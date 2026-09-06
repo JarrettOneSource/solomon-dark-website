@@ -11,7 +11,9 @@ import {
   createGameSnapshotFrame,
   createReplicatedEntityBaseline,
 } from '../src/game/protocol/entity-replication.ts'
-import { encodeGameMessage } from '../src/game/protocol/game-protocol.ts'
+import {
+  encodeGameMessage,
+} from '../src/game/protocol/game-protocol.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from '../src/game/host/websocket-compression.ts'
 
 const clientCount = positiveInteger(process.env.SDR_HUB_NETWORK_CLIENTS ?? '1', 'SDR_HUB_NETWORK_CLIENTS')

@@ -1,4 +1,9 @@
-import type { LuaConsoleObject, ModContentProjection } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
+import type {
+  ModContentProjection,
+} from '../protocol/game-mod-contract.ts'
 
 export interface ModMinimapSnapshot {
   readonly players: Readonly<Record<string, Readonly<{

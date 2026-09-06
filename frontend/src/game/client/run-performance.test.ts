@@ -9,7 +9,8 @@ import { createBoneyardCatalog, materializeBoneyard } from '../host/boneyard-cat
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
 import type { GameTransport } from './game-transport.ts'
-import type { GameClientSnapshot, GameplayPauseState, GameplayResumeGraceState } from '../protocol/game-protocol.ts'
+import type { GameClientSnapshot } from '../protocol/game-state.ts'
+import type { GameplayPauseState, GameplayResumeGraceState } from '../protocol/game-protocol-contract.ts'
 
 test('run samples separate frame stalls, snapshot gaps, ping and hidden windows', () => {
   const sampler = new RunPerformanceSampler(0)

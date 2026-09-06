@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
-import { GAME_PROTOCOL_NAME } from '../src/game/protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_NAME,
+} from '../src/game/protocol/game-protocol-contract.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const webRoot = fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url))

@@ -1,3 +1,4 @@
+import type { NativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
 import { NATIVE_MAGE_CAST_BODY_POSES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { NATIVE_DEMON_BOMB_CONTROLLER_POSES } from '../core-kernels/boneyard-demon-articulation.ts'
 import {
@@ -85,6 +86,7 @@ export interface NativeEnemyEffectSample {
  * disappearance.
  */
 export interface NativeEnemyAnimationSample {
+  spider: NativeSpiderAppearance | null
   action: NativeEnemyActionName | null
   actionProgress: number
   alpha: number
@@ -222,6 +224,7 @@ export function nativeEnemyIdleAnimationSample(
   overrides: Partial<NativeEnemyAnimationSample> = {},
 ): NativeEnemyAnimationSample {
   return {
+    spider: null,
     action: null,
     actionProgress: 0,
     alpha: 1,

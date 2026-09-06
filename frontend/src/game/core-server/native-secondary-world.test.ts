@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-import {
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeInteger,
-  type NativeRngState,
-} from '../core-kernels/native-rng.ts'
+import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
@@ -15,9 +11,9 @@ import {
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
   boneyardNativeSecondaryTargets,
-  resolveNativeCollisionAdjustedPosition,
   resolveBoneyardNativeSecondaryCombat,
   resolveBoneyardNativeTeleport,
+  resolveNativeCollisionAdjustedPosition,
 } from './native-secondary-world.ts'
 
 const BOUNDS = Object.freeze({ h: 400, w: 400, x: 0, y: 0 })
@@ -264,3 +260,44 @@ function enemyProjectile(
   }
   return kind === 'arrow' ? { ...base, kind, velocity: { x: 5, y: 0 } } : { ...base, kind }
 }
+
+test('Spider Ether Drain capture preserves rewards while suppressing sound and corpse only within the strict field radius', () => {
+  const context = {
+    projectileWorldBlocked: () => false,
+    players: {},
+    resolveMovement: ({ requestedPosition }: { requestedPosition: { x: number; y: number } }) => requestedPosition,
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  }
+  for (const [etherDrain, distance, captured] of [
+    [true, 39.999, true],
+    [true, 40, false],
+    [true, 40.001, false],
+    [false, 0, false],
+  ] as const) {
+    const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('spider-capture'), {
+      ...context,
+      resolveSpawnIntents: () => [{
+        enemyToken: 'SPIDER', flags: [], id: 1, locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SPIDER,
+        position: { x: 100, y: 100 }, spawnTick: 1, waveOrdinal: 4,
+      }],
+      tick: 1,
+    }).store
+    const spider = spawned.actors[0]!
+    const hit = resolveBoneyardNativeSecondaryCombat(spawned, {
+      damage: [{ amount: 100, etherDrain, kind: 'magic', ownerId: 'player', sourceActorId: 1, targetId: spider.id }],
+      dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+    }, 1, undefined, undefined, undefined, [{ x: spider.position.x + distance, y: spider.position.y }])
+    assert.equal(projectBoneyardEnemies(hit.enemies, 1).length, captured ? 0 : 1)
+    const retired = stepBoneyardEnemyStore(hit.enemies, context)
+    assert.equal(retired.store.actors.length, 0)
+    assert.equal(retired.rewards.length, 1)
+    assert.equal(retired.rewards[0]!.experience, 12.75)
+    assert.equal(retired.retired.length, 1)
+    assert.equal(retired.events.filter((event) => event.sound === 'spider-die').length, captured ? 0 : 1)
+    assert.equal(retired.store.spiderRemains.length, captured ? 0 : 1)
+    const next = stepBoneyardEnemyStore(retired.store, { ...context, tick: 3 })
+    assert.deepEqual(next.rewards, [])
+  }
+})

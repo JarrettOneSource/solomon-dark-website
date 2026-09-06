@@ -1,14 +1,7 @@
 import { nextBoneyardWaveRandom } from '../../core-kernels/boneyard-wave-timeline.ts'
-import {
-  NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM,
-} from '../../core-kernels/boneyard-zombie-beat.ts'
+import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../../core-kernels/boneyard-zombie-beat.ts'
 import { attackMarker, directContactPlayerDamage } from './combat.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyStoreStepContext,
-  BoneyardZombieBrain,
-  WorkingStep,
-} from './model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardZombieBrain, WorkingStep } from './model.ts'
 import { moveTowardTarget, positiveModulo, staffAttackSpeed } from './movement.ts'
 import { BOUNDED_ENEMY_ATTACK_REACH } from './programs.ts'
 import { drawUnit, signedUnit } from './random.ts'

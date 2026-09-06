@@ -4,7 +4,9 @@ import demon from '../../editor/manifest/demon.json' with { type: 'json' }
 
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
-import type { NativeEnemyAtlas } from './native-enemy-presentation.ts'
+import type {
+  NativeEnemyAtlas,
+} from './native-enemy-presentation-model.ts'
 
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: badguys as AtlasManifest,

@@ -7,7 +7,9 @@ import {
   type BoneyardCollisionPolygon,
   type BoneyardCollisionSegment,
 } from '../boneyard-collision.ts'
-import type { BoneyardWorldState } from '../boneyard-world.ts'
+import type {
+  BoneyardWorldState,
+} from '../boneyard-world-state.ts'
 import { ML_BOT_POLICY_SCALES } from './spec.ts'
 
 export type MlBotPolicyGeometryWorld = Pick<

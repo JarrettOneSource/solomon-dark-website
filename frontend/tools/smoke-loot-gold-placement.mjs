@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
-import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import {
+  createBoneyardEnemyStore,
+} from '../src/game/core-server/boneyard-enemy-store.ts'
 import {
   canPlaceBoneyardBody,
   resolveBoneyardSpawnPosition,
@@ -15,7 +17,9 @@ import {
 import { getPlayerCharacter, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
+import {
+  decodeServerGameMessage,
+} from '../src/game/protocol/game-protocol.ts'
 
 export function observeGoldPlacementWire(page, endpoint) {
   const reconstructor = new EntityReplicationReconstructor()

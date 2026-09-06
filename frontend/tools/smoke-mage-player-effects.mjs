@@ -1,15 +1,13 @@
+import assert from 'node:assert/strict'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { planPlayerCharacterTick } from '../src/game/core-kernels/player-character.ts'
-import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-
 import { chromium } from 'playwright-core'
 import { preview } from 'vite'
-
-import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { NATIVE_MAGE_ACTION_PROGRAMS } from '../src/game/core-server/enemies/programs.ts'
+import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { boneyardGeometrySha256 } from '../src/game/host/project-boneyard.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'

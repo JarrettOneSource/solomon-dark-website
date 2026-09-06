@@ -1,6 +1,8 @@
 import { LuaMultiReturn, type LuaEngine } from 'wasmoon'
 
-import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
+import type {
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
 import {
   WEB_LUA_API_VERSION,
   WEB_LUA_CAPABILITIES,

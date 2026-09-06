@@ -1,52 +1,39 @@
-import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
-import {
-  createNativeDemonArticulationState,
-} from '../../core-kernels/boneyard-demon-articulation.ts'
-import {
-  type EvaluatedBoneyardEnemyConfig,
-  evaluateBoneyardEnemyConfig,
-} from '../../core-kernels/boneyard-enemy-config.ts'
-import {
-  boundedMageShieldIntervalTicks,
-} from '../../core-kernels/boneyard-enemy-modifiers.ts'
+import { createNativeDemonArticulationState } from '../../core-kernels/boneyard-demon-articulation.ts'
+import type { EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
+import { evaluateBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config.ts'
+import { boundedMageShieldIntervalTicks } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import { createNativeImpFlightState } from '../../core-kernels/boneyard-imp-flight.ts'
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardEnemySpawnIntent,
-} from '../../core-kernels/boneyard-wave-director.ts'
-import {
-  nextBoneyardWaveRandom,
-  randomBoneyardWaveInteger,
-} from '../../core-kernels/boneyard-wave-timeline.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardEnemySpawnIntent } from '../../core-kernels/boneyard-wave-director.ts'
+import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import {
   createNativeEnemyPathState,
   nativeEnemyTargetRefreshTicks,
 } from '../../core-kernels/native-enemy-pathfinding.ts'
-import {
-  constructNativeRangedAttackRange,
-} from '../../core-kernels/native-enemy-targeting.ts'
+import { constructNativeRangedAttackRange } from '../../core-kernels/native-enemy-targeting.ts'
+import { drawNativeFloat } from '../../core-kernels/native-rng.ts'
+import { createNativeSpiderState } from '../../core-kernels/native-spider.ts'
 import {
   NATIVE_PORTAL_ACTOR_PROGRAM,
   createNativePortalState,
   nativePortalChildPosition,
 } from '../../core-kernels/native-survival-portal.ts'
-import {
-  NATIVE_WRAITH_FLYBY_TICKS,
-  createNativeWraithFlightState,
-} from '../../core-kernels/native-wraith-flight.ts'
-import {
-  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
-  NATIVE_DEMON_NAVIGATION_CLEARANCE,
-} from '../boneyard-enemy-navigation.ts'
+import type { RegisterNativeWorldPainter } from '../../core-kernels/native-world-manager-order.ts'
+import { NATIVE_WRAITH_FLYBY_TICKS, createNativeWraithFlightState } from '../../core-kernels/native-wraith-flight.ts'
+import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
+import { NATIVE_BADGUY_NAVIGATION_CLEARANCE, NATIVE_DEMON_NAVIGATION_CLEARANCE } from '../boneyard-enemy-navigation.ts'
 import { emitEvent } from './events.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyBrain,
-  type BoneyardEnemyStoreStepContext,
-  type BoneyardImpBrain,
-  type WorkingStep,
-  validatePoint,
+import { validatePoint } from './model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyBrain,
+  BoneyardEnemySemanticEvent,
+  BoneyardEnemyStore,
+  BoneyardEnemyStoreStepContext,
+  BoneyardEnemyTargets,
+  BoneyardImpBrain,
+  WorkingStep,
 } from './model.ts'
 import {
   NATIVE_COFFIN_HIDDEN_LONG_TICKS,
@@ -66,10 +53,11 @@ import {
 } from './random.ts'
 import { skeletonAction } from './skeleton-family.ts'
 import { nearestEligibleTarget, targetHeading } from './targeting.ts'
+import { createEnemyWork, finishEnemyStore } from './work.ts'
 
 export function materializeSpawnIntents(
   work: WorkingStep,
-  context: BoneyardEnemyStoreStepContext,
+  context: ConstructionContext,
   spawnIntents: readonly BoneyardEnemySpawnIntent[],
   impSplitDepthOverride: number | null = null,
 ): BoneyardEnemyActor[] {
@@ -171,6 +159,7 @@ export function materializeSpawnIntents(
     const headingDeg = intent.portalEjection?.childHeadingDeg
       ?? targetHeading(position, targetPlayerId, context.players)
     const createdBrain = createBrain(work, config, {
+      cocoonTargetPlayerId: intent.cocoonTargetPlayerId,
       actorId: work.nextActorId,
       headingDeg,
       position,
@@ -309,6 +298,7 @@ function createBrain(
   work: WorkingStep,
   config: EvaluatedBoneyardEnemyConfig,
   owner: Readonly<{
+    cocoonTargetPlayerId?: string
     actorId: number
     headingDeg: number
     position: Readonly<BoneyardPoint>
@@ -316,6 +306,15 @@ function createBrain(
   }>,
 ): BoneyardEnemyBrain {
   switch (config.enemyToken) {
+    case 'SPIDER': {
+      const distance = drawNativeFloat(work.steeringRngState, 1)
+      work.steeringRngState = distance.state
+      return { ...createNativeSpiderState(distance.value), family: 'spider', phase: 'active' }
+    }
+    case 'COCOON': return {
+      family: 'cocoon', phase: 'active', ownerPlayerId: owner.cocoonTargetPlayerId ?? null,
+      ownerPosition: { x: owner.position.x, y: owner.position.y - 1 },
+    }
     case 'SKELETON': return {
       action: skeletonAction(config.family.weapon),
       actionProgress: 0,
@@ -542,4 +541,27 @@ export function spawnTerminalChildren(
     spawnIntents,
     0,
   ))
+}
+
+type ConstructionContext = Pick<BoneyardEnemyStoreStepContext,
+  'arenaScalars' | 'players' | 'resolveMovement' | 'resolveSpawnPlacement' | 'rollLootSeed' | 'tick'>
+
+export function addNativeCocoon(
+  source: BoneyardEnemyStore,
+  ownerPlayerId: string,
+  position: Readonly<BoneyardPoint>,
+  players: BoneyardEnemyTargets,
+  tick: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+): Readonly<{ store: BoneyardEnemyStore; events: readonly BoneyardEnemySemanticEvent[] }> {
+  const work = createEnemyWork(source, { tick, registerWorldPainter }, true)
+  work.actors.push(...materializeSpawnIntents(work, {
+    players, tick, resolveMovement: ({ position: root }) => root,
+  }, [{
+    cocoonTargetPlayerId: ownerPlayerId,
+    enemyToken: 'COCOON', flags: [], id: work.nextSyntheticSpawnIntentId++,
+    nativeTypeId: 2058, locationPolicy: 'anywhere', positionPolicy: 'direct',
+    position: { x: position.x, y: position.y + 1 }, spawnTick: tick, waveOrdinal: 0,
+  }]))
+  return { store: finishEnemyStore(work, source.lastStepTick), events: work.events }
 }

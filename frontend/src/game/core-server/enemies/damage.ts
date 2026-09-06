@@ -1,21 +1,21 @@
 import { nextBoneyardWaveRandom } from '../../core-kernels/boneyard-wave-timeline.ts'
-import {
-  type RegisterNativeWorldPainter,
-  createNativeWorldManagerOrder,
-} from '../../core-kernels/native-world-manager-order.ts'
+import { reactNativeSpiderToDamage } from '../../core-kernels/native-spider.ts'
+import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
+import type { RegisterNativeWorldPainter } from '../../core-kernels/native-world-manager-order.ts'
+import { damageCocoon } from './cocoon.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
 import { deathBrain } from './deaths.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyActorId,
-  type BoneyardEnemyDamageSound,
-  type BoneyardEnemyDeathEffect,
-  type BoneyardEnemySemanticEvent,
-  type BoneyardEnemyStore,
-  type BoneyardMaggotActor,
-  type DamageBoneyardEnemyRequest,
-  type DamageBoneyardEnemyResult,
-  validateTick,
+import { validateTick } from './model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyActorId,
+  BoneyardEnemyDamageSound,
+  BoneyardEnemyDeathEffect,
+  BoneyardEnemySemanticEvent,
+  BoneyardEnemyStore,
+  BoneyardMaggotActor,
+  DamageBoneyardEnemyRequest,
+  DamageBoneyardEnemyResult,
 } from './model.ts'
 import { positiveModulo } from './movement.ts'
 import { NATIVE_ENEMY_HIT_LATCH_TICKS } from './programs.ts'
@@ -47,6 +47,7 @@ export function damageBoneyardEnemy(
   if (actor.lifeState !== 'alive') {
     return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
   }
+  if (actor.brain.family === 'cocoon') return damageCocoon(source, actor, request)
 
   const work: DamagePresentationWork = {
     deathEffects: [...source.deathEffects],
@@ -107,12 +108,18 @@ export function damageBoneyardEnemy(
       0.9 + drawDamageUnit(work) * 0.2,
     )
   }
-  const damageBrain = actor.brain.family === 'portal' && hurtPresentationReady
+  let damageBrain = actor.brain.family === 'portal' && hurtPresentationReady
     ? {
         ...actor.brain,
         hurtTicksRemaining: 10 + Math.min(14, Math.floor(drawDamageUnit(work) * 15)),
       }
     : actor.brain
+  let steeringRngState = source.steeringRngState
+  if (damageBrain.family === 'spider') {
+    const reaction = reactNativeSpiderToDamage(damageBrain, request.magic === true, steeringRngState)
+    damageBrain = { ...reaction.state, family: 'spider', phase: damageBrain.phase }
+    steeringRngState = reaction.rngState
+  }
 
   const currentHealth = actor.currentHealth - request.amount
   const healthDamage = Math.min(Math.max(actor.currentHealth, 0), request.amount)
@@ -120,7 +127,9 @@ export function damageBoneyardEnemy(
   const nextActor: BoneyardEnemyActor = killed
     ? {
         ...actor,
-        brain: deathBrain(damageBrain),
+        brain: damageBrain.family === 'spider' && request.etherDrainCapture === true
+          ? { ...damageBrain, phase: 'captured' }
+          : deathBrain(damageBrain),
         currentHealth,
         deathEpoch: source.nextDeathEpoch,
         deathStartedTick: request.tick,
@@ -157,7 +166,7 @@ export function damageBoneyardEnemy(
     })
   }
   notifyAttributedHealthDamage(request, actor.id, actor.config.maximumHealth, healthDamage)
-  return finishDamage(source, actors, work, killed, healthDamage)
+  return finishDamage({ ...source, steeringRngState }, actors, work, killed, healthDamage)
 }
 
 export function applyBoneyardStaffDisable(
@@ -420,6 +429,8 @@ function enemyHurtSound(
     case 'PORTAL':
       return 'portal-hurt'
     case 'COFFIN':
+    case 'SPIDER':
+    case 'COCOON':
     case 'DEMON':
     case 'IMP':
     case 'WRAITH':
@@ -486,6 +497,7 @@ function spawnShieldBreakParticles(
       role: 'shield-break-particle',
       rotationDeg,
       scale,
+      scaleY: scale,
       scaleMultiplier: 1,
       shadow: false,
       spawnTick: tick,

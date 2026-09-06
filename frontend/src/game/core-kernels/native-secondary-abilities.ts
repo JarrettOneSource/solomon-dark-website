@@ -457,6 +457,7 @@ export interface NativeSecondaryTickContext {
 
 export interface NativeSecondaryDamageContact {
   readonly amount: number
+  readonly etherDrain?: boolean
   readonly kind: NativeSecondaryDamageKind
   readonly ownerId: string
   readonly sourceActorId: number
@@ -1469,6 +1470,7 @@ export function stepNativeSecondaryAbilities(
     const effect = nativeSecondaryTargetEffect(state, actor.worldKey, target.id)
     damage.push({
       amount: kind === 'lightning' && (effect?.prismaticTicks ?? 0) > 0 ? amount * 2 : amount,
+      ...(actor.kind === 'ether-drain' ? { etherDrain: true } : {}),
       kind,
       ownerId: actor.ownerId,
       sourceActorId: actor.id,

@@ -1,4 +1,6 @@
-import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../protocol/game-protocol-contract.ts'
 import {
   failureFromTransportAttempt,
   type GameTransportClose,

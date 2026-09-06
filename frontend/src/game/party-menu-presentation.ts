@@ -4,7 +4,9 @@ import type {
   NativeUiPartyMenuTag,
   NativeUiPartyMenuVisibilityOption,
 } from './native-ui/core.ts'
-import type { GameSessionKind } from './protocol/game-protocol.ts'
+import type {
+  GameSessionKind,
+} from './protocol/game-protocol-contract.ts'
 import {
   PARTY_VISIBILITIES,
   type LocalPartyState,

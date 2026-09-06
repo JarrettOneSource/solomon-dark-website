@@ -1,3 +1,4 @@
+import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 
@@ -6,7 +7,7 @@ import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-w
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import { createBoneyardLootStore } from '../src/game/core-server/boneyard-loot-store.ts'
 import {
-  createBoneyardEnemyStore, damageBoneyardEnemy, stepBoneyardEnemyStore,
+  createBoneyardEnemyStore, stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { getPlayerCharacter, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'

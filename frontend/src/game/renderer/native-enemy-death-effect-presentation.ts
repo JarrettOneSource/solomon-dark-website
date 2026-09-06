@@ -82,8 +82,8 @@ export function nativeEnemyDeathEffectVisualBounds(
     effect.rotationRadians * 180 / Math.PI,
     effect.scale,
     effect.kind === 'move-fade-perspective'
-      ? Math.fround(effect.scale * Math.fround(0.8))
-      : perspective ? effect.scale * 0.75 : effect.scale,
+      ? Math.fround(effect.scaleY * Math.fround(0.8))
+      : perspective ? effect.scaleY * 0.75 : effect.scaleY,
   )]
   if (effect.shadow) {
     bounds.push(boneyardTransformedArtBounds(
@@ -91,7 +91,7 @@ export function nativeEnemyDeathEffectVisualBounds(
       { anchorX: art.anchorX, anchorY: art.anchorY, h: art.height, w: art.width },
       effect.rotationRadians * 180 / Math.PI,
       effect.scale,
-      effect.scale * 0.75,
+      effect.scaleY * 0.75,
     ))
   }
   return unionBounds(bounds)
@@ -176,8 +176,8 @@ export function nativeEnemyDeathEffectPlan(
     scale: Object.freeze({
       x: effect.scale,
       y: effect.kind === 'move-fade-perspective'
-      ? Math.fround(effect.scale * Math.fround(0.8))
-      : perspective ? effect.scale * 0.75 : effect.scale,
+      ? Math.fround(effect.scaleY * Math.fround(0.8))
+      : perspective ? effect.scaleY * 0.75 : effect.scaleY,
     }),
     tint: effect.tint,
   })
@@ -192,7 +192,7 @@ export function nativeEnemyDeathEffectPlan(
           entry: effect.entry,
           offset: Object.freeze({ x: 0, y: 2 }),
           rotationRadians: effect.rotationRadians,
-          scale: Object.freeze({ x: effect.scale, y: effect.scale * 0.75 }),
+          scale: Object.freeze({ x: effect.scale, y: effect.scaleY * 0.75 }),
           tint: 0x000000,
         })
       : null,

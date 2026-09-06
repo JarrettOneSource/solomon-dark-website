@@ -1,5 +1,10 @@
-import throwSpell from '../assets/game/audio/sfx/throw-spell.wav'
-import spitFire from '../assets/game/audio/sfx/spit-fire.wav'
+import spiderDie from '../assets/game/audio/sfx/spider-die.wav'
+import shootWeb1 from '../assets/game/audio/sfx/shoot-web-1.wav'
+import shootWeb2 from '../assets/game/audio/sfx/shoot-web-2.wav'
+import shootWeb3 from '../assets/game/audio/sfx/shoot-web-3.wav'
+import webbed1 from '../assets/game/audio/sfx/webbed-1.wav'
+import webbed2 from '../assets/game/audio/sfx/webbed-2.wav'
+import disintegrate from '../assets/game/audio/sfx/disintegrate.wav'
 import academy from '../assets/game/audio/music/academy.mp3'
 import combat from '../assets/game/audio/music/combat.mp3'
 import prelude from '../assets/game/audio/music/prelude.mp3'
@@ -190,6 +195,8 @@ import tutorialSurrender from '../assets/game/audio/voice/tutorial-surrender.wav
 import tutorialToDeathExactly from '../assets/game/audio/voice/tutorial-to-death-exactly.wav'
 import tutorialUnredeemable from '../assets/game/audio/voice/tutorial-unredeemable.wav'
 import tutorialYourPerversions from '../assets/game/audio/voice/tutorial-your-perversions.wav'
+import throwSpell from '../assets/game/audio/sfx/throw-spell.wav'
+import spitFire from '../assets/game/audio/sfx/spit-fire.wav'
 import type { GameAudioSources } from './game-audio-native.ts'
 
 export const GAME_AUDIO_SOURCES = {
@@ -223,6 +230,13 @@ export const GAME_AUDIO_SOURCES = {
     solomondarktheme: solomonDarkTheme,
   },
   sounds: {
+    'spider-die': spiderDie,
+    'shoot-web-1': shootWeb1,
+    'shoot-web-2': shootWeb2,
+    'shoot-web-3': shootWeb3,
+    'webbed-1': webbed1,
+    'webbed-2': webbed2,
+    'disintegrate': disintegrate,
     'backpack-close': backpackClose,
     'backpack-open': backpackOpen,
     'bad-action': badAction,

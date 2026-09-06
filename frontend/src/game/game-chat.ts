@@ -1,5 +1,7 @@
 import type { LocalPartyState } from './protocol/party-state.ts'
-import type { GameSessionKind } from './protocol/game-protocol.ts'
+import type {
+  GameSessionKind,
+} from './protocol/game-protocol-contract.ts'
 import type {
   GameChatChannel,
   GameChatMessage,

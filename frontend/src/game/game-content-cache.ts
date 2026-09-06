@@ -1,4 +1,6 @@
-import type { GameModAsset } from './protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from './protocol/game-mod-contract.ts'
 
 export interface GameContentDownloadProgress {
   readonly active: GameModAsset | null

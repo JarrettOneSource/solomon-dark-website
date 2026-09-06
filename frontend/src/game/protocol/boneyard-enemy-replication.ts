@@ -1,4 +1,6 @@
-import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
+import {
+  BONEYARD_ENEMY_FLAGS,
+} from '../core-kernels/boneyard-enemy-config.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import type {
   BoneyardEnemyAction,
@@ -19,7 +21,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 14
-const EFFECT_COMPONENT_OFFSET = 46
+const EFFECT_COMPONENT_OFFSET = 49
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -34,6 +36,8 @@ const FAMILIES = [
   'DEMON',
   'COFFIN',
   'PORTAL',
+  'SPIDER',
+  'COCOON',
 ] as const
 
 const ACTIONS: readonly (BoneyardEnemyAction | null)[] = [
@@ -131,6 +135,10 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && (sample[40] === 0 || sample[6] === 2)
       && sample[41] >= 0
       && sample.slice(42, 46).every((value) => Math.abs(value) <= POSITION_SCALE * 256)
+      && (sample[46] === -1 || cyclic(sample[46], 360, ANGLE_SCALE))
+      && sample[47] >= 0 && sample[47] <= VALUE_SCALE
+      && sample[48] >= 0 && sample[48] <= 0xffffff
+      && (sample[46] !== -1 || (sample[47] === 0 && sample[48] === 0))
       && effectComponentsAreValid(sample)
   },
 }
@@ -160,6 +168,9 @@ export function boneyardEnemySample(
   enemy: BoneyardEnemySnapshot,
 ): ReplicatedEntitySample {
   const animation = enemy.animation
+  if ((enemy.enemyToken === 'SPIDER') !== (animation.spider !== null)) {
+    throw new Error('Boneyard Spider sample does not match the enemy family')
+  }
   if (enemy.enemyToken !== 'DEMON' && !demonOffsetsAreZero(animation)) {
     throw new Error('Boneyard Demon endpoint offsets require a Demon family')
   }
@@ -222,6 +233,9 @@ export function boneyardEnemySample(
     quantize(animation.demonFrontExtremityOffset.y, POSITION_SCALE),
     quantize(animation.demonRearExtremityOffset.x, POSITION_SCALE),
     quantize(animation.demonRearExtremityOffset.y, POSITION_SCALE),
+    animation.spider === null ? -1 : quantizeCyclic(animation.spider.bodyHeadingDeg, 360, ANGLE_SCALE),
+    quantize(animation.spider?.outlineAlpha ?? 0, VALUE_SCALE),
+    animation.spider?.outlineTint ?? 0,
     ...effectComponents,
   ]
 }
@@ -240,6 +254,12 @@ export function materializeBoneyardEnemy(
     throw new Error('Boneyard enemy sample identity does not match its descriptor')
   }
   const family = FAMILIES[descriptor[2]]!
+  if ((family === 'SPIDER') !== (sample[46] !== -1)) {
+    throw new Error('Boneyard Spider sample does not match the enemy family')
+  }
+  if (family === 'SPIDER' && (sample[10] < 0 || sample[10] > 3 * VALUE_SCALE || sample[10] % VALUE_SCALE !== 0)) {
+    throw new Error('Boneyard Spider pose is outside its four banks')
+  }
   if (
     sample[40] !== 0
     && family !== 'SKELETON'
@@ -266,6 +286,11 @@ export function materializeBoneyardEnemy(
   ) throw new Error('Boneyard Demon endpoint offsets do not match the enemy family')
   return {
     animation: {
+      spider: sample[46] === -1 ? null : {
+        bodyHeadingDeg: dequantize(sample[46], ANGLE_SCALE),
+        outlineAlpha: dequantize(sample[47], VALUE_SCALE),
+        outlineTint: sample[48],
+      },
       action: ACTIONS[sample[7]]!,
       actionProgress: dequantize(sample[8], VALUE_SCALE),
       alpha: dequantize(sample[9], VALUE_SCALE),

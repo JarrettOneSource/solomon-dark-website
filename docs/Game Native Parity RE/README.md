@@ -329,3 +329,4 @@ entry only when the evidence belongs to a genuinely separate system.
 - [2026-08-28 — Physical iPhone performance and Hail snapshot-allocation reopening](<299-2026-08-28-physical-iphone-performance-and-hail-snapshot-allocation-reopening.md>)
 
 - [2026-09-05 — Lantern collision and secondary cursor placement reopening](<300-2026-09-05-lantern-collision-and-secondary-cursor-placement.md>)
+- [2026-09-05 — Spider survival encounters, Silk, Webbed, Cocoon, and DeadSpider](<091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md#2026-09-05--spider-survival-encounters-and-target-owned-web-restraint-reopening>)

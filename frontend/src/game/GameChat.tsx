@@ -27,7 +27,7 @@ import {
   type GameChatChannel,
   type GameChatMessage,
   type GameChatSender,
-} from './protocol/game-protocol.ts'
+} from './protocol/game-chat.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
 import { gameBindingLabel } from './game-settings.ts'
 import { nativeInventoryGoldLedgerRight } from './native-inventory-gold-layout.ts'

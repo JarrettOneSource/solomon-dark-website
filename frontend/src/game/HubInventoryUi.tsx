@@ -30,7 +30,10 @@ import {
 } from './hub-inventory-presentation.ts'
 import { hubBoastFailureText } from './hub-npc-dialogue.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
-import type { GameModAsset, ModContentProjection } from './protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+  ModContentProjection,
+} from './protocol/game-mod-contract.ts'
 import type { NativeNoteboxKind, NativeNoteboxNotice } from './native-ui/core.ts'
 import { NativeUiNotebox } from './native-ui/react.ts'
 import {

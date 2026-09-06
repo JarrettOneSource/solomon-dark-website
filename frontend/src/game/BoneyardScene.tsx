@@ -79,10 +79,14 @@ import {
 } from './input/gameplay-pointer.ts'
 import type {
   BoneyardEnemyEventSnapshot,
-  GameModAsset,
   GameSnapshot,
+} from './protocol/game-state.ts'
+import type {
+  GameModAsset,
+} from './protocol/game-mod-contract.ts'
+import type {
   LoadedBoneyard,
-} from './protocol/game-protocol.ts'
+} from './core-kernels/boneyard.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -102,8 +106,8 @@ import {
 } from './loot-message-presentation.ts'
 import {
   createBoneyardWorldRenderer,
-  type BoneyardWorldRenderer,
 } from './renderer/boneyard-world-renderer.ts'
+import type { BoneyardWorldRenderer } from './renderer/boneyard-renderer-model.ts'
 import {
   paintBoneyardEnvironmentLight,
   type BoneyardEnvironmentLightImages,

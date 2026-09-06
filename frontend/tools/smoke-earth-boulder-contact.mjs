@@ -5,14 +5,9 @@ import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
 import { createServer as createViteServer } from 'vite'
-
 import { boneyardActiveBounds } from '../src/game/core-kernels/boneyard-arena-transition.ts'
-import {
-  canPlaceBoneyardBody,
-  withBoneyardGateCollision,
-} from '../src/game/core-server/boneyard-collision.ts'
+import { canPlaceBoneyardBody, withBoneyardGateCollision } from '../src/game/core-server/boneyard-collision.ts'
 import { boneyardEnemyActorFlags } from '../src/game/core-server/enemies/model.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 

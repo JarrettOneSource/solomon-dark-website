@@ -25,12 +25,18 @@ import {
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_PROTOCOL_VERSION,
+} from '../protocol/game-protocol-contract.ts'
+import {
   decodeClientGameMessage,
   encodeGameMessage,
-  type GameChatMessage,
-  type GameChatRejection,
-  type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
+import type {
+  GameChatMessage,
+  GameChatRejection,
+} from '../protocol/game-chat.ts'
+import type {
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
 import { connectGameClientSession } from './game-client-session.ts'
 import { connectGameObserverSession } from './game-observer-session.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'

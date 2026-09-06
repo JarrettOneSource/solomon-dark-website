@@ -1,11 +1,6 @@
-import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config.ts'
-import {
-  type DeathEffectOwner,
-  spawnBouncer,
-  spawnRadialBouncer,
-  spawnSimpleDeathEffect,
-  spawnUnbind,
-} from './death-effects.ts'
+import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config-model.ts'
+import { spawnBouncer, spawnRadialBouncer, spawnSimpleDeathEffect, spawnUnbind } from './death-effects.ts'
+import type { DeathEffectOwner } from './death-effects.ts'
 import type { BoneyardEnemyActor, WorkingStep } from './model.ts'
 import { drawInteger, drawUnit, radialVector } from './random.ts'
 

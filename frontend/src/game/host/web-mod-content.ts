@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 
-import type { GameContentManifest, GameModAsset } from '../protocol/game-protocol.ts'
+import type {
+  GameContentManifest,
+} from '../protocol/game-protocol-contract.ts'
+import type {
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
 import {
   compileWebLuaDefinition,
   WebLuaDefinitionRuntime,

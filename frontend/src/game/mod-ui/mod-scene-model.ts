@@ -1,4 +1,6 @@
-import type { LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 
 export interface ModRoomModel {
   readonly contentId: string

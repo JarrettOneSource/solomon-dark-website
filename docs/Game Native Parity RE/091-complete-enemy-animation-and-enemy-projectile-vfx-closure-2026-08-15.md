@@ -1,5 +1,10 @@
 # Complete enemy animation and enemy-projectile VFX closure — 2026-08-15
 
+> Reopened 2026-09-05: the historical Spider/Silk/Cocoon exclusions below are
+> false for retail survival. The investigation at the end of this document
+> supersedes those exclusions; implementation and browser receipts are recorded
+> below, with the final publication gate tracked separately.
+
 ## Reported smell and system boundary
 
 The current survival port can make an enemy behave correctly while drawing a
@@ -33,8 +38,8 @@ only the Boneyard survival spawn graph:
 | `1013` | `Coffin` | in-system | Direct Boneyard wave family and Maggot owner. |
 | `2044` | `GreenImp` | out-of-system | UnholySpit child has no reachable DemonSkull owner. |
 | `2045` | `Maggot` | in-system child | Coffin-owned child is replicated independently from the eight parent wave families. |
-| `2057` | `Spider` | out-of-system | Story enemy and Silk/Cocoon graph are not spawned by the Website director. |
-| `2058` | `Cocoon` | out-of-system | Spider-owned modifier actor has no reachable parent. |
+| `2057` | `Spider` | exact-ported in the 2026-09-05 reopening | Native survival generation owns 23 Spider phases across the twelve supported templates. |
+| `2058` | `Cocoon` | exact-ported in the 2026-09-05 reopening | Target-owned restraint created by three accumulated Spider/Silk web applications. |
 | `5021` | `Portal` | out-of-system | Story Imp spawner is not spawned by the survival director. |
 
 “Out-of-system” is a reachability statement, not permission to substitute a
@@ -317,8 +322,8 @@ reachability and this reopening's disposition are:
 | Coffin | `0x3F5`, render/death `0x0049AC90/0x0049B310` | exact-ported by this correction | live state retained; exact ordered fragment populations and Unbind lane |
 | GreenImp | `0x7FC` | out-of-system: Unholy story child | distinct renderer/factory row retained |
 | Maggot | `0x7FD`, render/death `0x0049C190/0x0049C830` | exact-ported by this correction | constructor scale, crawl/emergence, and per-offset Bouncer/FadePerspective terminal actors |
-| Spider | `0x809` | out-of-system: story enemy | factory row retained |
-| Cocoon | `0x80A` | out-of-system: Spider-owned restraint has no reachable parent | child row retained |
+| Spider | `0x809` | exact-ported in the 2026-09-05 reopening | Complete native survival and actor program below |
+| Cocoon | `0x80A` | exact-ported in the 2026-09-05 reopening | Target-owned Webbed restraint and release lifecycle below |
 | Portal | `0x139D` | out-of-system: story/spawner class is not a Website survival token | factory row retained |
 
 Lateral branches are also explicit:
@@ -1166,3 +1171,464 @@ Arrow that stock's local Present loop already discarded. Mechanical flight,
 contact, and fading do not depend on client visibility or render rate.
 Raw logs, captures, patches, and task worktrees are disposable after the
 authorized main push is verified; this ledger retains their measured results.
+
+## 2026-09-05 — Spider survival encounters and target-owned web restraint reopening
+
+### Report and failure of the earlier boundary
+
+The reported symptom is that no spiders appear. The earlier census used the
+Website's missing factory entry as evidence that Spider was outside survival.
+It did not follow `WaveData_Parse` beyond the ordinary `wave.txt` schedule.
+The subsequent exclusions in entries 86, 98, 158, 159, 179, and 273 inherited
+that unproved assumption. Retail constructs Spider encounters in a separate
+trigger/script tail of the same survival generator. “Story-only” is false.
+
+The native system is implemented. The per-member Mac and built-browser
+receipts below cover the recovered behavior; the final canonical publication
+gate is tracked separately.
+
+### System boundary
+
+The unit of work is the **native survival Spider encounter and restraint
+system**: every generated Spider phase; Spider construction, movement,
+light-dependent decisions, attacks, and death; Silk flight, rendering and
+collision; Webbed stacking and expiration; target-owned Cocoon collision,
+damage, rendering, release, and teardown; and the descendants and scene data
+those owners consume. The ordinary wave scheduler, existing enemy families,
+and other independently generated boss encounters remain neighboring systems.
+
+The membership sweep includes all twelve generated layouts used by the
+Website, all four native Spider script variants, all their repeat groups and
+ordered setup flags, all six Spider action states, both spit-setting branches,
+all three web severities, ordinary/fully webbed/dead/missing targets, the live
+Silk limit and shared spit cooldown, both death eligibility branches, all
+Spider/DeadSpider art banks, Silk and Cocoon fragments, and the temporary
+DeadSpider compact and mask grids. The per-member dispositions and verification
+receipts follow below.
+
+### Evidence and provenance
+
+| Evidence class | Source | Finding | Confidence |
+| --- | --- | --- | --- |
+| Retail image, rehashed 2026-09-05 | `SolomonDarkAbandonware/SolomonDark.exe`, 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same exact retail image as the earlier census. | high |
+| Native generator instructions | `WaveData_Parse 0x00632730`; Tiny construction `0x006357A3..0x00635A7C`; Small/Large/Huge strings `0x0079ECA0`, `0x0079EC14`, `0x0079EBC8` | Spider scripts are generated outside `wave.txt`; optional membership and trigger waves are selected during generation. | high |
+| Native generated corpus | Read-only `Mod Loader/runtime/instances/*/stage/sandbox/play.boneyard` files selected by the twelve source hashes in `native-generated-boneyards.ts` | 23 Spider phases: three Tiny, twelve Small, four Large, four Huge. Trigger and script bytes, ordered operands, and flags were drained in full. These historical files are supporting data; generator instructions independently establish their meaning. | high |
+| Current stock-generated file | `C:/SolomonDarkAbandonware/sandbox/play.boneyard`, 248,393 bytes, SHA-256 `f668ca2a9aa9e4e04295897a5d44d359b21febf11870f568daa7865756b151cb` | Contains all four Spider triggers at waves 4, 11, 34, and 44. No gameplay observation is inferred from the file alone. | high |
+| Web reproduction on Mac mini | Website `01f07fde`, `createBoneyardWaveDirector` and `stepBoneyardWaveDirector`, source `8c2f97d2ed54431987e3cb54b7ae3c1098bf1c4517f59ade6aea57759187adb0`, native trigger wave 4, 250 ticks | The real director emits only type 1001 and zero type-2057 actors. The assertion requiring the source's three Tiny-wave spiders fails `0 !== 3`. | high |
+| Native family factory | Common allocator `0x005B7080`; Spider constructor `0x004759A0`, type `0x809`, vtable `0x0078643C` | Spider is a concrete hostile family with its own action, damage and render slots. | high |
+| Child ownership | Silk `0x005F05D0/0x005F8B50`; Webbed `0x00623B10/0x00627BD0`; player helper `0x0052C680`; Cocoon `0x0047BAE0/0x0048BCE0` | Silk applies a modifier. Reaching full severity creates one target-owned Cocoon; further hits cannot create duplicates. | high |
+| Cocoon presentation owner | Cocoon render slot is no-op `0x0055C300`; player state `+0x208/+0x20C/+0x214`; release `0x00533350` | The player owns the visible restraint. The separate Cocoon supplies damage/collision and is excluded from the normal monster count. | high |
+
+Ghidra used the canonical `SolomonDark` project through the existing replica
+wrapper with explicit original Windows project and replica roots. The
+read-only Mod Loader tool revision was
+`08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 was
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+No Mod Loader file was changed. The whole-generator decompile timed out;
+the completed instruction dump and serialized programs are the evidence for
+its branches. Task-owned scratch extracts are disposable after their durable
+results have been recorded.
+
+### Recovered encounter contract
+
+- Each included phase has an initially enabled, one-trip, type-2 start-wave
+  trigger. An omitted native phase stays omitted for that source.
+- The script holds the main TimeLine with command `0x42D`, selects offscreen
+  spawn placement (mode 2) with `0x3ED`, and spawns type 2057 via `0x43A`. These are real
+  synchronous repeat groups, not `wave.txt` members or timed Portal births.
+- Small waves contain groups of four and six. Large waves contain six, eight,
+  and three. Tiny and Huge counts are generator-selected and source-specific.
+- Setup flags retain order and repetition: flag 1 multiplies health by 1.5;
+  3 multiplies all three damage fields by 1.5; 5 increases speed; 43 multiplies
+  Cocoon HP by five; 44 disables spitting. Repeated flag 43 is intentional.
+- Between groups the script waits while normal monster count is greater than
+  zero, using a two-second fixed-tick sleep. The final group first sleeps one
+  second, then uses the same wait, advances the wave, and releases the hold.
+- Spider's `+0xCC` input is the native lighting/render scalar, not player
+  distance or a replacement arbitrary attack timer. `+0x230` is a per-Spider
+  spit cooldown; Arena `+0x9058` is shared. Global `0x00819848` counts live Silk,
+  with a strict limit of four for the gated spit paths.
+- `0x004A1670` uses the complete BadGuys leg bank 1840–1911, independent body
+  bank 1912–1929, and proximity outline bank 1930–2001. Pose and both headings
+  must be authoritative; renderer cadence must not advance them.
+- Cocoon is a target identity/lifetime relation. Damage goes to the target's
+  Cocoon HP, and release removes Webbed and the matching restraint actors.
+  Player death also tears down the restraint. Its collider must not be counted
+  as another hostile wave member or rendered as an independent enemy body.
+
+### Validation contract
+
+Retain the failing native-source director reproduction as a regression. Cover
+all 23 source phases and every omitted phase, ordered flag multiplicity,
+timeline holds, group counts, count polling, pause/save/resume/reset, every
+Spider action branch, Silk cap and lifecycle, all web severities and Cocoon
+release paths, complete sprite banks, and terminal effects. Run these checks,
+the complete Website gate, and built Chrome `/game` acceptance on the Mac
+mini. Runtime and browser validation have not been performed for a changed
+candidate yet.
+
+### Completed instruction/data recovery and implementation plan
+
+The [Spider native catalog](spider-native-catalog.json) retains the complete
+five-class slot census, audio resource rows, and all 23 source-authored
+programs, including every command and typed operand. There are no substituted
+Spider phases for absent source rows. The implementation dispositions below
+describe the implemented members. The final publication gate remains separate
+from the focused behavior receipts below.
+
+| Membership | Required disposition | Native contract / proof |
+| --- | --- | --- |
+| 3 Tiny, 12 Small, 4 Large, 4 Huge source phases | `exact-ported` | All source hashes, trigger/script UIDs, start-wave labels, commands, repeat counts and ordered flags in the catalog |
+| Optional generation branches and all 25 absent phase/source pairs | `exact-ported` | Absent phases produce no trigger; no fixed-wave substitute |
+| Script command budget, sleeps, repeats, count conditions, labels, hold/release | `exact-ported` | `0x0068B060` executes at most ten commands per tick; false conditions skip through ENDIF in `0x00681D40`; zero-return commands continue within that budget |
+| Spider ordinary/custom construction and flags | `exact-ported` | HP 15, primary damage 8, Cocoon HP 10, suck DPS 2, spit enabled; ordered setup transforms in `0x0046B390` |
+| All six Spider action states | `exact-ported` | `0x0047A580`: approach, close movement, lateral movement, spit hold, retreat, attachment; exact thresholds and RNG order |
+| Shared navigation, target loss and native movement cadence | `exact-ported` through the shared route owner and Spider class branches | `0x004835F0`, Spider `+0x6C`, inherited `+0x70/+0x74`; UID phases at 2/5/10/15 ticks and distinct full/degraded movement |
+| Local and shared spit cooldowns, live-Silk cap, no-spit setting | `exact-ported` | `0x00475DB0`, `0x00475AC0`, `0x0047A580`; `0x00819848` is a live-Silk count, not a Cocoon or Spider count |
+| Target light scalar, directional/radial branches and missing target | `exact-ported` through the shared native light model | `0x00624B40 -> 0x0057F980/0x0057F0E0/0x0057E490`; the browser must not feed simulation from frame cadence |
+| Spider legs, independent body, proximity outline, height | `exact-ported` | Complete BadGuys 1840–2001; 18 directions, four leg/outline poses; target-color outline at light > .5 and distance < 175 |
+| Silk construction, both complete spline point arrays, active/end states | `exact-ported` | `0x005F05D0/0x005F0790/0x005F8B50`; shared QuickSpline `0x0062B2F0`; skip every fourth active tick; flight and fade are separate states |
+| Silk full draw, inherited draw slot, tether, impact and audio | `exact-ported` | `0x00606A10/0x0060F590/0x005F92C0`; complete BadGuys/DeadHawg resources in the native catalog |
+| Partial web severities, movement recovery, stationary persistence | `exact-ported` | `0x00623BA0`: partial severity decreases by .001 only when native movement-vector length squared is > .5; it does not clear merely because five seconds pass |
+| Full web threshold, maximum Cocoon HP, duplicate identity suppression | `exact-ported` | `0x00627BD0`, `0x0052C680`: merge to integer severity capped at three, keep maximum payload, create one target-owned restraint |
+| Cocoon collision, position, damage, release and target teardown | `exact-ported` | Radius 40; collider updated 60 units ahead of target heading; damage subtracts from target-owned web HP; `0x00533350/0x00533520/0x0048BCE0/0x00534120` |
+| Partial/full player web presentation and hit flash | `exact-ported` | `0x005468C0`: additive player silhouettes at scales 1, 1.05, 1.10; fractional final alpha; full restraint uses DeadHawg 29 with quantized 30-degree heading offset and target hit pulse |
+| Normal Spider death, corpse, temporary decal target records | `exact-ported` | `0x00482D60/0x00455730/0x00461740/0x00461B60`; DeadHawg 208–227 and decoration rows 26–28; compact grid +0x8AF4 and mask grid +0x8F84 insertions and removals |
+| Ether Drain capture death branch | `exact-ported` | `0x0047BF70`: damage flag 0x100 and a registered Ether Drain field strictly within 40 units suppress SpiderDie and DeadSpider; Spider selects no Anim_Sucked art |
+| All impact/release fragments and sound selection ranges | `exact-ported` | Silk hit: five BadGuys-27 bouncers; Cocoon release: twelve BadGuys-10/11 moving fades, seven BadGuys-27 bouncers, DeadHawg-14 flash; native audio rows retained |
+| Save/restore, pause, host authority, replication and scene reset | `exact-ported` | Spider sync `0x00475BC0`, Cocoon sync `0x00475D60`, target identity fields and complete script state; no client-owned simulation |
+| Other independent generated bosses and normal enemy families | `out-of-system` | Distinct recipe/program and class owners; their absence from the Website is not evidence about native eligibility |
+| Unused inherited no-op slots | `verified-already-at-parity` | Catalog records each slot; Cocoon has no independent visible body |
+
+No browser limitation requires a visible approximation in this recovered
+system. Recovery corrected two additional historical claims: attached damage
+is one quarter of configured suck DPS after a strict counter `>25` (26 movement
+calls), not half every 25; and Webbed's nominal five-second allocation duration
+is replaced by 9999 each player modifier tick. Full restraint therefore needs
+the real damage/release path, and partial web is removed by movement.
+
+The existing natural-spline implementation is the first reusable implementation
+for Silk. It represents the same cubic evaluator at `0x0062B2F0`; new code must
+supply all native-generated control points, not replace the curve with a line.
+
+The enemy store was divided by its existing
+responsibilities under `core-server/enemies/`: state model, construction,
+incoming damage, movement, family actions, projectiles, emissions, terminal
+effects, events, and registration. `boneyard-enemy-store.ts` owns store
+creation and ordered stepping. Moved declarations keep their implementation;
+consumers import the actual owner, without forwarding exports.
+The enemy presentation file likewise separates family presentation
+from its shared plan. The native Spider action/spline/status kernels and
+presentation each have their own cohesive owner.
+
+Further consumer tracing corrected the old name for command `0x3ED`: it is
+spawn placement, not a Solomon speech command. Setter `0x00462680` writes
+Arena `+0x8F00`; `0x00466200` dispatches mode 2 to offscreen placement. Every
+Spider group therefore uses `offscreen`, not `dark`. The similarly named
+Solomon-command description in the earlier Portal entry is historical wording
+and does not establish a voice event. Arena `0x0046E570` also proves that the
+shared spit cooldown saturates at zero and decrements once per fixed tick.
+
+### Additional instruction-derived contracts (2026-09-05)
+
+- Spider outline `0x004A1881..0x004A1899` uses settings array `0x00819E70`,
+  integer slot `12 + player slot`, then `Skills_Wizard` vtable `0x007A0CD4`
+  slot `+0x8C -> 0x00661260`. This is the selected primary spell colour,
+  including all fifteen Weld choices, rather than the robe or starting element.
+  Initializer `0x00782C70..0x00782DBA` drains the complete table at `0x0081CCA8`:
+  eight RGBA root colours followed by the white sentinel. Root RGB rows are
+  `(1,.1,1)`, `(1,.35,.1)`, `(.1,1,1)`, `(.1,.5,1)`, `(.1,1,.1)`,
+  `(1,.5,.1)`, `(.1,.5,.5)`, `(.75,.75,.75)`; every alpha is one.
+  Weld `1000..1014` RGB rows, in order: `(1,.1,.5)`, `(1,.5,1)`,
+  `(1,.75,1)`, `(1,.75,.5)`, `(1,.75,1)`, `(.75,.75,.75)`,
+  `(1,.75,1)`, `(1,.75,.5)`, `(.8,1,1)`, `(.9,1,1)`, `(1,.1,.5)`,
+  `(1,.35,.1)`, `(.1,.5,1)`, `(.1,1,1)`, `(.1,1,.1)`.
+- Cocoon release `0x0048BE59..0x0048BF3B` plays fixed registry `+0x3E0`
+  (`sounds/disintegrate.wav`) at `1 + SignedFloat(.05)`, then one of both
+  Webbed splats at FloatRange(.8,.9). It assigns Arena `+0x8E04 = .2`
+  directly; it does not apply the generic death feedback accumulator.
+  Player release `0x00533350` first moves the matching Cocoon to the player's
+  root, so the release particles and audio use that final position.
+- The inherited recipe XP documentation required correction across its consumers:
+  `0x00463BA3` is **FMUL double ptr [0x00785858]**, whose value is
+  `0.8500000238418579`. Reading only four bytes gives the misleading float 2.
+  `0x00463B94..0x00463BCD` computes `(final actor max HP + recipe XP bonus)
+  times that double, stores to float, then multiplies both HP and XP by
+  Arena `+0x8FE4`. MonsterSetup flag 7 assigns bonus 2, and Arena `+0x9024`
+  scales the bonus. The prior `2 * baseline` plus `.425` compensation happens
+  to match unflagged enemies but loses HP-changing flags and recipe bonuses.
+  Ledger 081 and the shared XP producer now apply the correction to ordinary,
+  scripted, tutorial, and authored recipes.
+
+- The Webbed draw branch shares PlayerWizard's existing 256-square diffuse
+  capture with Harden. It draws `ceil(severity)` additive white silhouettes
+  at scales `1`, `1.05`, `1.10`, each alpha `min(1, severity-index)`, then
+  redraws the normal wizard. Full severity adds DeadHawg 29 (`117x129`,
+  centered origin), before Magic Shield. `0x00547E10..0x00547FA9` quantizes
+  heading by truncating `heading/30`, multiplies its unit vector by `-5`,
+  then transforms the top two glyph corners: Y delta is halved at `<= -3`,
+  otherwise `dy + abs(4*dy)`. The whole glyph is translated `(0,-20)`.
+  The second identical glyph is red at player `+0x210` hit-pulse alpha.
+  Stoneskin, Harden, and Planewalker precede the Webbed branch. Planewalker's
+  separate body-material omission remains the already-recorded nearby finding
+  in ledger 084; this change preserves that branch's priority over web layers.
+- Membership expansion: Silk's inherited force callback `0x005F92C0` is
+  reachable from the powered Frost Jet mask `0x1082`. Silk inherits radius 15
+  from Puppet `0x006287D0`; ordinary damage `0x00627F80` applies modifiers but
+  never decrements Silk HP. Force accumulates at `+0x178` and retires only
+  above one, creating `Anim_FadeLine` (`0x0079DDE8`, size `0x5C`). Its sole
+  constructor xref is this callback. Tick `0x004557A0` subtracts its authored
+  fade loss and translates both endpoints and midpoint by the stored velocity;
+  draw `0x0045AC40` emits two width-two white endpoint gradients. This child
+  is part of the Spider closure and is being added to the per-member checks.
+
+### Spider completion audit: force fragments and retained corpse rendering
+
+Fresh instruction reads on the same sealed retail image distinguish float and
+64-bit constants in `Silk::Force 0x005F92C0`. The callback accumulates its force
+argument at `+0x178` and retires the Silk only when that sum is strictly greater
+than one. Its remaining sixteen spline units are sampled backwards with step
+`float(4 / waveScale) * 0.4000000059604645`; each fragment also samples the half
+step. Both coordinates subtract the Silk height, exactly as the stock
+instructions do. The force vector supplied to the callback determines heading
+(`atan2(dx, -dy)`), with a signed five-degree draw per illuminated fragment.
+Speed is `(1 - clamp(distance(endpointMean, silkPosition) / 300, 0, 1)) *
+(1.9500000476837158 + U(0.09999990463256836))`. Initial opacity is
+`(.949999988079071 + U(.550000011920929)) * localLight * .3499999940395355`;
+loss per tick is the inherited float `.1` multiplied by
+`(.20000000298023224 - U(.05000000074505806))`. Unlit fragments are omitted
+before the fragment RNG draws. Blizzard's `0x00542086..0x005420BB` branch passes
+force `100` and the channel heading vector to every target with mask `0x1080`.
+
+`Anim_FadeLine` is an additional member of the Spider ownership inventory:
+vtable `0x0079DDE8`, constructor at the sole allocation xref in `0x005F92C0`,
+tick `0x004557A0`, render `0x0045AC40`, and shared line helper `0x00455840`.
+Its Arena `+0x1E0` direct late animation manager owns the child after the Silk retires. Each
+tick subtracts opacity loss and translates both endpoints and the separately
+sampled middle by the constant velocity. Render uses two white, width-two
+line gradients, transparent at the outer endpoints; the first middle alpha is
+capped at one and the second uses the stored opacity. Its target disposition is
+`exact-ported`; the force/lifecycle tests pass on Mac and the line material
+uses the same shared vertex-color owner as the other native gradient meshes.
+
+`Anim_DeadSpider::Render 0x00461B60` draws only while remaining life is at least
+`10`, with opacity `clamp(life - 10, 0, 1)`. It draws the selected glyph once
+black at `(x, y + 1)`, then white at `(x, y)`, independently of region tint.
+The corpse's retained blood record continues through the full twenty-unit
+lifetime in its compact and mask grids. These are distinct render consumers and require
+separate acceptance assertions. The inclusive facing wrap can reach bank index
+20; `Array<Glyph>::Resize 0x0043A6B0` constructs the extra entry with
+`Glyph::Glyph 0x004138A0`, whose zeroed resource and geometry members confirm an empty draw.
+
+The renderer module split moves existing light collection, surface lighting,
+static construction, live views, and diagnostic state to their owning modules.
+No native rendering order changes are inferred from that organization.
+
+`Glyph::Glyph 0x004138A0` zeroes its dimensions, texture-resource words, and
+geometry counts, confirming that DeadSpider's resized bank index 20 draws no
+glyph. `Silk::Tick 0x005F8B7F..0x005F8B89` calls only the modifier helper and
+clears its ordinary Arrow draw flag; it does not append the inherited light
+provider. The inherited `0x005E6140` slot therefore supplies no Silk light.
+Silk sparkle draws use the existing replicated-presentation rule: the native
+integer/float domains are preserved, while an actor/frame seed separates
+client render randomness from the authoritative combat stream. A browser
+client cannot consume the native process-global renderer/physics RNG stream.
+
+The lateral channel-mask audit found a third force consumer. Steam Jet handler
+`0x00542D20`, specifically `0x00543581..0x005435CE`, uses mask `0x1082` when
+fully powered and `0x2` when weak, then sends the current push factor times
+`0.3199999928474426` to virtual slot `+0x64` for flags `0x1080`. Its ordinary
+enemy push is a separate flags-two branch. The web's enemy-only Steam cone
+therefore omitted both Arrow and Silk force targets; both memberships are
+use the same recovered projectile-force dispatcher.
+
+### Decal record layout and mask census correction
+
+The earlier shorthand identifying both `+0x8F24/+0x8F84` as Spider-owned grids
+was incorrect. Raw `0x00461A0A/0x00461A3C` inserts the same record into the
+special compact-mask grid `+0x8F84` and ordinary compact grid `+0x8AF4`;
+`0x00461AF4/0x00461B22` removes that pair. Terrain polygons own the distinct
+`+0x8F24` mask grid. The record layout matches authored compact sprites:
+entry `+0`, position `+4/+8`, rotation `+0xC`, scale `+0x10`, alpha `+0x14`.
+Spider's scalar accumulator begins at `.35`, rises `.01` per tick to one,
+and writes scale `accumulator * .9`; alpha stays one until remaining life
+falls below one. Thus the decal grows, then fades during its final second.
+
+`Arena::Initialize 0x00470A90` also enrolls every authored compact row 25..29
+into `+0x8F84`. Seven of the twelve retained generated templates contain
+these rows: counts 57, 47, 19, 37, 50, 39, and 41 in source order shown by the
+catalog. Five mode-zero templates have none. All twelve generated templates
+have zero terrain rows. Existing claims in entries 090/106 that these masks
+are absent from the web's generated arenas are superseded. The shared compact
+mask compositor must consume the authored rows and Spider's retained record.
+
+Puppet's default camera box is exactly `(-100,-100,200,200)`. Static initializer
+`0x007825F0..0x00782618` writes `0x0081C724` using float constants
+`0x00785D04=-100` and `0x007852D8=200`; `0x00628951` installs its address in
+Puppet `+0xC8`, and Spider does not replace it. This is instruction-derived
+from the sealed PE, independently inspected with GNU objdump after the Ghidra
+xref reported an initializer outside its existing function boundaries.
+
+Schema 33 retains the complete Spider wave cursor and enemy-owned Silk,
+Webbed, Cocoon, FadeLine, and DeadSpider state. The existing durable-save
+contract requires a migration for older checkpoints. A pre-33 save gains empty
+new actor cohorts and the exact source's Spider program; phases whose trigger
+wave is already past are consumed so restoring an older run does not replay
+historical encounters. Existing cached enemy rewards remain that checkpoint's
+values. Death-effect Y scale migrates from its previously uniform scale.
+
+The compact-mask port includes its complete authored selector bank 25..29 and
+the dynamic Spider decal. Terrain polygons use a separate owning shape system
+and do not occur in any of the twelve native survival templates; their existing
+missing mask contribution is recorded as follow-up work outside this Spider
+system. This is a scope boundary, not a claimed browser limitation. The compact
+mask contribution renders after the world painters, while the dynamic decal's
+normal dark glyph renders with the pre-main ground content. Native startup
+sets compact selector 25..28 alpha to `.75` and selector 29 to `1` before both
+normal and mask consumers.
+
+Spider movement now places navigation before the final native speed cap and
+heading recovery. Full `+0x6C` uses the class's base speed; degraded `+0x70`
+uses chase speed as well. With no target, the full branch first projects a
+10,000-unit wander goal, clips/routes it, and only then adds signed 45-degree
+heading jitter and replaces the capped vector with `1.5 * baseSpeed`.
+The degraded branch keeps its brain unchanged, pursues the target (or the
+actor-UID times 225-degree bounded wander direction), and moves at one quarter
+of `baseSpeed * chaseSpeed * statusFactor * cadence`.
+
+The actor clock is phased by UID: 2 ticks with Enhanced Effects, 5 without,
+10 while unlit, and 15 outside the default camera box. A server-authoritative
+multiplayer scene uses the union of participant view rectangles derived from
+accepted viewport inputs and the stock camera scale. Web-only display FOV does
+not change authoritative enemy behavior; the dedicated context keeps the
+native setting branches testable without taking control of a browser frame.
+
+The painter audit distinguishes DeadSpider's `+0x278` pre-world manager from
+FadeLine's `+0x1E0` late direct manager. The fading Silk fragments therefore
+render after the sorted world, using the established direct-post-world lane;
+the corpse body stays before the Region multiply.
+
+The first Mac WebGL compact-mask readback exposed an integration defect: the
+radial pass left all 65,536 target pixels with nonzero alpha, including corners
+that the mask pass never touched. The radial Sprite was submitted as the render
+root; its requested multiply blend was not applied as a child draw. The existing
+Harden compositor submits its multiply Sprite beneath a Container. Compact
+masks must use that same renderer contract and retain transparent pixels outside
+the admitted mask shapes. This is a browser integration defect, not native
+permission to draw an unconditional radial.
+
+Mac Chrome's corrected compact target has zero alpha at center, corner, and
+untouched edge samples. The five-static-mask plus one-decal test retains 10,271
+nonzero-alpha pixels rather than incorrectly filling all 65,536. Runtime,
+console, and HTTP-error arrays are empty. This focused component probe verifies
+the correction. The later built-app journey below also verifies the complete
+restraint lifecycle; its final canonical publication gate is separate.
+
+### Ether Drain capture death audit
+
+The earlier “shared banish already at parity” disposition was unsupported.
+`0x0047BF70` checks global damage flag `0x100`, then walks Gameplay's registered
+Ether Drain list at `+0x13A8/+0x13B4` and accepts the first field with squared
+distance strictly below `1600`. Its seven direct callers are `0x004824A0`,
+`0x00482930`, `0x00482D60` (Spider), `0x0048D2A0`, `0x004947B0`, `0x00495600`,
+and `0x0049C830`. The 55-reference damage-global census identifies the capture
+writer at `0x005F8844/0x005F8849`: Ether Drain contact `0x005F8620` ORs `0x10A`
+before common damage dispatch. Ordinary magic does not set capture eligibility.
+
+Spider death calls common death eligibility before this test, so reward and
+retirement still occur. Capture skips both SpiderDie and DeadSpider. The selected
+field's `0x0061DC20` only chooses Anim_Sucked art for Skeleton variants, Zombie,
+and Demon; Spider has no image, sound, or capture-flare child. The initial
+`0x00402220` call clears the field's previous sucked-animation manager. No
+Spider-specific visual may be invented from the unused generic flare kind.
+
+The host carries Ether Drain damage provenance through its existing contact
+record and resolves the strict field-distance test against the same world.
+The Spider death brain retains the capture decision until terminal processing;
+the shared reward and retirement owners remain in control. The six non-Spider
+death callers are outside the Spider encounter system. Their family-specific
+Anim_Sucked integration remains follow-up work; the previous generic parity
+claim does not prove it implemented. Confidence is high for these branches,
+based on fresh instructions and complete direct-xref enumeration.
+
+### Authoritative Spider light inputs
+
+The initial host integration reused the spawn helper's coarse player, Lantern,
+and enemy lights. That helper omitted primary and secondary spell providers,
+ignored player overlay radius, and replaced enemy charge/glow with fixed
+values. It cannot substantiate the earlier exact target-light disposition.
+The native source query is the same Region light query already recovered for
+rendering; Spider does not have a separate “combat darkness” approximation.
+
+The correction moves the existing pure source factories out of renderer-only
+modules and reuses them for authoritative queries at fixed simulation ticks.
+The shared source inventory includes players, Lantern, all enemy and enemy
+projectile providers, primary projectiles and light-emitting transients,
+secondary providers and MiscLight, and Air path/contact lights. Pixel rendering
+and target allocation remain renderer-owned. Browser frame cadence must never
+write the authoritative Spider brain. Existing source-factory tests remain the
+formula witnesses; host integration checks must prove the omitted spell lights
+can change Spider illumination and disappear when their owners retire.
+
+The compact target query has a further recovered boundary rule. Arena startup
+`0x00470BCC..0x00470BEE` initializes `+0x8F84` with 50-unit cells and zero
+origin. `MagicGrid::Init 0x00587C40` uses `trunc(extent/50 + .5) + 2` cells per
+axis. Insertion `0x00587CF0` and query `0x00588040` truncate float rectangle
+edges, divide nonnegative coordinates by 50, clamp to the outer cell, and
+retain a separate negative border cell. Query collects whole cells without an
+exact rectangle-intersection filter. The initial web rectangle filter can
+therefore omit a scaled mask admitted by native at a cell boundary. Both the
+authored compact rows and DeadSpider must use this recovered cell membership;
+the cached insertion rectangle uses unscaled glyph width and height centered
+on the record position. Arena cleanup remains a separate bounds-intersection
+decision after sealing.
+
+### Mac behavior and browser receipts
+
+The twelve native generated source layouts have 23 Spider phases. Independent
+catalog assertions execute every phase, its complete repeat groups, ordered
+flags, pause/sleep/wait transitions, and single wave advance: 335 native births.
+The actor, Silk, force, Webbed, Cocoon, corpse, save, and presentation suites
+cover their distinct clocks, data rows, geometry, damage branches, and teardown.
+The rebased Boneyard run passes 1,978 tests, plus its 365-test prerequisite run.
+The focused light-source/capture suites pass 173 tests; world and Cocoon
+integration pass 40 after giving the world fixtures their real light owners.
+
+`tools/smoke-boneyard-waves.mjs --spider-only`, with
+`SDR_GAME_WAVES_SMOKE_PRODUCTION=1`, passes in Mac Chrome against the production
+build. It enters through Play, New Game, the College, and the Boneyard, then
+uses the normal Solomon combat-start event. The generated Small Spider Wave
+starts at wave 7 and produces its four-member first cohort. Three real Spider
+spits replicate live Silk and apply severities 1, 2, and 3. Full Webbed stops
+movement and creates exactly one Cocoon. Pause holds the authoritative state;
+Leave Game and Last Game restore the same restraint and owner. A real mouse
+primary cast breaks the restored Cocoon. Normal Spider death replicates both
+DeadSpider and its decal. Actual audio playback includes ShootWeb,
+Disintegrate, Webbed, and SpiderDie. Wire, page, console, and HTTP failure
+arrays are empty. The screenshots were inspected after the resume overlay
+cleared; they show the webbed wizard, live Silk, release, and corpse.
+
+`tools/smoke-spider-masks.mjs` passes eight Mac WebGL cases: selectors 25..29,
+DeadSpider, their combined target, and a scaled mask admitted through a shared
+50-unit cell beyond the query rectangle. The seven ordinary targets retain
+transparent corners; the combined target has 10,271 nonzero-alpha pixels out
+of 65,536. The cell-boundary case has 29,874, including the expected clipped
+edge contribution. Every case creates two player targets on join, destroys
+the departed target, and leaves no owned children after destruction.
+
+The complete implementation exceeded the existing game-entry bundle budget.
+Dark Cloud now uses the same on-demand scene boundary as the other optional
+scenes, preserving all of its current controls. The production entry is 131,311
+gzip bytes against the unchanged 134,144-byte ceiling. The existing built
+Dark Cloud browser suite passes desktop, portrait, landscape, and small-phone
+scenarios, including its deliberate service-failure responses.
+
+A matching clean-stock live capture was not feasible while the shared Windows
+foreground was occupied. Native instruction, registry, and complete authored
+corpus evidence remain the oracle; these receipts do not claim a pixel-equal
+stock video comparison. Cosmetic draws retain the existing deterministic
+browser seed policy, with the recovered native random domains and ranges.
+The separate Terrain-mask producer and party-count changes between enemy birth
+and reward credit remain the named neighboring follow-ups above.
+
+Final canonical validation and publication: pending for the committed candidate.

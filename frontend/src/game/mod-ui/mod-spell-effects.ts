@@ -1,5 +1,10 @@
 import { gameContentUrl } from '../game-content-cache.ts'
-import type { GameModAsset, LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 
 export interface ModSpellEffectModel {
   readonly frame: Readonly<{ height: number; width: number; x: number; y: number }>

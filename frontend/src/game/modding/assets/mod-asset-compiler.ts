@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 
 import type { ModSpriteFrame } from '../../core-kernels/hub-economy.ts'
-import type { GameModAsset } from '../../protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from '../../protocol/game-mod-contract.ts'
 import type {
   CompiledWebLuaAsset,
   CompiledWebLuaMod,

@@ -46,6 +46,14 @@ const SOURCES = {
     solomondarktheme: 'theme.mp3',
   },
   sounds: {
+    'shoot-web-1': 'shoot-web-1.wav',
+    'shoot-web-2': 'shoot-web-2.wav',
+    'shoot-web-3': 'shoot-web-3.wav',
+    'webbed-1': 'webbed-1.wav',
+    'webbed-2': 'webbed-2.wav',
+    'spider-die': 'spider-die.wav',
+    'disintegrate': 'disintegrate.wav',
+
     harden: 'harden.wav',
     'ice-shatter': 'ice-shatter.wav',
     'backpack-close': 'backpack-close.wav',

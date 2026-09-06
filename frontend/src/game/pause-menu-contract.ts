@@ -2,7 +2,9 @@ import {
   NATIVE_UI_SIMPLE_MENU,
   planNativeUiSimpleMenu,
 } from './native-ui/core.ts'
-import type { GameplayPauseState } from './protocol/game-protocol.ts'
+import type {
+  GameplayPauseState,
+} from './protocol/game-protocol-contract.ts'
 import type { FixedGameViewportLayout } from './renderer/game-viewport.ts'
 
 export type NativePauseAction = 'leave' | 'resume' | 'settings'

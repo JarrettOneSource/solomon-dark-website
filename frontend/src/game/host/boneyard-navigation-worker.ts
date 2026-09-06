@@ -5,7 +5,9 @@ import {
   buildPreparedBoneyardNavigationMesh,
   type PreparedBoneyardNavigationMesh,
 } from '../core-server/boneyard-enemy-navigation.ts'
-import type { BoneyardWorldNavigationPreparation } from '../core-server/boneyard-world.ts'
+import type {
+  BoneyardWorldNavigationPreparation,
+} from '../core-server/boneyard-world-state.ts'
 
 interface PrepareNavigationRequest {
   readonly collision: BoneyardCollisionWorld

@@ -1,4 +1,4 @@
-import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config.ts'
+import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config-model.ts'
 import {
   BOUNDED_MAGE_ALLY_SHIELD_RANGE,
   boundedMageShieldIntervalTicks,
@@ -19,6 +19,7 @@ import {
   NATIVE_ENEMY_ACTION_SEED_BOUND,
   restoreNativeRangeEasyAfterVolley,
 } from '../../core-kernels/native-enemy-targeting.ts'
+import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
 import { withEnemyLighting } from './actor-update.ts'
 import { attackMarker, directContactPlayerDamage } from './combat.ts'
 import type {
@@ -39,13 +40,8 @@ import {
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
 } from './programs.ts'
-import {
-  type MageLightningDispatch,
-  emitArcherVolley,
-  emitMageAttack,
-  stepMageLightningPulse,
-} from './projectile-emission.ts'
-import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
+import { emitArcherVolley, emitMageAttack, stepMageLightningPulse } from './projectile-emission.ts'
+import type { MageLightningDispatch } from './projectile-emission.ts'
 import {
   enemyTargetLineOfSightIsClear,
   targetDistance,
@@ -145,6 +141,8 @@ function canReceiveNativeMageAllyShield(actor: BoneyardEnemyActor): boolean {
     case 'WRAITH':
     case 'DEMON':
     case 'COFFIN':
+    case 'SPIDER':
+    case 'COCOON':
       return false
   }
 }

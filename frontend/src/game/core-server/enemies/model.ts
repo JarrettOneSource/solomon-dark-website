@@ -1,38 +1,31 @@
-import type { NativeEnemyLootSeedBound } from '../boneyard-enemy-loot-seed.ts'
-import type { NativeFirePatchState } from '../../core-kernels/primary-spell-fire-effects.ts'
-import type {
-  NativeDemonArticulationState,
-} from '../../core-kernels/boneyard-demon-articulation.ts'
+import type { NativeDemonArticulationState } from '../../core-kernels/boneyard-demon-articulation.ts'
 import type {
   BoneyardEnemyArenaScalars,
   EvaluatedBoneyardEnemyConfig,
-} from '../../core-kernels/boneyard-enemy-config.ts'
-import type {
-  BoneyardEnemyProjectilePayload,
-} from '../../core-kernels/boneyard-enemy-modifiers.ts'
+} from '../../core-kernels/boneyard-enemy-config-model.ts'
+import type { BoneyardEnemyProjectilePayload } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import type { NativeImpFlightState } from '../../core-kernels/boneyard-imp-flight.ts'
-import type {
-  NativeSkeletonHeadFacingOffset,
-} from '../../core-kernels/boneyard-skeleton-family-animation.ts'
+import type { NativeSkeletonHeadFacingOffset } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardEnemySpawnIntent } from '../../core-kernels/boneyard-wave-director.ts'
-import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
+import type { BoneyardBounds, BoneyardPoint } from '../../core-kernels/boneyard.ts'
+import type { NativeDeadSpiderState } from '../../core-kernels/native-dead-spider.ts'
 import type { NativeEnemyPathState } from '../../core-kernels/native-enemy-pathfinding.ts'
-import type {
-  NativeEnemyWorldFeedbackOutput,
-} from '../../core-kernels/native-enemy-world-feedback.ts'
+import type { NativeEnemyWorldFeedbackOutput } from '../../core-kernels/native-enemy-world-feedback.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
-import type {
-  NativeSecondaryTargetEffectState,
-} from '../../core-kernels/native-secondary-abilities.ts'
-import {
-  type NativePortalState,
-  nativePortalCollisionRadius,
-} from '../../core-kernels/native-survival-portal.ts'
+import type { NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
+import type { NativeFadeLineActor } from '../../core-kernels/native-silk-force.ts'
+import type { NativeSilkState } from '../../core-kernels/native-silk.ts'
+import type { NativeSpiderState } from '../../core-kernels/native-spider.ts'
+import { nativePortalCollisionRadius } from '../../core-kernels/native-survival-portal.ts'
+import type { NativePortalState } from '../../core-kernels/native-survival-portal.ts'
+import type { NativeWebbedState } from '../../core-kernels/native-webbed.ts'
 import type {
   NativeWorldManagerRegistration,
   RegisterNativeWorldPainter,
 } from '../../core-kernels/native-world-manager-order.ts'
 import type { NativeWraithFlightState } from '../../core-kernels/native-wraith-flight.ts'
+import type { NativeFirePatchState } from '../../core-kernels/primary-spell-fire-effects.ts'
+import type { NativeEnemyLootSeedBound } from '../boneyard-enemy-loot-seed.ts'
 import { NATIVE_ENEMY_HIT_LATCH_TICKS } from './programs.ts'
 
 export type BoneyardEnemyActorId = number
@@ -141,6 +134,8 @@ export interface BoneyardPortalBrain extends NativePortalState {
 }
 
 export type BoneyardEnemyBrain =
+  | BoneyardSpiderBrain
+  | BoneyardCocoonBrain
   | BoneyardArcherBrain
   | BoneyardCoffinBrain
   | BoneyardDemonBrain
@@ -406,6 +401,7 @@ export interface BoneyardEnemyDeathEffect {
   readonly role: string
   readonly rotationDeg: number
   readonly scale: number
+  readonly scaleY: number
   readonly scaleMultiplier: number
   readonly shadow: boolean
   readonly spawnTick: number
@@ -441,6 +437,7 @@ export interface BoneyardMageLightningPulse {
 export type BoneyardEnemyTerminalOutput = NativeEnemyWorldFeedbackOutput
 
 export type BoneyardEnemyDeathSound =
+  | 'spider-die'
   | 'banshee-die'
   | 'coffin-break'
   | 'demon-die'
@@ -471,6 +468,14 @@ export type BoneyardPlayerDamageSound =
   | 'wizard-ouch-3'
 
 export type BoneyardEnemyActionSound =
+  | 'maggot-squish-1'
+  | 'maggot-squish-2'
+  | 'disintegrate'
+  | 'shoot-web-1'
+  | 'shoot-web-2'
+  | 'shoot-web-3'
+  | 'webbed-1'
+  | 'webbed-2'
   | 'bite-1'
   | 'bite-2'
   | 'bite-3'
@@ -499,6 +504,7 @@ export type BoneyardCombatSound =
   | BoneyardPlayerDamageSound
 
 export type BoneyardEnemySemanticEventType =
+  | 'cocoon-released'
   | 'player-status-sound'
   | 'attack-marker'
   | 'coffin-maggot-release'
@@ -535,6 +541,7 @@ export interface BoneyardEnemySemanticEvent {
 }
 
 export interface BoneyardEnemyPlayerDamage {
+  readonly webbedStrength?: number
   readonly actorId: BoneyardEnemyActorId
   readonly physicalDamage: number
   readonly magicDamage: number
@@ -585,6 +592,11 @@ export interface BoneyardEnemyRetirement {
 }
 
 export interface BoneyardEnemyStore {
+  readonly silkFragments: readonly NativeFadeLineActor[]
+  readonly spiderRemains: readonly BoneyardSpiderRemains[]
+  readonly silks: readonly BoneyardSilkActor[]
+  readonly webbedPlayers: Readonly<Record<string, NativeWebbedState>>
+  readonly spiderSpitTicksRemaining: number
   readonly actors: readonly BoneyardEnemyActor[]
   readonly deathEffects: readonly BoneyardEnemyDeathEffect[]
   readonly headFacingRngState: NativeRngState
@@ -733,6 +745,12 @@ export interface BoneyardEnemyRetirementObserver {
 }
 
 export interface BoneyardEnemyStoreStepContext {
+  readonly spiderMovementView?: {
+    readonly arenaBounds: Readonly<BoneyardBounds>
+    readonly cameras: readonly Readonly<BoneyardBounds>[]
+    readonly enhancedEffects: boolean
+  }
+  readonly lightAt?: (position: Readonly<BoneyardPoint>) => number
   readonly abilityEffects?: Readonly<Record<number, NativeSecondaryTargetEffectState>>
   readonly arenaScalars?: Partial<BoneyardEnemyArenaScalars>
   readonly clipSpellSegment?: ClipBoneyardEnemySpellSegment
@@ -766,6 +784,8 @@ export interface BoneyardEnemyStoreStepResult {
 }
 
 export interface DamageBoneyardEnemyRequest {
+  readonly etherDrainCapture?: boolean
+  readonly magic?: boolean
   readonly actorId: BoneyardEnemyActorId
   readonly amount: number
   readonly attributionObserver?: BoneyardEnemyAttributionObserver
@@ -822,6 +842,11 @@ export interface TumbleBoneyardArrowResult {
 }
 
 export interface WorkingStep {
+  silkFragments: NativeFadeLineActor[]
+  spiderRemains: BoneyardSpiderRemains[]
+  silks: BoneyardSilkActor[]
+  webbedPlayers: Record<string, NativeWebbedState>
+  spiderSpitTicksRemaining: number
   actors: BoneyardEnemyActor[]
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
@@ -864,6 +889,7 @@ export interface ActionProgram {
 }
 
 export function boneyardEnemyCollisionRadius(actor: BoneyardEnemyActor): number {
+  if (actor.brain.family === 'spider') return actor.brain.attached ? 5 : 15
   return actor.brain.family === 'portal'
     ? nativePortalCollisionRadius(actor.brain)
     : actor.config.collisionRadius
@@ -879,4 +905,32 @@ export function validatePoint(point: Readonly<BoneyardPoint>, label: string): vo
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
     throw new RangeError(`${label} must contain finite coordinates`)
   }
+}
+
+export interface BoneyardSpiderBrain extends NativeSpiderState {
+  readonly family: 'spider'
+  readonly phase: 'active' | 'death' | 'captured'
+}
+
+export interface BoneyardCocoonBrain {
+  readonly family: 'cocoon'
+  readonly phase: 'active' | 'death'
+  readonly ownerPlayerId: string | null
+  readonly ownerPosition: Readonly<BoneyardPoint>
+}
+
+export interface BoneyardSilkActor {
+  readonly nativeRegistrationOrder: number
+  readonly nativeCellBindingOrder: number
+  readonly id: number
+  readonly ownerActorId: number
+  readonly spawnTick: number
+  readonly state: NativeSilkState
+  readonly painterRegistration: NativeWorldManagerRegistration
+}
+
+export interface BoneyardSpiderRemains {
+  readonly id: number
+  readonly spawnTick: number
+  readonly state: NativeDeadSpiderState
 }

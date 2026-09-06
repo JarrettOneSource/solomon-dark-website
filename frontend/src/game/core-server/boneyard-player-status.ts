@@ -64,6 +64,7 @@ export function emitPlayerStatusBurst(
       role: `player-status-${request.status}`,
       rotationDeg: rotation.value,
       scale: Math.fround(0.75 + scale.value),
+      scaleY: Math.fround(0.75 + scale.value),
       scaleMultiplier: 1,
       shadow: false,
       spawnTick: request.tick,

@@ -1,18 +1,14 @@
-import { nativeEnemyProjectileVelocity } from '../../core-kernels/native-enemy-targeting.ts'
 import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
+import { nativeEnemyProjectileVelocity } from '../../core-kernels/native-enemy-targeting.ts'
 import {
   NATIVE_POISON_POOL_GROWTH,
   NATIVE_POISON_POOL_MAXIMUM_SCALE,
   nativePoisonPoolAlpha,
   nativePoisonPoolContact,
 } from '../../core-kernels/native-poison-pool.ts'
-import {
-  nativeHeadingTurnDirection,
-  nativePrimaryCellCoordinate,
-} from '../../core-kernels/primary-spell-targeting.ts'
+import { nativeHeadingTurnDirection, nativePrimaryCellCoordinate } from '../../core-kernels/primary-spell-targeting.ts'
 import { stepProjectileEffects } from '../boneyard-transient-effects.ts'
-import { spawnDemonExplosion, spawnDemonFireHandoff, spawnPoisonPoolBubble, stepDemonFires, stepProjectileKnockbacks } from './projectile-hazards.ts'
 import { emitEvent } from './events.ts'
 import type {
   BoneyardEnemyProjectile,
@@ -21,10 +17,14 @@ import type {
   WorkingStep,
 } from './model.ts'
 import { NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS as PROGRAM } from './programs.ts'
+import { spawnProjectileImpactEffects, spawnProjectileTrails } from './projectile-effects.ts'
 import {
-  spawnProjectileImpactEffects,
-  spawnProjectileTrails,
-} from './projectile-effects.ts'
+  spawnDemonExplosion,
+  spawnDemonFireHandoff,
+  spawnPoisonPoolBubble,
+  stepDemonFires,
+  stepProjectileKnockbacks,
+} from './projectile-hazards.ts'
 import { targetEligible } from './targeting.ts'
 
 export function stepProjectiles(work: WorkingStep, context: BoneyardEnemyStoreStepContext): void {

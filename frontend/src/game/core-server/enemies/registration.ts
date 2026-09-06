@@ -9,6 +9,7 @@ export function standaloneEnemyWorldManagerOrderState(source: BoneyardEnemyStore
     ...source.maggots.map(({ lightRegistration }) => lightRegistration),
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
     ...source.projectiles.map(({ painterRegistration }) => painterRegistration),
+    ...source.silks.map(({ painterRegistration }) => painterRegistration),
     ...source.projectileEffects.map(({ lightRegistration }) => lightRegistration),
     ...source.projectileEffects.map(({ painterRegistration }) => painterRegistration),
     ...source.deathEffects.map(({ painterRegistration }) => painterRegistration),

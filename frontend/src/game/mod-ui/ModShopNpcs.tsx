@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 
 import type { GameClientSession } from '../client/game-client-session.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
-import type { LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 import './mod-shop-npcs.css'
 
 export default function ModShopNpcs({ session }: Readonly<{ session: GameClientSession }>) {

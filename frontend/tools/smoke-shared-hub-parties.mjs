@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
 
-import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../src/game/protocol/game-protocol-contract.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const baseUrl = process.env.SDR_SHARED_HUB_SMOKE_URL || 'http://127.0.0.1:5173'

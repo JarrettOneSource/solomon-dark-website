@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { GameModAsset } from '../../protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from '../../protocol/game-mod-contract.ts'
 import type { CompiledWebLuaMod } from '../definition/index.ts'
 import { compileModAssets } from './mod-asset-compiler.ts'
 

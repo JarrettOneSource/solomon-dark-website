@@ -1,0 +1,88 @@
+import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../../core-kernels/boneyard-mage-lightning.ts'
+import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
+import type { BoneyardEnemyStore, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
+import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
+
+export function createEnemyWork(
+  source: BoneyardEnemyStore,
+  context: Pick<BoneyardEnemyStoreStepContext, 'tick' | 'registerWorldPainter' | 'registerProjectileWorldPainter'>,
+  preserveExisting: boolean,
+): WorkingStep {
+  const registerWorldPainter = context.registerWorldPainter
+    ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
+  return {
+    silkFragments: [...source.silkFragments],
+    spiderRemains: [...source.spiderRemains],
+    silks: [...source.silks],
+    webbedPlayers: { ...source.webbedPlayers },
+    spiderSpitTicksRemaining: source.spiderSpitTicksRemaining,
+    actors: preserveExisting ? [...source.actors] : [],
+    deathEffects: preserveExisting ? [...source.deathEffects] : [],
+    events: [],
+    headFacingRngState: source.headFacingRngState,
+    impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+    locomotionRngState: source.locomotionRngState,
+    mageLightningPulses: preserveExisting ? [...source.mageLightningPulses] : source.mageLightningPulses.filter((pulse) => (
+      context.tick - pulse.tick < NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
+    )),
+    maggots: [...source.maggots],
+    nextActorId: source.nextActorId,
+    nextDeathEpoch: source.nextDeathEpoch,
+    nextDeathEffectId: source.nextDeathEffectId,
+    nextEventId: source.nextEventId,
+    nextMageLightningPulseId: source.nextMageLightningPulseId,
+    nextNativeCellBindingOrder: source.nextNativeCellBindingOrder,
+    nextNativeRegistrationOrder: source.nextNativeRegistrationOrder,
+    nextProjectileId: source.nextProjectileId,
+    nextProjectileEffectId: source.nextProjectileEffectId,
+    nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
+    playerDamage: [],
+    playerKnockbacks: [],
+    pathStatusFactors: new Map(),
+    pendingSpawnIntents: [],
+    projectiles: [...source.projectiles],
+    projectileKnockbacks: [...source.projectileKnockbacks],
+    targetCellBindings: source.targetCellBindings,
+    projectileEffects: preserveExisting ? [...source.projectileEffects] : [],
+    registerWorldPainter,
+    registerProjectileWorldPainter: context.registerProjectileWorldPainter ?? registerWorldPainter,
+    retired: [],
+    rewards: [],
+    rngState: source.rngState,
+    steeringRngState: source.steeringRngState,
+    spawnedActorIds: [],
+  }
+}
+
+export function finishEnemyStore(work: WorkingStep, tick: number): BoneyardEnemyStore {
+  return {
+    silkFragments: work.silkFragments,
+    spiderRemains: work.spiderRemains,
+    silks: work.silks,
+    webbedPlayers: work.webbedPlayers,
+    spiderSpitTicksRemaining: work.spiderSpitTicksRemaining,
+    actors: work.actors,
+    deathEffects: work.deathEffects,
+    headFacingRngState: work.headFacingRngState,
+    lastStepTick: tick,
+    locomotionRngState: work.locomotionRngState,
+    mageLightningPulses: work.mageLightningPulses,
+    maggots: work.maggots,
+    nextActorId: work.nextActorId,
+    nextDeathEpoch: work.nextDeathEpoch,
+    nextDeathEffectId: work.nextDeathEffectId,
+    nextEventId: work.nextEventId,
+    nextMageLightningPulseId: work.nextMageLightningPulseId,
+    nextNativeCellBindingOrder: work.nextNativeCellBindingOrder,
+    nextNativeRegistrationOrder: work.nextNativeRegistrationOrder,
+    nextProjectileId: work.nextProjectileId,
+    nextProjectileEffectId: work.nextProjectileEffectId,
+    nextSyntheticSpawnIntentId: work.nextSyntheticSpawnIntentId,
+    projectiles: work.projectiles,
+    projectileKnockbacks: work.projectileKnockbacks,
+    targetCellBindings: work.targetCellBindings,
+    projectileEffects: work.projectileEffects,
+    rngState: work.rngState,
+    steeringRngState: work.steeringRngState,
+  }
+}

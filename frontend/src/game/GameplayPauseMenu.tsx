@@ -16,7 +16,9 @@ import {
   type NativeSimpleMenuAction,
   type NativeSimpleMenuRow,
 } from './pause-menu-contract.ts'
-import type { GameplayPauseState } from './protocol/game-protocol.ts'
+import type {
+  GameplayPauseState,
+} from './protocol/game-protocol-contract.ts'
 import './gameplay-pause-menu.css'
 
 interface GameplayPauseMenuProps {

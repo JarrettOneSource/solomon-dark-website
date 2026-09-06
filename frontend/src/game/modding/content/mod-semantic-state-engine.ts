@@ -1,5 +1,7 @@
 import type { WebLuaScopeKind } from '../definition/index.ts'
-import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
+import type {
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
 
 const MAXIMUM_VALUES = 4_096
 const MAXIMUM_NODES = 4_096

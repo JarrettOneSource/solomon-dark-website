@@ -1,5 +1,3 @@
-import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
-import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import type {
   NativeSecondaryActorState,
   NativeSecondaryEventState,
@@ -14,8 +12,8 @@ import {
   drawNativeFloat,
   drawNativeInteger,
   drawNativeSign,
-  type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellEtherBlastState } from '../core-kernels/primary-spells.ts'
 import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
@@ -23,17 +21,13 @@ import {
   NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY,
   NATIVE_ETHER_BLAST_SCREEN_GREEN,
 } from '../core-kernels/native-ether-blast.ts'
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 import type { NativeSecondaryAtlas } from './native-secondary-assets.ts'
-import {
-  ETHER_PRIMARY_FLIGHT_RECORDS,
-  etherPrimaryCompositorPlan,
-} from './primary-spell-ether-native.ts'
-import {
-  nativeFireEmberPlan,
-  nativeFireExplosionPlan,
-  type NativeFireActorDraw,
-} from './primary-spell-fire-native.ts'
+import { ETHER_PRIMARY_FLIGHT_RECORDS, etherPrimaryCompositorPlan } from './primary-spell-ether-native.ts'
+import { nativeFireEmberPlan, nativeFireExplosionPlan } from './primary-spell-fire-native.ts'
+import type { NativeFireActorDraw } from './primary-spell-fire-native.ts'
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 
 export interface NativeSecondarySpriteDraw {
   readonly alpha: number
@@ -479,6 +473,7 @@ export function nativeSecondaryWorldShake(
   }
   return selected
 }
+
 
 
 export class NativeSecondaryScreenFeedbackPresentation {

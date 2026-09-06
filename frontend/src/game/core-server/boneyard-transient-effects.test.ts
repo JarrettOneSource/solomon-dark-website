@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
 import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 
@@ -302,6 +301,7 @@ function deathEffect(
     rotationDeg: 5,
     scale: 1,
     scaleMultiplier: 1,
+    scaleY: 1,
     shadow: false,
     spawnTick: 10,
     tint: 0xffffff,

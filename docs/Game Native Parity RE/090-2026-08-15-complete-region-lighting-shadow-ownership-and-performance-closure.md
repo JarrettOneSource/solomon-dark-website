@@ -518,7 +518,7 @@ provider order, setting flag, and all downstream consumers remain valid.
 | High live diagnostic | injected task PID `22468`, runtime base `0x002A0000`, staged executable hash equal to retail; Lua exec against Arena `0x19A1C150` | `LQ=.25`, manager scale `.200000003`, allocation `512x512`, active rectangle `(0,0)..(296.296295,383.796295)`. | high supporting evidence |
 | Low live diagnostic | injected task PID `26040`, runtime base `0x009D0000`, staged executable hash equal to retail; Lua exec against Arena `0x19AB9D68` | `LQ=.059999999`, manager scale `.048`, allocation `128x128`, active rectangle `(0,0)..(71.111107,92.111107)`, Multiple Shadows/Enhanced Effects off. | high supporting evidence |
 | Live provider lane | high task PID `8212`, runtime base `0x002A0000`; persistent list `Arena+0x8D80/+0x8D8C`, accepted records `Arena+0x8C44 +0xFC/+0x108` | Player then Lantern vtables/callbacks were exact. Forty Lantern samples ranged `.364724010..749794006`; Multiple Shadows off changed only the Lantern record flag from one to zero. | high supporting evidence |
-| Live environment grids | trace of `0x00588040` plus Arena `+0x8AF4/+0x8F24/+0x8F84` | Retail queries the general spatial grid and both player target grids every frame. Both target grids were empty in the generated run. Offset xrefs identify `Anim_DeadSpider::Tick 0x00461740` as their only concrete producer. | high |
+| Live environment grids | trace of `0x00588040` plus Arena `+0x8AF4/+0x8F24/+0x8F84` | Retail queries the general spatial grid and both player target grids every frame. Both target grids were empty in the observed run; that sample did not prove exclusion. The 2026-09-05 complete xref sweep identifies Terrain at `+0x8F24` and authored compact masks plus DeadSpider at `+0x8F84`. | high |
 | Specialized consumer | Wall builder `0x005EEBB0`, Wall render `0x0061DF40`, wrappers `0x0061E780/0x0061E990`; Building `0x0060E940` | Wall samples its two materialized endpoints through `0x0057E640`, creates endpoint grayscale values, and interpolates them through its generated surface/decor program. Website bakes its fixed-color three-stroke approximation into the untinted pre-main base; because Wall is correctly excluded from actor occlusion, the runtime never materializes the otherwise-modeled Wall lighting or shadow program. | high |
 | Current web differential | current Mac main; Building smoke and direct module probe | Default Website target is `400x400`/logical `1600`; low plan is `95x95`. Web source domains are Lantern `.550026..749932`, Missile `.750008..850000`, Fireball `1.000033..1.249970`, Arrow `.500030..749862`; a source past the native zoom-1.35 right edge remains admitted. | high |
 | Current Mac browser baseline | macOS 26.6.2 arm64, Chrome/WebGL2, detached `acad2d24` | Four Building and 21 Monument member proof passed; Settings toggles passed with empty error arrays. The checked-in complex-shadow smoke failed before a lighting assertion because it omitted newly required empty `modAssets/modCatalog`, exposing a stale acceptance harness. | high |
@@ -565,7 +565,7 @@ and destruction. Hub has no Region manager and is a negative scene member.
 | Light Quality `.06..25` | `0x00B3BCA4` | `exact-ported` by target correction | allocation, transform, cull and resize consume one value |
 | Enhanced Effects on/off | `0x00B3BCAD` | `verified-already-at-parity` for both Building grids; user toggle remains `out-of-system` per Settings authority | current browser policy stays visibly fixed on |
 | modes `0/1/2` direct player pass | `0x00470EE0`, DeadHawg 18 | `verified-already-at-parity` for membership/geometry; final opacity is `out-of-system` by explicit user product policy | mode 0 absent; modes 1/2 bounded additive; Website remains 14 percent of native brightness |
-| optional DeadHawg-9 target pass | Arena `+0x8F24/+0x8F84` | `out-of-system`: only `Anim_DeadSpider` populates these grids and Website has no Spider/DeadSpider actor | live target counts zero; no unconditional replacement mask |
+| optional DeadHawg-9 target passes | Arena `+0x8F24/+0x8F84` | Compact masks `exact-ported` in the [Spider reopening](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md); separate Terrain shape contribution is follow-up outside that system | Authored selectors 25..29 and DeadSpider share the compact target. Empty live grids did not prove no producer. |
 | weather splash/streak order | Arena weather callers | `verified-already-at-parity` | splash before Region, streak after foreground; Complex Lighting off reorders composite |
 | first frame, pause, reset, resize, scene replacement, destroy | Arena/Website scene owners | `exact-ported` after target resize correction | ready barrier, no hidden simulation clock, no stale textures/meshes/listeners |
 | Hub/private-room rendering | no Region initialization/composite | `out-of-system` negative member | no invented Hub radial lighting; Staff/ambient self-lit painters remain separate |
@@ -596,7 +596,7 @@ player aperture and the current approximate Wall silhouette/decor geometry.
 | `Fireball 0x0079C5BC -> 0x005E50D0` | intensity `.75`, radius `1+S(.25)`, `MS` | `exact-ported` by this correction |
 | `Boulder 0x0079E014`, `EBoulder 0x0079E08C`, `Hailstones 0x0079E104 -> 0x005E5670` | intensity `.5`, radius `max(1,2*charge)`, `MS` | `verified-already-at-parity` |
 | `Ember 0x0079C624`, `EvilEmber 0x0079C694 -> 0x005E5960` | intensity `.25*min(life,1)`, radius `1-U(.25)`, literal false | `verified-already-at-parity` |
-| `Arrow 0x0079C7E4`, `Firebolt 0x0079CAD4`, `DarkFireball 0x0079D144`, `Silk 0x0079D294 -> 0x005E6140` | radius `.5+S(.25)` with class-owned intensity/flag | `exact-ported` by this correction for fire Arrow/Firebolt; dormant siblings remain catalogued |
+| `Arrow 0x0079C7E4`, `Firebolt 0x0079CAD4`, `DarkFireball 0x0079D144`, `Silk 0x0079D294 -> 0x005E6140` | radius `.5+S(.25)` with class-owned intensity/flag | `exact-ported` for fire Arrow/Firebolt; Silk is `verified-already-at-parity` with no light: its constructor/tick does not register the inherited provider. Other siblings remain catalogued |
 | `Lantern 0x0079C854 -> 0x005E6220` | radius `.65`, intensity `.55+S(.2)`, `MS` | `exact-ported` by this correction; range `[.35,.75]` inclusive |
 | `Meteor 0x0079C9F4 -> 0x005E7040` | fall/impact visibility and body-scaled radius, literal false | `verified-already-at-parity` |
 | `GreenFire 0x0079DC2C -> 0x005E7420` | alpha-gated green-fire source | `out-of-system`: no current Website actor |
@@ -798,8 +798,8 @@ remains.
 - Residuals are explicit rather than unknown: the direct player aperture stays
   at the user-directed 14 percent of stock brightness; semantic presentation
   words intentionally replace the process-global RNG phase; browser Enhanced
-  Effects remains fixed on; Spider/DeadSpider target-grid masking has no web
-  actor; and Wall silhouette/decor remains the already-recorded approximate
+  Effects remains fixed on; the former Spider/DeadSpider exclusion is superseded
+  by the complete 2026-09-05 compact-mask port; and Wall silhouette/decor remains the already-recorded approximate
   geometry debt. No additional in-system lighting discrepancy remained after
   the final membership and callsite rescan.
 - Publication state: implemented and validated in retained task worktrees only.

@@ -1,4 +1,5 @@
-import { type NativeRngState, drawNativeInteger } from '../../core-kernels/native-rng.ts'
+import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../../core-kernels/native-rng.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
 import type {
   BoneyardEnemyActionSound,
@@ -83,6 +84,10 @@ export function emitEnemyDeathSounds(
   outputCount: number | undefined,
 ): void {
   switch (actor.config.enemyToken) {
+    case 'SPIDER':
+      emitEnemyDeathSound(work, tick, actor, 'spider-die', 0.95 + drawUnit(work) * 0.15)
+      return
+    case 'COCOON': return
     case 'SKELETON':
     case 'SKELETONARCHER':
     case 'SKELETONMAGE':

@@ -50,7 +50,9 @@ import {
   type HubNpcSelectorRow,
 } from './hub-npc-dialogue.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
-import type { ModContentProjection } from './protocol/game-protocol.ts'
+import type {
+  ModContentProjection,
+} from './protocol/game-mod-contract.ts'
 import type { HubInventoryRenderer } from './renderer/hub-inventory-renderer.ts'
 import type {
   HubInventoryDragModel,

@@ -7,7 +7,9 @@ import { NATIVE_BOAST_PRESENTATION } from '../core-kernels/native-hub-npc.ts'
 import { nativeHudModalSlideOffset } from '../native-hud-layout.ts'
 import { nativeUiAtlasSource } from '../native-ui/assets.ts'
 import { destroyNativeUiPixiFor } from '../native-ui/pixi.ts'
-import { type GameModAsset } from '../protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
 import {
   BONEYARD_COMBAT_ATLAS_SOURCES,
   boneyardCombatAtlasSourceIsPacked,
@@ -46,12 +48,12 @@ import {
   buildDialogue,
   planBoastDialogue,
 } from './hub-inventory/dialogue.ts'
-import {
-  type ChatRenderState,
-  type HubInventoryRendererModel,
-  type InventoryFlybyView,
-  type InventorySackPages,
-  type RenderContext,
+import type {
+  ChatRenderState,
+  HubInventoryRendererModel,
+  InventoryFlybyView,
+  InventorySackPages,
+  RenderContext,
 } from './hub-inventory/model.ts'
 import { buildNotice } from './hub-inventory/notices.ts'
 import {
@@ -67,7 +69,7 @@ import {
   loadModPresentationTextures,
 } from './mod-presentation-assets.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
-import { type NativeUiCanvas } from './native-ui-canvas.ts'
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   PLAYER_CHARACTER_ATLAS_SOURCES,
   PLAYER_CHARACTER_SHEETS,

@@ -19,7 +19,9 @@ import {
   getPlayerEconomy,
   getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
-import { stepBoneyardWorldTick } from '../src/game/core-server/boneyard-world.ts'
+import {
+  stepBoneyardWorldTick,
+} from '../src/game/core-server/boneyard-world.ts'
 import { boneyardSpawnPositionIsOffscreen } from '../src/game/core-server/boneyard-collision.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import {

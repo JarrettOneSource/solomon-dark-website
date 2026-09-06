@@ -1,35 +1,31 @@
-import { nativeEnemyProjectileVelocity } from '../../core-kernels/native-enemy-targeting.ts'
 import {
-  type BoneyardEnemyProjectilePayload,
   NATIVE_ARROW_POISON_DURATION_SECONDS,
   NATIVE_MAGE_COLD_SLOW_TICKS,
   NATIVE_MAGE_POISON_DURATION_SECONDS,
   projectilePayloadForArrow,
 } from '../../core-kernels/boneyard-enemy-modifiers.ts'
+import type { BoneyardEnemyProjectilePayload } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import {
   NATIVE_MAGE_LIGHTNING_BASE_TICKS,
   nativeMageBodyPose,
   nativeMageLightningSource,
 } from '../../core-kernels/boneyard-mage-lightning.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import { buildNativeArcherVolley } from '../../core-kernels/native-enemy-targeting.ts'
+import { buildNativeArcherVolley, nativeEnemyProjectileVelocity } from '../../core-kernels/native-enemy-targeting.ts'
 import type { NativeWorldManagerLane } from '../../core-kernels/native-world-manager-order.ts'
 import { emitEnemyActionSound, emitEvent } from './events.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyProjectile,
-  type BoneyardEnemyProjectileBase,
-  type BoneyardEnemyProjectileKind,
-  type BoneyardEnemyStoreStepContext,
-  type BoneyardMageLightningPulse,
-  type WorkingStep,
-  validatePoint,
+import { validatePoint } from './model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyProjectile,
+  BoneyardEnemyProjectileBase,
+  BoneyardEnemyProjectileKind,
+  BoneyardEnemyStoreStepContext,
+  BoneyardMageLightningPulse,
+  WorkingStep,
 } from './model.ts'
 import { staffAttackSpeed } from './movement.ts'
-import {
-  BOUNDED_ENEMY_PROJECTILE_PROGRAMS,
-  NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS,
-} from './programs.ts'
+import { BOUNDED_ENEMY_PROJECTILE_PROGRAMS, NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS } from './programs.ts'
 import { drawEnemyFloat, drawEnemyInteger, randomRadialDisplacement } from './random.ts'
 import { targetEligible } from './targeting.ts'
 

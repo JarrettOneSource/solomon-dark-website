@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 
 import type { GameClientSession } from '../client/game-client-session.ts'
-import type { LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 import {
   color,
   number,

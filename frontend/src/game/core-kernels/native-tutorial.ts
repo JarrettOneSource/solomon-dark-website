@@ -1,4 +1,6 @@
-import type { AuthoredBoneyardEnemyRecipe } from './boneyard-enemy-config.ts'
+import type {
+  AuthoredBoneyardEnemyRecipe,
+} from './boneyard-enemy-config-model.ts'
 import type { BoneyardEnemySpawnIntent } from './boneyard-wave-director.ts'
 import type { BoneyardSpawnPositionPolicy } from './boneyard-wave-timeline.ts'
 import {
@@ -1193,7 +1195,7 @@ function recipe(
     chaseSpeed,
     classification: 'normal',
     enemyToken,
-    experience: maximumHealth * 2,
+    experienceBonus: 0,
     extraDamage: 0,
     family: Object.freeze({ kind: 'default' as const }),
     flanking: true,

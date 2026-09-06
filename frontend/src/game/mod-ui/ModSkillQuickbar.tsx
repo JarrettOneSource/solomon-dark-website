@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react'
 import { actorHeadingVector } from '../core-kernels/actor-heading.ts'
 import type { GameClientSession } from '../client/game-client-session.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
-import type { LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 import './mod-skill-quickbar.css'
 
 export default function ModSkillQuickbar({ session }: Readonly<{ session: GameClientSession }>) {

@@ -1,31 +1,21 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
-
+import { readFileSync } from 'node:fs'
 import { parseBoneyard } from '../../editor/format/boneyard.ts'
-import {
-  createBoneyardEnemyStore,
-  stepBoneyardEnemyStore,
-} from '../core-server/boneyard-enemy-store.ts'
-import type {
-  BoneyardEnemyDeathEffect,
-  BoneyardMaggotActor,
-} from '../core-server/enemies/model.ts'
 import {
   NATIVE_ENEMY_HIT_LATCH_TICKS,
   NATIVE_MAGE_ACTION_PROGRAMS,
   NATIVE_MAGGOT_PROGRAM,
 } from '../core-server/enemies/programs.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server/boneyard-enemy-store.ts'
+import type { BoneyardEnemyDeathEffect, BoneyardMaggotActor } from '../core-server/enemies/model.ts'
 import { NATIVE_IMP_BODY_POSE_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
+import { materializeOpeningSolomonSetPiece, projectBoneyard } from './project-boneyard.ts'
 import {
-  materializeOpeningSolomonSetPiece,
-  projectBoneyard,
-} from './project-boneyard.ts'
-import {
-  projectBoneyardEnemyDeathEffect,
   projectBoneyardEnemies,
+  projectBoneyardEnemyDeathEffect,
   projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
@@ -184,6 +174,7 @@ test('projects only Demon raw FireBurst death layers into the direct post-world 
     role: 'demon-death-fire-burst-frame',
     rotationDeg: 90,
     scale: 2,
+    scaleY: 2,
     scaleMultiplier: 1,
     shadow: false,
     spawnTick: 10,

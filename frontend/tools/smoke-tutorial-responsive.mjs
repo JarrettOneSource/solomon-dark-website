@@ -20,7 +20,9 @@ import {
   insertPlayerEntityLootItem,
   replacePlayerCharacter,
 } from '../src/game/core-server/player-entity-store.ts'
-import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import {
+  createBoneyardEnemyStore,
+} from '../src/game/core-server/boneyard-enemy-store.ts'
 import {
   removeBoneyardLootActors,
   spawnBoneyardCustomLootItems,

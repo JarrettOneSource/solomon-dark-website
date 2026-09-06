@@ -19,7 +19,9 @@ import {
   type HubHudShortcutDefinition,
 } from './hub-inventory-presentation.ts'
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
-import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type {
+  GameSnapshot,
+} from './protocol/game-state.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'

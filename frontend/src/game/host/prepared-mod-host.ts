@@ -6,16 +6,11 @@ import {
   resolveBoneyardSpawnPosition,
   withBoneyardGateCollision,
 } from '../core-server/boneyard-collision.ts'
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardEnemySpawnIntent,
-} from '../core-kernels/boneyard-wave-director.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { isBoneyardPlayerCombatEnabled } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
-import {
-  findInventoryItem,
-  reforgeModEquipment,
-} from '../core-kernels/hub-economy.ts'
+import { findInventoryItem, reforgeModEquipment } from '../core-kernels/hub-economy.ts'
 import {
   GAME_TICK_RATE,
   failGameSimulationPlayerBoast,
@@ -24,9 +19,11 @@ import {
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
   replaceGameSimulationPlayerSkillWithMod,
-  type GameSimulationExtensions,
-  type GameSimulationModConsumption,
-  type GameSimulationState,
+} from '../core-server/game-simulation.ts'
+import type {
+  GameSimulationExtensions,
+  GameSimulationModConsumption,
+  GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import {
   creditPlayerEntityLootGold,
@@ -38,13 +35,9 @@ import {
   restorePlayerEntityMana,
   setPlayerEntityMana,
 } from '../core-server/player-entity-store.ts'
+import { compileModAssets } from '../modding/assets/index.ts'
+import type { PreparedModAssetCatalog, PreparedModSpriteAsset } from '../modding/assets/index.ts'
 import {
-  compileModAssets,
-  type PreparedModAssetCatalog,
-  type PreparedModSpriteAsset,
-} from '../modding/assets/index.ts'
-import {
-  compileModContentCatalog,
   ModAffixEngine,
   ModEnemyEngine,
   ModPortalEngine,
@@ -53,51 +46,48 @@ import {
   ModSemanticStateEngine,
   ModShopEngine,
   ModSkillEngine,
-  ModSpellEngine,
   ModSpellEffectEngine,
+  ModSpellEngine,
   ModStatusEngine,
+  compileModContentCatalog,
   modConsumableInventoryItem,
   modItemInventoryItem,
-  type ModEnemyCheckpoint,
-  type ActiveModEnemy,
-  type ModPowerupCheckpoint,
-  type ActiveModPowerup,
-  type ModPowerupCollectionEvent,
-  type ModSceneCheckpoint,
-  type ModSemanticStateCheckpoint,
-  type ModShopCheckpoint,
-  type ModSkillCheckpoint,
-  type ModSpellCheckpoint,
-  type ModSpellEffectCheckpoint,
-  type ModStatusCheckpoint,
-  type ActiveModSpellEffect,
-  type ActiveModScene,
-  type PreparedModContentCatalog,
-  type PreparedModUiDefinition,
+} from '../modding/content/index.ts'
+import type {
+  ActiveModEnemy,
+  ActiveModPowerup,
+  ActiveModScene,
+  ActiveModSpellEffect,
+  ModEnemyCheckpoint,
+  ModPowerupCheckpoint,
+  ModPowerupCollectionEvent,
+  ModSceneCheckpoint,
+  ModSemanticStateCheckpoint,
+  ModShopCheckpoint,
+  ModSkillCheckpoint,
+  ModSpellCheckpoint,
+  ModSpellEffectCheckpoint,
+  ModStatusCheckpoint,
+  PreparedModContentCatalog,
+  PreparedModUiDefinition,
 } from '../modding/content/index.ts'
 import type { ResolvedWebLuaContentReference } from '../modding/definition/index.ts'
 import type { BoastResolver } from '../core-kernels/boast.ts'
-import {
-  prepareModSession,
-  type ModIntent,
-  type ModIntentAdapter,
-  type ModIntentExecutionContext,
-  type PreparedModCheckpoint,
-  type PreparedModStepResult,
-} from '../modding/runtime/index.ts'
+import { prepareModSession } from '../modding/runtime/index.ts'
 import type {
-  LuaConsoleObject,
-  LuaConsoleValue,
-  ModContentProjection,
-} from '../protocol/game-protocol.ts'
+  ModIntent,
+  ModIntentAdapter,
+  ModIntentExecutionContext,
+  PreparedModCheckpoint,
+  PreparedModStepResult,
+} from '../modding/runtime/index.ts'
+import type { LuaConsoleObject, LuaConsoleValue } from '../protocol/codecs/lua.ts'
+import type { ModContentProjection } from '../protocol/game-mod-contract.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 import type { WebLuaDerivedEvent } from './lua/web-lua-game-api.ts'
 import { ModPlayerControl, selectModPlayerSkill, usesPlayerControlRule } from './mod-player-control.ts'
-import {
-  decodePreparedModSaveState,
-  encodePreparedModSaveState,
-  type PreparedModSaveState,
-} from './prepared-mod-save.ts'
+import { decodePreparedModSaveState, encodePreparedModSaveState } from './prepared-mod-save.ts'
+import type { PreparedModSaveState } from './prepared-mod-save.ts'
 
 const MAXIMUM_PRESENTATION_INTENTS = 1_024
 const SPAWN_ID_BASE = 0x5000_0000

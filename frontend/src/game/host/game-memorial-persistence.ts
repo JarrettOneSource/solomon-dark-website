@@ -15,7 +15,9 @@ import {
   createHubMemorialState,
   type HubMemorialState,
 } from '../core-kernels/hub-memorial.ts'
-import { decodeHubMemorialState } from '../protocol/game-protocol.ts'
+import {
+  decodeHubMemorialState,
+} from '../protocol/codecs/hub.ts'
 
 const MAX_GAME_MEMORIAL_BYTES = 256 * 1024
 

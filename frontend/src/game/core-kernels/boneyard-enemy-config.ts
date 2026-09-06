@@ -1,12 +1,18 @@
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardWaveEnemyToken,
-} from './boneyard-wave-schema.ts'
+import type {
+  AuthoredBoneyardEnemyFamilyRecipe,
+  AuthoredBoneyardEnemyRecipe,
+  BoneyardEnemyArenaScalars,
+  BoneyardEnemyConfigRandom,
+  BoneyardEnemyFlag,
+  BoneyardSkeletonWeapon,
+  EvaluateBoneyardEnemyConfigOptions,
+  EvaluatedBoneyardEnemyConfig,
+  MutableConfig,
+} from './boneyard-enemy-config-model.ts'
 import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES, type BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
 import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
 import type { NativeLootPolicies } from './native-loot.ts'
-import type { NativeSurvivalOnDeathProgram } from './native-survival-miniboss.ts'
-import type { NativePortalFrequency } from './native-survival-portal.ts'
 import { NATIVE_WRAITH_COLLISION_RADIUS } from './native-wraith-flight.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
@@ -55,207 +61,9 @@ export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_RANDOMSHOT',
   'FLAG_IGNITE',
   'FLAG_IMMORTALIZE',
+  'FLAG_COCOON',
+  'FLAG_NOSPIT',
 ] as const
-
-export type BoneyardEnemyFlag = typeof BONEYARD_ENEMY_FLAGS[number]
-
-export interface BoneyardEnemyArenaScalars {
-  attackSpeed: number
-  chaseSpeed: number
-  experience: number
-  extraDamage: number
-  health: number
-  primaryDamage: number
-  secondaryDamage: number
-  tertiaryDamage: number
-}
-
-export interface BoneyardEnemyConfigRandom {
-  /** Native constructor float in the inclusive 0..1 range. */
-  baseSpeedUnit: number
-  /** Native constructor float in the inclusive 0..1 range. */
-  collisionRadiusUnit: number
-  /** Native ARMORMAYBE byte selection. */
-  randomArmor: boolean
-  /** First native SPLITMANY inclusive three-way sample. */
-  splitManyGateUnit: number
-  /** Second native SPLITMANY inclusive three-way sample. */
-  splitManyUnit: number
-  /** Native SPLIT selection, represented as zero or one before adding one. */
-  splitUnit: 0 | 1
-}
-
-export interface EvaluateBoneyardEnemyConfigOptions {
-  arenaScalars?: Partial<BoneyardEnemyArenaScalars>
-  authoredRecipe?: AuthoredBoneyardEnemyRecipe
-  /** Custom-authoring lane; retail wave data leaves this at zero. */
-  archerExtraArrows?: number
-  /** Native MonsterRecipe +0x88; retail wave data leaves this at zero. */
-  archerMultiArrowMode?: 0 | 1 | 2 | 3
-  flags?: readonly string[]
-  /** Native MonsterRecipe +0xB8; the constructor default is enabled. */
-  flanking?: boolean
-  /** Native MonsterRecipe selector; retail survival-wave data leaves it false. */
-  mageCloak?: boolean
-  /** Native MonsterRecipe +0xB9; the constructor default is mode 1. */
-  pathfindingMode?: NativeEnemyPathfindingMode
-  random?: Partial<BoneyardEnemyConfigRandom>
-  waveOrdinal?: number
-  /** Native MonsterSetup BODY TYPE; value one selects Zombie body/head bank three. */
-  zombieBodyType?: 0 | 1
-}
-
-export interface AuthoredBoneyardEnemyRecipe {
-  readonly archerAccuracyMode: 0 | 1 | 2 | 3
-  readonly attackSpeed: number
-  readonly chaseSpeed: number
-  readonly classification: BoneyardEnemyClassification
-  readonly experience: number
-  readonly extraDamage: number
-  readonly family: AuthoredBoneyardEnemyFamilyRecipe
-  readonly lootPolicies: NativeLootPolicies
-  readonly maximumHealth: number
-  readonly movementScale: number
-  readonly name: string
-  readonly onDeathProgram: NativeSurvivalOnDeathProgram | null
-  readonly primaryDamage: number
-  readonly secondaryDamage: number
-  readonly tertiaryDamage: number
-  readonly uid: number
-}
-
-export type BoneyardEnemyClassification = 'boss' | 'miniboss' | 'multiple-boss' | 'normal'
-
-export type AuthoredBoneyardEnemyFamilyRecipe =
-  | Readonly<{ kind: 'default' }>
-  | Readonly<{ frequency: NativePortalFrequency; kind: 'portal' }>
-  | Readonly<{
-      bodyType: 0 | 1
-      flyblown: boolean
-      kind: 'zombie'
-      poisonDuration: number
-      poisonPoolDamage: number
-      poisonPunchDamage: number
-    }>
-
-export type BoneyardSkeletonWeapon = 'axe' | 'claw' | 'flail' | 'mace' | 'pike' | 'sword'
-export type BoneyardMageElement = 'fire' | 'frost' | 'lightning' | 'poison'
-export type BoneyardArrowType = 'fire' | 'normal' | 'poison'
-
-interface BoneyardEnemyConfigBase {
-  attackSpeed: number
-  baseSpeed: number
-  burning: boolean
-  chaseSpeed: number
-  classification: BoneyardEnemyClassification
-  collisionRadius: number
-  enemyToken: BoneyardWaveEnemyToken
-  experience: number
-  extraDamage: number
-  flags: readonly BoneyardEnemyFlag[]
-  flanking: boolean
-  ignoredSourceFlags: readonly ('FLAG_IGNITE' | 'FLAG_IMMORTALIZE')[]
-  maximumHealth: number
-  nativeTypeId: number
-  onDeathProgram: NativeSurvivalOnDeathProgram | null
-  pathfindingMode: NativeEnemyPathfindingMode
-  primaryDamage: number | null
-  recipeName: string | null
-  recipeUid: number | null
-  lootPolicies: NativeLootPolicies
-  scale: number
-  secondaryDamage: number
-  skeletonPolicy: 'default' | 'more' | 'none'
-  tertiaryDamage: number
-}
-
-export interface BoneyardSkeletonConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'SKELETON'
-  family: Readonly<{
-    armor: boolean
-    headgear: 0 | 1 | 2 | 3
-    weapon: BoneyardSkeletonWeapon
-  }>
-}
-
-export interface BoneyardArcherConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'SKELETONARCHER'
-  family: Readonly<{
-    accuracyMode: 0 | 1 | 2 | 3
-    arrowType: BoneyardArrowType
-    extraArrows: number
-    headgear: 0 | 1 | 2 | 3
-    multiArrowMode: 0 | 1 | 2 | 3
-    rangeMode: 0 | 1 | 2 | 3
-  }>
-}
-
-export interface BoneyardMageConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'SKELETONMAGE'
-  family: Readonly<{
-    cloak: boolean
-    element: BoneyardMageElement
-    headgear: 0 | 1 | 2 | 3
-    otherShield: boolean
-    otherShieldHealth: number
-    rangeMode: 0 | 1 | 2 | 3
-    selfShield: boolean
-    selfShieldHealth: number
-    shieldInterval: number
-  }>
-}
-
-export interface BoneyardImpConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'IMP'
-  family: Readonly<{ splitDepth: number }>
-}
-
-export interface BoneyardZombieConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'ZOMBIE'
-  family: Readonly<{
-    bodyType: number
-    poisonDuration: number
-    poisonPoolDamage: number
-    poisonPunchDamage: number
-    rotten: boolean
-  }>
-}
-
-export interface BoneyardWraithConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'WRAITH'
-  family: Readonly<{ dazzle: true }>
-}
-
-export interface BoneyardDemonConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'DEMON'
-  family: Readonly<{ splitCount: number }>
-}
-
-export interface BoneyardCoffinConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'COFFIN'
-  family: Readonly<{
-    maggotDamage: number
-    maggotHealth: number
-    maggotPoisonDamage: number
-    maximumMaggots: number
-  }>
-}
-
-export interface BoneyardPortalConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'PORTAL'
-  family: Readonly<{ frequency: NativePortalFrequency }>
-}
-
-export type EvaluatedBoneyardEnemyConfig =
-  | BoneyardArcherConfig
-  | BoneyardCoffinConfig
-  | BoneyardDemonConfig
-  | BoneyardImpConfig
-  | BoneyardMageConfig
-  | BoneyardPortalConfig
-  | BoneyardSkeletonConfig
-  | BoneyardWraithConfig
-  | BoneyardZombieConfig
 
 export const DEFAULT_BONEYARD_ENEMY_ARENA_SCALARS: Readonly<BoneyardEnemyArenaScalars> =
   Object.freeze({
@@ -270,61 +78,24 @@ export const DEFAULT_BONEYARD_ENEMY_ARENA_SCALARS: Readonly<BoneyardEnemyArenaSc
   })
 
 const KNOWN_FLAGS = new Set<string>(BONEYARD_ENEMY_FLAGS)
+
 const BASE_STATS: Readonly<Record<BoneyardWaveEnemyToken, Readonly<{
   chaseSpeed: number
-  experience: number
   health: number
   primaryDamage: number | null
 }>>> = Object.freeze({
-  COFFIN: Object.freeze({ chaseSpeed: 1, experience: 200, health: 100, primaryDamage: null }),
-  DEMON: Object.freeze({ chaseSpeed: 1, experience: 800, health: 400, primaryDamage: 20 }),
-  IMP: Object.freeze({ chaseSpeed: 1, experience: 2, health: 1, primaryDamage: 3 }),
-  PORTAL: Object.freeze({ chaseSpeed: 1, experience: 2, health: 1, primaryDamage: 2 }),
-  SKELETON: Object.freeze({ chaseSpeed: 1, experience: 10, health: 5, primaryDamage: 3 }),
-  SKELETONARCHER: Object.freeze({ chaseSpeed: 1, experience: 10, health: 5, primaryDamage: 4 }),
-  SKELETONMAGE: Object.freeze({ chaseSpeed: 0.8, experience: 10, health: 5, primaryDamage: 3 }),
-  WRAITH: Object.freeze({ chaseSpeed: 1, experience: 4, health: 2, primaryDamage: 4 }),
-  ZOMBIE: Object.freeze({ chaseSpeed: 1, experience: 210, health: 105, primaryDamage: 35 }),
+  COFFIN: Object.freeze({ chaseSpeed: 1, health: 100, primaryDamage: null }),
+  COCOON: Object.freeze({ chaseSpeed: 1, health: 999_999, primaryDamage: null }),
+  DEMON: Object.freeze({ chaseSpeed: 1, health: 400, primaryDamage: 20 }),
+  IMP: Object.freeze({ chaseSpeed: 1, health: 1, primaryDamage: 3 }),
+  PORTAL: Object.freeze({ chaseSpeed: 1, health: 1, primaryDamage: 2 }),
+  SKELETON: Object.freeze({ chaseSpeed: 1, health: 5, primaryDamage: 3 }),
+  SKELETONARCHER: Object.freeze({ chaseSpeed: 1, health: 5, primaryDamage: 4 }),
+  SKELETONMAGE: Object.freeze({ chaseSpeed: 0.8, health: 5, primaryDamage: 3 }),
+  SPIDER: Object.freeze({ chaseSpeed: 1, health: 15, primaryDamage: 8 }),
+  WRAITH: Object.freeze({ chaseSpeed: 1, health: 2, primaryDamage: 4 }),
+  ZOMBIE: Object.freeze({ chaseSpeed: 1, health: 105, primaryDamage: 35 }),
 })
-
-interface MutableConfig {
-  armor: boolean
-  attackSpeed: number
-  burning: boolean
-  chaseSpeed: number
-  cloak: boolean
-  experience: number
-  extraDamage: number
-  headgear: 0 | 1 | 2 | 3
-  maximumHealth: number
-  primaryDamage: number
-  secondaryDamage: number
-  skeletonPolicy: 'default' | 'more' | 'none'
-  tertiaryDamage: number
-  weapon: BoneyardSkeletonWeapon
-  accuracyMode: 0 | 1 | 2 | 3
-  arrowType: BoneyardArrowType
-  extraArrows: number
-  multiArrowMode: 0 | 1 | 2 | 3
-  rangeMode: 0 | 1 | 2 | 3
-  mageElement: BoneyardMageElement
-  otherShield: boolean
-  otherShieldHealth: number
-  selfShield: boolean
-  selfShieldHealth: number
-  shieldInterval: number
-  splitCount: number
-  bodyType: number
-  poisonDuration: number
-  poisonPoolDamage: number
-  poisonPunchDamage: number
-  portalFrequency: NativePortalFrequency
-  rotten: boolean
-  maggotDamage: number
-  maggotHealth: number
-  maggotPoisonDamage: number
-  maximumMaggots: number
-}
 
 export function evaluateBoneyardEnemyConfig(
   enemyToken: BoneyardWaveEnemyToken,
@@ -339,6 +110,7 @@ export function evaluateBoneyardEnemyConfig(
     throw new RangeError('enemy wave ordinal must be a non-negative safe integer')
   }
   const config: MutableConfig = {
+    spitWebs: true,
     accuracyMode: 0,
     armor: false,
     arrowType: 'normal',
@@ -347,7 +119,7 @@ export function evaluateBoneyardEnemyConfig(
     burning: false,
     chaseSpeed: base.chaseSpeed,
     cloak: validatedMageCloak(enemyToken, options.mageCloak),
-    experience: base.experience,
+    experienceBonus: 0,
     extraArrows: validatedExtraArrows(enemyToken, options.archerExtraArrows),
     extraDamage: 0,
     headgear: 0,
@@ -370,13 +142,13 @@ export function evaluateBoneyardEnemyConfig(
     primaryDamage: base.primaryDamage ?? 0,
     rangeMode: 0,
     rotten: false,
-    secondaryDamage: 0,
+    secondaryDamage: enemyToken === 'SPIDER' ? 10 : 0,
     selfShield: false,
     selfShieldHealth: 0,
     shieldInterval: 0,
     skeletonPolicy: 'default',
     splitCount: 0,
-    tertiaryDamage: 0,
+    tertiaryDamage: enemyToken === 'SPIDER' ? 2 : 0,
     weapon: 'claw',
   }
   const authoredRecipe = validatedAuthoredRecipe(enemyToken, options.authoredRecipe)
@@ -384,7 +156,7 @@ export function evaluateBoneyardEnemyConfig(
     config.accuracyMode = authoredRecipe.archerAccuracyMode
     config.attackSpeed = authoredRecipe.attackSpeed
     config.chaseSpeed = authoredRecipe.chaseSpeed
-    config.experience = authoredRecipe.experience
+    config.experienceBonus = authoredRecipe.experienceBonus
     config.extraDamage = authoredRecipe.extraDamage
     config.maximumHealth = authoredRecipe.maximumHealth
     config.primaryDamage = authoredRecipe.primaryDamage
@@ -404,7 +176,9 @@ export function evaluateBoneyardEnemyConfig(
     classification: authoredRecipe?.classification ?? 'normal',
     collisionRadius: constructorCollisionRadius(enemyToken, random.collisionRadiusUnit),
     enemyToken,
-    experience: config.experience,
+    experience: enemyToken === 'COCOON' ? 0 : Math.fround(
+      (config.maximumHealth + config.experienceBonus) * 0.8500000238418579,
+    ),
     extraDamage: config.extraDamage,
     flags: Object.freeze([...flags]),
     flanking: options.flanking ?? true,
@@ -426,6 +200,16 @@ export function evaluateBoneyardEnemyConfig(
   }
 
   switch (enemyToken) {
+    case 'COCOON': return frozen({ ...common, enemyToken, family: { kind: 'cocoon' } })
+    case 'SPIDER': return frozen({
+      ...common,
+      enemyToken,
+      family: {
+        cocoonHealth: config.secondaryDamage,
+        spitWebs: config.spitWebs,
+        suckDamagePerSecond: config.tertiaryDamage,
+      },
+    })
     case 'SKELETON': return frozen({
       ...common,
       enemyToken,
@@ -507,10 +291,12 @@ function validatedAuthoredRecipe(
   if (!Number.isSafeInteger(recipe.uid) || recipe.uid < 1 || recipe.name.length === 0) {
     throw new RangeError('authored enemy recipe identity is invalid')
   }
+  if (!Number.isFinite(recipe.experienceBonus)) {
+    throw new RangeError('authored enemy recipe experienceBonus must be finite')
+  }
   for (const [field, value] of Object.entries({
     attackSpeed: recipe.attackSpeed,
     chaseSpeed: recipe.chaseSpeed,
-    experience: recipe.experience,
     extraDamage: recipe.extraDamage,
     maximumHealth: recipe.maximumHealth,
     movementScale: recipe.movementScale,
@@ -670,7 +456,7 @@ function assertImplementedPayloads(
   if (enemyToken === 'PORTAL' && authoredRecipe?.family.kind !== 'portal') {
     throw new Error('Portal requires an authored Portal recipe')
   }
-  if (!authoredZombie && (config.tertiaryDamage !== 0 || config.extraDamage !== 0)) {
+  if (!authoredZombie && enemyToken !== 'SPIDER' && (config.tertiaryDamage !== 0 || config.extraDamage !== 0)) {
     throw new Error('unsupported dormant tertiary/extra enemy damage payload')
   }
 }
@@ -682,6 +468,8 @@ function applyFlag(
   waveOrdinal: number,
 ): void {
   switch (flag) {
+    case 'FLAG_COCOON': config.secondaryDamage *= 5; break
+    case 'FLAG_NOSPIT': config.spitWebs = false; break
     case 'FLAG_HPUP': config.maximumHealth *= 1.5; break
     case 'FLAG_HPDOWN': config.maximumHealth *= 0.5; break
     case 'FLAG_STRONG': multiplyDamage(config, 1.5); break
@@ -691,7 +479,7 @@ function applyFlag(
       config.chaseSpeed *= 0.5
       config.attackSpeed *= 0.5
       break
-    case 'FLAG_XPBONUS': config.experience *= 2; break
+    case 'FLAG_XPBONUS': config.experienceBonus = 2; break
     case 'FLAG_BURNING':
       config.burning = true
       config.chaseSpeed *= 1.5
@@ -826,12 +614,14 @@ function applyArenaScalars(
   config.extraDamage *= scalars.extraDamage
   config.chaseSpeed *= scalars.chaseSpeed
   config.attackSpeed *= scalars.attackSpeed
-  config.experience *= scalars.experience
+  config.experienceBonus *= scalars.experience
 }
 
 function constructorBaseSpeed(token: BoneyardWaveEnemyToken, unit: number): number {
   const skeleton = (1.25 + unit) * 1.25 ** 2
   switch (token) {
+    case 'COCOON': return 1
+    case 'SPIDER': return 3 + unit * 2
     case 'SKELETON': return skeleton
     case 'SKELETONARCHER': return skeleton * 0.75
     case 'SKELETONMAGE': return skeleton * 0.75 * 0.65
@@ -846,6 +636,8 @@ function constructorBaseSpeed(token: BoneyardWaveEnemyToken, unit: number): numb
 
 function constructorCollisionRadius(token: BoneyardWaveEnemyToken, unit: number): number {
   switch (token) {
+    case 'COCOON': return 40
+    case 'SPIDER': return 15
     case 'SKELETON': return 20 - unit * 8
     case 'SKELETONARCHER': return 20
     case 'SKELETONMAGE': return 25

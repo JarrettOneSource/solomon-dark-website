@@ -4,7 +4,9 @@ import {
   timingSafeEqual,
 } from 'node:crypto'
 
-import type { GameSessionKind } from '../protocol/game-protocol.ts'
+import type {
+  GameSessionKind,
+} from '../protocol/game-protocol-contract.ts'
 import { isWizardElement, type WizardElement } from '../core-kernels/player-character.ts'
 import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../core-kernels/player-combat.ts'
 import type { PartyVisibility } from '../protocol/party-state.ts'

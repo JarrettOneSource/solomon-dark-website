@@ -3,9 +3,7 @@ import {
   NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
   NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
 } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
-import {
-  NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP,
-} from '../../core-kernels/native-hurricane.ts'
+import { NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP } from '../../core-kernels/native-hurricane.ts'
 import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import { stepCoffin } from './coffin.ts'
 import { snapDemonRootToExtremities, stepDemon } from './demon.ts'
@@ -23,11 +21,7 @@ import {
   withNativeSecondaryTickScalars,
 } from './movement.ts'
 import { stepPortal } from './portal.ts'
-import {
-  NATIVE_ENEMY_BURN_GLOW_PER_TICK,
-  NATIVE_ENEMY_CHARGE_PER_TICK,
-  NATIVE_IMP_GLOW_PER_TICK,
-} from './programs.ts'
+import { NATIVE_ENEMY_BURN_GLOW_PER_TICK, NATIVE_ENEMY_CHARGE_PER_TICK, NATIVE_IMP_GLOW_PER_TICK } from './programs.ts'
 import {
   applyMageProviderGateAfterAction,
   magePoseIsFour,
@@ -35,6 +29,7 @@ import {
   stepMage,
   stepSkeleton,
 } from './skeleton-family.ts'
+import { stepCocoonActor, stepSpider } from './spider.ts'
 import { refreshTarget, reorientEnemyTowardTarget } from './targeting.ts'
 import { stepWraith } from './wraith.ts'
 import { advanceZombieVisual, stepZombie } from './zombie.ts'
@@ -44,6 +39,9 @@ export function stepDamagePresentationTimers(
   elapsedTicks: number,
 ): BoneyardEnemyActor {
   if (elapsedTicks <= 0) return actor
+  if (actor.brain.family === 'spider') {
+    actor = { ...actor, brain: { ...actor.brain, spitTicksRemaining: Math.max(0, actor.brain.spitTicksRemaining - elapsedTicks) } }
+  }
   const hurricaneContactCooldown = Math.max(
     0,
     actor.hurricaneContactCooldown
@@ -66,6 +64,7 @@ export function stepLivingActor(
   source: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
+  if (source.brain.family === 'cocoon') return stepCocoonActor(work, source, context)
   const effect = context.abilityEffects?.[source.id]
   work.pathStatusFactors.set(
     source.id,
@@ -133,6 +132,8 @@ export function stepLivingActor(
   }
   const stepped = (() => {
     switch (articulated.brain.family) {
+      case 'spider': return stepSpider(work, articulated, articulated.brain, context)
+      case 'cocoon': return stepCocoonActor(work, articulated, context)
       case 'skeleton': return stepSkeleton(work, articulated, articulated.brain, context)
       case 'archer': return stepArcher(work, articulated, articulated.brain, context)
       case 'imp': return stepImp(work, articulated, articulated.brain, context)
@@ -205,6 +206,8 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
   const prior = actor.lighting
   const active = actor.config.scale !== 0
   switch (actor.config.enemyToken) {
+    case 'SPIDER':
+    case 'COCOON': return actor
     case 'SKELETON': {
       const burning = active && actor.config.burning
       return withEnemyLighting(actor, {

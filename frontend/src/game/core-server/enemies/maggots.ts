@@ -9,23 +9,18 @@ import {
   stepNativeEnemyPathRecovery,
   stepNativeEnemyReorientation,
 } from '../../core-kernels/native-enemy-pathfinding.ts'
-import {
-  NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP,
-} from '../../core-kernels/native-hurricane.ts'
+import { NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP } from '../../core-kernels/native-hurricane.ts'
 import { NATIVE_BADGUY_NAVIGATION_CLEARANCE } from '../boneyard-enemy-navigation.ts'
-import {
-  type DeathEffectOwner,
-  spawnBouncer,
-  spawnSimpleDeathEffect,
-} from './death-effects.ts'
+import { spawnBouncer, spawnSimpleDeathEffect } from './death-effects.ts'
+import type { DeathEffectOwner } from './death-effects.ts'
 import { emitEnemyDeathSound, emitEvent } from './events.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyActorId,
-  type BoneyardEnemyStoreStepContext,
-  type BoneyardMaggotActor,
-  type WorkingStep,
-  validatePoint,
+import { validatePoint } from './model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyActorId,
+  BoneyardEnemyStoreStepContext,
+  BoneyardMaggotActor,
+  WorkingStep,
 } from './model.ts'
 import { nativeSecondaryActorSpeedScale, positiveModulo } from './movement.ts'
 import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS, NATIVE_MAGGOT_PROGRAM } from './programs.ts'

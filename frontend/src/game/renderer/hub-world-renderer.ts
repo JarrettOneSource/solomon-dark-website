@@ -55,7 +55,9 @@ import {
 } from './hub-npc-marker-presentation.ts'
 import { NATIVE_HUB_NPC_CATALOG } from '../core-kernels/native-hub-npc.ts'
 import { hub } from '../../lib/assets.ts'
-import type { GameModAsset } from '../protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
 import { loadModPresentationTextures } from './mod-presentation-assets.ts'
 import { installNativeFixedFunctionRenderPipeline } from './native-fixed-function-render-pipeline.ts'
 import { PLAYER_CHARACTER_ATLAS_SOURCES } from './player-character-atlas.ts'

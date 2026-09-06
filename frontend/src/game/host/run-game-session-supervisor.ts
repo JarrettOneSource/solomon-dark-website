@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_NAME,
+} from '../protocol/game-protocol-contract.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
 import { resolveWebLuaWasmPath } from './lua/web-lua-wasm-path.ts'
 import {

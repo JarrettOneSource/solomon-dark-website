@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 
-import type { GameCollegeInvitation } from './protocol/game-protocol.ts'
+import type {
+  GameCollegeInvitation,
+} from './protocol/game-chat.ts'
 import './play-routing-dialog.css'
 
 export default function CollegeInvitationDialog({

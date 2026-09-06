@@ -19,7 +19,9 @@ import {
   NATIVE_HUB_NPC_CATALOG,
   type NativeHubInteractionId,
 } from '../core-kernels/native-hub-npc.ts'
-import { PlayerWorldView } from './hub-actors.ts'
+import {
+  PlayerWorldView,
+} from './world-player-view.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
   HUB_PRIVATE_ROOM_EFFECT_DEPTH,
@@ -825,7 +827,7 @@ export class HubPrivateRoomScene {
         view.container.parent?.removeChild(view.container)
         room.addChild(view.container)
       }
-      view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
+      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
       view.update(
         player,
         snapshot.tick,

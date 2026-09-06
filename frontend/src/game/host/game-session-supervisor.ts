@@ -12,7 +12,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import {
   GAME_PROTOCOL_NAME,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
-} from '../protocol/game-protocol.ts'
+} from '../protocol/game-protocol-contract.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
 import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'

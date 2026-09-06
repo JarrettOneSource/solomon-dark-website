@@ -1,5 +1,5 @@
-import {
-  type NativePlayerStaffTransient,
+import type {
+  NativePlayerStaffTransient,
 } from '../core-kernels/native-player-staff-action.ts'
 import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
 import type { NativeWeldWorldActor } from '../core-kernels/native-weld-primary-runtime.ts'
@@ -10,7 +10,7 @@ import {
   lerpForwardCycle,
   lerpNullableVector,
   lerpVector,
-} from './primary-spell-presentation-math.ts'
+} from './presentation-math.ts'
 import {
   copyNativeRng,
   copyPrimarySpellTransient,

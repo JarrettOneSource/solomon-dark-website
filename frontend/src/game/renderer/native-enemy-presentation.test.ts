@@ -1,8 +1,7 @@
-import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
-
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
+import { readFileSync } from 'node:fs'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
@@ -20,20 +19,19 @@ import {
 } from './native-enemy-attack-effect.ts'
 import {
   nativeEnemyDeathEffectBypassesWorldTint,
-  nativeEnemyDeathEffectPainterLayer,
   nativeEnemyDeathEffectPainterLane,
+  nativeEnemyDeathEffectPainterLayer,
   nativeEnemyDeathEffectPlan,
-  nativeEnemyDeathEffectVisualBounds,
   nativeEnemyDeathEffectViewResourcePlan,
+  nativeEnemyDeathEffectVisualBounds,
 } from './native-enemy-death-effect-presentation.ts'
+import { NATIVE_ENEMY_FAMILIES } from './native-enemy-presentation-model.ts'
+import type { NativeEnemyAtlas, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
+import { nativeEnemyFacingBucket } from './native-enemy-layers.ts'
 import {
-  NATIVE_ENEMY_FAMILIES,
-  nativeEnemyFacingBucket,
   nativeEnemyPainterLayer,
   nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
   nativeEnemyViewPlanInputsEqual,
-  type NativeEnemyAtlas,
-  type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
 
 const geometryManifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
@@ -1336,6 +1334,8 @@ test('native hit redraw excludes Zombie gas, flies, and family ambient fire', ()
 
 test('common native hit redraw covers every survival family body membership', () => {
   const expectedHitLayers = {
+    COCOON: 0,
+    SPIDER: 2,
     COFFIN: 1,
     DEMON: 8,
     IMP: 2,
@@ -1351,6 +1351,7 @@ test('common native hit redraw covers every survival family body membership', ()
       ...enemy(family),
       animation: nativeEnemyIdleAnimationSample({
         coffinState: 'closed',
+        spider: family === 'SPIDER' ? { bodyHeadingDeg: 0, outlineAlpha: 0, outlineTint: 0 } : null,
         hitFlash: 0.5,
         impEffectAlpha: 1,
         impEffectFrame: 0,
@@ -1630,6 +1631,7 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     position: { x: 125, y: 240 },
     rotationRadians: 0.5,
     scale: 1.2,
+    scaleY: 1.2,
     shadow: true,
     spawnTick: 100,
     tint: 0xff8844,
@@ -1752,6 +1754,7 @@ test('death-effect visibility bounds union complete transformed art and Banish c
     position: { x: 125, y: 240 },
     rotationRadians: 0,
     scale: 1.2,
+    scaleY: 1.2,
     shadow: true,
     spawnTick: 100,
     tint: 0xff8844,

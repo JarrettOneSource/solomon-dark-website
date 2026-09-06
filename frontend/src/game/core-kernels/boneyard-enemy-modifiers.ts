@@ -1,4 +1,6 @@
-import type { BoneyardArrowType } from './boneyard-enemy-config.ts'
+import type {
+  BoneyardArrowType,
+} from './boneyard-enemy-config-model.ts'
 
 /** Retail does not populate extraArrows; custom configs remain explicitly bounded. */
 export const BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS = 8

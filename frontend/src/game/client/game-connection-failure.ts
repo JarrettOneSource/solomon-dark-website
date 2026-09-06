@@ -2,8 +2,10 @@ import {
   GAME_CONNECTION_TIMEOUT_CLOSE_CODE,
   GAME_HOST_ENDED_SESSION_CLOSE_CODE,
   GAME_SESSION_REPLACED_CLOSE_CODE,
-  type GameDisconnectCode,
-} from '../protocol/game-protocol.ts'
+} from '../protocol/game-protocol-contract.ts'
+import type {
+  GameDisconnectCode,
+} from '../protocol/game-server-messages.ts'
 
 export interface GameTransportClose {
   code: number

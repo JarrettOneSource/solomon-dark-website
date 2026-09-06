@@ -13,7 +13,6 @@ import {
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
 import CollegeInvitationDialog from './CollegeInvitationDialog.tsx'
-import DarkCloudScene from './DarkCloudScene.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
 import PartyJoinConsentDialog from './PartyJoinConsentDialog.tsx'
@@ -95,15 +94,25 @@ import type {
   GameChatMessage,
   GameCollegeInvitation,
   GamePlayerCardProfile,
+} from './protocol/game-chat.ts'
+import type {
   GameClientSnapshot,
+  HubPlayerActivity,
+} from './protocol/game-state.ts'
+import type {
   GameplayPauseSource,
   GameplayPauseState,
   GameplayResumeGraceState,
-  HubPlayerActivity,
+} from './protocol/game-protocol-contract.ts'
+import type {
   LoadedBoneyard,
+} from './core-kernels/boneyard.ts'
+import type {
   ModContentProjection,
+} from './protocol/game-mod-contract.ts'
+import type {
   PartyActionRejection,
-} from './protocol/game-protocol.ts'
+} from './protocol/game-server-messages.ts'
 import {
   api,
   type ActiveWebMod,
@@ -165,6 +174,7 @@ import './main-menu.css'
 const DISCORD_INVITE_URL = 'https://discord.gg/HGHxZgyM2p'
 
 const BoneyardScene = lazy(() => import('./BoneyardScene.tsx'))
+const DarkCloudScene = lazy(() => import('./DarkCloudScene.tsx'))
 const HubScene = lazy(() => import('./HubScene.tsx'))
 const DeveloperObserverScene = lazy(() => import('./DeveloperObserverScene.tsx'))
 const GameChat = lazy(() => import('./GameChat.tsx'))
@@ -2016,17 +2026,19 @@ function MainMenuContent({
         ) : screen === 'dark-cloud' ? (
           <>
             <div className="main-menu-native-stage dark-cloud-stage" inert={darkCloudMenuOpen || undefined}>
-              <DarkCloudScene
-                accountUsername={accountUsername}
-                developerAccess={developerAccess}
-                menuKeyCode={gameSettings.controls.openMenu}
-                menuOpen={darkCloudMenuOpen || settingsContext !== null}
-                onMenu={openDarkCloudMenu}
-                onObserveMatch={observeMatch}
-                onPartyResolved={resolveParty}
-                requesterDisplayName={partyRequesterName}
-                onSubscriptionsChanged={refreshActiveMods}
-              />
+              <Suspense fallback={null}>
+                <DarkCloudScene
+                  accountUsername={accountUsername}
+                  developerAccess={developerAccess}
+                  menuKeyCode={gameSettings.controls.openMenu}
+                  menuOpen={darkCloudMenuOpen || settingsContext !== null}
+                  onMenu={openDarkCloudMenu}
+                  onObserveMatch={observeMatch}
+                  onPartyResolved={resolveParty}
+                  requesterDisplayName={partyRequesterName}
+                  onSubscriptionsChanged={refreshActiveMods}
+                />
+              </Suspense>
             </div>
             {darkCloudMenuOpen ? (
               <Suspense fallback={null}>

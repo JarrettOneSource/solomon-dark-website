@@ -17,6 +17,7 @@ export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
 })
 
 export type NativeEnemyWorldFeedbackOutput =
+  | 'spider-collapse'
   | 'archer-shatter'
   | 'coffin-break'
   | 'demon-split'
@@ -82,6 +83,7 @@ export function nativeEnemyWorldFeedbackImpulses(
   outputCount?: number,
 ): readonly number[] {
   switch (output) {
+    case 'spider-collapse': return []
     case 'archer-shatter':
     case 'mage-shatter':
     case 'skeleton-shatter':

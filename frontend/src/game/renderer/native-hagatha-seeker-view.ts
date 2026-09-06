@@ -11,7 +11,9 @@ import {
   nativeHagathaSeekerMeshPlan,
   nativeHagathaSeekerSegments,
 } from '../core-kernels/native-hagatha-effects.ts'
-import type { GameSnapshot } from '../protocol/game-protocol.ts'
+import type {
+  GameSnapshot,
+} from '../protocol/game-state.ts'
 
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 

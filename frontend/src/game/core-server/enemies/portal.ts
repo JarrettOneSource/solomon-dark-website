@@ -1,12 +1,7 @@
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
 import { stepNativePortalState } from '../../core-kernels/native-survival-portal.ts'
 import { emitEnemyActionSound } from './events.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyStoreStepContext,
-  BoneyardPortalBrain,
-  WorkingStep,
-} from './model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardPortalBrain, WorkingStep } from './model.ts'
 import { drawUnit } from './random.ts'
 
 export function stepPortal(

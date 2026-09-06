@@ -1,4 +1,5 @@
 import type { Vector2 } from './vector.ts'
+import { nativeLineVertices } from './native-line.ts'
 
 export const NATIVE_HAGATHA_SELECTORS = Object.freeze({
   life: 0,
@@ -388,16 +389,6 @@ export function nativeHagathaSeekerSegments(
 export function nativeHagathaSeekerMeshPlan(
   segment: NativeHagathaSeekerSegment,
 ): NativeHagathaSeekerMeshPlan {
-  const deltaX = segment.end.x - segment.start.x
-  const deltaY = segment.end.y - segment.start.y
-  const length = Math.hypot(deltaX, deltaY)
-  if (!(length > 0) || !Number.isFinite(segment.width) || segment.width <= 0) {
-    throw new RangeError('Seeker mesh segment must have distinct endpoints and positive width')
-  }
-  const halfWidth = segment.width * 0.5
-  const perpendicularX = -deltaY / length * halfWidth
-  const perpendicularY = deltaX / length * halfWidth
-  const vertex = (value: number): number => Math.fround(value)
   const startU = segment.startVisible
     ? NATIVE_HAGATHA_SEEKER_RAMP_U.visible
     : NATIVE_HAGATHA_SEEKER_RAMP_U.transparent
@@ -414,15 +405,6 @@ export function nativeHagathaSeekerMeshPlan(
       endU, 0.5,
       endU, 0.5,
     ]),
-    vertices: Object.freeze([
-      vertex(segment.start.x - perpendicularX),
-      vertex(segment.start.y - perpendicularY),
-      vertex(segment.start.x + perpendicularX),
-      vertex(segment.start.y + perpendicularY),
-      vertex(segment.end.x - perpendicularX),
-      vertex(segment.end.y - perpendicularY),
-      vertex(segment.end.x + perpendicularX),
-      vertex(segment.end.y + perpendicularY),
-    ]),
+    vertices: Object.freeze(nativeLineVertices(segment.start, segment.end, segment.width)),
   })
 }

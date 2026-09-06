@@ -6,36 +6,33 @@ import {
   initialNativeKeyDropLevel,
   materializeNativeLootScriptAction,
   rollNativeEnemyLoot,
-  type NativeBonusKind,
-  type NativeLootDropSource,
-  type NativeLootDropSpec,
-  type NativeLootArenaInput,
-  type NativeLootModifiers,
-  type NativeLootPlacement,
-  type NativeLootPolicies,
-  type NativeLootSelectionInput,
-  type NativeOrbKind,
 } from '../core-kernels/native-loot.ts'
-import {
-  createNativeLootItemIds,
-  resolveNativeGoodieContents,
-  type NativeLootItem,
-} from '../core-kernels/native-loot-items.ts'
+import type {
+  NativeBonusKind,
+  NativeLootArenaInput,
+  NativeLootDropSource,
+  NativeLootDropSpec,
+  NativeLootModifiers,
+  NativeLootPlacement,
+  NativeLootPolicies,
+  NativeLootSelectionInput,
+  NativeOrbKind,
+} from '../core-kernels/native-loot.ts'
+import { createNativeLootItemIds, resolveNativeGoodieContents } from '../core-kernels/native-loot-items.ts'
+import type { NativeLootItem } from '../core-kernels/native-loot-items.ts'
 import {
   createNativeRng,
   drawNativeFloat,
   drawNativeFloatRange,
   drawNativeInteger,
-  type NativeRngState,
 } from '../core-kernels/native-rng.ts'
-import {
-  selectNativeMinibossDieReward,
-  type NativeSurvivalOnDeathProgram,
-} from '../core-kernels/native-survival-miniboss.ts'
-import {
-  createNativeWorldManagerOrder,
-  type NativeWorldManagerRegistration,
-  type RegisterNativeWorldPainter,
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { selectNativeMinibossDieReward } from '../core-kernels/native-survival-miniboss.ts'
+import type { NativeSurvivalOnDeathProgram } from '../core-kernels/native-survival-miniboss.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import type {
+  NativeWorldManagerRegistration,
+  RegisterNativeWorldPainter,
 } from '../core-kernels/native-world-manager-order.ts'
 import type { BoneyardEnemyDeathEffect } from './enemies/model.ts'
 
@@ -837,6 +834,7 @@ function createLootFadeEffect(
     role,
     rotationDeg: 0,
     scale,
+    scaleY: scale,
     scaleMultiplier: 1,
     shadow: false,
     spawnTick: tick,
@@ -902,6 +900,7 @@ function spawnGoodieBreakEffects(
     role: 'goodie-break-additive',
     rotationDeg: 0,
     scale: 4,
+    scaleY: 4,
     scaleMultiplier: 1,
     shadow: false,
     spawnTick: tick,
@@ -981,6 +980,7 @@ function createGoodieBouncer(
     role,
     rotationDeg,
     scale: 1,
+    scaleY: 1,
     scaleMultiplier: 1,
     shadow: true,
     spawnTick: tick,

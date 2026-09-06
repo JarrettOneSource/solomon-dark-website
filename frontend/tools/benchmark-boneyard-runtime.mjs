@@ -14,7 +14,9 @@ import {
   stepGameSimulationTick,
 } from '../src/game/core-server/game-simulation.ts'
 import { resolveBoneyardSpawnPosition } from '../src/game/core-server/boneyard-collision.ts'
-import { prepareBoneyardWorldNavigation } from '../src/game/core-server/boneyard-world.ts'
+import {
+  prepareBoneyardWorldNavigation,
+} from '../src/game/core-server/boneyard-world-construction.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { resolveMlBotPolicySkillOffers } from '../src/game/core-server/ml-bot-policy/skill-chooser.ts'
 import { deterministicStateHash } from '../src/game/headless/hub-headless-environment.ts'

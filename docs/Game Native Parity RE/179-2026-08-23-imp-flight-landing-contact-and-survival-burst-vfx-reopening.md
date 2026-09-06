@@ -64,7 +64,8 @@ teardown.
 | Common hit redraw, shields, family terminal actors | shared damage/death presenters | verified-already-at-parity | per-family body-only red redraw and terminal-effect suites |
 | Portal `0x139D` | `0x00489CC0` raw burst caller | out-of-system | no Website survival factory member; sharing burst art does not make it reachable |
 | GoodImp / GreenImp | `0x3ED` / `0x7FC` | out-of-system | player Fire summon and Unholy story graph have separate owners |
-| DemonSkull, DireFaculty, Heartmonger/Crow, Spider/Cocoon | compiled non-survival families | out-of-system | not reachable from the Website survival factory |
+| DemonSkull, DireFaculty, Heartmonger/Crow | compiled non-survival families | out-of-system | not reachable from the Website survival factory |
+| Spider/Cocoon | native survival Spider and target-owned restraint | exact-ported in the [2026-09-05 reopening](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md) | A missing Website factory member did not establish native exclusion. |
 
 No member is browser-blocked. Deterministic cosmetic draw identity remains the
 documented multiplayer substitution for the retail process-global RNG cursor;

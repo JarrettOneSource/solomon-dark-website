@@ -1,16 +1,13 @@
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import { nativePoisonPoolAlpha } from '../../core-kernels/native-poison-pool.ts'
-import {
-  createNativeFirePatch,
-  stepNativeFirePatch,
-} from '../../core-kernels/primary-spell-fire-effects.ts'
+import { createNativeFirePatch, stepNativeFirePatch } from '../../core-kernels/primary-spell-fire-effects.ts'
+import { emitEvent } from './events.ts'
 import type {
   BoneyardEnemyProjectile,
   BoneyardEnemyProjectileEffect,
   BoneyardEnemyStoreStepContext,
   WorkingStep,
 } from './model.ts'
-import { emitEvent } from './events.ts'
 import { createProjectileEffect } from './projectile-effects.ts'
 import { drawEnemyFloat, drawEnemyInteger, drawEnemySign, radialVector } from './random.ts'
 import { targetEligible } from './targeting.ts'

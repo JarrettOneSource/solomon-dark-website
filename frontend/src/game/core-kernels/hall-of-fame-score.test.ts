@@ -3,8 +3,10 @@ import test from 'node:test'
 
 import {
   evaluateBoneyardEnemyConfig,
-  type EvaluatedBoneyardEnemyConfig,
 } from './boneyard-enemy-config.ts'
+import type {
+  EvaluatedBoneyardEnemyConfig,
+} from './boneyard-enemy-config-model.ts'
 import {
   archiveNativeHallOfFameRun,
   createNativeHallOfFameRun,

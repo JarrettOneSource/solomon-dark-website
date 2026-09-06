@@ -40,6 +40,7 @@ type BouncerOptions = {
   position?: Readonly<BoneyardPoint>
   height?: number
   scale?: number
+  scaleY?: number
   tint?: number
   velocity?: Readonly<BoneyardPoint>
 }
@@ -91,6 +92,7 @@ export function spawnBouncer(
     role,
     rotationDeg,
     scale: resolvedOptions.scale ?? 1,
+    scaleY: resolvedOptions.scaleY ?? resolvedOptions.scale ?? 1,
     scaleMultiplier: 1,
     shadow: true,
     spawnTick: tick,
@@ -156,7 +158,9 @@ function primaryOnlyUnbindClock(
     case 'COFFIN':
       return { alpha: 0.75, alphaLossPerTick: 0.045 }
     case 'DEMON':
-      throw new Error('Demon death does not create Anim_Unbind')
+    case 'SPIDER':
+    case 'COCOON':
+      throw new Error(`${enemyToken} death does not create Anim_Unbind`)
   }
 }
 
@@ -240,6 +244,7 @@ export function spawnSimpleDeathEffect(
     role: string
     rotationDeg?: number
     scale: number
+    scaleY?: number
     scaleMultiplier?: number
     spawnDelayTicks?: number
     tint?: number
@@ -280,6 +285,7 @@ export function spawnSimpleDeathEffect(
     role: options.role,
     rotationDeg: options.rotationDeg ?? 0,
     scale: options.scale,
+    scaleY: options.scaleY ?? options.scale,
     scaleMultiplier: options.scaleMultiplier ?? 1,
     shadow: false,
     spawnTick: tick + (options.spawnDelayTicks ?? 0),

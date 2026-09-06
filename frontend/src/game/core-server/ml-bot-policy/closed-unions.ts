@@ -6,12 +6,14 @@ import type { BoneyardEnemyBrain, BoneyardEnemyProjectileKind } from '../enemies
 type EnemyFamily = BoneyardEnemyBrain['family']
 export const ML_BOT_POLICY_ENEMY_TOKEN_SPECIES = Object.freeze({
   COFFIN: 'coffin',
+  COCOON: 'cocoon',
   DEMON: 'demon',
   IMP: 'imp',
   PORTAL: 'coffin',
   SKELETON: 'skeleton',
   SKELETONARCHER: 'archer',
   SKELETONMAGE: 'mage',
+  SPIDER: 'spider',
   WRAITH: 'wraith',
   ZOMBIE: 'zombie',
 }) satisfies Readonly<Record<BoneyardWaveEnemyToken, EnemyFamily>>

@@ -6,11 +6,13 @@ import {
 import { GAME_RUN_PHASES, type GameRunPhase } from '../core-kernels/game-run.ts'
 import type {
   GameContentIdentity,
+} from '../protocol/game-protocol-contract.ts'
+import type {
   LuaConsoleValue,
-} from '../protocol/game-protocol.ts'
+} from '../protocol/codecs/lua.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 32
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 33
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 16 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */

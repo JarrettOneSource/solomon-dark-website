@@ -1,4 +1,6 @@
-import type { AuthoredBoneyardEnemyRecipe } from './boneyard-enemy-config.ts'
+import type {
+  AuthoredBoneyardEnemyRecipe,
+} from './boneyard-enemy-config-model.ts'
 import type { BoneyardPoint } from './boneyard.ts'
 import type { BoneyardSpawnPositionPolicy } from './boneyard-wave-timeline.ts'
 
@@ -243,7 +245,7 @@ export function nativePortalRecipe(
     attackSpeed: 1,
     chaseSpeed: 1,
     classification: 'multiple-boss',
-    experience: source.maximumHealth * 2,
+    experienceBonus: 0,
     extraDamage: 0,
     family: Object.freeze({ frequency: source.frequency, kind: 'portal' as const }),
     lootPolicies: Object.freeze({

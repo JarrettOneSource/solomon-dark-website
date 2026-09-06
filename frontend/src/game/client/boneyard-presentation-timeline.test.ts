@@ -63,6 +63,7 @@ function playerAt(x: number): ProtocolPlayerState {
 function enemyAt(x: number): BoneyardEnemySnapshot {
   return {
     animation: {
+      spider: null,
       action: null,
       actionProgress: 0,
       alpha: 1,
@@ -225,6 +226,9 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
     },
     tick,
     world: {
+      spiderSilks: [],
+      silkFragments: [], spiderRemains: [],
+      webbedPlayers: {},
       arenaTransition: createBoneyardArenaTransition(
         { x: 0, y: 0, w: 1_000, h: 1_000 },
         { x: 500, y: 100 },
@@ -784,6 +788,7 @@ test('interpolates independent death-effect transforms without rerolling art ide
     position: { x: 100, y: 200 },
     rotationRadians: Math.PI * 1.9,
     scale: 1.2,
+    scaleY: 1.2,
     shadow: false,
     spawnTick: 100,
     tint: 0xffffff,

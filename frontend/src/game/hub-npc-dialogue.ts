@@ -19,7 +19,7 @@ import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type {
   ModBoastIconProjection,
   ModContentProjection,
-} from './protocol/game-protocol.ts'
+} from './protocol/game-mod-contract.ts'
 import { formatHallOfFameTime } from './core-kernels/hall-of-fame.ts'
 import type { HubMemorialPortrait } from './core-kernels/hub-memorial.ts'
 import { wizardClassDisplayTitle } from './core-kernels/native-wizard-class.ts'

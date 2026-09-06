@@ -4,7 +4,9 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from '../../core-kernels/player-character.ts'
-import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
+import type {
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
 
 export const WEB_LUA_API_VERSION = '1.0.0'
 export const WEB_LUA_DEV_CONSOLE_MOD = Object.freeze({

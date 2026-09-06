@@ -113,19 +113,29 @@ the family baseline *after* the native recipe-to-actor `*2` conversion
 second time at death:
 
 ```text
-evaluatedRecipeXP = nativeRecipeXP * Arena.xpRecipeScalar
-nativeFamilyBaseline = 2 * (evaluatedRecipeXP + runtimeBonusXP)
-actorReward = nativeFamilyBaseline * arenaPlayerCount * Gameplay.xpScalar
+constructedHealth = orderedFlags(recipeHealth)
+actorReferenceHealth = constructedHealth * Arena.playerFactor
+actorReward = f32((constructedHealth + recipeBonusXP) * f32(0.85))
+              * Arena.playerFactor * Gameplay.xpScalar
 credited = actorReward * survivalLevelFactor(receiverLevel)
                        * (1 + receiverXpBonus)
 ```
 
-Retail Boneyard `Arena.xpRecipeScalar` is `0.425`; its one-player witnesses are
-Skeleton `10 -> 4.25`, Imp `2 -> 0.85`, and Wraith `4 -> 1.70`. Survival level
-factors are level 1 `1`; 2..5 `0.9`; 6..15 `0.72`; 16..30 `0.504`; and 31+
-`0.3024`. The actor-private XP bonus is additive before that multiplication.
-The Website keeps `Gameplay.xpScalar=1` until an implemented timeline action
-1090 changes it. Cumulative XP and protocol fields accept finite nonnegative
+The 2026-09-05 instruction audit supersedes the former `0.425` recipe-scalar
+and extra factor-of-two explanation. `0x00463B50` reads post-flag health at
+`+0x174`, adds the recipe bonus, multiplies by `0.8500000238418579`, and stores
+reward at `+0x178`. Arena `+0x8FE4` then scales reference health and reward;
+current health at `+0x170` remains unscaled. One-player default witnesses are
+Skeleton `5 -> 4.25`, Imp `1 -> f32(0.85)`, Wraith `2 -> f32(1.7)`, and Spider
+`15 -> 12.75`. Survival level factors are level 1 `1`; 2..5 `0.9`; 6..15 `0.72`;
+16..30 `0.504`; and 31+ `0.3024`.
+
+The Website now caches the post-flag one-player reward. Its existing shared
+credit owner applies the current participant multiplier and Gameplay scalar.
+Native stores the Arena factor at actor construction; changing participant
+counts between birth and death is a separate shared-reward follow-up, not a
+verified birth-time parity claim. Durable saved reward values remain intact.
+Cumulative XP and protocol fields accept finite nonnegative
 fractions; level thresholds remain the exact native integer table and the edge
 remains strict `experience > threshold`. The existing UI-81 fill/UI-82 frame
 continues to use `(XP-lower)/(upper-lower)` and must update from each

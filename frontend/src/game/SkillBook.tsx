@@ -33,7 +33,9 @@ import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
-import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type {
+  GameSnapshot,
+} from './protocol/game-state.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import ModSkillBook from './mod-ui/ModSkillBook.tsx'

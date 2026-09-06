@@ -1,15 +1,27 @@
 import {
   GAME_PROTOCOL_VERSION,
+  type GameSessionKind,
+} from '../protocol/game-protocol-contract.ts'
+import {
   GameProtocolError,
+} from '../protocol/codecs/values.ts'
+import {
   decodeServerGameMessage,
   encodeGameMessage,
-  type GameChatMessage,
-  type BoneyardEnemyEventSnapshot,
-  type GameModAsset,
-  type GameSessionKind,
-  type GameClientSnapshot,
-  type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
+import type {
+  GameChatMessage,
+} from '../protocol/game-chat.ts'
+import type {
+  BoneyardEnemyEventSnapshot,
+  GameClientSnapshot,
+} from '../protocol/game-state.ts'
+import type {
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
+import type {
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import {
   EntityReplicationGapError,

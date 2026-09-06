@@ -51,6 +51,7 @@ const requiredBadGuysRanges = [
   [1117, 1332],
   [1333, 1566],
   [1585, 1839],
+  [1840, 2001],
   [2002, 2010],
   [2013, 2069],
   [2070, 2202],
@@ -58,7 +59,10 @@ const requiredBadGuysRanges = [
   [2293, 2364],
   [2365, 2508],
 ] as const
-const requiredDeadHawgRanges = [[0, 0], [18, 19], [22, 22], [28, 28], [30, 31], [46, 77], [114, 144], [180, 199]] as const
+const requiredDeadHawgRanges = [
+  [0, 0], [9, 9], [14, 14], [18, 19], [22, 22], [28, 31], [46, 77],
+  [114, 144], [180, 199], [208, 227],
+] as const
 const requiredDemonRanges = [[1, 115]] as const
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: badguys as AtlasManifest,

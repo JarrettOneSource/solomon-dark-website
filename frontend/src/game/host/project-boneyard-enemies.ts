@@ -1,17 +1,16 @@
-import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyBrain,
-  type BoneyardEnemyDeathEffect,
-  type BoneyardEnemyStore,
-  type BoneyardMageLightningPulse,
-  type BoneyardMaggotActor,
-  nativeEnemyHitOverlay,
+import { nativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
+import type { NativeSpiderOutlineTarget } from '../core-kernels/native-spider-appearance.ts'
+import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS, NATIVE_MAGGOT_PROGRAM } from '../core-server/enemies/programs.ts'
+import { nativeEnemyHitOverlay } from '../core-server/enemies/model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyBrain,
+  BoneyardEnemyDeathEffect,
+  BoneyardEnemyStore,
+  BoneyardMageLightningPulse,
+  BoneyardMaggotActor,
 } from '../core-server/enemies/model.ts'
-import {
-  NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
-  NATIVE_MAGGOT_PROGRAM,
-} from '../core-server/enemies/programs.ts'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import {
   NATIVE_DEMON_BOMB_CONTROLLER_POSES,
@@ -19,23 +18,21 @@ import {
 } from '../core-kernels/boneyard-demon-articulation.ts'
 import { nativeImpEffectFrame } from '../core-kernels/boneyard-imp-flight.ts'
 import { nativeWraithContactActionProgress } from '../core-kernels/native-wraith-flight.ts'
-import {
-  nativeZombieArticulationPose,
-  nativeZombieBeatPose,
-} from '../core-kernels/boneyard-zombie-beat.ts'
+import { nativeZombieArticulationPose, nativeZombieBeatPose } from '../core-kernels/boneyard-zombie-beat.ts'
 import type {
   BoneyardEnemyAction,
   BoneyardEnemyAnimationSnapshot,
   BoneyardEnemyAnimationState,
   BoneyardEnemyCoffinState,
-  BoneyardEnemyEffectSnapshot,
   BoneyardEnemyDeathEffectSnapshot,
-  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemyEffectSnapshot,
   BoneyardEnemyProjectileEffectSnapshot,
+  BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMageLightningPulseSnapshot,
   BoneyardMaggotSnapshot,
 } from '../protocol/game-state.ts'
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 
 export function projectBoneyardEnemyDeathEffects(
   store: BoneyardEnemyStore,
@@ -63,6 +60,7 @@ export function projectBoneyardEnemyDeathEffect(
     position: { ...effect.position },
     rotationRadians: effect.rotationDeg * Math.PI / 180,
     scale: effect.scale,
+    scaleY: effect.scaleY,
     shadow: effect.shadow,
     spawnTick: effect.spawnTick,
     tint: effect.tint,
@@ -72,9 +70,12 @@ export function projectBoneyardEnemyDeathEffect(
 export function projectBoneyardEnemies(
   store: BoneyardEnemyStore,
   tick: number,
+  spiderContext?: BoneyardSpiderPresentationContext,
 ): readonly BoneyardEnemySnapshot[] {
-  return store.actors.map((actor) => ({
-    animation: projectAnimation(actor, tick),
+  return store.actors.filter((actor) => (
+    actor.brain.family !== 'spider' || actor.brain.phase !== 'captured'
+  )).map((actor) => ({
+    animation: projectAnimation(actor, tick, spiderContext),
     armored: actor.config.enemyToken === 'SKELETON' && actor.config.family.armor,
     currentHealth: Math.min(actor.config.maximumHealth, actor.currentHealth),
     enemyToken: actor.config.enemyToken,
@@ -223,6 +224,7 @@ export function projectBoneyardMaggots(
 function projectAnimation(
   actor: BoneyardEnemyActor,
   tick: number,
+  spiderContext: BoneyardSpiderPresentationContext | undefined,
 ): BoneyardEnemyAnimationSnapshot {
   const action = actor.lifeState === 'alive' ? brainAction(actor) : null
   const state: BoneyardEnemyAnimationState = actor.lifeState === 'dying'
@@ -273,6 +275,10 @@ function projectAnimation(
       )
     : null
   return {
+    spider: actor.brain.family === 'spider' ? nativeSpiderAppearance(
+      actor.brain.bodyHeadingDeg, actor.position, spiderContext?.lightAt(actor.position) ?? 0,
+      actor.targetPlayerId === null ? null : spiderContext?.players[actor.targetPlayerId] ?? null,
+    ) : null,
     action,
     actionProgress: actionProgress(actor.brain),
     alpha: actor.brain.family === 'portal' ? actor.brain.alpha : 1,
@@ -310,6 +316,7 @@ function projectAnimation(
       ? actor.lifeState === 'dying' ? 0 : demonArticulation?.verticalOffset ?? 0
       : impBrain?.verticalOffset
       ?? zombieBrain?.verticalOffset
+      ?? (actor.brain.family === 'spider' ? actor.brain.verticalOffset : undefined)
       ?? coffin.verticalOffset,
     zombieAngularOffsetDeg: zombieBrain?.angularOffsetDeg ?? 0,
     zombieAttackSide: zombieBrain?.attackSide ?? 0,
@@ -371,6 +378,8 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
     case 'wraith': return brain.contactCooldownTicks > 0 ? 'wraith-drain' : null
     case 'demon': return brain.phase === 'bomb' ? 'demon-bomb' : null
     case 'coffin': return null
+    case 'spider': return null
+    case 'cocoon': return null
   }
 }
 
@@ -380,6 +389,8 @@ function actionProgress(brain: BoneyardEnemyBrain): number {
     case 'archer':
     case 'mage': return brain.actionProgress
     case 'imp': return 0
+    case 'spider': return 0
+    case 'cocoon': return 0
     case 'portal': return 0
     case 'wraith': return nativeWraithContactActionProgress(brain.contactCooldownTicks)
     case 'zombie':
@@ -424,4 +435,9 @@ function coffinPresentation(brain: BoneyardEnemyBrain): {
 
 function positiveModulo(value: number, period: number): number {
   return ((value % period) + period) % period
+}
+
+export interface BoneyardSpiderPresentationContext {
+  readonly lightAt: (position: Readonly<BoneyardPoint>) => number
+  readonly players: Readonly<Record<string, NativeSpiderOutlineTarget>>
 }

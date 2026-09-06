@@ -8,7 +8,7 @@ import type {
   PrimarySpellSimulationFrameState,
   PrimarySpellWaterHailFrameTable,
 } from '../protocol/game-state.ts'
-import { lerp } from './primary-spell-presentation-math.ts'
+import { lerp } from './presentation-math.ts'
 import {
   copyPrimarySpellState,
   interpolatePrimarySpellState,

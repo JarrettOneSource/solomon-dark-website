@@ -39,6 +39,11 @@ export class NativeEnemyWorldFeedbackPresentation {
   consume(event: BoneyardEnemyEventSnapshot): boolean {
     if (event.eventId <= this.lastEventId) return false
     this.lastEventId = event.eventId
+    if (event.type === 'cocoon-released') {
+      this.advanceTo(event.tick)
+      this.feedback = { ...this.feedback, magnitude: Math.fround(0.2) }
+      return true
+    }
     if (event.type !== 'enemy-terminal-output' || event.output === undefined) return false
     const impulses = nativeEnemyWorldFeedbackImpulses(event.output, event.count)
     this.advanceTo(event.tick)

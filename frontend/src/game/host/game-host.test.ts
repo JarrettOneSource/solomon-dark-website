@@ -37,12 +37,18 @@ import type {
 import {
   GAME_PROTOCOL_VERSION,
   GAME_SESSION_REPLACED_CLOSE_CODE,
+} from '../protocol/game-protocol-contract.ts'
+import {
   decodeServerGameMessage,
   encodeGameMessage,
-  type GameOnlinePreferences,
-  type ServerGameMessage,
-  type ServerSnapshotMessage,
 } from '../protocol/game-protocol.ts'
+import type {
+  GameOnlinePreferences,
+} from '../protocol/game-chat.ts'
+import type {
+  ServerGameMessage,
+  ServerSnapshotMessage,
+} from '../protocol/game-server-messages.ts'
 import type { GameSnapshot } from '../protocol/game-state.ts'
 import type { PlayerSocialProfile } from '../protocol/party-state.ts'
 import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'

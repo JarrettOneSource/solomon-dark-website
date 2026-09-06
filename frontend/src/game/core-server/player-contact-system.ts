@@ -1,47 +1,35 @@
 import type { PendingPlayerHardenChip } from './player-harden-effects.ts'
-import type { BoneyardWorldState } from './boneyard-world.ts'
+import type { BoneyardWorldState } from './boneyard-world-state.ts'
 import { playerPoisonHealthDamage } from '../core-kernels/player-combat.ts'
 import { emitPlayerStatusBurst } from './boneyard-player-status.ts'
+import { applyNativeWebbed } from '../core-kernels/native-webbed.ts'
+import { addNativeCocoon } from './enemies/construction.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import {
   NATIVE_FLASH_RESPONSE_RADIUS,
   playerDeflectReflectionSourceInRange,
-  resolvePlayerHarmfulContact,
   resolvePlayerFlashResponse,
+  resolvePlayerHarmfulContact,
 } from '../core-kernels/player-harmful-contact.ts'
-import {
-  PLAYER_CHARACTER_RADIUS,
-  type PlayerCharacterState,
-} from '../core-kernels/player-character.ts'
-import {
-  actorHeadingFromVector,
-  actorHeadingIndex,
-} from '../core-kernels/actor-heading.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import type { PlayerCharacterState } from '../core-kernels/player-character.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
 import {
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryPlayerDamage,
   materializeNativePlayerFlashResponse,
-  type NativeSecondarySimulationState,
 } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED } from '../core-kernels/native-secondary-golem.ts'
 import { boneyardNativeSecondaryTargets } from './native-secondary-world.ts'
-import {
-  emitBoneyardPlayerDamageSound,
-  nativeWizardOuchCooldownReady,
-} from './enemies/events.ts'
-import {
-  type BoneyardEnemyPlayerDamage,
-  type BoneyardEnemySemanticEvent,
-  boneyardEnemyCollisionRadius,
-} from './enemies/model.ts'
-import {
-  damagePlayerEntityWithResult,
-  playerEntityIndex,
-  playerSkillDerivedStatsAt,
-  type PlayerEntityStore,
-} from './player-entity-store.ts'
-import type { GameSimulationState, GameWorldState, GameSimulationExtensions, PlayerId } from './game-simulation.ts'
+import { boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import type { BoneyardEnemyPlayerDamage, BoneyardEnemySemanticEvent } from './enemies/model.ts'
+import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
+import { damagePlayerEntityWithResult, playerEntityIndex, playerSkillDerivedStatsAt } from './player-entity-store.ts'
+import type { PlayerEntityStore } from './player-entity-store.ts'
+import type { GameSimulationExtensions, GameSimulationState, GameWorldState, PlayerId } from './game-simulation.ts'
 
 export interface PlayerContactStep {
   readonly hardenChips: readonly PendingPlayerHardenChip[]
@@ -61,6 +49,7 @@ export function applyPlayerContacts(
   playerDamage: readonly BoneyardEnemyPlayerDamage[],
   tick: number,
   extensions: GameSimulationExtensions | undefined,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): PlayerContactStep {
   const initialWorld = source.world
   let playerEntities = source.playerEntities
@@ -126,6 +115,10 @@ export function applyPlayerContacts(
     const runtime = playerEntities.skillRuntimes[playerIndex]!
     const derived = playerSkillDerivedStatsAt(playerEntities, damage.playerId)!
     const progression = playerEntities.progressions[playerIndex]!
+    if (damage.webbedStrength !== undefined
+      && (secondaryAbilities.players[damage.playerId]?.magicShieldAbsorb ?? 0) > 0) {
+      damage = { ...damage, physicalDamage: 25 }
+    }
     const contact = resolvePlayerHarmfulContact(
       runtime,
       derived,
@@ -243,6 +236,7 @@ export function applyPlayerContacts(
           poisonDamage,
           poisonDuration: playerPoisonDurationSeconds(derived, damage.poisonDuration),
         })
+        applyWebContact()
         let active = admittedStatusKinds.get(damage.playerId)
         if (active === undefined) {
           active = new Set<'cold' | 'poison'>()
@@ -265,6 +259,27 @@ export function applyPlayerContacts(
           playerDamageSoundEvents.push(burst.event)
         }
       }
+    }
+
+    function applyWebContact(): void {
+      if (damage.webbedStrength === undefined) return
+      const prior = world.enemies.webbedPlayers[damage.playerId] ?? null
+      const web = applyNativeWebbed(prior, damage.webbedStrength)
+      let enemies = {
+        ...world.enemies,
+        webbedPlayers: { ...world.enemies.webbedPlayers, [damage.playerId]: web },
+      }
+      if (web.severity === 3 && (prior?.severity ?? 0) < 3) {
+        const admitted = addNativeCocoon(enemies, damage.playerId, character.position, {
+          [damage.playerId]: {
+            alive: true, connected: true, eligible: true, collisionRadius: PLAYER_CHARACTER_RADIUS,
+            headingDeg: character.headingIndex * 15, position: character.position,
+            velocityPerTick: { x: 0, y: 0 },
+          },
+        }, tick, registerWorldPainter)
+        enemies = admitted.store
+      }
+      world = { ...world, enemies }
     }
 
     function playHurtResponse() {

@@ -4,9 +4,11 @@ import {
   MAX_LUA_CONSOLE_VALUE_FIELDS,
   MAX_LUA_CONSOLE_VALUE_NODES,
   MAX_LUA_CONSOLE_VALUE_STRING_LENGTH,
-  type LuaConsoleObject,
-  type LuaConsoleValue,
-} from '../../protocol/game-protocol.ts'
+} from '../../protocol/game-protocol-limits.ts'
+import type {
+  LuaConsoleObject,
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
 import {
   WEB_LUA_MAX_STATE_KEY_LENGTH,
   WEB_LUA_STOCK_ENEMIES,

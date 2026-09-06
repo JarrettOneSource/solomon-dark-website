@@ -7,8 +7,10 @@ import {
   MAX_LUA_CONSOLE_OUTPUT_BYTES,
   MAX_LUA_CONSOLE_RETURN_BYTES,
   MAX_LUA_CONSOLE_RETURN_VALUES,
-  type LuaConsoleValue,
-} from '../../protocol/game-protocol.ts'
+} from '../../protocol/game-protocol-limits.ts'
+import type {
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
 import {
   WEB_LUA_CALLBACK_TIMEOUT_MS,
   WEB_LUA_DEV_CONSOLE_MOD,

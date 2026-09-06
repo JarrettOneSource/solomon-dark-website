@@ -1,4 +1,6 @@
-import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../protocol/game-protocol-contract.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'
 import type { BrowserRunPerformance } from './run-performance.ts'
 

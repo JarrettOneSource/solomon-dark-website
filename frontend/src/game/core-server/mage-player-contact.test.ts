@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { createNativeTutorialState } from '../core-kernels/native-tutorial.ts'
 import { createSolomonEncounter } from '../core-kernels/boneyard-encounter.ts'
@@ -5,9 +7,6 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.
 import { applyPlayerContacts } from './player-contact-system.ts'
 import { grantPlayerEntitySkillRanks } from './player-entity-store.ts'
 import { grantPlayerSkillRanks } from '../core-kernels/player-progression.ts'
-import assert from 'node:assert/strict'
-import test from 'node:test'
-
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { playerMovementScale } from '../core-kernels/player-combat.ts'
 import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
@@ -18,15 +17,14 @@ import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-pro
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { NATIVE_MAGE_ACTION_PROGRAMS } from './enemies/programs.ts'
 import {
-  createGameSimulation,
   bindGameSimulationPlayerSkillQuickbar,
+  createGameSimulation,
   enterBoneyardWorld,
   gameSimulationPlayerRecords,
   getPlayerProgression,
   stepGameSimulationTick,
-  type GameSimulationState,
-  type GameSimulationExtensions,
 } from './game-simulation.ts'
+import type { GameSimulationExtensions, GameSimulationState } from './game-simulation.ts'
 
 test('a poison Mage impact poisons the player and lowers health', () => {
   let state = mageContactState('FLAG_CASTPOISON')

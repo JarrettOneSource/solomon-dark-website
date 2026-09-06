@@ -4470,6 +4470,7 @@ test('Ether Drain retains its strict ellipse and applies exact pressure, contact
     { amount: baseDamage * 8, targetId: 4 },
   ])
   assert.deepEqual(result.knockbacks.map(({ targetId }) => targetId), [1, 2, 3, 4, 5])
+  assert.ok(result.damage.every((contact) => contact.etherDrain === true))
   assert.equal(result.knockbacks.at(-1)?.delta.x, -0.1 * parent.alpha * 1.1)
   assert.deepEqual(result.state.rng, advanceNativeRngWords(beforeContactRng, 4))
 })

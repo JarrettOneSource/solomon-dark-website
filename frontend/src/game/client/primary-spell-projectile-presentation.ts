@@ -4,7 +4,7 @@ import {
   interpolateNullableNumber,
   lerp,
   lerpVector,
-} from './primary-spell-presentation-math.ts'
+} from './presentation-math.ts'
 
 type ProjectileKind = PrimarySpellProjectileState['kind']
 type MatchingProjectilePair = {

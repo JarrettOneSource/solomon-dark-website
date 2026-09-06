@@ -6,7 +6,9 @@ import type {
   ModSpriteFrame,
 } from '../core-kernels/hub-economy.ts'
 import { loadGameImage, releaseGameImages } from '../game-assets.ts'
-import type { GameModAsset } from '../protocol/game-protocol.ts'
+import type {
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
 
 export interface ModPresentationTextures {

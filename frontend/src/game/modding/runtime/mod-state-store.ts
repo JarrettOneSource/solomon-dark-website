@@ -1,4 +1,6 @@
-import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
+import type {
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
 import type {
   WebLuaDefinitionValue,
   WebLuaSchemaDefinition,

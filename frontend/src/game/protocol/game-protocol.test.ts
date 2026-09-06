@@ -1,31 +1,22 @@
 import assert from 'node:assert/strict'
-import { Buffer } from 'node:buffer'
 import test from 'node:test'
-
+import { Buffer } from 'node:buffer'
 import {
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   stepGameSimulationTick,
-  type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import { earthImpactFragmentCount, earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
-  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
-  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
-} from '../core-kernels/game-run.ts'
-import {
-  earthImpactFragmentCount,
-  earthImpactLifetimeTicks,
-} from '../core-kernels/primary-spell-earth.ts'
-import {
+  NATIVE_HAIL_MINIMUM_HEIGHT,
   createNativeWaterHailActor,
   nativeWaterHailLifeAtAge,
-  NATIVE_HAIL_MINIMUM_HEIGHT,
   stepNativeWaterHailActor,
 } from '../core-kernels/air-water-spell-actors.ts'
-import type {
-  PrimarySpellTransientState,
-} from '../core-kernels/primary-spells.ts'
+import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
@@ -50,29 +41,24 @@ import {
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
   createHubEconomy,
   hagathaOffers,
-  type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
-import {
-  coldSlowPlayerEntity,
-  dazzlePlayerEntity,
-} from '../core-server/player-entity-store.ts'
+import { coldSlowPlayerEntity, dazzlePlayerEntity } from '../core-server/player-entity-store.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
-  GAME_CHAT_MAX_TEXT_CODE_UNITS,
   GAMEPLAY_RESUME_GRACE_REASONS,
   GAME_PROTOCOL_VERSION,
-  MAX_LUA_CONSOLE_CODE_LENGTH,
-  GameProtocolError,
-  decodeClientGameMessage,
-  decodeServerGameMessage,
-  encodeGameMessage,
-  type LoadedBoneyard,
-  type ServerWelcomeMessage,
-} from './game-protocol.ts'
+} from './game-protocol-contract.ts'
+import { GAME_CHAT_MAX_TEXT_CODE_UNITS } from './game-chat.ts'
+import { MAX_LUA_CONSOLE_CODE_LENGTH } from './game-protocol-limits.ts'
+import { GameProtocolError } from './codecs/values.ts'
+import { decodeClientGameMessage, decodeServerGameMessage, encodeGameMessage } from './game-protocol.ts'
+import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import type { ServerWelcomeMessage } from './game-server-messages.ts'
 import { createGameSnapshotFrame } from './entity-replication.ts'
 import {
   createPrimarySpellSimulationFrame,
@@ -1380,6 +1366,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   assert.equal(snapshot.players['player-1']?.progression.dazzleTicksRemaining, 50)
   snapshot.world.enemies = [{
     animation: {
+      spider: null,
       action: 'skeleton-claw-a',
       actionProgress: 4,
       alpha: 1,
@@ -1539,6 +1526,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     position: { x: 130, y: 100 },
     rotationRadians: 0.5,
     scale: 1.7,
+    scaleY: 1.7,
     shadow: false,
     spawnTick: 1,
     tint: 0xffaa88,
@@ -1673,7 +1661,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    56,
+    59,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -1684,7 +1672,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 56)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 59)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,

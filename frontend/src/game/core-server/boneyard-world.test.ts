@@ -1,22 +1,16 @@
 import assert from 'node:assert/strict'
-import { Buffer } from 'node:buffer'
 import test from 'node:test'
-
+import { Buffer } from 'node:buffer'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { createNativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
-import {
-  BONEYARD_ARENA_SEAL_TICKS,
-  startBoneyardArenaTransition,
-} from '../core-kernels/boneyard-arena-transition.ts'
+import { BONEYARD_ARENA_SEAL_TICKS, startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
-import {
-  type BoneyardEnemySpawnIntent,
-  startBoneyardWaveDirector,
-} from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_CAMERA_TARGET,
@@ -26,17 +20,14 @@ import {
   nativeTutorialEnemyCameraPositionIsAllowed,
   stepNativeTutorial,
 } from '../core-kernels/native-tutorial.ts'
-import {
-  PLAYER_CHARACTER_RADIUS,
-  type PlayerCharacterState,
-} from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import type { PlayerCharacterState } from '../core-kernels/player-character.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
-import {
-  boneyardPrimarySpellTargets,
-  createBoneyardWorld,
-  stepBoneyardWorldTick,
-} from './boneyard-world.ts'
+import { boneyardPrimarySpellTargets } from './boneyard-world-targets.ts'
+import { createBoneyardWorld as createWorld } from './boneyard-world-construction.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import { stepBoneyardWorldTick } from './boneyard-world.ts'
 import {
   applyBoneyardPlayerKnockbacks,
   applyBoneyardSecondaryEnemyKnockbacks,
@@ -44,14 +35,8 @@ import {
 } from './boneyard-world-placement.ts'
 import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
-import {
-  BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
-  NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS,
-} from './enemies/programs.ts'
-import {
-  findBoneyardEnemyRoute,
-  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
-} from './boneyard-enemy-navigation.ts'
+import { BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE, NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS } from './enemies/programs.ts'
+import { NATIVE_BADGUY_NAVIGATION_CLEARANCE, findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { canPlaceBoneyardBody, resolveBoneyardMovement } from './boneyard-collision.ts'
 import { spawnBoneyardCustomLootItems } from './boneyard-loot-store.ts'
 
@@ -63,6 +48,12 @@ function movementInput(x: number, y: number) {
     viewportHeight: 900,
     viewportWidth: 1_600,
   }
+}
+
+function createBoneyardWorld(loaded: LoadedBoneyard) {
+  const order = createNativeWorldManagerOrder()
+  order.register('actor')
+  return createWorld(loaded, order.register('actor'), order.register('actor'))
 }
 
 function stepWorld(

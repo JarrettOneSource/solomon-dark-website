@@ -1,4 +1,6 @@
-import type { AuthoredBoneyardEnemyRecipe } from './boneyard-enemy-config.ts'
+import type {
+  AuthoredBoneyardEnemyRecipe,
+} from './boneyard-enemy-config-model.ts'
 import type {
   BoneyardSpawnLocationPolicy,
   BoneyardSpawnPositionPolicy,
@@ -95,10 +97,7 @@ export function nativeSlumpgutRecipeForUid(uid: number): AuthoredBoneyardEnemyRe
     attackSpeed: NATIVE_SLUMPGUT_RECIPE_SOURCE.attackSpeed,
     chaseSpeed: NATIVE_SLUMPGUT_RECIPE_SOURCE.chaseSpeed,
     classification: 'boss',
-    experience: (
-      NATIVE_SLUMPGUT_RECIPE_SOURCE.xpBonus
-      + NATIVE_SLUMPGUT_RECIPE_SOURCE.maxHp
-    ) * 2,
+    experienceBonus: NATIVE_SLUMPGUT_RECIPE_SOURCE.xpBonus,
     extraDamage: NATIVE_SLUMPGUT_RECIPE_SOURCE.extraDamage,
     family: Object.freeze({
       bodyType: 1,

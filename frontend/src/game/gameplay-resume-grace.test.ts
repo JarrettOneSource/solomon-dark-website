@@ -5,7 +5,9 @@ import {
   gameplayResumeGraceReasonForPauseSource,
   gameplayResumeGraceProgress,
 } from './gameplay-resume-grace.ts'
-import { GAMEPLAY_RESUME_GRACE_DURATION_MS } from './protocol/game-protocol.ts'
+import {
+  GAMEPLAY_RESUME_GRACE_DURATION_MS,
+} from './protocol/game-protocol-contract.ts'
 
 test('projects grace only for gameplay surfaces that need reorientation', () => {
   assert.deepEqual([

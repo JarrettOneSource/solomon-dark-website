@@ -1,31 +1,21 @@
 import type {
-  NativeSecondaryDampenCandidates,
   NativeSecondaryDamageContact,
+  NativeSecondaryDampenCandidates,
   NativeSecondaryHeadingPerturbation,
   NativeSecondaryPositionResult,
   NativeSecondaryTarget,
   NativeSecondaryTickResult,
 } from '../core-kernels/native-secondary-abilities.ts'
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
-import {
-  drawNativeFloat,
-  drawNativeInteger,
-  type NativeRngState,
-} from '../core-kernels/native-rng.ts'
+import { drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
-import {
-  type BoneyardEnemyLethalObserver,
-  type BoneyardEnemySemanticEvent,
-  type BoneyardEnemyStore,
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-} from './enemies/model.ts'
-import {
-  canPlaceBoneyardBody,
-  type BoneyardCollisionWorld,
-} from './boneyard-collision.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import type { BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore } from './enemies/model.ts'
+import { canPlaceBoneyardBody } from './boneyard-collision.ts'
+import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 
 const NATIVE_TELEPORT_GRID_STEP = 100
 const NATIVE_TELEPORT_GRID_INSET = 100
@@ -301,6 +291,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   lethalObserver?: BoneyardEnemyLethalObserver,
   damageMultiplier: (targetId: number, ownerId: string) => number = () => 1,
   registerWorldPainter?: RegisterNativeWorldPainter,
+  etherDrainFields: readonly Vector2[] = [],
 ): BoneyardSecondaryCombatResult {
   const removedProjectileIds = new Set(result.removedProjectileIds)
   let enemies = removedProjectileIds.size === 0
@@ -334,6 +325,7 @@ export function resolveBoneyardNativeSecondaryCombat(
       lethalObserver,
       damageMultiplier(contact.targetId, contact.ownerId),
       registerWorldPainter,
+      etherDrainFields,
     )
     enemies = damaged.enemies
     events.push(...damaged.events)
@@ -395,12 +387,23 @@ function applyContact(
   lethalObserver?: BoneyardEnemyLethalObserver,
   damageMultiplier = 1,
   registerWorldPainter?: RegisterNativeWorldPainter,
+  etherDrainFields: readonly Vector2[] = [],
 ): BoneyardSecondaryCombatResult {
   if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
     throw new RangeError('secondary damage multiplier must be finite and non-negative')
   }
+  const target = contact.etherDrain === true
+    ? source.actors.find(({ id }) => id === contact.targetId)
+    : undefined
+  const etherDrainCapture = target !== undefined && etherDrainFields.some((field) => {
+    const dx = field.x - target.position.x
+    const dy = field.y - target.position.y
+    return dx * dx + dy * dy < 1600
+  })
   const damaged = damageBoneyardEnemy(source, {
     actorId: contact.targetId,
+    etherDrainCapture,
+    magic: contact.kind !== 'physical',
     amount: contact.amount * damageMultiplier,
     lethalObserver,
     registerWorldPainter,

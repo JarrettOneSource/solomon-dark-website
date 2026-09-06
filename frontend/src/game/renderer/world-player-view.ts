@@ -1,0 +1,866 @@
+import {
+  type ActorMovementFacingState,
+  advanceActorMovementFacing,
+  createActorMovementFacingState,
+} from '../core-kernels/actor-heading.ts'
+import type { PlayerStaffAttachmentPose } from '../core-kernels/native-player-weapon.ts'
+import type { NativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
+import type { WizardElement } from '../core-kernels/player-character.ts'
+import { playerHitOverlayAlpha } from '../core-kernels/player-combat.ts'
+import {
+  NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE,
+  createPlayerCharacterDrawPlan,
+  createPlayerDeathDrawPlan,
+  isPlayerModEquipmentAppearance,
+  playerCharacterRobeFixedPose,
+  playerCharacterStaffIsFront,
+  playerDeathEquipmentAppearance,
+  playerEquippedElementEffectScale,
+  playerLivingEquipmentAppearance,
+} from '../player-character-presentation.ts'
+import type { ProtocolPlayerState } from '../protocol/game-state.ts'
+import {
+  actorSprite,
+} from './hub-actors.ts'
+import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
+import { type ModPresentationTextures, modWearableFrame } from './mod-presentation-assets.ts'
+import { NativeElementVfxView } from './native-element-vfx-view.ts'
+import { nativeSecondarySpriteKey, nativeSecondarySpriteRecord } from './native-secondary-assets.ts'
+import {
+  NATIVE_PLAYER_MAGIC_SHIELD,
+  nativePlayerMagicShieldPlan,
+} from './native-secondary-presentation.ts'
+import { PlayerDamageX4VfxView } from './player-damage-x4-vfx-view.ts'
+import { PlayerEnchantStaffView } from './player-enchant-staff-view.ts'
+import { PlayerHardenView } from './player-harden-view.ts'
+import type { NativeWebbedState } from '../core-kernels/native-webbed.ts'
+import { PlayerWebbedView } from './player-webbed-view.ts'
+import { type PlayerStatusMaterialState, nativePlayerMaterialTint } from './player-material.ts'
+import { type PlayerWorldTextures, playerDeathHatAnchor } from './world-player-textures.ts'
+import { Container, type Renderer, Sprite, type Texture } from 'pixi.js'
+
+const DEATH_HAT_PRIMARY = 7
+
+const DEATH_HAT_SECONDARY = 8
+
+const PLAYER_DEATH_LAYER_COUNT = 9
+
+export class PlayerWorldView {
+  readonly container = new Container({ label: 'local-player' })
+  private readonly shadow: Sprite
+  private readonly harden: PlayerHardenView
+  private readonly webbed: PlayerWebbedView
+  private webbedState: NativeWebbedState | undefined
+  private readonly arena: boolean
+  private materialPlayer: ProtocolPlayerState | null = null
+  private readonly staffBack: Sprite
+  private readonly damageX4FrontBase: PlayerDamageX4VfxView
+  private readonly damageX4FrontOverlay: PlayerDamageX4VfxView
+  private readonly orbFrontBase: NativeElementVfxView
+  private readonly orbFrontOverlay: NativeElementVfxView
+  private readonly orbHardenOverlay: NativeElementVfxView
+  private readonly damageX4HardenOverlay: PlayerDamageX4VfxView
+  private readonly robe: Sprite
+  private readonly robeSecondary: Sprite
+  private readonly unselectedRobeAttachment: Sprite
+  private readonly fixed: Sprite
+  private readonly fixedSecondary: Sprite
+  private readonly staffFront: Sprite
+  private readonly enchantStaff: PlayerEnchantStaffView
+  private readonly head: Sprite
+  private readonly headSecondary: Sprite
+  private readonly hitOverlay: Container
+  private readonly hitStaffBack: Sprite
+  private readonly hitRobe: Sprite
+  private readonly hitRobeSecondary: Sprite
+  private readonly hitUnselectedRobeAttachment: Sprite
+  private readonly hitFixed: Sprite
+  private readonly hitFixedSecondary: Sprite
+  private readonly hitStaffFront: Sprite
+  private readonly hitHead: Sprite
+  private readonly hitHeadSecondary: Sprite
+  private readonly deathLayers: readonly Sprite[]
+  private readonly deathShadowLayers: readonly Sprite[]
+  private readonly magicShield: Sprite
+  private readonly modTextures: ModPresentationTextures
+  private readonly textures: PlayerWorldTextures
+  private readonly deathBaseTints = Array.from(
+    { length: PLAYER_DEATH_LAYER_COUNT },
+    () => 0xffffff,
+  )
+  private statusMaterial: PlayerStatusMaterialState = {
+    coldSlowTicksRemaining: 0,
+    poisonBeforeCold: false,
+    poisonTicksRemaining: 0,
+  }
+  private worldTint = 0xffffff
+  private currentWalkPose = 0
+  private currentAttachmentPose = 0
+  private currentElementEffectScale = 1
+  private currentDeathFrame: number | null = null
+  private currentHeadingIndex = 0
+  private currentOrdinaryWeaponVisible = false
+  private currentRobeFixedPose = 0
+  private currentUnselectedPrimaryAttachment = false
+  private movementFacingState: ActorMovementFacingState | null = null
+  private secondaryState: NativeSecondaryPlayerState | undefined
+  private robePrimaryTint = 0xffffff
+  private robeSecondaryTint = 0xffffff
+  private headPrimaryTint = 0xffffff
+  private headSecondaryTint = 0xffffff
+
+  constructor(
+    element: WizardElement,
+    textures: PlayerWorldTextures,
+    modTextures: ModPresentationTextures,
+    renderer: Renderer,
+    arena: boolean,
+  ) {
+    this.textures = textures
+    this.modTextures = modTextures
+    this.arena = arena
+    this.harden = new PlayerHardenView(textures.secondary[nativeSecondarySpriteKey('Clothes', 1)]!, renderer)
+    this.webbed = new PlayerWebbedView(textures.webbedCocoon, renderer)
+    const playerTextures = textures.players[element]
+    this.container.sortableChildren = true
+    this.container.eventMode = 'none'
+    this.shadow = actorSprite(textures.playerShadow, 0)
+    this.shadow.scale.set(1.25)
+    this.shadow.alpha = 0.72
+    this.staffBack = actorSprite(playerTextures.staffBack[0][0], 1)
+    this.robe = actorSprite(playerTextures.robe[0][0], 3)
+    this.robeSecondary = actorSprite(playerTextures.robe[0][0], 3)
+    this.unselectedRobeAttachment = actorSprite(
+      textures.equipment.unselectedAttachment.robe[0],
+      3.5,
+    )
+    this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
+    this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
+    this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
+    this.enchantStaff = new PlayerEnchantStaffView(textures.enchantStaff)
+    const damageX4Texture = textures.secondary[nativeSecondarySpriteKey('BadGuys', 7)]
+    this.damageX4FrontBase = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4FrontBase.container.label = 'player-damage-x4-vfx-front-base'
+    this.damageX4FrontBase.container.zIndex = 6
+    this.damageX4FrontOverlay = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4FrontOverlay.container.label = 'player-damage-x4-vfx-front-overlay'
+    this.damageX4FrontOverlay.container.zIndex = 6
+    this.orbFrontBase = new NativeElementVfxView(null, textures.elementVfx)
+    this.orbFrontBase.container.label = 'native-element-vfx-front-base'
+    this.orbFrontBase.container.zIndex = 6
+    this.orbFrontOverlay = new NativeElementVfxView(null, textures.elementVfx)
+    this.orbFrontOverlay.container.label = 'native-element-vfx-front-overlay'
+    this.orbFrontOverlay.container.zIndex = 6
+    this.damageX4HardenOverlay = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4HardenOverlay.container.label = 'player-damage-x4-vfx-harden-overlay'
+    this.damageX4HardenOverlay.container.zIndex = 9
+    this.orbHardenOverlay = new NativeElementVfxView(null, textures.elementVfx)
+    this.orbHardenOverlay.container.label = 'native-element-vfx-harden-overlay'
+    this.orbHardenOverlay.container.zIndex = 9
+    this.head = actorSprite(playerTextures.head[0], 7)
+    this.headSecondary = actorSprite(playerTextures.head[0], 7)
+    this.deathShadowLayers = createDeathLayers(playerTextures.death[0][0], 1, 'shadow')
+    this.deathLayers = createDeathLayers(playerTextures.death[0][0], 11, 'color')
+    this.hitOverlay = new Container({ label: 'player-hit-overlay' })
+    this.hitOverlay.sortableChildren = true
+    this.hitOverlay.eventMode = 'none'
+    this.hitOverlay.zIndex = 8
+    this.hitStaffBack = actorSprite(playerTextures.staffBack[0][0], 1)
+    this.hitRobe = actorSprite(playerTextures.robe[0][0], 3)
+    this.hitRobeSecondary = actorSprite(playerTextures.robe[0][0], 3)
+    this.hitUnselectedRobeAttachment = actorSprite(
+      textures.equipment.unselectedAttachment.robe[0],
+      3.5,
+    )
+    this.hitFixed = actorSprite(playerTextures.fixed[0][0], 4)
+    this.hitFixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
+    this.hitStaffFront = actorSprite(playerTextures.staffFront[0][0], 5)
+    this.hitHead = actorSprite(playerTextures.head[0], 7)
+    this.hitHeadSecondary = actorSprite(playerTextures.head[0], 7)
+    for (const sprite of [
+      this.hitStaffBack,
+      this.hitRobe,
+      this.hitRobeSecondary,
+      this.hitUnselectedRobeAttachment,
+      this.hitFixed,
+      this.hitFixedSecondary,
+      this.hitStaffFront,
+      this.hitHead,
+      this.hitHeadSecondary,
+    ]) sprite.tint = 0xff0000
+    this.hitOverlay.addChild(
+      this.hitStaffBack,
+      this.hitRobe,
+      this.hitRobeSecondary,
+      this.hitUnselectedRobeAttachment,
+      this.hitFixed,
+      this.hitFixedSecondary,
+      this.hitStaffFront,
+      this.hitHead,
+      this.hitHeadSecondary,
+    )
+    const shield = NATIVE_PLAYER_MAGIC_SHIELD
+    const shieldRecord = nativeSecondarySpriteRecord(shield.atlas, shield.entry)
+    this.magicShield = new Sprite(textures.secondary[nativeSecondarySpriteKey(shield.atlas, shield.entry)])
+    this.magicShield.anchor.set(
+      shieldRecord.anchorX / shieldRecord.width,
+      shieldRecord.anchorY / shieldRecord.height,
+    )
+    this.magicShield.position.set(0, shield.offsetY)
+    this.magicShield.zIndex = 8
+    this.magicShield.blendMode = 'add'
+    this.magicShield.eventMode = 'none'
+    this.magicShield.visible = false
+    this.container.addChild(
+      this.shadow,
+      this.staffBack,
+      this.enchantStaff.container,
+      this.robe,
+      this.robeSecondary,
+      this.unselectedRobeAttachment,
+      this.fixed,
+      this.fixedSecondary,
+      this.staffFront,
+      this.damageX4FrontBase.container,
+      this.orbFrontBase.container,
+      this.damageX4FrontOverlay.container,
+      this.orbFrontOverlay.container,
+      this.head,
+      this.headSecondary,
+      ...this.deathShadowLayers,
+      ...this.deathLayers,
+      this.hitOverlay,
+      this.magicShield,
+      this.harden.container,
+      this.webbed.container,
+      this.damageX4HardenOverlay.container,
+      this.orbHardenOverlay.container,
+    )
+  }
+
+  update(
+    player: ProtocolPlayerState,
+    tick: number,
+    staffActionPose: PlayerStaffAttachmentPose | null = null,
+    elementEffectVisible = true,
+    movementFacing = false,
+  ): void {
+    this.statusMaterial = player.progression
+    const playerTextures = this.textures.players[player.config.element]
+    const elementEffectPhase = player.lighting.overlayEffectPhase
+    const plan = createPlayerCharacterDrawPlan(
+      player,
+      1,
+      staffActionPose,
+      this.secondaryState?.castAction
+        ?? ((this.secondaryState?.castSpinTicksRemaining ?? 0) > 0 ? 'spin' : null),
+      elementEffectPhase,
+    )
+    const heading = spriteFrameIndex(
+      Math.round(this.resolveHeadingIndex(player, movementFacing)),
+      24,
+    )
+    this.currentHeadingIndex = heading
+    const pose = spriteFrameIndex(plan.robePose, 5)
+    const attachmentPose = player.economy.equipment.weapon?.equipmentType === 'wand'
+      ? plan.wandAttachmentPose
+      : plan.attachmentPose
+    this.currentAttachmentPose = attachmentPose
+    this.currentWalkPose = pose
+    const fixedOffset = plan.fixedRobeOffset
+    const attachmentOffset = plan.frontAttachmentOffset
+    const headOffset = plan.headOffset
+    const orbOffset = plan.orbOffset
+    const death = createPlayerDeathDrawPlan(
+      player.headingIndex,
+      player.progression.lifeState,
+      player.progression.deathTick,
+    )
+    const deathAppearance = playerDeathEquipmentAppearance(
+      player.config.element,
+      player.economy.equipment,
+    )
+    const livingAppearance = playerLivingEquipmentAppearance(
+      player.config.element,
+      player.economy.equipment,
+    )
+    const modWeapon = livingAppearance.weapon !== null
+      && isPlayerModEquipmentAppearance(livingAppearance.weapon)
+    const modWeaponTextures = modWeapon
+      ? this.modTextures.wearable(livingAppearance.weapon.content)
+      : null
+    const weaponTextures = livingAppearance.weapon === null || modWeapon
+      ? null
+      : livingAppearance.weapon.kind === 'staff'
+        ? this.textures.equipment.staffs[livingAppearance.weapon.selector]
+        : this.textures.equipment.wand
+    if (
+      livingAppearance.weapon !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.weapon)
+      && weaponTextures === undefined
+    ) {
+      throw new RangeError(
+        `Missing native ${livingAppearance.weapon.kind} selector ${livingAppearance.weapon.selector}`,
+      )
+    }
+    if (modWeapon && modWeaponTextures?.slot !== 'staff') {
+      throw new RangeError('Missing mod staff wearable textures')
+    }
+    const modRobeTextures = livingAppearance.robe !== null
+      && isPlayerModEquipmentAppearance(livingAppearance.robe)
+      ? this.modTextures.wearable(livingAppearance.robe.content)
+      : null
+    if (modRobeTextures && modRobeTextures.slot !== 'robe') {
+      throw new RangeError('Missing mod robe wearable textures')
+    }
+    const modHatTextures = livingAppearance.hat !== null
+      && isPlayerModEquipmentAppearance(livingAppearance.hat)
+      ? this.modTextures.wearable(livingAppearance.hat.content)
+      : null
+    if (modHatTextures && modHatTextures.slot !== 'hat') {
+      throw new RangeError('Missing mod hat wearable textures')
+    }
+    const hasWeapon = weaponTextures !== null || modWeaponTextures !== null
+    const hasStaff = livingAppearance.weapon?.kind === 'staff'
+    const nativeRobe = livingAppearance.robe !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.robe)
+    const bareAttachmentVisible = !plan.unselectedPrimaryAttachment
+      && !hasWeapon
+      && plan.bareAttachmentPose !== null
+    const fallbackAttachmentVisible = plan.unselectedPrimaryAttachment
+      || bareAttachmentVisible
+    const ordinaryWeaponVisible = !plan.unselectedPrimaryAttachment && hasWeapon
+    const ordinaryStaffVisible = !plan.unselectedPrimaryAttachment && hasStaff
+    const nativeStaffVisible = ordinaryStaffVisible && !modWeapon
+    const unselectedRobeAttachmentVisible = plan.unselectedPrimaryAttachment
+      && nativeRobe
+    const robeFixedPose = playerCharacterRobeFixedPose(
+      attachmentPose,
+      plan.unselectedPrimaryAttachment,
+      nativeRobe,
+      livingAppearance.weapon?.kind === 'wand' ? plan.wandAttachmentPose : null,
+    )
+    const selectedPrimaryAvailable = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
+      || player.primaryCast.selectedPrimaryId >= 0
+    const modStaffFront = modWeaponTextures
+      ? playerCharacterStaffIsFront(heading, attachmentPose)
+      : null
+    const robeHasSecondary = modRobeTextures ? modRobeTextures.secondary !== null : true
+    const hatHasSecondary = livingAppearance.hat !== null
+      && (modHatTextures ? modHatTextures.secondary !== null : true)
+    this.currentDeathFrame = death.visible ? death.frame : null
+    this.currentOrdinaryWeaponVisible = ordinaryWeaponVisible
+    this.currentRobeFixedPose = robeFixedPose
+    this.currentUnselectedPrimaryAttachment = plan.unselectedPrimaryAttachment
+
+    this.container.position.set(player.position.x, player.position.y)
+    this.container.zIndex = hubWorldDepthForActor(player.position.y)
+    this.shadow.visible = !death.visible
+    // The extracted native item banks already partition each pose into an
+    // all-transparent back or front cell from Clothes point-0 depth. Keeping
+    // both passes live preserves every melee pose without duplicating pixels.
+    this.staffBack.visible = !death.visible && (
+      fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && !nativeStaffVisible && modStaffFront !== true)
+    )
+    this.orbFrontBase.container.visible = !death.visible
+      && elementEffectVisible
+      && ordinaryStaffVisible
+      && plan.orbPasses.frontBase
+    this.orbFrontOverlay.container.visible = !death.visible
+      && elementEffectVisible
+      && ordinaryStaffVisible
+      && plan.orbPasses.frontOverlay
+    this.orbHardenOverlay.container.visible = !death.visible && elementEffectVisible
+      && ordinaryStaffVisible && player.progression.hardenCoating > 0
+      && (this.secondaryState?.stoneskinTicksRemaining ?? 0) <= 0
+    this.damageX4HardenOverlay.container.visible = this.orbHardenOverlay.container.visible
+      && selectedPrimaryAvailable && player.progression.damageX4TicksRemaining > 0
+    this.damageX4FrontBase.container.visible = this.orbFrontBase.container.visible
+      && selectedPrimaryAvailable
+      && player.progression.damageX4TicksRemaining > 0
+    this.damageX4FrontOverlay.container.visible = this.orbFrontOverlay.container.visible
+      && selectedPrimaryAvailable
+      && player.progression.damageX4TicksRemaining > 0
+    this.robe.visible = !death.visible
+    this.robeSecondary.visible = !death.visible && robeHasSecondary
+    this.unselectedRobeAttachment.visible = !death.visible
+      && unselectedRobeAttachmentVisible
+    this.fixed.visible = !death.visible
+    this.fixedSecondary.visible = !death.visible && robeHasSecondary
+    this.staffFront.visible = !death.visible && (
+      fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && !nativeStaffVisible && modStaffFront !== false)
+    )
+    this.head.visible = !death.visible
+    this.headSecondary.visible = !death.visible && hatHasSecondary
+    this.updateDeathLayers(playerTextures, death, deathAppearance)
+    const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
+    this.hitOverlay.alpha = hitAlpha
+    this.hitOverlay.visible = !death.visible && hitAlpha > 0
+    this.hitStaffBack.visible = fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && modStaffFront !== true)
+    this.hitRobe.visible = true
+    this.hitRobeSecondary.visible = robeHasSecondary
+    this.hitUnselectedRobeAttachment.visible = unselectedRobeAttachmentVisible
+    this.hitFixed.visible = true
+    this.hitFixedSecondary.visible = robeHasSecondary
+    this.hitStaffFront.visible = fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && modStaffFront !== false)
+    this.hitHead.visible = true
+    this.hitHeadSecondary.visible = hatHasSecondary
+    if (plan.unselectedPrimaryAttachment) {
+      const back = this.textures.equipment.unselectedAttachment.back[heading]
+        ?.[NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE]
+      const front = this.textures.equipment.unselectedAttachment.front[heading]
+        ?.[NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE]
+      if (back === undefined || front === undefined) {
+        throw new RangeError('Missing selected-primary -1 attachment pose 4')
+      }
+      this.staffBack.texture = back
+      this.staffFront.texture = front
+      this.hitStaffBack.texture = back
+      this.hitStaffFront.texture = front
+    } else if (bareAttachmentVisible && plan.bareAttachmentPose !== null) {
+      const back = this.textures.equipment.bareAttachment.back[heading]
+        ?.[plan.bareAttachmentPose]
+      const front = this.textures.equipment.bareAttachment.front[heading]
+        ?.[plan.bareAttachmentPose]
+      if (back === undefined || front === undefined) {
+        throw new RangeError(`Missing bare attachment pose ${plan.bareAttachmentPose}`)
+      }
+      this.staffBack.texture = back
+      this.staffFront.texture = front
+      this.hitStaffBack.texture = back
+      this.hitStaffFront.texture = front
+    } else if (modWeaponTextures !== null) {
+      const texture = modWearableFrame(modWeaponTextures, 'primary', heading, attachmentPose)
+      this.staffBack.texture = texture
+      this.staffFront.texture = texture
+      this.hitStaffBack.texture = texture
+      this.hitStaffFront.texture = texture
+    } else if (weaponTextures !== null) {
+      this.staffBack.texture = weaponTextures.back[heading]![attachmentPose]!
+      this.staffFront.texture = weaponTextures.front[heading]![attachmentPose]!
+      this.hitStaffBack.texture = weaponTextures.back[heading]![attachmentPose]!
+      this.hitStaffFront.texture = weaponTextures.front[heading]![attachmentPose]!
+    }
+    this.unselectedRobeAttachment.texture =
+      this.textures.equipment.unselectedAttachment.robe[heading]!
+    this.unselectedRobeAttachment.position.set(fixedOffset.x, fixedOffset.y)
+    if (modRobeTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
+      this.robe.texture = modWearableFrame(modRobeTextures, 'primary', heading, pose)
+      if (modRobeTextures.secondary) {
+        this.robeSecondary.texture = modWearableFrame(modRobeTextures, 'secondary', heading, pose)
+      }
+      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![robeFixedPose]!
+      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![robeFixedPose]!
+      this.robePrimaryTint = livingAppearance.robe.primaryTint
+      this.robeSecondaryTint = livingAppearance.robe.secondaryTint
+    } else {
+      const robeAppearance = livingAppearance.robe ?? deathAppearance.robe
+      if (isPlayerModEquipmentAppearance(robeAppearance)) {
+        throw new RangeError('Missing mod robe wearable textures')
+      }
+      const robeTextures = this.textures.equipment.robes[robeAppearance.selector]
+      if (robeTextures === undefined) {
+        throw new RangeError(`Missing native robe selector ${robeAppearance.selector}`)
+      }
+      this.robe.texture = robeTextures.primary[heading]![pose]!
+      this.robeSecondary.texture = robeTextures.secondary[heading]![pose]!
+      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![robeFixedPose]!
+      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![robeFixedPose]!
+      this.robePrimaryTint = robeAppearance.primaryTint
+      this.robeSecondaryTint = robeAppearance.secondaryTint
+    }
+    this.fixed.position.set(fixedOffset.x, fixedOffset.y)
+    this.fixedSecondary.position.set(fixedOffset.x, fixedOffset.y)
+    this.staffFront.position.set(attachmentOffset.x, attachmentOffset.y)
+    const planewalkerActive = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
+    const nativeStaffSelector = nativeStaffVisible
+      && livingAppearance.weapon !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.weapon)
+      ? livingAppearance.weapon.selector
+      : 0
+    this.enchantStaff.update({
+      headingIndex: heading,
+      learnedSkills: player.progression.learnedSkills,
+      living: !death.visible,
+      nativeStaff: nativeStaffVisible,
+      pose: attachmentPose,
+      selectedPrimarySkillId: planewalkerActive
+        ? 80
+        : player.progression.selectedPrimarySkillId,
+      selector: nativeStaffSelector,
+      tick,
+      weldBuildId: planewalkerActive ? null : player.progression.weldBuildId,
+    }, plan.staffFront)
+    this.enchantStaff.container.position.set(
+      plan.staffFront ? attachmentOffset.x : 0,
+      plan.staffFront ? attachmentOffset.y : 0,
+    )
+    if (livingAppearance.hat === null) {
+      this.head.texture = playerTextures.head[heading]!
+      this.headPrimaryTint = 0xffffff
+      this.headSecondaryTint = 0xffffff
+    } else if (modHatTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.hat!)) {
+      this.head.texture = modWearableFrame(modHatTextures, 'primary', heading, 0)
+      if (modHatTextures.secondary) {
+        this.headSecondary.texture = modWearableFrame(modHatTextures, 'secondary', heading, 0)
+      }
+      this.headPrimaryTint = livingAppearance.hat.primaryTint
+      this.headSecondaryTint = livingAppearance.hat.secondaryTint
+    } else {
+      if (isPlayerModEquipmentAppearance(livingAppearance.hat!)) {
+        throw new RangeError('Missing mod hat wearable textures')
+      }
+      const hatTextures = this.textures.equipment.hats[livingAppearance.hat.selector]
+      if (hatTextures === undefined) {
+        throw new RangeError(`Missing native hat selector ${livingAppearance.hat.selector}`)
+      }
+      this.head.texture = hatTextures.primary[heading]!
+      this.headSecondary.texture = hatTextures.secondary[heading]!
+      this.headPrimaryTint = livingAppearance.hat.primaryTint
+      this.headSecondaryTint = livingAppearance.hat.secondaryTint
+    }
+    this.head.position.set(headOffset.x, headOffset.y)
+    this.headSecondary.position.set(headOffset.x, headOffset.y)
+    this.hitRobe.texture = this.robe.texture
+    this.hitRobeSecondary.texture = this.robeSecondary.texture
+    this.hitUnselectedRobeAttachment.texture = this.unselectedRobeAttachment.texture
+    this.hitUnselectedRobeAttachment.position.set(fixedOffset.x, fixedOffset.y)
+    this.hitFixed.texture = this.fixed.texture
+    this.hitFixedSecondary.texture = this.fixedSecondary.texture
+    this.hitFixed.position.set(fixedOffset.x, fixedOffset.y)
+    this.hitFixedSecondary.position.set(fixedOffset.x, fixedOffset.y)
+    this.hitStaffFront.position.set(attachmentOffset.x, attachmentOffset.y)
+    this.hitHead.texture = this.head.texture
+    this.hitHeadSecondary.texture = this.headSecondary.texture
+    this.hitHead.position.set(headOffset.x, headOffset.y)
+    this.hitHeadSecondary.position.set(headOffset.x, headOffset.y)
+    for (const view of [
+      this.damageX4FrontBase,
+      this.orbFrontBase,
+      this.damageX4FrontOverlay,
+      this.orbFrontOverlay,
+      this.damageX4HardenOverlay,
+      this.orbHardenOverlay,
+    ]) {
+      view.container.position.set(
+        orbOffset.x + attachmentOffset.x,
+        orbOffset.y + attachmentOffset.y,
+      )
+    }
+    this.currentElementEffectScale = playerEquippedElementEffectScale(
+      player.lighting.overlayEffectPhase,
+    )
+    const selectedPrimaryId = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
+      ? 80
+      : player.primaryCast.selectedPrimaryId
+    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
+      view.update(player.progression.damageX4TicksRemaining, tick, this.currentElementEffectScale)
+    }
+    for (const view of [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
+      view.updateSelectedPrimary(selectedPrimaryId, tick, this.currentElementEffectScale)
+    }
+    this.applyMaterialTint()
+    this.materialPlayer = player
+    if (!this.arena) this.refreshMaterialCapture()
+  }
+
+  get walkPose(): number {
+    return this.currentWalkPose
+  }
+
+  get attachmentPose(): number {
+    return this.currentAttachmentPose
+  }
+
+  get elementEffectScale(): number {
+    return this.currentElementEffectScale
+  }
+
+  get elementEffectPrimaryId(): number | null {
+    return this.orbFrontBase.selectedPrimaryId
+  }
+
+  get deathColorLayerCount(): number {
+    return this.deathLayers.filter((layer) => layer.visible).length
+  }
+
+  get deathFrame(): number | null {
+    return this.currentDeathFrame
+  }
+
+  get deathShadowLayerCount(): number {
+    return this.deathShadowLayers.filter((layer) => layer.visible).length
+  }
+
+  get materialTint(): number {
+    return this.robe.tint
+  }
+
+  get hardenLayerCount(): number {
+    return this.harden.container.visible ? this.harden.container.children.length : 0
+  }
+
+  /**
+   * Scripted Hub travel (College intro, portal transitions) faces the visible
+   * displacement of the presented sprite rather than the replicated heading,
+   * so correction smoothing cannot move one direction while painting another.
+   * The facing is anchored to the last point the sprite turned at and only
+   * turns again after ACTOR_MOVEMENT_FACING_DISTANCE of travel, which keeps a
+   * sub-tick reconciliation ripple from flipping the sprite for a frame.
+   */
+  private resolveHeadingIndex(player: ProtocolPlayerState, movementFacing: boolean): number {
+    if (!movementFacing) {
+      this.movementFacingState = null
+      return player.headingIndex
+    }
+    const facing = advanceActorMovementFacing(
+      this.movementFacingState
+        ?? createActorMovementFacingState(player.position.x, player.position.y),
+      player.position.x,
+      player.position.y,
+    )
+    this.movementFacingState = facing
+    return facing.headingIndex ?? player.headingIndex
+  }
+
+  get headingIndex(): number {
+    return this.currentHeadingIndex
+  }
+
+  get weaponScale(): number {
+    return this.staffBack.scale.x
+  }
+
+  get ordinaryWeaponVisible(): boolean {
+    return this.currentOrdinaryWeaponVisible
+  }
+
+  get robeFixedPose(): number {
+    return this.currentRobeFixedPose
+  }
+
+  get unselectedPrimaryAttachment(): boolean {
+    return this.currentUnselectedPrimaryAttachment
+  }
+
+  get unselectedRobeAttachmentVisible(): boolean {
+    return this.unselectedRobeAttachment.visible
+  }
+
+  get magicShieldAlpha(): number {
+    return this.magicShield.alpha
+  }
+
+  get magicShieldScale(): number {
+    return this.magicShield.scale.x
+  }
+
+  get magicShieldVisible(): boolean {
+    return this.magicShield.visible
+  }
+
+  get damageX4Alpha(): number {
+    return Math.max(this.damageX4FrontBase.alpha, this.damageX4FrontOverlay.alpha, this.damageX4HardenOverlay.alpha)
+  }
+
+  get damageX4SpriteCount(): number {
+    return this.damageX4FrontBase.visibleSpriteCount
+      + this.damageX4FrontOverlay.visibleSpriteCount
+      + this.damageX4HardenOverlay.visibleSpriteCount
+  }
+
+  get enchantStaffActive(): boolean {
+    return this.enchantStaff.active
+  }
+
+  get enchantStaffAuraRecord(): number | null {
+    return this.enchantStaff.auraRecord
+  }
+
+  get enchantStaffAlpha(): number {
+    return this.enchantStaff.nearAlpha
+  }
+
+  get enchantStaffTint(): number | null {
+    return this.enchantStaff.tint
+  }
+
+  setDepth(depth: number): void {
+    this.container.zIndex = depth
+  }
+
+  setStatusEffects(
+    state: NativeSecondaryPlayerState | undefined,
+    tick: number,
+    webbed?: NativeWebbedState,
+  ): void {
+    this.secondaryState = state
+    this.webbedState = webbed
+    const plan = nativePlayerMagicShieldPlan(state, tick)
+    this.magicShield.visible = plan.visible
+    this.magicShield.alpha = plan.alpha
+    this.magicShield.tint = plan.tint
+    this.magicShield.scale.set(plan.scale)
+    this.applyMaterialTint()
+  }
+
+  setWorldTint(tint: number): void {
+    this.worldTint = tint
+    this.applyMaterialTint()
+    this.refreshMaterialCapture()
+  }
+
+  private refreshMaterialCapture(): void {
+    const player = this.materialPlayer
+    if (player === null) return
+    const stoneskin = (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0
+    const excluded = [
+      this.shadow, this.harden.container, this.webbed.container,
+      this.orbHardenOverlay.container, this.damageX4HardenOverlay.container,
+    ]
+    this.harden.update(player, this.container, excluded, stoneskin)
+    this.webbed.update(player, this.webbedState, this.container, excluded,
+      stoneskin || player.progression.hardenCoating > 0
+        || (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0,
+    )
+  }
+
+  private applyMaterialTint(): void {
+    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState, this.statusMaterial)
+    this.staffBack.tint = tint
+    this.robe.tint = multiplyTints(this.robePrimaryTint, tint)
+    this.robeSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
+    this.unselectedRobeAttachment.tint = tint
+    this.fixed.tint = multiplyTints(this.robePrimaryTint, tint)
+    this.fixedSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
+    this.staffFront.tint = tint
+    this.enchantStaff.setMaterialTint(tint)
+    this.head.tint = multiplyTints(this.headPrimaryTint, tint)
+    this.headSecondary.tint = multiplyTints(this.headSecondaryTint, tint)
+    this.applyDeathTints()
+  }
+
+  get orbSpriteCount(): number {
+    return [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]
+      .filter(({ container }) => container.visible)
+      .reduce((count, orb) => (
+        count + orb.sprites.filter((sprite) => sprite.visible).length
+      ), 0)
+  }
+
+  destroy(): void {
+    this.harden.destroy()
+    this.webbed.destroy()
+    this.container.removeChild(this.enchantStaff.container)
+    this.enchantStaff.destroy()
+    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
+      this.container.removeChild(view.container)
+      view.destroy()
+    }
+    for (const orb of [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
+      this.container.removeChild(orb.container)
+      orb.destroy()
+    }
+    this.container.destroy({ children: true })
+  }
+
+  private updateDeathLayers(
+    playerTextures: PlayerWorldTextures['players'][WizardElement],
+    death: ReturnType<typeof createPlayerDeathDrawPlan>,
+    appearance: ReturnType<typeof playerDeathEquipmentAppearance>,
+  ): void {
+    const { facing, frame, heading } = death
+    const robe = this.textures.death.robe
+    const hat = this.textures.death.hat
+    const selectedTextures = [
+      robe.primary[appearance.robe.selector]![facing]![frame]!,
+      robe.secondary[appearance.robe.selector]![facing]![frame]!,
+      robe.fixedPrimary[0]![facing]![frame]!,
+      robe.fixedPrimary[1]![facing]![frame]!,
+      robe.fixedSecondary[0]![facing]![frame]!,
+      robe.fixedSecondary[1]![facing]![frame]!,
+      playerTextures.death[facing]![frame]!,
+      appearance.hat.selector === 3 && frame === 3
+        ? hat.specialPrimary[facing]!
+        : hat.primary[appearance.hat.selector]![heading]!,
+      appearance.hat.selector === 3 && frame === 3
+        ? hat.specialSecondary[facing]!
+        : hat.secondary[appearance.hat.selector]![heading]!,
+    ]
+    const baseTints = [
+      appearance.robe.primaryTint,
+      appearance.robe.secondaryTint,
+      appearance.robe.primaryTint,
+      appearance.robe.primaryTint,
+      appearance.robe.secondaryTint,
+      appearance.robe.secondaryTint,
+      0xffffff,
+      appearance.hat.primaryTint,
+      appearance.hat.secondaryTint,
+    ]
+    const hatOffset = appearance.hat.selector === 3 && frame === 3
+      ? { x: 0, y: 0 }
+      : playerDeathHatAnchor(frame, facing)
+    for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
+      const layer = this.deathLayers[index]!
+      const shadow = this.deathShadowLayers[index]!
+      layer.visible = death.visible
+      shadow.visible = death.shadow
+      layer.texture = selectedTextures[index]!
+      shadow.texture = selectedTextures[index]!
+      this.deathBaseTints[index] = baseTints[index]!
+      const isHat = index === DEATH_HAT_PRIMARY || index === DEATH_HAT_SECONDARY
+      const x = isHat ? hatOffset.x : 0
+      const y = isHat ? hatOffset.y : 0
+      layer.position.set(x, y)
+      shadow.position.set(x, y + 4)
+    }
+    this.applyDeathTints()
+  }
+
+  private applyDeathTints(): void {
+    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState, this.statusMaterial)
+    for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
+      this.deathLayers[index]!.tint = multiplyTints(
+        this.deathBaseTints[index]!,
+        tint,
+      )
+      this.deathShadowLayers[index]!.tint = 0x000000
+    }
+  }
+}
+
+function createDeathLayers(
+  texture: Texture,
+  firstZIndex: number,
+  pass: 'color' | 'shadow',
+): readonly Sprite[] {
+  const names = [
+    'robe-primary',
+    'robe-secondary',
+    'robe-fixed-primary-a',
+    'robe-fixed-primary-b',
+    'robe-fixed-secondary-a',
+    'robe-fixed-secondary-b',
+    'body',
+    'hat-primary',
+    'hat-secondary',
+  ]
+  return names.map((name, index) => {
+    const sprite = actorSprite(texture, firstZIndex + index)
+    sprite.label = `player-death:${pass}:${name}`
+    sprite.visible = false
+    return sprite
+  })
+}
+
+function multiplyTints(first: number, second: number): number {
+  const channel = (shift: number): number => Math.round(
+    ((first >> shift) & 0xff) * ((second >> shift) & 0xff) / 255,
+  )
+  return channel(16) << 16 | channel(8) << 8 | channel(0)
+}

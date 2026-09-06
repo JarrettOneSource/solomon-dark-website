@@ -1,11 +1,10 @@
-import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import type {
   PrimarySpellFireEmberState,
   PrimarySpellFireExplosionState,
   PrimarySpellFireGoodImpState,
   PrimarySpellFireImpactState,
-  PrimarySpellFirePatchState,
   PrimarySpellFireParticleState,
+  PrimarySpellFirePatchState,
   PrimarySpellFireProjectileState,
 } from '../core-kernels/primary-spells.ts'
 import { nativeImpEffectFrame } from '../core-kernels/boneyard-imp-flight.ts'
@@ -13,15 +12,10 @@ import {
   nativeFireParticleFadeStep,
   nativeFirePresentationRandom,
   nativeFirePresentationRandomInt,
-  nativeFirePresentationSignedRandom,
 } from '../core-kernels/primary-spell-fire-native.ts'
-import {
-  NATIVE_DEFAULT_MULTIPLE_SHADOWS,
-  type NativeBoneyardLightSource,
-} from './boneyard-lighting.ts'
-import {
-  nativeEnemyFacingBucket,
-} from './native-enemy-presentation.ts'
+import { nativeEnemyFacingBucket } from './native-enemy-layers.ts'
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
+import { NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS } from '../core-kernels/native-primary-light-sources.ts'
 
 export const NATIVE_FIREBALL_CORE_RECORD = 110
 export const NATIVE_FIREBALL_FRAME_FIRST = 255
@@ -39,7 +33,8 @@ export const NATIVE_FIRE_EXPLOSION_ARRAY_FIRST = 401
 export const NATIVE_FIRE_EXPLOSION_LIT_ARRAY_FIRST = 420
 export const NATIVE_FIRE_EXPLOSION_CORE_VISIBLE_TICKS = 10
 export const NATIVE_FIRE_EXPLOSION_ARRAY_VISIBLE_TICKS = 35
-export const NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS = 37
+
+export { NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS } from '../core-kernels/native-primary-light-sources.ts'
 export const NATIVE_FIRE_PATCH_FRAME_FIRST = 46
 export const NATIVE_FIRE_PATCH_FRAME_COUNT = 32
 export const NATIVE_GOOD_IMP_BODY_FIRST = 285
@@ -422,67 +417,6 @@ export function nativeFireEmberPlan(
   }
 }
 
-export function nativeFireExplosionLightSource(
-  state: Pick<PrimarySpellFireExplosionState, 'ageTicks' | 'origin'>,
-  pointGain = 1,
-  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
-): NativeBoneyardLightSource | null {
-  if (state.ageTicks >= NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS) return null
-  return {
-    castsDirectionalShadow: multipleShadows,
-    intensity: 1,
-    position: { ...state.origin },
-    radius: Math.fround(2 * Math.max(0, pointGain)),
-  }
-}
-
-export function nativeFireEmberLightSource(
-  state: Pick<PrimarySpellFireEmberState, 'id' | 'life' | 'position'>,
-  presentationSample = 0,
-): NativeBoneyardLightSource {
-  return {
-    castsDirectionalShadow: false,
-    intensity: Math.fround(Math.min(state.life, 1) * 0.25),
-    position: { ...state.position },
-    radius: Math.fround(1 - nativeFirePresentationRandom(
-      state.id,
-      presentationSample,
-      39,
-      0.25,
-    )),
-  }
-}
-
-export interface NativeFireGroundGlowPlan {
-  readonly alpha: number
-  readonly position: Readonly<{ x: number; y: number }>
-  readonly scale: number
-  readonly tint: number
-}
-
-export function nativeFireGroundGlowPlan(
-  state: Pick<PrimarySpellFirePatchState, 'id' | 'life' | 'position' | 'scale'>,
-  presentationSample: number,
-): NativeFireGroundGlowPlan {
-  return {
-    alpha: Math.fround(Math.min(state.life, 1) * 0.5),
-    position: state.position,
-    scale: Math.fround(state.scale * 2),
-    tint: 0xff0000 | (Math.round(nativeFirePresentationRandom(state.id, presentationSample, 61) * 255) << 8),
-  }
-}
-
-export function nativeFirePatchTransform(
-  state: Pick<PrimarySpellFirePatchState, 'position' | 'scale' | 'fadeAlpha' | 'horizontalSign'>,
-): Readonly<{ position: { x: number; y: number }; scaleX: number; scaleY: number }> {
-  const commonScale = Math.fround(Math.fround(Math.fround(1.1) * state.scale) * state.fadeAlpha)
-  return {
-    position: { x: state.position.x, y: Math.fround(Math.fround(state.position.y + 10) + Math.fround(-20 * commonScale)) },
-    scaleX: commonScale * state.horizontalSign,
-    scaleY: commonScale,
-  }
-}
-
 export function nativeFirePatchPlan(
   state: PrimarySpellFirePatchState,
 ): NativeFirePatchPlan {
@@ -547,68 +481,8 @@ export function nativeFireGoodImpPlan(
   }
 }
 
-export function nativeFireImpactLightSource(
-  state: PrimarySpellFireImpactState,
-): NativeBoneyardLightSource {
-  const plan = nativeFireImpactPlan(state)
-  return {
-    intensity: Math.max(0, 1 - state.ageTicks * 0.04),
-    castsDirectionalShadow: false,
-    position: plan.position,
-    radius: 1.5,
-  }
-}
 
-/** Shared Imp provider `0x00478CC0`, projected from GoodImp's owned glow lane. */
-export function nativeFireGoodImpLightSource(
-  state: PrimarySpellFireGoodImpState,
-  presentationFrame: number,
-): NativeBoneyardLightSource {
-  const radiusMagnitude = nativeFirePresentationRandom(
-    state.id,
-    Math.floor(presentationFrame),
-    21,
-    Math.fround(0.1),
-  )
-  const radiusSign = nativeFirePresentationRandomInt(
-    state.id,
-    Math.floor(presentationFrame),
-    22,
-    2,
-  ) === 1 ? -1 : 1
-  return {
-    castsDirectionalShadow: false,
-    intensity: Math.fround(
-      Math.fround(state.lightGlow)
-      * Math.fround(0.75 + nativeFirePresentationRandom(
-        state.id,
-        Math.floor(presentationFrame),
-        20,
-        Math.fround(0.25),
-      )),
-    ),
-    position: { ...state.position },
-    radius: Math.fround(0.25 + radiusSign * radiusMagnitude),
-  }
-}
 
-export function nativeFireballLightSource(
-  state: PrimarySpellFireProjectileState,
-  presentationFrame: number,
-  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
-): NativeBoneyardLightSource {
-  return {
-    intensity: 0.75,
-    castsDirectionalShadow: multipleShadows,
-    position: { ...state.position },
-    radius: Math.fround(1 + nativeFirePresentationSignedRandom(
-      state.id,
-      Math.floor(presentationFrame),
-      8,
-      0.25,
-    )),
-  }
-}
 
 function colorTint(red: number, green: number, blue: number): number {
   return (
@@ -672,4 +546,39 @@ function positiveModulo(value: number, divisor: number): number {
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
+}
+
+export { nativeFireExplosionLightSource, nativeFireEmberLightSource, nativeFireImpactLightSource, nativeFireGoodImpLightSource, nativeFireballLightSource } from '../core-kernels/native-primary-light-sources.ts'
+
+
+export interface NativeFireGroundGlowPlan {
+  readonly alpha: number
+  readonly position: Readonly<{ x: number; y: number }>
+  readonly scale: number
+  readonly tint: number
+}
+
+
+export function nativeFireGroundGlowPlan(
+  state: Pick<PrimarySpellFirePatchState, 'id' | 'life' | 'position' | 'scale'>,
+  presentationSample: number,
+): NativeFireGroundGlowPlan {
+  return {
+    alpha: Math.fround(Math.min(state.life, 1) * 0.5),
+    position: state.position,
+    scale: Math.fround(state.scale * 2),
+    tint: 0xff0000 | (Math.round(nativeFirePresentationRandom(state.id, presentationSample, 61) * 255) << 8),
+  }
+}
+
+
+export function nativeFirePatchTransform(
+  state: Pick<PrimarySpellFirePatchState, 'position' | 'scale' | 'fadeAlpha' | 'horizontalSign'>,
+): Readonly<{ position: { x: number; y: number }; scaleX: number; scaleY: number }> {
+  const commonScale = Math.fround(Math.fround(Math.fround(1.1) * state.scale) * state.fadeAlpha)
+  return {
+    position: { x: state.position.x, y: Math.fround(Math.fround(state.position.y + 10) + Math.fround(-20 * commonScale)) },
+    scaleX: commonScale * state.horizontalSign,
+    scaleY: commonScale,
+  }
 }

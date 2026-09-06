@@ -25,7 +25,6 @@ export const MAX_PLAYER_LEVEL = 75
 export const MAX_PLAYER_EXPERIENCE = 10_000_000
 export const SPELL_WELDING_SKILL_ID = 52
 export const INITIAL_WELD_OFFER_MARKER = 9_999
-export const RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR = 0.425
 export const NATIVE_DAMAGE_X4_BONUS_TICKS = 1_500
 export const NATIVE_DAMAGE_X4_POTION_TICKS = 6_000
 export const NATIVE_MIND_CHUG_TICKS = 6_000
@@ -879,12 +878,6 @@ export function boneyardEnemyExperienceAward(
     * (1 + receiverXpBonus)
 }
 
-export function evaluateBoneyardEnemyExperience(familyBaseline: number): number {
-  if (!Number.isFinite(familyBaseline) || familyBaseline < 0) {
-    throw new RangeError('enemy family experience baseline must be finite and non-negative')
-  }
-  return familyBaseline * RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR
-}
 
 function survivalExperienceLevelFactor(level: number): number {
   if (!Number.isSafeInteger(level) || level < 1 || level > MAX_PLAYER_LEVEL) {

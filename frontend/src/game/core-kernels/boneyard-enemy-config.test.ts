@@ -4,8 +4,10 @@ import test from 'node:test'
 import {
   BONEYARD_ENEMY_FLAGS,
   evaluateBoneyardEnemyConfig,
-  type BoneyardEnemyFlag,
 } from './boneyard-enemy-config.ts'
+import type {
+  BoneyardEnemyFlag,
+} from './boneyard-enemy-config-model.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
 import { nativeSlumpgutRecipe } from './native-survival-slumpgut.ts'
 import {
@@ -203,16 +205,18 @@ test('periodic and 25-stall recovery preserve their native winning rolls', () =>
   assert.ok(reroute.state.flankTicksRemaining <= 400)
 })
 
-test('all eight ordinary wave families materialize immutable recovered defaults', () => {
+test('all native enemy families materialize immutable recovered defaults', () => {
   const expected = {
-    COFFIN: [100, null, 1, 1, 200, 45, 0.75],
-    DEMON: [400, 20, 1, 1, 800, 35, 0.75],
-    IMP: [1, 3, 1, 1, 2, 8.75, 4.5],
-    SKELETON: [5, 3, 1, 1, 10, 16, (1.25 + 0.5) * 1.25 ** 2],
-    SKELETONARCHER: [5, 4, 1, 1, 10, 20, (1.25 + 0.5) * 1.25 ** 2 * 0.75],
-    SKELETONMAGE: [5, 3, 0.8, 1, 10, 25, (1.25 + 0.5) * 1.25 ** 2 * 0.75 * 0.65],
-    WRAITH: [2, 4, 1, 1, 4, 15, 1],
-    ZOMBIE: [105, 35, 1, 1, 210, 21, 0.85],
+    COCOON: [999_999, null, 1, 1, 0, 40, 1],
+    SPIDER: [15, 8, 1, 1, 12.75, 15, 4],
+    COFFIN: [100, null, 1, 1, 85, 45, 0.75],
+    DEMON: [400, 20, 1, 1, 340, 35, 0.75],
+    IMP: [1, 3, 1, 1, Math.fround(0.85), 8.75, 4.5],
+    SKELETON: [5, 3, 1, 1, 4.25, 16, (1.25 + 0.5) * 1.25 ** 2],
+    SKELETONARCHER: [5, 4, 1, 1, 4.25, 20, (1.25 + 0.5) * 1.25 ** 2 * 0.75],
+    SKELETONMAGE: [5, 3, 0.8, 1, 4.25, 25, (1.25 + 0.5) * 1.25 ** 2 * 0.75 * 0.65],
+    WRAITH: [2, 4, 1, 1, Math.fround(1.7), 15, 1],
+    ZOMBIE: [105, 35, 1, 1, 89.25, 21, 0.85],
   } satisfies Record<Exclude<BoneyardWaveEnemyToken, 'PORTAL'>, readonly (number | null)[]>
 
   for (const enemyToken of Object.keys(expected) as Exclude<
@@ -232,6 +236,8 @@ test('all eight ordinary wave families materialize immutable recovered defaults'
       config.baseSpeed,
     ], expected[enemyToken])
     assert.equal(config.nativeTypeId, {
+      COCOON: 2058,
+      SPIDER: 2057,
       COFFIN: 1013,
       DEMON: 1009,
       IMP: 1004,
@@ -265,7 +271,7 @@ test('Slumpgut materializes the authored boss Zombie instead of a flag approxima
   assert.equal(config.secondaryDamage, 10)
   assert.equal(config.tertiaryDamage, 15)
   assert.equal(config.extraDamage, 10)
-  assert.equal(config.experience, 2_756.25)
+  assert.equal(config.experience, 1_171.40625)
   assert.equal(config.chaseSpeed, 1)
   assert.equal(config.attackSpeed, 1)
   assert.equal(config.scale, 1)
@@ -302,7 +308,7 @@ test('common scalar flags apply in source order before Arena scalars', () => {
   })
   assert.equal(config.maximumHealth, 10)
   assert.equal(config.primaryDamage, 7.5)
-  assert.equal(config.experience, 10)
+  assert.equal(config.experience, Math.fround(9.35))
   assert.equal(config.chaseSpeed, 2.8125)
   assert.equal(config.attackSpeed, 1.5)
   assert.equal(config.burning, true)

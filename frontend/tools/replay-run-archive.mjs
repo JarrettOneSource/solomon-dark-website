@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util'
 import { readRunArchive } from '../src/game/host/run-archive-store.ts'
 import { runArchivePlayers } from '../src/game/host/run-archive.ts'
 import { stepGameSimulationTick } from '../src/game/core-server/game-simulation.ts'
-import { prepareBoneyardWorldNavigation } from '../src/game/core-server/boneyard-world.ts'
+import { prepareBoneyardWorldNavigation } from '../src/game/core-server/boneyard-world-construction.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
 
 const { values, positionals } = parseArgs({

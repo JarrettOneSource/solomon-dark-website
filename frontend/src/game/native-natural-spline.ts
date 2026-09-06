@@ -5,7 +5,7 @@ export interface NativeSplinePoint {
 
 interface NativeSplineAxis {
   readonly points: readonly number[]
-  readonly coefficients: readonly [number, number, number][]
+  readonly coefficients: readonly (readonly [number, number, number])[]
 }
 
 export interface NativeNaturalSpline {

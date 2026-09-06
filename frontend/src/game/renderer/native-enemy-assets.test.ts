@@ -15,10 +15,12 @@ import {
 } from './native-enemy-animation.ts'
 import {
   NATIVE_ENEMY_FAMILIES,
-  nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
   type NativeEnemyAtlas,
   type NativeEnemyFamily,
   type NativeEnemyVisualSnapshot,
+} from './native-enemy-presentation-model.ts'
+import {
+  nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
 } from './native-enemy-presentation.ts'
 import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 import {
@@ -516,6 +518,10 @@ function enemy(
   flags: readonly string[],
 ): NativeEnemyVisualSnapshot {
   return {
+    ...(enemyToken === 'SPIDER' ? { animation: nativeEnemyIdleAnimationSample({
+      bodyPose: id % 4,
+      spider: { bodyHeadingDeg: (headingDeg + 360) % 360, outlineAlpha: 0.5, outlineTint: 0xffffff },
+    }) } : {}),
     armored: flags.includes('FLAG_ARMOR') || (
       flags.includes('FLAG_ARMORMAYBE') && id % 2 === 0
     ),

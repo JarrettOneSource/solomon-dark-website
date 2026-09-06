@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createIdlePlayerCharacterInput } from '../src/game/core-kernels/player-character.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import { createGameSimulation, enterBoneyardWorld, stepGameSimulationTick } from '../src/game/core-server/game-simulation.ts'
-import { prepareBoneyardWorldNavigation } from '../src/game/core-server/boneyard-world.ts'
+import { prepareBoneyardWorldNavigation } from '../src/game/core-server/boneyard-world-construction.ts'
 import { createBoneyardCatalog, materializeBoneyard } from '../src/game/host/boneyard-catalog.ts'
 
 export function createRunArchiveFixture(playerCount = 2, enemyCount = 40) {

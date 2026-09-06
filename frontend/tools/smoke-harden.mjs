@@ -7,7 +7,9 @@ import { preview } from 'vite'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { grantPlayerEntitySkillRanks, setPlayerEntityMana } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../src/game/protocol/game-protocol-contract.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { enterElementHub, enterBoneyard, openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 

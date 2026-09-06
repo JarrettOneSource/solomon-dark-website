@@ -18,7 +18,9 @@ import {
   MOBILE_UI_LAYOUT_STORAGE_KEY,
   defaultMobileUiGeometry,
 } from '../src/game/mobile-ui-layout.ts'
-import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../src/game/protocol/game-protocol-contract.ts'
 
 // Mobile compact-HUD journey. Boots one iPhone XR-class landscape touch page
 // (896 x 414 CSS px, DPR 2 by default) through Hub solo, orientation round

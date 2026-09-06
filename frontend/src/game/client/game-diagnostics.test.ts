@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../protocol/game-protocol-contract.ts'
 import { GameConnectionFailure } from './game-connection-failure.ts'
 import {
   createGameClientDiagnostics,

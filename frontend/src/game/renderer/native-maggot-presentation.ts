@@ -3,8 +3,10 @@ import type { BoneyardMaggotSnapshot } from '../protocol/game-state.ts'
 import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
 import {
   nativeEnemyFacingBucket,
-  type NativeEnemySpriteLayer,
-} from './native-enemy-presentation.ts'
+} from './native-enemy-layers.ts'
+import type {
+  NativeEnemySpriteLayer,
+} from './native-enemy-presentation-model.ts'
 
 export interface NativeMaggotPresentationPlan {
   readonly layers: readonly NativeEnemySpriteLayer[]

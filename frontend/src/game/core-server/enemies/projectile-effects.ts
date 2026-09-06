@@ -1,27 +1,24 @@
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import {
-  type NativeRngState,
-  drawNativeFloat,
-  drawNativeSign,
-} from '../../core-kernels/native-rng.ts'
-import {
-  type NativeWorldManagerRegistration,
-  type RegisterNativeWorldPainter,
-  createNativeWorldManagerOrder,
+import { drawNativeFloat, drawNativeSign } from '../../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../../core-kernels/native-rng.ts'
+import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
+import type {
+  NativeWorldManagerRegistration,
+  RegisterNativeWorldPainter,
 } from '../../core-kernels/native-world-manager-order.ts'
-import {
-  type BoneyardEnemyProjectile,
-  type BoneyardEnemyProjectileEffect,
-  type BoneyardEnemyProjectileEffectBase,
-  type BoneyardEnemyProjectileEffectKind,
-  type BoneyardEnemyProjectileId,
-  type BoneyardEnemySemanticEvent,
-  type BoneyardEnemyStore,
-  type TumbleBoneyardArrowResult,
-  type WorkingStep,
-  validateTick,
-} from './model.ts'
 import { emitEvent } from './events.ts'
+import { validateTick } from './model.ts'
+import type {
+  BoneyardEnemyProjectile,
+  BoneyardEnemyProjectileEffect,
+  BoneyardEnemyProjectileEffectBase,
+  BoneyardEnemyProjectileEffectKind,
+  BoneyardEnemyProjectileId,
+  BoneyardEnemySemanticEvent,
+  BoneyardEnemyStore,
+  TumbleBoneyardArrowResult,
+  WorkingStep,
+} from './model.ts'
 import { NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS } from './programs.ts'
 import { drawEnemyFloat, drawEnemySign } from './random.ts'
 import { standaloneEnemyWorldManagerOrderState } from './registration.ts'

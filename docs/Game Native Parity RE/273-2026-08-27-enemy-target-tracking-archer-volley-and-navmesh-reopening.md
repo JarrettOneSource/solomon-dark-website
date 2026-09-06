@@ -155,7 +155,8 @@ Native systems:
 | reachable allied GoodImp | `0x0052C1A0`, vtable `0x00793D9C +0x74` | `exact-ported` | reversed target set, blocker route, target loss, lifetime release |
 | Maggot crawl/bite | `0x0048B2A0`, shared route slot | `exact-ported` | emerge-to-crawl route, blocker, one bite, invalid Coffin cleanup |
 | Coffin | inherited route slot but stationary `0x004A2760` | `verified-already-at-parity` — no locomotion call in live four-state owner | remains stationary while owned Maggots route |
-| Badguy abstract; DemonSkull, GreenImp, DireFaculty, Spider/Cocoon, Portal, Heartmonger | shared route vtables | `out-of-system` — Website survival factory does not construct these native classes | negative Website factory census; recovered native membership remains documented |
+| Badguy abstract; DemonSkull, GreenImp, DireFaculty, Portal, Heartmonger | shared route vtables | `out-of-system` — Website survival factory does not construct these native classes | negative Website factory census; recovered native membership remains documented |
+| Spider/Cocoon | native survival Spider and target-owned restraint | exact-ported in the [2026-09-05 reopening](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md) | A missing Website factory member did not establish native exclusion. |
 | Crow | vtable `0x00786340` | `out-of-system` — Heartmonger-owned child and the nearby enemy exception without route slot `+0x74` | negative vtable/xref and Website factory census |
 | Solomon Dig/Riff/DriveBy, Memorator, GameNpc direct solver users | five `0x005DFF20` caller census | `out-of-system` — NPC/script movement owners, not hostile mob targeting; Solomon Dig retains its separately ledgered escape contract | caller disposition test in Loader report |
 | pause, run reset, scene teardown, actor death | store/world lifecycle | `exact-ported` | no route/target/private aim state survives pause mutation, retirement, Game Over, or new run |

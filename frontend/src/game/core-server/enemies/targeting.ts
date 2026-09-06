@@ -6,17 +6,14 @@ import {
   nativeEnemyTargetRefreshTicks,
   stepNativeEnemyReorientation,
 } from '../../core-kernels/native-enemy-pathfinding.ts'
-import {
-  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
-  NATIVE_DEMON_NAVIGATION_CLEARANCE,
-} from '../boneyard-enemy-navigation.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyStoreStepContext,
-  type BoneyardEnemyTargetCandidate,
-  type BoneyardEnemyTargets,
-  type BoneyardMaggotActor,
-  validatePoint,
+import { NATIVE_BADGUY_NAVIGATION_CLEARANCE, NATIVE_DEMON_NAVIGATION_CLEARANCE } from '../boneyard-enemy-navigation.ts'
+import { validatePoint } from './model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyStoreStepContext,
+  BoneyardEnemyTargetCandidate,
+  BoneyardEnemyTargets,
+  BoneyardMaggotActor,
 } from './model.ts'
 
 export function refreshTarget(

@@ -15,7 +15,9 @@ import {
 } from '../src/game/core-server/game-simulation.ts'
 import { setPlayerDeathWeaponPainterRegistration } from '../src/game/core-server/player-entity-store.ts'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
-import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../src/game/protocol/game-protocol-contract.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const staticServer = process.env.SDR_PARTY_REJOIN_URL

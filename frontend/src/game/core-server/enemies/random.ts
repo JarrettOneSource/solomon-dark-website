@@ -1,7 +1,4 @@
-import {
-  nextBoneyardWaveRandom,
-  randomBoneyardWaveInteger,
-} from '../../core-kernels/boneyard-wave-timeline.ts'
+import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import { drawNativeFloat, drawNativeInteger, drawNativeSign } from '../../core-kernels/native-rng.ts'
 import type { WorkingStep } from './model.ts'
@@ -19,7 +16,7 @@ export function randomRadialDisplacement(
   return radialVector(drawUnit(work) * 360, radius)
 }
 
-export function drawUnit(work: WorkingStep): number {
+export function drawUnit(work: Pick<WorkingStep, 'rngState'>): number {
   const draw = nextBoneyardWaveRandom(work.rngState)
   work.rngState = draw.state
   return draw.value
@@ -50,7 +47,7 @@ export function drawLocomotionInteger(work: WorkingStep, count: number): number 
   return draw.value
 }
 
-export function drawInteger(work: WorkingStep, count: number): number {
+export function drawInteger(work: Pick<WorkingStep, 'rngState'>, count: number): number {
   const draw = randomBoneyardWaveInteger(work.rngState, count)
   work.rngState = draw.state
   return draw.value

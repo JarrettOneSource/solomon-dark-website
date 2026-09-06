@@ -31,7 +31,6 @@ import {
   drawNativePlayerCreationOfferSeed,
   deferPlayerSkillChoice as deferPlayerSkillChoiceWithGameplayRng,
   effectivePrimarySkillRankStats,
-  evaluateBoneyardEnemyExperience,
   grantPlayerExperience as grantPlayerExperienceWithGameplayRng,
   grantPlayerBonusSkillChoice as grantPlayerBonusSkillChoiceWithGameplayRng,
   grantPlayerSkillRanks,
@@ -707,9 +706,6 @@ test('queued and saved choices use the final current level while Sorceror action
 })
 
 test('Boneyard enemy XP preserves native fractional awards and strict threshold edges', () => {
-  assert.equal(evaluateBoneyardEnemyExperience(10), 4.25)
-  assert.equal(evaluateBoneyardEnemyExperience(2), 0.85)
-  assert.equal(evaluateBoneyardEnemyExperience(4), 1.7)
   assert.equal(boneyardEnemyExperienceAward({
     arenaPlayerCount: 1,
     evaluatedActorReward: 4.25,

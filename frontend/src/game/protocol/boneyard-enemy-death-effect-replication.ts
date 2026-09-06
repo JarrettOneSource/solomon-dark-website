@@ -14,7 +14,7 @@ const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
 const DESCRIPTOR_LENGTH = 10
-const SAMPLE_LENGTH = 11
+const SAMPLE_LENGTH = 12
 const ATLASES = ['BadGuys', 'DeadHawg', 'Demon'] as const
 const BLEND_MODES = ['add', 'normal'] as const
 
@@ -49,6 +49,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(sample[7])
       && sample[8] >= 0 && sample[8] <= 0xffffff
       && nonnegativeInteger(sample[9])
+      && sample[11] > 0
   },
 }
 
@@ -88,6 +89,7 @@ export function boneyardEnemyDeathEffectSample(
     effect.tint,
     effect.ageTicks,
     quantize(effect.height, POSITION_SCALE),
+    quantize(effect.scaleY, VALUE_SCALE),
   ]
 }
 
@@ -135,6 +137,7 @@ export function materializeBoneyardEnemyDeathEffect(
     },
     rotationRadians: dequantize(sample[4], ANGLE_SCALE),
     scale: dequantize(sample[6], VALUE_SCALE),
+    scaleY: dequantize(sample[11], VALUE_SCALE),
     shadow: descriptor[7] === 1,
     spawnTick: descriptor[6],
     tint: sample[8],

@@ -90,6 +90,7 @@ class NativeEnemyDeathEffectView {
   private boundsPositionY = Number.NaN
   private boundsRotation = Number.NaN
   private boundsScale = Number.NaN
+  private boundsScaleY = Number.NaN
   private readonly container: Container
   private readonly effect: Sprite | null
   private readonly gradients: FillGradient[] = []
@@ -170,6 +171,7 @@ class NativeEnemyDeathEffectView {
       && this.boundsPositionY === effect.position.y
       && this.boundsRotation === effect.rotationRadians
       && this.boundsScale === effect.scale
+      && this.boundsScaleY === effect.scaleY
     ) return this.bounds
     const bounds = nativeEnemyDeathEffectVisualBounds(effect, deathEffectArtRecord)
     this.bounds = bounds
@@ -179,6 +181,7 @@ class NativeEnemyDeathEffectView {
     this.boundsPositionY = effect.position.y
     this.boundsRotation = effect.rotationRadians
     this.boundsScale = effect.scale
+    this.boundsScaleY = effect.scaleY
     return bounds
   }
 

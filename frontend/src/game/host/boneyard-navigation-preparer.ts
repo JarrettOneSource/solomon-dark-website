@@ -8,8 +8,10 @@ import {
 import {
   boneyardWorldNavigationIsPrepared,
   boneyardWorldNavigationPreparations,
-  type BoneyardWorldState,
-} from '../core-server/boneyard-world.ts'
+} from '../core-server/boneyard-world-construction.ts'
+import type {
+  BoneyardWorldState,
+} from '../core-server/boneyard-world-state.ts'
 
 const pendingPreparations = new WeakMap<object, Promise<void>>()
 

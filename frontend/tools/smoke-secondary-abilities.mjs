@@ -1,28 +1,21 @@
-import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import assert from 'node:assert/strict'
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-
 import { acceptLanternAndCursor } from './lantern-cursor-smoke-acceptance.mjs'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
-
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { installGameTextureUploadSmokeProbe } from './game-texture-upload-smoke-probe.mjs'
-import {
-  NATIVE_SECONDARY_ABILITY_IDS,
-} from '../src/game/core-kernels/native-secondary-ability-contract.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../src/game/core-kernels/native-secondary-ability-contract.ts'
 import { actorHeadingVector } from '../src/game/core-kernels/actor-heading.ts'
-import {
-  DOWSING_EQUIPMENT_RECIPES,
-  createEquipmentInventoryItem,
-} from '../src/game/core-kernels/hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem } from '../src/game/core-kernels/hub-economy.ts'
 import { NATIVE_SKILL_CATALOG } from '../src/game/core-kernels/player-progression.ts'
 import { isHubRegionTraversable } from '../src/game/core-kernels/hub-regions.ts'
 import {
-  nativeSecondaryCooldownCapacityTicks,
   applyNativeSecondaryPlayerDamage,
+  nativeSecondaryCooldownCapacityTicks,
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { freezeNativeBelt } from '../src/game/core-kernels/native-belt.ts'
@@ -34,10 +27,7 @@ import {
   withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
 import { boneyardEnemyActorFlags } from '../src/game/core-server/enemies/model.ts'
-import {
-  getPlayerCharacter,
-  getPlayerSkillBook,
-} from '../src/game/core-server/game-simulation.ts'
+import { getPlayerCharacter, getPlayerSkillBook } from '../src/game/core-server/game-simulation.ts'
 import {
   replacePlayerEconomy,
   selectPlayerEntityPrimarySkill,

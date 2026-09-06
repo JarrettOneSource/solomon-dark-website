@@ -6,7 +6,9 @@ import {
   failureFromServerDisconnect,
   failureFromTransportClose,
 } from './game-connection-failure.ts'
-import { GAME_SESSION_REPLACED_CLOSE_CODE } from '../protocol/game-protocol.ts'
+import {
+  GAME_SESSION_REPLACED_CLOSE_CODE,
+} from '../protocol/game-protocol-contract.ts'
 
 test('server disconnects retain the authoritative detail and add a plain-English explanation', () => {
   const failure = failureFromServerDisconnect(

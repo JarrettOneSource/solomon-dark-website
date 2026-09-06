@@ -19,7 +19,9 @@ import {
   compileWebLuaDefinition,
   WebLuaDefinitionRuntime,
 } from '../modding/definition/index.ts'
-import type { LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 import { prepareModHost } from './prepared-mod-host.ts'
 

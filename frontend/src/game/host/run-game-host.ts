@@ -1,4 +1,6 @@
-import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_NAME,
+} from '../protocol/game-protocol-contract.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createBoneyardCatalog } from './boneyard-catalog.ts'

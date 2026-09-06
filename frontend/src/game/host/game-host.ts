@@ -78,30 +78,44 @@ import {
   GAMEPLAY_RESUME_GRACE_DURATION_MS,
   GAME_SESSION_REPLACED_CLOSE_CODE,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
-  PARTY_ACTION_REJECTIONS,
   GAME_PROTOCOL_VERSION,
-  GameProtocolError,
-  decodeClientGameMessage,
-  encodeGameMessage,
-  gameChatActivityText,
   type GameContentManifest,
-  type GameChatActivity,
-  type GameChatChannel,
-  type GameOnlinePreferences,
-  type GamePlayerCardProfile,
   type GameSessionKind,
   type GameplayPauseState,
   type GameplayResumeGraceReason,
   type GameplayResumeGraceState,
-  type HubPlayerActivity,
-  type LuaConsoleObject,
+} from '../protocol/game-protocol-contract.ts'
+import {
+  PARTY_ACTION_REJECTIONS,
   type PartyAction,
   type PartyActionRejection as ProtocolPartyActionRejection,
-  type PartyJoinRequester,
-  type PartyPlayerProfile,
-  type PlayerSocialProfile,
   type ServerDisconnectMessage,
+} from '../protocol/game-server-messages.ts'
+import {
+  GameProtocolError,
+} from '../protocol/codecs/values.ts'
+import {
+  decodeClientGameMessage,
+  encodeGameMessage,
 } from '../protocol/game-protocol.ts'
+import {
+  gameChatActivityText,
+  type GameChatActivity,
+  type GameChatChannel,
+  type GameOnlinePreferences,
+  type GamePlayerCardProfile,
+} from '../protocol/game-chat.ts'
+import type {
+  HubPlayerActivity,
+} from '../protocol/game-state.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
+import type {
+  PartyJoinRequester,
+  PartyPlayerProfile,
+  PlayerSocialProfile,
+} from '../protocol/party-state.ts'
 import { createGameSnapshot } from './game-snapshot.ts'
 import { prepareBoneyardWorldNavigationAsync } from './boneyard-navigation-preparer.ts'
 import {
@@ -306,7 +320,7 @@ export interface GameHostOptions {
   luaWasmPath?: string
   maxPlayers?: number
   mlBotPolicy?: MlBotPolicyInference
-  modAssets?: readonly import('../protocol/game-protocol.ts').GameModAsset[]
+  modAssets?: readonly import("../protocol/game-mod-contract.ts").GameModAsset[]
   modContent?: MaterializedWebSessionContent
   onPlayerCountChanged?: (playerCount: number) => void
   onMemorialStateChanged?: (state: HubMemorialState) => void
@@ -3112,7 +3126,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             error: string | null
             ok: boolean
             output: readonly string[]
-            values: readonly import('../protocol/game-protocol.ts').LuaConsoleValue[]
+            values: readonly import("../protocol/codecs/lua.ts").LuaConsoleValue[]
           }>,
         ) => {
           if (socket.readyState !== WebSocket.OPEN) return
@@ -8108,8 +8122,8 @@ function sameCharacter(first: PlayerCharacterConfig, second: PlayerCharacterConf
 }
 
 function sameContentMod(
-  first: import('../protocol/game-protocol.ts').GameContentIdentity,
-  second: import('../protocol/game-protocol.ts').GameContentIdentity,
+  first: import("../protocol/game-protocol-contract.ts").GameContentIdentity,
+  second: import("../protocol/game-protocol-contract.ts").GameContentIdentity,
 ): boolean {
   return first.id.toLowerCase() === second.id.toLowerCase()
     && first.version === second.version
@@ -8117,8 +8131,8 @@ function sameContentMod(
 }
 
 function sameContentMods(
-  first: readonly import('../protocol/game-protocol.ts').GameContentIdentity[],
-  second: readonly import('../protocol/game-protocol.ts').GameContentIdentity[],
+  first: readonly import("../protocol/game-protocol-contract.ts").GameContentIdentity[],
+  second: readonly import("../protocol/game-protocol-contract.ts").GameContentIdentity[],
 ): boolean {
   return first.length === second.length
     && first.every(mod => second.some(candidate => sameContentMod(mod, candidate)))

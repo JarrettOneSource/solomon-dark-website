@@ -1,4 +1,6 @@
-import type { LuaConsoleObject } from '../../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../../protocol/codecs/lua.ts'
 import type { ModIntent } from './mod-rule-engine.ts'
 import type { ModStateScope } from './mod-state-store.ts'
 

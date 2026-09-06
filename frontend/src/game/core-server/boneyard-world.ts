@@ -1,347 +1,93 @@
+import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
+import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
+import type { BoneyardLightEnvironment } from './boneyard-world-light.ts'
 import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
+import { nativeWebbedMovementScale } from '../core-kernels/native-webbed.ts'
+import { resolveActorMotion, resolveUnpushedMoverMotion } from '../core-kernels/actor-physics.ts'
 import {
-  resolveActorMotion,
-  resolveUnpushedMoverMotion,
-} from '../core-kernels/actor-physics.ts'
-import type {
-  BoneyardBounds,
-  BoneyardPoint,
-  LoadedBoneyard,
-} from '../core-kernels/boneyard.ts'
-import {
-  boneyardArenaTransitionSafetyClear,
   boneyardActiveBounds,
-  createBoneyardArenaTransition,
+  boneyardArenaTransitionSafetyClear,
   startBoneyardArenaTransition,
   stepBoneyardArenaTransition,
-  type BoneyardArenaTransitionState,
 } from '../core-kernels/boneyard-arena-transition.ts'
+import { isSolomonPlayerLocked, stepSolomonEncounter } from '../core-kernels/boneyard-encounter.ts'
+import { applyBoneyardGateContact, stepBoneyardGateLeaf } from '../core-kernels/boneyard-gate.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import {
-  createSolomonEncounter,
-  isSolomonPlayerLocked,
-  NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
-  stepSolomonEncounter,
-  type BoneyardSolomonEncounterState,
-} from '../core-kernels/boneyard-encounter.ts'
+  startBoneyardWaveDirector,
+  stepBoneyardSlumpgutTrigger,
+  stepBoneyardWaveDirector,
+} from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
+import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import {
-  STOCK_TUTORIAL_BONEYARD_ID,
+  applyNativeEnemyWorldFeedback,
+  nativeEnemyWorldFeedbackImpulses,
+  stepNativeEnemyWorldFeedback,
+} from '../core-kernels/native-enemy-world-feedback.ts'
+import { NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS, NATIVE_LOOT_DEFAULT_MODIFIERS } from '../core-kernels/native-loot.ts'
+import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import {
   NATIVE_TUTORIAL_CAMERA_TARGET,
-  createNativeTutorialState,
   nativeTutorialAmuletItem,
   nativeTutorialCameraBounds,
-  nativeTutorialDialogueTicks,
   nativeTutorialEnemyCameraPositionIsAllowed,
   nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialHealthPotionItem,
   nativeTutorialHostileScenePaused,
-  type NativeTutorialState,
 } from '../core-kernels/native-tutorial.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import {
-  applyBoneyardGateContact,
-  createBoneyardGateLeaves,
-  stepBoneyardGateLeaf,
-  type BoneyardGateLeafState,
-} from '../core-kernels/boneyard-gate.ts'
-import {
-  PLAYER_CHARACTER_PHYSICS,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+  PLAYER_CHARACTER_PHYSICS,
   PLAYER_CHARACTER_RADIUS,
   commitPlayerCharacterTick,
   createIdlePlayerCharacterInput,
   planPlayerCharacterTick,
-  type PlayerCharacterInput,
-  type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
-import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
-import { nativeBoneyardRadialLightScalar } from '../core-kernels/native-boneyard-lighting.ts'
-import type {
-  NativeWorldManagerRegistration,
-  RegisterNativeWorldPainter,
-} from '../core-kernels/native-world-manager-order.ts'
-import type {
-  NativeSecondarySceneryTarget,
-  NativeSecondaryTargetEffectState,
-} from '../core-kernels/native-secondary-abilities.ts'
-import { RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR } from '../core-kernels/player-progression.ts'
-import {
-  NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-  NATIVE_LOOT_DEFAULT_MODIFIERS,
-  type NativeLootModifiers,
-} from '../core-kernels/native-loot.ts'
-import {
-  createBoneyardWaveDirector,
-  startBoneyardWaveDirector,
-  stepBoneyardSlumpgutTrigger,
-  stepBoneyardWaveDirector,
-  type BoneyardEnemySpawnIntent,
-  type BoneyardWaveDirectorState,
-} from '../core-kernels/boneyard-wave-director.ts'
-import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
-import type {
-  HubEconomyState,
-  HubInventoryItem,
-} from '../core-kernels/hub-economy.ts'
-import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
-import {
-  applyNativeEnemyWorldFeedback,
-  createNativeEnemyWorldFeedbackState,
-  nativeEnemyWorldFeedbackImpulses,
-  stepNativeEnemyWorldFeedback,
-  type NativeEnemyWorldFeedbackKernelState,
-} from '../core-kernels/native-enemy-world-feedback.ts'
+import type { PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
 import {
   boneyardSpawnPositionIsOffscreen,
   canPlaceBoneyardBody,
   clipBoneyardSegment,
-  createBoneyardCollisionWorld,
   firstBoneyardPathBlockProgress,
-  resolveNativeBoneyardSpawnPosition,
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
+  resolveNativeBoneyardSpawnPosition,
   touchingBoneyardGateLeaves,
   withBoneyardGateCollision,
-  type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
-import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
+import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
+import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import {
-  type BoneyardEnemyPlayerDamage,
-  type BoneyardEnemyReward,
-  type BoneyardEnemySemanticEvent,
-  type BoneyardEnemyStore,
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-} from './enemies/model.ts'
-import {
-  boneyardNavigationMeshIsPrepared,
-  findBoneyardEnemyRoute,
-  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
-  NATIVE_DEMON_NAVIGATION_CLEARANCE,
-  prepareBoneyardNavigationMesh,
-} from './boneyard-enemy-navigation.ts'
-import {
-  createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
   retireBoneyardGoodiesOutsideBounds,
   spawnBoneyardCustomLootItems,
   stepBoneyardLootStore,
-  type BoneyardLootEvent,
-  type BoneyardLootPickup,
-  type BoneyardLootStore,
 } from './boneyard-loot-store.ts'
 import {
-  prepareSolomonEscapeNavigation,
-  resolveSolomonEscapeMovement,
-  solomonEscapeTraversalBounds,
-  boneyardSpawnLightSources,
-  createBoneyardSceneryTargets,
-  createNativeLootPlacement,
-  nearbyNativeMaskTwoCount,
+  NATIVE_LANTERN_BODY_ID,
   applyBoneyardPlayerKnockbacks,
   boneyardCombatBodies,
-  boneyardLanternBodies,
-  NATIVE_LANTERN_BODY_ID,
   boneyardEnemyBodies,
+  boneyardLanternBodies,
   commitBoneyardEnemyCollisionPositions,
+  createNativeLootPlacement,
   enemyCollisionBody,
+  nearbyNativeMaskTwoCount,
+  prepareSolomonEscapeNavigation,
+  resolveSolomonEscapeMovement,
   retainInsideBounds,
 } from './boneyard-world-placement.ts'
-
-export interface BoneyardPlayerCombatStatus {
-  readonly alive: boolean
-  readonly collisionEnabled: boolean
-  readonly eligible: boolean
-  readonly movementScale: number
-  readonly inventoryHasHealthPotion?: boolean
-  readonly level?: number
-  readonly lootModifiers?: NativeLootModifiers
-  readonly ownedRecipeIndexes?: readonly number[]
-  readonly advancedUnlocks?: readonly boolean[]
-}
-
-export interface BoneyardSummonTarget {
-  readonly collisionRadius: number
-  readonly id: string
-  readonly position: Readonly<BoneyardPoint>
-}
-
-export interface BoneyardWorldState {
-  arenaTransition: BoneyardArenaTransitionState | null
-  bounds: BoneyardBounds
-  collision: BoneyardCollisionWorld
-  earthquakeSceneryTargets: readonly NativeSecondarySceneryTarget[]
-  primarySceneryTargets: readonly PrimarySpellTarget[]
-  encounter: BoneyardSolomonEncounterState | null
-  enemies: BoneyardEnemyStore
-  enemyWorldFeedback: NativeEnemyWorldFeedbackKernelState
-  enemyEvents: readonly BoneyardEnemySemanticEvent[]
-  gateLeaves: readonly BoneyardGateLeafState[]
-  kind: 'boneyard'
-  lanternLightRegistration: NativeWorldManagerRegistration | null
-  lanternPosition: Readonly<BoneyardPoint> | null
-  hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunState>>
-  loot: BoneyardLootStore
-  lootEvents: readonly BoneyardLootEvent[]
-  playerOuchDeadlineTick: number
-  runId: string
-  scenerySpellTargets: readonly PrimarySpellTarget[]
-  solomonPainterRegistration: NativeWorldManagerRegistration | null
-  spawn: { x: number; y: number; facingDeg: number }
-  tutorial: NativeTutorialState | null
-  tutorialProfileEconomy: HubEconomyState | null
-  waves: BoneyardWaveDirectorState | null
-}
-
-export interface BoneyardWorldTickResult {
-  enemyEvents: readonly BoneyardEnemySemanticEvent[]
-  lootEvents: readonly BoneyardLootEvent[]
-  lootPickups: readonly BoneyardLootPickup[]
-  movementContactsByPlayerId: Readonly<
-    Record<string, readonly BoneyardPlayerMovementContact[]>
-  >
-  movementEpochActiveByPlayerId: Readonly<Record<string, boolean>>
-  playerDamage: readonly BoneyardEnemyPlayerDamage[]
-  players: Readonly<Record<string, PlayerCharacterState>>
-  rewards: readonly BoneyardEnemyReward[]
-  world: BoneyardWorldState
-}
-
-export interface BoneyardPlayerMovementContact {
-  readonly bodyId: string
-  readonly staffHostile: boolean
-}
-
-export function createBoneyardWorld(
-  loaded: LoadedBoneyard,
-  lanternLightRegistration: NativeWorldManagerRegistration | null = null,
-  solomonPainterRegistration: NativeWorldManagerRegistration | null = null,
-): BoneyardWorldState {
-  const tutorial = loaded.choice.id === STOCK_TUTORIAL_BONEYARD_ID
-  const ownsRetailEncounter = loaded.choice.source === 'default'
-    && loaded.scene.solomonDig !== null
-    && !tutorial
-  const ownsSolomonEncounter = loaded.choice.source === 'default'
-    && loaded.scene.solomonDig !== null
-  return {
-    arenaTransition: ownsRetailEncounter
-      ? createBoneyardArenaTransition(loaded.scene.bounds, loaded.scene.spawn)
-      : null,
-    bounds: { ...loaded.scene.bounds },
-    collision: createBoneyardCollisionWorld(loaded.scene),
-    ...createBoneyardSceneryTargets(loaded.scene.objects),
-    encounter: ownsSolomonEncounter
-      ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed, tutorial
-          ? { dialogueMode: 'tutorial', tutorialDialogueTicks: nativeTutorialDialogueTicks() }
-          : undefined)
-      : null,
-    enemies: createBoneyardEnemyStore(loaded.seed, loaded.scene.objects.length),
-    enemyWorldFeedback: createNativeEnemyWorldFeedbackState(),
-    enemyEvents: [],
-    gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
-    kind: 'boneyard',
-    lanternLightRegistration,
-    lanternPosition: loaded.scene.solomonDig === null
-      ? null
-      : Object.freeze({ ...loaded.scene.solomonDig.lanternPosition }),
-    hallOfFameRuns: {},
-    loot: createBoneyardLootStore(
-      loaded.seed,
-      loaded.scene.objects.flatMap((object, sceneryRegistrationOrdinal) => (
-        object.typeId === 2061 ? [{
-          eid: object.eid,
-          position: Object.freeze({ ...object.pos }),
-          sceneryRegistrationOrdinal,
-          subtype: 0,
-        }] : []
-      )),
-    ),
-    lootEvents: [],
-    playerOuchDeadlineTick: 0,
-    runId: loaded.runId,
-    solomonPainterRegistration,
-    spawn: { ...loaded.scene.spawn },
-    tutorial: tutorial
-      ? createNativeTutorialState(loaded.scene.spawn, 0, loaded.seed)
-      : null,
-    tutorialProfileEconomy: null,
-    waves: ownsRetailEncounter
-      ? createBoneyardWaveDirector(loaded.seed, undefined, {
-          sourceSha256: loaded.sourceSha256,
-        })
-      : null,
-  }
-}
-
-export interface BoneyardWorldNavigationPreparation {
-  readonly bounds: Readonly<BoneyardBounds>
-  readonly clearance: number
-}
-
-export function boneyardWorldNavigationPreparations(
-  world: BoneyardWorldState,
-): readonly BoneyardWorldNavigationPreparation[] {
-  const hostileBounds = world.arenaTransition?.combatBounds ?? world.bounds
-  const preparations: BoneyardWorldNavigationPreparation[] = [
-    { bounds: hostileBounds, clearance: NATIVE_BADGUY_NAVIGATION_CLEARANCE },
-    { bounds: hostileBounds, clearance: NATIVE_DEMON_NAVIGATION_CLEARANCE },
-  ]
-  if (world.encounter !== null) {
-    preparations.push({
-      bounds: solomonEscapeTraversalBounds(world.bounds),
-      clearance: NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
-    })
-  }
-  return Object.freeze(preparations)
-}
-
-export function boneyardWorldNavigationIsPrepared(world: BoneyardWorldState): boolean {
-  return boneyardWorldNavigationPreparations(world).every(({ bounds, clearance }) => (
-    boneyardNavigationMeshIsPrepared(bounds, world.collision, clearance)
-  ))
-}
-
-export function prepareBoneyardWorldNavigation(world: BoneyardWorldState): void {
-  for (const { bounds, clearance } of boneyardWorldNavigationPreparations(world)) {
-    prepareBoneyardNavigationMesh(bounds, world.collision, clearance)
-  }
-}
-
-export function boneyardPrimarySpellTargets(
-  world: BoneyardWorldState,
-): readonly PrimarySpellTarget[] {
-  const actors = world.enemies.actors
-    .map((enemy) => ({
-      active: enemy.lifeState === 'alive',
-      actorFlags: boneyardEnemyActorFlags(enemy),
-      attachment: { x: 0, y: 0 },
-      bodyRadius: boneyardEnemyCollisionRadius(enemy),
-      cellBindingOrder: enemy.nativeCellBindingOrder,
-      headingDeg: enemy.headingDeg,
-      id: `enemy:${enemy.id}`,
-      kind: 'enemy' as const,
-      nativePriority: 0,
-      pendingRemove: false,
-      position: { ...enemy.position },
-      registrationOrder: enemy.nativeRegistrationOrder,
-    }))
-  const maggots = world.enemies.maggots
-    .map((enemy) => ({
-      active: enemy.lifeState === 'alive' && enemy.combatActive,
-      actorFlags: 0x2,
-      attachment: { x: 0, y: 0 },
-      bodyRadius: enemy.collisionRadius,
-      cellBindingOrder: enemy.nativeCellBindingOrder,
-      headingDeg: enemy.headingDeg,
-      id: `enemy:${enemy.id}`,
-      kind: 'enemy' as const,
-      nativePriority: 0,
-      pendingRemove: false,
-      position: { ...enemy.position },
-      registrationOrder: enemy.nativeRegistrationOrder,
-    }))
-  const enemies: PrimarySpellTarget[] = [...actors, ...maggots]
-  return [...world.primarySceneryTargets, ...enemies]
-}
+import type {
+  BoneyardPlayerCombatStatus,
+  BoneyardPlayerMovementContact,
+  BoneyardSummonTarget,
+  BoneyardWorldState,
+  BoneyardWorldTickResult,
+} from './boneyard-world-state.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 
 export function stepBoneyardWorldTick(
   world: BoneyardWorldState,
@@ -359,6 +105,7 @@ export function stepBoneyardWorldTick(
     enemyToken: BoneyardWaveEnemyToken
   }>) => readonly HubInventoryItem[],
   hostileScenePaused = false,
+  lightEnvironment: BoneyardLightEnvironment = {},
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -378,7 +125,8 @@ export function stepBoneyardWorldTick(
       locked
         ? createIdlePlayerCharacterInput()
         : inputs[playerId] ?? createIdlePlayerCharacterInput(),
-      locked ? 0 : (playerCombat[playerId]?.movementScale ?? 1),
+      locked ? 0 : (playerCombat[playerId]?.movementScale ?? 1)
+        * nativeWebbedMovementScale(world.enemies.webbedPlayers[playerId]),
     )
     const requested = {
       x: player.position.x + plan.delta.x,
@@ -605,10 +353,12 @@ export function stepBoneyardWorldTick(
       movementRadius,
     ),
   }
-  const spawnLightSources = boneyardSpawnLightSources(
+  const worldLight = boneyardWorldLightQuery(
     { ...world, lanternPosition },
     nextPlayers,
     collisionResolvedEnemies,
+    tick,
+    { ...lightEnvironment, inputs },
   )
   const spawnPolicyFocuses = Object.values(livingPlayers)
     .map(({ position }) => position)
@@ -648,18 +398,13 @@ export function stepBoneyardWorldTick(
   })
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     abilityEffects,
-    arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
     clipSpellSegment: ({ end, start }) => clipBoneyardSegment(
       start,
       end,
       activeBounds,
       collision,
     ),
-    projectileWorldBlocked: createBoneyardProjectileWorld(
-      activeBounds,
-      collision,
-      projectileViewports,
-    ),
+    projectileWorldBlocked: createBoneyardProjectileWorld(activeBounds, collision, projectileViewports),
     navigation: {
       findRoute: ({ bodyRadius, end, navigationClearance, start }) => (
         findBoneyardEnemyRoute({
@@ -687,6 +432,11 @@ export function stepBoneyardWorldTick(
       if (!viewport) return
       const intensity = Math.fround(4 * boneyardProjectilePointGain(activeBounds, viewport, position, viewport.alternatePlayer))
       enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
+    },
+    lightAt: worldLight.scalarAt,
+    spiderMovementView: {
+      arenaBounds: activeBounds, enhancedEffects: true,
+      cameras: worldLight.cameras,
     },
     players: Object.fromEntries([
       ...Object.entries(nextPlayers).map(([playerId, player]) => {
@@ -779,10 +529,7 @@ export function stepBoneyardWorldTick(
             spawnCameraBounds,
             spawnPolicyFocuses,
           ),
-          lightAt: (candidate) => nativeBoneyardRadialLightScalar(
-            candidate,
-            spawnLightSources,
-          ),
+          lightAt: worldLight.scalarAt,
           ...(tutorial?.cameraLockTriggered === true
             ? { retryBounds: NATIVE_TUTORIAL_CAMERA_TARGET }
             : {}),

@@ -1,4 +1,6 @@
-import type { LuaConsoleValue } from './protocol/game-protocol.ts'
+import type {
+  LuaConsoleValue,
+} from './protocol/codecs/lua.ts'
 
 export const CHEAT_MENU_TABS = Object.freeze(['cheats', 'console'] as const)
 export type CheatMenuTab = typeof CHEAT_MENU_TABS[number]

@@ -131,7 +131,7 @@ test('builds the authored Portal boss recipe from its generated phase row', () =
     attackSpeed: 1,
     chaseSpeed: 1,
     classification: 'multiple-boss',
-    experience: phase.maximumHealth * 2,
+    experienceBonus: 0,
     extraDamage: 0,
     family: { frequency: 3, kind: 'portal' },
     lootPolicies: {

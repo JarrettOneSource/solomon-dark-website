@@ -1,5 +1,7 @@
 import { actorHeadingIndex } from './actor-heading.ts'
-import type { EvaluatedBoneyardEnemyConfig } from './boneyard-enemy-config.ts'
+import type {
+  EvaluatedBoneyardEnemyConfig,
+} from './boneyard-enemy-config-model.ts'
 
 export const NATIVE_HALL_OF_FAME_SCORE = Object.freeze({
   archiveDeathTick: 300,
@@ -207,6 +209,8 @@ export function nativeHallOfFameEnemyName(
       poison: 'Skeleton Poisoncaster',
     }[enemy.family.element]
     case 'IMP': return 'Imp'
+    case 'SPIDER': return 'Spider'
+    case 'COCOON': return 'Cocoon'
     case 'PORTAL': return enemy.recipeName ?? 'Deep Portal'
     case 'ZOMBIE': return enemy.family.rotten ? 'Rotten Zombie' : 'Zombie'
     case 'WRAITH': return 'Wraith'

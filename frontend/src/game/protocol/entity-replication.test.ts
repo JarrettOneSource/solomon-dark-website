@@ -83,6 +83,9 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       runId,
     },
     world: {
+      spiderSilks: [],
+      silkFragments: [], spiderRemains: [],
+      webbedPlayers: {},
       arenaTransition: null,
       deathEffects: [],
       encounter: null,
@@ -449,7 +452,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
   assert.equal(frame.world.entities.spawned[0]!.length, 14)
-  assert.equal(frame.world.entities.samples[0]!.length, 56)
+  assert.equal(frame.world.entities.samples[0]!.length, 59)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
   assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0, 1.25])
   assert.equal(frame.world.entities.samples[0]![30], 25 * 1024)
@@ -527,7 +530,7 @@ test('Demon planted endpoints round-trip only on the Demon family wire', () => {
   const descriptor = boneyardEnemyDescriptor(source)
   const sample = boneyardEnemySample(source)
   assert.equal(descriptor.length, 14)
-  assert.equal(sample.length, 56)
+  assert.equal(sample.length, 59)
   assert.deepEqual(sample.slice(25, 27), [256, -512])
   assert.deepEqual(sample.slice(42, 46), [192, -480, -192, -480])
   assert.deepEqual(
@@ -644,9 +647,9 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 46),
+    ...sample.slice(0, 49),
     1,
-    ...sample.slice(47),
+    ...sample.slice(50),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
     ...sample.slice(0, 37),
@@ -1173,7 +1176,7 @@ test('enemy death effects replicate independent motion and exact retirement iden
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
   ))!
   assert.equal(descriptor.length, 10)
-  assert.equal(sample.length, 11)
+  assert.equal(sample.length, 12)
 
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
     REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect,
@@ -1218,7 +1221,7 @@ test('enemy death effects replicate independent motion and exact retirement iden
     throw new Error('expected Boneyard snapshot')
   }
   const effect = reconstructed.world.deathEffects[0]!
-  const expected = enemyDeathEffectSnapshot()
+  const expected = { ...enemyDeathEffectSnapshot(), scaleY: 1.2001953125 }
   assert.deepEqual(
     {
       ...effect,
@@ -1464,6 +1467,7 @@ function cyclicDistance(first: number, second: number, period: number): number {
 function enemySnapshot(): BoneyardEnemySnapshot {
   return {
     animation: {
+      spider: null,
       action: 'skeleton-claw-a',
       actionProgress: 4,
       alpha: 1,
@@ -1592,6 +1596,7 @@ function enemyDeathEffectSnapshot(): BoneyardEnemyDeathEffectSnapshot {
     position: { x: 133.5, y: 463.25 },
     rotationRadians: 0.5,
     scale: 1.2,
+    scaleY: 1.2,
     shadow: true,
     spawnTick: 20,
     tint: 0xffaa88,

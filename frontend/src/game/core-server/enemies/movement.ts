@@ -17,18 +17,10 @@ import {
   resolveNativeEnemyPathGoal,
   stepNativeEnemyPathRecovery,
 } from '../../core-kernels/native-enemy-pathfinding.ts'
-import type {
-  NativeSecondaryTargetEffectState,
-} from '../../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
 import { resetDemon } from './demon.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyBrain,
-  type BoneyardEnemyStoreStepContext,
-  type WorkingStep,
-  nativeEnemyHitOverlay,
-  validatePoint,
-} from './model.ts'
+import { nativeEnemyHitOverlay, validatePoint } from './model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
 import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS } from './programs.ts'
 import { resetArcher, resetMage, resetSkeleton } from './skeleton-family.ts'
 import { enemyNavigationClearance } from './targeting.ts'
@@ -259,6 +251,8 @@ export function interruptNativeSecondaryAction(
     case 'wraith': return actor
     case 'demon': return resetDemon(actor, actor.brain)
     case 'coffin': return actor
+    case 'spider': return actor
+    case 'cocoon': return actor
   }
 }
 

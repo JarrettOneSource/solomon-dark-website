@@ -21,11 +21,13 @@ import {
   setPlayerEntityMana,
 } from '../../core-server/player-entity-store.ts'
 import type { LoadedBoneyard } from '../../core-kernels/boneyard.ts'
-import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
-import {
-  type WebLuaCommand,
-  type WebLuaEventName,
-  type WebLuaFrameState,
+import type {
+  LuaConsoleValue,
+} from '../../protocol/codecs/lua.ts'
+import type {
+  WebLuaCommand,
+  WebLuaEventName,
+  WebLuaFrameState,
 } from './web-lua-contract.ts'
 import {
   createWebLuaDeveloperGrantItems,

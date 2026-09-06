@@ -31,6 +31,13 @@ export type GameMusicCue =
   | 'selection'
   | 'solomondarktheme'
 export type GameSoundCue =
+  | 'spider-die'
+  | 'shoot-web-1'
+  | 'shoot-web-2'
+  | 'shoot-web-3'
+  | 'webbed-1'
+  | 'webbed-2'
+  | 'disintegrate'
   | BoneyardSolomonDigCue
   | 'backpack-close'
   | 'backpack-open'

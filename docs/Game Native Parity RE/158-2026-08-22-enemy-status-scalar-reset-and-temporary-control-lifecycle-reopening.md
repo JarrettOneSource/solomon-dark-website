@@ -53,7 +53,7 @@ without changing immutable authored enemy configuration.
 | Burn, EtherBurn, FrostBurn, Poisoned, Prismatic, Steamed | non-scalar modifier callbacks and Website target effects | verified-already-at-parity | source census shows no authored-config mutation |
 | Knockback, Pushback, Dampen disruption, flee steering | position/action branches, not base-stat multipliers | verified-already-at-parity | separate position/action ownership remains unchanged |
 | Staff Disabling Hit | stock one-time permanent target mutation | out-of-system — permanence is authored behavior | existing permanent-composition tests |
-| Webbed/Spider/Cocoon | `Mod_Webbed 0x1B79`; absent Website survival family | out-of-system — story-only family is not spawned by this port | existing enemy-family boundary |
+| Webbed/Spider/Cocoon | `Mod_Webbed 0x1B79`; native survival Spider family | exact-ported in the [2026-09-05 reopening](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md) | All severities, movement/turn restraint, Cocoon damage, and owner cleanup; the story-only exclusion was false. |
 | Player ColdSlow/Dazzle | player modifier/progression lane | out-of-system — separate `player-combat.ts` owner | existing countdown and restoration tests |
 
 ## Native ownership thread and recovered behavioral contract

@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { DefaultDeserializer, DefaultSerializer } from 'node:v8'
 import { gzip, gunzip } from 'node:zlib'
 
-import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol.ts'
+import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol-contract.ts'
 import { runArchivePlayers, type RunArchive } from './run-archive.ts'
 
 const compress = promisify(gzip)

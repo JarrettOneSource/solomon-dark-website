@@ -1,48 +1,37 @@
-import type { BoneyardProjectileKnockback } from '../core-server/enemies/model.ts'
-import { nativeEnemyProjectileVelocity } from '../core-kernels/native-enemy-targeting.ts'
+import { createNativeSpiderWaveState } from '../core-kernels/native-spider-wave-program.ts'
+import { nativeSpiderWaveDefinitions } from '../core-kernels/native-spider-wave-data.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES } from '../core-kernels/boneyard-enemy-config.ts'
 import {
   assertNativeDemonArticulationState,
   createNativeDemonArticulationState,
-  type NativeDemonArticulationState,
 } from '../core-kernels/boneyard-demon-articulation.ts'
-import {
-  createPlayerCharacter,
-  createIdlePlayerPrimaryCast,
-  type PlayerCharacterConfig,
-  type PlayerPrimaryCastState,
-} from '../core-kernels/player-character.ts'
+import type { NativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
+import { createIdlePlayerPrimaryCast, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import type { PlayerCharacterConfig, PlayerPrimaryCastState } from '../core-kernels/player-character.ts'
 import {
   archiveCompletedRunEconomy,
   createNativeUnforgeBonuses,
   hubEconomyInventoryIsValid,
   nativeHagathaBundleStateIsValid,
-  normalizeHubEconomyInventorySlots,
   nativeHagathaOutcomeStateIsValid,
-  type HubEconomyState,
+  normalizeHubEconomyInventorySlots,
 } from '../core-kernels/hub-economy.ts'
+import type { HubEconomyState } from '../core-kernels/hub-economy.ts'
 import {
   applyNativeHagathaPurchaseRuntime,
   createNativeHagathaRuntimeState,
   removeNativeHagathaRuntime,
-  type NativeHagathaRuntimeState,
 } from '../core-kernels/native-hagatha-effects.ts'
-import {
-  createNativeRng,
-  drawNativeInteger,
-  drawNativeFloat,
-  type NativeRngState,
-} from '../core-kernels/native-rng.ts'
+import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { createNativeWraithFlightState } from '../core-kernels/native-wraith-flight.ts'
-import {
-  nextBoneyardWaveRandom,
-  randomBoneyardWaveInteger,
-} from '../core-kernels/boneyard-wave-timeline.ts'
-import {
-  createNativeWorldManagerOrder,
-  type NativeWorldManagerOrderState,
-  type NativeWorldManagerRegistration,
+import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import type {
+  NativeWorldManagerOrderState,
+  NativeWorldManagerRegistration,
 } from '../core-kernels/native-world-manager-order.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
@@ -51,43 +40,40 @@ import {
 } from '../core-kernels/native-tutorial.ts'
 import {
   buildPlayerSkillOffer,
+  isNativeBeltSkill,
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
-  isNativeBeltSkill,
-  type PlayerSkillBookComponent,
-  type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import type { PlayerSkillBookComponent, PlayerStatBookComponent } from '../core-kernels/player-progression.ts'
 import {
   freezeNativeBelt,
   migrateSkillQuickbarToNativeBelt,
   nativeBeltOwnedItem,
   nativeInventoryItemCanBindToBelt,
-  type NativeBeltEntry,
-  type NativeBeltItemTypeId,
-  type PlayerBeltComponent,
 } from '../core-kernels/native-belt.ts'
+import type { NativeBeltEntry, NativeBeltItemTypeId, PlayerBeltComponent } from '../core-kernels/native-belt.ts'
 import {
   createPlayerSkillRuntime,
   playerSkillDerivedStats,
   refreshPlayerCombatFromSkillStats,
   refreshPlayerSkillRuntime,
-  type PlayerSkillRuntimeComponent,
 } from '../core-kernels/player-skill-runtime.ts'
+import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-runtime.ts'
 import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
 import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
 import { NATIVE_ETHER_BLAST_PARTICLE_COUNT } from '../core-kernels/native-ether-blast.ts'
-import {
-  nativeSecondaryPainterManagerLane,
-  type NativeSecondaryActorKind,
-} from '../core-kernels/native-secondary-abilities.ts'
+import { nativeSecondaryPainterManagerLane } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
 import {
   createHubCollegeIntroParticipantState,
   isHubRegionId,
   isHubTransitionEdge,
-  type HubParticipantState,
-  type HubParticipantTransition,
-  type HubRegionId,
-  type HubTransitionPhase,
+} from '../core-kernels/hub-regions.ts'
+import type {
+  HubParticipantState,
+  HubParticipantTransition,
+  HubRegionId,
+  HubTransitionPhase,
 } from '../core-kernels/hub-regions.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import {
@@ -95,16 +81,17 @@ import {
   NATIVE_HUB_NPC_CATALOG,
   createNativeHubNpcState,
   nativeBoastDefinition,
-  type NativeHubNpcState,
 } from '../core-kernels/native-hub-npc.ts'
+import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import type { BoastSelection, ModBoastSelection } from '../core-kernels/boast.ts'
-import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
+import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
+import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
 import {
   gameSimulationDurableProfileEconomy,
   gameSimulationRetiredWizardEconomy,
   removePlayerCharacter,
-  type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
 import {
   autofillPlayerEntitySkillSelections,
   migratePlayerStarterEquipmentAppearance,
@@ -113,21 +100,24 @@ import {
 } from '../core-server/player-entity-store.ts'
 import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
 import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
-import { createHubWorld, type HubWorldState } from '../core-server/hub-world.ts'
-import { createBoneyardWorld, type BoneyardWorldState } from '../core-server/boneyard-world.ts'
+import { createHubWorld } from '../core-server/hub-world.ts'
+import type { HubWorldState } from '../core-server/hub-world.ts'
+import { createBoneyardWorld } from '../core-server/boneyard-world-construction.ts'
+import type { BoneyardWorldState } from '../core-server/boneyard-world-state.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   MAX_WEB_GAME_SAVE_JSON_DEPTH,
   MAX_WEB_GAME_SAVE_JSON_NODES,
   WEB_GAME_SAVE_SCHEMA_VERSION,
   gameSaveDocumentFitsByteLimit,
-  type GameSaveIntegrity,
-  type ParsedGameSaveContinuation,
   onlyKeys,
   parseGameSaveDocument,
   record,
 } from './game-save-contract.ts'
+import type { GameSaveIntegrity, ParsedGameSaveContinuation } from './game-save-contract.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
+import type { BoneyardProjectileKnockback } from '../core-server/enemies/model.ts'
+import { nativeEnemyProjectileVelocity } from '../core-kernels/native-enemy-targeting.ts'
 
 export interface CreateGameSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
@@ -2008,6 +1998,13 @@ function normalizeWorld(
     enemies: {
       ...enemies,
       actors: enemyActors,
+      ...(sourceSchemaVersion < 33 ? {
+        silks: [], silkFragments: [], spiderRemains: [], webbedPlayers: {}, spiderSpitTicksRemaining: 0,
+        deathEffects: array(enemies.deathEffects, 'game save enemy death effects').map(value => {
+          const effect = record(value, 'game save enemy death effect')
+          return { ...effect, scaleY: effect.scale }
+        }),
+      } : {}),
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
       projectiles: enemyProjectiles,
       projectileKnockbacks: sourceSchemaVersion < 32 ? [] : parseProjectileKnockbacks(
@@ -2048,6 +2045,7 @@ function normalizeWorld(
       ? null
       : {
           ...waves,
+          ...(sourceSchemaVersion < 33 ? legacySpiderWaveProgram(loadedBoneyard, waves) : {}),
           openingBursts: waves.openingBursts ?? [],
           openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
           portalPhaseIndex: waves.portalPhaseIndex ?? 0,
@@ -2683,4 +2681,14 @@ function sameCharacter(
   return first?.discipline === second.discipline
     && first.displayName === second.displayName
     && first.element === second.element
+}
+
+function legacySpiderWaveProgram(loaded: LoadedBoneyard, waves: Record<string, unknown>) {
+  const spiderWaves = nativeSpiderWaveDefinitions(loaded.sourceSha256)
+  const waveOrdinal = finiteNumber(waves.waveOrdinal, 'game save wave ordinal')
+  const next = spiderWaves.findIndex(definition => definition.startWave >= waveOrdinal)
+  return {
+    spiderWaves,
+    spiderState: { ...createNativeSpiderWaveState(), phaseIndex: next < 0 ? spiderWaves.length : next },
+  }
 }

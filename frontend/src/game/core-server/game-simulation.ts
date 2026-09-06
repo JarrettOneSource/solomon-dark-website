@@ -1,32 +1,36 @@
-import { applyPlayerContacts, gameWorldKey, finiteModMutation } from './player-contact-system.ts'
-import type { BoneyardEnemyPlayerDamage } from './enemies/model.ts'
+import { removeCocoonOwner } from './enemies/cocoon.ts'
+import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
+import { applyPlayerContacts, finiteModMutation, gameWorldKey } from './player-contact-system.ts'
+import type {
+  BoneyardEnemyAttributionObserver,
+  BoneyardEnemyLethalObserver,
+  BoneyardEnemyPlayerDamage,
+  BoneyardEnemyReward,
+  BoneyardEnemySemanticEvent,
+} from './enemies/model.ts'
+import { NATIVE_FLASH_RESPONSE_RADIUS } from '../core-kernels/player-harmful-contact.ts'
 import {
-  NATIVE_FLASH_RESPONSE_RADIUS,
-} from '../core-kernels/player-harmful-contact.ts'
-import {
+  NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
-  NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
-  createIdlePlayerPrimaryCast,
   createIdlePlayerCharacterInput,
+  createIdlePlayerPrimaryCast,
   createPlayerCharacter,
-  type PlayerCharacterConfig,
-  type PlayerCharacterInput,
-  type PlayerCharacterState,
+} from '../core-kernels/player-character.ts'
+import type {
+  PlayerCharacterConfig,
+  PlayerCharacterInput,
+  PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-
 import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
 import { isBoneyardPlayerCombatEnabled } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { hubCollegeAdmissionPrimaryUnset } from '../core-kernels/college-admission-lifecycle.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import {
-  nativePrimaryViewBounds,
-  nativePrimaryViewRayEndpoint,
-  type PrimarySpellTarget,
-} from '../core-kernels/primary-spell-targeting.ts'
+import { nativePrimaryViewBounds, nativePrimaryViewRayEndpoint } from '../core-kernels/primary-spell-targeting.ts'
+import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import {
   HUB_REGION_DEFINITIONS,
@@ -36,55 +40,33 @@ import {
 } from '../core-kernels/hub-regions.ts'
 import {
   confirmPostRunLoadout,
-  continuePostRunToCollegeIntro,
   continueGameOver,
+  continuePostRunToCollegeIntro,
   createGameRunLifecycle,
   startGameRun,
   stepGameRunLifecycle,
   synchronizeGameRunParticipants,
-  type GameRunLifecycleState,
 } from '../core-kernels/game-run.ts'
+import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import {
+  NATIVE_HALL_OF_FAME_SCORE,
   archiveNativeHallOfFameRun,
   createNativeHallOfFameRun,
-  NATIVE_HALL_OF_FAME_SCORE,
   recordNativeHallOfFameAwesomestKill,
   recordNativeHallOfFameOrdinaryKill,
   resetNativeHallOfFameKillStreak,
-  type NativeHallOfFameRunState,
 } from '../core-kernels/hall-of-fame-score.ts'
-import {
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeInteger,
-  type NativeRngState,
-} from '../core-kernels/native-rng.ts'
-import {
-  nativeBeltEntryItem,
-  nativeBeltEquipmentSlots,
-  type PlayerBeltComponent,
-} from '../core-kernels/native-belt.ts'
-import {
-  acknowledgeNativeHubNpcHint,
-  resolveNativeBoast,
-  type NativeBoastFailureProducer,
-} from '../core-kernels/native-hub-npc.ts'
-import {
-  boastUsesRandomSkillChoices,
-  failBoast,
-  scoreBoast,
-  succeedBoast,
-  type BoastDefinition,
-  type BoastResolver,
-  type BoastSelection,
-} from '../core-kernels/boast.ts'
-import {
-  NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-  nativeLootModifiers,
-} from '../core-kernels/native-loot.ts'
-import {
-  type NativeLootItem,
-} from '../core-kernels/native-loot-items.ts'
+import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { nativeBeltEntryItem, nativeBeltEquipmentSlots } from '../core-kernels/native-belt.ts'
+import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
+import { acknowledgeNativeHubNpcHint, resolveNativeBoast } from '../core-kernels/native-hub-npc.ts'
+import type { NativeBoastFailureProducer } from '../core-kernels/native-hub-npc.ts'
+import { boastUsesRandomSkillChoices, failBoast, scoreBoast, succeedBoast } from '../core-kernels/boast.ts'
+import type { BoastDefinition, BoastResolver, BoastSelection } from '../core-kernels/boast.ts'
+import { NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS, nativeLootModifiers } from '../core-kernels/native-loot.ts'
+import type { NativeLootItem } from '../core-kernels/native-loot-items.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DAMAGE,
   NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE,
@@ -92,9 +74,10 @@ import {
   nativeHagathaBossDamageFactor,
 } from '../core-kernels/native-hagatha-effects.ts'
 import {
-  archiveHagathaLastWordItems,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   applyNativeStarterEquipmentAppearance,
   archiveCompletedRunEconomy,
+  archiveHagathaLastWordItems,
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
@@ -102,52 +85,50 @@ import {
   closeDowsingOffers,
   closeHagathaShop,
   consumeInventoryItem,
-  dyeInventoryClothing,
   dowse,
+  dyeInventoryClothing,
+  equipEligibleInventorySackContents,
   equipInventoryItem,
   findInventoryItem,
   hagathaOffers,
   moveInventoryItem,
-  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
-  readLibrarianBook,
   readInventorySkillBook,
-  removeHagathaPerk,
+  readLibrarianBook,
   reconcileHubEconomyModPackages,
+  removeHagathaPerk,
   selectHubBoast,
   transferInventoryItem,
-  equipEligibleInventorySackContents,
-  unforgeInventoryItem,
   unequipInventorySlot,
-  type HubEconomyRejection,
-  type HubEconomyState,
-  type EquipmentSlot,
-  type HubInventoryItem,
-  type HubInventoryAction,
-  type ModConsumableContent,
-  type HubTraderId,
+  unforgeInventoryItem,
+} from '../core-kernels/hub-economy.ts'
+import type {
+  EquipmentSlot,
+  HubEconomyRejection,
+  HubEconomyState,
+  HubInventoryAction,
+  HubInventoryItem,
+  HubTraderId,
+  ModConsumableContent,
 } from '../core-kernels/hub-economy.ts'
 import { nearestBoneyardGoodie } from '../core-kernels/boneyard-goodie-interaction.ts'
-import {
-  nativeEquipmentHasFeature,
-  nativeEquipmentRecipeEffects,
-} from '../core-kernels/native-equipment-effects.ts'
-import {
-  resolveNativeSkillDamageValue,
-} from '../core-kernels/native-offensive-resolution.ts'
+import { nativeEquipmentHasFeature, nativeEquipmentRecipeEffects } from '../core-kernels/native-equipment-effects.ts'
+import { resolveNativeSkillDamageValue } from '../core-kernels/native-offensive-resolution.ts'
 import { nativeHurricaneChargeTick } from '../core-kernels/native-hurricane.ts'
 import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
 import {
+  NATIVE_SKILL_CATALOG,
   applyNativeUnforgeFullRejuvenation,
   boneyardEnemyExperienceAward,
   drawNativePlayerCreationOfferSeed,
   grantNativeUnforgeMindDredge,
-  NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
-  type PlayerLevelUpBarrierState,
-  type PlayerProgressionComponent,
-  type SharedPlayerLevelMilestone,
-  type PlayerSkillBookComponent,
-  type PlayerStatBookComponent,
+} from '../core-kernels/player-progression.ts'
+import type {
+  PlayerLevelUpBarrierState,
+  PlayerProgressionComponent,
+  PlayerSkillBookComponent,
+  PlayerStatBookComponent,
+  SharedPlayerLevelMilestone,
 } from '../core-kernels/player-progression.ts'
 import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
@@ -171,34 +152,32 @@ import {
   stepNativeMindblastPresentation,
   stepNativeSecondaryAbilities,
   triggerNativePlayerMindblast,
-  type NativeSecondarySimulationState,
-  type NativeSecondaryTargetEffectState,
 } from '../core-kernels/native-secondary-abilities.ts'
-import {
-  NATIVE_GOLEM_PLACEMENT_RADIUS,
-  NATIVE_GOLEM_RADIUS,
-} from '../core-kernels/native-secondary-golem.ts'
+import type {
+  NativeSecondarySimulationState,
+  NativeSecondaryTargetEffectState,
+} from '../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_GOLEM_PLACEMENT_RADIUS, NATIVE_GOLEM_RADIUS } from '../core-kernels/native-secondary-golem.ts'
 import {
   createDeferredNativeWorldManagerRegistrations,
   createNativeWorldManagerOrder,
-  type DeferredNativeWorldManagerRegistrations,
-  type NativeWorldManagerOrder,
-  type NativeWorldManagerOrderState,
+} from '../core-kernels/native-world-manager-order.ts'
+import type {
+  DeferredNativeWorldManagerRegistrations,
+  NativeWorldManagerOrder,
+  NativeWorldManagerOrderState,
 } from '../core-kernels/native-world-manager-order.ts'
 import { reserveNativeHubFixedActorPainters } from '../hub-painter-order.ts'
 import {
   createPrimarySpellSimulation,
   removePrimarySpellOwner,
   stepPrimarySpells,
-  type PrimarySpellSimulationState,
 } from '../core-kernels/primary-spells.ts'
-import {
-  boneyardPrimarySpellTargets,
-  createBoneyardWorld,
-  stepBoneyardWorldTick,
-  type BoneyardPlayerMovementContact,
-  type BoneyardWorldState,
-} from './boneyard-world.ts'
+import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import { boneyardPrimarySpellTargets } from './boneyard-world-targets.ts'
+import { createBoneyardWorld } from './boneyard-world-construction.ts'
+import { stepBoneyardWorldTick } from './boneyard-world.ts'
+import type { BoneyardPlayerMovementContact, BoneyardWorldState } from './boneyard-world-state.ts'
 import {
   applyBoneyardSecondaryEnemyKnockbacks,
   placePlayersInBoneyard,
@@ -221,28 +200,15 @@ import {
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
   boneyardNativeSecondaryTargets,
-  resolveNativeCollisionAdjustedPosition,
-  resolveBoneyardNativeTeleport,
   resolveBoneyardNativeSecondaryCombat,
+  resolveBoneyardNativeTeleport,
+  resolveNativeCollisionAdjustedPosition,
 } from './native-secondary-world.ts'
-import {
-  applyBoneyardStaffHeadingPerturbation,
-  damageBoneyardEnemy,
-} from './enemies/damage.ts'
-import {
-  type BoneyardEnemyAttributionObserver,
-  type BoneyardEnemyLethalObserver,
-  type BoneyardEnemyReward,
-  type BoneyardEnemySemanticEvent,
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-} from './enemies/model.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import { applyBoneyardStaffHeadingPerturbation, damageBoneyardEnemy } from './enemies/damage.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
-import {
-  NATIVE_COLLEGE_COURTYARD_PATH,
-  nativeCollegePathHeadingIndex,
-} from '../core-kernels/native-college-intro.ts'
+import { NATIVE_COLLEGE_COURTYARD_PATH, nativeCollegePathHeadingIndex } from '../core-kernels/native-college-intro.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   addHubParticipant,
@@ -252,12 +218,10 @@ import {
   hubSpawnPoint,
   removeHubParticipant,
   stepHubWorldTick,
-  type HubWorldState,
 } from './hub-world.ts'
-import {
-  registerHubStudentPopulationPainters,
-  type HubStudentPopulationState,
-} from './hub-students.ts'
+import type { HubWorldState } from './hub-world.ts'
+import { registerHubStudentPopulationPainters } from './hub-students.ts'
+import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
   applyPlayerEntityDamageX4Bonus,
@@ -266,84 +230,83 @@ import {
   applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
   bindPlayerEntityBeltItem,
-  replacePlayerEntitySkillChoiceWithMod,
   bindPlayerEntitySkillQuickbar,
   coldSlowPlayerEntity,
   consumePlayerEntityWizardKey,
   createPlayerEntityStore,
   creditPlayerEntityLootGold,
   dazzlePlayerEntity,
-  grantPlayerEntityExperience,
+  deferPlayerEntitySkillChoice,
+  forcePlayerEntitySkillOfferIds,
   grantPlayerEntityBonusSkillChoice,
+  grantPlayerEntityExperience,
   grantSharedPlayerEntityExperience,
-  playerCharacterAt,
+  importPlayerEntity,
+  increaseRandomPlayerEntitySkill,
+  insertPlayerEntityLootItem,
   playerBeltAt,
-  playerEconomyAt,
+  playerCharacterAt,
   playerCharacterRecords,
+  playerEconomyAt,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
   playerEntityIndex,
   playerEntityMovementScale,
   playerLightingAt,
-  poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
   playerStatBookAt,
-  increaseRandomPlayerEntitySkill,
-  forcePlayerEntitySkillOfferIds,
-  importPlayerEntity,
-  insertPlayerEntityLootItem,
+  poisonPlayerEntity,
+  preparePlayerEntityTutorialLoadout,
   removePlayerEntity,
+  replacePlayerCharacter,
+  replacePlayerCharacterRecords,
+  replacePlayerEconomy,
+  replacePlayerEntitySkillChoiceWithMod,
+  replacePlayerLoadout,
+  replacePlayerPainterRegistration,
   rerollPlayerEntitySkillOffer,
   resetPlayerEntitiesForNewRun,
-  selectPlayerEntityPrimarySkill,
-  deferPlayerEntitySkillChoice,
+  respawnPlayerEntityAt,
   restorePlayerEntityHealth,
   restorePlayerEntityMana,
-  setPlayerEntityMana,
-  setPlayerEntityMindstar,
-  setPlayerDeathWeaponPainterRegistration,
   selectPlayerEntityConcentrationSkill,
   selectPlayerEntityConcentrationSlot,
+  selectPlayerEntityPrimarySkill,
+  setPlayerDeathWeaponPainterRegistration,
+  setPlayerEntityAutomaticSkillChoice,
+  setPlayerEntityMana,
+  setPlayerEntityMindstar,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
   stepPlayerEntityOverlayLightingTick,
-  tryDebitPlayerEntityMana,
-  replacePlayerCharacter,
-  replacePlayerLoadout,
-  replacePlayerPainterRegistration,
-  replacePlayerCharacterRecords,
-  replacePlayerEconomy,
-  respawnPlayerEntityAt,
-  preparePlayerEntityTutorialLoadout,
-  setPlayerEntityAutomaticSkillChoice,
   synchronizePlayerEntityLevelMilestone,
+  tryDebitPlayerEntityMana,
   unlockPlayerEntityAdvancedSkill,
-  type PlayerEntityStore,
 } from './player-entity-store.ts'
+import type { PlayerEntityStore } from './player-entity-store.ts'
 import {
+  NATIVE_TUTORIAL_FIRES,
   acknowledgeNativeTutorialMovementInstruction,
   applyNativeTutorialSurfaceAction,
-  NATIVE_TUTORIAL_FIRES,
   nativeTutorialCameraBounds,
   nativeTutorialCameraLockSafetyClear,
   nativeTutorialForcedVelocity,
   nativeTutorialHostileScenePaused,
   nativeTutorialHudAccess,
   stepNativeTutorial,
-  type NativeTutorialSurfaceAction,
 } from '../core-kernels/native-tutorial.ts'
+import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
 import {
+  NATIVE_LOOT_EVENT_RETENTION_TICKS,
   activateBoneyardGoodie,
   boneyardGoodieKeyNeeded,
-  NATIVE_LOOT_EVENT_RETENTION_TICKS,
   nativeHagathaLastWordLoot,
   removeBoneyardLootActors,
-  type BoneyardLootEvent,
-  type BoneyardLootPickup,
 } from './boneyard-loot-store.ts'
+import type { BoneyardLootEvent, BoneyardLootPickup } from './boneyard-loot-store.ts'
 
 export type PlayerId = string
 
@@ -709,6 +672,7 @@ export function removePlayerCharacter(
       ? removeHubParticipant(state.world, playerId)
       : {
           ...state.world,
+          enemies: removeCocoonOwner(state.world.enemies, playerId),
           hallOfFameRuns: Object.fromEntries(Object.entries(
             state.world.hallOfFameRuns,
           ).filter(([id]) => id !== playerId)),
@@ -2400,6 +2364,7 @@ export function stepGameSimulationTick(
         options.extensions?.createLootItems,
         boneyardWorld.tutorial !== null
           && nativeTutorialHostileScenePaused(boneyardWorld.tutorial),
+        { playerEntities: state.playerEntities, primarySpells: state.primarySpells, secondaryAbilities: state.secondaryAbilities },
       )
       return finishGameSimulationTick(
         state,
@@ -2551,7 +2516,7 @@ function finishGameSimulationTick(
     },
   }
   const contacts = applyPlayerContacts({ world, playerEntities, secondaryAbilities },
-    resolvedPlayers, result.playerDamage ?? [], tick, extensions)
+    resolvedPlayers, result.playerDamage ?? [], tick, extensions, worldManagerOrder.register)
   world = contacts.world
   playerEntities = contacts.playerEntities
   secondaryAbilities = contacts.secondaryAbilities
@@ -3532,6 +3497,7 @@ function finishGameSimulationTick(
   let primarySpells = hurricaneVisuals.spells
   let combatRng = hurricaneVisuals.rng
   if (world.kind === 'boneyard') {
+    const boneyardWorldKey = `boneyard:${world.runId}`
     const previousEvents = world.enemyEvents
     const previousLootEvents = previous.world.kind === 'boneyard'
       && previous.world.runId === world.runId
@@ -3597,6 +3563,9 @@ function finishGameSimulationTick(
           : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId)
       },
       worldManagerOrder.register,
+      secondaryAbilities.actors.filter((actor) => (
+        actor.kind === 'ether-drain' && actor.worldKey === boneyardWorldKey
+      )).map(({ position }) => position),
     )
     world = {
       ...world,
@@ -3646,6 +3615,9 @@ function finishGameSimulationTick(
       boneyardWorld.collision,
       boneyardWorld.gateLeaves,
     )
+    const spiderLight = boneyardWorldLightQuery(boneyardWorld, secondaryPlayers, boneyardWorld.enemies, tick, {
+      inputs, playerEntities, primarySpells, secondaryAbilities,
+    })
     const spellCombat = resolveBoneyardSpellCombat(
       boneyardWorld.enemies,
       primarySpells,
@@ -3691,6 +3663,7 @@ function finishGameSimulationTick(
       secondaryResult.steamedPulses,
       (ownerId) => primaryInputs[ownerId]?.viewportWidth
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
+      spiderLight.scalarAt,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
@@ -3878,6 +3851,7 @@ function finishGameSimulationTick(
     }
   }
   for (const playerId of combat.deathBurstPlayerIds) {
+    if (world.kind === 'boneyard') world = { ...world, enemies: removeCocoonOwner(world.enemies, playerId) }
     secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
     playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
   }
@@ -3927,6 +3901,9 @@ function finishGameSimulationTick(
       ).store
     }
   }
+  if (world.kind === 'boneyard' && world.enemyEvents.some(event => (
+    event.type === 'cocoon-released' && event.tick === tick
+  ))) world = { ...world, enemyWorldFeedback: { ...world.enemyWorldFeedback, magnitude: Math.fround(0.2) } }
   const alivePlayerIds = new Set(playerEntities.identities.flatMap(({ playerId }, index) => (
     playerEntities.progressions[index]!.lifeState === 'alive'
       || playerEntities.progressions[index]!.lifeState === 'lethal-pending'

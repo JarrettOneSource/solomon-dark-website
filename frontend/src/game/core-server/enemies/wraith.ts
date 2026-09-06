@@ -1,7 +1,4 @@
-import {
-  clearNativeEnemyRoute,
-  stepNativeEnemyPathRecovery,
-} from '../../core-kernels/native-enemy-pathfinding.ts'
+import { clearNativeEnemyRoute, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
 import {
   NATIVE_WRAITH_FLYBY_TICKS,
   nativeWraithContactContains,
@@ -10,12 +7,7 @@ import {
   stepNativeWraithFlightClock,
 } from '../../core-kernels/native-wraith-flight.ts'
 import { attackMarker, directPlayerDamage } from './combat.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyStoreStepContext,
-  BoneyardWraithBrain,
-  WorkingStep,
-} from './model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardWraithBrain, WorkingStep } from './model.ts'
 import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS } from './programs.ts'
 import { drawInteger, drawUnit } from './random.ts'
 import { targetEligible } from './targeting.ts'

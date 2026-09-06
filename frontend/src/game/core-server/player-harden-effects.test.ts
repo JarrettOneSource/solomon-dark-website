@@ -6,7 +6,10 @@ import { createNativeWorldManagerOrder } from '../core-kernels/native-world-mana
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createGameSnapshotFrame, createReplicatedEntityBaseline, EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
-import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
+import {
+  decodeServerGameMessage,
+  encodeGameMessage,
+} from '../protocol/game-protocol.ts'
 import {
   addPlayerCharacter, createGameSimulation, enterBoneyardWorld, removePlayerCharacter,
   returnGameSimulationToHub, stepGameSimulationTick,

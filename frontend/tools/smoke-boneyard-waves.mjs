@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-
 import { chromium } from 'playwright-core'
-import {
-  createServer as createViteServer,
-  preview as previewBuiltFrontend,
-} from 'vite'
-
+import { createServer as createViteServer, preview as previewBuiltFrontend } from 'vite'
 import { actorHeadingIndex } from '../src/game/core-kernels/actor-heading.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-director.ts'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
@@ -35,28 +30,15 @@ import {
 } from '../src/game/core-server/boneyard-collision.ts'
 import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from '../src/game/core-server/enemies/model.ts'
 import {
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-} from '../src/game/core-server/enemies/model.ts'
-import {
-  findBoneyardEnemyRoute,
   NATIVE_BADGUY_NAVIGATION_CLEARANCE,
+  findBoneyardEnemyRoute,
 } from '../src/game/core-server/boneyard-enemy-navigation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import {
-  getPlayerEconomy,
-  getPlayerCharacter,
-  getPlayerProgression,
-} from '../src/game/core-server/game-simulation.ts'
-import {
-  replacePlayerCharacter,
-  replacePlayerEconomy,
-} from '../src/game/core-server/player-entity-store.ts'
-import {
-  EntityReplicationReconstructor,
-  REPLICATED_ENTITY_TYPES,
-} from '../src/game/protocol/entity-replication.ts'
+import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { EntityReplicationReconstructor, REPLICATED_ENTITY_TYPES } from '../src/game/protocol/entity-replication.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
@@ -72,6 +54,7 @@ const portalOnly = process.argv.includes('--portal-only')
 const slumpgutOnly = process.argv.includes('--slumpgut-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
 const deathEffectsOnly = process.argv.includes('--death-effects-only')
+const spiderOnly = process.argv.includes('--spider-only')
 const deterministicSeedBytes = Buffer.alloc(16)
 if (portalOnly) deterministicSeedBytes.writeUInt32BE(1)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
@@ -159,7 +142,15 @@ await page.addInitScript((runtime) => {
 await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
-  if (portalOnly) {
+  if (spiderOnly) {
+    await enterBoneyard(page)
+    const { acceptSpiderSystem } = await import('./spider-system-smoke-acceptance.mjs')
+    const spiders = await acceptSpiderSystem({ host, page, wire, screenshotPath })
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({ status: 'ok', productionFrontend, spiders, errors, failedResponses })}\n`)
+  } else if (portalOnly) {
     const portal = await provePortalBrowser(page, portalScreenshotPath, wire)
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])

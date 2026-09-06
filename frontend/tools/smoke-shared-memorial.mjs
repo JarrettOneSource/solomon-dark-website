@@ -12,6 +12,8 @@ import {
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   GAME_PROTOCOL_VERSION,
+} from '../src/game/protocol/game-protocol-contract.ts'
+import {
   decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'

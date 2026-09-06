@@ -12,37 +12,57 @@ import {
 } from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
+  type GameSessionKind,
+  type GameplayPauseSource,
+  type GameplayPauseState,
+  type GameplayResumeGraceState,
+} from '../protocol/game-protocol-contract.ts'
+import {
   DEFAULT_GAME_ONLINE_PREFERENCES,
-  MAX_LUA_CONSOLE_CODE_LENGTH,
-  GameProtocolError,
-  decodeServerGameMessage,
-  encodeGameMessage,
   normalizeGameChatText,
-  type BoneyardChoice,
-  type BoneyardEnemyEventSnapshot,
   type GameChatChannel,
   type GameChatMessage,
   type GameCollegeInvitation,
   type GameChatRejection,
   type GamePlayerCardProfile,
-  type GameClientSnapshot,
-  type GameSessionKind,
-  type GameplayPauseSource,
-  type GameplayPauseState,
-  type GameplayResumeGraceState,
-  type HubPlayerActivity,
-  type LoadedBoneyard,
-  type LuaConsoleObject,
-  type ModAction,
-  type ModContentProjection,
-  type PartyAction,
-  type PartyActionRejection,
-  type ServerLuaResultMessage,
-  type ServerDeploymentRestartMessage,
-  type ServerWelcomeMessage,
-  type GameModAsset,
   type GameOnlinePreferences,
+} from '../protocol/game-chat.ts'
+import {
+  MAX_LUA_CONSOLE_CODE_LENGTH,
+} from '../protocol/game-protocol-limits.ts'
+import {
+  GameProtocolError,
+} from '../protocol/codecs/values.ts'
+import {
+  decodeServerGameMessage,
+  encodeGameMessage,
 } from '../protocol/game-protocol.ts'
+import type {
+  BoneyardChoice,
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
+import type {
+  BoneyardEnemyEventSnapshot,
+  GameClientSnapshot,
+  HubPlayerActivity,
+} from '../protocol/game-state.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
+import type {
+  ModAction,
+} from '../protocol/game-client-messages.ts'
+import type {
+  ModContentProjection,
+  GameModAsset,
+} from '../protocol/game-mod-contract.ts'
+import type {
+  PartyAction,
+  PartyActionRejection,
+  ServerLuaResultMessage,
+  ServerDeploymentRestartMessage,
+  ServerWelcomeMessage,
+} from '../protocol/game-server-messages.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import type { GameSaveCheckpoint, GameSaveIntent } from '../save/game-save-contract.ts'

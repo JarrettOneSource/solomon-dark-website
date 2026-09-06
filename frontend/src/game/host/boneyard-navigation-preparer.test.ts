@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createBoneyardWorld, boneyardWorldNavigationIsPrepared } from '../core-server/boneyard-world.ts'
+import {
+  createBoneyardWorld,
+  boneyardWorldNavigationIsPrepared,
+} from '../core-server/boneyard-world-construction.ts'
 import { NATIVE_GENERATED_BONEYARDS } from './native-generated-boneyards.ts'
 import { prepareBoneyardWorldNavigationAsync } from './boneyard-navigation-preparer.ts'
 

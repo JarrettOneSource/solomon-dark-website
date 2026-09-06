@@ -261,6 +261,7 @@ function stepDeathEffect(
   faded.position = position
   faded.rotationDeg = source.rotationDeg + source.angularVelocityDeg
   faded.scale = scale
+  faded.scaleY = source.kind === 'fade-scale' ? source.scaleY * source.scaleMultiplier : source.scaleY
   faded.velocity = velocity
   return faded
 }
@@ -307,6 +308,7 @@ function cloneDeathEffect(source: BoneyardEnemyDeathEffect): MutableDeathEffect 
     role: source.role,
     rotationDeg: source.rotationDeg,
     scale: source.scale,
+    scaleY: source.scaleY,
     scaleMultiplier: source.scaleMultiplier,
     shadow: source.shadow,
     spawnTick: source.spawnTick,
@@ -374,6 +376,7 @@ function smokyBouncerBirth(
     role: `${owner.role}:smoke`,
     rotationDeg,
     scale,
+    scaleY: scale,
     scaleMultiplier: 1,
     shadow: false,
     spawnTick: tick,

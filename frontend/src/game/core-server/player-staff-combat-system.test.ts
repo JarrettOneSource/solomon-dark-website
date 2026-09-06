@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import {
-  createIdlePlayerCharacterInput,
-  createPlayerCharacter,
-} from '../core-kernels/player-character.ts'
+import { createIdlePlayerCharacterInput, createPlayerCharacter } from '../core-kernels/player-character.ts'
 import {
   createNativePlayerStaffAction,
   resolveNativeStaffPhysicalContacts,
 } from '../core-kernels/native-player-staff-action.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
-import { createEquipmentInventoryItem, DOWSING_EQUIPMENT_RECIPES } from '../core-kernels/hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem } from '../core-kernels/hub-economy.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
@@ -24,12 +20,10 @@ import {
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
   replacePlayerEconomy,
-  type PlayerEntityStore,
 } from './player-entity-store.ts'
-import {
-  stepPlayerStaffCombatSystem,
-  type PlayerStaffCombatSystemContext,
-} from './player-staff-combat-system.ts'
+import type { PlayerEntityStore } from './player-entity-store.ts'
+import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
+import type { PlayerStaffCombatSystemContext } from './player-staff-combat-system.ts'
 
 const CONFIG = { discipline: 'body', displayName: 'Staff', element: 'air' } as const
 const ETHER_CONFIG = { ...CONFIG, element: 'ether' } as const

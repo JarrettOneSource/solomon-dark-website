@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import type { GameSimulationState, PlayerCharacterInputs } from '../core-server/game-simulation.ts'
-import { GAME_PROTOCOL_VERSION, type GameContentManifest } from '../protocol/game-protocol.ts'
+import { GAME_PROTOCOL_VERSION, type GameContentManifest } from '../protocol/game-protocol-contract.ts'
 
 type RunArchiveEndReason = 'game-over' | 'world-ended' | 'host-closed' | 'server-error'
 

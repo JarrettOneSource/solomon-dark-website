@@ -18,9 +18,11 @@ import {
 import {
   nativeEnemyPresentationPlan,
   nativeEnemyViewPlanInputsEqual,
-  type NativeEnemyFamily,
-  type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
+import type {
+  NativeEnemyFamily,
+  NativeEnemyVisualSnapshot,
+} from './native-enemy-presentation-model.ts'
 
 interface ManagedEnemyView {
   family: NativeEnemyFamily

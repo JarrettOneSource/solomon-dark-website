@@ -1,30 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import {
-  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
-  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
-} from '../core-kernels/game-run.ts'
+import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
-import {
-  createModBoastSelection,
-  selectBoast,
-  type BoastDefinition,
-  type BoastResolver,
-} from '../core-kernels/boast.ts'
-import {
-  NATIVE_SECONDARY_ABILITY_IDS,
-  type NativeSecondaryAbilityId,
-} from '../core-kernels/native-secondary-ability-contract.ts'
-import {
-  NATIVE_DAMAGE_X4_BONUS_TICKS,
-  NATIVE_WELD_BUILDS,
-  type NativeBeltSkillId,
-} from '../core-kernels/player-progression.ts'
+import { createModBoastSelection, selectBoast } from '../core-kernels/boast.ts'
+import type { BoastDefinition, BoastResolver } from '../core-kernels/boast.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
+import type { NativeSecondaryAbilityId } from '../core-kernels/native-secondary-ability-contract.ts'
+import { NATIVE_DAMAGE_X4_BONUS_TICKS, NATIVE_WELD_BUILDS } from '../core-kernels/player-progression.ts'
+import type { NativeBeltSkillId } from '../core-kernels/player-progression.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
@@ -42,12 +29,12 @@ import {
   releaseNativeWeldPersistentActor,
 } from '../core-kernels/native-weld-primary-runtime.ts'
 import {
-  createEquipmentInventoryItem,
   DOWSING_EQUIPMENT_RECIPES,
-  findInventoryItem,
   NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
-  type HubInventoryItem,
+  createEquipmentInventoryItem,
+  findInventoryItem,
 } from '../core-kernels/hub-economy.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
   NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
@@ -70,56 +57,52 @@ import {
 } from '../core-kernels/native-rng.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
-  createNativeSecondaryPlayerState,
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
+  createNativeSecondaryPlayerState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
-import {
-  decodeServerGameMessage,
-  encodeGameMessage,
-} from '../protocol/game-protocol.ts'
+import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import {
+  BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
+  DEFAULT_PLAYER_CHARACTER_CONFIG,
+  GAME_TICK_RATE,
   addPlayerCharacter,
   applyGameSimulationHubAction,
   armGameSimulationCollegeIntro,
   bindGameSimulationPlayerSkillQuickbar,
-  BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
   createGameSimulation,
   declineGameSimulationTutorial,
   detachGameSimulationPlayer,
-  DEFAULT_PLAYER_CHARACTER_CONFIG,
   enterBoneyardWorld,
-  GAME_TICK_RATE,
+  gameSimulationDurableProfileEconomy,
   getPlayerBelt,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
-  gameSimulationDurableProfileEconomy,
   grantGameSimulationPlayerExperience,
   projectDetachedGameSimulationPlayer,
-  removePlayerCharacter,
   rejoinGameSimulationPlayer,
+  removePlayerCharacter,
   replaceGameSimulationPlayerSkillWithMod,
-  selectDetachedGameSimulationPlayerSkill,
-  returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
+  returnGameSimulationToHub,
   saveGameSimulationPlayerSkill,
+  selectDetachedGameSimulationPlayerSkill,
   selectGameSimulationPlayerPrimarySkill,
   selectGameSimulationPlayerSkill,
-  synchronizeDetachedGameSimulationPlayer,
   stepGameSimulation,
   stepGameSimulationTick,
-  type GameSimulationExtensions,
-  type GameSimulationState,
+  synchronizeDetachedGameSimulationPlayer,
 } from './game-simulation.ts'
-import { positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import type { GameSimulationExtensions, GameSimulationState } from './game-simulation.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
-import type { BoneyardEnemySemanticEvent } from './enemies/model.ts'
+import { positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { NATIVE_MAGE_ACTION_PROGRAMS } from './enemies/programs.ts'
+import type { BoneyardEnemySemanticEvent } from './enemies/model.ts'
 import { createBoneyardLootStore, spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
@@ -3103,7 +3086,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   assert.deepEqual(state.primarySpells.projectiles, [])
 
   state = stepGameSimulationTick(state, { caster: cast(false) })
-  assert.equal(getPlayerProgression(state, 'caster').experience - initialExperience, 4.25)
+  assert.equal(getPlayerProgression(state, 'caster').experience - initialExperience, 2.125)
   const experienceAfterReward = getPlayerProgression(state, 'caster').experience
   state = stepGameSimulationTick(state, { caster: cast(false) })
   assert.equal(

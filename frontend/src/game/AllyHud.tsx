@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 
 import { art } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
-import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type {
+  GameSnapshot,
+} from './protocol/game-state.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import {
   PLAYER_CHARACTER_SHEETS,

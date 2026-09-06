@@ -1,40 +1,20 @@
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
+import type { ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
+import type { BoneyardBounds, BoneyardPoint, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
-  actorHeadingFromVector,
-  actorHeadingIndex,
-} from '../core-kernels/actor-heading.ts'
-import {
-  resolveActorMotion,
-  type ActorPhysicsBody,
-} from '../core-kernels/actor-physics.ts'
-import type {
-  BoneyardBounds,
-  BoneyardPoint,
-  LoadedBoneyard,
-} from '../core-kernels/boneyard.ts'
-import {
-  nativeSolomonEscapePathTarget,
-  nativeSolomonEscapeTarget,
   NATIVE_SOLOMON_COLLISION_RADIUS,
   NATIVE_SOLOMON_ESCAPE_PATH_MARGIN,
   NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED,
   NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
-  type BoneyardSolomonEncounterState,
+  nativeSolomonEscapePathTarget,
+  nativeSolomonEscapeTarget,
 } from '../core-kernels/boneyard-encounter.ts'
-import {
-  PLAYER_CHARACTER_PHYSICS,
-  createPlayerCharacter,
-  type PlayerCharacterConfig,
-  type PlayerCharacterState,
-} from '../core-kernels/player-character.ts'
-import {
-  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
-  NATIVE_LANTERN_LIGHT_RADIUS,
-  NATIVE_PLAYER_LIGHT_OFFSET,
-  NATIVE_PLAYER_LIGHT_RADIUS,
-  type NativeBoneyardRadialLight,
-} from '../core-kernels/native-boneyard-lighting.ts'
+import type { BoneyardSolomonEncounterState } from '../core-kernels/boneyard-encounter.ts'
+import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
 import type { NativeSecondaryKnockbackContact } from '../core-kernels/native-secondary-abilities.ts'
-import { type NativeLootPlacement } from '../core-kernels/native-loot.ts'
+import type { NativeLootPlacement } from '../core-kernels/native-loot.ts'
 import {
   boneyardBodyCollisionSourceIds,
   canPlaceBoneyardBody,
@@ -42,17 +22,12 @@ import {
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
-  type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
-import {
-  type BoneyardEnemyPlayerKnockback,
-  type BoneyardEnemyStore,
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-} from './enemies/model.ts'
+import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
+import type { BoneyardEnemyPlayerKnockback, BoneyardEnemyStore } from './enemies/model.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
-
-import type { BoneyardPlayerCombatStatus, BoneyardWorldState } from './boneyard-world.ts'
+import type { BoneyardPlayerCombatStatus, BoneyardWorldState } from './boneyard-world-state.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 
 export function spawnPlayerCharacterInBoneyard(
   config: PlayerCharacterConfig,
@@ -235,52 +210,6 @@ function pointInsideBounds(
     && point.y >= bounds.y
     && point.x <= bounds.x + bounds.w
     && point.y <= bounds.y + bounds.h
-}
-
-export function boneyardSpawnLightSources(
-  world: BoneyardWorldState,
-  players: Readonly<Record<string, PlayerCharacterState>>,
-  enemies: BoneyardEnemyStore,
-): readonly NativeBoneyardRadialLight[] {
-  const sources: NativeBoneyardRadialLight[] = []
-  for (const player of Object.values(players)) {
-    const heading = player.headingIndex * 15 * Math.PI / 180
-    sources.push({
-      intensity: 1,
-      position: {
-        x: player.position.x + Math.sin(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
-        y: player.position.y - Math.cos(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
-      },
-      radius: NATIVE_PLAYER_LIGHT_RADIUS,
-    })
-  }
-  if (world.lanternPosition !== null) {
-    sources.push({
-      intensity: NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
-      position: world.lanternPosition,
-      radius: NATIVE_LANTERN_LIGHT_RADIUS,
-    })
-  }
-  for (const actor of enemies.actors) {
-    if (actor.lighting.providerCopies === 0) continue
-    const radius = (() => {
-      switch (actor.config.enemyToken) {
-        case 'IMP': return 0.35
-        case 'PORTAL': return actor.brain.family === 'portal' ? actor.brain.alpha : 0
-        case 'DEMON': return 1.75
-        case 'COFFIN': return 0.65
-        case 'SKELETON':
-        case 'SKELETONARCHER':
-        case 'SKELETONMAGE':
-        case 'WRAITH': return 0.5
-        case 'ZOMBIE': return 0
-      }
-    })()
-    if (radius > 0) {
-      sources.push({ intensity: 1, position: actor.position, radius })
-    }
-  }
-  return sources
 }
 
 export function createNativeLootPlacement(
@@ -472,7 +401,7 @@ export function boneyardEnemyBodies(
 ): ActorPhysicsBody[] {
   return [
     ...enemies.actors
-      .filter((actor) => boneyardEnemyActorFlags(actor) !== 0)
+      .filter((actor) => actor.brain.family !== 'cocoon' && boneyardEnemyActorFlags(actor) !== 0)
       .map((actor) => {
         const id = `enemy-${actor.id}`
         return enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor))

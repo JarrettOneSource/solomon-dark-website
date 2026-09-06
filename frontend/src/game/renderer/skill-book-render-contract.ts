@@ -1,3 +1,4 @@
+import { NATIVE_SKILL_ROOT_COLORS } from '../core-kernels/native-skill-colors.ts'
 import { measureNativeUiText, nativeUiFont } from '../native-ui/core.ts'
 
 export const NATIVE_SKILL_SCREEN_SIZE = Object.freeze({ height: 900, width: 1_600 })
@@ -42,17 +43,6 @@ export const NATIVE_SKILL_SCREEN_ROOT = Object.freeze({
     Object.freeze({ mirrorX: false, record: 31, x: 1_400, y: 20 }),
   ]),
 })
-
-export const NATIVE_SKILL_PAGE_ROOT_COLORS = Object.freeze([
-  Object.freeze([1, 0.1, 1]),
-  Object.freeze([1, 0.35, 0.1]),
-  Object.freeze([0.1, 1, 1]),
-  Object.freeze([0.1, 0.5, 1]),
-  Object.freeze([0.1, 1, 0.1]),
-  Object.freeze([1, 0.5, 0.1]),
-  Object.freeze([0.1, 0.5, 0.5]),
-  Object.freeze([0.75, 0.75, 0.75]),
-] as const)
 
 export const NATIVE_SKILL_PAGE_PANEL = Object.freeze({
   additiveAlpha: 0.5,
@@ -254,7 +244,7 @@ export function nativeSkillScreenSealTransform(
 }
 
 export function nativeSkillPageTint(root: number | null): number {
-  const source = root === null ? undefined : NATIVE_SKILL_PAGE_ROOT_COLORS[root]
+  const source = root === null ? undefined : NATIVE_SKILL_ROOT_COLORS[root]
   if (!source) throw new RangeError(`unknown native SkillPage root ${String(root)}`)
   const luminance = source[0] * 0.3086 + source[1] * 0.6094 + source[2] * 0.082
   const channel = (value: number) => Math.round((luminance * 0.85 + value * 0.15) * 255)
@@ -262,7 +252,7 @@ export function nativeSkillPageTint(root: number | null): number {
 }
 
 export function nativeSkillRootTint(root: number | null): number {
-  const source = root === null ? undefined : NATIVE_SKILL_PAGE_ROOT_COLORS[root]
+  const source = root === null ? undefined : NATIVE_SKILL_ROOT_COLORS[root]
   if (!source) throw new RangeError(`unknown native skill root ${String(root)}`)
   return (Math.round(source[0] * 255) << 16)
     | (Math.round(source[1] * 255) << 8)

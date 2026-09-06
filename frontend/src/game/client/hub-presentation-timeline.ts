@@ -1,3 +1,4 @@
+import { clamp, lerp } from './presentation-math.ts'
 import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
 import type {
   GameClientSnapshot,
@@ -686,10 +687,6 @@ function copyStudent(student: ProtocolStudentState): ProtocolStudentState {
   }
 }
 
-function lerp(first: number, second: number, blend: number): number {
-  return first + (second - first) * blend
-}
-
 export function lerpCycle(
   first: number,
   second: number,
@@ -706,10 +703,6 @@ export function lerpCycle(
 
 function modulo(value: number, period: number): number {
   return ((value % period) + period) % period
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }
 
 function requireFinite(value: number, name: string): void {

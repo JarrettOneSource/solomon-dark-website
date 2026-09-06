@@ -64,11 +64,17 @@ import {
 } from './input/gameplay-pointer.ts'
 import type {
   BoneyardChoice,
+} from './core-kernels/boneyard.ts'
+import type {
   GameModAsset,
-  GameSessionKind,
-  GameSnapshot,
   ModContentProjection,
-} from './protocol/game-protocol.ts'
+} from './protocol/game-mod-contract.ts'
+import type {
+  GameSessionKind,
+} from './protocol/game-protocol-contract.ts'
+import type {
+  GameSnapshot,
+} from './protocol/game-state.ts'
 import type { LocalPartyState, PartyVisibility } from './protocol/party-state.ts'
 import type { NativeUiPartyMenuTabId } from './native-ui/core.ts'
 import { NativeUiPartyChip, NativeUiPartyInvitation, NativeUiPartyMenu } from './native-ui/react.ts'

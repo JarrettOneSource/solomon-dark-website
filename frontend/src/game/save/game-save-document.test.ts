@@ -1,24 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
-import {
-  createNativeWaterAuraActor,
-  createNativeWaterHailActor,
-} from '../core-kernels/air-water-spell-actors.ts'
-import {
-  createBoneyardEnemyStore,
-  stepBoneyardEnemyStore,
-} from '../core-server/boneyard-enemy-store.ts'
+import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server/boneyard-enemy-store.ts'
 import type { BoneyardEnemyDeathEffect } from '../core-server/enemies/model.ts'
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardEnemySpawnIntent,
-} from '../core-kernels/boneyard-wave-director.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import {
   applyGameSimulationHubAction,
   armGameSimulationCollegeIntro,
@@ -35,41 +26,28 @@ import {
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
   createEquipmentInventoryItem,
   insertLootInventoryItem,
-  type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
-import {
-  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
-  nativeTutorialAmuletItem,
-} from '../core-kernels/native-tutorial.ts'
+import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
-import { createHubWorld, HubWorldRuntime } from '../core-server/hub-world.ts'
-import {
-  createBoneyardCatalog,
-  materializeBoneyard,
-  materializeStockTutorial,
-} from '../host/boneyard-catalog.ts'
+import { HubWorldRuntime, createHubWorld } from '../core-server/hub-world.ts'
+import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
-import {
-  createGameSnapshotFrame,
-  createReplicatedEntityBaseline,
-} from '../protocol/entity-replication.ts'
-import {
-  decodeServerGameMessage,
-  encodeGameMessage,
-} from '../protocol/game-protocol.ts'
+import { createGameSnapshotFrame, createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
+import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
   hydrateGameSaveProfile,
-  retireGameSaveWizard,
   restoreGameSaveDocument,
   restoreGameSaveProfile,
+  retireGameSaveWizard,
 } from './game-save-document.ts'
 import {
   MAX_WEB_GAME_SAVE_BYTES,

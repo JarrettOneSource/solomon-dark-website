@@ -1,4 +1,3 @@
-import { emitEnemyActionSound } from './events.ts'
 import {
   NATIVE_DEMON_ROOT_SNAP_DISTANCE,
   nativeDemonArticulationRoot,
@@ -6,12 +5,8 @@ import {
   stepNativeDemonArticulation,
 } from '../../core-kernels/boneyard-demon-articulation.ts'
 import { attackMarker } from './combat.ts'
-import type {
-  BoneyardDemonBrain,
-  BoneyardEnemyActor,
-  BoneyardEnemyStoreStepContext,
-  WorkingStep,
-} from './model.ts'
+import { emitEnemyActionSound } from './events.ts'
+import type { BoneyardDemonBrain, BoneyardEnemyActor, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
 import { moveTowardTarget, staffAttackSpeed } from './movement.ts'
 import { BOUNDED_ENEMY_ATTACK_REACH, NATIVE_DEMON_BOMB_ACTION_PROGRAM } from './programs.ts'
 import { spawnProjectile } from './projectile-emission.ts'

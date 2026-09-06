@@ -45,3 +45,9 @@ export function lerpVector(
     y: lerp(first.y, second.y, blend),
   }
 }
+
+export const FULL_CIRCLE = 360
+
+export function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
+}

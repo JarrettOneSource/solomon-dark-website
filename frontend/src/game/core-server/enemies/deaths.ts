@@ -1,12 +1,7 @@
-import type { EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config.ts'
+import type { EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
 import { spawnTerminalChildren } from './construction.ts'
-import {
-  type DeathEffectOwner,
-  spawnBouncer,
-  spawnSimpleDeathEffect,
-  spawnSpriteArray,
-  spawnUnbind,
-} from './death-effects.ts'
+import { spawnBouncer, spawnSimpleDeathEffect, spawnSpriteArray, spawnUnbind } from './death-effects.ts'
+import type { DeathEffectOwner } from './death-effects.ts'
 import { emitEnemyDeathSound, emitEnemyDeathSounds, emitEvent } from './events.ts'
 import type {
   BoneyardEnemyActor,
@@ -23,20 +18,16 @@ import {
   NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
 } from './programs.ts'
 import { spawnProjectile } from './projectile-emission.ts'
-import {
-  drawInteger,
-  drawUnit,
-  radialVector,
-  randomRadialDisplacement,
-  signedUnit,
-} from './random.ts'
+import { drawInteger, drawUnit, radialVector, randomRadialDisplacement, signedUnit } from './random.ts'
 import { SKELETON_BASE_FRAGMENT_ENTRIES, spawnSkeletonShatter } from './skeleton-death.ts'
+import { spawnSpiderRemains } from './spider-remains.ts'
 
 export function stepDyingActor(
   work: WorkingStep,
   stored: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor | null {
+  if (stored.config.enemyToken === 'COCOON') return null
   const tick = context.tick
   let source = stored
   if (source.config.enemyToken === 'DEMON') {
@@ -55,6 +46,7 @@ export function stepDyingActor(
     if (deathTick < 100) return source
   }
   emitEvent(work, tick, 'enemy-death', source.id)
+  const captured = source.brain.family === 'spider' && source.brain.phase === 'captured'
   const output = terminalOutput(source.config.enemyToken)
   const outputCount = terminalOutputCount(work, source)
   emitEvent(work, tick, 'enemy-terminal-output', source.id, {
@@ -62,7 +54,7 @@ export function stepDyingActor(
     output,
   })
   context.retirementObserver?.onTerminalOutput(output, outputCount)
-  emitEnemyDeathSounds(work, source, tick, outputCount)
+  if (!captured) emitEnemyDeathSounds(work, source, tick, outputCount)
   if (
     source.config.enemyToken === 'ZOMBIE'
     && source.config.family.rotten
@@ -76,7 +68,7 @@ export function stepDyingActor(
       source.config.family.poisonPoolDamage,
     )
   }
-  spawnEnemyDeathEffects(work, source, tick, outputCount)
+  if (!captured) spawnEnemyDeathEffects(work, source, tick, outputCount)
   spawnTerminalChildren(work, source, context)
   const rewardEventId = emitEvent(work, tick, 'reward', source.id, {
     targetPlayerId: source.lastDamagedByPlayerId,
@@ -110,6 +102,8 @@ function spawnEnemyDeathEffects(
   outputCount: number | undefined,
 ): void {
   switch (actor.config.enemyToken) {
+    case 'SPIDER': spawnSpiderRemains(work, actor, tick); return
+    case 'COCOON': return
     case 'SKELETON':
     case 'SKELETONARCHER':
     case 'SKELETONMAGE':
@@ -620,6 +614,8 @@ function terminalOutput(token: EvaluatedBoneyardEnemyConfig['enemyToken']): Bone
     case 'WRAITH': return 'wraith-fragments'
     case 'DEMON': return 'demon-split'
     case 'COFFIN': return 'coffin-break'
+    case 'SPIDER': return 'spider-collapse'
+    case 'COCOON': throw new Error('Cocoons retire through their player owner')
   }
 }
 

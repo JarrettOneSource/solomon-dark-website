@@ -6,7 +6,8 @@ import {
 } from '../core-server/game-simulation.ts'
 import { playerEntityIndex } from '../core-server/player-entity-store.ts'
 import type { ModIntent, ModIntentExecutionContext } from '../modding/runtime/index.ts'
-import { decodePlayerCharacterInput, type LuaConsoleObject } from '../protocol/game-protocol.ts'
+import { decodePlayerCharacterInput } from '../protocol/codecs/input.ts'
+import type { LuaConsoleObject } from '../protocol/codecs/lua.ts'
 import { BoneyardEntranceNavigator } from './boneyard-entrance-navigation.ts'
 
 const DECISION_INTERVAL_MS = 100

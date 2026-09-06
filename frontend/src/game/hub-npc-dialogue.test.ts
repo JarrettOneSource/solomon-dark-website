@@ -21,7 +21,9 @@ import {
   hubNpcSelectorRows,
   hubNpcSelectorTitle,
 } from './hub-npc-dialogue.ts'
-import type { ModContentProjection } from './protocol/game-protocol.ts'
+import type {
+  ModContentProjection,
+} from './protocol/game-mod-contract.ts'
 
 const PROGRESSION = { advancedUnlocks: Array<boolean>(8).fill(false) }
 const MOD_BOAST_CONTENT: ModContentProjection = {

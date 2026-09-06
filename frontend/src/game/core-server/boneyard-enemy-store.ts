@@ -1,34 +1,29 @@
-import {
-  NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES,
-} from '../core-kernels/boneyard-mage-lightning.ts'
 import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
-import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 import { stepDamagePresentationTimers, stepLivingActor } from './enemies/actor-update.ts'
 import { materializeSpawnIntents } from './enemies/construction.ts'
 import { stepDyingActor } from './enemies/deaths.ts'
 import { stepMaggots } from './enemies/maggots.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyActorId,
-  type BoneyardEnemyStore,
-  type BoneyardEnemyStoreStepContext,
-  type BoneyardEnemyStoreStepResult,
-  type PositionBoneyardEnemyResult,
-  type WorkingStep,
-  validateTick,
+import { validateTick } from './enemies/model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyActorId,
+  BoneyardEnemyStore,
+  BoneyardEnemyStoreStepContext,
+  BoneyardEnemyStoreStepResult,
+  PositionBoneyardEnemyResult,
+  WorkingStep,
 } from './enemies/model.ts'
 import { stepProjectiles } from './enemies/projectiles.ts'
 import { drawUnit } from './enemies/random.ts'
-import {
-  bindEnemyTargets,
-  nativePrimaryCellChanged,
-  standaloneEnemyWorldManagerOrderState,
-  withNativeCellRebindOrder,
-} from './enemies/registration.ts'
+import { bindEnemyTargets, nativePrimaryCellChanged, withNativeCellRebindOrder } from './enemies/registration.ts'
+import { stepSilkFragments } from './enemies/silk-force.ts'
 import { stepMageShields } from './enemies/skeleton-family.ts'
+import { stepSpiderRemains } from './enemies/spider-remains.ts'
+import { stepSilks, stepSpiderWebs } from './enemies/spider.ts'
+import { createEnemyWork, finishEnemyStore } from './enemies/work.ts'
 
 export function createBoneyardEnemyStore(
   seed: string,
@@ -38,6 +33,11 @@ export function createBoneyardEnemyStore(
     throw new RangeError('native enemy registration base must be a non-negative safe integer')
   }
   return {
+    silkFragments: [],
+    spiderRemains: [],
+    silks: [],
+    webbedPlayers: {},
+    spiderSpitTicksRemaining: 0,
     actors: [],
     deathEffects: [],
     headFacingRngState: createNativeRng(
@@ -71,8 +71,8 @@ export function createBoneyardEnemyStore(
 }
 
 /** Includes every actor throughout its terminal presentation interval. */
-export function boneyardEnemyLiveCount(source: BoneyardEnemyStore): number {
-  return source.actors.length
+export function boneyardEnemyLiveCount(source: Pick<BoneyardEnemyStore, 'actors'>): number {
+  return source.actors.filter(({ config }) => config.enemyToken !== 'COCOON').length
 }
 
 /**
@@ -143,46 +143,11 @@ export function stepBoneyardEnemyStore(
     throw new RangeError('enemy store ticks must advance monotonically')
   }
   if (context.paused) return stepPausedBoneyardEnemyStore(source, context)
-  const registerWorldPainter = context.registerWorldPainter
-    ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
-  const work: WorkingStep = {
-    actors: [],
-    deathEffects: [],
-    events: [],
-    headFacingRngState: source.headFacingRngState,
-    impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
-    locomotionRngState: source.locomotionRngState,
-    mageLightningPulses: source.mageLightningPulses.filter((pulse) => (
-      context.tick - pulse.tick < NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
-    )),
-    maggots: [...source.maggots],
-    nextActorId: source.nextActorId,
-    nextDeathEpoch: source.nextDeathEpoch,
-    nextDeathEffectId: source.nextDeathEffectId,
-    nextEventId: source.nextEventId,
-    nextMageLightningPulseId: source.nextMageLightningPulseId,
-    nextNativeCellBindingOrder: source.nextNativeCellBindingOrder,
-    nextNativeRegistrationOrder: source.nextNativeRegistrationOrder,
-    nextProjectileId: source.nextProjectileId,
-    nextProjectileEffectId: source.nextProjectileEffectId,
-    nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
-    playerDamage: [],
-    playerKnockbacks: [],
-    projectileKnockbacks: [...source.projectileKnockbacks],
-    targetCellBindings: source.targetCellBindings,
-    pathStatusFactors: new Map(),
-    pendingSpawnIntents: [],
-    projectiles: [...source.projectiles],
-    projectileEffects: [],
-    registerWorldPainter,
-    registerProjectileWorldPainter: context.registerProjectileWorldPainter ?? registerWorldPainter,
-    retired: [],
-    rewards: [],
-    rngState: source.rngState,
-    steeringRngState: source.steeringRngState,
-    spawnedActorIds: [],
-  }
+  const work = createEnemyWork(source, context, false)
   bindEnemyTargets(work, context.players)
+  stepSpiderWebs(work, context)
+  stepSilkFragments(work)
+  stepSpiderRemains(work)
   const transients = stepBoneyardTransientEffects(
     source.deathEffects,
     source.projectileEffects,
@@ -226,12 +191,13 @@ export function stepBoneyardEnemyStore(
     projectile,
   ]))
   stepProjectiles(work, context)
+  stepSilks(work, context)
   work.projectiles = work.projectiles.map((projectile) => {
     const before = projectilesBeforeStep.get(projectile.id)
     return before ? withNativeCellRebindOrder(work, before, projectile) : projectile
   })
   const spawnIntents = context.resolveSpawnIntents(
-    work.actors.length,
+    boneyardEnemyLiveCount(work),
     liveZombieCount(work.actors),
     liveBossCount(work.actors),
   )
@@ -243,46 +209,13 @@ function stepPausedBoneyardEnemyStore(
   source: BoneyardEnemyStore,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyStoreStepResult {
-  const registerWorldPainter = context.registerWorldPainter
-    ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
-  const work: WorkingStep = {
-    actors: [...source.actors],
-    deathEffects: [...source.deathEffects],
-    events: [],
-    headFacingRngState: source.headFacingRngState,
-    impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
-    locomotionRngState: source.locomotionRngState,
-    mageLightningPulses: [...source.mageLightningPulses],
-    maggots: [...source.maggots],
-    nextActorId: source.nextActorId,
-    nextDeathEpoch: source.nextDeathEpoch,
-    nextDeathEffectId: source.nextDeathEffectId,
-    nextEventId: source.nextEventId,
-    nextMageLightningPulseId: source.nextMageLightningPulseId,
-    nextNativeCellBindingOrder: source.nextNativeCellBindingOrder,
-    nextNativeRegistrationOrder: source.nextNativeRegistrationOrder,
-    nextProjectileId: source.nextProjectileId,
-    nextProjectileEffectId: source.nextProjectileEffectId,
-    nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
-    pathStatusFactors: new Map(),
-    pendingSpawnIntents: [],
-    playerDamage: [],
-    playerKnockbacks: [],
-    projectileKnockbacks: source.projectileKnockbacks.map(row => ({ ...row, lastStepTick: context.tick })),
-    targetCellBindings: source.targetCellBindings,
-    projectiles: source.projectiles.map(row => ({ ...row, lastStepTick: context.tick })),
-    projectileEffects: source.projectileEffects.map(row => ({ ...row, lastStepTick: context.tick })),
-    registerWorldPainter,
-    registerProjectileWorldPainter: context.registerProjectileWorldPainter ?? registerWorldPainter,
-    retired: [],
-    rewards: [],
-    rngState: source.rngState,
-    steeringRngState: source.steeringRngState,
-    spawnedActorIds: [],
-  }
+  const work = createEnemyWork(source, context, true)
+  work.projectileKnockbacks = source.projectileKnockbacks.map(row => ({ ...row, lastStepTick: context.tick }))
+  work.projectiles = source.projectiles.map(row => ({ ...row, lastStepTick: context.tick }))
+  work.projectileEffects = source.projectileEffects.map(row => ({ ...row, lastStepTick: context.tick }))
   bindEnemyTargets(work, context.players)
   const spawnIntents = context.resolveSpawnIntents(
-    work.actors.length,
+    boneyardEnemyLiveCount(work),
     liveZombieCount(work.actors),
     liveBossCount(work.actors),
   )
@@ -302,31 +235,7 @@ function finishBoneyardEnemyStoreStep(
     retired: Object.freeze(work.retired),
     rewards: Object.freeze(work.rewards),
     spawnedActorIds: Object.freeze(work.spawnedActorIds),
-    store: {
-      actors: work.actors,
-      deathEffects: work.deathEffects,
-      headFacingRngState: work.headFacingRngState,
-      lastStepTick: tick,
-      locomotionRngState: work.locomotionRngState,
-      mageLightningPulses: work.mageLightningPulses,
-      maggots: work.maggots,
-      nextActorId: work.nextActorId,
-      nextDeathEpoch: work.nextDeathEpoch,
-      nextDeathEffectId: work.nextDeathEffectId,
-      nextEventId: work.nextEventId,
-      nextMageLightningPulseId: work.nextMageLightningPulseId,
-      nextNativeCellBindingOrder: work.nextNativeCellBindingOrder,
-      nextNativeRegistrationOrder: work.nextNativeRegistrationOrder,
-      nextProjectileId: work.nextProjectileId,
-      nextProjectileEffectId: work.nextProjectileEffectId,
-      nextSyntheticSpawnIntentId: work.nextSyntheticSpawnIntentId,
-      projectiles: work.projectiles,
-      projectileEffects: work.projectileEffects,
-      projectileKnockbacks: work.projectileKnockbacks,
-      targetCellBindings: work.targetCellBindings,
-      rngState: work.rngState,
-      steeringRngState: work.steeringRngState,
-    },
+    store: finishEnemyStore(work, tick),
   }
 }
 

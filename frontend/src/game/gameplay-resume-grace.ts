@@ -3,7 +3,7 @@ import {
   type GameplayPauseSource,
   type GameplayResumeGraceReason,
   type GameplayResumeGraceState,
-} from './protocol/game-protocol.ts'
+} from './protocol/game-protocol-contract.ts'
 
 const PAUSE_SOURCE_GRACE_REASON = {
   inventory: 'inventory-closed',

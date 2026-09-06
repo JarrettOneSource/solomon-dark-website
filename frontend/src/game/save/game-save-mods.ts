@@ -1,4 +1,6 @@
-import type { GameContentIdentity } from '../protocol/game-protocol.ts'
+import type {
+  GameContentIdentity,
+} from '../protocol/game-protocol-contract.ts'
 
 export interface GameSaveModMismatch {
   readonly added: readonly GameContentIdentity[]

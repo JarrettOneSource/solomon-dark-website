@@ -1,3 +1,4 @@
+import { lerp } from './presentation-math.ts'
 import type { NativeSecondarySnapshotState } from '../protocol/game-state.ts'
 
 export function copyNativeSecondaryState(
@@ -186,10 +187,6 @@ function lerpVector(
     x: lerp(first.x, second.x, blend),
     y: lerp(first.y, second.y, blend),
   }
-}
-
-function lerp(first: number, second: number, blend: number): number {
-  return first + (second - first) * blend
 }
 
 function lerpAngle(first: number, second: number, blend: number): number {

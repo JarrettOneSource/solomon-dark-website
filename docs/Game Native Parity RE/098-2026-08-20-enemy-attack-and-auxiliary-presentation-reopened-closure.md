@@ -47,7 +47,7 @@ the attack animation requested it.
 | The Discorporeal | non-survival native class | out-of-system | no stock survival-wave token or Website factory member in this port |
 | Dire Faculty | non-survival native class | out-of-system | boss class, outside the Boneyard survival factory membership |
 | Heartmonger / Crow | non-survival native class and owned child | out-of-system | boss lifecycle is not constructed by the Website survival factory |
-| Spider / Silk / Cocoon | non-survival native class and owned children | out-of-system | no Website survival token/factory member |
+| Spider / Silk / Cocoon | native survival class and target-owned children | exact-ported in the [2026-09-05 reopening](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md) | The old negative Website factory census was not native membership evidence. |
 | Portal | non-survival native class | out-of-system | Portal's own lifecycle remains outside the survival factory; its use of shared `251..254` does not replace Imp's separately closed marker-owned burst |
 
 All eight survival families and Maggot remain members of common damage/death

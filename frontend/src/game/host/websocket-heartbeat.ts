@@ -1,6 +1,8 @@
 import { WebSocket } from 'ws'
 
-import { GAME_CONNECTION_TIMEOUT_CLOSE_CODE } from '../protocol/game-protocol.ts'
+import {
+  GAME_CONNECTION_TIMEOUT_CLOSE_CODE,
+} from '../protocol/game-protocol-contract.ts'
 
 export const DEFAULT_GAME_HEARTBEAT_INTERVAL_MS = 5_000
 export const GAME_HEARTBEAT_MISSED_PONG_LIMIT = 6

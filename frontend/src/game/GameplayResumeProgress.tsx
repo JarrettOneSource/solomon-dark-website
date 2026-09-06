@@ -2,7 +2,9 @@ import { useEffect, useState, type CSSProperties } from 'react'
 
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import { gameplayResumeGraceProgress } from './gameplay-resume-grace.ts'
-import type { GameplayResumeGraceState } from './protocol/game-protocol.ts'
+import type {
+  GameplayResumeGraceState,
+} from './protocol/game-protocol-contract.ts'
 import './gameplay-resume-progress.css'
 
 interface GameplayResumeProgressProps {

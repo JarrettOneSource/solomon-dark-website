@@ -1,5 +1,6 @@
 import type { BoneyardEnemyAttributionObserver } from '../enemies/model.ts'
-import { getPlayerProgression, type GameSimulationState } from '../game-simulation.ts'
+import { getPlayerProgression } from '../game-simulation.ts'
+import type { GameSimulationState } from '../game-simulation.ts'
 
 export interface MlBotPolicyRewardTerms {
   readonly death: number

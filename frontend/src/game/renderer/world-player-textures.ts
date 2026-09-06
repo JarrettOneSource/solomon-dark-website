@@ -131,6 +131,7 @@ export interface PlayerEnchantStaffTextureFrames {
 }
 
 export interface PlayerWorldTextures {
+  webbedCocoon: Texture
   death: {
     hat: {
       primary: readonly (readonly Texture[])[]
@@ -208,6 +209,7 @@ export interface PlayerWorldTextures {
 
 export function playerWorldAssetSources(): string[] {
   return [...new Set(collectAssetSources({
+    webbedCocoon: nativeEnemySpriteRecord('DeadHawg', 29).source,
     elementVfx: Object.values(NATIVE_ELEMENT_VFX_RECORDS).flat().map((entry) => (
       nativeEnemySpriteRecord('BadGuys', entry).source
     )),
@@ -477,6 +479,7 @@ export function createPlayerWorldTextures(
       deadHawg: nativeRecordTextures(texture, 'DeadHawg', NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS),
     },
     playerShadow: texture(nativeEnemySpriteRecord('BadGuys', 67).source),
+    webbedCocoon: texture(nativeEnemySpriteRecord('DeadHawg', 29).source),
     players,
     primarySpells: {
       etherBlast: Object.freeze(Object.fromEntries([11, 45].map((entry) => {

@@ -4,7 +4,9 @@ import type { GameClientSession } from '../client/game-client-session.ts'
 import { loadModGameAudioAsset } from '../game-audio-browser.ts'
 import type { GameAudioDirector } from '../game-audio-director.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
-import type { LuaConsoleObject } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+} from '../protocol/codecs/lua.ts'
 
 interface ActiveAudio {
   readonly bus: string

@@ -1,6 +1,9 @@
 import type { CompiledWebLuaMod, WebLuaScopeKind } from '../modding/definition/index.ts'
 import { WEB_LUA_SCOPE_KINDS } from '../modding/definition/index.ts'
-import type { LuaConsoleObject, LuaConsoleValue } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+  LuaConsoleValue,
+} from '../protocol/codecs/lua.ts'
 import type { PreparedModHostCheckpoint } from './prepared-mod-host.ts'
 
 export type PreparedModSaveState = Readonly<

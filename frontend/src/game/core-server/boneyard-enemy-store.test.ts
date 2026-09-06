@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { nativeDemonArticulationRoot } from '../core-kernels/boneyard-demon-articulation.ts'
@@ -16,18 +15,15 @@ import {
   nativeSkeletonBodyGaitPose,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
+import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
-  nextBoneyardWaveRandom,
-  randomBoneyardWaveInteger,
-} from '../core-kernels/boneyard-wave-timeline.ts'
-import {
-  createNativeRng,
   advanceNativeRngWords,
+  createNativeRng,
   drawNativeFloat,
-  drawNativeSign,
   drawNativeInteger,
-  type NativeRngState,
+  drawNativeSign,
 } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
 import {
   nativePortalChildPosition,
@@ -41,48 +37,20 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { buildNativeEnemySteering } from '../core-kernels/native-enemy-pathfinding.ts'
 import {
-  NATIVE_MAGE_COLD_SLOW_TICKS,
   NATIVE_ARROW_POISON_DURATION_SECONDS,
+  NATIVE_MAGE_COLD_SLOW_TICKS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import {
-  NATIVE_MAGE_FACING_COUNT,
   NATIVE_MAGE_BODY_POSE_COUNT,
+  NATIVE_MAGE_FACING_COUNT,
   nativeMageBodyAttachment,
   nativeMageBodyPose,
   nativeMageFacingBucket,
   nativeMageLightningDurationTicks,
 } from '../core-kernels/boneyard-mage-lightning.ts'
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardEnemySpawnIntent,
-} from '../core-kernels/boneyard-wave-director.ts'
-import {
-  boneyardEnemyLiveCount,
-  createBoneyardEnemyStore,
-  positionBoneyardEnemy,
-  stepBoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
-import {
-  applyBoneyardStaffDisable,
-  damageBoneyardEnemy,
-  setBoneyardEnemyHurricaneContactCooldown,
-} from './enemies/damage.ts'
-import {
-  emitBoneyardPlayerDamageSound,
-  nativeWizardOuchCooldownReady,
-} from './enemies/events.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyMovementRequest,
-  type BoneyardEnemySpellSegmentRequest,
-  type BoneyardEnemyStore,
-  type BoneyardEnemyStoreStepResult,
-  type BoneyardEnemyTargets,
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-} from './enemies/model.ts'
-import { nativeSecondaryActorSpeedScale } from './enemies/movement.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import {
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
@@ -99,10 +67,32 @@ import {
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
 } from './enemies/programs.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import type {
+  BoneyardEnemyActor,
+  BoneyardEnemyMovementRequest,
+  BoneyardEnemySpellSegmentRequest,
+  BoneyardEnemyStore,
+  BoneyardEnemyStoreStepResult,
+  BoneyardEnemyTargets,
+} from './enemies/model.ts'
+import {
+  boneyardEnemyLiveCount,
+  createBoneyardEnemyStore,
+  positionBoneyardEnemy,
+  stepBoneyardEnemyStore,
+} from './boneyard-enemy-store.ts'
+import {
+  applyBoneyardStaffDisable,
+  damageBoneyardEnemy,
+  setBoneyardEnemyHurricaneContactCooldown,
+} from './enemies/damage.ts'
+import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
+import { nativeSecondaryActorSpeedScale } from './enemies/movement.ts'
 
 const TOKENS = Object.keys(BONEYARD_WAVE_ENEMY_TYPES).filter((token) => (
-  token !== 'PORTAL'
-)) as Exclude<BoneyardWaveEnemyToken, 'PORTAL'>[]
+  token !== 'PORTAL' && token !== 'COCOON'
+)) as Exclude<BoneyardWaveEnemyToken, 'PORTAL' | 'COCOON'>[]
 const FAR_PLAYERS: BoneyardEnemyTargets = {
   player: {
     alive: true,
@@ -385,7 +375,7 @@ test('Wizard ouch consumes delay before cue and scales the absolute deadline', (
   assert.equal(nativeWizardOuchCooldownReady(141, 140), true)
 })
 
-test('materialization gives all eight families stable actor and event identities', () => {
+test('materialization gives all nine hostile families stable actor and event identities', () => {
   const lootSeedWrites: number[] = []
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('families'), {
     projectileWorldBlocked: NO_WORLD_CONTACT,
@@ -405,12 +395,12 @@ test('materialization gives all eight families stable actor and event identities
     tick: 0,
   })
 
-  assert.deepEqual(result.spawnedActorIds, [1, 2, 3, 4, 5, 6, 7, 8])
+  assert.deepEqual(result.spawnedActorIds, [1, 2, 3, 4, 5, 6, 7, 8, 9])
   assert.deepEqual(result.store.actors.map((actor) => actor.sourceSpawnIntentId), [
-    41, 42, 43, 44, 45, 46, 47, 48,
+    41, 42, 43, 44, 45, 46, 47, 48, 49,
   ])
   assert.deepEqual(result.store.actors.map((actor) => actor.config.enemyToken), TOKENS)
-  assert.deepEqual(lootSeedWrites, [1_000, 1_001, 1_002, 1_003, 1_004, 1_005, 1_006, 1_007])
+  assert.deepEqual(lootSeedWrites, [1_000, 1_001, 1_002, 1_003, 1_004, 1_005, 1_006, 1_007, 1_008])
   assert.deepEqual(result.store.actors.map(({ lootSeed }) => lootSeed), lootSeedWrites)
   assert.deepEqual(result.store.actors.map((actor) => actor.brain.family), [
     'coffin',
@@ -419,14 +409,15 @@ test('materialization gives all eight families stable actor and event identities
     'skeleton',
     'archer',
     'mage',
+    'spider',
     'wraith',
     'zombie',
   ])
-  assert.deepEqual(result.events.map((event) => event.eventId), [1, 2, 3, 4, 5, 6, 7, 8])
+  assert.deepEqual(result.events.map((event) => event.eventId), [1, 2, 3, 4, 5, 6, 7, 8, 9])
   assert.ok(result.events.every((event) => event.type === 'enemy-spawned'))
-  assert.equal(result.store.nextActorId, 9)
-  assert.equal(result.store.nextEventId, 9)
-  assert.equal(boneyardEnemyLiveCount(result.store), 8)
+  assert.equal(result.store.nextActorId, 10)
+  assert.equal(result.store.nextEventId, 10)
+  assert.equal(boneyardEnemyLiveCount(result.store), 9)
   const skeleton = result.store.actors.find((actor) => actor.config.enemyToken === 'SKELETON')
   assert.deepEqual(skeleton?.config.flags, ['FLAG_FAST'])
   assert.equal(Object.isFrozen(skeleton?.config.flags), true)
@@ -437,7 +428,7 @@ test('materialization gives all eight families stable actor and event identities
   )
   assert.deepEqual(
     result.store.actors.map((actor) => actor.lightRegistration),
-    [0, 1, 2, 3, 4, 5, 6, 7].map((registrationOrdinal) => ({
+    [0, 1, 2, 3, 4, 5, 6, 7, 8].map((registrationOrdinal) => ({
       managerLane: 'actor',
       registrationOrdinal,
     })),
@@ -976,6 +967,7 @@ test('every mobile retail family wanders through common steering without a targe
     let result = spawnOne(`targetless-${token}`, token, { x: 0, y: 0 }, {})
     const initial = result.store.actors[0]!
     result = step(result.store, 2, {})
+    result = step(result.store, 3, {})
     const actor = result.store.actors[0]!
     assert.equal(actor.targetPlayerId, null)
     assert.notDeepEqual(actor.position, initial.position, `${token} must wander targetless`)
@@ -4006,22 +3998,22 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
     assert.equal(damaged.killed, true)
     store = damaged.store
   }
-  assert.equal(boneyardEnemyLiveCount(store), 8)
-  assert.deepEqual(store.actors.map((actor) => actor.deathEpoch), [1, 2, 3, 4, 5, 6, 7, 8])
+  assert.equal(boneyardEnemyLiveCount(store), 9)
+  assert.deepEqual(store.actors.map((actor) => actor.deathEpoch), [1, 2, 3, 4, 5, 6, 7, 8, 9])
   assert.ok(store.actors.every((actor) => actor.lastDamageTick === 0))
   const demonId = store.actors.find(({ config }) => config.enemyToken === 'DEMON')!.id
 
   result = step(store, 1, FAR_PLAYERS)
-  assert.equal(result.rewards.length, 7)
+  assert.equal(result.rewards.length, 8)
   assert.deepEqual(result.rewards.map((reward) => reward.experience), [
-    200, 2, 10, 10, 10, 4, 210,
+    85, Math.fround(0.85), 4.25, 4.25, 4.25, 12.75, Math.fround(1.7), 89.25,
   ])
   assert.deepEqual(result.rewards.map(({ actorId, lootSource }) => ({
     actorId,
     lootSource,
   })), expectedLootSources.filter(({ actorId }) => actorId !== demonId))
-  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 7)
-  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 7)
+  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 8)
+  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 8)
   assert.deepEqual(result.store.projectiles.map((projectile) => [
     projectile.id,
     projectile.kind,
@@ -4029,7 +4021,7 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   ]), [[1, 'poison-pool', 0x806]])
   assert.equal(result.store.projectiles[0]!.lightRegistration, null)
   assert.equal(boneyardEnemyLiveCount(result.store), 1)
-  assert.equal(result.retired.length, 7)
+  assert.equal(result.retired.length, 8)
   assert.ok(result.store.deathEffects.length > 8)
 
   result = step(result.store, 2, FAR_PLAYERS)
@@ -4056,7 +4048,7 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
     lootSource,
   })), [{
     ...expectedLootSources.find(({ actorId }) => actorId === demonId)!,
-    experience: 800,
+    experience: 340,
   }])
   assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 1)
   assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 1)
@@ -4598,7 +4590,7 @@ test('Slumpgut terminal reward retains the linked Miniboss Die program', () => {
     tick: 1,
   })
   assert.equal(result.rewards.length, 1)
-  assert.equal(result.rewards[0]?.experience, 2_756.25)
+  assert.equal(result.rewards[0]?.experience, 1_171.40625)
   assert.deepEqual(result.rewards[0]?.lootSource, {
     actorSeed: actor.lootSeed,
     enemyToken: 'ZOMBIE',
@@ -4937,6 +4929,7 @@ function step(
   return stepBoneyardEnemyStore(store, {
     clipSpellSegment,
     projectileWorldBlocked: NO_WORLD_CONTACT,
+    lightAt: () => 1,
     players,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
@@ -4954,6 +4947,7 @@ function stepWithEffects(
     abilityEffects,
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
     projectileWorldBlocked: NO_WORLD_CONTACT,
+    lightAt: () => 1,
     players,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],

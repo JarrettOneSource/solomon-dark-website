@@ -1,9 +1,8 @@
-import { Container, Matrix, RenderTexture, Sprite, type Renderer, type Texture } from 'pixi.js'
+import { Container, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { playerCharacterHeadOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
-import { renderNativeDiffuseMask } from './native-texture-color.ts'
+import { NativePlayerDiffuseCapture } from './native-player-diffuse-capture.ts'
 
-export const NATIVE_HARDEN_TARGET_SIZE = 256
 export const NATIVE_HARDEN_COMPOSITE_SCALE = 1.1200000047683716
 export const NATIVE_HARDEN_COMPOSITE_TINT = 0x3fbfff
 
@@ -12,13 +11,13 @@ export class PlayerHardenView {
   readonly container = new Container({ label: 'player-harden-coating' })
   private readonly iceSource = new Container({ label: 'player-harden-ice-multiply' })
   private readonly ice: Sprite
-  private readonly captureTransform = new Matrix(1, 0, 0, 1, 128, 153)
+  private readonly capture: NativePlayerDiffuseCapture
   private readonly renderer: Pick<Renderer, 'render'>
   private readonly composites: Sprite[] = []
-  private target: RenderTexture | null = null
 
   constructor(ice: Texture, renderer: Pick<Renderer, 'render'>) {
     this.renderer = renderer
+    this.capture = new NativePlayerDiffuseCapture(renderer)
     this.container.visible = false
     this.container.eventMode = 'none'
     this.container.zIndex = 8
@@ -34,17 +33,10 @@ export class PlayerHardenView {
     const coating = player.progression.hardenCoating
     if (coating <= 0 || stoneskin || player.progression.lifeState === 'dying'
       || player.progression.lifeState === 'spectating') return
-    if (this.target === null) {
-      this.target = RenderTexture.create({
-        alphaMode: 'no-premultiply-alpha',
-        dynamic: true,
-        height: NATIVE_HARDEN_TARGET_SIZE,
-        resolution: 1,
-        scaleMode: 'linear',
-        width: NATIVE_HARDEN_TARGET_SIZE,
-      })
+    const target = this.capture.render(source, excluded)
+    if (this.composites.length === 0) {
       for (let index = 0; index < 3; index += 1) {
-        const composite = new Sprite(this.target)
+        const composite = new Sprite(target)
         composite.anchor.set(0.5)
         composite.blendMode = 'add'
         composite.eventMode = 'none'
@@ -56,23 +48,10 @@ export class PlayerHardenView {
         this.composites.push(composite)
       }
     }
-    const visibility = excluded.map((child) => child.visible)
-    for (const child of excluded) child.visible = false
-    try {
-      renderNativeDiffuseMask(this.renderer, {
-        clear: true,
-        clearColor: [1, 1, 1, 0],
-        container: source,
-        target: this.target,
-        transform: this.captureTransform,
-      })
-    } finally {
-      excluded.forEach((child, index) => { child.visible = visibility[index]! })
-    }
     const headOffset = playerCharacterHeadOffset(player.headingIndex, player.gaitDegrees)
     this.ice.position.set(128 + headOffset.x, 128 + headOffset.y)
     this.ice.angle = player.headingIndex * 24
-    this.renderer.render({ clear: false, container: this.iceSource, target: this.target })
+    this.renderer.render({ clear: false, container: this.iceSource, target })
     for (const composite of this.composites) {
       composite.alpha = Math.fround(coating * 0.699999988079071)
     }
@@ -82,8 +61,7 @@ export class PlayerHardenView {
   destroy(): void {
     this.container.destroy({ children: true })
     this.iceSource.destroy({ children: true })
-    this.target?.destroy(true)
-    this.target = null
+    this.capture.destroy()
     this.composites.length = 0
   }
 }

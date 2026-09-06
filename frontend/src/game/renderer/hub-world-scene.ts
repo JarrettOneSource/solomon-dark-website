@@ -46,7 +46,13 @@ import {
   hubTeacherFrameAt,
   type HubTeacherBurstPresentation,
 } from '../hub-teacher.ts'
-import { PlayerWorldView, HubStudentView, actorSprite } from './hub-actors.ts'
+import {
+  PlayerWorldView,
+} from './world-player-view.ts'
+import {
+  HubStudentView,
+  actorSprite,
+} from './hub-actors.ts'
 import {
   HUB_COURTYARD_OBSTACLES,
   HUB_WORLD_DEPTH,
@@ -829,7 +835,7 @@ export class HubWorldScene {
         this.playerElements.set(playerId, player.config.element)
         this.world.addChild(view.container)
       }
-      view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
+      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
       view.update(
         player,
         snapshot.tick,

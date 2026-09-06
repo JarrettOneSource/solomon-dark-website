@@ -31,6 +31,8 @@ interface DirectorHarness {
 
 test('all retail and Portal enemy tokens map to their native type ids', () => {
   assert.deepEqual(BONEYARD_WAVE_ENEMY_TYPES, {
+    COCOON: 2058,
+    SPIDER: 2057,
     COFFIN: 1013,
     DEMON: 1009,
     IMP: 1004,
@@ -52,6 +54,7 @@ test('Deep Portal holds the timeline, births three bosses, and polls only bosses
     phase: 'spawning' as const,
     waveOrdinal: 24,
   }
+  state = { ...state, spiderState: { ...state.spiderState, phaseIndex: state.spiderWaves.length } }
   const spawnIntents: BoneyardEnemySpawnIntent[] = []
   const step = (tick: number, liveBossCount: number) => {
     const result = stepBoneyardWaveDirector(state, {
@@ -298,7 +301,7 @@ test('drains the generated Slumpgut trigger and complete authored recipe', () =>
       attackSpeed: 1,
       chaseSpeed: 1,
       classification: 'boss',
-      experience: 2_756.25,
+      experienceBonus: -196.875,
       extraDamage: 10,
       family: {
         bodyType: 1,

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { enterElementHub, enterBoneyard, openBoneyardCombat } from './game-smoke-navigation.mjs'
-import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_VERSION,
+} from '../src/game/protocol/game-protocol-contract.ts'
 import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 

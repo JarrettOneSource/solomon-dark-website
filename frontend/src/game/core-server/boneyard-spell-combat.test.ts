@@ -1,29 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
-import {
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeSign,
-} from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeFloat, drawNativeSign } from '../core-kernels/native-rng.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardEnemySpawnIntent,
-} from '../core-kernels/boneyard-wave-director.ts'
-import {
-  createPrimarySpellFireDetonation,
-  type PrimarySpellChannelEmission,
-  type PrimarySpellProjectileState,
-  type PrimarySpellSimulationState,
-  type PrimarySpellTransientState,
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { createPrimarySpellFireDetonation } from '../core-kernels/primary-spells.ts'
+import type {
+  PrimarySpellChannelEmission,
+  PrimarySpellProjectileState,
+  PrimarySpellSimulationState,
+  PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
-import {
-  createNativeWeldPersistentActor,
-  type NativeWeldOneShotBuildId,
-} from '../core-kernels/native-weld-primary-runtime.ts'
+import { createNativeWeldPersistentActor } from '../core-kernels/native-weld-primary-runtime.ts'
+import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
@@ -31,34 +22,24 @@ import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
 import {
   createNativeFirePatch,
-  stepNativeFirePatch,
   spawnNativeFireGoodImp,
   stepNativeFireGoodImp,
-  type NativeFireActorContact,
+  stepNativeFirePatch,
 } from '../core-kernels/primary-spell-fire-effects.ts'
-import type {
-  NativeWeldBuildId,
-  NativeWeldCastKind,
-} from '../core-kernels/native-weld-primary-profile.ts'
+import type { NativeFireActorContact } from '../core-kernels/primary-spell-fire-effects.ts'
+import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
 import { projectBoneyardEnemyProjectileEffects } from '../host/project-boneyard-enemies.ts'
 import {
   BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
   boneyardEnemyProjectileEffectSample,
 } from '../protocol/boneyard-enemy-projectile-effect-replication.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import type {
-  BoneyardEnemyProjectile,
-  BoneyardEnemyStore,
-  BoneyardMaggotActor,
-} from './enemies/model.ts'
-import {
-  nativeWeldFrostRadialRadius,
-  nativeWaterPushTargetFactor,
-  resolveBoneyardSpellCombat,
-  WATER_PRIMARY_ACTOR_MASK,
-  WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK,
-  type BoneyardSpellWorldContact,
-} from './boneyard-spell-combat.ts'
+import type { BoneyardEnemyProjectile, BoneyardEnemyStore, BoneyardMaggotActor } from './enemies/model.ts'
+import { nativeWeldFrostRadialRadius } from './spell-combat/projectiles.ts'
+import { nativeWaterPushTargetFactor } from './spell-combat/pushback.ts'
+import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
+import { WATER_PRIMARY_ACTOR_MASK, WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK } from './spell-combat/channels.ts'
+import type { BoneyardSpellWorldContact } from './spell-combat/model.ts'
 
 const WORLD_KEY = 'boneyard:combat-test'
 const COMBAT_RNG = createNativeRng(17)

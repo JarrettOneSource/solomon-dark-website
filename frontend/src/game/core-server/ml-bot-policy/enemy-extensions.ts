@@ -122,6 +122,10 @@ function enemyClock(actor: BoneyardEnemyActor): EnemyClockObservation {
     case 'imp': return brain.phase === 'death'
       ? passiveClock('recover')
       : passiveClock('approach')
+    case 'cocoon': return passiveClock('dormant')
+    case 'spider': return brain.phase !== 'active'
+      ? passiveClock('recover')
+      : passiveClock(brain.actionState === 3 ? 'cooldown' : 'approach', brain.actionTicksRemaining)
     case 'portal': return brain.phase === 'death'
       ? passiveClock('recover')
       : passiveClock('dormant')

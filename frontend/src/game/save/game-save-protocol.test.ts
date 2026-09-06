@@ -4,6 +4,8 @@ import test from 'node:test'
 import {
   GAME_PROTOCOL_VERSION,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
+} from '../protocol/game-protocol-contract.ts'
+import {
   decodeClientGameMessage,
   decodeServerGameMessage,
 } from '../protocol/game-protocol.ts'

@@ -10,18 +10,9 @@ import {
   stepNativeEnemyPathRecovery,
 } from '../../core-kernels/native-enemy-pathfinding.ts'
 import { attackMarker, directContactPlayerDamage } from './combat.ts'
-import {
-  NATIVE_IMP_BITE_SOUNDS,
-  NATIVE_IMP_VOCAL_SOUNDS,
-  emitEnemyActionSound,
-} from './events.ts'
-import {
-  type BoneyardEnemyActor,
-  type BoneyardEnemyStoreStepContext,
-  type BoneyardImpBrain,
-  type WorkingStep,
-  validatePoint,
-} from './model.ts'
+import { NATIVE_IMP_BITE_SOUNDS, NATIVE_IMP_VOCAL_SOUNDS, emitEnemyActionSound } from './events.ts'
+import { validatePoint } from './model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardImpBrain, WorkingStep } from './model.ts'
 import { positiveModulo } from './movement.ts'
 import {
   NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
@@ -29,11 +20,7 @@ import {
   NATIVE_IMP_CONTACT_RADIUS_SCALE,
 } from './programs.ts'
 import { randomIntegerFromUnit } from './random.ts'
-import {
-  enemyNavigationClearance,
-  targetEligible,
-  targetPlayerWithinAttackReach,
-} from './targeting.ts'
+import { enemyNavigationClearance, targetEligible, targetPlayerWithinAttackReach } from './targeting.ts'
 
 export function stepImp(
   work: WorkingStep,

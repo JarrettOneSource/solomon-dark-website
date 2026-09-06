@@ -1,3 +1,7 @@
+import type { NativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
+import type { NativeWebbedState } from '../core-kernels/native-webbed.ts'
+import type { NativeFadeLineActor } from '../core-kernels/native-silk-force.ts'
+import type { BoneyardSilkSnapshot, BoneyardSpiderRemainsSnapshot } from './spider-state.ts'
 import type {
   BoneyardGateLeafSnapshot,
 } from '../core-kernels/boneyard.ts'
@@ -236,6 +240,10 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  spiderSilks: readonly BoneyardSilkSnapshot[]
+  silkFragments: readonly NativeFadeLineActor[]
+  spiderRemains: readonly BoneyardSpiderRemainsSnapshot[]
+  webbedPlayers: Readonly<Record<string, NativeWebbedState>>
   arenaTransition: BoneyardArenaTransitionState | null
   deathEffects: readonly BoneyardEnemyDeathEffectSnapshot[]
   encounter: BoneyardSolomonSnapshot | null
@@ -379,6 +387,7 @@ export interface BoneyardEnemyDeathEffectSnapshot {
   position: Vector2
   rotationRadians: number
   scale: number
+  scaleY: number
   shadow: boolean
   spawnTick: number
   tint: number
@@ -428,6 +437,7 @@ export type BoneyardMageLightningPulseFrame = readonly [
 ]
 
 export const BONEYARD_ENEMY_EVENT_TYPES = [
+  'cocoon-released',
   'player-status-sound',
   'attack-marker',
   'coffin-maggot-release',
@@ -448,6 +458,14 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
 ] as const
 
 export const BONEYARD_ENEMY_ACTION_SOUNDS = [
+  'maggot-squish-1',
+  'maggot-squish-2',
+  'shoot-web-1',
+  'shoot-web-2',
+  'shoot-web-3',
+  'webbed-1',
+  'webbed-2',
+  'disintegrate',
   'bite-1',
   'bite-2',
   'bite-3',
@@ -477,6 +495,7 @@ export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
 ] as const
 
 export const BONEYARD_ENEMY_DEATH_SOUNDS = [
+  'spider-die',
   'banshee-die',
   'coffin-break',
   'demon-die',
@@ -504,9 +523,11 @@ export const BONEYARD_PLAYER_DAMAGE_SOUNDS = [
 export const BONEYARD_PLAYER_STATUS_SOUNDS = ['frosted', 'poisoned', 'magic-missile-hit'] as const
 
 export const BONEYARD_ENEMY_SOUNDS = [
-  ...BONEYARD_ENEMY_ACTION_SOUNDS,
-  ...BONEYARD_ENEMY_DAMAGE_SOUNDS,
-  ...BONEYARD_ENEMY_DEATH_SOUNDS,
+  ...new Set([
+    ...BONEYARD_ENEMY_ACTION_SOUNDS,
+    ...BONEYARD_ENEMY_DAMAGE_SOUNDS,
+    ...BONEYARD_ENEMY_DEATH_SOUNDS,
+  ]),
 ] as const
 
 export const BONEYARD_COMBAT_SOUNDS = [
@@ -516,6 +537,7 @@ export const BONEYARD_COMBAT_SOUNDS = [
 ] as const
 
 export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
+  'spider-collapse',
   'archer-shatter',
   'coffin-break',
   'demon-split',
@@ -692,6 +714,7 @@ export type BoneyardEnemyCoffinState =
   | 'open'
 
 export interface BoneyardEnemyAnimationSnapshot {
+  spider: NativeSpiderAppearance | null
   action: BoneyardEnemyAction | null
   actionProgress: number
   alpha: number
@@ -758,7 +781,7 @@ export interface BoneyardEnemySnapshot {
   animation: BoneyardEnemyAnimationSnapshot
   armored: boolean
   currentHealth: number
-  enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN' | 'PORTAL'
+  enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN' | 'PORTAL' | 'SPIDER' | 'COCOON'
   flags: readonly string[]
   headingDeg: number
   id: number
@@ -823,6 +846,10 @@ export interface HubWorldSnapshotFrame {
 }
 
 export interface BoneyardWorldSnapshotFrame {
+  spiderSilks: readonly BoneyardSilkSnapshot[]
+  silkFragments: readonly NativeFadeLineActor[]
+  spiderRemains: readonly BoneyardSpiderRemainsSnapshot[]
+  webbedPlayers: Readonly<Record<string, NativeWebbedState>>
   arenaTransition: BoneyardArenaTransitionState | null
   encounter: BoneyardSolomonSnapshot | null
   entities: ReplicatedEntityFrame

@@ -58,7 +58,8 @@ Native systems:
 | Demon | `0x00487300`, common mover | common path defect | approach/flank/bomb transition |
 | Coffin | `0x004A2760` | verified-already-at-parity as stationary Spawner family | no locomotion despite common base fields |
 | Maggot | `0x0048B2A0`, common movement/contact | common direct-chase defect | emerge/crawl/flank/bite lifecycle |
-| DemonSkull, DireFaculty, Heartmonger/Crow, GreenImp, Spider/Cocoon, Portal | native story/custom families | out-of-system — Website default survival factory does not construct their owners | negative factory inventory |
+| DemonSkull, DireFaculty, Heartmonger/Crow, GreenImp, Portal | native story/custom families | out-of-system — Website default survival factory does not construct their owners | negative factory inventory |
+| Spider/Cocoon | native survival Spider and target-owned restraint | exact-ported in the [2026-09-05 reopening](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md) | A missing Website factory member did not establish native exclusion. |
 | opening count and threshold draws | `0x00632997`, `0x00632AEC`, `0x00632C78` | parity defect — hardcoded 10+5/4 | full endpoint and draw-order tests |
 | opening immediate/spread event order | generated TimeLine | verified-already-at-parity except variable counts | 0/500..900 timing with variable follow-up |
 | near-player raw proposal | Spawner `0x0046D000` | verified-already-at-parity | exact 100-unit tests |

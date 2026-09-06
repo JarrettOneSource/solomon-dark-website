@@ -2208,3 +2208,12 @@ PoisonPool retain their distinct native clocks and contact programs. The host
 owns all mutable inputs; entity projection and browser presentation sample
 those inputs. Independent child effects and hazards survive parent retirement.
 The exact contracts and implementation receipts are in native-parity entry 091.
+
+
+The Boneyard renderer composes the scene in `boneyard-world-renderer.ts`.
+`boneyard-dynamic-scene.ts` owns live actor views and painter ordering;
+`boneyard-scene-lights.ts` collects registered native light providers, and
+`boneyard-static-lighting.ts` owns scenery tint, gradients, and tree occlusion.
+Static texture construction and cleanup live in `boneyard-static-world.ts`;
+`boneyard-renderer-diagnostics.ts` owns the retained browser inspection frame.
+These modules share the contracts in `boneyard-renderer-model.ts`.

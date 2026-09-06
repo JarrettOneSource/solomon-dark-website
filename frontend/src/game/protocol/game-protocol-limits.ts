@@ -1,0 +1,93 @@
+import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
+import { maximumPrimarySpellHailFrameBase64Length } from './primary-spell-hail-frame.ts'
+
+export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
+
+export const MAX_CONTENT_MODS = 256
+
+export const MAX_BONEYARD_CHOICES = 256
+
+export const MAX_BONEYARD_OBJECTS = 8192
+
+export const MAX_BONEYARD_SPRITES = 16384
+
+export const MAX_BONEYARD_STRUCTURES = 8192
+
+export const MAX_BONEYARD_ENEMIES = 512
+
+export const MAX_BONEYARD_ENEMY_EVENTS = 512
+
+export const MAX_BONEYARD_ENEMY_DEATH_EFFECTS = 8_192
+
+export const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
+
+export const MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS = 8_192
+
+export const MAX_BONEYARD_MAGE_LIGHTNING_PULSES = MAX_BONEYARD_ENEMIES
+  * NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
+
+export const MAX_BONEYARD_MAGGOTS = 2_048
+
+export const MAX_BONEYARD_LOOT = 2_047
+
+export const MAX_BONEYARD_GOODIES = 256
+
+export const MAX_BONEYARD_LOOT_EVENTS = 512
+
+export const MAX_BONEYARD_ENEMY_FLAGS = 64
+
+export const MAX_BONEYARD_ENEMY_EFFECTS = 1
+
+export const MAX_BONEYARD_DIG_EVENTS = 8
+
+export const MAX_BONEYARD_VOICE_EVENTS = 8
+
+export const MAX_FOUNTAIN_PARTICLES = 512
+
+export const MAX_PLAYERS = 64
+
+export const MAX_STUDENT_PROPS = 8
+
+export const MAX_STUDENTS = 256
+
+export const MAX_REPLICATED_ENTITIES = 8192
+
+export const MAX_REPLICATED_COMPONENTS = 72
+
+export const MAX_PRIMARY_SPELL_PROJECTILES = 4096
+
+export const MAX_PRIMARY_SPELL_TRANSIENTS = 16384
+
+export const MAX_PRIMARY_SPELL_HAIL_BASE64_LENGTH = maximumPrimarySpellHailFrameBase64Length(
+  MAX_PRIMARY_SPELL_TRANSIENTS,
+)
+
+export const MAX_PRIMARY_SPELL_HIT_TARGETS = 1024
+
+export const MAX_SECONDARY_ACTORS = 32_768
+
+export const MAX_SECONDARY_EVENTS = 512
+
+export const MAX_SECONDARY_TARGET_EFFECTS = 8_192
+
+export const MAX_LUA_CONSOLE_CODE_LENGTH = 48 * 1_024
+
+export const MAX_LUA_CONSOLE_OUTPUT_LINES = 64
+
+export const MAX_LUA_CONSOLE_OUTPUT_LINE_LENGTH = 4_096
+
+export const MAX_LUA_CONSOLE_OUTPUT_BYTES = 16 * 1_024
+
+export const MAX_LUA_CONSOLE_RETURN_VALUES = 16
+
+export const MAX_LUA_CONSOLE_RETURN_BYTES = 24 * 1_024
+
+export const MAX_LUA_CONSOLE_VALUE_DEPTH = 16
+
+export const MAX_LUA_CONSOLE_VALUE_NODES = 2_048
+
+export const MAX_LUA_CONSOLE_VALUE_FIELDS = 128
+
+export const MAX_LUA_CONSOLE_VALUE_STRING_LENGTH = 16_384
+
+export const MAX_GAME_COLLEGE_INVITATIONS = 8

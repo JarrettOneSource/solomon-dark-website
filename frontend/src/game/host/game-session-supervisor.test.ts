@@ -6,10 +6,14 @@ import { WebSocket } from 'ws'
 
 import {
   GAME_PROTOCOL_VERSION,
+} from '../protocol/game-protocol-contract.ts'
+import {
   decodeServerGameMessage,
   encodeGameMessage,
-  type ServerGameMessage,
 } from '../protocol/game-protocol.ts'
+import type {
+  ServerGameMessage,
+} from '../protocol/game-server-messages.ts'
 import {
   createGameSimulation,
   enterBoneyardWorld,

@@ -1,3 +1,5 @@
+import { boneyardWorldLightQuery } from '../core-server/boneyard-world-light.ts'
+import { nativePrimarySpellTint } from '../core-kernels/native-skill-colors.ts'
 import {
   gameSimulationPlayerRecords,
   getPlayerBelt,
@@ -5,20 +7,13 @@ import {
   getPlayerProgression,
   getPlayerSkillBook,
   getPlayerStatBook,
-  type GameSimulationState,
 } from '../core-server/game-simulation.ts'
-import {
-  hagathaOffers,
-  projectInventoryRootSlots,
-  SPLIT_MIND_CHARM_SELECTOR,
-  type HubInventoryItem,
-} from '../core-kernels/hub-economy.ts'
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import { SPLIT_MIND_CHARM_SELECTOR, hagathaOffers, projectInventoryRootSlots } from '../core-kernels/hub-economy.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
-import {
-  nativePlayerElementEffectPhase,
-  playerLightDriveActive,
-} from '../core-kernels/player-lighting.ts'
+import { nativePlayerElementEffectPhase, playerLightDriveActive } from '../core-kernels/player-lighting.ts'
 import {
   playerEntityDisplayHealth,
   playerEntityMovementScale,
@@ -36,23 +31,19 @@ import type {
 } from '../protocol/game-state.ts'
 import {
   projectBoneyardEnemies,
-  projectBoneyardEnemyDeathEffects,
   projectBoneyardEnemyDeathEffect,
-  projectBoneyardEnemyProjectiles,
+  projectBoneyardEnemyDeathEffects,
   projectBoneyardEnemyProjectileEffects,
+  projectBoneyardEnemyProjectiles,
   projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
 import { hubSkorchaHatFrame } from '../core-server/hub-skorcha.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import { effectiveSkillNumericValue } from '../core-kernels/player-skill-runtime.ts'
-import {
-  nativeSecondaryAbilityManaCost,
-} from '../core-kernels/native-secondary-abilities.ts'
+import { nativeSecondaryAbilityManaCost } from '../core-kernels/native-secondary-abilities.ts'
 import { nativePrimarySpellSummary } from '../core-kernels/native-primary-skill-profile.ts'
-import {
-  NATIVE_SECONDARY_ABILITY_IDS,
-} from '../core-kernels/native-secondary-ability-contract.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
 
 export function createGameSnapshot(
   state: GameSimulationState,
@@ -102,6 +93,16 @@ export function createGameSnapshot(
       }
     case 'boneyard': {
       const runId = state.world.runId
+      const lights = boneyardWorldLightQuery(state.world, players, state.world.enemies, state.tick, {
+        playerEntities: state.playerEntities, primarySpells: state.primarySpells, secondaryAbilities: state.secondaryAbilities,
+      })
+      const spiderPlayers = Object.fromEntries(Object.entries(players).map(([id, player]) => {
+        const skills = getPlayerSkillBook(state, id)!
+        return [id, {
+          position: player.position,
+          primaryTint: nativePrimarySpellTint(skills.primarySkillId, skills.weldBuildId),
+        }]
+      }))
       return {
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
@@ -113,6 +114,12 @@ export function createGameSnapshot(
         run: state.run,
         tick: state.tick,
         world: {
+          spiderSilks: state.world.enemies.silks.map(({ id, ownerActorId, spawnTick, painterRegistration, state }) => ({
+            id, ownerActorId, spawnTick, painterRegistration, state,
+          })),
+          silkFragments: state.world.enemies.silkFragments,
+          spiderRemains: state.world.enemies.spiderRemains,
+          webbedPlayers: { ...state.world.enemies.webbedPlayers },
           arenaTransition: state.world.arenaTransition === null
             ? null
             : {
@@ -149,7 +156,10 @@ export function createGameSnapshot(
             voiceTicksRemaining: state.world.encounter.voiceTicksRemaining,
             walkCycle: state.world.encounter.walkCycle,
           },
-          enemies: projectBoneyardEnemies(state.world.enemies, state.tick),
+          enemies: projectBoneyardEnemies(state.world.enemies, state.tick, {
+            lightAt: lights.scalarAt,
+            players: spiderPlayers,
+          }),
           enemyEvents: state.world.enemyEvents.map((event) => (
             protocolBoneyardEnemyEvent(event, runId)
           )),
