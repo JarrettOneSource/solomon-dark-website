@@ -45,8 +45,8 @@ export function nativeSpriteRecordTexture({
   assertSourceUv(sourceUv)
   const recordFrame = frame.clone()
   const [left, top, right, bottom] = sourceUv
+  // Record geometry is immutable; animation selects another cached texture.
   const texture = new Texture({
-    dynamic: true,
     frame: new Rectangle(
       recordFrame.x + recordFrame.width * left,
       recordFrame.y + recordFrame.height * top,

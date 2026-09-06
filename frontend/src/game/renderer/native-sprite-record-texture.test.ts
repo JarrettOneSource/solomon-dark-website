@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Rectangle, TextureSource } from 'pixi.js'
+import { Container, Rectangle, Sprite, TextureSource } from 'pixi.js'
 
 import {
   nativeSpriteRecordTexture,
@@ -63,6 +63,31 @@ test('record textures replay native UVs after a Pixi texture update', () => {
   texture.update()
   assert.deepEqual(texture.uvs, expected)
   texture.destroy(true)
+})
+
+test('retiring animated sprites does not retain them through shared native records', () => {
+  const source = new TextureSource({ height: 64, width: 64 })
+  const records = [0, 16].map(x => nativeSpriteRecordTexture({
+    frame: new Rectangle(x, 0, 16, 16),
+    source,
+  }))
+  const listenersBefore = records.map(record => record.listenerCount('update'))
+  for (let index = 0; index < 1_000; index += 1) {
+    const parent = new Container()
+    const sprite = new Sprite(records[0])
+    parent.addChild(sprite)
+    sprite.texture = records[1]!
+    sprite.texture = records[0]!
+    parent.destroy({ children: true })
+  }
+  assert.deepEqual(records.map(record => record.listenerCount('update')), listenersBefore)
+  for (const record of records) {
+    const uvs = { ...record.uvs }
+    record.update()
+    assert.deepEqual(record.uvs, uvs)
+    record.destroy(false)
+  }
+  source.destroy()
 })
 
 test('alpha-trimmed records retain logical geometry and interpolate original native UVs', () => {

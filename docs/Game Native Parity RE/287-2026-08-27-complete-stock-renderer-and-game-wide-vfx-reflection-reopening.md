@@ -2164,3 +2164,51 @@ vertex colors. It also accepted Leviathan's target owner without recovering
 the complete direct record-75/38 parent program, record-39 multiply-mask role,
 lower clear, and two target-output passes. The 2026-09-02 reopening owns the
 complete membership, correction, and current validation receipt.
+
+### 2026-09-06: long-run native record texture lifetime
+
+The sustained Mac production run at `47b1dce0` exposed a retained-object leak
+after repeated Fire actor retirement. Early presentation was approximately
+60 FPS; later samples fell into the mid-40s while the NFO simulation continued
+normally. Browser heap peaks exceeded 2 GiB. A private heap capture and a
+separate minimal reproduction isolated the shared native record subscription
+boundary before implementation.
+
+| Evidence | Observation | Confidence |
+| --- | --- | --- |
+| Installed PixiJS 8.19.0 `Sprite.texture` setter and `Sprite.destroy` | Assigning a dynamic texture registers `onViewUpdate` with the sprite as its context. Destruction clears the sprite's texture field without removing that subscription from the shared texture. | high, source |
+| Mac reproduction using the installed package | Creating and destroying 1,000 sprites leaves 1,000 update listeners on one shared dynamic texture. | high, runtime |
+| Native record regression before the fix | Repeated record selection followed by recursive parent destruction leaves listener counts `[1001, 1]`, against the baseline `[1, 1]`. Existing native UV tests still pass. | high, failing test |
+| Existing recovered record contract above | Authored frame/original/trim geometry and source UV slices are fixed. Animation selects another cached record; display resize retains the same record objects and page dimensions. | high, instruction-derived and browser-verified |
+
+The native record factory owns immutable atlas views. It should use Pixi's
+static-texture mode, which does not register per-consumer update listeners.
+The factory's own texture-update callback continues to replay the recovered
+native UV endpoints. This addresses every consumer of the common record
+factory through the existing ownership boundary.
+
+| Member | Disposition and acceptance |
+| --- | --- |
+| Native UI, glyph, enemy, player, spell, loot, weather, and secondary record views | `exact-ported`: immutable record geometry; select cached textures to animate |
+| Source/context update | `verified-already-at-parity`: the record-owned callback restores the same authored UVs |
+| Display resize | `verified-already-at-parity`: renderer targets resize while record objects and geometry remain stable |
+| Actor and recursive scene retirement | Website lifecycle correction: destroyed consumers must leave shared record listener counts at their baseline |
+| Page/record teardown | `verified-already-at-parity`: record textures retire before their owning page sources |
+| Mutable render targets and non-record textures | Separate existing owners; their dynamic-update contracts remain outside this immutable-record factory |
+
+Acceptance requires the retirement regression and existing UV/trim tests,
+the canonical Mac gate, and a new production browser capture demonstrating
+stable retained memory after repeated actor creation and destruction. The
+diagnostic heap-capture pause is excluded from normal gameplay timing and
+reported separately.
+
+The native record suite is now part of `test:arena-render`, so the canonical
+gate runs its lifecycle, update, UV, and trim checks. On the Mac, the new
+retirement case failed with the dynamic factory and all seven cases passed
+with static records; the shared listener counts return to `[1, 1]` after
+1,000 recursive sprite retirements.
+
+The complete Mac `./scripts/validate.sh` gate passed on 2026-09-06 at
+07:45:48 UTC, including the native record suite and the configured coverage
+and mutation gates. Production continuation remains the outstanding
+performance acceptance check for this lifecycle correction.
