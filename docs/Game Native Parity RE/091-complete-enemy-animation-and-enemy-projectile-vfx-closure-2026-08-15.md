@@ -1617,7 +1617,7 @@ the departed target, and leaves no owned children after destruction.
 
 The complete implementation exceeded the existing game-entry bundle budget.
 Dark Cloud now uses the same on-demand scene boundary as the other optional
-scenes, preserving all of its current controls. The production entry is 131,311
+scenes, preserving all of its current controls. The production entry is 131,310
 gzip bytes against the unchanged 134,144-byte ceiling. The existing built
 Dark Cloud browser suite passes desktop, portrait, landscape, and small-phone
 scenarios, including its deliberate service-failure responses.
@@ -1630,4 +1630,31 @@ browser seed policy, with the recovered native random domains and ranges.
 The separate Terrain-mask producer and party-count changes between enemy birth
 and reward credit remain the named neighboring follow-ups above.
 
-Final canonical validation and publication: pending for the committed candidate.
+### Final canonical receipt — 2026-09-06
+
+The exact committed candidate `024e61cf6860a4f5a69a5b116e5d6ee3022a7cee`,
+rebased onto `d31c155b`, passed `/opt/homebrew/bin/bash ./scripts/validate.sh`
+on the Mac mini. The command exited zero at 03:32 UTC with pinned Node
+22.17.0, npm 10.9.2, and .NET 10.0.302. All 350 changed files matched
+the local candidate byte for byte before validation.
+
+The gate includes backend build and formatting, 23 Website/backend contracts,
+83 Web Lua tests, 365 Boneyard prerequisites, seven Lua runtime tests, 1,978
+Boneyard tests, every remaining configured frontend suite, four desktop tests,
+production frontend/host builds, the unchanged bundle budget, and media policy.
+The configured eight-file renderer scope has 100% statement, branch, function,
+and line coverage. Its 544 mutations resolve to 385 killed, 129 compile errors,
+29 previously documented equivalents, and one timeout, with no survivors or
+unresolved statuses. The timeout is mutation 226 in `native-material-batch.ts`:
+changing `vertex += 1` to `vertex -= 1` makes the bounded vertex loop
+nonterminating. No gate or threshold was changed.
+
+The built `/game` Spider journey passed again on this committed candidate,
+including the normal menu/College/Boneyard entry, generated wave, all three web
+severities, pause, Last Game restore, primary-cast release, corpse/decal handoff,
+and actual audio playback. Page, console, wire, and HTTP error checks passed;
+the command and its owned browser/servers exited normally. The eight compact
+mask cases and four Dark Cloud viewport scenarios also passed; their renderer,
+scene, and probe sources are unchanged by the subsequent Lua integrations.
+This receipt is a documentation-only follow-up to that candidate; runtime
+sources, tests, and quality configuration are unchanged.
