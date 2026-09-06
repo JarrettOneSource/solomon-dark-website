@@ -1061,6 +1061,7 @@ function MainMenuContent({
   ) => {
     const mismatch = profileSave ? gameSaveModMismatch(profileSave.mods, mods) : null
     if (mismatch) {
+      setModdedPlayPrompt(false)
       setNewGameMismatchAdmission(admission)
       setModMismatch(mismatch)
       return

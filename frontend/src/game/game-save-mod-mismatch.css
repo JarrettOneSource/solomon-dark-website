@@ -1,5 +1,6 @@
-.game-save-mod-mismatch-stage {
+.main-menu-native-stage.game-save-mod-mismatch-stage {
   z-index: 40;
+  pointer-events: auto;
   display: grid;
   place-items: center;
   background: rgba(0, 0, 0, .82);

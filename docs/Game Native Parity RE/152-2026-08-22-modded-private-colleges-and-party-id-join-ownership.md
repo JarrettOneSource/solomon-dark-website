@@ -135,3 +135,34 @@ No member is `blocked-by-platform`.
 - No protocol/schema migration, native report/catalog change, platform-blocked
   member, deployment, or production restart was required. Git publication is a
   separate receipt and does not imply deployment.
+
+### 2026-09-06: New Game consent transition
+
+Production Mac Chrome at `a993eef2` reproduced a blocked New Game after enabling
+a private mod on an existing profile. `continueLocal` calls
+`requestNewGameCreate`; a changed saved mod list opens the mismatch dialog but
+leaves `moddedPlayPrompt` true. Both modal backdrops remain mounted, and the
+local-play dialog covers the mismatch confirmation. Confidence is high: the
+browser DOM, screenshot, and React state branches agree. No gameplay starts.
+
+`MainMenuScene` owns this web-specific consent sequence. Entering the mismatch
+step must close the local-play prompt while preserving the requested admission.
+Continue then starts Create or the College introduction with explicit mismatch
+consent; Cancel returns to the title menu. The ordinary mod compatibility and
+private-College rules remain authoritative. Browser verification must exercise
+an existing profile with a newly enabled mod and use normal visible controls.
+
+The first corrected-build browser check uncovered the second ownership defect:
+the visible mismatch dialog inherits `pointer-events: none` from
+`.main-menu-native-stage`, so normal Cancel clicks reach the title stage below.
+Its compound stage selector must opt into pointer handling, matching the stock
+prompt's established modal rule. This also protects the Resume mismatch path.
+
+Mac Chrome verification at 04:32 UTC passed with the corrected local build and
+the existing account's ordinary save/mod APIs: the mismatch confirmation was
+visible and clickable, Cancel returned to the title, and a second New Game plus
+Continue reached Create. No page errors occurred. The unchanged production
+build supplied the original red reproduction; this green receipt used locally
+built JS/CSS and is not a deployment claim. Mac lint, type checking, production
+build, and bundle budget passed. The shared browser navigation helper now
+handles character replacement, local-play consent, and saved-mod consent.

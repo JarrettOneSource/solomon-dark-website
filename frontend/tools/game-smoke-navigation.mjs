@@ -91,10 +91,29 @@ async function declineTutorialOffer(page) {
 async function enterCreateAfterCollegeOffice(page) {
   const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
   const office = page.locator('.hub-scene[data-hub-region="office"][data-story-office="true"]')
-  const first = await Promise.race([
-    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
-    office.waitFor({ timeout: 90_000 }).then(() => 'office'),
-  ])
+  const replacement = page.getByRole('dialog').filter({ hasText: 'Kill character?' })
+  const modded = page.getByRole('dialog', { name: 'Local play is active', exact: true })
+  const mismatch = page.getByRole('dialog', { name: 'Saved mod list changed', exact: true })
+  let first
+  while (first !== 'create' && first !== 'office') {
+    first = await Promise.race([
+      create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+      office.waitFor({ timeout: 90_000 }).then(() => 'office'),
+      replacement.waitFor({ timeout: 90_000 }).then(() => 'replacement'),
+      modded.waitFor({ timeout: 90_000 }).then(() => 'modded'),
+      mismatch.waitFor({ timeout: 90_000 }).then(() => 'mismatch'),
+    ])
+    if (first === 'replacement') {
+      await replacement.getByRole('button', { name: 'YES', exact: true }).click()
+      await replacement.waitFor({ state: 'hidden', timeout: 30_000 })
+    } else if (first === 'modded') {
+      await modded.getByRole('button', { name: 'CONTINUE LOCAL', exact: true }).click()
+      await modded.waitFor({ state: 'hidden', timeout: 90_000 })
+    } else if (first === 'mismatch') {
+      await mismatch.getByRole('button', { name: 'CONTINUE', exact: true }).click()
+      await mismatch.waitFor({ state: 'hidden', timeout: 90_000 })
+    }
+  }
   if (first === 'create') return
 
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
