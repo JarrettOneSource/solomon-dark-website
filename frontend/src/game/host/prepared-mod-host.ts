@@ -197,6 +197,7 @@ export interface PreparedModHost {
 export async function prepareModHost(options: Readonly<{
   content: MaterializedWebSessionContent
   log?: (message: string) => void
+  now?: () => number
   state: PreparedModHostStateAccess
   wasmPath: string
 }>): Promise<PreparedModHost> {
@@ -260,6 +261,7 @@ export async function prepareModHost(options: Readonly<{
   })
   const session = await prepareModSession({
     adapter,
+    now: options.now,
     mods: options.content.modSources.map((source, index) => ({
       compiled: options.content.compiledMods[index]!,
       entryScript: source.entryScript,

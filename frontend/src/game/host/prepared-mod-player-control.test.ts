@@ -5,7 +5,7 @@ import test from 'node:test'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { createIdlePlayerCharacterInput, type PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import {
-  createGameSimulation, enterBoneyardWorld, getPlayerCharacter, getPlayerProgression,
+  createGameSimulation, enterBoneyardWorld, getPlayerCharacter, getPlayerEconomy, getPlayerProgression,
   grantGameSimulationPlayerExperience, stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
 import { compileWebLuaDefinition, WebLuaDefinitionRuntime } from '../modding/definition/index.ts'
@@ -45,6 +45,14 @@ sd.advanced.reducer({
 })
 sd.on("gold.changed", sd.effect.damage({target = "user", amount = 1000}))
 `
+const otherController = `
+sd.advanced.reducer({
+  key = "other-driver", scope = "participant-run", schema_version = 1,
+  state = sd.schema.object({}), on = {"player.control"},
+  reduce = function(state)
+    return state, {sd.intent.input({movement = {x = 0, y = 1}})}
+  end,
+})`
 
 test('Lua controls the connected wizard through normal movement, casting, and damage rules', async () => {
   const fixture = await createFixture(script)
@@ -163,15 +171,7 @@ test('Lua cannot redirect an input intent to another participant', async () => {
 })
 
 test('competing Lua controllers fail atomically instead of silently taking ownership', async () => {
-  const competing = script + `
-sd.advanced.reducer({
-  key = "other-driver", scope = "participant-run", schema_version = 1,
-  state = sd.schema.object({}), on = {"player.control"},
-  reduce = function(state)
-    return state, {sd.intent.input({movement = {x = 0, y = 1}})}
-  end,
-})`
-  const { host, errors } = await createFixture(competing)
+  const { host, errors } = await createFixture(script + otherController)
   try {
     const inputs = humanInputs()
     host.applyPlayerControls(inputs, 0)
@@ -179,6 +179,37 @@ sd.advanced.reducer({
     assert.equal(host.checkpoint().statuses.instances.length, 0)
     assert.ok(errors.some(message => message.includes('another Lua controller')))
   } finally { host.close() }
+})
+
+test('a dispatch that exhausts its budget between reducers rolls back all partial effects and state', async () => {
+  let clockReads = 0
+  const { host, errors } = await createFixture(script + otherController,
+    () => clockReads++ < 2 ? 0 : 5)
+  try {
+    clockReads = 0
+    const inputs = humanInputs()
+    host.applyPlayerControls(inputs, 0)
+    assert.equal(inputs.wizard!.movement.x, -1)
+    assert.equal(host.checkpoint().statuses.instances.length, 0)
+    assert.equal(host.checkpoint().session.state.cells.length, 0)
+    assert.ok(errors.some(message => message.includes('budget exceeded')))
+  } finally { host.close() }
+})
+
+test('an over-budget scheduled rule cannot apply its resource effect', async () => {
+  let clock = 0
+  const fixture = await createFixture(`sd.on("wave.started", sd.after("10ms",
+    sd.effect.resource({target = "user", gold = 10})))`, () => { clock += 5; return clock })
+  try {
+    const gold = getPlayerEconomy(fixture.state, 'wizard').gold
+    assert.equal(fixture.host.step([{ name: 'wave.started', payload: {} }], 0,
+      'control-run', { participant_id: 'wizard' }).accepted, true)
+    const result = fixture.host.step([], 1, 'control-run')
+    assert.equal(result.budgetExceeded, true)
+    assert.equal(result.accepted, false)
+    assert.equal(getPlayerEconomy(fixture.state, 'wizard').gold, gold)
+    assert.equal(fixture.host.checkpoint().session.timers.length, 0)
+  } finally { fixture.host.close() }
 })
 
 test('declarative player-control rules use the same connected-player input path', async () => {
@@ -200,7 +231,7 @@ function humanInputs(): Record<string, PlayerCharacterInput> {
   return { wizard: { ...createIdlePlayerCharacterInput(1234, 700), movement: { x: -1, y: 0 } } }
 }
 
-async function createFixture(source: string) {
+async function createFixture(source: string, now: () => number = () => 0) {
   const runtime = await WebLuaDefinitionRuntime.create({ entryScript: 'scripts/main.lua', identity, wasmPath })
   let compiled
   try { compiled = compileWebLuaDefinition(identity, runtime.run(source)) }
@@ -225,7 +256,7 @@ async function createFixture(source: string) {
     discipline: 'arcane', displayName: 'Tester', element: 'fire',
   } }), loaded)
   const errors: string[] = []
-  const host = await prepareModHost({ content, log: message => errors.push(message),
+  const host = await prepareModHost({ content, log: message => errors.push(message), now,
     state: { read: () => state, write: next => { state = next } }, wasmPath })
   return { host, errors, get state() { return state }, set state(next) { state = next } }
 }

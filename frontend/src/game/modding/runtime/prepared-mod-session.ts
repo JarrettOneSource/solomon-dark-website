@@ -80,9 +80,10 @@ export interface PreparedModSession {
 export async function prepareModSession(options: Readonly<{
   adapter: ModIntentAdapter
   mods: readonly PreparedModSource[]
+  now?: () => number
   wasmPath: string
 }>): Promise<PreparedModSession> {
-  const rules = new ModRuleEngine()
+  const rules = new ModRuleEngine({ now: options.now })
   const runtimes: WebLuaDefinitionRuntime[] = []
   try {
     const verified: CompiledWebLuaMod[] = []
@@ -122,9 +123,11 @@ export async function prepareModSession(options: Readonly<{
         errors.push(...scheduled.result.errors)
         invocations += scheduled.result.invocations
         budgetExceeded ||= scheduled.result.budgetExceeded
-        const execution = scheduled.result.intents.length === 0
-          ? { accepted: true, error: null }
-          : executor.execute(scheduled.result.intents, {
+        const execution = scheduled.result.budgetExceeded
+          ? { accepted: false, error: 'scheduled mod budget exceeded' }
+          : scheduled.result.intents.length === 0
+            ? { accepted: true, error: null }
+            : executor.execute(scheduled.result.intents, {
               context: scheduled.context,
               scope: scheduled.scope,
               tick: input.tick,
@@ -135,10 +138,12 @@ export async function prepareModSession(options: Readonly<{
           errors.push(execution.error ?? 'scheduled mod intent transaction failed')
           accepted = false
         }
+        if (budgetExceeded) break
       }
       const eventCheckpoint = rules.checkpoint()
       const eventIntents: ModIntent[] = []
       for (const event of input.events) {
+        if (budgetExceeded) break
         const result = rules.dispatch({ ...event, tick: input.tick })
         eventIntents.push(...result.intents)
         errors.push(...result.errors)
@@ -147,9 +152,11 @@ export async function prepareModSession(options: Readonly<{
         if (result.budgetExceeded) break
       }
       const scope = commonScope(input.events)
-      const execution = eventIntents.length === 0
-        ? { accepted: true, error: null }
-        : executor.execute(eventIntents, {
+      const execution = budgetExceeded && input.events.length > 0
+        ? { accepted: false, error: 'mod event budget exceeded' }
+        : eventIntents.length === 0
+          ? { accepted: true, error: null }
+          : executor.execute(eventIntents, {
             context: input.events[0]?.context ?? {},
             scope,
             tick: input.tick,

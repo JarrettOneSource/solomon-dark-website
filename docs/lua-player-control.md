@@ -34,6 +34,12 @@ Only connected living participants in an active Boneyard receive it. Lua makes
 the decisions; the framework provides observations, validation, input lifetime,
 and atomic intent application. No Lua or decision callback runs in the browser.
 
+If the execution budget interrupts an event dispatch, its partial reducer state
+and intents roll back together. A scheduled rule that exceeds its budget also
+applies no effects and is cancelled. Functional tests use a controlled budget
+clock; dedicated regressions force budget exhaustion between reducers and
+during a timer. Production retains the ordinary 4 ms budget and clock.
+
 The implementation belongs to the prepared mod host and its player-control
 module. GameHost applies its resulting inputs before the normal shared/private
 simulation step. Existing statuses provide invincibility; the controller API
