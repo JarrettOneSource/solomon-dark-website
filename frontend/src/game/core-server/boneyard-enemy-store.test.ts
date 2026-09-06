@@ -4327,6 +4327,10 @@ test('Demon death retains its body flames and delayed Anim_FireBurst choreograph
     effects.filter(({ kind }) => kind === 'fire-array').map(({ spawnTick }) => spawnTick),
     [0, 20, 40, 60, 80],
   )
+  for (const effect of effects.filter(({ kind }) => kind === 'fire-array')) {
+    assert.equal(effect.presentationOwner, 'pre-world-queue')
+    assert.equal(effect.painterRegistration, null)
+  }
   assert.equal(effects.some(({ role }) => role === 'demon-death-body'), false)
   assert.equal(result.store.actors[0]?.lifeState, 'dying')
   assert.equal(result.store.actors[0]?.deathTick, 1)

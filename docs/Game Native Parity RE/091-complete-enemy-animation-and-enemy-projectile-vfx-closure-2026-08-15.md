@@ -1710,3 +1710,99 @@ and both shadow directions plus the generated arena. Their snapshot fixtures
 now supply the required empty Spider cohorts and restraint map. This receipt
 adds documentation only; the validated runtime, tests, browser probes, and
 quality configuration are unchanged.
+
+
+## 2026-09-06 - Shared transient ownership and checkpoint rejection
+
+The protocol-125 production monitoring run completed wave 50, but its wave-49
+periodic checkpoint at `2026-09-06T13:20:41.130Z` failed with
+`game save enemy death effect 20 presentation owner is invalid`. The next
+periodic checkpoint succeeded. Source review found that all five delayed
+`demon-death-fire` SpriteArray children omit `presentationOwner`, inheriting
+`spawnSimpleDeathEffect`'s world-sorted default. Save normalization requires
+the already recovered pre-world queue for `fire-array`, and correctly rejects
+the mismatched producer. Existing save tests authored the expected fields
+manually; the actual Demon constructor's tests omitted ownership assertions.
+
+The native boundary is Demon death tick `0x00487300`, the SpriteArray factory
+`0x00453410/0x00457540/0x0045D6E0`, their painter registration and lifetime,
+and the shared save normalization/restore path. This entry's concrete-class
+closure already establishes SpriteArray/LateSplat pre-world ownership;
+entry 098 establishes the five delayed births. Preserve those facts rather
+than weakening validation to accept an incorrectly sorted child.
+
+| Member | Disposition | Validation contract |
+| --- | --- | --- |
+| Demon death fires at 0/20/40/60/80 | exact-ported by explicit caller ownership | All five children use pre-world-queue with no world-sorted painter registration; birth clocks, records, RNG and lifetime unchanged |
+| Imp and Demon terminal SpriteArrays, Portal terminal array | verified-already-at-parity | Every existing caller explicitly selects pre-world-queue |
+| Zombie LateSplat | verified-already-at-parity | Explicit pre-world-queue, delayed native lifetime unchanged |
+| Unbind and Demon clock-95 FireBurst/glow | verified-already-at-parity | Direct post-world owner, distinct from the delayed flames |
+| Bouncers, other sorted effects and loot particles | verified-already-at-parity | Retain their actor-manager registration and sorted owner |
+| Cold and poison onset perspective particles | exact-ported through save classifier; producer verified-already-at-parity | All twelve children per status retain pre-world ownership and null sorted registration through save/restore |
+| Save creation, signed-claim validation, restore and migration | exact-ported classifier; strict validation verified-already-at-parity | Retain expected-owner validation; real produced effects must satisfy it |
+| Living attached fires and DemonBomb Fire actors | out-of-system | Separate native actors and ownership, unchanged by this caller correction |
+
+Add ownership assertions to the real Demon death constructor regression before
+changing the caller. Then exercise real native combat and save/restore through
+the captured encounter, including every emitted flame. Keep the ongoing
+production performance measurement isolated from Mac build/test load; run
+its required Mac checks once that capture finishes. The subsequent release
+and production save verification are separate from the already measured run.
+
+
+The real saved-encounter check first reproduced the five Demon flames with
+incorrect world-sorted ownership at tick 520436. Correcting that producer let
+saving continue until tick 527965, where a cold/poison onset child exposed a
+second omission: `move-fade-perspective` is correctly produced with
+pre-world-queue ownership, but the save classifier did not recognize it.
+The captured record is `player-status-poison`, effect 111247, with null painter
+registration. Entry 070's instruction closure explicitly places both status
+variants' twelve `Anim_FadeMoveAdditive_Perspective` children in
+`Region+0x278`. Add that concrete kind to the existing pre-world classifier;
+retain strict owner and registration validation for every kind.
+
+The full writer sweep now includes `boneyard-player-status.ts` (both cold and
+poison), `boneyard-loot-store.ts` (all three sorted particle producers),
+`boneyard-transient-effects.ts` (born and inherited child ownership),
+`enemies/death-effects.ts`, `enemies/deaths.ts`, and `enemies/damage.ts`.
+Player status onset is verified-already-at-parity in the producer and
+exact-ported through corrected save admission. All other rows in the table
+retain their dispositions. Protocol, save schema, status timing, RNG, damage,
+perspective scaling, and rendering remain unchanged for status particles.
+The regression uses the real status emitter for both variants, saves and
+restores the resulting state, and rejects an altered owner. The complete
+captured encounter must pass snapshot decoding and save restoration together
+through wave 50 before publication.
+
+
+Both focused regressions failed before their corrections: the real Demon
+factory returned world-sorted flames, and a real cold/poison emitter's state
+failed save restoration with the same presentation-owner error. After the
+caller and classifier corrections, all 168 enemy-store, Mage-contact and
+save-document tests passed on the Mac. The captured production encounter then
+completed wave 50 at tick 537235 with every fifth tick both decoded as a
+complete snapshot and saved/restored: 4,248 snapshot and save round trips,
+including 2,150 sampled flame-presence observations, with no rejection.
+The source-level change is one explicit Demon owner plus recognition of the
+already supported perspective status-particle kind. Full gate, browser save
+proof and publication receipts follow separately.
+
+The complete Mac `./scripts/validate.sh` gate passed at
+`2026-09-06T14:29:39Z`, including the renderer's configured 100% mutation gate.
+There were 385 killed mutations, 129 compile errors, zero survivors, and one
+timeout. The timeout changed the finite vertex loop in
+`native-material-batch.ts` from `vertex += 1` to `vertex -= 1`, making it
+nonterminating; it is a detected behavioral mutation, not a waived failure.
+No quality configuration or threshold changed.
+
+Headed Mac Chrome then loaded the built candidate and the exact captured
+wave-48 save through ordinary Play/Last Game and mod-update confirmation.
+Actual native combat created all five Demon flames. Escape paused that
+encounter, and the normal Leave Game flow persisted revision 4 at tick
+520300. Reading the actual browser IndexedDB slot and restoring it through
+the canonical save reader retained all five flames with pre-world ownership
+and null sorted registration. The browser observed 862 snapshots and native
+feedback up to 4, with no page, console or HTTP errors; the wizard remained
+alive. The check completed at `2026-09-06T14:31:10Z`, and its owned browser
+and local server exited. Periodic production autosaves are verified separately
+after release; paused simulation ticks do not drive periodic checkpoints.

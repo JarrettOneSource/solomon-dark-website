@@ -1160,7 +1160,8 @@ function nativeDeathEffectPresentationOwner(
   if (kind === 'unbind' || role.startsWith('demon-death-fire-burst-')) {
     return 'direct-post-world'
   }
-  if (kind === 'fire-array' || kind === 'late-splat' || kind === 'sprite-array') {
+  if (kind === 'fire-array' || kind === 'late-splat' || kind === 'sprite-array'
+    || kind === 'move-fade-perspective') {
     return 'pre-world-queue'
   }
   return 'world-sorted'

@@ -7,6 +7,7 @@ import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.t
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server/boneyard-enemy-store.ts'
+import { emitPlayerStatusBurst } from '../core-server/boneyard-player-status.ts'
 import type { BoneyardEnemyDeathEffect } from '../core-server/enemies/model.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
@@ -90,6 +91,33 @@ const MOD_STATE = {
   'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
+
+test('cold and poison onset particles retain their native owner across saves', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 35))
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  for (const status of ['cold', 'poison'] as const) {
+    const emitted = emitPlayerStatusBurst(state.world.enemies, {
+      actorId: 1, playerId: 'owner', position: state.world.spawn, status, tick: state.tick,
+    }, state.gameRng)
+    const document = createGameSaveDocument({
+      state: { ...state, gameRng: emitted.rng, world: { ...state.world, enemies: emitted.store } },
+      loadedBoneyard: loaded, playerId: 'owner', mods: [], modState: {}, integrity: 'local-only',
+    })
+    const restored = restoreGameSaveDocument(document).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    const particles = restored.world.enemies.deathEffects
+    assert.equal(particles.length, 12)
+    for (const particle of particles) {
+      assert.equal(particle.presentationOwner, 'pre-world-queue')
+      assert.equal(particle.painterRegistration, null)
+      assert.equal(particle.role, `player-status-${status}`)
+    }
+    const invalid = JSON.parse(document)
+    invalid.continuation.simulation.world.enemies.deathEffects[0].presentationOwner = 'world-sorted'
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /presentation owner is invalid/)
+  }
+})
 
 test('Hail save cutover retires old cosmetic particles while preserving current particles and the run', () => {
   const state = createGameSimulation({ owner: OWNER })

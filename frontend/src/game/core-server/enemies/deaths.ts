@@ -547,6 +547,7 @@ function spawnDemonDeathFires(
         atlas: 'DeadHawg',
         blendMode: 'add',
         kind: 'fire-array',
+        presentationOwner: 'pre-world-queue',
         position: {
           x: actor.position.x + displacement.x,
           y: actor.position.y + displacement.y - 20,
