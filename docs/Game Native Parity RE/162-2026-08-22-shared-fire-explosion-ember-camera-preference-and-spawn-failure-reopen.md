@@ -106,6 +106,51 @@ that exhaustive gate while changing the player-facing name.
 
 ## Spawn-safety boundary and membership
 
+### 2026-09-06: spawn reachability uses the destination owner's footprint
+
+A Mac continuation of a real production save reproduces another finite spawn
+failure at tick `511204`, wave 48: radius `35`, policy `dark`, origin
+`(342.5671081542969, 398.1956481933594)`. A saved pre-failure state reproduces
+the same exception in one ordinary `stepGameSimulationTick` call.
+
+| Evidence | Observation | Confidence |
+| --- | --- | --- |
+| Exact saved world and collision queries | The raw spawn point is a legal radius-35 placement. The living player's position `(982.9186581096685, 1384.0702625000654)` is legal at its own radius 25, but overlaps scenery objects 130 and 145 when tested at radius 35. | high, Mac runtime |
+| Existing world spawn-domain callback | It passes the newborn's reachability radius to both route endpoints, including the living player's position. Every candidate is rejected when the player cannot hold that larger footprint. | high, source and reproduction |
+| Same endpoints and geometry, both mesh classes | Destination checks at radius 25 find a route through both the clearance-25 and clearance-50 meshes; checks at radius 35 reject both. | high, Mac runtime |
+| Existing native navigation record, entry 273 | Mesh class, endpoint lookup, adjacency, and final movement clearance are separate owners. A spawn's collision radius does not change the connected player's physical radius. | high for the recovered constants and ownership; this fix is a Website query correction |
+
+The world owns the destination participant and must supply its radius to the
+spawn reachability query. The route query will allow a distinct destination
+footprint while preserving its existing mover footprint by default. This
+does not change native placement rings, light/offscreen policies, RNG draws,
+mesh clearance, graph adjacency, or the newborn's collision checks.
+
+| Member | Disposition and acceptance |
+| --- | --- |
+| Ordinary and larger enemy births, including the reproduced Demon | Website ownership correction: mover and destination footprints remain distinct |
+| Direct, dark, light, and offscreen world policies | Same world-owned reachability predicate; cover a living player beside collision |
+| Start endpoint and spawn body clearance | Preserve the newborn's full radius and placement rejection |
+| Existing locomotion routes without an explicit destination footprint | Preserve existing route decisions and movement clearance |
+| Disconnected geometry and Demon-only narrow-lane rejection | Preserve failure; the correction cannot join disconnected navigation components |
+| Empty or impossible authored worlds | Preserve explicit rejection; do not hide the exception or place an invalid actor |
+
+Acceptance requires focused route and world regressions, the saved failing
+tick, a longer Mac continuation, the canonical Mac gate, and actual production
+continuation through the requested wave target.
+
+The two new regressions failed against the original query. After the correction,
+all 47 navigation/world cases passed, including the four world policies and
+existing disconnected-domain tests. The saved failing tick completes normally.
+The same Mac checkpoint continuation then completed wave 50 and entered wave
+51 after 762.87 simulated seconds with the private pilot's normal combat inputs.
+This is isolated simulation evidence; production continuation remains separate.
+
+The complete canonical Mac gate for the spawn correction passed at
+08:46:36 UTC on 2026-09-06, including the configured coverage and mutation
+checks. The subsequent title-only Resume consent correction in entry 152
+received its own Mac lint/type/build and real-browser checks.
+
 The native ring topology itself is retained: identity candidate, actor-radius
 rings, `trunc(pi*(r+s)/r)` samples, fixed start angle in the deterministic web
 projection, and Y scale `.8`. The failure belongs to the declared web safety

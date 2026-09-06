@@ -166,3 +166,34 @@ build supplied the original red reproduction; this green receipt used locally
 built JS/CSS and is not a deployment claim. Mac lint, type checking, production
 build, and bundle budget passed. The shared browser navigation helper now
 handles character replacement, local-play consent, and saved-mod consent.
+
+### 2026-09-06: confirmed Resume mod upgrade
+
+Mac Chrome on production `f072540d` reproduced a second Resume ownership
+defect. A local-only wave-46 save carries a signed party recovery token for
+pilot 1.0.1. After the user confirms the displayed change to 1.0.3, the title
+still submits that token to `/api/game/rejoin`. The supervisor correctly
+rejects the old content-bound claim with HTTP 400. The normal browser receipt
+at 08:45:44 UTC confirms that no ordinary session admission follows.
+
+Explicit mod-change consent starts a new private session from the saved
+wizard; it cannot rejoin a party bound to the previous mod set. The title
+must omit the old recovery capability for this confirmed path. Unchanged-mod
+resumes retain their existing rejoin and inactive-party fallback behavior.
+The server's claim signature, owner, manifest, and active-party checks remain
+strict. The existing private save restore and changed-mod-state discard own
+the continuation; no save document or claim is edited.
+
+Acceptance is a normal Last Game, mod-change confirmation, and private-session
+admission of the same saved run with the newly enabled pilot, followed by
+normal pause/save/teardown. This browser proof must distinguish locally built
+client assets from the eventual production deployment.
+
+The corrected local client restored production run
+`55a505b366b94d5ae52194258f7aab1f`; the ordinary save API then confirmed
+revision 1696, wave 46, and pilot 1.0.3. A subsequent unchanged-mod resume
+used the normal rejoin endpoint successfully and opened the pause menu with
+no page errors. Mac lint, test type checking, production build, and bundle
+budget passed for this title change. These browser receipts use locally
+built client assets against the real production services; deployment remains
+a separate receipt.

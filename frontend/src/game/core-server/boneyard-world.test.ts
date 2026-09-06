@@ -1344,6 +1344,32 @@ test('authoritative offscreen placement materializes the logged Tutorial policy 
   ), true)
 })
 
+test('world spawn reachability uses the living player footprint for larger enemies', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.bounds = { x: 0, y: 0, w: 1000, h: 1000 }
+  const world = {
+    ...createBoneyardWorld(loaded), arenaTransition: null, encounter: null, waves: null,
+    gateLeaves: [],
+    collision: { circles: [{ center: { x: 500, y: 500 }, radius: 20 }], polygons: [], segments: [] },
+  }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Spawn target', element: 'fire' }, world),
+    position: { x: 500, y: 552 },
+  }
+  assert.equal(canPlaceBoneyardBody(player.position, world.bounds, world.collision, 25), true)
+  assert.equal(canPlaceBoneyardBody(player.position, world.bounds, world.collision, 35), false)
+  for (const positionPolicy of ['direct', 'dark', 'light', 'offscreen'] as const) {
+    const result = stepWorld(world, { player }, { player: movementInput(0, 0) }, 0, [{
+      enemyToken: 'DEMON', flags: [], id: 1, locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON, position: { x: 200, y: 200 },
+      positionPolicy, spawnTick: 0, waveOrdinal: 48,
+    }])
+    assert.equal(result.world.enemies.actors.length, 1)
+    const actor = result.world.enemies.actors[0]!
+    assert.equal(canPlaceBoneyardBody(actor.position, world.bounds, world.collision, actor.config.collisionRadius), true)
+  }
+})
+
 test('every Tutorial opening enemy materializes on the combat side of the entrance Fence', () => {
   const playerPosition = { x: 1025, y: 1350 }
   for (let seed = 0; seed < 64; seed += 1) {

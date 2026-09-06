@@ -1374,8 +1374,9 @@ function MainMenuContent({
           ? 'private-college'
           : 'global-hub',
         kind: 'resume',
-        partyRejoinToken: resumeSave.integrity === 'global-clean'
-          && !gameSharedHubEnabled(gameSettings)
+        partyRejoinToken: allowModMismatch || (
+          resumeSave.integrity === 'global-clean' && !gameSharedHubEnabled(gameSettings)
+        )
           ? null
           : resumeSave.summary.partyRejoinToken,
         saveDocument: resumeSave.document,

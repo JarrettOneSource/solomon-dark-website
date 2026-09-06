@@ -22,6 +22,22 @@ import {
 
 const BOUNDS = { h: 200, w: 200, x: 0, y: 0 }
 
+test('spawn reachability can use the smaller destination footprint beside collision', () => {
+  const request = {
+    bounds: { x: 0, y: 0, w: 1000, h: 1000 },
+    bodyRadius: 35,
+    clearance: 50,
+    start: { x: 200, y: 200 },
+    end: { x: 500, y: 552 },
+    world: { circles: [{ center: { x: 500, y: 500 }, radius: 20 }], polygons: [], segments: [] },
+  }
+  assert.equal(findBoneyardEnemyRoute(request), null)
+  assert.ok(findBoneyardEnemyRoute({ ...request, endBodyRadius: 25 }))
+  assert.equal(findBoneyardEnemyRoute({ ...request, endBodyRadius: 25,
+    world: { ...request.world, polygons: [rectangle(0, 350, 1000, 400)] },
+  }), null, 'destination clearance must not bridge a disconnected mesh')
+})
+
 test('enemy route A* clears a solid blocker and every retained segment is occupiable', () => {
   const world: BoneyardCollisionWorld = {
     circles: [],

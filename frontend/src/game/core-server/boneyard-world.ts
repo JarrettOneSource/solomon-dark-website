@@ -519,6 +519,7 @@ export function stepBoneyardWorldTick(
                 bounds: spawnBounds,
                 clearance: navigationClearance,
                 end: focus,
+                endBodyRadius: PLAYER_CHARACTER_RADIUS,
                 start: candidate,
                 world: collision,
               }) !== null

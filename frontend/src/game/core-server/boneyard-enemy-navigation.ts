@@ -23,6 +23,8 @@ export interface FindBoneyardEnemyRouteRequest {
   readonly bounds: Readonly<BoneyardBounds>
   readonly clearance: number
   readonly end: Readonly<BoneyardPoint>
+  /** Destination-owner radius for endpoint attachment; defaults to the mover. */
+  readonly endBodyRadius?: number
   readonly ignoredSourceIds?: ReadonlySet<string>
   readonly start: Readonly<BoneyardPoint>
   readonly world: BoneyardCollisionWorld
@@ -115,6 +117,7 @@ export function findBoneyardEnemyRoute(
     bounds,
     clearance,
     end,
+    endBodyRadius = bodyRadius,
     ignoredSourceIds,
     start,
     world,
@@ -140,7 +143,7 @@ export function findBoneyardEnemyRoute(
     end,
     bounds,
     world,
-    bodyRadius,
+    endBodyRadius,
     ignoredSourceIds,
   )
   if (startTriangle === null || endTriangle === null) return null
@@ -1495,6 +1498,10 @@ function validateRouteRequest(request: FindBoneyardEnemyRouteRequest): void {
   }
   if (!Number.isFinite(request.bodyRadius) || request.bodyRadius < 0) {
     throw new RangeError('enemy navigation body radius must be non-negative and finite')
+  }
+  if (request.endBodyRadius !== undefined
+    && (!Number.isFinite(request.endBodyRadius) || request.endBodyRadius < 0)) {
+    throw new RangeError('enemy navigation destination radius must be non-negative and finite')
   }
   for (const [label, point] of [
     ['start', request.start],
