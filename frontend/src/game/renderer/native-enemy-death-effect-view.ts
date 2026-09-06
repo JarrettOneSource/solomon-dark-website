@@ -2,13 +2,14 @@ import { Container, FillGradient, Graphics, Sprite, type Texture } from 'pixi.js
 
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
-import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
+import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import {
+  nativeEnemyDeathEffectIsBanish,
   nativeEnemyDeathEffectPlan,
-  nativeEnemyDeathEffectVisualBounds,
   nativeEnemyDeathEffectViewResourcePlan,
+  nativeEnemyDeathEffectVisualBounds,
 } from './native-enemy-death-effect-presentation.ts'
 import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 
@@ -29,6 +30,7 @@ export class NativeEnemyDeathEffectViews {
   update(
     effects: readonly BoneyardEnemyDeathEffectSnapshot[],
     visibleBounds: Readonly<BoneyardBounds>,
+    viewHeight: number,
   ): void {
     this.liveIds.clear()
     this.visibleCount = 0
@@ -37,13 +39,13 @@ export class NativeEnemyDeathEffectViews {
       let view = this.views.get(effect.id)
       if (!view) {
         view = new NativeEnemyDeathEffectView(
-          effect.presentationOwner === 'pre-world-queue' ? this.preWorldRoot : this.root,
+          (effect.presentationOwner === 'pre-world-queue' || effect.presentationOwner === 'background') ? this.preWorldRoot : this.root,
           this.textures,
           effect,
         )
         this.views.set(effect.id, view)
       }
-      if (view.update(effect, visibleBounds)) this.visibleCount += 1
+      if (view.update(effect, visibleBounds, viewHeight)) this.visibleCount += 1
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
@@ -109,7 +111,7 @@ class NativeEnemyDeathEffectView {
     this.root = root
     this.textures = textures
     this.kind = initial.kind
-    this.shadowed = initial.kind !== 'banish' && initial.shadow
+    this.shadowed = !nativeEnemyDeathEffectIsBanish(initial.kind) && initial.shadow
     const resources = nativeEnemyDeathEffectViewResourcePlan(initial)
     this.container = new Container({ label: 'enemy-death-effect' })
     this.banishGraphics = resources.banishGraphics
@@ -137,20 +139,21 @@ class NativeEnemyDeathEffectView {
   update(
     effect: BoneyardEnemyDeathEffectSnapshot,
     visibleBounds: Readonly<BoneyardBounds>,
+    viewHeight: number,
   ): boolean {
-    if (effect.kind !== this.kind || (effect.kind !== 'banish' && effect.shadow !== this.shadowed)) {
+    if (effect.kind !== this.kind || (!nativeEnemyDeathEffectIsBanish(effect.kind) && effect.shadow !== this.shadowed)) {
       throw new Error(`enemy death-effect ${effect.id} changed retained view resources`)
     }
     const visible = boneyardResidentIsVisible(
-      this.visualBounds(effect),
+      this.visualBounds(effect, viewHeight),
       visibleBounds,
     )
     this.visible = visible
     this.container.renderable = visible
     if (!visible) return false
     const plan = nativeEnemyDeathEffectPlan(effect)
-    if (effect.kind === 'banish') {
-      this.updateBanish(effect)
+    if (nativeEnemyDeathEffectIsBanish(effect.kind)) {
+      this.updateBanish(effect, viewHeight)
     } else {
       applyLayer(this.effect!, plan.effect, this.textures)
       if (plan.shadow) {
@@ -161,9 +164,9 @@ class NativeEnemyDeathEffectView {
     return true
   }
 
-  private visualBounds(effect: BoneyardEnemyDeathEffectSnapshot): BoneyardBounds {
+  private visualBounds(effect: BoneyardEnemyDeathEffectSnapshot, viewHeight: number): BoneyardBounds {
     if (
-      effect.kind !== 'banish'
+      !nativeEnemyDeathEffectIsBanish(effect.kind)
       && this.bounds !== null
       && this.boundsEntry === effect.entry
       && this.boundsHeight === effect.height
@@ -173,7 +176,7 @@ class NativeEnemyDeathEffectView {
       && this.boundsScale === effect.scale
       && this.boundsScaleY === effect.scaleY
     ) return this.bounds
-    const bounds = nativeEnemyDeathEffectVisualBounds(effect, deathEffectArtRecord)
+    const bounds = nativeEnemyDeathEffectVisualBounds(effect, deathEffectArtRecord, viewHeight)
     this.bounds = bounds
     this.boundsEntry = effect.entry
     this.boundsHeight = effect.height
@@ -199,37 +202,40 @@ class NativeEnemyDeathEffectView {
     this.container.destroy({ children: true })
   }
 
-  private updateBanish(effect: BoneyardEnemyDeathEffectSnapshot): void {
+  private updateBanish(effect: BoneyardEnemyDeathEffectSnapshot, viewHeight: number): void {
     this.clearGradients()
     this.banishGraphics!.clear()
     this.banishGraphics!.blendMode = 'add'
 
+    const black = effect.kind === 'banish-black'
     const scale = effect.scale
     const progress = Math.max(0, 2 - effect.ageTicks * (0.02 / scale))
     const orangeAlpha = Math.min(1, progress * 0.5)
     const whiteAlpha = Math.min(1, progress * 0.75)
-    const upperExtent = 450 * scale
+    const upperExtent = viewHeight * .5 * scale
     const lowerExtent = 50 * scale
+    const primary = black ? '64,0,0' : '255,128,0'
+    const secondary = black ? primary : '255,191,0'
     this.gradientRect(-10 * scale, -upperExtent, 20 * scale, upperExtent,
-      'rgba(0,0,0,1)', `rgba(255,128,0,${orangeAlpha})`)
+      'rgba(0,0,0,1)', `rgba(${primary},${orangeAlpha})`)
     this.gradientRect(-5 * progress * scale, -upperExtent,
       10 * progress * scale, upperExtent,
-      'rgba(0,0,0,1)', `rgba(255,191,0,${orangeAlpha})`)
+      'rgba(0,0,0,1)', `rgba(${secondary},${orangeAlpha})`)
     this.gradientRect(-2 * progress * scale, -upperExtent * 0.75,
       4 * progress * scale, upperExtent * 0.75,
       'rgba(0,0,0,1)', `rgba(255,255,255,${whiteAlpha})`)
     this.gradientRect(-10 * scale, 0, 20 * scale, lowerExtent,
-      `rgba(255,128,0,${orangeAlpha})`, 'rgba(0,0,0,1)')
+      `rgba(${primary},${orangeAlpha})`, 'rgba(0,0,0,1)')
     this.gradientRect(-5 * progress * scale, 0,
       10 * progress * scale, lowerExtent,
-      `rgba(255,191,0,${orangeAlpha})`, 'rgba(0,0,0,1)')
+      `rgba(${secondary},${orangeAlpha})`, 'rgba(0,0,0,1)')
     this.gradientRect(-2 * progress * scale, 0,
       4 * progress * scale, lowerExtent,
       `rgba(255,255,255,${whiteAlpha})`, 'rgba(0,0,0,1)')
 
     const alpha = Math.min(1, progress)
     const green = Math.min(255, Math.round(progress * 0.75 * 255))
-    const tint = 0xff0000 | green << 8
+    const tint = black ? Math.round(Math.min(1, progress * .15000000596046448) * 255) << 16 : 0xff0000 | green << 8
     for (let index = 0; index < 2; index += 1) {
       applyBanishSprite(
         this.banishSprites[index]!,
@@ -250,7 +256,7 @@ class NativeEnemyDeathEffectView {
         this.banishSprites[index]!,
         this.textures,
         upperEntry,
-        { x: 1, y: -40 * scale },
+        { x: black ? 0 : 1, y: -40 * scale },
         { x: 2 * scale, y: 3 * scale },
         alpha,
         tint,

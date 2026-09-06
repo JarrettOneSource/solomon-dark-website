@@ -1,7 +1,9 @@
 import { performance } from 'node:perf_hooks'
 
 import { startBoneyardArenaTransition } from '../src/game/core-kernels/boneyard-arena-transition.ts'
-import { startBoneyardWaveDirector } from '../src/game/core-kernels/boneyard-wave-director.ts'
+import {
+  startBoneyardWaveDirector,
+} from '../src/game/core-kernels/boneyard-wave-director.ts'
 import {
   createIdlePlayerCharacterInput,
   PLAYER_CHARACTER_RADIUS,

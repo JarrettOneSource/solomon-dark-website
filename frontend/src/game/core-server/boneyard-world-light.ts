@@ -1,5 +1,9 @@
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
+  buildNativeAirContactLightSource,
+  buildNativeAirPathLightSources,
+} from '../core-kernels/native-air-presentation.ts'
+import {
   NativeBoneyardLightIndex,
   nativeBoulderLightSource,
   nativeEnemyLightSources,
@@ -16,11 +20,7 @@ import {
   nativeWeldRockLightSource,
   type NativeBoneyardLightSource,
 } from '../core-kernels/native-boneyard-light-model.ts'
-import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
-import {
-  buildNativeAirContactLightSource,
-  buildNativeAirPathLightSources,
-} from '../core-kernels/native-air-presentation.ts'
+import { nativeBossSpellLight } from '../core-kernels/native-boss-spell-light.ts'
 import {
   etherPrimaryImpactLightSource,
   nativeFireEmberLightSource,
@@ -29,19 +29,20 @@ import {
   nativeFireImpactLightSource,
   nativeFireballLightSource,
 } from '../core-kernels/native-primary-light-sources.ts'
-import { nativePlayerElementEffectPhase } from '../core-kernels/player-lighting.ts'
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
+import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
+import { mergeNativeWorldManagerOwners, type NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import {
   NATIVE_GAMEPLAY_VIEWPORT_HEIGHT,
   NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   type PlayerCharacterInput,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import { nativePlayerElementEffectPhase } from '../core-kernels/player-lighting.ts'
 import { nativePrimaryViewBounds } from '../core-kernels/primary-spell-targeting.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
-import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
-import { mergeNativeWorldManagerOwners, type NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
-import type { BoneyardEnemyStore } from './enemies/model.ts'
 import type { BoneyardWorldState } from './boneyard-world-state.ts'
+import type { BoneyardEnemyStore } from './enemies/model.ts'
 import type { PlayerEntityStore } from './player-entity-store.ts'
 
 export interface BoneyardLightEnvironment {
@@ -100,6 +101,9 @@ export function boneyardWorldLightQuery(
   }
   for (const actor of enemies.actors) {
     const sources = nativeEnemyLightSources({
+      burning: actor.config.burning,
+      scale: actor.config.scale,
+      ...(actor.brain.family === 'demon-skull' ? { demonSkull: actor.brain } : {}),
       id: actor.id,
       enemyToken: actor.config.enemyToken,
       flags: actor.config.flags,
@@ -108,6 +112,15 @@ export function boneyardWorldLightQuery(
       animation: { state: actor.lifeState === 'dying' ? 'death' : 'idle', alpha: actor.brain.family === 'portal' ? actor.brain.alpha : 1 },
     }, tick)
     if (sources.length > 0) providers.push({ registration: actor.lightRegistration, sources })
+  }
+  for (const effect of enemies.deathEffects) {
+    if (effect.kind !== 'banish-black' || effect.painterRegistration === null) continue
+    append({ castsDirectionalShadow: true, position: effect.position, radius: 3,
+      intensity: Math.min(1, Math.max(0, Math.fround(2 - effect.ageTicks * .004999999888241291))),
+    }, effect.painterRegistration)
+  }
+  for (const spell of enemies.bossSpells) {
+    append(nativeBossSpellLight(spell, tick, true), spell.painterRegistration)
   }
   const worldKey = `boneyard:${world.runId}`
   for (const spell of environment.primarySpells?.projectiles ?? []) {
@@ -204,6 +217,7 @@ export function boneyardWorldLightQuery(
     return index
   })
   return {
+    acceptedSources: indices.flatMap(index => index.acceptedSources),
     cameras: cameraRows,
     scalarAt: (position: Readonly<BoneyardPoint>): number => indices.reduce((value, index) => Math.max(value, index.scalarAt(position)), 0),
   }

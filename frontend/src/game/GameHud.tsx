@@ -1,34 +1,25 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 
-import { hub } from '../lib/assets'
+import { hub } from '../lib/assets.ts'
 import AllyHud from './AllyHud.tsx'
+import GameAccountName from './GameAccountName.tsx'
+import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
-import type {
-  ProtocolPlayerEconomy,
-  ProtocolPlayerProgression,
-} from './protocol/game-state.ts'
+import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
 import {
   NATIVE_SKILL_CATALOG,
   playerExperienceProgress,
 } from './core-kernels/player-progression.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
-import { hubRunEntryPresentation } from './hub-presentation.ts'
-import GameAccountName from './GameAccountName.tsx'
+import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import {
   HUB_HUD_SHORTCUTS,
   type HubHudShortcutDefinition,
 } from './hub-inventory-presentation.ts'
-import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
-import type {
-  GameSnapshot,
-} from './protocol/game-state.ts'
-import type { PartyRosterPlayer } from './protocol/party-state.ts'
-import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
-import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
-import type { GameAudioDirector } from './game-audio-director.ts'
+import { hubRunEntryPresentation } from './hub-presentation.ts'
 import { mobileUiElementStyle } from './mobile-ui-layout.ts'
-import type { GameViewportLayout } from './renderer/game-viewport.ts'
-import { useMobileUiLayout } from './use-mobile-ui-layout.ts'
+import { nativeBossHudPlan } from './native-boss-hud.ts'
 import {
   NATIVE_HUD_FRAME_RECORD,
   NATIVE_HUD_MANA_RECORD,
@@ -43,7 +34,15 @@ import {
   nativeManaHudPresentation,
   type NativeHudSkillBinding,
 } from './native-hud-presentation.ts'
-import { NativeUiStrip } from './native-ui/react-raw.ts'
+import { NativeUiPlanView, NativeUiStrip } from './native-ui/react-raw.ts'
+import type {
+  GameSnapshot,
+  ProtocolPlayerEconomy,
+  ProtocolPlayerProgression,
+} from './protocol/game-state.ts'
+import type { PartyRosterPlayer } from './protocol/party-state.ts'
+import type { GameViewportLayout } from './renderer/game-viewport.ts'
+import { useMobileUiLayout } from './use-mobile-ui-layout.ts'
 
 interface GameHudProps {
   accountUsername: string | null
@@ -181,6 +180,7 @@ export default function GameHud({
   }), [audio, playerId, subscribeSnapshot])
   const [quickbarHud, setQuickbarHud] = useState(() => ({
     belt: initialSnapshot.players[playerId]!.belt,
+    boss: featuredBoss(initialSnapshot, playerId),
     concentrationSkillIds: initialSnapshot.players[playerId]!.progression.concentrationSkillIds,
     currentMana: initialSnapshot.players[playerId]!.progression.currentMana,
     playerState: initialSnapshot.secondaryAbilities.players[playerId],
@@ -194,6 +194,7 @@ export default function GameHud({
     if (!player) return
     setQuickbarHud({
       belt: player.belt,
+      boss: featuredBoss(snapshot, playerId),
       concentrationSkillIds: player.progression.concentrationSkillIds,
       currentMana: player.progression.currentMana,
       playerState: snapshot.secondaryAbilities.players[playerId],
@@ -259,6 +260,16 @@ export default function GameHud({
           edge in 0x005CB360 / 0x0058F320). The Website's skull is the stage-level
           GameMenuSkull the host mounts over this HUD at the same (11, 7) / 31 px. */}
       <GameAccountName placement="hud" username={accountUsername} />
+      {mode === 'run' && quickbarHud.boss?.name && (
+        <span role="meter" aria-label={quickbarHud.boss.name}
+          aria-valuemin={0} aria-valuemax={quickbarHud.boss.maximumHealth}
+          aria-valuenow={Math.max(0, quickbarHud.boss.currentHealth)}
+          data-featured-boss-id={quickbarHud.boss.id}>
+          <NativeUiPlanView plan={nativeBossHudPlan(quickbarHud.boss.name,
+            quickbarHud.boss.currentHealth, quickbarHud.boss.maximumHealth,
+            viewport.width / uiScale, viewport.height / uiScale)} />
+        </span>
+      )}
       <AllyHud
         additionalRows={additionalAllyRows}
         hidden={allyRosterHidden}
@@ -528,4 +539,11 @@ export default function GameHud({
       ) : null}
     </div>
   )
+}
+
+
+function featuredBoss(snapshot: GameSnapshot, playerId: string) {
+  const world = snapshot.world
+  if (world.kind !== 'boneyard' || snapshot.players[playerId]?.progression.lifeState !== 'alive') return null
+  return world.enemies.find(enemy => enemy.id === world.featuredBossId) ?? null
 }

@@ -1,3 +1,4 @@
+import { createNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
 import { randomBoneyardWaveInteger } from '../../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import {
@@ -180,6 +181,7 @@ function spawnCoffinMaggots(
       lastAttackTick: null,
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
+      hitFeedback: createNativePuppetHit(context.tick),
       lastMovementTick: null,
       lifeState: 'alive',
       lightRegistration: work.registerWorldPainter('actor'),

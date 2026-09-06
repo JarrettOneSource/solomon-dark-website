@@ -16,7 +16,7 @@ import {
 import { NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 import {
-  NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL, installNativeBatchMaterial, nativeTextureIsPremultiplied, requireNativeWebGlRenderer,
+  NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL, installNativeBatchMaterial, nativeTextureMode, requireNativeWebGlRenderer,
 } from './native-material-batch.ts'
 
 const NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS = Object.freeze({
@@ -41,14 +41,14 @@ interface NativeFixedFunctionRenderPipelineOptions {
 const NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE = `
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
-  vec3 textureColor = texturePremultiplied > 0.5 && textureAlpha > 0.0
+  vec3 textureColor = mod(nativeTextureModeValue, 2.0) > 0.5 && textureAlpha > 0.0
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
-  if (uIgnoreTextureColor > 0.5) textureColor = vec3(1.0);
+  if ((uIgnoreTextureColor > 0.5 || nativeTextureModeValue > 1.5)) textureColor = vec3(1.0);
   vec3 nativeColor = textureColor * vColor.rgb;
   float finalAlpha = textureAlpha * vertexAlpha;
   finalColor = vec4(
-    texturePremultiplied > 0.5 ? nativeColor * finalAlpha : nativeColor,
+    mod(nativeTextureModeValue, 2.0) > 0.5 ? nativeColor * finalAlpha : nativeColor,
     finalAlpha
   );
 `
@@ -84,45 +84,41 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
 
   const meshAdaptor = nativeRenderer.renderPipes.mesh?.['_adaptor'] as GlMeshAdaptor | undefined
   if (!meshAdaptor) return
-  const premultipliedMeshShader = createNativeFixedFunctionMeshShader(true)
-  const unpremultipliedMeshShader = createNativeFixedFunctionMeshShader(false)
+  const meshShaders = [0, 1, 2, 3].map(createNativeFixedFunctionMeshShader)
   const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
   const originalMeshDestroy = meshAdaptor.destroy
   originalMeshShader.destroy(true)
-  meshAdaptor['_shader'] = unpremultipliedMeshShader
+  meshAdaptor['_shader'] = meshShaders[0]!
   meshAdaptor.execute = function executeNativeFixedFunctionMesh(
     meshPipe: MeshPipe,
     mesh: Mesh,
   ): void {
-    this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
-      ? premultipliedMeshShader
-      : unpremultipliedMeshShader
+    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh)]!
     originalMeshExecute.call(this, meshPipe, mesh)
   }
   meshAdaptor.destroy = function destroyNativeFixedFunctionMeshAdaptor(): void {
     originalMeshDestroy.call(this)
-    premultipliedMeshShader.destroy(true)
-    unpremultipliedMeshShader.destroy(true)
+    for (const shader of meshShaders) shader.destroy(true)
   }
 }
 
-function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
+function createNativeFixedFunctionMeshShader(mode: number): Shader {
   const nativeColorBit = {
     // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
-    name: `native-fixed-function-${premultiplied ? 'pma' : 'npm'}`,
+    name: `native-fixed-function-${mode}`,
     fragment: {
       header: NATIVE_TEXTURE_COLOR_HEADER,
       end: NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE.replace(
-        /texturePremultiplied/g,
-        premultiplied ? '1.0' : '0.0',
+        /nativeTextureModeValue/g,
+        `${mode}.0`,
       ),
     },
   }
   return new Shader({
     glProgram: compileHighShaderGlProgram({
       // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
-      name: `native-fixed-function-mesh-${premultiplied ? 'pma' : 'npm'}`,
+      name: `native-fixed-function-mesh-${mode}`,
       bits: [
         localUniformBitGl,
         textureBitGl,

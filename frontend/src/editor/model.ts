@@ -160,7 +160,7 @@ export interface EditorDoc {
   /** Authored survival wave schedule. Not part of the .boneyard bytes: it
    * publishes as a data/wave.txt overlay riding in the same mod package.
    * Absent or empty means the plot ships with the game's stock waves. */
-  waves?: import('./waves').WaveDef[]
+  waves?: import('../game/core-kernels/boneyard-wave-schema.ts').WaveDef[]
   /** Authored player spawn. Absent means the envelope keeps whatever spawn
    * it already carries (an import's own, or the blank fixture's default). */
   spawn?: PlayerSpawn

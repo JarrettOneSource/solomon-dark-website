@@ -1,7 +1,7 @@
 import badguys from '../../editor/manifest/badguys.json' with { type: 'json' }
 
-import type { BoneyardPoint } from './boneyard.ts'
 import { NATIVE_MAGE_CAST_BODY_POSES } from './boneyard-skeleton-family-animation.ts'
+import type { BoneyardPoint } from './boneyard.ts'
 
 export { NATIVE_MAGE_CAST_BODY_POSES } from './boneyard-skeleton-family-animation.ts'
 
@@ -26,15 +26,13 @@ const MAGE_BODY_ATTACHMENTS = Object.freeze(Array.from(
   { length: NATIVE_MAGE_BODY_POSE_COUNT },
   (_, pose) => Object.freeze(Array.from({ length: NATIVE_MAGE_FACING_COUNT }, (_, facing) => {
     const entry = NATIVE_MAGE_BODY_BASE_RECORD + pose * NATIVE_MAGE_FACING_COUNT + facing
-    const attachment = badguys.entries[entry]?.extras?.[0]
-    if (
-      attachment === undefined
-      || !Number.isFinite(attachment.x)
-      || !Number.isFinite(attachment.y)
-    ) {
-      throw new Error(`BadGuys:${entry} is missing Mage body attachment slot 0`)
-    }
-    return Object.freeze({ x: attachment.x, y: attachment.y })
+    return Object.freeze(([0, 1] as const).map(slot => {
+      const attachment = badguys.entries[entry]?.extras?.[slot]
+      if (attachment === undefined || !Number.isFinite(attachment.x) || !Number.isFinite(attachment.y)) {
+        throw new Error(`BadGuys:${entry} is missing Mage body attachment slot ${slot}`)
+      }
+      return Object.freeze({ x: attachment.x, y: attachment.y })
+    }))
   })),
 ))
 
@@ -72,10 +70,11 @@ export function nativeEighteenWayFacingBucket(headingDeg: number): number {
 export function nativeMageBodyAttachment(
   pose: number,
   headingDeg: number,
+  slot: 0 | 1 = 0,
 ): Readonly<BoneyardPoint> {
   const attachment = MAGE_BODY_ATTACHMENTS[boundedPose(pose)]![
     nativeMageFacingBucket(headingDeg)
-  ]!
+  ]![slot]!
   return { ...attachment }
 }
 

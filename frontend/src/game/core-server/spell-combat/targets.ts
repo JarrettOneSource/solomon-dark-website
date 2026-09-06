@@ -156,7 +156,7 @@ export function selectedWeldTarget(
 }
 
 export function primaryTargetRows(
-  store: BoneyardEnemyStore,
+  store: Pick<BoneyardEnemyStore, 'actors' | 'maggots'>,
 ): readonly PrimaryTargetRow[] {
   return [...store.actors, ...store.maggots].map((actor, disintegratePhase) => ({
     actor,
@@ -170,8 +170,10 @@ export function primaryTargetRows(
       bodyRadius: 'config' in actor ? boneyardEnemyCollisionRadius(actor) : actor.collisionRadius,
       cellBindingOrder: actor.nativeCellBindingOrder,
       id: `enemy:${actor.id}`,
+      headingDeg: actor.headingDeg,
       kind: 'enemy',
       nativePriority: 0,
+      queryLane: 'grid' as const,
       pendingRemove: false,
       position: { ...actor.position },
       registrationOrder: actor.nativeRegistrationOrder,
@@ -197,9 +199,10 @@ export function primaryWaterTargetRows(
         id: `projectile:${projectile.id}`,
         kind: 'projectile',
         nativePriority: 0,
+        queryLane: 'transient',
         pendingRemove: false,
         position: { ...projectile.position },
-        registrationOrder: projectile.nativeRegistrationOrder,
+        registrationOrder: projectile.painterRegistration.registrationOrdinal,
       },
     }))
   const silks = store.silks.map((projectile): PrimarySilkTargetRow => ({
@@ -208,6 +211,7 @@ export function primaryWaterTargetRows(
       active: true, actorFlags: 0x1000, attachment: { x: 0, y: 0 },
       bodyRadius: 15, cellBindingOrder: projectile.nativeCellBindingOrder,
       id: `silk:${projectile.id}`, kind: 'projectile', nativePriority: 0,
+      queryLane: 'grid' as const,
       pendingRemove: false, position: { ...projectile.state.position },
       registrationOrder: projectile.nativeRegistrationOrder,
     },

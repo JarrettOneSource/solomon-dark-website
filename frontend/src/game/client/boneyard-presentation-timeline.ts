@@ -1,33 +1,19 @@
+import { receiveNativePuppetHit, stepNativePuppetHit, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
+import type { NativeBossSpell } from '../core-kernels/native-boss-spell.ts'
 import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
-import type {
-  BoneyardGoodieSnapshot,
-  BoneyardLootEventSnapshot,
-  BoneyardLootSnapshot,
-  BoneyardSolomonSnapshot,
-  BoneyardWaveSnapshot,
-  BoneyardWorldSnapshot,
-  GameClientSnapshot,
-  GameSnapshot,
-  ProtocolPlayerState,
-} from '../protocol/game-state.ts'
+import type { BoneyardGoodieSnapshot, BoneyardLootEventSnapshot, BoneyardLootSnapshot, BoneyardSolomonSnapshot, BoneyardWaveSnapshot, BoneyardWorldSnapshot, GameClientSnapshot, GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
 import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
-import { copyBoneyardEnemySamples, interpolateBoneyardEnemySamples, copyLightRegistration } from './boneyard-enemy-samples.ts'
+import { copyBoneyardEnemySamples, copyLightRegistration, interpolateBoneyardEnemySamples } from './boneyard-enemy-samples.ts'
 import { lerpCycle } from './hub-presentation-timeline.ts'
-import {
-  copyNativeSecondaryState,
-  interpolateNativeSecondaryState,
-} from './native-secondary-presentation.ts'
+import { copyNativeSecondaryState, interpolateNativeSecondaryState } from './native-secondary-presentation.ts'
 import { FULL_CIRCLE, clamp, lerp } from './presentation-math.ts'
-import {
-  type RetainedBoneyardPrimarySpellPresentation,
-  createRetainedBoneyardPrimarySpellPresentation,
-} from './primary-spell-retained-hail-presentation.ts'
-
+import type { RetainedBoneyardPrimarySpellPresentation } from './primary-spell-retained-hail-presentation.ts'
+import { createRetainedBoneyardPrimarySpellPresentation } from './primary-spell-retained-hail-presentation.ts'
 type BoneyardClientGameSnapshot = Omit<GameClientSnapshot, 'world'> & {
   world: BoneyardWorldSnapshot
 }
@@ -215,6 +201,10 @@ function interpolateSnapshot(
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
       ...interpolateBoneyardEnemySamples(older.world, newer.world, blend, targetTick),
+      featuredBossId: blend >= 1 ? newer.world.featuredBossId : older.world.featuredBossId,
+      bossNarration: blend >= 1 ? newer.world.bossNarration : older.world.bossNarration,
+      bossSpells: interpolateBossSpells(older.world.bossSpells, newer.world.bossSpells, blend),
+      puppetHits: interpolatePuppetHits(older.world.puppetHits, newer.world.puppetHits, blend, targetTick),
       arenaTransition: interpolateArenaTransition(
         older.world.arenaTransition,
         newer.world.arenaTransition,
@@ -430,6 +420,10 @@ function presentationCopy(
     tick: snapshot.tick,
     world: {
       ...copyBoneyardEnemySamples(snapshot.world, snapshot.tick),
+      featuredBossId: snapshot.world.featuredBossId,
+      bossNarration: snapshot.world.bossNarration,
+      bossSpells: snapshot.world.bossSpells,
+      puppetHits: snapshot.world.puppetHits.map(hit => ({ ...hit, feedback: { ...hit.feedback } })),
       arenaTransition: copyArenaTransition(snapshot.world.arenaTransition),
       encounter: copySolomon(snapshot.world.encounter),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
@@ -705,4 +699,60 @@ function requireFinite(value: number, name: string): void {
 function requirePositiveFinite(value: number, name: string): void {
   requireFinite(value, name)
   if (value <= 0) throw new Error(`${name} must be positive`)
+}
+
+function interpolatePoint(first: Readonly<{ x: number; y: number }>, second: Readonly<{ x: number; y: number }>, blend: number) {
+  return { x: lerp(first.x, second.x, blend), y: lerp(first.y, second.y, blend) }
+}
+
+function interpolateBossSpells(older: readonly NativeBossSpell[], newer: readonly NativeBossSpell[], blend: number): readonly NativeBossSpell[] {
+  if (blend >= 1) return newer
+  const newerById = new Map(newer.map(spell => [spell.id, spell]))
+  return older.map((first): NativeBossSpell => {
+    const second = newerById.get(first.id)
+    if (second === undefined || second.kind !== first.kind || first.kind === 'mouth-beam-segment') return first
+    const position = interpolatePoint(first.position, second.position, blend)
+    const common = { ...first, position }
+    if (first.kind === 'unholy-spit' && second.kind === 'unholy-spit') return { ...first, position,
+      progress: lerp(first.progress, second.progress, blend) }
+    if (first.kind === 'eye-laser' && second.kind === 'eye-laser') return { ...first, position,
+      phaseDeg: lerpCycle(first.phaseDeg, second.phaseDeg, blend, 360) }
+    if (first.kind === 'skull-missile' && second.kind === 'skull-missile') return { ...first, position,
+      phaseDeg: lerpCycle(first.phaseDeg, second.phaseDeg, blend, 360),
+      headingDeg: lerpCycle(first.headingDeg, second.headingDeg, blend, 360) }
+    if (first.kind === 'dark-fireball' && second.kind === 'dark-fireball') return { ...first, position,
+      arcPhase: lerp(first.arcPhase, second.arcPhase, blend) }
+    if (first.kind === 'green-fire' && second.kind === 'green-fire') return { ...first, position,
+      fire: { ...first.fire, position } }
+    if (first.kind === 'unholy-burst' && second.kind === 'unholy-burst') return { ...first, position,
+      offsetY: lerp(first.offsetY, second.offsetY, blend) }
+    if (first.kind === 'unholy-soul' && second.kind === 'unholy-soul') return { ...first, position,
+      height: lerp(first.height, second.height, blend) }
+    return common
+  })
+}
+
+function interpolatePuppetHits(
+  older: readonly NativeWorldPuppetHit[], newer: readonly NativeWorldPuppetHit[], blend: number, tick: number,
+): NativeWorldPuppetHit[] {
+  const previous = new Map(older.map(hit => [hit.targetId, hit]))
+  const result: NativeWorldPuppetHit[] = []
+  for (const next of newer) {
+    const before = previous.get(next.targetId)
+    previous.delete(next.targetId)
+    if (next.hitTick > tick) {
+      if (before) result.push({ ...before, feedback: { ...before.feedback } })
+      continue
+    }
+    if (before?.hitTick === next.hitTick) {
+      result.push({ ...next, feedback: { ...next.feedback, tick,
+        timer: lerp(before.feedback.timer, next.feedback.timer, blend) } })
+    } else {
+      const birth = receiveNativePuppetHit(next.hitTick, next.feedback.strength)
+      result.push({ ...next, feedback: next.kind === 'meteor' || next.kind === 'leviathan'
+        ? birth : stepNativePuppetHit(birth, next.hitTick) })
+    }
+  }
+  if (blend < 1) for (const before of previous.values()) result.push({ ...before, feedback: { ...before.feedback } })
+  return result
 }

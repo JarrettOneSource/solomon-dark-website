@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
-
+import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
 const registerTestWorldPainter = (managerLane: 'actor' | 'transient') => ({
   managerLane,
   registrationOrdinal: 99,
@@ -39,6 +38,28 @@ test('moving transient rows keep exact motion while sibling branches remain inde
 
   assert.deepEqual(first.deathEffects[0]?.position, { x: 12, y: 17 })
   assert.deepEqual(second.deathEffects[0]?.position, { x: 14, y: 14 })
+  assert.deepEqual(source.position, { x: 10, y: 20 })
+})
+
+test('Faculty scraps delay fading until they slow down, then drift, oscillate and retire', () => {
+  const source = deathEffect({ kind: 'scrap', entry: 66, opacityTimer: .02,
+    lifetimeTicks: 1000, velocity: { x: 1, y: 0 }, painterSortBias: -25,
+    scrapOscillation: { amplitudeDeg: 20, phaseDeg: 0, stepDeg: 5 } })
+  let draws = 0
+  const draw = () => { draws += 1; return 1 }
+  let result = stepBoneyardTransientEffects([source], [], 11, draw, 100, registerTestWorldPainter)
+  assert.equal(result.deathEffects[0]!.opacityTimer, .02)
+  assert.equal(result.deathEffects[0]!.velocity.x, Math.fround(.9200000166893005))
+  assert.equal(result.deathEffects[0]!.rotationDeg, Math.fround(Math.sin(5 * Math.PI / 180) * 20))
+  assert.equal(result.deathEffects[0]!.painterSortBias, -25)
+  assert.equal(draws, 0, 'fast scraps do not consume the slow sideways drift draw')
+  result = stepBoneyardTransientEffects(result.deathEffects, [], 18, draw, 100, registerTestWorldPainter)
+  assert.equal(result.deathEffects[0]!.opacityTimer, .02)
+  result = stepBoneyardTransientEffects(result.deathEffects, [], 19, draw, 100, registerTestWorldPainter)
+  assert.equal(draws, 1)
+  assert.equal(result.deathEffects[0]!.opacityTimer, Math.fround(.02 - .009999999776482582))
+  result = stepBoneyardTransientEffects(result.deathEffects, [], 22, draw, 100, registerTestWorldPainter)
+  assert.deepEqual(result.deathEffects, [])
   assert.deepEqual(source.position, { x: 10, y: 20 })
 })
 
@@ -99,7 +120,7 @@ test('SmokyBouncer births receive a fresh world-painter registration', () => {
 
   assert.equal(result.deathEffects.length, 2)
   assert.equal(result.nextDeathEffectId, 101)
-  assert.deepEqual(registrations, [{ managerLane: 'actor', registrationOrdinal: 200 }])
+  assert.deepEqual(registrations, [{ managerLane: 'transient', registrationOrdinal: 200 }])
   assert.deepEqual(result.deathEffects[1]?.painterRegistration, registrations[0])
   assert.equal(result.deathEffects[1]?.presentationOwner, 'world-sorted')
 })
@@ -294,7 +315,7 @@ function deathEffect(
     lifetimeTicks: 20,
     opacityTimer: 1,
     ownerActorId: 3,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 3 },
     presentationOwner: 'world-sorted',
     position: Object.freeze({ x: 10, y: 20 }),
     role: 'transient-test',

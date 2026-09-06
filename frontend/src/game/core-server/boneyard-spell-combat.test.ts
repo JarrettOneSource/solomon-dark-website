@@ -1,45 +1,46 @@
+import { createNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
-import { createNativeRng, drawNativeFloat, drawNativeSign } from '../core-kernels/native-rng.ts'
-import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
-import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
-import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
-import { createPrimarySpellFireDetonation } from '../core-kernels/primary-spells.ts'
-import type {
-  PrimarySpellChannelEmission,
-  PrimarySpellProjectileState,
-  PrimarySpellSimulationState,
-  PrimarySpellTransientState,
-} from '../core-kernels/primary-spells.ts'
-import { createNativeWeldPersistentActor } from '../core-kernels/native-weld-primary-runtime.ts'
-import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
-import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
-import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
-import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
+import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
+import { createNativeRng, drawNativeFloat, drawNativeSign } from '../core-kernels/native-rng.ts'
+import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
+import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
+import { createNativeWeldPersistentActor } from '../core-kernels/native-weld-primary-runtime.ts'
+import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
+import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
+import type { NativeFireActorContact } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   createNativeFirePatch,
   spawnNativeFireGoodImp,
   stepNativeFireGoodImp,
   stepNativeFirePatch,
 } from '../core-kernels/primary-spell-fire-effects.ts'
-import type { NativeFireActorContact } from '../core-kernels/primary-spell-fire-effects.ts'
-import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
+import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
+import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
+import type {
+  PrimarySpellChannelEmission,
+  PrimarySpellProjectileState,
+  PrimarySpellSimulationState,
+  PrimarySpellTransientState,
+} from '../core-kernels/primary-spells.ts'
+import { createPrimarySpellFireDetonation } from '../core-kernels/primary-spells.ts'
 import { projectBoneyardEnemyProjectileEffects } from '../host/project-boneyard-enemies.ts'
 import {
   BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
   boneyardEnemyProjectileEffectSample,
 } from '../protocol/boneyard-enemy-projectile-effect-replication.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import type { BoneyardEnemyProjectile, BoneyardEnemyStore, BoneyardMaggotActor } from './enemies/model.ts'
-import { nativeWeldFrostRadialRadius } from './spell-combat/projectiles.ts'
-import { nativeWaterPushTargetFactor } from './spell-combat/pushback.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
+import type { BoneyardEnemyProjectile, BoneyardEnemyStore, BoneyardMaggotActor } from './enemies/model.ts'
 import { WATER_PRIMARY_ACTOR_MASK, WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK } from './spell-combat/channels.ts'
 import type { BoneyardSpellWorldContact } from './spell-combat/model.ts'
+import { nativeWeldFrostRadialRadius } from './spell-combat/projectiles.ts'
+import { nativeWaterPushTargetFactor } from './spell-combat/pushback.ts'
 
 const WORLD_KEY = 'boneyard:combat-test'
 const COMBAT_RNG = createNativeRng(17)
@@ -80,6 +81,7 @@ test('GoodImp keeps a valid hostile until the native 300-tick refresh edge', () 
     id,
     kind: 'enemy',
     nativePriority: 0,
+    queryLane: 'grid' as const,
     pendingRemove: false,
     position: { x, y: 0 },
     registrationOrder: id === 'a' ? 0 : 1,
@@ -450,6 +452,7 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     lastAttackTick: null,
     lastDamagedByPlayerId: null,
     lastDamageTick: null,
+    hitFeedback: createNativePuppetHit(),
     lastMovementTick: null,
     lifeState: 'alive',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
@@ -1146,6 +1149,7 @@ test('Earth gathers strict roots once, shrinks, and sheds one independent contac
   assert.deepEqual(first.hits.map(({ actorId }) => actorId), [2])
   assert.equal(first.enemies.actors[0]?.currentHealth, 5)
   assert.equal(first.enemies.actors[1]?.lifeState, 'dying')
+  assert.equal(first.enemies.actors[1]?.lethalMagicDamage, true)
   assert.equal(first.enemies.actors[2]?.currentHealth, 5)
   assert.deepEqual(first.spells.transients.map(({ kind }) => kind), ['earth-boulder-bit'])
   assert.equal(first.spells.projectiles.length, 1)
@@ -1606,6 +1610,19 @@ test('Hail damage consumes the owning Frost contact target multiplier', () => {
   ])
 })
 
+test('a physical Hail kill after a nonlethal Frost hit preserves the physical Unbind branch', () => {
+  const source = emission({ id: 11, kind: 'water', origin: { x: 0, y: 0 } })
+  if (source.primarySkill.kind !== 'water') throw new Error('expected Frost Jet')
+  const result = resolveCombatWithAuthority(
+    spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }]),
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{ ...source, damage: 1, primarySkill: { ...source.primarySkill,
+      hailDamageMaximum: 4, hailDamageMinimum: 4, hailThreshold: 3_000 } }], 1,
+  )
+  assert.deepEqual(result.hits.map(hit => [hit.spellKind, hit.killed]), [['water', false], ['water-hail', true]])
+  assert.equal(result.enemies.actors[0]?.lethalMagicDamage, false)
+})
+
 test('underpowered Water carries half damage through the narrow actor-mask lane', () => {
   const enemies = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
   const weak = emission({
@@ -1825,6 +1842,7 @@ test('Blizzard admits every flags-four scenery root for glow only', () => {
     id: `scenery:${name}`,
     kind: name === 'gravestone' ? 'gravestone' : 'scenery',
     nativePriority: 1_000,
+    queryLane: 'grid' as const,
     pendingRemove: false,
     position: { x: Number(x), y: name === 'outside-body-overlap' ? 100 : 0 },
     registrationOrder,
@@ -2067,6 +2085,7 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
     impactThrowFirePitch: null,
     impactTicksRemaining: 200,
     kind: 'weld-meteor',
+    landingPosition: { x: 0, y: 0 },
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 20 },
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
@@ -2401,6 +2420,7 @@ test('Disintegrate executes only below the strict post-hit twenty-percent gate',
     40,
   )
   assert.equal(below.enemies.actors[0]?.lifeState, 'dying')
+  assert.equal(below.enemies.actors[0]?.lethalMagicDamage, true)
   assert.equal(below.enemies.actors[0]?.currentHealth, 0)
   assert.equal(below.hits[0]?.amount, 5)
 })
@@ -2902,6 +2922,7 @@ function sceneryTarget(id: string, bodyRadius: number, x: number): PrimarySpellT
     id: `scenery:${id}`,
     kind: 'scenery',
     nativePriority: 0,
+    queryLane: 'grid' as const,
     pendingRemove: false,
     position: { x, y: 0 },
     registrationOrder: 0,

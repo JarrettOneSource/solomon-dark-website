@@ -904,7 +904,7 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     enemy.config.collisionRadius,
   )), 'post-transition enemies must materialize inside the combat arena')
   const firstEnemy = world.enemies.actors[0]
-  assert.deepEqual(boneyardPrimarySpellTargets(world)[0], {
+  assert.deepEqual(boneyardPrimarySpellTargets(world).find(target => target.id === `enemy:${firstEnemy.id}`), {
     active: true,
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
@@ -914,6 +914,7 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     id: `enemy:${firstEnemy.id}`,
     kind: 'enemy',
     nativePriority: 0,
+    queryLane: 'grid' as const,
     pendingRemove: false,
     position: firstEnemy.position,
     registrationOrder: firstEnemy.nativeRegistrationOrder,
@@ -1139,13 +1140,15 @@ test('the tick-400 generated cleanup retires outside authored scenery targets an
   )
   assert.deepEqual(
     result.world.primarySceneryTargets.map(({ id }) => id),
-    ['scenery:inside-grave', 'scenery:inside-goodie'],
+    ['scenery:inside-grave', 'fencepost:0', 'fencepost:1'],
   )
   assert.deepEqual(
     result.world.scenerySpellTargets.map(({ id }) => id),
     ['scenery:inside-grave'],
   )
   assert.deepEqual(result.world.loot.goodies.map(({ eid }) => eid), ['inside-goodie'])
+  assert.deepEqual(boneyardPrimarySpellTargets(result.world).filter(target => target.id.startsWith('goodie:'))
+    .map(target => target.position), [{ x: 1200, y: 1000 }])
   assert.equal(result.world.gateLeaves.length, 2)
 })
 
@@ -1679,7 +1682,9 @@ test('primary spell targets use live authoritative enemy actors and owned Maggot
     },
   }
 
-  const targets = boneyardPrimarySpellTargets(world)
+  const allTargets = boneyardPrimarySpellTargets(world)
+  assert.deepEqual(allTargets.filter(target => target.id.startsWith('fencepost:')).map(target => target.id), ['fencepost:0', 'fencepost:1'])
+  const targets = allTargets.filter(target => target.id.startsWith('enemy:'))
   assert.deepEqual(targets.map(({ id }) => id), [
     `enemy:${coffin.id}`,
     ...world.enemies.maggots.map(({ id }) => `enemy:${id}`),
@@ -1710,6 +1715,7 @@ test('retains Gravestones in the grave-specific scenery lane', () => {
     id: 'scenery:grave-7',
     kind: 'gravestone',
     nativePriority: 1000,
+    queryLane: 'grid' as const,
     pendingRemove: false,
     position: { x: 300, y: 320 },
     registrationOrder: 0,
@@ -1732,7 +1738,8 @@ test('retains the complete native flag-four primary scenery roots, priorities, a
     primarySceneryTarget('monument', 2009, 1, 1, { x: 100, y: 110 }),
     primarySceneryTarget('grave', 2029, 2, 0.01, { x: 120, y: 130 }),
     primarySceneryTarget('building', 2040, 3, 1, { x: 140, y: 150 }),
-    primarySceneryTarget('goodie', 2061, 4, 20, { x: 160, y: 170 }),
+    { ...primarySceneryTarget('0', 3006, 6, 10, { x: 100, y: 200 }), id: 'fencepost:0' },
+    { ...primarySceneryTarget('1', 3006, 7, 10, { x: 300, y: 200 }), id: 'fencepost:1' },
   ])
 })
 
@@ -1757,9 +1764,12 @@ test('retains Goodie actor membership after its contents materialize', () => {
   }
 
   assert.deepEqual(
-    boneyardPrimarySpellTargets(exhaustedWorld),
-    [primarySceneryTarget('goodie', 2061, 0, 20, { x: 160, y: 170 })],
+    boneyardPrimarySpellTargets(exhaustedWorld).filter(target => target.id.startsWith('goodie:')),
+    [{ ...primarySceneryTarget('goodie', 2061, 0, 20, { x: 160, y: 170 }),
+      actorFlags: 0x2004, hitKind: 'goodie', id: `goodie:${world.loot.goodies[0]!.id}` }],
   )
+  assert.equal(boneyardPrimarySpellTargets({ ...exhaustedWorld, loot: { ...exhaustedWorld.loot, goodies: [] } })
+    .some(target => target.id.startsWith('goodie:')), false)
 })
 
 test('retains every native group-four scene-object family for Earthquake wobble ownership', () => {
@@ -1955,6 +1965,7 @@ function primarySceneryTarget(
     id: `scenery:${eid}`,
     kind: typeId === 2029 ? 'gravestone' : 'scenery',
     nativePriority: 1000,
+    queryLane: 'grid' as const,
     pendingRemove: false,
     position: { ...position },
     registrationOrder,

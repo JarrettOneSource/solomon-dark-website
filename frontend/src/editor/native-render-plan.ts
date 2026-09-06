@@ -1,3 +1,4 @@
+import { nativeBoneyardFencePosts } from '../game/core-kernels/boneyard-fence-posts.ts'
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, StaticSprite, Vec2 } from './model.ts'
 import { NATIVE } from './model.ts'
 import { nativeGateLeaves, nativeGatePainterRoot } from './native-fence-geometry.ts'
@@ -162,10 +163,6 @@ function fenceBodyPositions(fence: Polyline): Vec2[] {
   }
 }
 
-function pointKey(point: Vec2): string {
-  return `${point.x},${point.y}`
-}
-
 /**
  * Build the retail placement passes recovered from Arena::Render. Roads and
  * terrain are structural passes owned by the canvas; this plan starts with
@@ -189,34 +186,7 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     const layer = mainObjectLayer(object, sourceOrder)
     return layer ? [layer] : []
   })
-  const uniquePosts = new Map<string, {
-    fence: Polyline
-    pos: Vec2
-    postVariant: number
-  }>()
-  // 0x0064AC90 collects and deduplicates every non-wall endpoint before it
-  // creates any fence bodies, so connected segments share one Puppet post.
-  for (const fence of doc.fences) {
-    if ((fence.segmentCode ?? fence.style ?? 0) === 3) continue
-    for (const pos of fence.points.slice(0, 2)) {
-      if (!uniquePosts.has(pointKey(pos))) {
-        uniquePosts.set(pointKey(pos), { fence, pos, postVariant: 0 })
-      }
-    }
-  }
-  // Derived fences resolve the already-shared posts, then explicit serialized
-  // selectors overwrite +0x140 in source order. Later connected fences win.
-  for (const fence of doc.fences) {
-    if ((fence.segmentCode ?? fence.style ?? 0) === 3) continue
-    const variants = [fence.startPostVariant, fence.endPostVariant]
-    fence.points.slice(0, 2).forEach((pos, endpoint) => {
-      const variant = variants[endpoint]
-      if (variant === undefined || variant === 0xffffffff) return
-      const post = uniquePosts.get(pointKey(pos))
-      if (post) post.postVariant = variant
-    })
-  }
-  const fencePosts = [...uniquePosts.values()].map(({
+  const fencePosts = nativeBoneyardFencePosts(doc.fences).map(({
     fence,
     pos,
     postVariant,

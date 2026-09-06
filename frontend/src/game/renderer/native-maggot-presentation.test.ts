@@ -50,7 +50,8 @@ test('Maggot hit presentation appends the same native red redraw as enemies', ()
       role: 'hit:maggot-body',
       rotationRadians: 0,
       scale: 1,
-      tint: 0xff0000,
+      textureColor: 'diffuse',
+      tint: 0xa50000,
     },
   ])
 })

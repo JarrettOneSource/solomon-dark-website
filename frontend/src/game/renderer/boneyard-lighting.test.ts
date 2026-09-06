@@ -1,15 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type {
-  BoneyardEnemyProjectileSnapshot,
-  BoneyardEnemySnapshot,
-} from '../protocol/game-state.ts'
-import type {
-  PrimarySpellEtherImpactState,
-  PrimarySpellFireImpactState,
-  PrimarySpellFireProjectileState,
-} from '../core-kernels/primary-spells.ts'
+import { nativeBoulderLightSource, nativeEnemyLightSources, nativeEnemyProjectileEffectLightProvider, nativeEnemyProjectileLightProvider, nativeLanternLightSource, nativeMissileLightSource, nativePlayerLightSource, nativeWeldMeteorLightSource, nativeWeldProjectileLightSource, nativeWeldRockLightSource } from '../core-kernels/native-boneyard-light-model.ts'
 import {
   nativeRandomFloatFromSemanticWord,
   nativeRandomIntFromSemanticWord,
@@ -20,6 +12,15 @@ import {
   createNativeWeldPersistentActor,
   type NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import type {
+  PrimarySpellEtherImpactState,
+  PrimarySpellFireImpactState,
+  PrimarySpellFireProjectileState,
+} from '../core-kernels/primary-spells.ts'
+import type {
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+} from '../protocol/game-state.ts'
 import {
   NATIVE_DEFAULT_LIGHT_QUALITY,
   NATIVE_DEFAULT_MULTIPLE_SHADOWS,
@@ -30,33 +31,23 @@ import {
   NATIVE_PLAYER_LIGHT_RADIUS,
   NATIVE_PLAYER_LIGHT_RASTER_JITTER,
   NATIVE_REGION_LIGHT_ATLAS,
-  NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NATIVE_REGION_LIGHT_BOTTOM_PADDING,
+  NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NATIVE_REGION_LIGHT_ENTRY,
   NATIVE_REGION_LIGHT_WORLD_SCALE,
-  NativeBoneyardLightIndex,
-  type NativeBoneyardLightSource,
   nativeAcceptedBoneyardLightSources,
-  nativeBoulderLightSource,
+  nativeArenaDisplacementCoverPlan,
+  NativeBoneyardLightIndex,
   nativeBoneyardLightScalar,
-  nativeBoneyardSurfaceLightScalar,
+  type NativeBoneyardLightSource,
   nativeBoneyardLightTint,
   nativeBoneyardLightVisibleInManager,
+  nativeBoneyardSurfaceLightScalar,
   nativeBoneyardWeatherLightingOrder,
-  nativeEnemyProjectileEffectLightProvider,
-  nativeEnemyProjectileLightProvider,
-  nativeEnemyLightSources,
-  nativeLanternLightSource,
-  nativeMissileLightSource,
-  nativePlayerLightSource,
-  nativeArenaDisplacementCoverPlan,
   nativeRegionLightManagerPlan,
-  nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
+  nativeRegionLightTargetPlan,
   nativeSolomonSetPieceLighting,
-  nativeWeldProjectileLightSource,
-  nativeWeldMeteorLightSource,
-  nativeWeldRockLightSource,
 } from './boneyard-lighting.ts'
 import {
   NATIVE_BUILDING_BASE_ENTRIES,
@@ -68,16 +59,16 @@ import {
   writeNativeStaticSurfaceVertexColors,
   writeNativeWallVertexScalars,
 } from './boneyard-static-surface-lighting.ts'
+import { nativeMageLightningPulsePlan } from './native-mage-lightning-pulse-presentation.ts'
+import {
+  buildNativeAirContactLightSource,
+  buildNativeAirPathLightSources,
+} from './primary-spell-air-native.ts'
 import { etherPrimaryImpactLightSource } from './primary-spell-ether-native.ts'
 import {
   nativeFireballLightSource,
   nativeFireImpactLightSource,
 } from './primary-spell-fire-native.ts'
-import {
-  buildNativeAirContactLightSource,
-  buildNativeAirPathLightSources,
-} from './primary-spell-air-native.ts'
-import { nativeMageLightningPulsePlan } from './native-mage-lightning-pulse-presentation.ts'
 
 const LIGHT_VIEW = {
   camera: { x: 800, y: 450, zoom: 1 },
@@ -228,6 +219,9 @@ function enemy(
       demonFrontRotationRadians: 0,
       demonRearExtremityOffset: { x: 0, y: 0 },
       demonRearRotationRadians: 0,
+
+      demonShadowOffset: { x: 0, y: 0 },
+      shadowLateralOffset: 0,
       effects: [],
       gaitPose: 0,
       hitFlash: 0,
@@ -244,6 +238,7 @@ function enemy(
       ...overrides.animation,
     },
     armored: false,
+    burning: overrides.burning ?? overrides.flags?.includes('FLAG_BURNING') ?? false,
     currentHealth: 5,
     enemyToken,
     flags: [],
@@ -971,7 +966,7 @@ test('projects every welded projectile and retained-rock light provider exactly'
   assert.deepEqual(nativeWeldMeteorLightSource({ ...meteor, fallHeight: 0.5 }), {
     castsDirectionalShadow: false,
     intensity: 0.5,
-    position: { x: 30, y: 40 },
+    position: { x: 0, y: 0 },
     radius: Math.fround(0.6),
   })
   const impact = nativeWeldMeteorLightSource({
@@ -984,7 +979,7 @@ test('projects every welded projectile and retained-rock light provider exactly'
   assert.deepEqual(impact, {
     castsDirectionalShadow: false,
     intensity: 0.5,
-    position: { x: 30, y: 40 },
+    position: { x: 0, y: 0 },
     radius: Math.fround(0.75),
   })
 })

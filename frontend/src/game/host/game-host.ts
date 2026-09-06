@@ -1,252 +1,73 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http'
+import type { Server as HttpServer, IncomingMessage } from 'node:http'
+import { createServer } from 'node:http'
 import type { Duplex } from 'node:stream'
-
 import { WebSocket, WebSocketServer } from 'ws'
-
-import {
-  PLAYER_CHARACTER_INPUT_ACCELERATION,
-  PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
-  PLAYER_CHARACTER_MOVEMENT_RETENTION,
-  PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
-  PLAYER_CHARACTER_RADIUS,
-  createIdlePlayerCharacterInput,
-  type PlayerCharacterConfig,
-  type PlayerCharacterInput,
-} from '../core-kernels/player-character.ts'
-import type {
-  HubMemorialPlayerProfile,
-  HubMemorialState,
-} from '../core-kernels/hub-memorial.ts'
 import type { BoastResolver } from '../core-kernels/boast.ts'
-import {
-  GAME_FIXED_TICK_SECONDS,
-  GAME_TICK_RATE,
-  addPlayerCharacter,
-  applyGameSimulationHubAction,
-  applyGameSimulationTutorialAction,
-  armGameSimulationCollegeIntro,
-  bindGameSimulationPlayerSkillQuickbar,
-  confirmGameSimulationLoadout,
-  completedGameSimulationCollegeIntroPlayerIds,
-  continueGameSimulationOver,
-  createGameSimulation,
-  declineGameSimulationTutorial,
-  detachGameSimulationPlayer,
-  enterBoneyardWorld,
-  getPlayerCharacter,
-  getPlayerEconomy,
-  getPlayerProgression,
-  grantGameSimulationPlayerExperience,
-  projectDetachedGameSimulationPlayer,
-  reconcileGameSimulationPlayerModPackages,
-  rejoinGameSimulationPlayer,
-  removePlayerCharacter,
-  returnGameSimulationToHub,
-  rerollDetachedGameSimulationPlayerSkill,
-  rerollGameSimulationPlayerSkill,
-  saveDetachedGameSimulationPlayerSkill,
-  saveGameSimulationPlayerSkill,
-  selectGameSimulationPlayerConcentration,
-  selectGameSimulationPlayerConcentrationSlot,
-  selectGameSimulationPlayerPrimarySkill,
-  selectDetachedGameSimulationPlayerSkill,
-  selectGameSimulationPlayerSkill,
-  stepGameSimulationTick,
-  synchronizeDetachedGameSimulationPlayer,
-  type GameSimulationState,
-  type DetachedGameSimulationPlayer,
-  type PlayerId,
-} from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { gameOverExitDurationTicks } from '../core-kernels/game-run.ts'
+import type { HubInventoryAction, ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
+import type { HubMemorialPlayerProfile, HubMemorialState } from '../core-kernels/hub-memorial.ts'
 import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS } from '../core-kernels/native-tutorial.ts'
-import type {
-  HubInventoryAction,
-  ModConsumableCatalogEntry,
-} from '../core-kernels/hub-economy.ts'
-import {
-  createBoneyardCatalog,
-  materializeBoneyard,
-  materializeStockTutorial,
-  recoverSavedBoneyardRoadLinks,
-  type BoneyardCatalog,
-} from './boneyard-catalog.ts'
-import {
-  EMPTY_CONTENT_MANIFEST_SHA256,
-  GAME_HOST_ENDED_SESSION_CLOSE_CODE,
-  GAMEPLAY_RESUME_GRACE_DURATION_MS,
-  GAME_SESSION_REPLACED_CLOSE_CODE,
-  GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
-  GAME_PROTOCOL_VERSION,
-  type GameContentManifest,
-  type GameSessionKind,
-  type GameplayPauseState,
-  type GameplayResumeGraceReason,
-  type GameplayResumeGraceState,
-} from '../protocol/game-protocol-contract.ts'
-import {
-  PARTY_ACTION_REJECTIONS,
-  type PartyAction,
-  type PartyActionRejection as ProtocolPartyActionRejection,
-  type ServerDisconnectMessage,
-} from '../protocol/game-server-messages.ts'
-import {
-  GameProtocolError,
-} from '../protocol/codecs/values.ts'
-import {
-  decodeClientGameMessage,
-  encodeGameMessage,
-} from '../protocol/game-protocol.ts'
-import {
-  gameChatActivityText,
-  type GameChatActivity,
-  type GameChatChannel,
-  type GameOnlinePreferences,
-  type GamePlayerCardProfile,
-} from '../protocol/game-chat.ts'
-import type {
-  HubPlayerActivity,
-} from '../protocol/game-state.ts'
-import type {
-  LuaConsoleObject,
-} from '../protocol/codecs/lua.ts'
-import type {
-  PartyJoinRequester,
-  PartyPlayerProfile,
-  PlayerSocialProfile,
-} from '../protocol/party-state.ts'
-import { createGameSnapshot } from './game-snapshot.ts'
-import { prepareBoneyardWorldNavigationAsync } from './boneyard-navigation-preparer.ts'
-import {
-  createGameSnapshotFrame,
-  createGameSnapshotProjection,
-  createReplicatedEntityBaseline,
-  type GameSnapshotProjection,
-  type ReplicatedEntityBaseline,
-} from '../protocol/entity-replication.ts'
-import {
-  monitorWebSocketHeartbeat,
-  resolveGameHeartbeatInterval,
-} from './websocket-heartbeat.ts'
-import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
-import {
-  gameServerErrorDetails,
-  logGameServerEvent,
-  type GameServerLogSink,
-} from './game-server-logger.ts'
-import { GameSaveCheckpointScheduler } from './game-save-checkpoint-scheduler.ts'
-import { RunArchiveRecorder, type RunArchive } from './run-archive.ts'
-import {
-  deriveGameActivityEvents,
-  projectGameActivity,
-} from './game-activity-events.ts'
-import type { RuntimeEventSink } from './runtime-event-publisher.ts'
-import {
-  applyWebLuaCommands,
-  createWebLuaFrameState,
-  deriveWebLuaEvents,
-  type WebLuaDerivedEvent,
-} from './lua/web-lua-game-api.ts'
-import { WebLuaRuntime } from './lua/web-lua-runtime.ts'
-import {
-  WEB_LUA_MAX_PENDING_EXECUTIONS,
-} from './lua/web-lua-contract.ts'
-import {
-  ML_BOT_CHARACTER,
-  MlBotHostController,
-  type MlBotHostIntent,
-  type MlBotPolicyInference,
-} from './ml-bot-host-controller.ts'
-import {
-  createGameProfileSaveDocument,
-  createGameSaveDocument,
-  hydrateGameSaveProfile,
-  retireGameSaveWizard,
-  restoreGameSaveDocument,
-  restoreGameSaveProfile,
-  type RestoredGameSaveProfile,
-} from '../save/game-save-document.ts'
-import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
-import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
-import {
-  parseGameSaveDocument,
-  type GameSaveIntegrity,
-} from '../save/game-save-contract.ts'
-import type { NativeGameSaveSource } from '../save/portable-game-profile.ts'
-import {
-  createPartySystem,
-  decidePartyJoinRequest,
-  joinPartyPlayer,
-  partyByJoinCode,
-  partyByListingId,
-  partyForPlayer,
-  projectPartyState,
-  registerPartyPlayer,
-  removePartyPlayer as removePrivatePartyPlayer,
-  requestPartyJoin,
-  rotatePartyJoinCode,
-  setPartyVisibility,
-  restorePartyMembership,
-  type PartyIdentity,
-  type PartySystemState,
-} from './party-system.ts'
-import {
-  projectHostPresence,
-  type HostPresenceEntry,
-} from './host-presence.ts'
-import {
-  projectPublicPartyDirectory,
-  type PublicPartyDirectoryEntry,
-} from './public-party-directory.ts'
-import {
-  acceptSharedPartyInvitation,
-  addSharedHubPlayer,
-  confirmSharedPartyLoadout,
-  continueSharedPartyGameOver,
-  createSharedGameWorlds,
-  denySharedPartyInvitation,
-  detachSharedGamePlayer,
-  inviteSharedPartyPlayer,
-  joinSharedPartyPlayer,
-  kickSharedPartyPlayer,
-  leaveSharedParty,
-  removeSharedGamePlayer,
-  rejoinSharedPartyRunPlayer,
-  replaceSharedGameStateForPlayer,
-  restoreSharedGamePlayer,
-  sharedGameStateForPlayer,
-  sharedLoadedBoneyardForPlayer,
-  sharedPartySaveStateForPlayer,
-  startSharedPartyRun,
-  stepSharedGameWorlds,
-  type SharedPartyRun,
-  type SharedGameWorldsState,
-} from './shared-game-worlds.ts'
-import type {
-  MaterializedWebSessionContent,
-  WebSessionContentSummary,
-} from './web-mod-content.ts'
-import {
-  prepareModHost,
-  type PreparedModHost,
-} from './prepared-mod-host.ts'
-import type { PreparedModSaveState } from './prepared-mod-save.ts'
-import {
-  createPartyRecoveryClaim,
-  decodePartyRecoveryClaim,
-  verifyPartyRecoveryClaim,
-  type PartyRecoveryClaim,
-  type PartyRecoveryRosterMember,
-} from './party-recovery-claim.ts'
-import type { PartyRosterPlayer } from '../protocol/party-state.ts'
+import type { PlayerCharacterConfig, PlayerCharacterInput } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_INPUT_ACCELERATION, PLAYER_CHARACTER_MOVEMENT_LANE_CAP, PLAYER_CHARACTER_MOVEMENT_RETENTION, PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
+import type { DetachedGameSimulationPlayer, GameSimulationState, PlayerId } from '../core-server/game-simulation.ts'
+import { GAME_FIXED_TICK_SECONDS, GAME_TICK_RATE, addPlayerCharacter, applyGameSimulationHubAction, applyGameSimulationTutorialAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, completedGameSimulationCollegeIntroPlayerIds, confirmGameSimulationLoadout, continueGameSimulationOver, createGameSimulation, declineGameSimulationTutorial, detachGameSimulationPlayer, enterBoneyardWorld, getPlayerCharacter, getPlayerEconomy, getPlayerProgression, grantGameSimulationPlayerExperience, projectDetachedGameSimulationPlayer, reconcileGameSimulationPlayerModPackages, rejoinGameSimulationPlayer, removePlayerCharacter, rerollDetachedGameSimulationPlayerSkill, rerollGameSimulationPlayerSkill, returnGameSimulationToHub, saveDetachedGameSimulationPlayerSkill, saveGameSimulationPlayerSkill, selectDetachedGameSimulationPlayerSkill, selectGameSimulationPlayerConcentration, selectGameSimulationPlayerConcentrationSlot, selectGameSimulationPlayerPrimarySkill, selectGameSimulationPlayerSkill, stepGameSimulationTick, synchronizeDetachedGameSimulationPlayer } from '../core-server/game-simulation.ts'
 import { gameplayResumeGraceReasonForPauseSource } from '../gameplay-resume-grace.ts'
-import type {
-  GameSocialBroker,
-  GameSocialChatDelivery,
-  GameSocialConnection,
-} from './game-social-broker.ts'
-
+import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
+import type { LuaConsoleObject } from '../protocol/codecs/lua.ts'
+import { GameProtocolError } from '../protocol/codecs/values.ts'
+import type { GameSnapshotProjection, ReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
+import { createGameSnapshotFrame, createGameSnapshotProjection, createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
+import type { GameChatActivity, GameChatChannel, GameOnlinePreferences, GamePlayerCardProfile } from '../protocol/game-chat.ts'
+import { gameChatActivityText } from '../protocol/game-chat.ts'
+import type { GameContentManifest, GameSessionKind, GameplayPauseState, GameplayResumeGraceReason, GameplayResumeGraceState } from '../protocol/game-protocol-contract.ts'
+import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_DURATION_MS, GAME_HOST_ENDED_SESSION_CLOSE_CODE, GAME_PROTOCOL_VERSION, GAME_SESSION_REPLACED_CLOSE_CODE, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from '../protocol/game-protocol-contract.ts'
+import { decodeClientGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
+import type { PartyAction, PartyActionRejection as ProtocolPartyActionRejection, ServerDisconnectMessage } from '../protocol/game-server-messages.ts'
+import { PARTY_ACTION_REJECTIONS } from '../protocol/game-server-messages.ts'
+import type { HubPlayerActivity } from '../protocol/game-state.ts'
+import type { PartyJoinRequester, PartyPlayerProfile, PartyRosterPlayer, PlayerSocialProfile } from '../protocol/party-state.ts'
+import type { GameSaveIntegrity } from '../save/game-save-contract.ts'
+import { parseGameSaveDocument } from '../save/game-save-contract.ts'
+import type { RestoredGameSaveProfile } from '../save/game-save-document.ts'
+import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile, retireGameSaveWizard } from '../save/game-save-document.ts'
+import type { NativeGameSaveSource } from '../save/portable-game-profile.ts'
+import type { BoneyardCatalog } from './boneyard-catalog.ts'
+import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial, recoverSavedBoneyardRoadLinks } from './boneyard-catalog.ts'
+import { prepareBoneyardWorldNavigationAsync } from './boneyard-navigation-preparer.ts'
+import { deriveGameActivityEvents, projectGameActivity } from './game-activity-events.ts'
+import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
+import { GameSaveCheckpointScheduler } from './game-save-checkpoint-scheduler.ts'
+import type { GameServerLogSink } from './game-server-logger.ts'
+import { gameServerErrorDetails, logGameServerEvent } from './game-server-logger.ts'
+import { createGameSnapshot } from './game-snapshot.ts'
+import type { GameSocialBroker, GameSocialChatDelivery, GameSocialConnection } from './game-social-broker.ts'
+import type { HostPresenceEntry } from './host-presence.ts'
+import { projectHostPresence } from './host-presence.ts'
+import { WEB_LUA_MAX_PENDING_EXECUTIONS } from './lua/web-lua-contract.ts'
+import type { WebLuaDerivedEvent } from './lua/web-lua-game-api.ts'
+import { applyWebLuaCommands, createWebLuaFrameState, deriveWebLuaEvents } from './lua/web-lua-game-api.ts'
+import { WebLuaRuntime } from './lua/web-lua-runtime.ts'
+import type { MlBotHostIntent, MlBotPolicyInference } from './ml-bot-host-controller.ts'
+import { ML_BOT_CHARACTER, MlBotHostController } from './ml-bot-host-controller.ts'
+import type { PartyRecoveryClaim, PartyRecoveryRosterMember } from './party-recovery-claim.ts'
+import { createPartyRecoveryClaim, decodePartyRecoveryClaim, verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
+import type { PartyIdentity, PartySystemState } from './party-system.ts'
+import { createPartySystem, decidePartyJoinRequest, joinPartyPlayer, partyByJoinCode, partyByListingId, partyForPlayer, projectPartyState, registerPartyPlayer, removePartyPlayer as removePrivatePartyPlayer, requestPartyJoin, restorePartyMembership, rotatePartyJoinCode, setPartyVisibility } from './party-system.ts'
+import type { PreparedModHost } from './prepared-mod-host.ts'
+import { prepareModHost } from './prepared-mod-host.ts'
+import type { PreparedModSaveState } from './prepared-mod-save.ts'
+import type { PublicPartyDirectoryEntry } from './public-party-directory.ts'
+import { projectPublicPartyDirectory } from './public-party-directory.ts'
+import type { RunArchive } from './run-archive.ts'
+import { RunArchiveRecorder } from './run-archive.ts'
+import type { RuntimeEventSink } from './runtime-event-publisher.ts'
+import type { SharedGameWorldsState, SharedPartyRun } from './shared-game-worlds.ts'
+import { acceptSharedPartyInvitation, addSharedHubPlayer, confirmSharedPartyLoadout, continueSharedPartyGameOver, createSharedGameWorlds, denySharedPartyInvitation, detachSharedGamePlayer, inviteSharedPartyPlayer, joinSharedPartyPlayer, kickSharedPartyPlayer, leaveSharedParty, rejoinSharedPartyRunPlayer, removeSharedGamePlayer, replaceSharedGameStateForPlayer, restoreSharedGamePlayer, sharedGameStateForPlayer, sharedLoadedBoneyardForPlayer, sharedPartySaveStateForPlayer, startSharedPartyRun, stepSharedGameWorlds } from './shared-game-worlds.ts'
+import type { MaterializedWebSessionContent, WebSessionContentSummary } from './web-mod-content.ts'
+import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
+import { monitorWebSocketHeartbeat, resolveGameHeartbeatInterval } from './websocket-heartbeat.ts'
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
 export const GAME_REPLICATION_HIGH_WATER_MARK = 8
@@ -3718,7 +3539,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           for (const bot of bots.values()) inputs[bot.playerId] = bot.activeInput
           const enemySpawnIntents = new Map<
             string,
-            import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
+            import('../core-kernels/boneyard-wave-types.ts').BoneyardEnemySpawnIntent[]
           >()
           let developerStateBeforeLua: GameSimulationState | null = null
           let developerPartyId: string | null = null
@@ -3926,7 +3747,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const previousRunPhase = state.run.phase
         const previousGameOverExitTicks = state.run.gameOverExitTicks
         const stateBeforeLua = state
-        let enemySpawnIntents = [] as import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
+        let enemySpawnIntents = [] as import('../core-kernels/boneyard-wave-types.ts').BoneyardEnemySpawnIntent[]
         const runtimes = activePrivateLuaRuntimes()
         const controlRevision = privateModHost?.projectionRevision()
         const controlReleasedBarrier = privateModHost?.applyPlayerControls(inputs, now) ?? false

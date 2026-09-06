@@ -23,6 +23,8 @@ fix emerges from the same rules as stock; do not add symptom-specific patches.
 
 ## Ledger index
 
+Current boss investigation: [Generated survival boss encounters](<301-2026-09-05-generated-survival-boss-encounter-closure.md>).
+
 The former monolith is split at its authored top-level concept/system boundaries.
 Each entry below has its own file and remains in the original ledger order.
 Extend an existing system in its current file. Add a new numbered file and index

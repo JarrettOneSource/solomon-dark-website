@@ -1,44 +1,29 @@
-import {
-  NATIVE_SKELETON_HEAD_FACING_OFFSETS,
-  NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
-  NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
-} from '../../core-kernels/boneyard-skeleton-family-animation.ts'
+import { stepNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
+import { NATIVE_SKELETON_HEAD_FACING_OFFSETS, NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT, NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import { NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP } from '../../core-kernels/native-hurricane.ts'
 import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import { stepCoffin } from './coffin.ts'
+import { stepDemonSkull } from './demon-skull.ts'
 import { snapDemonRootToExtremities, stepDemon } from './demon.ts'
+import { stepFaculty } from './faculty.ts'
+import { stepHeartmonger } from './heartmonger.ts'
 import { stepImp } from './imp.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyLightingState,
-  BoneyardEnemyStoreStepContext,
-  WorkingStep,
-} from './model.ts'
-import {
-  interruptNativeSecondaryAction,
-  moveTowardTarget,
-  nativeSecondaryActorSpeedScale,
-  withNativeSecondaryTickScalars,
-} from './movement.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyLightingState, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
+import { interruptNativeSecondaryAction, moveTowardTarget, nativeSecondaryActorSpeedScale, withNativeSecondaryTickScalars } from './movement.ts'
 import { stepPortal } from './portal.ts'
 import { NATIVE_ENEMY_BURN_GLOW_PER_TICK, NATIVE_ENEMY_CHARGE_PER_TICK, NATIVE_IMP_GLOW_PER_TICK } from './programs.ts'
-import {
-  applyMageProviderGateAfterAction,
-  magePoseIsFour,
-  stepArcher,
-  stepMage,
-  stepSkeleton,
-} from './skeleton-family.ts'
+import { applyMageProviderGateAfterAction, magePoseIsFour, stepArcher, stepMage, stepSkeleton } from './skeleton-family.ts'
 import { stepCocoonActor, stepSpider } from './spider.ts'
 import { refreshTarget, reorientEnemyTowardTarget } from './targeting.ts'
 import { stepWraith } from './wraith.ts'
 import { advanceZombieVisual, stepZombie } from './zombie.ts'
-
 export function stepDamagePresentationTimers(
   actor: BoneyardEnemyActor,
   elapsedTicks: number,
+  tick: number,
 ): BoneyardEnemyActor {
   if (elapsedTicks <= 0) return actor
+  actor = { ...actor, hitFeedback: stepNativePuppetHit(actor.hitFeedback, tick, elapsedTicks) }
   if (actor.brain.family === 'spider') {
     actor = { ...actor, brain: { ...actor.brain, spitTicksRemaining: Math.max(0, actor.brain.spitTicksRemaining - elapsedTicks) } }
   }
@@ -76,12 +61,18 @@ export function stepLivingActor(
   let actor = affected.brain.family === 'portal'
     ? affected
     : refreshTarget(affected, context)
+  if (actor.brain.family === 'mage' && actor.brain.disabledPrimaryTicks > 0) {
+    actor = { ...actor, brain: { ...actor.brain, disabledPrimaryTicks: actor.brain.disabledPrimaryTicks - 1 } }
+  }
   if (actor.brain.family === 'demon') actor = snapDemonRootToExtremities(actor)
   if (actor.brain.family === 'portal') {
     return (effect?.timeScale ?? 1) === 0
       ? stepEnemyLighting(actor)
       : stepEnemyLighting(stepPortal(work, actor, actor.brain, context))
   }
+  if (actor.brain.family === 'heartmonger') return stepEnemyLighting(stepHeartmonger(work, actor, actor.brain, context))
+  if (actor.brain.family === 'demon-skull') return stepEnemyLighting(stepDemonSkull(work, actor, actor.brain, context, source.config.attackSpeed))
+  if (actor.brain.family === 'faculty') return stepEnemyLighting(stepFaculty(work, actor, actor.brain, context))
   if ((effect?.disruptedTicks ?? 0) > 0) {
     const interrupted = clearSkeletonFamilyHeadFacing(
       interruptNativeSecondaryAction(actor),
@@ -134,6 +125,9 @@ export function stepLivingActor(
     switch (articulated.brain.family) {
       case 'spider': return stepSpider(work, articulated, articulated.brain, context)
       case 'cocoon': return stepCocoonActor(work, articulated, context)
+      case 'demon-skull': return stepDemonSkull(work, articulated, articulated.brain, context, source.config.attackSpeed)
+      case 'faculty': return stepFaculty(work, articulated, articulated.brain, context)
+      case 'heartmonger': return stepHeartmonger(work, articulated, articulated.brain, context)
       case 'skeleton': return stepSkeleton(work, articulated, articulated.brain, context)
       case 'archer': return stepArcher(work, articulated, articulated.brain, context)
       case 'imp': return stepImp(work, articulated, articulated.brain, context)
@@ -208,6 +202,9 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
   switch (actor.config.enemyToken) {
     case 'SPIDER':
     case 'COCOON': return actor
+    case 'DEMONSKULL': return withEnemyLighting(actor, { charge: 0, glow: actor.brain.family === 'demon-skull' ? actor.brain.lightIntensity : 0, providerCopies: active ? 1 : 0 })
+    case 'DIREFACULTY': return withEnemyLighting(actor, { charge: 0, glow: actor.brain.family === 'faculty' ? actor.brain.lightIntensity : 0, providerCopies: active ? 1 : 0 })
+    case 'HEARTMONGER': return withEnemyLighting(actor, { charge: 0, glow: .5, providerCopies: active ? 1 : 0 })
     case 'SKELETON': {
       const burning = active && actor.config.burning
       return withEnemyLighting(actor, {

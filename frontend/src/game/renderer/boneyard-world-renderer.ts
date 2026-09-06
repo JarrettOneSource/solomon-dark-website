@@ -1,38 +1,18 @@
+import { Application, Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
 import 'pixi.js/unsafe-eval'
 import type { Camera } from '../../editor/render.ts'
 import { nativeBoneyardMainLayers } from '../../editor/render.ts'
 import { NATIVE_TUTORIAL_CAMERA_TARGET, nativeTutorialCameraBounds } from '../core-kernels/native-tutorial.ts'
-import {
-  DEFAULT_GAME_SETTINGS,
-  NATIVE_BROWSER_ENHANCED_EFFECTS,
-  cameraZoomForFov,
-  gameLightQuality,
-} from '../game-settings.ts'
-import type { GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
+import { cameraZoomForFov, DEFAULT_GAME_SETTINGS, gameLightQuality, NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
+import type { BoneyardEnemyEventSnapshot, GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { BoneyardDynamicScene } from './boneyard-dynamic-scene.ts'
 import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeArenaDisplacementCoverPlan } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
-import {
-  BONEYARD_CAMERA_ZOOM,
-  INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
-  boneyardCamera,
-  boneyardCameraFocus,
-  boneyardSpectatorCameraState,
-  boneyardSpectatorStatus,
-  boneyardVisibleWorldBounds,
-  isBoneyardSpectatorStatusSnapshot,
-} from './boneyard-render-contract.ts'
 import type { BoneyardSpectatorCameraState } from './boneyard-render-contract.ts'
-import {
-  createBoneyardRendererDiagnostics,
-  updateBoneyardRendererDiagnostics,
-} from './boneyard-renderer-diagnostics.ts'
-import type {
-  BoneyardWorldRenderer,
-  BoneyardWorldRendererOptions,
-  StaticWorldBuild,
-} from './boneyard-renderer-model.ts'
+import { BONEYARD_CAMERA_ZOOM, boneyardCamera, boneyardCameraFocus, boneyardSpectatorCameraState, boneyardSpectatorStatus, boneyardVisibleWorldBounds, INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE, isBoneyardSpectatorStatusSnapshot } from './boneyard-render-contract.ts'
+import { createBoneyardRendererDiagnostics, updateBoneyardRendererDiagnostics } from './boneyard-renderer-diagnostics.ts'
+import type { BoneyardWorldRenderer, BoneyardWorldRendererOptions, StaticWorldBuild } from './boneyard-renderer-model.ts'
 import { requireBoneyardSnapshot } from './boneyard-renderer-model.ts'
 import { editorDocument, loadStaticPainterImages } from './boneyard-static-layout.ts'
 import { BoneyardResidentVisibility, buildStaticWorld, destroyResidentTexture } from './boneyard-static-world.ts'
@@ -40,28 +20,18 @@ import { destroyBoneyardWorldTextures, loadBoneyardWorldTextures } from './boney
 import type { GameViewportLayout } from './game-viewport.ts'
 import { gameViewportWorldZoom } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
-import {
-  NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
-  skillPickerWorldPresentationFrame,
-} from './level-up-presentation.ts'
+import { NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS, skillPickerWorldPresentationFrame } from './level-up-presentation.ts'
 import { loadModPresentationTextures } from './mod-presentation-assets.ts'
 import type { NativeArenaRenderPipeline } from './native-arena-render-pipeline.ts'
 import { installNativeArenaRenderPipeline } from './native-arena-render-pipeline.ts'
-import {
-  NativeEnemyWorldFeedbackPresentation,
-  nativeEnemyWorldFeedbackTransform,
-} from './native-enemy-world-feedback.ts'
+import { NativeCrowBlindnessView } from './native-crow-blindness-view.ts'
+import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import { NativeEnemyWorldFeedbackPresentation, nativeEnemyWorldFeedbackTransform } from './native-enemy-world-feedback.ts'
 import { installNativeFixedFunctionRenderPipeline } from './native-fixed-function-render-pipeline.ts'
-import {
-  NativeSecondaryScreenFeedbackPresentation,
-  nativeSecondaryWorldShake,
-  presentNativeSecondaryScreenOverlay,
-} from './native-secondary-presentation.ts'
+import { NativeSecondaryScreenFeedbackPresentation, nativeSecondaryWorldShake, presentNativeSecondaryScreenOverlay } from './native-secondary-presentation.ts'
 import { NativeWorldNameplateLayer, projectNativeWorldPoint } from './native-world-nameplate.ts'
 import { NativeWorldSpeechLayer } from './native-world-speech.ts'
 import { PLAYER_CHARACTER_ATLAS_SOURCES } from './player-character-atlas.ts'
-import { Application, Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
-
 function drawSecondaryScreenFlash(
   graphic: Graphics,
   viewport: GameViewportLayout,
@@ -239,6 +209,8 @@ export async function createBoneyardWorldRenderer(
   secondaryScreenFlash.visible = false
   drawSecondaryScreenFlash(secondaryScreenFlash, viewport)
   application.stage.addChild(secondaryScreenFlash)
+  const crowBlindness = new NativeCrowBlindnessView(application.stage,
+    textures.base[nativeEnemySpriteRecord('DeadHawg', 1).source]!)
   const visibility = new BoneyardResidentVisibility(staticWorld.activeResidents)
   const worldFeedback = new NativeEnemyWorldFeedbackPresentation(
     options.initialSnapshot.tick,
@@ -250,6 +222,7 @@ export async function createBoneyardWorldRenderer(
     options.initialSnapshot.tick,
     `boneyard:${options.boneyard.runId}`,
   )
+  const pendingEnemyScreenEvents: BoneyardEnemyEventSnapshot[] = []
   const canvas = application.canvas as HTMLCanvasElement
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
@@ -426,6 +399,7 @@ export async function createBoneyardWorldRenderer(
     consumeEnemyEvent(event) {
       if (destroyed || event.runId !== options.boneyard.runId) return
       worldFeedback.consume(event)
+      if (event.screenFlash !== undefined) pendingEnemyScreenEvents.push(event)
       scene.consumeEnemyEvent(event)
     },
     cycleSpectatorTarget(snapshot) {
@@ -518,6 +492,10 @@ export async function createBoneyardWorldRenderer(
         camera,
         viewport,
       )
+      for (const event of pendingEnemyScreenEvents.splice(0)) {
+        secondaryScreenFeedback.consumeEnemy(event, { cameraCenter: { x: camera.x, y: camera.y },
+          localPlayerAlternate: player.progression.lifeState !== 'alive', visibleWorldWidth: visibleWorld.w })
+      }
       for (const event of snapshot.secondaryAbilities.events) {
         secondaryScreenFeedback.consume(event, {
           cameraCenter: { x: camera.x, y: camera.y },
@@ -631,6 +609,8 @@ export async function createBoneyardWorldRenderer(
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
       secondaryScreenFlash.visible = screenOverlay !== null
+      crowBlindness.update(snapshot.players[options.playerId]!.lighting.blindnessTicksRemaining,
+        frameAt, viewport)
       application.render()
       updateBoneyardRendererDiagnostics({
         frameDiagnostics, canvas, cameraFocus, camera, frameCount, painter, snapshot,
@@ -750,6 +730,7 @@ export async function createBoneyardWorldRenderer(
       destroyBoneyardWorldTextures(textures)
       modTextures.destroy()
       arenaRenderPipeline.destroy()
+      crowBlindness.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
     },

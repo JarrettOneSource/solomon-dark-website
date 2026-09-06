@@ -10,7 +10,7 @@ import {
 } from '../src/game/renderer/native-arena-render-pipeline.ts'
 
 import { setNativeVertexColors } from '../src/game/renderer/native-material-batch.ts'
-import { renderNativeDiffuseMask } from '../src/game/renderer/native-texture-color.ts'
+import { renderNativeDiffuseMask, setNativeDiffuseColor } from '../src/game/renderer/native-texture-color.ts'
 
 import { createNativeLitSurfaceGrid } from '../src/game/renderer/boneyard-building-surface-view.ts'
 
@@ -98,6 +98,7 @@ export async function renderNativeMaterialSamples() {
       samples.push(...uniformSamples(app, target, mode, retainedTextures, false, true))
       samples.push(...uniformSamples(app, target, mode, retainedTextures))
       samples.push(...retainedColorModeSamples(app, target, mode, retainedTextures))
+      samples.push(...drawableColorModeSamples(app, target, mode, retainedTextures))
       samples.push(...textureOpacitySamples(app, target, mode, retainedTextures))
       for (const alpha of [0, 1, 128, 255]) {
         const texture = textureFromPixel([128, 64, 192, alpha])
@@ -120,6 +121,7 @@ export async function renderNativeMaterialSamples() {
         previousProgramDestroyed: previousProgram.vertex === null && previousProgram.fragment === null,
       })
       samples.push(...uniformSamples(app, target, mode, retainedTextures, true))
+      samples.push(...drawableColorModeSamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
       samples.push(...textureOpacitySamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
     } finally {
       target.destroy(true)
@@ -199,6 +201,60 @@ function retainedColorModeSamples(app, target, mode, retainedTextures) {
     samples.push({ mode, masked, rgba, pixel: samplePixels(app.renderer, target), role: 'retained-color-mode' })
   }
   sprite.destroy()
+  return samples
+}
+
+function drawableColorModeSamples(app, target, mode, retainedTextures) {
+  const samples = []
+  for (const premultiplied of [false, true]) {
+    const rgba = premultiplied ? [30, 60, 15, 128] : [60, 120, 30, 128]
+    const texture = textureFromPixel(rgba, premultiplied)
+    retainedTextures.push(texture)
+    for (const kind of ['sprite', 'batched-mesh', 'standalone-mesh']) {
+      for (const blend of ['normal', 'add']) {
+        const parent = new Container({ isRenderGroup: true })
+        const displays = [0, 1].map(index => {
+          const display = kind === 'sprite'
+            ? new Sprite({ texture, width: size, height: size })
+            : new MeshSimple({ indices, texture, uvs, vertices })
+          // The probe vertices are immutable; automatic MeshSimple uploads would obscure retained-batch reuse.
+          if (kind !== 'sprite') display.autoUpdate = false
+          if (kind === 'standalone-mesh') display.geometry.batchMode = 'no-batch'
+          display.scale.x *= .5
+          display.x = index * size / 2
+          display.tint = 0xa50000
+          display.alpha = 128 / 255
+          display.blendMode = blend
+          parent.addChild(display)
+          return display
+        })
+        app.stage.addChild(parent)
+        const renderOptions = { container: app.stage, target, clear: true, clearColor: [.2, .1, .3, 1] }
+        try {
+          for (const diffuse of [true, false, true]) {
+            setNativeDiffuseColor(displays[1], diffuse)
+            app.renderer.render(renderOptions)
+            const batcher = kind === 'standalone-mesh' ? null
+              : app.renderer.renderPipes.batch['_batchersByInstructionSet'][parent.renderGroup.instructionSet.uid].default
+            const buffer = batcher?.geometry.buffers[0]
+            const before = buffer?._updateID
+            setNativeDiffuseColor(displays[1], diffuse)
+            app.renderer.render(renderOptions)
+            const retainedAttributeUpdates = buffer ? buffer._updateID - before : null
+            const retainedBuffer = !buffer || batcher.geometry.buffers[0] === buffer
+            const { pixels } = app.renderer.extract.pixels({ target })
+            for (const index of [0, 1]) {
+              const offset = (8 * size + 4 + index * 8) * 4
+              samples.push({ blend, diffuse: index === 1 && diffuse, kind, mode, premultiplied, rgba, retainedAttributeUpdates, retainedBuffer,
+                pixel: Array.from(pixels.slice(offset, offset + 4)), role: 'drawable-color-mode' })
+            }
+          }
+        } finally {
+          parent.destroy({ children: true })
+        }
+      }
+    }
+  }
   return samples
 }
 

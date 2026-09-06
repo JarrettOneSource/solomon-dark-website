@@ -1,29 +1,19 @@
+import { Container } from 'pixi.js'
+import 'pixi.js/unsafe-eval'
 import type { Vec2 } from '../../editor/model.ts'
 import type { Camera } from '../../editor/render.ts'
-import type {
-  BoneyardEnemyDeathEffectSnapshot,
-  BoneyardEnemySnapshot,
-  GameSnapshot,
-} from '../protocol/game-state.ts'
+import type { BoneyardEnemyDeathEffectSnapshot, BoneyardEnemySnapshot, GameSnapshot } from '../protocol/game-state.ts'
 import { BoneyardDynamicScene } from './boneyard-dynamic-scene.ts'
 import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
-import { type BoneyardSpectatorCameraState, boneyardCameraFocus } from './boneyard-render-contract.ts'
-import type {
-  BoneyardPainterFrame,
-  BoneyardSceneSnapshot,
-  StaticWorldBuild,
-} from './boneyard-renderer-model.ts'
+import type { BoneyardSpectatorCameraState } from './boneyard-render-contract.ts'
+import { boneyardCameraFocus } from './boneyard-render-contract.ts'
+import type { BoneyardPainterFrame, BoneyardSceneSnapshot, StaticWorldBuild } from './boneyard-renderer-model.ts'
 import type { BoneyardSolomonClipRect } from './boneyard-solomon-render.ts'
 import { BoneyardResidentVisibility } from './boneyard-static-world.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
-import {
-  NATIVE_PLAYER_MAGIC_SHIELD,
-  presentNativeSecondaryScreenOverlay,
-} from './native-secondary-presentation.ts'
+import { NATIVE_PLAYER_MAGIC_SHIELD, presentNativeSecondaryScreenOverlay } from './native-secondary-presentation.ts'
 import type { NativeSecondaryDiagnosticSample } from './native-secondary-world-view.ts'
-import { Container } from 'pixi.js'
-
 interface EnemyDeathEffectDiagnosticSample {
   ageTicks: number
   alpha: number
@@ -73,6 +63,7 @@ interface BoneyardRendererFrameDiagnostics {
   complexShadowRecordCount: number
   complexShadowZOrderMismatchCount: number
   enemyAuxiliaryEffectCount: number
+  enemyUnderlayLayerCount: number
   enemyAuxiliaryEffectLanes: readonly string[]
   enemyCount: number
   enemyOutsideCombatBoundsCount: number
@@ -367,6 +358,7 @@ export function createBoneyardRendererDiagnostics(
     complexShadowQuadCount: 0,
     complexShadowRecordCount: 0,
     complexShadowZOrderMismatchCount: 0,
+    enemyUnderlayLayerCount: 0,
     enemyAuxiliaryEffectCount: 0,
     enemyAuxiliaryEffectLanes: [],
     enemyCount: 0,
@@ -601,6 +593,7 @@ export function updateBoneyardRendererDiagnostics(input: BoneyardRendererDiagnos
       frameDiagnostics.complexShadowQuadCount = painter.complexShadowQuadCount
       frameDiagnostics.complexShadowRecordCount = painter.complexShadowRecordCount
       frameDiagnostics.complexShadowZOrderMismatchCount = painter.complexShadowZOrderMismatchCount
+      frameDiagnostics.enemyUnderlayLayerCount = scene.enemies.underlayLayerCount
       frameDiagnostics.enemyAuxiliaryEffectCount = scene.enemies.auxiliaryEffectCount
       frameDiagnostics.enemyAuxiliaryEffectLanes = (scene.enemies.painterLayers().map(({ lane }) => lane))
       frameDiagnostics.enemyCount = scene.enemies.size
@@ -849,6 +842,7 @@ export function updateBoneyardRendererDiagnostics(input: BoneyardRendererDiagnos
       frameDiagnostics.secondaryScreenFlashAlpha = screenOverlay?.alpha ?? 0
       frameDiagnostics.secondaryScreenFlashColor = screenOverlay?.color ?? 0xffffff
       canvas.dataset.enemyCount = `${scene.enemies.size}`
+      canvas.dataset.enemyUnderlayLayerCount = `${scene.enemies.underlayLayerCount}`
       canvas.dataset.enemyAuxiliaryEffectCount = `${scene.enemies.auxiliaryEffectCount}`
       canvas.dataset.enemyAuxiliaryEffectLanes = (scene.enemies.painterLayers().map(({ lane }) => lane)).join(',')
       canvas.dataset.enemyDeathEffectCount = `${scene.enemyDeathEffects.size}`

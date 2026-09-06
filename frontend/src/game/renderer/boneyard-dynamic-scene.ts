@@ -1,65 +1,36 @@
-import { NativeCompactMaskView } from './native-compact-mask-view.ts'
-import { NativeDeadSpiderViews } from './native-dead-spider-views.ts'
-import { NativeSpiderWebViews } from './native-spider-web-views.ts'
+import { NativeSceneryHitView } from './native-scenery-hit-view.ts'
+import type { ContainerChild } from 'pixi.js'
+import { Application, Container } from 'pixi.js'
+import 'pixi.js/unsafe-eval'
 import { NATIVE } from '../../editor/model.ts'
 import { nativeGatePainterRoot } from '../../editor/native-fence-geometry.ts'
 import type { MainLayer } from '../../editor/native-render-plan.ts'
 import type { Camera } from '../../editor/render.ts'
-import {
-  BoneyardPainterOrderPlanner,
-  type DynamicPainterLayer,
-  type StaticPainterLayer,
-} from '../boneyard-painter-order.ts'
+import type { DynamicPainterLayer, StaticPainterLayer } from '../boneyard-painter-order.ts'
+import { BoneyardPainterOrderPlanner } from '../boneyard-painter-order.ts'
 import type { BoneyardGateLeafSnapshot, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import { NativeBoneyardWeather } from '../core-kernels/native-boneyard-weather.ts'
-import {
-  type NativeSecondaryTargetEffectState,
-  nativeSecondaryTargetMaterialTint,
-} from '../core-kernels/native-secondary-abilities.ts'
-import {
-  type BoneyardCollisionWorld,
-  boneyardBodyCollides,
-  createBoneyardCollisionWorld,
-  withBoneyardGateCollision,
-} from '../core-server/boneyard-collision.ts'
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
+import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
+import type { BoneyardCollisionWorld } from '../core-server/boneyard-collision.ts'
+import { boneyardBodyCollides, createBoneyardCollisionWorld, withBoneyardGateCollision } from '../core-server/boneyard-collision.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
-import type {
-  BoneyardEnemyEventSnapshot,
-  BoneyardEnemySnapshot,
-  GameSnapshot,
-} from '../protocol/game-state.ts'
+import type { BoneyardEnemyEventSnapshot, BoneyardEnemySnapshot, GameSnapshot } from '../protocol/game-state.ts'
 import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
-import {
-  BoneyardComplexShadowPresentation,
-  type BoneyardComplexShadowStaticCaster,
-} from './boneyard-complex-shadow-presentation.ts'
+import type { BoneyardComplexShadowStaticCaster } from './boneyard-complex-shadow-presentation.ts'
+import { BoneyardComplexShadowPresentation } from './boneyard-complex-shadow-presentation.ts'
+import { nativeBoneyardComplexShadowRecords } from './boneyard-complex-shadows.ts'
 import { BoneyardGateViews } from './boneyard-gate-views.ts'
-import {
-  NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
-  nativeBoneyardLightScalar,
-  nativeBoneyardLightTint,
-  nativeBoneyardWeatherLightingOrder,
-  nativeSolomonSetPieceLighting,
-} from './boneyard-lighting.ts'
+import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeBoneyardLightScalar, nativeBoneyardLightTint, nativeBoneyardWeatherLightingOrder, nativeSolomonSetPieceLighting } from './boneyard-lighting.ts'
 import { boneyardPlayerSortBias, boneyardVisibleWorldBounds } from './boneyard-render-contract.ts'
-import {
-  type BoneyardPainterFrame,
-  type BoneyardWorldPresentationSettings,
-  type BuildingResidents,
-  type ResidentTexture,
-  type TreeResidents,
-  type WallResident,
-  requireBoneyardSnapshot,
-} from './boneyard-renderer-model.ts'
+import type { BoneyardPainterFrame, BoneyardWorldPresentationSettings, BuildingResidents, ResidentTexture, TreeResidents, WallResident } from './boneyard-renderer-model.ts'
+import { requireBoneyardSnapshot } from './boneyard-renderer-model.ts'
 import { BoneyardSceneLights } from './boneyard-scene-lights.ts'
 import { boneyardSolomonPainterLayers } from './boneyard-solomon-render.ts'
 import { BoneyardSolomonView } from './boneyard-solomon-view.ts'
-import {
-  isMovingGateBody,
-  nativeStaticProxyInsertions,
-  runtimeMainWorldY,
-} from './boneyard-static-layout.ts'
+import { isMovingGateBody, nativeStaticProxyInsertions, runtimeMainWorldY } from './boneyard-static-layout.ts'
 import { BoneyardStaticLighting } from './boneyard-static-lighting.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import type { NativeTreeOcclusionInput } from './boneyard-tree-occlusion.ts'
@@ -70,35 +41,28 @@ import { modConsumableEffectId as modEffectId } from './mod-consumable-effect-pr
 import { ModConsumableEffectViews } from './mod-consumable-effect-view.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { NativeBoneyardWeatherView } from './native-boneyard-weather-view.ts'
-import {
-  nativeEnemyDeathEffectPainterLane,
-  nativeEnemyDeathEffectPainterLayer,
-} from './native-enemy-death-effect-presentation.ts'
+import { NativeBossSpellViews } from './native-boss-spell-view.ts'
+import { NativeCompactMaskView } from './native-compact-mask-view.ts'
+import { NativeDeadSpiderViews } from './native-dead-spider-views.ts'
+import { nativeEnemyDeathEffectPainterLane, nativeEnemyDeathEffectPainterLayer } from './native-enemy-death-effect-presentation.ts'
 import { NativeEnemyDeathEffectViews } from './native-enemy-death-effect-view.ts'
 import { nativeEnemyPainterLayer } from './native-enemy-presentation.ts'
-import {
-  nativeEnemyProjectileEffectPainterLayer,
-} from './native-enemy-projectile-effect-presentation.ts'
+import { nativeEnemyProjectileEffectPainterLayer } from './native-enemy-projectile-effect-presentation.ts'
 import { NativeEnemyProjectileEffectViews } from './native-enemy-projectile-effect-view.ts'
 import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
+import { NATIVE_ENEMY_DIRECTIONAL_SHADOW_FAMILIES } from './native-enemy-underlay.ts'
 import { NativeEnemyViews } from './native-enemy-view.ts'
 import { NativeHagathaSeekerView } from './native-hagatha-seeker-view.ts'
 import { nativeGoodiePainterLayer, nativeLootPainterLayer } from './native-loot-presentation.ts'
 import { NativeGoodieViews, NativeLootViews } from './native-loot-view.ts'
-import {
-  NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_Z_OFFSET,
-  NativeMageLightningPulseViews,
-  nativeMageLightningTargetContactDepths,
-} from './native-mage-lightning-pulse-view.ts'
+import { NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_Z_OFFSET, NativeMageLightningPulseViews, nativeMageLightningTargetContactDepths } from './native-mage-lightning-pulse-view.ts'
 import { NativeMaggotViews } from './native-maggot-view.ts'
-import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
+import { NativeSpiderWebViews } from './native-spider-web-views.ts'
 import { PlayerDeathBurstViews } from './player-death-burst-view.ts'
 import { PlayerDeathWeaponViews } from './player-death-weapon-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { PlayerWorldView } from './world-player-view.ts'
-import { Application, Container, type ContainerChild } from 'pixi.js'
-
 export class BoneyardDynamicScene {
   private readonly compactMasks: NativeCompactMaskView
   private readonly spiderWebs: NativeSpiderWebViews
@@ -113,6 +77,7 @@ export class BoneyardDynamicScene {
   readonly enemyDeathEffects: NativeEnemyDeathEffectViews
   readonly enemyProjectileEffects: NativeEnemyProjectileEffectViews
   readonly enemyProjectiles: NativeEnemyProjectileViews
+  readonly bossSpells: NativeBossSpellViews
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gateShadowDepthOwners = new Map<string, ContainerChild>()
   private readonly gates: BoneyardGateViews
@@ -145,6 +110,7 @@ export class BoneyardDynamicScene {
   private readonly staticPainterLayers: StaticPainterLayer[]
   private readonly textures: BoneyardWorldTextures
   private readonly staticLighting: BoneyardStaticLighting
+  private readonly sceneryHits: NativeSceneryHitView
   private readonly treeResidents: ReadonlyMap<string, TreeResidents>
   private readonly wallResidents: ReadonlyMap<number, WallResident>
   private readonly visibleShadowDepthOwners: ContainerChild[] = []
@@ -184,6 +150,7 @@ export class BoneyardDynamicScene {
       boneyard, mainLayers, buildingResidents, wallResidents, treeResidents,
       treeInputs, initialSnapshot.tick,
     )
+    this.sceneryHits = new NativeSceneryHitView(mainLayers, mainResidents, treeResidents, buildingResidents)
     this.treeResidents = treeResidents
     this.buildingResidents = buildingResidents
     this.wallResidents = wallResidents
@@ -192,6 +159,11 @@ export class BoneyardDynamicScene {
     preWorld.sortableChildren = true
     preWorld.zIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX / 2
     root.addChild(preWorld)
+    const enemyUnderlays = new Container({ label: 'boneyard-enemy-underlays' })
+    enemyUnderlays.eventMode = 'none'
+    enemyUnderlays.sortableChildren = true
+    enemyUnderlays.zIndex = 1
+    preWorld.addChild(enemyUnderlays)
     this.primarySpells = PrimarySpellWorldView.forBoneyard(root, textures, { preWorldRoot: preWorld })
     this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer, {
       preWorldRoot: preWorld,
@@ -211,11 +183,12 @@ export class BoneyardDynamicScene {
     this.compactMasks = new NativeCompactMaskView(root, preWorld, renderer, textures, boneyard.scene)
     this.spiderRemains = new NativeDeadSpiderViews(preWorld, textures)
     this.spiderWebs = new NativeSpiderWebViews(root)
-    this.enemies = new NativeEnemyViews(root, textures, preWorld)
+    this.enemies = new NativeEnemyViews(root, textures, preWorld, enemyUnderlays)
+    this.bossSpells = new NativeBossSpellViews(root, textures)
     this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures, preWorld)
     this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures, preWorld)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures, preWorld)
-    this.maggots = new NativeMaggotViews(root, textures)
+    this.maggots = new NativeMaggotViews(root, textures, enemyUnderlays)
     this.loot = new NativeLootViews(root, textures, modTextures, modCatalog)
     this.seeker = new NativeHagathaSeekerView(root)
     this.modEffects = new ModConsumableEffectViews(root, textures)
@@ -324,11 +297,13 @@ export class BoneyardDynamicScene {
           levelUpPresentation.elapsedMs,
           levelUpPresentation.playerScreenY,
         )
+    const puppetHits = new Map(snapshot.world.puppetHits.map(hit => [hit.targetId, hit]))
     this.primarySpells.update(
       snapshot.primarySpells,
       `boneyard:${snapshot.world.runId}`,
       presentationFrame,
       pointGainAt,
+      puppetHits,
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,
@@ -337,17 +312,20 @@ export class BoneyardDynamicScene {
       pointGainAt,
     )
     this.gates.update(snapshot.world.gateLeaves)
-    this.goodies.update(snapshot.world.goodies, snapshot.tick)
-    this.enemies.update(enemySnapshots, snapshot.tick)
+    this.goodies.update(snapshot.world.goodies, snapshot.tick, puppetHits, settings.complexLighting)
+    this.enemies.update(enemySnapshots, snapshot.tick, settings.complexLighting)
     this.spiderRemains.update(snapshot.world.spiderRemains)
+    this.bossSpells.update(snapshot.world.bossSpells, snapshot.tick, viewport.height)
     const visibleWorldBounds = boneyardVisibleWorldBounds(camera, viewport)
     this.enemyDeathEffects.update(
       snapshot.world.deathEffects,
       visibleWorldBounds,
+      viewport.height,
     )
     this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects, pointGainAt)
-    this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
-    this.maggots.update(snapshot.world.maggots, visibleWorldBounds)
+    this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick, snapshot.world.enemyProjectileEffects,
+      puppetHits, settings.complexLighting)
+    this.maggots.update(snapshot.world.maggots, visibleWorldBounds, settings.complexLighting)
     const visibleMaggots = this.maggots.visibleSnapshots
     this.loot.update(snapshot.world.loot)
     this.seeker.update(snapshot, localPlayerId)
@@ -381,8 +359,9 @@ export class BoneyardDynamicScene {
     for (const [id, view] of this.players) {
       const player = snapshot.players[id]
       if (!player) continue
-      view.setWorldTint(nativeBoneyardLightTint(worldLightScalar(player.position)))
+      view.setWorldTint(nativeBoneyardLightTint(worldLightScalar(player.position)), settings.complexLighting)
     }
+    this.sceneryHits.update(snapshot.world.puppetHits, snapshot.tick, settings.complexLighting)
     const playerDeathWeaponPainterLayers = this.playerDeathWeapons.painterLayers()
     const primarySpellPainterLayers = this.primarySpells.painterLayers()
     const secondaryAbilityPainterLayers = this.secondaryAbilities.painterLayers()
@@ -406,6 +385,7 @@ export class BoneyardDynamicScene {
         nativeBoneyardLightTint(worldLightScalar(layer.regionLightPoint)),
       )
     }
+    this.secondaryAbilities.setPuppetHits(puppetHits, settings.complexLighting)
     const secondaryEffectsByTarget = this.secondaryEffectsByTarget
     secondaryEffectsByTarget.clear()
     for (const effect of snapshot.secondaryAbilities.targetEffects) {
@@ -414,11 +394,17 @@ export class BoneyardDynamicScene {
       }
     }
     for (const enemy of enemySnapshots) {
-      const lightTint = nativeBoneyardLightTint(worldLightScalar(enemy.position))
-      this.enemies.setTint(enemy.id, nativeSecondaryTargetMaterialTint(
+      const lightScalar = worldLightScalar(enemy.position)
+      const lightTint = nativeBoneyardLightTint(lightScalar)
+      const shadowRecords = NATIVE_ENEMY_DIRECTIONAL_SHADOW_FAMILIES.has(enemy.enemyToken)
+        && (settings.complexShadows || enemy.enemyToken === 'HEARTMONGER')
+        ? nativeBoneyardComplexShadowRecords(
+            { id: `enemy:${enemy.id}`, outline: [], position: enemy.position }, this.lights.index, presentationFrame,
+          ) : []
+      this.enemies.setLighting(enemy.id, nativeSecondaryTargetMaterialTint(
         lightTint,
         secondaryEffectsByTarget.get(enemy.id),
-      ))
+      ), lightScalar, shadowRecords, settings.complexShadows, snapshot.tick)
     }
     for (const actor of snapshot.world.loot) {
       this.loot.setTint(actor.id, nativeBoneyardLightTint(worldLightScalar(actor.position)))
@@ -536,6 +522,7 @@ export class BoneyardDynamicScene {
     for (const enemy of enemySnapshots) {
       dynamicLayers.push(nativeEnemyPainterLayer(enemy))
     }
+    dynamicLayers.push(...this.bossSpells.painterLayers(snapshot.world.bossSpells))
     for (const actor of snapshot.world.loot) {
       dynamicLayers.push(nativeLootPainterLayer(actor))
     }
@@ -724,6 +711,7 @@ export class BoneyardDynamicScene {
         positionedDynamics.get(`enemy:${enemy.id}`)?.zIndex ?? 1,
       )
     }
+    this.bossSpells.applyPainterDepths(snapshot.world.bossSpells, positionedDynamics)
     for (const layer of enemyAuxiliaryPainterLayers) {
       const depth = layer.lane === 'pre-world-queue'
         ? 0.5
@@ -756,7 +744,11 @@ export class BoneyardDynamicScene {
       const lane = nativeEnemyDeathEffectPainterLane(effect)
       this.enemyDeathEffects.setDepth(
         effect.id,
-        lane === 'pre-world-queue'
+        lane === 'background'
+          ? 0
+          : lane === 'late-world-overlay'
+          ? order.foregroundZIndex + 1
+          : lane === 'pre-world-queue'
           ? 0.5
           : lane === 'post-world-queue'
             ? order.foregroundZIndex + 0.25
@@ -900,6 +892,7 @@ export class BoneyardDynamicScene {
   }
 
   destroy(): void {
+    this.sceneryHits.destroy()
     this.painterOrderPlanner.clear()
     this.complexShadows.destroy()
     this.primarySpells.destroy()
@@ -908,6 +901,7 @@ export class BoneyardDynamicScene {
     this.spiderWebs.destroy()
     this.spiderRemains.destroy()
     this.enemies.destroy()
+    this.bossSpells.destroy()
     this.enemyDeathEffects.destroy()
     this.enemyProjectileEffects.destroy()
     this.enemyProjectiles.destroy()

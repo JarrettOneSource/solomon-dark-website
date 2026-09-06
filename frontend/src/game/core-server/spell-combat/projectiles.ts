@@ -151,6 +151,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
             work.damageMultiplier(actor.id, projectile.kind, projectile.ownerId),
           )
         const damaged = damageBoneyardEnemy(work.enemies, {
+          hasMagicDamage: true,
           magic: true,
           actorId: actor.id,
           amount,
@@ -255,6 +256,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
           )
         : projectile.damage
       const damaged = damageBoneyardEnemy(work.enemies, {
+        hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,
         actorId: actor.id,
@@ -285,6 +287,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
             })
           }
           const radial = damageBoneyardEnemy(work.enemies, {
+            hasMagicDamage: true,
             magic: true,
             lethalObserver: work.lethalObserver,
             actorId: row.actor.id,
@@ -358,6 +361,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
       const amount = nativeFireDirectDamage(projectile.damage, projectile.explodeDamage)
       if (amount > 0) {
         const damaged = damageBoneyardEnemy(work.enemies, {
+          hasMagicDamage: true,
           magic: true,
           lethalObserver: work.lethalObserver,
           actorId: actor.id,
@@ -396,6 +400,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
         work.damageMultiplier(actor.id, projectile.kind, projectile.ownerId),
       )
     const damaged = damageBoneyardEnemy(work.enemies, {
+      hasMagicDamage: true,
       magic: true,
       actorId: actor.id,
       amount,

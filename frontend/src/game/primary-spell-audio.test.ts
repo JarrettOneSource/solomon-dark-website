@@ -1508,6 +1508,7 @@ function meteorAudioActor(
     impactThrowFirePitch: impact && !underpowered ? Math.fround(0.8) : null,
     impactTicksRemaining: 200,
     kind: 'weld-meteor',
+    landingPosition: position,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 40 },
     origin: position,
     ownerId: PLAYER_ID,

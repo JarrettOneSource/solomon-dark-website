@@ -1,8 +1,4 @@
-import {
-  nativeRandomFloatFromSemanticWord,
-  nativeRandomIntFromSemanticWord,
-} from './native-random-domain.ts'
-
+import { nativeRandomFloatFromSemanticWord, nativeRandomIntFromSemanticWord } from './native-random-domain.ts'
 export const AIR_LIGHTNING_BODY_LIFETIME_TICKS = 2
 export const AIR_LIGHTNING_CONTACT_LIFETIME_TICKS = 5
 export const AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING = 15
@@ -57,7 +53,8 @@ export interface NativeAirRibbonLayer {
   parameterSamples: Float32Array
   phaseDegrees: number
   phaseOffset: number
-  textureRecord: 44
+  textureRecord: 44 | 64
+  blendMode?: 'normal' | 'add'
   tint: number
   uvs: Float32Array
   vertices: Float32Array
@@ -65,11 +62,11 @@ export interface NativeAirRibbonLayer {
 }
 
 export interface NativeAirBranchPlan {
-  geometryRecord: typeof AIR_LIGHTNING_BRANCH_RECORDS[number]
+  geometryRecord: 373 | 374 | typeof AIR_LIGHTNING_BRANCH_RECORDS[number]
   indices: Uint32Array
   mirrorX: boolean
   scale: number
-  textureRecord: typeof AIR_LIGHTNING_BRANCH_RECORDS[number]
+  textureRecord: 373 | 374 | typeof AIR_LIGHTNING_BRANCH_RECORDS[number]
   uvs: Float32Array
   vertices: Float32Array
 }
@@ -146,6 +143,8 @@ export interface NativeAirLightningInput {
 }
 
 export interface NativeAirRibbonLayerInput {
+  readonly dark?: boolean
+  readonly taperScale?: number
   readonly alpha: number
   readonly basePhaseDegrees: number
   readonly birthTick: number
@@ -320,6 +319,8 @@ export function buildNativeAirRibbonLayer(
     input.phaseOffset ?? 0,
     input.tint,
     input.alpha,
+    input.dark ?? false,
+    input.taperScale ?? 1,
   )
 }
 
@@ -456,6 +457,8 @@ function buildRibbon(
   phaseOffset: number,
   tint: number,
   alpha: number,
+  dark = false,
+  taperScale = 1,
 ): NativeAirRibbonLayer {
   const parameterSamples = nativeParameterSamples(points[0], points[1])
   const pairCount = parameterSamples.length
@@ -494,7 +497,7 @@ function buildRibbon(
       const randomRadius = randomSample.radius * envelope
       centerX += Math.sin(degreesToRadians(randomAngle)) * randomRadius
       centerY -= Math.cos(degreesToRadians(randomAngle)) * randomRadius
-      halfWidth *= (1 - envelope) * 0.75 + 0.5
+      halfWidth *= ((1 - envelope) * 0.75 + 0.5) * taperScale
     }
 
     const vertex = pair * 4
@@ -534,12 +537,14 @@ function buildRibbon(
         id,
         semanticSeed(id, birthTick, 0x4252414e ^ phaseOffset),
       ),
+      dark,
     ),
     indices,
     parameterSamples,
     phaseDegrees,
     phaseOffset,
-    textureRecord: AIR_LIGHTNING_RIBBON_RECORD,
+    ...(dark ? { blendMode: 'normal' as const } : {}),
+    textureRecord: dark ? 64 : AIR_LIGHTNING_RIBBON_RECORD,
     tint,
     uvs,
     vertices,
@@ -566,6 +571,7 @@ export function nativeAirRibbonRandomSample(state: number): {
 export function buildNativeAirBranchPlan(
   points: readonly [NativeAirPoint, NativeAirPoint, NativeAirPoint],
   random: NativeAirRandomSource,
+  dark = false,
 ): NativeAirBranchPlan | null {
   if (airRandomInt(random, 2) !== 1) return null
   const attachment = quickSplinePoint(
@@ -577,11 +583,17 @@ export function buildNativeAirBranchPlan(
   const mirrorX = airRandomInt(random, 2) === 1
   const geometryIndex = airRandomInt(random, 2) as 0 | 1
   const textureIndex = airRandomInt(random, 2) as 0 | 1
-  const geometryRecord = AIR_LIGHTNING_BRANCH_RECORDS[geometryIndex]
-  const geometry = AIR_LIGHTNING_BRANCH_GEOMETRY[geometryIndex]
+  const records = dark ? [373, 374] as const : AIR_LIGHTNING_BRANCH_RECORDS
+  const geometryRecord = records[geometryIndex]
+  const geometry = dark ? [
+    [{ x: -49, y: -75 }, { x: 13, y: -75 }, { x: -49, y: 20 }, { x: 13, y: 20 }],
+    [{ x: -49, y: -183 }, { x: 14, y: -183 }, { x: -49, y: 23 }, { x: 14, y: 23 }],
+  ][geometryIndex] : AIR_LIGHTNING_BRANCH_GEOMETRY[geometryIndex]
   const first = geometry[0]
   const baseDegrees = normalizeDegrees(Math.atan2(-first.y, first.x) * 180 / Math.PI)
-  const radians = (baseDegrees + airRandomFloat(random, 45)) * Math.PI / 180
+  const angle = airRandomFloat(random, 45)
+  const signedAngle = airRandomInt(random, 2) === 1 ? -angle : angle
+  const radians = (baseDegrees + signedAngle) * Math.PI / 180
   const cosine = Math.cos(radians)
   const sine = Math.sin(radians)
   const xScale = (mirrorX ? -1 : 1) * scale
@@ -597,7 +609,7 @@ export function buildNativeAirBranchPlan(
     indices: Uint32Array.from([0, 1, 2, 1, 3, 2]),
     mirrorX,
     scale,
-    textureRecord: AIR_LIGHTNING_BRANCH_RECORDS[textureIndex],
+    textureRecord: records[textureIndex],
     uvs: Float32Array.from([0, 0, 1, 0, 0, 1, 1, 1]),
     vertices,
   }

@@ -174,6 +174,7 @@ export function transient<Kind extends TransientKind>(
     enhancedShadow: true,
     entry: kind === 'player-staff-move-fade' ? 40 : 15,
     fadeAlpha: value,
+    landingPosition: vector,
     fallHeadingDegrees: value,
     fallHeight: value,
     falling: true,

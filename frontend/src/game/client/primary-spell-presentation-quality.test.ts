@@ -86,7 +86,7 @@ const TRANSIENT_CONTRACTS: Record<TransientKind, TransientContract> = {
   'weld-hail-terrain-bouncer': { degrees: ['rotationDegrees'], numbers: ['ageTicks', 'alpha', 'height'], owned: ['direction', 'origin', 'position', 'vector', 'velocity'], vectors: ['direction', 'origin', 'position', 'velocity'] },
   'weld-hail-terrain-particle': { numbers: ['ageTicks', 'alpha'], owned: ['direction', 'origin', 'position', 'vector', 'velocity'], vectors: ['direction', 'origin', 'position', 'velocity'] },
   'weld-impact': { numbers: ['ageTicks', 'alpha'], owned: ['direction', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
-  'weld-meteor': { numbers: ['ageTicks', 'bodyScale', 'fallHeight'], owned: ['cameraDisplacement', 'debris', 'debris.0.position', 'debris.0.velocity', 'direction', 'lightRegistration', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
+  'weld-meteor': { numbers: ['ageTicks', 'bodyScale', 'fallHeight'], owned: ['landingPosition', 'cameraDisplacement', 'debris', 'debris.0.position', 'debris.0.velocity', 'direction', 'lightRegistration', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
   'weld-meteor-flash': { numbers: ['ageTicks', 'alpha'], owned: ['direction', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
   'weld-meteor-marker': { degrees: ['rotationDegrees'], numbers: ['ageTicks', 'alpha', 'scale'], owned: ['direction', 'origin', 'vector'], vectors: ['direction', 'origin'] },
   'weld-persistent': { numbers: ['ageTicks'], owned: ['direction', 'origin', 'vector'], vectors: ['direction', 'origin'] },

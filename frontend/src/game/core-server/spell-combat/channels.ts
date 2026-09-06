@@ -1,4 +1,3 @@
-import { applyChannelProjectileForce } from './projectile-forces.ts'
 import {
   drawNativeDisintegratePercentile,
   drawNativeSpellDamage,
@@ -31,6 +30,7 @@ import {
   validatedDamageMultiplier,
 } from './damage.ts'
 import { NATIVE_WELD_FROST_SLOW_FACTOR } from './model.ts'
+import { applyChannelProjectileForce } from './projectile-forces.ts'
 import {
   applyBlizzardPushback,
   applyWaterPushback,
@@ -199,6 +199,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(work.enemies, {
+              hasMagicDamage: true,
               magic: true,
               lethalObserver: work.lethalObserver,
               actorId: row.actor.id,
@@ -362,6 +363,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(work.enemies, {
+              hasMagicDamage: true,
               magic: true,
               lethalObserver: work.lethalObserver,
               actorId: row.actor.id,
@@ -441,6 +443,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
                 work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
               )
               const damaged = damageBoneyardEnemy(work.enemies, {
+                hasMagicDamage: true,
                 magic: true,
                 lethalObserver: work.lethalObserver,
                 actorId: row.actor.id,
@@ -544,6 +547,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
         work.damageMultiplier(row.actor.id, 'water', emission.ownerId),
       )
       const damaged = damageBoneyardEnemy(work.enemies, {
+        hasMagicDamage: true,
         magic: true,
         actorId: row.actor.id,
         amount,
@@ -579,6 +583,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'water-hail', emission.ownerId),
             )
             const hailContact = damageBoneyardEnemy(work.enemies, {
+              hasMagicDamage: false,
               magic: true,
               lethalObserver: work.lethalObserver,
               actorId: row.actor.id,

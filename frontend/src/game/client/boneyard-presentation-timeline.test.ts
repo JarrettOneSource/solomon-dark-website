@@ -1,33 +1,34 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
-import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../core-kernels/player-combat.ts'
-import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
+import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
 import {
   createBoneyardArenaTransition,
   startBoneyardArenaTransition,
   stepBoneyardArenaTransition,
 } from '../core-kernels/boneyard-arena-transition.ts'
+import { createNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
 import {
   createNativeTutorialState,
   nativeTutorialCameraBounds,
 } from '../core-kernels/native-tutorial.ts'
+import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
+import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../core-kernels/player-combat.ts'
+import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createPlayerDeathDrawPlan } from '../player-character-presentation.ts'
+import type {
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+  BoneyardMageLightningPulseSnapshot,
+  BoneyardMaggotSnapshot,ProtocolPlayerState
+} from '../protocol/game-state.ts'
 import {
   BOUNDED_PLAYER_DEATH_BURST_PROGRAM,
   PlayerDeathBurstCrossingTracker,
   playerDeathBurstLayers,
 } from '../renderer/player-death-burst-presentation.ts'
-import type { ProtocolPlayerState } from '../protocol/game-state.ts'
-import type {
-  BoneyardEnemyProjectileSnapshot,
-  BoneyardEnemySnapshot,
-  BoneyardMageLightningPulseSnapshot,
-  BoneyardMaggotSnapshot,
-} from '../protocol/game-state.ts'
 import {
   createBoneyardPresentationTimeline,
   type BoneyardGameSnapshot,
@@ -41,6 +42,31 @@ const CHARACTER = {
 const DEFAULT_SNAPSHOT = createGameSnapshot(createGameSimulation(), null)
 const DEFAULT_PLAYER = DEFAULT_SNAPSHOT.players['local-player']!
 const LIGHTING = DEFAULT_PLAYER.lighting
+
+test('Puppet hit interpolation respects contact onset, owner clocks and retirement', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 100)
+  newer.world.puppetHits = [
+    { kind: 'scenery', targetId: 'scenery:tree', hitTick: 103, feedback: { tick: 105, timer: Math.fround(.85), strength: .5 } },
+    { kind: 'leviathan', targetId: 'secondary:1', hitTick: 103, feedback: { tick: 103, timer: 1, strength: .5 } },
+  ]
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0, initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(newer, 50)
+  assert.deepEqual(timeline.sample(79).world.puppetHits, [])
+  const onset = timeline.sample(80)
+  assert.equal(onset.tick, 103)
+  assert.deepEqual(onset.world.puppetHits.map(hit => hit.feedback.timer), [Math.fround(.95), 1])
+  const advancing = timeline.sample(90)
+  const scenery = advancing.world.puppetHits[0]!
+  assert.equal(nativePuppetHitAlpha(scenery.feedback, advancing.tick), Math.fround(Math.fround(.9) * .5))
+  const frozen = advancing.world.puppetHits[1]!
+  assert.equal(frozen.feedback.timer, 1)
+  assert.notEqual(frozen.feedback, newer.world.puppetHits[1]!.feedback)
+  const retired = snapshotAt(110, 30, 100)
+  timeline.push(retired, 100)
+  assert.equal(timeline.sample(125).world.puppetHits.length, 2)
+  assert.deepEqual(timeline.sample(150).world.puppetHits, [])
+})
 
 function playerAt(x: number): ProtocolPlayerState {
   return {
@@ -79,6 +105,9 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       demonFrontRotationRadians: x / 100,
       demonRearExtremityOffset: { x: -x, y: x / 2 },
       demonRearRotationRadians: -x / 200,
+
+      demonShadowOffset: { x: 0, y: 0 },
+      shadowLateralOffset: 0,
       effects: [{
         alpha: x / 1_000,
         atlas: 'BadGuys',
@@ -92,6 +121,8 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       }],
       gaitPose: x / 10,
       headFacingOffset: 0,
+      headVariant: 0,
+      limbHeadingDeg: 0,
       hitFlash: 0,
       impBodyRotationRadians: 0,
       impEffectAlpha: 0,
@@ -112,6 +143,14 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       zombieRearArmRotationRadians: 0,
     },
     armored: false,
+    arrowType: 'normal',
+    burning: false,
+    classification: 'normal',
+    headgear: 0,
+    mageElement: 'fire',
+    name: null,
+    rotten: false,
+    weapon: 'claw',
     currentHealth: 6,
     enemyToken: 'SKELETON',
     flags: ['FLAG_WEAK'],
@@ -233,6 +272,10 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         { x: 0, y: 0, w: 1_000, h: 1_000 },
         { x: 500, y: 100 },
       ),
+      featuredBossId: null,
+      bossNarration: createNativeBossNarration(),
+      bossSpells: [],
+      puppetHits: [],
       deathEffects: [],
       encounter: {
         acceleration: tick >= 105 ? -3 : -7,

@@ -1,12 +1,6 @@
 import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
-import type {
-  NativeEnemyAtlas,
-  NativeEnemyFamily,
-  NativeEnemyFamilyPresentation,
-  NativeEnemySpriteLayer,
-  NativeEnemyVisualSnapshot,
-} from './native-enemy-presentation-model.ts'
-
+import { nativeDemonSkullFacing } from '../core-kernels/native-demon-skull-attachments.ts'
+import type { NativeEnemyAtlas, NativeEnemyFamily, NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 export const EMPTY_FAMILY_PRESENTATION: NativeEnemyFamilyPresentation = Object.freeze({
   after: Object.freeze([]),
   before: Object.freeze([]),
@@ -21,6 +15,7 @@ export function nativeEnemyFacingBucket(
 ): number {
   if (family === 'COFFIN' || family === 'PORTAL') return 0
   if (!Number.isFinite(headingDeg)) throw new Error('native facing value must be finite')
+  if (family === 'DEMONSKULL') return nativeDemonSkullFacing(headingDeg)
   if (family === 'IMP') {
     return positiveModulo(Math.trunc((headingDeg + 15) / 30), 12)
   }
@@ -52,6 +47,21 @@ export function presentation(
     hitBody: options.hitBody ?? body,
     segments: options.segments ?? [],
   }
+}
+
+export function midpoint(
+  first: Readonly<{ x: number; y: number }>,
+  second: Readonly<{ x: number; y: number }>,
+): Readonly<{ x: number; y: number }> {
+  return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+}
+
+export function addScaledPoint(
+  origin: Readonly<{ x: number; y: number }>,
+  point: Readonly<{ x: number; y: number }>,
+  scale: number,
+): Readonly<{ x: number; y: number }> {
+  return { x: origin.x + point.x * scale, y: origin.y + point.y * scale }
 }
 
 export function rotatePoint(

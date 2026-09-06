@@ -330,7 +330,7 @@ export function createNativeFirePatch(
         registrationOrdinal: options.id,
       }),
     ]),
-    position: Object.freeze({ ...options.position }),
+    position: Object.freeze({ x: Math.fround(options.position.x), y: Math.fround(options.position.y) }),
     scale: Math.fround(scale),
     horizontalSign,
     supplementalContact: options.supplementalContact ?? false,

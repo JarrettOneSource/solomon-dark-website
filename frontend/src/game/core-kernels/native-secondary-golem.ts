@@ -3,6 +3,7 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
+import { nativeHeadingTurnDirection } from './primary-spell-targeting.ts'
 import type { Vector2 } from './vector.ts'
 
 export const NATIVE_GOLEM_RADIUS = 30
@@ -33,6 +34,7 @@ export interface NativeSecondaryGolemState {
   readonly actionHeadingOffsetDegrees: number
   readonly actionDurationTicks: number
   readonly actionTick: number
+  readonly circleSlowTicks: number
   readonly currentHealth: number
   readonly damageMaximum: number
   readonly iron: boolean
@@ -190,6 +192,7 @@ export function stepNativeSecondaryGolem(
     )
     actor = withGolem(actor, {
       ...actor.golem,
+      circleSlowTicks: Math.max(0, actor.golem.circleSlowTicks - 1),
       leftFoot,
       leftFootBob: { x: 0, y: 0 },
       rightFoot,
@@ -223,6 +226,8 @@ export function stepNativeSecondaryGolem(
   }
 
   if (actor.golem.phase === 'attack') {
+    const target = context.targets.find(({ id }) => id === actor.targetId)
+    if (target) actor = { ...actor, rotationRadians: turnGolem(actor, target.position, true) }
     const actionTick = actor.golem.actionTick + 1
     let contact: NativeGolemContact | null = null
     if (actionTick === ATTACK_IMPACT_TICK) {
@@ -301,7 +306,7 @@ export function stepNativeSecondaryGolem(
             phase: 'attack',
             poseVariant: (1 - actor.golem.poseVariant) as 0 | 1,
           },
-          rotationRadians: nativeHeading(actor.position, target.position),
+          rotationRadians: turnGolem(actor, target.position, true),
         },
         durationDraw.state,
         null,
@@ -345,15 +350,17 @@ export function stepNativeSecondaryGolem(
     const dy = desired.y - actor.position.y
     const distance = Math.hypot(dx, dy)
     if (distance > 0) {
+      const rotationRadians = turnGolem(actor, desired, false)
+      const speed = MOVEMENT_PER_TICK * (actor.golem.circleSlowTicks > 0 ? .5 : 1)
       const requestedPosition = {
-        x: actor.position.x + dx / distance * MOVEMENT_PER_TICK,
-        y: actor.position.y + dy / distance * MOVEMENT_PER_TICK,
+        x: Math.fround(actor.position.x + Math.sin(rotationRadians) * speed),
+        y: Math.fround(actor.position.y - Math.cos(rotationRadians) * speed),
       }
       const position = context.resolveMovement(requestedPosition)
       actor = {
         ...actor,
         position: { ...position },
-        rotationRadians: nativeHeading(actor.position, position),
+        rotationRadians,
       }
     }
   }
@@ -522,7 +529,7 @@ function advanceGolemArticulation(
     }
     if (progress < 1) {
       const advanced = Math.fround(
-        Math.fround(progress + Math.fround(0.015)) * Math.fround(1.06),
+        Math.fround(progress + Math.fround(0.015 * (source.golem.circleSlowTicks > 0 ? .5 : 1))) * Math.fround(1.06),
       )
       if (advanced > 1) {
         footstep = true
@@ -707,11 +714,28 @@ function activeResult(
 ): NativeGolemKernelStepResult {
   const articulated = advanceGolemArticulation(source, sourceRng, resolveFootTarget)
   return {
-    actor: articulated.actor,
+    actor: withGolem(articulated.actor, {
+      ...articulated.actor.golem,
+      circleSlowTicks: Math.max(0, articulated.actor.golem.circleSlowTicks - 1),
+    }),
     assemblyMilestone: null,
     contact,
     footstep: articulated.footstep,
     provokeStarted,
     rng: articulated.rng,
   }
+}
+
+function turnGolem(actor: NativeGolemKernelActor, target: Vector2, attacking: boolean): number {
+  const targetDegrees = nativeHeading(actor.position, target) * 180 / Math.PI
+  let degrees = actor.rotationRadians * 180 / Math.PI
+  const step = actor.golem.circleSlowTicks > 0 ? .5 : 1
+  for (let index = 0; index < (attacking ? 5 : 1); index += 1) {
+    const gap = Math.abs(((targetDegrees - degrees + 540) % 360) - 180)
+    if (index > 0 && gap < 3) break
+    const direction = nativeHeadingTurnDirection(degrees, targetDegrees)
+    if (direction === 0) break
+    degrees = Math.fround(degrees + direction * step)
+  }
+  return normalizeRadians(degrees * Math.PI / 180)
 }

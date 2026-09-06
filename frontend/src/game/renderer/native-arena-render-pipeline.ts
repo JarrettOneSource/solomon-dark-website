@@ -23,7 +23,7 @@ import {
   NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
   NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
   installNativeBatchMaterial,
-  nativeTextureIsPremultiplied,
+  nativeTextureMode,
   requireNativeWebGlRenderer,
 } from './native-material-batch.ts'
 
@@ -32,11 +32,11 @@ export const NATIVE_ARENA_SATURATION = 0.65
 const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
-  vec3 sampledTextureColor = texturePremultiplied > 0.5 && textureAlpha > 0.0
+  vec3 sampledTextureColor = mod(nativeTextureModeValue, 2.0) > 0.5 && textureAlpha > 0.0
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
   vec3 vertexColor = vColor.rgb;
-  vec3 textureColor = uIgnoreTextureColor > 0.5 ? vec3(1.0) : sampledTextureColor;
+  vec3 textureColor = (uIgnoreTextureColor > 0.5 || nativeTextureModeValue > 1.5) ? vec3(1.0) : sampledTextureColor;
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;
   float vertexGrey = (vertexColor.r + vertexColor.g + vertexColor.b) / 3.0;
   float grey = textureGrey * vertexGrey;
@@ -44,7 +44,7 @@ const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
   vec3 nativeColor = mix(vec3(grey), realColor, 0.65);
   float finalAlpha = textureAlpha * vertexAlpha;
   finalColor = vec4(
-    texturePremultiplied > 0.5 ? nativeColor * finalAlpha : nativeColor,
+    mod(nativeTextureModeValue, 2.0) > 0.5 ? nativeColor * finalAlpha : nativeColor,
     finalAlpha
   );
 `
@@ -64,7 +64,7 @@ export const NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL = {
   fragment: {
     header: NATIVE_TEXTURE_COLOR_HEADER,
     end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(
-      /texturePremultiplied/g,
+      /nativeTextureModeValue/g,
       '0.0',
     ),
   },
@@ -76,7 +76,7 @@ const NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL = {
   fragment: {
     header: NATIVE_TEXTURE_COLOR_HEADER,
     end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(
-      /texturePremultiplied/g,
+      /nativeTextureModeValue/g,
       '1.0',
     ),
   },
@@ -96,8 +96,7 @@ export function installNativeArenaRenderPipeline(
   let graphicsShader = createNativeArenaGraphicsShader(
     nativeRenderer.limits.maxBatchableTextures,
   )
-  const premultipliedMeshShader = createNativeArenaMeshShader(true)
-  const unpremultipliedMeshShader = createNativeArenaMeshShader(false)
+  const meshShaders = [0, 1, 2, 3].map(createNativeArenaMeshShader)
   const originalGraphicsShader = graphicsAdaptor.shader
   const originalGraphicsContextChange = graphicsAdaptor.contextChange
   graphicsAdaptor.shader = graphicsShader
@@ -109,14 +108,12 @@ export function installNativeArenaRenderPipeline(
 
   const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
-  meshAdaptor['_shader'] = unpremultipliedMeshShader
+  meshAdaptor['_shader'] = meshShaders[0]!
   meshAdaptor.execute = function executeNativeArenaMesh(
     meshPipe: MeshPipe,
     mesh: Mesh,
   ): void {
-    this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
-      ? premultipliedMeshShader
-      : unpremultipliedMeshShader
+    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh)]!
     // Arena replaces the application's fixed-function shader selection.
     GlMeshAdaptor.prototype.execute.call(this, meshPipe, mesh)
   }
@@ -142,8 +139,7 @@ export function installNativeArenaRenderPipeline(
       meshAdaptor['_shader'] = originalMeshShader
       particleAdaptor.execute = originalParticleExecute
       graphicsShader.destroy(true)
-      premultipliedMeshShader.destroy(true)
-      unpremultipliedMeshShader.destroy(true)
+      for (const shader of meshShaders) shader.destroy(true)
     },
   }
 }
@@ -191,19 +187,23 @@ function createNativeArenaGraphicsShader(maxTextures: number): Shader {
   })
 }
 
-function createNativeArenaMeshShader(premultiplied: boolean): Shader {
+function createNativeArenaMeshShader(mode: number): Shader {
   return new Shader({
     glProgram: compileHighShaderGlProgram({
       // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
-      name: `native-arena-mesh-${premultiplied ? 'pma' : 'npm'}`,
+      name: `native-arena-mesh-${mode}`,
       bits: [
         localUniformBitGl,
         NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
         textureBitGl,
         roundPixelsBitGl,
-        premultiplied
-          ? NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL
-          : NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
+        {
+          ...NATIVE_ARENA_SATURATION_BIT_GL,
+          fragment: {
+            header: NATIVE_TEXTURE_COLOR_HEADER,
+            end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(/nativeTextureModeValue/g, `${mode}.0`),
+          },
+        },
       ],
     }),
     resources: {

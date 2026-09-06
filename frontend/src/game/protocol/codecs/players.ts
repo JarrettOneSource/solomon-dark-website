@@ -92,6 +92,7 @@ function playerLighting(
 ): ProtocolPlayerState['lighting'] {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'blindnessTicksRemaining',
     'deathWeaponPainterRegistration',
     'driveActive',
     'lightRegistration',
@@ -102,6 +103,7 @@ function playerLighting(
     throw new GameProtocolError(`${field}.overlayEffectPhase is outside the native domain`)
   }
   return {
+    blindnessTicksRemaining: nonnegativeFinite(source.blindnessTicksRemaining, `${field}.blindnessTicksRemaining`),
     deathWeaponPainterRegistration: nullableNativeWorldManagerRegistration(
       source.deathWeaponPainterRegistration,
       `${field}.deathWeaponPainterRegistration`,

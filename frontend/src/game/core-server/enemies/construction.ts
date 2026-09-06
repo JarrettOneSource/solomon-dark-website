@@ -1,60 +1,34 @@
+import { createNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
 import { createNativeDemonArticulationState } from '../../core-kernels/boneyard-demon-articulation.ts'
 import type { EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
 import { evaluateBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config.ts'
 import { boundedMageShieldIntervalTicks } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import { createNativeImpFlightState } from '../../core-kernels/boneyard-imp-flight.ts'
-import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardEnemySpawnIntent } from '../../core-kernels/boneyard-wave-director.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
 import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import {
-  createNativeEnemyPathState,
-  nativeEnemyTargetRefreshTicks,
-} from '../../core-kernels/native-enemy-pathfinding.ts'
+import { createNativeDemonSkull } from '../../core-kernels/native-demon-skull.ts'
+import { createNativeEnemyPathState, nativeEnemyTargetRefreshTicks } from '../../core-kernels/native-enemy-pathfinding.ts'
 import { constructNativeRangedAttackRange } from '../../core-kernels/native-enemy-targeting.ts'
-import { drawNativeFloat } from '../../core-kernels/native-rng.ts'
+import { createNativeFacultyVoiceController } from '../../core-kernels/native-faculty-voices.ts'
+import { createNativeFaculty, registerNativeFaculty } from '../../core-kernels/native-faculty.ts'
+import { createNativeHeartmonger } from '../../core-kernels/native-heartmonger.ts'
+import { drawNativeFloat, drawNativeSign } from '../../core-kernels/native-rng.ts'
 import { createNativeSpiderState } from '../../core-kernels/native-spider.ts'
-import {
-  NATIVE_PORTAL_ACTOR_PROGRAM,
-  createNativePortalState,
-  nativePortalChildPosition,
-} from '../../core-kernels/native-survival-portal.ts'
+import { NATIVE_PORTAL_ACTOR_PROGRAM, createNativePortalState, nativePortalChildPosition } from '../../core-kernels/native-survival-portal.ts'
 import type { RegisterNativeWorldPainter } from '../../core-kernels/native-world-manager-order.ts'
 import { NATIVE_WRAITH_FLYBY_TICKS, createNativeWraithFlightState } from '../../core-kernels/native-wraith-flight.ts'
 import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
 import { NATIVE_BADGUY_NAVIGATION_CLEARANCE, NATIVE_DEMON_NAVIGATION_CLEARANCE } from '../boneyard-enemy-navigation.ts'
 import { emitEvent } from './events.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemySemanticEvent, BoneyardEnemyStore, BoneyardEnemyStoreStepContext, BoneyardEnemyTargets, BoneyardImpBrain, WorkingStep } from './model.ts'
 import { validatePoint } from './model.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyBrain,
-  BoneyardEnemySemanticEvent,
-  BoneyardEnemyStore,
-  BoneyardEnemyStoreStepContext,
-  BoneyardEnemyTargets,
-  BoneyardImpBrain,
-  WorkingStep,
-} from './model.ts'
-import {
-  NATIVE_COFFIN_HIDDEN_LONG_TICKS,
-  NATIVE_COFFIN_HIDDEN_SHORT_TICKS,
-  NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
-  NATIVE_IMP_CONSTRUCTION_MAXIMUM,
-  NATIVE_IMP_SPLIT_HEADING_OFFSETS,
-  NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
-} from './programs.ts'
-import {
-  drawInteger,
-  drawLocomotionInteger,
-  drawLocomotionPhase,
-  drawLocomotionStridePhase,
-  drawUnit,
-  signedUnit,
-} from './random.ts'
+import { NATIVE_COFFIN_HIDDEN_LONG_TICKS, NATIVE_COFFIN_HIDDEN_SHORT_TICKS, NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS, NATIVE_IMP_CONSTRUCTION_MAXIMUM, NATIVE_IMP_SPLIT_HEADING_OFFSETS, NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM } from './programs.ts'
+import { drawInteger, drawLocomotionInteger, drawLocomotionPhase, drawLocomotionStridePhase, drawUnit, signedUnit } from './random.ts'
 import { skeletonAction } from './skeleton-family.ts'
 import { nearestEligibleTarget, targetHeading } from './targeting.ts'
 import { createEnemyWork, finishEnemyStore } from './work.ts'
-
 export function materializeSpawnIntents(
   work: WorkingStep,
   context: ConstructionContext,
@@ -93,9 +67,17 @@ export function materializeSpawnIntents(
     const inheritedConfig = impSplitDepthOverride === null
       ? evaluatedConfig
       : withImpSplitDepth(evaluatedConfig, impSplitDepthOverride)
-    const config = intent.portalEjection === undefined
+    let config = intent.portalEjection === undefined
       ? inheritedConfig
       : withPortalEjectionDamage(inheritedConfig, intent.portalEjection)
+    if (intent.greenImpSpitDamage !== undefined) {
+      if (config.enemyToken !== 'IMP' || intent.nativeTypeId !== 2044
+        || !Number.isFinite(intent.greenImpSpitDamage) || intent.greenImpSpitDamage < 0) {
+        throw new Error('GreenImp requires its native Imp payload')
+      }
+      config = { ...config, maximumHealth: 1, nativeTypeId: 2044,
+        primaryDamage: intent.greenImpSpitDamage / 20, experience: intent.greenImpSpitDamage / 20 }
+    }
     if (
       config.enemyToken === 'IMP'
       && intent.portalEjection === undefined
@@ -158,9 +140,14 @@ export function materializeSpawnIntents(
     work.steeringRngState = path.rngState
     const headingDeg = intent.portalEjection?.childHeadingDeg
       ?? targetHeading(position, targetPlayerId, context.players)
+    if (intent.enableDiscorporealHealthGates) {
+      work.demonSkullEncounter = { ...work.demonSkullEncounter, healthTriggersEnabled: true }
+    }
     const createdBrain = createBrain(work, config, {
       cocoonTargetPlayerId: intent.cocoonTargetPlayerId,
       actorId: work.nextActorId,
+      facultyMemberCount: work.actors.filter(actor => actor.brain.family === 'faculty' && actor.lifeState === 'alive').length
+        + actors.filter(actor => actor.brain.family === 'faculty').length + 1,
       headingDeg,
       position,
       spawnTick: intent.spawnTick,
@@ -191,7 +178,10 @@ export function materializeSpawnIntents(
       id: work.nextActorId,
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
+      hitFeedback: createNativePuppetHit(context.tick),
       lastMovementTick: null,
+      lethalMagicDamage: false,
+      shadowLateralOffset: 0,
       lifeState: 'alive',
       lightRegistration: work.registerWorldPainter('actor'),
       lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
@@ -201,7 +191,7 @@ export function materializeSpawnIntents(
         + nativeEnemyTargetRefreshTicks(config.pathfindingMode),
       nativeCellBindingOrder: work.nextNativeCellBindingOrder,
       nativeRegistrationOrder: work.nextNativeRegistrationOrder,
-      path: path.state,
+      path: config.enemyToken === 'DIREFACULTY' ? { ...path.state, flankRadius: 300 } : path.state,
       position: Object.freeze({ ...position }),
       rewardGranted: false,
       restBodyPose,
@@ -220,6 +210,10 @@ export function materializeSpawnIntents(
     }
     work.nextNativeCellBindingOrder += 1
     work.nextNativeRegistrationOrder += 1
+    if (work.featuredBossId === null
+      && (config.classification === 'boss' || config.classification === 'multiple-boss')) {
+      work.featuredBossId = actor.id
+    }
     work.nextActorId += 1
     if (config.enemyToken === 'IMP') work.impActorCount += 1
     work.spawnedActorIds.push(actor.id)
@@ -300,6 +294,7 @@ function createBrain(
   owner: Readonly<{
     cocoonTargetPlayerId?: string
     actorId: number
+    facultyMemberCount: number
     headingDeg: number
     position: Readonly<BoneyardPoint>
     spawnTick: number
@@ -315,6 +310,29 @@ function createBrain(
       family: 'cocoon', phase: 'active', ownerPlayerId: owner.cocoonTargetPlayerId ?? null,
       ownerPosition: { x: owner.position.x, y: owner.position.y - 1 },
     }
+    case 'DEMONSKULL': {
+      const created = createNativeDemonSkull(work.steeringRngState, config.scale, config.family.capabilities)
+      work.steeringRngState = created.rng
+      return { ...created.state, actions: [], deathCountdown: 1000, family: 'demon-skull', phase: 'range-control' }
+    }
+    case 'DIREFACULTY': {
+      const created = createNativeFaculty(work.steeringRngState)
+      let rng = created.rng
+      if (work.facultyVoiceController === null) {
+        const controller = createNativeFacultyVoiceController(rng)
+        work.facultyVoiceController = controller.state
+        rng = controller.rng
+      }
+      const registered = registerNativeFaculty(created.state, rng, owner.facultyMemberCount)
+      work.steeringRngState = registered.rng
+      return { ...registered.state, bodyHeadingDeg: owner.headingDeg, family: 'faculty', phase: 'range-control' }
+    }
+    case 'HEARTMONGER': {
+      const created = createNativeHeartmonger(work.steeringRngState, config.family.crowCount, work.nextDeathEffectId)
+      work.steeringRngState = created.rng
+      work.nextDeathEffectId += config.family.crowCount
+      return { ...created.state, family: 'heartmonger', phase: 'approach', legPhase: 0, torsoPhase: 0 }
+    }
     case 'SKELETON': return {
       action: skeletonAction(config.family.weapon),
       actionProgress: 0,
@@ -324,10 +342,11 @@ function createBrain(
       phase: 'approach',
     }
     case 'SKELETONARCHER': {
+      const direction = drawNativeSign(work.steeringRngState, 1)
       const range = constructNativeRangedAttackRange(
         'archer',
         config.family.rangeMode,
-        work.steeringRngState,
+        direction.state,
       )
       work.steeringRngState = range.rngState
       return {
@@ -338,6 +357,12 @@ function createBrain(
         markerEmitted: false,
         phase: 'range-control',
         rangeEasyPending: range.rangeEasyPending,
+        strafe: {
+          direction: direction.value === -1 ? -1 : 1,
+          limbHeadingDeg: owner.headingDeg,
+          movementRamp: 0,
+          turnBlend: 0,
+        },
       }
     }
     case 'SKELETONMAGE': {
@@ -357,6 +382,7 @@ function createBrain(
         attackRange: range.range,
         castProgram: 'short',
         castRoll: 0,
+        disabledPrimaryTicks: 0,
         family: 'mage',
         lightningTargetPlayerId: null,
         lightningTargetPosition: null,

@@ -1,27 +1,4 @@
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
-import type {
-  BoneyardEnemyProjectileSnapshot,
-  BoneyardEnemyProjectileEffectSnapshot,
-  BoneyardEnemyDeathEffectSnapshot,
-  BoneyardEnemySnapshot,
-  BoneyardGoodieSnapshot,
-  BoneyardLootSnapshot,
-  BoneyardMaggotSnapshot,
-  GameClientSnapshot,
-  GameSnapshot,
-  GameSnapshotFrame,
-  ProtocolPlayerEconomy,
-  ProtocolPlayerState,
-  ProtocolPlayerSnapshotFrame,
-  ProtocolStudentProp,
-  ProtocolStudentState,
-} from './game-state.ts'
-import type {
-  ReplicatedEntityDescriptor,
-  ReplicatedEntityFrame,
-  ReplicatedEntityKey,
-  ReplicatedEntitySample,
-} from './replicated-entity-types.ts'
 import {
   BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION,
   BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID,
@@ -29,13 +6,6 @@ import {
   boneyardEnemyDeathEffectSample,
   materializeBoneyardEnemyDeathEffect,
 } from './boneyard-enemy-death-effect-replication.ts'
-import {
-  BONEYARD_ENEMY_ENTITY_REGISTRATION,
-  BONEYARD_ENEMY_ENTITY_TYPE_ID,
-  boneyardEnemyDescriptor,
-  boneyardEnemySample,
-  materializeBoneyardEnemy,
-} from './boneyard-enemy-replication.ts'
 import {
   BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
   BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID,
@@ -51,16 +21,19 @@ import {
   materializeBoneyardEnemyProjectile,
 } from './boneyard-enemy-projectile-replication.ts'
 import {
-  BONEYARD_MAGGOT_ENTITY_REGISTRATION,
-  BONEYARD_MAGGOT_ENTITY_TYPE_ID,
-  boneyardMaggotDescriptor,
-  boneyardMaggotSample,
-  materializeBoneyardMaggot,
-} from './boneyard-maggot-replication.ts'
+  BONEYARD_ENEMY_ENTITY_REGISTRATION,
+  BONEYARD_ENEMY_ENTITY_TYPE_ID,
+  boneyardEnemyDescriptor,
+  boneyardEnemySample,
+  materializeBoneyardEnemy,
+} from './boneyard-enemy-replication.ts'
 import {
-  boneyardMageLightningPulseFrame,
-  materializeBoneyardMageLightningPulse,
-} from './boneyard-mage-lightning-replication.ts'
+  BONEYARD_GOODIE_ENTITY_REGISTRATION,
+  BONEYARD_GOODIE_ENTITY_TYPE_ID,
+  boneyardGoodieDescriptor,
+  boneyardGoodieSample,
+  materializeBoneyardGoodie,
+} from './boneyard-goodie-replication.ts'
 import {
   BONEYARD_LOOT_ENTITY_REGISTRATION,
   BONEYARD_LOOT_ENTITY_TYPE_ID,
@@ -69,13 +42,40 @@ import {
   materializeBoneyardLoot,
 } from './boneyard-loot-replication.ts'
 import {
-  BONEYARD_GOODIE_ENTITY_REGISTRATION,
-  BONEYARD_GOODIE_ENTITY_TYPE_ID,
-  boneyardGoodieDescriptor,
-  boneyardGoodieSample,
-  materializeBoneyardGoodie,
-} from './boneyard-goodie-replication.ts'
+  boneyardMageLightningPulseFrame,
+  materializeBoneyardMageLightningPulse,
+} from './boneyard-mage-lightning-replication.ts'
+import {
+  BONEYARD_MAGGOT_ENTITY_REGISTRATION,
+  BONEYARD_MAGGOT_ENTITY_TYPE_ID,
+  boneyardMaggotDescriptor,
+  boneyardMaggotSample,
+  materializeBoneyardMaggot,
+} from './boneyard-maggot-replication.ts'
+import type {
+  BoneyardEnemyDeathEffectSnapshot,
+  BoneyardEnemyProjectileEffectSnapshot,
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+  BoneyardGoodieSnapshot,
+  BoneyardLootSnapshot,
+  BoneyardMaggotSnapshot,
+  GameClientSnapshot,
+  GameSnapshot,
+  GameSnapshotFrame,
+  ProtocolPlayerEconomy,
+  ProtocolPlayerSnapshotFrame,
+  ProtocolPlayerState,
+  ProtocolStudentProp,
+  ProtocolStudentState,
+} from './game-state.ts'
 import { createPrimarySpellSimulationFrame } from './primary-spell-hail-replication.ts'
+import type {
+  ReplicatedEntityDescriptor,
+  ReplicatedEntityFrame,
+  ReplicatedEntityKey,
+  ReplicatedEntitySample,
+} from './replicated-entity-types.ts'
 
 export const REPLICATED_ENTITY_TYPES = {
   boneyardEnemy: BONEYARD_ENEMY_ENTITY_TYPE_ID,
@@ -342,6 +342,10 @@ export function createGameSnapshotFrame(
     ...common,
     world: {
       arenaTransition: snapshot.world.arenaTransition,
+      featuredBossId: snapshot.world.featuredBossId,
+      bossNarration: snapshot.world.bossNarration,
+      bossSpells: snapshot.world.bossSpells,
+      puppetHits: snapshot.world.puppetHits,
       encounter: snapshot.world.encounter,
       entities,
       enemyEvents: snapshot.world.enemyEvents,
@@ -534,10 +538,19 @@ export class EntityReplicationReconstructor {
         },
       }
     }
+    const featuredBossId = frame.world.featuredBossId
+    if (featuredBossId !== null && !enemies.some(enemy => enemy.id === featuredBossId
+      && enemy.classification !== 'normal' && enemy.currentHealth > 0)) {
+      throw new EntityReplicationGapError('featuredBossId must refer to a living boss or miniboss')
+    }
     return {
       ...common,
       world: {
         arenaTransition: frame.world.arenaTransition,
+        featuredBossId: frame.world.featuredBossId,
+        bossNarration: frame.world.bossNarration,
+        bossSpells: frame.world.bossSpells,
+        puppetHits: frame.world.puppetHits,
         deathEffects,
         encounter: frame.world.encounter,
         enemies,

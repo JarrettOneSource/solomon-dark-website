@@ -1,8 +1,23 @@
-import { NATIVE_WRAITH_DAZZLE_TICKS } from '../../core-kernels/boneyard-enemy-modifiers.ts'
-import { emitEvent } from './events.ts'
-import type { BoneyardEnemyActor, BoneyardEnemyTargets, WorkingStep } from './model.ts'
-import { BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE } from './programs.ts'
-import { targetPlayerWithinAttackReach } from './targeting.ts'
+import {
+  NATIVE_WRAITH_DAZZLE_TICKS,
+} from '../../core-kernels/boneyard-enemy-modifiers.ts'
+import {
+  NATIVE_HEARTMONGER_BLIND_CHANCES,
+} from '../../core-kernels/native-heartmonger.ts'
+import {
+  emitEvent,
+} from './events.ts'
+import {
+  type BoneyardEnemyActor,
+  type BoneyardEnemyTargets,
+  type WorkingStep,
+} from './model.ts'
+import {
+  BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
+} from './programs.ts'
+import {
+  targetPlayerWithinAttackReach,
+} from './targeting.ts'
 
 export function attackMarker(
   work: WorkingStep,
@@ -27,6 +42,7 @@ export function directPlayerDamage(
   if (targetPlayerId === null || actor.config.primaryDamage === null) return
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
   work.playerDamage.push(Object.freeze({
+    ...(actor.config.enemyToken === 'HEARTMONGER' ? { crowBlindChancePercent: NATIVE_HEARTMONGER_BLIND_CHANCES[actor.config.family.blindMode] } : {}),
     actorId: actor.id,
     physicalDamage: actor.config.enemyToken === 'WRAITH' ? 0 : actor.config.primaryDamage,
     magicDamage: actor.config.enemyToken === 'WRAITH' ? actor.config.primaryDamage : 0,

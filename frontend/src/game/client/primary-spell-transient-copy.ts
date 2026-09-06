@@ -178,6 +178,7 @@ function copyWeldAnimatedTransient(
   switch (effect.kind) {
     case 'weld-meteor': return {
       ...effect,
+      landingPosition: { ...effect.landingPosition },
       cameraDisplacement: effect.cameraDisplacement === null
         ? null
         : { ...effect.cameraDisplacement },

@@ -1,8 +1,5 @@
 import { actorHeadingIndex } from './actor-heading.ts'
-import type {
-  EvaluatedBoneyardEnemyConfig,
-} from './boneyard-enemy-config-model.ts'
-
+import type { EvaluatedBoneyardEnemyConfig } from './boneyard-enemy-config-model.ts'
 export const NATIVE_HALL_OF_FAME_SCORE = Object.freeze({
   archiveDeathTick: 300,
   awesomestKillBase: 71,
@@ -191,7 +188,11 @@ export function nativeHallOfFameAward(
 export function nativeHallOfFameEnemyName(
   enemy: EvaluatedBoneyardEnemyConfig,
 ): string {
+  if (enemy.recipeName !== null) return enemy.recipeName
   switch (enemy.enemyToken) {
+    case 'DEMONSKULL': return 'The Discorporeal'
+    case 'DIREFACULTY': return 'Dire Faculty'
+    case 'HEARTMONGER': return 'Heartmonger'
     case 'SKELETON': return skeletonName(enemy)
     case 'SKELETONARCHER': {
       const skeleton = ['Skeleton', 'Armored Skeleton', 'Horned Skeleton', 'Hooded Skeleton'][

@@ -4,8 +4,11 @@ import type {
   BoneyardLootSnapshot,
 } from '../protocol/game-state.ts'
 import type { NativeLootAtlas } from './native-loot-assets.ts'
+import { nativePuppetHitAlpha, type NativePuppetHitState } from '../core-kernels/native-puppet-hit.ts'
+import { nativePuppetHitTint } from './native-texture-color.ts'
 
 export interface NativeLootVisualLayer {
+  readonly textureColor?: 'diffuse'
   readonly alpha: number
   readonly atlas: NativeLootAtlas
   readonly blendMode: 'add' | 'normal'
@@ -38,6 +41,8 @@ export function nativeLootPresentationPlan(
 export function nativeGoodiePresentationPlan(
   goodie: BoneyardGoodieSnapshot,
   tick: number,
+  hit?: NativePuppetHitState,
+  complexLighting = true,
 ): readonly NativeLootVisualLayer[] {
   const layers: NativeLootVisualLayer[] = [layer(
     'goodie-body',
@@ -49,6 +54,9 @@ export function nativeGoodiePresentationPlan(
       offset: { x: 0, y: -40 },
     }))
   }
+  const alpha = hit === undefined ? 0 : nativePuppetHitAlpha(hit, tick)
+  if (alpha > 0) layers.push(...layers.map(draw => ({ ...draw, alpha: draw.alpha * alpha,
+    role: `hit:${draw.role}`, textureColor: 'diffuse' as const, tint: nativePuppetHitTint(complexLighting, draw.tint) })))
   return Object.freeze(layers)
 }
 

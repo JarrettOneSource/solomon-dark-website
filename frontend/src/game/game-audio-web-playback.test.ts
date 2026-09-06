@@ -127,8 +127,8 @@ test('reuses resident buffers across overlapping low-latency one-shots', async (
   assert.equal(context.sources[0].buffer, click)
   assert.equal(context.sources[1].buffer, click)
   assert.equal(context.sources[0].playbackRate.value, 1.05)
-  assert.equal(context.gains[1].gain.value, 0.5)
-  assert.equal(context.gains[1].connectedTo, context.gains[0])
+  assert.equal(context.gains[2].gain.value, 0.5)
+  assert.equal(context.gains[2].connectedTo, context.gains[1])
   playback.setMasterVolume(0.25)
   assert.equal(context.gains[0].gain.value, 0.25)
   assert.equal(context.sources[0].startCalls, 1)
@@ -136,7 +136,7 @@ test('reuses resident buffers across overlapping low-latency one-shots', async (
 
   context.sources[0].onended?.()
   assert.equal(context.sources[0].disconnected, true)
-  assert.equal(context.gains[1].disconnected, true)
+  assert.equal(context.gains[2].disconnected, true)
 
   playback.destroy()
   await Promise.resolve()
@@ -170,9 +170,9 @@ test('restarts keyed streams and stops keyed loops without touching other channe
   const loop = context.sources[1]
   assert.equal(loop.loop, true)
   assert.equal(loop.playbackRate.value, 0.95)
-  assert.equal(context.gains[2].gain.value, 0.25)
+  assert.equal(context.gains[3].gain.value, 0.25)
   playback.setVolume('loop:spell', 0.5)
-  assert.equal(context.gains[2].gain.value, 0.5)
+  assert.equal(context.gains[3].gain.value, 0.5)
   assert.equal(loop.stopCalls, 0)
   assert.deepEqual(firstStream.startOffsets, [[0, 1.25]])
 
@@ -205,7 +205,7 @@ test('routes capped native samples through one retained voice pool', () => {
     ]),
     (destination) => {
       voicePoolCreations += 1
-      assert.equal(destination, context.gains[0])
+      assert.equal(destination, context.gains[1])
       return nativeVoices
     },
   )
@@ -220,7 +220,7 @@ test('routes capped native samples through one retained voice pool', () => {
   assert.equal(voicePoolCreations, 1)
   assert.equal(nativeVoices.plays.length, 11)
   assert.equal(context.sources.length, 0)
-  assert.equal(context.gains.length, 1)
+  assert.equal(context.gains.length, 2)
 
   playback.play('hail-0.wav', { playbackRate: 1, volume: 1 })
   playback.play('hail-0.wav', { playbackRate: 1, volume: 1 })
@@ -240,4 +240,26 @@ test('rejects playback for an asset absent from the resident bank', () => {
     () => playback.play('missing.wav', { playbackRate: 1, volume: 1 }),
     /game audio buffer was not loaded/,
   )
+})
+
+test('Speaker ducking changes sounds and live loops while SoundStream voices retain full gain', () => {
+  const context = new FakeAudioContext()
+  const playback = createWebAudioPlayback(context as unknown as AudioContext,
+    new Map([['audio.wav', {} as AudioBuffer]]))
+  playback.play('audio.wav', { playbackRate: 1, volume: 1 })
+  playback.restart('loop:soul:faculty', 'audio.wav', { loop: true, playbackRate: 1, volume: .8 })
+  playback.restart('stream:faculty-join-us-1', 'audio.wav', { playbackRate: 1, volume: 1 })
+  const master = context.gains[0]!
+  const soundMix = context.gains[1]!
+  assert.equal(context.gains[2]!.connectedTo, soundMix)
+  assert.equal(context.gains[3]!.connectedTo, soundMix)
+  assert.equal(context.gains[4]!.connectedTo, master)
+  playback.setSoundMixVolume(.5)
+  assert.equal(soundMix.gain.value, .5)
+  assert.equal(master.gain.value, 1)
+  assert.equal(context.gains[4]!.gain.value, 1)
+  playback.setSoundMixVolume(1)
+  assert.equal(soundMix.gain.value, 1)
+  playback.destroy()
+  assert.ok(context.gains.every(gain => gain.disconnected))
 })

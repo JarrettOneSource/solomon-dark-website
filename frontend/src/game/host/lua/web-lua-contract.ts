@@ -1,13 +1,7 @@
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardWaveEnemyToken } from '../../core-kernels/boneyard-wave-schema.ts'
-import type {
-  WizardDiscipline,
-  WizardElement,
-} from '../../core-kernels/player-character.ts'
-import type {
-  LuaConsoleValue,
-} from '../../protocol/codecs/lua.ts'
-
+import type { WizardDiscipline, WizardElement } from '../../core-kernels/player-character.ts'
+import type { LuaConsoleValue } from '../../protocol/codecs/lua.ts'
 export const WEB_LUA_API_VERSION = '1.0.0'
 export const WEB_LUA_DEV_CONSOLE_MOD = Object.freeze({
   id: 'web.dev-console',
@@ -78,7 +72,10 @@ export interface WebLuaModIdentity {
 
 export const WEB_LUA_STOCK_ENEMIES = [
   { base: 'coffin', key: 'coffin', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.COFFIN, token: 'COFFIN' },
+  { base: 'demon_skull', key: 'demon_skull', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.DEMONSKULL, token: 'DEMONSKULL' },
   { base: 'demon', key: 'demon', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.DEMON, token: 'DEMON' },
+  { base: 'dire_faculty', key: 'dire_faculty', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.DIREFACULTY, token: 'DIREFACULTY' },
+  { base: 'heartmonger', key: 'heartmonger', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.HEARTMONGER, token: 'HEARTMONGER' },
   { base: 'imp', key: 'imp', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.IMP, token: 'IMP' },
   { base: 'skeleton', key: 'skeleton', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.SKELETON, token: 'SKELETON' },
   { base: 'skeleton_archer', key: 'skeleton_archer', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.SKELETONARCHER, token: 'SKELETONARCHER' },

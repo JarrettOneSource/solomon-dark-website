@@ -86,7 +86,7 @@ function sinDegrees(value: number): number { return Math.sin(value * Math.PI / 1
 export function nativeEnemyProjectileEffectPainterLayer(
   effect: BoneyardEnemyProjectileEffectSnapshot,
 ): DynamicPainterLayer | null {
-  if (effect.kind === 'demon-explosion-core' || effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble') return null
+  if (effect.kind === 'firebolt-trail' || effect.kind === 'demon-explosion-core' || effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble') return null
   const wrapped = effect.kind === 'fire-burst' || effect.kind === 'guided-impact'
     || effect.kind === 'demon-explosion-lit-array'
   return {

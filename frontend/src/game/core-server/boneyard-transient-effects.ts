@@ -1,5 +1,11 @@
-import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
-import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
+import type {
+  RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
+import {
+  type BoneyardEnemyDeathEffect,
+  type BoneyardEnemyProjectileEffect,
+} from './enemies/model.ts'
 
 interface BoneyardTransientStepResult {
   readonly deathEffects: BoneyardEnemyDeathEffect[]
@@ -41,7 +47,7 @@ export function stepBornBoneyardBouncer(
   nextDeathEffectId: number,
   registerWorldPainter: RegisterNativeWorldPainter,
 ): DeathPopulationStep {
-  if (effect.kind !== 'bouncer' && effect.kind !== 'smoky-bouncer') {
+  if (effect.kind !== 'bouncer' && effect.kind !== 'smoky-bouncer' && effect.kind !== 'black-smoky-bouncer') {
     throw new Error('only a Bouncer can run the native immediate birth tick')
   }
   if (effect.spawnTick !== tick || effect.lastStepTick !== tick) {
@@ -51,9 +57,9 @@ export function stepBornBoneyardBouncer(
   if (stepped === null) return { effects: [], nextDeathEffectId }
   const effects = [stepped]
   if (
-    stepped.kind === 'smoky-bouncer'
+    (stepped.kind === 'smoky-bouncer' || stepped.kind === 'black-smoky-bouncer')
     && stepped.height < 0
-    && drawInteger(drawUnit, 3) === 1
+    && (stepped.kind === 'black-smoky-bouncer' || drawInteger(drawUnit, 3) === 1)
   ) {
     effects.push(smokyBouncerBirth(
       stepped,
@@ -92,9 +98,9 @@ function stepDeathEffects(
       if (stepped === null) continue
       retained.push(stepped)
       if (
-        stepped.kind === 'smoky-bouncer'
+        (stepped.kind === 'smoky-bouncer' || stepped.kind === 'black-smoky-bouncer')
         && stepped.height < 0
-        && drawInteger(drawUnit, 3) === 1
+        && (stepped.kind === 'black-smoky-bouncer' || drawInteger(drawUnit, 3) === 1)
       ) {
         births.push(smokyBouncerBirth(
           stepped,
@@ -126,7 +132,7 @@ function stepDeathEffect(
   const ageTicks = Math.max(0, tick - source.spawnTick)
   if (ageTicks >= source.lifetimeTicks) return null
 
-  if (source.kind === 'bouncer' || source.kind === 'smoky-bouncer') {
+  if (source.kind === 'bouncer' || source.kind === 'smoky-bouncer' || source.kind === 'black-smoky-bouncer') {
     const skipsAirborneMotion = source.height < 0 && tick % 3 === 0
     const position = skipsAirborneMotion
       ? source.position
@@ -167,7 +173,7 @@ function stepDeathEffect(
       }
       height = verticalVelocity
     }
-    if (opacityTimer <= 0) return null
+    if (opacityTimer <= 0 || source.kind === 'black-smoky-bouncer' && height >= 0) return null
     const bounced = cloneDeathEffect(source)
     bounced.ageTicks = ageTicks
     bounced.alpha = Math.min(1, opacityTimer)
@@ -181,6 +187,26 @@ function stepDeathEffect(
     bounced.verticalVelocity = verticalVelocity
     bounced.velocity = { x: velocityX, y: velocityY }
     return bounced
+  }
+
+  if (source.kind === 'scrap') {
+    const oscillation = source.scrapOscillation
+    if (oscillation === undefined) throw new Error('Scrap lost its oscillation state')
+    const velocity = { x: Math.fround(source.velocity.x * .9200000166893005),
+      y: Math.fround(source.velocity.y * .9200000166893005) }
+    const position = { x: Math.fround(source.position.x + source.velocity.x),
+      y: Math.fround(Math.fround(source.position.y + source.velocity.y) + .10000000149011612) }
+    let opacityTimer = source.opacityTimer
+    if (velocity.x ** 2 + velocity.y ** 2 < .25) {
+      position.y = Math.fround(position.y + .10000000149011612)
+      position.x = Math.fround(position.x + (drawUnit() * 2 - 1) * .20000000298023224)
+      opacityTimer = Math.fround(opacityTimer - .009999999776482582)
+    }
+    if (opacityTimer <= 0) return null
+    const phaseDeg = Math.fround(oscillation.phaseDeg + oscillation.stepDeg)
+    return { ...source, ageTicks, alpha: Math.min(opacityTimer, 1), lastStepTick: tick,
+      opacityTimer, position, velocity, scrapOscillation: { ...oscillation, phaseDeg },
+      rotationDeg: Math.fround(Math.sin(phaseDeg * Math.PI / 180) * oscillation.amplitudeDeg) }
   }
 
   const opacityTimer = source.kind === 'move-fade-perspective'
@@ -215,12 +241,12 @@ function stepDeathEffect(
       }
       break
     case 'sprite-array': {
-      framePhase += frameVelocity
+      framePhase = Math.fround(framePhase + frameVelocity)
       if (framePhase > source.frameCount) return null
-      frameVelocity *= source.frameVelocityDamping
+      frameVelocity = Math.fround(frameVelocity * source.frameVelocityDamping)
       entry = source.firstEntry + Math.min(
         source.frameCount - 1,
-        Math.max(0, Math.trunc(framePhase)),
+        Math.max(0, roundHalfToEven(framePhase)),
       )
       if (source.velocity.x !== 0 || source.velocity.y !== 0) {
         position = {
@@ -236,9 +262,11 @@ function stepDeathEffect(
         32,
       )
       break
+    case 'fade-scale-perspective':
     case 'fade-scale':
       scale *= source.scaleMultiplier
       break
+    case 'banish-black':
     case 'banish':
     case 'fade':
     case 'fade-additive':
@@ -252,7 +280,8 @@ function stepDeathEffect(
   }
   const faded = cloneDeathEffect(source)
   faded.ageTicks = ageTicks
-  faded.alpha = deathEffectAlpha(source.kind, opacityTimer, source.alphaMultiplier)
+  faded.alpha = source.kind === 'sprite-array' && roundHalfToEven(framePhase) >= source.frameCount
+    ? 0 : deathEffectAlpha(source.kind, opacityTimer, source.alphaMultiplier)
   faded.entry = entry
   faded.framePhase = framePhase
   faded.frameVelocity = frameVelocity
@@ -279,6 +308,8 @@ type MutableDeathEffect = {
  */
 function cloneDeathEffect(source: BoneyardEnemyDeathEffect): MutableDeathEffect {
   return {
+    ...(source.painterSortBias === undefined ? {} : { painterSortBias: source.painterSortBias }),
+    ...(source.scrapOscillation === undefined ? {} : { scrapOscillation: source.scrapOscillation }),
     ageTicks: source.ageTicks,
     alpha: source.alpha,
     alphaMultiplier: source.alphaMultiplier,
@@ -342,15 +373,17 @@ function smokyBouncerBirth(
   const offset = radialVector(drawUnit() * 360, radius)
   const rotationDeg = drawUnit() * 360
   const scale = 0.1 + drawUnit() * 0.25
-  const opacityTimer = 0.25 + drawUnit() * 0.45
+  const black = owner.kind === 'black-smoky-bouncer'
+  const opacityTimer = 0.25 + drawUnit() * (black ? .44999998807907104 : .45)
+  const alphaLossPerTick = black ? .004999999888241291 : .01
   return {
     ageTicks: 0,
     alpha: opacityTimer,
     alphaMultiplier: 1,
-    alphaLossPerTick: 0.01,
+    alphaLossPerTick,
     angularVelocityDeg: 0,
     atlas: 'BadGuys',
-    blendMode: 'add',
+    blendMode: black ? 'normal' : 'add',
     bounceRetention: 0,
     bounceVelocity: 0,
     entry: 10,
@@ -362,12 +395,12 @@ function smokyBouncerBirth(
     frameTicks: 1,
     height: 0,
     id,
-    kind: 'fade-additive',
+    kind: black ? 'fade' : 'fade-additive',
     lastStepTick: tick,
-    lifetimeTicks: Math.ceil(opacityTimer / 0.01),
+    lifetimeTicks: Math.ceil(opacityTimer / alphaLossPerTick),
     opacityTimer,
     ownerActorId: owner.ownerActorId,
-    painterRegistration: registerWorldPainter('actor'),
+    painterRegistration: registerWorldPainter('transient'),
     presentationOwner: 'world-sorted',
     position: {
       x: owner.position.x + offset.x,
@@ -380,7 +413,7 @@ function smokyBouncerBirth(
     scaleMultiplier: 1,
     shadow: false,
     spawnTick: tick,
-    tint: 0xbebf8f,
+    tint: black ? 0 : 0xbebf8f,
     verticalVelocity: 0,
     velocity: { x: 0, y: 0 },
     velocityDamping: 1,

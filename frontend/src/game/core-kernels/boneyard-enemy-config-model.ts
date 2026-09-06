@@ -1,12 +1,10 @@
-import {
-  BONEYARD_ENEMY_FLAGS,
-} from './boneyard-enemy-config.ts'
+import type { BONEYARD_ENEMY_FLAGS } from './boneyard-enemy-config.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
 import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
+import type { NativeFacultyAppearance } from './native-faculty.ts'
 import type { NativeLootPolicies } from './native-loot.ts'
 import type { NativeSurvivalOnDeathProgram } from './native-survival-miniboss.ts'
 import type { NativePortalFrequency } from './native-survival-portal.ts'
-
 export type BoneyardEnemyFlag = typeof BONEYARD_ENEMY_FLAGS[number]
 
 export interface BoneyardEnemyArenaScalars {
@@ -42,6 +40,8 @@ export interface EvaluateBoneyardEnemyConfigOptions {
   archerExtraArrows?: number
   /** Native MonsterRecipe +0x88; retail wave data leaves this at zero. */
   archerMultiArrowMode?: 0 | 1 | 2 | 3
+  /** Internal script modifier 48; this has no wave.txt token. */
+  archerStrafing?: boolean
   flags?: readonly string[]
   /** Native MonsterRecipe +0xB8; the constructor default is enabled. */
   flanking?: boolean
@@ -74,10 +74,29 @@ export interface AuthoredBoneyardEnemyRecipe {
   readonly uid: number
 }
 
-export type BoneyardEnemyClassification = 'boss' | 'miniboss' | 'multiple-boss' | 'normal'
+export const BONEYARD_ENEMY_CLASSIFICATIONS = ['normal', 'boss', 'miniboss', 'multiple-boss'] as const
+export type BoneyardEnemyClassification = typeof BONEYARD_ENEMY_CLASSIFICATIONS[number]
 
 export type AuthoredBoneyardEnemyFamilyRecipe =
   | Readonly<{ kind: 'default' }>
+  | Readonly<{ kind: 'demon-skull'; capabilities: number }>
+  | Readonly<BoneyardFacultyFamily & { kind: 'faculty' }>
+  | Readonly<{ kind: 'heartmonger'; crowCount: number; blindMode: 0 | 1 | 2 | 3 | 4; summonMode: 0 | 1 | 2 | 3 | 4 }>
+  | Readonly<{
+      armor: boolean
+      headgear: BoneyardSkeletonHeadgear
+      kind: 'skeleton'
+      weapon: BoneyardSkeletonWeapon
+    }>
+  | Readonly<{
+      arrowType: BoneyardArrowType
+      extraArrows: number
+      headgear: BoneyardSkeletonHeadgear
+      kind: 'archer'
+      multiArrowMode: 0 | 1 | 2 | 3
+      rangeMode: 0 | 1 | 2 | 3
+      strafing: boolean
+    }>
   | Readonly<{ frequency: NativePortalFrequency; kind: 'portal' }>
   | Readonly<{
       bodyType: 0 | 1
@@ -88,11 +107,15 @@ export type AuthoredBoneyardEnemyFamilyRecipe =
       poisonPunchDamage: number
     }>
 
-export type BoneyardSkeletonWeapon = 'axe' | 'claw' | 'flail' | 'mace' | 'pike' | 'sword'
+export type BoneyardSkeletonHeadgear = 0 | 1 | 2 | 3 | 4 | 5
+export const BONEYARD_SKELETON_WEAPONS = ['claw', 'sword', 'mace', 'flail', 'axe', 'pike'] as const
+export type BoneyardSkeletonWeapon = typeof BONEYARD_SKELETON_WEAPONS[number]
 
-export type BoneyardMageElement = 'fire' | 'frost' | 'lightning' | 'poison'
+export const BONEYARD_MAGE_ELEMENTS = ['fire', 'lightning', 'frost', 'poison'] as const
+export type BoneyardMageElement = typeof BONEYARD_MAGE_ELEMENTS[number]
 
-export type BoneyardArrowType = 'fire' | 'normal' | 'poison'
+export const BONEYARD_ARROW_TYPES = ['normal', 'fire', 'poison'] as const
+export type BoneyardArrowType = typeof BONEYARD_ARROW_TYPES[number]
 
 interface BoneyardEnemyConfigBase {
   attackSpeed: number
@@ -125,7 +148,7 @@ export interface BoneyardSkeletonConfig extends BoneyardEnemyConfigBase {
   enemyToken: 'SKELETON'
   family: Readonly<{
     armor: boolean
-    headgear: 0 | 1 | 2 | 3
+    headgear: BoneyardSkeletonHeadgear
     weapon: BoneyardSkeletonWeapon
   }>
 }
@@ -136,9 +159,10 @@ export interface BoneyardArcherConfig extends BoneyardEnemyConfigBase {
     accuracyMode: 0 | 1 | 2 | 3
     arrowType: BoneyardArrowType
     extraArrows: number
-    headgear: 0 | 1 | 2 | 3
+    headgear: BoneyardSkeletonHeadgear
     multiArrowMode: 0 | 1 | 2 | 3
     rangeMode: 0 | 1 | 2 | 3
+    strafing: boolean
   }>
 }
 
@@ -147,7 +171,7 @@ export interface BoneyardMageConfig extends BoneyardEnemyConfigBase {
   family: Readonly<{
     cloak: boolean
     element: BoneyardMageElement
-    headgear: 0 | 1 | 2 | 3
+    headgear: BoneyardSkeletonHeadgear
     otherShield: boolean
     otherShieldHealth: number
     rangeMode: 0 | 1 | 2 | 3
@@ -178,16 +202,6 @@ export interface BoneyardWraithConfig extends BoneyardEnemyConfigBase {
   family: Readonly<{ dazzle: true }>
 }
 
-export interface BoneyardSpiderConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'SPIDER'
-  family: Readonly<{ cocoonHealth: number; spitWebs: boolean; suckDamagePerSecond: number }>
-}
-
-export interface BoneyardCocoonConfig extends BoneyardEnemyConfigBase {
-  enemyToken: 'COCOON'
-  family: Readonly<{ kind: 'cocoon' }>
-}
-
 export interface BoneyardDemonConfig extends BoneyardEnemyConfigBase {
   enemyToken: 'DEMON'
   family: Readonly<{ splitCount: number }>
@@ -208,9 +222,33 @@ export interface BoneyardPortalConfig extends BoneyardEnemyConfigBase {
   family: Readonly<{ frequency: NativePortalFrequency }>
 }
 
+export interface BoneyardHeartmongerConfig extends BoneyardEnemyConfigBase {
+  enemyToken: 'HEARTMONGER'
+  family: Readonly<{ crowCount: number; blindMode: 0 | 1 | 2 | 3 | 4; summonMode: 0 | 1 | 2 | 3 | 4 }>
+}
+
+export interface BoneyardFacultyFamily extends NativeFacultyAppearance {
+  readonly headgear: BoneyardSkeletonHeadgear
+  readonly primary: 0 | 1 | 2 | 3
+  readonly secondary: 0 | 1 | 2 | 3
+}
+
+export interface BoneyardFacultyConfig extends BoneyardEnemyConfigBase {
+  enemyToken: 'DIREFACULTY'
+  family: BoneyardFacultyFamily
+}
+
+export interface BoneyardDemonSkullConfig extends BoneyardEnemyConfigBase {
+  enemyToken: 'DEMONSKULL'
+  family: Readonly<{ capabilities: number }>
+}
+
 export type EvaluatedBoneyardEnemyConfig =
-  | BoneyardCocoonConfig
   | BoneyardSpiderConfig
+  | BoneyardCocoonConfig
+  | BoneyardDemonSkullConfig
+  | BoneyardFacultyConfig
+  | BoneyardHeartmongerConfig
   | BoneyardArcherConfig
   | BoneyardCoffinConfig
   | BoneyardDemonConfig
@@ -223,6 +261,11 @@ export type EvaluatedBoneyardEnemyConfig =
 
 export interface MutableConfig {
   spitWebs: boolean
+  demonSkullCapabilities: number
+  faculty: BoneyardFacultyFamily
+  crowCount: number
+  blindMode: 0 | 1 | 2 | 3 | 4
+  summonMode: 0 | 1 | 2 | 3 | 4
   armor: boolean
   attackSpeed: number
   burning: boolean
@@ -230,7 +273,7 @@ export interface MutableConfig {
   cloak: boolean
   experienceBonus: number
   extraDamage: number
-  headgear: 0 | 1 | 2 | 3
+  headgear: BoneyardSkeletonHeadgear
   maximumHealth: number
   primaryDamage: number
   secondaryDamage: number
@@ -242,6 +285,7 @@ export interface MutableConfig {
   extraArrows: number
   multiArrowMode: 0 | 1 | 2 | 3
   rangeMode: 0 | 1 | 2 | 3
+  strafing: boolean
   mageElement: BoneyardMageElement
   otherShield: boolean
   otherShieldHealth: number
@@ -259,4 +303,14 @@ export interface MutableConfig {
   maggotHealth: number
   maggotPoisonDamage: number
   maximumMaggots: number
+}
+
+export interface BoneyardSpiderConfig extends BoneyardEnemyConfigBase {
+  enemyToken: 'SPIDER'
+  family: Readonly<{ cocoonHealth: number; spitWebs: boolean; suckDamagePerSecond: number }>
+}
+
+export interface BoneyardCocoonConfig extends BoneyardEnemyConfigBase {
+  enemyToken: 'COCOON'
+  family: Readonly<{ kind: 'cocoon' }>
 }

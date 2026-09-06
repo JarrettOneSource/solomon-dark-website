@@ -28,7 +28,9 @@ import {
   enterBoneyardWorld,
   stepGameSimulationTick,
 } from '../src/game/core-server/game-simulation.ts'
-import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-director.ts'
+import {
+  BONEYARD_WAVE_ENEMY_TYPES,
+} from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import {
   createEquipmentInventoryItem,
   createFomentiusInventoryItem,

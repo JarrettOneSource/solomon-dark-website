@@ -1,28 +1,30 @@
-import { nativeDemonBombBearing } from '../core-kernels/boneyard-demon-articulation.ts'
+import { setNativeDiffuseColor } from './native-texture-color.ts'
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
+import { nativeDemonBombBearing } from '../core-kernels/boneyard-demon-articulation.ts'
+import type { NativeBoneyardComplexShadowRecord } from './boneyard-complex-shadows.ts'
+import { NativeEnemyUnderlayView } from './native-enemy-underlay-view.ts'
+import { nativeEnemyUnderlayPlan } from './native-enemy-underlay.ts'
+import { NativeHeartmongerTendrilView } from './native-heartmonger-tendril-view.ts'
 
-import type { BoneyardWorldTextures } from './boneyard-textures.ts'
-import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
 import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
+import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
+import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import {
-  nativeEnemyRawFireBurstSample,
-  nativeEnemyRawFireBurstPainterPolicy,
   nativeDemonBombMuzzleOrigin,
+  nativeEnemyRawFireBurstPainterPolicy,
+  nativeEnemyRawFireBurstSample,
   nativeImpContactBurstOrigin,
   nativeImpLandingFlarePainterPolicy,
   nativeImpLandingFlareSample,
   type NativeEnemyAuxiliaryPainterPolicy,
   type NativeEnemyRawFireBurstKind,
 } from './native-enemy-attack-effect.ts'
+import type { NativeEnemyFamily, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 import {
   nativeEnemyPresentationPlan,
   nativeEnemyViewPlanInputsEqual,
 } from './native-enemy-presentation.ts'
-import type {
-  NativeEnemyFamily,
-  NativeEnemyVisualSnapshot,
-} from './native-enemy-presentation-model.ts'
 
 interface ManagedEnemyView {
   family: NativeEnemyFamily
@@ -49,6 +51,7 @@ export class NativeEnemyViews {
   private readonly liveIds = new Set<number>()
   private readonly root: Container
   private readonly preWorldRoot: Container
+  private readonly underlayRoot: Container
   private readonly textures: BoneyardWorldTextures
   private readonly views = new Map<number, ManagedEnemyView>()
 
@@ -56,13 +59,15 @@ export class NativeEnemyViews {
     root: Container,
     textures: BoneyardWorldTextures,
     preWorldRoot: Container = root,
+    underlayRoot: Container = preWorldRoot,
   ) {
     this.root = root
     this.preWorldRoot = preWorldRoot
+    this.underlayRoot = underlayRoot
     this.textures = textures
   }
 
-  update(enemies: readonly NativeEnemyVisualSnapshot[], tick: number): void {
+  update(enemies: readonly NativeEnemyVisualSnapshot[], tick: number, complexLighting = true): void {
     const liveIds = this.liveIds
     liveIds.clear()
     for (const enemy of enemies) {
@@ -74,11 +79,11 @@ export class NativeEnemyViews {
         managed = undefined
       }
       if (!managed) {
-        const view = new NativeEnemyView(this.root, this.textures, enemy, tick)
+        const view = new NativeEnemyView(this.root, this.underlayRoot, this.textures, enemy, tick, complexLighting)
         managed = { family: enemy.enemyToken, view }
         this.views.set(enemy.id, managed)
       } else {
-        managed.view.update(enemy, tick)
+        managed.view.update(enemy, tick, complexLighting)
       }
     }
     for (const [id, managed] of this.views) {
@@ -145,8 +150,9 @@ export class NativeEnemyViews {
     this.views.get(id)?.view.setDepth(depth)
   }
 
-  setTint(id: number, tint: number): void {
-    this.views.get(id)?.view.setTint(tint)
+  setLighting(id: number, tint: number, lightScalar: number,
+    records: readonly NativeBoneyardComplexShadowRecord[], complexShadows: boolean, tick: number): void {
+    this.views.get(id)?.view.setLighting(tint, lightScalar, records, complexShadows, tick)
   }
 
   setRenderable(renderable: boolean): void {
@@ -174,6 +180,12 @@ export class NativeEnemyViews {
     return this.auxiliaryEffects.size
   }
 
+  get underlayLayerCount(): number {
+    let count = 0
+    for (const { view } of this.views.values()) count += view.underlayLayerCount
+    return count
+  }
+
   destroy(): void {
     for (const managed of this.views.values()) managed.view.destroy()
     this.views.clear()
@@ -184,6 +196,8 @@ export class NativeEnemyViews {
 }
 
 class NativeEnemyView {
+  private readonly tendrils: NativeHeartmongerTendrilView | null
+  private readonly underlay: NativeEnemyUnderlayView | null
   private readonly container: Container
   private readonly segments: Graphics
   private readonly root: Container
@@ -195,15 +209,24 @@ class NativeEnemyView {
   private demonMuzzleOffset: Readonly<{ x: number; y: number }> | null = null
   private previousPlanInput: NativeEnemyVisualSnapshot | null = null
   private previousPlanTick = Number.NaN
+  private complexLighting = true
 
   constructor(
     root: Container,
+    underlayRoot: Container,
     textures: BoneyardWorldTextures,
     enemy: NativeEnemyVisualSnapshot,
     tick: number,
+    complexLighting: boolean,
   ) {
     this.root = root
     this.textures = textures
+    this.underlay = enemy.enemyToken === 'IMP' || enemy.enemyToken === 'WRAITH' ? null
+      : new NativeEnemyUnderlayView(underlayRoot, textures, `enemy-underlay:${enemy.id}`)
+    this.tendrils = enemy.enemyToken === 'HEARTMONGER'
+      ? new NativeHeartmongerTendrilView(this.underlay!.container,
+          requiredTexture(textures, nativeEnemySpriteRecord('BadGuys', 19).source), enemy)
+      : null
     this.container = new Container({
       label: `enemy:${enemy.enemyToken}:${enemy.id}`,
     })
@@ -212,15 +235,20 @@ class NativeEnemyView {
     this.segments.eventMode = 'none'
     this.container.addChild(this.segments)
     root.addChild(this.container)
-    this.update(enemy, tick)
+    this.update(enemy, tick, complexLighting)
   }
 
-  update(enemy: NativeEnemyVisualSnapshot, tick: number): void {
+  update(enemy: NativeEnemyVisualSnapshot, tick: number, complexLighting: boolean): void {
+    this.tendrils?.update(enemy)
     const previous = this.previousPlanInput
     if (
       previous === null
+      || this.complexLighting !== complexLighting
       || !nativeEnemyViewPlanInputsEqual(previous, this.previousPlanTick, enemy, tick)
-    ) this.updateVisualPlan(enemy, tick)
+    ) {
+      this.complexLighting = complexLighting
+      this.updateVisualPlan(enemy, tick)
+    }
     this.previousPlanInput = enemy
     this.previousPlanTick = tick
     this.container.position.set(enemy.position.x, enemy.position.y)
@@ -230,12 +258,12 @@ class NativeEnemyView {
   private updateVisualPlan(enemy: NativeEnemyVisualSnapshot, tick: number): void {
     const plan = nativeEnemyPresentationPlan(enemy, tick, (atlas, entry) => (
       nativeEnemySpriteRecord(atlas, entry).points
-    ))
+    ), this.complexLighting)
     this.renderedBodyEntry = plan.layers.find(({ role }) => (
-      role.endsWith('-body')
+      role.endsWith('-body') || role === 'heartmonger-torso'
     ))?.entry ?? null
     this.renderedLimbsEntry = plan.layers.find(({ role }) => (
-      role.endsWith('-limbs')
+      role.endsWith('-limbs') || role === 'heartmonger-legs'
     ))?.entry ?? null
     const demonController = plan.layers.find(({ role }) => role === 'demon-controller-body')
     if (demonController) {
@@ -304,9 +332,10 @@ class NativeEnemyView {
       sprite.alpha = layer.alpha
       sprite.blendMode = layer.blendMode
       sprite.tint = layer.tint
+      setNativeDiffuseColor(sprite, layer.textureColor === 'diffuse')
     })
     this.container.position.set(enemy.position.x, enemy.position.y)
-    this.container.scale.set(enemy.scale)
+    this.container.scale.set(enemy.enemyToken === 'PORTAL' ? 1 : enemy.scale)
     this.headingDeg = enemy.headingDeg
   }
 
@@ -330,6 +359,8 @@ class NativeEnemyView {
     return this.container.scale.x
   }
 
+  get underlayLayerCount(): number { return this.underlay?.layerCount ?? 0 }
+
   impContactOrigin(): Readonly<{ x: number; y: number }> {
     return nativeImpContactBurstOrigin(this.position, this.headingDeg)
   }
@@ -342,15 +373,25 @@ class NativeEnemyView {
     }
   }
 
-  setTint(tint: number): void {
+  setLighting(tint: number, lightScalar: number, records: readonly NativeBoneyardComplexShadowRecord[],
+    complexShadows: boolean, tick: number): void {
     this.container.tint = tint
+    const enemy = this.previousPlanInput
+    if (enemy) this.underlay?.update(enemy.position,
+      nativeEnemyUnderlayPlan(enemy, tick, records, lightScalar, complexShadows),
+      enemy.lightRegistration.registrationOrdinal)
+    this.tendrils?.setShadowDirection(records[0]?.direction ?? { x: 0, y: 0 })
   }
 
   setRenderable(renderable: boolean): void {
     this.container.renderable = renderable
+    this.underlay?.setRenderable(renderable)
+    this.tendrils?.setRenderable(renderable)
   }
 
   destroy(): void {
+    this.tendrils?.destroy()
+    this.underlay?.destroy()
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
     this.sprites.length = 0

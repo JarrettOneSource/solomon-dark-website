@@ -31,6 +31,7 @@ import {
 } from './primary-spell-earth-orientation.ts'
 import {
   createNativeWeldMeteorImpactProgram,
+  nativeWeldMeteorRootPosition,
   type NativeWeldMeteorDebrisSeed,
   type NativeWeldMeteorMarkerState,
   stepNativeWeldMeteorMarker,
@@ -240,6 +241,7 @@ export type NativeWeldPersistentActorState =
   | NativeWeldMeteorFieldState
 
 export interface NativeWeldMeteorActorState extends NativeWeldOwnedActorBase {
+  readonly landingPosition: Vector2
   readonly bodyScale: number
   readonly buildId: 1007
   readonly cameraDisplacement: Vector2 | null
@@ -1305,13 +1307,14 @@ export function createNativeWeldMeteor(input: {
     impactThrowFirePitch: null,
     impactTicksRemaining: input.impactTicks,
     kind: 'weld-meteor',
+    landingPosition: Object.freeze({ ...input.position }),
     lightRegistration: input.registerWorldPainter?.('actor') ?? Object.freeze({
       managerLane: 'actor',
       registrationOrdinal: input.id,
     }),
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
-    position: Object.freeze({ ...input.position }),
+    position: Object.freeze({ x: 0, y: 0 }),
     privateSeed: input.privateSeed,
     phase: 'fall',
     pulseDue: false,
@@ -1464,6 +1467,7 @@ export function stepNativeWeldWorldActor(
   }
   if (actor.kind === 'weld-meteor') {
     if (actor.phase === 'fall') {
+      const position = Object.freeze(nativeWeldMeteorRootPosition(actor.landingPosition, actor.fallHeadingDegrees, actor.fallHeight))
       const fallHeight = Math.fround(actor.fallHeight - actor.fallStep)
       if (fallHeight > 0) {
         return {
@@ -1471,6 +1475,7 @@ export function stepNativeWeldWorldActor(
             ...actor,
             ageTicks: actor.ageTicks + 1,
             fallHeight,
+            position,
           }),
           rng: sourceRng,
         }
@@ -1487,6 +1492,7 @@ export function stepNativeWeldWorldActor(
           cameraDisplacement: impact.cameraDisplacement,
           debris: Object.freeze([]),
           fallHeight,
+          position,
           impactDue: true,
           impactRadiusScalar: impact.impactRadiusScalar,
           impactRotationDegrees: impact.impactRotationDegrees,

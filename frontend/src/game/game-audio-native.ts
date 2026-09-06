@@ -1,19 +1,8 @@
-import {
-  HUB_TEACHER_CAST_SECONDS,
-  HUB_TEACHER_CYCLE_SECONDS,
-} from './hub-teacher.ts'
-import type {
-  BoneyardSolomonDigCue,
-  BoneyardSolomonDigEvent,
-  BoneyardSolomonVoiceCue,
-  BoneyardSolomonVoiceEvent,
-} from './core-kernels/boneyard-encounter.ts'
-import type {
-  BoneyardEnemyEventSnapshot,
-  BoneyardLootEventSnapshot,
-} from './protocol/game-state.ts'
+import type { BoneyardSolomonDigCue, BoneyardSolomonDigEvent, BoneyardSolomonVoiceCue, BoneyardSolomonVoiceEvent } from './core-kernels/boneyard-encounter.ts'
+import type { NativeBossStreamCue } from './core-kernels/native-boss-audio.ts'
 import type { NativeTutorialCue } from './core-kernels/native-tutorial.ts'
-
+import { HUB_TEACHER_CAST_SECONDS, HUB_TEACHER_CYCLE_SECONDS } from './hub-teacher.ts'
+import type { BoneyardEnemyEventSnapshot, BoneyardLootEventSnapshot } from './protocol/game-state.ts'
 export const NATIVE_AUDIO_TICK_MS = 10
 
 export type GameAudioScene =
@@ -38,6 +27,14 @@ export type GameSoundCue =
   | 'webbed-1'
   | 'webbed-2'
   | 'disintegrate'
+  | 'knock'
+  | 'throw-dark'
+  | 'chain-clank-1'
+  | 'chain-clank-2'
+  | 'crow-1'
+  | 'crow-2'
+  | 'wings'
+  | 'blind'
   | BoneyardSolomonDigCue
   | 'backpack-close'
   | 'backpack-open'
@@ -96,6 +93,10 @@ export type GameSoundCue =
   | 'lightning-start'
   | 'magic-missile'
   | 'magic-missile-hit'
+  | 'eye-laser-charge'
+  | 'jaw'
+  | 'skull-bite'
+  | 'unholy-spits'
   | 'magic-circle'
   | 'magic-shield-explode'
   | 'magic-shield-up'
@@ -170,6 +171,7 @@ export type SecondaryStreamCue =
   | 'trap'
 export type GameOverSolomonVoiceCue = 'solomon-laugh-big'
 export type GameStreamCue =
+  | NativeBossStreamCue
   | CreateStreamCue
   | SecondaryStreamCue
   | BoneyardSolomonVoiceCue
@@ -180,6 +182,7 @@ export type GameStreamCue =
   | 'arch-intro-0'
   | 'boast-failure'
 export type GameLoopCue =
+  | 'eerie-loop'
   | 'comet-loop'
   | 'electric-loop'
   | 'earthquake-loop'
@@ -288,43 +291,9 @@ export function nativeLootEventSoundRequest(
   }
 }
 
-export function nativeBoneyardPointGain(
-  sourcePosition: Readonly<{ x: number; y: number }>,
-  cameraCenter: Readonly<{ x: number; y: number }>,
-  visibleWorldWidth: number,
-  localPlayerInDeathPresentation: boolean,
-): number {
-  const distance = Math.hypot(
-    sourcePosition.x - cameraCenter.x,
-    sourcePosition.y - cameraCenter.y,
-  )
-  const innerRadius = visibleWorldWidth * 0.25
-  const outerRadius = visibleWorldWidth * 1.1
-  const spatialGain = distance <= innerRadius
-    ? 1
-    : distance >= outerRadius
-      ? 0
-      : 1 - (distance - innerRadius) / (outerRadius - innerRadius)
-  return spatialGain * (localPlayerInDeathPresentation ? 0.1 : 1)
-}
-
-export function nativeBoneyardHitPointGain(
-  sourcePosition: Readonly<{ x: number; y: number }>,
-  cameraCenter: Readonly<{ x: number; y: number }>,
-  visibleWorldWidth: number,
-  localPlayerInDeathPresentation: boolean,
-): number {
-  const distance = Math.hypot(
-    sourcePosition.x - cameraCenter.x,
-    sourcePosition.y - cameraCenter.y,
-  )
-  const innerRadius = visibleWorldWidth * 0.1
-  const outerRadius = visibleWorldWidth * 0.5
-  if (distance < innerRadius) return 1
-  if (distance > outerRadius) return 0
-  const gain = 1 - (distance - innerRadius) / (outerRadius - innerRadius)
-  return gain * (localPlayerInDeathPresentation ? 0.1 : 1)
-}
+export {
+  nativeRegionHitPointGain as nativeBoneyardHitPointGain,nativeRegionPointGain as nativeBoneyardPointGain
+} from './core-kernels/native-region-point-gain.ts'
 
 export const GAME_SCENE_MUSIC = {
   boneyard: { cue: 'prelude', transitionTicks: 100 },

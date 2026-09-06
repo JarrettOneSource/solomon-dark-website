@@ -248,3 +248,13 @@ export function byte(value: unknown, field: string): number {
   if (result > 255) throw new GameProtocolError(`${field} must be a byte`)
   return result
 }
+
+export function headingDegrees(value: unknown, field: string): number {
+  const result = finite(value, field)
+  if (result < 0 || result >= 360) {
+    throw new GameProtocolError(`${field} must be within [0,360)`)
+  }
+  return result
+}
+
+export type JsonInput = null | boolean | number | string | undefined | readonly JsonInput[] | { [key: string]: JsonInput }

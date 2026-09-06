@@ -1,27 +1,9 @@
-import type { BoneyardPoint as Vec2 } from './boneyard.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
-import {
-  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
-  NATIVE_LANTERN_LIGHT_FLICKER,
-  NATIVE_LANTERN_LIGHT_RADIUS,
-  NATIVE_LIGHT_OUTER_DISTANCE,
-  NATIVE_PLAYER_LIGHT_OFFSET,
-  NATIVE_PLAYER_LIGHT_RADIUS,
-  nativeBoneyardRadialLightContribution,
-} from './native-boneyard-lighting.ts'
-import {
-  nativeRandomFloatFromSemanticWord,
-  nativeRandomIntFromSemanticWord,
-  nativeSignedRandomFloatFromSemanticWords,
-} from './native-random-domain.ts'
+import type { BoneyardPoint as Vec2 } from './boneyard.ts'
+import { NATIVE_LANTERN_LIGHT_BASE_INTENSITY, NATIVE_LANTERN_LIGHT_FLICKER, NATIVE_LANTERN_LIGHT_RADIUS, NATIVE_LIGHT_OUTER_DISTANCE, NATIVE_PLAYER_LIGHT_OFFSET, NATIVE_PLAYER_LIGHT_RADIUS, nativeBoneyardRadialLightContribution } from './native-boneyard-lighting.ts'
+import { nativeRandomFloatFromSemanticWord, nativeRandomIntFromSemanticWord, nativeSignedRandomFloatFromSemanticWords } from './native-random-domain.ts'
 import type { NativeSecondaryActorState } from './native-secondary-abilities.ts'
-import type {
-  NativeWeldHailstonesState,
-  NativeWeldEtherealBoulderState,
-  NativeWeldMeteorActorState,
-  NativeWeldProjectileState,
-} from './native-weld-primary-runtime.ts'
-
+import type { NativeWeldEtherealBoulderState, NativeWeldHailstonesState, NativeWeldMeteorActorState, NativeWeldProjectileState } from './native-weld-primary-runtime.ts'
 export {
   NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
@@ -30,7 +12,7 @@ export {
   NATIVE_LIGHT_OUTER_DISTANCE,
   NATIVE_LIGHT_VERTICAL_SCALE,
   NATIVE_PLAYER_LIGHT_OFFSET,
-  NATIVE_PLAYER_LIGHT_RADIUS,
+  NATIVE_PLAYER_LIGHT_RADIUS
 } from './native-boneyard-lighting.ts'
 
 export interface NativeBoneyardLightSample {
@@ -540,10 +522,25 @@ export function nativeEnemyLightSources(
 ): readonly NativeBoneyardLightSource[] {
   if (enemy.enemyToken === 'ZOMBIE' || enemy.lighting.providerCopies === 0) return []
   const result: NativeBoneyardLightSource[] = []
-  const burning = enemy.flags.includes('FLAG_BURNING')
+  const burning = enemy.burning
   for (let copy = 0; copy < enemy.lighting.providerCopies; copy += 1) {
     const salt = Math.imul(copy + 1, 0x45d9f3b) ^ enemy.id
     switch (enemy.enemyToken) {
+      case 'DEMONSKULL':
+        result.push({ castsDirectionalShadow: multipleShadows, intensity: enemy.lighting.glow, radius: enemy.scale * 2,
+          position: { x: enemy.position.x + (enemy.demonSkull?.bodyOffset.x ?? 0), y: enemy.position.y + (enemy.demonSkull?.bodyOffset.y ?? 0) } })
+        break
+      case 'DIREFACULTY':
+        result.push({ castsDirectionalShadow: multipleShadows,
+          intensity: presentationRandom(presentationFrame, salt ^ 0x479f80, 1) < .5 ? 0 : enemy.lighting.glow,
+          position: { ...enemy.position },
+          radius: Math.fround(.75 + presentationSignedRandom(presentationFrame, salt ^ 0x479fa0, Math.fround(.1))) })
+        break
+      case 'HEARTMONGER':
+        result.push({ castsDirectionalShadow: multipleShadows,
+          intensity: Math.fround(.5 + presentationRandom(presentationFrame, salt ^ 0x47a040, .10000002384185791)),
+          position: { ...enemy.position }, radius: .75 })
+        break
       case 'SKELETON':
         result.push(nativeOrdinarySkeletonLight(enemy, presentationFrame, salt, multipleShadows))
         break
@@ -1150,6 +1147,9 @@ function nativeBoneyardLightContribution(
 }
 
 interface NativeEnemyLightOwner {
+  readonly burning: boolean
+  readonly scale: number
+  readonly demonSkull?: { readonly bodyOffset: Vec2 }
   readonly id: number
   readonly enemyToken: BoneyardWaveEnemyToken
   readonly flags: readonly string[]

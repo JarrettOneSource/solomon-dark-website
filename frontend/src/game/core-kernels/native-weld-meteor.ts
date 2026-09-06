@@ -279,6 +279,19 @@ export function nativeWeldMeteorDirectRadius(): number {
   return NATIVE_METEOR_DIRECT_RADIUS
 }
 
+/** Meteor Tick writes this root before it decrements +0x13C. */
+export function nativeWeldMeteorRootPosition(
+  landing: Readonly<Vector2>, headingDegrees: number, height: number,
+): Vector2 {
+  const radians = headingDegrees * Math.PI / 180
+  const velocityX = Math.fround(Math.fround(Math.sin(radians)) * 300)
+  const velocityY = Math.fround(Math.fround(Math.fround(-Math.cos(radians)) * 300) * .25)
+  return {
+    x: Math.fround(landing.x + Math.fround(height * velocityX)),
+    y: Math.fround(landing.y + Math.fround(height * velocityY)),
+  }
+}
+
 export function nativeWeldMeteorPulseRadius(impactRadiusScalar: number): number {
   return Math.fround(impactRadiusScalar * NATIVE_METEOR_IMPACT_RADIUS_FACTOR)
 }

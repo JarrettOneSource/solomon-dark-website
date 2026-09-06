@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
+import { NATIVE_BOSS_STREAM_CUES, NATIVE_BOSS_STREAM_TICKS, NATIVE_FACULTY_VOICE_CUES } from './core-kernels/native-boss-audio.ts'
 
 import { worldToScreen, type Camera } from '../editor/render.ts'
 import { boneyard, nativeGameOver } from '../lib/assets.ts'
@@ -18,35 +19,39 @@ import {
   BoneyardWeatherAudioSynchronizer,
   nativeBoneyardWeatherArenaFade,
 } from './boneyard-weather-audio.ts'
-import {
-  BONEYARD_SOLOMON_VOICE_CUES,
-  isBoneyardPlayerCombatEnabled,
-} from './core-kernels/boneyard-encounter.ts'
-import { actorHeadingVector } from './core-kernels/actor-heading.ts'
-import {
-  nativeTutorialHostileScenePaused,
-  nativeTutorialHudAccess,
-  type NativeTutorialState,
-} from './core-kernels/native-tutorial.ts'
-import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
-import {
-  nativePlayerBeltsEqual,
-  type PlayerBeltComponent,
-} from './core-kernels/native-belt.ts'
-import { nearestBoneyardGoodie } from './core-kernels/boneyard-goodie-interaction.ts'
-import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
+import './boneyard.css'
 import {
   isBoneyardGameSnapshot,
   type BoneyardGameSnapshot,
 } from './client/boneyard-presentation-timeline.ts'
-import type { GameAudioDirector } from './game-audio-director.ts'
+import ContextualInteractButton from './ContextualInteractButton.tsx'
+import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import {
-  cameraZoomForFov,
-  gameUiScale,
-  type GameSettings,
-} from './game-settings.ts'
+  BONEYARD_SOLOMON_VOICE_CUES,
+  isBoneyardPlayerCombatEnabled,
+} from './core-kernels/boneyard-encounter.ts'
+import { nearestBoneyardGoodie } from './core-kernels/boneyard-goodie-interaction.ts'
+import type {
+  LoadedBoneyard,
+} from './core-kernels/boneyard.ts'
+import {
+  gameRunLifecyclesEqual,
+  type GameRunLifecycleState,
+} from './core-kernels/game-run.ts'
+import type { HubInventoryAction, ModConsumableCatalogEntry } from './core-kernels/hub-economy.ts'
+import {
+  nativePlayerBeltsEqual,
+  type PlayerBeltComponent,
+} from './core-kernels/native-belt.ts'
+import {
+  NATIVE_TUTORIAL_CUES,
+  nativeTutorialHostileScenePaused,
+  nativeTutorialHudAccess,
+  type NativeTutorialState,
+} from './core-kernels/native-tutorial.ts'
+import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import { loadGameImage } from './game-assets.ts'
-import { gameOverAudioEvents } from './game-over-audio.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
@@ -57,18 +62,19 @@ import {
   solomonDigAudioDelta,
   type SolomonDigAudioCursor,
 } from './game-audio-native.ts'
+import { gameOverAudioEvents } from './game-over-audio.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
+import {
+  cameraZoomForFov,
+  gameUiScale,
+  type GameSettings,
+} from './game-settings.ts'
 import GameHud from './GameHud.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
-import ContextualInteractButton from './ContextualInteractButton.tsx'
-import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
-import HubInventoryUi from './HubInventoryUi.tsx'
-import type { HubUiSurface } from './hub-inventory-ui-model.ts'
 import GameOverOverlay from './GameOverOverlay.tsx'
-import TouchJoystick from './input/TouchJoystick.tsx'
-import NativeLootBitmapText from './NativeLootBitmapText.tsx'
-import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
-import TutorialOverlay, { TutorialModalCallouts } from './TutorialOverlay.tsx'
+import type { HubUiSurface } from './hub-inventory-ui-model.ts'
+import './hub.css'
+import HubInventoryUi from './HubInventoryUi.tsx'
 import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
@@ -77,37 +83,24 @@ import {
   projectNativeStickAim,
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
-import type {
-  BoneyardEnemyEventSnapshot,
-  GameSnapshot,
-} from './protocol/game-state.ts'
-import type {
-  GameModAsset,
-} from './protocol/game-mod-contract.ts'
-import type {
-  LoadedBoneyard,
-} from './core-kernels/boneyard.ts'
-import type {
-  ProtocolPlayerEconomy,
-  ProtocolPlayerProgression,
-} from './protocol/game-state.ts'
-import type { PartyRosterPlayer } from './protocol/party-state.ts'
-import {
-  gameRunLifecyclesEqual,
-  type GameRunLifecycleState,
-} from './core-kernels/game-run.ts'
-import type { ModConsumableCatalogEntry } from './core-kernels/hub-economy.ts'
-import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
-import type { GameWorldSpeech } from './world-speech-presentation.ts'
+import TouchJoystick from './input/TouchJoystick.tsx'
 import { BoneyardLootEventSynchronizer } from './loot-event-audio.ts'
 import {
   NativeLootMessagePresentation,
   type NativeLootMessageVisual,
 } from './loot-message-presentation.ts'
-import {
-  createBoneyardWorldRenderer,
-} from './renderer/boneyard-world-renderer.ts'
-import type { BoneyardWorldRenderer } from './renderer/boneyard-renderer-model.ts'
+import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
+import NativeLootBitmapText from './NativeLootBitmapText.tsx'
+import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
+import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
+import type { GameModAsset } from './protocol/game-mod-contract.ts'
+import type {
+  BoneyardEnemyEventSnapshot,
+  GameSnapshot,
+  ProtocolPlayerEconomy,
+  ProtocolPlayerProgression,
+} from './protocol/game-state.ts'
+import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import {
   paintBoneyardEnvironmentLight,
   type BoneyardEnvironmentLightImages,
@@ -117,13 +110,17 @@ import {
   boneyardSpectatorStatusesEqual,
   type BoneyardSpectatorStatusPresentation,
 } from './renderer/boneyard-render-contract.ts'
+import type { BoneyardWorldRenderer } from './renderer/boneyard-renderer-model.ts'
+import {
+  createBoneyardWorldRenderer,
+} from './renderer/boneyard-world-renderer.ts'
 import {
   boundedGameViewportLayout,
   gameViewportLayout,
   type BoundedGameViewportLayout,
 } from './renderer/game-viewport.ts'
-import './hub.css'
-import './boneyard.css'
+import TutorialOverlay, { TutorialModalCallouts } from './TutorialOverlay.tsx'
+import type { GameWorldSpeech } from './world-speech-presentation.ts'
 
 interface BoneyardSceneProps {
   accountUsername: string | null
@@ -317,6 +314,7 @@ export default function BoneyardScene({
   const pendingEnemyPresentationEventsRef = useRef<BoneyardEnemyEventSnapshot[]>([])
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const settingsRef = useRef(settings)
+  const lastBossVoiceRef = useRef({ runId: '', eventId: 0 })
   const lastVoiceEventRef = useRef({
     eventId: boneyardInitialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0,
     runId: loaded.runId,
@@ -414,7 +412,26 @@ export default function BoneyardScene({
         ? current
         : gameRunLifecyclesEqual(current, snapshot.run) ? current : snapshot.run
     ))
-    if (snapshot.world.kind === 'boneyard') setTutorial(snapshot.world.tutorial)
+    if (snapshot.world.kind === 'boneyard') {
+      setTutorial(snapshot.world.tutorial)
+      const narration = snapshot.world.bossNarration
+      audio.setNarrationMix(narration.mix)
+      if (lastBossVoiceRef.current.runId !== snapshot.world.runId) {
+        audio.stopStreams(NATIVE_FACULTY_VOICE_CUES)
+        lastBossVoiceRef.current = { runId: snapshot.world.runId, eventId: 0 }
+      }
+      const current = narration.current
+      if (current !== null && current.eventId !== lastBossVoiceRef.current.eventId) {
+        audio.stopStreams(NATIVE_FACULTY_VOICE_CUES)
+        audio.playStream(current.cue, {
+          offsetSeconds: (NATIVE_BOSS_STREAM_TICKS[current.cue] - narration.ticksRemaining) / 100,
+        })
+        lastBossVoiceRef.current.eventId = current.eventId
+      } else if (current === null && lastBossVoiceRef.current.eventId !== 0) {
+        audio.stopStreams(NATIVE_FACULTY_VOICE_CUES)
+        lastBossVoiceRef.current.eventId = 0
+      }
+    }
     for (const cue of gameOverAudioEvents(previousAudioRunRef.current, snapshot.run)) {
       if (cue === 'solomon-laugh-big') audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
       audio.playStream(cue)
@@ -424,6 +441,9 @@ export default function BoneyardScene({
 
   useEffect(() => subscribeEnemyEvent((event) => {
     if (event.runId !== loaded.runId) return
+    if (event.type === 'enemy-dialogue-stop') {
+      audio.stopStreams([...NATIVE_FACULTY_VOICE_CUES, ...BONEYARD_SOLOMON_VOICE_CUES, ...NATIVE_TUTORIAL_CUES])
+    }
     const scene = sceneRef.current
     if (scene) {
       scene.dataset.lastEnemyEventActorId = `${event.actorId}`
@@ -434,21 +454,23 @@ export default function BoneyardScene({
       }
     }
     const sound = nativeEnemyEventSoundRequest(event)
-    if (sound) {
+    if (sound || event.stream !== undefined) {
+      const sourcePosition = sound?.sourcePosition ?? event.sourcePosition ?? null
       const renderer = rendererRef.current
       const snapshot = samplePresentation()
       const localPlayer = snapshot.players[playerId]
       const camera = renderer?.camera(snapshot)
-      const spatialGain = camera && sound.sourcePosition !== null
+      const spatialGain = camera && sourcePosition !== null
         ? nativeBoneyardPointGain(
-            sound.sourcePosition,
+            sourcePosition,
             camera,
             viewportRef.current.width / camera.zoom,
             localPlayer?.progression.lifeState === 'dying'
               || localPlayer?.progression.lifeState === 'spectating',
           )
         : 1
-      audio.playSound(sound.cue, {
+      if (event.stream !== undefined) audio.playStream(event.stream, { volume: spatialGain })
+      else if (sound) audio.playSound(sound.cue, {
         playbackRate: sound.playbackRate,
         volume: sound.volume * spatialGain,
       })
@@ -923,15 +945,13 @@ export default function BoneyardScene({
             ),
           )
           const localPlayer = snapshot.players[playerId]
-          const requests = enemyAmbientAudio.update(snapshot, (position) => (
-            nativeBoneyardPointGain(
-              position,
-              camera,
-              viewportRef.current.width / camera.zoom,
-              localPlayer?.progression.lifeState === 'dying'
-                || localPlayer?.progression.lifeState === 'spectating',
-            )
-          ))
+          const inDeathPresentation = localPlayer?.progression.lifeState === 'dying'
+            || localPlayer?.progression.lifeState === 'spectating'
+          const visibleWorldWidth = viewportRef.current.width / camera.zoom
+          const requests = enemyAmbientAudio.update(snapshot, {
+            point: position => nativeBoneyardPointGain(position, camera, visibleWorldWidth, inDeathPresentation),
+            hit: position => nativeBoneyardHitPointGain(position, camera, visibleWorldWidth, inDeathPresentation),
+          })
           const scene = sceneRef.current
           if (scene) {
             scene.dataset.weatherAudioCue = weatherRequest.cue
@@ -999,6 +1019,8 @@ export default function BoneyardScene({
       enemyAmbientAudio.destroy()
       weatherAudio.destroy()
       audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
+      audio.stopStreams(NATIVE_BOSS_STREAM_CUES)
+      audio.setNarrationMix(1)
       input.destroy()
       inputRef.current = null
       pendingEnemyPresentationEventsRef.current = []

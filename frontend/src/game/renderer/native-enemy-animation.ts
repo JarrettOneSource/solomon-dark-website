@@ -1,6 +1,5 @@
-import type { NativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
-import { NATIVE_MAGE_CAST_BODY_POSES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { NATIVE_DEMON_BOMB_CONTROLLER_POSES } from '../core-kernels/boneyard-demon-articulation.ts'
+import { NATIVE_MAGE_CAST_BODY_POSES } from '../core-kernels/boneyard-mage-lightning.ts'
 import {
   NATIVE_ARCHER_SHOT_BODY_POSES,
   NATIVE_SKELETON_CLAW_BODY_POSES,
@@ -8,6 +7,7 @@ import {
   NATIVE_SKELETON_WEAPON_BODY_POSES,
   type NativeSkeletonHeadFacingOffset,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
+import type { NativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
 
 export type NativeEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
 
@@ -22,6 +22,15 @@ export type NativeEnemyActionProgramName =
   | 'demon-bomb'
 
 export type NativeEnemyActionName =
+  | 'demon-skull-bite'
+  | 'demon-skull-eyes'
+  | 'demon-skull-mouth'
+  | 'demon-skull-spit'
+  | 'demon-skull-flair'
+  | 'demon-skull-scream'
+  | 'faculty-throw'
+  | 'faculty-two-hand'
+  | 'faculty-lightning'
   | NativeEnemyActionProgramName
   | 'zombie-beat'
   | 'wraith-drain'
@@ -64,7 +73,7 @@ export interface NativeEnemyMaggotSample {
   state: 'crawl' | 'bite' | 'death'
 }
 
-export type NativeEnemySampleAtlas = 'BadGuys' | 'DeadHawg' | 'Demon'
+export type NativeEnemySampleAtlas = 'BadGuys' | 'DeadHawg' | 'Demon' | 'Faculty' | 'Heartmonger' | 'Unholy'
 
 export interface NativeEnemyEffectSample {
   alpha: number
@@ -102,6 +111,8 @@ export interface NativeEnemyAnimationSample {
   demonFrontRotationRadians: number
   demonRearExtremityOffset: Readonly<{ x: number; y: number }>
   demonRearRotationRadians: number
+  demonShadowOffset: Readonly<{ x: number; y: number }>
+  shadowLateralOffset: number
   effects: readonly NativeEnemyEffectSample[]
   gaitPose: number
   headFacingOffset: NativeSkeletonHeadFacingOffset
@@ -109,6 +120,8 @@ export interface NativeEnemyAnimationSample {
   impBodyRotationRadians: number
   impEffectAlpha: number
   impEffectFrame: number
+  headVariant: 0 | 1
+  limbHeadingDeg: number | null
   maggots: readonly NativeEnemyMaggotSample[]
   state: NativeEnemyAnimationState
   stridePhaseDeg: number
@@ -130,7 +143,7 @@ export {
   nativeZombieArticulationPose,
   nativeZombieBeatPose,
   type NativeZombieArticulationPose,
-  type NativeZombieBeatPose,
+  type NativeZombieBeatPose
 } from '../core-kernels/boneyard-zombie-beat.ts'
 
 export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
@@ -240,6 +253,8 @@ export function nativeEnemyIdleAnimationSample(
     demonFrontRotationRadians: 0,
     demonRearExtremityOffset: { x: 0, y: 0 },
     demonRearRotationRadians: 0,
+    demonShadowOffset: { x: 0, y: 0 },
+    shadowLateralOffset: 0,
     effects: [],
     gaitPose: 0,
     headFacingOffset: 0,
@@ -247,6 +262,8 @@ export function nativeEnemyIdleAnimationSample(
     impBodyRotationRadians: 0,
     impEffectAlpha: 0,
     impEffectFrame: -1,
+    headVariant: 0,
+    limbHeadingDeg: null,
     maggots: [],
     state: 'idle',
     stridePhaseDeg: 0,

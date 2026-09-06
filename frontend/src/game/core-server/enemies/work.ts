@@ -11,12 +11,19 @@ export function createEnemyWork(
   const registerWorldPainter = context.registerWorldPainter
     ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
   return {
+    demonSkullEncounter: source.demonSkullEncounter,
+    featuredBossId: source.featuredBossId,
+    bossNarration: source.bossNarration,
+    facultyVoiceController: source.facultyVoiceController,
+    bossSpells: [...source.bossSpells],
+    puppetHits: [...source.puppetHits],
+    detachedCrows: [...source.detachedCrows],
     silkFragments: [...source.silkFragments],
     spiderRemains: [...source.spiderRemains],
     silks: [...source.silks],
     webbedPlayers: { ...source.webbedPlayers },
     spiderSpitTicksRemaining: source.spiderSpitTicksRemaining,
-    actors: preserveExisting ? [...source.actors] : [],
+    actors: [...source.actors],
     deathEffects: preserveExisting ? [...source.deathEffects] : [],
     events: [],
     headFacingRngState: source.headFacingRngState,
@@ -56,6 +63,13 @@ export function createEnemyWork(
 
 export function finishEnemyStore(work: WorkingStep, tick: number): BoneyardEnemyStore {
   return {
+    demonSkullEncounter: work.demonSkullEncounter,
+    featuredBossId: work.actors.some(actor => actor.id === work.featuredBossId) ? work.featuredBossId : null,
+    bossNarration: work.bossNarration,
+    facultyVoiceController: work.facultyVoiceController,
+    bossSpells: work.bossSpells,
+    puppetHits: work.puppetHits,
+    detachedCrows: work.detachedCrows,
     silkFragments: work.silkFragments,
     spiderRemains: work.spiderRemains,
     silks: work.silks,

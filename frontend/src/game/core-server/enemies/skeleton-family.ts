@@ -1,54 +1,19 @@
 import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config-model.ts'
-import {
-  BOUNDED_MAGE_ALLY_SHIELD_RANGE,
-  boundedMageShieldIntervalTicks,
-} from '../../core-kernels/boneyard-enemy-modifiers.ts'
-import {
-  NATIVE_MAGE_CAST_BODY_POSES,
-  nativeMageLightningDurationTicks,
-} from '../../core-kernels/boneyard-mage-lightning.ts'
-import {
-  NATIVE_ARCHER_SHOT_BODY_POSES,
-  NATIVE_SKELETON_CLAW_BODY_POSES,
-  NATIVE_SKELETON_PIKE_BODY_POSES,
-  NATIVE_SKELETON_WEAPON_BODY_POSES,
-  nativeSkeletonFamilyBodyPose,
-} from '../../core-kernels/boneyard-skeleton-family-animation.ts'
+import { BOUNDED_MAGE_ALLY_SHIELD_RANGE, boundedMageShieldIntervalTicks } from '../../core-kernels/boneyard-enemy-modifiers.ts'
+import { NATIVE_MAGE_CAST_BODY_POSES, nativeMageLightningDurationTicks } from '../../core-kernels/boneyard-mage-lightning.ts'
+import { NATIVE_ARCHER_SHOT_BODY_POSES, NATIVE_SKELETON_CLAW_BODY_POSES, NATIVE_SKELETON_PIKE_BODY_POSES, NATIVE_SKELETON_WEAPON_BODY_POSES, nativeSkeletonFamilyBodyPose } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import { nextBoneyardWaveRandom } from '../../core-kernels/boneyard-wave-timeline.ts'
-import {
-  NATIVE_ENEMY_ACTION_SEED_BOUND,
-  restoreNativeRangeEasyAfterVolley,
-} from '../../core-kernels/native-enemy-targeting.ts'
+import { stepNativeArcherStrafe } from '../../core-kernels/native-archer-strafe.ts'
+import { NATIVE_ENEMY_ACTION_SEED_BOUND, restoreNativeRangeEasyAfterVolley } from '../../core-kernels/native-enemy-targeting.ts'
 import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
 import { withEnemyLighting } from './actor-update.ts'
 import { attackMarker, directContactPlayerDamage } from './combat.ts'
-import type {
-  ActionProgram,
-  BoneyardArcherBrain,
-  BoneyardEnemyActor,
-  BoneyardEnemyStoreStepContext,
-  BoneyardMageBrain,
-  BoneyardSkeletonBrain,
-  WorkingStep,
-} from './model.ts'
-import { moveTowardTarget, staffAttackSpeed } from './movement.ts'
-import {
-  BOUNDED_ENEMY_ATTACK_REACH,
-  NATIVE_ARCHER_ACTION_PROGRAM,
-  NATIVE_MAGE_ACTION_PROGRAMS,
-  NATIVE_SKELETON_ACTION_PROGRAMS,
-  NATIVE_SKELETON_CLAW_MARKERS,
-  NATIVE_SKELETON_WEAPON_MARKERS,
-} from './programs.ts'
-import { emitArcherVolley, emitMageAttack, stepMageLightningPulse } from './projectile-emission.ts'
+import type { ActionProgram, BoneyardArcherBrain, BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardMageBrain, BoneyardSkeletonBrain, WorkingStep } from './model.ts'
+import { moveTowardTarget, staffAttackSpeed, staffMovementSpeed } from './movement.ts'
+import { BOUNDED_ENEMY_ATTACK_REACH, NATIVE_ARCHER_ACTION_PROGRAM, NATIVE_MAGE_ACTION_PROGRAMS, NATIVE_SKELETON_ACTION_PROGRAMS, NATIVE_SKELETON_CLAW_MARKERS, NATIVE_SKELETON_WEAPON_MARKERS } from './programs.ts'
 import type { MageLightningDispatch } from './projectile-emission.ts'
-import {
-  enemyTargetLineOfSightIsClear,
-  targetDistance,
-  targetWithinAttackReach,
-  trackEnemyActionHeading,
-} from './targeting.ts'
-
+import { emitArcherVolley, emitMageAttack, stepMageLightningPulse } from './projectile-emission.ts'
+import { enemyTargetLineOfSightIsClear, targetDistance, targetWithinAttackReach, trackEnemyActionHeading } from './targeting.ts'
 export function stepMageShields(
   work: WorkingStep,
   context: BoneyardEnemyStoreStepContext,
@@ -64,7 +29,7 @@ export function stepMageShields(
       || source.config.family.shieldInterval <= 0
     ) continue
     const remaining = Math.max(0, source.brain.shieldTicksRemaining - 1)
-    if (remaining > 0) {
+    if (remaining > 0 || source.brain.disabledPrimaryTicks > 0) {
       work.actors[index] = {
         ...source,
         brain: { ...source.brain, shieldTicksRemaining: remaining },
@@ -135,6 +100,9 @@ function canReceiveNativeMageAllyShield(actor: BoneyardEnemyActor): boolean {
     case 'SKELETONARCHER':
     case 'ZOMBIE':
       return true
+    case 'DEMONSKULL':
+    case 'DIREFACULTY':
+    case 'HEARTMONGER':
     case 'SKELETONMAGE':
     case 'IMP':
     case 'PORTAL':
@@ -375,6 +343,56 @@ export function stepArcher(
   brain: BoneyardArcherBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
+  const stepped = stepArcherAction(work, actor, brain, context)
+  if (stepped.brain.family !== 'archer') throw new Error('Archer action changed brain family')
+  const target = stepped.targetPlayerId === null ? null : context.players[stepped.targetPlayerId]
+  const strafe = stepNativeArcherStrafe(stepped.brain.strafe, {
+    attacking: stepped.brain.phase === 'attack',
+    enabled: stepped.config.enemyToken === 'SKELETONARCHER' && stepped.config.family.strafing,
+    headingDeg: stepped.headingDeg,
+    movementScalar: Math.fround(
+      stepped.config.chaseSpeed * staffMovementSpeed(stepped) * stepped.config.scale,
+    ),
+    pathIsClear: (end) => !context.projectileWorldBlocked({
+      kind: 'line', nativeExclusionMask: 0,
+      end,
+      projectileId: stepped.id,
+      radius: 0,
+      start: stepped.position,
+    }),
+    position: stepped.position,
+    targetPosition: target?.position ?? null,
+  })
+  const updated = { ...stepped, brain: { ...stepped.brain, strafe: strafe.state } }
+  if (strafe.delta === null) return updated
+  const position = context.resolveMovement({
+    actorId: stepped.id,
+    delta: strafe.delta,
+    position: stepped.position,
+    purpose: 'movement',
+    radius: stepped.config.collisionRadius,
+    requestedPosition: {
+      x: Math.fround(stepped.position.x + strafe.delta.x),
+      y: Math.fround(stepped.position.y + strafe.delta.y),
+    },
+  })
+  const gait = Math.fround(stepped.gaitPose + strafe.gaitAdvance)
+  return {
+    ...updated,
+    gaitPose: gait > 8 ? Math.fround(gait - 8) : gait,
+    lastMovementTick: context.tick,
+    position,
+    stridePhaseDeg: Math.fround(stepped.stridePhaseDeg + strafe.strideAdvance),
+  }
+}
+
+
+function stepArcherAction(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  brain: BoneyardArcherBrain,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
   if (actor.targetPlayerId === null) {
     const reset = resetArcher(actor, brain)
     return moveTowardTarget(work, reset, reset.brain, context, 1)
@@ -481,7 +499,8 @@ export function stepMage(
   } else {
     const distance = targetDistance(actor, context.players)
     if (
-      distance < brain.attackRange
+      brain.disabledPrimaryTicks === 0
+      && distance < brain.attackRange
       && enemyTargetLineOfSightIsClear(actor, context)
     ) {
       const program = nextBoneyardWaveRandom(work.rngState)

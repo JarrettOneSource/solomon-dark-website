@@ -1,7 +1,9 @@
+import { setNativeDiffuseColor } from './native-texture-color.ts'
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { BoneyardMaggotSnapshot } from '../protocol/game-state.ts'
+import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import {
@@ -14,17 +16,20 @@ export class NativeMaggotViews {
   private readonly liveIds = new Set<number>()
   private readonly root: Container
   private readonly textures: BoneyardWorldTextures
+  private readonly underlayRoot: Container
   private readonly visibleMaggots: BoneyardMaggotSnapshot[] = []
   private readonly views = new Map<number, NativeMaggotView>()
 
-  constructor(root: Container, textures: BoneyardWorldTextures) {
+  constructor(root: Container, textures: BoneyardWorldTextures, underlayRoot: Container) {
     this.root = root
     this.textures = textures
+    this.underlayRoot = underlayRoot
   }
 
   update(
     maggots: readonly BoneyardMaggotSnapshot[],
     visibleBounds: Readonly<BoneyardBounds>,
+    complexLighting = true,
   ): void {
     this.liveIds.clear()
     this.visibleMaggots.length = 0
@@ -32,10 +37,10 @@ export class NativeMaggotViews {
       this.liveIds.add(maggot.id)
       let view = this.views.get(maggot.id)
       if (!view) {
-        view = new NativeMaggotView(this.root, this.textures)
+        view = new NativeMaggotView(this.root, this.textures, this.underlayRoot)
         this.views.set(maggot.id, view)
       }
-      if (view.update(maggot, visibleBounds)) this.visibleMaggots.push(maggot)
+      if (view.update(maggot, visibleBounds, complexLighting)) this.visibleMaggots.push(maggot)
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
@@ -77,25 +82,43 @@ export class NativeMaggotViews {
 }
 
 class NativeMaggotView {
+  private readonly shadow: Sprite
+  private shadowVisible = false
   private readonly container: Container
   private readonly root: Container
   private readonly sprites: Sprite[] = []
   private readonly textures: BoneyardWorldTextures
   visible = false
 
-  constructor(root: Container, textures: BoneyardWorldTextures) {
+  constructor(root: Container, textures: BoneyardWorldTextures, underlayRoot: Container) {
     this.root = root
     this.textures = textures
     this.container = new Container()
     this.container.eventMode = 'none'
     root.addChild(this.container)
+    const record = maggotSpriteRecord('BadGuys', 67)
+    this.shadow = new Sprite(requiredTexture(textures, record.source))
+    this.shadow.eventMode = 'none'
+    this.shadow.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
+    this.shadow.scale.set(.44999998807907104)
+    underlayRoot.addChild(this.shadow)
   }
 
   update(
     maggot: BoneyardMaggotSnapshot,
     visibleBounds: Readonly<BoneyardBounds>,
+    complexLighting = true,
   ): boolean {
-    const plan = nativeMaggotPresentationPlan(maggot)
+    this.shadow.label = `maggot-ground-shadow:${maggot.id}`
+    this.shadow.position.set(maggot.position.x, maggot.position.y)
+    this.shadow.zIndex = maggot.lightRegistration.registrationOrdinal
+    this.shadowVisible = boneyardResidentIsVisible({
+      x: maggot.position.x - this.shadow.anchor.x * this.shadow.width,
+      y: maggot.position.y - this.shadow.anchor.y * this.shadow.height,
+      w: this.shadow.width, h: this.shadow.height,
+    }, visibleBounds)
+    this.shadow.renderable = this.shadowVisible
+    const plan = nativeMaggotPresentationPlan(maggot, complexLighting)
     const visible = nativeMaggotIsVisible(
       maggot,
       visibleBounds,
@@ -128,6 +151,7 @@ class NativeMaggotView {
       sprite.alpha = layer.alpha
       sprite.blendMode = layer.blendMode
       sprite.tint = layer.tint
+      setNativeDiffuseColor(sprite, layer.textureColor === 'diffuse')
     })
     this.container.label = `maggot:${maggot.id}:${maggot.state}`
     this.container.position.set(maggot.position.x, maggot.position.y)
@@ -144,9 +168,12 @@ class NativeMaggotView {
 
   setRenderable(renderable: boolean): void {
     this.container.renderable = renderable && this.visible
+    this.shadow.renderable = renderable && this.shadowVisible
   }
 
   destroy(): void {
+    this.shadow.removeFromParent()
+    this.shadow.destroy()
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
     this.sprites.length = 0

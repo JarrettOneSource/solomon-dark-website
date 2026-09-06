@@ -1,47 +1,29 @@
-import {
-  advanceNativeRngWords,
-  drawNativeFloat,
-  drawNativeFloatRange,
-  drawNativeInteger,
-  drawNativeSign,
-  createNativeRng,
-  type NativeRngState,
-} from './native-rng.ts'
-import type { PlayerBeltComponent } from './native-belt.ts'
-import {
-  stepNativeSecondaryCastAction,
-  type NativeSecondaryCastAction,
-} from './native-secondary-cast-action.ts'
-import {
-  type PlayerCharacterInput,
-  type PlayerCharacterState,
-  type WizardElement,
-} from './player-character.ts'
 import { actorHeadingIndex, actorHeadingVector } from './actor-heading.ts'
-import {
-  activePlayerWeldBuildId,
-  effectiveElementalPrimarySkillRankStats,
-  effectiveSecondaryAbilityRankStats,
-  nativeSkillCategory,
-  nativeWeldBuild,
-  playerStatBook,
-  type NativeSecondaryAbilityRankStats,
-  type PlayerSkillBookComponent,
-} from './player-progression.ts'
-import {
-  NATIVE_SECONDARY_ABILITY_IDS,
-  type NativeSecondaryAbilityId,
-} from './native-secondary-ability-contract.ts'
+import type { PlayerBeltComponent } from './native-belt.ts'
+import { createNativeDampenedSpell, stepNativeDampenedSpell } from './native-dampened-spell.ts'
+import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
 import {
   resolveNativeSkillDamageValue,
   resolveNativeSkillManaCostValue,
   type NativeOffensiveSpellFactors,
 } from './native-offensive-resolution.ts'
 import {
-  nativeSkillClass,
-} from './player-skill-runtime.ts'
-import type { PlayerFlashResponse } from './player-harmful-contact.ts'
-import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
+  advanceNativeRngWords,
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeFloatRange,
+  drawNativeInteger,
+  drawNativeSign,
+  type NativeRngState,
+} from './native-rng.ts'
+import {
+  NATIVE_SECONDARY_ABILITY_IDS,
+  type NativeSecondaryAbilityId,
+} from './native-secondary-ability-contract.ts'
+import {
+  stepNativeSecondaryCastAction,
+  type NativeSecondaryCastAction,
+} from './native-secondary-cast-action.ts'
 import {
   NATIVE_GOLEM_DEATH_DURATION_TICKS,
   NATIVE_GOLEM_RADIUS,
@@ -72,16 +54,35 @@ import {
   type NativeWorldManagerRegistration,
   type RegisterNativeWorldPainter,
 } from './native-world-manager-order.ts'
-import type { Vector2 } from './vector.ts'
+import {
+  type PlayerCharacterInput,
+  type PlayerCharacterState,
+  type WizardElement,
+} from './player-character.ts'
+import type { PlayerFlashResponse } from './player-harmful-contact.ts'
+import {
+  activePlayerWeldBuildId,
+  effectiveElementalPrimarySkillRankStats,
+  effectiveSecondaryAbilityRankStats,
+  nativeSkillCategory,
+  nativeWeldBuild,
+  playerStatBook,
+  type NativeSecondaryAbilityRankStats,
+  type PlayerSkillBookComponent,
+} from './player-progression.ts'
+import {
+  nativeSkillClass,
+} from './player-skill-runtime.ts'
 import {
   createNativeFireDetonation,
   stepNativeFireEmber,
   type NativeFireEmberContact,
 } from './primary-spell-fire-effects.ts'
+import type { Vector2 } from './vector.ts'
 
 export type {
   NativeGolemPhase,
-  NativeSecondaryGolemState,
+  NativeSecondaryGolemState
 } from './native-secondary-golem.ts'
 
 export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
@@ -98,7 +99,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'teleport-burst', 'magic-circle', 'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn',
   'flash-response-fade', 'flash-response-grow',
-  'dampen-wave', 'dampened-projectile', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
+  'dampen-wave', 'dampened-projectile', 'dampened-smoke', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
   'mindblast-burst', 'mindblast-shockwave',
   'ring-fire-explosion', 'ring-fire-fragment',
   'acid-splash', 'ether-drain', 'ether-drain-cloud', 'ether-drain-debris',
@@ -379,14 +380,10 @@ export interface NativeSecondaryDampenCandidates {
 }
 
 export interface NativeSecondaryDampenProjectileCandidate {
-  readonly ageTicks: number
-  readonly headingDegrees: number
   readonly id: number
-  readonly kind: 'firebolt' | 'guided-missile'
-  readonly payload: 'cold' | 'fire' | 'poison'
+  readonly kind: 'firebolt' | 'guided-missile' | 'skull-missile' | 'dark-fireball'
+  readonly payload: 'cold' | 'fire' | 'poison' | 'dark'
   readonly position: Vector2
-  readonly visualPhaseDegrees: number
-  readonly visualScale: number
 }
 
 export interface NativeSecondaryPositionResult {
@@ -395,6 +392,7 @@ export interface NativeSecondaryPositionResult {
 }
 
 export interface NativeSecondaryTickContext {
+  readonly effectVisible?: (worldKey: string, position: Vector2, margin: number) => boolean
   readonly dampenCandidates: (
     worldKey: string,
     origin: Vector2,
@@ -487,6 +485,7 @@ export interface NativeSecondarySteamedPulse {
 }
 
 export interface NativeSecondaryTickResult {
+  readonly dampenedCasterTargetIds: readonly number[]
   readonly damage: readonly NativeSecondaryDamageContact[]
   readonly dispelledShieldTargetIds: readonly number[]
   readonly disruptedTargetIds: readonly number[]
@@ -698,8 +697,6 @@ const DAMPEN_PRESENTATION_RNG_WORDS = (
   + DAMPEN_ADDITIVE_CHILDREN * DAMPEN_RNG_WORDS_PER_ADDITIVE
 )
 const DAMPEN_PRESENTATION_LIFETIME_TICKS = 100
-const DAMPEN_PROJECTILE_FLYOUT_LIFETIME_TICKS = DAMPEN_PRESENTATION_LIFETIME_TICKS
-const DAMPEN_PROJECTILE_FLYOUT_SPEED = Math.fround(40)
 const MAGIC_SHIELD_BREAK_CHILDREN = 20
 const MAGIC_SHIELD_BREAK_ALPHA_LOSS = Math.fround(0.05)
 const MAGIC_SHIELD_BREAK_LIFETIME_TICKS = 26
@@ -1423,6 +1420,7 @@ export function stepNativeSecondaryAbilities(
   const damage: NativeSecondaryDamageContact[] = []
   const knockbacks: NativeSecondaryKnockbackContact[] = []
   const disruptedTargetIds = new Set<number>()
+  const dampenedCasterTargetIds = new Set<number>()
   const manaRecovered: Record<string, number> = {}
   const manaSpent: Record<string, number> = {}
   const healthRecovered: Record<string, number> = {}
@@ -3541,14 +3539,32 @@ export function stepNativeSecondaryAbilities(
       case 'dampen-wave':
       case 'mindblast-burst':
         break
-      case 'dampened-projectile':
-        actor = {
-          ...actor,
-          position: {
-            x: Math.fround(sourceActor.position.x + sourceActor.velocity.x),
-            y: Math.fround(sourceActor.position.y + sourceActor.velocity.y),
-          },
-        }
+      case 'dampened-projectile': {
+        const stepped = stepNativeDampenedSpell({
+          headingDeg: sourceActor.rotationRadians * 180 / Math.PI,
+          phaseDeg: sourceActor.phase,
+          position: sourceActor.position,
+          velocity: sourceActor.velocity,
+        }, actor.variant, rng)
+        rng = stepped.rng
+        actor = { ...actor, frame: 0, phase: stepped.state.phaseDeg,
+          position: stepped.state.position,
+          rotationRadians: stepped.state.headingDeg * Math.PI / 180 }
+        retain = context.effectVisible?.(actor.worldKey, actor.position, 50) ?? true
+        const smoke = stepped.smoke
+        state = spawn(state, actorSeed({ kind: 'dampened-smoke',
+          frame: smoke.entry, lifetimeTicks: 101, ownerId: actor.ownerId,
+          phase: smoke.colorAlpha, position: smoke.position, quantity: smoke.tint,
+          rotationRadians: smoke.rotationDeg * Math.PI / 180, scale: smoke.scale,
+          skillId: actor.skillId, slowFactor: smoke.alphaLossPerTick,
+          variant: actor.variant, worldKey: actor.worldKey,
+        }))
+        break
+      }
+      case 'dampened-smoke':
+        actor = { ...actor, frame: sourceActor.frame,
+          alpha: Math.max(0, Math.fround(sourceActor.alpha - sourceActor.slowFactor)) }
+        retain = actor.alpha > 0
         break
       case 'flash-response-grow':
         actor = {
@@ -3768,7 +3784,7 @@ export function stepNativeSecondaryAbilities(
           facingHeadingIndexes[playerId] = cast.facingHeadingIndex
         }
         cast.removedProjectileIds.forEach((id) => removedProjectileIds.add(id))
-        cast.disruptedTargetIds.forEach((id) => disruptedTargetIds.add(id))
+        cast.dampenedCasterTargetIds.forEach((id) => dampenedCasterTargetIds.add(id))
         cast.dispelledShieldTargetIds.forEach((id) => dispelledShieldTargetIds.add(id))
       }
     }
@@ -3806,6 +3822,7 @@ export function stepNativeSecondaryAbilities(
   state = enrollNativeSecondaryLightOwners(state, context)
   return {
     damage: Object.freeze(damage),
+    dampenedCasterTargetIds: Object.freeze([...dampenedCasterTargetIds].sort((a, b) => a - b)),
     dispelledShieldTargetIds: Object.freeze([...dispelledShieldTargetIds].sort((a, b) => a - b)),
     disruptedTargetIds: Object.freeze([...disruptedTargetIds].sort((a, b) => a - b)),
     facingHeadingIndexes: Object.freeze(facingHeadingIndexes),
@@ -3827,7 +3844,7 @@ export function stepNativeSecondaryAbilities(
 
 interface CastResult {
   readonly dispelledShieldTargetIds: readonly number[]
-  readonly disruptedTargetIds: readonly number[]
+  readonly dampenedCasterTargetIds: readonly number[]
   readonly manaRecovered: number
   readonly manaUnderflow: boolean
   readonly manaSpent: number
@@ -3890,7 +3907,7 @@ function castAbility(
     nextPlayer = player,
     manaUnderflow = false,
   ): CastResult => ({
-    dispelledShieldTargetIds: [], disruptedTargetIds: [], manaRecovered: 0, manaUnderflow,
+    dispelledShieldTargetIds: [], dampenedCasterTargetIds: [], manaRecovered: 0, manaUnderflow,
     manaSpent: 0, player: nextPlayer,
     facingHeadingIndex: null, relocated: null, removedProjectileIds: [], state,
   })
@@ -3939,7 +3956,7 @@ function castAbility(
   let relocated: Vector2 | null = null
   let facingHeadingIndex: number | null = null
   let removedProjectileIds: readonly number[] = []
-  let disruptedTargetIds: readonly number[] = []
+  let dampenedCasterTargetIds: readonly number[] = []
   let dispelledShieldTargetIds: readonly number[] = []
   let postCastCue: NativeSecondaryAudioCue | null = null
   const spawnActor = (seed: Partial<NativeSecondaryActorState> & Pick<NativeSecondaryActorState, 'kind' | 'skillId'>) => {
@@ -4051,7 +4068,7 @@ function castAbility(
         ))
         return {
           dispelledShieldTargetIds,
-          disruptedTargetIds,
+          dampenedCasterTargetIds,
           facingHeadingIndex: null,
           manaRecovered: castManaRecovered,
           manaUnderflow: false,
@@ -4369,6 +4386,7 @@ function castAbility(
           ),
           actionDurationTicks: 0,
           actionTick: 0,
+          circleSlowTicks: 0,
           currentHealth: v.mHP,
           damageMaximum: v.mDamage2,
           iron: authority.golemIron,
@@ -4528,7 +4546,7 @@ function castAbility(
       state = { ...state, rng: actionIdentity.state }
       const dampen = context.dampenCandidates(authority.worldKey, origin)
       removedProjectileIds = Object.freeze(dampen.projectiles.map(({ id }) => id))
-      disruptedTargetIds = dampen.casterTargetIds
+      dampenedCasterTargetIds = dampen.casterTargetIds
       const dispelled: number[] = []
       for (const targetId of [...dampen.shieldTargetIds].sort((a, b) => a - b)) {
         const roll = drawNativeInteger(state.rng, 100)
@@ -4536,23 +4554,20 @@ function castAbility(
         if (roll.value < 0x33) dispelled.push(targetId)
       }
       dispelledShieldTargetIds = Object.freeze(dispelled)
-      for (const targetId of dampen.casterTargetIds) {
-        state = mergeEffect(state, authority.worldKey, targetId, { disruptedTicks: 600 })
-      }
       nextPlayer = { ...nextPlayer, castSpinTicksRemaining: 73 }
       for (const projectile of dampen.projectiles) {
+        const flyout = createNativeDampenedSpell(origin, projectile.position, state.rng)
+        state = { ...state, rng: flyout.rng }
         spawnActor({
-          frame: projectile.ageTicks,
           kind: 'dampened-projectile',
-          lifetimeTicks: DAMPEN_PROJECTILE_FLYOUT_LIFETIME_TICKS,
-          phase: projectile.visualPhaseDegrees,
+          lifetimeTicks: Number.MAX_SAFE_INTEGER,
+          phase: flyout.state.phaseDeg,
           position: projectile.position,
-          rotationRadians: projectile.headingDegrees * Math.PI / 180,
-          scale: projectile.visualScale,
+          rotationRadians: -Math.PI / 180,
           skillId,
           targetId: projectile.id,
           variant: dampenedProjectileVariant(projectile),
-          velocity: dampenedProjectileVelocity(origin, projectile.position),
+          velocity: flyout.state.velocity,
         })
       }
       const presentationRng = state.rng
@@ -4760,7 +4775,7 @@ function castAbility(
   }
   return {
     dispelledShieldTargetIds,
-    disruptedTargetIds,
+    dampenedCasterTargetIds,
     facingHeadingIndex,
     manaRecovered: castManaRecovered,
     manaUnderflow: false,
@@ -5295,20 +5310,10 @@ function wizardElementIndex(element: WizardElement): number {
 
 function dampenedProjectileVariant(
   projectile: NativeSecondaryDampenProjectileCandidate,
-): 0 | 1 | 2 {
+): 0 | 1 | 2 | 3 {
+  if (projectile.kind === 'skull-missile' || projectile.kind === 'dark-fireball') return 3
   if (projectile.kind === 'firebolt') return 0
   return projectile.payload === 'poison' ? 1 : 2
-}
-
-function dampenedProjectileVelocity(origin: Vector2, position: Vector2): Vector2 {
-  const x = Math.fround(position.x - origin.x)
-  const y = Math.fround(position.y - origin.y)
-  const distance = Math.hypot(x, y)
-  if (distance === 0) return ZERO
-  return {
-    x: Math.fround(x / distance * DAMPEN_PROJECTILE_FLYOUT_SPEED),
-    y: Math.fround(y / distance * DAMPEN_PROJECTILE_FLYOUT_SPEED),
-  }
 }
 
 export type NativeSecondaryLightDisposition =

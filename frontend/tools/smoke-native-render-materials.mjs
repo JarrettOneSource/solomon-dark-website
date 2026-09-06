@@ -58,6 +58,10 @@ try {
     })
     const failures = []
     for (const sample of samples) {
+      if (sample.role === 'drawable-color-mode' && sample.kind !== 'standalone-mesh') {
+        assert.ok(sample.retainedBuffer)
+        assert.equal(sample.retainedAttributeUpdates, 0, 'unchanged drawable color mode must reuse retained GPU attributes: ' + JSON.stringify(sample))
+      }
       const expected = expectedPixel(sample)
       if (sample.pixel.some((value, index) => Math.abs(value - expected[index]) > 2)) {
         failures.push({ ...sample, expected })
@@ -67,6 +71,38 @@ try {
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     assert.deepEqual(failures, [], 'GPU output must match independent native RGBA interpolation and blending')
     assert.deepEqual(contexts, [{ previousShaderDestroyed: true, previousProgramDestroyed: true }])
+    const puppetHits = await page.evaluate(async () => {
+      const { inspectNativePuppetHits } = await import('/tools/native-puppet-hit-probe.mjs')
+      return inspectNativePuppetHits()
+    })
+    console.log(JSON.stringify({ puppetHits }))
+    for (const row of puppetHits.scenery) {
+      assert.ok(row.restored && row.copiesDestroyed && row.borrowedResourcesAlive, row.kind)
+      assert.equal(row.childrenAfterRetire, 0)
+      assert.deepEqual(row.samples[0], row.samples[2], `${row.kind} setting toggle restores the material`)
+      assert.notDeepEqual(row.samples[0].body, row.before)
+      for (const sample of row.samples) {
+        const light = row.kind === 'building' ? 127 / 255 : 1
+        const base = saturate([60, 120, 30].map(channel => channel * light), 'arena')
+        const redraw = row.kind === 'building' && sample.complex ? [127, 127, 127]
+          : saturate([(sample.complex ? 165 : 255) * light, 0, 0], 'arena')
+        const alpha = row.kind === 'building' && sample.complex ? 1 : .5
+        const expected = [...redraw.map((channel, index) => channel * alpha + base[index] * (1 - alpha)),
+          255 * (alpha * alpha + 1 - alpha)]
+        assert.ok(sample.body.every((value, index) => Math.abs(value - expected[index]) <= 2), JSON.stringify({ row: row.kind, sample, expected }))
+      }
+      assert.deepEqual(row.samples.map(sample => sample.proxyDraws), row.kind === 'tree' ? [1, 1, 1]
+        : row.kind === 'building' ? [1, 0, 1] : [0, 0, 0])
+    }
+    assert.ok(puppetHits.leviathan.visibleHit && puppetHits.leviathan.normalTargetPreserved && puppetHits.leviathan.restored)
+    assert.equal(puppetHits.leviathan.retiredChildren, 0)
+    assert.ok(puppetHits.leviathan.targetsDestroyed && puppetHits.leviathan.sourceTexturesAlive)
+    assert.equal(puppetHits.leviathan.captureSamples.length, 1)
+    const captured = puppetHits.leviathan.captureSamples[0]
+    for (const [field, rgb, alpha] of [['ordinary', [60, 120, 30], 128 / 255], ['hit', [165, 0, 0], 64 / 255]]) {
+      const expected = [...saturate(rgb, 'arena').map(channel => channel * alpha), 255 * alpha * alpha]
+      assert.ok(captured[field].every((value, index) => Math.abs(value - expected[index]) <= 2), JSON.stringify({ field, captured, expected }))
+    }
     const contracts = await page.evaluate(async () => {
       const { inspectNativeRenderContracts } = await import('/tools/native-render-contract-probe.mjs')
       return inspectNativeRenderContracts()
@@ -180,6 +216,20 @@ try {
 }
 
 function expectedPixel(sample) {
+  if (sample.role === 'drawable-color-mode') {
+    const texture = sample.diffuse ? [1, 1, 1] : sample.rgba.slice(0, 3).map(channel => (
+      channel / (sample.premultiplied ? sample.rgba[3] : 255)
+    ))
+    const alpha = sample.rgba[3] / 255 * 128 / 255
+    const grey = (texture[0] + texture[1] + texture[2]) / 3 * (165 / 255) / 3
+    const color = texture.map((channel, index) => {
+      const real = index === 0 ? channel * 165 / 255 : 0
+      return sample.mode === 'fixed' ? real : grey * .35 + real * .65
+    })
+    const destination = sample.blend === 'add' ? 1 : 1 - alpha
+    return [...color.map((channel, index) => (channel * alpha + [.2, .1, .3][index] * destination) * 255),
+      (alpha * alpha + destination) * 255].map(value => Math.min(255, value))
+  }
   if (sample.role === 'explicit-shader') return [63, 63, 63, 255]
   if (sample.role === 'retained-color-mode') {
     const color = sample.masked ? [1, 1, 1] : saturate(sample.rgba.slice(0, 3).map(channel => channel / 255), sample.mode)

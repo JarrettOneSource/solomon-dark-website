@@ -1,12 +1,15 @@
-import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
-import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
-import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
-  NATIVE_LOOT_DEFAULT_MODIFIERS,
-  initialNativeKeyDropLevel,
-  materializeNativeLootScriptAction,
-  rollNativeEnemyLoot,
-} from '../core-kernels/native-loot.ts'
+  seedBoneyardWaveRng,
+} from '../core-kernels/boneyard-wave-timeline.ts'
+import type {
+  BoneyardBounds,
+  BoneyardPoint,
+} from '../core-kernels/boneyard.ts'
+import type {
+  HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
+import type { NativeLootItem } from '../core-kernels/native-loot-items.ts'
+import { createNativeLootItemIds, resolveNativeGoodieContents } from '../core-kernels/native-loot-items.ts'
 import type {
   NativeBonusKind,
   NativeLootArenaInput,
@@ -18,23 +21,29 @@ import type {
   NativeLootSelectionInput,
   NativeOrbKind,
 } from '../core-kernels/native-loot.ts'
-import { createNativeLootItemIds, resolveNativeGoodieContents } from '../core-kernels/native-loot-items.ts'
-import type { NativeLootItem } from '../core-kernels/native-loot-items.ts'
+import {
+  NATIVE_LOOT_DEFAULT_MODIFIERS,
+  initialNativeKeyDropLevel,
+  materializeNativeLootScriptAction,
+  rollNativeEnemyLoot,
+} from '../core-kernels/native-loot.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   createNativeRng,
   drawNativeFloat,
   drawNativeFloatRange,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
-import type { NativeRngState } from '../core-kernels/native-rng.ts'
-import { selectNativeMinibossDieReward } from '../core-kernels/native-survival-miniboss.ts'
 import type { NativeSurvivalOnDeathProgram } from '../core-kernels/native-survival-miniboss.ts'
-import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import { selectNativeMinibossDieReward } from '../core-kernels/native-survival-miniboss.ts'
 import type {
   NativeWorldManagerRegistration,
   RegisterNativeWorldPainter,
 } from '../core-kernels/native-world-manager-order.ts'
-import type { BoneyardEnemyDeathEffect } from './enemies/model.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import {
+  type BoneyardEnemyDeathEffect,
+} from './enemies/model.ts'
 
 export const NATIVE_LOOT_WORLD_ID_MINIMUM = 1
 export const NATIVE_LOOT_WORLD_ID_MAXIMUM = 2_047
@@ -828,7 +837,7 @@ function createLootFadeEffect(
     lifetimeTicks: 100,
     opacityTimer: 1,
     ownerActorId: actor.id,
-    painterRegistration: work.registerWorldPainter('actor'),
+    painterRegistration: work.registerWorldPainter('transient'),
     presentationOwner: 'world-sorted',
     position: Object.freeze({ ...position }),
     role,
@@ -894,7 +903,7 @@ function spawnGoodieBreakEffects(
     lifetimeTicks: 100,
     opacityTimer: 1,
     ownerActorId: goodie.id,
-    painterRegistration: work.registerWorldPainter('actor'),
+    painterRegistration: work.registerWorldPainter('transient'),
     presentationOwner: 'world-sorted',
     position: Object.freeze({ x: goodie.position.x, y: goodie.position.y - 20 }),
     role: 'goodie-break-additive',
@@ -974,7 +983,7 @@ function createGoodieBouncer(
     lifetimeTicks: 1_000,
     opacityTimer: 2,
     ownerActorId: goodie.id,
-    painterRegistration: work.registerWorldPainter('actor'),
+    painterRegistration: work.registerWorldPainter('transient'),
     presentationOwner: 'world-sorted',
     position: Object.freeze({ ...goodie.position }),
     role,

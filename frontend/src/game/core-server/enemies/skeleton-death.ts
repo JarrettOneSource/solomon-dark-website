@@ -1,9 +1,9 @@
 import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config-model.ts'
-import { spawnBouncer, spawnRadialBouncer, spawnSimpleDeathEffect, spawnUnbind } from './death-effects.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
+import { spawnBouncer, spawnRadialBouncer, spawnSimpleDeathEffect, spawnUnbind } from './death-effects.ts'
+import { spawnHeartmongerDeparture } from './heartmonger.ts'
 import type { BoneyardEnemyActor, WorkingStep } from './model.ts'
-import { drawInteger, drawUnit, radialVector } from './random.ts'
-
+import { drawInteger, drawUnit, radialVector, signedUnit } from './random.ts'
 export const SKELETON_BASE_FRAGMENT_ENTRIES = Object.freeze([
   113, 113, 113, 115, 118, 121, 120, 119, 116,
   121, 120, 119, 116, 117, 117, 117, 117, 117,
@@ -15,10 +15,7 @@ export function spawnSkeletonShatter(
   tick: number,
 ): void {
   const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
-  for (let index = entries.length - 1; index > 0; index -= 1) {
-    const swap = drawInteger(work, index + 1)
-    ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
-  }
+  shuffleBoneFragments(work, entries)
   let angleDeg = drawUnit(work) * 360
   for (const entry of entries) {
     spawnSkeletonFragmentBouncer(
@@ -55,8 +52,8 @@ function spawnSkeletonEquipmentEffects(
     || actor.config.enemyToken === 'SKELETONMAGE'
   ) {
     const headgear = actor.config.family.headgear
-    if (headgear === 1 || headgear === 2) {
-      const firstEntry = headgear === 1 ? 92 : 94
+    if (headgear === 1 || headgear === 2 || headgear === 4 || headgear === 5) {
+      const firstEntry = 92 + (headgear - (headgear > 3 ? 2 : 1)) * 2
       spawnSkeletonFragmentBouncer(
         work,
         actor,
@@ -156,6 +153,8 @@ function spawnSkeletonFragmentBouncer(
   angleDeg: number | (() => number),
   scale = 1,
   opacityTimer = 10,
+  minimumDistance = 15,
+  distanceRange = 10,
 ): void {
   spawnBouncer(work, actor, tick, entry, role, () => {
     const velocity = radialVector(
@@ -163,7 +162,7 @@ function spawnSkeletonFragmentBouncer(
       1,
     )
     velocity.x *= 1.5
-    const distance = 15 + drawInteger(work, 11)
+    const distance = Math.fround(minimumDistance + drawUnit(work) * distanceRange)
     return {
       opacityTimer,
       position: {
@@ -174,4 +173,39 @@ function spawnSkeletonFragmentBouncer(
       velocity,
     }
   })
+}
+
+
+function shuffleBoneFragments(work: WorkingStep, entries: number[]): void {
+  for (let index = 0; index < entries.length; index += 1) {
+    const swap = drawInteger(work, entries.length)
+    ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
+  }
+}
+
+
+export function spawnHeartmongerShatter(work: WorkingStep, actor: BoneyardEnemyActor, tick: number): void {
+  // 0x0049FB60; the browser's Enhanced Effects setting is fixed on.
+  const entries = [113, 113, 113, 113, 113, 115, 118,
+    121, 120, 119, 116, 121, 120, 119, 116, 121, 120, 119, 116,
+    ...Array<number>(11).fill(117)]
+  shuffleBoneFragments(work, entries)
+  let angle = drawUnit(work) * 360
+  for (const entry of entries) {
+    spawnSkeletonFragmentBouncer(work, actor, tick, entry, 'heartmonger-bone', angle,
+      Math.fround(Math.fround(1.2000000476837158) * 1.350000023841858), 15)
+    angle = Math.fround(angle + 72 + signedUnit(drawUnit(work)) * 10)
+  }
+  for (let index = 0; index < 20; index += 1) {
+    spawnSkeletonFragmentBouncer(work, actor, tick, () => 172 + drawInteger(work, 3),
+      'heartmonger-splinter', () => drawUnit(work) * 360, 1.2000000476837158, 15, 5, 30)
+  }
+  for (let index = 0; index < 7; index += 1) {
+    spawnSkeletonFragmentBouncer(work, actor, tick, 29, 'heartmonger-fragment',
+      () => drawUnit(work) * 360, 1.2000000476837158, 15, 5, 30)
+  }
+  spawnBouncer(work, actor, tick, () => 1819 + drawInteger(work, 4), 'heartmonger-skull',
+    { opacityTimer: 15, scale: 1.350000023841858, velocity: radialVector(angle, 2) })
+  spawnUnbind(work, actor, tick)
+  spawnHeartmongerDeparture(work, actor, tick)
 }

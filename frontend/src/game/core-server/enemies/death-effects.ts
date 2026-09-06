@@ -1,16 +1,9 @@
 import type { BoneyardWaveEnemyToken } from '../../core-kernels/boneyard-wave-schema.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import { stepBornBoneyardBouncer } from '../boneyard-transient-effects.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyActorId,
-  BoneyardEnemyDeathEffect,
-  BoneyardEnemyDeathEffectKind,
-  WorkingStep,
-} from './model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyActorId, BoneyardEnemyDeathEffect, BoneyardEnemyDeathEffectKind, WorkingStep } from './model.ts'
 import { NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS } from './programs.ts'
 import { drawUnit, radialVector } from './random.ts'
-
 export interface DeathEffectOwner {
   readonly id: BoneyardEnemyActorId
   readonly position: Readonly<BoneyardPoint>
@@ -32,10 +25,13 @@ export function spawnRadialBouncer(
 }
 
 type BouncerOptions = {
+  bounceVelocityMultiplier?: number
+  presentationOwner?: BoneyardEnemyDeathEffect['presentationOwner']
   atlas?: BoneyardEnemyDeathEffect['atlas']
   bounceRetention?: number
   bounceVelocityScale?: number
-  kind?: 'bouncer' | 'smoky-bouncer'
+  heightScale?: number
+  kind?: 'bouncer' | 'smoky-bouncer' | 'black-smoky-bouncer'
   opacityTimer?: number
   position?: Readonly<BoneyardPoint>
   height?: number
@@ -71,7 +67,7 @@ export function spawnBouncer(
     atlas: resolvedOptions.atlas ?? 'BadGuys',
     blendMode: 'normal',
     bounceRetention: resolvedOptions.bounceRetention ?? 0.65,
-    bounceVelocity: verticalVelocity,
+    bounceVelocity: verticalVelocity * (resolvedOptions.bounceVelocityMultiplier ?? 1),
     entry: resolvedEntry,
     firstEntry: resolvedEntry,
     frameCount: 1,
@@ -79,15 +75,15 @@ export function spawnBouncer(
     frameVelocity: 0,
     frameVelocityDamping: 1,
     frameTicks: 1,
-    height: resolvedOptions.height ?? constructorHeight,
+    height: resolvedOptions.height ?? constructorHeight * (resolvedOptions.heightScale ?? 1),
     id: work.nextDeathEffectId,
     kind: resolvedOptions.kind ?? 'bouncer',
     lastStepTick: tick,
-    lifetimeTicks: 1_000,
+    lifetimeTicks: Math.ceil(opacityTimer / .015 * 1.5) + 1,
     opacityTimer,
     ownerActorId: actor.id,
-    painterRegistration: work.registerWorldPainter('actor'),
-    presentationOwner: 'world-sorted',
+    painterRegistration: (resolvedOptions.presentationOwner ?? 'world-sorted') === 'world-sorted' ? work.registerWorldPainter('transient') : null,
+    presentationOwner: resolvedOptions.presentationOwner ?? 'world-sorted',
     position: Object.freeze({ ...(resolvedOptions.position ?? actor.position) }),
     role,
     rotationDeg,
@@ -118,7 +114,9 @@ export function spawnUnbind(
   actor: BoneyardEnemyActor,
   tick: number,
 ): void {
-  const { alpha, alphaLossPerTick } = primaryOnlyUnbindClock(actor.config.enemyToken)
+  const clock = unbindClock(actor.config.enemyToken)
+  const alpha = actor.lethalMagicDamage ? 1.25 : clock.alpha
+  const alphaLossPerTick = clock.alphaLossPerTick
   const rotationDeg = drawUnit(work) * 360
   const angularOffsetDeg = drawUnit(work) * 2.5
   const clockwise = drawUnit(work) >= 0.5
@@ -133,15 +131,15 @@ export function spawnUnbind(
     entry: 86,
     kind: 'unbind',
     lifetimeTicks: Math.ceil(alpha / alphaLossPerTick),
-    position: { x: actor.position.x + 1, y: actor.position.y - 15 },
-    presentationOwner: 'direct-post-world',
+    position: { x: actor.position.x + (actor.config.enemyToken === 'HEARTMONGER' || actor.config.enemyToken === 'DIREFACULTY' ? 0 : 1), y: actor.position.y - 15 },
+    presentationOwner: 'late-world-overlay',
     role: 'death-unbind-star',
     rotationDeg,
-    scale: 1,
+    scale: actor.config.enemyToken === 'HEARTMONGER' ? 3 : actor.config.enemyToken === 'DIREFACULTY' ? 2 : 1,
   })
 }
 
-function primaryOnlyUnbindClock(
+function unbindClock(
   enemyToken: BoneyardWaveEnemyToken,
 ): Readonly<{ alpha: number; alphaLossPerTick: number }> {
   switch (enemyToken) {
@@ -150,16 +148,20 @@ function primaryOnlyUnbindClock(
     case 'SKELETONMAGE':
       return { alpha: 0.75, alphaLossPerTick: 0.0225 }
     case 'IMP':
-    case 'PORTAL':
     case 'WRAITH':
       return { alpha: 1, alphaLossPerTick: 0.025 }
     case 'ZOMBIE':
       return { alpha: 0.75, alphaLossPerTick: 0.05 }
     case 'COFFIN':
       return { alpha: 0.75, alphaLossPerTick: 0.045 }
+    case 'HEARTMONGER':
+    case 'DIREFACULTY':
+      return { alpha: .75, alphaLossPerTick: Math.fround(.0225) }
+    case 'DEMONSKULL':
     case 'DEMON':
     case 'SPIDER':
     case 'COCOON':
+    case 'PORTAL':
       throw new Error(`${enemyToken} death does not create Anim_Unbind`)
   }
 }
@@ -219,11 +221,13 @@ export function spawnSpriteArray(
 }
 
 export function spawnSimpleDeathEffect(
-  work: WorkingStep,
+  work: Pick<WorkingStep, 'deathEffects' | 'nextDeathEffectId' | 'registerWorldPainter'>,
   actor: DeathEffectOwner,
   tick: number,
   options: {
     alpha: number
+    painterSortBias?: number
+    scrapOscillation?: BoneyardEnemyDeathEffect['scrapOscillation']
     alphaMultiplier?: number
     alphaLossPerTick: number
     angularVelocityDeg?: number
@@ -236,7 +240,7 @@ export function spawnSimpleDeathEffect(
     frameVelocity?: number
     frameVelocityDamping?: number
     frameTicks?: number
-    kind: Exclude<BoneyardEnemyDeathEffectKind, 'bouncer' | 'smoky-bouncer'>
+    kind: Exclude<BoneyardEnemyDeathEffectKind, 'bouncer' | 'smoky-bouncer' | 'black-smoky-bouncer'>
     lifetimeTicks: number
     opacityTimer?: number
     position?: Readonly<BoneyardPoint>
@@ -255,6 +259,8 @@ export function spawnSimpleDeathEffect(
   const presentationOwner = options.presentationOwner ?? 'world-sorted'
   work.deathEffects.push(Object.freeze({
     ageTicks: 0,
+    ...(options.painterSortBias === undefined ? {} : { painterSortBias: options.painterSortBias }),
+    ...(options.scrapOscillation === undefined ? {} : { scrapOscillation: options.scrapOscillation }),
     alpha: options.alpha,
     alphaMultiplier: options.alphaMultiplier ?? 1,
     alphaLossPerTick: options.alphaLossPerTick,
@@ -278,7 +284,7 @@ export function spawnSimpleDeathEffect(
     opacityTimer: options.opacityTimer ?? options.alpha,
     ownerActorId: actor.id,
     painterRegistration: presentationOwner === 'world-sorted'
-      ? work.registerWorldPainter('actor')
+      ? work.registerWorldPainter('transient')
       : null,
     presentationOwner,
     position: Object.freeze({ ...(options.position ?? actor.position) }),

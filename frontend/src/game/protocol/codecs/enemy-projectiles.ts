@@ -221,7 +221,7 @@ export function boneyardEnemyProjectileEffectSnapshot(
     painterRegistration: nativeWorldManagerRegistration(
       source.painterRegistration,
       `${field}.painterRegistration`,
-      (kind === 'fire-burst' || kind === 'guided-impact') || kind === 'demon-explosion-lit-array' ? 'transient' : 'actor',
+      kind === 'fire-burst' || kind === 'guided-impact' || kind === 'firebolt-trail' || kind === 'demon-explosion-lit-array' ? 'transient' : 'actor',
     ),
     phaseOriginTicks: nonnegativeInteger(
       source.phaseOriginTicks,

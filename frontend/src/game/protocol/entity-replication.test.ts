@@ -1,56 +1,21 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
-import { createGameSimulation } from '../core-server/game-simulation.ts'
-import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { gameSnapshot, gameSnapshotFrame } from './codecs/snapshot.ts'
 import { createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { createNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
-import type {
-  BoneyardEnemyDeathEffectSnapshot,
-  BoneyardEnemyProjectileEffectSnapshot,
-  BoneyardEnemySnapshot,
-  BoneyardEnemyProjectileSnapshot,
-  BoneyardLootSnapshot,
-  BoneyardMaggotSnapshot,
-  GameSnapshot,
-  ProtocolStudentState,
-} from './game-state.ts'
-import {
-  BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS,
-  BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS,
-} from './game-state.ts'
-import type {
-  ReplicatedEntityDescriptor,
-  ReplicatedEntitySample,
-} from './replicated-entity-types.ts'
-import {
-  EntityReplicationGapError,
-  EntityReplicationReconstructor,
-  REPLICATED_ENTITY_TYPES,
-  REPLICATED_ENTITY_TYPE_REGISTRY,
-  createGameSnapshotFrame,
-  createGameSnapshotProjection,
-  createReplicatedEntityBaseline,
-} from './entity-replication.ts'
+import { BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION, boneyardEnemyDeathEffectDescriptor } from './boneyard-enemy-death-effect-replication.ts'
+import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from './boneyard-enemy-replication.ts'
+import { BONEYARD_LOOT_ENTITY_REGISTRATION, boneyardLootDescriptor, boneyardLootSample, materializeBoneyardLoot } from './boneyard-loot-replication.ts'
+import { EntityReplicationGapError, EntityReplicationReconstructor, REPLICATED_ENTITY_TYPES, REPLICATED_ENTITY_TYPE_REGISTRY, createGameSnapshotFrame, createGameSnapshotProjection, createReplicatedEntityBaseline } from './entity-replication.ts'
+import type { BoneyardEnemyDeathEffectSnapshot, BoneyardEnemyProjectileEffectSnapshot, BoneyardEnemyProjectileSnapshot, BoneyardEnemySnapshot, BoneyardLootSnapshot, BoneyardMaggotSnapshot, GameSnapshot, ProtocolStudentState } from './game-state.ts'
+import { BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS, BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS } from './game-state.ts'
 import { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
-import {
-  BONEYARD_LOOT_ENTITY_REGISTRATION,
-  boneyardLootDescriptor,
-  boneyardLootSample,
-  materializeBoneyardLoot,
-} from './boneyard-loot-replication.ts'
-import {
-  BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION,
-  boneyardEnemyDeathEffectDescriptor,
-} from './boneyard-enemy-death-effect-replication.ts'
-import {
-  boneyardEnemyDescriptor,
-  boneyardEnemySample,
-  materializeBoneyardEnemy,
-} from './boneyard-enemy-replication.ts'
-
+import type { ReplicatedEntityDescriptor, ReplicatedEntitySample } from './replicated-entity-types.ts'
 function hubSnapshot(studentCount: number): GameSnapshot {
   return createGameSnapshot(createGameSimulation({}, {
     hubStudentPopulation: createHubStudentFixturePopulation({
@@ -87,6 +52,13 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       silkFragments: [], spiderRemains: [],
       webbedPlayers: {},
       arenaTransition: null,
+      featuredBossId: null,
+      bossNarration: createNativeBossNarration(),
+      bossSpells: [],
+      puppetHits: [
+        { kind: 'scenery', targetId: 'scenery:tree', hitTick: 0, feedback: { tick: 0, timer: .5, strength: 1 } },
+        { kind: 'meteor', targetId: 'primary:1234', hitTick: 0, feedback: { tick: 0, timer: 1, strength: .25 } },
+      ],
       deathEffects: [],
       encounter: null,
       enemies: [enemySnapshot()],
@@ -144,6 +116,48 @@ function boneyardSnapshot(runId: string): GameSnapshot {
     },
   }
 }
+
+test('Puppet hit ownership and strength survive full and compact snapshot transport', () => {
+  const source = boneyardSnapshot('puppet-hit-transport')
+  const decoded = gameSnapshot(JSON.parse(JSON.stringify(source)))
+  const frame = createGameSnapshotFrame(source, 0, undefined, true)
+  const decodedFrame = gameSnapshotFrame(JSON.parse(JSON.stringify(frame)))
+  const reconstructed = new EntityReplicationReconstructor().apply(decodedFrame, 1)
+  if (source.world.kind !== 'boneyard' || decoded.world.kind !== 'boneyard' || reconstructed.world.kind !== 'boneyard') {
+    throw new Error('Expected Boneyard')
+  }
+  assert.deepEqual(decoded.world.puppetHits, source.world.puppetHits)
+  assert.deepEqual(reconstructed.world.puppetHits, source.world.puppetHits)
+})
+
+test('magic Unbind brightness survives full and compact transport with exact shape bounds', () => {
+  const source = boneyardSnapshot('magic-unbind-transport')
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const unbind: BoneyardEnemyDeathEffectSnapshot = {
+    ...enemyDeathEffectSnapshot(), alpha: 1.25, atlas: 'BadGuys', blendMode: 'normal',
+    entry: 86, kind: 'unbind', painterRegistration: null, presentationOwner: 'late-world-overlay',
+  }
+  for (const alpha of [1, 1.125, 1.25]) {
+    source.world.deathEffects = [{ ...unbind, alpha }]
+    const full = gameSnapshot(JSON.parse(JSON.stringify(source)))
+    const frame = gameSnapshotFrame(JSON.parse(JSON.stringify(createGameSnapshotFrame(source, 0, undefined, true))))
+    const compact = new EntityReplicationReconstructor().apply(frame, 1)
+    if (full.world.kind !== 'boneyard' || compact.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    assert.equal(full.world.deathEffects[0]!.alpha, alpha)
+    assert.equal(compact.world.deathEffects[0]!.alpha, alpha)
+  }
+  for (const invalid of [
+    { ...unbind, alpha: 1.26 }, { ...unbind, entry: 87 },
+    { ...unbind, atlas: 'Heartmonger' as const }, { ...unbind, blendMode: 'add' as const },
+    { ...unbind, kind: 'fade' as const },
+  ]) {
+    source.world.deathEffects = [invalid]
+    assert.throws(() => gameSnapshot(JSON.parse(JSON.stringify(source))), /alpha/)
+    assert.throws(() => new EntityReplicationReconstructor().apply(
+      gameSnapshotFrame(JSON.parse(JSON.stringify(createGameSnapshotFrame(source, 0, undefined, true)))), 1,
+    ), /alpha exceeds its native shape|invalid registered sample shape/)
+  }
+})
 
 test('one immutable snapshot projection produces equivalent frames for different peer baselines', () => {
   const hub = hubSnapshot(32)
@@ -451,10 +465,10 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
-  assert.equal(frame.world.entities.spawned[0]!.length, 14)
-  assert.equal(frame.world.entities.samples[0]!.length, 59)
+  assert.equal(frame.world.entities.spawned[0]!.length, 31)
+  assert.equal(frame.world.entities.samples[0]!.length, 82)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
-  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0, 1.25])
+  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0, 1.25, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert.equal(frame.world.entities.samples[0]![30], 25 * 1024)
   assert.equal(frame.world.entities.samples[0]![31], 50 * 1024)
   assert.equal(frame.world.entities.samples[0]![36], 1)
@@ -518,6 +532,9 @@ test('Demon planted endpoints round-trip only on the Demon family wire', () => {
       demonFrontRotationRadians: 0.25,
       demonRearExtremityOffset: { x: -12, y: -30 },
       demonRearRotationRadians: -0.5,
+
+      demonShadowOffset: { x: 2.5, y: -27.5 },
+      shadowLateralOffset: 1.25,
       effects: [],
       headFacingOffset: 0,
       state: 'locomotion',
@@ -529,8 +546,11 @@ test('Demon planted endpoints round-trip only on the Demon family wire', () => {
   }
   const descriptor = boneyardEnemyDescriptor(source)
   const sample = boneyardEnemySample(source)
-  assert.equal(descriptor.length, 14)
-  assert.equal(sample.length, 59)
+  assert.equal(descriptor.length, 31)
+  assert.equal(sample.length, 82)
+  assert.deepEqual(sample.slice(66, 69), [1280, 40, -440])
+  assert.deepEqual(materializeBoneyardEnemy(descriptor, sample).animation.demonShadowOffset, { x: 2.5, y: -27.5 })
+  assert.equal(materializeBoneyardEnemy(descriptor, sample).animation.shadowLateralOffset, 1.25)
   assert.deepEqual(sample.slice(25, 27), [256, -512])
   assert.deepEqual(sample.slice(42, 46), [192, -480, -192, -480])
   assert.deepEqual(
@@ -647,9 +667,9 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 49),
+    ...sample.slice(0, 72),
     1,
-    ...sample.slice(50),
+    ...sample.slice(73),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
     ...sample.slice(0, 37),
@@ -690,6 +710,7 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     1,
     0,
     descriptor[13]!,
+    ...descriptor.slice(14),
   ] as ReplicatedEntityDescriptor
   const mageCloakDescriptor = [
     descriptor[0]!,
@@ -706,6 +727,7 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     1,
     0,
     descriptor[13]!,
+    ...descriptor.slice(14),
   ] as ReplicatedEntityDescriptor
   assert.equal(registration.descriptorIsValid(invalidDescriptor), false)
   assert.equal(registration.descriptorIsValid(invalidActorLane), false)
@@ -1175,7 +1197,7 @@ test('enemy death effects replicate independent motion and exact retirement iden
   const sample = keyframe.world.entities.samples.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
   ))!
-  assert.equal(descriptor.length, 10)
+  assert.equal(descriptor.length, 11)
   assert.equal(sample.length, 12)
 
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
@@ -1483,6 +1505,9 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       demonFrontRotationRadians: 0,
       demonRearExtremityOffset: { x: 0, y: 0 },
       demonRearRotationRadians: 0,
+
+      demonShadowOffset: { x: 0, y: 0 },
+      shadowLateralOffset: 0,
       effects: [{
         alpha: 1.25,
         atlas: 'BadGuys',
@@ -1500,6 +1525,8 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       impBodyRotationRadians: 0.125,
       impEffectAlpha: 0.75,
       impEffectFrame: -1,
+      headVariant: 0,
+      limbHeadingDeg: null,
       maggots: [],
       state: 'action',
       stridePhaseDeg: 123.5,
@@ -1528,6 +1555,14 @@ function enemySnapshot(): BoneyardEnemySnapshot {
     scale: 1.25,
     lighting: { charge: 0, glow: 0.375, providerCopies: 1 },
     mageCloak: false,
+    classification: 'normal',
+    name: null,
+    headgear: 0,
+    weapon: 'claw',
+    arrowType: 'normal',
+    burning: false,
+    mageElement: 'fire',
+    rotten: false,
     shieldHealth: 25,
     shieldMaximumHealth: 50,
     spawnTick: 12,
@@ -1591,7 +1626,7 @@ function enemyDeathEffectSnapshot(): BoneyardEnemyDeathEffectSnapshot {
     id: 9,
     kind: 'bouncer',
     ownerActorId: 7,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 9 },
     presentationOwner: 'world-sorted',
     position: { x: 133.5, y: 463.25 },
     rotationRadians: 0.5,

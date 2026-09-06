@@ -1,6 +1,5 @@
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { maximumPrimarySpellHailFrameBase64Length } from './primary-spell-hail-frame.ts'
-
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 
 export const MAX_CONTENT_MODS = 256
@@ -52,7 +51,7 @@ export const MAX_STUDENTS = 256
 
 export const MAX_REPLICATED_ENTITIES = 8192
 
-export const MAX_REPLICATED_COMPONENTS = 72
+export const MAX_REPLICATED_COMPONENTS = 160
 
 export const MAX_PRIMARY_SPELL_PROJECTILES = 4096
 
@@ -65,6 +64,9 @@ export const MAX_PRIMARY_SPELL_HAIL_BASE64_LENGTH = maximumPrimarySpellHailFrame
 export const MAX_PRIMARY_SPELL_HIT_TARGETS = 1024
 
 export const MAX_SECONDARY_ACTORS = 32_768
+
+export const MAX_BONEYARD_PUPPET_HITS = MAX_BONEYARD_OBJECTS + 2 * MAX_BONEYARD_STRUCTURES
+  + MAX_BONEYARD_GOODIES + MAX_BONEYARD_ENEMY_PROJECTILES + MAX_PRIMARY_SPELL_TRANSIENTS + MAX_SECONDARY_ACTORS
 
 export const MAX_SECONDARY_EVENTS = 512
 

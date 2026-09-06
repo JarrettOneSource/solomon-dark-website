@@ -1,33 +1,36 @@
+import type { NativePuppetHitState, NativeWorldPuppetHit, NativeWorldPuppetHitKind } from '../../core-kernels/native-puppet-hit.ts'
 import type { NativeDemonArticulationState } from '../../core-kernels/boneyard-demon-articulation.ts'
-import type {
-  BoneyardEnemyArenaScalars,
-  EvaluatedBoneyardEnemyConfig,
-} from '../../core-kernels/boneyard-enemy-config-model.ts'
+import type { BoneyardEnemyArenaScalars, EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
 import type { BoneyardEnemyProjectilePayload } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import type { NativeImpFlightState } from '../../core-kernels/boneyard-imp-flight.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardEnemySpawnIntent } from '../../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardBounds, BoneyardPoint } from '../../core-kernels/boneyard.ts'
+import type { NativeArcherStrafeState } from '../../core-kernels/native-archer-strafe.ts'
+import type { NativeBossNarration, NativeBossStreamCue } from '../../core-kernels/native-boss-audio.ts'
+import type { NativeBossSpell } from '../../core-kernels/native-boss-spell.ts'
+import type { NativeCrowState } from '../../core-kernels/native-crow.ts'
 import type { NativeDeadSpiderState } from '../../core-kernels/native-dead-spider.ts'
+import type { NativeDemonSkullAction, NativeDemonSkullEncounterState, NativeDemonSkullState } from '../../core-kernels/native-demon-skull.ts'
 import type { NativeEnemyPathState } from '../../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeEnemyWorldFeedbackOutput } from '../../core-kernels/native-enemy-world-feedback.ts'
+import type { NativeFacultyVoiceController } from '../../core-kernels/native-faculty-voices.ts'
+import type { NativeFacultyState } from '../../core-kernels/native-faculty.ts'
+import type { NativeHeartmongerState } from '../../core-kernels/native-heartmonger.ts'
+import type { NativeRegionCameraShake } from '../../core-kernels/native-region-point-gain.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
-import type { NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondaryScreenFlashState, NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
 import type { NativeFadeLineActor } from '../../core-kernels/native-silk-force.ts'
 import type { NativeSilkState } from '../../core-kernels/native-silk.ts'
 import type { NativeSpiderState } from '../../core-kernels/native-spider.ts'
-import { nativePortalCollisionRadius } from '../../core-kernels/native-survival-portal.ts'
 import type { NativePortalState } from '../../core-kernels/native-survival-portal.ts'
+import { nativePortalCollisionRadius } from '../../core-kernels/native-survival-portal.ts'
 import type { NativeWebbedState } from '../../core-kernels/native-webbed.ts'
-import type {
-  NativeWorldManagerRegistration,
-  RegisterNativeWorldPainter,
-} from '../../core-kernels/native-world-manager-order.ts'
+import type { NativeWorldManagerRegistration, RegisterNativeWorldPainter } from '../../core-kernels/native-world-manager-order.ts'
 import type { NativeWraithFlightState } from '../../core-kernels/native-wraith-flight.ts'
 import type { NativeFirePatchState } from '../../core-kernels/primary-spell-fire-effects.ts'
+import type { PrimarySpellTarget } from '../../core-kernels/primary-spell-targeting.ts'
 import type { NativeEnemyLootSeedBound } from '../boneyard-enemy-loot-seed.ts'
-import { NATIVE_ENEMY_HIT_LATCH_TICKS } from './programs.ts'
-
 export type BoneyardEnemyActorId = number
 
 export type BoneyardEnemyDeathEffectId = number
@@ -58,12 +61,14 @@ export interface BoneyardArcherBrain extends ActionClock {
   readonly family: 'archer'
   readonly phase: 'range-control' | 'attack' | 'death'
   readonly rangeEasyPending: boolean
+  readonly strafe: NativeArcherStrafeState
 }
 
 export interface BoneyardMageBrain extends ActionClock {
   readonly attackRange: number
   readonly castProgram: 'long' | 'short'
   readonly castRoll: number
+  readonly disabledPrimaryTicks: number
   readonly family: 'mage'
   readonly lightningTargetPlayerId: string | null
   readonly lightningTargetPosition: Readonly<BoneyardPoint> | null
@@ -133,9 +138,43 @@ export interface BoneyardPortalBrain extends NativePortalState {
   readonly phase: 'active' | 'death'
 }
 
+export interface BoneyardDemonSkullBrain extends NativeDemonSkullState {
+  readonly deathCountdown: number
+  readonly actions: readonly NativeDemonSkullAction[]
+  readonly family: 'demon-skull'
+  readonly phase: 'range-control' | 'cast' | 'death'
+}
+
+export type BoneyardDemonSkullActor = BoneyardEnemyActor & {
+  readonly brain: BoneyardDemonSkullBrain
+  readonly config: Extract<EvaluatedBoneyardEnemyConfig, { enemyToken: 'DEMONSKULL' }>
+}
+
+
+export interface BoneyardFacultyBrain extends NativeFacultyState {
+  readonly family: 'faculty'
+  readonly phase: 'range-control' | 'cast' | 'death'
+}
+
+export interface BoneyardHeartmongerBrain extends NativeHeartmongerState {
+  readonly family: 'heartmonger'
+  readonly phase: 'approach' | 'death'
+  readonly legPhase: number
+  readonly torsoPhase: number
+}
+
+export interface BoneyardDetachedCrow {
+  readonly flight: NativeCrowState
+  readonly ownerActorId: number
+  readonly spawnTick: number
+}
+
 export type BoneyardEnemyBrain =
   | BoneyardSpiderBrain
   | BoneyardCocoonBrain
+  | BoneyardDemonSkullBrain
+  | BoneyardFacultyBrain
+  | BoneyardHeartmongerBrain
   | BoneyardArcherBrain
   | BoneyardCoffinBrain
   | BoneyardDemonBrain
@@ -153,6 +192,7 @@ export interface BoneyardEnemyLightingState {
 }
 
 export interface BoneyardEnemyActor {
+  readonly hitFeedback: NativePuppetHitState
   readonly blizzardPushAccumulator: number
   readonly blizzardPushLastTick: number | null
   readonly bodyGaitPhase: number
@@ -172,6 +212,7 @@ export interface BoneyardEnemyActor {
   readonly lastDamagedByPlayerId: string | null
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
+  readonly lethalMagicDamage: boolean
   readonly lifeState: 'alive' | 'dying'
   readonly lightRegistration: NativeWorldManagerRegistration
   readonly lighting: Readonly<BoneyardEnemyLightingState>
@@ -185,6 +226,7 @@ export interface BoneyardEnemyActor {
   readonly rewardGranted: boolean
   readonly restBodyPose: number
   readonly shieldHealth: number
+  readonly shadowLateralOffset: number
   readonly shieldMaximumHealth: number
   readonly shieldPulse: number
   readonly shieldSoundCooldownTicks: number
@@ -205,17 +247,6 @@ export function boneyardEnemyActorFlags(actor: BoneyardEnemyActor): 0 | 0x2 {
     && (actor.brain.phase === 'hidden' || actor.brain.phase === 'death')
   ) return 0
   return 0x2
-}
-
-export function nativeEnemyHitOverlay(
-  lastDamageTick: number | null,
-  tick: number,
-): number {
-  if (lastDamageTick === null) return 0
-  return Math.max(
-    0,
-    1 - Math.max(0, tick - lastDamageTick) / NATIVE_ENEMY_HIT_LATCH_TICKS,
-  )
 }
 
 export type BoneyardEnemyProjectileKind =
@@ -308,6 +339,7 @@ export type BoneyardEnemyProjectileEffect = BoneyardEnemyProjectileEffectBase & 
 )
 
 export interface BoneyardMaggotActor {
+  readonly hitFeedback: NativePuppetHitState
   readonly blizzardPushAccumulator: number
   readonly blizzardPushLastTick: number | null
   readonly combatActive: boolean
@@ -363,6 +395,7 @@ export type BoneyardEnemyDeathEffectKind =
   | 'fade-additive'
   | 'fade-perspective'
   | 'fade-perspective-clipped'
+  | 'fade-scale-perspective'
   | 'fade-scale'
   | 'fire-array'
   | 'late-splat'
@@ -370,6 +403,9 @@ export type BoneyardEnemyDeathEffectKind =
   | 'move-fade-perspective'
   | 'sprite-array'
   | 'unbind'
+  | 'banish-black'
+  | 'scrap'
+  | 'black-smoky-bouncer'
 
 export interface BoneyardEnemyDeathEffect {
   readonly ageTicks: number
@@ -377,7 +413,7 @@ export interface BoneyardEnemyDeathEffect {
   readonly alphaMultiplier: number
   readonly alphaLossPerTick: number
   readonly angularVelocityDeg: number
-  readonly atlas: 'BadGuys' | 'DeadHawg' | 'Demon'
+  readonly atlas: 'BadGuys' | 'DeadHawg' | 'Demon' | 'Unholy'
   readonly blendMode: 'add' | 'normal'
   readonly bounceRetention: number
   readonly bounceVelocity: number
@@ -396,7 +432,7 @@ export interface BoneyardEnemyDeathEffect {
   readonly ownerActorId: BoneyardEnemyActorId
   readonly opacityTimer: number
   readonly painterRegistration: NativeWorldManagerRegistration | null
-  readonly presentationOwner: 'direct-post-world' | 'pre-world-queue' | 'world-sorted'
+  readonly presentationOwner: 'background' | 'direct-post-world' | 'pre-world-queue' | 'world-sorted' | 'late-world-overlay'
   readonly position: Readonly<BoneyardPoint>
   readonly role: string
   readonly rotationDeg: number
@@ -409,6 +445,8 @@ export interface BoneyardEnemyDeathEffect {
   readonly verticalVelocity: number
   readonly velocity: Readonly<BoneyardPoint>
   readonly velocityDamping: number
+  readonly painterSortBias?: number
+  readonly scrapOscillation?: Readonly<{ phaseDeg: number; stepDeg: number; amplitudeDeg: number }>
 }
 
 export interface BoneyardMageLightningWorldContact {
@@ -494,6 +532,27 @@ export type BoneyardEnemyActionSound =
   | 'throw-fire'
   | 'throw-spell'
   | 'spit-fire'
+  | 'knock'
+  | 'throw-dark'
+  | 'chain-clank-1'
+  | 'chain-clank-2'
+  | 'spin-attack'
+  | 'magic-storm'
+  | 'magic-shield-explode'
+  | 'distort-reality'
+  | 'firey-death'
+  | 'eye-laser-charge'
+  | 'jaw'
+  | 'skull-bite'
+  | 'unholy-spits'
+  | 'magic-circle'
+  | 'big-fire'
+  | 'banshee-die'
+  | 'lightning-start'
+  | 'flame-lash-start'
+  | 'crow-1'
+  | 'crow-2'
+  | 'wings'
 
 export type BoneyardCombatSound =
   | 'frosted'
@@ -502,6 +561,7 @@ export type BoneyardCombatSound =
   | BoneyardEnemyDamageSound
   | BoneyardEnemyDeathSound
   | BoneyardPlayerDamageSound
+  | 'blind'
 
 export type BoneyardEnemySemanticEventType =
   | 'cocoon-released'
@@ -522,8 +582,13 @@ export type BoneyardEnemySemanticEventType =
   | 'mage-lightning-contact'
   | 'projectile-spawned'
   | 'reward'
+  | 'enemy-dialogue-stop'
+  | 'enemy-stream'
+  | 'enemy-screen-flash'
+  | 'enemy-camera-shake'
 
 export interface BoneyardEnemySemanticEvent {
+  readonly cameraShake?: NativeRegionCameraShake
   readonly actorId: BoneyardEnemyActorId
   readonly count?: number
   readonly deflectPitch?: number
@@ -538,9 +603,13 @@ export interface BoneyardEnemySemanticEvent {
   readonly targetPlayerId?: string | null
   readonly tick: number
   readonly type: BoneyardEnemySemanticEventType
+  readonly stream?: NativeBossStreamCue
+  readonly screenFlashOnlyIfClear?: boolean
+  readonly screenFlash?: NativeSecondaryScreenFlashState
 }
 
 export interface BoneyardEnemyPlayerDamage {
+  readonly hitStrength?: number
   readonly webbedStrength?: number
   readonly actorId: BoneyardEnemyActorId
   readonly physicalDamage: number
@@ -554,6 +623,14 @@ export interface BoneyardEnemyPlayerDamage {
   readonly suppressHitResponse?: boolean
   readonly suppressFlash?: boolean
   readonly playerId: string
+  readonly source?: Readonly<{
+    position: Readonly<BoneyardPoint>
+    collisionRadius: number
+    reflectableActorId: BoneyardEnemyActorId | null
+  }>
+  readonly manaDamageMaximumFraction?: number
+  readonly tragicCircle?: boolean
+  readonly crowBlindChancePercent?: number
 }
 
 export interface BoneyardEnemyPlayerKnockback {
@@ -592,11 +669,13 @@ export interface BoneyardEnemyRetirement {
 }
 
 export interface BoneyardEnemyStore {
+  readonly puppetHits: readonly NativeWorldPuppetHit[]
   readonly silkFragments: readonly NativeFadeLineActor[]
   readonly spiderRemains: readonly BoneyardSpiderRemains[]
   readonly silks: readonly BoneyardSilkActor[]
   readonly webbedPlayers: Readonly<Record<string, NativeWebbedState>>
   readonly spiderSpitTicksRemaining: number
+  readonly demonSkullEncounter: NativeDemonSkullEncounterState
   readonly actors: readonly BoneyardEnemyActor[]
   readonly deathEffects: readonly BoneyardEnemyDeathEffect[]
   readonly headFacingRngState: NativeRngState
@@ -620,6 +699,11 @@ export interface BoneyardEnemyStore {
   readonly targetCellBindings: Readonly<Record<string, BoneyardEnemyTargetCellBinding>>
   readonly rngState: number
   readonly steeringRngState: NativeRngState
+  readonly featuredBossId: BoneyardEnemyActorId | null
+  readonly bossNarration: NativeBossNarration
+  readonly facultyVoiceController: NativeFacultyVoiceController | null
+  readonly bossSpells: readonly NativeBossSpell[]
+  readonly detachedCrows: readonly BoneyardDetachedCrow[]
 }
 
 export interface BoneyardPlayerDamageSoundRequest {
@@ -719,6 +803,7 @@ export type BoneyardEnemyProjectileWorldBlocked = (
 ) => boolean
 
 export interface BoneyardEnemySpellSegmentRequest {
+  readonly nativeExclusionMask?: number
   readonly end: Readonly<BoneyardPoint>
   readonly start: Readonly<BoneyardPoint>
 }
@@ -751,6 +836,7 @@ export interface BoneyardEnemyStoreStepContext {
     readonly enhancedEffects: boolean
   }
   readonly lightAt?: (position: Readonly<BoneyardPoint>) => number
+  readonly puppetTargets?: readonly BoneyardPuppetTarget[]
   readonly abilityEffects?: Readonly<Record<number, NativeSecondaryTargetEffectState>>
   readonly arenaScalars?: Partial<BoneyardEnemyArenaScalars>
   readonly clipSpellSegment?: ClipBoneyardEnemySpellSegment
@@ -771,6 +857,14 @@ export interface BoneyardEnemyStoreStepContext {
     liveBossCount: number,
   ) => readonly BoneyardEnemySpawnIntent[]
   readonly tick: number
+  readonly dialogueBusy?: boolean
+  readonly nativeViewBounds?: Readonly<BoneyardBounds>
+  readonly nativeVisibility?: (position: Readonly<BoneyardPoint>) => Readonly<{ admitted: boolean; intensity: number }>
+  readonly projectedPointVisible?: (position: Readonly<BoneyardPoint>) => boolean
+}
+
+export interface BoneyardPuppetTarget extends PrimarySpellTarget {
+  readonly hitKind: NativeWorldPuppetHitKind | null
 }
 
 export interface BoneyardEnemyStoreStepResult {
@@ -784,10 +878,12 @@ export interface BoneyardEnemyStoreStepResult {
 }
 
 export interface DamageBoneyardEnemyRequest {
+  readonly hitStrength?: number
   readonly etherDrainCapture?: boolean
   readonly magic?: boolean
   readonly actorId: BoneyardEnemyActorId
   readonly amount: number
+  readonly hasMagicDamage?: boolean
   readonly attributionObserver?: BoneyardEnemyAttributionObserver
   readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly sourcePlayerId: string | null
@@ -842,11 +938,13 @@ export interface TumbleBoneyardArrowResult {
 }
 
 export interface WorkingStep {
+  puppetHits: NativeWorldPuppetHit[]
   silkFragments: NativeFadeLineActor[]
   spiderRemains: BoneyardSpiderRemains[]
   silks: BoneyardSilkActor[]
   webbedPlayers: Record<string, NativeWebbedState>
   spiderSpitTicksRemaining: number
+  demonSkullEncounter: NativeDemonSkullEncounterState
   actors: BoneyardEnemyActor[]
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
@@ -880,6 +978,11 @@ export interface WorkingStep {
   rngState: number
   steeringRngState: NativeRngState
   spawnedActorIds: number[]
+  featuredBossId: BoneyardEnemyActorId | null
+  bossNarration: NativeBossNarration
+  facultyVoiceController: NativeFacultyVoiceController | null
+  bossSpells: NativeBossSpell[]
+  detachedCrows: BoneyardDetachedCrow[]
 }
 
 export interface ActionProgram {

@@ -1,7 +1,7 @@
-import type { Camera } from '../../editor/render.ts'
 import type { Vec2 } from '../../editor/model.ts'
+import type { Camera } from '../../editor/render.ts'
+import type { BoneyardWaveDirectorPhase } from '../core-kernels/boneyard-wave-types.ts'
 import type { GameRunPhase } from '../core-kernels/game-run.ts'
-import type { BoneyardWaveDirectorPhase } from '../core-kernels/boneyard-wave-director.ts'
 import {
   PLAYER_DEATH_FRAME_THREE_TICK,
   type PlayerLifeState,

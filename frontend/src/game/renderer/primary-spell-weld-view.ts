@@ -37,6 +37,7 @@ interface WeldPainterRoot {
 
 export class WeldPrimarySpellView {
   readonly container: Container
+  readonly underlayContainer?: Container
   readonly containers: readonly Container[]
   private readonly buildId: NativeWeldPresentationState['buildId']
   private readonly bandContainers: readonly Container[]
@@ -46,6 +47,8 @@ export class WeldPrimarySpellView {
   private readonly initialKind: NativeWeldPresentationState['kind']
   private readonly drawing = new WeldDrawingResources()
   private readonly drawingViews: readonly WeldDrawingView[]
+  private readonly underlayView: WeldDrawingView | null
+  private puppetHit = false
   private plan: ReturnType<typeof nativeWeldVisualPlan>
   private readonly split: boolean
   private state: NativeWeldPresentationState
@@ -88,6 +91,9 @@ export class WeldPrimarySpellView {
     this.drawingViews = (this.split ? bandContents : [this.container]).map(
       root => new WeldDrawingView(root, this.drawing, textures, this.split),
     )
+    if (state.kind === 'weld-meteor') this.underlayContainer = new Container({ label: 'meteor-ground-pass', eventMode: 'none' })
+    this.underlayView = this.underlayContainer === undefined ? null
+      : new WeldDrawingView(this.underlayContainer, this.drawing, textures, false)
     this.containers = Object.freeze([this.container, ...this.bandContainers])
     this.update(state)
   }
@@ -104,9 +110,13 @@ export class WeldPrimarySpellView {
       || state.kind !== this.initialKind
       || state.buildId !== this.buildId) return
     this.state = state
-    this.plan = nativeWeldVisualPlan(state, presentationFrame)
+    this.plan = nativeWeldVisualPlan(state, presentationFrame, this.puppetHit)
     this.drawing.update(this.plan)
     this.container.position.set(this.plan.position.x, this.plan.position.y)
+    if (this.underlayContainer) {
+      this.underlayContainer.position.set(this.plan.position.x, this.plan.position.y)
+      this.underlayView!.update({ ...this.plan, sprites: this.plan.underlays ?? [], lines: [], meshes: [] }, this.drawing)
+    }
     if (this.split) {
       for (let index = 0; index < this.bandContainers.length; index += 1) {
         const root = this.bandContainers[index]!
@@ -165,6 +175,8 @@ export class WeldPrimarySpellView {
     this.container.tint = tint
   }
 
+  setPuppetHit(active: boolean): void { this.puppetHit = active }
+
   painterContainer(suffix: string): Container | null {
     if (!suffix.startsWith('band-')) return null
     const index = Number(suffix.slice('band-'.length))
@@ -172,6 +184,7 @@ export class WeldPrimarySpellView {
   }
 
   destroy(): void {
+    this.underlayContainer?.destroy({ children: true })
     for (const container of this.containers) container.destroy({ children: true })
     this.drawing.destroy()
   }

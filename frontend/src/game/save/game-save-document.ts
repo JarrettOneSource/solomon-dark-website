@@ -1,124 +1,64 @@
-import { createNativeSpiderWaveState } from '../core-kernels/native-spider-wave-program.ts'
-import { nativeSpiderWaveDefinitions } from '../core-kernels/native-spider-wave-data.ts'
-import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES } from '../core-kernels/boneyard-enemy-config.ts'
-import {
-  assertNativeDemonArticulationState,
-  createNativeDemonArticulationState,
-} from '../core-kernels/boneyard-demon-articulation.ts'
-import type { NativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
-import { createIdlePlayerPrimaryCast, createPlayerCharacter } from '../core-kernels/player-character.ts'
-import type { PlayerCharacterConfig, PlayerPrimaryCastState } from '../core-kernels/player-character.ts'
-import {
-  archiveCompletedRunEconomy,
-  createNativeUnforgeBonuses,
-  hubEconomyInventoryIsValid,
-  nativeHagathaBundleStateIsValid,
-  nativeHagathaOutcomeStateIsValid,
-  normalizeHubEconomyInventorySlots,
-} from '../core-kernels/hub-economy.ts'
-import type { HubEconomyState } from '../core-kernels/hub-economy.ts'
-import {
-  applyNativeHagathaPurchaseRuntime,
-  createNativeHagathaRuntimeState,
-  removeNativeHagathaRuntime,
-} from '../core-kernels/native-hagatha-effects.ts'
-import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
-import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
-import type { NativeRngState } from '../core-kernels/native-rng.ts'
-import { createNativeWraithFlightState } from '../core-kernels/native-wraith-flight.ts'
-import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
-import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
-import type {
-  NativeWorldManagerOrderState,
-  NativeWorldManagerRegistration,
-} from '../core-kernels/native-world-manager-order.ts'
-import {
-  NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
-  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
-  STOCK_TUTORIAL_BONEYARD_ID,
-} from '../core-kernels/native-tutorial.ts'
-import {
-  buildPlayerSkillOffer,
-  isNativeBeltSkill,
-  nativeWeldBuild,
-  nativeWeldComponentRanksForBuild,
-} from '../core-kernels/player-progression.ts'
-import type { PlayerSkillBookComponent, PlayerStatBookComponent } from '../core-kernels/player-progression.ts'
-import {
-  freezeNativeBelt,
-  migrateSkillQuickbarToNativeBelt,
-  nativeBeltOwnedItem,
-  nativeInventoryItemCanBindToBelt,
-} from '../core-kernels/native-belt.ts'
-import type { NativeBeltEntry, NativeBeltItemTypeId, PlayerBeltComponent } from '../core-kernels/native-belt.ts'
-import {
-  createPlayerSkillRuntime,
-  playerSkillDerivedStats,
-  refreshPlayerCombatFromSkillStats,
-  refreshPlayerSkillRuntime,
-} from '../core-kernels/player-skill-runtime.ts'
-import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-runtime.ts'
-import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
-import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
-import { NATIVE_ETHER_BLAST_PARTICLE_COUNT } from '../core-kernels/native-ether-blast.ts'
-import { nativeSecondaryPainterManagerLane } from '../core-kernels/native-secondary-abilities.ts'
-import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
-import {
-  createHubCollegeIntroParticipantState,
-  isHubRegionId,
-  isHubTransitionEdge,
-} from '../core-kernels/hub-regions.ts'
-import type {
-  HubParticipantState,
-  HubParticipantTransition,
-  HubRegionId,
-  HubTransitionPhase,
-} from '../core-kernels/hub-regions.ts'
-import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
-import {
-  NATIVE_HUB_HELP_ROW_COUNT,
-  NATIVE_HUB_NPC_CATALOG,
-  createNativeHubNpcState,
-  nativeBoastDefinition,
-} from '../core-kernels/native-hub-npc.ts'
-import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import { nativeWeldMeteorRootPosition } from '../core-kernels/native-weld-meteor.ts'
+import { boneyardMouthWorldTargets } from '../core-server/boneyard-world-targets.ts'
+import { normalizeSavedDiscorporeal } from './discorporeal-save.ts'
+import { createNativePuppetHit, nativePuppetHitAlpha, receiveNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
+import { nativePuppetHit, nativeWorldPuppetHits } from '../protocol/codecs/native-state.ts'
 import type { BoastSelection, ModBoastSelection } from '../core-kernels/boast.ts'
-import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
-import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
-import {
-  gameSimulationDurableProfileEconomy,
-  gameSimulationRetiredWizardEconomy,
-  removePlayerCharacter,
-} from '../core-server/game-simulation.ts'
-import type { GameSimulationState } from '../core-server/game-simulation.ts'
-import {
-  autofillPlayerEntitySkillSelections,
-  migratePlayerStarterEquipmentAppearance,
-  replacePlayerCharacter,
-  replacePlayerEconomy,
-} from '../core-server/player-entity-store.ts'
-import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
-import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
-import { createHubWorld } from '../core-server/hub-world.ts'
-import type { HubWorldState } from '../core-server/hub-world.ts'
+import type { NativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
+import { assertNativeDemonArticulationState, createNativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
+import { DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES } from '../core-kernels/boneyard-enemy-config.ts'
+import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
+import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
+import type { HubEconomyState } from '../core-kernels/hub-economy.ts'
+import { archiveCompletedRunEconomy, createNativeUnforgeBonuses, hubEconomyInventoryIsValid, nativeHagathaBundleStateIsValid, nativeHagathaOutcomeStateIsValid, normalizeHubEconomyInventorySlots } from '../core-kernels/hub-economy.ts'
+import type { HubParticipantState, HubParticipantTransition, HubRegionId, HubTransitionPhase } from '../core-kernels/hub-regions.ts'
+import { createHubCollegeIntroParticipantState, isHubRegionId, isHubTransitionEdge } from '../core-kernels/hub-regions.ts'
+import type { NativeBeltEntry, NativeBeltItemTypeId, PlayerBeltComponent } from '../core-kernels/native-belt.ts'
+import { freezeNativeBelt, migrateSkillQuickbarToNativeBelt, nativeBeltOwnedItem, nativeInventoryItemCanBindToBelt } from '../core-kernels/native-belt.ts'
+import { createNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
+import { createNativeDampenedSpell } from '../core-kernels/native-dampened-spell.ts'
+import { createNativeDemonSkullEncounter } from '../core-kernels/native-demon-skull.ts'
+import { nativeEnemyProjectileVelocity } from '../core-kernels/native-enemy-targeting.ts'
+import { NATIVE_ETHER_BLAST_PARTICLE_COUNT } from '../core-kernels/native-ether-blast.ts'
+import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
+import { applyNativeHagathaPurchaseRuntime, createNativeHagathaRuntimeState, removeNativeHagathaRuntime } from '../core-kernels/native-hagatha-effects.ts'
+import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import { NATIVE_HUB_HELP_ROW_COUNT, NATIVE_HUB_NPC_CATALOG, createNativeHubNpcState, nativeBoastDefinition } from '../core-kernels/native-hub-npc.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from '../core-kernels/native-rng.ts'
+import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
+import { nativeSecondaryPainterManagerLane } from '../core-kernels/native-secondary-abilities.ts'
+import { nativeSpiderWaveDefinitions } from '../core-kernels/native-spider-wave-data.ts'
+import { createNativeSpiderWaveState } from '../core-kernels/native-spider-wave-program.ts'
+import { NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS, NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, STOCK_TUTORIAL_BONEYARD_ID } from '../core-kernels/native-tutorial.ts'
+import type { NativeWorldManagerOrderState, NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import { createNativeWraithFlightState } from '../core-kernels/native-wraith-flight.ts'
+import type { PlayerCharacterConfig, PlayerPrimaryCastState } from '../core-kernels/player-character.ts'
+import { createIdlePlayerPrimaryCast, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import type { PlayerSkillBookComponent, PlayerStatBookComponent } from '../core-kernels/player-progression.ts'
+import { buildPlayerSkillOffer, isNativeBeltSkill, nativeWeldBuild, nativeWeldComponentRanksForBuild } from '../core-kernels/player-progression.ts'
+import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-runtime.ts'
+import { createPlayerSkillRuntime, playerSkillDerivedStats, refreshPlayerCombatFromSkillStats, refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
+import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
 import { createBoneyardWorld } from '../core-server/boneyard-world-construction.ts'
 import type { BoneyardWorldState } from '../core-server/boneyard-world-state.ts'
-import { createGameSnapshot } from '../host/game-snapshot.ts'
-import {
-  MAX_WEB_GAME_SAVE_JSON_DEPTH,
-  MAX_WEB_GAME_SAVE_JSON_NODES,
-  WEB_GAME_SAVE_SCHEMA_VERSION,
-  gameSaveDocumentFitsByteLimit,
-  onlyKeys,
-  parseGameSaveDocument,
-  record,
-} from './game-save-contract.ts'
-import type { GameSaveIntegrity, ParsedGameSaveContinuation } from './game-save-contract.ts'
-import type { NativeGameSaveSource } from './portable-game-profile.ts'
 import type { BoneyardProjectileKnockback } from '../core-server/enemies/model.ts'
-import { nativeEnemyProjectileVelocity } from '../core-kernels/native-enemy-targeting.ts'
-
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import { gameSimulationDurableProfileEconomy, gameSimulationRetiredWizardEconomy, removePlayerCharacter } from '../core-server/game-simulation.ts'
+import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
+import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
+import type { HubWorldState } from '../core-server/hub-world.ts'
+import { createHubWorld } from '../core-server/hub-world.ts'
+import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, replacePlayerCharacter, replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
+import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
+import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
+import type { GameSaveIntegrity, ParsedGameSaveContinuation } from './game-save-contract.ts'
+import { MAX_WEB_GAME_SAVE_JSON_DEPTH, MAX_WEB_GAME_SAVE_JSON_NODES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, onlyKeys, parseGameSaveDocument, record } from './game-save-contract.ts'
+import type { NativeGameSaveSource } from './portable-game-profile.ts'
 export interface CreateGameSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
   readonly loadedBoneyard: LoadedBoneyard | null
@@ -688,6 +628,17 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     throw new Error('game save owner character summary drifted')
   }
   createGameSnapshot(state, continuation.summary.playerId)
+  if (state.world.kind === 'boneyard' && state.world.enemies.puppetHits.length > 0) {
+    const owners = new Map(boneyardMouthWorldTargets(state.world, state).map(target => [target.id, target.hitKind]))
+    for (const projectile of state.world.enemies.projectiles) {
+      if (projectile.kind === 'arrow' || projectile.kind === 'firebolt') {
+        owners.set(`projectile:${projectile.id}`, projectile.kind)
+      }
+    }
+    if (state.world.enemies.puppetHits.some(hit => owners.get(hit.targetId) !== hit.kind)) {
+      throw new Error('saved Puppet hit owner is missing or has a different kind')
+    }
+  }
   return {
     integrity: parsed.integrity,
     loadedBoneyard,
@@ -764,6 +715,7 @@ function normalizeSimulation(
   sourceSchemaVersion: number,
 ): Record<string, unknown> {
   const source = record(value, 'game save simulation')
+  const savedTick = integerWithin(source.tick, 'game save simulation tick', 0, Number.MAX_SAFE_INTEGER)
   rejectUnexpectedKeys(source, 'game save simulation', [
     ...SIMULATION_KEYS,
     ...(sourceSchemaVersion < 21 ? ['lightProviderOrder'] : []),
@@ -781,12 +733,12 @@ function normalizeSimulation(
     modEffects: source.modEffects ?? [],
     nextLevelUpBarrierId: source.nextLevelUpBarrierId,
     nextModConsumableUseId: source.nextModConsumableUseId ?? 1,
-    playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion),
+    playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion, savedTick),
     primarySpells: normalizePrimarySpells(source.primarySpells, sourceSchemaVersion),
     run: normalizeRun(source.run),
     secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities, sourceSchemaVersion),
     tick: source.tick,
-    world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
+    world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion, savedTick),
   }
   const migrated = sourceSchemaVersion < 21
     ? migrateLegacyWorldPainterState(normalized, loadedBoneyardValue)
@@ -1019,7 +971,7 @@ function normalizeWorldPainterOwnership(
 
   const world = record(input.world, 'game save world')
   const normalizedWorld = world.kind === 'boneyard'
-    ? normalizeBoneyardPainterOwnership(world, register, migrateMissing, sourceSchemaVersion < 32)
+    ? normalizeBoneyardPainterOwnership(world, register, migrateMissing, sourceSchemaVersion < 32, sourceSchemaVersion < 34)
     : world
   return {
     ...input,
@@ -1067,6 +1019,7 @@ function normalizeBoneyardPainterOwnership(
   }>,
   migrateMissing: boolean,
   migrateProjectiles: boolean,
+  migrateParticleManagers: boolean,
 ): Record<string, unknown> {
   const enemies = record(source.enemies, 'game save Boneyard enemies')
   const projectiles = array(enemies.projectiles, 'game save enemy projectiles').map(value => (
@@ -1078,6 +1031,7 @@ function normalizeBoneyardPainterOwnership(
       register,
       migrateMissing,
       `game save enemy death effect ${index}`,
+      migrateParticleManagers,
     ),
   )
   const loot = record(source.loot, 'game save Boneyard loot')
@@ -1087,11 +1041,19 @@ function normalizeBoneyardPainterOwnership(
       register,
       migrateMissing,
       `game save loot effect ${index}`,
+      migrateParticleManagers,
     ),
   )
   return {
     ...source,
-    enemies: { ...enemies, deathEffects, projectiles },
+    enemies: { ...enemies, deathEffects, projectiles,
+      projectileEffects: migrateParticleManagers ? array(enemies.projectileEffects, 'saved projectile effects').flatMap(value => {
+        const effect = record(value, 'saved projectile effect')
+        if (effect.kind !== 'firebolt-trail') return [effect]
+        const parent = projectiles.find(parent => parent.id === effect.ownerProjectileId && parent.kind === 'firebolt')
+        return parent ? [{ ...effect, blendMode: 'add', painterRegistration: parent.painterRegistration }] : []
+      }) : enemies.projectileEffects,
+    },
     loot: { ...loot, effects: lootEffects },
   }
 }
@@ -1126,23 +1088,28 @@ function normalizeDeathEffectOwnership(
   }>,
   migrateMissing: boolean,
   field: string,
+  migrateManager = false,
 ): Record<string, unknown> {
   const expectedOwner = nativeDeathEffectPresentationOwner(source)
   const presentationOwner = source.presentationOwner === undefined && migrateMissing
     ? expectedOwner
     : source.presentationOwner
-  if (presentationOwner !== expectedOwner) {
+  // These Faculty particles choose either owner when they are constructed.
+  const mixedSmokeOwner = source.kind === 'move-fade'
+    && ['dampen-caster-smoke', 'tragic-circle-smoke', 'skull-trail', 'dark-trail', 'skull-impact', 'dark-impact', 'dark-ring-impact'].includes(String(source.role))
+    && presentationOwner === 'pre-world-queue'
+  if (presentationOwner !== expectedOwner && !mixedSmokeOwner) {
     throw new Error(`${field} presentation owner is invalid`)
   }
   if (presentationOwner === 'world-sorted') {
     const painterRegistration = source.painterRegistration
-    if (isManagerRegistration(painterRegistration, 'actor')) {
+    if (isManagerRegistration(painterRegistration, 'transient')) {
       return { ...source, presentationOwner }
     }
-    if (!migrateMissing) throw new Error(`${field} painter registration is invalid`)
+    if (!migrateMissing && !migrateManager) throw new Error(`${field} painter registration is invalid`)
     return {
       ...source,
-      painterRegistration: register('actor'),
+      painterRegistration: register('transient'),
       presentationOwner,
     }
   }
@@ -1154,14 +1121,18 @@ function normalizeDeathEffectOwnership(
 
 function nativeDeathEffectPresentationOwner(
   source: Record<string, unknown>,
-): 'direct-post-world' | 'pre-world-queue' | 'world-sorted' {
+): 'direct-post-world' | 'pre-world-queue' | 'world-sorted' | 'late-world-overlay' | 'background' {
   const kind = String(source.kind)
   const role = String(source.role)
-  if (kind === 'unbind' || role.startsWith('demon-death-fire-burst-')) {
+  if (kind === 'unbind' || ['dampen-caster-flash', 'mouth-beam-wall-contact',
+    'discorporeal-eyes-warmup', 'discorporeal-mouth-warmup'].includes(role)) return 'late-world-overlay'
+  if (role === 'ultra-banish-bone') return 'background'
+  if (role === 'eye-impact-flash' || role.startsWith('demon-death-fire-burst-')) {
     return 'direct-post-world'
   }
   if (kind === 'fire-array' || kind === 'late-splat' || kind === 'sprite-array'
-    || kind === 'move-fade-perspective') {
+    || kind === 'move-fade-perspective' || kind === 'fade-scale-perspective'
+    || ['blightning-source-smoke', 'blightning-path-smoke', 'discorporeal-death-branch'].includes(role)) {
     return 'pre-world-queue'
   }
   return 'world-sorted'
@@ -1388,6 +1359,7 @@ function isManagerRegistration(
 function normalizePlayerStore(
   value: unknown,
   sourceSchemaVersion: number,
+  savedTick: number,
 ): GameSimulationState['playerEntities'] {
   const source = record(value, 'game save players')
   rejectUnexpectedKeys(
@@ -1512,6 +1484,9 @@ function normalizePlayerStore(
       )
       const normalized = {
         ...progression,
+        hitFeedback: normalizeSavedPuppetHit(progression.hitFeedback, progression.lastDamageTick,
+          savedTick, sourceSchemaVersion, `game save player ${index} hit feedback`),
+        circleSlowTicksRemaining: sourceSchemaVersion < 34 ? 0 : progression.circleSlowTicksRemaining,
         poisonBeforeCold: sourceSchemaVersion < 31 ? false : progression.poisonBeforeCold,
         disciplineOfferBias: economy.ownedPerkSelectors.includes(14),
         hagathaRuntime,
@@ -1532,6 +1507,9 @@ function normalizePlayerStore(
     ...source,
     belts,
     economies,
+    lightings: sourceSchemaVersion < 34 ? array(source.lightings, 'game save player lightings').map((value, index) => ({
+      ...record(value, `game save player lighting ${index}`), blindnessTicksRemaining: 0,
+    })) : source.lightings,
     primaryCasts,
     progressions,
     skillBooks,
@@ -1549,6 +1527,14 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
         fire.horizontalSign = 1
         delete fire.shapeSample
         return fire
+      }
+      if (sourceSchemaVersion < 34 && transient.kind === 'weld-meteor') {
+        const point = record(transient.position, 'saved Meteor landing position')
+        const landingPosition = { x: finiteNumber(point.x, 'saved Meteor landing X'), y: finiteNumber(point.y, 'saved Meteor landing Y') }
+        const height = Math.fround(finiteNumber(transient.fallHeight, 'saved Meteor height')
+          + finiteNumber(transient.fallStep, 'saved Meteor fall step'))
+        return { ...transient, landingPosition, position: transient.ageTicks === 0 ? { x: 0, y: 0 }
+          : nativeWeldMeteorRootPosition(landingPosition, finiteNumber(transient.fallHeadingDegrees, 'saved Meteor heading'), height) }
       }
       if (transient.kind !== 'water') return transient
       const speed = sourceSchemaVersion < 19 && transient.speed === undefined
@@ -1569,11 +1555,46 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   }
 }
 
+function normalizeDemonSkullEncounter(value: unknown) {
+  const source = record(value, 'saved DemonSkull encounter')
+  if (typeof source.healthTriggersEnabled !== 'boolean') throw new Error('saved DemonSkull health trigger activation must be boolean')
+  return {
+    deathStreamTicksRemaining: integerWithin(source.deathStreamTicksRemaining, 'saved DemonSkull death stream', 0, 600),
+    screamStreamTicksRemaining: integerWithin(source.screamStreamTicksRemaining, 'saved DemonSkull scream stream', 0, 275),
+    healthTriggersEnabled: source.healthTriggersEnabled,
+    healthTriggersFiredMask: integerWithin(source.healthTriggersFiredMask, 'saved DemonSkull fired health triggers', 0, 15),
+    pendingCapabilities: integerWithin(source.pendingCapabilities, 'saved DemonSkull pending health triggers', 0, 15),
+  }
+}
+
 function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): GameSimulationState['secondaryAbilities'] {
   const source = record(value, 'game save secondary abilities')
   const players = record(source.players, 'game save secondary players')
+  let rng = parseNativeRng(source.rng, 'game save secondary RNG')
+  const actors = array(source.actors, 'game save secondary actors').map((value, index) => {
+    const actor = record(value, `game save secondary actor ${index}`)
+    if (actor.kind === 'golem') {
+      const golem = record(actor.golem, 'saved Golem')
+      const circleSlowTicks = sourceSchemaVersion < 34 ? 0
+        : finiteNumber(golem.circleSlowTicks, 'saved Golem CircleSlow timer')
+      if (!Number.isInteger(circleSlowTicks) || circleSlowTicks < 0 || circleSlowTicks > 20) {
+        throw new Error('saved Golem CircleSlow timer is invalid')
+      }
+      return { ...actor, golem: { ...golem, circleSlowTicks } }
+    }
+    if (sourceSchemaVersion >= 33 || actor.kind !== 'dampened-projectile') return actor
+    const savedPosition = record(actor.position, 'saved Dampen position')
+    const savedVelocity = record(actor.velocity, 'saved Dampen velocity')
+    const position = { x: finiteNumber(savedPosition.x, 'saved Dampen X'), y: finiteNumber(savedPosition.y, 'saved Dampen Y') }
+    const origin = { x: position.x - finiteNumber(savedVelocity.x, 'saved Dampen velocity X'),
+      y: position.y - finiteNumber(savedVelocity.y, 'saved Dampen velocity Y') }
+    const flyout = createNativeDampenedSpell(origin, position, rng)
+    rng = flyout.rng
+    return { ...actor, ageTicks: 0, frame: 0, lifetimeTicks: Number.MAX_SAFE_INTEGER,
+      phase: flyout.state.phaseDeg, rotationRadians: -Math.PI / 180, scale: 1, velocity: flyout.state.velocity }
+  })
   return {
-    ...source,
+    ...source, actors, rng,
     events: sourceSchemaVersion < 30
       ? array(source.events, 'game save secondary events').map(event => ({
           ...record(event, 'game save secondary event'), gain: 1,
@@ -1811,6 +1832,7 @@ function normalizeWorld(
   loadedBoneyardValue: unknown,
   playerId: string,
   sourceSchemaVersion: number,
+  savedTick: number,
 ): unknown {
   const source = record(value, 'game save world')
   if (source.kind === 'hub') {
@@ -1828,12 +1850,17 @@ function normalizeWorld(
   if (source.kind !== 'boneyard') return source
   const loadedBoneyard = parseLoadedBoneyard(loadedBoneyardValue)
   const defaults = createBoneyardWorld(loadedBoneyard)
+  const previousSceneryIds = sourceSchemaVersion < 34 ? new Set(array(
+    source.primarySceneryTargets ?? defaults.primarySceneryTargets, 'legacy saved scenery targets',
+  ).map(value => record(value, 'legacy saved scenery target').id)) : null
   const enemies = record(source.enemies, 'game save Boneyard enemies')
   let enemyRngState = finiteNumber(enemies.rngState, 'game save Boneyard enemy RNG')
   let enemyNativeRng = parseNativeRng(enemies.steeringRngState ?? defaults.enemies.steeringRngState, 'game save enemy native RNG')
-  const enemyActors = array(enemies.actors, 'game save Boneyard enemy actors').map(
+  const enemyActors: (Record<string, unknown> & { config: Record<string, unknown> })[] = array(enemies.actors, 'game save Boneyard enemy actors').map(
     (value, index) => {
       const actor = record(value, `game save Boneyard enemy actor ${index}`)
+      const lethalMagicDamage = sourceSchemaVersion < 34 ? false : actor.lethalMagicDamage
+      if (typeof lethalMagicDamage !== 'boolean') throw new Error('saved enemy lethal magic provenance is invalid')
       const config = record(actor.config, `game save Boneyard enemy config ${index}`)
       let brain = actor.brain
       if (sourceSchemaVersion < 26 && config.enemyToken === 'WRAITH') {
@@ -1854,7 +1881,7 @@ function normalizeWorld(
         }
       }
       const savedBrain = record(brain, `game save Boneyard enemy brain ${index}`)
-      const normalizedBrain = savedBrain.family === 'demon'
+      let normalizedBrain: Record<string, unknown> = savedBrain.family === 'demon'
         ? {
             ...savedBrain,
             articulation: normalizeSavedDemonArticulation(
@@ -1866,11 +1893,36 @@ function normalizeWorld(
             ),
           }
         : savedBrain
+      if (savedBrain.family === 'mage') {
+        const disabledPrimaryTicks = sourceSchemaVersion < 34 ? 0
+          : finiteNumber(savedBrain.disabledPrimaryTicks, `game save Mage ${index} casting delay`)
+        if (!Number.isInteger(disabledPrimaryTicks) || disabledPrimaryTicks < 0 || disabledPrimaryTicks > 600) {
+          throw new Error(`game save Mage ${index} casting delay is invalid`)
+        }
+        normalizedBrain = { ...normalizedBrain, disabledPrimaryTicks }
+      }
+      if (savedBrain.family === 'demon-skull') {
+        normalizedBrain = { ...normalizeSavedDiscorporeal(savedBrain) }
+      }
+      if (sourceSchemaVersion < 34 && savedBrain.family === 'archer') {
+        const direction = drawNativeSign(enemyNativeRng, 1)
+        enemyNativeRng = direction.state
+        normalizedBrain = { ...normalizedBrain, strafe: { direction: direction.value,
+          limbHeadingDeg: finiteNumber(actor.headingDeg, `game save Archer ${index} heading`), movementRamp: 0, turnBlend: 0 } }
+      }
       return {
         ...actor,
+        hitFeedback: normalizeSavedPuppetHit(actor.hitFeedback, actor.lastDamageTick,
+          savedTick, sourceSchemaVersion, `game save enemy ${index} hit feedback`),
         brain: normalizedBrain,
+        lethalMagicDamage,
+        shadowLateralOffset: sourceSchemaVersion < 34 ? 0
+          : finiteNumber(actor.shadowLateralOffset, 'saved enemy shadow gait offset'),
         config: {
           ...config,
+          ...(sourceSchemaVersion < 34 && config.enemyToken === 'SKELETONARCHER' ? {
+            family: { ...record(config.family, `game save Archer ${index} config`), strafing: false },
+          } : {}),
           classification: config.classification ?? 'normal',
           lootPolicies: config.lootPolicies ?? DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES,
           onDeathProgram: config.onDeathProgram ?? null,
@@ -1880,7 +1932,7 @@ function normalizeWorld(
       }
     },
   )
-  const enemyProjectiles = array(
+  const enemyProjectiles: Record<string, unknown>[] = array(
     enemies.projectiles,
     'game save Boneyard enemy projectiles',
   ).map((value, index) => {
@@ -1991,20 +2043,53 @@ function normalizeWorld(
   if ((tutorial === null) !== (tutorialProfileEconomy === null)) {
     throw new Error('game save Tutorial profile baseline ownership is inconsistent')
   }
+  let featuredBossId: number | null = sourceSchemaVersion < 34 || enemies.featuredBossId === null
+    ? null : integerWithin(enemies.featuredBossId, 'game save featuredBossId', 1, Number.MAX_SAFE_INTEGER)
+  if (sourceSchemaVersion < 34) {
+    const candidates = enemyActors.filter(actor => actor.lifeState === 'alive'
+      && (actor.config.classification === 'boss' || actor.config.classification === 'multiple-boss'))
+    if (candidates.length > 0) {
+      const selected = drawNativeInteger(enemyNativeRng, candidates.length)
+      enemyNativeRng = selected.state
+      featuredBossId = integerWithin(candidates[selected.value]!.id, 'game save featuredBossId', 1, Number.MAX_SAFE_INTEGER)
+    }
+  }
+  if (featuredBossId !== null && !enemyActors.some(actor => actor.id === featuredBossId
+    && actor.lifeState === 'alive' && actor.config.classification !== 'normal')) {
+    throw new Error('game save featuredBossId must refer to a living boss or miniboss')
+  }
   const waves = source.waves === null
     ? null
     : record(source.waves, 'game save Boneyard waves')
   return {
     ...source,
+    primarySceneryTargets: previousSceneryIds === null ? source.primarySceneryTargets
+      : defaults.primarySceneryTargets.filter(target => target.id.startsWith('fencepost:') || previousSceneryIds.has(target.id)),
     enemies: {
       ...enemies,
+      featuredBossId,
+      deathEffects: sourceSchemaVersion < 34 ? array(enemies.deathEffects, 'saved enemy death effects').map(value => {
+        const effect = record(value, 'saved enemy death effect')
+        return {
+          ...effect,
+          ...(sourceSchemaVersion < 33 ? { scaleY: effect.scale } : {}),
+          ...(effect.kind === 'unbind' ? { presentationOwner: 'late-world-overlay', painterRegistration: null } : {}),
+        }
+      }) : enemies.deathEffects,
+      demonSkullEncounter: sourceSchemaVersion < 34 ? createNativeDemonSkullEncounter() : normalizeDemonSkullEncounter(enemies.demonSkullEncounter),
+      bossNarration: sourceSchemaVersion < 34 ? createNativeBossNarration() : enemies.bossNarration,
+      facultyVoiceController: sourceSchemaVersion < 34 ? null : enemies.facultyVoiceController,
+      bossSpells: sourceSchemaVersion < 34 ? [] : enemies.bossSpells,
+      puppetHits: sourceSchemaVersion < 34 ? [] : nativeWorldPuppetHits(enemies.puppetHits, 'saved Puppet hits', savedTick),
+      detachedCrows: sourceSchemaVersion < 34 ? [] : enemies.detachedCrows,
       actors: enemyActors,
+      maggots: array(enemies.maggots, 'game save Maggots').map((value, index) => {
+        const maggot = record(value, `game save Maggot ${index}`)
+        return { ...maggot, hitFeedback: normalizeSavedPuppetHit(maggot.hitFeedback, maggot.lastDamageTick,
+          savedTick, sourceSchemaVersion, `game save Maggot ${index} hit feedback`) }
+      }),
       ...(sourceSchemaVersion < 33 ? {
         silks: [], silkFragments: [], spiderRemains: [], webbedPlayers: {}, spiderSpitTicksRemaining: 0,
-        deathEffects: array(enemies.deathEffects, 'game save enemy death effects').map(value => {
-          const effect = record(value, 'game save enemy death effect')
-          return { ...effect, scaleY: effect.scale }
-        }),
       } : {}),
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
       projectiles: enemyProjectiles,
@@ -2021,16 +2106,23 @@ function normalizeWorld(
           order: integerWithin(binding.order, 'target cell order', 0, Number.MAX_SAFE_INTEGER),
         }]
       })),
-      projectileEffects: sourceSchemaVersion < 32
-        ? array(enemies.projectileEffects, 'game save enemy projectile effects').filter(value => {
-            const effect = record(value, 'game save enemy projectile effect')
-            return effect.kind !== 'demon-fire' && effect.kind !== 'poison-pool-normal'
-              && effect.kind !== 'poison-pool-additive'
-              && effect.kind !== 'fire-burst-frame' && effect.kind !== 'fire-burst-glow'
-              && effect.kind !== 'guided-impact-main' && effect.kind !== 'guided-impact-aura-one'
-              && effect.kind !== 'guided-impact-aura-two'
-          })
-        : enemies.projectileEffects,
+      projectileEffects: array(enemies.projectileEffects, 'game save enemy projectile effects').flatMap(value => {
+        const effect = record(value, 'game save enemy projectile effect')
+        if (sourceSchemaVersion < 32 && (effect.kind === 'demon-fire' || effect.kind === 'poison-pool-normal'
+          || effect.kind === 'poison-pool-additive' || effect.kind === 'fire-burst-frame' || effect.kind === 'fire-burst-glow'
+          || effect.kind === 'guided-impact-main' || effect.kind === 'guided-impact-aura-one'
+          || effect.kind === 'guided-impact-aura-two')) return []
+        if (effect.kind !== 'firebolt-trail') return [effect]
+        const parent = enemyProjectiles.find(parent => parent.id === effect.ownerProjectileId && parent.kind === 'firebolt')
+        if (sourceSchemaVersion < 34) return parent ? [{ ...effect, painterRegistration: parent.painterRegistration }] : []
+        if (!parent) throw new Error('saved Firebolt trail has no live parent')
+        const painter = record(effect.painterRegistration, 'saved Firebolt trail painter')
+        const parentPainter = record(parent.painterRegistration, 'saved Firebolt painter')
+        if (painter.managerLane !== parentPainter.managerLane || painter.registrationOrdinal !== parentPainter.registrationOrdinal) {
+          throw new Error('saved Firebolt trail must inherit its parent painter')
+        }
+        return [effect]
+      }),
       rngState: enemyRngState,
       steeringRngState: enemyNativeRng,
     },
@@ -2047,6 +2139,7 @@ function normalizeWorld(
       : {
           ...waves,
           ...(sourceSchemaVersion < 33 ? legacySpiderWaveProgram(loadedBoneyard, waves) : {}),
+          bossEncounters: sourceSchemaVersion < 34 ? defaults.waves?.bossEncounters ?? [] : waves.bossEncounters,
           openingBursts: waves.openingBursts ?? [],
           openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
           portalPhaseIndex: waves.portalPhaseIndex ?? 0,
@@ -2692,4 +2785,17 @@ function legacySpiderWaveProgram(loaded: LoadedBoneyard, waves: Record<string, u
     spiderWaves,
     spiderState: { ...createNativeSpiderWaveState(), phaseIndex: next < 0 ? spiderWaves.length : next },
   }
+}
+
+function normalizeSavedPuppetHit(
+  value: unknown, lastDamageTick: unknown, savedTick: number, sourceSchemaVersion: number, field: string,
+): ReturnType<typeof nativePuppetHit> {
+  if (sourceSchemaVersion < 34) {
+    const hit = lastDamageTick == null ? createNativePuppetHit(savedTick)
+      : receiveNativePuppetHit(integerWithin(lastDamageTick, `${field} damage tick`, 0, savedTick))
+    return { ...hit, timer: nativePuppetHitAlpha(hit, savedTick), tick: savedTick }
+  }
+  const hit = nativePuppetHit(value, field)
+  if (hit.tick > savedTick) throw new Error(`${field} update tick is in the future`)
+  return hit
 }

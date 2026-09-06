@@ -1,21 +1,14 @@
 import type { BoneyardEnemyDeathEffectSnapshot } from './game-state.ts'
-import {
-  BONEYARD_ENEMY_DEATH_EFFECT_KINDS,
-  BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS,
-} from './game-state.ts'
-import type {
-  ReplicatedEntityDescriptor,
-  ReplicatedEntitySample,
-} from './replicated-entity-types.ts'
-
+import { BONEYARD_ENEMY_DEATH_EFFECT_KINDS, BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS } from './game-state.ts'
+import type { ReplicatedEntityDescriptor, ReplicatedEntitySample } from './replicated-entity-types.ts'
 export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID = 5
 
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
-const DESCRIPTOR_LENGTH = 10
+const DESCRIPTOR_LENGTH = 11
 const SAMPLE_LENGTH = 12
-const ATLASES = ['BadGuys', 'DeadHawg', 'Demon'] as const
+const ATLASES = ['BadGuys', 'DeadHawg', 'Demon', 'Heartmonger', 'Faculty', 'Unholy'] as const
 const BLEND_MODES = ['add', 'normal'] as const
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
@@ -26,6 +19,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
       && descriptor[0] === BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID
       && positiveEntityId(descriptor[1])
       && positiveEntityId(descriptor[2])
+      && Number.isSafeInteger(descriptor[10])
       && arrayIndex(descriptor[3], BONEYARD_ENEMY_DEATH_EFFECT_KINDS.length)
       && arrayIndex(descriptor[4], ATLASES.length)
       && arrayIndex(descriptor[5], BLEND_MODES.length)
@@ -71,6 +65,7 @@ export function boneyardEnemyDeathEffectDescriptor(
       'death effect presentation owner',
     ),
     effect.painterRegistration?.registrationOrdinal ?? -1,
+    quantize(effect.painterSortBias ?? 0, POSITION_SCALE),
   ]
 }
 
@@ -107,17 +102,16 @@ export function materializeBoneyardEnemyDeathEffect(
     throw new Error('Boneyard enemy death-effect sample identity does not match its descriptor')
   }
   const alpha = dequantize(sample[5], VALUE_SCALE)
-  const maximumAlpha = ATLASES[descriptor[4]] === 'BadGuys'
-    && BLEND_MODES[descriptor[5]] === 'add'
-    && sample[7] === 69
-    && BONEYARD_ENEMY_DEATH_EFFECT_KINDS[descriptor[3]] === 'fade'
-    ? 1.25
-    : 1
+  const maximumAlpha = boneyardEnemyDeathEffectMaximumAlpha(
+    ATLASES[descriptor[4]]!, BLEND_MODES[descriptor[5]]!, sample[7],
+    BONEYARD_ENEMY_DEATH_EFFECT_KINDS[descriptor[3]]!,
+  )
   if (alpha > maximumAlpha) {
     throw new Error('Boneyard enemy death-effect alpha exceeds its native shape')
   }
   const height = dequantize(sample[10], POSITION_SCALE)
   return {
+    ...(descriptor[10] === 0 ? {} : { painterSortBias: dequantize(descriptor[10], POSITION_SCALE) }),
     ageTicks: sample[9],
     alpha,
     atlas: ATLASES[descriptor[4]]!,
@@ -129,7 +123,7 @@ export function materializeBoneyardEnemyDeathEffect(
     ownerActorId: descriptor[2],
     painterRegistration: descriptor[9] < 0
       ? null
-      : { managerLane: 'actor', registrationOrdinal: descriptor[9] },
+      : { managerLane: 'transient', registrationOrdinal: descriptor[9] },
     presentationOwner: BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS[descriptor[8]]!,
     position: {
       x: dequantize(sample[2], POSITION_SCALE),
@@ -142,6 +136,18 @@ export function materializeBoneyardEnemyDeathEffect(
     spawnTick: descriptor[6],
     tint: sample[8],
   }
+}
+
+export function boneyardEnemyDeathEffectMaximumAlpha(
+  atlas: string,
+  blendMode: string,
+  entry: number,
+  kind: string,
+): number {
+  return atlas === 'BadGuys' && (
+    (blendMode === 'add' && entry === 69 && kind === 'fade')
+    || (blendMode === 'normal' && entry === 86 && kind === 'unbind')
+  ) ? 1.25 : 1
 }
 
 function requiredIndex<T>(values: readonly T[], value: T, field: string): number {

@@ -19,14 +19,20 @@ ATLAS_SPECS = (
     ("Demon", "demon.json"),
     ("DeadHawg", "deadhawg.json"),
     ("Golem", "golem.json"),
+    ("Faculty", "faculty.json"),
+    ("Heartmonger", "heartmonger.json"),
+    ("Unholy", "unholy.json"),
 )
-EXPECTED_SOURCE_COUNT = 3164
-EXPECTED_PAGE_COUNT = 4
+EXPECTED_SOURCE_COUNT = 4286
+EXPECTED_PAGE_COUNT = 7
 EXPECTED_PAGE_SHA256 = (
     "af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e",
     "0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4",
     "3758ce24d516f0ca6349e57b988d8a84e8d6f89fb3827856d7bb521618281af0",
     "586bb06b4fc69f0d90c90da99871e1cd97d5f250a1e83edbba82a4b7504294ac",
+    "928cbadcb4d131927aa26ca041e5ecf1fbc8692327197cedfbcf5c68f3ded6a5",
+    "4dce7164633a67a39a23b44b5ce5895930d5ed5d08c42821fe7173b56aaa9f5a",
+    "cd5fd533d0d2c20eb1cc55891a9d1d54841ac5ebab7a3497d880d696c116a5c1",
 )
 
 

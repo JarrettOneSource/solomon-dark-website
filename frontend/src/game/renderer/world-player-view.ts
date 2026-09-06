@@ -1,3 +1,4 @@
+import { multiplyNativeTints, nativePuppetHitTint, setNativeDiffuseColor } from './native-texture-color.ts'
 import {
   type ActorMovementFacingState,
   advanceActorMovementFacing,
@@ -70,6 +71,7 @@ export class PlayerWorldView {
   private readonly head: Sprite
   private readonly headSecondary: Sprite
   private readonly hitOverlay: Container
+  private complexLighting = true
   private readonly hitStaffBack: Sprite
   private readonly hitRobe: Sprite
   private readonly hitRobeSecondary: Sprite
@@ -187,7 +189,10 @@ export class PlayerWorldView {
       this.hitStaffFront,
       this.hitHead,
       this.hitHeadSecondary,
-    ]) sprite.tint = 0xff0000
+    ]) {
+      sprite.tint = nativePuppetHitTint(true)
+      setNativeDiffuseColor(sprite, true)
+    }
     this.hitOverlay.addChild(
       this.hitStaffBack,
       this.hitRobe,
@@ -708,7 +713,8 @@ export class PlayerWorldView {
     this.applyMaterialTint()
   }
 
-  setWorldTint(tint: number): void {
+  setWorldTint(tint: number, complexLighting = true): void {
+    this.complexLighting = complexLighting
     this.worldTint = tint
     this.applyMaterialTint()
     this.refreshMaterialCapture()
@@ -732,15 +738,22 @@ export class PlayerWorldView {
   private applyMaterialTint(): void {
     const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState, this.statusMaterial)
     this.staffBack.tint = tint
-    this.robe.tint = multiplyTints(this.robePrimaryTint, tint)
-    this.robeSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
+    this.robe.tint = multiplyNativeTints(this.robePrimaryTint, tint)
+    this.robeSecondary.tint = multiplyNativeTints(this.robeSecondaryTint, tint)
     this.unselectedRobeAttachment.tint = tint
-    this.fixed.tint = multiplyTints(this.robePrimaryTint, tint)
-    this.fixedSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
+    this.fixed.tint = multiplyNativeTints(this.robePrimaryTint, tint)
+    this.fixedSecondary.tint = multiplyNativeTints(this.robeSecondaryTint, tint)
     this.staffFront.tint = tint
     this.enchantStaff.setMaterialTint(tint)
-    this.head.tint = multiplyTints(this.headPrimaryTint, tint)
-    this.headSecondary.tint = multiplyTints(this.headSecondaryTint, tint)
+    this.head.tint = multiplyNativeTints(this.headPrimaryTint, tint)
+    this.headSecondary.tint = multiplyNativeTints(this.headSecondaryTint, tint)
+    for (const [body, hit] of [
+      [this.staffBack, this.hitStaffBack], [this.robe, this.hitRobe],
+      [this.robeSecondary, this.hitRobeSecondary], [this.fixed, this.hitFixed],
+      [this.fixedSecondary, this.hitFixedSecondary], [this.staffFront, this.hitStaffFront],
+      [this.head, this.hitHead], [this.headSecondary, this.hitHeadSecondary],
+      [this.unselectedRobeAttachment, this.hitUnselectedRobeAttachment],
+    ] as const) hit.tint = nativePuppetHitTint(this.complexLighting, body.tint)
     this.applyDeathTints()
   }
 
@@ -825,7 +838,7 @@ export class PlayerWorldView {
   private applyDeathTints(): void {
     const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState, this.statusMaterial)
     for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
-      this.deathLayers[index]!.tint = multiplyTints(
+      this.deathLayers[index]!.tint = multiplyNativeTints(
         this.deathBaseTints[index]!,
         tint,
       )
@@ -856,11 +869,4 @@ function createDeathLayers(
     sprite.visible = false
     return sprite
   })
-}
-
-function multiplyTints(first: number, second: number): number {
-  const channel = (shift: number): number => Math.round(
-    ((first >> shift) & 0xff) * ((second >> shift) & 0xff) / 255,
-  )
-  return channel(16) << 16 | channel(8) << 8 | channel(0)
 }

@@ -1,3 +1,4 @@
+import type { NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import { HUB_PRE_WORLD_ANIMATION_DEPTH } from '../hub-depth.ts'
 import { Container, type Shader } from 'pixi.js'
 
@@ -146,6 +147,7 @@ export class PrimarySpellWorldView {
     worldKey: string,
     presentationFrame?: number,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
+    puppetHits?: ReadonlyMap<string, NativeWorldPuppetHit>,
   ): void {
     this.liveIds.clear()
     this.waterMeshes?.beginFrame()
@@ -249,6 +251,7 @@ export class PrimarySpellWorldView {
           this.preWorldRoot.addChild(view.underlayContainer)
         }
       }
+      if (view instanceof WeldPrimarySpellView) view.setPuppetHit(puppetHits?.has(`primary:${state.id}`) === true)
       view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)))
       for (const painterRoot of view.painterRoots()) {
         painterRoot.container.zIndex = painterRoot.lane === 'post-world-queue'

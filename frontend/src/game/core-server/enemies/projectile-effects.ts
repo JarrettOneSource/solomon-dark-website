@@ -1,13 +1,12 @@
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import { drawNativeFloat, drawNativeSign } from '../../core-kernels/native-rng.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
-import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
+import { drawNativeFloat, drawNativeSign } from '../../core-kernels/native-rng.ts'
 import type {
   NativeWorldManagerRegistration,
   RegisterNativeWorldPainter,
 } from '../../core-kernels/native-world-manager-order.ts'
+import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
 import { emitEvent } from './events.ts'
-import { validateTick } from './model.ts'
 import type {
   BoneyardEnemyProjectile,
   BoneyardEnemyProjectileEffect,
@@ -19,6 +18,7 @@ import type {
   TumbleBoneyardArrowResult,
   WorkingStep,
 } from './model.ts'
+import { validateTick } from './model.ts'
 import { NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS } from './programs.ts'
 import { drawEnemyFloat, drawEnemySign } from './random.ts'
 import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
@@ -138,6 +138,7 @@ interface SpawnProjectileEffectOptions {
   readonly entry: number
   readonly lifetimeTicks: number
   readonly lightRegistration?: NativeWorldManagerRegistration
+  readonly painterRegistration?: NativeWorldManagerRegistration
   readonly phaseOriginTicks?: number
   readonly rotationDeg?: number
   readonly scale?: number
@@ -147,7 +148,7 @@ interface SpawnProjectileEffectOptions {
 
 export function createProjectileEffect<Kind extends BoneyardEnemyProjectileEffectKind>(
   work: WorkingStep,
-  projectile: BoneyardEnemyProjectile,
+  projectile: Pick<BoneyardEnemyProjectile, 'id' | 'ownerActorId' | 'ageTicks'>,
   tick: number,
   position: Readonly<BoneyardPoint>,
   kind: Kind,
@@ -169,7 +170,7 @@ export function createProjectileEffect<Kind extends BoneyardEnemyProjectileEffec
     lifetimeTicks: options.lifetimeTicks,
     ownerActorId: projectile.ownerActorId,
     ownerProjectileId: projectile.id,
-    painterRegistration: options.lightRegistration
+    painterRegistration: options.painterRegistration ?? options.lightRegistration
       ?? work.registerProjectileWorldPainter(
         kind === 'fire-burst' || kind === 'guided-impact' ? 'transient' : 'actor',
       ),
@@ -209,6 +210,8 @@ export function spawnProjectileTrails(
       x: position.x + Math.sin(jitterHeading) * jitterMagnitude,
       y: position.y - 15 - Math.cos(jitterHeading) * jitterMagnitude,
     }, 'firebolt-trail', {
+      painterRegistration: projectile.painterRegistration,
+      blendMode: 'add',
       alphaLossPerTick,
       entry: 255 + (projectile.ageTicks + offset) % 12,
       lifetimeTicks: 8,
@@ -219,12 +222,13 @@ export function spawnProjectileTrails(
   }
 }
 
-function spawnFireBurst(
+export function spawnFireBurst(
   work: WorkingStep,
-  projectile: BoneyardEnemyProjectile,
+  projectile: Pick<BoneyardEnemyProjectile, 'id' | 'ownerActorId' | 'ageTicks'>,
   tick: number,
   position: Readonly<BoneyardPoint>,
   scaleBase: number,
+  scaleRange = .1,
 ): void {
   emitEvent(work, tick, 'enemy-action-sound', projectile.ownerActorId, {
     gainScale: 1, pitch: 2, sound: 'fireball-hit', sourcePosition: position,
@@ -232,7 +236,7 @@ function spawnFireBurst(
   const rotationDeg = drawEnemyFloat(work, 360)
   const angularMagnitude = Math.fround(0.5 + drawEnemyFloat(work, 1))
   const angularVelocityDeg = drawEnemySign(work, angularMagnitude)
-  const scale = Math.fround(scaleBase + drawEnemyFloat(work, 0.1, true))
+  const scale = Math.fround(scaleBase + drawEnemyFloat(work, scaleRange, true))
   work.projectileEffects.push(createProjectileEffect(work, projectile, tick, {
     x: position.x, y: Math.fround(position.y - 10),
   }, 'fire-burst', {

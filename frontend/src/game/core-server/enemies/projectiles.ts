@@ -197,7 +197,7 @@ function stepGuidedMissile(
     targetPlayerId,
     visualPhaseDeg: Math.fround(source.visualPhaseDeg + source.speed * 6),
   }
-  const playerId = firstGuidedContact(work, stepped, context.players)
+  const playerId = firstGuidedMissileContact(work, stepped, context.players)
   if (playerId !== null) emitProjectileImpact(work, stepped, tick, playerId)
   // Native lookahead still consumes the vector made before this tick's turn.
   const blocked = moved.ageTicks % 5 === 0 && terrainBlocked(moved, context, 5, 0x700)
@@ -210,7 +210,7 @@ function stepGuidedMissile(
   }
 }
 
-function firstGuidedContact(work: WorkingStep, projectile: BoneyardEnemyProjectile, players: BoneyardEnemyTargets): string | null {
+export function firstGuidedMissileContact(work: WorkingStep, projectile: Pick<BoneyardEnemyProjectile, 'position' | 'targetPlayerId'>, players: BoneyardEnemyTargets): string | null {
   const target = projectile.targetPlayerId === null ? undefined : players[projectile.targetPlayerId]
   if (target && targetEligible(target) && squaredDistance(projectile.position, target.position) < 100) {
     return projectile.targetPlayerId
@@ -382,6 +382,9 @@ function retireProjectile(
   tick: number,
   targetPlayerId = projectile.targetPlayerId,
 ): null {
+  if (projectile.kind === 'firebolt') work.projectileEffects = work.projectileEffects.filter(effect => (
+    effect.kind !== 'firebolt-trail' || effect.ownerProjectileId !== projectile.id
+  ))
   emitEvent(work, tick, 'projectile-retired', projectile.ownerActorId, {
     projectileId: projectile.id, targetPlayerId,
   })

@@ -19,31 +19,35 @@ import {
 } from '../core-kernels/native-world-manager-order.ts'
 import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
-import {
-  AirPrimarySpellView,
-  type NativeAirLightningViewState,
-} from './primary-spell-air-view.ts'
+import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
+import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
 import {
   nativeSecondarySpriteKey,
   nativeSecondarySpriteRecord,
 } from './native-secondary-assets.ts'
 import {
-  NativeSecondaryPresentationScratch,
-  NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
   nativeLeviathanCompositePlan,
   nativeSecondaryCompositeOwnerEntries,
-  updateNativeSecondaryPresentationPlan,
-  type NativeSecondaryGradientDraw,
+} from './native-secondary-field-presentation.ts'
+import { NativeSecondaryPresentationScratch } from './native-secondary-presentation-scratch.ts'
+import {
+  NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
   type NativeLeviathanCompositePlan,
+  type NativeSecondaryGradientDraw,
   type NativeSecondaryMeshDraw,
   type NativeSecondaryPresentationPlan,
   type NativeSecondaryQuadDraw,
   type NativeSecondarySpriteDraw,
   type NativeStormWeatherComposite,
-} from './native-secondary-presentation.ts'
+} from './native-secondary-presentation-types.ts'
+import { updateNativeSecondaryPresentationPlan } from './native-secondary-presentation.ts'
+import {
+  AirPrimarySpellView,
+  type NativeAirLightningViewState,
+} from './primary-spell-air-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
-import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
-import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
+import { nativePuppetHitAlpha, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
+import { multiplyNativeTints, nativePuppetHitTint, renderNativeDiffuseMask, setNativeDiffuseColor } from './native-texture-color.ts'
 
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
@@ -52,6 +56,7 @@ const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
   'acid-rain',
   'dampen-wave',
   'dampened-projectile',
+  'dampened-smoke',
   'freeze-wave-visual',
   'golem',
   'leviathan',
@@ -519,6 +524,8 @@ class NativeSecondaryActorView {
     return this.state.scale
   }
 
+  get mainSprites(): readonly Sprite[] { return this.sprites }
+
   get usesDirectPrimitives(): boolean {
     return this.directPrimitives
   }
@@ -748,6 +755,11 @@ class NativeLeviathanCompositeView {
   private plan = nativeLeviathanCompositePlan(0)
   private readonly renderTexture: RenderTexture
   private readonly source = new Container({ label: 'leviathan-render-target-source' })
+  private parent: NativeSecondaryActorView | null = null
+  private readonly hitRoot = new Container({ label: 'leviathan-hit-main', eventMode: 'none', zIndex: 3 })
+  private readonly hitSprites: Sprite[] = []
+  private hitRenderTexture: RenderTexture | null = null
+  private readonly hitOutputs: Sprite[] = []
 
   constructor(textures: PlayerWorldTextures) {
     this.container.eventMode = 'none'
@@ -805,6 +817,9 @@ class NativeLeviathanCompositeView {
     this.clear.zIndex = 2
     this.source.addChild(this.appendageSource, this.mask, this.maskClip, this.clear)
     this.container.addChild(this.compositeNormal, this.compositeGlow)
+    this.hitRoot.sortableChildren = true
+    this.hitRoot.visible = false
+    this.container.addChild(this.hitRoot)
   }
 
   update(
@@ -813,6 +828,7 @@ class NativeLeviathanCompositeView {
     renderer: Renderer,
     root: Container,
   ): void {
+    this.parent = parent
     this.releaseMembers(root)
     const parentSample = parent.diagnosticSample(0, 0)
     this.container.position.set(parentSample.worldX, parentSample.worldY)
@@ -857,6 +873,68 @@ class NativeLeviathanCompositeView {
     })
   }
 
+  setPuppetHit(hit: NativeWorldPuppetHit | undefined, complexLighting: boolean, renderer: Renderer): void {
+    this.hitRoot.visible = hit !== undefined
+    if (hit === undefined || this.parent === null) return
+    const alpha = nativePuppetHitAlpha(hit.feedback, hit.feedback.tick)
+    const tint = nativePuppetHitTint(complexLighting)
+    const sources = this.parent.mainSprites
+    while (this.hitSprites.length < sources.length) {
+      const sprite = new Sprite({ eventMode: 'none' })
+      setNativeDiffuseColor(sprite, true)
+      this.hitSprites.push(sprite)
+      this.hitRoot.addChild(sprite)
+    }
+    this.hitSprites.forEach((sprite, index) => {
+      const source = sources[index]
+      sprite.visible = source?.visible === true
+      if (!source) return
+      sprite.label = `hit:${source.label}`
+      sprite.texture = source.texture
+      sprite.anchor.copyFrom(source.anchor)
+      sprite.position.copyFrom(source.position)
+      sprite.scale.copyFrom(source.scale)
+      sprite.skew.copyFrom(source.skew)
+      sprite.pivot.copyFrom(source.pivot)
+      sprite.rotation = source.rotation
+      sprite.alpha = source.alpha * alpha
+      sprite.tint = multiplyNativeTints(source.tint, tint)
+      sprite.blendMode = source.blendMode
+      sprite.zIndex = index
+    })
+    if (this.hitRenderTexture === null) {
+      this.hitRenderTexture = RenderTexture.create({ alphaMode: 'no-premultiply-alpha', dynamic: true,
+        height: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE, width: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
+        resolution: 1, scaleMode: 'linear' })
+      for (const index of [0, 1]) {
+        const sprite = new Sprite({ texture: this.hitRenderTexture, eventMode: 'none', label: `hit:leviathan-composite:${index}` })
+        sprite.anchor.set(.5)
+        sprite.zIndex = sources.length + index
+        setNativeDiffuseColor(sprite, true)
+        this.hitOutputs.push(sprite)
+        this.hitRoot.addChild(sprite)
+      }
+    }
+    // The clip rectangle is geometric; only real Main draws inherit hit RGBA.
+    const originals = [this.appendageSource, this.mask, this.clear].map(display => ({ display, alpha: display.alpha, tint: display.tint }))
+    const captureTint = multiplyNativeTints(this.container.tint, tint)
+    try {
+      for (const original of originals) {
+        original.display.alpha = original.alpha * alpha
+        original.display.tint = multiplyNativeTints(original.tint, captureTint)
+      }
+      renderNativeDiffuseMask(renderer, { clear: true, clearColor: [0, 0, 0, 0],
+        container: this.source, target: this.hitRenderTexture })
+    } finally {
+      for (const original of originals) { original.display.alpha = original.alpha; original.display.tint = original.tint }
+    }
+    this.hitOutputs.forEach((sprite, index) => {
+      sprite.alpha = this.plan.outputs[index]!.alpha * alpha
+      sprite.blendMode = this.plan.outputs[index]!.blend
+      sprite.tint = tint
+    })
+  }
+
   releaseMembers(root: Container): void {
     for (const view of this.memberViews.values()) {
       const sample = view.diagnosticSample(0, 0)
@@ -892,6 +970,7 @@ class NativeLeviathanCompositeView {
     this.source.destroy({ children: true })
     this.container.destroy({ children: true })
     this.renderTexture.destroy(true)
+    this.hitRenderTexture?.destroy(true)
     this.memberIds.clear()
     this.memberViews.clear()
   }
@@ -1056,6 +1135,12 @@ export class NativeSecondaryWorldView {
     else this.views.get(ownerId)?.setTint(tint)
   }
 
+  setPuppetHits(hits: ReadonlyMap<string, NativeWorldPuppetHit>, complexLighting: boolean): void {
+    for (const [id, composite] of this.leviathanComposites) {
+      composite.setPuppetHit(hits.get(`secondary:${id}`), complexLighting, this.renderer)
+    }
+  }
+
   setRenderable(renderable: boolean): void {
     for (const composite of this.leviathanComposites.values()) {
       composite.setRenderable(renderable)
@@ -1148,6 +1233,7 @@ export class NativeSecondaryWorldView {
 
   private syncLeviathanComposites(): void {
     const childrenByParent = new Map<number, number[]>()
+    for (const [id, view] of this.views) if (view.kind === 'leviathan') childrenByParent.set(id, [])
     for (const [actorId, parentId] of this.compositeOwnerByActorId) {
       const children = childrenByParent.get(parentId) ?? []
       children.push(actorId)

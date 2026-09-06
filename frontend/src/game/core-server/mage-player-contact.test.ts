@@ -1,31 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
-import { createNativeTutorialState } from '../core-kernels/native-tutorial.ts'
 import { createSolomonEncounter } from '../core-kernels/boneyard-encounter.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import { applyPlayerContacts } from './player-contact-system.ts'
-import { grantPlayerEntitySkillRanks } from './player-entity-store.ts'
-import { grantPlayerSkillRanks } from '../core-kernels/player-progression.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { playerMovementScale } from '../core-kernels/player-combat.ts'
-import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
+import { createNativeBossNarration, enqueueNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
+import { createNativeTutorialState } from '../core-kernels/native-tutorial.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import { playerMovementScale, stepPlayerCombatTick } from '../core-kernels/player-combat.ts'
+import { grantPlayerSkillRanks } from '../core-kernels/player-progression.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { NATIVE_MAGE_ACTION_PROGRAMS } from './enemies/programs.ts'
-import {
-  bindGameSimulationPlayerSkillQuickbar,
-  createGameSimulation,
-  enterBoneyardWorld,
-  gameSimulationPlayerRecords,
-  getPlayerProgression,
-  stepGameSimulationTick,
-} from './game-simulation.ts'
 import type { GameSimulationExtensions, GameSimulationState } from './game-simulation.ts'
-
+import { bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords, getPlayerProgression, stepGameSimulationTick } from './game-simulation.ts'
+import { applyPlayerContacts } from './player-contact-system.ts'
+import { grantPlayerEntitySkillRanks, stepPlayerEntityOverlayLightingTick } from './player-entity-store.ts'
 test('a poison Mage impact poisons the player and lowers health', () => {
   let state = mageContactState('FLAG_CASTPOISON')
   for (let tick = 0; tick < 300; tick += 1) {
@@ -42,6 +35,117 @@ test('a poison Mage impact poisons the player and lowers health', () => {
     && effect.presentationOwner === 'pre-world-queue'))
   assert.ok(state.world.enemyEvents.some(event => event.sound === 'poisoned' && event.pitch === 1.5))
   assertWireRoundTrip(state)
+})
+
+test('Faculty damage carries a separate mana lane that shield interception cancels', () => {
+  for (const shield of [0, 100]) {
+    const initial = mageContactState('FLAG_CASTFIRE')
+    const source = { ...initial, secondaryAbilities: { ...initial.secondaryAbilities, players: {
+      ...initial.secondaryAbilities.players,
+      'local-player': { ...createNativeSecondaryPlayerState(), magicShieldAbsorb: shield, magicShieldMaximum: shield },
+    } } }
+    const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
+      actorId: 1, physicalDamage: 0, magicDamage: 10, playerId: 'local-player', eventId: 1,
+      coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, manaDamageMaximumFraction: .15,
+    }], 1, undefined)
+    const before = source.playerEntities.progressions[0]!
+    const after = result.playerEntities.progressions[0]!
+    assert.equal(after.currentMana, shield > 0 ? before.currentMana : Math.fround(before.currentMana - before.maximumMana * .15))
+    assert.equal(after.currentHealth, shield > 0 ? before.currentHealth : before.currentHealth - 10)
+  }
+})
+
+test('deflect faces a boss projectile contact and cannot reflect damage into its distant caster', () => {
+  const initial = mageContactState('FLAG_CASTFIRE')
+  const source = { ...initial,
+    secondaryAbilities: { ...initial.secondaryAbilities, rng: createNativeRng(121) },
+    playerEntities: { ...initial.playerEntities,
+      skillBooks: initial.playerEntities.skillBooks.map(book => grantPlayerSkillRanks(book, 68, 1)),
+      skillRuntimes: initial.playerEntities.skillRuntimes.map(runtime => ({ ...runtime, concentrationSkillIdA: 68 })),
+    },
+  }
+  const before = source.playerEntities.progressions[0]!
+  const damage = {
+    actorId: 1, physicalDamage: 10, magicDamage: 10, playerId: 'local-player', eventId: 1,
+    coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, manaDamageMaximumFraction: .15,
+    source: { position: { x: 520, y: 500 }, collisionRadius: 20, reflectableActorId: null },
+  }
+  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [damage], 1, undefined)
+  assert.ok(result.deflectPitchesByEventId.has(1))
+  assert.equal(result.resolvedPlayers['local-player']!.headingIndex, 6, 'contact is east, caster is west')
+  assert.deepEqual(result.reflectedEnemyDamage, [])
+  assert.equal(result.playerEntities.progressions[0]!.currentHealth, before.currentHealth)
+  assert.equal(result.playerEntities.progressions[0]!.currentMana, before.currentMana)
+})
+
+test('Tragic Circle drains mana through its direct path and keeps its slow separate from cold', () => {
+  const source = mageContactState('FLAG_CASTFIRE')
+  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
+    actorId: 1, physicalDamage: 0, magicDamage: 0, playerId: 'local-player', eventId: 1,
+    coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, tragicCircle: true,
+  }], 1, undefined)
+  const before = source.playerEntities.progressions[0]!
+  const after = result.playerEntities.progressions[0]!
+  assert.equal(after.currentHealth, before.currentHealth)
+  assert.ok(after.currentMana < before.currentMana)
+  assert.equal(after.coldSlowTicksRemaining, 0)
+  assert.equal(after.circleSlowTicksRemaining, 20)
+  assert.equal(playerMovementScale(after), .5)
+  let combat = after
+  for (let tick = 0; tick < 20; tick += 1) combat = stepPlayerCombatTick(combat).combat
+  assert.equal(playerMovementScale(combat), 1)
+  assert.equal(combat.circleSlowTicksRemaining, 0)
+})
+
+test('boss screen flashes survive the host snapshot and strict network frame', () => {
+  const initial = mageContactState('FLAG_CASTFIRE')
+  if (initial.world.kind !== 'boneyard') throw new Error('Boneyard required')
+  const flash = { alpha: 1, red: 0, green: 0, blue: 0, decayPerTick: Math.fround(.1), pointAttenuated: false }
+  const state = { ...initial, world: { ...initial.world, enemyEvents: [{
+    actorId: 1, eventId: 1, tick: initial.tick, type: 'enemy-screen-flash' as const,
+    sourcePosition: { x: 0, y: 0 }, screenFlash: flash,
+  }] } }
+  const snapshot = createGameSnapshot(state, null)
+  if (snapshot.world.kind !== 'boneyard') throw new Error('Boneyard required')
+  assert.deepEqual(snapshot.world.enemyEvents[0]!.screenFlash, flash)
+  assertWireRoundTrip(state)
+})
+
+test('active and queued Faculty voices survive the host snapshot and strict frame', () => {
+  const initial = mageContactState('FLAG_CASTFIRE')
+  if (initial.world.kind !== 'boneyard') throw new Error('Boneyard required')
+  const bossNarration = enqueueNativeBossNarration(createNativeBossNarration(),
+    ['faculty-join-us-1', 'faculty-join-us-1-female'], initial.tick, false)
+  const state = { ...initial, world: { ...initial.world,
+    enemies: { ...initial.world.enemies, bossNarration },
+  } }
+  const snapshot = createGameSnapshot(state, null)
+  if (snapshot.world.kind !== 'boneyard') throw new Error('Boneyard required')
+  assert.deepEqual(snapshot.world.bossNarration, bossNarration)
+  assertWireRoundTrip(state)
+})
+
+test('Crow blindness uses post-contact health and the remaining shield, survives the wire, and decays on the player clock', () => {
+  for (const [health, shield, expectedBlind] of [[20, 0, false], [20.01, 0, true], [50, 100, false], [50, 2, true]] as const) {
+    const initial = mageContactState('FLAG_CASTFIRE')
+    const source = { ...initial, playerEntities: { ...initial.playerEntities,
+      progressions: initial.playerEntities.progressions.map((value) => ({ ...value, currentHealth: health })),
+    }, secondaryAbilities: { ...initial.secondaryAbilities, players: {
+      ...initial.secondaryAbilities.players,
+      'local-player': { ...createNativeSecondaryPlayerState(), magicShieldAbsorb: shield, magicShieldMaximum: shield },
+    } } }
+    const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
+      actorId: 1, physicalDamage: 10, magicDamage: 0, playerId: 'local-player', eventId: 1,
+      coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, crowBlindChancePercent: 100,
+    }], 1, undefined)
+    const duration = result.playerEntities.lightings[0]!.blindnessTicksRemaining
+    assert.equal(duration > 0, expectedBlind)
+    assert.equal(result.playerDamageSoundEvents.some(({ sound }) => sound === 'blind'), expectedBlind)
+    assertWireRoundTrip(stepGameSimulationTick({ ...source, playerEntities: result.playerEntities, world: result.world,
+      secondaryAbilities: result.secondaryAbilities }, {}))
+    const next = stepPlayerEntityOverlayLightingTick(result.playerEntities)
+    assert.equal(next.lightings[0]!.blindnessTicksRemaining, Math.max(0, duration - 1))
+  }
 })
 
 test('a poison Mage impact bypasses Harden and applies poison', () => {
@@ -454,6 +558,30 @@ test('a guided missile still applies its payload after its Mage is removed', () 
   assert.equal(getPlayerProgression(state).poisonTicksRemaining, 1_000)
   assert.ok(getPlayerProgression(state).currentHealth < 50)
   assertWireRoundTrip(state)
+})
+
+test('Tragic Circle reaches a newly assembled Golem without changing player mana or enemy modifiers', () => {
+  let source = mageContactState('FLAG_CASTFIRE')
+  const granted = grantPlayerEntitySkillRanks(source.playerEntities, 'local-player', 45, 1, source.gameRng)
+  source = { ...source, playerEntities: granted.store, gameRng: granted.rng }
+  source = bindGameSimulationPlayerSkillQuickbar(source, 'local-player', 45, 0)!
+  source = stepGameSimulationTick(source, { 'local-player': {
+    aim: { x: 550, y: 500 }, cast: { primary: false, quickbar: 0 }, movement: { x: 0, y: 0 },
+    viewportWidth: 1600, viewportHeight: 900,
+  } })
+  const golem = source.secondaryAbilities.actors.find(actor => actor.kind === 'golem')
+  assert.ok(golem?.golem)
+  assert.ok(golem.ageTicks < 400)
+  const contact = { actorId: 1, physicalDamage: 0, magicDamage: 0, playerId: `golem:${golem.id}`,
+    eventId: 1, coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, tragicCircle: true }
+  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [contact], source.tick + 1, undefined)
+  const affected = result.secondaryAbilities.actors.find(actor => actor.id === golem.id)!
+  assert.equal(affected.golem!.circleSlowTicks, 20)
+  assert.equal(affected.golem!.currentHealth, golem.golem.currentHealth)
+  assert.deepEqual(result.playerEntities, source.playerEntities)
+  assert.deepEqual(result.secondaryAbilities.targetEffects, source.secondaryAbilities.targetEffects)
+  assert.deepEqual(result.reflectedEnemyDamage, [])
+  assertWireRoundTrip({ ...source, secondaryAbilities: result.secondaryAbilities })
 })
 
 test('the shared contact receiver applies both channels to Golems and reflects physical damage only', () => {

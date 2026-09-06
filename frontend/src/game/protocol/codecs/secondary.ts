@@ -198,7 +198,7 @@ function nativeSecondaryScreenFlash(
   }
 }
 
-function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPlayerState {
+export function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPlayerState {
   const source = record(value, field)
   let castAction: NativeSecondaryPlayerState['castAction'] = null
   if (source.castAction !== null) {
@@ -316,7 +316,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
   }
 }
 
-function nativeSecondaryTargetEffectState(
+export function nativeSecondaryTargetEffectState(
   value: unknown,
   field: string,
 ): NativeSecondaryTargetEffectState {
@@ -472,7 +472,7 @@ function nativeSecondarySteamedEffect(
   }
 }
 
-function uniqueAscendingIds(
+export function uniqueAscendingIds(
   values: readonly Readonly<{ id?: number; eventId?: number }>[],
   field: string,
 ): void {

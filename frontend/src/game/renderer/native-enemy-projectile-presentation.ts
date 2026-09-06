@@ -1,9 +1,18 @@
-import { nativeRandomFloatFromSemanticWord } from '../core-kernels/native-random-domain.ts'
-import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
-import { nativePoisonPoolAlpha } from '../core-kernels/native-poison-pool.ts'
-import type { NativeEnemySampleAtlas } from './native-enemy-animation.ts'
+import {
+  nativePoisonPoolAlpha,
+} from '../core-kernels/native-poison-pool.ts'
+import {
+  nativeRandomFloatFromSemanticWord,
+} from '../core-kernels/native-random-domain.ts'
+import type {
+  BoneyardEnemyProjectileSnapshot,
+} from '../protocol/game-state.ts'
+import type {
+  NativeEnemySampleAtlas,
+} from './native-enemy-animation.ts'
 
 export interface NativeEnemyProjectileLayer {
+  readonly textureColor?: 'diffuse'
   readonly alpha: number
   readonly atlas: NativeEnemySampleAtlas
   readonly blendMode: 'add' | 'normal'
@@ -62,7 +71,7 @@ export function nativeEnemyProjectilePlan(
         + deterministicUnit(projectile.id, fixedTick, 0) * 0.5 * heightScale
       const overlay = payload === 'fire'
         ? nativeEnemyProjectileLayer('BadGuys', 255 + Math.floor(fixedTick / 5) % 12, 'arrow-fire-overlay', {
-            alpha,
+            alpha: Math.fround(Math.fround(alpha) * Math.fround(alpha)),
             blendMode: 'add',
             offset: { x: 0, y: projectile.verticalOffset },
             rotationRadians: visualHeadingRadians + Math.PI,
@@ -79,7 +88,7 @@ export function nativeEnemyProjectilePlan(
     }
     case 'firebolt': {
       requirePayload(projectile, ['fire'])
-      const alpha = remainingLifetimeAlpha(projectile, age)
+      const alpha = nativeEnemyProjectileLifetimeAlpha(projectile, age)
       const entry = 255 + age % 12
       return plan(projectile, [
         nativeEnemyProjectileLayer('BadGuys', 15, 'firebolt-orange-glow', {
@@ -100,7 +109,7 @@ export function nativeEnemyProjectilePlan(
     }
     case 'guided-missile': {
       const payload = requirePayload(projectile, ['cold', 'poison'])
-      const lifetimeAlpha = remainingLifetimeAlpha(projectile, age)
+      const lifetimeAlpha = nativeEnemyProjectileLifetimeAlpha(projectile, age)
       const phase = projectile.visualPhaseDeg
       const mainEntry = payload === 'cold' ? 110 : 111
       const auraTint = payload === 'cold' ? 0x4080ff : 0x40ff40
@@ -239,7 +248,7 @@ export function nativeEnemyProjectileLayer(
   }
 }
 
-function remainingLifetimeAlpha(
+export function nativeEnemyProjectileLifetimeAlpha(
   projectile: BoneyardEnemyProjectileSnapshot,
   age: number,
 ): number {

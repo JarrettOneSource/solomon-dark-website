@@ -1,95 +1,31 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
-import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { nativeDemonArticulationRoot } from '../core-kernels/boneyard-demon-articulation.ts'
-import {
-  NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
-  NATIVE_BADGUY_GAIT_PHASE_PERIOD,
-  NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
-  NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
-  NATIVE_SKELETON_HEAD_FACING_OFFSETS,
-  NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
-  NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
-  advanceNativeEnemyLocomotionPhase,
-  nativeSkeletonBodyGaitPose,
-} from '../core-kernels/boneyard-skeleton-family-animation.ts'
+import { NATIVE_ARROW_POISON_DURATION_SECONDS, NATIVE_MAGE_COLD_SLOW_TICKS, NATIVE_WRAITH_DAZZLE_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import { NATIVE_MAGE_BODY_POSE_COUNT, NATIVE_MAGE_FACING_COUNT, nativeMageBodyAttachment, nativeMageBodyPose, nativeMageFacingBucket, nativeMageLightningDurationTicks } from '../core-kernels/boneyard-mage-lightning.ts'
+import { NATIVE_BADGUY_GAIT_PHASE_DIVISOR, NATIVE_BADGUY_GAIT_PHASE_PERIOD, NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR, NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD, NATIVE_SKELETON_HEAD_FACING_OFFSETS, NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT, NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER, advanceNativeEnemyLocomotionPhase, nativeSkeletonBodyGaitPose } from '../core-kernels/boneyard-skeleton-family-animation.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
-import {
-  advanceNativeRngWords,
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeInteger,
-  drawNativeSign,
-} from '../core-kernels/native-rng.ts'
-import type { NativeRngState } from '../core-kernels/native-rng.ts'
-import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
-import {
-  nativePortalChildPosition,
-  nativePortalProgram,
-  nativePortalRecipe,
-} from '../core-kernels/native-survival-portal.ts'
-import type {
-  NativeSecondaryMovementModifierKind,
-  NativeSecondaryTargetEffectPatch,
-  NativeSecondaryTargetEffectState,
-} from '../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { buildNativeEnemySteering } from '../core-kernels/native-enemy-pathfinding.ts'
-import {
-  NATIVE_ARROW_POISON_DURATION_SECONDS,
-  NATIVE_MAGE_COLD_SLOW_TICKS,
-  NATIVE_WRAITH_DAZZLE_TICKS,
-} from '../core-kernels/boneyard-enemy-modifiers.ts'
-import {
-  NATIVE_MAGE_BODY_POSE_COUNT,
-  NATIVE_MAGE_FACING_COUNT,
-  nativeMageBodyAttachment,
-  nativeMageBodyPose,
-  nativeMageFacingBucket,
-  nativeMageLightningDurationTicks,
-} from '../core-kernels/boneyard-mage-lightning.ts'
-import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
-import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
-import {
-  BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
-  NATIVE_ARCHER_ACTION_PROGRAM,
-  NATIVE_DEMON_BOMB_ACTION_PROGRAM,
-  NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
-  NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
-  NATIVE_IMP_CONSTRUCTION_MAXIMUM,
-  NATIVE_IMP_CONTACT_BASE_RADIUS,
-  NATIVE_IMP_CONTACT_RADIUS_SCALE,
-  NATIVE_IMP_SPLIT_CHILD_COUNT,
-  NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
-  NATIVE_MAGE_ACTION_PROGRAMS,
-  NATIVE_SKELETON_ACTION_PROGRAMS,
-  NATIVE_SKELETON_CLAW_MARKERS,
-  NATIVE_SKELETON_WEAPON_MARKERS,
-} from './enemies/programs.ts'
-import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyMovementRequest,
-  BoneyardEnemySpellSegmentRequest,
-  BoneyardEnemyStore,
-  BoneyardEnemyStoreStepResult,
-  BoneyardEnemyTargets,
-} from './enemies/model.ts'
-import {
-  boneyardEnemyLiveCount,
-  createBoneyardEnemyStore,
-  positionBoneyardEnemy,
-  stepBoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
-import {
-  applyBoneyardStaffDisable,
-  damageBoneyardEnemy,
-  setBoneyardEnemyHurricaneContactCooldown,
-} from './enemies/damage.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { advanceNativeRngWords, createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from '../core-kernels/native-rng.ts'
+import type { NativeSecondaryMovementModifierKind, NativeSecondaryTargetEffectPatch, NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import { nativeHeartmongerRecipe } from '../core-kernels/native-survival-heartmonger.ts'
+import { nativePortalChildPosition, nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
+import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skeleton-bosses.ts'
+import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
+import { projectBoneyardCrows } from '../host/project-boneyard-crows.ts'
+import { boneyardEnemyLiveCount, createBoneyardEnemyStore, positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import { applyBoneyardStaffDisable, breakBoneyardSkeletonPike, damageBoneyardEnemy, setBoneyardEnemyHurricaneContactCooldown } from './enemies/damage.ts'
 import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyMovementRequest, BoneyardEnemySpellSegmentRequest, BoneyardEnemyStore, BoneyardEnemyStoreStepResult, BoneyardEnemyTargets } from './enemies/model.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 import { nativeSecondaryActorSpeedScale } from './enemies/movement.ts'
-
+import { BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE, NATIVE_ARCHER_ACTION_PROGRAM, NATIVE_DEMON_BOMB_ACTION_PROGRAM, NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK, NATIVE_DEMON_RAW_FIRE_BURST_TICKS, NATIVE_IMP_CONSTRUCTION_MAXIMUM, NATIVE_IMP_CONTACT_BASE_RADIUS, NATIVE_IMP_CONTACT_RADIUS_SCALE, NATIVE_IMP_SPLIT_CHILD_COUNT, NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM, NATIVE_MAGE_ACTION_PROGRAMS, NATIVE_SKELETON_ACTION_PROGRAMS, NATIVE_SKELETON_CLAW_MARKERS, NATIVE_SKELETON_WEAPON_MARKERS } from './enemies/programs.ts'
 const TOKENS = Object.keys(BONEYARD_WAVE_ENEMY_TYPES).filter((token) => (
   token !== 'PORTAL' && token !== 'COCOON'
 )) as Exclude<BoneyardWaveEnemyToken, 'PORTAL' | 'COCOON'>[]
@@ -375,7 +311,7 @@ test('Wizard ouch consumes delay before cue and scales the absolute deadline', (
   assert.equal(nativeWizardOuchCooldownReady(141, 140), true)
 })
 
-test('materialization gives all nine hostile families stable actor and event identities', () => {
+test('materialization gives all registered families stable actor and event identities', () => {
   const lootSeedWrites: number[] = []
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('families'), {
     projectileWorldBlocked: NO_WORLD_CONTACT,
@@ -395,16 +331,17 @@ test('materialization gives all nine hostile families stable actor and event ide
     tick: 0,
   })
 
-  assert.deepEqual(result.spawnedActorIds, [1, 2, 3, 4, 5, 6, 7, 8, 9])
-  assert.deepEqual(result.store.actors.map((actor) => actor.sourceSpawnIntentId), [
-    41, 42, 43, 44, 45, 46, 47, 48, 49,
-  ])
+  assert.deepEqual(result.spawnedActorIds, TOKENS.map((_, i) => i + 1))
+  assert.deepEqual(result.store.actors.map((actor) => actor.sourceSpawnIntentId), TOKENS.map((_, i) => i + 41))
   assert.deepEqual(result.store.actors.map((actor) => actor.config.enemyToken), TOKENS)
-  assert.deepEqual(lootSeedWrites, [1_000, 1_001, 1_002, 1_003, 1_004, 1_005, 1_006, 1_007, 1_008])
+  assert.deepEqual(lootSeedWrites, TOKENS.map((_, i) => i + 1_000))
   assert.deepEqual(result.store.actors.map(({ lootSeed }) => lootSeed), lootSeedWrites)
   assert.deepEqual(result.store.actors.map((actor) => actor.brain.family), [
     'coffin',
     'demon',
+    'demon-skull',
+    'faculty',
+    'heartmonger',
     'imp',
     'skeleton',
     'archer',
@@ -413,11 +350,11 @@ test('materialization gives all nine hostile families stable actor and event ide
     'wraith',
     'zombie',
   ])
-  assert.deepEqual(result.events.map((event) => event.eventId), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+  assert.deepEqual(result.events.map((event) => event.eventId), TOKENS.map((_, i) => i + 1))
   assert.ok(result.events.every((event) => event.type === 'enemy-spawned'))
-  assert.equal(result.store.nextActorId, 10)
-  assert.equal(result.store.nextEventId, 10)
-  assert.equal(boneyardEnemyLiveCount(result.store), 9)
+  assert.equal(result.store.nextActorId, TOKENS.length + 1)
+  assert.equal(result.store.nextEventId, TOKENS.length + 1)
+  assert.equal(boneyardEnemyLiveCount(result.store), TOKENS.length)
   const skeleton = result.store.actors.find((actor) => actor.config.enemyToken === 'SKELETON')
   assert.deepEqual(skeleton?.config.flags, ['FLAG_FAST'])
   assert.equal(Object.isFrozen(skeleton?.config.flags), true)
@@ -428,7 +365,7 @@ test('materialization gives all nine hostile families stable actor and event ide
   )
   assert.deepEqual(
     result.store.actors.map((actor) => actor.lightRegistration),
-    [0, 1, 2, 3, 4, 5, 6, 7, 8].map((registrationOrdinal) => ({
+    TOKENS.map((_, registrationOrdinal) => ({
       managerLane: 'actor',
       registrationOrdinal,
     })),
@@ -3265,13 +3202,19 @@ test('GuidedMissile resolves player contact before terrain on the same native ti
   assert.equal(result.events.filter(event => event.type === 'projectile-retired').length, 1)
 })
 
-test('Firebolt trail and impact VFX outlive the retired projectile on native clocks', () => {
+test('Firebolt owns its trail painter and lifetime while its impact continues independently', () => {
   const spawned = forcedMageAttack('firebolt-vfx', ['FLAG_CASTFIRE'])
   const projectile = spawned.store.projectiles[0]!
   assert.equal(projectile.kind, 'firebolt')
   const expectedImpactRng = advanceNativeRngWords(spawned.store.steeringRngState, 9)
 
   const trailed = step({ ...spawned.store, actors: [] }, 2, { player: livingTarget(150, 0) })
+  const privateTrail = trailed.store.projectileEffects.find(effect => effect.kind === 'firebolt-trail')!
+  assert.deepEqual(privateTrail.painterRegistration, projectile.painterRegistration)
+  assert.equal(privateTrail.ownerProjectileId, projectile.id)
+  assert.equal(privateTrail.blendMode, 'add')
+  const moving = step(trailed.store, 3, { player: livingTarget(150, 0) })
+  assert.equal(moving.store.projectileEffects.find(effect => effect.id === privateTrail.id)?.ageTicks, 1)
   let result = stepBoneyardEnemyStore(trailed.store, {
     projectileWorldBlocked: query => query.kind === 'line',
     players: { player: livingTarget(28, 0) },
@@ -3282,7 +3225,6 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
   assert.equal(result.store.projectiles.length, 0)
   assert.deepEqual(result.store.steeringRngState, expectedImpactRng)
   assert.deepEqual(result.store.projectileEffects.map(({ entry, kind }) => ({ entry, kind })), [
-    { entry: 256, kind: 'firebolt-trail' },
     { entry: 251, kind: 'fire-burst' },
   ])
   const burst = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')!
@@ -3296,12 +3238,10 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
   result = step(result.store, 4, { player: livingTarget(150, 0) })
   const trail = result.store.projectileEffects.find(({ kind }) => kind === 'firebolt-trail')
   const impact = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')
-  assert.ok(trail)
+  assert.equal(trail, undefined)
   assert.ok(impact)
   assert.equal(impact.entry, 251)
   assert.equal(impact.ageTicks, 1)
-  assert.equal(trail.ageTicks, 2)
-  assert.ok(trail.alpha > 0.6 && trail.alpha < 0.7)
 
   result = step(result.store, 7, { player: livingTarget(150, 0) })
   assert.equal(
@@ -3310,7 +3250,7 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
   )
   assert.equal(
     result.store.projectileEffects.some(({ kind }) => kind === 'firebolt-trail'),
-    true,
+    false,
   )
 
   result = step(result.store, 18, { player: livingTarget(150, 0) })
@@ -3963,12 +3903,13 @@ test('retail wave 35 and 42 recursive deaths obey native Imp caps and protocol c
   }
 })
 
-test('lethal damage rewards and terminal outputs once, then hands off to effect actors', () => {
+test('immediate and short-delay deaths reward once and hand off to effect actors', () => {
+  const deathTokens = TOKENS.filter(token => token !== 'DEMONSKULL')
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('death'), {
     projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
-    resolveSpawnIntents: () => TOKENS.map((token, index) => intent(
+    resolveSpawnIntents: () => deathTokens.map((token, index) => intent(
       token,
       index + 1,
       { x: index * 10, y: 0 },
@@ -3998,30 +3939,31 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
     assert.equal(damaged.killed, true)
     store = damaged.store
   }
-  assert.equal(boneyardEnemyLiveCount(store), 9)
-  assert.deepEqual(store.actors.map((actor) => actor.deathEpoch), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+  assert.equal(boneyardEnemyLiveCount(store), deathTokens.length)
+  assert.deepEqual(store.actors.map((actor) => actor.deathEpoch), deathTokens.map((_, i) => i + 1))
   assert.ok(store.actors.every((actor) => actor.lastDamageTick === 0))
+  const facultyId = store.actors.find(({ config }) => config.enemyToken === 'DIREFACULTY')!.id
   const demonId = store.actors.find(({ config }) => config.enemyToken === 'DEMON')!.id
 
   result = step(store, 1, FAR_PLAYERS)
-  assert.equal(result.rewards.length, 8)
+  assert.equal(result.rewards.length, deathTokens.length - 2)
   assert.deepEqual(result.rewards.map((reward) => reward.experience), [
-    85, Math.fround(0.85), 4.25, 4.25, 4.25, 12.75, Math.fround(1.7), 89.25,
+    85, Math.fround(6.8), Math.fround(0.85), 4.25, 4.25, 4.25, 12.75, Math.fround(1.7), 89.25,
   ])
   assert.deepEqual(result.rewards.map(({ actorId, lootSource }) => ({
     actorId,
     lootSource,
-  })), expectedLootSources.filter(({ actorId }) => actorId !== demonId))
-  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 8)
-  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 8)
+  })), expectedLootSources.filter(({ actorId }) => actorId !== demonId && actorId !== facultyId))
+  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, deathTokens.length - 2)
+  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, deathTokens.length - 2)
   assert.deepEqual(result.store.projectiles.map((projectile) => [
     projectile.id,
     projectile.kind,
     projectile.nativeTypeId,
-  ]), [[1, 'poison-pool', 0x806]])
+  ]), [[3, 'poison-pool', 0x806]])
   assert.equal(result.store.projectiles[0]!.lightRegistration, null)
-  assert.equal(boneyardEnemyLiveCount(result.store), 1)
-  assert.equal(result.retired.length, 8)
+  assert.equal(boneyardEnemyLiveCount(result.store), 2)
+  assert.equal(result.retired.length, deathTokens.length - 2)
   assert.ok(result.store.deathEffects.length > 8)
 
   result = step(result.store, 2, FAR_PLAYERS)
@@ -4039,7 +3981,7 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
       .map(({ sound }) => sound),
     ['flash', 'demon-die'],
   )
-  assert.equal(boneyardEnemyLiveCount(result.store), 1)
+  assert.equal(boneyardEnemyLiveCount(result.store), 2)
 
   result = step(result.store, 100, FAR_PLAYERS)
   assert.deepEqual(result.rewards.map(({ actorId, experience, lootSource }) => ({
@@ -4053,6 +3995,12 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 1)
   assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 1)
   assert.deepEqual(result.retired.map(({ actorId }) => actorId), [demonId])
+  assert.equal(boneyardEnemyLiveCount(result.store), 1)
+
+  result = step(result.store, 250, FAR_PLAYERS)
+  assert.deepEqual(result.rewards.map(({ actorId, experience }) => ({ actorId, experience })),
+    [{ actorId: facultyId, experience: Math.fround(6.8) }])
+  assert.deepEqual(result.retired.map(({ actorId }) => actorId), [facultyId])
   assert.equal(boneyardEnemyLiveCount(result.store), 0)
 
   result = step(result.store, 3_001, FAR_PLAYERS)
@@ -4133,6 +4081,29 @@ test('family Unbind stars use the exact primary-only clocks', () => {
   )
 })
 
+test('every Unbind family retains magic provenance only from its lethal contact', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'IMP', 'ZOMBIE',
+    'WRAITH', 'COFFIN', 'HEARTMONGER', 'DIREFACULTY'] as const) {
+    for (const hasMagicDamage of [false, true]) {
+      const initial = spawnOne(`lethal-magic-${token}`, token, { x: 12, y: 34 }, FAR_PLAYERS).store
+      const actor = initial.actors[0]!
+      const first = damageBoneyardEnemy(initial, { actorId: actor.id, amount: actor.currentHealth / 4,
+        hasMagicDamage: !hasMagicDamage, sourcePlayerId: 'player', tick: 0 }).store
+      const lethal = damageBoneyardEnemy(first, { actorId: actor.id, amount: actor.currentHealth,
+        hasMagicDamage, sourcePlayerId: 'player', tick: 0 }).store
+      assert.equal(lethal.actors[0]!.lethalMagicDamage, hasMagicDamage, `${token} lethal contact`)
+      let result = step(lethal, 1, FAR_PLAYERS)
+      for (let tick = 2; tick <= 250 && !result.store.deathEffects.some(effect => effect.kind === 'unbind'); tick += 1) {
+        result = step(result.store, tick, FAR_PLAYERS)
+      }
+      const star = result.store.deathEffects.find(effect => effect.kind === 'unbind')
+      assert.ok(star, token)
+      assert.equal(star.alpha, hasMagicDamage ? 1.25 : token === 'IMP' || token === 'WRAITH' ? 1 : .75, token)
+      assert.equal(star.opacityTimer, star.alpha)
+    }
+  }
+})
+
 test('Wraith dissolve keeps the shared additive BadGuys-20 FadeScale core', () => {
   const result = killOneAndStep('wraith-fade-scale-core', 'WRAITH')
   const core = result.store.deathEffects.find(
@@ -4157,7 +4128,7 @@ test('every survival family assembles its native terminal animation classes', ()
     const unbind = skeletonFamily.store.deathEffects.find(
       ({ role }) => role === 'death-unbind-star',
     )!
-    assert.equal(unbind.presentationOwner, 'direct-post-world')
+    assert.equal(unbind.presentationOwner, 'late-world-overlay')
     assert.equal(unbind.painterRegistration, null)
   }
 
@@ -4384,7 +4355,7 @@ test('Demon death retains its body flames and delayed Anim_FireBurst choreograph
     result.store.deathEffects.find(
       ({ role }) => role === 'demon-death-fire-burst-frame',
     )?.entry,
-    251,
+    252,
   )
   assert.equal(
     result.store.deathEffects.find(
@@ -5174,3 +5145,112 @@ function portalIntent(
     reachabilityRadius: 25,
   }
 }
+
+test('Foulshaft circles its target while drawing the bow and fires the authored fire payload', () => {
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('foulshaft-strafe'), {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [{
+      ...intent('SKELETONARCHER', 1, { x: 400, y: 0 }),
+      authoredRecipe: nativeSkeletonBossRecipe(
+        'bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb', 'Foulshaft',
+      ),
+    }],
+    tick: 0,
+  })
+  const origin = { ...result.store.actors[0]!.position }
+  for (let tick = 1; tick <= 20; tick += 1) result = step(result.store, tick, FAR_PLAYERS)
+  const actor = result.store.actors[0]!
+  assert.ok(Math.abs(actor.position.y - origin.y) > 0.01)
+  assert.ok(Math.abs(Math.hypot(actor.position.x - 500, actor.position.y) - 100) < 1)
+  assert.equal(actor.brain.family, 'archer')
+  assert.equal(actor.brain.phase, 'attack')
+  let fireArrowObserved = false
+  for (let tick = 21; tick <= 90; tick += 1) {
+    result = step(result.store, tick, FAR_PLAYERS)
+    fireArrowObserved ||= result.store.projectiles.some(({ kind, payload, damage, secondaryDamage }) => (
+      kind === 'arrow' && payload === 'fire' && damage === 3 && secondaryDamage === 3
+    ))
+  }
+  assert.equal(fireArrowObserved, true)
+})
+
+for (const [name, fragmentPair] of [['Ironmaw', [96, 97]], ['Foulshaft', [98, 99]]] as const) {
+  test(`${name} releases its native headgear fragment and linked miniboss reward`, () => {
+    const token = name === 'Ironmaw' ? 'SKELETON' : 'SKELETONARCHER'
+    const source = stepBoneyardEnemyStore(createBoneyardEnemyStore(name), {
+      projectileWorldBlocked: NO_WORLD_CONTACT,
+      players: FAR_PLAYERS,
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [{
+        ...intent(token, 1, { x: 20, y: 30 }),
+        authoredRecipe: nativeSkeletonBossRecipe(
+          'bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb', name,
+        ),
+      }],
+      tick: 0,
+    })
+    const killed = damageBoneyardEnemy(source.store, {
+      actorId: 1,
+      amount: 10_000,
+      sourcePlayerId: 'player',
+      tick: 0,
+    })
+    const death = step(killed.store, 1, FAR_PLAYERS)
+    const helmet = death.store.deathEffects.find(({ role }) => role === 'skeleton-headgear-fragment')
+    assert.ok(helmet)
+    assert.ok(fragmentPair.some((entry) => entry === helmet.entry))
+    assert.equal(death.rewards[0]?.lootSource.onDeathProgram, 'miniboss-die')
+  })
+}
+
+
+test('Heartmonger owns five Crows, summons at its native deadline, and releases six birds on death', () => {
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('heartmonger'), {
+    projectileWorldBlocked: NO_WORLD_CONTACT, players: FAR_PLAYERS, resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [{ ...intent('HEARTMONGER', 1, { x: 20, y: 30 }),
+      authoredRecipe: nativeHeartmongerRecipe('bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb') }], tick: 0,
+  })
+  assert.equal(result.store.actors[0]!.currentHealth, 2000)
+  for (let tick = 1; tick <= 201; tick += 1) result = step(result.store, tick, FAR_PLAYERS)
+  assert.equal(result.store.actors.length, 1)
+  assert.equal(projectBoneyardCrows(result.store).length, 5)
+  const saved = structuredClone(result.store)
+  result = step(result.store, 202, FAR_PLAYERS)
+  assert.deepEqual(result, step(saved, 202, FAR_PLAYERS))
+  assert.ok(result.store.actors.length > 1)
+  const actor = result.store.actors.find(({ config }) => config.enemyToken === 'HEARTMONGER')!
+  const killed = damageBoneyardEnemy(result.store, { actorId: actor.id, amount: actor.currentHealth,
+    sourcePlayerId: 'player', tick: 202 })
+  const retired = step(killed.store, 203, FAR_PLAYERS)
+  assert.equal(retired.store.detachedCrows.length, 6)
+  assert.deepEqual(retired.store.bossSpells.map(({ kind }) => kind), ['heartmonger-flicker', 'heartmonger-soul'])
+  assert.ok(retired.events.some(({ stream }) => stream === 'heart-break'))
+  assert.ok(retired.events.some(({ sound }) => sound === 'chain-clank-1'))
+  assert.ok(retired.events.some(({ sound }) => sound === 'chain-clank-2'))
+  const bones = retired.store.deathEffects.filter(({ role }) => role === 'heartmonger-bone')
+  assert.equal(bones.length, 30)
+  assert.equal(retired.store.deathEffects.filter(({ role }) => role === 'heartmonger-splinter').length, 20)
+  assert.equal(retired.store.deathEffects.filter(({ role }) => role === 'heartmonger-fragment').length, 7)
+  const unbind = retired.store.deathEffects.find(({ role }) => role === 'death-unbind-star')!
+  assert.equal(unbind.scale, 3)
+  assert.equal(unbind.alphaLossPerTick, Math.fround(.0225))
+  assert.equal(retired.rewards[0]?.experience, 850)
+  assert.equal(retired.store.actors.some(({ id }) => id === actor.id), false)
+})
+
+
+test('breaking a Pike updates the canonical equipment selector and cannot break it twice', () => {
+  const initial = spawnOne('break-pike', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS, ['FLAG_PIKE'])
+  const actor = initial.store.actors[0]!
+  const broken = breakBoneyardSkeletonPike(initial.store, actor.id)
+  assert.equal(broken.broke, true)
+  const configured = broken.store.actors[0]!.config
+  assert.equal(configured.enemyToken, 'SKELETON')
+  if (configured.enemyToken !== 'SKELETON') throw new Error('expected Skeleton')
+  assert.equal(configured.family.weapon, 'claw')
+  assert.equal(configured.flags.includes('FLAG_PIKE'), false)
+  assert.equal(breakBoneyardSkeletonPike(broken.store, actor.id).broke, false)
+})

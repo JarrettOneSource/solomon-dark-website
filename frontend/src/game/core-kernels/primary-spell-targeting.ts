@@ -36,11 +36,14 @@ export interface PrimarySpellTarget {
   bodyRadius: number
   cellBindingOrder: number
   headingDeg?: number
+  /** Direct position stores can leave a native Puppet in its original grid cell. */
+  gridPosition?: Readonly<Vector2>
   id: string
   kind: PrimarySpellTargetKind
   nativePriority: number
   pendingRemove: boolean
   position: Vector2
+  queryLane: 'grid' | 'transient'
   registrationOrder: number
 }
 
@@ -66,10 +69,10 @@ export interface NativePrimaryConeQuery {
   targets: readonly PrimarySpellTarget[]
 }
 
-export interface NativePrimaryPolygonQuery {
+export interface NativePrimaryPolygonQuery<T extends PrimarySpellTarget = PrimarySpellTarget> {
   actorMask: number
   polygon: readonly Readonly<Vector2>[]
-  targets: readonly PrimarySpellTarget[]
+  targets: readonly T[]
 }
 
 export interface NativePrimaryWorldBounds {
@@ -328,9 +331,9 @@ export function nativePrimaryConeTargets(
   })
 }
 
-export function nativePrimaryPolygonTargets(
-  query: NativePrimaryPolygonQuery,
-): PrimarySpellTarget[] {
+export function nativePrimaryPolygonTargets<T extends PrimarySpellTarget>(
+  query: NativePrimaryPolygonQuery<T>,
+): T[] {
   if (query.polygon.length < 3) return []
   let minimumX = Number.POSITIVE_INFINITY
   let minimumY = Number.POSITIVE_INFINITY
@@ -562,9 +565,9 @@ function validateMissileFanIndex(quantity: number, index: number): void {
   }
 }
 
-function nativeRegistrationOrder(
-  targets: readonly PrimarySpellTarget[],
-): PrimarySpellTarget[] {
+function nativeRegistrationOrder<T extends PrimarySpellTarget>(
+  targets: readonly T[],
+): T[] {
   return [...targets].sort((left, right) => (
     left.registrationOrder - right.registrationOrder
   ))
@@ -587,35 +590,38 @@ function nativeBroadphaseOrder(
   })
 }
 
-function nativeCellRangeOrder(input: Readonly<{
+function nativeCellRangeOrder<T extends PrimarySpellTarget>(input: Readonly<{
   maximumX: number
   maximumY: number
   minimumX: number
   minimumY: number
-  targets: readonly PrimarySpellTarget[]
-}>): PrimarySpellTarget[] {
+  targets: readonly T[]
+}>): T[] {
   const minCellX = nativePrimaryCellCoordinate(input.minimumX)
   const minCellY = nativePrimaryCellCoordinate(input.minimumY)
   const maxCellX = nativePrimaryCellCoordinate(input.maximumX)
   const maxCellY = nativePrimaryCellCoordinate(input.maximumY)
   const grid = input.targets.filter((target) => {
-    if ((target.actorFlags & 0x180) !== 0) return false
-    const cellX = nativePrimaryCellCoordinate(target.position.x)
-    const cellY = nativePrimaryCellCoordinate(target.position.y)
+    if (target.queryLane !== 'grid') return false
+    const bound = target.gridPosition ?? target.position
+    const cellX = nativePrimaryCellCoordinate(bound.x)
+    const cellY = nativePrimaryCellCoordinate(bound.y)
     return cellX >= minCellX
       && cellX <= maxCellX
       && cellY >= minCellY
       && cellY <= maxCellY
   }).sort((left, right) => {
-    const leftCellX = nativePrimaryCellCoordinate(left.position.x)
-    const rightCellX = nativePrimaryCellCoordinate(right.position.x)
+    const leftBound = left.gridPosition ?? left.position
+    const rightBound = right.gridPosition ?? right.position
+    const leftCellX = nativePrimaryCellCoordinate(leftBound.x)
+    const rightCellX = nativePrimaryCellCoordinate(rightBound.x)
     if (leftCellX !== rightCellX) return leftCellX - rightCellX
-    const leftCellY = nativePrimaryCellCoordinate(left.position.y)
-    const rightCellY = nativePrimaryCellCoordinate(right.position.y)
+    const leftCellY = nativePrimaryCellCoordinate(leftBound.y)
+    const rightCellY = nativePrimaryCellCoordinate(rightBound.y)
     return leftCellY - rightCellY || left.cellBindingOrder - right.cellBindingOrder
   })
   const special = nativeRegistrationOrder(input.targets.filter((target) => (
-    (target.actorFlags & 0x180) !== 0
+    target.queryLane === 'transient' && (target.actorFlags & 0x180) !== 0
   )))
   return [...grid, ...special]
 }
@@ -624,7 +630,7 @@ export function nativePrimaryCellCoordinate(position: number): number {
   return Math.trunc(Math.fround(position / NATIVE_PRIMARY_ACTOR_CELL_SIZE))
 }
 
-function nativePointInPolygon(
+export function nativePointInPolygon(
   point: Readonly<Vector2>,
   polygon: readonly Readonly<Vector2>[],
 ): boolean {

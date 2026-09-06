@@ -1,16 +1,8 @@
 import { NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
-import type {
-  BoneyardEnemyDeathEffectSnapshot,
-  BoneyardEnemyProjectileEffectSnapshot,
-  BoneyardEnemyProjectileSnapshot,
-  BoneyardEnemySnapshot,
-  BoneyardMaggotSnapshot,
-  BoneyardWorldSnapshot,
-} from '../protocol/game-state.ts'
+import type { BoneyardEnemyDeathEffectSnapshot, BoneyardEnemyProjectileEffectSnapshot, BoneyardEnemyProjectileSnapshot, BoneyardEnemySnapshot, BoneyardMaggotSnapshot, BoneyardWorldSnapshot } from '../protocol/game-state.ts'
 import { lerpCycle } from './hub-presentation-timeline.ts'
 import { FULL_CIRCLE, lerp, lerpVector } from './presentation-math.ts'
-
 const ENEMY_GAIT_POSE_COUNT = 8
 
 const GUIDED_MISSILE_VISUAL_PHASE_PERIOD = 720
@@ -208,6 +200,18 @@ function interpolateEnemies(
     const discrete = blend < 1 ? olderEnemy : newerEnemy
     return {
       ...copyEnemy(discrete),
+      ...(olderEnemy.demonSkull === undefined || newerEnemy.demonSkull === undefined ? {} : { demonSkull: {
+        ...discrete.demonSkull!,
+        bodyHeadingDeg: lerpCycle(olderEnemy.demonSkull.bodyHeadingDeg, newerEnemy.demonSkull.bodyHeadingDeg, blend, 360),
+        bodyOffset: lerpVector(olderEnemy.demonSkull.bodyOffset, newerEnemy.demonSkull.bodyOffset, blend),
+        jitter: lerpVector(olderEnemy.demonSkull.jitter, newerEnemy.demonSkull.jitter, blend),
+        eyeCharge: lerp(olderEnemy.demonSkull.eyeCharge, newerEnemy.demonSkull.eyeCharge, blend),
+        chargeGlow: lerp(olderEnemy.demonSkull.chargeGlow, newerEnemy.demonSkull.chargeGlow, blend),
+        flairGlow: lerp(olderEnemy.demonSkull.flairGlow, newerEnemy.demonSkull.flairGlow, blend),
+        bodyPhaseDeg: lerpCycle(olderEnemy.demonSkull.bodyPhaseDeg, newerEnemy.demonSkull.bodyPhaseDeg, blend, 360),
+        flickerPhaseDeg: lerpCycle(olderEnemy.demonSkull.flickerPhaseDeg, newerEnemy.demonSkull.flickerPhaseDeg, blend, 360),
+        spin: lerp(olderEnemy.demonSkull.spin, newerEnemy.demonSkull.spin, blend),
+      } }),
       animation: interpolateEnemyAnimation(olderEnemy, newerEnemy, blend),
       currentHealth: lerp(olderEnemy.currentHealth, newerEnemy.currentHealth, blend),
       headingDeg: lerpCycle(
@@ -426,6 +430,11 @@ function interpolateEnemyAnimation(
       blend,
     ),
     effects: interpolateEnemyEffects(first.effects, second.effects, blend),
+    shadowLateralOffset: lerpCycle(first.shadowLateralOffset, second.shadowLateralOffset, blend, 4),
+    demonShadowOffset: {
+      x: lerp(first.demonShadowOffset.x, second.demonShadowOffset.x, blend),
+      y: lerp(first.demonShadowOffset.y, second.demonShadowOffset.y, blend),
+    },
     gaitPose: lerpCycle(first.gaitPose, second.gaitPose, blend, ENEMY_GAIT_POSE_COUNT),
     hitFlash: lerp(first.hitFlash, second.hitFlash, blend),
     impBodyRotationRadians: discrete.impBodyRotationRadians,

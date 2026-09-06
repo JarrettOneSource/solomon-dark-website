@@ -28,6 +28,7 @@ export class NativeEnemyProjectileEffectViews {
   ): void {
     this.liveIds.clear()
     for (const effect of effects) {
+      if (effect.kind === 'firebolt-trail') continue
       this.liveIds.add(effect.id)
       let view = this.views.get(effect.id)
       if (!view) {

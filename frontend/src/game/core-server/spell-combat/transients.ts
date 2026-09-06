@@ -64,6 +64,7 @@ export function resolvePersistentContacts(work: BoneyardSpellCombatWork): void {
           toughness: effect.toughness,
         })
         const damaged = damageBoneyardEnemy(work.enemies, {
+          hasMagicDamage: true,
           magic: true,
           lethalObserver: work.lethalObserver,
           actorId: actor.id,
@@ -184,6 +185,7 @@ export function resolvePersistentContacts(work: BoneyardSpellCombatWork): void {
             ? amount
             : amount / effect.toughness
           const damaged = damageBoneyardEnemy(work.enemies, {
+            hasMagicDamage: true,
             magic: true,
             lethalObserver: work.lethalObserver,
             actorId: currentActor.id,
@@ -253,6 +255,7 @@ export function resolveDelayedContacts(work: BoneyardSpellCombatWork): void {
       if (!actor) continue
       work.queueBurn(actor.id, effect.ownerId, effect.burnDamage)
       const damaged = damageBoneyardEnemy(work.enemies, {
+        hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,
         actorId: actor.id,
@@ -297,6 +300,7 @@ export function resolveDelayedContacts(work: BoneyardSpellCombatWork): void {
         0x2,
       )) {
         const damaged = damageBoneyardEnemy(work.enemies, {
+          hasMagicDamage: true,
           magic: true,
           lethalObserver: work.lethalObserver,
           actorId: row.actor.id,

@@ -1,72 +1,41 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
 import { Buffer } from 'node:buffer'
-import {
-  confirmGameSimulationLoadout,
-  createGameSimulation,
-  enterBoneyardWorld,
-  stepGameSimulationTick,
-} from '../core-server/game-simulation.ts'
-import type { GameSimulationState } from '../core-server/game-simulation.ts'
-import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
-import { earthImpactFragmentCount, earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
-import {
-  NATIVE_HAIL_MINIMUM_HEIGHT,
-  createNativeWaterHailActor,
-  nativeWaterHailLifeAtAge,
-  stepNativeWaterHailActor,
-} from '../core-kernels/air-water-spell-actors.ts'
-import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
-import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
-import {
-  NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
-  nativeFireParticleLifetimeTicks,
-  nativeFireParticleVariant,
-} from '../core-kernels/primary-spell-fire-native.ts'
-import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
-import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
-import { applyNativeEnemyWorldFeedback, NATIVE_ENEMY_WORLD_FEEDBACK } from '../core-kernels/native-enemy-world-feedback.ts'
-import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
-import {
-  createNativeSecondaryPlayerState,
-  createNativeSecondarySimulation,
-  triggerNativePlayerMindblast,
-} from '../core-kernels/native-secondary-abilities.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
-import { createNativeWeldBlizzardContactGlow } from '../core-kernels/native-weld-blizzard.ts'
-import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
-import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
-import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
-import {
-  DOWSING_EQUIPMENT_RECIPES,
-  HUB_SACK_REPLICATION_DEPTH_LIMIT,
-  createHubEconomy,
-  hagathaOffers,
-} from '../core-kernels/hub-economy.ts'
-import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
-import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
-import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
-import { coldSlowPlayerEntity, dazzlePlayerEntity } from '../core-server/player-entity-store.ts'
-import { createGameSnapshot } from '../host/game-snapshot.ts'
-import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
-import {
-  EMPTY_CONTENT_MANIFEST_SHA256,
-  GAMEPLAY_RESUME_GRACE_REASONS,
-  GAME_PROTOCOL_VERSION,
-} from './game-protocol-contract.ts'
-import { GAME_CHAT_MAX_TEXT_CODE_UNITS } from './game-chat.ts'
-import { MAX_LUA_CONSOLE_CODE_LENGTH } from './game-protocol-limits.ts'
-import { GameProtocolError } from './codecs/values.ts'
-import { decodeClientGameMessage, decodeServerGameMessage, encodeGameMessage } from './game-protocol.ts'
+import test from 'node:test'
+import { NATIVE_HAIL_MINIMUM_HEIGHT, createNativeWaterHailActor, nativeWaterHailLifeAtAge, stepNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import type { ServerWelcomeMessage } from './game-server-messages.ts'
+import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createHubEconomy, hagathaOffers } from '../core-kernels/hub-economy.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
+import { NATIVE_ENEMY_WORLD_FEEDBACK, applyNativeEnemyWorldFeedback } from '../core-kernels/native-enemy-world-feedback.ts'
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeSecondaryPlayerState, createNativeSecondarySimulation, triggerNativePlayerMindblast } from '../core-kernels/native-secondary-abilities.ts'
+import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
+import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
+import { createNativeWeldBlizzardContactGlow } from '../core-kernels/native-weld-blizzard.ts'
+import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
+import { earthImpactFragmentCount, earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
+import { NATIVE_FIRE_IMPACT_LIFETIME_TICKS, nativeFireParticleLifetimeTicks, nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
+import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
+import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
+import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
+import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import { confirmGameSimulationLoadout, createGameSimulation, enterBoneyardWorld, stepGameSimulationTick } from '../core-server/game-simulation.ts'
+import { coldSlowPlayerEntity, dazzlePlayerEntity } from '../core-server/player-entity-store.ts'
+import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { GameProtocolError } from './codecs/values.ts'
 import { createGameSnapshotFrame, createGameSnapshotProjection } from './entity-replication.ts'
-import {
-  createPrimarySpellSimulationFrame,
-  materializePrimarySpellSimulationFrame,
-} from './primary-spell-hail-replication.ts'
+import { GAME_CHAT_MAX_TEXT_CODE_UNITS } from './game-chat.ts'
+import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_REASONS, GAME_PROTOCOL_VERSION } from './game-protocol-contract.ts'
+import { MAX_LUA_CONSOLE_CODE_LENGTH } from './game-protocol-limits.ts'
+import { decodeClientGameMessage, decodeServerGameMessage, encodeGameMessage } from './game-protocol.ts'
+import type { ServerWelcomeMessage } from './game-server-messages.ts'
 import { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
-
+import { createPrimarySpellSimulationFrame, materializePrimarySpellSimulationFrame } from './primary-spell-hail-replication.ts'
 const CHARACTER = {
   discipline: 'arcane',
   displayName: 'Helvidius',
@@ -1245,6 +1214,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     },
   })), GameProtocolError)
   assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
+    blindnessTicksRemaining: 0,
     deathWeaponPainterRegistration: null,
     driveActive: false,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 48 },
@@ -1261,6 +1231,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     concentrationSkillIds: [null, null],
     currentHealth: 50,
     currentMana: 100,
+    circleSlowTicksRemaining: 0,
     coldSlowTicksRemaining: 0,
     damageX4TicksRemaining: 0,
     deferredSkillChoices: 0,
@@ -1274,6 +1245,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
       serendipityActive: false,
     },
     hardenCoating: 0,
+    hitFeedback: { tick: 0, timer: 0, strength: 1 },
     inventoryStats: {
       castSpeedPercent: 100,
       magicResistancePercent: 0,
@@ -1416,6 +1388,9 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       demonFrontRotationRadians: 0,
       demonRearExtremityOffset: { x: 0, y: 0 },
       demonRearRotationRadians: 0,
+
+      demonShadowOffset: { x: 0, y: 0 },
+      shadowLateralOffset: 0,
       effects: [{
         alpha: 1.25,
         atlas: 'BadGuys',
@@ -1433,6 +1408,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       impBodyRotationRadians: 0,
       impEffectAlpha: 0,
       impEffectFrame: -1,
+      headVariant: 0,
+      limbHeadingDeg: null,
       maggots: [],
       state: 'action',
       stridePhaseDeg: 45,
@@ -1461,6 +1438,14 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     scale: 1,
     lighting: { charge: 0, glow: 0.75, providerCopies: 1 },
     mageCloak: false,
+    classification: 'normal',
+    name: null,
+    headgear: 0,
+    weapon: 'claw',
+    arrowType: 'normal',
+    burning: false,
+    mageElement: 'fire',
+    rotten: false,
     shieldHealth: 25,
     shieldMaximumHealth: 50,
     spawnTick: 0,
@@ -1555,7 +1540,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     id: 4,
     kind: 'fade',
     ownerActorId: 1,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 24 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 24 },
     presentationOwner: 'world-sorted',
     position: { x: 130, y: 100 },
     rotationRadians: 0.5,
@@ -1695,7 +1680,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    59,
+    82,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -1706,7 +1691,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 59)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 82)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,
@@ -1719,10 +1704,10 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
   assert.equal(replicatedFrame.world.entities.samples[0]?.[40], -1)
   const oversizedReplicatedSample = JSON.parse(encodeGameMessage(replicatedMessage))
-  oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(20).fill(0))
+  oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(161).fill(0))
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(oversizedReplicatedSample)),
-    /may contain at most 72 entries/,
+    /may contain at most 160 entries/,
   )
 
   const missingCold = JSON.parse(encodeGameMessage(welcome))
@@ -4997,6 +4982,7 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   golemActor.skillId = 45
   golemActor.golem = {
     ...nativeInitialGolemArticulation(golemActor.position, 0),
+    circleSlowTicks: 0,
     actionDurationTicks: 0,
     actionTick: 0,
     currentHealth: 100,
@@ -5630,7 +5616,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /encounter\.digFrame/,
   )
 
-  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0, 1, 0, 1]
+  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
   invalidType.frame.world.entities.spawned = [[...enemyDescriptor.slice(0, 3), 1004, ...enemyDescriptor.slice(4)]]
   assert.throws(
@@ -6401,6 +6387,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     impactThrowFirePitch: null,
     impactTicksRemaining: 200,
     kind: 'weld-meteor',
+    landingPosition: { x: 800, y: 350 },
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     phase: 'fall',
     position: { x: 800, y: 350 },

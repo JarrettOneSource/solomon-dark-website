@@ -37,6 +37,7 @@ export function resolveFireContacts(work: BoneyardSpellCombatWork): void {
     for (const { actor } of rows) {
       work.queueBurn(actor.id, effect.ownerId, effect.burnDamage)
       const damaged = damageBoneyardEnemy(work.enemies, {
+        hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,
         actorId: actor.id,
@@ -77,6 +78,7 @@ export function resolveFireContacts(work: BoneyardSpellCombatWork): void {
           work.damageMultiplier(actor.id, contact.kind, contact.ownerId),
         )
       const damaged = damageBoneyardEnemy(work.enemies, {
+        hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,
         actorId: actor.id,

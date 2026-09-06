@@ -1,35 +1,15 @@
-import {
-  NATIVE_MAGE_COLD_SLOW_TICKS,
-  NATIVE_WRAITH_DAZZLE_TICKS,
-} from '../../core-kernels/boneyard-enemy-modifiers.ts'
+import { nativePuppetHit } from './native-state.ts'
+import { NATIVE_MAGE_COLD_SLOW_TICKS, NATIVE_WRAITH_DAZZLE_TICKS } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../../core-kernels/native-secondary-ability-contract.ts'
-import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../../core-kernels/player-combat.ts'
-import {
-  NATIVE_DAMAGE_X4_POTION_TICKS,
-  nativeSkillCategory,
-} from '../../core-kernels/player-progression.ts'
+import type { PlayerLifeState } from '../../core-kernels/player-combat.ts'
+import { PLAYER_LIFE_STATES } from '../../core-kernels/player-combat.ts'
+import { NATIVE_DAMAGE_X4_POTION_TICKS, nativeSkillCategory } from '../../core-kernels/player-progression.ts'
 import type { ProtocolPlayerProgression } from '../game-state.ts'
-import {
-  GameProtocolError,
-  array,
-  boolean,
-  finite,
-  integer,
-  integerWithin,
-  limitedArray,
-  limitedString,
-  nonnegativeFinite,
-  nonnegativeInteger,
-  onlyKeys,
-  positiveFinite,
-  positiveInteger,
-  record,
-  unitInterval,
-} from './values.ts'
-
+import { GameProtocolError, array, boolean, finite, integer, integerWithin, limitedArray, limitedString, nonnegativeFinite, nonnegativeInteger, onlyKeys, positiveFinite, positiveInteger, record, unitInterval } from './values.ts'
 export function playerProgression(value: unknown, field: string): ProtocolPlayerProgression {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'circleSlowTicksRemaining',
     'advancedUnlocks',
     'weldBuildId',
     'weldComponentRanks',
@@ -51,6 +31,7 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
     'level',
     'lifeState',
     'lastDamageTick',
+    'hitFeedback',
     'maximumHealth',
     'maximumMana',
     'mindChugTicksRemaining',
@@ -282,6 +263,7 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
     throw new GameProtocolError(`${field}.lifeState is not supported`)
   }
   return {
+    circleSlowTicksRemaining: integerWithin(source.circleSlowTicksRemaining, `${field}.circleSlowTicksRemaining`, 0, 20),
     advancedUnlocks,
     coldSlowTicksRemaining,
     concentrationSkillIds: concentrationSkillIds as [number | null, number | null],
@@ -303,6 +285,7 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
     learnedSkillOrder,
     level,
     lifeState: lifeState as PlayerLifeState,
+    hitFeedback: nativePuppetHit(source.hitFeedback, `${field}.hitFeedback`),
     lastDamageTick: source.lastDamageTick === null
       ? null
       : nonnegativeInteger(source.lastDamageTick, `${field}.lastDamageTick`),

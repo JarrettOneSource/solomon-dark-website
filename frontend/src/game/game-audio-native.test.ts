@@ -15,12 +15,12 @@ import {
   hubTeacherSummonVolume,
   nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
-  nativeFootstepCue,
   nativeEnemyEventSoundRequest,
+  nativeFootstepCue,
   nativeLootEventSoundRequest,
   nativeSolomonDigSoundRequest,
-  newSolomonVoiceEvent,
   newNativeFootstepTick,
+  newSolomonVoiceEvent,
   solomonDigAudioDelta,
 } from './game-audio-native.ts'
 import {
@@ -217,7 +217,7 @@ test('matches native Boneyard point attenuation and death-presentation damping',
       visibleWorldWidth,
       true,
     ),
-    0.1,
+    Math.fround(.1),
   )
 })
 
@@ -233,13 +233,13 @@ test('matches native Solomon Dig hit attenuation and fixed gain-only requests', 
   ), 1)
   assert.equal(nativeBoneyardHitPointGain(
     { x: camera.x + inner, y: camera.y }, camera, width, true,
-  ), 0.1)
+  ), Math.fround(.1))
   assert.equal(nativeBoneyardHitPointGain(
     { x: camera.x + midpoint, y: camera.y }, camera, width, false,
   ), 0.5)
   assert.equal(nativeBoneyardHitPointGain(
     { x: camera.x + midpoint, y: camera.y }, camera, width, true,
-  ), 0.05)
+  ), Math.fround(.05))
   assert.equal(nativeBoneyardHitPointGain(
     { x: camera.x, y: camera.y }, camera, width, true,
   ), 1)

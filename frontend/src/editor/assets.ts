@@ -2,11 +2,11 @@
 // editor/manifest/ (tools/extract-boneyard-assets.py): the DeadHawg scenery
 // catalogue, the Bonedit chrome, and the verified class-to-art mappings.
 
-import type { AtlasEntry } from './manifest'
-import { atlasManifests, classesManifest, paletteManifest } from './manifest'
-import type { SpriteRef } from './model'
-import { NATIVE } from './model'
-import { nativeSpriteAnchor } from './sprite-registration'
+import type { AtlasEntry } from './manifest/index.ts'
+import { atlasManifests, classesManifest, paletteManifest } from './manifest/index.ts'
+import type { SpriteRef } from './model.ts'
+import { NATIVE } from './model.ts'
+import { nativeSpriteAnchor } from './sprite-registration.ts'
 
 // Vite bundles what the glob names; DeadHawg and Bonedit carry the editor.
 // BadGuys stays out of the bundle: its records are secondary effects, not

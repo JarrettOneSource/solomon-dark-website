@@ -1,22 +1,9 @@
-import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
+import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
-import type {
-  BoneyardEnemyActionSound,
-  BoneyardEnemyActor,
-  BoneyardEnemyActorId,
-  BoneyardEnemyDeathSound,
-  BoneyardEnemySemanticEvent,
-  BoneyardEnemySemanticEventType,
-  BoneyardEnemyStore,
-  BoneyardPlayerDamageSound,
-  BoneyardPlayerDamageSoundRequest,
-  BoneyardPlayerDamageSoundResult,
-  WorkingStep,
-} from './model.ts'
+import type { BoneyardEnemyActionSound, BoneyardEnemyActor, BoneyardEnemyActorId, BoneyardEnemyDeathSound, BoneyardEnemySemanticEvent, BoneyardEnemySemanticEventType, BoneyardEnemyStore, BoneyardPlayerDamageSound, BoneyardPlayerDamageSoundRequest, BoneyardPlayerDamageSoundResult, WorkingStep } from './model.ts'
 import { NATIVE_IMP_SPLIT_CHILD_COUNT } from './programs.ts'
 import { drawUnit } from './random.ts'
-
 export const NATIVE_IMP_VOCAL_SOUNDS = Object.freeze([
   'imp-vocal-1',
   'imp-vocal-2',
@@ -88,6 +75,8 @@ export function emitEnemyDeathSounds(
       emitEnemyDeathSound(work, tick, actor, 'spider-die', 0.95 + drawUnit(work) * 0.15)
       return
     case 'COCOON': return
+    case 'HEARTMONGER':
+    case 'DIREFACULTY':
     case 'SKELETON':
     case 'SKELETONARCHER':
     case 'SKELETONMAGE':

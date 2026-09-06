@@ -1,95 +1,33 @@
-import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
-import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
-import type { BoneyardLightEnvironment } from './boneyard-world-light.ts'
-import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
-import { nativeWebbedMovementScale } from '../core-kernels/native-webbed.ts'
+import { boneyardMouthWorldTargets } from './boneyard-world-targets.ts'
 import { resolveActorMotion, resolveUnpushedMoverMotion } from '../core-kernels/actor-physics.ts'
-import {
-  boneyardActiveBounds,
-  boneyardArenaTransitionSafetyClear,
-  startBoneyardArenaTransition,
-  stepBoneyardArenaTransition,
-} from '../core-kernels/boneyard-arena-transition.ts'
+import { boneyardActiveBounds, boneyardArenaTransitionSafetyClear, startBoneyardArenaTransition, stepBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { isSolomonPlayerLocked, stepSolomonEncounter } from '../core-kernels/boneyard-encounter.ts'
 import { applyBoneyardGateContact, stepBoneyardGateLeaf } from '../core-kernels/boneyard-gate.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
-import {
-  startBoneyardWaveDirector,
-  stepBoneyardSlumpgutTrigger,
-  stepBoneyardWaveDirector,
-} from '../core-kernels/boneyard-wave-director.ts'
+import { startBoneyardWaveDirector, stepBoneyardSlumpgutTrigger, stepBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
-import {
-  applyNativeEnemyWorldFeedback,
-  NATIVE_ENEMY_WORLD_FEEDBACK,
-  nativeEnemyWorldFeedbackImpulses,
-  stepNativeEnemyWorldFeedback,
-} from '../core-kernels/native-enemy-world-feedback.ts'
+import { applyNativeEnemyWorldFeedback, NATIVE_ENEMY_WORLD_FEEDBACK, nativeEnemyWorldFeedbackImpulses, stepNativeEnemyWorldFeedback } from '../core-kernels/native-enemy-world-feedback.ts'
 import { NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS, NATIVE_LOOT_DEFAULT_MODIFIERS } from '../core-kernels/native-loot.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
-import {
-  NATIVE_TUTORIAL_CAMERA_TARGET,
-  nativeTutorialAmuletItem,
-  nativeTutorialCameraBounds,
-  nativeTutorialEnemyCameraPositionIsAllowed,
-  nativeTutorialEnemySpawnPositionIsAllowed,
-  nativeTutorialHealthPotionItem,
-  nativeTutorialHostileScenePaused,
-} from '../core-kernels/native-tutorial.ts'
+import { NATIVE_TUTORIAL_CAMERA_TARGET, nativeTutorialAmuletItem, nativeTutorialCameraBounds, nativeTutorialEnemyCameraPositionIsAllowed, nativeTutorialEnemySpawnPositionIsAllowed, nativeTutorialHealthPotionItem, nativeTutorialHostileScenePaused } from '../core-kernels/native-tutorial.ts'
+import { nativeWebbedMovementScale } from '../core-kernels/native-webbed.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
-import {
-  PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
-  PLAYER_CHARACTER_PHYSICS,
-  PLAYER_CHARACTER_RADIUS,
-  commitPlayerCharacterTick,
-  createIdlePlayerCharacterInput,
-  planPlayerCharacterTick,
-} from '../core-kernels/player-character.ts'
 import type { PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
-import {
-  boneyardSpawnPositionIsOffscreen,
-  canPlaceBoneyardBody,
-  clipBoneyardSegment,
-  firstBoneyardPathBlockProgress,
-  resolveBoneyardMovement,
-  resolveBoneyardSpawnPosition,
-  resolveNativeBoneyardSpawnPosition,
-  touchingBoneyardGateLeaves,
-  withBoneyardGateCollision,
-} from './boneyard-collision.ts'
+import { commitPlayerCharacterTick, createIdlePlayerCharacterInput, planPlayerCharacterTick, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_PHYSICS, PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import { boneyardSpawnPositionIsOffscreen, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, resolveBoneyardSpawnPosition, resolveNativeBoneyardSpawnPosition, touchingBoneyardGateLeaves, withBoneyardGateCollision } from './boneyard-collision.ts'
+import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import {
-  materializeBoneyardEnemyLoot,
-  retireBoneyardGoodiesOutsideBounds,
-  spawnBoneyardCustomLootItems,
-  stepBoneyardLootStore,
-} from './boneyard-loot-store.ts'
-import {
-  NATIVE_LANTERN_BODY_ID,
-  applyBoneyardPlayerKnockbacks,
-  boneyardCombatBodies,
-  boneyardEnemyBodies,
-  boneyardLanternBodies,
-  commitBoneyardEnemyCollisionPositions,
-  createNativeLootPlacement,
-  enemyCollisionBody,
-  nearbyNativeMaskTwoCount,
-  prepareSolomonEscapeNavigation,
-  resolveSolomonEscapeMovement,
-  retainInsideBounds,
-} from './boneyard-world-placement.ts'
-import type {
-  BoneyardPlayerCombatStatus,
-  BoneyardPlayerMovementContact,
-  BoneyardSummonTarget,
-  BoneyardWorldState,
-  BoneyardWorldTickResult,
-} from './boneyard-world-state.ts'
+import { createBoneyardEnemyVisibility } from './boneyard-enemy-visibility.ts'
+import { materializeBoneyardEnemyLoot, retireBoneyardGoodiesOutsideBounds, spawnBoneyardCustomLootItems, stepBoneyardLootStore } from './boneyard-loot-store.ts'
+import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
+import type { BoneyardLightEnvironment } from './boneyard-world-light.ts'
+import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
+import { applyBoneyardPlayerKnockbacks, boneyardCombatBodies, boneyardEnemyBodies, boneyardLanternBodies, commitBoneyardEnemyCollisionPositions, createNativeLootPlacement, enemyCollisionBody, NATIVE_LANTERN_BODY_ID, nearbyNativeMaskTwoCount, prepareSolomonEscapeNavigation, resolveSolomonEscapeMovement, retainInsideBounds } from './boneyard-world-placement.ts'
+import type { BoneyardPlayerCombatStatus, BoneyardPlayerMovementContact, BoneyardSummonTarget, BoneyardWorldState, BoneyardWorldTickResult } from './boneyard-world-state.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
-
 export function stepBoneyardWorldTick(
   world: BoneyardWorldState,
   players: Readonly<Record<string, PlayerCharacterState>>,
@@ -398,14 +336,24 @@ export function stepBoneyardWorldTick(
     }
   })
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
+    puppetTargets: boneyardMouthWorldTargets({ ...world, loot }, lightEnvironment),
+    dialogueBusy: (encounter?.voiceTicksRemaining ?? 0) > 0
+      || world.tutorial?.narration.current != null || (world.tutorial?.narration.pending.length ?? 0) > 0,
+    ...createBoneyardEnemyVisibility(spawnCameraBounds, nextPlayers, inputs, worldLight.acceptedSources),
     abilityEffects,
-    clipSpellSegment: ({ end, start }) => clipBoneyardSegment(
+    clipSpellSegment: ({ end, start, nativeExclusionMask }) => firstBoneyardLineObstruction(
       start,
       end,
       activeBounds,
       collision,
+      undefined,
+      nativeExclusionMask,
+    ) ?? end,
+    projectileWorldBlocked: createBoneyardProjectileWorld(
+      activeBounds,
+      collision,
+      projectileViewports,
     ),
-    projectileWorldBlocked: createBoneyardProjectileWorld(activeBounds, collision, projectileViewports),
     navigation: {
       findRoute: ({ bodyRadius, end, navigationClearance, start }) => (
         findBoneyardEnemyRoute({
@@ -676,7 +624,7 @@ export function stepBoneyardWorldTick(
     : retainInsideBounds(world.earthquakeSceneryTargets, cleanupBounds)
   const primarySceneryTargets = cleanupBounds === null
     ? world.primarySceneryTargets
-    : retainInsideBounds(world.primarySceneryTargets, cleanupBounds)
+    : retainInsideBounds(world.primarySceneryTargets, cleanupBounds, target => target.id.startsWith('fencepost:'))
   const scenerySpellTargets = cleanupBounds === null
     ? world.scenerySpellTargets
     : retainInsideBounds(world.scenerySpellTargets, cleanupBounds)

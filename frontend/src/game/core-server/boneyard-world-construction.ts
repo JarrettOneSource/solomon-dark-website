@@ -1,3 +1,4 @@
+import { nativeBoneyardFencePosts } from '../core-kernels/boneyard-fence-posts.ts'
 import { createBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import {
   NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
@@ -45,13 +46,13 @@ export function createBoneyardWorld(
       : null,
     bounds: { ...loaded.scene.bounds },
     collision: createBoneyardCollisionWorld(loaded.scene),
-    ...createBoneyardSceneryTargets(loaded.scene.objects),
+    ...createBoneyardSceneryTargets(loaded.scene),
     encounter: ownsSolomonEncounter
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed, tutorial
           ? { dialogueMode: 'tutorial', tutorialDialogueTicks: nativeTutorialDialogueTicks() }
           : undefined)
       : null,
-    enemies: createBoneyardEnemyStore(loaded.seed, loaded.scene.objects.length),
+    enemies: createBoneyardEnemyStore(loaded.seed, loaded.scene.objects.length + nativeBoneyardFencePosts(loaded.scene.fences).length),
     enemyWorldFeedback: createNativeEnemyWorldFeedbackState(),
     enemyEvents: [],
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),

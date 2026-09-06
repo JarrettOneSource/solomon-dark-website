@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
+import { bindNativeBeltSkill } from '../core-kernels/native-belt.ts'
+import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   createIdlePlayerPrimaryCast,
   createPlayerCharacter,
@@ -9,18 +13,14 @@ import {
   PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
   PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
 } from '../core-kernels/player-combat.ts'
-import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
-import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
-import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
-import { bindNativeBeltSkill } from '../core-kernels/native-belt.ts'
 import {
   playerLightDriveActive,
 } from '../core-kernels/player-lighting.ts'
 import {
   addPlayerEntity,
-  applyPlayerEntitySkillChoice,
   applyPlayerEntityHagathaPurchaseEffects,
   applyPlayerEntityHagathaRemovalEffects,
+  applyPlayerEntitySkillChoice,
   autofillPlayerEntitySkillSelections,
   coldSlowPlayerEntity,
   createPlayerEntityStore,
@@ -28,36 +28,36 @@ import {
   damagePlayerEntity,
   damagePlayerEntityWithResult,
   dazzlePlayerEntity,
-  grantPlayerEntityExperience,
   grantPlayerEntityBonusSkillChoice,
+  grantPlayerEntityExperience,
   grantPlayerEntitySkillRanks,
   grantPlayerEntityWeldBuild,
   increaseRandomPlayerEntitySkill,
   insertPlayerEntityLootItem,
   migratePlayerStarterEquipmentAppearance,
+  playerCharacterAt,
+  playerEconomyAt,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
   playerEntityDisplayHealth,
-  playerEntityMovementScale,
-  playerCharacterAt,
-  playerEconomyAt,
   playerEntityId,
+  playerEntityMovementScale,
   playerLightingAt,
-  poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
   playerStatBookAt,
+  poisonPlayerEntity,
   preparePlayerEntityTutorialLoadout,
   removePlayerEntity,
-  replacePlayerEconomy,
   replacePlayerCharacter,
+  replacePlayerEconomy,
   replacePlayerLoadout,
-  selectPlayerEntityConcentration,
+  resetPlayerEntitiesForNewRun,
   respawnPlayerEntityAt,
   restorePlayerEntityHealth,
-  resetPlayerEntitiesForNewRun,
+  selectPlayerEntityConcentration,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
   stepPlayerEntityOverlayLightingTick,
@@ -88,6 +88,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(playerEntityId(store, 'second'), 2)
   assert.equal(playerEconomyAt(store, 'first')?.gold, 500)
   assert.deepEqual(playerLightingAt(store, 'second'), {
+    blindnessTicksRemaining: 0,
     deathWeaponPainterRegistration: null,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     overlayEffectPhase: 0,
@@ -791,6 +792,7 @@ test('new-run placement resets transient combat while retaining dense identity a
   assert.equal(playerEntityMovementScale(store, 'first'), 1)
   assert.equal(playerProgressionAt(store, 'first')?.currentMana, 100)
   assert.deepEqual(playerLightingAt(store, 'first'), {
+    blindnessTicksRemaining: 0,
     deathWeaponPainterRegistration: null,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     overlayEffectPhase: 0,

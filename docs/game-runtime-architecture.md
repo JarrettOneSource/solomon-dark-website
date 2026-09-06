@@ -2217,3 +2217,30 @@ The Boneyard renderer composes the scene in `boneyard-world-renderer.ts`.
 Static texture construction and cleanup live in `boneyard-static-world.ts`;
 `boneyard-renderer-diagnostics.ts` owns the retained browser inspection frame.
 These modules share the contracts in `boneyard-renderer-model.ts`.
+### Enemy simulation module ownership
+
+`core-server/boneyard-enemy-store.ts` owns store creation and fixed-tick order.
+Its `enemies/` modules keep actor contracts, construction, damage,
+control, death, family behavior, movement, projectiles, and presentation emission
+with the code that maintains their invariants. The store remains the single
+authoritative state; family modules operate on its current tick work. Callers
+import moved operations and types from their owning modules.
+
+`core-kernels/native-boneyard-light-model.ts` owns native light producers, their
+presentation RNG, spatial lookup, and admission. The host and renderer consume
+that same model. Boss child lights follow the same rule through
+`core-kernels/native-boss-spell-light.ts`.
+
+`enemies/puppet-hits.ts` joins native actor-grid and transient query membership
+for the Discorporeal beam. HP receivers keep their existing owners; six classes
+of non-HP Puppet retain sparse hit records in the enemy store. The final spell
+phase commits external actor bindings and removes retired hit owners. Scenery
+drawables borrow their resident geometry, and Leviathan owns its additional
+render target for the nested hit capture. Protocol 126 and save schema 34 carry
+the sampled strength and owner clock. `save/discorporeal-save.ts` validates the
+private action union while preserving native signed counters.
+
+The Game route loads `engine.ts` when a player or observer connects. The
+connection module owns transport setup and complete protocol decoding, so the
+title screen does not eagerly load it. Both existing async connection paths
+handle a module-load failure through their normal connection-failure owner.

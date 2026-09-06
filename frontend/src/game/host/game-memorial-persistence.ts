@@ -1,24 +1,9 @@
-import {
-  closeSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute } from 'node:path'
-
-import {
-  copyHubMemorialState,
-  createHubMemorialState,
-  type HubMemorialState,
-} from '../core-kernels/hub-memorial.ts'
-import {
-  decodeHubMemorialState,
-} from '../protocol/codecs/hub.ts'
-
+import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
+import { copyHubMemorialState, createHubMemorialState } from '../core-kernels/hub-memorial.ts'
+import { decodeHubMemorialState } from '../protocol/codecs/hub.ts'
+import type { JsonInput } from '../protocol/codecs/values.ts'
 const MAX_GAME_MEMORIAL_BYTES = 256 * 1024
 
 export interface GameMemorialPersistence {
@@ -64,22 +49,18 @@ function readMemorial(path: string): HubMemorialState {
   try {
     size = statSync(path).size
   } catch (error) {
-    if (isMissingFile(error)) return createHubMemorialState()
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return createHubMemorialState()
+    }
     throw error
   }
   if (size > MAX_GAME_MEMORIAL_BYTES) {
     throw new Error('Game memorial state exceeds its bounded document size')
   }
-  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  const parsed: JsonInput = JSON.parse(readFileSync(path, 'utf8'))
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('Game memorial document must be an object')
   }
-  const source = parsed as Record<string, unknown>
+  const source = parsed as Record<string, JsonInput>
   return copyHubMemorialState(decodeHubMemorialState(source.state, 'gameMemorial.state'))
-}
-
-function isMissingFile(error: unknown): boolean {
-  return error instanceof Error
-    && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'ENOENT'
 }

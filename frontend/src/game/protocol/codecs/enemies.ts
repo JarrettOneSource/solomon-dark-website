@@ -1,36 +1,20 @@
+import { BONEYARD_ARROW_TYPES, BONEYARD_ENEMY_CLASSIFICATIONS, BONEYARD_MAGE_ELEMENTS, BONEYARD_SKELETON_WEAPONS } from '../../core-kernels/boneyard-enemy-config-model.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../../core-kernels/boneyard-enemy-config.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
 import { GAME_PROTOCOL_VERSION } from '../game-protocol-contract.ts'
 import { MAX_BONEYARD_ENEMY_EFFECTS, MAX_BONEYARD_ENEMY_FLAGS } from '../game-protocol-limits.ts'
-import {
-  BONEYARD_ENEMY_EFFECT_ROLES,
-  type BoneyardEnemyAction,
-  type BoneyardEnemyAnimationSnapshot,
-  type BoneyardEnemyCoffinState,
-  type BoneyardEnemyEffectSnapshot,
-  type BoneyardEnemySnapshot,
-} from '../game-state.ts'
+import type { BoneyardEnemyAction, BoneyardEnemyAnimationSnapshot, BoneyardEnemyCoffinState, BoneyardEnemyEffectSnapshot, BoneyardEnemySnapshot } from '../game-state.ts'
+import { BONEYARD_ENEMY_EFFECT_ROLES } from '../game-state.ts'
+import { nativeDemonSkullVisual } from './demon-skull.ts'
+import { nativeFacultyVisual } from './faculty.ts'
 import { boneyardPoint, nativeWorldManagerRegistration } from './native-state.ts'
 import { spiderAppearance } from './spiders.ts'
-import {
-  GameProtocolError,
-  boolean,
-  finite,
-  integer,
-  integerWithin,
-  limitedArray,
-  limitedString,
-  nonnegativeFinite,
-  nonnegativeInteger,
-  onlyKeys,
-  positiveFinite,
-  positiveInteger,
-  record,
-} from './values.ts'
-
+import { GameProtocolError, boolean, byteLimitedString, finite, headingDegrees, integer, integerWithin, limitedArray, limitedString, memberString, nonnegativeFinite, nonnegativeInteger, onlyKeys, positiveFinite, positiveInteger, record } from './values.ts'
 const BONEYARD_ENEMY_ANIMATION_STATES = ['idle', 'locomotion', 'action', 'death'] as const
 
 const BONEYARD_ENEMY_ACTIONS = [
+  'demon-skull-bite', 'demon-skull-eyes', 'demon-skull-mouth', 'demon-skull-spit', 'demon-skull-flair', 'demon-skull-scream',
+  'faculty-throw', 'faculty-two-hand', 'faculty-lightning',
   'skeleton-claw-a',
   'skeleton-claw-b',
   'skeleton-weapon',
@@ -54,23 +38,33 @@ const BONEYARD_ENEMY_COFFIN_STATES = [
 export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnapshot {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'demonSkull',
+    'faculty',
     'animation',
     'armored',
+    'arrowType',
+    'burning',
+    'classification',
     'currentHealth',
     'enemyToken',
     'flags',
+    'headgear',
     'headingDeg',
     'id',
     'lightRegistration',
     'lighting',
     'mageCloak',
+    'mageElement',
     'maximumHealth',
+    'name',
     'nativeTypeId',
     'position',
+    'rotten',
     'scale',
     'shieldHealth',
     'shieldMaximumHealth',
     'spawnTick',
+    'weapon',
   ])
   const enemyToken = limitedString(source.enemyToken, `${field}.enemyToken`, 32)
   const expectedTypeId = BONEYARD_WAVE_ENEMY_TYPES[
@@ -80,7 +74,7 @@ export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEn
     throw new GameProtocolError(`${field}.enemyToken is not supported`)
   }
   const nativeTypeId = positiveInteger(source.nativeTypeId, `${field}.nativeTypeId`)
-  if (nativeTypeId !== expectedTypeId) {
+  if (nativeTypeId !== expectedTypeId && !(enemyToken === 'IMP' && nativeTypeId === 2044)) {
     throw new GameProtocolError(`${field}.nativeTypeId does not match enemyToken`)
   }
   const flags = limitedArray(
@@ -97,9 +91,12 @@ export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEn
   if (new Set(flags).size !== flags.length) {
     throw new GameProtocolError(`${field}.flags must be unique`)
   }
-  const headingDeg = finite(source.headingDeg, `${field}.headingDeg`)
-  if (headingDeg < 0 || headingDeg >= 360) {
-    throw new GameProtocolError(`${field}.headingDeg must be within [0,360)`)
+  const headingDeg = headingDegrees(source.headingDeg, `${field}.headingDeg`)
+  if ((enemyToken === 'DIREFACULTY') !== (source.faculty !== undefined)) {
+    throw new GameProtocolError(`${field}.faculty must match the Faculty family`)
+  }
+  if ((enemyToken === 'DEMONSKULL') !== (source.demonSkull !== undefined)) {
+    throw new GameProtocolError(`${field}.demonSkull must match the DemonSkull family`)
   }
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
   const scale = positiveFinite(source.scale, `${field}.scale`)
@@ -137,6 +134,8 @@ export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEn
       || animation.demonFrontExtremityOffset.y !== 0
       || animation.demonRearExtremityOffset.x !== 0
       || animation.demonRearExtremityOffset.y !== 0
+      || animation.demonShadowOffset.x !== 0
+      || animation.demonShadowOffset.y !== 0
     )
   ) {
     throw new GameProtocolError(
@@ -155,11 +154,19 @@ export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEn
     )
   }
   return {
+    ...(source.demonSkull === undefined ? {} : { demonSkull: nativeDemonSkullVisual(source.demonSkull, `${field}.demonSkull`) }),
+    ...(source.faculty === undefined ? {} : { faculty: nativeFacultyVisual(source.faculty, `${field}.faculty`) }),
     animation,
     armored,
+    arrowType: memberString(source.arrowType, `${field}.arrowType`, BONEYARD_ARROW_TYPES),
+    burning: boolean(source.burning, `${field}.burning`),
+    classification: memberString(
+      source.classification, `${field}.classification`, BONEYARD_ENEMY_CLASSIFICATIONS,
+    ),
     currentHealth,
     enemyToken: enemyToken as BoneyardEnemySnapshot['enemyToken'],
     flags,
+    headgear: integerWithin(source.headgear, `${field}.headgear`, 0, 5) as 0 | 1 | 2 | 3 | 4 | 5,
     headingDeg,
     id: positiveInteger(source.id, `${field}.id`),
     lightRegistration: nativeWorldManagerRegistration(
@@ -169,13 +176,17 @@ export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEn
     ),
     lighting: boneyardEnemyLighting(source.lighting, `${field}.lighting`),
     mageCloak,
+    mageElement: memberString(source.mageElement, `${field}.mageElement`, BONEYARD_MAGE_ELEMENTS),
+    rotten: boolean(source.rotten, `${field}.rotten`),
     maximumHealth,
+    name: source.name === null ? null : byteLimitedString(source.name, `${field}.name`, 128),
     nativeTypeId,
     position: boneyardPoint(source.position, `${field}.position`),
     scale,
     shieldHealth,
     shieldMaximumHealth,
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
+    weapon: memberString(source.weapon, `${field}.weapon`, BONEYARD_SKELETON_WEAPONS),
   }
 }
 
@@ -225,6 +236,8 @@ function boneyardEnemyAnimation(
     'demonFrontRotationRadians',
     'demonRearExtremityOffset',
     'demonRearRotationRadians',
+    'demonShadowOffset',
+    'shadowLateralOffset',
     'effects',
     'gaitPose',
     'headFacingOffset',
@@ -232,6 +245,8 @@ function boneyardEnemyAnimation(
     'impBodyRotationRadians',
     'impEffectAlpha',
     'impEffectFrame',
+    'headVariant',
+    'limbHeadingDeg',
     'maggots',
     'state',
     'stridePhaseDeg',
@@ -333,6 +348,8 @@ function boneyardEnemyAnimation(
     ),
     effects,
     gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),
+    demonShadowOffset: boneyardPoint(source.demonShadowOffset, `${field}.demonShadowOffset`),
+    shadowLateralOffset: nonnegativeFinite(source.shadowLateralOffset, `${field}.shadowLateralOffset`),
     headFacingOffset: integerWithin(
       source.headFacingOffset,
       `${field}.headFacingOffset`,
@@ -346,6 +363,10 @@ function boneyardEnemyAnimation(
     ),
     impEffectAlpha,
     impEffectFrame: integer(source.impEffectFrame, `${field}.impEffectFrame`),
+    headVariant: integerWithin(source.headVariant, `${field}.headVariant`, 0, 1) as 0 | 1,
+    limbHeadingDeg: source.limbHeadingDeg === null
+      ? null
+      : headingDegrees(source.limbHeadingDeg, `${field}.limbHeadingDeg`),
     maggots: [],
     state: state as BoneyardEnemyAnimationSnapshot['state'],
     stridePhaseDeg: nonnegativeFinite(

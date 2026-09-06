@@ -1,51 +1,31 @@
-import { nativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
-import type { NativeSpiderOutlineTarget } from '../core-kernels/native-spider-appearance.ts'
-import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
-import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS, NATIVE_MAGGOT_PROGRAM } from '../core-server/enemies/programs.ts'
-import { nativeEnemyHitOverlay } from '../core-server/enemies/model.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyBrain,
-  BoneyardEnemyDeathEffect,
-  BoneyardEnemyStore,
-  BoneyardMageLightningPulse,
-  BoneyardMaggotActor,
-} from '../core-server/enemies/model.ts'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
-import {
-  NATIVE_DEMON_BOMB_CONTROLLER_POSES,
-  nativeDemonArticulationSample,
-} from '../core-kernels/boneyard-demon-articulation.ts'
+import { NATIVE_DEMON_BOMB_CONTROLLER_POSES, nativeDemonArticulationSample } from '../core-kernels/boneyard-demon-articulation.ts'
 import { nativeImpEffectFrame } from '../core-kernels/boneyard-imp-flight.ts'
-import { nativeWraithContactActionProgress } from '../core-kernels/native-wraith-flight.ts'
 import { nativeZombieArticulationPose, nativeZombieBeatPose } from '../core-kernels/boneyard-zombie-beat.ts'
-import type {
-  BoneyardEnemyAction,
-  BoneyardEnemyAnimationSnapshot,
-  BoneyardEnemyAnimationState,
-  BoneyardEnemyCoffinState,
-  BoneyardEnemyDeathEffectSnapshot,
-  BoneyardEnemyEffectSnapshot,
-  BoneyardEnemyProjectileEffectSnapshot,
-  BoneyardEnemyProjectileSnapshot,
-  BoneyardEnemySnapshot,
-  BoneyardMageLightningPulseSnapshot,
-  BoneyardMaggotSnapshot,
-} from '../protocol/game-state.ts'
+import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
-
+import type { NativeSpiderOutlineTarget } from '../core-kernels/native-spider-appearance.ts'
+import { nativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
+import { nativeWraithContactActionProgress } from '../core-kernels/native-wraith-flight.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyDeathEffect, BoneyardEnemyStore, BoneyardMageLightningPulse, BoneyardMaggotActor } from '../core-server/enemies/model.ts'
+import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
+import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS, NATIVE_MAGGOT_PROGRAM } from '../core-server/enemies/programs.ts'
+import type { BoneyardEnemyAction, BoneyardEnemyAnimationSnapshot, BoneyardEnemyAnimationState, BoneyardEnemyCoffinState, BoneyardEnemyDeathEffectSnapshot, BoneyardEnemyEffectSnapshot, BoneyardEnemyProjectileEffectSnapshot, BoneyardEnemyProjectileSnapshot, BoneyardEnemySnapshot, BoneyardMageLightningPulseSnapshot, BoneyardMaggotSnapshot } from '../protocol/game-state.ts'
+import { projectBoneyardCrows } from './project-boneyard-crows.ts'
 export function projectBoneyardEnemyDeathEffects(
   store: BoneyardEnemyStore,
 ): readonly BoneyardEnemyDeathEffectSnapshot[] {
-  return store.deathEffects.filter((effect) => (
-    effect.spawnTick <= store.lastStepTick
-  )).map(projectBoneyardEnemyDeathEffect)
+  return [...store.deathEffects.filter((effect) => (
+    effect.kind !== 'black-smoky-bouncer' && effect.spawnTick <= store.lastStepTick
+  )).map(projectBoneyardEnemyDeathEffect), ...projectBoneyardCrows(store)]
 }
 
 export function projectBoneyardEnemyDeathEffect(
   effect: BoneyardEnemyDeathEffect,
 ): BoneyardEnemyDeathEffectSnapshot {
+  if (effect.kind === 'black-smoky-bouncer') throw new Error('a smoke emitter has no native draw')
   return {
+    ...(effect.painterSortBias === undefined ? {} : { painterSortBias: effect.painterSortBias }),
     ageTicks: effect.ageTicks,
     alpha: effect.alpha,
     atlas: effect.atlas,
@@ -75,24 +55,45 @@ export function projectBoneyardEnemies(
   return store.actors.filter((actor) => (
     actor.brain.family !== 'spider' || actor.brain.phase !== 'captured'
   )).map((actor) => ({
+    ...(actor.brain.family === 'demon-skull' ? { demonSkull: {
+      bodyHeadingDeg: actor.brain.bodyHeadingDeg, bodyOffset: actor.brain.bodyOffset,
+      bodyPhaseDeg: actor.brain.bodyPhaseDeg, bodyPose: actor.brain.bodyPose,
+      chargeGlow: actor.brain.chargeGlow, eyeCharge: actor.brain.eyeCharge, flairGlow: actor.brain.flairGlow,
+      flickerPhaseDeg: actor.brain.flickerPhaseDeg, jitter: actor.brain.jitter,
+      lightIntensity: actor.brain.lightIntensity, spin: actor.brain.spin,
+    } } : {}),
+    ...(actor.config.enemyToken === 'DIREFACULTY' && actor.brain.family === 'faculty' ? {
+      faculty: { bodyColor: actor.config.family.bodyColor, headColor: actor.config.family.headColor,
+        bodyHeadingDeg: actor.brain.bodyHeadingDeg,
+        female: actor.config.family.female, handMask: actor.brain.handMask, lightningActive: actor.brain.lightningActive,
+        lightIntensity: actor.brain.lightIntensity, lightPhase: actor.brain.lightPhase },
+    } : {}),
     animation: projectAnimation(actor, tick, spiderContext),
     armored: actor.config.enemyToken === 'SKELETON' && actor.config.family.armor,
+    arrowType: actor.config.enemyToken === 'SKELETONARCHER' ? actor.config.family.arrowType : 'normal',
+    burning: actor.config.burning,
+    classification: actor.config.classification,
     currentHealth: Math.min(actor.config.maximumHealth, actor.currentHealth),
     enemyToken: actor.config.enemyToken,
     flags: actor.config.flags,
+    headgear: 'headgear' in actor.config.family ? actor.config.family.headgear : 0,
     headingDeg: actor.headingDeg,
     id: actor.id,
     lightRegistration: actor.lightRegistration,
     lighting: { ...actor.lighting },
     mageCloak: actor.config.enemyToken === 'SKELETONMAGE'
       && actor.config.family.cloak,
+    mageElement: actor.config.enemyToken === 'SKELETONMAGE' ? actor.config.family.element : 'fire',
     maximumHealth: actor.config.maximumHealth,
+    name: actor.config.recipeName,
     nativeTypeId: actor.config.nativeTypeId,
     position: { ...actor.position },
+    rotten: actor.config.enemyToken === 'ZOMBIE' && actor.config.family.rotten,
     scale: actor.config.scale,
     shieldHealth: actor.shieldHealth,
     shieldMaximumHealth: actor.shieldMaximumHealth,
     spawnTick: actor.spawnTick,
+    weapon: actor.config.enemyToken === 'SKELETON' ? actor.config.family.weapon : 'claw',
   }))
 }
 
@@ -198,7 +199,7 @@ export function projectBoneyardMaggots(
       emergenceTick: maggot.emergenceTick,
       emergenceOrientation: maggotEmergenceOrientation(maggot),
       headingDeg: maggot.headingDeg,
-      hitFlash: nativeEnemyHitOverlay(maggot.lastDamageTick, tick),
+      hitFlash: nativePuppetHitAlpha(maggot.hitFeedback, tick),
       id: maggot.id,
       launchTrajectory: maggot.launchTrajectory,
       lightRegistration: maggot.lightRegistration,
@@ -300,15 +301,23 @@ function projectAnimation(
     demonFrontRotationRadians: demonArticulation?.frontRotationRadians ?? 0,
     demonRearExtremityOffset: demonArticulation?.rearExtremityOffset ?? { x: 0, y: 0 },
     demonRearRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
+    demonShadowOffset: demonBrain ? {
+      x: (demonBrain.articulation.front.current.x + demonBrain.articulation.rear.current.x) * .5 - actor.position.x,
+      y: (demonBrain.articulation.front.current.y + demonBrain.articulation.rear.current.y) * .5 - actor.position.y,
+    } : { x: 0, y: 0 },
+    shadowLateralOffset: actor.shadowLateralOffset,
     effects: projectEnemyEffects(actor, tick),
-    gaitPose,
+    gaitPose: actor.brain.family === 'heartmonger' ? Math.trunc(actor.brain.legPhase)
+      : actor.brain.family === 'faculty' ? actor.brain.gaitPhase : gaitPose,
     headFacingOffset: actor.headFacingOffset,
     hitFlash: actor.brain.family === 'portal'
       ? Math.min(1, actor.brain.hurtTicksRemaining / 24)
-      : nativeEnemyHitOverlay(actor.lastDamageTick, tick),
+      : nativePuppetHitAlpha(actor.hitFeedback, tick),
     impBodyRotationRadians: (impBrain?.bodyRotationDeg ?? 0) * Math.PI / 180,
     impEffectAlpha: impBrain?.effectAlpha ?? 0,
     impEffectFrame: impBrain ? nativeImpEffectFrame(impBrain.effectPhase) : -1,
+    headVariant: actor.brain.family === 'heartmonger' ? actor.brain.headVariant : 0,
+    limbHeadingDeg: actor.brain.family === 'archer' ? actor.brain.strafe.limbHeadingDeg : null,
     maggots: [],
     state,
     stridePhaseDeg: actor.stridePhaseDeg,
@@ -361,6 +370,8 @@ function maggotVerticalOffset(maggot: BoneyardMaggotActor): number {
 function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
   const brain = actor.brain
   switch (brain.family) {
+    case 'demon-skull': return brain.actions.length === 0 ? null : `demon-skull-${brain.actions[0]!.kind}`
+    case 'faculty': return brain.action === null ? null : `faculty-${brain.action.kind}`
     case 'skeleton':
       if (brain.phase !== 'attack') return null
       if (brain.action === 'pike') return 'skeleton-pike'
@@ -372,6 +383,7 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
     case 'mage': return brain.phase === 'cast'
       ? brain.castProgram === 'long' ? 'mage-cast-long' : 'mage-cast-short'
       : null
+    case 'heartmonger': return null
     case 'imp': return null
     case 'portal': return null
     case 'zombie': return brain.phase === 'swipe' ? 'zombie-beat' : null
@@ -385,9 +397,15 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
 
 function actionProgress(brain: BoneyardEnemyBrain): number {
   switch (brain.family) {
+    case 'demon-skull': {
+      const action = brain.actions[0]
+      return action?.kind === 'bite' ? action.progress : 0
+    }
+    case 'faculty': return brain.action?.progress ?? 0
     case 'skeleton':
     case 'archer':
     case 'mage': return brain.actionProgress
+    case 'heartmonger': return 0
     case 'imp': return 0
     case 'spider': return 0
     case 'cocoon': return 0

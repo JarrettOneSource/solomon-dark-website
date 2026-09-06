@@ -1,5 +1,6 @@
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { BoneyardMaggotSnapshot } from '../protocol/game-state.ts'
+import { nativePuppetHitTint } from './native-texture-color.ts'
 import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
 import {
   nativeEnemyFacingBucket,
@@ -21,6 +22,7 @@ export interface NativeMaggotArtRecord {
 
 export function nativeMaggotPresentationPlan(
   maggot: BoneyardMaggotSnapshot,
+  complexLighting = true,
 ): NativeMaggotPresentationPlan {
   const record = maggotRecord(maggot)
   const alpha = boundedUnit(maggot.alpha)
@@ -48,7 +50,8 @@ export function nativeMaggotPresentationPlan(
             alpha: alpha * hitFlash,
             blendMode: 'normal',
             role: 'hit:maggot-body',
-            tint: 0xff0000,
+            textureColor: 'diffuse',
+            tint: nativePuppetHitTint(complexLighting),
           },
         ],
   }

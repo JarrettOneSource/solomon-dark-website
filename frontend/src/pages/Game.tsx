@@ -1,53 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  gameStartupStageLabel,
-  initialGameStartupProgress,
-  loadGameStartupAssets,
-} from '../game/game-assets'
-import { assetDisplayName } from '../game/game-asset-readiness.ts'
-import {
-  bootGame,
-  bootGameObserver,
-  type GameConnectionStage,
-  type GameEndpoint,
-  type GameSession,
-} from '../game/engine.ts'
+import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
 import {
   GameConnectionFailure,
 } from '../game/client/game-connection-failure.ts'
-import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
-import type { GameObserverSession } from '../game/client/game-observer-session.ts'
 import { createGameClientDiagnostics } from '../game/client/game-diagnostics.ts'
-import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
+import type { GameObserverSession } from '../game/client/game-observer-session.ts'
 import type {
   HallOfFameBoard,
   HallOfFameEntry,
 } from '../game/core-kernels/hall-of-fame.ts'
+import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
+import { waitForDeploymentRevision } from '../game/deployment-revision.ts'
+import {
+  type GameConnectionStage,
+  type GameEndpoint,
+  type GameSession,
+} from '../game/engine.ts'
+import { assetDisplayName } from '../game/game-asset-readiness.ts'
+import { gameStartupStageLabel, initialGameStartupProgress, loadGameStartupAssets } from '../game/game-assets.ts'
 import {
   admitBrowserGame,
   admitGameObserver,
   configuredGameEndpoint,
   type BrowserGameAdmission,
 } from '../game/game-bootstrap.ts'
+import { gameOnlinePreferences, readGameSettings } from '../game/game-settings.ts'
+import GameDeploymentUpdate from '../game/GameDeploymentUpdate.tsx'
+import GameRuntimeError from '../game/GameRuntimeError.tsx'
+import { readLocalHallOfFame } from '../game/hall-of-fame-store.ts'
 import MainMenuScene from '../game/MainMenuScene'
+import NativeLoader from '../game/NativeLoader'
 import type {
   NativeSaveTransferController,
 } from '../game/NativeSaveTransferSettings.tsx'
-import NativeLoader from '../game/NativeLoader'
-import GameRuntimeError from '../game/GameRuntimeError.tsx'
-import { useAuth } from '../lib/auth'
-import {
-  api,
-  getToken,
-  type ActiveWebMod,
-  type DisabledWebMod,
-} from '../lib/api.ts'
-import { GameSaveCoordinator } from '../game/save/game-save-coordinator.ts'
-import {
-  createCloudGameSaveStore,
-  createLocalGameSaveStore,
-  type StoredGameSave,
-} from '../game/save/game-save-store.ts'
+import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
 import {
   parseGameSaveDocument,
   type GameProfileSave,
@@ -55,16 +41,24 @@ import {
   type GameSaveIntent,
   type ResumableGameSave,
 } from '../game/save/game-save-contract.ts'
-import { readLocalHallOfFame } from '../game/hall-of-fame-store.ts'
-import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
+import { GameSaveCoordinator } from '../game/save/game-save-coordinator.ts'
+import {
+  createCloudGameSaveStore,
+  createLocalGameSaveStore,
+  type StoredGameSave,
+} from '../game/save/game-save-store.ts'
 import { TITLE_BUILD_REVISION } from '../game/title-build-revision.ts'
-import { waitForDeploymentRevision } from '../game/deployment-revision.ts'
-import GameDeploymentUpdate from '../game/GameDeploymentUpdate.tsx'
 import {
   shouldOfferStockTutorial,
   type BrowserSaveDetection,
 } from '../game/tutorial-entry.ts'
-import { gameOnlinePreferences, readGameSettings } from '../game/game-settings.ts'
+import {
+  api,
+  getToken,
+  type ActiveWebMod,
+  type DisabledWebMod,
+} from '../lib/api.ts'
+import { useAuth } from '../lib/auth.tsx'
 
 type Readiness = 'loading' | 'ready'
 
@@ -314,6 +308,7 @@ export default function Game() {
     try {
       const endpoint = preparedEndpoint.current
       if (!endpoint) throw new Error('The shared Hub admission was not prepared.')
+      const { bootGame } = await import('../game/engine.ts')
       const session = await bootGame({
         ...(allowModMismatch ? { allowModMismatch: true } : {}),
         ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
@@ -352,6 +347,7 @@ export default function Game() {
   ): Promise<GameObserverSession> => {
     try {
       const endpoint = await admitGameObserver(matchId, getToken())
+      const { bootGameObserver } = await import('../game/engine.ts')
       return await bootGameObserver({
         endpoint,
         onEnded,

@@ -1,6 +1,13 @@
-import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../../core-kernels/boneyard-zombie-beat.ts'
-import type { NativeSecondarySimulationState } from '../../core-kernels/native-secondary-abilities.ts'
-import type { BoneyardEnemyActor, BoneyardMaggotActor } from '../enemies/model.ts'
+import {
+  NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM,
+} from '../../core-kernels/boneyard-zombie-beat.ts'
+import {
+  type NativeSecondarySimulationState,
+} from '../../core-kernels/native-secondary-abilities.ts'
+import {
+  type BoneyardEnemyActor,
+  type BoneyardMaggotActor,
+} from '../enemies/model.ts'
 import {
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_DEMON_BOMB_ACTION_PROGRAM,
@@ -9,8 +16,12 @@ import {
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
 } from '../enemies/programs.ts'
-import type { MlBotPolicyEnemyRow } from './enemies.ts'
-import { ML_BOT_POLICY_SCALES } from './spec.ts'
+import {
+  type MlBotPolicyEnemyRow,
+} from './enemies.ts'
+import {
+  ML_BOT_POLICY_SCALES,
+} from './spec.ts'
 
 export interface MlBotPolicyEnemyExtensionOptions {
   readonly secondaryAbilities: NativeSecondarySimulationState
@@ -75,6 +86,27 @@ function enemyClock(actor: BoneyardEnemyActor): EnemyClockObservation {
   const speed = Math.max(0, actor.config.attackSpeed * actor.staffActionFactor)
   const brain = actor.brain
   switch (brain.family) {
+    case 'demon-skull': {
+      const action = brain.actions.find(value => !value.retired)
+      if (!action || action.kind === 'flair' || action.kind === 'scream') return passiveClock('approach')
+      const time = Math.max(.0001, speed)
+      const strike = action.kind === 'bite' ? (4 - action.progress) / (action.rate * time)
+        : action.kind === 'eyes' ? action.warmupTicks + (1 - brain.eyeCharge) / (.025 * time)
+        : action.kind === 'mouth' ? action.warmupTicks : action.mouthTicks + action.cooldownTicks
+      const end = action.kind === 'bite' ? (13 - action.progress) / (action.rate * time)
+        : action.kind === 'eyes' ? action.warmupTicks + Math.max(0, action.shotsRemaining - brain.eyeCharge) / (.025 * time) + action.recoveryTicks
+        : action.kind === 'mouth' ? action.warmupTicks + Math.max(0, action.beamPower) / .015 + action.recoveryTicks + 1
+        : strike + Math.max(0, action.shotsRemaining - 1) * 110
+      return { markerEmitted: strike <= 0, phase: 'windup', phaseRemainingTicks: 0,
+        timeToActionEndTicks: Math.max(0, Math.ceil(end)), timeToStrikeTicks: Math.max(0, Math.ceil(strike)) }
+    }
+    case 'faculty': return brain.action === null ? passiveClock('range-control') : {
+      markerEmitted: brain.action.progress >= brain.action.marker,
+      phase: 'windup', phaseRemainingTicks: 0,
+      timeToActionEndTicks: ticksForProgress(brain.action.end - brain.action.progress, brain.action.rate * speed),
+      timeToStrikeTicks: ticksForProgress(brain.action.marker - brain.action.progress, brain.action.rate * speed),
+    }
+    case 'heartmonger': return passiveClock('approach')
     case 'skeleton': {
       if (brain.phase === 'approach') return passiveClock('approach')
       if (brain.phase === 'death') return passiveClock('recover')

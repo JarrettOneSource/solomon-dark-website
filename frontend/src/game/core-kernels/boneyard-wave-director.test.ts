@@ -1,15 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-import type { WaveDef } from './boneyard-wave-schema.ts'
 import {
-  BONEYARD_WAVE_ENEMY_TYPES,
+  NATIVE_SURVIVAL_BOSS_SOURCES,
+} from './native-survival-boss-catalog.ts'
+
+import {
   createBoneyardWaveDirector,
   startBoneyardWaveDirector,
   stepBoneyardWaveDirector,
-  type BoneyardEnemySpawnIntent,
-  type BoneyardWaveDirectorState,
 } from './boneyard-wave-director.ts'
+import type {
+  WaveDef,
+} from './boneyard-wave-schema.ts'
+import {
+  BONEYARD_WAVE_ENEMY_TYPES,
+} from './boneyard-wave-schema.ts'
+import type {
+  BoneyardEnemySpawnIntent,
+  BoneyardWaveDirectorState,
+} from './boneyard-wave-types.ts'
 import {
   NATIVE_SLUMPGUT_RECIPE_SOURCE,
   NATIVE_SLUMPGUT_TRIGGER,
@@ -35,6 +44,9 @@ test('all retail and Portal enemy tokens map to their native type ids', () => {
     SPIDER: 2057,
     COFFIN: 1013,
     DEMON: 1009,
+    DEMONSKULL: 1008,
+    DIREFACULTY: 1010,
+    HEARTMONGER: 1011,
     IMP: 1004,
     PORTAL: 5021,
     SKELETON: 1001,
@@ -592,3 +604,81 @@ function wave(patch: Partial<WaveDef>): WaveDef {
     ...patch,
   }
 }
+
+for (const source of NATIVE_SURVIVAL_BOSS_SOURCES) {
+  test(`generated boss recipes and exact trigger labels belong to ${source.sourceSha256}`, () => {
+    const create = (waveOrdinal: number) => ({
+      ...startBoneyardWaveDirector(createBoneyardWaveDirector('boss-census', [wave({ next: [0] })], {
+        sourceSha256: source.sourceSha256,
+      })),
+      lowPopulationTicks: 100,
+      lullThreshold: 1,
+      phase: 'wave-lull' as const,
+      waveOrdinal,
+    })
+    const context = {
+      bounds: BOUNDS,
+      liveBossCount: 0,
+      liveEnemyCount: 1000,
+      liveZombieCount: 0,
+      players: PLAYERS,
+      tick: 0,
+    }
+    const heartmonger = stepBoneyardWaveDirector(create(source.heartmonger.waveOrdinal), context)
+    assert.equal(heartmonger.spawnIntents[0]?.authoredRecipe?.name, 'Heartmonger')
+    assert.equal(heartmonger.spawnIntents[0]?.authoredRecipe?.uid, source.recipeUids.Heartmonger)
+    assert.equal(heartmonger.spawnIntents[0]?.nativeTypeId, 1011)
+    assert.equal(heartmonger.director.bossEncounters[0]?.phase, 'boss-wait')
+    const faculty = stepBoneyardWaveDirector(create(source.faculty.waveOrdinal), context)
+    assert.deepEqual(faculty.spawnIntents.filter(({ nativeTypeId }) => nativeTypeId === 1010)
+      .map(({ authoredRecipe }) => authoredRecipe?.name), ['Dire Sirmin', 'Dire Lucritius', 'Dire Aliss'])
+    assert.equal(faculty.director.bossEncounters[1]?.phase, 'boss-wait')
+    const ironmaw = stepBoneyardWaveDirector(create(source.ironmaw.waveOrdinal), context)
+    assert.equal(ironmaw.spawnIntents[0]?.authoredRecipe?.uid, source.recipeUids.Ironmaw)
+    assert.equal(ironmaw.spawnIntents[0]?.authoredRecipe?.name, 'Ironmaw')
+    assert.equal(ironmaw.spawnIntents[0]?.positionPolicy, 'dark')
+    assert.equal(ironmaw.director.waveOrdinal, source.ironmaw.waveOrdinal)
+    const repeated = stepBoneyardWaveDirector(ironmaw.director, { ...context, tick: 1 })
+    assert.equal(repeated.spawnIntents.length, 0)
+    const foulshaft = stepBoneyardWaveDirector(create(source.foulshaft.waveOrdinal), context)
+    assert.equal(foulshaft.spawnIntents[0]?.authoredRecipe?.uid, source.recipeUids.Foulshaft)
+    assert.equal(foulshaft.spawnIntents[0]?.authoredRecipe?.name, 'Foulshaft')
+    assert.deepEqual(foulshaft.spawnIntents[1]?.flags, ['FLAG_HOODED', 'FLAG_HPUP'])
+    assert.equal(foulshaft.spawnIntents[1]?.archerStrafing, true)
+  })
+}
+
+test('Foulshaft holds the timeline through ten Archers and polls all bosses before wave release', () => {
+  const source = NATIVE_SURVIVAL_BOSS_SOURCES[0]
+  let state: ReturnType<typeof createBoneyardWaveDirector> = {
+    ...startBoneyardWaveDirector(createBoneyardWaveDirector('foulshaft-program', [wave({ next: [0] })], {
+      sourceSha256: source.sourceSha256,
+    })),
+    lowPopulationTicks: 100,
+    lullThreshold: 1,
+    phase: 'wave-lull' as const,
+    waveOrdinal: source.foulshaft.waveOrdinal,
+  }
+  const spawns: BoneyardEnemySpawnIntent[] = []
+  for (let tick = 0; tick <= 1400; tick += 1) {
+    const result = stepBoneyardWaveDirector(state, {
+      bounds: BOUNDS,
+      liveBossCount: tick < 1201 ? 1 : 0,
+      liveEnemyCount: 1000,
+      liveZombieCount: 0,
+      players: PLAYERS,
+      tick,
+    })
+    state = result.director
+    spawns.push(...result.spawnIntents)
+    assert.equal(state.waveOrdinal, source.foulshaft.waveOrdinal + (tick === 1400 ? 1 : 0))
+  }
+  assert.deepEqual(spawns.filter(({ archerStrafing }) => archerStrafing).map(({ spawnTick }) => spawnTick),
+    [0, 100, 200, 300, 400, 500, 600, 700, 800, 900])
+  assert.deepEqual(spawns.filter(({ spawnTick }) => spawnTick === 1000 || spawnTick === 1200).map(({ enemyToken, flags }) => ({ enemyToken, flags })), [
+    { enemyToken: 'SKELETONARCHER', flags: ['FLAG_HPUP'] },
+    { enemyToken: 'SKELETON', flags: ['FLAG_HPUP'] },
+    { enemyToken: 'SKELETONARCHER', flags: ['FLAG_HPUP'] },
+    { enemyToken: 'SKELETON', flags: ['FLAG_HPUP'] },
+  ])
+})

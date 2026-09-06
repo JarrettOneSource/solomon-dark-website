@@ -179,6 +179,13 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
     worldKey: 'boneyard:1',
   })
   let rng = createNativeRng(99)
+  assert.deepEqual(actor.position, { x: 0, y: 0 }, 'the native constructor binds its initial zero root')
+  assert.deepEqual(actor.landingPosition, { x: 40, y: 80 })
+  const oblique = stepNativeWeldWorldActor({ ...actor, landingPosition: { x: 100, y: 200 },
+    fallHeadingDegrees: 30, fallHeight: 2, fallStep: .1 }, rng).actor
+  assert.ok(oblique?.kind === 'weld-meteor')
+  assert.deepEqual(oblique.position, { x: 400, y: 70.09619140625 })
+  assert.equal(oblique.fallHeight, 1.899999976158142)
   let fallTicks = 0
   let impactDebris = 0
   while (actor.phase === 'fall') {
@@ -196,12 +203,14 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
   assert.equal(actor.debris.length, 0)
   assert.equal(impactDebris, 5)
   assert.ok(actor.cameraDisplacement)
+  const impactPosition = actor.position
 
   for (let tick = 0; tick < 9; tick += 1) {
     const stepped = stepNativeWeldWorldActor(actor, rng)
     rng = stepped.rng
     assert.ok(stepped.actor?.kind === 'weld-meteor')
     actor = stepped.actor
+    assert.deepEqual(actor.position, impactPosition, 'impact retains the last pre-decrement root')
     assert.equal(actor.pulseDue, false)
   }
   const stepped = stepNativeWeldWorldActor(actor, rng)

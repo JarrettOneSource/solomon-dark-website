@@ -1,50 +1,40 @@
+import type { BoneyardWaveEnemyToken, WaveDef, WaveGroupEntry } from './boneyard-wave-schema.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from './boneyard-wave-schema.ts'
+import type { BoneyardCompiledSpawnBurst, BoneyardCompiledWaveSection, BoneyardSpawnLocationPolicy } from './boneyard-wave-timeline.ts'
+import { compileBoneyardOpening, compileBoneyardWaveSection, NATIVE_LULL_RELEASE_TO_NEXT_SPAWN_TICKS, NATIVE_PAUSE_NODE_GAP_TICKS, NATIVE_WAVE_LABEL_TO_FIRST_SPAWN_TICKS, seedBoneyardWaveRng } from './boneyard-wave-timeline.ts'
+import type { BoneyardEnemySpawnIntent, BoneyardWaveDirectorState, BoneyardWaveDirectorTickContext, BoneyardWaveDirectorTickResult, BoneyardWavePlayers } from './boneyard-wave-types.ts'
 import type { BoneyardBounds, BoneyardPoint } from './boneyard.ts'
-import type {
-  AuthoredBoneyardEnemyRecipe,
-} from './boneyard-enemy-config-model.ts'
-import {
-  BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardWaveEnemyToken,
-  type WaveDef,
-  type WaveGroupEntry,
-} from './boneyard-wave-schema.ts'
-import {
-  compileBoneyardOpening,
-  compileBoneyardWaveSection,
-  NATIVE_LULL_RELEASE_TO_NEXT_SPAWN_TICKS,
-  NATIVE_PAUSE_NODE_GAP_TICKS,
-  NATIVE_WAVE_LABEL_TO_FIRST_SPAWN_TICKS,
-  seedBoneyardWaveRng,
-  type BoneyardCompiledSpawnBurst,
-  type BoneyardCompiledWaveSection,
-  type BoneyardSpawnLocationPolicy,
-  type BoneyardSpawnPositionPolicy,
-} from './boneyard-wave-timeline.ts'
 import { NATIVE_RETAIL_WAVES } from './native-retail-wave-schedule.ts'
+import type { NativeRngState } from './native-rng.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
 import { nativeSpiderWaveDefinitions } from './native-spider-wave-data.ts'
-import {
-  createNativeSpiderWaveState,
-  stepNativeSpiderWaves,
-  type NativeSpiderWaveDefinition,
-  type NativeSpiderWaveState,
-} from './native-spider-wave-program.ts'
-import {
-  NATIVE_SLUMPGUT_TRIGGER,
-  nativeSlumpgutRecipe,
-  nativeSlumpgutRecipeForUid,
-} from './native-survival-slumpgut.ts'
-import {
-  NATIVE_PORTAL_ACTOR_PROGRAM,
-  nativePortalProgram,
-  nativePortalRecipe,
-  type NativePortalProgramDefinition,
-} from './native-survival-portal.ts'
-import {
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeInteger,
-  type NativeRngState,
-} from './native-rng.ts'
+import { createNativeSpiderWaveState, stepNativeSpiderWaves } from './native-spider-wave-program.ts'
+import { createNativeBossEncounter, nativeBossEncounterTimelinePaused, stepNativeBossEncounter } from './native-survival-boss-encounter.ts'
+import { nativeDiscorporealRecipe } from './native-survival-discorporeal.ts'
+import { nativeFacultyRecipe } from './native-survival-faculty.ts'
+import { nativeHeartmongerRecipe } from './native-survival-heartmonger.ts'
+import { NATIVE_PORTAL_ACTOR_PROGRAM, nativePortalProgram, nativePortalRecipe } from './native-survival-portal.ts'
+import { createNativeSkeletonBossProgram, nativeSkeletonBossTimelinePaused, stepNativeSkeletonBossProgram } from './native-survival-skeleton-bosses.ts'
+import { NATIVE_SLUMPGUT_TRIGGER, nativeSlumpgutRecipe, nativeSlumpgutRecipeForUid } from './native-survival-slumpgut.ts'
+export type {
+  BoneyardEnemySpawnIntent,BoneyardWaveDirectorPhase,BoneyardWaveDirectorState,BoneyardWaveDirectorTickContext,
+  BoneyardWaveDirectorTickResult,BoneyardWavePlayers,NativeSlumpgutPhase
+} from './boneyard-wave-types.ts'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 export { BONEYARD_WAVE_ENEMY_TYPES } from './boneyard-wave-schema.ts'
 
@@ -59,8 +49,6 @@ export const BONEYARD_WAVE_DIRECTOR_PHASES = [
   'interwave',
 ] as const
 
-export type BoneyardWaveDirectorPhase = typeof BONEYARD_WAVE_DIRECTOR_PHASES[number]
-
 export const NATIVE_SLUMPGUT_PHASES = [
   'eligible',
   'interval-countdown',
@@ -68,110 +56,13 @@ export const NATIVE_SLUMPGUT_PHASES = [
   'retired',
 ] as const
 
-export type NativeSlumpgutPhase = typeof NATIVE_SLUMPGUT_PHASES[number]
-
-export interface BoneyardEnemySpawnIntent {
-  cocoonTargetPlayerId?: string
-  authoredRecipe?: AuthoredBoneyardEnemyRecipe
-  enemyToken: BoneyardWaveEnemyToken
-  flags: readonly string[]
-  /** Custom MonsterRecipe lane; defaults to the native enabled value. */
-  flanking?: boolean
-  id: number
-  locationPolicy: BoneyardSpawnLocationPolicy
-  /** Custom MonsterRecipe lane; omitted by the retail wave director. */
-  mageCloak?: boolean
-  /** Direct native Portal child construction payload. */
-  portalEjection?: Readonly<{
-    childHeadingDeg: number
-    inheritedPrimaryDamage: number
-    parentHeadingDeg: number
-    parentPosition: Readonly<BoneyardPoint>
-    verticalVelocity: number
-  }>
-  nativeTypeId: number
-  /** Override for stationary or constructor-sized authored actors. */
-  navigationClearance?: number
-  /** Custom MonsterRecipe lane; defaults to native mode 1. */
-  pathfindingMode?: 0 | 1 | 2 | 3
-  /** One native UIDGroup call may reuse its first final placement. */
-  placementGroupId?: number
-  /** Constructor-sized placement body when it differs from the active body. */
-  placementRadius?: number
-  position: BoneyardPoint
-  /** Non-TimeLine callers use direct placement when omitted. */
-  positionPolicy?: BoneyardSpawnPositionPolicy
-  /** Radius used to prove that the accepted component reaches a player. */
-  reachabilityRadius?: number
-  spawnTick: number
-  waveOrdinal: number
-  /** Custom MonsterSetup BODY TYPE lane; retail survival waves leave it zero. */
-  zombieBodyType?: 0 | 1
-}
-
-export interface BoneyardWaveDirectorState {
-  spiderState: NativeSpiderWaveState
-  spiderWaves: readonly NativeSpiderWaveDefinition[]
-  activeBurstIndex: number | null
-  activeBursts: readonly BoneyardCompiledSpawnBurst[]
-  activeGroupIndex: number | null
-  activeGroupMemberIndex: number
-  burstStarted: boolean
-  burstSpawnRemaining: number
-  burstSpreadTicksRemaining: number
-  compiledSchedule: readonly BoneyardCompiledWaveSection[]
-  interwaveDelayTicks: number
-  lullThreshold: number
-  lowPopulationTicks: number
-  nextSpawnIntentId: number
-  nextScheduleIndex: number | null
-  openingBursts: readonly BoneyardCompiledSpawnBurst[]
-  openingReleaseThreshold: number
-  pendingSpawnBudget: number
-  phase: BoneyardWaveDirectorPhase
-  portalPhaseIndex: number
-  portalProgram: NativePortalProgramDefinition | null
-  portalScriptPhase: 'boss-wait' | 'idle' | 'intro' | 'retired' | 'spawning'
-  portalSpawnRemaining: number
-  portalTicksRemaining: number
-  portalTimelinePaused: boolean
-  populationThreshold: number
-  rngState: NativeRngState
-  schedule: readonly WaveDef[]
-  scheduleIndex: number
-  slumpgutPhase: NativeSlumpgutPhase
-  slumpgutPollCursor: number
-  slumpgutRecipeUid: number | null
-  slumpgutTicksRemaining: number
-  spawnCountdown: number
-  spawnDelayTicks: number
-  waveEventId: number
-  waveOrdinal: number
-}
-
-export type BoneyardWavePlayers = Readonly<
-  Record<string, { position: BoneyardPoint }>
->
-
-export interface BoneyardWaveDirectorTickContext {
-  bounds: BoneyardBounds
-  liveBossCount?: number
-  liveEnemyCount: number
-  liveZombieCount: number
-  players: BoneyardWavePlayers
-  tick: number
-}
-
-export interface BoneyardWaveDirectorTickResult {
-  director: BoneyardWaveDirectorState
-  spawnIntents: readonly BoneyardEnemySpawnIntent[]
-}
-
 const SPAWN_RADIUS = 100
+
 const LULL_RELEASE_TO_NEXT_LABEL_TICKS = (
   NATIVE_LULL_RELEASE_TO_NEXT_SPAWN_TICKS
   - NATIVE_WAVE_LABEL_TO_FIRST_SPAWN_TICKS
 )
+
 const ADVANCE_TO_NEXT_LABEL_TICKS = 50
 
 export function createBoneyardWaveDirector(
@@ -217,6 +108,11 @@ export function createBoneyardWaveDirector(
     rngState: createNativeRng(seedBoneyardWaveRng(`${seed}:wave-runtime`)),
     schedule,
     scheduleIndex: 0,
+    bossEncounters: options.sourceSha256 === undefined ? []
+      : [createNativeBossEncounter(options.sourceSha256, 'heartmonger'), createNativeBossEncounter(options.sourceSha256, 'faculty'), createNativeBossEncounter(options.sourceSha256, 'discorporeal')],
+    skeletonBosses: options.sourceSha256 === undefined
+      ? null
+      : createNativeSkeletonBossProgram(options.sourceSha256),
     slumpgutPhase: 'eligible',
     slumpgutPollCursor: 0,
     slumpgutRecipeUid: options.sourceSha256 === undefined
@@ -249,68 +145,125 @@ export function stepBoneyardWaveDirector(
   validateLiveEnemyCount(context.liveEnemyCount)
   validateLiveEnemyCount(context.liveZombieCount)
   if (context.liveBossCount !== undefined) validateLiveEnemyCount(context.liveBossCount)
-  const slumpgut = stepBoneyardSlumpgutTrigger(source, context)
-  const spiders = stepBoneyardSpiderProgram(slumpgut.director, context)
-  const portals = stepBoneyardPortalProgram(spiders.director, context)
-  const timelineHeld = slumpgut.director.portalTimelinePaused
+  const heart = stepGeneratedBossEncounters(source, context)
+  const slumpgut = stepBoneyardSlumpgutTrigger(heart.director, countScriptBirths(context, heart.spawnIntents))
+  const skeletons = stepSkeletonBosses(slumpgut.director, countScriptBirths(context, slumpgut.spawnIntents))
+  const spiders = stepBoneyardSpiderProgram(skeletons.director, countScriptBirths(context, [...heart.spawnIntents, ...slumpgut.spawnIntents, ...skeletons.spawnIntents]))
+  const earlierBirths = [...heart.spawnIntents, ...slumpgut.spawnIntents, ...skeletons.spawnIntents, ...spiders.spawnIntents]
+  const portals = stepBoneyardPortalProgram(spiders.director, countScriptBirths(context, earlierBirths))
+  const timelineHeld = source.bossEncounters.some(nativeBossEncounterTimelinePaused)
+    || heart.director.bossEncounters.some(nativeBossEncounterTimelinePaused)
+    || slumpgut.director.portalTimelinePaused
     || portals.director.portalTimelinePaused
+    || nativeSkeletonBossTimelinePaused(source.skeletonBosses)
+    || nativeSkeletonBossTimelinePaused(skeletons.director.skeletonBosses)
     || source.spiderState.timelinePaused
     || spiders.director.spiderState.timelinePaused
+  const waveContext = countScriptBirths(context, [...earlierBirths, ...portals.spawnIntents])
   const state = portals.director.phase === 'dormant' || timelineHeld
     ? portals.director
-    : stepArenaLowPopulationTimer(portals.director, context.liveEnemyCount)
+    : stepArenaLowPopulationTimer(portals.director, waveContext.liveEnemyCount)
   const waves = timelineHeld
     ? tickResult(state)
-    : stepOrdinaryWaves(state, context)
+    : stepOrdinaryWaves(state, waveContext)
   return {
     director: waves.director,
     spawnIntents: [
-      ...slumpgut.spawnIntents,
-      ...spiders.spawnIntents,
+      ...earlierBirths,
       ...portals.spawnIntents,
       ...waves.spawnIntents,
     ],
   }
 }
 
-function stepBoneyardSpiderProgram(
+function stepGeneratedBossEncounters(
   source: BoneyardWaveDirectorState,
   context: BoneyardWaveDirectorTickContext,
 ): BoneyardWaveDirectorTickResult {
   if (source.phase === 'dormant') return tickResult(source)
-  const result = stepNativeSpiderWaves(
-    source.spiderState,
-    source.spiderWaves,
-    source.waveOrdinal,
-    context.liveEnemyCount,
-  )
-  let director = { ...source, spiderState: result.state }
+  let director = source
   const spawnIntents: BoneyardEnemySpawnIntent[] = []
-  for (const birth of result.births) {
-    const placed = placeEnemy(director.rngState, 'anywhere', context.players, context.bounds)
-    spawnIntents.push({
-      enemyToken: 'SPIDER',
-      flags: birth.flags,
-      id: director.nextSpawnIntentId,
-      locationPolicy: 'anywhere',
-      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SPIDER,
-      position: placed.position,
-      positionPolicy: birth.positionPolicy,
-      spawnTick: context.tick,
-      waveOrdinal: director.waveOrdinal,
-    })
-    director = {
-      ...director,
-      nextSpawnIntentId: director.nextSpawnIntentId + 1,
-      rngState: placed.rngState,
+  const bossEncounters = source.bossEncounters.map((encounter) => {
+    const step = stepNativeBossEncounter(encounter, source.waveOrdinal,
+      countScriptBirths(context, spawnIntents).liveBossCount ?? 0)
+    if (step.birth !== null) {
+      const recipes = step.birth === 'skeleton' ? [undefined]
+        : encounter.kind === 'heartmonger' ? [nativeHeartmongerRecipe(encounter.sourceSha256)]
+          : encounter.kind === 'discorporeal' ? [nativeDiscorporealRecipe(encounter.sourceSha256)]
+          : (['Dire Sirmin', 'Dire Lucritius', 'Dire Aliss'] as const).map((name) => nativeFacultyRecipe(
+              encounter.sourceSha256, name,
+            ))
+      for (const recipe of recipes) {
+        const placement = placeEnemy(director.rngState, 'anywhere', context.players, context.bounds)
+        const enemyToken = recipe === undefined ? 'SKELETON'
+          : encounter.kind === 'heartmonger' ? 'HEARTMONGER' : encounter.kind === 'discorporeal' ? 'DEMONSKULL' : 'DIREFACULTY'
+        spawnIntents.push({
+          ...(recipe === undefined ? {} : { authoredRecipe: recipe }),
+          ...(recipe !== undefined && encounter.kind === 'discorporeal' ? { enableDiscorporealHealthGates: true } : {}),
+          enemyToken, flags: [], id: director.nextSpawnIntentId, locationPolicy: 'anywhere',
+          nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken], pathfindingMode: recipe === undefined ? 1 : 2,
+          position: placement.position, positionPolicy: 'dark', spawnTick: context.tick, waveOrdinal: source.waveOrdinal,
+        })
+        director = { ...director, nextSpawnIntentId: director.nextSpawnIntentId + 1, rngState: placement.rngState }
+      }
     }
-  }
-  return { director: result.advanceWave ? startNextBoneyardWave(director) : director, spawnIntents }
+    if (step.releaseWave) {
+      const selected = selectNextScheduleRow(director)
+      director = beginScheduleRow(selected, selected.nextScheduleIndex ?? selected.scheduleIndex)
+    }
+    return step.state
+  })
+  return { director: { ...director, bossEncounters }, spawnIntents }
 }
 
-function startNextBoneyardWave(source: BoneyardWaveDirectorState): BoneyardWaveDirectorState {
-  const selected = selectNextScheduleRow(source)
-  return beginScheduleRow(selected, selected.nextScheduleIndex ?? selected.scheduleIndex)
+function stepSkeletonBosses(
+  source: BoneyardWaveDirectorState,
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
+  if (source.skeletonBosses === null || source.phase === 'dormant') return tickResult(source)
+  const program = stepNativeSkeletonBossProgram(
+    source.skeletonBosses, source.waveOrdinal, context.liveBossCount ?? 0,
+  )
+  let director = { ...source, skeletonBosses: program.state }
+  const spawnIntents: BoneyardEnemySpawnIntent[] = []
+  for (const birth of program.births) {
+    const placed = placeEnemy(director.rngState, 'anywhere', context.players, context.bounds)
+    spawnIntents.push({
+      ...birth,
+      flanking: true,
+      id: director.nextSpawnIntentId,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[birth.enemyToken],
+      pathfindingMode: birth.authoredRecipe === undefined ? 1 : 2,
+      position: placed.position,
+      positionPolicy: 'dark',
+      spawnTick: context.tick,
+      waveOrdinal: source.waveOrdinal,
+    })
+    director = { ...director, nextSpawnIntentId: director.nextSpawnIntentId + 1, rngState: placed.rngState }
+  }
+  if (program.releaseWave) {
+    const selected = selectNextScheduleRow(director)
+    return {
+      director: beginScheduleRow(selected, selected.nextScheduleIndex ?? selected.scheduleIndex),
+      spawnIntents,
+    }
+  }
+  return { director, spawnIntents }
+}
+
+function countScriptBirths(
+  context: BoneyardWaveDirectorTickContext,
+  births: readonly BoneyardEnemySpawnIntent[],
+): BoneyardWaveDirectorTickContext {
+  return {
+    ...context,
+    liveBossCount: (context.liveBossCount ?? 0) + births.filter(({ authoredRecipe }) => (
+      authoredRecipe !== undefined && authoredRecipe.classification !== 'normal'
+    )).length,
+    liveEnemyCount: context.liveEnemyCount + births.length,
+    liveZombieCount: context.liveZombieCount + births.filter(({ enemyToken }) => enemyToken === 'ZOMBIE').length,
+  }
 }
 
 function stepBoneyardPortalProgram(
@@ -908,4 +861,44 @@ function validateEnemyEntry(entry: WaveGroupEntry, waveIndex: number): void {
   if (BONEYARD_WAVE_ENEMY_TYPES[entry.enemy as BoneyardWaveEnemyToken] === undefined) {
     throw new Error(`wave ${waveIndex} has unknown enemy ${entry.enemy}`)
   }
+}
+
+function stepBoneyardSpiderProgram(
+  source: BoneyardWaveDirectorState,
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
+  if (source.phase === 'dormant') return tickResult(source)
+  const result = stepNativeSpiderWaves(
+    source.spiderState,
+    source.spiderWaves,
+    source.waveOrdinal,
+    context.liveEnemyCount,
+  )
+  let director = { ...source, spiderState: result.state }
+  const spawnIntents: BoneyardEnemySpawnIntent[] = []
+  for (const birth of result.births) {
+    const placed = placeEnemy(director.rngState, 'anywhere', context.players, context.bounds)
+    spawnIntents.push({
+      enemyToken: 'SPIDER',
+      flags: birth.flags,
+      id: director.nextSpawnIntentId,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SPIDER,
+      position: placed.position,
+      positionPolicy: birth.positionPolicy,
+      spawnTick: context.tick,
+      waveOrdinal: director.waveOrdinal,
+    })
+    director = {
+      ...director,
+      nextSpawnIntentId: director.nextSpawnIntentId + 1,
+      rngState: placed.rngState,
+    }
+  }
+  return { director: result.advanceWave ? startNextBoneyardWave(director) : director, spawnIntents }
+}
+
+function startNextBoneyardWave(source: BoneyardWaveDirectorState): BoneyardWaveDirectorState {
+  const selected = selectNextScheduleRow(source)
+  return beginScheduleRow(selected, selected.nextScheduleIndex ?? selected.scheduleIndex)
 }

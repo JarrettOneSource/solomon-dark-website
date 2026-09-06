@@ -1,59 +1,21 @@
+import { BONEYARD_SKELETON_WEAPONS } from '../core-kernels/boneyard-enemy-config-model.ts'
+import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
 import { nativeSkeletonHeadFacing } from '../core-kernels/boneyard-skeleton-family-animation.ts'
-import type {
-  NativeEnemyActionFrame,
-  NativeEnemyAnimationSample,
-} from './native-enemy-animation.ts'
-import { segment } from './native-enemy-demon-presentation.ts'
-import {
-  bankPose,
-  boundedPose,
-  boundedUnit,
-  finiteOrZero,
-  layer,
-  packRgb,
-  positiveModulo,
-  presentation,
-  requiredPoint,
-  selectedFlagValue,
-  stableInclusiveUnit,
-  stableInteger,
-  stableUnit,
-} from './native-enemy-layers.ts'
-import type {
-  NativeEnemyAuthoredPointResolver,
-  NativeEnemyFamilyPresentation,
-  NativeEnemySegmentLayer,
-  NativeEnemySpriteLayer,
-  NativeEnemyVisualSnapshot,
-} from './native-enemy-presentation-model.ts'
-
-const HEADGEAR_BASES = [1477, 1531, 1549, 1495] as const
-
-const WEAPON_BY_FLAG = new Map([
-  ['SWORD', 1],
-  ['MACE', 2],
-  ['FLAIL', 3],
-  ['AXE', 4],
-  ['PIKE', 5],
-] as const)
-
-const HEADGEAR_BY_FLAG = new Map([
-  ['HELM', 1],
-  ['HORNED', 2],
-  ['HOODED', 3],
-] as const)
+import type { NativeEnemyActionFrame, NativeEnemyAnimationSample } from './native-enemy-animation.ts'
+import { bankPose, boundedPose, boundedUnit, finiteOrZero, layer, packRgb, positiveModulo, presentation, requiredPoint, stableInclusiveUnit, stableInteger, stableUnit } from './native-enemy-layers.ts'
+import type { NativeEnemyAuthoredPointResolver, NativeEnemyFamilyPresentation, NativeEnemySegmentLayer, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
+const HEADGEAR_BASES = [1477, 1531, 1549, 1495, 1513, 1567] as const
 
 export function skeletonPresentation(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   spawnAgeTicks: number,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
   const source = skeletonLayers(enemy, facing, animation, actionFrame)
-  const weapon = selectedFlagValue([...flags], WEAPON_BY_FLAG, 0)
+  const weapon = BONEYARD_SKELETON_WEAPONS.indexOf(enemy.weapon)
   const segments: NativeEnemySegmentLayer[] = []
   if (weapon === 2 || weapon === 3) {
     const weaponLayer = source.find(({ role }) => role === 'skeleton-weapon')
@@ -64,7 +26,7 @@ export function skeletonPresentation(
         source.push(layer('BadGuys', 46, 'skeleton-mace-head', { offset: first }))
       } else {
         const second = requiredPoint(points, 1, `Skeleton flail ${weaponLayer.entry}`)
-        segments.push(segment(first, second, 'skeleton-flail-chain'))
+        segments.push({ alpha: 1, start: first, end: second, role: 'skeleton-flail-chain', tint: 0x777777, width: 1.5 })
         source.push(layer('BadGuys', 46, 'skeleton-flail-head', { offset: second }))
       }
     }
@@ -91,7 +53,7 @@ export function skeletonPresentation(
     animation,
     spawnAgeTicks,
     source,
-    flags.has('BURNING'),
+    enemy.burning,
     'skeleton',
   )
   return presentation(composed.layers, { hitBody: composed.hitBody, segments })
@@ -100,13 +62,12 @@ export function skeletonPresentation(
 export function archerPresentation(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   spawnAgeTicks: number,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
-  const source = skeletonArcherLayers(facing, flags, animation, actionFrame)
+  const source = skeletonArcherLayers(enemy, facing, animation, actionFrame)
   const bodyLayer = source.find(({ role }) => role === 'archer-body')!
   const bowPoint = requiredPoint(
     authoredPoints(bodyLayer.atlas, bodyLayer.entry),
@@ -116,7 +77,7 @@ export function archerPresentation(
   const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
   let held: NativeEnemySpriteLayer | null = null
   if (Math.floor(finiteOrZero(bodyPose)) !== 8) {
-    if (flags.has('FIREARROW')) {
+    if (enemy.arrowType === 'fire') {
       held = layer(
         'BadGuys',
         255 + Math.floor(spawnAgeTicks / 5) % 12,
@@ -127,7 +88,7 @@ export function archerPresentation(
           offset: { x: bowPoint.x, y: bowPoint.y - 5 },
         },
       )
-    } else if (flags.has('POISONARROW')) {
+    } else if (enemy.arrowType === 'poison') {
       held = layer(
         'BadGuys',
         271 + Math.floor(spawnAgeTicks / 6) % 12,
@@ -146,7 +107,7 @@ export function archerPresentation(
     animation,
     spawnAgeTicks,
     source,
-    flags.has('BURNING'),
+    enemy.burning,
     'archer',
     held,
   )
@@ -156,7 +117,6 @@ export function archerPresentation(
 export function magePresentation(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   spawnAgeTicks: number,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
@@ -165,7 +125,6 @@ export function magePresentation(
   const source = skeletonMageLayers(
     enemy,
     facing,
-    flags,
     animation,
     actionFrame,
     authoredPoints,
@@ -175,7 +134,7 @@ export function magePresentation(
   const first = requiredPoint(authored, 0, `Mage body ${bodyLayer.entry}`)
   const second = authored[1] ?? { x: -first.x, y: first.y }
   const charge = mageChargeLayers(
-    flags,
+    enemy.mageElement,
     enemy.lighting.charge,
     spawnAgeTicks,
     [first, second],
@@ -193,7 +152,7 @@ export function magePresentation(
     animation,
     spawnAgeTicks,
     body,
-    flags.has('BURNING'),
+    enemy.burning,
     'mage',
   )
   const composedHead = skeletonFamilyComposition(
@@ -201,7 +160,7 @@ export function magePresentation(
     animation,
     spawnAgeTicks,
     [head],
-    flags.has('BURNING'),
+    enemy.burning,
     'mage',
     null,
     false,
@@ -222,8 +181,8 @@ function skeletonLayers(
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
-  const weapon = selectedFlagValue(enemy.flags, WEAPON_BY_FLAG, 0)
-  const headgear = selectedFlagValue(enemy.flags, HEADGEAR_BY_FLAG, 0)
+  const weapon = BONEYARD_SKELETON_WEAPONS.indexOf(enemy.weapon)
+  const headgear = enemy.headgear
   const armored = enemy.armored
   const limbPose = animation?.gaitPose ?? 0
   const bodySelector = actionFrame?.selector ?? animation?.bodyPose ?? 0
@@ -269,17 +228,17 @@ function skeletonLayers(
 }
 
 function skeletonArcherLayers(
+  enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  sourceFlags: ReadonlySet<string>,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
-  const flags = [...sourceFlags]
-  const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
+  const headgear = enemy.headgear
   const limbPose = animation?.gaitPose ?? 0
   const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
+  const limbFacing = nativeEighteenWayFacingBucket(animation?.limbHeadingDeg ?? enemy.headingDeg)
   return [
-    layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'archer-limbs'),
+    layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + limbFacing, 'archer-limbs'),
     layer('BadGuys', 451 + boundedPose(bodyPose, 8) * 18 + facing, 'archer-body'),
     layer('BadGuys', HEADGEAR_BASES[headgear] + nativeSkeletonHeadFacing(
       facing,
@@ -291,13 +250,11 @@ function skeletonArcherLayers(
 function skeletonMageLayers(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  sourceFlags: ReadonlySet<string>,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemySpriteLayer[] {
-  const flags = [...sourceFlags]
-  const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
+  const headgear = enemy.headgear
   const limbPose = animation?.gaitPose ?? 0
   const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
   const limbs = layer(
@@ -439,20 +396,13 @@ function skeletonFamilyBurningFireLayers(
 }
 
 function mageChargeLayers(
-  flags: ReadonlySet<string>,
+  element: NativeEnemyVisualSnapshot['mageElement'],
   charge: number,
   spawnAgeTicks: number,
   points: readonly Readonly<{ x: number; y: number }>[],
 ): NativeEnemySpriteLayer[] {
   const strength = boundedUnit(charge) ** 2
   if (strength === 0) return []
-  let element: 'fire' | 'frost' | 'lightning' | 'poison' = 'fire'
-  for (const flag of flags) {
-    if (flag === 'CASTFIRE') element = 'fire'
-    else if (flag === 'CASTLIGHTNING') element = 'lightning'
-    else if (flag === 'CASTFROST') element = 'frost'
-    else if (flag === 'CASTPOISON') element = 'poison'
-  }
   if (element === 'fire') {
     const entry = 255 + Math.floor(spawnAgeTicks / 5) % 12
     return points.flatMap((offset, pointIndex) => [

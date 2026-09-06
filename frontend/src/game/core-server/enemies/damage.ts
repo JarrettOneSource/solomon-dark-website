@@ -1,26 +1,18 @@
+import { receiveNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
 import { nextBoneyardWaveRandom } from '../../core-kernels/boneyard-wave-timeline.ts'
+import { cancelNativeBossNarration } from '../../core-kernels/native-boss-audio.ts'
+import { queueNativeDemonSkullHealthTriggers } from '../../core-kernels/native-demon-skull.ts'
 import { reactNativeSpiderToDamage } from '../../core-kernels/native-spider.ts'
-import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
 import type { RegisterNativeWorldPainter } from '../../core-kernels/native-world-manager-order.ts'
+import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
 import { damageCocoon } from './cocoon.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
 import { deathBrain } from './deaths.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyActorId, BoneyardEnemyDamageSound, BoneyardEnemyDeathEffect, BoneyardEnemySemanticEvent, BoneyardEnemyStore, BoneyardMaggotActor, DamageBoneyardEnemyRequest, DamageBoneyardEnemyResult, WorkingStep } from './model.ts'
 import { validateTick } from './model.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyActorId,
-  BoneyardEnemyDamageSound,
-  BoneyardEnemyDeathEffect,
-  BoneyardEnemySemanticEvent,
-  BoneyardEnemyStore,
-  BoneyardMaggotActor,
-  DamageBoneyardEnemyRequest,
-  DamageBoneyardEnemyResult,
-} from './model.ts'
 import { positiveModulo } from './movement.ts'
 import { NATIVE_ENEMY_HIT_LATCH_TICKS } from './programs.ts'
 import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
-
 interface DamagePresentationWork {
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
@@ -40,6 +32,9 @@ export function damageBoneyardEnemy(
   }
   if (!Number.isFinite(request.amount) || request.amount <= 0) {
     throw new RangeError('enemy damage must be finite and positive')
+  }
+  if (request.hitStrength !== undefined && (!Number.isFinite(request.hitStrength) || request.hitStrength < 0)) {
+    throw new RangeError('enemy hit strength must be finite and nonnegative')
   }
   const index = source.actors.findIndex((actor) => actor.id === request.actorId)
   const actor = source.actors[index]
@@ -124,6 +119,11 @@ export function damageBoneyardEnemy(
   const currentHealth = actor.currentHealth - request.amount
   const healthDamage = Math.min(Math.max(actor.currentHealth, 0), request.amount)
   const killed = currentHealth <= 0
+  if (actor.config.classification !== 'normal') {
+    source = { ...source, featuredBossId: killed ? null : actor.id,
+      demonSkullEncounter: queueNativeDemonSkullHealthTriggers(source.demonSkullEncounter,
+        actor.currentHealth / actor.config.maximumHealth, currentHealth / actor.config.maximumHealth) }
+  }
   const nextActor: BoneyardEnemyActor = killed
     ? {
         ...actor,
@@ -137,6 +137,8 @@ export function damageBoneyardEnemy(
         headFacingOffset: 0,
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
+        hitFeedback: receiveNativePuppetHit(request.tick, request.hitStrength),
+        lethalMagicDamage: request.hasMagicDamage === true,
         lifeState: 'dying',
         lighting: actor.config.enemyToken === 'SKELETONARCHER'
           ? {
@@ -156,9 +158,14 @@ export function damageBoneyardEnemy(
         currentHealth,
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
+        hitFeedback: receiveNativePuppetHit(request.tick, request.hitStrength),
       }
   const actors = [...source.actors]
   actors[index] = nextActor
+  if (killed && actor.config.enemyToken === 'DIREFACULTY') {
+    source = { ...source, bossNarration: cancelNativeBossNarration(source.bossNarration) }
+    work.events.push({ actorId: actor.id, eventId: work.nextEventId++, tick: request.tick, type: 'enemy-dialogue-stop' })
+  }
   if (killed) {
     request.lethalObserver?.onReward({
       enemy: actor.config,
@@ -167,6 +174,26 @@ export function damageBoneyardEnemy(
   }
   notifyAttributedHealthDamage(request, actor.id, actor.config.maximumHealth, healthDamage)
   return finishDamage({ ...source, steeringRngState }, actors, work, killed, healthDamage)
+}
+
+/** Damage from an enemy action updates the shared list before later actors take their turns. */
+export function damageWorkingBoneyardEnemy(work: WorkingStep, request: DamageBoneyardEnemyRequest): void {
+  const result = damageBoneyardEnemy({ ...work, lastStepTick: request.tick }, {
+    ...request, registerWorldPainter: work.registerWorldPainter,
+  })
+  if (!result.accepted) return
+  work.actors = [...result.store.actors]
+  work.maggots = [...result.store.maggots]
+  work.deathEffects = [...result.store.deathEffects]
+  work.bossNarration = result.store.bossNarration
+  work.demonSkullEncounter = result.store.demonSkullEncounter
+  work.featuredBossId = result.store.featuredBossId
+  work.nextDeathEffectId = result.store.nextDeathEffectId
+  work.nextDeathEpoch = result.store.nextDeathEpoch
+  work.nextEventId = result.store.nextEventId
+  work.rngState = result.store.rngState
+  work.steeringRngState = result.store.steeringRngState
+  work.events.push(...result.events)
 }
 
 export function applyBoneyardStaffDisable(
@@ -259,7 +286,8 @@ export function breakBoneyardSkeletonPike(
   if (
     actor.lifeState !== 'alive'
     || actor.brain.family !== 'skeleton'
-    || !actor.config.flags.some((flag) => flag === 'FLAG_PIKE')
+    || actor.config.enemyToken !== 'SKELETON'
+    || actor.config.family.weapon !== 'pike'
   ) return { broke: false, store: source }
   const weaponFlags = new Set([
     'FLAG_SWORD', 'FLAG_MACE', 'FLAG_FLAIL', 'FLAG_AXE', 'FLAG_PIKE',
@@ -278,13 +306,18 @@ export function breakBoneyardSkeletonPike(
     },
     config: {
       ...actor.config,
+      family: { ...actor.config.family, weapon: 'claw' },
       flags: Object.freeze(actor.config.flags.filter((flag) => !weaponFlags.has(flag))),
     },
   }
   return { broke: true, store: { ...source, actors } }
 }
 
-/** Raw Badguy +0x1DA Hurricane contact clock, shared by every source. */
+/**
+ * Commits a collision-resolved spell impulse to the target-owned enemy row.
+ * The spell system owns the impulse formula; the active world owns collision
+ * resolution and passes only the accepted final root position here.
+ */
 export function setBoneyardEnemyHurricaneContactCooldown(
   source: BoneyardEnemyStore,
   actorId: BoneyardEnemyActorId,
@@ -358,6 +391,7 @@ function damageBoneyardMaggot(
     deathStartedTick: killed ? request.tick : maggot.deathStartedTick,
     lastDamagedByPlayerId: request.sourcePlayerId,
     lastDamageTick: request.tick,
+        hitFeedback: receiveNativePuppetHit(request.tick, request.hitStrength),
     lifeState: killed ? 'dying' : 'alive',
   }
   const maggots = [...source.maggots]
@@ -420,6 +454,8 @@ function enemyHurtSound(
   actor: BoneyardEnemyActor,
 ): BoneyardEnemyDamageSound | null {
   switch (actor.config.enemyToken) {
+    case 'DIREFACULTY':
+    case 'HEARTMONGER':
     case 'SKELETON':
     case 'SKELETONARCHER':
     case 'SKELETONMAGE':
@@ -431,6 +467,7 @@ function enemyHurtSound(
     case 'COFFIN':
     case 'SPIDER':
     case 'COCOON':
+    case 'DEMONSKULL':
     case 'DEMON':
     case 'IMP':
     case 'WRAITH':
@@ -491,7 +528,7 @@ function spawnShieldBreakParticles(
       lifetimeTicks: Math.ceil(alpha / 0.05),
       opacityTimer: alpha,
       ownerActorId: actor.id,
-      painterRegistration: work.registerWorldPainter('actor'),
+      painterRegistration: work.registerWorldPainter('transient'),
       presentationOwner: 'world-sorted',
       position: Object.freeze({ x: actor.position.x, y: actor.position.y - 30 }),
       role: 'shield-break-particle',

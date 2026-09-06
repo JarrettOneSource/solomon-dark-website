@@ -1,13 +1,25 @@
-import type { NativeEquipmentModifiers } from '../../core-kernels/native-equipment-effects.ts'
-import type { NativeSecondaryActorKind } from '../../core-kernels/native-secondary-abilities.ts'
-import type { BoneyardWaveEnemyToken } from '../../core-kernels/boneyard-wave-schema.ts'
-import type { BoneyardEnemyBrain, BoneyardEnemyProjectileKind } from '../enemies/model.ts'
+import type {
+  BoneyardWaveEnemyToken,
+} from '../../core-kernels/boneyard-wave-schema.ts'
+import type {
+  NativeEquipmentModifiers,
+} from '../../core-kernels/native-equipment-effects.ts'
+import type {
+  NativeSecondaryActorKind,
+} from '../../core-kernels/native-secondary-abilities.ts'
+import {
+  type BoneyardEnemyBrain,
+  type BoneyardEnemyProjectileKind,
+} from '../enemies/model.ts'
 
 type EnemyFamily = BoneyardEnemyBrain['family']
 export const ML_BOT_POLICY_ENEMY_TOKEN_SPECIES = Object.freeze({
   COFFIN: 'coffin',
   COCOON: 'cocoon',
   DEMON: 'demon',
+  DEMONSKULL: 'demon-skull',
+  DIREFACULTY: 'faculty',
+  HEARTMONGER: 'heartmonger',
   IMP: 'imp',
   PORTAL: 'coffin',
   SKELETON: 'skeleton',
@@ -64,6 +76,7 @@ export const ML_BOT_POLICY_SECONDARY_ACTOR_CLASSES = Object.freeze({
   'comet-trail': 'presentation',
   'dampen-wave': 'effect',
   'dampened-projectile': 'presentation',
+  'dampened-smoke': 'presentation',
   'earthquake': 'effect',
   'earthquake-debris': 'presentation',
   'earthquake-dust': 'presentation',

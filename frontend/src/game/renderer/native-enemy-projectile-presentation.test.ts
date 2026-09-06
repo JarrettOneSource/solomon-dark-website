@@ -25,6 +25,7 @@ test('every enemy projectile uses its recovered native atlas range', () => {
     assert.deepEqual(plan.position, fixture.position)
     assert.ok(plan.layers.length + plan.underlays.length > 0)
     for (const layer of [...plan.layers, ...plan.underlays]) {
+      assert.ok(layer.atlas === 'BadGuys' || layer.atlas === 'DeadHawg' || layer.atlas === 'Demon')
       const record = manifests[layer.atlas].entries[layer.entry]
       assert.ok(record, `${layer.atlas}:${layer.entry}`)
       assert.ok(record.rect.w > 0, fixture.kind)
@@ -49,7 +50,7 @@ test('live projectile selectors and clocks follow the recovered compositor', () 
     payload: 'fire',
     visualScale: 0.4,
   }), 120)
-  assert.ok(fadedArrow.layers.every(({ alpha }) => alpha === 0.4))
+  assert.deepEqual(fadedArrow.layers.map(({ alpha }) => alpha), [0.4, 0.1600000113248825])
 
   const firebolt = nativeEnemyProjectilePlan(projectile('firebolt', 0x7eb, {
     ageTicks: 5,

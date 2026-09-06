@@ -1,27 +1,18 @@
-import {
-  BONEYARD_ENEMY_FLAGS,
-} from '../core-kernels/boneyard-enemy-config.ts'
+import { BONEYARD_ARROW_TYPES, BONEYARD_ENEMY_CLASSIFICATIONS, BONEYARD_MAGE_ELEMENTS, BONEYARD_SKELETON_WEAPONS } from '../core-kernels/boneyard-enemy-config-model.ts'
+import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import type {
-  BoneyardEnemyAction,
-  BoneyardEnemyAnimationState,
-  BoneyardEnemyCoffinState,
-  BoneyardEnemyEffectSnapshot,
-  BoneyardEnemySnapshot,
-} from './game-state.ts'
+import type { BoneyardEnemyAction, BoneyardEnemyAnimationState, BoneyardEnemyCoffinState, BoneyardEnemyEffectSnapshot, BoneyardEnemySnapshot } from './game-state.ts'
 import { BONEYARD_ENEMY_EFFECT_ROLES } from './game-state.ts'
-import type {
-  ReplicatedEntityDescriptor,
-  ReplicatedEntitySample,
-} from './replicated-entity-types.ts'
-
+import type { ReplicatedEntityDescriptor, ReplicatedEntitySample } from './replicated-entity-types.ts'
 export const BONEYARD_ENEMY_ENTITY_TYPE_ID = 2
 
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 14
-const EFFECT_COMPONENT_OFFSET = 49
+const DESCRIPTOR_COMPONENTS = 31
+const nameEncoder = new TextEncoder()
+const nameDecoder = new TextDecoder('utf-8', { fatal: true })
+const EFFECT_COMPONENT_OFFSET = 72
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -38,6 +29,9 @@ const FAMILIES = [
   'PORTAL',
   'SPIDER',
   'COCOON',
+  'HEARTMONGER',
+  'DIREFACULTY',
+  'DEMONSKULL',
 ] as const
 
 const ACTIONS: readonly (BoneyardEnemyAction | null)[] = [
@@ -52,6 +46,16 @@ const ACTIONS: readonly (BoneyardEnemyAction | null)[] = [
   'zombie-beat',
   'wraith-drain',
   'demon-bomb',
+  'faculty-throw',
+  'faculty-two-hand',
+  'faculty-lightning',
+  'demon-skull-bite',
+  'demon-skull-eyes',
+  'demon-skull-mouth',
+  'demon-skull-spit',
+  'demon-skull-flair',
+  'demon-skull-scream',
+
 ]
 
 const ANIMATION_STATES: readonly BoneyardEnemyAnimationState[] = [
@@ -77,7 +81,7 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
   typeId: BONEYARD_ENEMY_ENTITY_TYPE_ID,
   descriptorIsValid(descriptor: ReplicatedEntityDescriptor): boolean {
     if (
-      descriptor.length !== DESCRIPTOR_LENGTH
+      descriptor.length < DESCRIPTOR_COMPONENTS
       || descriptor[0] !== BONEYARD_ENEMY_ENTITY_TYPE_ID
       || !entityId(descriptor[1])
       || descriptor[1] === 0
@@ -98,16 +102,30 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       || !Number.isFinite(descriptor[13])
       || descriptor[13] <= 0
     ) return false
+    if (!arrayIndex(descriptor[14], 6)
+      || !arrayIndex(descriptor[15], BONEYARD_SKELETON_WEAPONS.length)
+      || !arrayIndex(descriptor[16], BONEYARD_ENEMY_CLASSIFICATIONS.length)
+      || !arrayIndex(descriptor[17], 2)
+      || !arrayIndex(descriptor[18], BONEYARD_ARROW_TYPES.length)
+      || !arrayIndex(descriptor[19], BONEYARD_MAGE_ELEMENTS.length)
+      || !arrayIndex(descriptor[20], 2)
+      || !arrayIndex(descriptor[22], 2)
+      || !descriptor.slice(23, 31).every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+      || !validNameDescriptor(descriptor)) return false
     const family = FAMILIES[descriptor[2]]!
-    return BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3]
+    return (BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3] || family === 'IMP' && descriptor[3] === 2044)
       && (descriptor[7] === 0 || family === 'SKELETON')
       && descriptor[8] === 0
       && nonnegativeInteger(descriptor[9])
       && (descriptor[10] === 0 || family === 'SKELETONMAGE')
       && (family === 'COFFIN' || (descriptor[11] === 1 && descriptor[12] === 0))
+      && (family === 'DIREFACULTY' || descriptor.slice(22, 31).every((value) => value === 0))
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
+      && (sample[52] === 0 || sample[52] === 1)
+      && arrayIndex(sample[57], 3)
+      && [58, 59, 60, 64].every(index => sample[index] >= 0 && sample[index] <= VALUE_SCALE)
       && sample[0] === BONEYARD_ENEMY_ENTITY_TYPE_ID
       && entityId(sample[1])
       && sample[1] > 0
@@ -134,11 +152,17 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[40] >= -1 && sample[40] <= 1
       && (sample[40] === 0 || sample[6] === 2)
       && sample[41] >= 0
+      && sample[66] >= 0
       && sample.slice(42, 46).every((value) => Math.abs(value) <= POSITION_SCALE * 256)
+      && (sample[47] === 0 || sample[47] === 1)
+      && arrayIndex(sample[48], 4)
+      && sample[50] >= 0 && sample[50] <= VALUE_SCALE
+      && cyclic(sample[51], 360, ANGLE_SCALE)
       && (sample[46] === -1 || cyclic(sample[46], 360, ANGLE_SCALE))
-      && sample[47] >= 0 && sample[47] <= VALUE_SCALE
-      && sample[48] >= 0 && sample[48] <= 0xffffff
-      && (sample[46] !== -1 || (sample[47] === 0 && sample[48] === 0))
+      && (sample[69] === -1 || cyclic(sample[69], 360, ANGLE_SCALE))
+      && sample[70] >= 0 && sample[70] <= VALUE_SCALE
+      && sample[71] >= 0 && sample[71] <= 0xffffff
+      && (sample[69] !== -1 || (sample[70] === 0 && sample[71] === 0))
       && effectComponentsAreValid(sample)
   },
 }
@@ -146,6 +170,11 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
 export function boneyardEnemyDescriptor(
   enemy: BoneyardEnemySnapshot,
 ): ReplicatedEntityDescriptor {
+  const name = enemy.name === null ? null : nameEncoder.encode(enemy.name)
+  if (name !== null && name.length > 128) throw new Error('enemy name exceeds 128 UTF-8 bytes')
+  if ((enemy.enemyToken === 'DIREFACULTY') !== (enemy.faculty !== undefined)) {
+    throw new Error('Faculty descriptor requires its appearance')
+  }
   return [
     BONEYARD_ENEMY_ENTITY_TYPE_ID,
     enemy.id,
@@ -161,6 +190,18 @@ export function boneyardEnemyDescriptor(
     enemy.animation.coffinScaleX,
     quantize(enemy.animation.coffinRotationRadians, VALUE_SCALE),
     enemy.scale,
+    enemy.headgear,
+    requiredIndex(BONEYARD_SKELETON_WEAPONS, enemy.weapon, 'Skeleton weapon'),
+    requiredIndex(BONEYARD_ENEMY_CLASSIFICATIONS, enemy.classification, 'enemy classification'),
+    Number(enemy.burning),
+    requiredIndex(BONEYARD_ARROW_TYPES, enemy.arrowType, 'arrow type'),
+    requiredIndex(BONEYARD_MAGE_ELEMENTS, enemy.mageElement, 'Mage element'),
+    Number(enemy.rotten),
+    name?.length ?? -1,
+    Number(enemy.faculty?.female ?? false),
+    ...(enemy.faculty?.bodyColor ?? [0, 0, 0, 0]),
+    ...(enemy.faculty?.headColor ?? [0, 0, 0, 0]),
+    ...(name ?? []),
   ]
 }
 
@@ -233,6 +274,29 @@ export function boneyardEnemySample(
     quantize(animation.demonFrontExtremityOffset.y, POSITION_SCALE),
     quantize(animation.demonRearExtremityOffset.x, POSITION_SCALE),
     quantize(animation.demonRearExtremityOffset.y, POSITION_SCALE),
+    animation.limbHeadingDeg === null ? -1 : quantizeCyclic(animation.limbHeadingDeg, 360, ANGLE_SCALE),
+    animation.headVariant,
+    enemy.faculty?.handMask ?? 0,
+    quantize(enemy.faculty?.lightPhase ?? 0, ANGLE_SCALE),
+    quantize(enemy.faculty?.lightIntensity ?? 0, VALUE_SCALE),
+    quantizeCyclic(enemy.faculty?.bodyHeadingDeg ?? 0, 360, ANGLE_SCALE),
+    Number(enemy.faculty?.lightningActive ?? false),
+    quantize(enemy.demonSkull?.bodyHeadingDeg ?? 0, ANGLE_SCALE),
+    quantize(enemy.demonSkull?.bodyOffset.x ?? 0, POSITION_SCALE),
+    quantize(enemy.demonSkull?.bodyOffset.y ?? 0, POSITION_SCALE),
+    quantize(enemy.demonSkull?.bodyPhaseDeg ?? 0, ANGLE_SCALE),
+    enemy.demonSkull?.bodyPose ?? 0,
+    quantize(enemy.demonSkull?.chargeGlow ?? 0, VALUE_SCALE),
+    quantize(enemy.demonSkull?.eyeCharge ?? 0, VALUE_SCALE),
+    quantize(enemy.demonSkull?.flairGlow ?? 0, VALUE_SCALE),
+    quantize(enemy.demonSkull?.flickerPhaseDeg ?? 0, ANGLE_SCALE),
+    quantize(enemy.demonSkull?.jitter.x ?? 0, POSITION_SCALE),
+    quantize(enemy.demonSkull?.jitter.y ?? 0, POSITION_SCALE),
+    quantize(enemy.demonSkull?.lightIntensity ?? 0, VALUE_SCALE),
+    quantize(enemy.demonSkull?.spin ?? 0, ANGLE_SCALE),
+    quantize(animation.shadowLateralOffset, VALUE_SCALE),
+    quantize(animation.demonShadowOffset.x, POSITION_SCALE),
+    quantize(animation.demonShadowOffset.y, POSITION_SCALE),
     animation.spider === null ? -1 : quantizeCyclic(animation.spider.bodyHeadingDeg, 360, ANGLE_SCALE),
     quantize(animation.spider?.outlineAlpha ?? 0, VALUE_SCALE),
     animation.spider?.outlineTint ?? 0,
@@ -254,7 +318,7 @@ export function materializeBoneyardEnemy(
     throw new Error('Boneyard enemy sample identity does not match its descriptor')
   }
   const family = FAMILIES[descriptor[2]]!
-  if ((family === 'SPIDER') !== (sample[46] !== -1)) {
+  if ((family === 'SPIDER') !== (sample[69] !== -1)) {
     throw new Error('Boneyard Spider sample does not match the enemy family')
   }
   if (family === 'SPIDER' && (sample[10] < 0 || sample[10] > 3 * VALUE_SCALE || sample[10] % VALUE_SCALE !== 0)) {
@@ -282,14 +346,28 @@ export function materializeBoneyardEnemy(
       || demonFrontExtremityOffset.y !== 0
       || demonRearExtremityOffset.x !== 0
       || demonRearExtremityOffset.y !== 0
+      || sample[67] !== 0
+      || sample[68] !== 0
     )
   ) throw new Error('Boneyard Demon endpoint offsets do not match the enemy family')
+  if (family !== 'DEMONSKULL' && sample.slice(53, 66).some(value => value !== 0)) {
+    throw new Error('DemonSkull visual fields do not match the enemy family')
+  }
   return {
+    ...(family !== 'DEMONSKULL' ? {} : { demonSkull: {
+      bodyHeadingDeg: dequantize(sample[53], ANGLE_SCALE),
+      bodyOffset: { x: dequantize(sample[54], POSITION_SCALE), y: dequantize(sample[55], POSITION_SCALE) },
+      bodyPhaseDeg: dequantize(sample[56], ANGLE_SCALE), bodyPose: sample[57],
+      chargeGlow: dequantize(sample[58], VALUE_SCALE), eyeCharge: dequantize(sample[59], VALUE_SCALE),
+      flairGlow: dequantize(sample[60], VALUE_SCALE), flickerPhaseDeg: dequantize(sample[61], ANGLE_SCALE),
+      jitter: { x: dequantize(sample[62], POSITION_SCALE), y: dequantize(sample[63], POSITION_SCALE) },
+      lightIntensity: dequantize(sample[64], VALUE_SCALE), spin: dequantize(sample[65], ANGLE_SCALE),
+    } }),
     animation: {
-      spider: sample[46] === -1 ? null : {
-        bodyHeadingDeg: dequantize(sample[46], ANGLE_SCALE),
-        outlineAlpha: dequantize(sample[47], VALUE_SCALE),
-        outlineTint: sample[48],
+      spider: sample[69] === -1 ? null : {
+        bodyHeadingDeg: dequantize(sample[69], ANGLE_SCALE),
+        outlineAlpha: dequantize(sample[70], VALUE_SCALE),
+        outlineTint: sample[71],
       },
       action: ACTIONS[sample[7]]!,
       actionProgress: dequantize(sample[8], VALUE_SCALE),
@@ -310,9 +388,13 @@ export function materializeBoneyardEnemy(
       demonRearRotationRadians: dequantize(sample[26], VALUE_SCALE),
       effects: decodeEffects(sample),
       gaitPose: dequantize(sample[16], VALUE_SCALE),
+      shadowLateralOffset: dequantize(sample[66], VALUE_SCALE),
+      demonShadowOffset: { x: dequantize(sample[67], POSITION_SCALE), y: dequantize(sample[68], POSITION_SCALE) },
       headFacingOffset: sample[40] as -1 | 0 | 1,
       hitFlash: dequantize(sample[17], VALUE_SCALE),
       impEffectFrame: sample[18],
+      headVariant: sample[47] as 0 | 1,
+      limbHeadingDeg: sample[46] === -1 ? null : dequantize(sample[46], ANGLE_SCALE),
       impBodyRotationRadians: dequantize(sample[32], VALUE_SCALE),
       impEffectAlpha: dequantize(sample[33], VALUE_SCALE),
       maggots: [],
@@ -330,7 +412,23 @@ export function materializeBoneyardEnemy(
       zombieRearArmPose: dequantize(sample[23], VALUE_SCALE),
       zombieRearArmRotationRadians: dequantize(sample[24], VALUE_SCALE),
     },
+    ...(family === 'DIREFACULTY' ? { faculty: {
+      lightningActive: sample[52] === 1,
+      bodyColor: [descriptor[23]!, descriptor[24]!, descriptor[25]!, descriptor[26]!] as const,
+      female: descriptor[22] === 1, handMask: sample[48]!,
+      bodyHeadingDeg: dequantize(sample[51], ANGLE_SCALE),
+      headColor: [descriptor[27]!, descriptor[28]!, descriptor[29]!, descriptor[30]!] as const,
+      lightPhase: dequantize(sample[49], ANGLE_SCALE), lightIntensity: dequantize(sample[50], VALUE_SCALE),
+    } } : {}),
     armored: descriptor[7] === 1,
+    classification: BONEYARD_ENEMY_CLASSIFICATIONS[descriptor[16]]!,
+    headgear: descriptor[14] as 0 | 1 | 2 | 3 | 4 | 5,
+    burning: descriptor[17] === 1,
+    arrowType: BONEYARD_ARROW_TYPES[descriptor[18]]!,
+    mageElement: BONEYARD_MAGE_ELEMENTS[descriptor[19]]!,
+    rotten: descriptor[20] === 1,
+    name: descriptor[21] === -1 ? null : nameDecoder.decode(new Uint8Array(descriptor.slice(DESCRIPTOR_COMPONENTS))),
+    weapon: BONEYARD_SKELETON_WEAPONS[descriptor[15]]!,
     currentHealth: dequantize(sample[5], VALUE_SCALE),
     enemyToken: family,
     flags: decodeFlags(descriptor[6]),
@@ -522,4 +620,19 @@ function arrayIndex(value: number, length: number): boolean {
 
 function cyclic(value: number, period: number, scale: number): boolean {
   return Number.isSafeInteger(value) && value >= 0 && value < period * scale
+}
+
+function validNameDescriptor(descriptor: ReplicatedEntityDescriptor): boolean {
+  const length = descriptor[21]
+  if (length === -1) return descriptor.length === DESCRIPTOR_COMPONENTS
+  if (!Number.isSafeInteger(length) || length < 0 || length > 128
+    || descriptor.length !== DESCRIPTOR_COMPONENTS + length) return false
+  const bytes = descriptor.slice(DESCRIPTOR_COMPONENTS)
+  if (bytes.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return false
+  try {
+    nameDecoder.decode(new Uint8Array(bytes))
+    return true
+  } catch {
+    return false
+  }
 }

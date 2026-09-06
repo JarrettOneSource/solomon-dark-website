@@ -1,34 +1,20 @@
+import { nativeBoneyardFencePosts } from '../core-kernels/boneyard-fence-posts.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
-import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
 import type { ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
-import type { BoneyardBounds, BoneyardPoint, LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import {
-  NATIVE_SOLOMON_COLLISION_RADIUS,
-  NATIVE_SOLOMON_ESCAPE_PATH_MARGIN,
-  NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED,
-  NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
-  nativeSolomonEscapePathTarget,
-  nativeSolomonEscapeTarget,
-} from '../core-kernels/boneyard-encounter.ts'
+import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
 import type { BoneyardSolomonEncounterState } from '../core-kernels/boneyard-encounter.ts'
-import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter } from '../core-kernels/player-character.ts'
-import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
-import type { NativeSecondaryKnockbackContact } from '../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_SOLOMON_COLLISION_RADIUS, NATIVE_SOLOMON_ESCAPE_PATH_MARGIN, NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED, NATIVE_SOLOMON_NAVIGATION_CLEARANCE, nativeSolomonEscapePathTarget, nativeSolomonEscapeTarget } from '../core-kernels/boneyard-encounter.ts'
+import type { BoneyardBounds, BoneyardPoint, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { NativeLootPlacement } from '../core-kernels/native-loot.ts'
-import {
-  boneyardBodyCollisionSourceIds,
-  canPlaceBoneyardBody,
-  firstBoneyardLineObstruction,
-  firstBoneyardPathBlockProgress,
-  resolveBoneyardMovement,
-  withBoneyardGateCollision,
-} from './boneyard-collision.ts'
+import type { NativeSecondaryKnockbackContact } from '../core-kernels/native-secondary-abilities.ts'
+import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter } from '../core-kernels/player-character.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
-import type { BoneyardEnemyPlayerKnockback, BoneyardEnemyStore } from './enemies/model.ts'
+import { boneyardBodyCollisionSourceIds, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, withBoneyardGateCollision } from './boneyard-collision.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import type { BoneyardPlayerCombatStatus, BoneyardWorldState } from './boneyard-world-state.ts'
+import type { BoneyardEnemyPlayerKnockback, BoneyardEnemyStore } from './enemies/model.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
-
 export function spawnPlayerCharacterInBoneyard(
   config: PlayerCharacterConfig,
   world: BoneyardWorldState,
@@ -444,14 +430,16 @@ export function commitBoneyardEnemyCollisionPositions(
 export function retainInsideBounds<Row extends { readonly position: Readonly<BoneyardPoint> }>(
   rows: readonly Row[],
   bounds: Readonly<BoneyardBounds>,
+  excludedFromCleanup?: (row: Row) => boolean,
 ): readonly Row[] {
   let index = 0
-  while (index < rows.length && pointInsideBounds(rows[index]!.position, bounds)) index += 1
+  while (index < rows.length && (excludedFromCleanup?.(rows[index]!)
+    || pointInsideBounds(rows[index]!.position, bounds))) index += 1
   if (index === rows.length) return rows
   const retained = rows.slice(0, index)
   for (index += 1; index < rows.length; index += 1) {
     const row = rows[index]!
-    if (pointInsideBounds(row.position, bounds)) retained.push(row)
+    if (excludedFromCleanup?.(row) || pointInsideBounds(row.position, bounds)) retained.push(row)
   }
   return retained
 }
@@ -474,15 +462,16 @@ export function enemyCollisionBody(
 }
 
 export function createBoneyardSceneryTargets(
-  objects: LoadedBoneyard['scene']['objects'],
+  scene: LoadedBoneyard['scene'],
 ): Pick<BoneyardWorldState, 'earthquakeSceneryTargets' | 'primarySceneryTargets' | 'scenerySpellTargets'> {
+  const objects = scene.objects
   return {
     earthquakeSceneryTargets: objects.map((object, id) => Object.freeze({
       id,
       position: Object.freeze({ ...object.pos }),
       typeId: object.typeId,
     })),
-    primarySceneryTargets: objects.flatMap((object, registrationOrder) => {
+    primarySceneryTargets: [...objects.flatMap((object, registrationOrder) => {
       const bodyRadius = fireballSceneryRadius(object.typeId)
       return bodyRadius === null ? [] : [Object.freeze({
         active: true,
@@ -493,11 +482,17 @@ export function createBoneyardSceneryTargets(
         id: `scenery:${object.eid}`,
         kind: object.typeId === 2029 ? 'gravestone' as const : 'scenery' as const,
         nativePriority: 1000,
+        queryLane: 'grid' as const,
         pendingRemove: false,
         position: Object.freeze({ ...object.pos }),
         registrationOrder,
       })]
-    }),
+    }), ...nativeBoneyardFencePosts(scene.fences).map(({ pos }, index) => ({
+      active: true, actorFlags: 4, attachment: { x: 0, y: 0 }, bodyRadius: 10,
+      cellBindingOrder: objects.length + index, id: `fencepost:${index}`, kind: 'scenery' as const,
+      nativePriority: 1000, pendingRemove: false, position: { ...pos }, queryLane: 'grid' as const,
+      registrationOrder: objects.length + index,
+    }))],
     scenerySpellTargets: objects.flatMap((object, registrationOrder) => (
       object.typeId === 2029 ? [{
         active: true,
@@ -508,6 +503,7 @@ export function createBoneyardSceneryTargets(
         id: `scenery:${object.eid}`,
         kind: 'gravestone' as const,
         nativePriority: 1000,
+        queryLane: 'grid' as const,
         pendingRemove: false,
         position: { ...object.pos },
         registrationOrder,
@@ -522,7 +518,6 @@ function fireballSceneryRadius(typeId: number): number | null {
     case 2009: return 1
     case 2029: return 0.01
     case 2040: return 1
-    case 2061: return 20
     default: return null
   }
 }

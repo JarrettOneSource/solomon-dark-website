@@ -1,22 +1,15 @@
-import type {
-  NativeSecondaryDamageContact,
-  NativeSecondaryDampenCandidates,
-  NativeSecondaryHeadingPerturbation,
-  NativeSecondaryPositionResult,
-  NativeSecondaryTarget,
-  NativeSecondaryTickResult,
-} from '../core-kernels/native-secondary-abilities.ts'
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
-import { drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
-import type { Vector2 } from '../core-kernels/vector.ts'
+import { drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import type { NativeSecondaryDamageContact, NativeSecondaryDampenCandidates, NativeSecondaryDampenProjectileCandidate, NativeSecondaryHeadingPerturbation, NativeSecondaryPositionResult, NativeSecondaryTarget, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
-import { damageBoneyardEnemy } from './enemies/damage.ts'
-import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
-import type { BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore } from './enemies/model.ts'
-import { canPlaceBoneyardBody } from './boneyard-collision.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
-
+import { canPlaceBoneyardBody } from './boneyard-collision.ts'
+import { damageBoneyardEnemy } from './enemies/damage.ts'
+import { dampenBoneyardCasters } from './enemies/dampen.ts'
+import type { BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore } from './enemies/model.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 const NATIVE_TELEPORT_GRID_STEP = 100
 const NATIVE_TELEPORT_GRID_INSET = 100
 const NATIVE_TELEPORT_SCORE_CAP = 0x10_0000
@@ -234,7 +227,7 @@ export function boneyardNativeSecondaryDampenCandidates(
   const actors = enemies.actors.filter((actor) => (
     actor.lifeState === 'alive' && inside(actor.position)
   ))
-  const projectiles = enemies.projectiles
+  const projectiles: NativeSecondaryDampenProjectileCandidate[] = enemies.projectiles
     .filter((projectile) => (
       inside(projectile.position)
       && (
@@ -255,8 +248,6 @@ export function boneyardNativeSecondaryDampenCandidates(
       || first.id - second.id
     ))
     .map((projectile) => Object.freeze({
-      ageTicks: projectile.ageTicks,
-      headingDegrees: projectile.headingDeg,
       id: projectile.id,
       kind: projectile.nativeTypeId === 0x7eb ? 'firebolt' : 'guided-missile',
       payload: projectile.nativeTypeId === 0x7eb
@@ -265,12 +256,14 @@ export function boneyardNativeSecondaryDampenCandidates(
           ? 'poison'
           : 'cold',
       position: Object.freeze({ ...projectile.position }),
-      visualPhaseDegrees: projectile.visualPhaseDeg,
-      visualScale: projectile.visualScale,
     }))
+  for (const spell of enemies.bossSpells) {
+    if (!inside(spell.position) || (spell.kind !== 'skull-missile' && spell.kind !== 'dark-fireball')) continue
+    projectiles.push({ id: spell.id, kind: spell.kind, payload: 'dark', position: { ...spell.position } })
+  }
   return Object.freeze({
     casterTargetIds: Object.freeze(actors
-      .filter(({ config }) => config.enemyToken === 'SKELETONMAGE')
+      .filter(({ config }) => config.enemyToken === 'SKELETONMAGE' || config.enemyToken === 'DIREFACULTY')
       .map(({ id }) => id)
       .sort((a, b) => a - b)),
     projectiles: Object.freeze(projectiles),
@@ -285,7 +278,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   source: BoneyardEnemyStore,
   result: Pick<
     NativeSecondaryTickResult,
-    'damage' | 'dispelledShieldTargetIds' | 'headingPerturbations' | 'removedProjectileIds'
+    'damage' | 'dampenedCasterTargetIds' | 'dispelledShieldTargetIds' | 'headingPerturbations' | 'removedProjectileIds'
   >,
   tick: number,
   lethalObserver?: BoneyardEnemyLethalObserver,
@@ -299,8 +292,10 @@ export function resolveBoneyardNativeSecondaryCombat(
     : {
         ...source,
         projectiles: source.projectiles.filter(({ id }) => !removedProjectileIds.has(id)),
+        bossSpells: source.bossSpells.filter(({ id }) => !removedProjectileIds.has(id)),
       }
   const events: BoneyardEnemySemanticEvent[] = []
+  enemies = dampenBoneyardCasters(enemies, result.dampenedCasterTargetIds, tick, registerWorldPainter)
 
   for (const targetId of result.dispelledShieldTargetIds) {
     const actor = enemies.actors.find(({ id }) => id === targetId)
@@ -405,6 +400,7 @@ function applyContact(
     etherDrainCapture,
     magic: contact.kind !== 'physical',
     amount: contact.amount * damageMultiplier,
+    hasMagicDamage: contact.kind !== 'physical',
     lethalObserver,
     registerWorldPainter,
     sourcePlayerId: contact.ownerId,

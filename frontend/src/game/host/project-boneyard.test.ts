@@ -1,3 +1,4 @@
+import { createNativePuppetHit, receiveNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -259,6 +260,7 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     lastAttackTick: null,
     lastDamagedByPlayerId: 'player',
     lastDamageTick: 10,
+    hitFeedback: receiveNativePuppetHit(10),
     lastMovementTick: null,
     lifeState: 'alive',
     maximumHealth: 2,
@@ -288,15 +290,15 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
   }
 
   assert.equal(projectBoneyardMaggots(store, 10)[0]?.hitFlash, 1)
-  assert.equal(projectBoneyardMaggots(store, 12)[0]?.hitFlash, 0.9)
+  assert.equal(projectBoneyardMaggots(store, 12)[0]?.hitFlash, .8999999761581421)
   assert.ok(Math.abs(
-    projectBoneyardMaggots(store, 29)[0]!.hitFlash - 0.05,
+    projectBoneyardMaggots(store, 29)[0]!.hitFlash - .049999844282865524,
   ) < 1e-12)
   assert.equal(projectBoneyardMaggots(store, 30)[0]?.hitFlash, 0)
   assert.equal(NATIVE_ENEMY_HIT_LATCH_TICKS, 20)
   assert.equal(projectBoneyardMaggots({
     ...store,
-    maggots: [{ ...maggot, lastDamageTick: null }],
+    maggots: [{ ...maggot, lastDamageTick: null, hitFeedback: createNativePuppetHit() }],
   }, 10)[0]?.hitFlash, 0)
 })
 
@@ -337,6 +339,7 @@ test('projects the native refreshed 20-tick hit latch without changing enemy act
       phase: 'attack' as const,
     },
     lastDamageTick: 10,
+    hitFeedback: receiveNativePuppetHit(10),
   }
   const store = { ...spawned.store, actors: [attacking] }
   const first = projectBoneyardEnemies(store, 10)[0]!
@@ -344,7 +347,7 @@ test('projects the native refreshed 20-tick hit latch without changing enemy act
   const expired = projectBoneyardEnemies(store, 30)[0]!
 
   assert.equal(first.animation.hitFlash, 1)
-  assert.ok(Math.abs(finalVisible.animation.hitFlash - 0.05) < 1e-12)
+  assert.ok(Math.abs(finalVisible.animation.hitFlash - .049999844282865524) < 1e-12)
   assert.equal(expired.animation.hitFlash, 0)
   assert.equal(first.animation.state, 'action')
   assert.equal(first.animation.actionProgress, 4)
@@ -766,6 +769,7 @@ function projectedMaggot(
     lastAttackTick: null,
     lastDamagedByPlayerId: null,
     lastDamageTick: null,
+    hitFeedback: createNativePuppetHit(),
     lastMovementTick: null,
     lifeState: 'alive',
     maximumHealth: 2,

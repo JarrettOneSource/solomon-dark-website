@@ -20,7 +20,6 @@ import {
 import type {
   NativeEnemyAuthoredPointResolver,
   NativeEnemyFamilyPresentation,
-  NativeEnemySegmentLayer,
   NativeEnemySpriteLayer,
   NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation-model.ts'
@@ -232,12 +231,4 @@ function addScaledPoint(
   scale: number,
 ): Readonly<{ x: number; y: number }> {
   return { x: origin.x + point.x * scale, y: origin.y + point.y * scale }
-}
-
-export function segment(
-  start: Readonly<{ x: number; y: number }>,
-  end: Readonly<{ x: number; y: number }>,
-  role: string,
-): NativeEnemySegmentLayer {
-  return { alpha: 1, end, role, start, tint: 0x777777, width: 1.5 }
 }

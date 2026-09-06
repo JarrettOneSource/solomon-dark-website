@@ -1,3 +1,4 @@
+
 const NATIVE_EXPLOSION_FEEDBACK_INTENSITY = 4
 
 export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
@@ -8,6 +9,7 @@ export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
   coffinIntensity: 0.2,
   demonIntensity: 0.2,
   explosionIntensity: NATIVE_EXPLOSION_FEEDBACK_INTENSITY,
+  heartmongerIntensity: 0.2,
   impSplitIntensity: 0.05,
   impTerminalIntensity: 0.1,
   portalIntensity: 0.2,
@@ -21,9 +23,12 @@ export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
 
 export type NativeEnemyWorldFeedbackOutput =
   | 'spider-collapse'
+  | 'discorporeal-banish'
+  | 'faculty-break'
   | 'archer-shatter'
   | 'coffin-break'
   | 'demon-split'
+  | 'heartmonger-shatter'
   | 'imp-split'
   | 'mage-shatter'
   | 'portal-break'
@@ -87,6 +92,8 @@ export function nativeEnemyWorldFeedbackImpulses(
 ): readonly number[] {
   switch (output) {
     case 'spider-collapse': return []
+    case 'discorporeal-banish': return []
+    case 'faculty-break': return [Math.fround(.2)]
     case 'archer-shatter':
     case 'mage-shatter':
     case 'skeleton-shatter':
@@ -102,6 +109,7 @@ export function nativeEnemyWorldFeedbackImpulses(
         NATIVE_ENEMY_WORLD_FEEDBACK.wraithIntensity,
         NATIVE_ENEMY_WORLD_FEEDBACK.wraithIntensity,
       ]
+    case 'heartmonger-shatter': return [NATIVE_ENEMY_WORLD_FEEDBACK.heartmongerIntensity]
     case 'coffin-break': return [NATIVE_ENEMY_WORLD_FEEDBACK.coffinIntensity]
     case 'demon-split': return [NATIVE_ENEMY_WORLD_FEEDBACK.demonIntensity]
     case 'portal-break': return [NATIVE_ENEMY_WORLD_FEEDBACK.portalIntensity]

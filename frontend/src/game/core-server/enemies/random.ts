@@ -74,3 +74,9 @@ export function drawEnemySign(work: WorkingStep, magnitude: number): number {
   work.steeringRngState = draw.state
   return draw.value
 }
+
+export function randomEnemyOffset(work: WorkingStep, radius: number): BoneyardPoint {
+  const length = drawEnemyFloat(work, radius)
+  const point = radialVector(drawEnemyFloat(work, 360), length)
+  return { x: Math.fround(point.x), y: Math.fround(point.y) }
+}

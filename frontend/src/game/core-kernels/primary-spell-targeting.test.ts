@@ -18,6 +18,7 @@ import {
   nativeMissileFanHeading,
   nativeMissileFanTurnScale,
   nativePrimaryConeTargets,
+  nativePrimaryPolygonTargets,
   nativePrimaryRootTargets,
   nativePrimaryViewBounds,
   nativePrimaryViewRayEndpoint,
@@ -39,6 +40,7 @@ const enemy = (
   id,
   kind: 'enemy',
   nativePriority: 0,
+  queryLane: 'grid' as const,
   pendingRemove: false,
   position: { x, y },
   registrationOrder: Number(id.replace(/\D/g, '')) || 0,
@@ -57,6 +59,7 @@ const grave = (
   id,
   kind: 'gravestone',
   nativePriority: 1000,
+  queryLane: 'grid' as const,
   pendingRemove: false,
   position: { x, y },
   registrationOrder: Number(id.replace(/\D/g, '')) || 0,
@@ -605,4 +608,24 @@ test('Earth root gather ignores body radius, rejects equality, and keeps column-
     0x6,
     [nextColumn, firstColumn],
   ).map(({ id }) => id), [firstColumn.id, nextColumn.id])
+})
+
+test('polygon gathers actor-owned guided missiles in the grid before transient arrows and firebolts', () => {
+  const polygon = [{ x: 0, y: 0 }, { x: 250, y: 0 }, { x: 250, y: 250 }, { x: 0, y: 250 }]
+  const targets = [
+    { ...enemy('arrow', 30, 30), actorFlags: 0x80, queryLane: 'transient' as const, registrationOrder: 1 },
+    { ...enemy('firebolt', 30, 30), actorFlags: 0x100, queryLane: 'transient' as const, registrationOrder: 0 },
+    { ...enemy('guided', 10, 10), actorFlags: 0x100, queryLane: 'grid' as const, cellBindingOrder: 1, registrationOrder: 20 },
+    { ...enemy('skeleton', 110, 10), queryLane: 'grid' as const, cellBindingOrder: 0 },
+  ]
+  assert.deepEqual(nativePrimaryPolygonTargets({ actorMask: 0xffffffff, polygon, targets }).map(target => target.id),
+    ['guided', 'skeleton', 'firebolt', 'arrow'])
+})
+
+test('a direct-position Meteor store preserves the bound cell while polygon containment uses its live root', () => {
+  const target = { ...enemy('meteor', 150, 100), actorFlags: 8, gridPosition: { x: 0, y: 0 } }
+  const tight = [{ x: 130, y: 80 }, { x: 170, y: 80 }, { x: 170, y: 120 }, { x: 130, y: 120 }]
+  assert.deepEqual(nativePrimaryPolygonTargets({ actorMask: 0xffffffff, targets: [target], polygon: tight }), [])
+  const crossingZero = [{ x: 0, y: 0 }, { x: 170, y: 0 }, { x: 170, y: 120 }, { x: 0, y: 120 }]
+  assert.deepEqual(nativePrimaryPolygonTargets({ actorMask: 0xffffffff, targets: [target], polygon: crossingZero }).map(row => row.id), ['meteor'])
 })

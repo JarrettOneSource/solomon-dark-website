@@ -36,6 +36,7 @@ export interface GameAudioPlayback {
   destroy(): void
   play(source: string, options: GameAudioPlaybackOptions): void
   restart(key: string, source: string, options: GameAudioPlaybackOptions): void
+  setSoundMixVolume(volume: number): void
   setMasterVolume(volume: number): void
   setVolume(key: string, volume: number): void
   stop(key: string): void
@@ -79,8 +80,10 @@ export class GameAudioDirector {
   private readonly musicChannels = new Map<string, GameMusicChannel>()
   private readonly assetMusic = new Map<string, Readonly<{ channel: GameMusicChannel; volume: number }>>()
   private loops = new Map<GameLoopCue, Map<string, ActiveLoopOptions>>()
+  private readonly loopMixes = new Map<GameLoopCue, ActiveLoopOptions>()
   private readonly musicEnvelopes = new Map<GameMusicChannel, number>()
   private musicVolume = 1
+  private narrationMix = 1
   private now: () => number
   private outgoingMusic: GameMusicChannel | null = null
   private readonly primedMusic = new Set<GameMusicChannel>()
@@ -113,7 +116,18 @@ export class GameAudioDirector {
     for (const channel of [this.currentMusic, this.outgoingMusic]) {
       if (channel) this.applyMusicEnvelope(channel)
     }
-    for (const entry of this.assetMusic.values()) entry.channel.volume = entry.volume * this.musicVolume
+    for (const entry of this.assetMusic.values()) entry.channel.volume = entry.volume * this.musicVolume * this.narrationMix
+  }
+
+  setNarrationMix(value: number): void {
+    const mix = clampUnit(value)
+    if (mix === this.narrationMix) return
+    this.narrationMix = mix
+    this.playback.setSoundMixVolume(mix)
+    for (const channel of [this.currentMusic, this.outgoingMusic]) {
+      if (channel) this.applyMusicEnvelope(channel)
+    }
+    for (const entry of this.assetMusic.values()) entry.channel.volume = entry.volume * this.musicVolume * mix
   }
 
   setSoundMuted(muted: boolean): void {
@@ -190,26 +204,32 @@ export class GameAudioDirector {
       owners = new Map()
       this.loops.set(cue, owners)
     }
-    const current = owners.get(owner)
-    if (current?.playbackRate === next.playbackRate) {
-      if (current.volume !== next.volume) {
-        this.playback.setVolume(loopKey(cue, owner), next.volume)
-        owners.set(owner, next)
-      }
-      return
-    }
-    this.playback.restart(loopKey(cue, owner), this.sources.loops[cue], {
-      loop: true,
-      ...next,
-    })
     owners.set(owner, next)
+    this.syncLoop(cue)
   }
 
   stopLoop(cue: GameLoopCue, owner: string): void {
     const owners = this.loops.get(cue)
     if (!owners || !owners.delete(owner)) return
-    this.playback.stop(loopKey(cue, owner))
     if (owners.size === 0) this.loops.delete(cue)
+    this.syncLoop(cue)
+  }
+
+  private syncLoop(cue: GameLoopCue): void {
+    let next: ActiveLoopOptions | undefined
+    for (const request of this.loops.get(cue)?.values() ?? []) {
+      if (next === undefined || request.volume > next.volume) next = request
+    }
+    const previous = this.loopMixes.get(cue)
+    if (next === undefined || next.volume === 0) {
+      if (previous !== undefined) this.playback.stop(loopKey(cue))
+      this.loopMixes.delete(cue)
+      return
+    }
+    if (previous?.playbackRate !== next.playbackRate) {
+      this.playback.restart(loopKey(cue), this.sources.loops[cue], { loop: true, ...next })
+    } else if (previous.volume !== next.volume) this.playback.setVolume(loopKey(cue), next.volume)
+    this.loopMixes.set(cue, next)
   }
 
   stopLoopsForOwner(owner: string): void {
@@ -251,7 +271,7 @@ export class GameAudioDirector {
     const boundedVolume = clampUnit(volume)
     channel.currentTime = 0
     channel.loop = true
-    channel.volume = boundedVolume * this.musicVolume
+    channel.volume = boundedVolume * this.musicVolume * this.narrationMix
     this.assetMusic.set(owner, Object.freeze({ channel, volume: boundedVolume }))
     this.updateMediaPlaybackState()
     void this.playOwnedMusic(channel)
@@ -301,6 +321,7 @@ export class GameAudioDirector {
     this.musicChannels.clear()
     for (const owner of [...this.assetMusic.keys()]) this.stopAssetMusic(owner)
     this.loops.clear()
+    this.loopMixes.clear()
     this.musicEnvelopes.clear()
     this.primedMusic.clear()
     this.primingMusic.clear()
@@ -455,7 +476,7 @@ export class GameAudioDirector {
   }
 
   private applyMusicEnvelope(channel: GameMusicChannel): void {
-    channel.volume = (this.musicEnvelopes.get(channel) ?? 0) * this.musicVolume
+    channel.volume = (this.musicEnvelopes.get(channel) ?? 0) * this.musicVolume * this.narrationMix
   }
 
   private applySoundVolume(): void {
@@ -463,8 +484,8 @@ export class GameAudioDirector {
   }
 }
 
-function loopKey(cue: GameLoopCue, owner: string): string {
-  return `loop:${cue}:${owner}`
+function loopKey(cue: GameLoopCue): string {
+  return `loop:${cue}`
 }
 
 function streamKey(cue: GameStreamCue): string {

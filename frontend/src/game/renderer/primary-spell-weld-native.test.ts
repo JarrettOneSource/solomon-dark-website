@@ -392,7 +392,7 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
   assert.equal(Math.abs(fallPlan.sprites[1]!.scaleX), 1)
   assert.equal(fallPlan.sprites[1]!.scaleY, 2)
   const finalDescent = nativeWeldVisualPlan({ ...meteor, fallHeight: 0.5 })
-  assert.deepEqual(finalDescent.sprites.filter(({ atlas }) => atlas === 'DeadHawg').map((draw) => ({
+  assert.deepEqual(finalDescent.underlays!.map((draw) => ({
     alpha: draw.alpha,
     record: draw.record,
     scaleX: draw.scaleX,
@@ -408,7 +408,15 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
     impactRotationDegrees: impactProgram.impactRotationDegrees,
     phase: 'impact' as const,
   }
-  assert.deepEqual(nativeWeldVisualPlan(impacted).sprites.map(({ record }) => record), [67])
+  assert.deepEqual(nativeWeldVisualPlan(impacted).underlays!.map(({ record }) => record), [67])
+  assert.equal(nativeWeldVisualPlan(impacted, 0, true).sprites.length, 0)
+  const hit = nativeWeldVisualPlan(meteor, 0, true)
+  assert.deepEqual(hit.sprites.map(({ blend, textureColor, tint }) => ({ blend, textureColor, tint })), [
+    { blend: 'normal', textureColor: undefined, tint: 0xff8000 },
+    { blend: 'add', textureColor: undefined, tint: 0xffffff },
+    { blend: 'normal', textureColor: 'diffuse', tint: 0xff8000 },
+    { blend: 'add', textureColor: 'diffuse', tint: 0xffffff },
+  ])
   const flash = createNativeWeldMeteorFlash({ actor: impacted, id: 41, tick: 2 })
   assert.deepEqual(nativeWeldVisualPlan(flash).sprites.map(({ record, scaleX }) => ({
     record,

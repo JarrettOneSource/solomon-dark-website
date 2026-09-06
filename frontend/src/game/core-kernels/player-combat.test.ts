@@ -27,13 +27,13 @@ test('direct damage owns the native 20-tick red redraw without changing poison p
   const first = damagePlayer(initial, 5, 100)
   assert.equal(first.lastDamageTick, 100)
   assert.equal(playerHitOverlayAlpha(first, 100), 1)
-  assert.equal(playerHitOverlayAlpha(first, 110), 0.5)
+  assert.equal(playerHitOverlayAlpha(first, 110), .49999988079071045)
   assert.equal(playerHitOverlayAlpha(first, 120), 0)
 
   const refreshed = damagePlayer(first, 1, 115)
   assert.equal(refreshed.lastDamageTick, 115)
   assert.equal(playerHitOverlayAlpha(refreshed, 115), 1)
-  assert.equal(playerHitOverlayAlpha(refreshed, 125), 0.5)
+  assert.equal(playerHitOverlayAlpha(refreshed, 125), .49999988079071045)
 
   const poisoned = stepPlayerCombatTick(poisonPlayer(initial, 2, 1)).combat
   assert.ok(poisoned.currentHealth < initial.currentHealth)

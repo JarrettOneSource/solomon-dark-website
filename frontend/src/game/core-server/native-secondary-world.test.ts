@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
-import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
-import type { NativeRngState } from '../core-kernels/native-rng.ts'
-import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
+import { createNativeFacultyAction } from '../core-kernels/native-faculty-actions.ts'
+import { createNativeDarkFireballs } from '../core-kernels/native-faculty-spells.ts'
+import { createNativeGuidedMissile } from '../core-kernels/native-guided-missile.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
+import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
+import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import type { BoneyardEnemyProjectile } from './enemies/model.ts'
+import type { BoneyardEnemyProjectile, BoneyardEnemyStoreStepContext } from './enemies/model.ts'
 import {
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
@@ -160,24 +164,101 @@ test('secondary target membership begins on the Coffin rising edge', () => {
   assert.equal(boneyardNativeSecondaryTarget(risen, coffin.id)?.nativeFlags, 0x2)
 })
 
-test('Dampen selects only the four native hostile-magic projectile families', () => {
+test('Dampen cancels all five native magic variants without calling their impact programs', () => {
   const projectiles: readonly BoneyardEnemyProjectile[] = [
     enemyProjectile(1, 'arrow', 0x7da, 'normal'),
     enemyProjectile(2, 'firebolt', 0x7eb, 'fire'),
     enemyProjectile(3, 'guided-missile', 0x7ec, 'cold'),
     enemyProjectile(4, 'demon-bomb', 0x7f7, 'none'),
     enemyProjectile(5, 'poison-pool', 0x806, 'poison'),
+    enemyProjectile(6, 'guided-missile', 0x7ec, 'poison'),
   ]
-  const source = {
-    ...createBoneyardEnemyStore('dampen-projectile-membership'),
-    projectiles,
-  }
+  const common = { ageTicks: 0, damage: 10, ownerActorId: 50, spawnTick: 0,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 10 } as const }
+  const skull = { ...common, ...createNativeGuidedMissile(createNativeRng(8), { x: 1, y: 1 }, 0, 1.5).state,
+    kind: 'skull-missile' as const, id: 7, targetPlayerId: null }
+  const dark = { ...common, ...createNativeDarkFireballs({ x: 1, y: 1 }, 0, false, null, createNativeRng(9)).spells[0]!,
+    kind: 'dark-fireball' as const, id: 8, groundFireDamage: 1 }
+  const source = { ...createBoneyardEnemyStore('dampen-projectile-membership'),
+    bossSpells: [skull, dark], projectiles }
+  const candidates = boneyardNativeSecondaryDampenCandidates(source, { x: 0, y: 0 })
+  assert.deepEqual(candidates.projectiles.map(({ id }) => id), [2, 3, 6, 7, 8])
+  assert.deepEqual(candidates.projectiles.map(({ kind }) => kind), [
+    'firebolt', 'guided-missile', 'guided-missile', 'skull-missile', 'dark-fireball',
+  ])
+  const canceled = resolveBoneyardNativeSecondaryCombat(source, {
+    damage: [], dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [],
+    removedProjectileIds: candidates.projectiles.map(({ id }) => id),
+  }, 0)
+  assert.deepEqual(canceled.enemies.projectiles.map(({ id }) => id), [1, 4, 5])
+  assert.deepEqual(canceled.enemies.bossSpells, [])
+  assert.deepEqual(canceled.enemies.projectileEffects, [])
+  assert.deepEqual(canceled.enemies.deathEffects, [])
+  assert.deepEqual(canceled.events, [])
+})
 
-  assert.deepEqual(
-    boneyardNativeSecondaryDampenCandidates(source, { x: 0, y: 0 })
-      .projectiles.map(({ id }) => id),
-    [2, 3],
+test('Dampen interrupts Mage and Faculty casts while their walking and casting-delay clocks continue', () => {
+  const context: BoneyardEnemyStoreStepContext = {
+    projectileWorldBlocked: () => false,
+    players: { player: { alive: true, collisionRadius: 25, connected: true, eligible: true,
+      headingDeg: 0, position: { x: 300, y: 0 }, velocityPerTick: { x: 0, y: 0 } } },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => (['SKELETONMAGE', 'DIREFACULTY'] as const).map((enemyToken, index) => ({
+      enemyToken, flags: [], id: index + 1, locationPolicy: 'anywhere',
+      nativeTypeId: enemyToken === 'SKELETONMAGE' ? 1003 : 1010,
+      position: { x: index * 20, y: 0 }, spawnTick: 0, waveOrdinal: 1,
+    })),
+    tick: 0,
+  }
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('dampen-casters'), context).store
+  const casting = { ...spawned, actors: spawned.actors.map(actor => ({ ...actor, bodyPose: 2,
+    brain: actor.brain.family === 'mage' ? { ...actor.brain, actionProgress: 4, phase: 'cast' as const }
+      : actor.brain.family === 'faculty' ? { ...actor.brain,
+          action: createNativeFacultyAction('lightning', createNativeRng(2)).action,
+          handMask: 3, headingLocked: true, phase: 'cast' as const } : actor.brain,
+  })) }
+  const candidates = boneyardNativeSecondaryDampenCandidates(casting, { x: 0, y: 0 })
+  assert.deepEqual(candidates.casterTargetIds, [1, 2])
+  const dampened = resolveBoneyardNativeSecondaryCombat(casting, {
+    damage: [], dampenedCasterTargetIds: candidates.casterTargetIds,
+    dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+  }, 0).enemies
+  for (const actor of dampened.actors) {
+    if (actor.brain.family !== 'mage' && actor.brain.family !== 'faculty') throw new Error('caster required')
+    assert.equal(actor.brain.phase, 'range-control')
+    assert.equal(actor.brain.disabledPrimaryTicks, actor.brain.family === 'mage' ? 600 : 500)
+    assert.equal(dampened.deathEffects.filter(effect => effect.ownerActorId === actor.id && effect.role === 'dampen-caster-smoke').length, 72)
+    assert.equal(dampened.deathEffects.filter(effect => effect.ownerActorId === actor.id && effect.role === 'dampen-caster-flash').length, 1)
+    if (actor.brain.family === 'faculty') {
+      assert.equal(actor.brain.action, null)
+      assert.equal(actor.brain.handMask, 0)
+      assert.equal(actor.brain.headingLocked, true)
+    }
+  }
+  let frozenEffects = createNativeSecondarySimulation()
+  for (const actor of dampened.actors) frozenEffects = applyNativeSecondaryTargetEffect(
+    frozenEffects, 'boneyard:test', actor.id, { frozenTicks: 100, frozenTimeScale: 0 },
   )
+  const frozen = stepBoneyardEnemyStore(dampened, { ...context, resolveSpawnIntents: () => [], tick: 1,
+    abilityEffects: Object.fromEntries(frozenEffects.targetEffects.map(effect => [effect.targetId, effect])),
+  }).store
+  for (const actor of frozen.actors) {
+    const original = dampened.actors.find(({ id }) => actor.id === id)!
+    if (actor.brain.family !== 'mage' && actor.brain.family !== 'faculty') throw new Error('caster required')
+    assert.equal(actor.brain.disabledPrimaryTicks, actor.brain.family === 'mage' ? 599 : 499)
+    assert.deepEqual(actor.position, original.position)
+  }
+  let advanced = dampened
+  for (let tick = 1; tick <= 10; tick += 1) advanced = stepBoneyardEnemyStore(advanced, {
+    ...context, resolveSpawnIntents: () => [], tick,
+  }).store
+  for (const actor of advanced.actors) {
+    const original = dampened.actors.find(({ id }) => id === actor.id)!
+    if (actor.brain.family !== 'mage' && actor.brain.family !== 'faculty') throw new Error('caster required')
+    assert.equal(actor.brain.disabledPrimaryTicks, actor.brain.family === 'mage' ? 590 : 490)
+    assert.equal(actor.brain.phase, 'range-control')
+    assert.notDeepEqual(actor.position, original.position)
+  }
 })
 
 test('Earthquake applies its exact signed heading perturbation at the enemy-store boundary', () => {
@@ -205,6 +286,7 @@ test('Earthquake applies its exact signed heading perturbation at the enemy-stor
 
   const result = resolveBoneyardNativeSecondaryCombat(source, {
     damage: [],
+    dampenedCasterTargetIds: [],
     dispelledShieldTargetIds: [],
     headingPerturbations: [{ deltaDegrees: -15, targetId: actor.id }],
     removedProjectileIds: [],
@@ -287,7 +369,7 @@ test('Spider Ether Drain capture preserves rewards while suppressing sound and c
     const spider = spawned.actors[0]!
     const hit = resolveBoneyardNativeSecondaryCombat(spawned, {
       damage: [{ amount: 100, etherDrain, kind: 'magic', ownerId: 'player', sourceActorId: 1, targetId: spider.id }],
-      dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
     }, 1, undefined, undefined, undefined, [{ x: spider.position.x + distance, y: spider.position.y }])
     assert.equal(projectBoneyardEnemies(hit.enemies, 1).length, captured ? 0 : 1)
     const retired = stepBoneyardEnemyStore(hit.enemies, context)

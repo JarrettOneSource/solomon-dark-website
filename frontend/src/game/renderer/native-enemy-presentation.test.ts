@@ -1,43 +1,27 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import { readFileSync } from 'node:fs'
+import test from 'node:test'
+import { nativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
-import {
-  NATIVE_ENEMY_ACTION_PROGRAMS,
-  nativeEnemyActionFrame,
-  nativeEnemyIdleAnimationSample,
-} from './native-enemy-animation.ts'
-import {
-  NATIVE_IMP_LANDING_FLARE_TICKS,
-  nativeDemonBombMuzzleOrigin,
-  nativeEnemyRawFireBurstPainterPolicy,
-  nativeEnemyRawFireBurstSample,
-  nativeImpContactBurstOrigin,
-  nativeImpLandingFlarePainterPolicy,
-  nativeImpLandingFlareSample,
-} from './native-enemy-attack-effect.ts'
-import {
-  nativeEnemyDeathEffectBypassesWorldTint,
-  nativeEnemyDeathEffectPainterLane,
-  nativeEnemyDeathEffectPainterLayer,
-  nativeEnemyDeathEffectPlan,
-  nativeEnemyDeathEffectViewResourcePlan,
-  nativeEnemyDeathEffectVisualBounds,
-} from './native-enemy-death-effect-presentation.ts'
-import { NATIVE_ENEMY_FAMILIES } from './native-enemy-presentation-model.ts'
-import type { NativeEnemyAtlas, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
+import { evaluateBoneyardEnemyConfig } from '../core-kernels/boneyard-enemy-config.ts'
+import { createNativeDemonSkull } from '../core-kernels/native-demon-skull.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
+import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
+import { NATIVE_ENEMY_ACTION_PROGRAMS, nativeEnemyActionFrame, nativeEnemyIdleAnimationSample } from './native-enemy-animation.ts'
+import { NATIVE_IMP_LANDING_FLARE_TICKS, nativeDemonBombMuzzleOrigin, nativeEnemyRawFireBurstPainterPolicy, nativeEnemyRawFireBurstSample, nativeImpContactBurstOrigin, nativeImpLandingFlarePainterPolicy, nativeImpLandingFlareSample } from './native-enemy-attack-effect.ts'
+import { nativeEnemyDeathEffectBypassesWorldTint, nativeEnemyDeathEffectPainterLane, nativeEnemyDeathEffectPainterLayer, nativeEnemyDeathEffectPlan, nativeEnemyDeathEffectViewResourcePlan, nativeEnemyDeathEffectVisualBounds } from './native-enemy-death-effect-presentation.ts'
 import { nativeEnemyFacingBucket } from './native-enemy-layers.ts'
-import {
-  nativeEnemyPainterLayer,
-  nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
-  nativeEnemyViewPlanInputsEqual,
-} from './native-enemy-presentation.ts'
-
+import type { NativeEnemyAtlas, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
+import { NATIVE_ENEMY_FAMILIES } from './native-enemy-presentation-model.ts'
+import { applyAuthoritativeSample, nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan, nativeEnemyPainterLayer, nativeEnemyViewPlanInputsEqual } from './native-enemy-presentation.ts'
 const geometryManifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
   DeadHawg: manifest('../../editor/manifest/deadhawg.json'),
   Demon: manifest('../../editor/manifest/demon.json'),
+  Faculty: manifest('../../editor/manifest/faculty.json'),
+  Heartmonger: manifest('../../editor/manifest/heartmonger.json'),
+  Unholy: manifest('../../editor/manifest/unholy.json'),
 }
 
 function nativeEnemyPresentationPlan(
@@ -57,25 +41,32 @@ function enemy(
   enemyToken: NativeEnemyVisualSnapshot['enemyToken'],
   flags: readonly string[] = [],
 ): NativeEnemyVisualSnapshot {
+  const config = evaluateBoneyardEnemyConfig(enemyToken, {
+    flags,
+    authoredRecipe: enemyToken === 'PORTAL' ? nativePortalRecipe(nativePortalProgram(
+      'bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb',
+    ).phases[0]!) : undefined,
+  })
   return {
-    armored: flags.includes('FLAG_ARMOR'),
+    ...(config.enemyToken === 'DEMONSKULL' ? { demonSkull: { ...createNativeDemonSkull(createNativeRng(7), 1).state, bodyHeadingDeg: 0 } } : {}),
+    ...(config.enemyToken === 'DIREFACULTY' ? { faculty: {
+      bodyColor: config.family.bodyColor, headColor: config.family.headColor, female: config.family.female,
+      bodyHeadingDeg: 0, handMask: 0, lightPhase: 0, lightIntensity: 0, lightningActive: false,
+    } } : {}),
+    armored: config.enemyToken === 'SKELETON' && config.family.armor,
+    arrowType: config.enemyToken === 'SKELETONARCHER' ? config.family.arrowType : 'normal',
+    burning: config.burning,
+    headgear: 'headgear' in config.family ? config.family.headgear : 0,
+    weapon: config.enemyToken === 'SKELETON' ? config.family.weapon : 'claw',
+    mageElement: config.enemyToken === 'SKELETONMAGE' ? config.family.element : 'fire',
+    rotten: config.enemyToken === 'ZOMBIE' && config.family.rotten,
     enemyToken,
     flags,
     headingDeg: 0,
     id: 7,
     lighting: { charge: 0, glow: 0, providerCopies: 0 },
     mageCloak: false,
-    nativeTypeId: {
-      SKELETON: 1001,
-      SKELETONARCHER: 1002,
-      SKELETONMAGE: 1003,
-      IMP: 1004,
-      PORTAL: 1005,
-      ZOMBIE: 1006,
-      WRAITH: 1007,
-      DEMON: 1009,
-      COFFIN: 1013,
-    }[enemyToken],
+    nativeTypeId: config.nativeTypeId,
     position: { x: 125, y: 240 },
     scale: 1,
     shieldHealth: 0,
@@ -166,9 +157,9 @@ test('enemy view plan equality ignores movement-only state and closes every visu
     125,
   ), false)
   assert.equal(nativeEnemyViewPlanInputsEqual(
-    { ...source, flags: ['FLAG_BURNING'] },
+    { ...source, burning: true },
     120,
-    { ...movementOnly, flags: ['FLAG_BURNING'] },
+    { ...movementOnly, burning: true },
     121,
   ), false)
   const demon = {
@@ -360,7 +351,7 @@ test('native hit feedback redraws the exact current pose red with normal blendin
   assert.ok(hit.every((layer) => (
     layer.alpha === 0.65
     && layer.blendMode === 'normal'
-    && layer.tint === 0xff0000
+    && layer.tint === 0x950000
     && layer.role.startsWith('hit:')
   )))
 })
@@ -409,7 +400,7 @@ test('Skeleton-family constructor height and stride sine articulate limbs, body,
   }
 })
 
-test('Portal renders the recovered body, aura, inline passes, and damage row', () => {
+test('Portal main pass draws the additive flame above its root and retains its damage row', () => {
   const plan = nativeEnemyPresentationPlan({
     ...enemy('PORTAL'),
     animation: nativeEnemyIdleAnimationSample({
@@ -421,15 +412,14 @@ test('Portal renders the recovered body, aura, inline passes, and damage row', (
     }),
   }, 120)
   assert.deepEqual(plan.layers.map(({ atlas, entry, role }) => ({ atlas, entry, role })), [
-    { atlas: 'DeadHawg', entry: 18, role: 'portal-outer' },
-    { atlas: 'DeadHawg', entry: 185, role: 'portal-aura' },
     { atlas: 'DeadHawg', entry: 49, role: 'portal-body' },
-    { atlas: 'DeadHawg', entry: 22, role: 'portal-core' },
     { atlas: 'BadGuys', entry: 410, role: 'portal-hurt' },
   ])
-  assert.deepEqual(plan.layers.map(({ alpha }) => alpha), [0.25, 0.5, 0.5, 0.5, 0.5])
-  assert.equal(plan.layers[2]?.scaleX, 1.5)
-  assert.equal(plan.layers[2]?.scaleY, 2)
+  assert.deepEqual(plan.layers.map(({ alpha }) => alpha), [0.5, 0.5])
+  assert.equal(plan.layers[0]?.scaleX, 1.5)
+  assert.equal(plan.layers[0]?.scaleY, 2)
+  assert.equal(plan.layers[0]?.blendMode, 'add')
+  assert.deepEqual(plan.layers[0]?.offset, { x: 0, y: -49 })
 })
 
 test('Imp uses four native 12-facing bodies and the registered upper effect', () => {
@@ -1336,8 +1326,11 @@ test('common native hit redraw covers every survival family body membership', ()
   const expectedHitLayers = {
     COCOON: 0,
     SPIDER: 2,
+    DEMONSKULL: 0,
+    DIREFACULTY: 5,
     COFFIN: 1,
     DEMON: 8,
+    HEARTMONGER: 3,
     IMP: 2,
     PORTAL: 0,
     SKELETON: 3,
@@ -1359,8 +1352,9 @@ test('common native hit redraw covers every survival family body membership', ()
     }, 120)
     const hit = plan.layers.filter(({ role }) => role.startsWith('hit:'))
     assert.equal(hit.length, expectedHitLayers[family], family)
-    assert.ok(hit.every(({ alpha, blendMode, tint }) => (
-      alpha === 0.5 && blendMode === 'normal' && tint === 0xff0000
+    assert.ok(hit.every(({ alpha, blendMode, textureColor, tint }) => (
+      alpha === 0.5 && blendMode === 'normal' && textureColor === 'diffuse'
+      && (tint & 0xffff) === 0 && tint <= 0xa50000
     )), family)
   }
 })
@@ -1397,9 +1391,27 @@ test('hit presentation preserves body layers and appends native red redraws', ()
   assert.deepEqual(flash.map((layer) => layer.entry), body.map((layer) => layer.entry))
   assert.ok(body.every((layer) => layer.blendMode === 'normal' && layer.alpha === 0.8))
   assert.ok(flash.every((layer) => (
-    layer.blendMode === 'normal' && layer.alpha === 0.4 && layer.tint === 0xff0000
+    layer.blendMode === 'normal' && layer.alpha === 0.4 && layer.tint === 0x950000
   )))
   assert.ok(flash.every((layer) => layer.role.startsWith('hit:')))
+})
+
+test('hit redraw selects diffuse RGB and preserves Main blend modes in both lighting settings', () => {
+  const body = nativeEnemyPresentationPlan(enemy('SKELETON'), 0).layers[0]!
+  const layers = [{ ...body, tint: 0xffffff, blendMode: 'normal' as const },
+    { ...body, tint: 0x80c0ff, blendMode: 'add' as const }]
+  const family = { before: [], body: layers, hitBody: layers, after: [], segments: [] }
+  const animation = nativeEnemyIdleAnimationSample({ alpha: .8, hitFlash: .5 })
+  for (const complexLighting of [false, true]) {
+    const plan = applyAuthoritativeSample(family, [], animation, complexLighting)
+    assert.deepEqual(plan.slice(2).map(({ alpha, blendMode, textureColor, tint }) => (
+      { alpha, blendMode, textureColor, tint }
+    )), [
+      { alpha: .4, blendMode: 'normal', textureColor: 'diffuse', tint: complexLighting ? 0xa50000 : 0xff0000 },
+      { alpha: .4, blendMode: 'add', textureColor: 'diffuse', tint: complexLighting ? 0x530000 : 0x800000 },
+    ])
+    assert.deepEqual(plan.slice(0, 2).map(layer => layer.textureColor), [undefined, undefined])
+  }
 })
 
 test('ordinary dying bodies render no fallback strip after handing off to effect actors', () => {
@@ -1535,6 +1547,9 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
       demonFrontRotationRadians: 0.2,
       demonRearExtremityOffset: { x: -14, y: -31 },
       demonRearRotationRadians: -0.2,
+
+      demonShadowOffset: { x: 0, y: 0 },
+      shadowLateralOffset: 0,
     }),
   }, 100)
   const demonBody = demon.layers.filter(({ role }) => !role.startsWith('demon-flame:'))
@@ -1626,7 +1641,7 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     id: 41,
     kind: 'bouncer' as const,
     ownerActorId: 7,
-    painterRegistration: { managerLane: 'actor' as const, registrationOrdinal: 41 },
+    painterRegistration: { managerLane: 'transient' as const, registrationOrdinal: 41 },
     presentationOwner: 'world-sorted' as const,
     position: { x: 125, y: 240 },
     rotationRadians: 0.5,
@@ -1663,13 +1678,14 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
   })
   assert.deepEqual(nativeEnemyDeathEffectPainterLayer(effect), {
     id: 'enemy-death-effect:41',
-    queueFamily: 'ordinary-dynamic',
+    queueFamily: 'zanim',
     registration: effect.painterRegistration,
     sortBias: 0,
     worldY: 240,
   })
   assert.equal(nativeEnemyDeathEffectPainterLane(effect), 'world-sorted')
   assert.equal(nativeEnemyDeathEffectBypassesWorldTint(effect), true)
+  assert.equal(nativeEnemyDeathEffectPainterLane({ ...effect, painterRegistration: null, presentationOwner: 'late-world-overlay' }), 'late-world-overlay')
   assert.equal(nativeEnemyDeathEffectPainterLane({
     ...effect,
     painterRegistration: null,
@@ -1749,7 +1765,7 @@ test('death-effect visibility bounds union complete transformed art and Banish c
     id: 41,
     kind: 'bouncer' as const,
     ownerActorId: 7,
-    painterRegistration: { managerLane: 'actor' as const, registrationOrdinal: 41 },
+    painterRegistration: { managerLane: 'transient' as const, registrationOrdinal: 41 },
     presentationOwner: 'world-sorted' as const,
     position: { x: 125, y: 240 },
     rotationRadians: 0,
@@ -1785,4 +1801,80 @@ test('death-effect visibility bounds union complete transformed art and Banish c
     x: 115,
     y: -210,
   })
+})
+
+for (const enemyToken of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE'] as const) {
+  for (const [headgear, firstEntry] of [[0, 1477], [1, 1531], [2, 1549], [3, 1495], [4, 1513], [5, 1567]] as const) {
+    test(`${enemyToken} selects authored headgear ${headgear} independently of flags`, () => {
+      const source = { ...enemy(enemyToken), headgear }
+      const plan = nativeEnemyPresentationPlan(source, 100)
+      assert.equal(plan.layers.find(({ role }) => role.endsWith('-headgear'))?.entry, firstEntry)
+      assert.equal(nativeEnemyViewPlanInputsEqual(source, 100, { ...source, headgear: headgear === 0 ? 1 : 0 }, 100), false)
+    })
+  }
+}
+
+test('authored fire arrows and flyblown state render with an empty wave-flag list', () => {
+  const archer = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER'),
+    arrowType: 'fire',
+    headgear: 5,
+    lighting: { charge: 1, glow: 0, providerCopies: 1 },
+  }, 100)
+  assert.ok(archer.layers.some(({ role }) => role === 'archer-held-fire-arrow'))
+  const zombie = nativeEnemyPresentationPlan({ ...enemy('ZOMBIE'), rotten: true }, 100)
+  assert.ok(zombie.layers.some(({ role }) => role.includes('fly')))
+})
+
+
+test('Heartmonger uses every authored directional leg, torso, and head bank', () => {
+  for (let facing = 0; facing < 18; facing += 1) {
+    for (let gaitPose = 0; gaitPose < 10; gaitPose += 1) {
+      for (const headVariant of [0, 1] as const) {
+        const bodyPose = gaitPose % 3
+        const actor = { ...enemy('HEARTMONGER'), headingDeg: facing * 20,
+          animation: { ...nativeEnemyIdleAnimationSample(), gaitPose, bodyPose, headVariant } }
+        const layers = nativeEnemyPresentationPlan(actor, 0).layers
+        assert.deepEqual(layers.map(({ entry }) => entry),
+          [200 + gaitPose * 18 + facing, 146 + bodyPose * 18 + facing, 110 + headVariant * 18 + facing])
+        assert.ok(layers.every(({ atlas }) => atlas === 'Heartmonger'))
+      }
+    }
+  }
+})
+
+test('every enemy family accepts fractional presentation frames and produces finite draw geometry', () => {
+  for (const family of NATIVE_ENEMY_FAMILIES) {
+    for (const tick of [190.25, 190.75]) {
+      const source = enemy(family)
+      const plan = nativeEnemyPresentationPlan({ ...source, animation: nativeEnemyIdleAnimationSample({
+        spider: family === 'SPIDER' ? nativeSpiderAppearance(0, source.position, 1, null) : null,
+      }) }, tick)
+      assert.ok(plan.layers.every(layer => [layer.offset.x, layer.offset.y, layer.scale, layer.rotationRadians, layer.alpha].every(Number.isFinite)), family)
+    }
+  }
+})
+
+test('Faculty selects all nine robe poses, every facing, both head banks, and the female hair layer', () => {
+  const source = enemy('DIREFACULTY')
+  const base = source.faculty!
+  for (let facing = 0; facing < 18; facing += 1) {
+    for (let robePose = 0; robePose < 9; robePose += 1) {
+      const bodyPose = robePose < 5 ? 0 : robePose - 4
+      for (const headgear of [0, 1] as const) {
+        for (const female of [false, true]) {
+          const plan = nativeEnemyPresentationPlan({ ...source, headgear, headingDeg: facing * 20,
+            faculty: { ...base, bodyHeadingDeg: facing * 20, female, lightPhase: 90 },
+            animation: nativeEnemyIdleAnimationSample({ bodyPose, gaitPose: robePose < 5 ? robePose : 0 }),
+          }, 190.25)
+          assert.equal(plan.layers.find(({ role }) => role === 'faculty-body')?.entry, 1 + bodyPose * 18 + facing)
+          assert.equal(plan.layers.find(({ role }) => role === 'faculty-robe')?.entry, 199 + robePose * 18 + facing)
+          assert.equal(plan.layers.find(({ role }) => role === 'faculty-robe-trim')?.entry, 361 + robePose * 18 + facing)
+          assert.equal(plan.layers.some(({ role }) => role === 'faculty-hair'), headgear === 0 && female)
+          assert.equal(plan.layers.some(({ role }) => role === 'faculty-hat'), headgear !== 0)
+          assert.ok(plan.layers.every(({ entry }) => geometryManifests.Faculty.entries[entry]?.empty === false))
+        }
+      }
+    }
+  }
 })

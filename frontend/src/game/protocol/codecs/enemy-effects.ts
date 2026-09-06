@@ -1,49 +1,14 @@
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../../core-kernels/boneyard-mage-lightning.ts'
-import {
-  boneyardMageLightningPulseFrameIsValid,
-  materializeBoneyardMageLightningPulse,
-} from '../boneyard-mage-lightning-replication.ts'
-import {
-  MAX_BONEYARD_ENEMY_EVENTS,
-  MAX_BONEYARD_MAGE_LIGHTNING_PULSES,
-} from '../game-protocol-limits.ts'
-import {
-  BONEYARD_ENEMY_ACTION_SOUNDS,
-  BONEYARD_ENEMY_DAMAGE_SOUNDS,
-  BONEYARD_ENEMY_DEATH_EFFECT_KINDS,
-  BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS,
-  BONEYARD_ENEMY_DEATH_SOUNDS,
-  BONEYARD_ENEMY_EVENT_TYPES,
-  BONEYARD_ENEMY_TERMINAL_OUTPUTS,
-  BONEYARD_PLAYER_DAMAGE_SOUNDS,
-  BONEYARD_PLAYER_STATUS_SOUNDS,
-  type BoneyardEnemyDeathEffectSnapshot,
-  type BoneyardEnemyEventSnapshot,
-  type BoneyardMageLightningPulseFrame,
-  type BoneyardMageLightningPulseSnapshot,
-} from '../game-state.ts'
-import {
-  absentNativeWorldManagerRegistration,
-  boneyardPoint,
-  nativeWorldManagerRegistration,
-  nativeWorldPainterRegistrations,
-  vector,
-} from './native-state.ts'
-import {
-  GameProtocolError,
-  boolean,
-  finite,
-  limitedArray,
-  limitedString,
-  nonnegativeFinite,
-  nonnegativeInteger,
-  onlyKeys,
-  positiveFinite,
-  positiveInteger,
-  record,
-  validatedPlayerId,
-} from './values.ts'
-
+import type { NativeBossStreamCue } from '../../core-kernels/native-boss-audio.ts'
+import { NATIVE_BOSS_STREAM_CUES } from '../../core-kernels/native-boss-audio.ts'
+import { boneyardEnemyDeathEffectMaximumAlpha } from '../boneyard-enemy-death-effect-replication.ts'
+import { boneyardMageLightningPulseFrameIsValid, materializeBoneyardMageLightningPulse } from '../boneyard-mage-lightning-replication.ts'
+import { MAX_BONEYARD_ENEMY_EVENTS, MAX_BONEYARD_MAGE_LIGHTNING_PULSES } from '../game-protocol-limits.ts'
+import type { BoneyardEnemyDeathEffectSnapshot, BoneyardEnemyEventSnapshot, BoneyardMageLightningPulseFrame, BoneyardMageLightningPulseSnapshot } from '../game-state.ts'
+import { BONEYARD_ENEMY_ACTION_SOUNDS, BONEYARD_ENEMY_DAMAGE_SOUNDS, BONEYARD_ENEMY_DEATH_EFFECT_KINDS, BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS, BONEYARD_ENEMY_DEATH_SOUNDS, BONEYARD_ENEMY_EVENT_TYPES, BONEYARD_ENEMY_TERMINAL_OUTPUTS, BONEYARD_PLAYER_DAMAGE_SOUNDS, BONEYARD_PLAYER_STATUS_SOUNDS } from '../game-state.ts'
+import { absentNativeWorldManagerRegistration, boneyardPoint, nativeWorldManagerRegistration, nativeWorldPainterRegistrations, vector } from './native-state.ts'
+import { nativeScreenFlash } from './screen-flash.ts'
+import { GameProtocolError, boolean, finite, limitedArray, limitedString, memberString, nonnegativeFinite, nonnegativeInteger, onlyKeys, positiveFinite, positiveInteger, record, validatedPlayerId } from './values.ts'
 export function boneyardEnemyDeathEffectSnapshot(
   value: unknown,
   field: string,
@@ -60,6 +25,7 @@ export function boneyardEnemyDeathEffectSnapshot(
     'kind',
     'ownerActorId',
     'painterRegistration',
+    'painterSortBias',
     'presentationOwner',
     'position',
     'rotationRadians',
@@ -71,7 +37,8 @@ export function boneyardEnemyDeathEffectSnapshot(
   ])
   const alpha = finite(source.alpha, `${field}.alpha`)
   const atlas = limitedString(source.atlas, `${field}.atlas`, 32)
-  if (atlas !== 'BadGuys' && atlas !== 'DeadHawg' && atlas !== 'Demon') {
+  if (atlas !== 'BadGuys' && atlas !== 'DeadHawg' && atlas !== 'Demon'
+    && atlas !== 'Heartmonger' && atlas !== 'Faculty' && atlas !== 'Unholy') {
     throw new GameProtocolError(`${field}.atlas is not supported`)
   }
   const blendMode = limitedString(source.blendMode, `${field}.blendMode`, 16)
@@ -93,12 +60,7 @@ export function boneyardEnemyDeathEffectSnapshot(
     throw new GameProtocolError(`${field}.presentationOwner is not supported`)
   }
   const entry = nonnegativeInteger(source.entry, `${field}.entry`)
-  const maximumAlpha = atlas === 'BadGuys'
-    && blendMode === 'add'
-    && entry === 69
-    && kind === 'fade'
-    ? 1.25
-    : 1
+  const maximumAlpha = boneyardEnemyDeathEffectMaximumAlpha(atlas, blendMode, entry, kind)
   if (alpha < 0 || alpha > maximumAlpha) {
     throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
   }
@@ -107,6 +69,7 @@ export function boneyardEnemyDeathEffectSnapshot(
     throw new GameProtocolError(`${field}.tint must be a 24-bit RGB value`)
   }
   return {
+    ...(source.painterSortBias === undefined ? {} : { painterSortBias: finite(source.painterSortBias, `${field}.painterSortBias`) }),
     ageTicks: nonnegativeFinite(source.ageTicks, `${field}.ageTicks`),
     alpha,
     atlas,
@@ -120,7 +83,7 @@ export function boneyardEnemyDeathEffectSnapshot(
       ? nativeWorldManagerRegistration(
           source.painterRegistration,
           `${field}.painterRegistration`,
-          'actor',
+          'transient',
         )
       : absentNativeWorldManagerRegistration(
           source.painterRegistration,
@@ -156,6 +119,9 @@ export function boneyardEnemyEvents(
     const type = rawType as BoneyardEnemyEventSnapshot['type']
     const payloadKeys = (() => {
       switch (type) {
+        case 'enemy-stream': return ['stream', 'sourcePosition']
+        case 'enemy-screen-flash': return ['screenFlash', 'screenFlashOnlyIfClear', 'sourcePosition']
+        case 'enemy-camera-shake': return ['cameraShake', 'sourcePosition']
         case 'attack-marker': return [
           'deflectPitch',
           'painterRegistration',
@@ -166,6 +132,7 @@ export function boneyardEnemyEvents(
         case 'enemy-spawned':
         case 'reward': return ['targetPlayerId']
         case 'coffin-maggot-release': return ['count']
+        case 'enemy-dialogue-stop':
         case 'enemy-death':
         case 'cocoon-released':
         case 'enemy-retired': return []
@@ -230,6 +197,31 @@ export function boneyardEnemyEvents(
       type,
     }
     switch (type) {
+      case 'enemy-stream': {
+        const stream = limitedString(source.stream, `${eventField}.stream`, 64)
+        if (!NATIVE_BOSS_STREAM_CUES.includes(stream as NativeBossStreamCue)) {
+          throw new GameProtocolError(`${eventField}.stream is not supported`)
+        }
+        return { ...base, stream: stream as NativeBossStreamCue,
+          ...(source.sourcePosition === undefined ? {} : {
+            sourcePosition: boneyardPoint(source.sourcePosition, `${eventField}.sourcePosition`),
+          }),
+        }
+      }
+      case 'enemy-camera-shake': {
+        const shake = record(source.cameraShake, `${eventField}.cameraShake`)
+        onlyKeys(shake, `${eventField}.cameraShake`, ['attenuation', 'displacement'])
+        const attenuation = memberString(shake.attenuation, `${eventField}.cameraShake.attenuation`,
+          ['fixed', 'point', 'hit', 'hit-squared'] as const)
+        return { ...base, cameraShake: { attenuation,
+          displacement: boneyardPoint(shake.displacement, `${eventField}.cameraShake.displacement`) },
+          sourcePosition: boneyardPoint(source.sourcePosition, `${eventField}.sourcePosition`) }
+      }
+      case 'enemy-screen-flash': return { ...base,
+        ...(source.screenFlashOnlyIfClear === undefined ? {} : { screenFlashOnlyIfClear: boolean(source.screenFlashOnlyIfClear, `${eventField}.screenFlashOnlyIfClear`) }),
+        screenFlash: nativeScreenFlash(source.screenFlash, `${eventField}.screenFlash`),
+        sourcePosition: boneyardPoint(source.sourcePosition, `${eventField}.sourcePosition`),
+      }
       case 'attack-marker': {
         const targetPlayerId = nullablePlayerId(
           source.targetPlayerId,
@@ -263,6 +255,7 @@ export function boneyardEnemyEvents(
         ...base,
         count: nonnegativeInteger(source.count, `${eventField}.count`),
       }
+      case 'enemy-dialogue-stop':
       case 'enemy-death':
       case 'cocoon-released':
       case 'enemy-retired': return base

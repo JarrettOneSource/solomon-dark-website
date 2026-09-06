@@ -1,45 +1,11 @@
-import {
-  NATIVE_MINDBLAST_BURST_LIFETIME_TICKS,
-  NATIVE_MINDBLAST_SHOCKWAVE_GROWTH,
-  NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS,
-  NATIVE_SECONDARY_ACTOR_KINDS,
-  type NativeSecondaryActorKind,
-  type NativeSecondaryActorState,
-  type NativeSecondaryGolemState,
-  nativeSecondaryLightDisposition,
-  nativeSecondaryPainterManagerLane,
-} from '../../core-kernels/native-secondary-abilities.ts'
-import {
-  NATIVE_SECONDARY_ABILITY_IDS,
-  type NativeSecondaryAbilityId,
-} from '../../core-kernels/native-secondary-ability-contract.ts'
+import type { NativeSecondaryActorKind, NativeSecondaryActorState, NativeSecondaryGolemState } from '../../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_MINDBLAST_BURST_LIFETIME_TICKS, NATIVE_MINDBLAST_SHOCKWAVE_GROWTH, NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS, NATIVE_SECONDARY_ACTOR_KINDS, nativeSecondaryLightDisposition, nativeSecondaryPainterManagerLane } from '../../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondaryAbilityId } from '../../core-kernels/native-secondary-ability-contract.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../../core-kernels/native-secondary-ability-contract.ts'
 import { MAX_PRIMARY_SPELL_HIT_TARGETS } from '../game-protocol-limits.ts'
 import type { ProtocolPlayerSnapshotFrame } from '../game-state.ts'
-import {
-  absentNativeActorLight,
-  nativeRngState,
-  nativeWorldManagerRegistration,
-  nativeWorldPainterRegistrations,
-  vector,
-} from './native-state.ts'
-import {
-  GameProtocolError,
-  boolean,
-  boundedInteger,
-  finite,
-  limitedArray,
-  limitedString,
-  memberString,
-  nonnegativeFinite,
-  nonnegativeInteger,
-  onlyKeys,
-  positiveFinite,
-  positiveInteger,
-  record,
-  unitInterval,
-  validatedPlayerId,
-} from './values.ts'
-
+import { absentNativeActorLight, nativeRngState, nativeWorldManagerRegistration, nativeWorldPainterRegistrations, vector } from './native-state.ts'
+import { GameProtocolError, boolean, boundedInteger, finite, limitedArray, limitedString, memberString, nonnegativeFinite, nonnegativeInteger, onlyKeys, positiveFinite, positiveInteger, record, unitInterval, validatedPlayerId } from './values.ts'
 export function nativeSecondaryActor(
   value: unknown,
   field: string,
@@ -202,7 +168,7 @@ function nativeSecondaryGolemState(
   const source = record(value, field)
   onlyKeys(source, field, [
     'actionDurationTicks', 'actionHeadingOffsetDegrees', 'actionTick',
-    'currentHealth', 'damageMaximum', 'gaitTick', 'iron',
+    'circleSlowTicks', 'currentHealth', 'damageMaximum', 'gaitTick', 'iron',
     'leftConnectorOffset', 'leftFoot', 'leftFootBob', 'leftFootNext',
     'leftFootPrevious', 'leftFootProgress', 'leftFootRotationDegrees',
     'leftLimbMode', 'maximumHealth', 'orbitDirection', 'orbitHeadingRadians',
@@ -245,6 +211,7 @@ function nativeSecondaryGolemState(
     ),
     actionDurationTicks,
     actionTick,
+    circleSlowTicks: boundedInteger(source.circleSlowTicks, `${field}.circleSlowTicks`, 0, 20),
     currentHealth,
     damageMaximum: nonnegativeFinite(source.damageMaximum, `${field}.damageMaximum`),
     gaitTick: nonnegativeInteger(source.gaitTick, `${field}.gaitTick`),

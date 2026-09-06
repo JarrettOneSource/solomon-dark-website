@@ -1,76 +1,25 @@
-import { vector } from './native-state.ts'
+import { nativeWorldPuppetHits } from './native-state.ts'
 import type { BoneyardGateLeafSnapshot } from '../../core-kernels/boneyard.ts'
 import type { GameRunLifecycleState } from '../../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../../core-kernels/hall-of-fame-score.ts'
-import { spiderWorldFields } from './spiders.ts'
-import {
-  NATIVE_ENEMY_WORLD_FEEDBACK,
-  type NativeEnemyWorldFeedbackKernelState,
-} from '../../core-kernels/native-enemy-world-feedback.ts'
+import type { NativeEnemyWorldFeedbackKernelState } from '../../core-kernels/native-enemy-world-feedback.ts'
+import { NATIVE_ENEMY_WORLD_FEEDBACK } from '../../core-kernels/native-enemy-world-feedback.ts'
 import { REPLICATED_ENTITY_TYPE_REGISTRY } from '../entity-replication.ts'
-import {
-  MAX_BONEYARD_ENEMIES,
-  MAX_BONEYARD_ENEMY_DEATH_EFFECTS,
-  MAX_BONEYARD_ENEMY_PROJECTILES,
-  MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS,
-  MAX_BONEYARD_GOODIES,
-  MAX_BONEYARD_LOOT,
-  MAX_BONEYARD_MAGGOTS,
-  MAX_BONEYARD_STRUCTURES,
-  MAX_PLAYERS,
-  MAX_REPLICATED_COMPONENTS,
-  MAX_REPLICATED_ENTITIES,
-} from '../game-protocol-limits.ts'
-import type {
-  GameSnapshot,
-  GameSnapshotFrame,
-  NativeHallOfFameRunSnapshot,
-  ProtocolHubParticipantState,
-} from '../game-state.ts'
-import type {
-  ReplicatedEntityDescriptor,
-  ReplicatedEntityFrame,
-  ReplicatedEntityKey,
-  ReplicatedEntitySample,
-} from '../replicated-entity-types.ts'
+import { MAX_BONEYARD_ENEMIES, MAX_BONEYARD_ENEMY_DEATH_EFFECTS, MAX_BONEYARD_ENEMY_PROJECTILES, MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS, MAX_BONEYARD_GOODIES, MAX_BONEYARD_LOOT, MAX_BONEYARD_MAGGOTS, MAX_BONEYARD_STRUCTURES, MAX_PLAYERS, MAX_REPLICATED_COMPONENTS, MAX_REPLICATED_ENTITIES } from '../game-protocol-limits.ts'
+import type { GameSnapshot, GameSnapshotFrame, NativeHallOfFameRunSnapshot, ProtocolHubParticipantState } from '../game-state.ts'
+import type { ReplicatedEntityDescriptor, ReplicatedEntityFrame, ReplicatedEntityKey, ReplicatedEntitySample } from '../replicated-entity-types.ts'
+import { nativeBossNarration } from './boss-narration.ts'
+import { nativeBossSpells } from './boss-spells.ts'
 import { boneyardEnemySnapshot } from './enemies.ts'
-import {
-  boneyardEnemyDeathEffectSnapshot,
-  boneyardEnemyEvents,
-  boneyardMageLightningPulseFrames,
-  boneyardMageLightningPulses,
-} from './enemy-effects.ts'
-import {
-  boneyardEnemyProjectileEffectSnapshot,
-  boneyardEnemyProjectileSnapshot,
-  boneyardMaggotSnapshot,
-} from './enemy-projectiles.ts'
-import {
-  ambientState,
-  decodeHubMemorialState,
-  hubParticipantState,
-  hubSkorchaState,
-  hubWorldSnapshot,
-} from './hub.ts'
+import { boneyardEnemyDeathEffectSnapshot, boneyardEnemyEvents, boneyardMageLightningPulseFrames, boneyardMageLightningPulses } from './enemy-effects.ts'
+import { boneyardEnemyProjectileEffectSnapshot, boneyardEnemyProjectileSnapshot, boneyardMaggotSnapshot } from './enemy-projectiles.ts'
+import { ambientState, decodeHubMemorialState, hubParticipantState, hubSkorchaState, hubWorldSnapshot } from './hub.ts'
 import { boneyardGoodieSnapshot, boneyardLootEvents, boneyardLootSnapshot } from './loot.ts'
-import { boneyardPoint, nullableNativeWorldManagerRegistration } from './native-state.ts'
+import { boneyardPoint, nullableNativeWorldManagerRegistration, vector } from './native-state.ts'
 import { boneyardArenaTransition } from './scene.ts'
+import { spiderWorldFields } from './spiders.ts'
 import { boneyardSolomonSnapshot, boneyardWaveSnapshot, nativeTutorialState } from './survival.ts'
-import {
-  GameProtocolError,
-  boolean,
-  boundedInteger,
-  finite,
-  limitedArray,
-  limitedString,
-  nonnegativeFinite,
-  nonnegativeInteger,
-  onlyKeys,
-  positiveFinite,
-  record,
-  validatedPlayerId,
-} from './values.ts'
-
+import { GameProtocolError, boolean, boundedInteger, finite, limitedArray, limitedString, nonnegativeFinite, nonnegativeInteger, onlyKeys, positiveFinite, positiveInteger, record, validatedPlayerId } from './values.ts'
 function nativeHallOfFameRunSnapshots(
   value: unknown,
   field: string,
@@ -210,6 +159,10 @@ export function gameWorldSnapshot(
       'silkFragments',
       'spiderRemains',
       'webbedPlayers',
+      'featuredBossId',
+      'bossNarration',
+      'bossSpells',
+      'puppetHits',
       'arenaTransition',
       'deathEffects',
       'encounter',
@@ -296,6 +249,12 @@ export function gameWorldSnapshot(
       enemyIds.add(decoded.id)
       return decoded
     })
+    const featuredBossId = source.featuredBossId === null
+      ? null : positiveInteger(source.featuredBossId, `${field}.featuredBossId`)
+    if (featuredBossId !== null && !enemies.some(enemy => enemy.id === featuredBossId
+      && enemy.classification !== 'normal' && enemy.currentHealth > 0)) {
+      throw new GameProtocolError(`${field}.featuredBossId must refer to a living boss or miniboss`)
+    }
     const deathEffectIds = new Set<number>()
     const deathEffects = limitedArray(
       source.deathEffects,
@@ -385,6 +344,10 @@ export function gameWorldSnapshot(
     return {
       ...spiderWorldFields(source, field, snapshotTick),
       arenaTransition,
+      featuredBossId,
+      bossNarration: nativeBossNarration(source.bossNarration, `${field}.bossNarration`, snapshotTick),
+      bossSpells: nativeBossSpells(source.bossSpells, `${field}.bossSpells`, snapshotTick),
+      puppetHits: nativeWorldPuppetHits(source.puppetHits, `${field}.puppetHits`, snapshotTick),
       deathEffects,
       encounter,
       enemies,
@@ -439,6 +402,10 @@ export function gameWorldSnapshotFrame(
       'silkFragments',
       'spiderRemains',
       'webbedPlayers',
+      'featuredBossId',
+      'bossNarration',
+      'bossSpells',
+      'puppetHits',
       'arenaTransition',
       'encounter',
       'entities',
@@ -483,6 +450,10 @@ export function gameWorldSnapshotFrame(
     return {
       ...spiderWorldFields(source, field, snapshotTick),
       arenaTransition,
+      featuredBossId: source.featuredBossId === null ? null : positiveInteger(source.featuredBossId, `${field}.featuredBossId`),
+      bossNarration: nativeBossNarration(source.bossNarration, `${field}.bossNarration`, snapshotTick),
+      bossSpells: nativeBossSpells(source.bossSpells, `${field}.bossSpells`, snapshotTick),
+      puppetHits: nativeWorldPuppetHits(source.puppetHits, `${field}.puppetHits`, snapshotTick),
       encounter,
       entities: replicatedEntityFrame(source.entities, `${field}.entities`),
       enemyEvents: boneyardEnemyEvents(

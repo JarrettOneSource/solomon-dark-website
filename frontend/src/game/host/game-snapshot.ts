@@ -1,50 +1,22 @@
-import { boneyardWorldLightQuery } from '../core-server/boneyard-world-light.ts'
-import { nativePrimarySpellTint } from '../core-kernels/native-skill-colors.ts'
-import {
-  gameSimulationPlayerRecords,
-  getPlayerBelt,
-  getPlayerEconomy,
-  getPlayerProgression,
-  getPlayerSkillBook,
-  getPlayerStatBook,
-} from '../core-server/game-simulation.ts'
-import type { GameSimulationState } from '../core-server/game-simulation.ts'
-import { SPLIT_MIND_CHARM_SELECTOR, hagathaOffers, projectInventoryRootSlots } from '../core-kernels/hub-economy.ts'
-import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
-import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
-import { nativePlayerElementEffectPhase, playerLightDriveActive } from '../core-kernels/player-lighting.ts'
-import {
-  playerEntityDisplayHealth,
-  playerEntityMovementScale,
-  playerLightingAt,
-  playerSkillDerivedStatsAt,
-  playerSkillRuntimeAt,
-} from '../core-server/player-entity-store.ts'
-import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
-import type {
-  BoneyardEnemyEventSnapshot,
-  GameSnapshot,
-  HubPlayerActivity,
-  ProtocolPlayerState,
-  ProtocolStudentState,
-} from '../protocol/game-state.ts'
-import {
-  projectBoneyardEnemies,
-  projectBoneyardEnemyDeathEffect,
-  projectBoneyardEnemyDeathEffects,
-  projectBoneyardEnemyProjectileEffects,
-  projectBoneyardEnemyProjectiles,
-  projectBoneyardMageLightningPulses,
-  projectBoneyardMaggots,
-} from './project-boneyard-enemies.ts'
-import { hubSkorchaHatFrame } from '../core-server/hub-skorcha.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import { SPLIT_MIND_CHARM_SELECTOR, hagathaOffers, projectInventoryRootSlots } from '../core-kernels/hub-economy.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
-import { effectiveSkillNumericValue } from '../core-kernels/player-skill-runtime.ts'
-import { nativeSecondaryAbilityManaCost } from '../core-kernels/native-secondary-abilities.ts'
 import { nativePrimarySpellSummary } from '../core-kernels/native-primary-skill-profile.ts'
+import { nativeSecondaryAbilityManaCost } from '../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
-
+import { nativePrimarySpellTint } from '../core-kernels/native-skill-colors.ts'
+import { nativePlayerElementEffectPhase, playerLightDriveActive } from '../core-kernels/player-lighting.ts'
+import { effectiveSkillNumericValue } from '../core-kernels/player-skill-runtime.ts'
+import { boneyardWorldLightQuery } from '../core-server/boneyard-world-light.ts'
+import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import { gameSimulationPlayerRecords, getPlayerBelt, getPlayerEconomy, getPlayerProgression, getPlayerSkillBook, getPlayerStatBook } from '../core-server/game-simulation.ts'
+import { hubSkorchaHatFrame } from '../core-server/hub-skorcha.ts'
+import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
+import { playerEntityDisplayHealth, playerEntityMovementScale, playerLightingAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt } from '../core-server/player-entity-store.ts'
+import type { BoneyardEnemyEventSnapshot, GameSnapshot, HubPlayerActivity, ProtocolPlayerState, ProtocolStudentState } from '../protocol/game-state.ts'
+import { projectBoneyardEnemies, projectBoneyardEnemyDeathEffect, projectBoneyardEnemyDeathEffects, projectBoneyardEnemyProjectileEffects, projectBoneyardEnemyProjectiles, projectBoneyardMageLightningPulses, projectBoneyardMaggots } from './project-boneyard-enemies.ts'
 export function createGameSnapshot(
   state: GameSimulationState,
   hostPlayerId: string | null,
@@ -120,6 +92,10 @@ export function createGameSnapshot(
           silkFragments: state.world.enemies.silkFragments,
           spiderRemains: state.world.enemies.spiderRemains,
           webbedPlayers: { ...state.world.enemies.webbedPlayers },
+          featuredBossId: state.world.enemies.featuredBossId,
+          bossNarration: state.world.enemies.bossNarration,
+          bossSpells: state.world.enemies.bossSpells,
+          puppetHits: state.world.enemies.puppetHits,
           arenaTransition: state.world.arenaTransition === null
             ? null
             : {
@@ -269,6 +245,10 @@ function protocolBoneyardEnemyEvent(
     ...(event.pitch === undefined ? {} : { pitch: event.pitch }),
     ...(event.projectileId === undefined ? {} : { projectileId: event.projectileId }),
     ...(event.sound === undefined ? {} : { sound: event.sound }),
+    ...(event.stream === undefined ? {} : { stream: event.stream }),
+    ...(event.cameraShake === undefined ? {} : { cameraShake: { ...event.cameraShake, displacement: { ...event.cameraShake.displacement } } }),
+    ...(event.screenFlashOnlyIfClear === undefined ? {} : { screenFlashOnlyIfClear: event.screenFlashOnlyIfClear }),
+    ...(event.screenFlash === undefined ? {} : { screenFlash: { ...event.screenFlash } }),
     ...(event.sourcePosition === undefined
       ? {}
       : { sourcePosition: { ...event.sourcePosition } }),
@@ -376,6 +356,7 @@ function protocolPlayerState(
       unforgeBonuses: { ...economy.unforgeBonuses },
     },
     lighting: {
+      blindnessTicksRemaining: lighting.blindnessTicksRemaining,
       deathWeaponPainterRegistration: lighting.deathWeaponPainterRegistration,
       driveActive: playerLightDriveActive(player.primaryCast, progression.lifeState),
       lightRegistration: lighting.lightRegistration,
@@ -386,6 +367,7 @@ function protocolPlayerState(
     },
     movementScale: playerEntityMovementScale(state.playerEntities, playerId),
     progression: {
+      circleSlowTicksRemaining: progression.circleSlowTicksRemaining,
       advancedUnlocks: [...skillBook.advancedUnlocks],
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
       concentrationSkillIds: [
@@ -419,6 +401,7 @@ function protocolPlayerState(
       mindChugTicksRemaining: progression.mindChugTicksRemaining,
       lifeState: progression.lifeState,
       lastDamageTick: progression.lastDamageTick,
+      hitFeedback: progression.hitFeedback,
       nextThreshold: progression.nextThreshold,
       pendingOffer: progression.pendingOffer,
       poisonDamagePerTick: progression.poisonDamagePerTick,

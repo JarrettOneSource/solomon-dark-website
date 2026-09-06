@@ -10,7 +10,7 @@ import {
   textureBitGl,
   type Texture,
 } from 'pixi.js'
-import { NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
+import { NATIVE_DIFFUSE_TEXTURE_COLOR_UNIFORMS, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-material-batch.ts'
 
@@ -68,19 +68,7 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
     label: 'native-static-surface-colors',
     usage: BufferUsage.VERTEX | BufferUsage.COPY_DST,
   })
-  const shader = new Shader({
-    glProgram: NATIVE_STATIC_SURFACE_PROGRAM,
-    resources: {
-      nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
-      textureUniforms: {
-        uTextureMatrix: {
-          type: 'mat3x3<f32>',
-          value: texture.textureMatrix.mapCoord,
-        },
-      },
-      uTexture: texture.source,
-    },
-  })
+  const shader = createNativeSurfaceShader(texture)
   const geometry = new MeshGeometry({
     indices: plan.indices,
     positions: plan.positions,
@@ -111,4 +99,32 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
       if (writeNativeStaticSurfaceVertexColors(colors, scalars)) colorBuffer.update()
     },
   }
+}
+
+/** A redraw borrows live vertex lighting and owns only its display and optional shader. */
+export function createNativeSurfaceRedraw(source: NativeStaticSurfaceMesh, diffuse: boolean): {
+  mesh: Mesh<MeshGeometry, Shader>
+  destroy(): void
+} {
+  const ownedShader = diffuse ? createNativeSurfaceShader(source.mesh.texture, true) : null
+  const mesh = new Mesh({ geometry: source.mesh.geometry, texture: source.mesh.texture,
+    shader: ownedShader ?? source.mesh.shader })
+  mesh.eventMode = 'none'
+  return { mesh, destroy() { mesh.destroy(); ownedShader?.destroy() } }
+}
+
+function createNativeSurfaceShader(texture: Texture, diffuse = false): Shader {
+  return new Shader({
+    glProgram: NATIVE_STATIC_SURFACE_PROGRAM,
+    resources: {
+      nativeTextureColor: diffuse ? NATIVE_DIFFUSE_TEXTURE_COLOR_UNIFORMS : NATIVE_TEXTURE_COLOR_UNIFORMS,
+      textureUniforms: {
+        uTextureMatrix: {
+          type: 'mat3x3<f32>',
+          value: texture.textureMatrix.mapCoord,
+        },
+      },
+      uTexture: texture.source,
+    },
+  })
 }

@@ -1,36 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-import {
-  BONEYARD_ENEMY_FLAGS,
-  evaluateBoneyardEnemyConfig,
-} from './boneyard-enemy-config.ts'
-import type {
-  BoneyardEnemyFlag,
-} from './boneyard-enemy-config-model.ts'
+import type { BoneyardEnemyFlag } from './boneyard-enemy-config-model.ts'
+import { BONEYARD_ENEMY_FLAGS, evaluateBoneyardEnemyConfig } from './boneyard-enemy-config.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
+import type { NativeEnemyPathState } from './native-enemy-pathfinding.ts'
+import { buildNativeEnemySteering, createNativeEnemyPathState, NATIVE_ENEMY_FLANK_SPEED_FACTOR, NATIVE_ENEMY_FLANK_TURN_FACTOR, NATIVE_ENEMY_PATH_FACTOR_DECAY, NATIVE_ENEMY_REORIENTATION_TICKS, nativeEnemyTargetRefreshTicks, selectNativeEnemyFlank, stepNativeEnemyPathRecovery, stepNativeEnemyReorientation } from './native-enemy-pathfinding.ts'
+import type { NativeRngState } from './native-rng.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from './native-rng.ts'
 import { nativeSlumpgutRecipe } from './native-survival-slumpgut.ts'
-import {
-  buildNativeEnemySteering,
-  createNativeEnemyPathState,
-  NATIVE_ENEMY_FLANK_SPEED_FACTOR,
-  NATIVE_ENEMY_FLANK_TURN_FACTOR,
-  NATIVE_ENEMY_PATH_FACTOR_DECAY,
-  NATIVE_ENEMY_REORIENTATION_TICKS,
-  nativeEnemyTargetRefreshTicks,
-  selectNativeEnemyFlank,
-  stepNativeEnemyPathRecovery,
-  stepNativeEnemyReorientation,
-  type NativeEnemyPathState,
-} from './native-enemy-pathfinding.ts'
-import {
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeInteger,
-  drawNativeSign,
-  type NativeRngState,
-} from './native-rng.ts'
-
 const BASE_PATH: NativeEnemyPathState = Object.freeze({
   baseTurnRate: 1,
   flankAngleDeg: 0,
@@ -217,11 +194,11 @@ test('all native enemy families materialize immutable recovered defaults', () =>
     SKELETONMAGE: [5, 3, 0.8, 1, 4.25, 25, (1.25 + 0.5) * 1.25 ** 2 * 0.75 * 0.65],
     WRAITH: [2, 4, 1, 1, Math.fround(1.7), 15, 1],
     ZOMBIE: [105, 35, 1, 1, 89.25, 21, 0.85],
-  } satisfies Record<Exclude<BoneyardWaveEnemyToken, 'PORTAL'>, readonly (number | null)[]>
+  } satisfies Record<Exclude<BoneyardWaveEnemyToken, 'PORTAL' | 'HEARTMONGER' | 'DIREFACULTY' | 'DEMONSKULL'>, readonly (number | null)[]>
 
   for (const enemyToken of Object.keys(expected) as Exclude<
     BoneyardWaveEnemyToken,
-    'PORTAL'
+    'PORTAL' | 'HEARTMONGER' | 'DIREFACULTY' | 'DEMONSKULL'
   >[]) {
     const config = evaluateBoneyardEnemyConfig(enemyToken, {
       random: { baseSpeedUnit: 0.5, collisionRadiusUnit: 0.5 },
@@ -361,6 +338,7 @@ test('Archer and Mage flags remain family-specific evaluated lanes', () => {
     headgear: 0,
     multiArrowMode: 2,
     rangeMode: 3,
+    strafing: false,
   })
   assert.equal(archer.secondaryDamage, 12)
 

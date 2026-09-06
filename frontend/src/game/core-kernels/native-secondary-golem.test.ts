@@ -186,7 +186,49 @@ test('Golem acquires, follows, attacks at marker 37, and applies the 90-degree c
     rng: createNativeRng(1),
     targets: [{ ...target, position: { x: 200, y: 0 }, radius: 10 }],
   })
-  assert.deepEqual(moved.actor.position, { x: 0.5, y: 0 })
+  assert.deepEqual(moved.actor.position, {
+    x: Math.fround(Math.sin(Math.PI / 180) * .5),
+    y: Math.fround(-Math.cos(Math.PI / 180) * .5),
+  })
+})
+
+test('CircleSlow halves Golem travel and foot progress while its action markers keep their own clock', () => {
+  const initial = golem({ ageTicks: 400, rotationRadians: Math.PI / 2, golem: golemState({
+    phase: 'active', provokeRollBound: 1_200, targetPollTicksRemaining: 1,
+    circleSlowTicks: 20, leftFootProgress: 0,
+  }) })
+  const context = { ownerPosition: null, resolveMovement: noMovement,
+    rng: createNativeRng(1), targets: [{ id: 1, position: { x: 200, y: 0 }, radius: 10 }] }
+  const slowed = stepNativeSecondaryGolem(initial, context)
+  assert.ok(Math.abs(slowed.actor.position.x - .25) < 1e-6)
+  assert.equal(slowed.actor.golem.leftFootProgress, Math.fround(Math.fround(.015 * .5) * Math.fround(1.06)))
+  assert.equal(slowed.actor.golem.circleSlowTicks, 19)
+  const normal = stepNativeSecondaryGolem({ ...initial, golem: { ...initial.golem, circleSlowTicks: 0 } }, context)
+  assert.ok(Math.abs(normal.actor.position.x - .5) < 1e-6)
+  const attack = stepNativeSecondaryGolem({ ...initial, targetId: 1, golem: {
+    ...initial.golem, phase: 'attack', actionDurationTicks: 90, actionTick: 36,
+  } }, { ...context, targets: [{ id: 1, position: { x: 60, y: 0 }, radius: 20 }] })
+  assert.equal(attack.actor.golem.actionTick, 37)
+  assert.ok(attack.contact)
+  let actor = slowed.actor
+  for (let tick = 0; tick < 19; tick += 1) actor = stepNativeSecondaryGolem(actor, context).actor
+  assert.equal(actor.golem.circleSlowTicks, 0)
+})
+
+test('Golem turns by the native signed degree step and CircleSlow halves that step', () => {
+  for (const [circleSlowTicks, degrees] of [[0, 1], [20, .5]] as const) {
+    const stepped = stepNativeSecondaryGolem(golem({ ageTicks: 400, golem: golemState({
+      phase: 'active', provokeRollBound: 1_200, targetPollTicksRemaining: 1, circleSlowTicks,
+    }) }), { ownerPosition: null, resolveMovement: noMovement, rng: createNativeRng(1),
+      targets: [{ id: 1, position: { x: 200, y: 0 }, radius: 10 }] })
+    assert.ok(Math.abs(stepped.actor.rotationRadians * 180 / Math.PI - degrees) < 1e-5)
+    assert.ok(stepped.actor.position.y < 0, 'travel follows the gradually turning heading')
+    const aligned = stepNativeSecondaryGolem({ ...stepped.actor, rotationRadians: 0 }, {
+      ownerPosition: null, resolveMovement: noMovement, rng: createNativeRng(1),
+      targets: [{ id: 1, position: { x: Math.sin(.75 * Math.PI / 180) * 200, y: -200 }, radius: 10 }],
+    })
+    assert.equal(aligned.actor.rotationRadians, 0, 'native sign helper stops within one degree')
+  }
 })
 
 test('Golem target polling, owner orbit, provoke roll, and death RNG consumption preserve native boundaries', () => {
@@ -279,6 +321,7 @@ function golemState(
     ...nativeInitialGolemArticulation({ x: 0, y: 0 }, 0),
     actionDurationTicks: 0,
     actionTick: 0,
+    circleSlowTicks: 0,
     currentHealth: 100,
     damageMaximum: 10,
     iron: false,

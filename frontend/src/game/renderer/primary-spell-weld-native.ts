@@ -105,6 +105,7 @@ export type NativeWeldPresentationState =
     }>
 
 export interface NativeWeldSpriteDraw {
+  readonly textureColor?: 'diffuse'
   readonly alpha: number
   readonly atlas: NativeWeldAtlas
   readonly blend: 'add' | 'normal'
@@ -148,6 +149,7 @@ export interface NativeWeldLineDraw {
 }
 
 export interface NativeWeldVisualPlan {
+  readonly underlays?: readonly NativeWeldSpriteDraw[]
   readonly lines: readonly NativeWeldLineDraw[]
   readonly meshes: readonly NativeWeldMeshDraw[]
   readonly position: Readonly<{ x: number; y: number }>
@@ -185,6 +187,7 @@ export function isNativeWeldPresentationState(
 export function nativeWeldVisualPlan(
   state: NativeWeldPresentationState,
   presentationFrame = Math.floor(state.ageTicks),
+  puppetHit = false,
 ): NativeWeldVisualPlan {
   switch (state.kind) {
     case 'weld': return projectilePlan(state, presentationFrame)
@@ -211,7 +214,7 @@ export function nativeWeldVisualPlan(
     case 'weld-hail-terrain-bouncer': return hailTerrainBouncerPlan(state)
     case 'weld-hail-terrain-particle': return hailTerrainParticlePlan(state)
     case 'weld-impact': return impactPlan(state, presentationFrame)
-    case 'weld-meteor': return meteorPlan(state, presentationFrame)
+    case 'weld-meteor': return meteorPlan(state, presentationFrame, puppetHit)
     case 'weld-meteor-flash': return meteorFlashPlan(state)
     case 'weld-meteor-marker': return markerPlan(state)
     case 'weld-persistent':
@@ -485,7 +488,7 @@ function markerPlan(state: NativeWeldMeteorMarkerState): NativeWeldVisualPlan {
   })])
 }
 
-function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWeldVisualPlan {
+function meteorPlan(state: NativeWeldMeteorActorState, frame: number, puppetHit: boolean): NativeWeldVisualPlan {
   if (state.phase === 'fall') {
     const fallOffset = {
       x: 0,
@@ -495,37 +498,40 @@ function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWel
       ? -state.bodyScale
       : state.bodyScale
     const groundAlpha = Math.max(0, 1 - state.fallHeight) * 0.5
-    return positioned(state.position, [
+    const main = [
       sprite(15, 'meteor-fall-corona', {
         alpha: 1,
-        blend: 'add',
+        blend: 'normal',
         offset: fallOffset,
         scaleX: 3 + visualUnit(state.id, frame, 0) * 0.5,
         scaleY: 3 + visualUnit(state.id, frame, 0) * 0.5,
         tint: 0xff8000,
       }),
       sprite(50, 'meteor-fall-body', {
+        blend: 'add',
         offset: fallOffset,
         rotationRadians: (state.fallHeadingDegrees * 0.5 + 180) * DEG,
         scaleX: bodyScaleX,
         scaleY: Math.max(0, state.bodyScale * 2),
       }),
-      ...(groundAlpha > 0 ? [sprite(19, 'meteor-final-descent-ground', {
+    ]
+    return positioned(state.position, [...main, ...(puppetHit ? main.map(draw => ({
+      ...draw, role: `hit:${draw.role}`, textureColor: 'diffuse' as const,
+    })) : [])], { underlays: groundAlpha > 0 ? [sprite(19, 'meteor-final-descent-ground', {
         alpha: groundAlpha,
         atlas: 'DeadHawg',
         scaleX: 2,
         scaleY: 1.6,
-      })] : []),
-    ])
+      })] : [] })
   }
   const impactAlpha = Math.min(1, state.impactTicksRemaining / 100)
-  return positioned(state.position, [sprite(67, 'meteor-impact-body', {
+  return positioned(state.position, [], { underlays: [sprite(67, 'meteor-impact-body', {
     alpha: impactAlpha,
     blend: 'add',
     rotationRadians: state.impactRotationDegrees * DEG,
     scaleX: state.impactRadiusScalar,
     scaleY: state.impactRadiusScalar * 0.8,
-  })])
+  })] })
 }
 
 function meteorFlashPlan(state: NativeWeldMeteorFlashActorState): NativeWeldVisualPlan {
@@ -1056,6 +1062,7 @@ function positioned(
   options: Readonly<{
     lines?: readonly NativeWeldLineDraw[]
     meshes?: readonly NativeWeldMeshDraw[]
+    underlays?: readonly NativeWeldSpriteDraw[]
     regionLightPoint?: Readonly<{ x: number; y: number }> | null
     sortBias?: number
   }> = {},
@@ -1063,6 +1070,7 @@ function positioned(
   return Object.freeze({
     lines: Object.freeze([...(options.lines ?? [])]),
     meshes: Object.freeze([...(options.meshes ?? [])]),
+    ...(options.underlays === undefined ? {} : { underlays: Object.freeze([...options.underlays]) }),
     position: Object.freeze({ ...position }),
     regionLightPoint: options.regionLightPoint === undefined
       ? null

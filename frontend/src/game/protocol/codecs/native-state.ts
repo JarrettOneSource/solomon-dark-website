@@ -1,3 +1,5 @@
+import { MAX_BONEYARD_PUPPET_HITS } from '../game-protocol-limits.ts'
+import { NATIVE_WORLD_PUPPET_HIT_KINDS, type NativePuppetHitState, type NativeWorldPuppetHit } from '../../core-kernels/native-puppet-hit.ts'
 import type { BoneyardBounds, BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import type { NativeEnemyPathState } from '../../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
@@ -15,6 +17,7 @@ import {
   limitedString,
   nonnegativeFinite,
   nonnegativeInteger,
+  unitInterval,
   onlyKeys,
   positiveFinite,
   record,
@@ -189,4 +192,38 @@ export function nativeEnemyPathState(value: unknown, field: string): NativeEnemy
     turnFactor: positiveFinite(source.turnFactor, `${field}.turnFactor`),
     wanderHeadingDeg: finite(source.wanderHeadingDeg, `${field}.wanderHeadingDeg`),
   }
+}
+
+export function nativePuppetHit(value: unknown, field: string): NativePuppetHitState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['strength', 'tick', 'timer'])
+  return {
+    strength: nonnegativeFinite(source.strength, `${field}.strength`),
+    tick: nonnegativeInteger(source.tick, `${field}.tick`),
+    timer: unitInterval(source.timer, `${field}.timer`),
+  }
+}
+
+export function nativeWorldPuppetHits(value: unknown, field: string, snapshotTick: number): NativeWorldPuppetHit[] {
+  const ids = new Set<string>()
+  return limitedArray(value, field, MAX_BONEYARD_PUPPET_HITS).map((entry, index) => {
+    const name = `${field}[${index}]`
+    const source = record(entry, name)
+    onlyKeys(source, name, ['feedback', 'hitTick', 'kind', 'targetId'])
+    const kind = NATIVE_WORLD_PUPPET_HIT_KINDS.find(kind => kind === source.kind)
+    if (kind === undefined) throw new GameProtocolError(`${name}.kind is invalid`)
+    const targetId = limitedString(source.targetId, `${name}.targetId`, 256)
+    const prefixes = kind === 'scenery' ? ['scenery:', 'fencepost:'] : kind === 'goodie' ? ['goodie:']
+      : kind === 'arrow' || kind === 'firebolt' ? ['projectile:'] : kind === 'meteor' ? ['primary:'] : ['secondary:']
+    if (!prefixes.some(prefix => targetId.startsWith(prefix) && targetId.length > prefix.length) || ids.has(targetId)) {
+      throw new GameProtocolError(`${name}.targetId is invalid or duplicated`)
+    }
+    ids.add(targetId)
+    const feedback = nativePuppetHit(source.feedback, `${name}.feedback`)
+    const hitTick = nonnegativeInteger(source.hitTick, `${name}.hitTick`)
+    if (feedback.timer <= 0 || feedback.tick > snapshotTick || hitTick > feedback.tick) {
+      throw new GameProtocolError(`${name} hit clock is invalid`)
+    }
+    return { feedback, hitTick, kind, targetId }
+  })
 }

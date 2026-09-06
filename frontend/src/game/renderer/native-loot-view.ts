@@ -8,6 +8,8 @@ import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { nativeLootSpriteRecord } from './native-loot-assets.ts'
+import type { NativePuppetHitState, NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
+import { setNativeDiffuseColor } from './native-texture-color.ts'
 import {
   nativeGoodiePresentationPlan,
   nativeLootPresentationPlan,
@@ -93,7 +95,8 @@ export class NativeGoodieViews {
     this.textures = textures
   }
 
-  update(goodies: readonly BoneyardGoodieSnapshot[], tick: number): void {
+  update(goodies: readonly BoneyardGoodieSnapshot[], tick: number,
+    hits?: ReadonlyMap<string, NativeWorldPuppetHit>, complexLighting = true): void {
     this.liveIds.clear()
     for (const goodie of goodies) {
       this.liveIds.add(goodie.id)
@@ -102,7 +105,7 @@ export class NativeGoodieViews {
         view = new NativeGoodieView(this.root, this.textures)
         this.views.set(goodie.id, view)
       }
-      view.update(goodie, tick)
+      view.update(goodie, tick, hits?.get(`goodie:${goodie.id}`)?.feedback, complexLighting)
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
@@ -245,11 +248,11 @@ class NativeGoodieView {
     root.addChild(this.container)
   }
 
-  update(goodie: BoneyardGoodieSnapshot, tick: number): void {
+  update(goodie: BoneyardGoodieSnapshot, tick: number, hit?: NativePuppetHitState, complexLighting = true): void {
     updateLayers(
       this.container,
       this.sprites,
-      nativeGoodiePresentationPlan(goodie, tick),
+      nativeGoodiePresentationPlan(goodie, tick, hit, complexLighting),
       this.textures,
     )
     this.container.label = `goodie:${goodie.id}`
@@ -304,6 +307,7 @@ function updateLayers(
     sprite.alpha = visual.alpha
     sprite.blendMode = visual.blendMode
     sprite.tint = visual.tint
+    setNativeDiffuseColor(sprite, visual.textureColor === 'diffuse')
   })
 }
 

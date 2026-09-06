@@ -38,6 +38,13 @@ test('pins Fireball direct/splash partition and private seed ownership', () => {
   assert.equal(draw.rng.indexA, 1)
 })
 
+test('Fire stores its native float position at birth and a stationary first tick preserves it', () => {
+  const patch = createNativeFirePatch({ id: 1, burnDamage: 0, damage: 1, nativeType: 'fire',
+    ownerId: 'owner', worldKey: 'boneyard', position: { x: 123.1, y: -456.2 } }, 0, 1)
+  assert.deepEqual(patch.position, { x: Math.fround(123.1), y: Math.fround(-456.2) })
+  assert.deepEqual(stepNativeFirePatch(patch, 1).patch?.position, patch.position)
+})
+
 test('creates the exact-count seeded fan, footprint, and ten pre-ticks', () => {
   const sourceRng = createNativeRng(900)
   const first = createNativeFireDetonation(

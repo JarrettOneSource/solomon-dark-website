@@ -1,10 +1,20 @@
-import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import { nativePrimaryCellCoordinate } from '../../core-kernels/primary-spell-targeting.ts'
-import type { BoneyardEnemyStore, BoneyardEnemyTargets, WorkingStep } from './model.ts'
+import type {
+  BoneyardPoint,
+} from '../../core-kernels/boneyard.ts'
+import {
+  nativePrimaryCellCoordinate,
+} from '../../core-kernels/primary-spell-targeting.ts'
+import {
+  type BoneyardEnemyStore,
+  type BoneyardEnemyTargets,
+  type BoneyardPuppetTarget,
+  type WorkingStep,
+} from './model.ts'
 
 export function standaloneEnemyWorldManagerOrderState(source: BoneyardEnemyStore) {
   const nextRegistrationOrdinal = { actor: 0, transient: 0 }
   for (const registration of [
+    ...source.bossSpells.map(({ painterRegistration }) => painterRegistration),
     ...source.actors.map(({ lightRegistration }) => lightRegistration),
     ...source.maggots.map(({ lightRegistration }) => lightRegistration),
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
@@ -52,12 +62,23 @@ export function nativePrimaryCellChanged(
 }
 
 export function bindEnemyTargets(work: WorkingStep, targets: BoneyardEnemyTargets): void {
-  work.targetCellBindings = Object.fromEntries(Object.entries(targets).map(([id, target]) => {
-    const cellX = nativePrimaryCellCoordinate(target.position.x)
-    const cellY = nativePrimaryCellCoordinate(target.position.y)
-    const previous = work.targetCellBindings[id]
-    return [id, previous?.cellX === cellX && previous.cellY === cellY
-      ? previous
-      : { cellX, cellY, order: work.nextNativeCellBindingOrder++ }]
-  }))
+  for (const [id, target] of Object.entries(targets)) bindNativeQueryTarget(work, id, target.position)
+}
+
+export type NativeQueryBindingWork = Pick<WorkingStep, 'targetCellBindings' | 'nextNativeCellBindingOrder'>
+
+export function bindNativeQueryTarget(work: NativeQueryBindingWork, id: string, position: Readonly<BoneyardPoint>): void {
+  const cellX = nativePrimaryCellCoordinate(position.x)
+  const cellY = nativePrimaryCellCoordinate(position.y)
+  const previous = work.targetCellBindings[id]
+  if (previous?.cellX === cellX && previous.cellY === cellY) return
+  work.targetCellBindings = { ...work.targetCellBindings,
+    [id]: { cellX, cellY, order: work.nextNativeCellBindingOrder++ } }
+}
+
+export function bindWorldPuppetTargets(work: NativeQueryBindingWork, targets: readonly BoneyardPuppetTarget[]): void {
+  for (const target of [...targets].filter(target => target.hitKind === 'meteor' || target.hitKind === 'leviathan')
+    .sort((left, right) => left.registrationOrder - right.registrationOrder)) {
+    bindNativeQueryTarget(work, target.id, target.gridPosition ?? target.position)
+  }
 }

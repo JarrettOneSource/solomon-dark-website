@@ -1,3 +1,4 @@
+import { stepNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
 import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import {
@@ -116,6 +117,7 @@ export function stepMaggots(
               - elapsedTicks * NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP,
           ),
         }
+    source = { ...source, hitFeedback: stepNativePuppetHit(source.hitFeedback, context.tick, elapsedTicks) }
     const effect = context.abilityEffects?.[source.id]
     if (!hasLiveCoffinOwner(work.actors, source.ownerCoffinActorId)) {
       retireMaggot(work, source, context.tick)

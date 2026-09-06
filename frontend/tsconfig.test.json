@@ -1,10 +1,15 @@
 {
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "types": ["node", "vite/client"],
+    "types": [
+      "node",
+      "vite/client"
+    ],
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
+    "src/game/renderer/native-enemy-underlay.test.ts",
+    "src/game/core-server/native-secondary-world.test.ts",
     "src/game/host/run-archive.test.ts",
     "src/game/client/run-performance.test.ts",
     "src/boneyard/model.ts",
@@ -134,7 +139,30 @@
     "src/game/host/game-snapshot.ts",
     "src/game/host/boneyard-catalog.test.ts",
     "src/game/host/boneyard-catalog.ts",
-    "src/game/host/project-boneyard.test.ts"
+    "src/game/host/project-boneyard.test.ts",
+    "src/game/core-kernels/native-boss-equipment.test.ts",
+    "src/game/core-kernels/native-crow-blindness.test.ts",
+    "src/game/core-kernels/native-crow.test.ts",
+    "src/game/core-kernels/native-demon-skull.test.ts",
+    "src/game/core-kernels/native-puppet-hit.test.ts",
+    "src/game/core-kernels/native-faculty-actions.test.ts",
+    "src/game/core-kernels/native-faculty-attachments.test.ts",
+    "src/game/core-kernels/native-faculty-spells.test.ts",
+    "src/game/core-kernels/native-faculty-voices.test.ts",
+    "src/game/core-kernels/native-faculty.test.ts",
+    "src/game/core-kernels/native-guided-missile.test.ts",
+    "src/game/core-kernels/native-heartmonger.test.ts",
+    "src/game/core-kernels/native-survival-boss-encounter.test.ts",
+    "src/game/core-server/boneyard-enemy-visibility.test.ts",
+    "src/game/core-server/faculty-encounter.test.ts",
+    "src/game/core-server/discorporeal-encounter.test.ts",
+    "src/game/renderer/native-demon-skull-presentation.test.ts",
+    "src/game/renderer/native-dark-lightning.test.ts",
+    "src/game/renderer/native-heartmonger-tendrils.test.ts",
+    "src/game/renderer/native-rain-cloud.test.ts",
+    "src/game/renderer/native-screen-feedback.test.ts",
+    "src/game/native-boss-hud.test.ts",
+    "src/game/save/discorporeal-save.test.ts"
   ],
   "exclude": []
 }

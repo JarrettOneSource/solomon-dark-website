@@ -8,12 +8,8 @@ import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { measureNativeUiText, nativeUiFont, wrapNativeUiText } from '../src/game/native-ui/core.ts'
-import {
-  HAGATHA_NATIVE_TOOLTIP_LINES,
-  HUB_HOVER_BOX,
-  hubHagathaTooltipLines,
-  hubOwnedPerkSlotRect,
-} from '../src/game/renderer/hub-inventory-render-contract.ts'
+import { HAGATHA_NATIVE_TOOLTIP_LINES, hubHagathaTooltipLines } from '../src/game/renderer/hub-inventory-item-text.ts'
+import { HUB_HOVER_BOX, hubOwnedPerkSlotRect } from '../src/game/renderer/hub-inventory-render-contract.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const productionBuild = process.env.SDR_OVERLAY_PRODUCTION === '1'

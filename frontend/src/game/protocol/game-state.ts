@@ -1,60 +1,36 @@
-import type { NativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
-import type { NativeWebbedState } from '../core-kernels/native-webbed.ts'
-import type { NativeFadeLineActor } from '../core-kernels/native-silk-force.ts'
-import type { BoneyardSilkSnapshot, BoneyardSpiderRemainsSnapshot } from './spider-state.ts'
-import type {
-  BoneyardGateLeafSnapshot,
-} from '../core-kernels/boneyard.ts'
+import type { NativePuppetHitState, NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
-import type {
-  BoneyardSolomonDigEvent,
-  BoneyardSolomonPhase,
-  BoneyardSolomonVoiceEvent,
-} from '../core-kernels/boneyard-encounter.ts'
-import type {
-  BoneyardWaveDirectorPhase,
-  NativeSlumpgutPhase,
-} from '../core-kernels/boneyard-wave-director.ts'
-import type {
-  PlayerCharacterConfig,
-  PlayerCharacterState,
-} from '../core-kernels/player-character.ts'
-import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
-import type {
-  DowsingOffer,
-  HagathaOffer,
-  HubActionFeedback,
-  HubEquipmentState,
-  HubInventoryItem,
-  HubShopItem,
-  NativeUnforgeBonuses,
-} from '../core-kernels/hub-economy.ts'
-import type {
-  HubParticipantState,
-} from '../core-kernels/hub-regions.ts'
-import type { Vector2 } from '../core-kernels/vector.ts'
-import type {
-  PrimarySpellProjectileState,
-  PrimarySpellSimulationState,
-  PrimarySpellTransientState,
-} from '../core-kernels/primary-spells.ts'
-import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
-import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
-import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
-import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
-import type {
-  NativeWeldComponentRanks,
-  PlayerLevelUpBarrierState,
-} from '../core-kernels/player-progression.ts'
-import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
-import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
+import type { BoneyardSolomonDigEvent, BoneyardSolomonPhase, BoneyardSolomonVoiceEvent } from '../core-kernels/boneyard-encounter.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
+import type { BoneyardWaveDirectorPhase, NativeSlumpgutPhase } from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
+import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
+import type { DowsingOffer, HagathaOffer, HubActionFeedback, HubEquipmentState, HubInventoryItem, HubShopItem, NativeUnforgeBonuses } from '../core-kernels/hub-economy.ts'
+import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
+import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
+import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
+import type { NativeBossNarration, NativeBossStreamCue } from '../core-kernels/native-boss-audio.ts'
+import type { NativeBossSpell } from '../core-kernels/native-boss-spell.ts'
+import type { NativeDemonSkullVisualState } from '../core-kernels/native-demon-skull.ts'
+import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
+import type { NativeFacultyVisualState } from '../core-kernels/native-faculty.ts'
+import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
+import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import type { NativeRegionCameraShake } from '../core-kernels/native-region-point-gain.ts'
+import type { NativeSecondaryScreenFlashState, NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeFadeLineActor } from '../core-kernels/native-silk-force.ts'
+import type { NativeSpiderAppearance } from '../core-kernels/native-spider-appearance.ts'
+import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
+import type { NativeWebbedState } from '../core-kernels/native-webbed.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
+import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
+import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
+import type { NativeWeldComponentRanks, PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
+import type { PrimarySpellProjectileState, PrimarySpellSimulationState, PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
-import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
-import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
-import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
-
+import type { BoneyardSilkSnapshot, BoneyardSpiderRemainsSnapshot } from './spider-state.ts'
 export interface ProtocolFountainParticleState {
   id: number
   remaining: number
@@ -109,6 +85,7 @@ export interface ProtocolPlayerEconomy {
 }
 
 export interface ProtocolPlayerLighting {
+  blindnessTicksRemaining: number
   deathWeaponPainterRegistration: NativeWorldManagerRegistration | null
   driveActive: boolean
   lightRegistration: NativeWorldManagerRegistration
@@ -146,6 +123,7 @@ export interface ProtocolPlayerPrimarySpellStats {
 }
 
 export interface ProtocolPlayerProgression {
+  circleSlowTicksRemaining: number
   advancedUnlocks: readonly boolean[]
   coldSlowTicksRemaining: number
   concentrationSkillIds: readonly [number | null, number | null]
@@ -168,6 +146,7 @@ export interface ProtocolPlayerProgression {
   mindChugTicksRemaining: number
   lifeState: PlayerLifeState
   lastDamageTick: number | null
+  hitFeedback: NativePuppetHitState
   nextThreshold: number
   pendingOffer: ProtocolPlayerSkillOffer | null
   poisonDamagePerTick: number
@@ -240,10 +219,14 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  puppetHits: readonly NativeWorldPuppetHit[]
   spiderSilks: readonly BoneyardSilkSnapshot[]
   silkFragments: readonly NativeFadeLineActor[]
   spiderRemains: readonly BoneyardSpiderRemainsSnapshot[]
   webbedPlayers: Readonly<Record<string, NativeWebbedState>>
+  featuredBossId: number | null
+  bossNarration: NativeBossNarration
+  bossSpells: readonly NativeBossSpell[]
   arenaTransition: BoneyardArenaTransitionState | null
   deathEffects: readonly BoneyardEnemyDeathEffectSnapshot[]
   encounter: BoneyardSolomonSnapshot | null
@@ -350,6 +333,7 @@ export interface BoneyardLootEventSnapshot {
 }
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
+  'crow',
   'move-fade-perspective',
   'banish',
   'bouncer',
@@ -359,23 +343,29 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
   'fade-perspective',
   'fade-perspective-clipped',
   'fade-scale',
+  'fade-scale-perspective',
   'fire-array',
   'late-splat',
   'move-fade',
   'sprite-array',
   'unbind',
+  'banish-black',
+  'scrap',
 ] as const
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS = [
   'direct-post-world',
   'pre-world-queue',
   'world-sorted',
+  'late-world-overlay',
+  'background',
 ] as const
 
 export interface BoneyardEnemyDeathEffectSnapshot {
+  painterSortBias?: number
   ageTicks: number
   alpha: number
-  atlas: 'BadGuys' | 'DeadHawg' | 'Demon'
+  atlas: 'BadGuys' | 'DeadHawg' | 'Demon' | 'Heartmonger' | 'Faculty' | 'Unholy'
   blendMode: 'add' | 'normal'
   entry: number
   height: number
@@ -438,6 +428,10 @@ export type BoneyardMageLightningPulseFrame = readonly [
 
 export const BONEYARD_ENEMY_EVENT_TYPES = [
   'cocoon-released',
+  'enemy-dialogue-stop',
+  'enemy-stream',
+  'enemy-screen-flash',
+  'enemy-camera-shake',
   'player-status-sound',
   'attack-marker',
   'coffin-maggot-release',
@@ -466,6 +460,20 @@ export const BONEYARD_ENEMY_ACTION_SOUNDS = [
   'webbed-1',
   'webbed-2',
   'disintegrate',
+  'knock',
+  'throw-dark',
+  'chain-clank-1',
+  'chain-clank-2',
+  'spin-attack',
+  'magic-storm',
+  'magic-shield-explode', 'distort-reality', 'firey-death',
+  'eye-laser-charge', 'jaw', 'skull-bite', 'unholy-spits',
+  'magic-circle',
+  'big-fire',
+  'banshee-die',
+  'lightning-start',
+  'flame-lash-start',
+  'crow-1', 'crow-2', 'wings',
   'bite-1',
   'bite-2',
   'bite-3',
@@ -520,7 +528,7 @@ export const BONEYARD_PLAYER_DAMAGE_SOUNDS = [
   'wizard-ouch-3',
 ] as const
 
-export const BONEYARD_PLAYER_STATUS_SOUNDS = ['frosted', 'poisoned', 'magic-missile-hit'] as const
+export const BONEYARD_PLAYER_STATUS_SOUNDS = ['blind', 'frosted', 'poisoned', 'magic-missile-hit'] as const
 
 export const BONEYARD_ENEMY_SOUNDS = [
   ...new Set([
@@ -538,6 +546,9 @@ export const BONEYARD_COMBAT_SOUNDS = [
 
 export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
   'spider-collapse',
+  'discorporeal-banish',
+  'faculty-break',
+  'heartmonger-shatter',
   'archer-shatter',
   'coffin-break',
   'demon-split',
@@ -558,6 +569,10 @@ export type BoneyardCombatSound = typeof BONEYARD_COMBAT_SOUNDS[number]
 export type BoneyardEnemyTerminalOutput = typeof BONEYARD_ENEMY_TERMINAL_OUTPUTS[number]
 
 export interface BoneyardEnemyEventSnapshot {
+  cameraShake?: NativeRegionCameraShake
+  stream?: NativeBossStreamCue
+  screenFlashOnlyIfClear?: boolean
+  screenFlash?: NativeSecondaryScreenFlashState
   actorId: number
   count?: number
   deflectPitch?: number
@@ -696,6 +711,15 @@ export interface BoneyardMaggotSnapshot {
 
 export type BoneyardEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
 export type BoneyardEnemyAction =
+  | 'demon-skull-bite'
+  | 'demon-skull-eyes'
+  | 'demon-skull-mouth'
+  | 'demon-skull-spit'
+  | 'demon-skull-flair'
+  | 'demon-skull-scream'
+  | 'faculty-throw'
+  | 'faculty-two-hand'
+  | 'faculty-lightning'
   | 'skeleton-claw-a'
   | 'skeleton-claw-b'
   | 'skeleton-weapon'
@@ -730,6 +754,8 @@ export interface BoneyardEnemyAnimationSnapshot {
   demonFrontRotationRadians: number
   demonRearExtremityOffset: Vector2
   demonRearRotationRadians: number
+  demonShadowOffset: Readonly<{ x: number; y: number }>
+  shadowLateralOffset: number
   effects: readonly BoneyardEnemyEffectSnapshot[]
   gaitPose: number
   headFacingOffset: NativeSkeletonHeadFacingOffset
@@ -737,6 +763,8 @@ export interface BoneyardEnemyAnimationSnapshot {
   impBodyRotationRadians: number
   impEffectAlpha: number
   impEffectFrame: number
+  headVariant: 0 | 1
+  limbHeadingDeg: number | null
   maggots: readonly []
   state: BoneyardEnemyAnimationState
   stridePhaseDeg: number
@@ -778,23 +806,33 @@ export interface BoneyardEnemyLightingSnapshot {
 }
 
 export interface BoneyardEnemySnapshot {
+  demonSkull?: NativeDemonSkullVisualState
+  faculty?: NativeFacultyVisualState
   animation: BoneyardEnemyAnimationSnapshot
   armored: boolean
+  arrowType: 'fire' | 'normal' | 'poison'
+  burning: boolean
+  classification: 'boss' | 'miniboss' | 'multiple-boss' | 'normal'
   currentHealth: number
-  enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN' | 'PORTAL' | 'SPIDER' | 'COCOON'
+  enemyToken: 'DEMONSKULL' | 'DIREFACULTY' | 'HEARTMONGER' | 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN' | 'PORTAL' | 'SPIDER' | 'COCOON'
   flags: readonly string[]
+  headgear: 0 | 1 | 2 | 3 | 4 | 5
   headingDeg: number
   id: number
   lightRegistration: NativeWorldManagerRegistration
   lighting: BoneyardEnemyLightingSnapshot
   mageCloak: boolean
+  mageElement: 'fire' | 'frost' | 'lightning' | 'poison'
   maximumHealth: number
+  name: string | null
   nativeTypeId: number
   position: Vector2
+  rotten: boolean
   scale: number
   shieldHealth: number
   shieldMaximumHealth: number
   spawnTick: number
+  weapon: 'axe' | 'claw' | 'flail' | 'mace' | 'pike' | 'sword'
 }
 
 export interface BoneyardSolomonSnapshot {
@@ -846,10 +884,14 @@ export interface HubWorldSnapshotFrame {
 }
 
 export interface BoneyardWorldSnapshotFrame {
+  puppetHits: readonly NativeWorldPuppetHit[]
   spiderSilks: readonly BoneyardSilkSnapshot[]
   silkFragments: readonly NativeFadeLineActor[]
   spiderRemains: readonly BoneyardSpiderRemainsSnapshot[]
   webbedPlayers: Readonly<Record<string, NativeWebbedState>>
+  featuredBossId: number | null
+  bossNarration: NativeBossNarration
+  bossSpells: readonly NativeBossSpell[]
   arenaTransition: BoneyardArenaTransitionState | null
   encounter: BoneyardSolomonSnapshot | null
   entities: ReplicatedEntityFrame

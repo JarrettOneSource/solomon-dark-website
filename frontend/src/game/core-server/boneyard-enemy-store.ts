@@ -1,30 +1,28 @@
+import { stepBoneyardPuppetHits } from './enemies/puppet-hits.ts'
 import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import { createNativeBossNarration, enqueueNativeBossNarration, stepNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
+import { createNativeDemonSkullEncounter } from '../core-kernels/native-demon-skull.ts'
+import { stepNativeFacultyVoices } from '../core-kernels/native-faculty-voices.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 import { stepDamagePresentationTimers, stepLivingActor } from './enemies/actor-update.ts'
+import { stepBossSpells } from './enemies/boss-spells.ts'
 import { materializeSpawnIntents } from './enemies/construction.ts'
+import { spawnDampenedMageSmoke } from './enemies/dampen.ts'
 import { stepDyingActor } from './enemies/deaths.ts'
+import { stepDetachedCrows } from './enemies/heartmonger.ts'
 import { stepMaggots } from './enemies/maggots.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyActorId, BoneyardEnemyStore, BoneyardEnemyStoreStepContext, BoneyardEnemyStoreStepResult, PositionBoneyardEnemyResult, WorkingStep } from './enemies/model.ts'
 import { validateTick } from './enemies/model.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyActorId,
-  BoneyardEnemyStore,
-  BoneyardEnemyStoreStepContext,
-  BoneyardEnemyStoreStepResult,
-  PositionBoneyardEnemyResult,
-  WorkingStep,
-} from './enemies/model.ts'
 import { stepProjectiles } from './enemies/projectiles.ts'
 import { drawUnit } from './enemies/random.ts'
-import { bindEnemyTargets, nativePrimaryCellChanged, withNativeCellRebindOrder } from './enemies/registration.ts'
+import { bindEnemyTargets, bindNativeQueryTarget, bindWorldPuppetTargets, nativePrimaryCellChanged, withNativeCellRebindOrder } from './enemies/registration.ts'
 import { stepSilkFragments } from './enemies/silk-force.ts'
 import { stepMageShields } from './enemies/skeleton-family.ts'
 import { stepSpiderRemains } from './enemies/spider-remains.ts'
 import { stepSilks, stepSpiderWebs } from './enemies/spider.ts'
 import { createEnemyWork, finishEnemyStore } from './enemies/work.ts'
-
 export function createBoneyardEnemyStore(
   seed: string,
   nativeRegistrationBase = 0,
@@ -38,6 +36,13 @@ export function createBoneyardEnemyStore(
     silks: [],
     webbedPlayers: {},
     spiderSpitTicksRemaining: 0,
+    demonSkullEncounter: createNativeDemonSkullEncounter(),
+    featuredBossId: null,
+    bossNarration: createNativeBossNarration(),
+    facultyVoiceController: null,
+    bossSpells: [],
+    puppetHits: [],
+    detachedCrows: [],
     actors: [],
     deathEffects: [],
     headFacingRngState: createNativeRng(
@@ -145,9 +150,25 @@ export function stepBoneyardEnemyStore(
   if (context.paused) return stepPausedBoneyardEnemyStore(source, context)
   const work = createEnemyWork(source, context, false)
   bindEnemyTargets(work, context.players)
+  bindWorldPuppetTargets(work, context.puppetTargets ?? [])
+  for (const spell of work.bossSpells) {
+    if (spell.kind === 'skull-missile') bindNativeQueryTarget(work, `boss-spell:${spell.id}`, spell.position)
+  }
   stepSpiderWebs(work, context)
   stepSilkFragments(work)
   stepSpiderRemains(work)
+  const dialogueBusy = context.dialogueBusy ?? false
+  work.bossNarration = stepNativeBossNarration(work.bossNarration, context.tick, dialogueBusy)
+  if (work.facultyVoiceController !== null) {
+    const members = source.actors.flatMap(actor => actor.lifeState === 'alive' && actor.config.enemyToken === 'DIREFACULTY'
+      ? [{ female: actor.config.family.female }] : [])
+    const voices = stepNativeFacultyVoices(work.facultyVoiceController, work.steeringRngState, members,
+      dialogueBusy || work.bossNarration.current !== null || work.bossNarration.pending.length > 0)
+    work.facultyVoiceController = voices.state
+    work.steeringRngState = voices.rng
+    work.bossNarration = enqueueNativeBossNarration(work.bossNarration, voices.cues, context.tick, dialogueBusy)
+  }
+  stepDetachedCrows(work, context)
   const transients = stepBoneyardTransientEffects(
     source.deathEffects,
     source.projectileEffects,
@@ -159,23 +180,35 @@ export function stepBoneyardEnemyStore(
   work.deathEffects = transients.deathEffects
   work.nextDeathEffectId = transients.nextDeathEffectId
   work.projectileEffects = transients.projectileEffects
-  for (const actor of source.actors) {
+  const pendingCapabilities = work.demonSkullEncounter.pendingCapabilities
+  work.demonSkullEncounter = { ...work.demonSkullEncounter, pendingCapabilities: 0,
+    deathStreamTicksRemaining: Math.max(0, work.demonSkullEncounter.deathStreamTicksRemaining - 1),
+    screamStreamTicksRemaining: Math.max(0, work.demonSkullEncounter.screamStreamTicksRemaining - 1) }
+  for (let actorIndex = 0; actorIndex < work.actors.length; actorIndex += 1) {
+    const sourceActor = work.actors[actorIndex]!
+    const actor = sourceActor.brain.family === 'demon-skull' && pendingCapabilities !== 0
+      ? { ...sourceActor, brain: { ...sourceActor.brain, capabilities: sourceActor.brain.capabilities | pendingCapabilities } }
+      : sourceActor
     const timedActor = stepDamagePresentationTimers(
       actor,
       context.tick - source.lastStepTick,
+      context.tick,
     )
     const stepped = timedActor.lifeState === 'dying'
       ? stepDyingActor(work, timedActor, context)
       : stepLivingActor(work, timedActor, context)
     if (stepped) {
+      spawnDampenedMageSmoke(work, stepped, context.tick)
       const rebound = withNativeCellRebindOrder(work, actor, stepped)
       // Native 0x00625680 rebuilds status scalars from 1.0 every tick. The
       // affected config is a current-tick view, never the next authored row.
-      work.actors.push(rebound.config === timedActor.config
+      work.actors[actorIndex] = rebound.config === timedActor.config
         ? rebound
-        : { ...rebound, config: timedActor.config })
-    } else if (timedActor.config.enemyToken === 'IMP') {
-      work.impActorCount -= 1
+        : { ...rebound, config: timedActor.config }
+    } else {
+      work.actors.splice(actorIndex, 1)
+      actorIndex -= 1
+      if (timedActor.config.enemyToken === 'IMP') work.impActorCount -= 1
     }
   }
   work.actors.push(...materializeSpawnIntents(work, context, work.pendingSpawnIntents))
@@ -192,6 +225,7 @@ export function stepBoneyardEnemyStore(
   ]))
   stepProjectiles(work, context)
   stepSilks(work, context)
+  stepBossSpells(work, context)
   work.projectiles = work.projectiles.map((projectile) => {
     const before = projectilesBeforeStep.get(projectile.id)
     return before ? withNativeCellRebindOrder(work, before, projectile) : projectile
@@ -202,6 +236,7 @@ export function stepBoneyardEnemyStore(
     liveBossCount(work.actors),
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
+  stepBoneyardPuppetHits(work, context)
   return finishBoneyardEnemyStoreStep(work, context.tick)
 }
 
@@ -210,10 +245,19 @@ function stepPausedBoneyardEnemyStore(
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyStoreStepResult {
   const work = createEnemyWork(source, context, true)
+  work.actors = work.actors.map(actor => actor.hitFeedback.timer === 0 ? actor
+    : { ...actor, hitFeedback: { ...actor.hitFeedback, tick: context.tick } })
+  work.maggots = work.maggots.map(actor => actor.hitFeedback.timer === 0 ? actor
+    : { ...actor, hitFeedback: { ...actor.hitFeedback, tick: context.tick } })
+  work.puppetHits = work.puppetHits.map(hit => ({ ...hit, feedback: { ...hit.feedback, tick: context.tick } }))
   work.projectileKnockbacks = source.projectileKnockbacks.map(row => ({ ...row, lastStepTick: context.tick }))
   work.projectiles = source.projectiles.map(row => ({ ...row, lastStepTick: context.tick }))
   work.projectileEffects = source.projectileEffects.map(row => ({ ...row, lastStepTick: context.tick }))
   bindEnemyTargets(work, context.players)
+  bindWorldPuppetTargets(work, context.puppetTargets ?? [])
+  for (const spell of work.bossSpells) {
+    if (spell.kind === 'skull-missile') bindNativeQueryTarget(work, `boss-spell:${spell.id}`, spell.position)
+  }
   const spawnIntents = context.resolveSpawnIntents(
     boneyardEnemyLiveCount(work),
     liveZombieCount(work.actors),

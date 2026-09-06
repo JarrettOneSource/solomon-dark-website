@@ -2015,3 +2015,13 @@ journey and page/console/failed-response capture.
   authorized publication to main in the follow-up. Task-owned
   scratch Ghidra output, copied screenshots, and browser logs are disposable
   once their conclusions and hashes above have been recorded.
+
+## 2026-09-06 — Faculty membership and flyout lifecycle correction
+
+The Faculty encounter now adds the previously absent SkullMissile/DarkFireball
+and DireFaculty caster branches. Fresh ASM also falsifies the August 30
+source-age/heading/scale preservation, 40-pixel flyout velocity, fixed 100-tick
+retirement, and immobilizing Mage disruption. The complete correction and
+instruction-level facts are in [ledger 301](301-2026-09-05-generated-survival-boss-encounter-closure.md#dampen-caster-and-canceled-projectile-reopening). Earlier exact-port
+claims for those paths are superseded pending this candidate's Mac/browser proof.
+The explicitly accepted caster-pulse crash repair remains unchanged.

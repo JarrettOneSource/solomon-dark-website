@@ -1,3 +1,4 @@
+import { setNativeDiffuseColor } from './native-texture-color.ts'
 import { Container, Graphics, GraphicsContext, Matrix, Mesh, MeshGeometry, Sprite } from 'pixi.js'
 
 import type {
@@ -126,6 +127,7 @@ export class WeldDrawingView {
 }
 
 function applySprite(target: Sprite, registered: NativeWeldTexture, draw: NativeWeldSpriteDraw): void {
+  setNativeDiffuseColor(target, draw.textureColor === 'diffuse')
   target.label = `${draw.role}:${draw.atlas}:${draw.record}`
   target.texture = registered.texture
   target.anchor.set(registered.anchorX / registered.width, registered.anchorY / registered.height)

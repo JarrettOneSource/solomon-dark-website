@@ -1063,6 +1063,7 @@ export function damagePlayerEntityWithResult(
   tick: number,
   damageAlreadyScaled = false,
   recordHit = true,
+  hitStrength = 1,
 ): PlayerEntityDamageResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) {
@@ -1077,7 +1078,7 @@ export function damagePlayerEntityWithResult(
         source.progressions[index]!,
         source.economies[index]!,
       ).incomingDamageFactor)
-  const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick, recordHit)
+  const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick, recordHit, hitStrength)
   if (damaged === source.progressions[index]) {
     return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
   }
@@ -1289,6 +1290,7 @@ export function stepPlayerEntityCombatTick(
     filterPoisonDamage?: (playerId: string, amount: number) => number
     manaCeiling?: (playerId: string, maximum: number) => number
   }> = {},
+  tick?: number,
 ): PlayerEntityCombatTickResult {
   const autoHealthPotionPlayerIds: string[] = []
   const beganDeathEpochPlayerIds: string[] = []
@@ -1342,6 +1344,7 @@ export function stepPlayerEntityCombatTick(
     const { poisonActive, contact, poisonDamagePerTick, poisonHealthDamage, nativePoisonDamagePerTick } =
       resolvePoisonContact()
     let result = stepPlayerCombatTick(potionStepped, {
+      tick,
       healthRecoveryPerTick: derived.healthRecoveryPerTick,
       manaCeiling: mutations.manaCeiling?.(playerId, potionStepped.maximumMana),
       manaRecoveryPerTick: baseManaRecoveryPerTick,

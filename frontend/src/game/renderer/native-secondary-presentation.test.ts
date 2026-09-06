@@ -1,7 +1,16 @@
-import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
+import { nativeSecondaryMiscLightSource, nativeSecondaryProviderLightSource } from '../core-kernels/native-boneyard-light-model.ts'
+import {
+  nativeRegionPointGain,
+} from '../core-kernels/native-region-point-gain.ts'
+import {
+  advanceNativeRngWords,
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+  drawNativeSign,
+} from '../core-kernels/native-rng.ts'
 import {
   NATIVE_SECONDARY_ACTOR_KINDS,
   createNativeSecondaryPlayerState,
@@ -12,31 +21,34 @@ import {
   type NativeSecondaryScreenFlashState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import {
-  advanceNativeRngWords,
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeInteger,
-  drawNativeSign,
-} from '../core-kernels/native-rng.ts'
-import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
+  nativeInitialGolemArticulation,
+} from '../core-kernels/native-secondary-golem.ts'
 import {
-  nativeSecondaryMiscLightSource,
-  nativeSecondaryProviderLightSource,
-} from './boneyard-lighting.ts'
-import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
+  writeNativeRotationThenScaleMatrix,
+} from './native-affine-transform.ts'
 import {
-  NativeSecondaryPresentationScratch,
-  NATIVE_PLAYER_MAGIC_SHIELD,
-  nativeGolemFacing,
-  nativeGolemPresentationPlan,
-  nativeLeviathanCompositePlan,
-  nativePlayerMagicShieldPlan,
-  nativeEtherFadeScalar,
-  nativeSecondaryPresentationPlan,
-  nativeSecondaryCompositeOwnerEntries,
-  presentNativeSecondaryScreenOverlay,
   NativeSecondaryScreenFeedbackPresentation,
   nativeSecondaryWorldShake,
+  presentNativeSecondaryScreenOverlay,
+} from './native-screen-feedback.ts'
+import {
+  nativeEtherFadeScalar,
+} from './native-secondary-burst-presentation.ts'
+import {
+  NATIVE_PLAYER_MAGIC_SHIELD,
+  nativeLeviathanCompositePlan,
+  nativePlayerMagicShieldPlan,
+  nativeSecondaryCompositeOwnerEntries,
+} from './native-secondary-field-presentation.ts'
+import {
+  nativeGolemFacing,
+  nativeGolemPresentationPlan,
+} from './native-secondary-golem-presentation.ts'
+import {
+  NativeSecondaryPresentationScratch,
+} from './native-secondary-presentation-scratch.ts'
+import {
+  nativeSecondaryPresentationPlan,
   updateNativeSecondaryPresentationPlan,
 } from './native-secondary-presentation.ts'
 
@@ -50,7 +62,7 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'golem', 'golem-death', 'teleport-burst', 'magic-circle',
   'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn', 'flash-response-fade', 'flash-response-grow',
-  'dampen-wave', 'dampened-projectile', 'shield-break',
+  'dampen-wave', 'dampened-projectile', 'dampened-smoke', 'shield-break',
   'shield-explosion', 'acid-rain', 'acid-drop', 'mindblast-burst',
   'mindblast-shockwave', 'ring-fire-explosion',
   'ring-fire-fragment', 'acid-splash', 'ether-drain',
@@ -65,7 +77,7 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     damage: 1,
     enhanced: true,
     endpoint: { x: 140, y: 240 },
-    frame: kind === 'moving-fire' || kind === 'fire-patch' ? 46 : 0,
+    frame: kind === 'moving-fire' || kind === 'fire-patch' ? 46 : kind === 'dampened-smoke' ? 10 : 0,
     freezeTicks: 0,
     golem: kind === 'golem' ? {
       ...nativeInitialGolemArticulation({ x: 100, y: 200 }, 0),
@@ -91,7 +103,7 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     midpoint: { x: 120, y: 180 },
     miscLightAppendOrdinal: null,
     ownerId: 'player',
-    phase: 0,
+    phase: kind === 'dampened-smoke' ? 1 : 0,
     position: { x: 100, y: 200 },
     presentationRng: kind === 'dampen-wave' || kind === 'golem-death' || kind === 'freeze-wave-visual'
       || kind === 'storm-cloud' || kind === 'prismatic-wave' || kind === 'magic-circle'
@@ -982,7 +994,7 @@ test('Dampen flyouts keep Firebolt and both Guided Missile native compositors', 
   }).draws
   assert.deepEqual(fire.map(({ entry, role }) => ({ entry, role })), [
     { entry: 15, role: 'dampened-projectile-firebolt-orange-glow' },
-    { entry: 263, role: 'dampened-projectile-firebolt-body' },
+    { entry: 255, role: 'dampened-projectile-firebolt-body' },
   ])
 
   for (const [variant, mainEntry, payload] of [
@@ -1000,6 +1012,23 @@ test('Dampen flyouts keep Firebolt and both Guided Missile native compositors', 
       { entry: mainEntry, role: `dampened-projectile-guided-missile-${payload}-body` },
       { entry: 112, role: `dampened-projectile-guided-missile-${payload}-aura` },
     ])
+  }
+})
+
+test('Dampen dark flyouts share both DeathMagic passes and their smoke preserves native alpha and blend', () => {
+  const dark = nativeSecondaryPresentationPlan({ ...actor('dampened-projectile'), variant: 3, phase: 30 }).draws
+  assert.equal(dark.filter(({ role }) => role.startsWith('dampened-death-magic-outer-disk-')).length, 2)
+  assert.equal(dark.filter(({ role }) => role.startsWith('dampened-death-magic-inner-disk-')).length, 2)
+  assert.equal(dark.filter(({ role }) => role.startsWith('dampened-death-magic-star-')).length, 2)
+  for (const variant of [0, 1, 2, 3]) {
+    const smoke = nativeSecondaryPresentationPlan({ ...actor('dampened-smoke'), variant,
+      alpha: .8, phase: variant === 0 ? .5 : 1, scale: .7, quantity: 0x400000, frame: 10,
+    }).draws[0]!
+    assert.equal(smoke.entry, 10)
+    assert.equal(smoke.alpha, variant === 0 ? .4 : .8)
+    assert.equal(smoke.blend, variant === 3 ? 'normal' : 'add')
+    assert.equal(smoke.scaleX, .7)
+    assert.equal(smoke.scaleY, .7)
   }
 })
 

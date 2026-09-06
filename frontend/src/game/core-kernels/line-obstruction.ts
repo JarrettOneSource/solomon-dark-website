@@ -129,3 +129,28 @@ function mix(start: Vector2, end: Vector2, t: number): Vector2 {
     y: start.y + (end.y - start.y) * t,
   }
 }
+
+/** Clip both ends of a segment; native beam views may begin outside the viewport. */
+export function clipLineToBounds(start: Readonly<Vector2>, end: Readonly<Vector2>, bounds: LineBounds): {
+  start: Vector2; end: Vector2
+} | null {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  let enter = 0
+  let exit = 1
+  for (const [direction, distance] of [
+    [-dx, start.x - bounds.x], [dx, bounds.x + bounds.w - start.x],
+    [-dy, start.y - bounds.y], [dy, bounds.y + bounds.h - start.y],
+  ]) {
+    if (direction === 0) {
+      if (distance < 0) return null
+      continue
+    }
+    const crossing = distance / direction
+    if (direction < 0) enter = Math.max(enter, crossing)
+    else exit = Math.min(exit, crossing)
+    if (enter > exit) return null
+  }
+  const point = (t: number) => ({ x: Math.fround(start.x + dx * t), y: Math.fround(start.y + dy * t) })
+  return { start: point(enter), end: point(exit) }
+}

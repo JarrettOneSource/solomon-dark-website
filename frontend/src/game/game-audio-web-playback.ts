@@ -21,6 +21,8 @@ export function createWebAudioPlayback(
   const channels = new Map<string, OwnedBufferSource>()
   const oneShots = new Set<OwnedBufferSource>()
   const masterGain = context.createGain()
+  const soundMixGain = context.createGain()
+  soundMixGain.connect(masterGain)
   let nativeSoundVoices: NativeSoundVoicePool | null = null
   masterGain.connect(context.destination)
 
@@ -39,6 +41,7 @@ export function createWebAudioPlayback(
   const makeSource = (
     source: string,
     options: GameAudioPlaybackOptions,
+    nativeStream = false,
   ): OwnedBufferSource => {
     const buffer = residentBuffers.get(source)
     if (!buffer) throw new Error(`game audio buffer was not loaded: ${source}`)
@@ -49,7 +52,7 @@ export function createWebAudioPlayback(
     bufferSource.playbackRate.value = options.playbackRate
     gain.gain.value = options.volume
     bufferSource.connect(gain)
-    gain.connect(masterGain)
+    gain.connect(nativeStream ? masterGain : soundMixGain)
     return { gain, source: bufferSource }
   }
 
@@ -67,6 +70,7 @@ export function createWebAudioPlayback(
       channels.clear()
       nativeSoundVoices?.destroy()
       nativeSoundVoices = null
+      soundMixGain.disconnect()
       masterGain.disconnect()
       if (context.state === 'running') void context.suspend().catch(() => {})
     },
@@ -75,7 +79,7 @@ export function createWebAudioPlayback(
         if (!createNativeSoundVoices) {
           throw new Error('native sound voice pool was not configured')
         }
-        nativeSoundVoices ??= createNativeSoundVoices(masterGain)
+        nativeSoundVoices ??= createNativeSoundVoices(soundMixGain)
         nativeSoundVoices.play(source, options)
         return
       }
@@ -90,13 +94,16 @@ export function createWebAudioPlayback(
     restart(key, source, options) {
       const current = channels.get(key)
       if (current) stop(current)
-      const owned = makeSource(source, options)
+      const owned = makeSource(source, options, key.startsWith('stream:'))
       channels.set(key, owned)
       owned.source.onended = () => {
         if (channels.get(key) === owned) channels.delete(key)
         release(owned)
       }
       start(owned, options)
+    },
+    setSoundMixVolume(volume) {
+      soundMixGain.gain.value = volume
     },
     setMasterVolume(volume) {
       masterGain.gain.value = volume

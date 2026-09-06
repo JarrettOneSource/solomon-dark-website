@@ -1,22 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-import {
-  GameAudioDirector,
-  type GameAudioPlayback,
-  type GameAudioPlaybackOptions,
-  type GameMusicChannel,
-} from './game-audio-director.ts'
-import type { GameAudioSources } from './game-audio-native.ts'
-import { NATIVE_TUTORIAL_CUES } from './core-kernels/native-tutorial.ts'
-import './game-audio-web-playback.test.ts'
-import './game-audio-native-sound-voice-pool.test.ts'
 import '../lib/media-element-gain.test.ts'
+import { NATIVE_TUTORIAL_CUES } from './core-kernels/native-tutorial.ts'
+import type { GameAudioPlayback, GameAudioPlaybackOptions, GameMusicChannel } from './game-audio-director.ts'
+import { GameAudioDirector } from './game-audio-director.ts'
+import './game-audio-native-sound-voice-pool.test.ts'
+import type { GameAudioSources } from './game-audio-native.ts'
+import './game-audio-web-playback.test.ts'
 import './player-footstep-audio.test.ts'
 import './primary-spell-audio.test.ts'
-
 const SOURCES = {
   loops: {
+    'eerie-loop': 'eerie.wav',
     'comet-loop': 'comet-loop.wav',
     'electric-loop': 'electric-loop.wav',
     'earthquake-loop': 'earthquake-loop.wav',
@@ -54,6 +49,14 @@ const SOURCES = {
     'spider-die': 'spider-die.wav',
     'disintegrate': 'disintegrate.wav',
 
+    'crow-1': 'crow-1.wav',
+    'crow-2': 'crow-2.wav',
+    wings: 'wings.wav',
+    blind: 'blind.wav',
+    'knock': 'knock.wav',
+    'throw-dark': 'throw-dark.wav',
+    'chain-clank-1': 'chain-clank-1.wav',
+    'chain-clank-2': 'chain-clank-2.wav',
     harden: 'harden.wav',
     'ice-shatter': 'ice-shatter.wav',
     'backpack-close': 'backpack-close.wav',
@@ -111,6 +114,10 @@ const SOURCES = {
     'level-up': 'level-up.wav',
     'magic-missile': 'magic.wav',
     'magic-missile-hit': 'magic-hit.wav',
+    'eye-laser-charge': 'eye-laser-charge.wav',
+    'jaw': 'jaw.wav',
+    'skull-bite': 'skull-bite.wav',
+    'unholy-spits': 'unholy-spits.wav',
     'magic-circle': 'magic-circle.wav',
     'magic-shield-explode': 'magic-shield-explode.wav',
     'magic-shield-up': 'magic-shield-up.wav',
@@ -172,6 +179,20 @@ const SOURCES = {
     'zombie-poison-splat': 'zombie-splat.wav',
   },
   streams: {
+    'unholy-die': 'unholy-die.wav',
+    'unholy-scream': 'unholy-scream.wav',
+    'faculty-die': 'faculty-die.wav',
+    'faculty-no': 'faculty-no.wav',
+    'faculty-no-female': 'faculty-no-female.wav',
+    'heart-break': 'heart-break.wav',
+    'faculty-join-us-1': 'faculty-join-us-1.wav',
+    'faculty-join-us-1-female': 'faculty-join-us-1-female.wav',
+    'faculty-join-us-2': 'faculty-join-us-2.wav',
+    'faculty-join-us-2-female': 'faculty-join-us-2-female.wav',
+    'faculty-dead-is-better-1': 'faculty-dead-is-better-1.wav',
+    'faculty-dead-is-better-1-female': 'faculty-dead-is-better-1-female.wav',
+    'faculty-dead-is-better-2': 'faculty-dead-is-better-2.wav',
+    'faculty-dead-is-better-2-female': 'faculty-dead-is-better-2-female.wav',
     ...(Object.fromEntries(NATIVE_TUTORIAL_CUES.map(cue => [cue, `${cue}.wav`])) as Record<
       typeof NATIVE_TUTORIAL_CUES[number],
       string
@@ -276,6 +297,12 @@ class FakePlayback implements GameAudioPlayback {
     options: GameAudioPlaybackOptions,
   ): void {
     this.restarts.push({ key, options, source })
+  }
+
+  readonly soundMixUpdates: number[] = []
+
+  setSoundMixVolume(volume: number): void {
+    this.soundMixUpdates.push(volume)
   }
 
   setMasterVolume(volume: number): void {
@@ -830,38 +857,43 @@ test('passes the recovered ten-channel limit only for native Hail samples', () =
   ])
 })
 
-test('owns independent native loop channels and updates gain without restarting', async () => {
+test('native loops share the maximum gain across owners and release only after the last owner', () => {
   const { created, director, playback } = fixture()
-  director.startLoop('lightning-loop', 'player:a')
-  director.startLoop('lightning-loop', 'player:a')
-  director.startLoop('lightning-loop', 'player:b')
+  director.startLoop('steady-wind-loop', 'player:wind', { volume: .5 })
+  director.startLoop('steady-wind-loop', 'faculty', { volume: .75 })
+  director.startLoop('steady-wind-loop', 'faculty', { volume: .75 })
   assert.equal(created.length, 0)
-  assert.deepEqual(playback.restarts, [
-    {
-      key: 'loop:lightning-loop:player:a',
-      options: { loop: true, playbackRate: 1, volume: 1 },
-      source: 'lightning-loop.wav',
-    },
-    {
-      key: 'loop:lightning-loop:player:b',
-      options: { loop: true, playbackRate: 1, volume: 1 },
-      source: 'lightning-loop.wav',
-    },
-  ])
+  assert.deepEqual(playback.restarts, [{ key: 'loop:steady-wind-loop',
+    options: { loop: true, playbackRate: 1, volume: .5 }, source: 'steady-wind-loop.wav' }])
+  assert.deepEqual(playback.volumeUpdates, [['loop:steady-wind-loop', .75]])
+  director.stopLoop('steady-wind-loop', 'faculty')
+  assert.deepEqual(playback.volumeUpdates.at(-1), ['loop:steady-wind-loop', .5])
+  assert.deepEqual(playback.stops, [])
+  director.stopLoop('steady-wind-loop', 'player:wind')
+  assert.deepEqual(playback.stops, ['loop:steady-wind-loop'])
+  director.startLoop('steady-wind-loop', 'silent', { volume: 0 })
+  assert.equal(playback.restarts.length, 1)
+  director.stopLoopsForOwner('silent')
+})
 
-  director.startLoop('lightning-loop', 'player:a', { volume: 0.75 })
-  assert.deepEqual(playback.volumeUpdates, [[
-    'loop:lightning-loop:player:a',
-    0.75,
-  ]])
-  assert.equal(playback.restarts.length, 2)
-
-  director.stopLoop('lightning-loop', 'player:a')
-  assert.deepEqual(playback.stops, ['loop:lightning-loop:player:a'])
-  director.stopLoop('lightning-loop', 'player:b')
-  assert.deepEqual(playback.stops, [
-    'loop:lightning-loop:player:a',
-    'loop:lightning-loop:player:b',
-  ])
+test('narration mix preserves user volume settings and updates current, outgoing, and mod music', async () => {
+  const { director, playback, created, frames } = fixture()
+  director.setVolumes(.8, .6)
+  director.setScene('title')
   await flushPromises()
+  frames.runAt(1000)
+  director.startAssetMusic('faculty-test', 'custom.mp3', .5)
+  await flushPromises()
+  director.setNarrationMix(.5)
+  assert.equal(created[0]!.volume, .3)
+  assert.equal(created.at(-1)!.volume, .15)
+  assert.deepEqual(playback.soundMixUpdates, [.5])
+  assert.equal(playback.masterVolumeUpdates.at(-1), .8)
+  director.setVolumes(.4, .8)
+  assert.equal(created[0]!.volume, .4)
+  assert.equal(created.at(-1)!.volume, .2)
+  director.setNarrationMix(1)
+  assert.equal(created[0]!.volume, .8)
+  assert.equal(created.at(-1)!.volume, .4)
+  director.destroy()
 })

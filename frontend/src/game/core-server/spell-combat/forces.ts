@@ -8,8 +8,8 @@ import {
 import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import type { PrimarySpellTransientState } from '../../core-kernels/primary-spells.ts'
 import { createPrimarySpellWeldSteamDetonation } from '../../core-kernels/primary-spells.ts'
-import { damageBoneyardEnemy, setBoneyardEnemyHurricaneContactCooldown } from '../enemies/damage.ts'
 import { positionBoneyardEnemy } from '../boneyard-enemy-store.ts'
+import { damageBoneyardEnemy, setBoneyardEnemyHurricaneContactCooldown } from '../enemies/damage.ts'
 import { validatedDamageMultiplier } from './damage.ts'
 import { bySpellId, nativePrimaryRootTargetRows, parseEnemyTargetId, primaryTargetRows } from './targets.ts'
 import { BoneyardSpellCombatWork } from './work.ts'
@@ -72,6 +72,7 @@ export function resolveHurricaneContacts(work: BoneyardSpellCombatWork): void {
       )
       if (amount > 0) {
         const damaged = damageBoneyardEnemy(work.enemies, {
+          hasMagicDamage: true,
           magic: true,
           actorId: row.actor.id,
           amount,
@@ -154,6 +155,7 @@ export function resolveTransientForces(work: BoneyardSpellCombatWork): void {
     )) {
       const amount = nativeEtherBlastDamage(effect.charges, row.actor.currentHealth)
       const contact = damageBoneyardEnemy(work.enemies, {
+        hasMagicDamage: true,
         magic: true,
         actorId: row.actor.id,
         amount,

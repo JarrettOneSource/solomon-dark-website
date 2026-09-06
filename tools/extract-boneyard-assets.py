@@ -30,7 +30,7 @@ SHARED_PARSER_PATH = SOLOMON_DARK_DIR / "Mod Loader" / "tools" / "extract_bundle
 # Goodie renders its placed sprite from DeadHawg, but its native render/tick path
 # also owns BadGuys indicator and effect sprites. Survival actors consume those
 # records plus the Lesser Demon's dedicated articulated atlas.
-ATLAS_NAMES = ("DeadHawg", "Bonedit", "BadGuys", "Demon", "Golem")
+ATLAS_NAMES = ("DeadHawg", "Bonedit", "BadGuys", "Demon", "Golem", "Faculty", "Heartmonger", "Unholy")
 
 THUMB_SIZE = 80
 LABEL_HEIGHT = 18
@@ -961,6 +961,12 @@ def write_classes_manifest() -> None:
 def main() -> int:
     args = parse_args()
     images_dir = args.images_dir.resolve()
+    green_plasma = images_dir / "greenplasma.png"
+    if hashlib.sha256(green_plasma.read_bytes()).hexdigest() != "463de5a10d3123395f38ddf01cdb2b450c58ffc06b7753b896b81940490bd84f":
+        raise ValueError("greenplasma.png is not the stock DemonSkull beam texture")
+    loose_output = ASSET_ROOT / "textures"
+    loose_output.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(green_plasma, loose_output / green_plasma.name)
     shared_parser = load_shared_parser(images_dir)
     results = [
         extract_atlas(images_dir, atlas_name, shared_parser)

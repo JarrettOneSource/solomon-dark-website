@@ -1,9 +1,10 @@
 // Editor state: one reducer, snapshot history, and the local draft drawer.
 // Pure module; the page owns it through useReducer.
 
-import type { EditorDoc, PlacedObject, PlayerSpawn, Polyline, SelEntry, Selection, StaticSprite, TerrainPatch, Rect, Vec2 } from './model'
-import { createDoc, eid, entryKey, selectionSet } from './model'
-import { exportDocJson, importDocJson } from './io'
+import { exportDocJson, importDocJson } from './io.ts'
+import type { Rect } from './model'
+import type { EditorDoc, PlacedObject, PlayerSpawn, Polyline, SelEntry, Selection, StaticSprite, TerrainPatch, Vec2 } from './model.ts'
+import { createDoc, eid, entryKey, selectionSet } from './model.ts'
 
 const HISTORY_CAP = 100
 
@@ -43,7 +44,7 @@ export type EditorAction =
   | { type: 'duplicate-selection' }
   | { type: 'set-name'; name: string }
   | { type: 'set-bounds'; bounds: Rect }
-  | { type: 'set-waves'; waves: import('./waves').WaveDef[] }
+  | { type: 'set-waves'; waves: import('../game/core-kernels/boneyard-wave-schema.ts').WaveDef[] }
   | { type: 'set-spawn'; spawn: PlayerSpawn | undefined }
   | { type: 'move-item'; sel: SelEntry; pos: Vec2 }
   | { type: 'set-object-props'; eid: string; patch: Partial<Pick<PlacedObject, 'variant' | 'rot' | 'scale'>> }

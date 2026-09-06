@@ -1,27 +1,17 @@
 import type { EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
 import { spawnTerminalChildren } from './construction.ts'
-import { spawnBouncer, spawnSimpleDeathEffect, spawnSpriteArray, spawnUnbind } from './death-effects.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
+import { spawnBouncer, spawnSimpleDeathEffect, spawnSpriteArray, spawnUnbind } from './death-effects.ts'
+import { stepDyingDemonSkull } from './demon-skull-death.ts'
 import { emitEnemyDeathSound, emitEnemyDeathSounds, emitEvent } from './events.ts'
-import type {
-  BoneyardEnemyActor,
-  BoneyardEnemyBrain,
-  BoneyardEnemyStoreStepContext,
-  BoneyardEnemyTerminalOutput,
-  WorkingStep,
-} from './model.ts'
-import {
-  NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
-  NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
-  NATIVE_IMP_CONSTRUCTION_MAXIMUM,
-  NATIVE_IMP_SPLIT_CHILD_COUNT,
-  NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
-} from './programs.ts'
+import { spawnFacultyDyingEffects, spawnFacultyFinale } from './faculty-death.ts'
+import { detachHeartmongerCrows, stepHeartmonger } from './heartmonger.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyStoreStepContext, BoneyardEnemyTerminalOutput, WorkingStep } from './model.ts'
+import { NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK, NATIVE_DEMON_RAW_FIRE_BURST_TICKS, NATIVE_IMP_CONSTRUCTION_MAXIMUM, NATIVE_IMP_SPLIT_CHILD_COUNT, NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM } from './programs.ts'
 import { spawnProjectile } from './projectile-emission.ts'
 import { drawInteger, drawUnit, radialVector, randomRadialDisplacement, signedUnit } from './random.ts'
-import { SKELETON_BASE_FRAGMENT_ENTRIES, spawnSkeletonShatter } from './skeleton-death.ts'
+import { SKELETON_BASE_FRAGMENT_ENTRIES, spawnHeartmongerShatter, spawnSkeletonShatter } from './skeleton-death.ts'
 import { spawnSpiderRemains } from './spider-remains.ts'
-
 export function stepDyingActor(
   work: WorkingStep,
   stored: BoneyardEnemyActor,
@@ -30,6 +20,31 @@ export function stepDyingActor(
   if (stored.config.enemyToken === 'COCOON') return null
   const tick = context.tick
   let source = stored
+  if (source.config.enemyToken === 'DEMONSKULL' && source.brain.family === 'demon-skull' && source.brain.deathCountdown > 0) {
+    return stepDyingDemonSkull(work, { ...source, config: source.config, brain: source.brain }, tick)
+  }
+  if (source.brain.family === 'heartmonger') source = stepHeartmonger(work, source, source.brain, context)
+  if (source.config.enemyToken === 'DIREFACULTY') {
+    const deathTick = Math.max(0, tick - (source.deathStartedTick ?? tick))
+    if (source.deathTick === 0 && deathTick > 0) {
+      emitEvent(work, tick, 'enemy-stream', source.id, { stream: 'faculty-die', sourcePosition: source.position })
+      emitEvent(work, tick, 'enemy-screen-flash', source.id, { sourcePosition: source.position,
+        screenFlash: { red: 0, green: 0, blue: 0, alpha: 1, decayPerTick: .01, pointAttenuated: true } })
+    }
+    if (source.deathTick < 101 && deathTick >= 101) {
+      emitEvent(work, tick, 'enemy-stream', source.id, {
+        stream: source.config.family.female ? 'faculty-no-female' : 'faculty-no', sourcePosition: source.position })
+    }
+    let headingDeg = source.headingDeg
+    for (let step = source.deathTick + 1; step <= deathTick; step += 1) {
+      spawnFacultyDyingEffects(work, source, tick - deathTick + step, step)
+      headingDeg = Math.fround(headingDeg + Math.trunc(step / 20))
+      if (headingDeg >= 360) headingDeg = Math.fround(headingDeg - 360)
+    }
+    source = { ...source, bodyPose: 3, deathTick, headingDeg,
+      brain: source.brain.family === 'faculty' ? { ...source.brain, bodyPose: 3, bodyHeadingDeg: headingDeg } : source.brain }
+    if (deathTick < 250) return source
+  }
   if (source.config.enemyToken === 'DEMON') {
     const deathStartedTick = source.deathStartedTick ?? tick
     const deathTick = Math.max(0, tick - deathStartedTick)
@@ -45,6 +60,7 @@ export function stepDyingActor(
     source = { ...source, deathTick }
     if (deathTick < 100) return source
   }
+  detachHeartmongerCrows(work, source, context)
   emitEvent(work, tick, 'enemy-death', source.id)
   const captured = source.brain.family === 'spider' && source.brain.phase === 'captured'
   const output = terminalOutput(source.config.enemyToken)
@@ -104,6 +120,8 @@ function spawnEnemyDeathEffects(
   switch (actor.config.enemyToken) {
     case 'SPIDER': spawnSpiderRemains(work, actor, tick); return
     case 'COCOON': return
+    case 'DIREFACULTY': spawnFacultyFinale(work, actor, tick); return
+    case 'HEARTMONGER': spawnHeartmongerShatter(work, actor, tick); return
     case 'SKELETON':
     case 'SKELETONARCHER':
     case 'SKELETONMAGE':
@@ -235,8 +253,8 @@ function spawnZombieTerminalEffects(
     2093,
     2093,
   ]
-  for (let index = entries.length - 1; index > 0; index -= 1) {
-    const swap = drawInteger(work, index + 1)
+  for (let index = 0; index < entries.length; index += 1) {
+    const swap = drawInteger(work, entries.length)
     ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
   }
   let angleDeg = drawUnit(work) * 360
@@ -330,8 +348,8 @@ function spawnWraithTerminalEffects(
   spawnWraithDissolve(work, actor, tick)
 
   const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
-  for (let index = entries.length - 1; index > 0; index -= 1) {
-    const swap = drawInteger(work, index + 1)
+  for (let index = 0; index < entries.length; index += 1) {
+    const swap = drawInteger(work, entries.length)
     ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
   }
   let angleDeg = actor.headingDeg
@@ -442,8 +460,8 @@ function spawnCoffinTerminalEffects(
   tick: number,
 ): void {
   const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
-  for (let index = entries.length - 1; index > 0; index -= 1) {
-    const swap = drawInteger(work, index + 1)
+  for (let index = 0; index < entries.length; index += 1) {
+    const swap = drawInteger(work, entries.length)
     ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
   }
   let angleDeg = drawUnit(work) * 360
@@ -606,6 +624,9 @@ function spawnDemonDeathFireBurst(
 
 function terminalOutput(token: EvaluatedBoneyardEnemyConfig['enemyToken']): BoneyardEnemyTerminalOutput {
   switch (token) {
+    case 'DEMONSKULL': return 'discorporeal-banish'
+    case 'DIREFACULTY': return 'faculty-break'
+    case 'HEARTMONGER': return 'heartmonger-shatter'
     case 'SKELETON': return 'skeleton-shatter'
     case 'SKELETONARCHER': return 'archer-shatter'
     case 'SKELETONMAGE': return 'mage-shatter'
@@ -640,6 +661,9 @@ function terminalOutputCount(
 }
 
 export function deathBrain(brain: BoneyardEnemyBrain): BoneyardEnemyBrain {
+  if (brain.family === 'demon-skull') return { ...brain, actions: [], phase: 'death' }
+  if (brain.family === 'faculty') return { ...brain, action: null, bodyPose: 0,
+    handMask: 0, headingLocked: false, lightningActive: false, phase: 'death' }
   return brain.family === 'mage'
     ? {
         ...brain,

@@ -46,7 +46,7 @@ import {
   validateHallOfFameRunOwners,
 } from './world.ts'
 
-function playerLevelUpBarrier(
+export function playerLevelUpBarrier(
   value: unknown,
   field: string,
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
@@ -135,7 +135,7 @@ function validatedBarrierPlayerIds(
   return playerIds
 }
 
-function validatedMaterializingPlayerIds(
+export function validatedMaterializingPlayerIds(
   value: unknown,
   field: string,
   players: Readonly<Record<string, unknown>>,
@@ -283,7 +283,7 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   }
 }
 
-function protocolModEffects(
+export function protocolModEffects(
   value: unknown,
   field: string,
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
@@ -467,7 +467,7 @@ function validateGameRunWorld(
   }
 }
 
-function validateParticipantOwnership(
+export function validateParticipantOwnership(
   participants: Readonly<Record<string, ProtocolHubParticipantState>>,
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
   field: string,

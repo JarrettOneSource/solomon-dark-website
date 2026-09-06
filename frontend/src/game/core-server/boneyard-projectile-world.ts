@@ -1,5 +1,5 @@
-import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 import { nativePrimaryViewBounds } from '../core-kernels/primary-spell-targeting.ts'
 import {
   boneyardBodyCollides,
@@ -19,6 +19,23 @@ export function createBoneyardProjectileWorld(
   collision: BoneyardCollisionWorld,
   viewports: readonly BoneyardProjectileViewport[],
 ): BoneyardEnemyProjectileWorldBlocked {
+  const visible = createBoneyardProjectileVisibility(bounds, viewports)
+  return query => {
+    switch (query.kind) {
+      case 'line': return firstBoneyardLineObstruction(
+        query.start, query.end, bounds, collision, undefined, query.nativeExclusionMask,
+      ) !== null
+      case 'point': return boneyardBodyCollides(query.position, collision, query.radius)
+      case 'bounds': return !containsPoint(bounds, query.position, query.margin)
+      case 'view': return !visible(query.position, query.margin)
+    }
+  }
+}
+
+export function createBoneyardProjectileVisibility(
+  bounds: BoneyardBounds,
+  viewports: readonly BoneyardProjectileViewport[],
+): (position: Readonly<BoneyardPoint>, margin: number) => boolean {
   const views = viewports.map(viewport => nativePrimaryViewBounds({
     bounds,
     focus: viewport.position,
@@ -27,16 +44,7 @@ export function createBoneyardProjectileWorld(
     viewportHeight: viewport.viewportHeight,
     viewportWidth: viewport.viewportWidth,
   }))
-  return query => {
-    switch (query.kind) {
-      case 'line': return firstBoneyardLineObstruction(
-        query.start, query.end, bounds, collision, undefined, query.nativeExclusionMask,
-      ) !== null
-      case 'point': return boneyardBodyCollides(query.position, collision, query.radius)
-      case 'bounds': return !containsPoint(bounds, query.position, query.margin)
-      case 'view': return !views.some(view => containsPoint(view, query.position, query.margin))
-    }
-  }
+  return (position, margin) => views.some(view => containsPoint(view, position, margin))
 }
 
 function containsPoint(bounds: BoneyardBounds, point: Readonly<BoneyardPoint>, margin: number): boolean {

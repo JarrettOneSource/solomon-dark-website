@@ -1,3 +1,4 @@
+import { createNativePuppetHit, nativePuppetHitAlpha, receiveNativePuppetHit, stepNativePuppetHit, type NativePuppetHitState } from './native-puppet-hit.ts'
 import {
   NATIVE_COLD_MOVEMENT_SCALE,
   NATIVE_WRAITH_DAZZLE_TICKS,
@@ -28,6 +29,8 @@ export const PLAYER_LIFE_STATES = [
 export type PlayerLifeState = typeof PLAYER_LIFE_STATES[number]
 
 export interface PlayerCombatComponent {
+  readonly hitFeedback: NativePuppetHitState
+  readonly circleSlowTicksRemaining: number
   readonly coldSlowTicksRemaining: number
   readonly currentHealth: number
   readonly currentMana: number
@@ -52,6 +55,7 @@ export interface PlayerCombatTickResult<T extends PlayerCombatComponent> {
 }
 
 export interface PlayerCombatTickOptions {
+  readonly tick?: number
   readonly healthRecoveryPerTick?: number
   readonly manaCeiling?: number
   readonly manaRecoveryPerTick?: number
@@ -65,6 +69,8 @@ export interface PlayerManaDebitResult<T extends PlayerCombatComponent> {
 
 export function createPlayerCombat(): PlayerCombatComponent {
   return {
+    hitFeedback: createNativePuppetHit(),
+    circleSlowTicksRemaining: 0,
     coldSlowTicksRemaining: 0,
     currentHealth: PLAYER_INITIAL_HEALTH,
     currentMana: PLAYER_INITIAL_MANA,
@@ -113,12 +119,13 @@ export function dazzlePlayer<T extends PlayerCombatComponent>(
 }
 
 export function playerMovementScale(
-  source: Pick<PlayerCombatComponent, 'coldSlowTicksRemaining' | 'dazzleTicksRemaining'>,
+  source: Pick<PlayerCombatComponent, 'circleSlowTicksRemaining' | 'coldSlowTicksRemaining' | 'dazzleTicksRemaining'>,
 ): number {
   const coldScale = source.coldSlowTicksRemaining > 0
     ? NATIVE_COLD_MOVEMENT_SCALE
     : 1
   return coldScale * nativeDazzleMovementScale(source.dazzleTicksRemaining)
+    * (source.circleSlowTicksRemaining > 0 ? .5 : 1)
 }
 
 export function poisonPlayer<T extends PlayerCombatComponent>(
@@ -155,9 +162,11 @@ export function damagePlayer<T extends PlayerCombatComponent>(
   damage: number,
   tick: number,
   recordHit = true,
+  hitStrength = 1,
 ): T {
   requireNonnegativeFinite(damage, 'player damage')
   requireNonnegativeTicks(tick, 'player damage tick')
+  requireNonnegativeFinite(hitStrength, 'player hit strength')
   if (damage === 0 || source.lifeState === 'dying' || source.lifeState === 'spectating') {
     return source
   }
@@ -166,6 +175,7 @@ export function damagePlayer<T extends PlayerCombatComponent>(
     ...source,
     currentHealth,
     lastDamageTick: recordHit ? tick : source.lastDamageTick,
+    hitFeedback: recordHit ? receiveNativePuppetHit(tick, hitStrength) : source.hitFeedback,
     lifeState: source.lifeState === 'lethal-pending' || currentHealth <= PLAYER_LETHAL_HEALTH
       ? 'lethal-pending'
       : 'alive',
@@ -173,15 +183,11 @@ export function damagePlayer<T extends PlayerCombatComponent>(
 }
 
 export function playerHitOverlayAlpha(
-  source: Pick<PlayerCombatComponent, 'lastDamageTick' | 'lifeState'>,
+  source: Pick<PlayerCombatComponent, 'hitFeedback' | 'lifeState'>,
   tick: number,
 ): number {
   requireNonnegativeFinite(tick, 'player presentation tick')
-  if (source.lastDamageTick === null || source.lifeState !== 'alive') return 0
-  return Math.min(
-    1,
-    Math.max(0, 1 - (tick - source.lastDamageTick) / PLAYER_HIT_LATCH_TICKS),
-  )
+  return source.lifeState === 'alive' ? nativePuppetHitAlpha(source.hitFeedback, tick) : 0
 }
 
 export function restorePlayerHealth<T extends PlayerCombatComponent>(
@@ -240,6 +246,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
   source: T,
   options: PlayerCombatTickOptions = {},
 ): PlayerCombatTickResult<T> {
+  if (options.tick !== undefined) requireNonnegativeTicks(options.tick, 'player combat tick')
   const { healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick } =
     playerCombatRecovery(source, options)
   if (source.lifeState === 'lethal-pending') {
@@ -250,9 +257,11 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
         deathAgeTicks: 0,
         deathEpoch: source.deathEpoch + 1,
         deathTick: 0,
+        circleSlowTicksRemaining: 0,
         coldSlowTicksRemaining: 0,
         dazzleTicksRemaining: 0,
         lastDamageTick: null,
+        hitFeedback: createNativePuppetHit(source.hitFeedback.tick),
         lifeState: 'dying',
         poisonBeforeCold: false,
         poisonDamagePerTick: 0,
@@ -297,15 +306,20 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
 
   return stepLivingPlayerCombat(source, {
     healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick,
-  })
+  }, options.tick)
 }
 
 function stepLivingPlayerCombat<T extends PlayerCombatComponent>(
   source: T,
-  recovery: Required<PlayerCombatTickOptions>,
+  recovery: Required<Omit<PlayerCombatTickOptions, 'tick'>>,
+  tick = source.hitFeedback.tick + 1,
 ): PlayerCombatTickResult<T> {
   const { healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick } = recovery
   const poisoned = source.poisonTicksRemaining > 0 && source.poisonDamagePerTick > 0
+  // World contacts arrive after the player's base tick, before this HP finalizer.
+  const hitFeedback = source.hitFeedback.tick === tick ? source.hitFeedback
+    : stepNativePuppetHit(source.hitFeedback, tick)
+  const circleSlowTicksRemaining = Math.max(0, source.circleSlowTicksRemaining - 1)
   const coldSlowTicksRemaining = Math.max(0, source.coldSlowTicksRemaining - 1)
   const dazzleTicksRemaining = Math.max(0, source.dazzleTicksRemaining - 1)
   const poisonTicksRemaining = poisoned ? source.poisonTicksRemaining - 1 : 0
@@ -326,18 +340,22 @@ function stepLivingPlayerCombat<T extends PlayerCombatComponent>(
     ? 'lethal-pending' as const
     : 'alive' as const
   const combat = currentHealth === source.currentHealth
+      && hitFeedback === source.hitFeedback
       && currentMana === source.currentMana
       && lifeState === source.lifeState
       && poisonDamagePerTick === source.poisonDamagePerTick
       && poisonTicksRemaining === source.poisonTicksRemaining
       && poisonBeforeCold === source.poisonBeforeCold
       && coldSlowTicksRemaining === source.coldSlowTicksRemaining
+      && circleSlowTicksRemaining === source.circleSlowTicksRemaining
       && dazzleTicksRemaining === source.dazzleTicksRemaining
     ? source
     : {
         ...source,
         currentHealth,
+        hitFeedback,
         currentMana,
+        circleSlowTicksRemaining,
         coldSlowTicksRemaining,
         dazzleTicksRemaining,
         lifeState,
@@ -356,7 +374,7 @@ function stepLivingPlayerCombat<T extends PlayerCombatComponent>(
 function playerCombatRecovery(
   source: PlayerCombatComponent,
   options: PlayerCombatTickOptions,
-): Required<PlayerCombatTickOptions> {
+): Required<Omit<PlayerCombatTickOptions, 'tick'>> {
   const healthRecoveryPerTick = options.healthRecoveryPerTick
     ?? PLAYER_HEALTH_RECOVERY_PER_TICK
   const manaRecoveryPerTick = options.manaRecoveryPerTick
@@ -455,6 +473,8 @@ export function playerDeathPresentationTickAtAge(deathAgeTicks: number): number 
 export function resetPlayerCombatForNewRun<T extends PlayerCombatComponent>(source: T): T {
   return {
     ...source,
+    hitFeedback: createNativePuppetHit(),
+    circleSlowTicksRemaining: 0,
     coldSlowTicksRemaining: 0,
     currentHealth: source.maximumHealth,
     currentMana: source.maximumMana,

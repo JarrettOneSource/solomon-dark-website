@@ -1,34 +1,17 @@
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { NativeEnemyAnimationSample } from './native-enemy-animation.ts'
-import {
-  boundedPose,
-  finiteOrZero,
-  layer,
-  presentation,
-  requiredPoint,
-  rotatePoint,
-  stableInteger,
-  stableUnit,
-  visualChoice,
-} from './native-enemy-layers.ts'
-import type {
-  NativeEnemyAuthoredPointResolver,
-  NativeEnemyFamilyPresentation,
-  NativeEnemySpriteLayer,
-  NativeEnemyVisualSnapshot,
-} from './native-enemy-presentation-model.ts'
-
+import { boundedPose, finiteOrZero, layer, presentation, requiredPoint, rotatePoint, stableInteger, stableUnit, visualChoice } from './native-enemy-layers.ts'
+import type { NativeEnemyAuthoredPointResolver, NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 export function zombiePresentation(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   spawnAgeTicks: number,
   animation: NativeEnemyAnimationSample | undefined,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
   const body = zombieLayers(enemy, facing, animation, authoredPoints)
-  const after = flags.has('ROTTEN') ? zombieFlyblownLayers(spawnAgeTicks) : []
-  if (flags.has('ROTTEN')) {
+  const after = enemy.rotten ? zombieFlyblownLayers(spawnAgeTicks) : []
+  if (enemy.rotten) {
     after.push(...zombieFadeParticleLayers(enemy, spawnAgeTicks))
   }
   return presentation(body, {

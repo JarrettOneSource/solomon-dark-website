@@ -1,27 +1,8 @@
-import {
-  NATIVE_IMP_BODY_POSE_COUNT,
-  NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
-} from '../core-kernels/boneyard-imp-flight.ts'
-import type { NativeEnemyAnimationSample } from './native-enemy-animation.ts'
-import {
-  boundedPose,
-  boundedUnit,
-  finiteOrZero,
-  layer,
-  nativeEnemyFacingBucket,
-  positiveModulo,
-  presentation,
-  stableInteger,
-  stableUnit,
-  visualChoice,
-} from './native-enemy-layers.ts'
+import { NATIVE_IMP_BODY_POSE_COUNT, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
-import type {
-  NativeEnemyFamilyPresentation,
-  NativeEnemySpriteLayer,
-  NativeEnemyVisualSnapshot,
-} from './native-enemy-presentation-model.ts'
-
+import type { NativeEnemyAnimationSample } from './native-enemy-animation.ts'
+import { boundedPose, boundedUnit, finiteOrZero, layer, nativeEnemyFacingBucket, positiveModulo, presentation, stableInteger, stableUnit, visualChoice } from './native-enemy-layers.ts'
+import type { NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 export function portalLayers(
   animation: NativeEnemyAnimationSample | undefined,
 ): NativeEnemySpriteLayer[] {
@@ -29,25 +10,13 @@ export function portalLayers(
   const alpha = animation.alpha
   const fixedScale = Math.max(0, animation.stridePhaseDeg)
   const bodyEntry = 46 + positiveModulo(Math.floor(animation.bodyPose), 32)
-  const auraEntry = 180 + positiveModulo(Math.floor(animation.gaitPose), 20)
   const layers = [
-    layer('DeadHawg', 18, 'portal-outer', {
-      alpha: 0.5,
-      blendMode: 'add',
-      scale: fixedScale * (1 + alpha),
-    }),
-    layer('DeadHawg', auraEntry, 'portal-aura', {
-      blendMode: 'add',
-      scale: fixedScale,
-    }),
     layer('DeadHawg', bodyEntry, 'portal-body', {
+      blendMode: 'add',
+      offset: { x: 0, y: 15 - 32 * (1 + alpha * 2) },
       scale: fixedScale,
       scaleX: fixedScale,
       scaleY: 1 + alpha * 2,
-    }),
-    layer('DeadHawg', 22, 'portal-core', {
-      blendMode: 'add',
-      scale: fixedScale,
     }),
   ]
   if (animation.hitFlash > 0) {
@@ -64,7 +33,6 @@ export function portalLayers(
 export function wraithPresentation(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   spawnAgeTicks: number,
   animation: NativeEnemyAnimationSample | undefined,
 ): NativeEnemyFamilyPresentation {
@@ -73,7 +41,7 @@ export function wraithPresentation(
     scale: 2,
   })]
   return presentation(body, {
-    after: flags.has('BURNING')
+    after: enemy.burning
       ? wraithWispLayers(
           enemy,
           spawnAgeTicks,
@@ -97,14 +65,16 @@ export function impLayers(
   const upperFrame = animation?.impEffectFrame
     ?? visualChoice(enemy, 2, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT)
   return [
-    layer('BadGuys', 285 + pose * 12 + facing, 'imp-body', {
+    layer(enemy.nativeTypeId === 2044 ? 'Unholy' : 'BadGuys', (enemy.nativeTypeId === 2044 ? 41 : 285) + pose * 12 + facing, 'imp-body', {
+      blendMode: enemy.nativeTypeId === 2044 ? 'add' : 'normal',
       rotationRadians: animation?.impBodyRotationRadians ?? 0,
     }),
     layer(
-      'BadGuys',
-      333 + boundedPose(upperFrame, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT - 1),
+      enemy.nativeTypeId === 2044 ? 'Unholy' : 'BadGuys',
+      (enemy.nativeTypeId === 2044 ? 89 : 333) + boundedPose(upperFrame, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT - 1),
       'imp-upper-effect',
       {
+        blendMode: enemy.nativeTypeId === 2044 ? 'add' : 'normal',
         alpha: animation && animation.impEffectFrame >= 0
           ? animation.impEffectAlpha
           : 0,

@@ -1,31 +1,15 @@
 import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
-import {
-  NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
-  NATIVE_BADGUY_GAIT_PHASE_PERIOD,
-  NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
-  NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
-  advanceNativeEnemyLocomotionPhase,
-  advanceNativeEnemyStridePhase,
-  nativeSkeletonBodyGaitPose,
-} from '../../core-kernels/boneyard-skeleton-family-animation.ts'
+import { NATIVE_BADGUY_GAIT_PHASE_DIVISOR, NATIVE_BADGUY_GAIT_PHASE_PERIOD, NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR, NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD, advanceNativeEnemyLocomotionPhase, advanceNativeEnemyStridePhase, nativeSkeletonBodyGaitPose } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import {
-  buildNativeEnemySteering,
-  clearNativeEnemyRoute,
-  nativeEnemySteeringGoal,
-  nativeEnemyTargetRefreshTicks,
-  resolveNativeEnemyPathGoal,
-  stepNativeEnemyPathRecovery,
-} from '../../core-kernels/native-enemy-pathfinding.ts'
+import { buildNativeEnemySteering, clearNativeEnemyRoute, nativeEnemySteeringGoal, nativeEnemyTargetRefreshTicks, resolveNativeEnemyPathGoal, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
 import { resetDemon } from './demon.ts'
-import { nativeEnemyHitOverlay, validatePoint } from './model.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
+import { validatePoint } from './model.ts'
 import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS } from './programs.ts'
 import { resetArcher, resetMage, resetSkeleton } from './skeleton-family.ts'
 import { enemyNavigationClearance } from './targeting.ts'
 import { resetZombie } from './zombie.ts'
-
 export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
@@ -37,7 +21,7 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   if (context.tick < actor.nextMovementTick) return actor
   if (
     skeletonFamilyMovementPausedByHit(actor)
-    && nativeEnemyHitOverlay(actor.lastDamageTick, context.tick) > 0
+    && actor.hitFeedback.timer > 0
   ) {
     return {
       ...actor,
@@ -164,6 +148,7 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   return {
     ...actor,
     bodyGaitPhase,
+    shadowLateralOffset: bodyGaitPhase,
     bodyPose: skeletonFamilyLocomotionBodyPose(actor, bodyGaitPhase),
     brain,
     gaitPose,
@@ -234,14 +219,20 @@ export function staffAttackSpeed(actor: BoneyardEnemyActor): number {
   return actor.config.attackSpeed * actor.staffActionFactor
 }
 
-function staffMovementSpeed(actor: BoneyardEnemyActor): number {
-  return actor.config.baseSpeed * actor.staffMovementFactor
+export function staffMovementSpeed(actor: BoneyardEnemyActor): number {
+  const speed = actor.brain.family === 'demon-skull'
+    ? actor.brain.speed / actor.config.scale * (actor.config.baseSpeed / 4) : actor.config.baseSpeed
+  return speed * actor.staffMovementFactor
 }
 
 export function interruptNativeSecondaryAction(
   actor: BoneyardEnemyActor,
 ): BoneyardEnemyActor {
   switch (actor.brain.family) {
+    case 'demon-skull': return { ...actor, brain: { ...actor.brain, actions: [], phase: 'range-control' } }
+    case 'faculty': return { ...actor, bodyPose: 0, brain: { ...actor.brain, action: null,
+      bodyPose: 0, handMask: 0, headingLocked: false, lightningActive: false, phase: 'range-control' } }
+    case 'heartmonger': return actor
     case 'skeleton': return resetSkeleton(actor, actor.brain)
     case 'archer': return resetArcher(actor, actor.brain)
     case 'mage': return resetMage(actor, actor.brain)

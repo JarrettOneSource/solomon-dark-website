@@ -69,13 +69,15 @@ alpha decrement `0.015`; the Skeleton pike fragment exception retains timer
 damping decision is a fresh authoritative RNG draw on every ground contact,
 not a construction-time Boolean.
 
-The Unbind star is damage-component-sensitive. Lethal secondary damage sets
-Actor bit `+0x9C & 2`; the current Website spell/contact lane stages primary
-damage only and therefore uses the exact primary-only clocks: Skeleton family
-`alpha .75/loss .0225`, Imp `1/.025`, Zombie `.75/.05`, Wraith `1/.025`, and
-Coffin `.75/.045`. The recovered secondary-present branch starts each at
-`1.25`; it remains a fail-closed future producer requirement rather than an
-invented web damage channel.
+The Unbind star is damage-component-sensitive. Lethal magic damage sets
+Actor bit `+0x9C & 2`. The earlier amount-only web adapter lost that provenance;
+calling the magic branch a future producer requirement was incorrect. Entry
+301 reopens the complete receiver and all existing damage producers. The
+physical-only clocks are Skeleton family `alpha .75/loss .0225`, Imp
+`1/.025`, Zombie `.75/.05`, Wraith `1/.025`, Coffin `.75/.045`, and
+Heartmonger/Faculty `.75/.0225`. A lethal contact containing magic starts each
+at `1.25`, with the same family loss. Nonlethal magic does not change a later
+physical-only death. Portal, Demon and DemonSkull do not create this star.
 
 Skeleton `Anim_Bouncer` physics and `Anim_Unbind` are exact. Where the native
 numeric physics for Banish, SpriteArray, MoveFade, SmokyBouncer, and auxiliary

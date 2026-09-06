@@ -38,10 +38,12 @@ import {
   getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
 import {
+  damageBoneyardEnemy,
+} from '../src/game/core-server/enemies/damage.ts'
+import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
-import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import {
   damagePlayerEntity,
   playerSkillDerivedStatsAt,

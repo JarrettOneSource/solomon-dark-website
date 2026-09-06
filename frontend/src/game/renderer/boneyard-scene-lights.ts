@@ -1,6 +1,7 @@
 import type { Vec2 } from '../../editor/model.ts'
 import type { Camera } from '../../editor/render.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { nativeBossSpellLight } from '../core-kernels/native-boss-spell-light.ts'
 import {
   type NativeWorldManagerRegistration,
   mergeNativeWorldManagerOwners,
@@ -149,6 +150,18 @@ export class BoneyardSceneLights {
         ),
         sources,
       })
+    }
+    for (const effect of snapshot.world.deathEffects) {
+      if (effect.kind !== 'banish-black' || effect.painterRegistration === null) continue
+      lightProviderOwners.push({ registration: effect.painterRegistration, sources: [{
+        castsDirectionalShadow: settings.multipleShadows,
+        position: effect.position, radius: 3,
+        intensity: Math.min(1, Math.max(0, Math.fround(2 - effect.ageTicks * .004999999888241291))),
+      }] })
+    }
+    for (const spell of snapshot.world.bossSpells) {
+      const source = nativeBossSpellLight(spell, presentationFrame, settings.multipleShadows)
+      if (source !== null) lightProviderOwners.push({ registration: spell.painterRegistration, sources: [source] })
     }
     for (const spell of snapshot.primarySpells.projectiles) {
       if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue

@@ -57,10 +57,14 @@ const UNSHADOWED_SPRITE_VIEW_RESOURCES: NativeEnemyDeathEffectViewResourcePlan =
   shadowSprite: false,
 })
 
+export function nativeEnemyDeathEffectIsBanish(kind: BoneyardEnemyDeathEffectSnapshot['kind']): boolean {
+  return kind === 'banish' || kind === 'banish-black'
+}
+
 export function nativeEnemyDeathEffectViewResourcePlan(
   effect: Pick<BoneyardEnemyDeathEffectSnapshot, 'kind' | 'shadow'>,
 ): NativeEnemyDeathEffectViewResourcePlan {
-  if (effect.kind === 'banish') return BANISH_VIEW_RESOURCES
+  if (nativeEnemyDeathEffectIsBanish(effect.kind)) return BANISH_VIEW_RESOURCES
   return effect.shadow ? SHADOWED_SPRITE_VIEW_RESOURCES : UNSHADOWED_SPRITE_VIEW_RESOURCES
 }
 
@@ -70,9 +74,10 @@ export function nativeEnemyDeathEffectVisualBounds(
     atlas: BoneyardEnemyDeathEffectSnapshot['atlas'],
     entry: number,
   ) => NativeEnemyDeathEffectArtRecord,
+  viewHeight = 900,
 ): BoneyardBounds {
-  if (effect.kind === 'banish') return nativeBanishVisualBounds(effect, resolveArt)
-  const perspective = effect.kind === 'fade-perspective'
+  if (nativeEnemyDeathEffectIsBanish(effect.kind)) return nativeBanishVisualBounds(effect, resolveArt, viewHeight)
+  const perspective = effect.kind === 'fade-scale-perspective' || effect.kind === 'fade-perspective'
     || effect.kind === 'fade-perspective-clipped'
     || effect.kind === 'late-splat'
   const art = resolveArt(effect.atlas, effect.entry)
@@ -103,11 +108,12 @@ function nativeBanishVisualBounds(
     atlas: BoneyardEnemyDeathEffectSnapshot['atlas'],
     entry: number,
   ) => NativeEnemyDeathEffectArtRecord,
+  viewHeight = 900,
 ): BoneyardBounds {
   const scale = effect.scale
   const progress = Math.max(0, 2 - effect.ageTicks * (0.02 / scale))
   const lowerExtent = 50 * scale
-  const upperExtent = 450 * scale
+  const upperExtent = viewHeight * .5 * scale
   const core = resolveArt('BadGuys', 15)
   const upper = resolveArt('BadGuys', 333 + positiveModulo(
     Math.floor((effect.spawnTick + effect.ageTicks) / 4),
@@ -163,7 +169,7 @@ function positiveModulo(value: number, divisor: number): number {
 export function nativeEnemyDeathEffectPlan(
   effect: BoneyardEnemyDeathEffectSnapshot,
 ): NativeEnemyDeathEffectPlan {
-  const perspective = effect.kind === 'fade-perspective'
+  const perspective = effect.kind === 'fade-scale-perspective' || effect.kind === 'fade-perspective'
     || effect.kind === 'fade-perspective-clipped'
     || effect.kind === 'late-splat'
   const main: NativeEnemyDeathEffectLayer = Object.freeze({
@@ -210,16 +216,18 @@ export function nativeEnemyDeathEffectPainterLayer(
   }
   return {
     id: `enemy-death-effect:${effect.id}`,
-    queueFamily: 'ordinary-dynamic',
+    queueFamily: 'zanim',
     registration: effect.painterRegistration,
-    sortBias: 0,
+    sortBias: effect.painterSortBias ?? 0,
     worldY: effect.position.y,
   }
 }
 
 export function nativeEnemyDeathEffectPainterLane(
   effect: BoneyardEnemyDeathEffectSnapshot,
-): 'post-world-queue' | 'pre-world-queue' | 'world-sorted' {
+): 'background' | 'post-world-queue' | 'pre-world-queue' | 'world-sorted' | 'late-world-overlay' {
+  if (effect.presentationOwner === 'background') return 'background'
+  if (effect.presentationOwner === 'late-world-overlay') return 'late-world-overlay'
   if (effect.presentationOwner === 'direct-post-world') return 'post-world-queue'
   if (effect.presentationOwner === 'pre-world-queue') return 'pre-world-queue'
   return 'world-sorted'

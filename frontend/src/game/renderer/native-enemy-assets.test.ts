@@ -2,36 +2,28 @@ import assert from 'node:assert/strict'
 import { readFileSync, statSync } from 'node:fs'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-
 import { createServer } from 'vite'
-
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
+import { evaluateBoneyardEnemyConfig } from '../core-kernels/boneyard-enemy-config.ts'
+import { createNativeDemonSkull } from '../core-kernels/native-demon-skull.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
 import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
-import {
-  NATIVE_ENEMY_ACTION_PROGRAMS,
-  nativeEnemyIdleAnimationSample,
-  type NativeEnemyActionProgramName,
-} from './native-enemy-animation.ts'
-import {
-  NATIVE_ENEMY_FAMILIES,
-  type NativeEnemyAtlas,
-  type NativeEnemyFamily,
-  type NativeEnemyVisualSnapshot,
-} from './native-enemy-presentation-model.ts'
-import {
-  nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
-} from './native-enemy-presentation.ts'
+import type { NativeEnemyActionProgramName } from './native-enemy-animation.ts'
+import { NATIVE_ENEMY_ACTION_PROGRAMS, nativeEnemyIdleAnimationSample } from './native-enemy-animation.ts'
+import type { NativeEnemyAtlas, NativeEnemyFamily, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
+import { NATIVE_ENEMY_FAMILIES } from './native-enemy-presentation-model.ts'
+import { nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan } from './native-enemy-presentation.ts'
 import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
-import {
-  NATIVE_WELD_BADGUYS_RECORDS,
-  NATIVE_WELD_DEADHAWG_RECORDS,
-} from './primary-spell-weld-native.ts'
-
+import { NATIVE_WELD_BADGUYS_RECORDS, NATIVE_WELD_DEADHAWG_RECORDS } from './primary-spell-weld-native.ts'
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
   DeadHawg: manifest('../../editor/manifest/deadhawg.json'),
   Demon: manifest('../../editor/manifest/demon.json'),
+  Faculty: manifest('../../editor/manifest/faculty.json'),
+  Heartmonger: manifest('../../editor/manifest/heartmonger.json'),
+  Unholy: manifest('../../editor/manifest/unholy.json'),
 }
 
 function nativeEnemyPresentationPlan(
@@ -517,25 +509,31 @@ function enemy(
   headingDeg: number,
   flags: readonly string[],
 ): NativeEnemyVisualSnapshot {
+  const config = evaluateBoneyardEnemyConfig(enemyToken, { flags: flags.filter(flag => flag !== 'MAGE_CLOAK'),
+    random: { randomArmor: id % 2 === 0 },
+    authoredRecipe: enemyToken === 'PORTAL' ? nativePortalRecipe(nativePortalProgram(
+      'bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb').phases[0]!) : undefined })
   return {
     ...(enemyToken === 'SPIDER' ? { animation: nativeEnemyIdleAnimationSample({
       bodyPose: id % 4,
       spider: { bodyHeadingDeg: (headingDeg + 360) % 360, outlineAlpha: 0.5, outlineTint: 0xffffff },
     }) } : {}),
-    armored: flags.includes('FLAG_ARMOR') || (
-      flags.includes('FLAG_ARMORMAYBE') && id % 2 === 0
-    ),
-    enemyToken,
-    flags,
-    headingDeg,
-    id,
+    ...(enemyToken === 'DEMONSKULL' ? { demonSkull: { ...createNativeDemonSkull(createNativeRng(id), config.scale).state, bodyHeadingDeg: headingDeg } } : {}),
+    ...(config.enemyToken === 'DIREFACULTY' ? { faculty: { bodyColor: config.family.bodyColor,
+      headColor: config.family.headColor, female: config.family.female, bodyHeadingDeg: headingDeg,
+      handMask: 0, lightPhase: 0, lightIntensity: 0, lightningActive: false } } : {}),
+    armored: config.enemyToken === 'SKELETON' && config.family.armor,
+    arrowType: config.enemyToken === 'SKELETONARCHER' ? config.family.arrowType : 'normal',
+    burning: config.burning, headgear: 'headgear' in config.family ? config.family.headgear : 0,
+    weapon: config.enemyToken === 'SKELETON' ? config.family.weapon : 'claw',
+    mageElement: config.enemyToken === 'SKELETONMAGE' ? config.family.element : 'fire',
+    rotten: config.enemyToken === 'ZOMBIE' && config.family.rotten,
+    enemyToken, flags, headingDeg, id,
     lighting: { charge: 1, glow: 0, providerCopies: 1 },
-    mageCloak: flags.includes('MAGE_CLOAK'),
-    nativeTypeId: 1000,
-    position: { x: 0, y: 0 },
-    shieldHealth: 0,
-    shieldMaximumHealth: 0,
-    spawnTick: 450,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: id },
+    mageCloak: flags.includes('MAGE_CLOAK'), nativeTypeId: config.nativeTypeId,
+    position: { x: 0, y: 0 }, scale: config.scale,
+    shieldHealth: 0, shieldMaximumHealth: 0, spawnTick: 450,
   }
 }
 

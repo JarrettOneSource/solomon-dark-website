@@ -3,11 +3,13 @@ import type { BoneyardEnemyActor, BoneyardEnemyStore, BoneyardMaggotActor } from
 import { boneyardEnemyCollisionRadius } from '../enemies/model.ts'
 import { ML_BOT_POLICY_ENEMY_TOKEN_SPECIES } from './closed-unions.ts'
 import { ML_BOT_POLICY_SCALES } from './spec.ts'
-
 export type MlBotPolicyEnemySource = BoneyardEnemyActor | BoneyardMaggotActor
 export type MlBotPolicyEnemySpecies =
   | 'spider'
   | 'cocoon'
+  | 'demon-skull'
+  | 'faculty'
+  | 'heartmonger'
   | 'archer'
   | 'coffin'
   | 'demon'

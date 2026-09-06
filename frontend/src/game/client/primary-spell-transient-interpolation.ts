@@ -513,6 +513,7 @@ function interpolateWeldActorTransient(
     const actor = interpolateWeldPositionTransient(older, newer, blend)
     return {
       ...actor,
+      landingPosition: { ...actor.landingPosition },
       cameraDisplacement: actor.cameraDisplacement === null
         ? null
         : { ...actor.cameraDisplacement },

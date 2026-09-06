@@ -1,6 +1,6 @@
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 
-export const GAME_PROTOCOL_VERSION = 125
+export const GAME_PROTOCOL_VERSION = 126
 
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 

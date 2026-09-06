@@ -1,15 +1,25 @@
 import type { Texture } from 'pixi.js'
+import greenPlasmaSource from '../../assets/game/boneyard/textures/greenplasma.png'
 
 import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
 import { GROUND_TEXTURE, ROAD_TEXTURES } from '../../editor/textures.ts'
 import { boneyard, hub } from '../../lib/assets.ts'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
-import { loadGameTextureEntries } from './game-webgl.ts'
+import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
+import {
+  BONEYARD_COMBAT_ATLAS_SOURCES,
+  boneyardCombatAtlasSourceIsPacked,
+  createBoneyardCombatAtlas,
+  type BoneyardCombatAtlas,
+} from './boneyard-combat-atlas.ts'
 import {
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_ENTRY,
 } from './boneyard-lighting.ts'
+import { loadGameTextureEntries } from './game-webgl.ts'
+import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
+import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
 import {
   NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES,
 } from './native-secondary-assets.ts'
@@ -22,21 +32,13 @@ import {
   stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
-import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
-import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
-import {
-  BONEYARD_COMBAT_ATLAS_SOURCES,
-  boneyardCombatAtlasSourceIsPacked,
-  createBoneyardCombatAtlas,
-  type BoneyardCombatAtlas,
-} from './boneyard-combat-atlas.ts'
-import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
 
 export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   base: Readonly<Record<string, Texture>>
   combatAtlas: BoneyardCombatAtlas
   ground: Texture
+  greenPlasma: Texture
   lantern: Texture
   levelUpSparkle: Texture
   regionLightGlyph: Texture
@@ -71,6 +73,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     deadHawgAliases.get(source) ?? boneyardCombatAssetSource(source)
   )
   const requestedSources = [...new Set([
+    greenPlasmaSource,
     ...playerWorldAssetSources(),
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
@@ -140,6 +143,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
   const roads = ROAD_TEXTURES.map(texture)
   const ground = texture(GROUND_TEXTURE)
   ground.source.addressMode = 'repeat'
+  texture(greenPlasmaSource).source.addressMode = 'repeat'
   for (const road of roads) road.source.addressMode = 'repeat'
 
   return {
@@ -148,6 +152,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     base,
     combatAtlas,
     ground,
+    greenPlasma: texture(greenPlasmaSource),
     lantern: texture(boneyard.lantern),
     levelUpSparkle: texture(boneyard.levelUpSparkle),
     regionLightGlyph: texture(regionLightRef.src),

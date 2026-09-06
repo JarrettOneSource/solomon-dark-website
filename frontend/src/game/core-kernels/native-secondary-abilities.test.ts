@@ -1,25 +1,34 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  NATIVE_SECONDARY_ABILITY_IDS,
-  type NativeSecondaryAbilityId,
-} from './native-secondary-ability-contract.ts'
 import { actorHeadingVector } from './actor-heading.ts'
 import {
-  applyNativeSecondaryTargetEffect,
-  applyNativeSecondaryGolemDamage,
+  bindNativeBeltSkill,
+  createNativePlayerBelt,
+} from './native-belt.ts'
+import {
+  advanceNativeRngWords,
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeFloatRange,
+  drawNativeInteger,
+  drawNativeSign,
+  type NativeRngState,
+} from './native-rng.ts'
+import {
   applyNativeSecondaryEtherBurn,
   applyNativeSecondaryFireBurn,
+  applyNativeSecondaryGolemDamage,
   applyNativeSecondaryPlayerDamage,
+  applyNativeSecondaryTargetEffect,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   enrollNativeSecondaryPainterOwners,
   materializeNativePlayerFlashResponse,
-  NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
+  NATIVE_ETHER_BURN_LIFETIME_TICKS,
   NATIVE_MINDBLAST_DIRECT_RADIUS,
   NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS,
-  NATIVE_ETHER_BURN_LIFETIME_TICKS,
+  NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
   nativePlaneOrbDamage,
   nativeSecondaryCooldownCapacityTicks,
   nativeSecondaryManaCeiling,
@@ -32,22 +41,14 @@ import {
   type NativeSecondaryTickContext,
 } from './native-secondary-abilities.ts'
 import {
-  advanceNativeRngWords,
-  createNativeRng,
-  drawNativeFloat,
-  drawNativeFloatRange,
-  drawNativeInteger,
-  drawNativeSign,
-  type NativeRngState,
-} from './native-rng.ts'
-import {
-  bindNativeBeltSkill,
-  createNativePlayerBelt,
-} from './native-belt.ts'
+  NATIVE_SECONDARY_ABILITY_IDS,
+  type NativeSecondaryAbilityId,
+} from './native-secondary-ability-contract.ts'
 import {
   nativeLeviathanCurrentScale,
   nativeLeviathanHeadingVector,
 } from './native-secondary-leviathan.ts'
+import { createNativeWorldManagerOrder } from './native-world-manager-order.ts'
 import {
   createIdlePlayerCharacterInput,
   createPlayerCharacter,
@@ -58,7 +59,6 @@ import {
   effectiveSecondaryAbilityRankStats,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
-import { createNativeWorldManagerOrder } from './native-world-manager-order.ts'
 
 const CONFIG = {
   discipline: 'arcane',
@@ -146,24 +146,16 @@ function context(
       casterTargetIds: [7],
       projectiles: [
         {
-          ageTicks: 8,
-          headingDegrees: 90,
           id: 8,
           kind: 'firebolt',
           payload: 'fire',
           position: { x: 10, y: 0 },
-          visualPhaseDegrees: 15,
-          visualScale: 1,
         },
         {
-          ageTicks: 12,
-          headingDegrees: 0,
           id: 9,
           kind: 'guided-missile',
           payload: 'cold',
           position: { x: 0, y: 20 },
-          visualPhaseDegrees: 30,
-          visualScale: 1.1,
         },
       ],
       shieldTargetIds: [10],
@@ -2416,11 +2408,11 @@ test('Dampen and Turn Undead consume their complete native child-animation RNG p
   const dampenActor = dampen.actors.find(({ kind }) => kind === 'dampen-wave')!
   assert.deepEqual(
     dampenActor.presentationRng,
-    advanceNativeRngWords(dampenInitial, 2),
+    advanceNativeRngWords(dampenInitial, 4),
   )
   assert.deepEqual(
     dampen.rng,
-    advanceNativeRngWords(dampenInitial, 2 + 360 * 8 + 30 * 3),
+    advanceNativeRngWords(dampenInitial, 4 + 360 * 8 + 30 * 3),
   )
   assert.equal(dampenActor.lifetimeTicks, 100)
 
@@ -2443,90 +2435,65 @@ test('Dampen and Turn Undead consume their complete native child-animation RNG p
   assert.deepEqual(undead.rng, advanceNativeRngWords(undeadInitial, 71))
 })
 
-test('Dampen flings native magic projectiles, disrupts casters, rolls shields, and owns CastSpin', () => {
-  const initialRng = createNativeRng(123)
-  const actionIdentity = drawNativeInteger(initialRng, 100_000)
+test('Dampen creates fresh flyouts and suppresses casting without immobilizing targets', () => {
+  const actionIdentity = drawNativeInteger(createNativeRng(123), 100_000)
   const shieldRoll = drawNativeInteger(actionIdentity.state, 100)
+  const firstPhase = drawNativeFloat(shieldRoll.state, 360)
+  const secondPhase = drawNativeFloat(firstPhase.state, 360)
   const result = cast(51)
-
   assert.deepEqual(result.removedProjectileIds, [8, 9])
-  assert.deepEqual(result.disruptedTargetIds, [7])
+  assert.deepEqual(result.dampenedCasterTargetIds, [7])
+  assert.deepEqual(result.disruptedTargetIds, [])
   assert.deepEqual(result.dispelledShieldTargetIds, shieldRoll.value < 0x33 ? [10] : [])
   assert.equal(result.state.players.player?.castSpinTicksRemaining, 73)
-  assert.deepEqual(
-    result.state.actors
-      .filter(({ kind }) => kind === 'dampened-projectile')
-      .map(({ frame, lifetimeTicks, phase, position, targetId, variant, velocity }) => ({
-        frame, lifetimeTicks, phase, position, targetId, variant, velocity,
-      })),
-    [
-      {
-        frame: 8,
-        lifetimeTicks: 100,
-        phase: 15,
-        position: { x: 10, y: 0 },
-        targetId: 8,
-        variant: 0,
-        velocity: { x: 40, y: 0 },
-      },
-      {
-        frame: 12,
-        lifetimeTicks: 100,
-        phase: 30,
-        position: { x: 0, y: 20 },
-        targetId: 9,
-        variant: 2,
-        velocity: { x: 0, y: 40 },
-      },
-    ],
-  )
-  const advanced = stepNativeSecondaryAbilities(
-    result.state,
-    context(51, 2, null),
-  ).state.actors.filter(({ kind }) => kind === 'dampened-projectile')
-  assert.deepEqual(advanced.map(({ position }) => position), [
-    { x: 50, y: 0 },
-    { x: 0, y: 60 },
+  const flyouts = result.state.actors.filter(({ kind }) => kind === 'dampened-projectile')
+  assert.deepEqual(flyouts.map(({ frame, phase, scale, velocity, variant }) => ({
+    frame, phase, scale, velocity, variant,
+  })), [
+    { frame: 0, phase: firstPhase.value, scale: 1, velocity: { x: 7, y: 0 }, variant: 0 },
+    { frame: 0, phase: secondPhase.value, scale: 1, velocity: { x: 0, y: 7 }, variant: 2 },
   ])
-  assert.deepEqual(
-    result.state.targetEffects.find(({ targetId }) => targetId === 7),
-    {
-      circleSlowFactor: 1,
-      circleSlowTicks: 0,
-      coldSlowFactor: 1,
-      coldSlowMaterial: false,
-      coldSlowTicks: 0,
-      dazzleMaximumTicks: 0,
-      dazzleTicks: 0,
-      disruptedTicks: 600,
-      electricBurn: null,
-      fleeTicks: 0,
-      frostBurnDamagePerTick: 0,
-      frostBurnOwnerId: null,
-      frostBurnSkillId: null,
-      frostBurnSourceActorId: null,
-      frostBurnTicks: 0,
-      frozenTicks: 0,
-      frozenTimeScale: 1,
-      movementModifierOrder: [],
-      prismaticTicks: 0,
-      stunFactor: 1,
-      stunTicks: 0,
-      steamed: null,
-      targetId: 7,
-      timeScale: 1,
-      weakenFactor: 1,
-      worldKey: 'boneyard:test',
-    },
-  )
-  assert.deepEqual(
-    result.state.events.map(({ cue, kind }) => ({ cue, kind })),
-    [
-      { cue: 'flash', kind: 'cast' },
-      { cue: 'dampen', kind: 'pulse' },
-      { cue: null, kind: 'cast' },
-    ],
-  )
+  assert.equal(result.state.targetEffects.some(({ targetId }) => targetId === 7), false)
+  const advanced = stepNativeSecondaryAbilities(result.state, context(51, 2, null)).state.actors
+  assert.deepEqual(advanced.filter(({ kind }) => kind === 'dampened-projectile').map(({ position }) => position), [
+    { x: 17, y: 0 }, { x: 0, y: 27 },
+  ])
+  assert.equal(advanced.filter(({ kind }) => kind === 'dampened-smoke').length, 2)
+  const retired = stepNativeSecondaryAbilities({ ...result.state, actors: flyouts }, {
+    ...context(51, 2, null), effectVisible: () => false,
+  }).state.actors
+  assert.equal(retired.some(({ kind }) => kind === 'dampened-projectile'), false)
+  assert.equal(retired.filter(({ kind }) => kind === 'dampened-smoke').length, 2)
+  assert.deepEqual(result.state.events.map(({ cue, kind }) => ({ cue, kind })), [
+    { cue: 'flash', kind: 'cast' }, { cue: 'dampen', kind: 'pulse' }, { cue: null, kind: 'cast' },
+  ])
+})
+
+test('Dampen flyout lifetime follows the viewport and every mode leaves independently fading smoke', () => {
+  const castResult = cast(51)
+  const template = castResult.state.actors.find(({ kind }) => kind === 'dampened-projectile')!
+  let state: NativeSecondarySimulationState = { ...castResult.state, nextActorId: 100,
+    actors: [0, 1, 2, 3].map((variant, index) => ({ ...template, id: 10 + index, variant })),
+  }
+  const first = stepNativeSecondaryAbilities(state, context(51, 2, null)).state
+  const smokes = first.actors.filter(({ kind }) => kind === 'dampened-smoke')
+  assert.equal(smokes.length, 4)
+  assert.deepEqual(smokes.map(({ quantity, variant }) => variant === 3 ? 0 : quantity), [0xff8000, 0x40ff40, 0x4080ff, 0])
+  for (const smoke of smokes) {
+    assert.ok(smoke.scale >= (smoke.variant === 3 ? Math.fround(.6) : .5) && smoke.scale <= Math.fround(.8))
+    assert.ok(smoke.frame === 10 || smoke.variant === 3 && smoke.frame === 11)
+    assert.deepEqual(smoke.velocity, { x: 0, y: 0 })
+  }
+  state = first
+  for (let tick = 3; tick <= 125; tick += 1) state = stepNativeSecondaryAbilities(state, {
+    ...context(51, tick, null), effectVisible: () => true,
+  }).state
+  assert.equal(state.actors.filter(({ kind }) => kind === 'dampened-projectile').length, 4)
+  const stopped = stepNativeSecondaryAbilities(state, { ...context(51, 126, null), effectVisible: () => false }).state
+  assert.equal(stopped.actors.some(({ kind }) => kind === 'dampened-projectile'), false)
+  let decayed = stopped
+  for (let tick = 127; tick <= 228; tick += 1) decayed = stepNativeSecondaryAbilities(decayed, context(51, tick, null)).state
+  assert.equal(decayed.actors.some(({ kind }) => kind === 'dampened-smoke'), false)
 })
 
 test('Turn Undead filters the four native families and installs exact flee and weaken state', () => {

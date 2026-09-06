@@ -259,7 +259,7 @@ export class NativeAirLightningBodyView {
   constructor(
     label: string,
     body: NativeAirLightningFactoryPlan['body'],
-    textures: NativeAirVfxTextures,
+    textures: Pick<NativeAirVfxTextures, 'ribbon' | 'branches'>,
     split = true,
   ) {
     this.container = new Container({ label })
@@ -346,6 +346,7 @@ function airBodyBounds(
 }
 
 interface AirBodyMeshResource {
+  readonly blendMode: 'normal' | 'add'
   readonly alpha: number
   readonly geometry: MeshGeometry
   readonly texture: Texture
@@ -354,11 +355,12 @@ interface AirBodyMeshResource {
 
 function createAirBodyMeshResources(
   body: NativeAirLightningFactoryPlan['body'],
-  textures: NativeAirVfxTextures,
+  textures: Pick<NativeAirVfxTextures, 'ribbon' | 'branches'>,
 ): readonly AirBodyMeshResource[] {
   return body?.layers.flatMap((layer) => {
     const resources: AirBodyMeshResource[] = [{
       alpha: layer.alpha,
+      blendMode: layer.blendMode ?? 'add',
       geometry: new MeshGeometry({
         indices: layer.indices,
         positions: layer.vertices,
@@ -371,6 +373,7 @@ function createAirBodyMeshResources(
     if (!layer.branch) return resources
     resources.push({
       alpha: layer.alpha,
+      blendMode: layer.blendMode ?? 'add',
       geometry: new MeshGeometry({
         indices: layer.branch.indices,
         positions: layer.branch.vertices,
@@ -378,7 +381,7 @@ function createAirBodyMeshResources(
         uvs: layer.branch.uvs,
       }),
       texture: textures.branches[
-        AIR_LIGHTNING_BRANCH_RECORDS.indexOf(layer.branch.textureRecord)
+        layer.branch.textureRecord === AIR_LIGHTNING_BRANCH_RECORDS[0] || layer.branch.textureRecord === 373 ? 0 : 1
       ],
       tint: layer.tint,
     })
@@ -393,7 +396,7 @@ function createAirBodyMeshes(resources: readonly AirBodyMeshResource[]): Mesh[] 
       texture: resource.texture,
     })
     mesh.alpha = resource.alpha
-    mesh.blendMode = 'add'
+    mesh.blendMode = resource.blendMode
     mesh.eventMode = 'none'
     mesh.tint = resource.tint
     return mesh

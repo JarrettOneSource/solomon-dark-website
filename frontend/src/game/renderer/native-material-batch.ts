@@ -4,7 +4,7 @@ import {
   roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type BatchableSprite,
   type GlBatchAdaptor, type Mesh, type Renderer, type Texture, type WebGLRenderer,
 } from 'pixi.js'
-import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
+import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_UNIFORMS, usesNativeDiffuseColor } from './native-texture-color.ts'
 
 type NativeBatchMeshElement = Parameters<DefaultBatcher['packAttributes']>[0]
 type NativeBatchQuadElement = Parameters<DefaultBatcher['packQuadAttributes']>[0]
@@ -40,18 +40,18 @@ export const NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL = {
   },
 }
 
-const NATIVE_TEXTURE_ALPHA_MODE_BIT_GL = {
+const NATIVE_TEXTURE_MODE_BIT_GL = {
   // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-texture-alpha-mode',
   vertex: {
     header: `
-      in float aTexturePremultiplied;
-      out float texturePremultiplied;
+      in float aNativeTextureMode;
+      out float nativeTextureModeValue;
     `,
-    main: 'texturePremultiplied = aTexturePremultiplied;',
+    main: 'nativeTextureModeValue = aNativeTextureMode;',
   },
   fragment: {
-    header: 'in float texturePremultiplied;',
+    header: 'in float nativeTextureModeValue;',
   },
 }
 
@@ -60,7 +60,7 @@ class NativeTextureAlphaBatchGeometry extends BatchGeometry {
     super()
     const stride = 7 * 4
     for (const attribute of Object.values(this.attributes)) attribute.stride = stride
-    this.addAttribute('aTexturePremultiplied', {
+    this.addAttribute('aNativeTextureMode', {
       buffer: this.buffers[0]!,
       offset: 6 * 4,
       stride,
@@ -77,7 +77,7 @@ class NativeMaterialBatchShader extends Shader {
           NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
           generateTextureBatchBitGl(maxTextures),
           roundPixelsBitGl,
-          NATIVE_TEXTURE_ALPHA_MODE_BIT_GL,
+          NATIVE_TEXTURE_MODE_BIT_GL,
           material,
         ],
       }),
@@ -114,11 +114,10 @@ class NativeMaterialBatcher extends Batcher {
     const textureIdAndRound = textureId << 16 | element.roundPixels & 0xffff
     const transform = element.transform
     const { positions, uvs } = element
-    const vertexColors = nativeVertexColors.get(
-      (element as BatchableMesh | BatchableGraphics).renderable,
-    )
+    const drawable = (element as BatchableMesh | BatchableGraphics).renderable
+    const vertexColors = nativeVertexColors.get(drawable)
     const end = element.attributeOffset + element.attributeSize
-    const texturePremultiplied = nativeTextureIsPremultiplied(element.texture)
+    const nativeTextureModeValue = nativeTextureMode(element.texture, drawable)
     for (let vertex = element.attributeOffset; vertex < end; vertex += 1) {
       const coordinate = vertex * 2
       const x = positions[coordinate]!
@@ -133,7 +132,7 @@ class NativeMaterialBatcher extends Batcher {
         ? element.color
         : multiplyNativePackedColors(vertexColor, element.color)
       uint32View[index++] = textureIdAndRound
-      float32View[index++] = texturePremultiplied
+      float32View[index++] = nativeTextureModeValue
     }
   }
 
@@ -149,7 +148,7 @@ class NativeMaterialBatcher extends Batcher {
     const bounds = element.bounds
     const uvs = texture.uvs
     const textureIdAndRound = textureId << 16 | element.roundPixels & 0xffff
-    const texturePremultiplied = nativeTextureIsPremultiplied(texture)
+    const nativeTextureModeValue = nativeTextureMode(texture, (element as BatchableSprite | BatchableGraphics).renderable)
     const write = (x: number, y: number, u: number, v: number): void => {
       float32View[index++] = transform.a * x + transform.c * y + transform.tx
       float32View[index++] = transform.d * y + transform.b * x + transform.ty
@@ -157,7 +156,7 @@ class NativeMaterialBatcher extends Batcher {
       float32View[index++] = v
       uint32View[index++] = element.color
       uint32View[index++] = textureIdAndRound
-      float32View[index++] = texturePremultiplied
+      float32View[index++] = nativeTextureModeValue
     }
     write(bounds.minX, bounds.minY, uvs.x0, uvs.y0)
     write(bounds.maxX, bounds.minY, uvs.x1, uvs.y1)
@@ -191,8 +190,9 @@ function multiplyNativePackedColors(vertex: number, group: number): number {
   return (red | green << 8 | blue << 16 | alpha << 24) >>> 0
 }
 
-export function nativeTextureIsPremultiplied(texture: Texture): 0 | 1 {
-  return texture.source.alphaMode === 'no-premultiply-alpha' ? 0 : 1
+/** Low bit is texture alpha format; high bit selects diffuse RGB. */
+export function nativeTextureMode(texture: Texture, drawable: object): number {
+  return (texture.source.alphaMode === 'no-premultiply-alpha' ? 0 : 1) + (usesNativeDiffuseColor(drawable) ? 2 : 0)
 }
 
 export function installNativeBatchMaterial(renderer: WebGLRenderer, material: NativeBatchMaterial): () => void {

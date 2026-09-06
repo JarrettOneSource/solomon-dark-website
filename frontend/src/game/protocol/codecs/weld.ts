@@ -665,7 +665,7 @@ export function primarySpellWeldActor(
     onlyKeys(source, field, [
       ...commonKeys, 'bodyScale', 'cameraDisplacement', 'damage', 'debris',
       'fallHeadingDegrees', 'fallHeight', 'fallStep', 'impactAgeTicks', 'impactDue',
-      'impactRadiusScalar',
+      'impactRadiusScalar', 'landingPosition',
       'impactRotationDegrees', 'impactSoundPitch', 'impactThrowFirePitch',
       'impactTicksRemaining',
       'phase', 'position', 'privateSeed', 'pulseDue', 'pulseSequence',
@@ -787,6 +787,7 @@ export function primarySpellWeldActor(
       impactThrowFirePitch,
       impactTicksRemaining,
       kind: 'weld-meteor',
+      landingPosition: vector(source.landingPosition, `${field}.landingPosition`),
       lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
