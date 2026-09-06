@@ -1236,8 +1236,9 @@ results have been recorded.
 - The script holds the main TimeLine with command `0x42D`, selects offscreen
   spawn placement (mode 2) with `0x3ED`, and spawns type 2057 via `0x43A`. These are real
   synchronous repeat groups, not `wave.txt` members or timed Portal births.
-- Small waves contain groups of four and six. Large waves contain six, eight,
-  and three. Tiny and Huge counts are generator-selected and source-specific.
+- Small waves contain groups of four and six. The four extracted Large waves
+  contain groups `(6,7,4)`, `(6,7,3)`, `(6,10,3)`, and `(6,8,3)`. Tiny, Large,
+  and Huge counts retain each generated source's operands.
 - Setup flags retain order and repetition: flag 1 multiplies health by 1.5;
   3 multiplies all three damage fields by 1.5; 5 increases speed; 43 multiplies
   Cocoon HP by five; 44 disables spitting. Repeated flag 43 is intentional.
@@ -1264,10 +1265,9 @@ timeline holds, group counts, count polling, pause/save/resume/reset, every
 Spider action branch, Silk cap and lifecycle, all web severities and Cocoon
 release paths, complete sprite banks, and terminal effects. Run these checks,
 the complete Website gate, and built Chrome `/game` acceptance on the Mac
-mini. Runtime and browser validation have not been performed for a changed
-candidate yet.
+mini. The completed runtime and browser receipts are recorded below.
 
-### Completed instruction/data recovery and implementation plan
+### Completed instruction/data recovery and implementation
 
 The [Spider native catalog](spider-native-catalog.json) retains the complete
 five-class slot census, audio resource rows, and all 23 source-authored
@@ -1307,9 +1307,8 @@ calls), not half every 25; and Webbed's nominal five-second allocation duration
 is replaced by 9999 each player modifier tick. Full restraint therefore needs
 the real damage/release path, and partial web is removed by movement.
 
-The existing natural-spline implementation is the first reusable implementation
-for Silk. It represents the same cubic evaluator at `0x0062B2F0`; new code must
-supply all native-generated control points, not replace the curve with a line.
+Silk reuses the existing natural-spline implementation, which represents the
+same cubic evaluator at `0x0062B2F0`, with all native-generated control points.
 
 The enemy store was divided by its existing
 responsibilities under `core-server/enemies/`: state model, construction,
@@ -1380,7 +1379,7 @@ shared spit cooldown saturates at zero and decrements once per fixed tick.
   constructor xref is this callback. Tick `0x004557A0` subtracts its authored
   fade loss and translates both endpoints and midpoint by the stored velocity;
   draw `0x0045AC40` emits two width-two white endpoint gradients. This child
-  is part of the Spider closure and is being added to the per-member checks.
+  is part of the Spider closure and its per-member regression checks.
 
 ### Spider completion audit: force fragments and retained corpse rendering
 
