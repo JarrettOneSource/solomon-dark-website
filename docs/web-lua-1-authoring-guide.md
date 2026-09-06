@@ -594,6 +594,16 @@ The `action_kind` context field contains the framework family such as
 
 ## Advanced reducers
 
+For a Lua bot that takes over an existing browser player, subscribe a
+`participant-run` reducer to `player.control`. The host supplies nearby enemies,
+loot, the player's resources and current skill offer up to ten times per second.
+Return `sd.intent.input({movement = {x = 1, y = 0}, primary = false})` to move,
+or `sd.intent.input({release = true})` to return control to the human. World-space
+`aim`, `primary`, and `quickbar` use the ordinary casting path. A
+`sd.intent.select_skill` must identify an option in the current offer.
+See [Lua player control](lua-player-control.md) for ownership, observations,
+input expiry, and monitoring commands.
+
 Procedural authority behavior uses bounded reducers. A reducer receives
 immutable semantic state, an event, and a context, then returns a complete next
 state plus typed intents:

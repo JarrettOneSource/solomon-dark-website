@@ -16,7 +16,7 @@ import { decodeMlBotPolicyCheckpoint } from '../core-server/ml-bot-policy/checkp
 import { MlBotPolicyObserver } from '../core-server/ml-bot-policy/observer.ts'
 import { resolveMlBotPolicySkillOffers } from '../core-server/ml-bot-policy/skill-chooser.ts'
 import { describeMlBotPolicySkillOffer } from '../core-server/ml-bot-policy/skill-options.ts'
-import { MlBotEntranceNavigator } from './ml-bot-entrance-navigation.ts'
+import { BoneyardEntranceNavigator } from './boneyard-entrance-navigation.ts'
 
 export const ML_BOT_CHARACTER = Object.freeze({
   discipline: 'arcane',
@@ -222,7 +222,7 @@ export class MlBotHostController {
   private readonly adapter: MlBotHostControllerAdapter
   private readonly character: PlayerCharacterConfig
   private decisionPending = false
-  private readonly entrance = new MlBotEntranceNavigator()
+  private readonly entrance = new BoneyardEntranceNavigator()
   private failed = false
   private readonly inference: MlBotPolicyInference
   private dispatchedChoiceGeneration: number | null = null

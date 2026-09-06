@@ -387,6 +387,8 @@ function validateRule(
     case 'effect.grant': validateEffectFields(rule, path, ['item', 'quantity', 'target'], ['item', 'target'], issues); return
     case 'effect.state': validateEffectFields(rule, path, ['clear', 'key', 'value'], ['key'], issues); return
     case 'effect.present': validateEffectFields(rule, path, ['sound'], ['sound'], issues); return
+    case 'effect.input': validateEffectFields(rule, path, ['aim', 'movement', 'primary', 'quickbar', 'release'], [], issues); return
+    case 'effect.select_skill': validateEffectFields(rule, path, ['choice_index', 'offer_sequence', 'skill_id'], ['choice_index', 'offer_sequence', 'skill_id'], issues); return
     default:
       issues.push(webLuaDefinitionIssue(
         'E_SCHEMA', path, `unsupported Web Lua rule operation: ${rule.operation}`, { source: rule.source },

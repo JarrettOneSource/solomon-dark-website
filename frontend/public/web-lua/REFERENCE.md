@@ -130,6 +130,7 @@ Lists of effects are accepted wherever one rule is expected, so
 - `level.up`
 - `mod.enemy.damaged`
 - `mod.enemy.died`
+- `player.control`
 - `run.ended`
 - `run.started`
 - `session.started`
@@ -148,6 +149,8 @@ the `action` context field and the framework action family in `action_kind`.
 - `sd.effect.grant(spec)`
 - `sd.effect.state(spec)`
 - `sd.effect.present(spec)`
+- `sd.effect.input(spec)`
+- `sd.effect.select_skill(spec)`
 
 `sd.effect.grant` and `sd.effect.status` accept content keys as strings.
 `sd.effect.present` accepts a sound path.
@@ -189,6 +192,8 @@ the `action` context field and the framework action family in `action_kind`.
 - `sd.intent.grant(spec)`
 - `sd.intent.state(spec)`
 - `sd.intent.present(spec)`
+- `sd.intent.input(spec)`
+- `sd.intent.select_skill(spec)`
 
 ## Scopes
 

@@ -100,8 +100,10 @@ equipment slots, and new player classes are not accepted 1.0 fields.
 | `sd.prefab.minimap` | Complete | Party, visible-hostile and powerup layers |
 | `sd.prefab.portal` | Complete | Boneyard Monument to declared party scene |
 
-`sd.intent.*` mirrors the seven effect operations for advanced reducers:
-`damage`, `resource`, `status`, `spawn`, `grant`, `state`, and `present`.
+`sd.intent.*` mirrors the effect operations for advanced reducers:
+`damage`, `resource`, `status`, `spawn`, `grant`, `state`, `present`, `input`,
+and `select_skill`. Player-control intents act only on the event participant
+and retain normal input and skill-offer validation.
 There is no accepted-but-unobserved generic `emit` operation and no low-level
 transition intent; scene transitions use the scene/portal module.
 
@@ -110,6 +112,7 @@ transition intent; scene transitions use the scene/portal module.
 | Surface | Status | Evidence |
 | --- | --- | --- |
 | `sd.advanced.reducer` | Complete | Immutable input, typed next state/intents, named RNG, atomic commit, budgets and three-failure circuit breaker |
+| `player.control`, `input`, `select_skill` | Complete | Connected-player takeover, 10 Hz bounded observations, normal casting/movement, skill barriers, expiring input and human release; see [Lua player control](lua-player-control.md) |
 | schema constructors | Complete | Boolean, integer, number, string, enum, array and object validation/defaults |
 | migrations | Complete | Real Gravity Lesson schema-1 state migrates through its package callback |
 | `entity` | Complete | Grave Keeper phase reducer |

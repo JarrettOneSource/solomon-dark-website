@@ -1245,7 +1245,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type', 'input', 'sequence', 'targetTick'])
     return {
       type: 'client-input',
-      input: playerCharacterInput(value.input, 'input'),
+      input: decodePlayerCharacterInput(value.input, 'input'),
       sequence: nonnegativeInteger(value.sequence, 'sequence'),
       targetTick: nonnegativeInteger(value.targetTick, 'targetTick'),
     }
@@ -2551,7 +2551,7 @@ function gitRevision(value: unknown, field: string): string {
   return result
 }
 
-function playerCharacterInput(value: unknown, field: string): PlayerCharacterInput {
+export function decodePlayerCharacterInput(value: unknown, field: string): PlayerCharacterInput {
   const source = record(value, field)
   onlyKeys(source, field, ['aim', 'cast', 'movement', 'viewportHeight', 'viewportWidth'])
   const cast = record(source.cast, `${field}.cast`)

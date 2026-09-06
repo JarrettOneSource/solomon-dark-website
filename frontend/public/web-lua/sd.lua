@@ -1,7 +1,7 @@
 ---@meta
 
 ---@alias SdDuration integer|string
----@alias SdEventName "action.content.cast"|"action.content.pickup"|"action.content.use"|"action.portal.enter"|"action.scene.room"|"action.shop.purchase"|"action.ui.action"|"enemy.death"|"enemy.spawned"|"gold.changed"|"level.up"|"mod.enemy.damaged"|"mod.enemy.died"|"run.ended"|"run.started"|"session.started"|"wave.completed"|"wave.started"
+---@alias SdEventName "action.content.cast"|"action.content.pickup"|"action.content.use"|"action.portal.enter"|"action.scene.room"|"action.shop.purchase"|"action.ui.action"|"enemy.death"|"enemy.spawned"|"gold.changed"|"level.up"|"mod.enemy.damaged"|"mod.enemy.died"|"player.control"|"run.ended"|"run.started"|"session.started"|"wave.completed"|"wave.started"
 ---@alias SdScope "entity"|"participant-profile"|"participant-run"|"party-run"|"scene"|"session"
 ---@alias SdRule table
 ---@alias SdIntentValue table
@@ -271,6 +271,8 @@
 ---@field grant fun(spec: table): SdRule
 ---@field state fun(spec: table): SdRule
 ---@field present fun(spec: table): SdRule
+---@field input fun(spec: table): SdRule
+---@field select_skill fun(spec: table): SdRule
 
 ---@class SdIntent
 ---@field damage fun(spec: table): SdIntentValue
@@ -280,6 +282,8 @@
 ---@field grant fun(spec: table): SdIntentValue
 ---@field state fun(spec: table): SdIntentValue
 ---@field present fun(spec: table): SdIntentValue
+---@field input fun(spec: table): SdIntentValue
+---@field select_skill fun(spec: table): SdIntentValue
 
 ---@class SdPrefab
 ---@field projectile fun(spec: table): SdRule

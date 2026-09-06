@@ -27,7 +27,7 @@ const DIRECTIONS = Object.freeze([
   { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 },
 ])
 
-export class MlBotEntranceNavigator {
+export class BoneyardEntranceNavigator {
   private plannedAtTick = Number.NEGATIVE_INFINITY
   private route: readonly BoneyardPoint[] = []
   private routeTargetKey: string | null = null
@@ -43,7 +43,7 @@ export class MlBotEntranceNavigator {
     }
     if (state.world.encounter.phase !== 'digging') return createIdlePlayerCharacterInput()
     const player = gameSimulationPlayerRecords(state)[playerId]
-    if (!player) throw new Error(`ML bot entrance navigation has no player ${playerId}`)
+    if (!player) throw new Error(`Boneyard entrance navigation has no player ${playerId}`)
     const bounds = state.world.arenaTransition?.fullBounds ?? state.world.bounds
     const gate = entryGate(state)
     if (gate) {

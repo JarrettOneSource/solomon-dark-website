@@ -57,6 +57,7 @@ export const WEB_LUA_RULE_EVENT_NAMES = [
   'level.up',
   'mod.enemy.damaged',
   'mod.enemy.died',
+  'player.control',
   'run.ended',
   'run.started',
   'session.started',

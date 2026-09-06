@@ -2,6 +2,7 @@ import {
   damageBoneyardEnemy,
 } from '../core-server/boneyard-enemy-store.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import {
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
@@ -93,6 +94,7 @@ import type {
 } from '../protocol/game-protocol.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 import type { WebLuaDerivedEvent } from './lua/web-lua-game-api.ts'
+import { ModPlayerControl, selectModPlayerSkill, usesPlayerControlRule } from './mod-player-control.ts'
 import {
   decodePreparedModSaveState,
   encodePreparedModSaveState,
@@ -138,6 +140,8 @@ export interface PreparedModHost {
   readonly extensions: GameSimulationExtensions
   activeScene(ownerId: string): ActiveModScene | null
   activateBoneyard(contentId: string | null, restoreExisting?: boolean): void
+  /** Replaces connected participants' inputs; true means the level-up barrier ended. */
+  applyPlayerControls(inputs: Record<string, PlayerCharacterInput>, nowMs: number): boolean
   bindModQuickbar(playerId: string, slot: number, contentId: string | null): void
   checkpoint(): PreparedModHostCheckpoint
   cast(input: Readonly<{
@@ -224,6 +228,11 @@ export async function prepareModHost(options: Readonly<{
   const spells = new ModSpellEngine(content, GAME_TICK_RATE)
   const spellEffects = new ModSpellEffectEngine(GAME_TICK_RATE)
   const statuses = new ModStatusEngine(content, GAME_TICK_RATE)
+  const playerControls = new ModPlayerControl()
+  const hasPlayerControls = options.content.compiledMods.some(mod => (
+    mod.reducers.some(reducer => reducer.on.includes('player.control'))
+    || mod.rules.some(usesPlayerControlRule)
+  ))
   const enemySpawns: BoneyardEnemySpawnIntent[] = []
   const presentation: PreparedModPresentationIntent[] = []
   const reportedEnemyHealth = new Map<number, number>()
@@ -238,6 +247,7 @@ export async function prepareModHost(options: Readonly<{
     content,
     enemies,
     enemySpawns,
+    playerControls,
     powerups,
     presentation,
     resolveBoast,
@@ -456,12 +466,36 @@ export async function prepareModHost(options: Readonly<{
         throw error
       }
     },
+    applyPlayerControls(inputs, nowMs) {
+      requireOpen()
+      if (!hasPlayerControls) return false
+      const source = options.state.read()
+      const hadBarrier = source.levelUpBarrier !== null
+      for (const playerId of playerControls.beginFrame(source, inputs, nowMs)) {
+        const current = options.state.read()
+        const result = report(session.step({
+          events: [{
+            context: { event: 'player.control', participant_id: playerId },
+            event: 'player.control',
+            payload: playerControls.observe(current, playerId),
+            scope: { id: playerId + ':' + current.run.runId, kind: 'participant-run' },
+          }],
+          tick: current.tick,
+        }))
+        if (!result.accepted || result.errors.length > 0 || result.budgetExceeded) {
+          playerControls.release(playerId)
+        }
+      }
+      playerControls.apply(inputs)
+      return hadBarrier && options.state.read().levelUpBarrier === null
+    },
     close() {
       if (closed) return
       closed = true
       enemySpawns.length = 0
       presentation.length = 0
       reportedEnemyHealth.clear()
+      playerControls.clear()
       activeBoneyardContentId = null
       session.close()
     },
@@ -664,6 +698,7 @@ export async function prepareModHost(options: Readonly<{
         statuses.restore(checkpoint.statuses)
         session.restore(checkpoint.session)
         reportedEnemyHealth.clear()
+        playerControls.clear()
       } catch (error) {
         enemies.restore(previous.enemies)
         powerups.restore(previous.powerups)
@@ -1138,6 +1173,7 @@ function createHostIntentAdapter(options: Readonly<{
   content: PreparedModContentCatalog
   enemies: ModEnemyEngine
   enemySpawns: BoneyardEnemySpawnIntent[]
+  playerControls: ModPlayerControl
   powerups: ModPowerupEngine
   presentation: PreparedModPresentationIntent[]
   resolveBoast: BoastResolver
@@ -1157,11 +1193,20 @@ function createHostIntentAdapter(options: Readonly<{
       const sceneCheckpoint = options.scenes.checkpoint()
       const semanticStateCheckpoint = options.semanticState.checkpoint()
       const spellEffectCheckpoint = options.spellEffects.checkpoint()
+      const controlCheckpoint = options.playerControls.checkpoint()
       let candidate = source
       const spawns: BoneyardEnemySpawnIntent[] = []
       const projected: PreparedModPresentationIntent[] = []
       try {
         for (const intent of intents) {
+          if (intent.kind === 'input') {
+            options.playerControls.accept(candidate, intent, context)
+            continue
+          }
+          if (intent.kind === 'select_skill') {
+            candidate = selectModPlayerSkill(candidate, intent.fields, context)
+            continue
+          }
           const result = applyIntent(
             candidate,
             intent,
@@ -1186,6 +1231,7 @@ function createHostIntentAdapter(options: Readonly<{
         options.scenes.restore(sceneCheckpoint)
         options.semanticState.restore(semanticStateCheckpoint)
         options.spellEffects.restore(spellEffectCheckpoint)
+        options.playerControls.restore(controlCheckpoint)
         throw error
       }
       let committed = false
@@ -1207,6 +1253,7 @@ function createHostIntentAdapter(options: Readonly<{
           options.scenes.restore(sceneCheckpoint)
           options.semanticState.restore(semanticStateCheckpoint)
           options.spellEffects.restore(spellEffectCheckpoint)
+          options.playerControls.restore(controlCheckpoint)
           if (!committed) return
           options.state.write(source)
           options.enemySpawns.splice(Math.max(0, options.enemySpawns.length - spawns.length), spawns.length)

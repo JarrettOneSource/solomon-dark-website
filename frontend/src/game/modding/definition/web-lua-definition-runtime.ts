@@ -667,6 +667,9 @@ export class WebLuaDefinitionRuntime {
     if (unknownEvent) {
       throw new Error(`unknown advanced reducer event: ${unknownEvent}${didYouMean(unknownEvent, WEB_LUA_RULE_EVENT_NAMES)}`)
     }
+    if (on.includes('player.control') && scope !== 'participant-run') {
+      throw new Error('player.control reducers require participant-run scope')
+    }
     if (!Number.isSafeInteger(source.schema_version) || Number(source.schema_version) < 1) {
       throw new Error('advanced reducer schema_version must be a positive safe integer')
     }

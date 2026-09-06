@@ -15,6 +15,8 @@ export const WEB_LUA_EFFECT_NAMES = Object.freeze([
   'grant',
   'state',
   'present',
+  'input',
+  'select_skill',
 ] as const)
 
 export const WEB_LUA_PREFAB_NAMES = Object.freeze([

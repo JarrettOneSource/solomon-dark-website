@@ -3746,6 +3746,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             if (!run) continue
             if (rendererWaitingPartyIds.has(partyId)) continue
             if (run.state.run.runId && scope.runtime.activeScene(run.state.run.runId)) continue
+            if (sharedGameplayPauses.has(partyId) || sharedGameplayResumeGraces.has(partyId)
+              || startingPartyIds.has(partyId)) continue
+            const controlRevision = scope.runtime.projectionRevision()
+            const controlReleasedBarrier = scope.runtime.applyPlayerControls(inputs, now)
+            const controlViewer = run.state.playerEntities.identities[0]?.playerId
+            if (controlViewer && scope.runtime.projectionRevision() !== controlRevision) {
+              broadcastPreparedModProjection(controlViewer, scope.runtime)
+            }
+            if (controlReleasedBarrier && controlViewer) {
+              stopWorldClientInputs(controlViewer)
+              maybeStartGameplayResumeGrace(controlViewer)
+              broadcastSnapshot()
+              continue
+            }
             if (scope.runtime.tick(run.state.tick + 1)) {
               const viewer = run.state.playerEntities.identities[0]?.playerId
               if (viewer) broadcastPreparedModProjection(viewer, scope.runtime)
@@ -3900,6 +3914,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const stateBeforeLua = state
         let enemySpawnIntents = [] as import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
         const runtimes = activePrivateLuaRuntimes()
+        const controlRevision = privateModHost?.projectionRevision()
+        const controlReleasedBarrier = privateModHost?.applyPlayerControls(inputs, now) ?? false
+        const controlViewer = state.playerEntities.identities[0]?.playerId
+        if (privateModHost && controlViewer && privateModHost.projectionRevision() !== controlRevision) {
+          broadcastPreparedModProjection(controlViewer, privateModHost)
+        }
+        if (controlReleasedBarrier && controlViewer) {
+          stopWorldClientInputs(controlViewer)
+          maybeStartGameplayResumeGrace(controlViewer)
+          broadcastSnapshot()
+          resetNextTickDeadline()
+          break
+        }
         if (privateModHost?.tick(nextTick)) {
           const viewer = state.playerEntities.identities[0]?.playerId
           if (viewer) broadcastPreparedModProjection(viewer, privateModHost)

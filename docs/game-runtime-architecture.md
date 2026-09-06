@@ -1844,6 +1844,17 @@ southern-bank children, and the Astronomer ensemble without errors.
 
 ## Web Lua extension boundary
 
+Prepared mods can control an existing connected Boneyard participant through
+the `player.control` event. The prepared mod host samples bounded observations
+at 10 Hz, runs the existing Lua reducer transaction, and applies validated input
+before the ordinary simulation step. Input leases last 250 ms; a release,
+disconnect, changed run, or closed mod removes them. The browser remains the
+human connection, viewport, renderer, and save owner. Offered skills use the
+normal progression validator and resume barrier. The shared Boneyard entrance
+navigator supplies the initial collision-aware approach to both Lua and ML
+controllers. This needs no new gameplay wire message or browser Lua VM; the
+existing mod UI action toggles control. [Contract](lua-player-control.md).
+
 Lua is an authority extension, not another world model. The portable Node game
 host owns one lazily initialized Lua 5.4 VM for the browser developer console
 and one VM for each active mod in a private session or launched shared-Hub
