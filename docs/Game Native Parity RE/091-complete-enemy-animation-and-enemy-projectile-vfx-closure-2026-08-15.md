@@ -1589,7 +1589,7 @@ catalog assertions execute every phase, its complete repeat groups, ordered
 flags, pause/sleep/wait transitions, and single wave advance: 335 native births.
 The actor, Silk, force, Webbed, Cocoon, corpse, save, and presentation suites
 cover their distinct clocks, data rows, geometry, damage branches, and teardown.
-The rebased Boneyard run passes 1,978 tests, plus its 365-test prerequisite run.
+The integrated Boneyard run passes 1,998 tests, plus its 365-test prerequisite run.
 The focused light-source/capture suites pass 173 tests; world and Cocoon
 integration pass 40 after giving the world fixtures their real light owners.
 
@@ -1617,7 +1617,7 @@ the departed target, and leaves no owned children after destruction.
 
 The complete implementation exceeded the existing game-entry bundle budget.
 Dark Cloud now uses the same on-demand scene boundary as the other optional
-scenes, preserving all of its current controls. The production entry is 131,310
+scenes, preserving all of its current controls. The final production entry is 131,709
 gzip bytes against the unchanged 134,144-byte ceiling. The existing built
 Dark Cloud browser suite passes desktop, portrait, landscape, and small-phone
 scenarios, including its deliberate service-failure responses.
@@ -1674,4 +1674,39 @@ nonempty projectile knockbacks and target bindings while initializing only
 future Spider wave phases; it does not replay completed phases. Type checking
 and 431 focused Mac tests pass across actors, projectiles, spell combat,
 restraints, saves, protocol, and presentation. The complete combined-candidate
-validation and browser checks remain pending.
+validation and browser checks pass as recorded below.
+
+### Final integrated canonical receipt — 2026-09-06
+
+Commit `478a57b5365be6d35df58094d30533d6c4357ae1`, based on main `ce13acd0`,
+passed `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini. The
+gate finished at 05:29 UTC with pinned Node 22.17.0, npm 10.9.2, and .NET
+10.0.302. All 352 changed files from the projectile integration base matched
+the local candidate byte for byte, and the Mac worktree remained clean.
+
+The gate passed 23 Website/backend contracts, 3,034 reported Node test
+executions including the renderer checks, backend/frontend/game-host builds,
+formatting, lint, generated contracts, bundle budget, and production media
+policy. The production entry is 471,202 raw bytes and 131,709 gzip bytes,
+within the unchanged 524,288-byte and 134,144-byte limits.
+
+The configured eight-file renderer scope has 100% statement, branch, function,
+and line coverage. All 544 mutations are resolved: 385 killed, 129 compile
+errors, 29 documented equivalents ignored, and one timeout. There are no
+survivors or unresolved statuses. Timeout 226 changes the bounded vertex
+loop in `native-material-batch.ts:122` from `vertex += 1` to `vertex -= 1`,
+making it nonterminating. No quality configuration or threshold changed.
+
+Mac Chrome passed the built `/game` Spider journey on this candidate: normal
+entry, the generated wave-7 cohort, all three web severities, pause, same-owner
+Last Game restore, real primary-cast release, corpse/decal handoff, and actual
+audio playback. Page, console, wire, and HTTP error checks passed, and the
+owned browser and servers exited normally. The eight compact-mask cases also
+passed with the pixel and teardown results above.
+
+The shared renderer checks passed all eight existing enemy families, eight
+projectile variants, nine projectile effect cases, four building variants,
+and both shadow directions plus the generated arena. Their snapshot fixtures
+now supply the required empty Spider cohorts and restraint map. This receipt
+adds documentation only; the validated runtime, tests, browser probes, and
+quality configuration are unchanged.
