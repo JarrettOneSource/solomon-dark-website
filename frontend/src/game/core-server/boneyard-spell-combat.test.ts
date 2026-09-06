@@ -30,6 +30,8 @@ import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
 import {
+  createNativeFirePatch,
+  stepNativeFirePatch,
   spawnNativeFireGoodImp,
   stepNativeFireGoodImp,
   type NativeFireActorContact,
@@ -43,13 +45,12 @@ import {
   BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
   boneyardEnemyProjectileEffectSample,
 } from '../protocol/boneyard-enemy-projectile-effect-replication.ts'
-import {
-  createBoneyardEnemyStore,
-  stepBoneyardEnemyStore,
-  type BoneyardEnemyProjectile,
-  type BoneyardEnemyStore,
-  type BoneyardMaggotActor,
-} from './boneyard-enemy-store.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import type {
+  BoneyardEnemyProjectile,
+  BoneyardEnemyStore,
+  BoneyardMaggotActor,
+} from './enemies/model.ts'
 import {
   nativeWeldFrostRadialRadius,
   nativeWaterPushTargetFactor,
@@ -652,6 +653,11 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
       maximumHealth: 100,
     })),
   }
+  const fireContact = stepNativeFirePatch(createNativeFirePatch({
+    burnDamage: 9, damage: 40, id: 7, nativeType: 'goodguy', ownerId: 'wizard',
+    position: { x: 0, y: 0 }, worldKey: WORLD_KEY,
+  }, 0, 1), 3).contact
+  assert.ok(fireContact)
   const result = resolveBoneyardSpellCombat(
     enemies,
     spellState({}),
@@ -665,16 +671,7 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
     undefined,
     undefined,
     [
-      {
-        amount: 0.6,
-        burnDamage: 9,
-        kind: 'fire-patch',
-        ownerId: 'wizard',
-        position: { x: 0, y: 0 },
-        radius: 32,
-        spellId: 7,
-        worldKey: WORLD_KEY,
-      },
+      fireContact,
       {
         amount: 12,
         kind: 'fire-good-imp',
@@ -689,14 +686,14 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
   assert.deepEqual(
     result.hits.map(({ actorId, amount, spellKind }) => ({ actorId, amount, spellKind })),
     [
-      { actorId: 1, amount: 0.6, spellKind: 'fire-patch' },
-      { actorId: 2, amount: 0.6, spellKind: 'fire-patch' },
+      { actorId: 1, amount: 1.2, spellKind: 'fire-patch' },
+      { actorId: 2, amount: 1.2, spellKind: 'fire-patch' },
       { actorId: 2, amount: 12, spellKind: 'fire-good-imp' },
     ],
   )
   assert.deepEqual(
     result.enemies.actors.map(({ currentHealth }) => currentHealth),
-    [99.4, 87.4, 100],
+    [98.8, 86.8, 100],
   )
   assert.deepEqual(result.burns, [
     { damage: 9, ownerId: 'wizard', targetId: 1 },
@@ -1362,10 +1359,10 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
   }
   const initialRng = createNativeRng(23)
   const rotation = drawNativeFloat(initialRng, 360)
-  const angularMagnitude = drawNativeFloat(rotation.state, 1)
+  const angularMagnitude = drawNativeFloat(rotation.state, 10)
   const angularVelocity = drawNativeSign(
     angularMagnitude.state,
-    Math.fround(1 + angularMagnitude.value),
+    Math.fround(10 + angularMagnitude.value),
   )
   let retainedEnemies = enemies
   let retainedRng = initialRng
@@ -1410,7 +1407,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
   assert.deepEqual(result.rng, angularVelocity.state)
   assert.deepEqual(result.enemies.projectileEffects, [{
     ageTicks: 0,
-    alpha: 6,
+    alpha: 4,
     alphaLossPerTick: Math.fround(0.1),
     angularVelocityDeg: angularVelocity.value,
     atlas: 'BadGuys',
@@ -1420,7 +1417,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     kind: 'arrow-tumble',
     lastStepTick: 32,
     lightRegistration: null,
-    lifetimeTicks: 60,
+    lifetimeTicks: 41,
     ownerActorId: 3,
     painterRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
     ownerProjectileId: 7,
@@ -1435,7 +1432,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
 
   const initialEffect = projectBoneyardEnemyProjectileEffects(result.enemies)[0]!
   assert.equal(initialEffect.kind, 'arrow-tumble')
-  assert.equal(initialEffect.alpha, 6)
+  assert.equal(initialEffect.alpha, 4)
   assert.equal(
     BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION.sampleIsValid(
       boneyardEnemyProjectileEffectSample(initialEffect),
@@ -1444,7 +1441,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
   )
 
   let advancedStore = stepBoneyardEnemyStore(result.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: (request) => request.requestedPosition,
     resolveSpawnIntents: () => [],
@@ -1452,14 +1449,14 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
   }).store
   const advanced = advancedStore.projectileEffects[0]!
   assert.equal(advanced.ageTicks, 1)
-  assert.equal(advanced.alpha, Math.fround(6 - Math.fround(0.1)))
+  assert.equal(advanced.alpha, Math.fround(4 - Math.fround(0.1)))
   assert.deepEqual(advanced.position, { x: 51, y: 0 })
   assert.equal(advanced.rotationDeg, Math.fround(rotation.value + angularVelocity.value))
   assert.deepEqual(advanced.velocity, { x: Math.fround(0.98), y: 0 })
 
   for (let tick = 34; tick <= 92; tick += 1) {
     advancedStore = stepBoneyardEnemyStore(advancedStore, {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players: {},
       resolveMovement: (request) => request.requestedPosition,
       resolveSpawnIntents: () => [],
@@ -2616,7 +2613,7 @@ function spawnEnemies(
   }>[],
 ): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('spell-combat'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: (request) => request.requestedPosition,
     resolveSpawnIntents: () => specs.map(({ position, token }, index): BoneyardEnemySpawnIntent => ({
@@ -2947,6 +2944,7 @@ function enemyArrow(options: {
     homing: false,
     id: options.id,
     kind: 'arrow',
+    velocity: { x: 5, y: 0 },
     lastStepTick: 0,
     lightRegistration: null,
     lifetimeTicks: 300,
@@ -2964,6 +2962,7 @@ function enemyArrow(options: {
     settledTicksRemaining: 0,
     spawnTick: 0,
     targetPlayerId: null,
+    turnSpeed: 0,
     verticalOffset: 0,
     verticalVelocity: 0,
     visualPhaseDeg: 0,

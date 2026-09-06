@@ -1,3 +1,4 @@
+import { roundHalfToEven } from './native-rounding.ts'
 import { actorHeadingFromVector } from './actor-heading.ts'
 import type { BoneyardPoint } from './boneyard.ts'
 import {
@@ -34,8 +35,9 @@ export const NATIVE_ARCHER_MULTI_ARROW_THRESHOLDS = Object.freeze([
 ] as const)
 
 export const NATIVE_ARROW_FORWARD_ORIGIN = 30
-export const NATIVE_ARROW_SPEED_BASE = 5.7
-export const NATIVE_ARROW_SPEED_RANDOM_MAXIMUM = Math.fround(0.6)
+export const NATIVE_ARROW_ENHANCED_OPACITY = 15
+export const NATIVE_ARROW_SPEED_BASE = 5.699999809265137
+export const NATIVE_ARROW_SPEED_RANDOM_MAXIMUM = 0.5999999046325684
 export const NATIVE_ARROW_LIFETIME_BASE = 100
 export const NATIVE_ARROW_LIFETIME_RANDOM_MAXIMUM = 100
 
@@ -220,7 +222,7 @@ export function buildNativeArcherVolley(
       NATIVE_ARROW_LIFETIME_RANDOM_MAXIMUM,
     )
     privateRngState = lifetimeDraw.state
-    const lifetimeTicks = roundToNearestEven(
+    const lifetimeTicks = roundHalfToEven(
       (
         sourceTargetDistance
         + NATIVE_ARROW_LIFETIME_BASE
@@ -253,6 +255,11 @@ export function buildNativeArcherVolley(
   })
 }
 
+export function nativeEnemyProjectileVelocity(headingDeg: number, speed: number): Readonly<BoneyardPoint> {
+  const direction = headingVector(headingDeg)
+  return { x: Math.fround(direction.x * speed), y: Math.fround(direction.y * speed) }
+}
+
 function headingVector(headingDeg: number): BoneyardPoint {
   const radians = headingDeg * Math.PI / 180
   return {
@@ -269,13 +276,6 @@ function positiveDegrees(value: number): number {
   return Math.fround(((value % 360) + 360) % 360)
 }
 
-function roundToNearestEven(value: number): number {
-  const floor = Math.floor(value)
-  const fraction = value - floor
-  if (fraction < 0.5) return floor
-  if (fraction > 0.5) return floor + 1
-  return floor % 2 === 0 ? floor : floor + 1
-}
 
 function validateVolleyRequest(request: NativeArcherVolleyRequest): void {
   if (

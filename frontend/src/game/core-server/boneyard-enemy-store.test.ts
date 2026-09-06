@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
-import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { nativeDemonArticulationRoot } from '../core-kernels/boneyard-demon-articulation.ts'
 import {
@@ -23,6 +22,9 @@ import {
 } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
   createNativeRng,
+  advanceNativeRngWords,
+  drawNativeFloat,
+  drawNativeSign,
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
@@ -56,39 +58,47 @@ import {
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
-  BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
-  NATIVE_ARCHER_ACTION_PROGRAM,
-  NATIVE_DEMON_BOMB_ACTION_PROGRAM,
-  NATIVE_MAGE_ACTION_PROGRAMS,
-  NATIVE_IMP_CONSTRUCTION_MAXIMUM,
-  NATIVE_IMP_CONTACT_BASE_RADIUS,
-  NATIVE_IMP_CONTACT_RADIUS_SCALE,
-  NATIVE_IMP_SPLIT_CHILD_COUNT,
-  NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
-  NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
-  NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
-  NATIVE_SKELETON_ACTION_PROGRAMS,
-  NATIVE_SKELETON_CLAW_MARKERS,
-  NATIVE_SKELETON_WEAPON_MARKERS,
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
   boneyardEnemyLiveCount,
-  applyBoneyardStaffDisable,
   createBoneyardEnemyStore,
+  positionBoneyardEnemy,
+  stepBoneyardEnemyStore,
+} from './boneyard-enemy-store.ts'
+import {
+  applyBoneyardStaffDisable,
   damageBoneyardEnemy,
+  setBoneyardEnemyHurricaneContactCooldown,
+} from './enemies/damage.ts'
+import {
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
-  nativeSecondaryActorSpeedScale,
-  positionBoneyardEnemy,
-  setBoneyardEnemyHurricaneContactCooldown,
-  stepBoneyardEnemyStore,
+} from './enemies/events.ts'
+import {
   type BoneyardEnemyActor,
   type BoneyardEnemyMovementRequest,
   type BoneyardEnemySpellSegmentRequest,
   type BoneyardEnemyStore,
   type BoneyardEnemyStoreStepResult,
   type BoneyardEnemyTargets,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
+import { nativeSecondaryActorSpeedScale } from './enemies/movement.ts'
+import {
+  BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
+  NATIVE_ARCHER_ACTION_PROGRAM,
+  NATIVE_DEMON_BOMB_ACTION_PROGRAM,
+  NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
+  NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
+  NATIVE_IMP_CONSTRUCTION_MAXIMUM,
+  NATIVE_IMP_CONTACT_BASE_RADIUS,
+  NATIVE_IMP_CONTACT_RADIUS_SCALE,
+  NATIVE_IMP_SPLIT_CHILD_COUNT,
+  NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
+  NATIVE_MAGE_ACTION_PROGRAMS,
+  NATIVE_SKELETON_ACTION_PROGRAMS,
+  NATIVE_SKELETON_CLAW_MARKERS,
+  NATIVE_SKELETON_WEAPON_MARKERS,
+} from './enemies/programs.ts'
 
 const TOKENS = Object.keys(BONEYARD_WAVE_ENEMY_TYPES).filter((token) => (
   token !== 'PORTAL'
@@ -104,12 +114,12 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
   },
 }
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
-const NO_WORLD_CONTACT = () => null
+const NO_WORLD_CONTACT = () => false
 const CLEAR_SPELL_SEGMENT = (request: BoneyardEnemySpellSegmentRequest) => request.end
 
 test('native cell binding preserves same-cell order and appends cross-cell rebinds at the tail', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('cell-order', 10), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: {},
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [
@@ -145,7 +155,7 @@ test('native cell binding preserves same-cell order and appends cross-cell rebin
 test('a UIDGroup placement cache reuses only its first final root', () => {
   let placementCalls = 0
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('placement-group'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [
@@ -173,7 +183,7 @@ test('a UIDGroup placement cache reuses only its first final root', () => {
 
 test('a paused hostile tick materializes authored spawns without advancing existing enemy state', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('tutorial-pause'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [intent('SKELETON', 1, { x: 0, y: 0 })],
@@ -181,7 +191,7 @@ test('a paused hostile tick materializes authored spawns without advancing exist
   })
   const existing = structuredClone(spawned.store.actors[0])
   const held = stepBoneyardEnemyStore(spawned.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     paused: true,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
@@ -198,7 +208,7 @@ test('a paused hostile tick materializes authored spawns without advancing exist
   assert.deepEqual(held.spawnedActorIds, [2])
 
   const heldAgain = stepBoneyardEnemyStore(held.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     paused: true,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
@@ -208,7 +218,7 @@ test('a paused hostile tick materializes authored spawns without advancing exist
   assert.deepEqual(heldAgain.store, { ...held.store, lastStepTick: 100 })
 
   const released = stepBoneyardEnemyStore(heldAgain.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
@@ -378,7 +388,7 @@ test('Wizard ouch consumes delay before cue and scales the absolute deadline', (
 test('materialization gives all eight families stable actor and event identities', () => {
   const lootSeedWrites: number[] = []
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('families'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     rollLootSeed: () => {
       const seed = 1_000 + lootSeedWrites.length
@@ -451,7 +461,7 @@ test('Skeleton, Archer, and Mage schedulers replace retained seeds in native ord
     const players = { player: livingTarget(distance, 0) }
     let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`loot-seed-${token}`), {
       clipSpellSegment: CLEAR_SPELL_SEGMENT,
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players,
       rollLootSeed,
       resolveMovement: DIRECT_MOVEMENT,
@@ -461,7 +471,7 @@ test('Skeleton, Archer, and Mage schedulers replace retained seeds in native ord
     assert.equal(result.store.actors[0]?.lootSeed, 100)
     result = stepBoneyardEnemyStore(result.store, {
       clipSpellSegment: CLEAR_SPELL_SEGMENT,
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players,
       rollLootSeed,
       resolveMovement: DIRECT_MOVEMENT,
@@ -927,7 +937,7 @@ test('target selection is nearest, insertion-stable, cadence-bound, and rejects 
     spectator: { ...livingTarget(3, 0), eligible: false },
   }
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('targets'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: tiedPlayers,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [intent('SKELETON', 1, { x: 0, y: 0 })],
@@ -936,7 +946,7 @@ test('target selection is nearest, insertion-stable, cadence-bound, and rejects 
   assert.equal(result.store.actors[0]!.targetPlayerId, 'zulu')
 
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: {
       ...tiedPlayers,
       alpha: { ...tiedPlayers.alpha!, alive: false },
@@ -948,7 +958,7 @@ test('target selection is nearest, insertion-stable, cadence-bound, and rejects 
   assert.equal(result.store.actors[0]!.targetPlayerId, 'zulu')
 
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: {
       alpha: livingTarget(100, 0),
       nearer: livingTarget(5, 0),
@@ -1001,7 +1011,7 @@ test('two-tick movement sends the recovered delta and radius through collision a
   let result = spawnOne('movement', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
   const actor = result.store.actors[0]!
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: (request) => {
       requests.push(request)
@@ -1012,7 +1022,7 @@ test('two-tick movement sends the recovered delta and radius through collision a
   })
   assert.equal(requests.length, 0)
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: (request) => {
       requests.push(request)
@@ -1075,7 +1085,7 @@ test('blocked requested movement still advances Skeleton limb and upper-body loc
 
   for (let tick = 1; tick <= 180; tick += 1) {
     result = stepBoneyardEnemyStore(result.store, {
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players: FAR_PLAYERS,
       resolveMovement: (request) => {
         movementRequests += 1
@@ -1109,7 +1119,7 @@ test('every mobile survival family enters the shared blocked-goal route owner', 
     const clearances: number[] = []
     const result = stepBoneyardEnemyStore(spawned.store, {
       clipSpellSegment: CLEAR_SPELL_SEGMENT,
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       navigation: {
         findRoute: ({ end, navigationClearance, start }) => {
           clearances.push(navigationClearance)
@@ -1140,7 +1150,7 @@ test('Wraith special flight bypasses inherited route and collision owners', () =
   const spawned = spawnOne('wraith-special-route', 'WRAITH', { x: 0, y: 0 }, players)
   const result = stepBoneyardEnemyStore(spawned.store, {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     navigation: {
       findRoute: () => assert.fail('Wraith special vector does not call NavMesh'),
       isPathClear: () => assert.fail('Wraith special vector does not call route LOS'),
@@ -1160,7 +1170,7 @@ test('stationary Coffin does not invoke its inherited route slot', () => {
   const spawned = spawnOne('stationary-coffin-route', 'COFFIN', { x: 0, y: 0 }, players)
   const result = stepBoneyardEnemyStore(spawned.store, {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     navigation: {
       findRoute: () => assert.fail('Coffin has no live locomotion caller'),
       isPathClear: () => assert.fail('Coffin has no live locomotion caller'),
@@ -1943,48 +1953,122 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
   })
 })
 
-test('Arrow arc countdown is independent from its settled opacity retirement lane', () => {
-  let result = forcedArcherVolley(
-    'archer-arrow-arc-lifecycle',
-    [],
-    { player: livingTarget(200, 0) },
-  )
-  const born = result.store.projectiles[0]!
-  assert.equal(born.verticalOffset, -25)
-  assert.equal(born.visualScale, 5)
-  assert.equal(born.settledTicksRemaining, born.lifetimeTicks)
+test('Arrow holds level flight until the native countdown and then descends before fading', () => {
+  for (const flags of [[], ['FLAG_FIREARROW'], ['FLAG_POISONARROW']]) {
+    let result = forcedArcherVolley(
+      'archer-arrow-arc-lifecycle',
+      flags,
+      { player: livingTarget(200, 0) },
+    )
+    const born = result.store.projectiles[0]!
+    assert.equal(born.verticalOffset, -25)
+    assert.equal(born.visualScale, 15)
+    assert.equal(born.settledTicksRemaining, born.lifetimeTicks)
 
-  result = step(result.store, 2, {})
-  const airborne = result.store.projectiles[0]!
-  assert.equal(airborne.verticalOffset, -24.25)
-  const radians = born.headingDeg * Math.PI / 180
-  assert.equal(airborne.visualPhaseDeg, Math.fround(actorHeadingFromVector(
-    Math.sin(radians) * born.minimumSpeed,
-    -Math.cos(radians) * born.minimumSpeed
-      + (-25 / airborne.verticalOffset) * born.minimumSpeed * 0.25,
-  )))
+    result = step({ ...result.store, actors: [] }, born.spawnTick + 1, {})
+    const level = result.store.projectiles[0]!
+    assert.equal(level.verticalOffset, -25)
+    assert.equal(level.speed, born.speed)
+    assert.equal(level.visualPhaseDeg, born.headingDeg)
 
-  result = step(result.store, 31, {})
-  const landed = result.store.projectiles[0]!
-  assert.equal(landed.ageTicks, 30)
-  assert.equal(landed.verticalOffset, -2.5)
-  assert.ok(landed.speed < born.speed)
-  assert.equal(landed.visualScale, 5)
+    result = step(result.store, born.spawnTick + born.lifetimeTicks - 1, {})
+    const lastLevel = result.store.projectiles[0]!
+    assert.equal(lastLevel.settledTicksRemaining, 1)
+    assert.equal(lastLevel.verticalOffset, -25)
+    assert.equal(lastLevel.speed, born.speed)
 
-  result = step(result.store, 32, {})
-  const fading = result.store.projectiles[0]!
-  assert.equal(fading.verticalOffset, 0)
-  assert.equal(fading.speed, 0)
-  assert.ok(fading.visualScale < 5)
+    result = step(result.store, born.spawnTick + born.lifetimeTicks, {})
+    const descending = result.store.projectiles[0]!
+    assert.equal(descending.verticalOffset, -24.25)
+    assert.ok(descending.speed < born.speed)
+    assert.ok(descending.visualPhaseDeg > 90 && descending.visualPhaseDeg < 110)
 
-  result = step(result.store, 80, {})
-  assert.equal(result.store.projectiles.length, 1)
-  assert.ok(result.store.projectiles[0]!.ageTicks > born.lifetimeTicks)
-  result = step(result.store, 140, {})
-  assert.equal(result.store.projectiles.length, 0)
+    result = step(result.store, born.spawnTick + born.lifetimeTicks + 29, {})
+    assert.equal(result.store.projectiles[0]!.verticalOffset, -2.5)
+    result = step(result.store, born.spawnTick + born.lifetimeTicks + 30, {})
+    const grounded = result.store.projectiles[0]!
+    assert.equal(grounded.verticalOffset, 0)
+    assert.equal(grounded.speed, 0)
+    assert.ok(grounded.visualScale < born.visualScale)
+
+    result = step(result.store, born.spawnTick + born.lifetimeTicks + 350, {})
+    assert.equal(result.store.projectiles.length, 0)
+  }
 })
 
-test('Fire Arrow impact uses its unsigned half-scale burst and one transient wrapper', () => {
+test('all Archer payloads reach an unobstructed stationary target within native attack range', () => {
+  for (const flags of [[], ['FLAG_FIREARROW'], ['FLAG_POISONARROW']]) {
+    const players = { player: livingTarget(0, -270) }
+    let result = forcedArcherVolley('archer-unobstructed-flight', flags, players)
+    const archer = result.store.actors[0]!
+    assert.equal(archer.brain.family, 'archer')
+    if (archer.brain.family !== 'archer') throw new Error('expected Archer')
+    assert.ok(archer.brain.attackRange > 270)
+    const arrowId = result.store.projectiles[0]!.id
+    let hit = false
+    for (let tick = 2; tick <= 80; tick += 1) {
+      result = step({ ...result.store, actors: [] }, tick, players)
+      if (result.events.some(event => (
+        event.type === 'projectile-impact'
+        && event.projectileId === arrowId
+        && event.targetPlayerId === 'player'
+      ))) hit = true
+    }
+    assert.equal(hit, true, `${flags.join(',') || 'ordinary'} arrow fell short`)
+  }
+})
+
+test('settled arrows are harmless when a player walks over them', () => {
+  const emitted = forcedArcherVolley('grounded-arrow-contact', [], FAR_PLAYERS)
+  const arrow = emitted.store.projectiles[0]!
+  const result = step({
+    ...emitted.store,
+    actors: [],
+    projectiles: [{ ...arrow, speed: 0, verticalOffset: 0, settledTicksRemaining: 0 }],
+  }, 2, { player: livingTarget(arrow.position.x, arrow.position.y) })
+  assert.deepEqual(result.playerDamage, [])
+  assert.equal(result.store.projectiles.length, 1)
+  assert.equal(result.events.some(event => event.type === 'projectile-impact'), false)
+})
+
+test('hostile pause preserves projectile and impact clocks through resume', () => {
+  const arrow = forcedArcherVolley('paused-arrow', [], { player: livingTarget(200, 0) })
+  const fire = forcedMageAttack('paused-fire-impact', ['FLAG_CASTFIRE'])
+  const impact = step({ ...fire.store, actors: [] }, 2, { player: livingTarget(24, 0) })
+  for (const source of [arrow.store, impact.store]) {
+    const held = stepBoneyardEnemyStore({ ...source, actors: [] }, {
+      paused: true, projectileWorldBlocked: NO_WORLD_CONTACT, players: {},
+      resolveMovement: DIRECT_MOVEMENT, resolveSpawnIntents: () => [], tick: 100,
+    })
+    assert.deepEqual(held.store.projectiles.map(row => row.position), source.projectiles.map(row => row.position))
+    assert.deepEqual(held.store.projectileEffects.map(row => row.ageTicks), source.projectileEffects.map(row => row.ageTicks))
+    const resumed = step(held.store, 101, {})
+    assert.deepEqual(resumed.store.projectiles.map(row => row.ageTicks), source.projectiles.map(row => row.ageTicks + 1))
+    assert.deepEqual(resumed.store.projectileEffects.map(row => row.ageTicks), source.projectileEffects.map(row => row.ageTicks + 1))
+  }
+})
+
+test('oblique Arrow descent retains and damps the native float velocity components', () => {
+  for (const [x, y] of [[170, 190], [-200, 95], [190, -120], [-180, -165]]) {
+  const born = forcedArcherVolley('oblique-arrow-velocity', [], { player: livingTarget(x!, y!) })
+  const arrow = born.store.projectiles[0]!
+  assert.ok(arrow.kind === 'arrow')
+  const angle = arrow.headingDeg * Math.PI / 180
+  let velocity = { x: Math.fround(Math.fround(Math.sin(angle)) * arrow.speed),
+    y: Math.fround(Math.fround(-Math.cos(angle)) * arrow.speed) }
+  let position = { ...arrow.position }
+  for (let age = 0; age < 20; age += 1) {
+    position = { x: Math.fround(position.x + velocity.x), y: Math.fround(position.y + velocity.y) }
+    velocity = { x: Math.fround(velocity.x * Math.fround(0.99)), y: Math.fround(velocity.y * Math.fround(0.99)) }
+  }
+  const result = step({ ...born.store, actors: [], projectiles: [{
+    ...arrow, settledTicksRemaining: 1,
+  }] }, 21, {})
+  assert.deepEqual(result.store.projectiles[0]!.position, position)
+  }
+})
+
+test('Fire Arrow impact uses its signed half-scale burst and one transient wrapper', () => {
   const players = { player: livingTarget(200, 0) }
   const spawned = forcedArcherVolley(
     'archer-fire-impact-burst',
@@ -1992,37 +2076,35 @@ test('Fire Arrow impact uses its unsigned half-scale burst and one transient wra
     players,
   )
   const projectile = spawned.store.projectiles[0]!
-  const rotation = nextBoneyardWaveRandom(spawned.store.rngState)
-  const angularMagnitude = nextBoneyardWaveRandom(rotation.state)
-  const angularSign = randomBoneyardWaveInteger(angularMagnitude.state, 2)
-  const scale = nextBoneyardWaveRandom(angularSign.state)
-  const result = stepBoneyardEnemyStore(spawned.store, {
-    firstProjectileWorldContact: () => 1,
+  const rotation = drawNativeFloat(spawned.store.steeringRngState, 360)
+  const angularMagnitude = drawNativeFloat(rotation.state, 1)
+  const angularSign = drawNativeSign(angularMagnitude.state, Math.fround(0.5 + angularMagnitude.value))
+  const scale = drawNativeFloat(angularSign.state, 0.1, true)
+  const result = stepBoneyardEnemyStore({ ...spawned.store, actors: [] }, {
+    projectileWorldBlocked: query => query.kind === 'line',
     players,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
-    tick: 2,
+    tick: 6,
   })
-  const glow = result.store.projectileEffects.find(
-    ({ kind }) => kind === 'fire-burst-glow',
-  )!
-  const frame = result.store.projectileEffects.find(
-    ({ kind }) => kind === 'fire-burst-frame',
-  )!
+  const frame = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')!
+  assert.equal(result.store.projectileEffects.length, 1)
   const radians = projectile.headingDeg * Math.PI / 180
-  assert.deepEqual(frame.position, {
-    x: projectile.position.x + Math.sin(radians) * projectile.speed,
-    y: projectile.position.y - Math.cos(radians) * projectile.speed - 10,
-  })
-  assert.deepEqual(glow.position, frame.position)
-  assert.ok(frame.scale >= 0.5 && frame.scale <= 0.6)
-  assert.equal(glow.scale, frame.scale * 5)
-  assert.deepEqual(glow.lightRegistration, {
+  let expected = { ...projectile.position }
+  for (let age = 0; age < 5; age += 1) expected = {
+    x: Math.fround(expected.x + Math.fround(Math.sin(radians) * projectile.speed)),
+    y: Math.fround(expected.y - Math.fround(Math.cos(radians) * projectile.speed)),
+  }
+  assert.deepEqual(frame.position, { x: expected.x, y: Math.fround(expected.y - 10) })
+  assert.ok(frame.scale >= 0.4 && frame.scale <= 0.6)
+  assert.deepEqual(frame.lightRegistration, {
     managerLane: 'transient',
     registrationOrdinal: projectile.lightRegistration!.registrationOrdinal + 1,
   })
-  assert.equal(frame.lightRegistration, null)
-  assert.equal(result.store.rngState, scale.state)
+  assert.deepEqual(frame.painterRegistration, frame.lightRegistration)
+  assert.deepEqual(result.store.steeringRngState, scale.state)
+  assert.equal(frame.scale, Math.fround(0.5 + scale.value))
+  assert.equal(frame.angularVelocityDeg, angularSign.value)
 })
 
 test('Mage self and ally shields preserve 50/450 strength and 1000/500 cadence', () => {
@@ -2036,7 +2118,7 @@ test('Mage self and ally shields preserve 50/450 strength and 1000/500 cadence',
       ? [shieldFlag, 'FLAG_SHIELDSTRONG', 'FLAG_SHIELDFAST']
       : [shieldFlag]
     let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`shield-${flags.join('-')}`), {
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players: { player: livingTarget(150, 0) },
       resolveMovement: DIRECT_MOVEMENT,
       resolveSpawnIntents: () => [
@@ -2074,7 +2156,7 @@ test('Mage ally shields accept only the three stock runtime recipient types', ()
     ['COFFIN', false],
   ] as const) {
     let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`shield-recipient-${token}`), {
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players: { player: livingTarget(150, 0) },
       resolveMovement: DIRECT_MOVEMENT,
       resolveSpawnIntents: () => [
@@ -2474,7 +2556,7 @@ test('Wraith contact is strict at 40 units and repeated overlap resets flight wi
     },
   }
   inside = stepBoneyardEnemyStore(inside.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: insidePlayers,
     resolveMovement: () => assert.fail('Wraith flight bypasses movement collision'),
     resolveSpawnIntents: () => [],
@@ -2493,7 +2575,7 @@ test('Wraith initial flight uses its native high-speed vector instead of ordinar
   const players = { player: livingTarget(500, 0) }
   let result = spawnOne('wraith-flight-speed', 'WRAITH', { x: 0, y: 0 }, players)
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players,
     resolveMovement: () => assert.fail('Wraith flight bypasses movement collision'),
     resolveSpawnIntents: () => [],
@@ -2758,7 +2840,7 @@ test('Imp post-contact escape releases only when authoritative movement changes 
     const requests: BoneyardEnemyMovementRequest[] = []
     const stepped = stepBoneyardEnemyStore(store, {
       clipSpellSegment: CLEAR_SPELL_SEGMENT,
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players,
       resolveMovement: (request) => {
         requests.push(request)
@@ -2781,6 +2863,45 @@ test('Imp post-contact escape releases only when authoritative movement changes 
   }
 })
 
+test('rotten Zombie pools refresh every overlapping player through the native ellipse and fade', () => {
+  const born = killOneAndStep('native-pool-contact-fade', 'ZOMBIE', ['FLAG_ROTTEN'])
+  const pool = born.store.projectiles[0]!
+  assert.equal(pool.kind, 'poison-pool')
+  const players = {
+    nearX: livingTarget(pool.position.x + 69.9, pool.position.y),
+    nearY: livingTarget(pool.position.x, pool.position.y + 55.9),
+    edgeX: livingTarget(pool.position.x + 70, pool.position.y),
+    edgeY: livingTarget(pool.position.x, pool.position.y + 56),
+  }
+  let result = step({ ...born.store, actors: [] }, 2, players)
+  assert.deepEqual(result.playerDamage.map(damage => damage.playerId), ['nearX', 'nearY'])
+  result = step(result.store, 3, players)
+  assert.deepEqual(result.playerDamage.map(damage => damage.playerId), ['nearX', 'nearY'])
+  result = step(result.store, 3001, {})
+  assert.equal(result.store.projectiles.length, 1)
+  result = step(result.store, 3002, players)
+  assert.deepEqual(result.playerDamage.map(damage => damage.playerId), ['nearX', 'nearY'])
+  result = step(result.store, 3201, {})
+  assert.equal(result.store.projectiles.length, 0)
+})
+
+test('poison-pool bubbles grow, hold, and retire independently of the pool', () => {
+  let result = killOneAndStep('native-poison-bubbles', 'ZOMBIE', ['FLAG_ROTTEN'])
+  for (let tick = 2; tick <= 250 && !result.store.projectileEffects.some(effect => effect.kind === 'poison-bubble'); tick += 1) {
+    result = step(result.store, tick, {})
+  }
+  const bubble = result.store.projectileEffects.find(effect => effect.kind === 'poison-bubble')
+  assert.ok(bubble, 'pool must emit the native bubble child')
+  assert.equal(bubble.entry, 57)
+  assert.equal(bubble.alpha, 0.75)
+  assert.equal(bubble.scale, 0)
+  const grown = step({ ...result.store, actors: [], projectiles: [] }, bubble.spawnTick + 12, {}).store
+    .projectileEffects.find(effect => effect.id === bubble.id)
+  assert.ok(grown && grown.scale >= 0.5 && grown.scale <= 1.25)
+  const ended = step({ ...result.store, actors: [], projectiles: [] }, bubble.spawnTick + 130, {})
+  assert.equal(ended.store.projectileEffects.some(effect => effect.id === bubble.id), false)
+})
+
 test('Demon bomb keeps its action-entry facing and consumes raw FireBurst RNG first', () => {
   const players = { player: livingTarget(100, 0) }
   let result = spawnOne('demon-bomb-muzzle-rng', 'DEMON', { x: 0, y: 0 }, players)
@@ -2800,25 +2921,65 @@ test('Demon bomb keeps its action-entry facing and consumes raw FireBurst RNG fi
       actors: [{ ...result.store.actors[0]!, headingDeg: 37 }],
     },
   }
-  let expectedRngState = result.store.rngState
-  for (let draw = 0; draw < 5; draw += 1) {
-    expectedRngState = nextBoneyardWaveRandom(expectedRngState).state
+  const launchRoot = nativeDemonArticulationRoot(brain.articulation)
+  const expectedPosition = {
+    x: Math.fround(launchRoot.x + Math.fround(Math.fround(Math.sin(40 * Math.PI / 180)) * 35)),
+    y: Math.fround(launchRoot.y - Math.fround(Math.fround(Math.cos(40 * Math.PI / 180)) * 35)),
   }
+  const expectedNativeRng = advanceNativeRngWords(result.store.steeringRngState, 7)
 
   result = step(result.store, 1, { player: livingTarget(0, 100) })
-  assert.equal(result.store.rngState, expectedRngState)
+  assert.deepEqual(result.store.steeringRngState, expectedNativeRng)
   assert.deepEqual(result.events.map(({ type }) => type), [
     'attack-marker',
+    'enemy-action-sound',
     'projectile-spawned',
   ])
   assert.equal(result.store.actors[0]?.headingDeg, 37)
   assert.equal(result.store.projectiles[0]?.kind, 'demon-bomb')
   assert.equal(result.store.projectiles[0]?.headingDeg, 37)
+  assert.deepEqual(result.store.projectiles[0]?.position, expectedPosition)
+})
+
+test('DemonBomb contact clears its fuse and detonates in the contact tick', () => {
+  const players = { player: livingTarget(100, 0) }
+  let emitted = spawnOne('native-demon-contact-fuse', 'DEMON', { x: 0, y: 0 }, players)
+  const brain = emitted.store.actors[0]!.brain
+  if (brain.family !== 'demon') throw new Error('expected Demon')
+  emitted = withActorBrain(emitted, 0, {
+    ...brain,
+    actionProgress: NATIVE_DEMON_BOMB_ACTION_PROGRAM.markerProgress
+      - NATIVE_DEMON_BOMB_ACTION_PROGRAM.progressPerTick,
+    markerEmitted: false,
+    phase: 'bomb',
+  })
+  emitted = step(emitted.store, 1, players)
+  const bomb = emitted.store.projectiles[0]!
+  assert.ok(bomb.settledTicksRemaining >= 100)
+  const contacted = step({ ...emitted.store, actors: [] }, 2, {
+    player: livingTarget(bomb.position.x, bomb.position.y),
+    golem: { ...livingTarget(bomb.position.x + 10, bomb.position.y), summoned: true },
+  })
+  assert.equal(contacted.store.projectiles.length, 0)
+  assert.ok(contacted.playerDamage.some(damage => damage.playerId === 'golem'))
+  assert.deepEqual(contacted.store.projectileKnockbacks.map(knockback => knockback.playerId), ['player'])
+  assert.equal(contacted.events.find(event => event.type === 'projectile-impact')?.tick, 2)
+  assert.equal(contacted.store.projectileEffects.filter(effect => effect.kind === 'demon-fire').length, 2)
+  const fire = contacted.store.projectileEffects.find(effect => effect.kind === 'demon-fire')!
+  let burning = contacted
+  const contacts: number[] = []
+  for (let tick = 3; tick <= 30; tick += 1) {
+    burning = step(burning.store, tick, { player: livingTarget(fire.position.x, fire.position.y) })
+    if (burning.playerDamage.length > 0) contacts.push(tick)
+  }
+  assert.deepEqual(contacts, [3, 6, 9, 12, 15, 18, 21, 24, 27, 30])
+  burning = step(burning.store, 530, {})
+  assert.equal(burning.store.projectileEffects.some(effect => effect.kind === 'demon-fire'), false)
 })
 
 test('remaining action families keep separate approach, special, and cooldown states', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('bounded-families'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: { player: livingTarget(10, 0) },
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [
@@ -2862,7 +3023,158 @@ test('remaining action families keep separate approach, special, and cooldown st
   assert.ok(damagedActorIds.has(3), 'Wraith contact damages immediately')
 })
 
-test('GuidedMissile deterministically reacquires, homes, contacts, and retires', () => {
+test('Arrow and Firebolt contact uses strict player-center radii', () => {
+  for (const kind of ['arrow', 'firebolt'] as const) {
+    const born = kind === 'arrow'
+      ? forcedArcherVolley('native-arrow-contact', [], { player: livingTarget(200, 0) })
+      : forcedMageAttack('native-firebolt-contact', ['FLAG_CASTFIRE'])
+    const shot = born.store.projectiles[0]!
+    const x = shot.position.x + shot.speed
+    const radius = kind === 'arrow' ? 20 : 30
+    const edge = step({ ...born.store, actors: [] }, 2, {
+      player: { ...livingTarget(x, radius), collisionRadius: 100 },
+    })
+    assert.deepEqual(edge.playerDamage, [], `${kind} must reject the exact center-distance edge`)
+    const inside = step({ ...born.store, actors: [] }, 2, {
+      player: livingTarget(x, radius - 0.01),
+    })
+    assert.equal(inside.playerDamage.length, 1, `${kind} must hit inside its center-distance radius`)
+  }
+})
+
+test('GuidedMissile fallback respects target cell rebind order', () => {
+  const born = forcedMageAttack('guided-target-rebinding', ['FLAG_CASTFROST'])
+  const shot = born.store.projectiles[0]!
+  let result = step({ ...born.store, actors: [], projectiles: [{
+    ...shot, position: { x: 300, y: 0 }, targetPlayerId: null,
+  }] }, 2, { first: livingTarget(20, 0), second: livingTarget(25, 0) })
+  result = step(result.store, 3, { first: livingTarget(150, 0), second: livingTarget(25, 0) })
+  result = step({ ...result.store, projectiles: [{
+    ...result.store.projectiles[0]!, position: { x: 0, y: 0 },
+  }] }, 4, { first: livingTarget(20, 0), second: livingTarget(25, 0) })
+  assert.deepEqual(result.playerDamage.map(damage => damage.playerId), ['second'])
+})
+
+test('native player-list projectiles skip summons while GuidedMissile admits them through Region contact', () => {
+  for (const flag of ['FLAG_CASTFIRE', 'FLAG_CASTFROST', 'FLAG_CASTPOISON']) {
+    const born = forcedMageAttack(`summon-projectile-${flag}`, [flag])
+    const shot = born.store.projectiles[0]!
+    const result = step({ ...born.store, actors: [] }, 2, {
+      player: livingTarget(400, 0),
+      golem: { ...livingTarget(shot.position.x + 3, shot.position.y), summoned: true },
+    })
+    assert.equal(result.playerDamage.some(damage => damage.playerId === 'golem'), flag !== 'FLAG_CASTFIRE')
+    assert.equal(result.store.projectiles.length, flag === 'FLAG_CASTFIRE' ? 1 : 0)
+  }
+  const born = killOneAndStep('pool-skips-summons', 'ZOMBIE', ['FLAG_ROTTEN'])
+  const position = born.store.projectiles[0]!.position
+  const result = step({ ...born.store, actors: [] }, 2, {
+    golem: { ...livingTarget(position.x, position.y), summoned: true },
+  })
+  assert.deepEqual(result.playerDamage, [])
+})
+
+test('Firebolt terrain lookahead runs before movement only on its tenth age tick', () => {
+  const born = forcedMageAttack('native-firebolt-terrain-cadence', ['FLAG_CASTFIRE'])
+  let store: BoneyardEnemyStore = { ...born.store, actors: [] }
+  const requests: { start: Readonly<{ x: number; y: number }>; end: Readonly<{ x: number; y: number }>; radius: number }[] = []
+  for (let tick = 2; tick <= 10; tick += 1) {
+    store = stepBoneyardEnemyStore(store, {
+      projectileWorldBlocked: request => { if (request.kind === 'line') requests.push(request); return false },
+      players: {},
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [],
+      tick,
+    }).store
+  }
+  assert.equal(requests.length, 0)
+  stepBoneyardEnemyStore(store, {
+    projectileWorldBlocked: request => { if (request.kind === 'line') requests.push(request); return false },
+    players: {},
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 11,
+  })
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0]!.start.x, 56)
+  assert.equal(requests[0]!.end.x, 96)
+  assert.equal(requests[0]!.radius, 0)
+})
+
+test('Mage fire and guided projectiles use their native launch offsets, speeds, and lifetimes', () => {
+  const cases = [
+    { flag: 'FLAG_CASTFIRE', kind: 'firebolt', originX: 20, speed: 4, lifetime: 400 },
+    { flag: 'FLAG_CASTFROST', kind: 'guided-missile', originX: 5, speed: 3, lifetime: 1300 },
+    { flag: 'FLAG_CASTPOISON', kind: 'guided-missile', originX: 5, speed: 3, lifetime: 1300 },
+  ] as const
+  for (const row of cases) {
+    const shot = forcedMageAttack(`native-mage-launch-${row.flag}`, [row.flag])
+      .store.projectiles[0]!
+    assert.equal(shot.kind, row.kind)
+    assert.equal(shot.position.x, row.originX)
+    assert.ok(Math.abs(shot.position.y) < 1e-5)
+    assert.equal(shot.speed, row.speed)
+    assert.equal(shot.lifetimeTicks, row.lifetime)
+  }
+})
+
+test('guided missiles move before their bounded turn and retain no replacement after target loss', () => {
+  for (const flag of ['FLAG_CASTFROST', 'FLAG_CASTPOISON']) {
+    const born = forcedMageAttack(`guided-turn-${flag}`, [flag])
+    const shot = born.store.projectiles[0]!
+    let result = step({ ...born.store, actors: [] }, 2, { player: livingTarget(5, -300) })
+    const turned = result.store.projectiles[0]!
+    assert.equal(turned.position.x, 8)
+    assert.ok(Math.abs(turned.position.y) < 1e-5)
+    assert.ok(turned.headingDeg >= 88.75 && turned.headingDeg <= 89.5)
+    assert.equal(turned.speed, Math.fround(3 - 0.07500000298023224))
+    assert.ok(turned.visualPhaseDeg > shot.visualPhaseDeg)
+
+    result = step(result.store, 3, {
+      player: { ...livingTarget(5, -300), alive: false },
+      replacement: livingTarget(0, 300),
+    })
+    const untargeted = result.store.projectiles[0]!
+    assert.equal(untargeted.targetPlayerId, null)
+    assert.equal(untargeted.headingDeg, turned.headingDeg)
+    assert.ok(untargeted.position.x > turned.position.x)
+
+    result = step(result.store, 1_300, {})
+    assert.equal(result.store.projectiles.length, 1)
+    result = step(result.store, 1_301, {})
+    assert.equal(result.store.projectiles.length, 0)
+    assert.equal(result.events.some(event => event.type === 'projectile-impact'), false)
+  }
+})
+
+test('native projectile painter ownership follows its actual registration manager', () => {
+  for (const [flag, lane] of [['FLAG_CASTFIRE', 'transient'], ['FLAG_CASTFROST', 'actor'], ['FLAG_CASTPOISON', 'actor']] as const) {
+    const shot = forcedMageAttack(`projectile-manager-${flag}`, [flag]).store.projectiles[0]!
+    assert.equal(shot.painterRegistration.managerLane, lane)
+    assert.deepEqual(shot.painterRegistration, shot.lightRegistration)
+  }
+  for (const flags of [[], ['FLAG_FIREARROW'], ['FLAG_POISONARROW']]) {
+    const arrow = forcedArcherVolley('arrow-manager', flags, { player: livingTarget(200, 0) }).store.projectiles[0]!
+    assert.equal(arrow.painterRegistration.managerLane, 'transient')
+    if (arrow.lightRegistration) assert.deepEqual(arrow.painterRegistration, arrow.lightRegistration)
+  }
+})
+
+test('each Mage impact transfers one native effect owner and one transient light', () => {
+  for (const flag of ['FLAG_CASTFIRE', 'FLAG_CASTFROST', 'FLAG_CASTPOISON']) {
+    const born = forcedMageAttack(`one-impact-owner-${flag}`, [flag])
+    const shot = born.store.projectiles[0]!
+    const result = step({ ...born.store, actors: [] }, 2, {
+      player: livingTarget(shot.position.x + 3, shot.position.y),
+    })
+    const impacts = result.store.projectileEffects.filter(effect => effect.kind !== 'firebolt-trail')
+    assert.equal(impacts.length, 1)
+    assert.equal(impacts[0]!.lightRegistration?.managerLane, 'transient')
+    assert.deepEqual(impacts[0]!.painterRegistration, impacts[0]!.lightRegistration)
+  }
+})
+
+test('GuidedMissile retains its living target, contacts, and transfers independent impact layers', () => {
   let result = spawnOne(
     'guided-projectile',
     'SKELETONMAGE',
@@ -2881,19 +3193,16 @@ test('GuidedMissile deterministically reacquires, homes, contacts, and retires',
     registrationOrdinal: 1,
   })
 
-  const redirectedPlayers: BoneyardEnemyTargets = {
-    alpha: { ...livingTarget(150, 0), alive: false },
-    beta: livingTarget(0, 100),
-  }
-  result = step(result.store, tick, redirectedPlayers)
-  assert.equal(result.store.projectiles[0]!.targetPlayerId, 'beta')
-  assert.equal(result.store.projectiles[0]!.position.x, 0)
-  assert.equal(result.store.projectiles[0]!.position.y, 3)
+  const retainedPlayers = { alpha: livingTarget(150, 0) }
+  const birthPosition = result.store.projectiles[0]!.position
+  result = step({ ...result.store, actors: [] }, tick, retainedPlayers)
+  assert.equal(result.store.projectiles[0]!.targetPlayerId, 'alpha')
+  assert.ok(result.store.projectiles[0]!.position.x > birthPosition.x)
 
   let impacted = false
   for (tick += 1; tick < 600 && !impacted; tick += 1) {
-    result = step(result.store, tick, redirectedPlayers)
-    const damage = result.playerDamage.find((entry) => entry.playerId === 'beta')
+    result = step(result.store, tick, retainedPlayers)
+    const damage = result.playerDamage.find((entry) => entry.playerId === 'alpha')
     if (!damage) continue
     impacted = true
     assert.equal(damage.physicalDamage + damage.magicDamage, 6)
@@ -2901,23 +3210,16 @@ test('GuidedMissile deterministically reacquires, homes, contacts, and retires',
   }
   assert.equal(impacted, true)
   assert.equal(result.store.projectiles.length, 0)
-  assert.deepEqual(result.store.projectileEffects.map((effect) => ({
-    blendMode: effect.blendMode,
-    entry: effect.entry,
-    kind: effect.kind,
-    tint: effect.tint,
-  })), [
-    { blendMode: 'add', entry: 110, kind: 'guided-impact-main', tint: 0xffffff },
-    { blendMode: 'add', entry: 110, kind: 'guided-impact-main', tint: 0xffffff },
-    { blendMode: 'add', entry: 111, kind: 'guided-impact-aura-one', tint: 0x4080ff },
-    { blendMode: 'add', entry: 112, kind: 'guided-impact-aura-two', tint: 0x4080ff },
-  ])
-  assert.ok(result.store.projectileEffects.every(({ alpha, scale }) => (
-    alpha === 2 && scale === 2
-  )))
+  assert.equal(result.store.projectileEffects.length, 1)
+  const impact = result.store.projectileEffects[0]!
+  assert.equal(impact.kind, 'guided-impact')
+  assert.equal(impact.entry, 110)
+  assert.equal(impact.tint, 0x4080ff)
+  assert.equal(impact.alpha, 2)
+  assert.equal(impact.scale, 2)
 })
 
-test('enemy projectiles retire on an earlier static-world contact without damaging a player', () => {
+test('enemy projectiles retire at native terrain lookahead without damaging a player', () => {
   let result = spawnOne(
     'world-contact',
     'SKELETONMAGE',
@@ -2931,12 +3233,12 @@ test('enemy projectiles retire on an earlier static-world contact without damagi
   }
   assert.equal(result.store.projectiles[0]?.kind, 'guided-missile')
 
-  result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: () => 0.25,
+  result = stepBoneyardEnemyStore({ ...result.store, actors: [] }, {
+    projectileWorldBlocked: query => query.kind === 'line',
     players: { player: livingTarget(150, 0) },
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
-    tick,
+    tick: result.store.projectiles[0]!.spawnTick + 5,
   })
 
   assert.deepEqual(result.playerDamage, [])
@@ -2951,74 +3253,57 @@ test('enemy projectiles retire on an earlier static-world contact without damagi
   assert.ok(projectileEvents.every((event) => event.targetPlayerId === null))
 })
 
-test('enemy projectile actor entry wins when it precedes a later world contact', () => {
-  const players = { player: livingTarget(50, 0) }
-  const spawned = forcedMageAttack(
-    'swept-actor-before-world',
-    ['FLAG_CASTFROST'],
-  )
-  assert.equal(spawned.store.projectiles[0]?.position.x, 0)
-
-  const result = stepBoneyardEnemyStore(spawned.store, {
-    firstProjectileWorldContact: () => 0.9,
-    players,
-    resolveMovement: DIRECT_MOVEMENT,
-    resolveSpawnIntents: () => [],
-    tick: 51,
+test('GuidedMissile resolves player contact before terrain on the same native tick', () => {
+  const spawned = forcedMageAttack('guided-player-and-wall', ['FLAG_CASTFROST'])
+  const shot = spawned.store.projectiles[0]!
+  const result = stepBoneyardEnemyStore({
+    ...spawned.store, actors: [], lastStepTick: 5,
+    projectiles: [{ ...shot, ageTicks: 4, lastStepTick: 5, position: { x: 0, y: 0 } }],
+  }, {
+    projectileWorldBlocked: query => query.kind === 'line',
+    players: { player: livingTarget(9, 0) },
+    resolveMovement: DIRECT_MOVEMENT, resolveSpawnIntents: () => [], tick: 6,
   })
-
   assert.deepEqual(result.playerDamage.map(({ physicalDamage, magicDamage, playerId }) => ({
-    amount: physicalDamage + magicDamage,
-    playerId,
+    amount: physicalDamage + magicDamage, playerId,
   })), [{ amount: 6, playerId: 'player' }])
   assert.equal(result.store.projectiles.length, 0)
-  assert.equal(
-    result.events.find((event) => event.type === 'projectile-impact')?.targetPlayerId,
-    'player',
-  )
+  assert.deepEqual(result.events.filter(event => event.type === 'projectile-impact')
+    .map(event => event.targetPlayerId), ['player', null])
+  assert.equal(result.events.filter(event => event.type === 'projectile-retired').length, 1)
 })
 
 test('Firebolt trail and impact VFX outlive the retired projectile on native clocks', () => {
   const spawned = forcedMageAttack('firebolt-vfx', ['FLAG_CASTFIRE'])
   const projectile = spawned.store.projectiles[0]!
   assert.equal(projectile.kind, 'firebolt')
-  let expectedImpactRngState = spawned.store.rngState
-  for (let draw = 0; draw < 9; draw += 1) {
-    expectedImpactRngState = nextBoneyardWaveRandom(expectedImpactRngState).state
-  }
+  const expectedImpactRng = advanceNativeRngWords(spawned.store.steeringRngState, 9)
 
-  let result = stepBoneyardEnemyStore(spawned.store, {
-    firstProjectileWorldContact: () => 1,
-    players: { player: livingTarget(150, 0) },
+  const trailed = step({ ...spawned.store, actors: [] }, 2, { player: livingTarget(150, 0) })
+  let result = stepBoneyardEnemyStore(trailed.store, {
+    projectileWorldBlocked: query => query.kind === 'line',
+    players: { player: livingTarget(28, 0) },
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
     tick: 3,
   })
   assert.equal(result.store.projectiles.length, 0)
-  assert.equal(result.store.rngState, expectedImpactRngState)
+  assert.deepEqual(result.store.steeringRngState, expectedImpactRng)
   assert.deepEqual(result.store.projectileEffects.map(({ entry, kind }) => ({ entry, kind })), [
     { entry: 256, kind: 'firebolt-trail' },
-    { entry: 110, kind: 'fire-burst-glow' },
-    { entry: 251, kind: 'fire-burst-frame' },
+    { entry: 251, kind: 'fire-burst' },
   ])
-  const burstGlow = result.store.projectileEffects.find(
-    ({ kind }) => kind === 'fire-burst-glow',
-  )!
-  const burstFrame = result.store.projectileEffects.find(
-    ({ kind }) => kind === 'fire-burst-frame',
-  )!
-  assert.deepEqual(burstGlow.lightRegistration, {
+  const burst = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')!
+  assert.deepEqual(burst.lightRegistration, {
     managerLane: 'transient',
     registrationOrdinal: projectile.lightRegistration!.registrationOrdinal + 1,
   })
-  assert.equal(burstFrame.lightRegistration, null)
-  assert.deepEqual(burstGlow.position, burstFrame.position)
-  assert.ok(burstFrame.scale >= 0.65 && burstFrame.scale <= 0.85)
-  assert.equal(burstGlow.scale, burstFrame.scale * 5)
+  assert.deepEqual(burst.painterRegistration, burst.lightRegistration)
+  assert.ok(burst.scale >= 0.65 && burst.scale <= 0.85)
 
   result = step(result.store, 4, { player: livingTarget(150, 0) })
   const trail = result.store.projectileEffects.find(({ kind }) => kind === 'firebolt-trail')
-  const impact = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst-frame')
+  const impact = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')
   assert.ok(trail)
   assert.ok(impact)
   assert.equal(impact.entry, 251)
@@ -3028,7 +3313,7 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
 
   result = step(result.store, 7, { player: livingTarget(150, 0) })
   assert.equal(
-    result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst-frame')?.entry,
+    result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')?.entry,
     252,
   )
   assert.equal(
@@ -3038,12 +3323,12 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
 
   result = step(result.store, 18, { player: livingTarget(150, 0) })
   assert.equal(
-    result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst-frame')?.entry,
+    result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst')?.entry,
     254,
   )
   result = step(result.store, 19, { player: livingTarget(150, 0) })
   assert.equal(
-    result.store.projectileEffects.some(({ kind }) => kind === 'fire-burst-frame'),
+    result.store.projectileEffects.some(({ kind }) => kind === 'fire-burst'),
     false,
   )
 })
@@ -3207,7 +3492,7 @@ test('combat Maggot crawl joins the ordinary blocked-goal route owner', () => {
   const clearances: number[] = []
   result = stepBoneyardEnemyStore(result.store, {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     navigation: {
       findRoute: ({ end, navigationClearance, start }) => {
         clearances.push(navigationClearance)
@@ -3351,7 +3636,7 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
     return request.requestedPosition
   }
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('terminal-children'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement,
     resolveSpawnIntents: () => [
@@ -3371,7 +3656,7 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
   }
 
   result = stepBoneyardEnemyStore(store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement,
     resolveSpawnIntents: () => [],
@@ -3382,7 +3667,7 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
     (actor) => actor.lifeState === 'alive',
   )
   result = stepBoneyardEnemyStore(impStep.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement,
     resolveSpawnIntents: () => [],
@@ -3504,7 +3789,7 @@ test('both Imp descendants inherit one fewer split generation until recursion te
 
 test('SPLITMANY terminal count reports binary fan-out while the live guard reports zero', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('split-many-output-count'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [{
@@ -3531,7 +3816,7 @@ test('SPLITMANY terminal count reports binary fan-out while the live guard repor
     .every((event) => event.eventId > splitManyOutput!.eventId))
 
   result = stepBoneyardEnemyStore(createBoneyardEnemyStore('split-guard-output-count'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => Array.from({ length: 69 }, (_, index) => intent(
@@ -3563,7 +3848,7 @@ test('SPLITMANY terminal count reports binary fan-out while the live guard repor
 
 test('Demon terminal count reports only child Imps accepted beneath the construction cap', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('demon-clipped-output-count'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [
@@ -3629,7 +3914,7 @@ test('retail wave 35 and 42 recursive deaths obey native Imp caps and protocol c
     }
 
     let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`wave-${waveOrdinal}-cap`), {
-      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      projectileWorldBlocked: NO_WORLD_CONTACT,
       players: FAR_PLAYERS,
       resolveMovement: DIRECT_MOVEMENT,
       resolveSpawnIntents: () => spawnIntents,
@@ -3688,7 +3973,7 @@ test('retail wave 35 and 42 recursive deaths obey native Imp caps and protocol c
 
 test('lethal damage rewards and terminal outputs once, then hands off to effect actors', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('death'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => TOKENS.map((token, index) => intent(
@@ -3779,36 +4064,10 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   assert.equal(boneyardEnemyLiveCount(result.store), 0)
 
   result = step(result.store, 3_001, FAR_PLAYERS)
+  assert.equal(result.store.projectiles[0]!.kind, 'poison-pool')
+  assert.equal(result.store.projectiles[0]!.visualScale, Math.fround(1.6))
+  result = step(result.store, 3_201, FAR_PLAYERS)
   assert.equal(result.store.projectiles.length, 0)
-  assert.deepEqual(result.store.projectileEffects.map((effect) => ({
-    alpha: effect.alpha,
-    blendMode: effect.blendMode,
-    entry: effect.entry,
-    kind: effect.kind,
-    scale: effect.scale,
-  })), [{
-    alpha: 0.5,
-    blendMode: 'normal',
-    entry: 0,
-    kind: 'poison-pool-fade-outer',
-    scale: 1.6,
-  }, {
-    alpha: Math.sin(3_000 * Math.PI / 180) * 0.25 + 0.75,
-    blendMode: 'normal',
-    entry: 0,
-    kind: 'poison-pool-fade-inner',
-    scale: 1.2,
-  }])
-
-  result = step(result.store, 3_002, FAR_PLAYERS)
-  const [outer, inner] = result.store.projectileEffects
-  assert.ok(outer)
-  assert.ok(inner)
-  assert.ok(Math.abs(outer.alpha - 0.4975) < 1e-12)
-  assert.ok(Math.abs(
-    inner.alpha
-      - (Math.sin(3_001 * Math.PI / 180) * 0.25 + 0.75) * 0.995,
-  ) < 1e-12)
 })
 
 test('Skeleton death hands off immediately to exact independent shatter actors', () => {
@@ -4241,7 +4500,7 @@ test('wave spawn resolution observes post-retirement and terminal-child live cou
   }).store
   let observedLiveCount = -1
   result = stepBoneyardEnemyStore(store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: (liveEnemyCount) => {
@@ -4268,7 +4527,7 @@ test('wave spawn resolution observes post-retirement and terminal-child live cou
   }).store
   observedLiveCount = -1
   result = stepBoneyardEnemyStore(store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: (liveEnemyCount) => {
@@ -4283,7 +4542,7 @@ test('wave spawn resolution observes post-retirement and terminal-child live cou
 
 test('wave trigger census counts Zombie actors without treating Coffins as Zombies', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('zombie-census'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [
@@ -4295,7 +4554,7 @@ test('wave trigger census counts Zombie actors without treating Coffins as Zombi
   })
   let observed: readonly [number, number] | null = null
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: (liveEnemyCount, liveZombieCount) => {
@@ -4313,7 +4572,7 @@ test('Slumpgut terminal reward retains the linked Miniboss Die program', () => {
     '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   )
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('slumpgut-death'), {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [{
@@ -4332,7 +4591,7 @@ test('Slumpgut terminal reward retains the linked Miniboss Die program', () => {
     sourcePlayerId: 'player',
     tick: 0,
   }).store, {
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
@@ -4494,7 +4753,7 @@ test('Portal materializes 45 to 5 and admits its native Imp ejection through pla
   const placementRadii: number[] = []
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('portal-ejection'), {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnPlacement: (request) => {
@@ -4528,7 +4787,7 @@ test('Portal materializes 45 to 5 and admits its native Imp ejection through pla
   result = withActorBrain(result, 0, { ...portal.brain, ticksUntilEjection: 1 })
   result = stepBoneyardEnemyStore(result.store, {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnPlacement: (request) => ({
@@ -4565,7 +4824,7 @@ test('Portal materializes 45 to 5 and admits its native Imp ejection through pla
 test('Portal damage and death emit their direct cues, effects, reward, and retirement', () => {
   let spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('portal-terminal'), {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [portalIntent(1, { x: 12, y: 34 })],
@@ -4622,7 +4881,7 @@ function spawnOne(
 ): BoneyardEnemyStoreStepResult {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore(seed), {
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [intent(token, 1, position, flags)],
@@ -4677,7 +4936,7 @@ function step(
 ): BoneyardEnemyStoreStepResult {
   return stepBoneyardEnemyStore(store, {
     clipSpellSegment,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
@@ -4694,7 +4953,7 @@ function stepWithEffects(
   return stepBoneyardEnemyStore(store, {
     abilityEffects,
     clipSpellSegment: CLEAR_SPELL_SEGMENT,
-    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
     players,
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],

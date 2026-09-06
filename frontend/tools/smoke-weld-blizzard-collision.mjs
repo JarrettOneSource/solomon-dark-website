@@ -130,7 +130,7 @@ async function prepareBlizzardRun(host, includeMaggotEndpoint) {
       const spawned = stepBoneyardEnemyStore(
         createBoneyardEnemyStore('blizzard-browser-contact'),
         {
-          firstProjectileWorldContact: () => null,
+          projectileWorldBlocked: () => false,
           paused: true,
           players: {},
           registerWorldPainter: worldManagerOrder.register,
@@ -289,7 +289,7 @@ function endpointMaggotStore() {
 
 function endpointMaggotContext(tick, spawnCoffin) {
   return {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => spawnCoffin ? [{

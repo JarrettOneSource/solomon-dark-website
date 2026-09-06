@@ -26,7 +26,7 @@ import {
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
 } from '../core-server/player-entity-store.ts'
-import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
+import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
 import type {
   BoneyardEnemyEventSnapshot,
   GameSnapshot,

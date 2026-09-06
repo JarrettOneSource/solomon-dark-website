@@ -13,8 +13,8 @@ import {
 import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
-  type BoneyardEnemyDeathEffect,
 } from '../core-server/boneyard-enemy-store.ts'
+import type { BoneyardEnemyDeathEffect } from '../core-server/enemies/model.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
@@ -390,7 +390,7 @@ test('schema 25 active Wraiths migrate from the fabricated phase brain to native
     waveOrdinal: 1,
   }
   const spawned = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: request => request.requestedPosition,
     resolveSpawnIntents: () => [spawnIntent],
@@ -438,7 +438,7 @@ test('schema 26 reconstructs missing Demon articulation while schema 27 requires
   let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('saved-demon'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       owner: {
         alive: true,
@@ -1748,6 +1748,8 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
   }
   const enemies = simulation.world.enemies
   const arrowId = enemies.nextProjectileId
+  const arrowRegistration = { managerLane: 'transient',
+    registrationOrdinal: simulation.worldManagerOrder.nextRegistrationOrdinal.transient++ }
   enemies.projectiles = [{
     ageTicks: 1,
     bounceVelocity: 0,
@@ -1761,8 +1763,10 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
     homing: false,
     id: arrowId,
     kind: 'arrow',
+    velocity: { x: 0, y: 0 },
     lastStepTick: state.tick,
-    lightRegistration: null,
+    lightRegistration: arrowRegistration,
+    painterRegistration: arrowRegistration,
     lifetimeTicks: 300,
     minimumSpeed: 0,
     nativeCellBindingOrder: enemies.nextNativeCellBindingOrder,
@@ -1777,6 +1781,7 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
     spawnTick: state.tick - 1,
     speed: 0,
     targetPlayerId: null,
+    turnSpeed: 0,
     verticalOffset: -25,
     verticalVelocity: 0,
     visualPhaseDeg: 0,
@@ -1806,6 +1811,39 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
       : null,
     0,
   )
+
+  const withKnockback = structuredClone(document)
+  const pendingKnockback = { actorId: 1, delta: { x: -4.5, y: 0 }, eventId: 1,
+    lastStepTick: state.tick, playerId: 'owner', remainingTicks: 5 }
+  withKnockback.continuation.simulation.world.enemies.projectileKnockbacks = [pendingKnockback]
+  const pendingWorld = restoreGameSaveDocument(JSON.stringify(withKnockback)).state.world
+  assert.ok(pendingWorld.kind === 'boneyard')
+  assert.deepEqual(pendingWorld.enemies.projectileKnockbacks, [pendingKnockback])
+  for (const remainingTicks of [0, 11, null]) {
+    const malformed = structuredClone(withKnockback)
+    malformed.continuation.simulation.world.enemies.projectileKnockbacks[0].remainingTicks = remainingTicks
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /projectile knockback/)
+  }
+
+  const missingTurn = structuredClone(document)
+  delete missingTurn.continuation.simulation.world.enemies.projectiles[0].turnSpeed
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(missingTurn)), /turn speed/)
+  missingTurn.schemaVersion = 31
+  const oldArrow = restoreGameSaveDocument(JSON.stringify(missingTurn)).state.world
+  assert.ok(oldArrow.kind === 'boneyard')
+  assert.equal(oldArrow.enemies.projectiles[0]?.turnSpeed, 0)
+
+  const oldGuidedDocument = structuredClone(missingTurn)
+  const oldGuided = oldGuidedDocument.continuation.simulation.world.enemies.projectiles[0]
+  Object.assign(oldGuided, {
+    kind: 'guided-missile', nativeTypeId: 0x7ec, payload: 'cold', visualScale: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 200 },
+  })
+  const migratedGuided = restoreGameSaveDocument(JSON.stringify(oldGuidedDocument)).state.world
+  assert.ok(migratedGuided.kind === 'boneyard')
+  const guided = migratedGuided.enemies.projectiles[0]!
+  assert.ok(guided.turnSpeed >= 0.5 && guided.turnSpeed <= 1.25)
+  assert.equal(guided.lifetimeTicks, 1300)
 
   const legacy = structuredClone(document)
   legacy.schemaVersion = 18

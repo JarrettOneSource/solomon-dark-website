@@ -1,3 +1,4 @@
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -33,7 +34,6 @@ import {
   nativeEtherFadeScalar,
   nativeSecondaryPresentationPlan,
   nativeSecondaryCompositeOwnerEntries,
-  nativeRegionPointGain,
   presentNativeSecondaryScreenOverlay,
   NativeSecondaryScreenFeedbackPresentation,
   nativeSecondaryWorldShake,
@@ -348,7 +348,7 @@ test('secondary provider adapters preserve every recovered radius, intensity, an
   const cases = [
     [
       { ...actor('moving-fire'), radius: 0.2 },
-      { castsDirectionalShadow: true, intensity: 0.6000000000000001, radius: 0.6 },
+      { castsDirectionalShadow: true, intensity: 0.6000000000000001, radius: Math.fround(0.6) },
     ],
     [
       actor('leviathan'),

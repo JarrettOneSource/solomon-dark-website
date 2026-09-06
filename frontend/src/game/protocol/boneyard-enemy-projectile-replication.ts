@@ -1,3 +1,5 @@
+import { NATIVE_ARROW_ENHANCED_OPACITY } from '../core-kernels/native-enemy-targeting.ts'
+import { NATIVE_POISON_POOL_MAXIMUM_SCALE } from '../core-kernels/native-poison-pool.ts'
 import {
   BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
 } from './game-state.ts'
@@ -72,7 +74,7 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION = {
       && sample[7] <= 0
       && cyclic(sample[8], 720, ANGLE_SCALE)
       && nonnegativeInteger(sample[9])
-      && sample[9] <= 5 * VALUE_SCALE
+      && sample[9] <= NATIVE_ARROW_ENHANCED_OPACITY * VALUE_SCALE
   },
 }
 
@@ -150,7 +152,7 @@ export function materializeBoneyardEnemyProjectile(
     nativeTypeId: descriptor[3] as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: descriptor[4],
     painterRegistration: {
-      managerLane: 'actor',
+      managerLane: kind === 'arrow' || kind === 'firebolt' ? 'transient' : 'actor',
       registrationOrdinal: descriptor[12],
     },
     payload: BONEYARD_ENEMY_PROJECTILE_PAYLOADS[descriptor[9]]!,
@@ -172,12 +174,12 @@ export function boneyardEnemyProjectileVisualScaleIsValid(
 ): boolean {
   if (!Number.isFinite(visualScale)) return false
   switch (kind) {
-    case 'arrow': return visualScale > 0 && visualScale <= 5
+    case 'arrow': return visualScale > 0 && visualScale <= NATIVE_ARROW_ENHANCED_OPACITY
     case 'demon-bomb':
     case 'firebolt':
       return visualScale === 1
-    case 'guided-missile': return visualScale >= 0.9 && visualScale <= 1.1
-    case 'poison-pool': return visualScale >= 1 && visualScale <= 1.6
+    case 'guided-missile': return visualScale >= Math.fround(0.9) && visualScale <= Math.fround(1.1)
+    case 'poison-pool': return visualScale >= 1 && visualScale <= NATIVE_POISON_POOL_MAXIMUM_SCALE
   }
 }
 

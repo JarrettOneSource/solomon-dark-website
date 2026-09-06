@@ -129,6 +129,8 @@ export type GameSoundCue =
   | 'swipe'
   | 'teleport'
   | 'throw-fire'
+  | 'throw-spell'
+  | 'spit-fire'
   | 'throw-lightning-1'
   | 'throw-lightning-2'
   | 'unforge'
@@ -260,7 +262,9 @@ export function nativeEnemyEventSoundRequest(
   return {
     cue: event.sound as GameSoundCue,
     playbackRate: event.pitch!,
-    sourcePosition: event.sound === 'poisoned' ? null : event.sourcePosition!,
+    sourcePosition: event.sound === 'poisoned'
+      || (event.type === 'player-status-sound' && event.sound === 'magic-missile-hit')
+      ? null : event.sourcePosition!,
     volume: event.gainScale!,
   }
 }

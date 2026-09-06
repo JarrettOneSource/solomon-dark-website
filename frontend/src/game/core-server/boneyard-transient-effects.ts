@@ -1,12 +1,5 @@
-import type {
-  BoneyardEnemyDeathEffect,
-  BoneyardEnemyProjectileEffect,
-} from './boneyard-enemy-store.ts'
+import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
-
-interface BoneyardTransientPrograms {
-  readonly poisonPoolAlphaLossPerTick: number
-}
 
 interface BoneyardTransientStepResult {
   readonly deathEffects: BoneyardEnemyDeathEffect[]
@@ -21,7 +14,6 @@ export function stepBoneyardTransientEffects(
   drawUnit: () => number,
   nextDeathEffectId: number,
   registerWorldPainter: RegisterNativeWorldPainter,
-  programs: BoneyardTransientPrograms,
 ): BoneyardTransientStepResult {
   const death = stepDeathEffects(
     deathEffects,
@@ -33,7 +25,7 @@ export function stepBoneyardTransientEffects(
   return {
     deathEffects: death.effects,
     nextDeathEffectId: death.nextDeathEffectId,
-    projectileEffects: stepProjectileEffects(projectileEffects, tick, programs),
+    projectileEffects: stepProjectileEffects(projectileEffects, tick),
   }
 }
 
@@ -401,13 +393,16 @@ function radialVector(angleDeg: number, magnitude: number): { x: number; y: numb
   return { x: Math.sin(radians) * magnitude, y: -Math.cos(radians) * magnitude }
 }
 
-function stepProjectileEffects(
+export function stepProjectileEffects(
   source: readonly BoneyardEnemyProjectileEffect[],
   tick: number,
-  programs: BoneyardTransientPrograms,
 ): BoneyardEnemyProjectileEffect[] {
   const retained: BoneyardEnemyProjectileEffect[] = []
   for (const effect of source) {
+    if (effect.kind === 'demon-fire') {
+      retained.push(effect)
+      continue
+    }
     const elapsedTicks = tick - effect.lastStepTick
     if (elapsedTicks <= 0) {
       retained.push(effect)
@@ -415,8 +410,10 @@ function stepProjectileEffects(
     }
     const ageTicks = effect.ageTicks + elapsedTicks
     if (ageTicks >= effect.lifetimeTicks) continue
-    let alpha = effect.alpha - effect.alphaLossPerTick * elapsedTicks
+    let alpha = effect.alpha
+    for (let step = 0; step < elapsedTicks; step += 1) alpha = Math.fround(alpha - effect.alphaLossPerTick)
     let entry = effect.entry
+    let scale = effect.scale
     let position = effect.position
     let rotationDeg = effect.rotationDeg + effect.angularVelocityDeg * elapsedTicks
     let velocity = effect.velocity
@@ -440,39 +437,15 @@ function stepProjectileEffects(
       }
     } else {
       switch (effect.kind) {
-        case 'fire-burst-frame':
+        case 'fire-burst':
           entry = 251 + Math.min(3, Math.floor(ageTicks / 4))
           break
-        case 'demon-fire':
-          entry = 46 + positiveModulo(
-            Math.floor(effect.phaseOriginTicks + ageTicks * 0.25),
-            32,
-          )
+        case 'poison-bubble':
+          for (let step = 0; step < elapsedTicks; step += 1) {
+            scale = Math.min(effect.maximumScale, Math.fround(scale + effect.growthPerTick))
+          }
           break
-        case 'poison-pool-fade-inner': {
-          const fade = Math.max(
-            0,
-            1 - ageTicks * programs.poisonPoolAlphaLossPerTick,
-          )
-          alpha = (Math.sin(
-            (effect.phaseOriginTicks + ageTicks) * Math.PI / 180,
-          ) * 0.25 + 0.75) * fade
-          break
-        }
-        case 'poison-pool-fade-outer':
-          alpha = 0.5 * Math.max(
-            0,
-            1 - ageTicks * programs.poisonPoolAlphaLossPerTick,
-          )
-          break
-        case 'firebolt-trail':
-        case 'fire-burst-glow':
-        case 'guided-impact-aura-one':
-        case 'guided-impact-aura-two':
-        case 'guided-impact-main':
-          break
-        default:
-          assertNever(effect.kind)
+
       }
       if (effect.velocity.x !== 0 || effect.velocity.y !== 0) {
         position = {
@@ -490,6 +463,7 @@ function stepProjectileEffects(
       lastStepTick: tick,
       position,
       rotationDeg,
+      scale,
       velocity,
     })
   }

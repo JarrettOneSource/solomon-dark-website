@@ -1464,3 +1464,15 @@ not entered by native Wraith flight.
   release, deployment, production restart, or live-production claim was made.
   This receipt is the sole post-validation tracked write; no runtime, test,
   schema, build, asset, or protocol byte changed after the final receipts.
+
+## 2026-09-05 — Arrow flight closure superseded
+
+The immediate-drop report falsifies the flight interpretation in the original
+Archer section and the August 30 draw-angle correction. Fresh raw instructions
+at `0x005FED25..0x005FEEA5` prove the positive `+0x168` countdown bypasses the
+whole descent/damping program. The previous host and its regression both ran
+that program from the first flight tick. Entry
+[091, hostile projectile flight and lifetime reopening](<091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md>)
+now owns the causal evidence, full sibling inventory, corrected contract, and
+validation receipt. Exact Archer aim/fan/range/birth RNG recovery remains the
+input to that system; it does not prove downstream flight correctness.

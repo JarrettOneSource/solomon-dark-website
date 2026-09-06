@@ -39,9 +39,9 @@ import {
 } from '../src/game/core-server/game-simulation.ts'
 import {
   createBoneyardEnemyStore,
-  damageBoneyardEnemy,
   stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import {
   damagePlayerEntity,
   playerSkillDerivedStatsAt,
@@ -670,7 +670,7 @@ async function materializeAttributedEnemyGold({
   const spawned = stepBoneyardEnemyStore(
     createBoneyardEnemyStore(`browser-charm-owner-${state.tick}`),
     {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players,
       registerWorldPainter: worldManagerOrder.register,
       resolveMovement: ({ requestedPosition }) => requestedPosition,

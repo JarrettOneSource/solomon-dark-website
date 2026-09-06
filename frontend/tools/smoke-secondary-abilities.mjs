@@ -1,3 +1,4 @@
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import assert from 'node:assert/strict'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +33,7 @@ import {
   firstBoneyardPathBlockProgress,
   withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
-import { boneyardEnemyActorFlags } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { boneyardEnemyActorFlags } from '../src/game/core-server/enemies/model.ts'
 import {
   getPlayerCharacter,
   getPlayerSkillBook,
@@ -2123,6 +2124,7 @@ function prepareDampenProjectileProof(host, playerId) {
   const firstRegistration = enemies.nextNativeRegistrationOrder
   const firstCellBinding = enemies.nextNativeCellBindingOrder
   const ownerActorId = enemies.actors.find(({ lifeState }) => lifeState === 'alive')?.id ?? 0
+  const projectileManager = createNativeWorldManagerOrder(state.worldManagerOrder)
   const projectile = ({
     headingDeg,
     id,
@@ -2132,10 +2134,7 @@ function prepareDampenProjectileProof(host, playerId) {
     payload,
     registrationOffset,
   }) => {
-    const registration = {
-      managerLane: 'actor',
-      registrationOrdinal: firstRegistration + registrationOffset,
-    }
+    const registration = projectileManager.register(kind === 'arrow' || kind === 'firebolt' ? 'transient' : 'actor')
     return {
       ageTicks: 8,
       bounceVelocity: 0,
@@ -2149,6 +2148,8 @@ function prepareDampenProjectileProof(host, playerId) {
       homing: false,
       id,
       kind,
+      ...(kind === 'arrow' ? { velocity: { x: 0, y: 0 } } : {}),
+      turnSpeed: kind === 'guided-missile' ? 1 : 0,
       lastStepTick: state.tick + 100_000,
       lightRegistration: kind === 'arrow' ? null : registration,
       lifetimeTicks: 400,
@@ -2207,6 +2208,7 @@ function prepareDampenProjectileProof(host, playerId) {
     }),
   ]
   Object.assign(state, {
+    worldManagerOrder: projectileManager.state(),
     world: {
       ...state.world,
       enemies: {

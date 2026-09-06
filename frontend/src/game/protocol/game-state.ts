@@ -462,6 +462,10 @@ export const BONEYARD_ENEMY_ACTION_SOUNDS = [
   'fireball-hit',
   'portal-open',
   'shoot-arrow',
+  'magic-missile-hit',
+  'throw-fire',
+  'throw-spell',
+  'spit-fire',
 ] as const
 
 export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
@@ -497,7 +501,7 @@ export const BONEYARD_PLAYER_DAMAGE_SOUNDS = [
   'wizard-ouch-3',
 ] as const
 
-export const BONEYARD_PLAYER_STATUS_SOUNDS = ['frosted', 'poisoned'] as const
+export const BONEYARD_PLAYER_STATUS_SOUNDS = ['frosted', 'poisoned', 'magic-missile-hit'] as const
 
 export const BONEYARD_ENEMY_SOUNDS = [
   ...BONEYARD_ENEMY_ACTION_SOUNDS,
@@ -591,14 +595,13 @@ export interface BoneyardEnemyProjectileSnapshot {
 export const BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS = [
   'arrow-tumble',
   'demon-fire',
-  'fire-burst-frame',
-  'fire-burst-glow',
+  'demon-explosion-core',
+  'demon-explosion-array',
+  'demon-explosion-lit-array',
+  'poison-bubble',
+  'fire-burst',
+  'guided-impact',
   'firebolt-trail',
-  'guided-impact-aura-one',
-  'guided-impact-aura-two',
-  'guided-impact-main',
-  'poison-pool-fade-inner',
-  'poison-pool-fade-outer',
 ] as const
 
 export type BoneyardEnemyProjectileEffectKind =
@@ -607,26 +610,24 @@ export type BoneyardEnemyProjectileEffectKind =
 export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS: Readonly<
   Record<BoneyardEnemyProjectileEffectKind, number>
 > = Object.freeze({
-  'arrow-tumble': 6,
+  'arrow-tumble': 4,
   'demon-fire': 1,
-  'fire-burst-frame': 1,
-  'fire-burst-glow': 0.5,
+  'demon-explosion-core': 1,
+  'demon-explosion-array': 1,
+  'demon-explosion-lit-array': 1,
+  'poison-bubble': 0.75,
+  'fire-burst': 0.5,
+  'guided-impact': 2,
   'firebolt-trail': 1,
-  'guided-impact-aura-one': 2,
-  'guided-impact-aura-two': 2,
-  'guided-impact-main': 2,
-  'poison-pool-fade-inner': 1,
-  'poison-pool-fade-outer': 0.5,
 })
 
-export interface BoneyardEnemyProjectileEffectSnapshot {
+export interface BoneyardEnemyProjectileEffectSnapshotBase {
   ageTicks: number
   alpha: number
   atlas: 'BadGuys' | 'DeadHawg'
   blendMode: 'add' | 'normal'
   entry: number
   id: number
-  kind: BoneyardEnemyProjectileEffectKind
   lightRegistration: NativeWorldManagerRegistration | null
   lifetimeTicks: number
   ownerActorId: number
@@ -639,6 +640,11 @@ export interface BoneyardEnemyProjectileEffectSnapshot {
   spawnTick: number
   tint: number
 }
+
+export type BoneyardEnemyProjectileEffectSnapshot = BoneyardEnemyProjectileEffectSnapshotBase & (
+  | { kind: 'demon-fire'; fireFadeAlpha: number; fireHorizontalSign: -1 | 1 }
+  | { kind: Exclude<BoneyardEnemyProjectileEffectKind, 'demon-fire'> }
+)
 
 export const BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES = ['edge', 'lid'] as const
 export const BONEYARD_MAGGOT_STATES = ['bite', 'crawl', 'death', 'emerging'] as const

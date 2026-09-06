@@ -9,11 +9,8 @@ import {
 } from '../core-kernels/native-rng.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import {
-  createBoneyardEnemyStore,
-  stepBoneyardEnemyStore,
-  type BoneyardEnemyProjectile,
-} from './boneyard-enemy-store.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import type { BoneyardEnemyProjectile } from './enemies/model.ts'
 import {
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
@@ -123,7 +120,7 @@ test('shared native collision adjustment changes ring sample count and preserves
 
 test('secondary target membership begins on the Coffin rising edge', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('secondary-coffin'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -189,7 +186,7 @@ test('Dampen selects only the four native hostile-magic projectile families', ()
 
 test('Earthquake applies its exact signed heading perturbation at the enemy-store boundary', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('earthquake-heading'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -226,27 +223,31 @@ function enemyProjectile(
   nativeTypeId: BoneyardEnemyProjectile['nativeTypeId'],
   payload: BoneyardEnemyProjectile['payload'],
 ): BoneyardEnemyProjectile {
-  return {
+  const painterRegistration = {
+    managerLane: kind === 'arrow' || kind === 'firebolt' ? 'transient' as const : 'actor' as const,
+    registrationOrdinal: id,
+  }
+  const base = {
     ageTicks: 8,
     bounceVelocity: 0,
     chillTumbleAccumulator: 0,
     coldSlowTicks: 0,
     contactRadius: 8,
     damage: 1,
+    secondaryDamage: 0,
     headingDeg: 90,
     hitPlayerIds: [],
     homing: false,
     id,
-    kind,
     lastStepTick: 0,
-    lightRegistration: null,
+    lightRegistration: kind === 'arrow' ? null : painterRegistration,
     lifetimeTicks: 300,
     minimumSpeed: 0,
     nativeCellBindingOrder: id,
     nativeRegistrationOrder: id,
     nativeTypeId,
     ownerActorId: 3,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: id },
+    painterRegistration,
     payload,
     poisonDamage: 0,
     poisonDuration: 0,
@@ -255,9 +256,11 @@ function enemyProjectile(
     spawnTick: 0,
     speed: 5,
     targetPlayerId: null,
+    turnSpeed: kind === 'guided-missile' ? 1 : 0,
     verticalOffset: 0,
     verticalVelocity: 0,
     visualPhaseDeg: 15,
     visualScale: 1,
   }
+  return kind === 'arrow' ? { ...base, kind, velocity: { x: 5, y: 0 } } : { ...base, kind }
 }

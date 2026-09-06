@@ -15,11 +15,8 @@ import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
-import {
-  createBoneyardEnemyStore,
-  NATIVE_MAGE_ACTION_PROGRAMS,
-  stepBoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import { NATIVE_MAGE_ACTION_PROGRAMS } from './enemies/programs.ts'
 import {
   createGameSimulation,
   bindGameSimulationPlayerSkillQuickbar,
@@ -415,7 +412,7 @@ test('a Coffin-owned Maggot uses the same player defense and reflection rules', 
   const order = createNativeWorldManagerOrder(source.worldManagerOrder)
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('contact-maggot'), {
     tick: 0, players: {}, registerWorldPainter: order.register,
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{ enemyToken: 'COFFIN', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN, id: 1, flags: [],
       position: { x: 600, y: 500 }, spawnTick: 0, waveOrdinal: 1, locationPolicy: 'anywhere' }],
@@ -529,7 +526,7 @@ function mageContactState(
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   const order = createNativeWorldManagerOrder(state.worldManagerOrder)
   const spawned = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     registerWorldPainter: order.register,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,

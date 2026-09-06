@@ -1,4 +1,6 @@
+import { nativeRandomFloatFromSemanticWord } from '../core-kernels/native-random-domain.ts'
 import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
+import { nativePoisonPoolAlpha } from '../core-kernels/native-poison-pool.ts'
 import type { NativeEnemySampleAtlas } from './native-enemy-animation.ts'
 
 export interface NativeEnemyProjectileLayer {
@@ -16,7 +18,16 @@ export interface NativeEnemyProjectileLayer {
 
 export interface NativeEnemyProjectilePlan {
   readonly layers: readonly NativeEnemyProjectileLayer[]
+  readonly underlays: readonly NativeEnemyProjectileLayer[]
   readonly position: Readonly<{ x: number; y: number }>
+  readonly streak: NativeEnemyProjectileStreak | null
+}
+
+export interface NativeEnemyProjectileStreak {
+  readonly alpha: number
+  readonly end: Readonly<{ x: number; y: number }>
+  readonly start: Readonly<{ x: number; y: number }>
+  readonly width: number
 }
 
 /**
@@ -38,47 +49,47 @@ export function nativeEnemyProjectilePlan(
       const payload = requirePayload(projectile, ['normal', 'fire', 'poison'])
       const visualHeadingRadians = projectile.visualPhaseDeg * Math.PI / 180
       const alpha = Math.min(1, projectile.visualScale)
-      const body = layer('BadGuys', 2, `arrow-${payload}`, {
+      const body = nativeEnemyProjectileLayer('BadGuys', 2, `arrow-${payload}`, {
         alpha,
         offset: { x: 0, y: projectile.verticalOffset },
         rotationRadians: visualHeadingRadians,
         scale: 1.25,
       })
-      if (payload === 'normal') return plan(projectile, [body])
+      const streak = arrowStreak(projectile, fixedTick)
+      if (payload === 'normal') return plan(projectile, [body], streak)
       const heightScale = projectile.verticalOffset === 0 ? 0.35 : 1
       const overlayScale = 0.5
         + deterministicUnit(projectile.id, fixedTick, 0) * 0.5 * heightScale
       const overlay = payload === 'fire'
-        ? layer('BadGuys', 255 + Math.floor(fixedTick / 5) % 12, 'arrow-fire-overlay', {
+        ? nativeEnemyProjectileLayer('BadGuys', 255 + Math.floor(fixedTick / 5) % 12, 'arrow-fire-overlay', {
             alpha,
             blendMode: 'add',
             offset: { x: 0, y: projectile.verticalOffset },
             rotationRadians: visualHeadingRadians + Math.PI,
             scale: overlayScale,
           })
-        : layer('BadGuys', 271 + Math.floor(age / 6) % 12, 'arrow-poison-overlay', {
+        : nativeEnemyProjectileLayer('BadGuys', 271 + Math.floor(age / 6) % 12, 'arrow-poison-overlay', {
             alpha,
             blendMode: 'add',
             offset: { x: 0, y: projectile.verticalOffset },
-            rotationRadians: visualHeadingRadians + Math.PI,
             scale: overlayScale,
             tint: 0x008000,
           })
-      return plan(projectile, [body, overlay])
+      return plan(projectile, [body, overlay], streak)
     }
     case 'firebolt': {
       requirePayload(projectile, ['fire'])
       const alpha = remainingLifetimeAlpha(projectile, age)
       const entry = 255 + age % 12
       return plan(projectile, [
-        layer('BadGuys', 15, 'firebolt-orange-glow', {
+        nativeEnemyProjectileLayer('BadGuys', 15, 'firebolt-orange-glow', {
           alpha: alpha * 0.5,
           blendMode: 'add',
           offset: { x: 0, y: -15 },
           scale: 2,
           tint: 0xff8000,
         }),
-        layer('BadGuys', entry, 'firebolt-body', {
+        nativeEnemyProjectileLayer('BadGuys', entry, 'firebolt-body', {
           alpha,
           blendMode: 'add',
           offset: { x: 0, y: -15 },
@@ -94,7 +105,7 @@ export function nativeEnemyProjectilePlan(
       const mainEntry = payload === 'cold' ? 110 : 111
       const auraTint = payload === 'cold' ? 0x4080ff : 0x40ff40
       return plan(projectile, [
-        layer('BadGuys', mainEntry, `guided-missile-${payload}-body`, {
+        nativeEnemyProjectileLayer('BadGuys', mainEntry, `guided-missile-${payload}-body`, {
           alpha: lifetimeAlpha * (
             0.5 + deterministicUnit(projectile.id, fixedTick, 0) * 0.5
           ),
@@ -103,7 +114,7 @@ export function nativeEnemyProjectilePlan(
           scale: 1.1
             + Math.abs(sinDegrees(phase * 15)) * 0.15 * projectile.visualScale,
         }),
-        layer('BadGuys', 112, `guided-missile-${payload}-aura`, {
+        nativeEnemyProjectileLayer('BadGuys', 112, `guided-missile-${payload}-aura`, {
           alpha: lifetimeAlpha * Math.abs(sinDegrees(phase * 6)) * 0.55,
           blendMode: 'add',
           offset: { x: 0, y: -15 },
@@ -116,7 +127,7 @@ export function nativeEnemyProjectilePlan(
     }
     case 'demon-bomb': {
       requirePayload(projectile, ['none'])
-      const bombLayers = Array.from({ length: 3 }, (_, index) => layer(
+      const bombLayers = Array.from({ length: 3 }, (_, index) => nativeEnemyProjectileLayer(
         'BadGuys',
         267 + deterministicDomainSample(projectile.id, fixedTick, index, 4),
         `demon-bomb-sample-${index}`,
@@ -130,7 +141,7 @@ export function nativeEnemyProjectilePlan(
       const groundAlpha = projectile.speed <= 1
         ? 1
         : Math.max(0, 1 - projectile.speed * 0.5)
-      return plan(projectile, [...bombLayers, layer(
+      return plan(projectile, [...bombLayers, nativeEnemyProjectileLayer(
         'DeadHawg',
         46 + Math.floor(fixedTick / 2) % 32,
         'demon-bomb-ground',
@@ -146,13 +157,14 @@ export function nativeEnemyProjectilePlan(
       requirePayload(projectile, ['poison'])
       const scale = projectile.visualScale
       const pulse = Math.sin(age * Math.PI / 180) * 0.25 + 0.75
+      const alpha = nativePoisonPoolAlpha(age)
       return plan(projectile, [
-        layer('DeadHawg', 0, 'poison-pool-outer', {
-          alpha: 0.5,
+        nativeEnemyProjectileLayer('DeadHawg', 0, 'poison-pool-outer', {
+          alpha: 0.5 * alpha,
           scale,
         }),
-        layer('DeadHawg', 0, 'poison-pool-inner', {
-          alpha: pulse,
+        nativeEnemyProjectileLayer('DeadHawg', 0, 'poison-pool-inner', {
+          alpha: pulse * alpha,
           scale: Math.max(scale - 0.6, 0) * scale * 0.75,
         }),
       ])
@@ -175,11 +187,35 @@ function requirePayload<Payload extends BoneyardEnemyProjectileSnapshot['payload
 function plan(
   projectile: BoneyardEnemyProjectileSnapshot,
   layers: readonly NativeEnemyProjectileLayer[],
+  streak: NativeEnemyProjectileStreak | null = null,
 ): NativeEnemyProjectilePlan {
-  return { layers, position: { ...projectile.position } }
+  const underlays = projectile.kind === 'arrow'
+    ? [nativeEnemyProjectileLayer('BadGuys', projectile.verticalOffset === 0 ? 3 : 2, 'arrow-ground-shadow', {
+        alpha: Math.min(1, projectile.visualScale), rotationRadians: projectile.headingDeg * Math.PI / 180, tint: 0,
+      })]
+    : projectile.kind === 'demon-bomb'
+      ? [nativeEnemyProjectileLayer('BadGuys', 15, 'demon-bomb-ground-glow', {
+          alpha: 0.25, blendMode: 'add', scaleY: Math.fround(0.8), tint: 0xff8000,
+        })]
+      : projectile.kind === 'poison-pool' ? layers : []
+  return { layers: projectile.kind === 'poison-pool' ? [] : layers, underlays, position: { ...projectile.position }, streak }
 }
 
-function layer(
+function arrowStreak(projectile: BoneyardEnemyProjectileSnapshot, tick: number): NativeEnemyProjectileStreak | null {
+  if (projectile.verticalOffset > -20) return null
+  const radians = projectile.headingDeg * Math.PI / 180
+  const x = Math.sin(radians) * projectile.speed
+  const y = -Math.cos(radians) * projectile.speed
+  const age = Math.min(projectile.ageTicks, 35)
+  return {
+    alpha: 0.5 * (0.8 + deterministicUnit(projectile.id, tick, 2) * 0.2),
+    start: { x: Math.fround(-5 * x), y: Math.fround(projectile.verticalOffset - 5 * y) },
+    end: { x: Math.fround(-age * x), y: Math.fround(projectile.verticalOffset - age * y) },
+    width: 2,
+  }
+}
+
+export function nativeEnemyProjectileLayer(
   atlas: NativeEnemySampleAtlas,
   entry: number,
   role: string,
@@ -240,5 +276,5 @@ function deterministicUnit(id: number, tick: number, channel: number): number {
   value ^= value >>> 16
   value = Math.imul(value, 0x7feb352d) >>> 0
   value = (value ^ (value >>> 15)) >>> 0
-  return value / 0x1_0000_0000
+  return nativeRandomFloatFromSemanticWord(value)
 }

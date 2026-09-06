@@ -114,7 +114,7 @@ test('native Hail birth draws a small ice chip in both Hub sprites and Boneyard 
   for (const mesh of [false, true]) {
     const root = new Container()
     const view = mesh
-      ? PrimarySpellWorldView.forBoneyard(root, textures, testShader())
+      ? PrimarySpellWorldView.forBoneyard(root, textures, { shader: testShader() })
       : new PrimarySpellWorldView(root, textures)
     view.update(spells, WORLD_KEY)
     if (mesh) {
@@ -137,7 +137,7 @@ test('native Hail birth draws a small ice chip in both Hub sprites and Boneyard 
 
 test('Boneyard Air/Water mesh retains every actor row and exact painter partition', () => {
   const root = new Container()
-  const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), testShader())
+  const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), { shader: testShader() })
   view.update(actorFixture(), WORLD_KEY, 100)
   assert.deepEqual(view.painterLayers().map(({ id }) => id), [
     'primary-spell:1',
@@ -171,7 +171,7 @@ test('Boneyard Air/Water mesh retains every actor row and exact painter partitio
 
 test('Boneyard Water mesh owns normal Frost while Frost-over retains its post-world view', () => {
   const root = new Container()
-  const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), testShader())
+  const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), { shader: testShader() })
   const normal = water(normalWaterId(10))
   const over = water(overWaterId(10))
   view.update({ nextId: 100, projectiles: [], transients: [normal, over] }, WORLD_KEY, 100)

@@ -14,11 +14,8 @@ import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createEquipmentInventoryItem, DOWSING_EQUIPMENT_RECIPES } from '../core-kernels/hub-economy.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
-import {
-  createBoneyardEnemyStore,
-  stepBoneyardEnemyStore,
-  type BoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import type { BoneyardEnemyStore } from './enemies/model.ts'
 import {
   addPlayerEntity,
   createPlayerEntityStore,
@@ -504,7 +501,7 @@ function seedForEtherPikeBreak(playerEntities: PlayerEntityStore): number {
 
 function spawnSkeleton(flags: readonly 'FLAG_PIKE'[] = []): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('staff-system'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       [PLAYER_ID]: {
         alive: true,
@@ -532,7 +529,7 @@ function spawnSkeleton(flags: readonly 'FLAG_PIKE'[] = []): BoneyardEnemyStore {
 
 function spawnCoffin(): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('staff-coffin'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       [PLAYER_ID]: {
         alive: true,

@@ -1,4 +1,4 @@
-import type { BoneyardEnemyAttributionObserver } from '../boneyard-enemy-store.ts'
+import type { BoneyardEnemyAttributionObserver } from '../enemies/model.ts'
 import { getPlayerProgression, type GameSimulationState } from '../game-simulation.ts'
 
 export interface MlBotPolicyRewardTerms {

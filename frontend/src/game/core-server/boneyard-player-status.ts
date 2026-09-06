@@ -5,7 +5,7 @@ import type {
   BoneyardEnemyDeathEffect,
   BoneyardEnemySemanticEvent,
   BoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+} from './enemies/model.ts'
 
 export function emitPlayerStatusBurst(
   source: BoneyardEnemyStore,

@@ -3,7 +3,7 @@ import type {
   BoneyardEnemyProjectile,
   BoneyardEnemyStore,
   BoneyardMageLightningPulse,
-} from '../boneyard-enemy-store.ts'
+} from '../enemies/model.ts'
 import { ML_BOT_POLICY_ENEMY_PROJECTILE_CLASSES } from './closed-unions.ts'
 import { ML_BOT_POLICY_SCALES } from './spec.ts'
 

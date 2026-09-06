@@ -102,16 +102,16 @@ import {
   withBoneyardGateCollision,
   type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
 import {
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-  createBoneyardEnemyStore,
-  stepBoneyardEnemyStore,
   type BoneyardEnemyPlayerDamage,
   type BoneyardEnemyReward,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
 import {
   boneyardNavigationMeshIsPrepared,
   findBoneyardEnemyRoute,
@@ -637,6 +637,15 @@ export function stepBoneyardWorldTick(
           || nativeTutorialEnemyCameraPositionIsAllowed(candidate, radius)
         )
       )
+  const projectileViewports = Object.entries(nextPlayers).map(([playerId, player]) => {
+    const input = inputs[playerId] ?? createIdlePlayerCharacterInput()
+    return {
+      alternatePlayer: playerCombat[playerId]?.alive !== true,
+      position: player.position,
+      viewportHeight: input.viewportHeight,
+      viewportWidth: input.viewportWidth,
+    }
+  })
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     abilityEffects,
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
@@ -646,14 +655,10 @@ export function stepBoneyardWorldTick(
       activeBounds,
       collision,
     ),
-    firstProjectileWorldContact: ({ end, radius, start }) => (
-      firstBoneyardPathBlockProgress(
-        start,
-        end,
-        activeBounds,
-        collision,
-        radius,
-      )
+    projectileWorldBlocked: createBoneyardProjectileWorld(
+      activeBounds,
+      collision,
+      projectileViewports,
     ),
     navigation: {
       findRoute: ({ bodyRadius, end, navigationClearance, start }) => (
@@ -677,6 +682,12 @@ export function stepBoneyardWorldTick(
       ) === null,
     },
     paused: hostileScenePaused,
+    onProjectileExplosion: position => {
+      const viewport = projectileViewports[0]
+      if (!viewport) return
+      const intensity = Math.fround(4 * boneyardProjectilePointGain(activeBounds, viewport, position, viewport.alternatePlayer))
+      enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
+    },
     players: Object.fromEntries([
       ...Object.entries(nextPlayers).map(([playerId, player]) => {
         const combat = playerCombat[playerId]
@@ -694,6 +705,7 @@ export function stepBoneyardWorldTick(
         }] as const
       }),
       ...summons.map((summon) => [summon.id, {
+        summoned: true,
         alive: true,
         collisionRadius: summon.collisionRadius,
         connected: true,

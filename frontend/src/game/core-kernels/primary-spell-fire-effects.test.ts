@@ -155,10 +155,10 @@ test('Fire patches own the float animation clock and exact three-tick contact no
     worldKey: 'world',
   }, createNativeRng(41))
   const patch = spawned.patch
-  assert.equal(NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR, 0.015)
+  assert.equal(NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR, 0.03)
   assert.equal(spawned.rng.indexA, 2)
   assert.equal(patch.atlasPhase >= 0 && patch.atlasPhase < NATIVE_FIRE_PATCH_FRAME_COUNT, true)
-  assert.equal(patch.shapeSample >= 0 && patch.shapeSample <= 1, true)
+  assert.ok(patch.horizontalSign === -1 || patch.horizontalSign === 1)
 
   const first = stepNativeFirePatch(patch, 1)
   assert.equal(first.contact, null)
@@ -181,7 +181,7 @@ test('Fire patches own the float animation clock and exact three-tick contact no
   })
 })
 
-test('Fire patch assembly keeps atlas phase, fade, and sampled horizontal shape independent', () => {
+test('Fire patch assembly keeps atlas phase, fade, and horizontal mirror independent', () => {
   const patch = createNativeFirePatch({
     burnDamage: 0,
     damage: 0,
@@ -190,13 +190,13 @@ test('Fire patch assembly keeps atlas phase, fade, and sampled horizontal shape 
     ownerId: 'p1',
     position: { x: 0, y: 0 },
     worldKey: 'world',
-  }, 31.95, 0.375)
+  }, 31.95, -1)
   const stepped = stepNativeFirePatch(patch, 1).patch!
   const accumulatedPhase = Math.fround(Math.fround(31.95) + Math.fround(0.12))
   assert.equal(stepped.atlasPhase, Math.fround(accumulatedPhase - 32))
   assert.equal(stepped.atlasPhaseStep, Math.fround(0.12))
   assert.equal(stepped.fadeAlpha, Math.fround(0.05))
-  assert.equal(stepped.shapeSample, Math.fround(0.375))
+  assert.equal(stepped.horizontalSign, -1)
   assert.equal(stepped.drawAlpha, 4)
 })
 

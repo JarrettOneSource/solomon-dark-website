@@ -1,10 +1,7 @@
 import type { NativeEquipmentModifiers } from '../../core-kernels/native-equipment-effects.ts'
 import type { NativeSecondaryActorKind } from '../../core-kernels/native-secondary-abilities.ts'
 import type { BoneyardWaveEnemyToken } from '../../core-kernels/boneyard-wave-schema.ts'
-import type {
-  BoneyardEnemyBrain,
-  BoneyardEnemyProjectileKind,
-} from '../boneyard-enemy-store.ts'
+import type { BoneyardEnemyBrain, BoneyardEnemyProjectileKind } from '../enemies/model.ts'
 
 type EnemyFamily = BoneyardEnemyBrain['family']
 export const ML_BOT_POLICY_ENEMY_TOKEN_SPECIES = Object.freeze({

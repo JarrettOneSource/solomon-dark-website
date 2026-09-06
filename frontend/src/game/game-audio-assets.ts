@@ -1,3 +1,5 @@
+import throwSpell from '../assets/game/audio/sfx/throw-spell.wav'
+import spitFire from '../assets/game/audio/sfx/spit-fire.wav'
 import academy from '../assets/game/audio/music/academy.mp3'
 import combat from '../assets/game/audio/music/combat.mp3'
 import prelude from '../assets/game/audio/music/prelude.mp3'
@@ -322,6 +324,8 @@ export const GAME_AUDIO_SOURCES = {
     'throw-dirt-1': throwDirt1,
     'throw-dirt-2': throwDirt2,
     'throw-fire': throwFire,
+    'throw-spell': throwSpell,
+    'spit-fire': spitFire,
     'throw-lightning-1': throwLightning1,
     'throw-lightning-2': throwLightning2,
     'unlock-skill': unlockSkill,

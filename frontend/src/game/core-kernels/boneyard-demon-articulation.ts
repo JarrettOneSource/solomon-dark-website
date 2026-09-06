@@ -1,3 +1,6 @@
+import { roundHalfToEven } from './native-rounding.ts'
+import { nativeEnemyProjectileVelocity } from './native-enemy-targeting.ts'
+
 export interface NativeDemonPoint {
   readonly x: number
   readonly y: number
@@ -192,6 +195,16 @@ export function nativeDemonArticulationRoot(
       + state.rear.liftY
     ) * 0.5,
   })
+}
+
+export function nativeDemonBombBearing(headingDeg: number): number {
+  return positiveModulo(roundHalfToEven((headingDeg + 10) / 20), 18) * 20
+}
+
+export function nativeDemonBombLaunchPosition(state: NativeDemonArticulationState, headingDeg: number): NativeDemonPoint {
+  const root = nativeDemonArticulationRoot(state)
+  const forward = nativeEnemyProjectileVelocity(nativeDemonBombBearing(headingDeg), 35)
+  return { x: Math.fround(root.x + forward.x), y: Math.fround(root.y + forward.y) }
 }
 
 export function assertNativeDemonArticulationState(

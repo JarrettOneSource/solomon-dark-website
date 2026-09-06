@@ -701,3 +701,403 @@ MonsterRecipe default/build -> factory/config apply
   lethal `0..100` transition, terminal removal, and second-run reset.
 - The exact rebased candidate must pass focused suites and
   `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini before push.
+
+## 2026-09-05 — Hostile projectile flight and lifetime reopening
+
+### Reported failure and evidence boundary
+
+The reported Archer arrow falls immediately after release. This is another
+report against the supposedly closed projectile system. The earlier passes
+recovered constants but skipped their enclosing branches: `Arrow+0x168` gates
+**the entire descent/drag program**, not only its draw angle. They also called
+bounded sibling launch, targeting, collision, and expiry programs verified.
+The projectile dispositions and the 400-tick GuidedMissile claim above are
+reopened. The earlier 273 Arrow flight and angle sections are superseded by
+this instruction-derived contract.
+
+Website investigation base: `f9d736bf03e3d917ce1cf31dd3778a4423b40f94`.
+A deterministic Mac M2 / Node 22.17.0 replay releases an ordinary Archer arrow
+from `(0,0)` toward a stationary player at `(0,-300)`, without obstacles. It
+starts at `(0,-30)`, speed `5.826210021972656`, height `-25`, countdown `74`.
+The uncorrected host lowers it on age 1, reaches height `-2.5` on age 30, and
+stops at `(0,-185.96570253372192)` on age 31 with countdown `43`. No player
+impact occurs. The unattended reproduction exits with
+`Unobstructed Archer shot falls short of stationary target at 300 units`.
+This directly reproduces the report in authoritative state; it is not a
+camera, interpolation, texture orientation, or browser frame-rate defect.
+
+Retail source: unmodified 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Fresh static queries use canonical project `SolomonDark`,
+program `SolomonDark.exe`, and the leased replica pool through the read-only
+Mod Loader wrapper. Tool revision: `08bfba9ef367f7b863848030d0a289dc31e33192`;
+wrapper SHA-256:
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+Queries include constructor/tick/render/contact decompiles, complete raw
+instruction dumps, and the constructor/tick xref census below. Disposable
+outputs are under `%LOCALAPPDATA%/Temp/sdr-enemy-projectile-flight-20260905-root`.
+
+A separately copied, directly launched stock instance has PID `17360`, image
+base `0x00E70000`, and no injected loader. A read-only process-memory probe
+confirms `0x00820230=100` ticks/second and the copied profile's Enhanced Effects
+byte is zero. These observations establish process/configuration provenance;
+they are not a substitute for a projectile capture. Website's explicit
+Enhanced Effects ON policy remains the contract in entry 130.
+
+### System boundary and membership
+
+Native system: the hostile projectile graph emitted by the current Boneyard
+Archer, Mage, Demon, and rotten-Zombie factories, including launch inputs,
+fixed-tick flight, contact admission, retirement, and their owned presentation
+children. Existing primary spells, movement controllers, collision geometry,
+status-modifier consumers, and the world painter are dependencies; their
+interfaces are checked where these children cross them.
+
+The following is the implementation disposition inventory. `exact-ported`
+rows are the required end state of this reopening; until the final validation
+receipt is recorded, they are not a completion claim.
+
+| Member | Native owner / source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Ordinary Arrow | Archer volley `0x00477B90`; Arrow `0x005E1000/0x005FEA00/0x0060F590` | `exact-ported` | Straight-flight hold, exact countdown edge, descent, planted fade, stationary-target hit |
+| Fire Arrow | same owner; payload byte `+0x164=1`, impact `0x005E5D30` | `exact-ported` | Same complete flight; fire-only rotated overlay and independent burst/light handoff |
+| Poison Arrow | same owner; payload byte `+0x164=2` | `exact-ported` | Same complete flight; unrotated poison overlay and poison contact |
+| Archer direct/lead/scatter/random aim, all four range and multi-arrow modes | `0x00477B90`, existing complete `native-enemy-targeting.ts` tables | `exact-ported` | Reuse aim/range/fan rules and restore exact per-arrow speed constants and countdown; all payloads inherit the corrected flight |
+| Arrow Enhanced Effects ON and settled fade | `0x005E1000`, `0x00B3BCAD` | `exact-ported` | Initial opacity 15; stable shaft opacity above one; fade and wire admission through the last positive sample |
+| Arrow Enhanced Effects OFF | same constructor, opacity 5 | `out-of-system` | No mutable OFF producer in Website; native difference is documented, not silently selected |
+| Arrow velocity streak and grounded contact gate | `0x0060F590`, `0x005FEA00` | `exact-ported` | Streak at height at most -20; grounded arrows cannot damage passing players |
+| Arrow Chill/SpinAway handoff | `0x005E5EC0` | `exact-ported` | Strict accumulated force greater than one; child survives parent; native rotation/scaling/fade |
+| Mage Firebolt | `0x0047FDE0`, `0x005E1D00/0x00600880/0x00612760` | `exact-ported` | Forward origin 20, speed 4, 400-tick lifetime; native contact and terrain cadence |
+| Mage cold GuidedMissile | `0x0047FDE0`, `0x005E7E00/0x00600B40/0x005F42C0/0x005F3EE0` | `exact-ported` | Forward origin 5, speed decay/floor, constructor turn rate, movement-before-turn, 1300-tick lifetime, cold contact |
+| Mage poison GuidedMissile | same owner, payload `+0x180=1` | `exact-ported` | Same complete flight; poison payload and color/impact branch |
+| Mage direct lightning | `0x0047FDE0` case 1 and `boneyard-mage-lightning.ts` | `out-of-system` | A retained actor-owned beam/pulse, not an emitted flying projectile; existing per-tick target/LOS owner remains authoritative |
+| DemonBomb launch, airborne, bounce, stop, and terminal branches | `0x0049A270`, `0x005E2F00/0x00603CA0/0x0061A690` | `exact-ported` | Exact launch origin/speed, float constants, strict contact/settled edges, immediate contact detonation, independent fire children |
+| Rotten-Zombie PoisonPool | `0x005E3B00/0x005F8030/0x005EDFA0` | `exact-ported` | Stationary origin, growth, live/fade contact and retirement; never passed through moving-projectile homing or swept-hit admission |
+| Firebolt trails / fire impacts / GuidedMissile impact / Demon fire / poison-pool presentation | owning callbacks and existing authored BadGuys/DeadHawg manifests | `exact-ported` | Native birth order, independent clocks, all authored records, painter/light ownership, parent retirement and reset |
+| All generated Arenas, custom recipes, multiplayer, pause, late join, and save/restore | one authority-owned projectile store and strict entity codec | `exact-ported` | Same state and reducer in every scene; restored and remote clients do not restart flight |
+| Silk | ctor `0x005F05D0` calls Arrow ctor, but own tick `0x005F8B50` | `out-of-system` | Spider/Cocoon emission graph is absent from this baseline; own update must not inherit the Archer descent gate by name alone |
+| DarkFireball | ctor `0x005E3A10`, tick wrapper `0x00605C80` calls Firebolt tick | `out-of-system` | DireFaculty/story emission graph absent from baseline; fire contact replaces payload with DireFire |
+| SkullMissile | ctor `0x005EB980`, tick wrapper `0x00605920` calls GuidedMissile tick | `out-of-system` | DemonSkull/story emission graph absent from baseline; inherited flight is a documented sibling, not an exposed stock recipe |
+| Imp, GoodImp, Wraith, Maggot and Portal-owned Imp | separate living-actor/family movement virtuals | `out-of-system` | Their body flight/emergence is not a projectile descent program; do not apply Arrow constants to them |
+
+Constructor xrefs are completely enumerated: Arrow has factory call
+`0x005B7838` and Silk constructor call `0x005F05F9`; Firebolt has factory
+`0x005B7CFA` and DarkFireball constructor `0x005E3A13`; GuidedMissile has factory
+`0x005B7D34` and SkullMissile constructor `0x005EB983`; DemonBomb has only
+factory `0x005B7FEC`; PoisonPool has only factory `0x005B7AB6`.
+Tick xrefs: Arrow vtable cell `0x0079C7EC`; Firebolt vtable `0x0079CADC` and
+DarkFireball call `0x00605C84`; GuidedMissile vtable `0x0079DA94` and
+SkullMissile call `0x00605951`; DemonBomb vtable `0x0079CE5C`; PoisonPool vtable
+`0x0079D1C4`. There is no shared Arrow tick inherited by Silk.
+
+### Instruction-derived contract
+
+- `0x005FED25..0x005FED46` subtracts Puppet `+0x120` from Arrow `+0x168`.
+  A **positive** result jumps to `0x005FEEA2`, copying travel heading to draw
+  heading without touching height or velocity. At zero or below, height less
+  than -3 gains 0.75 and both stored velocity components damp by
+  `0.9900000095367432`; only this descent branch computes the .25 pitch term.
+  At height at least -3, velocity and height become zero and float opacity
+  loses `0.05000000074505806`. Position movement precedes these transitions.
+- Arrow contacts are admitted only while height is nonzero, at squared player
+  center distance strictly below 400. Its terrain check occurs every fifth
+  age tick, from the moved position through five more velocity steps. A
+  landed Arrow is presentation state, not a stationary damage trigger.
+- Arrow constructor opacity is 5 with Enhanced Effects off and 15 with it on.
+  Shaft alpha is `min(opacity,1)`. The poison overlay is an unrotated sprite;
+  the fire overlay alone adds 180 degrees. A velocity-aligned gray gradient
+  streak precedes the shaft while height is at most -20, using age capped at
+  35 and the native five-step near endpoint.
+- Mage Firebolt dispatch multiplies its heading vector by 4 and then advances
+  its birth position by five of those vectors: 20 units forward. Lifetime is
+  400, contact is player-center distance strictly below 30, and terrain is
+  checked every tenth age tick with ten movement steps of lookahead before
+  current movement. Live art stays at -15 Y; those offsets are not flight
+  gravity.
+- GuidedMissile's MagicMissile base constructor draws its phase first. Its
+  own constructor draws turn rate `0.5 + Float(0.75)`, speed floor
+  `0.75 + Float(0.44999998807907104)`, then scale
+  `0.8999999761581421 + Float(0.20000004768371582)`. Initial speed is 3.
+  Mage dispatch advances origin by five units and multiplies the constructor
+  `100*20` lifetime by float `0.6499999761581421`, yielding 1300 ticks.
+  Each tick moves with the prior heading, advances phase by six times speed,
+  then turns by its constructor rate times native signed turn direction.
+  Target invalidation clears the retained identity; it does not select the
+  nearest replacement. Speed loses `0.07500000298023224` down to its floor.
+  Retained-target proximity uses a strict ten-unit center test, followed by
+  the native radius-two actor query. Terrain lookahead is every fifth age tick.
+- DemonBomb keeps its own ballistic program: speed `[2,3]`, damping
+  `0.9950000047683716`, height -35, gravity `0.10000000149011612`, bounce
+  multiplier `0.8500000238418579`, and settled damping `0.9800000190734863`.
+  World contact at the current point and player center distance strictly below
+  35 clear both speed and the terminal countdown. A naturally slowed bomb
+  instead consumes its constructor's inclusive 100..200 countdown while speed
+  is below one and clears its retained bounce velocity. Contact must not
+  leave an invented 1..2 second fuse. Terminal explosion and two Fire actors
+  remain separate outputs with their own lifetimes.
+- PoisonPool grows by float 0.025 to float 1.6, retains a 3000-tick clock, then
+  loses float 0.005 opacity per tick. Its contact loop continues while the
+  actor remains alive, including fading states; it admits every overlapping
+  player each tick in the exact ellipse `dx*dx + (dy/0.8)^2 < 4900`.
+  A permanent hit-ID exclusion list and a frozen pair of fading sprites do
+  not represent the native owner.
+
+### Implementation and validation contract
+
+Projectile construction, mutable flight state, contact, and terminal handoff
+remain one authoritative subsystem. Class-specific programs reuse the existing
+world geometry adapter. The store entry point coordinates transactions, while
+cohesive enemy modules own construction, family actions/movement, projectile
+emission/flight/effects, and death programs. Each responsibility moved with its
+private helpers; callers import its owner directly.
+
+Use established public store/projection/codec interfaces for regressions. The
+Mac must first fail the stationary-target Arrow replay, then prove every
+payload, countdown and contact edge, guided target loss and turn order,
+Demon contact/fuse/bounce, child lifetime, and pool contact/fade. Require
+byte-identical changed-file manifests, focused tests, configured quality
+measurements, the full `/opt/homebrew/bin/bash ./scripts/validate.sh`, and a
+built Chrome `/game` journey with page/console/failed-response arrays. Record
+actual receipts here after the implementation; none is implied by this plan.
+
+#### Further contact and birth checks before the contact cutover
+
+The Arrow terrain call hardcodes exclusion mask `0x380` at `0x005FEC6E`;
+Firebolt and GuidedMissile use `+0x38=0x700`. The Website already has the native
+line-mask adapter in `firstBoneyardLineObstruction`; hostile projectiles were
+incorrectly routed through inflated walking-body sweeps. Reuse the line
+adapter at the recovered class cadence. DemonBomb instead requests its native
+radius-one point overlap. The simulation-facing terrain query therefore needs
+a boolean obstruction result, not an invented fraction used to move the
+projectile to the future lookahead contact.
+
+Archer volley additionally writes fire physical damage as
+`primary + secondary*0.5` and magic damage as `secondary*0.5`. Ordinary and poison
+physical lanes stay primary. The exact stored speed constants are double
+`5.699999809265137` at `0x007866D8` and float `0.5999999046325684` at
+`0x007866E0`. These constructor/payload details are also `exact-ported` targets
+of this reopening; the earlier verified birth row does not waive them.
+
+#### Bounds and view owner
+
+Fresh downstream queries identify Firebolt culling as `Region::Visible`
+`0x0064AA80`: its 100-by-100 footprint is tested against each local player's
+clamped view. View normalization divides by `max(1, height/800)`; the double
+800 is at `0x00785D10`. Arrow uses half-open Region bounds through
+`0x00403DA0`, and GuidedMissile uses those bounds expanded by 500. These are
+separate from terrain admission. The shared Website terrain callback is
+replaced by one typed world-query interface with `line`, `point`, `bounds`,
+and `view` requests. The existing line-mask, circle-overlap, and clamped-view
+implementations supply the geometry; there is no walking-body sweep or
+renderer-driven projectile clock.
+
+#### Native child details
+
+`Anim_PoisonBubble` uses vtable `0x00785204`, constructor `0x00454F10`, tick
+`0x00454FD0`, and render `0x00459F90`. Radius starts at zero, grows by
+`0.05 + Float(0.05)` to `0.5 + Float(0.75)`, then the inclusive 25..100 hold
+counter decrements starting with the first full-radius tick. The pool emits
+one when alpha is greater than .75 and `Integer(20)==3`, at radial distance
+`Float(50)` with Y compressed by float .8. This is a native particle actor,
+not the removed pair of invented pool-fade actors. Pool contact has no
+projectile-impact VFX/audio event.
+
+The finite pool opacity recurrence remains authority-age derived in a shared
+kernel. It begins fading on update 3000 and retires on update 3200, because
+201 float32 decrements are needed. The descriptor's lifetime now covers the
+whole native actor; no separate fade clock is reconstructed in the browser.
+
+The Bubble renderer's explicit asset address `BadGuys+0x2BDC` is record 57,
+with alpha .75 and zero rotation. That record must be resident before birth.
+
+The Fire child audit also falsifies the shared Fire constructor's web width
+sample: `Fire::Fire 0x005E7130` calls signed `1` at `0x004012C0` for `+0x14C`.
+It is a horizontal mirror sign, not a uniform float in [0,1]. Correct the one
+shared Fire constructor and its Fire/Fire_Goodguy/MovingFire consumers;
+GreenFire/DireFire are unreachable story subclasses in this baseline. The
+native field becomes `horizontalSign` with the exact domain -1/+1.
+Demon fires use this existing Fire owner with life 5, their authored scales,
+three-tick strict radius-32-times-scale contact, and equal physical/magic
+lanes of `damage/100*3*.5`. The previous enemy children were visual-only.
+
+Arrow's `Anim_SpinAway` recipe at `0x005E5EC0` starts alpha 4, angular speed
+`signed(10+Float(10))`, and velocity retention float .98; its fade is float .1.
+The former web values alpha 6 and angular speed 1..2 belong to the separate
+Silk deflection caller `0x005EBE20`. Keep the shared animation mechanism, but
+use the correct per-caller recipe.
+
+Additional instruction-derived findings (same retail image and replica provider):
+`Fire::render 0x00610F90 -> scale 0x004030A0 -> matrix multiply 0x00402D40`
+scales the initial `(0,-20)` translation, then adds `(rootX,rootY+10)`.
+The final flame origin is therefore `(rootX,rootY+10-20*commonScale)`, where
+`commonScale=f32(f32(1.100000023841858*scale)*fadeAlpha)`; horizontal scale
+also consumes the constructor's signed unit. This corrects the shared Fire
+presentation, including its already-supported goodguy and moving descendants.
+Fire's actual light-provider callback is vslot `+0x30`, `0x005E7610`; its
+colored ground submission is vslot `+0x28`, `0x005E7310`. They must not be
+mistaken for the ordinary flame draw or omitted when the parent bomb retires.
+
+`AnimPoisonBubble` (`0x00454F10/0x00454FD0/0x00459F90`) consumes BadGuys
+record 57. Constructor draws are growth `0.05+Float(0.05)`, maximum scale
+`0.5+Float(0.75)`, and hold `25+Integer(76)`; growth clamps, then the hold
+clock decrements on the first clamped tick. Pool emission requires alpha
+strictly above 0.75 and `Integer(20)==3`, then constructor draws precede
+position radius `Float(50)` and angle `Float(360)`. Y displacement is scaled
+by 0.8. The bubble is independent, ordinary blended, alpha 0.75, and unrotated.
+
+Arrow launch speed uses the recovered double `5.699999809265137` plus a float
+draw with magnitude `0.5999999046325684`. Fire-arrow physical damage is base
+physical plus half its secondary fire damage; the other half is magic damage.
+The Arrow Chill transfer uses opacity 4 and signed angular speed
+`10+Float(10)`; the superficially similar Silk transfer has a different recipe.
+
+Wire protocol 123 carries Fire fade and horizontal sign explicitly. Save schema
+32 retains GuidedMissile's constructor turn rate. Prior-schema guided missiles
+receive the native constructor draw from the restored enemy RNG and the native
+1300-tick lifetime; other old projectiles receive zero turn rate. Older positive
+Fire width samples become the corresponding positive horizontal orientation.
+Legacy visual-only Demon fires and invented detached pool fades are retired on
+migration because those records lack the native damage/constructor state; the
+profile, encounter, enemies, and active projectile population remain resumable.
+
+The DemonBomb's `Region::Explosion 0x006464E0` call uses size 1.5 and enables
+knockback. Its three visual objects reuse the existing recovered Fire explosion
+compositor: BadGuys 15 (10 ticks), 401..419 (35 ticks), and 420..433 (37 ticks).
+The lit array carries the separate native light at the impact origin, radius
+`2*RegionPointGain`, and the Multiple Shadows setting. The ordinary Fire actor
+light at `0x005E7610` has radius float .6 and intensity `min(1,life*3)`;
+its `0x005E7310` colored ground sprite is BadGuys 15, alpha `min(life,1)*.5`,
+scale `2*scale`, and color `(1,Float(1),0)`. The bomb's audio is FireballHit at
+pitch `1+Float(.1)`, then ThrowFire at float .8, both gain `2*RegionPointGain`.
+These reuse existing assets and sound delivery. Explosion contact appends the
+native ten-tick target knockback, normalized displacement times `size*3` per
+tick. The action survives removal of the bomb. Its camera feedback is a
+world-owned `4*RegionPointGain` impulse through `0x00448590`, separate from the
+actor death feedback already supported by Website.
+
+The shared painter audit (entry 297) resolves the Explosion manager fields:
+core `Anim_Fade` goes directly to post-world `Region+0x22C`; the ordinary
+SpriteArray goes directly to pre-world `+0x278`; only the rising SpriteArray's
+`ZAnimLit` goes to transient manager `+0x8B70`. Its light registration is
+therefore transient, not actor. The existing player-Fire Explosion renderer
+collapsed these three native intervals into one sorted container. This shared
+assumption is corrected for both enemy and player consumers; no extra world
+queue registration is synthesized for either direct-manager component.
+
+Raw instruction closure of the impact callbacks supersedes the provisional
+unsigned Fire-arrow claim: `0x005E5E22` pushes signed flag 1, so its burst scale
+is `0.5+S(.1)`; Firebolt uses `0.75+S(.1)`. Both play registry `+0x540`
+(FireballHit) at pitch 2 with Region gain. Guided impact `0x005F3EE0` plays
+registry `+0xA10` (MagicMissileHit) at `1+Float(.1)` before its phase draw;
+a player hit additionally plays the same cue at float .85, unattenuated.
+Registry membership is recorded by the stock audio registry builder
+`0x004EE010`; the existing Website audio assets match those records.
+
+`Anim_FireBurst` (`0x00453470/0x004575B0/0x0045E2D0`) is one object with two
+draws, wrapped once by ZAnimLit (bias 50, radius 1.5, intensity decreases .04).
+`Anim_FadeGM` (`0x00454000/0x0045DC90`) is one four-draw object: two identical
+main submissions share one random alpha, followed by independently sampled
+111/112 aura scales. Its single ZAnimLit has bias 100, radius .75, intensity
+1 decreasing .05 per tick. The prior web representation invented independent
+actor registrations for those layers and omitted the guided light. Each
+native impact now owns one authoritative object, one wrapper registration,
+and its complete draw list. On a same-tick guided actor plus wall hit, native
+code runs the actor callback before the terrain callback; removal does not
+short-circuit the second callback, so two independent impact objects can be
+created while the projectile retires once.
+
+Projectile constructors, impacts, trails, pool bubbles, and Demon fire now consume
+the existing authoritative 55-word native enemy RNG (`steeringRngState`, also
+used by Archer's shared draw lane). The former wave xorshift/unit-float helpers
+were inappropriate for native `Float` and `Integer`: the binary uses a 100001
+sample inclusive float domain, power-of-two integer reduction, and different
+sign polarity for signed Float versus signed magnitude. Those already recovered
+kernel operations are reused directly, preserving constructor draw order and
+arity. Only render-only flicker retains the established deterministic semantic
+word substitution; authoritative flight and child births consume the native RNG.
+
+The contact membership sweep distinguishes Game's player list from Region's
+actor grid. Arrow, Firebolt, DemonBomb proximity, and PoisonPool walk
+`Game+0x1390/+0x139C`; summoned Golems are not player-list members. Guided
+fallback `0x00641220` and Fire/Explosion region searches admit friendly summons
+through their actual actor flags. Guided fallback visits the native cell
+binding order, which changes when a target leaves and re-enters a cell. The
+authority must retain those target bindings rather than reuse object-key order.
+Pool bubbles register directly with pre-world manager `Region+0x278`, as shown
+by `0x005F8030`, and therefore do not enter the sorted actor queue.
+
+The reused Fire contact DTO carries total damage. Native `0x005FF1D0` assigns
+`damage/100*3*.5` to both physical and magic lanes; the previous DTO contained
+only one half while its player-spell caller treated it as the complete hit.
+It now carries `damage*3/100`, and the hostile receiver divides that total into
+the two native lanes. A public kernel-to-combat regression detects the former
+half-damage result. Native per-contact response randomness is consumed after
+the two lane values, before the next recipient or fire actor is stepped.
+
+The final Arrow state audit confirms two independent float velocity components
+at `+0x140/+0x144`. Descent multiplies each by float .99; recomputing a vector
+from a repeatedly damped scalar speed loses that recurrence on oblique shots.
+Arrow authority retains the vector, while the existing protocol projects its
+travel heading and speed for interpolation. The launch vector at `+0x148/+0x14C`
+remains unchanged and supplies the pitch calculation. No new wire layout is
+needed for that server-only correction; the regression compares oblique travel
+against the recovered per-component float recurrence.
+
+Final caller/neighbor-slot closure:
+
+- Archer release `0x00478139` and Mage Firebolt release `0x0047FFBF` register
+  in the transient manager. Their painter and optional light belong to the
+  same registration; normal/poison Arrows still own a transient painter.
+  GuidedMissile and DemonBomb register as actors, each sharing its painter
+  ticket with its light. The previous extra painter allocation was invented.
+- Mage fire release plays ThrowFire (`registry+0x10C4`) at float 1.25. Cold and
+  poison release play ThrowSpell (`+0x10F0`) at `1+S(.25)` before the missile
+  constructor. Demon release plays SpitFire (`+0xE88`) at `1+S(.1)` before the
+  raw FireBurst constructor. All use Region point gain. Exact WAVs are added
+  through the existing extraction/asset-registration convention.
+- DemonBomb's root is the current endpoint midpoint plus 35 units along
+  `20*roundEven((heading+10)/20) mod 360`; its velocity uses the original
+  heading. Raw instructions `0x0049A53F..0x0049A58A`, double 35 at
+  `0x00785BB8`, prove the launch offset. The separate muzzle FireBurst adds
+  controller point 5 and a 25-unit vector at the same quantized bearing.
+- Arrow `+0x28 -> 0x005E6050` draws its black ground shadow at the planar
+  root, launch heading, scale 1, alpha `min(opacity,1)`: BadGuys 2 while
+  airborne and BadGuys 3 when landed. DemonBomb `+0x28 -> 0x005E9970` draws
+  BadGuys 15 at the root, additive orange `(1,.5,0)`, alpha .25, scale `(1,.8)`.
+  Its diffuse-only color selector is equivalent for this extracted record:
+  every nontransparent texel has RGB `(255,255,255)`. Firebolt and Guided
+  have no `+0x28` draw. PoisonPool's whole draw belongs to this pre-world
+  slot, and its bubbles belong to direct pre-world `+0x278`.
+
+The Fire light producer is shared by enemy Fire, primary Fire/Fire_Goodguy, and
+secondary MovingFire. The same native `min(1,life*3)`/radius-float-.6 source is
+used for all three. The primary Fire path previously omitted enrollment
+entirely despite retaining its authoritative painter ticket; that omission is
+fixed with the existing actor registration.
+
+One native lifecycle branch has a platform disposition separate from flight:
+
+| Member | Native evidence | Disposition | Predicted difference |
+| --- | --- | --- | --- |
+| Arrow's render-owned zero-visibility cleanup | `0x005E10D0 -> 0x00624B40`, base visibility `+0xCC`, count `+0x150`, seen flag `+0x154`; retire after 26 zero-visibility Present visits after being seen | `blocked-by-platform` | Separate browser clients and the headless authority do not share one native Present cadence or visibility field. Flight/contact and landed fading remain authoritative; an unseen Arrow may remain in the world until its physical/fade lifetime completes, so returning to an area can reveal a ground arrow that stock's local render loop already discarded. |
+
+This is not a substitute for a missing extracted value: the condition and
+counter are recovered. Making one client's render rate control shared damage
+and object removal would violate the multiplayer authority contract. The
+mechanical countdown, velocity, height, collision, and opacity branches are
+ported; this observer-dependent optimization is explicitly separate.
+
+The Explosion's explicit knockback exception is native type `0x7F4`, Golem
+(constructor `0x005F57E0`). The currently admitted summon targets are Golems;
+they receive explosion damage but no ten-tick knockback. Pending player
+knockback state is persisted with validated identity, finite displacement,
+clock, and remaining ticks 1..10, so malformed saves cannot become unchecked
+runtime actions.
+
+The existing hostile-scene pause contract holds actor state while the outer
+clock advances. Projectile and child `lastStepTick` values must acknowledge
+those paused ticks while preserving age, position, and remaining lifetime;
+otherwise resume incorrectly replays the entire pause as projectile movement
+and can discard live impact effects. The pause regression checks the existing
+public enemy-store interface through hold and resume. Birth identities and
+replicated spawn ticks remain unchanged.

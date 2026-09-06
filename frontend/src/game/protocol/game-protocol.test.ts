@@ -52,7 +52,7 @@ import {
   hagathaOffers,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
-import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
+import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import {
   coldSlowPlayerEntity,
@@ -1473,7 +1473,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 22 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 22 },
     payload: 'poison',
     position: { x: 110, y: 100 },
     speed: 5,
@@ -1489,12 +1489,12 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     blendMode: 'add',
     entry: 110,
     id: 5,
-    kind: 'guided-impact-main',
-    lightRegistration: null,
+    kind: 'guided-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 23 },
     lifetimeTicks: 4,
     ownerActorId: 1,
     ownerProjectileId: 2,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 23 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 23 },
     phaseOriginTicks: 3,
     position: { x: 115, y: 100 },
     rotationRadians: 0.25,
@@ -1575,12 +1575,12 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 
   const projectileScaleRows = [
     {
-      invalid: [0, 5.001],
+      invalid: [0, 15.001],
       kind: 'arrow',
       lightRegistration: null,
       nativeTypeId: 0x7da,
       payload: 'normal',
-      visualScale: 5,
+      visualScale: 15,
     },
     {
       invalid: [0.999, 1.001],
@@ -1619,6 +1619,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     const legal = JSON.parse(encodeGameMessage(welcome))
     Object.assign(legal.snapshot.world.enemyProjectiles[0], row, {
       homing: row.kind === 'guided-missile',
+      painterRegistration: { managerLane: row.kind === 'arrow' || row.kind === 'firebolt' ? 'transient' : 'actor', registrationOrdinal: 22 },
     })
     delete legal.snapshot.world.enemyProjectiles[0].invalid
     assert.deepEqual(decodeServerGameMessage(JSON.stringify(legal)), legal, row.kind)
@@ -1916,13 +1917,14 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   const arrowTumble = JSON.parse(encodeGameMessage(welcome))
   Object.assign(arrowTumble.snapshot.world.enemyProjectileEffects[0], {
     ageTicks: 0,
-    alpha: 6,
+    alpha: 4,
     atlas: 'BadGuys',
     blendMode: 'normal',
     entry: 2,
     kind: 'arrow-tumble',
     lightRegistration: null,
-    lifetimeTicks: 60,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 23 },
+    lifetimeTicks: 41,
     scale: 1,
   })
   assert.deepEqual(
@@ -1930,7 +1932,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     arrowTumble,
   )
   const excessiveArrowTumble = JSON.parse(JSON.stringify(arrowTumble))
-  excessiveArrowTumble.snapshot.world.enemyProjectileEffects[0].alpha = 6.001
+  excessiveArrowTumble.snapshot.world.enemyProjectileEffects[0].alpha = 4.001
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(excessiveArrowTumble)),
     /enemyProjectileEffects\[0\]\.alpha/,
@@ -1940,7 +1942,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     alpha: 1.001,
     blendMode: 'add',
     entry: 251,
-    kind: 'fire-burst-frame',
+    kind: 'fire-burst',
     lifetimeTicks: 16,
   })
   assert.throws(
@@ -3402,7 +3404,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 33 }],
     position: { x: 800, y: 400 },
     scale: 1,
-    shapeSample: 0.75,
+    horizontalSign: -1,
     supplementalContact: false,
     velocity: { x: 0, y: 0 },
     velocityMultiplier: { x: 1, y: 1 },

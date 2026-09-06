@@ -14,14 +14,14 @@ import {
 } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
+import { damageBoneyardEnemy } from './enemies/damage.ts'
 import {
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-  damageBoneyardEnemy,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
 import {
   canPlaceBoneyardBody,
   type BoneyardCollisionWorld,

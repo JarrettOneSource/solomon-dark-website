@@ -3,6 +3,7 @@ import {
   createNativeRng,
   drawNativeFloat,
   drawNativeInteger,
+  drawNativeSign,
   type NativeRngState,
 } from './native-rng.ts'
 import {
@@ -26,11 +27,11 @@ export const NATIVE_FIRE_EMBER_GRAVITY = Math.fround(0.15)
 export const NATIVE_FIRE_EMBER_GROUNDED_LIFE_STEP = Math.fround(0.015)
 export const NATIVE_FIRE_EMBER_IMMOLATE_FOOTPRINT = 110
 export const NATIVE_FIRE_EMBER_PHASE_MAGNITUDE = 4
-export const NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR = 3 * 0.5 / 100
+export const NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR = 3 / 100
 export const NATIVE_FIRE_PATCH_CONTACT_FOOTPRINT = 32
 export const NATIVE_FIRE_PATCH_FRAME_COUNT = 32
 export const NATIVE_FIRE_PATCH_INITIAL_LIFE = 2
-export const NATIVE_FIRE_PATCH_LIFE_STEP = 0.01
+export const NATIVE_FIRE_PATCH_LIFE_STEP = 0.009999999776482582
 export const NATIVE_FIRE_PATCH_FADE_STEP = Math.fround(0.05)
 export const NATIVE_FIRE_PATCH_FRAME_STEP = Math.fround(0.25)
 export const NATIVE_MOVING_FIRE_DRAW_ALPHA = 4
@@ -62,7 +63,7 @@ export interface NativeFirePatchState {
   readonly ownerId: string
   readonly painterRegistrations: readonly NativeWorldManagerRegistration[]
   readonly position: Vector2
-  readonly shapeSample: number
+  readonly horizontalSign: -1 | 1
   readonly scale: number
   readonly supplementalContact: boolean
   readonly velocity: Vector2
@@ -277,7 +278,7 @@ export interface NativeFireGoodImpSpawn {
 export function createNativeFirePatch(
   options: CreateNativeFirePatchOptions,
   atlasPhase: number,
-  shapeSample: number,
+  horizontalSign: number,
 ): NativeFirePatchState {
   validateNonnegative(options.burnDamage, 'Fire patch Burn damage')
   validateNonnegative(options.damage, 'Fire patch damage')
@@ -301,14 +302,14 @@ export function createNativeFirePatch(
   if (!Number.isFinite(drawAlpha) || drawAlpha < 0) {
     throw new RangeError('Fire patch draw alpha must be finite and non-negative')
   }
-  if (!Number.isFinite(atlasPhase) || atlasPhase < 0 || atlasPhase >= NATIVE_FIRE_PATCH_FRAME_COUNT) {
+  if (!Number.isFinite(atlasPhase) || atlasPhase < 0 || atlasPhase > NATIVE_FIRE_PATCH_FRAME_COUNT) {
     throw new RangeError('Fire patch atlas phase must be inside the native frame range')
   }
   if (!Number.isFinite(atlasPhaseStep) || atlasPhaseStep < 0) {
     throw new RangeError('Fire patch atlas phase step must be finite and non-negative')
   }
-  if (!Number.isFinite(shapeSample) || shapeSample < 0 || shapeSample > 1) {
-    throw new RangeError('Fire patch shape sample must be inside the native unit interval')
+  if (horizontalSign !== -1 && horizontalSign !== 1) {
+    throw new RangeError('Fire patch horizontal sign must be -1 or 1')
   }
   return Object.freeze({
     ageTicks: 0,
@@ -331,7 +332,7 @@ export function createNativeFirePatch(
     ]),
     position: Object.freeze({ ...options.position }),
     scale: Math.fround(scale),
-    shapeSample: Math.fround(shapeSample),
+    horizontalSign,
     supplementalContact: options.supplementalContact ?? false,
     velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),
     velocityMultiplier: Object.freeze({
@@ -346,10 +347,10 @@ export function spawnNativeFirePatch(
   rng: NativeRngState,
 ): NativeFirePatchSpawn {
   const phaseDraw = drawNativeFloat(rng, NATIVE_FIRE_PATCH_FRAME_COUNT)
-  const shapeDraw = drawNativeFloat(phaseDraw.state, 1)
+  const signDraw = drawNativeSign(phaseDraw.state, 1)
   return Object.freeze({
-    patch: createNativeFirePatch(options, phaseDraw.value, shapeDraw.value),
-    rng: shapeDraw.state,
+    patch: createNativeFirePatch(options, phaseDraw.value, signDraw.value),
+    rng: signDraw.state,
   })
 }
 

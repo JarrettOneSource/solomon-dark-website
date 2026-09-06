@@ -15,7 +15,11 @@ const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
 const DESCRIPTOR_LENGTH = 14
 const SAMPLE_LENGTH = 10
-const LIGHT_KIND_INDEX = BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS.indexOf('fire-burst-glow')
+function lightLane(kind: BoneyardEnemyProjectileEffectSnapshot['kind']): -1 | 0 | 1 {
+  if (kind === 'fire-burst' || kind === 'guided-impact' || kind === 'demon-explosion-lit-array') return 1
+  if (kind === 'demon-fire') return 0
+  return -1
+}
 const ALPHA_MAXIMUM = Math.max(
   ...Object.values(BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS),
 ) * VALUE_SCALE
@@ -37,14 +41,13 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(descriptor[7])
       && positiveInteger(descriptor[8])
       && nonnegativeInteger(descriptor[9])
-      && (descriptor[2] === LIGHT_KIND_INDEX
-        ? descriptor[10] === 1 && nonnegativeInteger(descriptor[11])
-        : descriptor[10] === -1 && descriptor[11] === -1)
+      && descriptor[10] === lightLane(BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[descriptor[2]]!)
+      && (descriptor[10] === -1 ? descriptor[11] === -1 : nonnegativeInteger(descriptor[11]))
       && (descriptor[12] === 0 || descriptor[12] === 1)
       && nonnegativeInteger(descriptor[13])
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
-    return sample.length === SAMPLE_LENGTH
+    return (sample.length === SAMPLE_LENGTH || sample.length === SAMPLE_LENGTH + 2)
       && sample[0] === BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID
       && positiveInteger(sample[1])
       && sample.slice(2).every(Number.isSafeInteger)
@@ -53,6 +56,9 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(sample[7])
       && sample[8] >= 0 && sample[8] <= 0xffffff
       && nonnegativeInteger(sample[9])
+      && (sample.length === SAMPLE_LENGTH || (
+        sample[10] >= 0 && sample[10] <= VALUE_SCALE && (sample[11] === -1 || sample[11] === 1)
+      ))
   },
 }
 
@@ -60,12 +66,10 @@ export function boneyardEnemyProjectileEffectDescriptor(
   effect: BoneyardEnemyProjectileEffectSnapshot,
 ): ReplicatedEntityDescriptor {
   const lightRegistration = effect.lightRegistration
-  if (effect.kind === 'fire-burst-glow') {
-    if (lightRegistration?.managerLane !== 'transient') {
-      throw new Error('enemy FireBurst glow requires a transient light registration')
-    }
-  } else if (lightRegistration !== null) {
-    throw new Error(`enemy projectile effect ${effect.kind} must not register a light`)
+  const lane = lightLane(effect.kind)
+  if (lane === -1 ? lightRegistration !== null
+    : lightRegistration?.managerLane !== (lane === 0 ? 'actor' : 'transient')) {
+    throw new Error(`enemy projectile effect ${effect.kind} has invalid light ownership`)
   }
   return [
     BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID,
@@ -78,7 +82,7 @@ export function boneyardEnemyProjectileEffectDescriptor(
     effect.spawnTick,
     effect.lifetimeTicks,
     effect.phaseOriginTicks,
-    lightRegistration === null ? -1 : 1,
+    lane,
     lightRegistration?.registrationOrdinal ?? -1,
     effect.painterRegistration.managerLane === 'actor' ? 0 : 1,
     effect.painterRegistration.registrationOrdinal,
@@ -99,6 +103,7 @@ export function boneyardEnemyProjectileEffectSample(
     effect.entry,
     effect.tint,
     effect.ageTicks,
+    ...(effect.kind === 'demon-fire' ? [quantize(effect.fireFadeAlpha, VALUE_SCALE), effect.fireHorizontalSign] : []),
   ]
 }
 
@@ -120,22 +125,24 @@ export function materializeBoneyardEnemyProjectileEffect(
   if (alpha > BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS[kind]) {
     throw new Error('Boneyard enemy projectile-effect alpha exceeds its native shape')
   }
-  return {
+  if (sample.length !== SAMPLE_LENGTH + (kind === 'demon-fire' ? 2 : 0)) {
+    throw new Error('enemy projectile-effect sample does not match its kind')
+  }
+  const base = {
     ageTicks: sample[9],
     alpha,
     atlas: ATLASES[descriptor[5]]!,
     blendMode: BLEND_MODES[descriptor[6]]!,
     entry: sample[7],
     id: descriptor[1],
-    kind,
     lightRegistration: descriptor[10] === -1
       ? null
-      : { managerLane: 'transient', registrationOrdinal: descriptor[11] },
+      : { managerLane: descriptor[10] === 0 ? 'actor' as const : 'transient' as const, registrationOrdinal: descriptor[11] },
     lifetimeTicks: descriptor[8],
     ownerActorId: descriptor[3],
     ownerProjectileId: descriptor[4],
     painterRegistration: {
-      managerLane: descriptor[12] === 0 ? 'actor' : 'transient',
+      managerLane: descriptor[12] === 0 ? 'actor' as const : 'transient' as const,
       registrationOrdinal: descriptor[13],
     },
     phaseOriginTicks: descriptor[9],
@@ -148,6 +155,12 @@ export function materializeBoneyardEnemyProjectileEffect(
     spawnTick: descriptor[7],
     tint: sample[8],
   }
+  if (kind !== 'demon-fire') return { ...base, kind }
+  const fireHorizontalSign = sample[11]
+  if (fireHorizontalSign !== -1 && fireHorizontalSign !== 1) {
+    throw new Error('enemy Fire horizontal sign is invalid')
+  }
+  return { ...base, kind, fireFadeAlpha: dequantize(sample[10], VALUE_SCALE), fireHorizontalSign }
 }
 
 function requiredIndex<T>(values: readonly T[], value: T, field: string): number {

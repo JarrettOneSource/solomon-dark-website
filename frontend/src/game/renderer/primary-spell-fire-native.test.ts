@@ -390,14 +390,15 @@ test('projects common Fire patches through DeadHawg 46..77 with native alpha and
     position: { x: 40, y: 50 },
     scale: 2.75,
     worldKey: 'hub:courtyard',
-  }, 17.75, 0.5)
+  }, 17.75, -1)
   const plan = nativeFirePatchPlan(patch)
   assert.equal(plan.entry, NATIVE_FIRE_PATCH_FRAME_FIRST + 18)
   assert.equal(plan.alpha, 0.4)
-  assert.equal(plan.scaleX, 1.1 * 2.75 * 0.75 * 0.5)
-  assert.equal(plan.scaleY, 1.1 * 2.75 * 0.75)
+  const commonScale = Math.fround(Math.fround(Math.fround(1.1) * 2.75) * 0.75)
+  assert.equal(plan.scaleX, -commonScale)
+  assert.equal(plan.scaleY, commonScale)
   assert.equal(plan.blend, 'add')
-  assert.deepEqual(plan.position, { x: 40, y: 30 })
+  assert.deepEqual(plan.position, { x: 40, y: Math.fround(60 + Math.fround(-20 * commonScale)) })
 })
 
 test('projects GoodImp authoritative flight, upper flame, and detached contact bank', () => {

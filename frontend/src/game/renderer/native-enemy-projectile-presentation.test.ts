@@ -23,8 +23,8 @@ test('every enemy projectile uses its recovered native atlas range', () => {
   for (const fixture of fixtures) {
     const plan = nativeEnemyProjectilePlan(fixture, 120)
     assert.deepEqual(plan.position, fixture.position)
-    assert.ok(plan.layers.length > 0)
-    for (const layer of plan.layers) {
+    assert.ok(plan.layers.length + plan.underlays.length > 0)
+    for (const layer of [...plan.layers, ...plan.underlays]) {
       const record = manifests[layer.atlas].entries[layer.entry]
       assert.ok(record, `${layer.atlas}:${layer.entry}`)
       assert.ok(record.rect.w > 0, fixture.kind)
@@ -129,13 +129,47 @@ test('live projectile selectors and clocks follow the recovered compositor', () 
     payload: 'poison',
     visualScale: 1.6,
   }), 120)
-  assert.deepEqual(poison.layers.map((layer) => layer.entry), [0, 0])
-  assert.equal(poison.layers[0]!.alpha, 0.5)
-  assert.equal(poison.layers[0]!.scale, 1.6)
-  assert.ok(Math.abs(poison.layers[1]!.scale - 1.2) < 1e-12)
-  assert.ok(poison.layers.every(({ blendMode, tint }) => (
+  assert.deepEqual(poison.underlays.map((layer) => layer.entry), [0, 0])
+  assert.equal(poison.underlays[0]!.alpha, 0.5)
+  assert.equal(poison.underlays[0]!.scale, 1.6)
+  assert.ok(Math.abs(poison.underlays[1]!.scale - 1.2) < 1e-12)
+  assert.ok(poison.underlays.every(({ blendMode, tint }) => (
     blendMode === 'normal' && tint === 0xffffff
   )))
+  assert.equal(poison.layers.length, 0)
+})
+
+test('Arrow shadows and Demon glow keep their native pre-world records and ground roots', () => {
+  for (const payload of ['normal', 'fire', 'poison'] as const) {
+    const airborne = nativeEnemyProjectilePlan(projectile('arrow', 0x7da, {
+      headingDeg: 90, payload, verticalOffset: -25, visualScale: 5,
+    }), 120)
+    assert.deepEqual(airborne.underlays.map(layer => ({
+      entry: layer.entry, alpha: layer.alpha, scale: layer.scale, tint: layer.tint, offset: layer.offset,
+    })), [{ entry: 2, alpha: 1, scale: 1, tint: 0, offset: { x: 0, y: 0 } }])
+    const grounded = nativeEnemyProjectilePlan(projectile('arrow', 0x7da, { payload, verticalOffset: 0, visualScale: 0.5 }), 120)
+    assert.equal(grounded.underlays[0]!.entry, 3)
+    assert.equal(grounded.underlays[0]!.alpha, 0.5)
+  }
+  const bomb = nativeEnemyProjectilePlan(projectile('demon-bomb', 0x7f7), 120)
+  assert.deepEqual(bomb.underlays.map(layer => ({ entry: layer.entry, alpha: layer.alpha,
+    scaleX: layer.scale, scaleY: layer.scaleY, blendMode: layer.blendMode,
+  })), [{ entry: 15, alpha: 0.25, scaleX: 1, scaleY: Math.fround(0.8), blendMode: 'add' }])
+})
+
+test('Arrow streak follows flight velocity and poison overlay remains unrotated', () => {
+  const source = projectile('arrow', 0x7da, {
+    ageTicks: 20, headingDeg: 90, payload: 'poison', speed: 6,
+    verticalOffset: -25, visualPhaseDeg: 90,
+  })
+  const plan = nativeEnemyProjectilePlan(source, 20)
+  assert.equal(plan.layers[1]!.rotationRadians, 0)
+  assert.ok(plan.streak)
+  assert.deepEqual(plan.streak.start, { x: -30, y: -25 })
+  assert.deepEqual(plan.streak.end, { x: -120, y: -25 })
+  assert.equal(plan.streak.width, 2)
+  assert.ok(plan.streak.alpha >= 0.4 && plan.streak.alpha <= 0.5)
+  assert.equal(nativeEnemyProjectilePlan({ ...source, verticalOffset: -19.25 }, 20).streak, null)
 })
 
 test('arrow payloads select their native banks and fire effect', () => {

@@ -517,17 +517,38 @@ export function nativeEnemyProjectileLightProvider(
   }
 }
 
+export function nativeFirePatchLightSource(
+  position: Readonly<Vec2>,
+  life: number,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+): NativeBoneyardLightSource {
+  return { castsDirectionalShadow: multipleShadows, intensity: Math.min(1, 3 * life),
+    position: { ...position }, radius: Math.fround(0.6) }
+}
+
 export function nativeEnemyProjectileEffectLightProvider(
   effect: BoneyardEnemyProjectileEffectSnapshot,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+  pointGain = 1,
 ): NativeBoneyardLightProviderCandidate | null {
-  if (effect.kind !== 'fire-burst-glow') return null
+  if (effect.kind === 'demon-fire' || effect.kind === 'demon-explosion-lit-array') {
+    if (effect.kind === 'demon-fire' && effect.ageTicks === 0) return null
+    return {
+      lane: effect.kind === 'demon-fire' ? 'actor' : 'transient',
+      source: effect.kind === 'demon-fire'
+        ? nativeFirePatchLightSource(effect.position, effect.alpha, multipleShadows)
+        : { castsDirectionalShadow: multipleShadows, intensity: 1,
+            position: { ...effect.position }, radius: Math.fround(2 * pointGain) },
+    }
+  }
+  if (effect.kind !== 'fire-burst' && effect.kind !== 'guided-impact') return null
   return {
     lane: 'transient',
     source: {
       castsDirectionalShadow: false,
-      intensity: Math.max(0, 1 - Math.fround(0.04) * effect.ageTicks),
+      intensity: Math.max(0, 1 - Math.fround(effect.kind === 'guided-impact' ? 0.05 : 0.04) * effect.ageTicks),
       position: { ...effect.position },
-      radius: 1.5,
+      radius: effect.kind === 'guided-impact' ? 0.75 : 1.5,
     },
   }
 }
@@ -741,12 +762,7 @@ export function nativeSecondaryProviderLightSource(
 ): NativeBoneyardLightSource | null {
   if (actor.kind === 'moving-fire' || actor.kind === 'fire-patch') {
     if (!(actor.radius > 0)) return null
-    return {
-      castsDirectionalShadow: multipleShadows,
-      intensity: Math.min(1, 3 * actor.radius),
-      position: actor.position,
-      radius: 0.6,
-    }
+    return nativeFirePatchLightSource(actor.position, actor.radius, multipleShadows)
   }
   if (actor.kind === 'ring-fire-explosion') {
     return {

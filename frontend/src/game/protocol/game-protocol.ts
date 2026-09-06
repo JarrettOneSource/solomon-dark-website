@@ -1,3 +1,4 @@
+import type { BoneyardEnemyProjectileEffectSnapshotBase } from './game-state.ts'
 import {
   isWizardDiscipline,
   isWizardElement,
@@ -424,7 +425,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 122
+export const GAME_PROTOCOL_VERSION = 123
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -8989,7 +8990,7 @@ function primarySpellTransientPayload(
     onlyKeys(source, field, [
       'ageTicks', 'atlasPhase', 'atlasPhaseStep', 'burnDamage', 'damage',
       'drawAlpha', 'fadeAlpha', 'id', 'kind', 'life', 'nativeType', 'ownerId',
-      'position', 'scale', 'shapeSample',
+      'position', 'scale', 'horizontalSign',
       'supplementalContact', 'velocity', 'velocityMultiplier', 'worldKey',
     ])
     if (
@@ -9007,9 +9008,9 @@ function primarySpellTransientPayload(
     if (atlasPhase < 0 || atlasPhase >= 32) {
       throw new GameProtocolError(`${field}.atlasPhase is outside [0,32)`)
     }
-    const shapeSample = finite(source.shapeSample, `${field}.shapeSample`)
-    if (shapeSample < 0 || shapeSample > 1) {
-      throw new GameProtocolError(`${field}.shapeSample is outside [0,1]`)
+    const horizontalSign = finite(source.horizontalSign, `${field}.horizontalSign`)
+    if (horizontalSign !== -1 && horizontalSign !== 1) {
+      throw new GameProtocolError(`${field}.horizontalSign must be -1 or 1`)
     }
     return {
       ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
@@ -9029,7 +9030,7 @@ function primarySpellTransientPayload(
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       position: vector(source.position, `${field}.position`),
       scale: positiveFinite(source.scale, `${field}.scale`),
-      shapeSample,
+      horizontalSign,
       supplementalContact: boolean(
         source.supplementalContact,
         `${field}.supplementalContact`,
@@ -11138,8 +11139,9 @@ function boneyardEnemyEvents(
           source.gainScale,
           `${eventField}.gainScale`,
         )
-        if (gainScale > 1) {
-          throw new GameProtocolError(`${eventField}.gainScale must be within [0,1]`)
+        const maximumGain = type === 'enemy-action-sound' && (sound === 'fireball-hit' || sound === 'throw-fire') ? 2 : 1
+        if (gainScale > maximumGain) {
+          throw new GameProtocolError(`${eventField}.gainScale must be within [0,${maximumGain}]`)
         }
         return {
           ...base,
@@ -11582,7 +11584,7 @@ function boneyardEnemyProjectileSnapshot(
     painterRegistration: nativeWorldManagerRegistration(
       source.painterRegistration,
       `${field}.painterRegistration`,
-      'actor',
+      kind === 'arrow' || kind === 'firebolt' ? 'transient' : 'actor',
     ),
     payload: payload as BoneyardEnemyProjectilePayload,
     position: boneyardPoint(source.position, `${field}.position`),
@@ -11618,6 +11620,7 @@ function boneyardEnemyProjectileEffectSnapshot(
     'scale',
     'spawnTick',
     'tint',
+    ...(source.kind === 'demon-fire' ? ['fireFadeAlpha', 'fireHorizontalSign'] : []),
   ])
   const kind = limitedString(source.kind, `${field}.kind`, 32)
   if (!(BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS as readonly string[]).includes(kind)) {
@@ -11643,19 +11646,19 @@ function boneyardEnemyProjectileEffectSnapshot(
   if (alpha < 0 || alpha > maximumAlpha) {
     throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
   }
-  return {
+  const effectKind = kind as BoneyardEnemyProjectileEffectSnapshot['kind']
+  const base: BoneyardEnemyProjectileEffectSnapshotBase = {
     ageTicks,
     alpha,
     atlas,
     blendMode,
     entry: nonnegativeInteger(source.entry, `${field}.entry`),
     id: positiveInteger(source.id, `${field}.id`),
-    kind: kind as BoneyardEnemyProjectileEffectSnapshot['kind'],
-    lightRegistration: kind === 'fire-burst-glow'
+    lightRegistration: kind === 'fire-burst' || kind === 'guided-impact' || kind === 'demon-fire' || kind === 'demon-explosion-lit-array'
       ? nativeWorldManagerRegistration(
           source.lightRegistration,
           `${field}.lightRegistration`,
-          'transient',
+          kind === 'demon-fire' ? 'actor' : 'transient',
         )
       : absentNativeActorLight(source, field),
     lifetimeTicks,
@@ -11667,7 +11670,7 @@ function boneyardEnemyProjectileEffectSnapshot(
     painterRegistration: nativeWorldManagerRegistration(
       source.painterRegistration,
       `${field}.painterRegistration`,
-      kind.startsWith('fire-burst-') ? 'transient' : 'actor',
+      (kind === 'fire-burst' || kind === 'guided-impact') || kind === 'demon-explosion-lit-array' ? 'transient' : 'actor',
     ),
     phaseOriginTicks: nonnegativeInteger(
       source.phaseOriginTicks,
@@ -11679,6 +11682,11 @@ function boneyardEnemyProjectileEffectSnapshot(
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
     tint: integerWithin(source.tint, `${field}.tint`, 0, 0xffffff),
   }
+  if (effectKind !== 'demon-fire') return { ...base, kind: effectKind }
+  const fireHorizontalSign = finite(source.fireHorizontalSign, `${field}.fireHorizontalSign`)
+  if (fireHorizontalSign !== -1 && fireHorizontalSign !== 1) throw new GameProtocolError('Fire horizontal sign must be -1 or 1')
+  return { ...base, kind: effectKind,
+    fireFadeAlpha: finiteWithin(source.fireFadeAlpha, `${field}.fireFadeAlpha`, 0, 1), fireHorizontalSign }
 }
 
 function projectilePayloadMatchesKind(

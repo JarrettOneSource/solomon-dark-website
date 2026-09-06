@@ -1,5 +1,6 @@
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../../core-kernels/boneyard-zombie-beat.ts'
 import type { NativeSecondarySimulationState } from '../../core-kernels/native-secondary-abilities.ts'
+import type { BoneyardEnemyActor, BoneyardMaggotActor } from '../enemies/model.ts'
 import {
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_DEMON_BOMB_ACTION_PROGRAM,
@@ -7,9 +8,7 @@ import {
   NATIVE_SKELETON_ACTION_PROGRAMS,
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
-  type BoneyardEnemyActor,
-  type BoneyardMaggotActor,
-} from '../boneyard-enemy-store.ts'
+} from '../enemies/programs.ts'
 import type { MlBotPolicyEnemyRow } from './enemies.ts'
 import { ML_BOT_POLICY_SCALES } from './spec.ts'
 

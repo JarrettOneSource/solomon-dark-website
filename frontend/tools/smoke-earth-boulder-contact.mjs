@@ -13,7 +13,7 @@ import {
   canPlaceBoneyardBody,
   withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
-import { boneyardEnemyActorFlags } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { boneyardEnemyActorFlags } from '../src/game/core-server/enemies/model.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))

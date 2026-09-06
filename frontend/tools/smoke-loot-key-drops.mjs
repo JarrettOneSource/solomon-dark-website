@@ -131,7 +131,7 @@ function killEnemy(host, playerId, position) {
     // Insert this probe between host ticks without resetting actor/event allocators.
     lastStepTick: state.tick - 1,
   }, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players, registerWorldPainter: order.register,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{

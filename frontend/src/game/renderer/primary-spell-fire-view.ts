@@ -21,6 +21,7 @@ import {
   nativeFireballPlan,
   nativeFireImpactPlan,
   nativeFirePatchPlan,
+  nativeFireGroundGlowPlan,
   nativeFireParticlePlan,
   type NativeFireballDraw,
   type NativeFireImpactDraw,
@@ -37,8 +38,8 @@ export interface PrimarySpellFireTextures {
 
 interface FirePainterRoot {
   container: Container
-  lane: 'world-sorted'
-  queueFamily: 'ordinary-dynamic' | 'zanim'
+  lane: 'world-sorted' | 'post-world-queue'
+  queueFamily: 'ordinary-dynamic' | 'zanim' | null
   regionLightPoint: Readonly<{ x: number; y: number }> | null
   sortBias: number
   suffix: string
@@ -51,6 +52,8 @@ type NativeFireActorState =
   | PrimarySpellFirePatchState
 
 export class FireActorSpellView {
+  readonly underlayContainer = new Container({ label: 'fire-ground-underlay' })
+  private readonly fireGroundGlow = new Sprite()
   readonly container: Container
   readonly containers: readonly Container[]
   readonly kind: string
@@ -69,6 +72,11 @@ export class FireActorSpellView {
     this.container = new Container({ label: state.kind })
     this.containers = [this.container]
     this.container.eventMode = 'none'
+    this.underlayContainer.eventMode = 'none'
+    this.underlayContainer.zIndex = 0.5
+    this.fireGroundGlow.eventMode = 'none'
+    this.fireGroundGlow.visible = false
+    this.underlayContainer.addChild(this.fireGroundGlow)
     this.emberGroundGlow = new Sprite(Texture.WHITE)
     this.emberGroundGlow.anchor.set(0.5)
     this.emberGroundGlow.eventMode = 'none'
@@ -88,6 +96,20 @@ export class FireActorSpellView {
       && state.kind !== 'fire-patch'
     ) return
     this.state = state
+    this.underlayContainer.visible = state.kind === 'fire-patch'
+    if (state.kind === 'fire-patch') {
+      const glow = nativeFireGroundGlowPlan(state, presentationFrame)
+      const record = nativeEnemySpriteRegistration('BadGuys', 15)
+      const texture = this.textures.badGuys[15]
+      if (!texture) throw new Error('Missing native Fire ground glow texture')
+      this.fireGroundGlow.texture = texture
+      this.fireGroundGlow.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
+      this.fireGroundGlow.visible = true
+      this.fireGroundGlow.alpha = glow.alpha
+      this.fireGroundGlow.scale.set(glow.scale)
+      this.fireGroundGlow.tint = glow.tint
+      this.underlayContainer.position.set(glow.position.x, glow.position.y)
+    }
     const plan = state.kind === 'fire-ember'
       ? nativeFireEmberPlan(state, presentationFrame)
       : state.kind === 'fire-good-imp'
@@ -172,67 +194,59 @@ export class FireActorSpellView {
   }
 
   destroy(): void {
+    this.underlayContainer.destroy({ children: true })
     this.container.destroy({ children: true })
     this.sprites.length = 0
   }
 }
 
 export class FireExplosionSpellView {
-  readonly container: Container
-  readonly containers: readonly Container[]
+  readonly container = new Container({ label: 'fire-explosion-lit-array' })
+  readonly underlayContainer = new Container({ label: 'fire-explosion-pre-world' })
+  private readonly flash = new Container({ label: 'fire-explosion-post-world' })
+  readonly containers = [this.container, this.flash]
   readonly kind = 'fire-explosion'
   private readonly pointGain: number
-  private readonly sprites: Sprite[] = []
+  private readonly sprites = new Map<string, Sprite>()
   private state: PrimarySpellFireExplosionState
   private readonly textures: NativeFireActorTextures
 
-  constructor(
-    state: PrimarySpellFireExplosionState,
-    textures: NativeFireActorTextures,
-    pointGain = 1,
-  ) {
+  constructor(state: PrimarySpellFireExplosionState, textures: NativeFireActorTextures, pointGain = 1) {
     this.state = state
     this.textures = textures
     this.pointGain = pointGain
-    this.container = new Container({ label: 'fire-explosion' })
-    this.containers = [this.container]
-    this.container.eventMode = 'none'
+    for (const container of [...this.containers, this.underlayContainer]) container.eventMode = 'none'
     this.update(state)
   }
 
-  update(
-    state: PrimarySpellProjectileState | PrimarySpellTransientState,
-    _presentationFrame = state.ageTicks,
-    _pointGain = this.pointGain,
-  ): void {
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (state.kind !== 'fire-explosion') return
     this.state = state
     const plan = nativeFireExplosionPlan(state, this.pointGain)
-    this.container.position.set(plan.position.x, plan.position.y)
-    while (this.sprites.length < plan.draws.length) {
-      const sprite = new Sprite()
-      sprite.eventMode = 'none'
-      this.sprites.push(sprite)
-      this.container.addChild(sprite)
+    for (const container of [...this.containers, this.underlayContainer]) {
+      container.position.set(plan.position.x, plan.position.y)
     }
-    while (this.sprites.length > plan.draws.length) {
-      const sprite = this.sprites.pop()!
-      this.container.removeChild(sprite)
-      sprite.destroy()
-    }
-    for (const [index, draw] of plan.draws.entries()) {
+    for (const sprite of this.sprites.values()) sprite.visible = false
+    for (const draw of plan.draws) {
+      let sprite = this.sprites.get(draw.role)
+      if (!sprite) {
+        sprite = new Sprite()
+        sprite.eventMode = 'none'
+        const container = draw.role === 'explosion-core' ? this.flash
+          : draw.role === 'explosion-array' ? this.underlayContainer : this.container
+        container.addChild(sprite)
+        this.sprites.set(draw.role, sprite)
+      }
       const record = nativeEnemySpriteRegistration(draw.atlas, draw.entry)
-      const texture = draw.atlas === 'BadGuys'
-        ? this.textures.badGuys[draw.entry]
-        : this.textures.deadHawg[draw.entry]
-      if (!texture) throw new Error(`Missing native Fire texture ${draw.atlas}:${draw.entry}`)
-      const sprite = this.sprites[index]!
-      sprite.label = `${draw.role}:${draw.atlas}:${draw.entry}`
+      const texture = this.textures.badGuys[draw.entry]
+      if (!texture) throw new Error(`Missing native Explosion texture ${draw.entry}`)
+      sprite.visible = true
+      sprite.label = `${draw.role}:BadGuys:${draw.entry}`
       sprite.texture = texture
       sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
       sprite.position.set(draw.offset.x, draw.offset.y)
       sprite.rotation = draw.rotation
-      sprite.scale.set(draw.scaleX ?? draw.scale, draw.scaleY ?? draw.scale)
+      sprite.scale.set(draw.scale)
       sprite.alpha = draw.alpha
       sprite.blendMode = draw.blend
       sprite.tint = draw.tint
@@ -240,28 +254,24 @@ export class FireExplosionSpellView {
   }
 
   painterRoots(): readonly FirePainterRoot[] {
-    const plan = nativeFireExplosionPlan(this.state, this.pointGain)
     return [{
-      container: this.container,
-      lane: 'world-sorted',
-      queueFamily: 'zanim',
-      regionLightPoint: plan.regionLightPoint,
-      sortBias: 0,
-      suffix: '',
-      worldY: plan.worldY,
+      container: this.container, lane: 'world-sorted', queueFamily: 'zanim',
+      regionLightPoint: null, sortBias: 0, suffix: '', worldY: this.state.origin.y,
+    }, {
+      container: this.flash, lane: 'post-world-queue', queueFamily: null,
+      regionLightPoint: null, sortBias: 0, suffix: 'flash', worldY: this.state.origin.y,
     }]
   }
 
   setTint(_suffix: string, _tint: number): void {
-    // The shared children own their color/blend and the lit child draws directly.
+    // All three native children own their color and blending.
   }
 
-  get sampledPointGain(): number {
-    return this.pointGain
-  }
+  get sampledPointGain(): number { return this.pointGain }
 
   destroy(): void {
-    this.container.destroy({ children: true })
+    for (const container of [...this.containers, this.underlayContainer]) container.destroy({ children: true })
+    this.sprites.clear()
   }
 }
 

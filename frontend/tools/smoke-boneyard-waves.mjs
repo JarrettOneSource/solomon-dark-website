@@ -33,12 +33,12 @@ import {
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
 } from '../src/game/core-server/boneyard-collision.ts'
+import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import {
   boneyardEnemyActorFlags,
   boneyardEnemyCollisionRadius,
-  damageBoneyardEnemy,
-  stepBoneyardEnemyStore,
-} from '../src/game/core-server/boneyard-enemy-store.ts'
+} from '../src/game/core-server/enemies/model.ts'
 import {
   findBoneyardEnemyRoute,
   NATIVE_BADGUY_NAVIGATION_CLEARANCE,
@@ -62,7 +62,9 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
-const chillArrowOnly = process.argv.includes('--chill-arrow-only')
+const archerProjectileOnly = process.argv.includes('--archer-projectile-only')
+const arrowTumbleOnly = process.argv.includes('--arrow-tumble-only')
+const chillArrowOnly = arrowTumbleOnly || process.argv.includes('--chill-arrow-only')
 const cleanupOnly = process.argv.includes('--cleanup-only')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
@@ -385,7 +387,7 @@ try {
         loadedBoneyard.runId,
         opening.liveEnemies,
       )
-  const entranceRetirement = openingOnly || staffMeleeOnly || chillArrowOnly
+  const entranceRetirement = archerProjectileOnly || openingOnly || staffMeleeOnly || chillArrowOnly
     || deathEffectsOnly
     ? null
     : await proveRetiredEntry(
@@ -442,6 +444,7 @@ try {
       cleanupOnly,
       chillArrow,
       chillArrowOnly,
+      arrowTumbleOnly,
       chillArrowScreenshotPath,
       retiredEntryScreenshotPath,
       runCombatAdmission,
@@ -522,6 +525,10 @@ try {
   assert.equal(taunt.voiceCue, 'solomon-get-him-boys')
   assert.equal(taunt.voiceEventId, 3)
   assert.ok(taunt.liveEnemies >= 9 && taunt.liveEnemies <= 17)
+  const archerPlayerId = host.hostPlayerId()
+  assert.ok(archerPlayerId)
+  const archerVitals = getPlayerProgression(host.state(), archerPlayerId)
+  if (archerProjectileOnly) setCombatTrialVitals(host.state(), archerPlayerId)
   const archer = await proveArcherProjectileLifecycle(
     page,
     wire,
@@ -529,6 +536,26 @@ try {
     archerScreenshotPath,
     combatNavigation,
   )
+  if (archerProjectileOnly) {
+    process.stdout.write(`${JSON.stringify({ archer, stage: 'archer-projectile' })}\n`)
+    const deathState = host.state()
+    const deathPlayer = getPlayerCharacter(deathState, archerPlayerId)
+    const contact = nearestHostileActor(deathState, deathPlayer.position)
+    assert.ok(contact, 'expected a live enemy for the post-projectile death transition')
+    setCombatTrialVitals(
+      deathState, archerPlayerId, 1, archerVitals.maximumHealth,
+    )
+    Object.assign(deathState, {
+      playerEntities: replacePlayerCharacter(deathState.playerEntities, archerPlayerId, {
+        ...deathPlayer, position: { ...contact.position },
+      }),
+      world: {
+        ...deathState.world,
+        waves: deathState.world.waves === null
+          ? null : { ...deathState.world.waves, phase: 'dormant' },
+      },
+    })
+  }
   const death = await waitForPlayerDeath(page)
   const deathRender = await waitForRenderedDeathSequence(page)
   const enemyHeadFacingSamples = await page.evaluate(() => (
@@ -563,7 +590,7 @@ try {
   assert.ok(playerDamageAudio.length > 0, 'expected decoded Wizard ouch playback')
   assert.ok(playerDamageAudio.every((event) => event.playbackRate === 1))
   await page.screenshot({ path: deathScreenshotPath })
-  const gameOver = page.getByRole('status', { name: 'Game over.' })
+  const gameOver = page.getByRole('button', { name: /^Game over\./ })
   await gameOver.waitFor({ timeout: 30_000 })
   assert.equal(await page.locator('.boneyard-game-over button').count(), 0)
   const gameOverFrame = await boneyardFrame(page)
@@ -575,6 +602,7 @@ try {
     '.create-menu-scene[data-retained-loadout="true"][data-motion-settled="true"]',
   )
   await retainedLoadout.waitFor({ timeout: 90_000 })
+  await retainedLoadout.locator('.create-menu-element-fire').click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 30_000 })
   assert.equal(await retainedLoadout.getAttribute('data-element'), 'fire')
   await page.screenshot({ path: loadoutScreenshotPath })
@@ -589,6 +617,7 @@ try {
   await page.waitForFunction((priorRunId) => {
     const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
     return frame?.runPhase === 'active' && frame.runId !== priorRunId
+      && document.querySelector('.boneyard-scene')?.getAttribute('data-solomon-phase') === 'digging'
   }, firstRunId, { timeout: 30_000 })
   const secondRun = await boneyardFrame(page)
   const secondLoadedBoneyard = await waitForWireValue(
@@ -609,6 +638,8 @@ try {
   assert.equal(secondRun.localPlayerMana, 100)
   assert.equal(secondRun.localPlayerLifeState, 'alive')
   assert.equal(secondRun.enemyCount, 0)
+  assert.equal(secondRun.enemyProjectileCount, 0)
+  assert.equal(secondRun.enemyProjectileEffectCount, 0)
   assert.equal(await scene.getAttribute('data-solomon-phase'), 'digging')
 
   const audioPlaySources = await page.evaluate(() => (
@@ -627,6 +658,7 @@ try {
   process.stdout.write(`${JSON.stringify({
     approach,
     archer,
+    archerProjectileOnly,
     archerScreenshotPath,
     audioPlaySources,
     combat,
@@ -1053,7 +1085,7 @@ async function proveSlumpgutBrowser(page, screenshotPath) {
     ...state.world.enemies,
     lastStepTick: state.tick - 1,
   }, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     paused: true,
     players: {},
     registerWorldPainter: worldManagerOrder.register,
@@ -1422,9 +1454,15 @@ function recordWireEntityFrame(receipt, entities, sequence) {
   for (const sample of entities.samples) {
     if (sample[0] !== REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile) continue
     const prior = receipt.projectileSamples.get(sample[1])
+    const descriptor = receipt.descriptors.get(replicatedEntityKey(sample[0], sample[1]))
+    const flightSamples = prior?.flightSamples ?? []
+    if (descriptor?.[2] === 0 && sample[5] > 0 && sample[5] < descriptor[6]) {
+      boundedPush(flightSamples, { ageTicks: sample[5], height: sample[7] / 1024 }, 16)
+    }
     boundedMapSet(receipt.projectileSamples, sample[1], {
       count: (prior?.count ?? 0) + 1,
       first: prior?.first ?? sample,
+      flightSamples,
       last: sample,
     }, 128)
   }
@@ -1683,6 +1721,7 @@ async function proveArcherProjectileLifecycle(
     killCount,
     wire: wireSummary(wire),
   })}`)
+  if (archerProjectileOnly) setCombatTrialVitals(host.state(), host.hostPlayerId())
   return observeArcherProjectileLifecycle(
     page,
     wire,
@@ -1776,6 +1815,7 @@ async function observeArcherProjectileLifecycle(
           && reconstructedProjectile
           && renderedShotActorIds.has(candidate.actorId)
           && motion?.count >= 2
+          && motion.flightSamples.length >= 2
           && moved
         ) {
           const enemyDescriptor = wire.descriptors.get(replicatedEntityKey(
@@ -1804,6 +1844,8 @@ async function observeArcherProjectileLifecycle(
           assert.equal(reconstructedProjectile.nativeTypeId, 0x7da)
           assert.equal(reconstructedProjectile.ownerActorId, candidate.actorId)
           assert.equal(retirement.actorId, candidate.actorId)
+          assert.ok(motion.flightSamples.every(sample => sample.height === -25),
+            `Arrow descended before its flight countdown elapsed: ${JSON.stringify(motion.flightSamples)}`)
           return {
             ...advanceReceipt,
             actorId: candidate.actorId,
@@ -1814,6 +1856,7 @@ async function observeArcherProjectileLifecycle(
             projectileMotion: {
               count: motion.count,
               first: [...motion.first],
+              flightSamples: motion.flightSamples,
               last: [...motion.last],
             },
             projectileRenderedTick: renderedProjectileTicks.get(projectileId),
@@ -1990,7 +2033,15 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   let baseline = null
   await page.mouse.down({ button: 'left' })
   try {
-    baseline = await waitForWaterCohort(page, playerId, 2, 4, 15)
+    if (arrowTumbleOnly) {
+      await page.waitForFunction(() => (
+        document.querySelector('.boneyard-world-canvas')
+          ?.__sdrBoneyardFrame?.primarySpellKinds.includes('water')
+      ), undefined, { timeout: 10_000 })
+      baseline = { tick: host.state().tick }
+    } else {
+      baseline = await waitForWaterCohort(page, playerId, 2, 4, 15)
+    }
     await page.waitForTimeout(120)
     baseline = {
       ...baseline,
@@ -2013,6 +2064,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   const tick = arrowState.tick
   const nativeCellBindingOrder = arrowState.world.enemies.nextNativeCellBindingOrder
   const nativeRegistrationOrder = arrowState.world.enemies.nextNativeRegistrationOrder
+  const arrowManager = createNativeWorldManagerOrder(arrowState.worldManagerOrder)
   const arrow = Object.freeze({
     ageTicks: 0,
     bounceVelocity: 0,
@@ -2020,11 +2072,14 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     coldSlowTicks: 0,
     contactRadius: 8,
     damage: 1,
+    secondaryDamage: 0,
     headingDeg: 90,
     hitPlayerIds: Object.freeze([]),
     homing: false,
     id: arrowId,
     kind: 'arrow',
+    velocity: { x: 0, y: 0 },
+    painterRegistration: arrowManager.register('transient'),
     lastStepTick: tick,
     lightRegistration: null,
     lifetimeTicks: 300,
@@ -2036,17 +2091,22 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     payload: 'normal',
     poisonDamage: 0,
     poisonDuration: 0,
-    position: Object.freeze({ x: player.position.x + 80, y: player.position.y }),
+    position: Object.freeze({
+      x: player.position.x + player.primaryCast.aimDirection.x * 80,
+      y: player.position.y + player.primaryCast.aimDirection.y * 80,
+    }),
     speed: 0,
     settledTicksRemaining: 300,
     spawnTick: tick,
     targetPlayerId: null,
+    turnSpeed: 0,
     verticalOffset: -25,
     verticalVelocity: 0,
     visualPhaseDeg: 0,
     visualScale: 1,
   })
   Object.assign(arrowState, {
+    worldManagerOrder: arrowManager.state(),
     world: {
       ...arrowState.world,
       enemies: {
@@ -2089,7 +2149,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   assert.ok(hostEffect, 'learned Chill Wind did not tumble the hostile Arrow')
   assert.ok(firstAccumulatorTick !== null, 'Chill Wind never accumulated Arrow tumble force')
   assert.ok(maximumAccumulator > 0.9 && maximumAccumulator <= 1)
-  assert.ok(hostEffect.alpha > 2 && hostEffect.alpha <= 6)
+  assert.ok(hostEffect.alpha > 2 && hostEffect.alpha <= 4)
   assert.equal(hostEffect.entry, 2)
   assert.equal(hostEffect.ownerProjectileId, arrowId)
 
@@ -2102,7 +2162,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
         )) ?? null
       : null,
     5_000,
-    'the replicated alpha-six Arrow SpinAway',
+    'the replicated native Arrow SpinAway',
   )
   await page.waitForFunction((id) => (
     document.querySelector('.boneyard-world-canvas')
@@ -2130,6 +2190,20 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     false,
   )
   assert.ok(host.hostPlayerId(), 'the browser player disconnected during SpinAway')
+  const tumble = {
+    arrowId,
+    baseline,
+    baselineScreenshotPath,
+    effectId,
+    entry: wireEffect.entry,
+    firstAccumulatorTick,
+    initialAlpha: wireEffect.alpha,
+    maximumAccumulator,
+    renderedEffectIds: renderedFrame.enemyProjectileEffectIds,
+    retirementTick: finalState.tick,
+    tumbleTick: hostEffect.spawnTick,
+  }
+  if (arrowTumbleOnly) return tumble
   learnConeOfIce(host.state(), playerId, 11)
   const coneScreenshotPath = screenshotPath.replace(/\.png$/, '-cone-of-ice-rank-11.png')
   await page.mouse.down({ button: 'left' })
@@ -2153,20 +2227,10 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     frostAuraHailScreenshotPath,
   )
   return {
+    ...tumble,
     auraHail,
-    arrowId,
-    baseline,
-    baselineScreenshotPath,
     cone,
     coneScreenshotPath,
-    effectId,
-    entry: wireEffect.entry,
-    firstAccumulatorTick,
-    initialAlpha: wireEffect.alpha,
-    maximumAccumulator,
-    renderedEffectIds: renderedFrame.enemyProjectileEffectIds,
-    retirementTick: finalState.tick,
-    tumbleTick: hostEffect.spawnTick,
   }
 }
 
@@ -2371,14 +2435,14 @@ function learnWaterSkill(state, playerId, skillId, rank) {
   })
 }
 
-function fortifyStaffMovementTrial(state, playerId) {
+function setCombatTrialVitals(state, playerId, currentHealth = 1_000_000, maximumHealth = currentHealth) {
   const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
   assert.notEqual(index, -1)
   const progressions = [...state.playerEntities.progressions]
   progressions[index] = {
     ...progressions[index],
-    currentHealth: 1_000_000,
-    maximumHealth: 1_000_000,
+    currentHealth,
+    maximumHealth,
     revision: progressions[index].revision + 1,
   }
   Object.assign(state, {
@@ -2536,7 +2600,7 @@ async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {
   const playerId = initialState.playerEntities.identities[0]?.playerId
   assert.ok(playerId, 'expected the authoritative browser player')
   learnFortunateFlailing(initialState, playerId)
-  fortifyStaffMovementTrial(initialState, playerId)
+  setCombatTrialVitals(initialState, playerId)
   const stagedTargetId = stageStaffMovementTarget(initialState, playerId, navigation)
   stabilizeStaffMeleeEnemies(initialState, playerId, stagedTargetId)
   await waitForStaffPresentationReady(page)

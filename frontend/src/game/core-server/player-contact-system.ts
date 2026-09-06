@@ -27,12 +27,14 @@ import {
 import { NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED } from '../core-kernels/native-secondary-golem.ts'
 import { boneyardNativeSecondaryTargets } from './native-secondary-world.ts'
 import {
-  boneyardEnemyCollisionRadius,
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
-  type BoneyardEnemySemanticEvent,
+} from './enemies/events.ts'
+import {
   type BoneyardEnemyPlayerDamage,
-} from './boneyard-enemy-store.ts'
+  type BoneyardEnemySemanticEvent,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
 import {
   damagePlayerEntityWithResult,
   playerEntityIndex,

@@ -9,7 +9,7 @@ import type { NativeEnemySampleAtlas } from './native-enemy-animation.ts'
 type NativeEnemyAtlas = NativeEnemySampleAtlas
 
 const requiredBadGuysRanges = [
-  [2, 2],
+  [2, 3],
   [5, 5],
   [6, 6],
   [10, 11],
@@ -25,7 +25,7 @@ const requiredBadGuysRanges = [
   [43, 45],
   [46, 46],
   [49, 51],
-  [53, 56],
+  [53, 57],
   [65, 65],
   [67, 67],
   [69, 69],

@@ -1,14 +1,17 @@
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import {
-  NATIVE_MAGGOT_PROGRAM,
-  NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
-  nativeEnemyHitOverlay,
   type BoneyardEnemyActor,
   type BoneyardEnemyBrain,
   type BoneyardEnemyDeathEffect,
-  type BoneyardMaggotActor,
-  type BoneyardMageLightningPulse,
   type BoneyardEnemyStore,
-} from '../core-server/boneyard-enemy-store.ts'
+  type BoneyardMageLightningPulse,
+  type BoneyardMaggotActor,
+  nativeEnemyHitOverlay,
+} from '../core-server/enemies/model.ts'
+import {
+  NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+  NATIVE_MAGGOT_PROGRAM,
+} from '../core-server/enemies/programs.ts'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import {
   NATIVE_DEMON_BOMB_CONTROLLER_POSES,
@@ -98,7 +101,8 @@ export function projectBoneyardEnemyProjectiles(
   return store.projectiles.map((projectile) => ({
     ageTicks: projectile.ageTicks,
     contactRadius: projectile.contactRadius,
-    headingDeg: projectile.headingDeg,
+    headingDeg: projectile.kind === 'arrow' && projectile.speed > 0
+      ? actorHeadingFromVector(projectile.velocity.x, projectile.velocity.y) : projectile.headingDeg,
     homing: projectile.homing,
     id: projectile.id,
     kind: projectile.kind,
@@ -120,14 +124,14 @@ export function projectBoneyardEnemyProjectiles(
 export function projectBoneyardEnemyProjectileEffects(
   store: BoneyardEnemyStore,
 ): readonly BoneyardEnemyProjectileEffectSnapshot[] {
-  return store.projectileEffects.map((effect) => ({
+  return store.projectileEffects.map((effect) => {
+    const base = {
     ageTicks: effect.ageTicks,
     alpha: effect.alpha,
     atlas: effect.atlas,
     blendMode: effect.blendMode,
     entry: effect.entry,
     id: effect.id,
-    kind: effect.kind,
     lightRegistration: effect.lightRegistration,
     lifetimeTicks: effect.lifetimeTicks,
     ownerActorId: effect.ownerActorId,
@@ -139,7 +143,14 @@ export function projectBoneyardEnemyProjectileEffects(
     scale: effect.scale,
     spawnTick: effect.spawnTick,
     tint: effect.tint,
-  }))
+    }
+    return effect.kind === 'demon-fire' ? {
+      ...base, kind: effect.kind,
+      entry: 46 + roundHalfToEven(effect.fire.atlasPhase) % 32,
+      fireFadeAlpha: effect.fire.fadeAlpha,
+      fireHorizontalSign: effect.fire.horizontalSign,
+    } : { ...base, kind: effect.kind }
+  })
 }
 
 export function projectBoneyardMageLightningPulses(

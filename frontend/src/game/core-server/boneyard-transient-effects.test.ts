@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type {
-  BoneyardEnemyDeathEffect,
-  BoneyardEnemyProjectileEffect,
-} from './boneyard-enemy-store.ts'
+import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 
-const PROGRAMS = Object.freeze({ poisonPoolAlphaLossPerTick: 0.005 })
 const registerTestWorldPainter = (managerLane: 'actor' | 'transient') => ({
   managerLane,
   registrationOrdinal: 99,
@@ -15,9 +11,9 @@ const registerTestWorldPainter = (managerLane: 'actor' | 'transient') => ({
 
 test('stationary transient rows reuse vectors without mutating their source branch', () => {
   const death = deathEffect()
-  const projectile = projectileEffect({ kind: 'fire-burst-glow' })
+  const projectile = projectileEffect({ kind: 'fire-burst' })
   const result = stepBoneyardTransientEffects(
-    [death], [projectile], 11, () => 0.5, 100, registerTestWorldPainter, PROGRAMS,
+    [death], [projectile], 11, () => 0.5, 100, registerTestWorldPainter,
   )
   const steppedDeath = result.deathEffects[0]!
   const steppedProjectile = result.projectileEffects[0]!
@@ -36,10 +32,10 @@ test('stationary transient rows reuse vectors without mutating their source bran
 test('moving transient rows keep exact motion while sibling branches remain independent', () => {
   const source = deathEffect({ kind: 'move-fade', velocity: { x: 2, y: -3 } })
   const first = stepBoneyardTransientEffects(
-    [source], [], 11, () => 0.5, 100, registerTestWorldPainter, PROGRAMS,
+    [source], [], 11, () => 0.5, 100, registerTestWorldPainter,
   )
   const second = stepBoneyardTransientEffects(
-    [source], [], 12, () => 0.5, 100, registerTestWorldPainter, PROGRAMS,
+    [source], [], 12, () => 0.5, 100, registerTestWorldPainter,
   )
 
   assert.deepEqual(first.deathEffects[0]?.position, { x: 12, y: 17 })
@@ -61,7 +57,7 @@ test('Bouncer ground contacts retain exact RNG order, settling, and retirement',
   const bounced = stepBoneyardTransientEffects([source], [], 11, () => {
     draws.push(0.25)
     return 0.25
-  }, 100, registerTestWorldPainter, PROGRAMS).deathEffects[0]!
+  }, 100, registerTestWorldPainter).deathEffects[0]!
 
   assert.deepEqual(draws, [0.25, 0.25])
   assert.equal(bounced.height, 0)
@@ -69,7 +65,7 @@ test('Bouncer ground contacts retain exact RNG order, settling, and retirement',
   assert.deepEqual(bounced.velocity, { x: 0, y: 0 })
   assert.equal(
     stepBoneyardTransientEffects(
-      [bounced], [], 14, () => 0.75, 100, registerTestWorldPainter, PROGRAMS,
+      [bounced], [], 14, () => 0.75, 100, registerTestWorldPainter,
     )
       .deathEffects.length,
     0,
@@ -100,7 +96,6 @@ test('SmokyBouncer births receive a fresh world-painter registration', () => {
       registrations.push(registration)
       return registration
     },
-    PROGRAMS,
   )
 
   assert.equal(result.deathEffects.length, 2)
@@ -120,7 +115,7 @@ test('Arrow tumble keeps float32 motion and retires on its strict lifetime edge'
     velocity: { x: Math.fround(1), y: Math.fround(-0.5) },
   })
   const first = stepBoneyardTransientEffects(
-    [], [source], 11, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+    [], [source], 11, () => 0, 100, registerTestWorldPainter,
   )
     .projectileEffects[0]!
   assert.equal(first.alpha, Math.fround(Math.fround(0.2) - Math.fround(0.1)))
@@ -131,7 +126,7 @@ test('Arrow tumble keeps float32 motion and retires on its strict lifetime edge'
   })
   assert.equal(
     stepBoneyardTransientEffects(
-      [], [first], 12, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+      [], [first], 12, () => 0, 100, registerTestWorldPainter,
     )
       .projectileEffects.length,
     0,
@@ -167,7 +162,7 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
   const result = stepBoneyardTransientEffects(source, [], 13, () => {
     draws.push(0.75)
     return 0.75
-  }, 100, registerTestWorldPainter, PROGRAMS)
+  }, 100, registerTestWorldPainter)
   assert.equal(JSON.stringify(source), before)
   assert.deepEqual(result.deathEffects.map(({ id, kind }) => ({ id, kind })), [
     { id: 1, kind: 'fade' },
@@ -215,62 +210,27 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
   })
 })
 
-test('all projectile-effect kinds keep exact catch-up clocks and ordered projection', () => {
-  const kinds = [
-    'arrow-tumble',
-    'demon-fire',
-    'fire-burst-frame',
-    'fire-burst-glow',
-    'firebolt-trail',
-    'guided-impact-aura-one',
-    'guided-impact-aura-two',
-    'guided-impact-main',
-    'poison-pool-fade-inner',
-    'poison-pool-fade-outer',
-  ] as const
+test('visual projectile effects retain native catch-up clocks and source ownership', () => {
+  const kinds = ['arrow-tumble', 'fire-burst', 'firebolt-trail', 'guided-impact',
+    'demon-explosion-core', 'demon-explosion-array', 'demon-explosion-lit-array'] as const
   const source = kinds.map((kind, index) => projectileEffect({
-    id: index + 1,
-    kind,
+    id: index + 1, kind, lifetimeTicks: 30,
     velocity: kind === 'arrow-tumble' ? { x: 1, y: -0.5 } : { x: 0, y: 0 },
   }))
-  const before = JSON.stringify(source)
-  const result = stepBoneyardTransientEffects(
-    [], source, 14, () => 0, 100, registerTestWorldPainter, PROGRAMS,
-  )
-
-  assert.equal(JSON.stringify(source), before)
-  assert.deepEqual(result.projectileEffects.map(({ id, kind }) => ({ id, kind })),
-    kinds.map((kind, index) => ({ id: index + 1, kind })))
-  assert.ok(result.projectileEffects.every(({ ageTicks, lastStepTick }) => (
-    ageTicks === 4 && lastStepTick === 14
-  )))
-  assert.deepEqual(result.projectileEffects.slice(1, 8).map(({ alpha, entry }) => ({
-    alpha,
-    entry,
-  })), [
-    { alpha: 0.6, entry: 47 },
-    { alpha: 0.6, entry: 252 },
-    { alpha: 0.6, entry: 251 },
-    { alpha: 0.6, entry: 251 },
-    { alpha: 0.6, entry: 251 },
-    { alpha: 0.6, entry: 251 },
-    { alpha: 0.6, entry: 251 },
-  ])
-  const inner = result.projectileEffects[8]!
-  const outer = result.projectileEffects[9]!
-  assert.equal(inner.alpha, (Math.sin(4 * Math.PI / 180) * 0.25 + 0.75) * 0.98)
-  assert.equal(outer.alpha, 0.49)
-  let arrowAlpha = 1
-  for (let step = 0; step < 4; step += 1) {
-    arrowAlpha = Math.fround(arrowAlpha - Math.fround(0.1))
-  }
-  assert.equal(result.projectileEffects[0]!.alpha, arrowAlpha)
+  const before = structuredClone(source)
+  const result = stepBoneyardTransientEffects([], source, 14, () => 0, 100, registerTestWorldPainter)
+  assert.deepEqual(source, before)
+  assert.deepEqual(result.projectileEffects.map(effect => effect.kind), kinds)
+  assert.ok(result.projectileEffects.every(effect => effect.ageTicks === 4 && effect.lastStepTick === 14))
+  assert.equal(result.projectileEffects.find(effect => effect.kind === 'fire-burst')?.entry, 252)
+  assert.ok(result.projectileEffects.every(effect => effect.alpha > 0.59 && effect.alpha < 0.61))
+  assert.ok(result.projectileEffects[0]!.position.x > source[0]!.position.x)
 })
 
 test('delayed births and strict lifetime edges apply across complete transient populations', () => {
   const delayed = deathEffect({ lastStepTick: 10, spawnTick: 12 })
   const beforeBirth = stepBoneyardTransientEffects(
-    [delayed], [], 11, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+    [delayed], [], 11, () => 0, 100, registerTestWorldPainter,
   )
     .deathEffects[0]!
   assert.equal(beforeBirth.ageTicks, 0)
@@ -282,11 +242,7 @@ test('delayed births and strict lifetime edges apply across complete transient p
     'fade-perspective', 'fade-perspective-clipped', 'fade-scale', 'fire-array',
     'late-splat', 'move-fade', 'sprite-array', 'unbind',
   ] as const
-  const projectileKinds = [
-    'arrow-tumble', 'demon-fire', 'fire-burst-frame', 'fire-burst-glow',
-    'firebolt-trail', 'guided-impact-aura-one', 'guided-impact-aura-two',
-    'guided-impact-main', 'poison-pool-fade-inner', 'poison-pool-fade-outer',
-  ] as const
+  const projectileKinds = ['arrow-tumble', 'fire-burst', 'firebolt-trail', 'guided-impact'] as const
   const result = stepBoneyardTransientEffects(
     deathKinds.map((kind, index) => deathEffect({
       alphaLossPerTick: 0,
@@ -304,7 +260,6 @@ test('delayed births and strict lifetime edges apply across complete transient p
     () => 0,
     100,
     registerTestWorldPainter,
-    PROGRAMS,
   )
   assert.deepEqual(result, {
     deathEffects: [],
@@ -358,7 +313,7 @@ function deathEffect(
 }
 
 function projectileEffect(
-  patch: Partial<BoneyardEnemyProjectileEffect> = {},
+  patch: Partial<Exclude<BoneyardEnemyProjectileEffect, { kind: 'demon-fire' | 'poison-bubble' }>> = {},
 ): BoneyardEnemyProjectileEffect {
   return Object.freeze({
     ageTicks: 0,
@@ -369,12 +324,13 @@ function projectileEffect(
     blendMode: 'add',
     entry: 251,
     id: 1,
-    kind: 'fire-burst-frame',
+    kind: 'fire-burst',
     lastStepTick: 10,
     lightRegistration: null,
     lifetimeTicks: 16,
     ownerActorId: 3,
     ownerProjectileId: 4,
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 4 },
     phaseOriginTicks: 0,
     position: Object.freeze({ x: 30, y: 40 }),
     rotationDeg: 0,

@@ -1,3 +1,4 @@
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
 import 'pixi.js/unsafe-eval'
 import {
@@ -141,6 +142,7 @@ import {
   nativeEnemyLightSources,
   nativeEnemyProjectileEffectLightProvider,
   nativeEnemyProjectileLightProvider,
+  nativeFirePatchLightSource,
   nativeMissileLightSource,
   nativePlayerLightSource,
   nativeSecondaryMiscLightSource,
@@ -225,7 +227,6 @@ import {
 import {
   NATIVE_PLAYER_MAGIC_SHIELD,
   NativeSecondaryScreenFeedbackPresentation,
-  nativeRegionPointGain,
   nativeSecondaryWorldShake,
   presentNativeSecondaryScreenOverlay,
 } from './native-secondary-presentation.ts'
@@ -2075,7 +2076,7 @@ class BoneyardDynamicScene {
     preWorld.sortableChildren = true
     preWorld.zIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX / 2
     root.addChild(preWorld)
-    this.primarySpells = PrimarySpellWorldView.forBoneyard(root, textures)
+    this.primarySpells = PrimarySpellWorldView.forBoneyard(root, textures, { preWorldRoot: preWorld })
     this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer, {
       preWorldRoot: preWorld,
     })
@@ -2093,8 +2094,8 @@ class BoneyardDynamicScene {
     this.goodies = new NativeGoodieViews(root, textures)
     this.enemies = new NativeEnemyViews(root, textures, preWorld)
     this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures, preWorld)
-    this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures)
-    this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
+    this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures, preWorld)
+    this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures, preWorld)
     this.maggots = new NativeMaggotViews(root, textures)
     this.loot = new NativeLootViews(root, textures, modTextures, modCatalog)
     this.seeker = new NativeHagathaSeekerView(root)
@@ -2224,7 +2225,7 @@ class BoneyardDynamicScene {
       snapshot.world.deathEffects,
       visibleWorldBounds,
     )
-    this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects)
+    this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects, pointGainAt)
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
     this.maggots.update(snapshot.world.maggots, visibleWorldBounds)
     const visibleMaggots = this.maggots.visibleSnapshots
@@ -2345,7 +2346,7 @@ class BoneyardDynamicScene {
       lightProviderOwners.push({ registration, sources: [candidate.source] })
     }
     for (const effect of snapshot.world.enemyProjectileEffects) {
-      const candidate = nativeEnemyProjectileEffectLightProvider(effect)
+      const candidate = nativeEnemyProjectileEffectLightProvider(effect, settings.multipleShadows, pointGainAt(effect.position))
       if (!candidate) continue
       const registration = requiredLightRegistration(
         effect.lightRegistration,
@@ -2357,6 +2358,13 @@ class BoneyardDynamicScene {
       lightProviderOwners.push({ registration, sources: [candidate.source] })
     }
     for (const effect of snapshot.primarySpells.transients) {
+      if (effect.kind === 'fire-patch' && effect.worldKey === `boneyard:${snapshot.world.runId}`) {
+        if (effect.ageTicks > 0) lightProviderOwners.push({
+          registration: effect.painterRegistrations[0]!,
+          sources: [nativeFirePatchLightSource(effect.position, effect.life, settings.multipleShadows)],
+        })
+        continue
+      }
       if (
         effect.kind === 'weld-meteor'
         && effect.worldKey === `boneyard:${snapshot.world.runId}`
@@ -2888,6 +2896,7 @@ class BoneyardDynamicScene {
       dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect))
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
+      if (projectile.kind === 'poison-pool') continue
       dynamicLayers.push({
         id: `enemy-projectile:${projectile.id}`,
         queueFamily: 'ordinary-dynamic',
@@ -2897,7 +2906,8 @@ class BoneyardDynamicScene {
       })
     }
     for (const effect of snapshot.world.enemyProjectileEffects) {
-      dynamicLayers.push(nativeEnemyProjectileEffectPainterLayer(effect))
+      const layer = nativeEnemyProjectileEffectPainterLayer(effect)
+      if (layer) dynamicLayers.push(layer)
     }
     for (const layer of enemyAuxiliaryPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
@@ -3104,7 +3114,9 @@ class BoneyardDynamicScene {
     for (const effect of snapshot.world.enemyProjectileEffects) {
       this.enemyProjectileEffects.setDepth(
         effect.id,
-        positionedDynamics.get(`enemy-projectile-effect:${effect.id}`)?.zIndex ?? 1,
+        effect.kind === 'demon-explosion-core' ? order.foregroundZIndex + 0.25
+          : effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble' ? 0.5
+            : positionedDynamics.get(`enemy-projectile-effect:${effect.id}`)?.zIndex ?? 1,
       )
     }
     for (const maggot of visibleMaggots) {

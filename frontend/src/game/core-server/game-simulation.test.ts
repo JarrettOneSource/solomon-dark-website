@@ -116,13 +116,10 @@ import {
   type GameSimulationExtensions,
   type GameSimulationState,
 } from './game-simulation.ts'
-import {
-  damageBoneyardEnemy,
-  NATIVE_MAGE_ACTION_PROGRAMS,
-  positionBoneyardEnemy,
-  stepBoneyardEnemyStore,
-  type BoneyardEnemySemanticEvent,
-} from './boneyard-enemy-store.ts'
+import { positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import { damageBoneyardEnemy } from './enemies/damage.ts'
+import type { BoneyardEnemySemanticEvent } from './enemies/model.ts'
+import { NATIVE_MAGE_ACTION_PROGRAMS } from './enemies/programs.ts'
 import { createBoneyardLootStore, spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
@@ -566,7 +563,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
   const order = createNativeWorldManagerOrder(state.worldManagerOrder)
   const player = getPlayerCharacter(state, 'caster')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       caster: {
         alive: true,
@@ -647,8 +644,9 @@ test('same-tick player primary actors register before projectiles spawned by lat
     managerLane: 'actor',
     registrationOrdinal: 4,
   })
+  assert.deepEqual(guided.painterRegistration, guided.lightRegistration)
   assert.deepEqual(state.worldManagerOrder.nextRegistrationOrdinal, {
-    actor: 6,
+    actor: 5,
     transient: 0,
   })
 })
@@ -2082,7 +2080,7 @@ test('Ether Mindblast applies strict radius-495 level damage before retaining Bo
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state, 'caster')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [1, 2].map((id) => ({
@@ -2136,7 +2134,7 @@ test('a death reward consumes Mindblast RNG in reward order without advancing it
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state, 'caster')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -2182,7 +2180,7 @@ test('same-tick world and reward-triggered damage events retain authoritative ID
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state, 'caster')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [1, 2].map((id) => ({
@@ -3034,7 +3032,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
     arenaScalars: { experience: 0.425 },
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       caster: {
         alive: true,
@@ -3128,7 +3126,7 @@ test('pure Fire Burn contact is painter-enrolled before its first replicated fra
   const player = getPlayerCharacter(state, 'caster')
   const targetPosition = { x: player.position.x, y: player.position.y - 110 }
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       caster: {
         alive: true,
@@ -3192,7 +3190,7 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state, 'caster')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -3406,7 +3404,7 @@ test('Boneyard Fire uses kernel terrain lookahead then post-move point contact',
   } }), loaded)
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -3570,7 +3568,7 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       'local-player': {
         alive: true,
@@ -3656,7 +3654,7 @@ test('Deflect cancels the contact, faces and sounds once, and reflects concentra
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       'local-player': {
         alive: true,
@@ -3721,7 +3719,7 @@ test('Flash responds after damage with area Dazzle, twelve children, feedback, a
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       'local-player': {
         alive: true,
@@ -3799,7 +3797,7 @@ test('enemy retirement carries its death-time private seed into one authoritativ
     if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
     const player = getPlayerCharacter(state)
     const spawned = stepBoneyardEnemyStore(state.world.enemies, {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players: {
         'local-player': {
           alive: true,
@@ -3900,7 +3898,7 @@ test('enemy loot charm modifiers belong only to the participant credited with th
     if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
     const boneyardWorld = state.world
     const spawned = stepBoneyardEnemyStore(boneyardWorld.enemies, {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players: {
         first: {
           alive: true,
@@ -5058,7 +5056,7 @@ function withRottenZombieAtPlayer(state: GameSimulationState): GameSimulationSta
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       'local-player': {
         alive: true,
@@ -5089,7 +5087,7 @@ function withWraithAtPlayer(state: GameSimulationState): GameSimulationState {
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       'local-player': {
         alive: true,
@@ -5120,7 +5118,7 @@ function withDemonAtPlayer(state: GameSimulationState): GameSimulationState {
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       'local-player': {
         alive: true,

@@ -1,6 +1,4 @@
-import {
-  damageBoneyardEnemy,
-} from '../core-server/boneyard-enemy-store.ts'
+import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import {

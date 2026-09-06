@@ -64,10 +64,10 @@ test('native Archer direct and leading aim track the current target point', () =
   assert.equal(direct.arrows.length, 1)
   assert.equal(direct.arrows[0]!.headingDeg, 0)
   assert.deepEqual(direct.arrows[0]!.position, { x: 0, y: -30 })
-  const expectedSpeed = drawNativeFloat(createNativeRng(42), Math.fround(0.6))
+  const expectedSpeed = drawNativeFloat(createNativeRng(42), 0.5999999046325684)
   assert.equal(
     direct.arrows[0]!.speed,
-    Math.fround(5.7 + expectedSpeed.value),
+    Math.fround(5.699999809265137 + expectedSpeed.value),
   )
   assert.ok(direct.arrows[0]!.speed >= 5.7 && direct.arrows[0]!.speed <= 6.3)
   assert.ok(direct.arrows[0]!.lifetimeTicks > 0)

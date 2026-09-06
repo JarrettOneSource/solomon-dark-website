@@ -1,10 +1,10 @@
 import type { Vector2 } from '../../core-kernels/vector.ts'
 import type {
   BoneyardEnemyActor,
-  BoneyardMaggotActor,
   BoneyardEnemyStore,
-} from '../boneyard-enemy-store.ts'
-import { boneyardEnemyCollisionRadius } from '../boneyard-enemy-store.ts'
+  BoneyardMaggotActor,
+} from '../enemies/model.ts'
+import { boneyardEnemyCollisionRadius } from '../enemies/model.ts'
 import { ML_BOT_POLICY_ENEMY_TOKEN_SPECIES } from './closed-unions.ts'
 import { ML_BOT_POLICY_SCALES } from './spec.ts'
 

@@ -42,12 +42,12 @@ import {
   applyBoneyardSecondaryEnemyKnockbacks,
   spawnPlayerCharacterInBoneyard,
 } from './boneyard-world-placement.ts'
+import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import { damageBoneyardEnemy } from './enemies/damage.ts'
 import {
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
-  damageBoneyardEnemy,
   NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS,
-  stepBoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+} from './enemies/programs.ts'
 import {
   findBoneyardEnemyRoute,
   NATIVE_BADGUY_NAVIGATION_CLEARANCE,
@@ -295,7 +295,7 @@ test('collision-disabled death presentation does not block enemy locomotion', ()
     },
   }
   const seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       living: {
         alive: true,
@@ -365,7 +365,7 @@ test('enemy locomotion resolves against players and peer actors before committin
     position: { x: 140, y: 250 },
   }
   const seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       player: {
         alive: true,
@@ -428,7 +428,7 @@ test('a Skeleton attacks from the settled native player-contact distance', () =>
     position: { x: 140, y: 350 },
   }
   const seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       player: {
         alive: true,
@@ -513,7 +513,7 @@ test('Zombie contact knockback displaces the authoritative player through world 
     position: { x: 190, y: 250 },
   }
   const seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       player: {
         alive: true,
@@ -584,7 +584,7 @@ test('player movement separates from live enemy circles and commits the displace
     position: { x: 100, y: 350 },
   }
   const seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -659,7 +659,7 @@ test('movement contact follows the Coffin hidden-to-rising hostile edge', () => 
       position: { x: 100, y: 350 },
     }
     const seeded = stepBoneyardEnemyStore(world.enemies, {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players: {},
       resolveMovement: ({ requestedPosition }) => requestedPosition,
       resolveSpawnIntents: () => [{
@@ -754,7 +754,7 @@ test('player movement separates from a live owned Maggot and commits the displac
     position: { x: 100, y: 350 },
   }
   let seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -782,7 +782,7 @@ test('player movement separates from a live owned Maggot and commits the displac
       },
     }],
   }, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [],
@@ -1605,7 +1605,7 @@ test('Solomon ignores dead and ineligible proximity targets', () => {
 test('primary spell targets use live authoritative enemy actors and owned Maggots', () => {
   let world = createBoneyardWorld(gatedBoneyard())
   let seeded = stepBoneyardEnemyStore(world.enemies, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -1634,7 +1634,7 @@ test('primary spell targets use live authoritative enemy actors and owned Maggot
       },
     }],
   }, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [],

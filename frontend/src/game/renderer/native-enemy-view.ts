@@ -1,3 +1,4 @@
+import { nativeDemonBombBearing } from '../core-kernels/boneyard-demon-articulation.ts'
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
@@ -236,17 +237,17 @@ class NativeEnemyView {
     ))?.entry ?? null
     const demonController = plan.layers.find(({ role }) => role === 'demon-controller-body')
     if (demonController) {
-      const points = nativeEnemySpriteRecord(
-        demonController.atlas,
-        demonController.entry,
+      const controllerPose = Math.trunc((demonController.entry - 19) / 18)
+      const points = nativeEnemySpriteRecord('Demon',
+        19 + controllerPose * 18 + nativeDemonBombBearing(enemy.headingDeg) / 20,
       ).points
       const muzzle = points[5]
       if (!muzzle) throw new Error(`Demon controller ${demonController.entry} lacks point 5`)
       this.demonMuzzleOffset = nativeDemonBombMuzzleOrigin(
         { x: 0, y: 0 },
         enemy.headingDeg,
-        { x: muzzle.x + demonController.offset.x, y: muzzle.y },
-        demonController.offset.y,
+        { x: muzzle.x + demonController.offset.x * enemy.scale, y: muzzle.y },
+        demonController.offset.y * enemy.scale,
       )
     } else {
       this.demonMuzzleOffset = null

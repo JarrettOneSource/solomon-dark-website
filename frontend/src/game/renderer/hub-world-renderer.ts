@@ -1,3 +1,4 @@
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
 import 'pixi.js/unsafe-eval'
 import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js'
@@ -39,7 +40,6 @@ import {
 import {
   NATIVE_PLAYER_MAGIC_SHIELD,
   NativeSecondaryScreenFeedbackPresentation,
-  nativeRegionPointGain,
   presentNativeSecondaryScreenOverlay,
 } from './native-secondary-presentation.ts'
 import {

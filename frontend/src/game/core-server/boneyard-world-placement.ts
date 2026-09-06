@@ -45,11 +45,11 @@ import {
   type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
 import {
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
   type BoneyardEnemyPlayerKnockback,
   type BoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 
 import type { BoneyardPlayerCombatStatus, BoneyardWorldState } from './boneyard-world.ts'

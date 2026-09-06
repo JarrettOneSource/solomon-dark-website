@@ -147,6 +147,8 @@ const SOURCES = {
     'throw-dirt-1': 'throw-dirt-1.wav',
     'throw-dirt-2': 'throw-dirt-2.wav',
     'throw-fire': 'fire.wav',
+    'throw-spell': 'throw-spell.wav',
+    'spit-fire': 'spit-fire.wav',
     'throw-lightning-1': 'throw-lightning-1.wav',
     'throw-lightning-2': 'throw-lightning-2.wav',
     unforge: 'unforge.wav',

@@ -1,3 +1,5 @@
+import type { BoneyardProjectileKnockback } from '../core-server/enemies/model.ts'
+import { nativeEnemyProjectileVelocity } from '../core-kernels/native-enemy-targeting.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES } from '../core-kernels/boneyard-enemy-config.ts'
 import {
@@ -29,6 +31,7 @@ import {
 import {
   createNativeRng,
   drawNativeInteger,
+  drawNativeFloat,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import { createNativeWraithFlightState } from '../core-kernels/native-wraith-flight.ts'
@@ -39,6 +42,7 @@ import {
 import {
   createNativeWorldManagerOrder,
   type NativeWorldManagerOrderState,
+  type NativeWorldManagerRegistration,
 } from '../core-kernels/native-world-manager-order.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
@@ -799,7 +803,7 @@ function normalizeSimulation(
     : sourceSchemaVersion === 21
       ? migrateSchema21HubPainterState(normalized)
       : normalized
-  return normalizeWorldPainterOwnership(migrated, sourceSchemaVersion < 23)
+  return normalizeWorldPainterOwnership(migrated, sourceSchemaVersion)
 }
 
 const SCHEMA_21_HUB_FIXED_ACTOR_PAINTER_COUNT = 11
@@ -983,8 +987,9 @@ function withLegacyPainterRegistrations(
 
 function normalizeWorldPainterOwnership(
   input: Record<string, unknown>,
-  migrateMissing: boolean,
+  sourceSchemaVersion: number,
 ): Record<string, unknown> {
+  const migrateMissing = sourceSchemaVersion < 23
   const order = record(input.worldManagerOrder, 'game save world manager order')
   const next = record(
     order.nextRegistrationOrdinal,
@@ -1024,7 +1029,7 @@ function normalizeWorldPainterOwnership(
 
   const world = record(input.world, 'game save world')
   const normalizedWorld = world.kind === 'boneyard'
-    ? normalizeBoneyardDeathEffectOwnership(world, register, migrateMissing)
+    ? normalizeBoneyardPainterOwnership(world, register, migrateMissing, sourceSchemaVersion < 32)
     : world
   return {
     ...input,
@@ -1064,15 +1069,19 @@ function normalizePrimaryPainterOwnership(
   return { ...source, painterRegistrations }
 }
 
-function normalizeBoneyardDeathEffectOwnership(
+function normalizeBoneyardPainterOwnership(
   source: Record<string, unknown>,
   register: (lane: 'actor' | 'transient') => Readonly<{
     managerLane: 'actor' | 'transient'
     registrationOrdinal: number
   }>,
   migrateMissing: boolean,
+  migrateProjectiles: boolean,
 ): Record<string, unknown> {
   const enemies = record(source.enemies, 'game save Boneyard enemies')
+  const projectiles = array(enemies.projectiles, 'game save enemy projectiles').map(value => (
+    normalizeEnemyProjectilePainter(record(value, 'game save enemy projectile'), register, migrateProjectiles)
+  ))
   const deathEffects = array(enemies.deathEffects, 'game save enemy death effects').map(
     (value, index) => normalizeDeathEffectOwnership(
       record(value, `game save enemy death effect ${index}`),
@@ -1092,9 +1101,31 @@ function normalizeBoneyardDeathEffectOwnership(
   )
   return {
     ...source,
-    enemies: { ...enemies, deathEffects },
+    enemies: { ...enemies, deathEffects, projectiles },
     loot: { ...loot, effects: lootEffects },
   }
+}
+
+function normalizeEnemyProjectilePainter(
+  source: Record<string, unknown>,
+  register: (lane: 'actor' | 'transient') => NativeWorldManagerRegistration,
+  migrate: boolean,
+): Record<string, unknown> {
+  const lane = source.kind === 'arrow' || source.kind === 'firebolt' ? 'transient' : 'actor'
+  const lit = source.kind === 'firebolt' || source.kind === 'guided-missile'
+    || source.kind === 'demon-bomb' || (source.kind === 'arrow' && source.payload === 'fire')
+  let painter = source.painterRegistration
+  if (migrate) {
+    painter = isManagerRegistration(source.lightRegistration, lane) ? source.lightRegistration
+      : isManagerRegistration(painter, lane) ? painter : register(lane)
+    return { ...source, painterRegistration: painter, lightRegistration: lit ? painter : null }
+  }
+  if (!isManagerRegistration(painter, lane)) throw new Error('saved projectile painter registration is invalid')
+  const light = source.lightRegistration
+  if (lit ? !isManagerRegistration(light, lane) || light.registrationOrdinal !== painter.registrationOrdinal : light !== null) {
+    throw new Error('saved projectile light registration is invalid')
+  }
+  return source
 }
 
 function normalizeDeathEffectOwnership(
@@ -1355,11 +1386,12 @@ function remapNativeActorRegistrations(
 function isManagerRegistration(
   value: unknown,
   managerLane: 'actor' | 'transient',
-): boolean {
+): value is NativeWorldManagerRegistration {
   if (value === null || typeof value !== 'object') return false
   const source = value as Record<string, unknown>
   return source.managerLane === managerLane
     && Number.isSafeInteger(source.registrationOrdinal)
+    && Number(source.registrationOrdinal) >= 0
 }
 
 function normalizePlayerStore(
@@ -1521,6 +1553,12 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   const transients = array(source.transients, 'game save primary spell transients').map(
     (value, index) => {
       const transient = record(value, `game save primary spell transient ${index}`)
+      if (sourceSchemaVersion < 32 && transient.kind === 'fire-patch') {
+        const fire = { ...transient }
+        fire.horizontalSign = 1
+        delete fire.shapeSample
+        return fire
+      }
       if (transient.kind !== 'water') return transient
       const speed = sourceSchemaVersion < 19 && transient.speed === undefined
         ? 4
@@ -1801,6 +1839,7 @@ function normalizeWorld(
   const defaults = createBoneyardWorld(loadedBoneyard)
   const enemies = record(source.enemies, 'game save Boneyard enemies')
   let enemyRngState = finiteNumber(enemies.rngState, 'game save Boneyard enemy RNG')
+  let enemyNativeRng = parseNativeRng(enemies.steeringRngState ?? defaults.enemies.steeringRngState, 'game save enemy native RNG')
   const enemyActors = array(enemies.actors, 'game save Boneyard enemy actors').map(
     (value, index) => {
       const actor = record(value, `game save Boneyard enemy actor ${index}`)
@@ -1871,7 +1910,33 @@ function normalizeWorld(
     if (secondaryDamage < 0) {
       throw new Error(`game save Boneyard enemy projectile ${index} magic damage is invalid`)
     }
-    return { ...projectile, chillTumbleAccumulator, secondaryDamage }
+    let turnSpeed = 0
+    if (sourceSchemaVersion < 32) {
+      if (projectile.kind === 'guided-missile') {
+        const draw = drawNativeFloat(enemyNativeRng, 0.75)
+        enemyNativeRng = draw.state
+        turnSpeed = Math.fround(0.5 + draw.value)
+      }
+    } else {
+      turnSpeed = finiteNumber(projectile.turnSpeed, `game save enemy projectile ${index} turn speed`)
+      if (projectile.kind === 'guided-missile' ? turnSpeed < 0.5 || turnSpeed > 1.25 : turnSpeed !== 0) {
+        throw new Error(`game save enemy projectile ${index} turn speed is invalid`)
+      }
+    }
+    const velocity = projectile.kind === 'arrow'
+      ? sourceSchemaVersion < 32
+        ? nativeEnemyProjectileVelocity(
+            finiteNumber(projectile.headingDeg, 'saved Arrow heading'), finiteNumber(projectile.speed, 'saved Arrow speed'),
+          )
+        : record(projectile.velocity, 'saved Arrow velocity')
+      : null
+    return { ...projectile, chillTumbleAccumulator, secondaryDamage, turnSpeed,
+      ...(velocity === null ? {} : { velocity: {
+        x: finiteNumber(velocity.x, 'saved Arrow velocity X'), y: finiteNumber(velocity.y, 'saved Arrow velocity Y'),
+      } }),
+      ...(sourceSchemaVersion < 32 && projectile.kind === 'guided-missile' ? { lifetimeTicks: 1300 } : {}),
+      ...(sourceSchemaVersion < 32 && projectile.kind === 'poison-pool' ? { lifetimeTicks: 3200 } : {}),
+    }
   })
   const encounter = source.encounter === null
     ? null
@@ -1945,8 +2010,31 @@ function normalizeWorld(
       actors: enemyActors,
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
       projectiles: enemyProjectiles,
+      projectileKnockbacks: sourceSchemaVersion < 32 ? [] : parseProjectileKnockbacks(
+        enemies.projectileKnockbacks, finiteNumber(enemies.lastStepTick, 'game save enemy tick'),
+      ),
+      targetCellBindings: sourceSchemaVersion < 32 ? {} : Object.fromEntries(Object.entries(
+        record(enemies.targetCellBindings, 'game save target cell bindings'),
+      ).map(([id, value]) => {
+        const binding = record(value, 'game save target cell binding')
+        return [id, {
+          cellX: integerWithin(binding.cellX, 'target cell X', Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER),
+          cellY: integerWithin(binding.cellY, 'target cell Y', Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER),
+          order: integerWithin(binding.order, 'target cell order', 0, Number.MAX_SAFE_INTEGER),
+        }]
+      })),
+      projectileEffects: sourceSchemaVersion < 32
+        ? array(enemies.projectileEffects, 'game save enemy projectile effects').filter(value => {
+            const effect = record(value, 'game save enemy projectile effect')
+            return effect.kind !== 'demon-fire' && effect.kind !== 'poison-pool-normal'
+              && effect.kind !== 'poison-pool-additive'
+              && effect.kind !== 'fire-burst-frame' && effect.kind !== 'fire-burst-glow'
+              && effect.kind !== 'guided-impact-main' && effect.kind !== 'guided-impact-aura-one'
+              && effect.kind !== 'guided-impact-aura-two'
+          })
+        : enemies.projectileEffects,
       rngState: enemyRngState,
-      steeringRngState: enemies.steeringRngState ?? defaults.enemies.steeringRngState,
+      steeringRngState: enemyNativeRng,
     },
     encounter: normalizedEncounter,
     enemyWorldFeedback: source.enemyWorldFeedback ?? defaults.enemyWorldFeedback,
@@ -1976,6 +2064,30 @@ function normalizeWorld(
           slumpgutTicksRemaining: waves.slumpgutTicksRemaining ?? 0,
         },
   } as unknown as BoneyardWorldState
+}
+
+function parseProjectileKnockbacks(value: unknown, lastStepTick: number): readonly BoneyardProjectileKnockback[] {
+  return array(value, 'game save projectile knockbacks').map((value, index) => {
+    const field = `game save projectile knockback ${index}`
+    const source = record(value, field)
+    onlyKeys(source, field, ['actorId', 'delta', 'eventId', 'lastStepTick', 'playerId', 'remainingTicks'])
+    const delta = record(source.delta, `${field} displacement`)
+    onlyKeys(delta, `${field} displacement`, ['x', 'y'])
+    const x = finiteNumber(delta.x, `${field} displacement X`)
+    const y = finiteNumber(delta.y, `${field} displacement Y`)
+    if (Math.abs(x) > 4.5 || Math.abs(y) > 4.5) throw new Error(`${field} displacement is invalid`)
+    if (typeof source.playerId !== 'string' || source.playerId.length === 0 || source.playerId.length > 128) {
+      throw new Error(`${field} player identity is invalid`)
+    }
+    return {
+      actorId: integerWithin(source.actorId, `${field} actor`, 1, Number.MAX_SAFE_INTEGER),
+      delta: { x, y },
+      eventId: integerWithin(source.eventId, `${field} event`, 1, Number.MAX_SAFE_INTEGER),
+      lastStepTick: integerWithin(source.lastStepTick, `${field} clock`, 0, lastStepTick),
+      playerId: source.playerId,
+      remainingTicks: integerWithin(source.remainingTicks, `${field} remaining ticks`, 1, 10),
+    }
+  })
 }
 
 function normalizeSavedDemonArticulation(

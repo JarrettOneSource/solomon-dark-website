@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { preview } from 'vite'
 
-import { NATIVE_MAGE_ACTION_PROGRAMS, stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { NATIVE_MAGE_ACTION_PROGRAMS } from '../src/game/core-server/enemies/programs.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { boneyardGeometrySha256 } from '../src/game/host/project-boneyard.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
@@ -149,7 +150,7 @@ async function mageImpact(element, protection) {
   const nextId = store.nextActorId
   const order = createNativeWorldManagerOrder(before.worldManagerOrder)
   const spawned = stepBoneyardEnemyStore({ ...store, lastStepTick: before.tick - 1 }, {
-    firstProjectileWorldContact: () => null, players: {}, tick: before.tick,
+    projectileWorldBlocked: () => false, players: {}, tick: before.tick,
     registerWorldPainter: order.register,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{ enemyToken: 'SKELETONMAGE', flags: [`FLAG_CAST${element.toUpperCase()}`],

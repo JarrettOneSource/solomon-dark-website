@@ -1,3 +1,4 @@
+import { nativeDemonBombBearing } from '../core-kernels/boneyard-demon-articulation.ts'
 export type NativeEnemyRawFireBurstKind = 'demon-bomb-muzzle' | 'imp-contact'
 
 export interface NativeEnemyAuxiliaryPainterPolicy {
@@ -48,7 +49,7 @@ export function nativeDemonBombMuzzleOrigin(
   controllerPoint5: Readonly<{ x: number; y: number }>,
   verticalOffset: number,
 ): Readonly<{ x: number; y: number }> {
-  const radians = headingDeg * Math.PI / 180
+  const radians = nativeDemonBombBearing(headingDeg) * Math.PI / 180
   return {
     x: actorPosition.x + controllerPoint5.x + Math.sin(radians) * 25,
     y: actorPosition.y + verticalOffset + controllerPoint5.y - Math.cos(radians) * 25,

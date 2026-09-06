@@ -1,5 +1,5 @@
 import { applyPlayerContacts, gameWorldKey, finiteModMutation } from './player-contact-system.ts'
-import type { BoneyardEnemyPlayerDamage } from './boneyard-enemy-store.ts'
+import type { BoneyardEnemyPlayerDamage } from './enemies/model.ts'
 import {
   NATIVE_FLASH_RESPONSE_RADIUS,
 } from '../core-kernels/player-harmful-contact.ts'
@@ -226,15 +226,17 @@ import {
   resolveBoneyardNativeSecondaryCombat,
 } from './native-secondary-world.ts'
 import {
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
-  damageBoneyardEnemy,
   applyBoneyardStaffHeadingPerturbation,
+  damageBoneyardEnemy,
+} from './enemies/damage.ts'
+import {
   type BoneyardEnemyAttributionObserver,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemyReward,
   type BoneyardEnemySemanticEvent,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {

@@ -48,14 +48,16 @@ import {
 import {
   applyBoneyardStaffDisable,
   applyBoneyardStaffImpactVerticalVelocity,
-  boneyardEnemyActorFlags,
   breakBoneyardSkeletonPike,
   damageBoneyardEnemy,
-  boneyardEnemyCollisionRadius,
+} from './enemies/damage.ts'
+import {
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
 import type { BoneyardPlayerMovementContact } from './boneyard-world.ts'
 import {
   playerProgressionAt,

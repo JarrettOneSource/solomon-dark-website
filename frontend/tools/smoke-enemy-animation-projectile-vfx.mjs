@@ -74,6 +74,7 @@ try {
       economyModule,
       enemyProjectionModule,
       enemyStoreModule,
+      enemyDamageModule,
       playerModule,
       progressionModule,
       presentationModule,
@@ -89,6 +90,7 @@ try {
       import('/src/game/core-kernels/hub-economy.ts'),
       import('/src/game/host/project-boneyard-enemies.ts'),
       import('/src/game/core-server/boneyard-enemy-store.ts'),
+      import('/src/game/core-server/enemies/damage.ts'),
       import('/src/game/core-kernels/player-character.ts'),
       import('/src/game/core-kernels/player-progression.ts'),
       import('/src/game/renderer/native-enemy-presentation.ts'),
@@ -370,7 +372,7 @@ try {
       nativeTypeId,
       ownerActorId: id % 8 + 1,
       painterRegistration: {
-        managerLane: 'actor',
+        managerLane: kind === 'arrow' || kind === 'firebolt' ? 'transient' : 'actor',
         registrationOrdinal: 20 + id - 101,
       },
       payload,
@@ -385,20 +387,20 @@ try {
     const enemyProjectiles = [
       projectile(101, 'arrow', 0x7da, 'normal', { x: 300, y: 315 }),
       projectile(102, 'arrow', 0x7da, 'fire', { x: 385, y: 315 }, {
-        lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
+        lightRegistration: { managerLane: 'transient', registrationOrdinal: 21 },
       }),
       projectile(103, 'arrow', 0x7da, 'poison', { x: 470, y: 315 }),
       projectile(104, 'firebolt', 0x7eb, 'fire', { x: 555, y: 315 }, {
-        lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+        lightRegistration: { managerLane: 'transient', registrationOrdinal: 23 },
       }),
       projectile(105, 'guided-missile', 0x7ec, 'cold', { x: 640, y: 315 }, {
-        lightRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 24 },
       }),
       projectile(106, 'guided-missile', 0x7ec, 'poison', { x: 725, y: 315 }, {
-        lightRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 25 },
       }),
       projectile(107, 'demon-bomb', 0x7f7, 'none', { x: 810, y: 315 }, {
-        lightRegistration: { managerLane: 'actor', registrationOrdinal: 10 },
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 26 },
       }),
       projectile(108, 'poison-pool', 0x806, 'poison', { x: 895, y: 315 }, {
         speed: 0,
@@ -422,15 +424,15 @@ try {
       entry,
       id,
       kind,
-      lightRegistration: kind === 'fire-burst-glow'
-        ? { managerLane: 'transient', registrationOrdinal: 11 }
-        : null,
+      lightRegistration: ['fire-burst', 'guided-impact', 'demon-explosion-lit-array'].includes(kind)
+        ? { managerLane: 'transient', registrationOrdinal: 1000 + id }
+        : kind === 'demon-fire' ? { managerLane: 'actor', registrationOrdinal: 1000 + id } : null,
       lifetimeTicks: 20,
       ownerActorId: id % 8 + 1,
       ownerProjectileId: 100 + id % 8 + 1,
       painterRegistration: {
-        managerLane: 'actor',
-        registrationOrdinal: 40 + id - 201,
+        managerLane: ['fire-burst', 'guided-impact', 'demon-explosion-lit-array'].includes(kind) ? 'transient' : 'actor',
+        registrationOrdinal: 1000 + id,
       },
       phaseOriginTicks: 120,
       position,
@@ -441,24 +443,21 @@ try {
       ...overrides,
     })
     const enemyProjectileEffects = [
-      effect(201, 'fire-burst-frame', 'BadGuys', 253, 'add', { x: 280, y: 375 }),
-      effect(202, 'fire-burst-glow', 'BadGuys', 110, 'normal', { x: 360, y: 375 }),
+      effect(201, 'fire-burst', 'BadGuys', 253, 'add', { x: 280, y: 375 }, { alpha: 0.5 }),
+      effect(202, 'poison-bubble', 'BadGuys', 57, 'normal', { x: 360, y: 375 }),
       effect(203, 'firebolt-trail', 'BadGuys', 260, 'normal', { x: 440, y: 375 }),
-      effect(204, 'guided-impact-main', 'BadGuys', 110, 'add', { x: 520, y: 375 }, {
-        alpha: 2,
-        scale: 2,
+      effect(204, 'guided-impact', 'BadGuys', 110, 'add', { x: 520, y: 375 }, {
+        alpha: 2, scale: 2, tint: 0x4080ff,
       }),
-      effect(205, 'guided-impact-aura-one', 'BadGuys', 111, 'add', { x: 600, y: 375 }, {
-        alpha: 2,
-        scale: 2,
+      effect(205, 'guided-impact', 'BadGuys', 111, 'add', { x: 600, y: 375 }, {
+        alpha: 2, scale: 2, tint: 0x40ff40,
       }),
-      effect(206, 'guided-impact-aura-two', 'BadGuys', 112, 'add', { x: 680, y: 375 }, {
-        alpha: 2,
-        scale: 2,
+      effect(206, 'demon-explosion-core', 'BadGuys', 15, 'normal', { x: 680, y: 375 }, { scale: 1.5 }),
+      effect(207, 'demon-fire', 'DeadHawg', 46, 'add', { x: 760, y: 375 }, {
+        fireFadeAlpha: 0.5, fireHorizontalSign: -1, lifetimeTicks: 501,
       }),
-      effect(207, 'demon-fire', 'DeadHawg', 46, 'add', { x: 760, y: 375 }),
-      effect(208, 'poison-pool-fade-outer', 'DeadHawg', 0, 'normal', { x: 840, y: 375 }),
-      effect(209, 'poison-pool-fade-inner', 'DeadHawg', 0, 'normal', { x: 920, y: 375 }),
+      effect(208, 'demon-explosion-array', 'BadGuys', 401, 'add', { x: 840, y: 375 }, { scale: 1.5 }),
+      effect(209, 'demon-explosion-lit-array', 'BadGuys', 420, 'add', { x: 920, y: 375 }, { scale: 1.5 }),
     ]
     const deathEffect = (
       id,
@@ -829,14 +828,9 @@ try {
       snapshotAt(121.75, true),
       () => 1,
     )
-    await Promise.all([
-      ...ambientAudioModule.BONEYARD_ENEMY_AMBIENT_CUES.map((cue) => (
-        audioBrowserModule.loadGameAudioAsset(audioAssetsModule.GAME_AUDIO_SOURCES.loops[cue])
-      )),
-      ...Object.values(audioAssetsModule.GAME_AUDIO_SOURCES.music).map((source) => (
-        audioBrowserModule.loadGameAudioAsset(source)
-      )),
-    ])
+    await Promise.all(audioBrowserModule.GAME_RESIDENT_AUDIO_SOURCES.map((source) => (
+      audioBrowserModule.loadGameAudioAsset(source)
+    )))
     const audioEventStart = window.__sdrAudioEvents.length
     const ambientDirector = audioBrowserModule.createBrowserGameAudioDirector()
     ambientDirector.unlock()
@@ -960,7 +954,7 @@ try {
     }
     const stepImpAuthority = (store, tick, spawnIntents = []) => (
       enemyStoreModule.stepBoneyardEnemyStore(store, {
-        firstProjectileWorldContact: () => null,
+        projectileWorldBlocked: () => false,
         players: { local: impTarget },
         resolveMovement: ({ requestedPosition }) => requestedPosition,
         resolveSpawnIntents: () => spawnIntents,
@@ -993,7 +987,7 @@ try {
       }],
     }, 1)
     const releasedMaggotIds = coffinAuthority.store.maggots.map(({ id }) => id)
-    const damagedCoffin = enemyStoreModule.damageBoneyardEnemy(coffinAuthority.store, {
+    const damagedCoffin = enemyDamageModule.damageBoneyardEnemy(coffinAuthority.store, {
       actorId: coffinActor.id,
       amount: coffinActor.currentHealth,
       sourcePlayerId: 'local',
@@ -1085,7 +1079,7 @@ try {
     const impContactEvents = impAuthority.events
     const impContactRngState = impAuthority.store.rngState
     impAuthority = enemyStoreModule.stepBoneyardEnemyStore(impAuthority.store, {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players: { local: impTarget },
       resolveMovement: ({ position }) => position,
       resolveSpawnIntents: () => [],

@@ -4,14 +4,18 @@ import test from 'node:test'
 
 import { parseBoneyard } from '../../editor/format/boneyard.ts'
 import {
-  NATIVE_MAGGOT_PROGRAM,
   createBoneyardEnemyStore,
-  NATIVE_MAGE_ACTION_PROGRAMS,
-  NATIVE_ENEMY_HIT_LATCH_TICKS,
   stepBoneyardEnemyStore,
-  type BoneyardEnemyDeathEffect,
-  type BoneyardMaggotActor,
 } from '../core-server/boneyard-enemy-store.ts'
+import type {
+  BoneyardEnemyDeathEffect,
+  BoneyardMaggotActor,
+} from '../core-server/enemies/model.ts'
+import {
+  NATIVE_ENEMY_HIT_LATCH_TICKS,
+  NATIVE_MAGE_ACTION_PROGRAMS,
+  NATIVE_MAGGOT_PROGRAM,
+} from '../core-server/enemies/programs.ts'
 import { NATIVE_IMP_BODY_POSE_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
@@ -307,7 +311,7 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
 
 test('projects the native refreshed 20-tick hit latch without changing enemy action state', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('enemy-hit-latch'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       player: {
         alive: true,
@@ -367,7 +371,7 @@ test('projects Wraith contact cooldown as wisp action state without inventing a 
     },
   } as const
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('wraith-contact-projection'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: contactPlayer,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -383,7 +387,7 @@ test('projects Wraith contact cooldown as wisp action state without inventing a 
     tick: 0,
   })
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: contactPlayer,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [],
@@ -395,7 +399,7 @@ test('projects Wraith contact cooldown as wisp action state without inventing a 
   assert.equal(contact.animation.state, 'action')
 
   result = stepBoneyardEnemyStore(result.store, {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       player: { ...contactPlayer.player, position: { x: 500, y: 0 } },
     },
@@ -411,7 +415,7 @@ test('projects Wraith contact cooldown as wisp action state without inventing a 
 
 test('Demon lethal projection freezes its articulated composite root', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('demon-death-root'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -509,7 +513,7 @@ test('projects the native Imp body, bounce, rotation, and upper-effect lifecycle
   const spawnTick = 100
   const position = { x: 80, y: 120 }
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('imp-flight'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {
       player: {
         alive: true,
@@ -537,7 +541,7 @@ test('projects the native Imp body, bounce, rotation, and upper-effect lifecycle
   const samples = [projectBoneyardEnemies(store, spawnTick)[0]!]
   for (let tick = spawnTick + 1; tick <= spawnTick + 3; tick += 1) {
     store = stepBoneyardEnemyStore(store, {
-      firstProjectileWorldContact: () => null,
+      projectileWorldBlocked: () => false,
       players: {
         player: {
           alive: true,
@@ -601,7 +605,7 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
     },
   } as const
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('projection-modifiers'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
@@ -645,7 +649,7 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
     }, spawned.store.actors[1]!],
   }, {
     clipSpellSegment: ({ end }) => end,
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [],
@@ -689,7 +693,7 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
 
 test('projects Skeleton claw programs from armor and keeps body pose independent of gait', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('claw-projection'), {
-    firstProjectileWorldContact: () => null,
+    projectileWorldBlocked: () => false,
     players: {},
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [

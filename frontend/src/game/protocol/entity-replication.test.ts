@@ -779,12 +779,12 @@ test('Boneyard enemy projectiles replicate motion and exact spawn-retire identit
 
   const visualScaleRows = [
     {
-      invalid: [0, 5.1],
+      invalid: [0, 15.1],
       kind: 'arrow',
       lightRegistration: null,
       nativeTypeId: 0x7da,
       payload: 'normal',
-      visualScale: 5,
+      visualScale: 15,
     },
     {
       invalid: [0.5, 1.5],
@@ -827,6 +827,7 @@ test('Boneyard enemy projectiles replicate motion and exact spawn-retire identit
       ...enemyProjectileSnapshot(),
       ...projectileRow,
       homing: row.kind === 'guided-missile',
+      painterRegistration: { managerLane: row.kind === 'arrow' || row.kind === 'firebolt' ? 'transient' : 'actor', registrationOrdinal: 4 },
       id: 100 + index,
     }]
     const keyframe = createGameSnapshotFrame(scaleSnapshot, 0, undefined, true)
@@ -946,36 +947,15 @@ test('enemy projectile effects replicate after their owner projectile retires', 
 
 test('enemy projectile-effect codecs cover every native alpha domain', () => {
   const rows = {
-    'arrow-tumble': {
-      atlas: 'BadGuys', blendMode: 'normal', entry: 2, lifetimeTicks: 60,
-    },
-    'demon-fire': {
-      atlas: 'DeadHawg', blendMode: 'add', entry: 46, lifetimeTicks: 500,
-    },
-    'fire-burst-frame': {
-      atlas: 'BadGuys', blendMode: 'add', entry: 251, lifetimeTicks: 16,
-    },
-    'fire-burst-glow': {
-      atlas: 'BadGuys', blendMode: 'normal', entry: 110, lifetimeTicks: 16,
-    },
-    'firebolt-trail': {
-      atlas: 'BadGuys', blendMode: 'normal', entry: 255, lifetimeTicks: 8,
-    },
-    'guided-impact-aura-one': {
-      atlas: 'BadGuys', blendMode: 'add', entry: 111, lifetimeTicks: 20,
-    },
-    'guided-impact-aura-two': {
-      atlas: 'BadGuys', blendMode: 'add', entry: 112, lifetimeTicks: 20,
-    },
-    'guided-impact-main': {
-      atlas: 'BadGuys', blendMode: 'add', entry: 110, lifetimeTicks: 20,
-    },
-    'poison-pool-fade-inner': {
-      atlas: 'DeadHawg', blendMode: 'normal', entry: 0, lifetimeTicks: 200,
-    },
-    'poison-pool-fade-outer': {
-      atlas: 'DeadHawg', blendMode: 'normal', entry: 0, lifetimeTicks: 200,
-    },
+    'arrow-tumble': { atlas: 'BadGuys', blendMode: 'normal', entry: 2, lifetimeTicks: 41 },
+    'demon-fire': { atlas: 'DeadHawg', blendMode: 'add', entry: 46, lifetimeTicks: 501 },
+    'demon-explosion-core': { atlas: 'BadGuys', blendMode: 'normal', entry: 15, lifetimeTicks: 10 },
+    'demon-explosion-array': { atlas: 'BadGuys', blendMode: 'add', entry: 401, lifetimeTicks: 35 },
+    'demon-explosion-lit-array': { atlas: 'BadGuys', blendMode: 'add', entry: 420, lifetimeTicks: 37 },
+    'poison-bubble': { atlas: 'BadGuys', blendMode: 'normal', entry: 57, lifetimeTicks: 100 },
+    'fire-burst': { atlas: 'BadGuys', blendMode: 'add', entry: 251, lifetimeTicks: 16 },
+    'guided-impact': { atlas: 'BadGuys', blendMode: 'add', entry: 110, lifetimeTicks: 20 },
+    'firebolt-trail': { atlas: 'BadGuys', blendMode: 'normal', entry: 255, lifetimeTicks: 8 },
   } as const satisfies Record<
     BoneyardEnemyProjectileEffectSnapshot['kind'],
     Readonly<Pick<
@@ -988,19 +968,22 @@ test('enemy projectile-effect codecs cover every native alpha domain', () => {
   for (const [index, kind] of BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS.entries()) {
     const initial = boneyardSnapshot(`projectile-effect-${kind}`)
     if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
-    const effect: BoneyardEnemyProjectileEffectSnapshot = {
+    const base = {
       ...enemyProjectileEffectSnapshot(),
       ...rows[kind],
       ageTicks: 0,
       alpha: BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS[kind],
       id: 100 + index,
-      kind,
-      lightRegistration: kind === 'fire-burst-glow'
-        ? { managerLane: 'transient', registrationOrdinal: 12 }
-        : null,
+      lightRegistration: kind === 'demon-fire'
+        ? { managerLane: 'actor' as const, registrationOrdinal: 12 }
+        : kind === 'fire-burst' || kind === 'guided-impact' || kind === 'demon-explosion-lit-array'
+          ? { managerLane: 'transient' as const, registrationOrdinal: 12 } : null,
       phaseOriginTicks: 0,
       spawnTick: 20,
     }
+    const effect: BoneyardEnemyProjectileEffectSnapshot = kind === 'demon-fire'
+      ? { ...base, kind, fireFadeAlpha: 0.5, fireHorizontalSign: -1 }
+      : { ...base, kind }
     initial.world.enemyProjectileEffects = [effect]
     const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
     if (keyframe.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
@@ -1037,19 +1020,19 @@ test('enemy projectile-effect codecs cover every native alpha domain', () => {
   }
 })
 
-test('enemy FireBurst glow alone carries the transient ZAnimLit registration', () => {
+test('enemy FireBurst and trail have distinct the transient ZAnimLit registration', () => {
   const initial = boneyardSnapshot('projectile-effect-light-run')
   if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
   const glow = {
     ...enemyProjectileEffectSnapshot(),
     alpha: 0.5,
-    kind: 'fire-burst-glow' as const,
+    kind: 'fire-burst' as const,
     lightRegistration: { managerLane: 'transient' as const, registrationOrdinal: 12 },
   }
   const frame = {
     ...glow,
     id: glow.id + 1,
-    kind: 'fire-burst-frame' as const,
+    kind: 'firebolt-trail' as const,
     lightRegistration: null,
   }
   initial.world.enemyProjectileEffects = [glow, frame]
@@ -1062,10 +1045,10 @@ test('enemy FireBurst glow alone carries the transient ZAnimLit registration', (
       lightRegistration,
     })),
     [{
-      kind: 'fire-burst-glow',
+      kind: 'fire-burst',
       lightRegistration: { managerLane: 'transient', registrationOrdinal: 12 },
     }, {
-      kind: 'fire-burst-frame',
+      kind: 'firebolt-trail',
       lightRegistration: null,
     }],
   )
@@ -1555,12 +1538,12 @@ function enemyProjectileEffectSnapshot(): BoneyardEnemyProjectileEffectSnapshot 
     blendMode: 'add',
     entry: 110,
     id: 10,
-    kind: 'guided-impact-main',
-    lightRegistration: null,
+    kind: 'guided-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 10 },
     lifetimeTicks: 20,
     ownerActorId: 7,
     ownerProjectileId: 4,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 10 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 10 },
     phaseOriginTicks: 3,
     position: { x: 128.5, y: 456.75 },
     rotationRadians: 0.25,
@@ -1582,7 +1565,7 @@ function enemyProjectileSnapshot(): BoneyardEnemyProjectileSnapshot {
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 7,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 4 },
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 4 },
     payload: 'normal',
     position: { x: 128, y: 456.75 },
     speed: 5,

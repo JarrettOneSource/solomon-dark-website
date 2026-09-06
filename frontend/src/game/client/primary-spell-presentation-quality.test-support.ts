@@ -271,7 +271,7 @@ export function transient<Kind extends TransientKind>(
     rotationStepDegrees: value,
     savedBounceVelocity: value,
     scale: value,
-    shapeSample: value,
+    horizontalSign: value < 0 ? -1 : 1,
     shellScale: value,
     soundPitch: value,
     speed: value,

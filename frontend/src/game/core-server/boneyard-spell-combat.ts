@@ -95,22 +95,26 @@ import {
   registerNativeWorldPainterRoots,
   type RegisterNativeWorldPainter,
 } from '../core-kernels/native-world-manager-order.ts'
+import { positionBoneyardEnemy } from './boneyard-enemy-store.ts'
 import {
-  boneyardEnemyActorFlags,
-  boneyardEnemyCollisionRadius,
   damageBoneyardEnemy,
-  positionBoneyardEnemy,
-  setBoneyardArrowChillTumbleAccumulator,
   setBoneyardEnemyBlizzardPushState,
   setBoneyardEnemyHurricaneContactCooldown,
-  tumbleBoneyardArrow,
+} from './enemies/damage.ts'
+import {
   type BoneyardEnemyActor,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemyProjectile,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
   type BoneyardMaggotActor,
-} from './boneyard-enemy-store.ts'
+  boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
+} from './enemies/model.ts'
+import {
+  setBoneyardArrowChillTumbleAccumulator,
+  tumbleBoneyardArrow,
+} from './enemies/projectile-effects.ts'
 
 export type BoneyardSpellHitKind =
   | PrimarySpellProjectileKind

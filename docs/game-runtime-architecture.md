@@ -2197,3 +2197,14 @@ reconstruct the formerly absent state once from the saved Demon identity,
 position, heading, scale, and spawn tick; schema 27 rejects a missing state.
 Death freezes the last endpoint midpoint while the independent 100-tick body
 strip and terminal-effect stores retain their existing ownership and teardown.
+
+## Hostile projectile ownership
+
+The enemy store transaction delegates hostile projectile construction,
+fixed-tick flight, contact, and terminal handoff to cohesive enemy modules.
+Arrow descent is admitted by its distance-derived flight countdown; it is not
+an unconditional height animation. Firebolt, GuidedMissile, DemonBomb, and
+PoisonPool retain their distinct native clocks and contact programs. The host
+owns all mutable inputs; entity projection and browser presentation sample
+those inputs. Independent child effects and hazards survive parent retirement.
+The exact contracts and implementation receipts are in native-parity entry 091.

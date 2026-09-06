@@ -1,3 +1,4 @@
+import { HUB_PRE_WORLD_ANIMATION_DEPTH } from '../hub-depth.ts'
 import { Container, type Shader } from 'pixi.js'
 
 import type {
@@ -66,6 +67,7 @@ export interface PrimarySpellPainterLayer {
 
 interface SpellView {
   readonly containers: readonly Container[]
+  readonly underlayContainer?: Container
   readonly kind: string
   destroy(): void
   painterRoots(): readonly SpellPainterRoot[]
@@ -101,6 +103,8 @@ export class PrimarySpellWorldView {
   private readonly liveIds = new Set<number>()
   private readonly painterOwners = new Map<number, 'view' | 'water-mesh'>()
   private readonly root: Container
+  private readonly preWorldRoot: Container
+  private readonly preWorldQueueDepth: number
   private readonly postWorldQueueDepth: number | null
   private readonly textures: PlayerWorldTextures
   private readonly views = new Map<number, SpellView>()
@@ -113,24 +117,26 @@ export class PrimarySpellWorldView {
   static forBoneyard(
     root: Container,
     textures: PlayerWorldTextures,
-    shader?: Shader,
+    options: { shader?: Shader; preWorldRoot?: Container } = {},
   ): PrimarySpellWorldView {
-    const view = new PrimarySpellWorldView(root, textures)
+    const view = new PrimarySpellWorldView(root, textures, { ...options, preWorldQueueDepth: 0.5 })
     view.waterMeshes = new NativeWaterMeshRuns(root, {
       aura: textures.primarySpells.airWaterActors.coldAura,
       core: textures.primarySpells.frost.core,
       glint: textures.primarySpells.frost.over,
       hail: textures.primarySpells.airWaterActors.hail,
-    }, shader)
+    }, options.shader)
     return view
   }
 
   constructor(
     root: Container,
     textures: PlayerWorldTextures,
-    options: { postWorldQueueDepth?: number } = {},
+    options: { postWorldQueueDepth?: number; preWorldRoot?: Container; preWorldQueueDepth?: number } = {},
   ) {
     this.root = root
+    this.preWorldRoot = options.preWorldRoot ?? root
+    this.preWorldQueueDepth = options.preWorldQueueDepth ?? HUB_PRE_WORLD_ANIMATION_DEPTH
     this.textures = textures
     this.postWorldQueueDepth = options.postWorldQueueDepth ?? null
   }
@@ -238,6 +244,10 @@ export class PrimarySpellWorldView {
         this.views.set(state.id, view)
         if (this.waterMeshes) this.painterOwners.set(state.id, 'view')
         this.root.addChild(...view.containers)
+        if (view.underlayContainer) {
+          view.underlayContainer.zIndex = this.preWorldQueueDepth
+          this.preWorldRoot.addChild(view.underlayContainer)
+        }
       }
       view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)))
       for (const painterRoot of view.painterRoots()) {
@@ -451,6 +461,7 @@ function primaryPainterRegistrationIndex(
   suffix: string,
   fallbackIndex: number,
 ): number {
+  if (state.kind === 'fire-explosion') return 0
   if (state.kind === 'air') {
     if (suffix === 'body') return 0
     if (suffix === 'source') return 1

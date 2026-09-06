@@ -37,7 +37,7 @@ import {
   type NativeWorldManagerRegistration,
   type RegisterNativeWorldPainter,
 } from '../core-kernels/native-world-manager-order.ts'
-import type { BoneyardEnemyDeathEffect } from './boneyard-enemy-store.ts'
+import type { BoneyardEnemyDeathEffect } from './enemies/model.ts'
 
 export const NATIVE_LOOT_WORLD_ID_MINIMUM = 1
 export const NATIVE_LOOT_WORLD_ID_MAXIMUM = 2_047

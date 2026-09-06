@@ -1,3 +1,4 @@
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -31,7 +32,6 @@ import {
   nativeEnemyPainterLayer,
   nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
   nativeEnemyViewPlanInputsEqual,
-  roundHalfToEven,
   type NativeEnemyAtlas,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'

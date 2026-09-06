@@ -1,3 +1,4 @@
+import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import type {
   PrimarySpellFireEmberState,
   PrimarySpellFireExplosionState,
@@ -20,7 +21,6 @@ import {
 } from './boneyard-lighting.ts'
 import {
   nativeEnemyFacingBucket,
-  roundHalfToEven,
 } from './native-enemy-presentation.ts'
 
 export const NATIVE_FIREBALL_CORE_RECORD = 110
@@ -453,20 +453,47 @@ export function nativeFireEmberLightSource(
   }
 }
 
+export interface NativeFireGroundGlowPlan {
+  readonly alpha: number
+  readonly position: Readonly<{ x: number; y: number }>
+  readonly scale: number
+  readonly tint: number
+}
+
+export function nativeFireGroundGlowPlan(
+  state: Pick<PrimarySpellFirePatchState, 'id' | 'life' | 'position' | 'scale'>,
+  presentationSample: number,
+): NativeFireGroundGlowPlan {
+  return {
+    alpha: Math.fround(Math.min(state.life, 1) * 0.5),
+    position: state.position,
+    scale: Math.fround(state.scale * 2),
+    tint: 0xff0000 | (Math.round(nativeFirePresentationRandom(state.id, presentationSample, 61) * 255) << 8),
+  }
+}
+
+export function nativeFirePatchTransform(
+  state: Pick<PrimarySpellFirePatchState, 'position' | 'scale' | 'fadeAlpha' | 'horizontalSign'>,
+): Readonly<{ position: { x: number; y: number }; scaleX: number; scaleY: number }> {
+  const commonScale = Math.fround(Math.fround(Math.fround(1.1) * state.scale) * state.fadeAlpha)
+  return {
+    position: { x: state.position.x, y: Math.fround(Math.fround(state.position.y + 10) + Math.fround(-20 * commonScale)) },
+    scaleX: commonScale * state.horizontalSign,
+    scaleY: commonScale,
+  }
+}
+
 export function nativeFirePatchPlan(
   state: PrimarySpellFirePatchState,
 ): NativeFirePatchPlan {
-  const commonScale = 1.1 * state.scale * state.fadeAlpha
   return {
+    ...nativeFirePatchTransform(state),
     alpha: Math.min(state.drawAlpha * state.life, 1),
     atlas: 'DeadHawg',
     blend: 'add',
     entry: NATIVE_FIRE_PATCH_FRAME_FIRST
       + positiveModulo(roundHalfToEven(state.atlasPhase), NATIVE_FIRE_PATCH_FRAME_COUNT),
-    position: { x: state.position.x, y: state.position.y - 20 },
     regionLightPoint: null,
-    scaleX: commonScale * state.shapeSample,
-    scaleY: commonScale,
     tint: 0xffffff,
     worldY: state.position.y,
   }
