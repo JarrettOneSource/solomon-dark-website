@@ -753,9 +753,9 @@ children. Existing primary spells, movement controllers, collision geometry,
 status-modifier consumers, and the world painter are dependencies; their
 interfaces are checked where these children cross them.
 
-The following is the implementation disposition inventory. `exact-ported`
-rows are the required end state of this reopening; until the final validation
-receipt is recorded, they are not a completion claim.
+The following inventory records the completed implementation dispositions.
+The verification receipt below covers the mechanical and presentation rows;
+the render-owned Arrow visibility cleanup has its separate platform disposition.
 
 | Member | Native owner / source | Disposition | Required proof |
 | --- | --- | --- | --- |
@@ -981,8 +981,8 @@ SpriteArray goes directly to pre-world `+0x278`; only the rising SpriteArray's
 `ZAnimLit` goes to transient manager `+0x8B70`. Its light registration is
 therefore transient, not actor. The existing player-Fire Explosion renderer
 collapsed these three native intervals into one sorted container. This shared
-assumption is corrected for both enemy and player consumers; no extra world
-queue registration is synthesized for either direct-manager component.
+assumption is corrected for both enemy and player consumers; no extra
+sorted-queue submission is synthesized for either direct-manager component.
 
 Raw instruction closure of the impact callbacks supersedes the provisional
 unsigned Fire-arrow claim: `0x005E5E22` pushes signed flag 1, so its burst scale
@@ -1101,3 +1101,68 @@ otherwise resume incorrectly replays the entire pause as projectile movement
 and can discard live impact effects. The pause regression checks the existing
 public enemy-store interface through hold and resume. Birth identities and
 replicated spawn ticks remain unchanged.
+
+#### 2026-09-06 verification receipt
+
+The validated runtime implementation is `eff21b7cbf1e6e7ccfc864a745a43a205532a3d3`,
+based on main `d31c155b6118bc797454d51fbaf3c3410ad4181c`. Local and detached
+Mac source files were byte-identical. Publication adds this receipt without
+changing the validated runtime, tests, or browser harness. Stock conclusions
+remain instruction-derived from the retail 0.72.5 image identified above;
+this pass did not obtain a paired clean-stock video or pixel comparison.
+
+All validation ran on the Mac mini with Node 22.17.0, arm64 Chrome, and the
+pinned repository toolchain:
+
+- `/opt/homebrew/bin/bash ./scripts/validate.sh` completed successfully:
+  23 Python checks, 2,977 reported Node test executions, backend/frontend
+  builds, formatting/lint, protocol/save contracts, bundle/media policy,
+  and configured renderer quality checks. The gate began on `c246d026a`.
+  Main's subsequent `d31c155b` change touched only Lua rollback code, its
+  tests, and documentation. The unchanged renderer run continued; the
+  changed Lua dependency path was revalidated separately instead of
+  restarting the renderer measurement.
+- On the final merged runtime, all 20 tests in
+  `prepared-mod-player-control.test.ts`, `prepared-mod-host.test.ts`, and
+  `prepared-mod-session.test.ts` passed. The complete test TypeScript check,
+  frontend lint, fresh production frontend/game-host build, bundle budget,
+  and production media check also passed. No configured threshold was changed.
+- Renderer quality finished at `2026-09-06T03:22:24.622Z` with no failures.
+  Its eight configured files had 100% statement, branch, function, and line
+  coverage; maximum cyclomatic complexity 20, cognitive complexity 10, and
+  CRAP 20; no prohibited types, dead code, or duplicate blocks. Mutation
+  results were 385 killed, one timeout, 129 compile errors, and 29 existing
+  documented equivalents ignored; there were no survivors or uncovered mutants.
+
+Chrome acceptance used isolated local ports and browser profiles:
+
+| Scenario | Observable result |
+| --- | --- |
+| `smoke-enemy-animation-projectile-vfx.mjs` | WebGL2 rendered all eight projectile variants and nine effect cases, including all three Arrow payloads, both GuidedMissile payloads, Firebolt, DemonBomb, PoisonPool, impacts, bubbles, and independent Demon fire/explosion layers. Page errors, console errors, and failed responses were empty. |
+| Built `smoke-boneyard-waves.mjs --archer-projectile-only` | Real Title/Create/Hub/Arena entry, combat, and natural wave-2 Archer 58 produced Arrow 1 with countdown 62. Moving samples at ages 3, 8, 13, 18, 23, and 28 all retained height -25. The Arrow retired at tick 17006. Death, native damage audio, Game Over, retained-loadout confirmation, and the next arena passed. The new run had 50 health, 100 mana, and zero enemies, projectiles, or projectile effects. Page/console/network errors were empty. |
+| Built `smoke-boneyard-waves.mjs --arrow-tumble-only` | Actual Water casting accumulated Chill force to 0.9920001029968262 before the strict threshold transferred Arrow 1 into SpinAway 1 at tick 7999. The client received alpha 3.900390625 after one update, rendered BadGuys 2, and both host and client had retired the child by tick 8041. Error arrays were empty. |
+
+The component and Chill checks ran on `c246d026a`; the Lua-only merge changed
+none of their tested paths. The final Archer journey ran on the fresh
+`eff21b7c` production build.
+
+The Archer profile gives its test player extra health during shot observation,
+then stages one-health contact with an existing enemy and holds the wave
+schedule for the death transition. The Archer's factory, AI release, flight,
+collision, rendering, and retirement execute normally. The Chill profile
+stages a stationary Arrow along the actual cast direction and exercises the
+normal contact/replication/presentation path. These controls belong only to
+the browser harness.
+
+The broader smoke's entrance-return navigation and Water fan/Cone/Aura checks
+are outside this hostile-projectile acceptance profile. Their earlier route
+and fan assertions did not pass in this run and are not claimed as evidence
+here. The shared harness now also follows the current Game Over button,
+retained-loadout element selection, and second-arena resume readiness.
+
+The only platform-dispositioned member in this reopening remains Arrow's
+render-owned visibility retirement: returning to an area can reveal a ground
+Arrow that stock's local Present loop already discarded. Mechanical flight,
+contact, and fading do not depend on client visibility or render rate.
+Raw logs, captures, patches, and task worktrees are disposable after the
+authorized main push is verified; this ledger retains their measured results.
