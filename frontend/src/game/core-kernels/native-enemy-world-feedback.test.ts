@@ -51,6 +51,6 @@ test('retains the exact float32 terminal magnitude maximum', () => {
       { accumulator: 1, magnitude: 0 },
       intensity!,
     )
-    assert.equal(feedback.magnitude, NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap)
+    assert.equal(feedback.magnitude, Math.fround(0.2))
   }
 })

@@ -23,6 +23,7 @@ import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import {
   applyNativeEnemyWorldFeedback,
+  NATIVE_ENEMY_WORLD_FEEDBACK,
   nativeEnemyWorldFeedbackImpulses,
   stepNativeEnemyWorldFeedback,
 } from '../core-kernels/native-enemy-world-feedback.ts'
@@ -430,7 +431,8 @@ export function stepBoneyardWorldTick(
     onProjectileExplosion: position => {
       const viewport = projectileViewports[0]
       if (!viewport) return
-      const intensity = Math.fround(4 * boneyardProjectilePointGain(activeBounds, viewport, position, viewport.alternatePlayer))
+      const intensity = Math.fround(NATIVE_ENEMY_WORLD_FEEDBACK.explosionIntensity
+        * boneyardProjectilePointGain(activeBounds, viewport, position, viewport.alternatePlayer))
       enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
     },
     lightAt: worldLight.scalarAt,

@@ -1,3 +1,5 @@
+const NATIVE_EXPLOSION_FEEDBACK_INTENSITY = 4
+
 export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
   accumulatorCap: 3.5,
   accumulatorFloor: 0.1,
@@ -5,10 +7,11 @@ export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
   accumulatorLossPerTick: 0.0025,
   coffinIntensity: 0.2,
   demonIntensity: 0.2,
+  explosionIntensity: NATIVE_EXPLOSION_FEEDBACK_INTENSITY,
   impSplitIntensity: 0.05,
   impTerminalIntensity: 0.1,
   portalIntensity: 0.2,
-  magnitudeCap: 0.20000000298023224,
+  magnitudeCap: NATIVE_EXPLOSION_FEEDBACK_INTENSITY,
   magnitudeCutoff: 0.001,
   magnitudeRetentionPerTick: 0.94,
   skeletonIntensity: 0.1,

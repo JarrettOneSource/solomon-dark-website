@@ -518,3 +518,90 @@ hail presentation.
   After remote commit verification, remove both worktrees and the task branch.
   Task browser/server processes and disposable captures/probes were already
   cleaned up at implementation handoff.
+
+
+## 2026-09-06 - DemonBomb producer reopens the feedback transport domain
+
+Production revision `841089d8588c55219a8f7c053fbdf8e9962f6a33`, protocol
+124, disconnected the private Lua monitoring run at wave 48 and tick 517066
+at `2026-09-06T11:56:42.397Z`. The client reported
+`frame.world.enemyWorldFeedback exceeds the native enemy-feedback bounds`.
+The last saved continuation is revision 1718, tick 516000. The server retired
+the disconnected session normally; this was a protocol rejection, not a
+server process crash. The preceding measured client frames remained near
+60 FPS. The previous terminal-only boundary proof omitted the later connected
+DemonBomb producer and therefore cannot establish the shared state's maximum.
+
+### Ownership and membership
+
+The system is the complete shared Region feedback state: every authority
+writer, fixed-tick decay, save/restore, full snapshot and compact frame
+admission, and presentation/teardown. Existing entry 091's instruction closure
+(`Region::Explosion 0x006464E0 -> 0x00448590`, retail 0.72.5) proves the
+DemonBomb request is `4 * RegionPointGain`. The actual world caller and
+`stepDemonBomb` match that recovered contract. The Region gain kernel is
+bounded by one; alternate-player attenuation multiplies by float32 0.1.
+`applyNativeEnemyWorldFeedback` multiplies the requested intensity by
+`min(accumulator, 1)` and rounds to float32. Consequently the shared magnitude
+maximum is exactly **4**, while terminal death pulses still top out at
+`0.20000000298023224`. This is instruction-derived and source-confirmed;
+no new native behavior or browser approximation is introduced.
+
+| Member | Disposition | Contract |
+| --- | --- | --- |
+| Skeleton, Archer, Mage, Zombie, terminal Imp | verified-already-at-parity | Existing 0.1 terminal requests and float32 transition |
+| Imp split and Wraith fragments | verified-already-at-parity | Existing 0.05 split and two ordered 0.1 fragment requests |
+| Coffin, Demon, Portal death | verified-already-at-parity | Existing 0.2 request; float32 terminal maximum unchanged |
+| Spider collapse and Cocoon release | verified-already-at-parity | No generic collapse request; Cocoon directly writes float32 0.2 |
+| DemonBomb contact and settled detonation | exact-ported through corrected shared admission | Native 4-times-gain request, independent of terminal death |
+| Full, partial, zero and alternate-player point gain | verified-already-at-parity | Magnitudes through 4, 2, 0 and float32 0.4 respectively |
+| Accumulator, decay, cutoff and initial zero state | verified-already-at-parity | Existing 3.5 accumulator cap and decay formulas unchanged |
+| Full welcome, keyframe and compact delta | exact-ported through corrected shared admission | Accept every producer's valid output; retain finite, nonnegative and upper-bound checks |
+| Player, observer, baseline recovery and resume | exact-ported through shared full/frame decoders | Same bound for every recipient and recovery path |
+| Saved state and retained presentation | verified-already-at-parity | Existing numeric fields and sampling consume the legal magnitude |
+| Hub and unrelated ability-local camera feedback | out-of-system | Separate owners; no new writer to this shared state |
+
+### Implementation and validation contract
+
+Keep the recovered DemonBomb intensity in the existing feedback constant
+module and derive the shared admission cap from it. The world caller consumes
+that authored value. Preserve all terminal intensities, camera formulas,
+accumulator limits, RNG, damage, and pulse ordering. Protocol 125 separates
+clients that still reject legal larger magnitudes; save schema is unchanged.
+
+Add a failing real-kernel explosion/decoder regression before the fix, exercise
+full welcome and compact replication, and reject the next representable value
+above four. Retain terminal maximum coverage. Reproduce against the captured
+production continuation where practical, validate the complete Mac tree, and
+resume the same production run after deployment. The original wave-50 and
+sustained-performance acceptance remains open until the real browser passes.
+
+
+The Mac regression failed on unchanged protocol-124 code with the same
+feedback-bounds error. A continuation using the real private pilot and
+native fixed ticks produced a DemonBomb detonation at tick 517549:
+accumulator `0.6474724411964417`, magnitude `1.7898898124694824`, and removal
+of bomb 23001. The old decoder rejected this complete captured snapshot.
+After the correction, the same native continuation and feedback survive the
+complete wire decoder with the tick and feedback unchanged. This is a
+reproduction from the captured save, not a claim to replay the exact original
+client-input history or failure tick. All 100 focused kernel, protocol,
+replication and save-document tests passed on the Mac, including both decoder
+shapes, observer/player welcomes, point-gain variants, unchanged terminal
+maxima and strict excess rejection. Full validation and browser acceptance
+remain pending.
+
+
+The complete Mac `./scripts/validate.sh` gate passed at
+`2026-09-06T12:37:40Z`, including renderer coverage and mutation policy with
+an empty failures array. The captured-save continuation then completed wave
+50 at tick 537235, decoding every fifth fixed tick: 4,248 complete snapshots,
+maximum feedback 4, and no decoder rejection. This accelerated local check
+is distinct from production performance acceptance. Headed Mac Chrome then
+resumed the same copied save through the normal local Resume and mod-confirmation
+flow against the built candidate and real game host. It stayed alive and
+connected through 913 received snapshots and magnitude-4 Demon feedback;
+page, console, response and wire failures were empty. The observed scene and
+native explosion visuals were coherent. The temporary local host was stopped
+after the browser closed. Production continuation remains the separate final
+gate for the Lua monitoring task.

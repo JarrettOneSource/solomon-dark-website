@@ -25,7 +25,8 @@ import {
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
-import { NATIVE_ENEMY_WORLD_FEEDBACK } from '../core-kernels/native-enemy-world-feedback.ts'
+import { applyNativeEnemyWorldFeedback, NATIVE_ENEMY_WORLD_FEEDBACK } from '../core-kernels/native-enemy-world-feedback.ts'
+import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 import {
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
@@ -59,7 +60,7 @@ import { GameProtocolError } from './codecs/values.ts'
 import { decodeClientGameMessage, decodeServerGameMessage, encodeGameMessage } from './game-protocol.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { ServerWelcomeMessage } from './game-server-messages.ts'
-import { createGameSnapshotFrame } from './entity-replication.ts'
+import { createGameSnapshotFrame, createGameSnapshotProjection } from './entity-replication.ts'
 import {
   createPrimarySpellSimulationFrame,
   materializePrimarySpellSimulationFrame,
@@ -771,6 +772,39 @@ test('server welcome round-trips content, kernel, character, and world ownership
     snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loadedBoneyardFixture('demon-explosion-feedback'),
+  )
+  if (active.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const baseline = createGameSnapshotProjection(createGameSnapshot(active, 'player-1')).baseline
+  for (const [x, alternatePlayer, magnitude] of [
+    [250, false, 4], [675, false, 2], [1_100, false, 0], [250, true, Math.fround(0.4)],
+  ] as const) {
+    const gain = nativeRegionPointGain({ x, y: 0 }, { x: 0, y: 0 }, 1_000, alternatePlayer)
+    const enemyWorldFeedback = applyNativeEnemyWorldFeedback(
+      { accumulator: 1, magnitude: 0 },
+      Math.fround(NATIVE_ENEMY_WORLD_FEEDBACK.explosionIntensity * gain),
+    )
+    assert.equal(enemyWorldFeedback.magnitude, magnitude)
+    const snapshot = createGameSnapshot({
+      ...active, world: { ...active.world, enemyWorldFeedback },
+    }, 'player-1')
+    for (const observer of [false, true]) {
+      const pulseWelcome = { ...welcome, observer, snapshot }
+      assert.deepEqual(decodeServerGameMessage(encodeGameMessage(pulseWelcome)), pulseWelcome)
+    }
+    for (const forceKeyframe of [false, true]) {
+      const message = {
+        acknowledgedInputSequence: 0,
+        frame: createGameSnapshotFrame(snapshot, 1, baseline, forceKeyframe),
+        sequence: 2,
+        type: 'server-snapshot' as const,
+      }
+      assert.equal(message.frame.world.entities.keyframe, forceKeyframe)
+      assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+    }
+  }
   const hail = createNativeWaterHailActor(
     1, 'player-1', 'hub:courtyard', 0, { x: 10, y: 20 }, { x: 1, y: 0 }, createNativeRng(37),
   ).actor
@@ -2263,7 +2297,7 @@ test('protocol v42 strictly owns the generated-arena transition', () => {
 
   const excessEnemyFeedback = structuredClone(maximumEnemyFeedback)
   excessEnemyFeedback.frame.world.enemyWorldFeedback.magnitude =
-    NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap + Number.EPSILON
+    NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap * (1 + Number.EPSILON)
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(excessEnemyFeedback)),
     /enemy-feedback bounds/,
