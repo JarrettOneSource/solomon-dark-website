@@ -3,7 +3,7 @@ import { link, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'no
 import { join } from 'node:path'
 import { setImmediate } from 'node:timers/promises'
 import { promisify } from 'node:util'
-import { deserialize, serialize } from 'node:v8'
+import { DefaultDeserializer, DefaultSerializer } from 'node:v8'
 import { gzip, gunzip } from 'node:zlib'
 
 import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol.ts'
@@ -19,6 +19,7 @@ interface RunArchiveReceipt {
   readonly bytes: number
   readonly sha256: string
   readonly serializationMs: number
+  readonly maximumSerializationSliceMs: number
 }
 
 /** Private operator artifacts, published atomically after the gameplay tick yields. */
@@ -64,16 +65,14 @@ export class RunArchiveStore {
   private async write(archive: RunArchive): Promise<RunArchiveReceipt> {
     const file = `${archive.id}.sdrrun.gz`
     if (!ARCHIVE_FILE.test(file)) throw new Error('Run archive id is invalid')
-    await setImmediate()
-    const startedAt = performance.now()
-    const bytes = serialize(archive)
-    const serializationMs = performance.now() - startedAt
+    const { bytes, serializationMs, maximumSerializationSliceMs } = await serializeArchive(archive)
     const compressed = await compress(bytes)
     const receipt = {
       file,
       bytes: compressed.length,
       sha256: createHash('sha256').update(compressed).digest('hex'),
       serializationMs,
+      maximumSerializationSliceMs,
     }
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     const path = join(this.directory, file)
@@ -108,8 +107,16 @@ export class RunArchiveStore {
 
 export async function readRunArchive(path: string): Promise<RunArchive> {
   const bytes = await decompress(await readFile(path))
+  const reader = new DefaultDeserializer(bytes)
+  reader.readHeader()
+  const header: { encodingVersion: number; stateCount: number } | null = reader.readValue()
+  if (header?.encodingVersion !== 1 || !Number.isSafeInteger(header.stateCount)
+    || header.stateCount < 0 || header.stateCount > bytes.length) {
+    throw new Error('Run archive encoding header is invalid')
+  }
+  for (let index = 0; index < header.stateCount; index += 1) reader.readValue()
   // Only operator-owned server captures enter this path; there is no public upload/import route.
-  const archive: RunArchive = deserialize(bytes)
+  const archive: RunArchive = reader.readValue()
   if (archive?.schemaVersion !== 1 || archive.protocolVersion !== GAME_PROTOCOL_VERSION) {
     throw new Error('Run archive schema or gameplay protocol does not match this checkout')
   }
@@ -120,4 +127,34 @@ export async function readRunArchive(path: string): Promise<RunArchive> {
     throw new Error('Run archive metadata or checkpoint is invalid')
   }
   return archive
+}
+
+async function serializeArchive(archive: RunArchive): Promise<{
+  bytes: Buffer
+  serializationMs: number
+  maximumSerializationSliceMs: number
+}> {
+  const states = new Set([
+    archive.worstTick.state,
+    ...[...archive.lastAliveByPlayer.values()].map(checkpoint => checkpoint.state),
+    archive.finalState,
+  ])
+  if (archive.lastAlive) states.add(archive.lastAlive.state)
+  const writer = new DefaultSerializer()
+  writer.writeHeader()
+  writer.writeValue({ encodingVersion: 1, stateCount: states.size })
+  let serializationMs = 0
+  let maximumSerializationSliceMs = 0
+  // Preloading each immutable world separately keeps shared references in V8's
+  // object table. The final archive then encodes references rather than revisiting
+  // all players' historical worlds in one uninterrupted event-loop turn.
+  for (const value of [...states, archive]) {
+    await setImmediate()
+    const startedAt = performance.now()
+    writer.writeValue(value)
+    const elapsed = performance.now() - startedAt
+    serializationMs += elapsed
+    maximumSerializationSliceMs = Math.max(maximumSerializationSliceMs, elapsed)
+  }
+  return { bytes: writer.releaseBuffer(), serializationMs, maximumSerializationSliceMs }
 }

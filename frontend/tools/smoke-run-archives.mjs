@@ -5,41 +5,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { randomUUID } from 'node:crypto'
-import { createIdlePlayerCharacterInput } from '../src/game/core-kernels/player-character.ts'
-import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
-import { createGameSimulation, enterBoneyardWorld, stepGameSimulationTick } from '../src/game/core-server/game-simulation.ts'
-import { prepareBoneyardWorldNavigation } from '../src/game/core-server/boneyard-world.ts'
-import { createBoneyardCatalog, materializeBoneyard } from '../src/game/host/boneyard-catalog.ts'
+import { stepGameSimulationTick } from '../src/game/core-server/game-simulation.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
 import { RunArchiveRecorder } from '../src/game/host/run-archive.ts'
 import { RunArchiveStore, readRunArchive } from '../src/game/host/run-archive-store.ts'
 import { renderArchivedRun } from './render-run-archive.mjs'
+import { createRunArchiveFixture } from './run-archive-fixture.mjs'
 
 const directory = await mkdtemp(join(tmpdir(), 'sdr-run-archive-smoke-'))
 try {
-  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))
-  let state = enterBoneyardWorld(createGameSimulation({
-    first: { displayName: 'Archive Ether', discipline: 'body', element: 'ether' },
-    second: { displayName: 'Archive Water', discipline: 'mind', element: 'water' },
-  }, { gameRngSeed: 123 }), loadedBoneyard)
-  state = { ...state, levelUpBarrier: null,
-    world: { ...state.world, arenaTransition: null, encounter: null, waves: null } }
-  prepareBoneyardWorldNavigation(state.world)
-  const spawn = state.world.spawn
-  const inputs = Object.fromEntries(['first', 'second'].map(playerId => [playerId, {
-    ...createIdlePlayerCharacterInput(), aim: { x: spawn.x + 150, y: spawn.y },
-    cast: { primary: true, quickbar: null },
-  }]))
-  const enemySpawnIntents = Array.from({ length: 40 }, (_, index) => ({
-    enemyToken: 'SKELETON', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
-    flags: [], id: index + 1, locationPolicy: 'anywhere', spawnTick: state.tick + 1,
-    waveOrdinal: 1, position: {
-      x: spawn.x + 150 + (index % 5) * 30, y: spawn.y - 100 + Math.floor(index / 5) * 30,
-    },
-  }))
-  state = stepGameSimulationTick(state, inputs, { enemySpawnIntents })
-  for (let index = 0; index < 30; index += 1) state = stepGameSimulationTick(state, inputs)
-  assert.ok(state.world.enemies.actors.length > 0, 'the fixture must include real enemy work')
+  const { loadedBoneyard, state, inputs } = createRunArchiveFixture()
   const original = structuredClone(state)
   const captured = []
   const recorder = new RunArchiveRecorder({

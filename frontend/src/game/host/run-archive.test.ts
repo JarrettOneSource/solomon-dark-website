@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { deserialize, serialize } from 'node:v8'
+import { DefaultSerializer, deserialize, serialize } from 'node:v8'
 import { isDeepStrictEqual } from 'node:util'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -120,8 +120,21 @@ test('completed runs retain the entire last living party and a reproducible slow
     { ...archive, worstTick: null },
     { ...archive, worstTick: { ...archive.worstTick, state: createGameSimulation() } },
   ]) {
-    await writeFile(path, gzipSync(serialize(invalid)))
+    const writer = new DefaultSerializer()
+    writer.writeHeader()
+    writer.writeValue({ encodingVersion: 1, stateCount: 0 })
+    writer.writeValue(invalid)
+    await writeFile(path, gzipSync(writer.releaseBuffer()))
     await assert.rejects(readRunArchive(path), { name: 'Error', message: /^Run archive (schema|metadata)/ })
+  }
+  for (const invalidHeader of [null, { encodingVersion: 2, stateCount: 0 },
+    { encodingVersion: 1, stateCount: -1 }, { encodingVersion: 1, stateCount: 0.5 },
+    { encodingVersion: 1, stateCount: 1_000_000_000 }]) {
+    const writer = new DefaultSerializer()
+    writer.writeHeader()
+    writer.writeValue(invalidHeader)
+    await writeFile(path, gzipSync(writer.releaseBuffer()))
+    await assert.rejects(readRunArchive(path), /encoding header is invalid/)
   }
   await writeFile(path, 'not a gzip archive')
   await assert.rejects(readRunArchive(path), { code: 'Z_DATA_ERROR' })
@@ -296,4 +309,39 @@ test('each player retains their own last living moment after a teammate dies and
     { playerId: 'first', displayName: 'First', lastAliveTick: initial.tick },
     { playerId: 'second', displayName: 'Second', lastAliveTick: changedWhilePaused.tick },
   ])
+})
+
+test('saving distinct last-alive worlds yields to the server between serialization slices', async context => {
+  const loaded = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))!
+  const state = enterBoneyardWorld(createGameSimulation(), loaded)
+  const archives: RunArchive[] = []
+  const recorder = new RunArchiveRecorder({
+    content: { manifestSha256: '0'.repeat(64), mods: [] }, revision: 'a'.repeat(40),
+    sessionId: 'serialization', write: captured => { archives.push(captured) },
+  })
+  recorder.checkpoint(state, loaded)
+  recorder.close()
+  const archive = archives[0]!
+  let turn = 0
+  let heartbeat: NodeJS.Immediate
+  const beat = (): void => { turn += 1; heartbeat = setImmediate(beat) }
+  heartbeat = setImmediate(beat)
+  context.after(() => clearImmediate(heartbeat))
+  const serializationTurns: number[] = []
+  const second = { ...state }
+  for (const [index, world] of [state, second].entries()) {
+    Object.defineProperty(world, 'tick', { enumerable: true, get() {
+      serializationTurns.push(turn)
+      return index
+    } })
+  }
+  const root = await mkdtemp(join(tmpdir(), 'run-archive-yield-'))
+  context.after(() => rm(root, { recursive: true, force: true }))
+  const store = new RunArchiveStore(root)
+  const receipt = await store.save({ ...archive, finalState: second })
+  const restored = await readRunArchive(join(root, receipt.file))
+  assert.ok(serializationTurns[0]! < serializationTurns[1]!, 'world encoding monopolized one event-loop turn')
+  assert.equal(restored.finalState.tick, 1)
+  assert.equal(restored.lastAlive?.state.tick, 0)
+  assert.equal(restored.lastAlive?.state, restored.worstTick.state, 'encoding must preserve shared checkpoint references')
 })

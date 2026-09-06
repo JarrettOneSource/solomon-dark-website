@@ -36,13 +36,20 @@ for pending writes. No capture changes saves, scores, run eligibility or gamepla
 Server archives live in `run-archives/` beside the file configured by
 `SDR_GAME_MEMORIAL_PATH`, outside release directories. Files are private to the
 service account. `run_archive.saved` logs identify the archive file, run ID,
-session, compressed size, SHA-256, and synchronous serialization time.
+session, compressed size, SHA-256, total serialization time and largest
+synchronous serialization slice.
 
-Each `<archive-id>.sdrrun.gz` is an asynchronous gzip of the complete Node V8
-serialization. Its adjacent `.sdrrun.gz.json` summary permits searches by run,
+Each `<archive-id>.sdrrun.gz` contains a V8 encoding header, separately preloaded
+world states, and the archive referencing those states, compressed with gzip.
+Its adjacent `.sdrrun.gz.json` summary permits searches by run,
 wizard name, time, map and worst tick without loading simulation data. Compression
-and filesystem writes happen after the tick yields. The recorder retains
-immutable state references during play rather than repeatedly copying worlds.
+and filesystem writes happen after the tick yields. Serialization yields between
+individual worlds while V8 retains their shared object identities; a large party's
+death checkpoints cannot all serialize in one uninterrupted turn. The recorder
+retains immutable state references during play rather than repeatedly copying
+worlds. It keeps one checkpoint per player, the party's latest living checkpoint,
+one worst tick, and 60 timing windows. That retained history is bounded by party
+membership, not elapsed run time.
 V8's serialization supports persisted structured data; equal values can have
 different binary encodings, so replay tests compare decoded state, not serialized
 bytes. See the [Node serialization API](https://nodejs.org/docs/latest-v22.x/api/v8.html#serialization-api).
@@ -163,3 +170,38 @@ No production capture, lag root cause, performance fix, push, or deployment is
 claimed by this validation. Follow-up performance work starts with a reported
 real run. Mod-runtime restoration and renderer/device settings capture remain
 separate extensions to the current stock-checkpoint reproduction tool.
+
+## Recording overhead and publication check
+
+`npm run benchmark:run-archives` runs recording off/on/on/off in separate Node
+processes for 2/8/16 players and 40/200/400 starting enemies. It warms the actual
+advancing combat workload, resolves level-up offers using the existing scripted
+chooser, compares complete simulation hashes, and reports recorder timings and
+heap samples. The fixture suppresses player damage during measurement so every
+recorder slot stays active. Separate deaths then retain each player's distinct
+world and test disk round-trip plus event-loop responsiveness during storage.
+
+The initial 16-player/400-enemy run measured approximately 0.0038 ms average
+recording time and 0.0105 ms p99; recording on/off produced identical final state
+and approximately equal elapsed time (−0.14% across the paired samples). Smaller
+workload elapsed comparisons were noisier while other Mac tasks ran. Retained
+heap readings also varied with V8 collection and are not a precise memory cap.
+
+The important additional finding was a 26.2–26.4 ms uninterrupted serialization
+at run end when 16 players had distinct last-alive worlds. Incremental V8 encoding
+preserves references and yields between those worlds. The same heavy test then
+measured largest serialization slices of 3.16 and 3.19 ms in two runs, with largest
+event-loop gaps of 3.89 and 3.97 ms and the same decoded archive state. The archive was about 1.68 MB
+compressed. A regression test proves another event-loop turn runs between world
+encodings. Serialization still has a per-world cost; these measurements describe
+this workload, not arbitrary content sizes or production concurrency.
+
+Before publication, the candidate was rebased onto `586b92b2` and validated on
+the Mac with the incremental encoder. Backend integration passed 23 tests;
+canonical Node suites reported 2,944 test executions with no failures. Formatting,
+lint, type checks, production builds, media policy and browser capture/replay
+passed. The unchanged eight-file renderer mutation scope again reported
+survivors and was interrupted under the previously documented scope exception.
+The complete repository mutation gate remains unpassed; no validation rule was
+changed to hide that result. A final focused run covered the new encoding and
+client capture paths after the last tooling cleanup.
