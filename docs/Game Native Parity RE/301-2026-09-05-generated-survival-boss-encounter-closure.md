@@ -1,7 +1,7 @@
 # 2026-09-05 — Generated survival boss encounters
 
-Status: native recovery and candidate implementation complete; final Mac gate
-and per-member browser acceptance are in progress.
+Status: native recovery and implementation complete; the full Mac Website gate
+and all 24 Mac browser acceptance cases passed.
 
 ## Reopened boundary and cause
 
@@ -64,9 +64,9 @@ retain their original investigation context.
 | Discorporeal attacks and children | `exact-ported` | EyeLaser 2047, UnholySpit 2043, GreenFire 2042, GreenImp 2044; mouth beam `0x0044FFE0`, spit action `0x00449A00`, spit impact `0x005EA6F0` | Eye pair, beam contacts, traveling spit, persistent fire, imp payload and inherited combat identity. Spit Imps augments spit; it is not a fourth scheduled ranged attack. |
 | Faculty attack graph | `exact-ported` | SkullMissile 2048, RainOfBones 2049, TragicCircle 2050, DarkFireball 2052, DireFire 2053, EvilEmber children | Native geometry, contact effects, clocks, assets, and lifetime. |
 | Stock inert Faculty selectors | `exact-ported` | primary 3 Faust Jet, secondary 3 Thing of Ice | Preserve the absence of event-dispatch behavior; compiled labels do not justify invented spells. |
-| Slumpgut | `verified-already-at-parity` | 12 existing recipe rows and type-9 Zombie-count trigger | Verify existing behavior and shared boss accounting remain correct. |
-| Deep Portal 1..7 | `verified-already-at-parity` | 80 existing recipe rows and independent scripts | Verify existing placement, ejection, boss barriers, and concurrent later phases remain correct. |
-| Lesser Demon | `verified-already-at-parity` | type 1009 in ordinary wave table | Existing wave-owned enemy, already implemented; check shared factory/count/render effects of the roster extension. |
+| Slumpgut | `exact-ported` | 12 existing recipe rows and type-9 Zombie-count trigger | Reuse the verified encounter program, with the corrected shared Zombie underlay and boss accounting. |
+| Deep Portal 1..7 | `exact-ported` | 80 existing recipe rows and independent scripts | Reuse verified placement, ejection, barriers, and concurrent phases; correct the separate underlay and main presentation passes. |
+| Lesser Demon | `out-of-system` | type 1009 in ordinary wave table | Its producer is an ordinary wave, not a generated boss encounter. Shared factory, count, and rendering changes retain its regression coverage. |
 | Boss HUD and reward ownership | `exact-ported` | featured-enemy prefix `0x005D257E..0x005D2AEF`, common death/reward path, linked Miniboss Die script | Use authoritative boss identity and health; preserve ordinary and scripted rewards. |
 
 ## Fully extracted authored recipe facts
@@ -1535,3 +1535,72 @@ other pre-world children; they require an explicit background lane. Their
 opacity can outlive the ordinary Bouncer's old 1000-tick bound, so the shared
 Bouncer helper derives its non-truncating upper lifetime from the opacity and
 known maximum skipped-tick cadence. Actual retirement remains opacity-driven.
+
+## Final Mac acceptance
+
+The accepted implementation is `bd93153c0aff32a656b2d37b9cfbcf070a5917d6`,
+based on `04a73729c1e7fd2e649f5d9afa9514664d638245`. The isolated Mac and
+editing checkouts had identical tracked candidate bytes; the changed-file
+manifest SHA-256 was
+`8f2aa9c3fb84e0cee2e8ec52a50fc01bc84a01af37deddc413c4b615667a10dc`.
+Acceptance used Node 22.17.0, .NET SDK 10.0.302, and actual Chrome
+152.0.7977.76 on the Mac mini. Protocol 126 and continuation-save schema 34
+carry the complete boss and shared presentation state.
+
+`npm --prefix frontend run smoke:native-bosses` passed all 24 cases against
+the production client and a real local GameHost. It produced 90 PNG captures
+and zero page errors, console errors, failed requests, or failed responses.
+The receipt SHA-256 is
+`e539677664c3c037ebbb4b24e56f6d0a50a227d5cdea04a0517465c60a34351b`.
+Each case uses the public save/restore entry, generated native recipes, real
+rendering, strict snapshot transport, and actual audio playback. The shielded
+observer keeps the camera available throughout the attack and finale checks.
+
+| Browser membership | Cases | Accepted observation |
+| --- | ---: | --- |
+| Ironmaw claw, sword, mace, flail | 4 | Distinct equipment and live animation; player casts reduce HP from 320 to 288, 288, 288, and 292 respectively. |
+| Foulshaft | 1 | Fire Arrow presentation and ShootArrow playback. |
+| Heartmonger | 1 | Five owned Crows, native body/tendrils, movement, and summons. |
+| Three Faculty members, both attacks each | 6 | Death magic, RainOfBones cloud and falling bones, Blightning, Tragic Circle, Direball, and Ring of Dire, with their native playback cues. |
+| Discorporeal Eyes, Mouth, Spit, Flair | 4 | Eye pair, continuous Mouth segment joins, green Spit projectile and trail, persistent GreenFire, three Imp children, and the independent Flair animation/audio branch. |
+| Slumpgut and Deep Portal | 2 | Existing encounters retain their animation and shared presentation; the selected Portal recipe is specifically Deep Portal 2. All 80 Portal recipe rows remain covered by the source/program checks. |
+| Heartmonger death | 1 | Six detached Crows, flicker/soul effects, fragments, HeartBreak playback, and parent retirement. |
+| Three Faculty deaths | 3 | Dying poses, smoke and fragments, male/female playback, and retirement for each member. |
+| Discorporeal ordinary and mega deaths | 2 | Death stream, green flash, UltraBanish, the mega UnholySoul branch, and parent retirement while descendants remain. |
+
+Representative start, active, attack, and finale captures were visually
+reviewed against the recovered atlas and draw contracts above. The HUD uses
+the stock bottom-centered placement: at 1600x900 the fill is Y=791 and H=11.
+The half-health Discorporeal fill is W=128.5. At 960x640 the existing viewport
+scale is .6, giving Y=574.59375, W=77.100006, and H=6.600037; this preserves
+the native 109-unit bottom offset through the shared viewport transform.
+All six death cases have no featured bar and retire the owning actor.
+
+The screenshot driver prioritizes already-active effects immediately after
+resume. This is necessary because Spit can be born at tick 3 while the resume
+overlay finishes at tick 13; writing a general start PNG before inspecting
+effects can consume its remaining flight. The shared capture order now records
+the projectile in flight without changing its native clock or the encounter.
+
+The renderer mutation audit also exposed missing regression coverage for an
+existing retained-data optimization: setting the same per-drawable color mode
+must not repack its GPU attributes. The real GPU probe now checks buffer reuse
+across steady Sprite and immutable Mesh frames, alongside the independent
+RGBA oracle. Removing the guard fails with an extra buffer update; the native
+implementation passes. Quality thresholds and mutation exclusions are unchanged.
+
+`/opt/homebrew/bin/bash ./scripts/validate.sh` passed against this same
+implementation, including pinned dependency restoration, backend build and
+integration checks, formatting/lint, all configured frontend and desktop
+suites, production client/host builds, media policy, and renderer quality.
+The log reports 3,255 Node test executions with zero failures. Each of the
+eight configured renderer files has 100% statement, branch, function, and line
+coverage. The mutation gate passed at 100%: 398 killed, one timeout, 142 compile
+errors, and 23 existing reviewed equivalents; no survivors or uncovered
+mutations remain. The previously surviving color-mode guard is now killed by
+the retained-GPU-attribute regression.
+
+The complete validation log SHA-256 is
+`ede2881d9b4126adc511b4a1c795172af772f2d0c5ea9839fd628e673c4d1325`.
+This final receipt is a documentation-only follow-up to the tested
+implementation. Earlier intermediate receipts are superseded by these results.
