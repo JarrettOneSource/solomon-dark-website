@@ -5,6 +5,11 @@
 > supersedes those exclusions; implementation and browser receipts are recorded
 > below, with the final publication gate tracked separately.
 
+> Reopened 2026-09-07: the complete body-composition, VFX, and emitted-light
+> audit at the end of this entry supersedes the historical membership and
+> acceptance claims below. Entry 301 already incorporates the generated bosses,
+> Crows, GreenImps, and Portals; they are included in this presentation audit.
+
 ## Reported smell and system boundary
 
 The current survival port can make an enemy behave correctly while drawing a
@@ -1806,3 +1811,464 @@ feedback up to 4, with no page, console or HTTP errors; the wizard remained
 alive. The check completed at `2026-09-06T14:31:10Z`, and its owned browser
 and local server exited. Periodic production autosaves are verified separately
 after release; paused simulation ticks do not drive periodic checkpoints.
+
+## 2026-09-07 — Body composition, VFX, and emitted-light audit reopened
+
+The user reports incorrect-looking enemy body parts and potentially missing
+VFX, including lights. The starting Website revision is
+`5eb34e452cc05adffc2c8797fed863f59c9d0197`. No specific defective body or
+light rule has yet been confirmed. The earlier eight-family compositor and
+24-case boss receipts prove presence, selected animation changes, transport,
+and specific effects. They do not prove every anatomical combination or an
+isolated outbound light contribution. Reusing those presence/pixel-delta
+checks as exhaustive presentation proof would skip the required authored-data
+and sibling-variant comparison.
+
+The system boundary is native enemy presentation: construction-selected body
+variants, facing/pose/attachment selection, complete draw order and transforms,
+body and status materials, actor/attack/child/death VFX, emitted lights and
+inbound lighting, shadows, culling, and renderer lifetime. State passes through
+the authoritative actor, projection, full/compact transport, interpolation,
+and existing view owners. Gameplay and any preview reusing these owners are
+included; an independent editor icon is a separate native consumer, to be
+identified explicitly rather than mistaken for an articulated runtime body.
+
+The native census has nineteen classes. Every row below must receive a final
+native-backed disposition and a corresponding assertion or visual check.
+This initial inventory is an audit checklist, not a new claim of parity.
+
+| Native membership | Variants and dependent presentation to verify |
+| --- | --- |
+| Badguy 1000 | Shared transforms, hit materials, registration, overlays, and no-op body callback. |
+| Skeleton 1001, SkeletonArcher 1002, SkeletonMage 1003 | Six weapon selectors, armor, six headgear banks, independent limb/body/head selectors, cloak branch, held Arrow/charge effects, action and walking branches. Ironmaw and Foulshaft consume this same family. |
+| Imp 1004, GoodImp 1005, GreenImp 2044 | Four body choices, ordinary and green render overrides, allied producer, flight/landing/contact effects, outbound light and retirement. |
+| Zombie 1006 | Four torso types, head choices, articulated arms, enlarged-body branches, rotten clouds/flies/particles, death effects, and the native absence or presence of each light callback. Slumpgut reuses this family. |
+| Wraith 1007 | Facing strip, flight state, wisps, attack effects, opacity, light, and death handoff. |
+| DemonSkull 1008 | Every body/overlay direction and pose, eye and mouth attachment transforms, independent actions, attack/charge/finale VFX and light providers. |
+| Demon 1009 | Controller, upper limbs, endpoints/connectors, mirrors and sorting, flame attachments, muzzle effects, light, and dying-body composition. |
+| DireFaculty 1010 | All male/female body/head/hand banks, three authored members, robe colors, cast attachments, smoke, six attack branches, light, and death fragments. |
+| Heartmonger 1011, Crow 1012 | Legs/torso/head and authored points, chains, orbit/strike/detachment, materials, light, and finale ownership. |
+| Coffin 1013, Maggot 2045 | Hidden/emergence/opening branches, flips and rotation, grounded and ballistic Maggot banks, auxiliary effects, light and shadow callbacks. |
+| Spider 2057, Cocoon 2058 | Body/leg composition, strike/jump/turn state, Silk and target overlay, death remains, no-op callbacks and shared settings. |
+| Portal 5021 | Separate underlay/main passes, alpha/materialization/pulse, ejection effects, fixed presentation scale, and light. |
+
+Player characters, traders, unrelated scenery/weather, and independently
+owned player summons are outside the enemy-body boundary. Shared consumers
+enter the audit only where a recovered enemy presentation rule also owns them.
+Generic custom mod presentation is not substituted for any native class.
+
+The work proceeds through four concrete acceptance steps:
+
+1. Reconcile the current family plans and light providers with fresh native
+   render/light callbacks and the exact source atlas data. Enumerate every
+   indexed bank, authored point, local scale, mirror, and painter boundary.
+2. Compare every family/variant through a controlled Mac rendering matrix.
+   Separate body geometry, additive visual effects, and outbound light so the
+   player's or Lantern's illumination cannot conceal a missing provider.
+   Exercise movement, actions, interruption, death, settings, and owner reset.
+3. Record confirmed contradictions before changing the owning implementation.
+   Add regressions against native expectations across all affected siblings;
+   preserve native absence where a callback is empty.
+4. Verify the corrected exact tree with the full Mac Website gate and real
+   browser journeys. Fill final per-member dispositions, review the affected
+   callers and assets, and distinguish source publication from deployment.
+
+Fresh identity checks confirm retail 0.72.5 SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+image base `0x00400000`, and the read-only Ghidra wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+The analyzed canonical SolomonDark project and its replica pool remain the
+native instruction source. Mod Loader is read-only tooling and historical
+reference; this Website entry owns the new findings and acceptance record.
+
+The unchanged legacy compositor smoke failed before enemy rendering because
+its hand-authored player omitted the current Puppet hit state. Its enemy
+fixtures also lacked the evaluated weapon/headgear fields now required by the
+view, and its death-effect fixtures retained old owner/registration defaults.
+These are verification-tool defects, not evidence of a gameplay failure.
+The smoke now obtains default player/world state from the public simulation
+snapshot and enemy appearance from real construction/projection; synthetic
+poses and effect witnesses remain explicit overrides of those valid defaults.
+
+Fresh render instructions also expose two Skeleton presentation omissions.
+Pike render uses the two authored weapon/body attachment points and switches
+its far endpoint to the retained target handle at `+0x236/+0x238` when latched;
+the target point is `(target.x,target.y-25)`. The current fixed 54/64-unit
+heading approximation does not implement that branch. Flail has a separate
+idle orbit when body selector `+0x150` is zero and byte `+0x234` is one, with
+different head/chain painter placement from the authored two-point branch.
+The state writers, target constraint, and exact primitive transforms are under
+audit before those model changes.
+
+The Portal light mismatch is independently confirmed by the raw call layout
+and `0x0057FE40` consumer: native intensity follows live alpha, while radius
+flickers with alpha-scaled size. The former Website assignment reversed them.
+Entries 051 and 090 now record the corrected formula and exact constants;
+the shared light kernel is the single host/renderer correction point.
+
+Archer light callback `0x00478180` has a distinct non-burning early return for
+the raw `+0x150` body pose equal to **9** (`float 0x0078473C`). This is separate
+from its held-arrow painter's pose-**8** exclusion (`float 0x007849DC` in
+`0x0048F450`); these constants must not be collapsed into one release gate.
+The Website's body pose is already the raw native selector. Burning Archers
+bypass the pose-nine exclusion and keep their ordinary burning light copies;
+Mage has no corresponding pose exclusion. Both light consumers must provide
+the authoritative body pose to the shared kernel.
+
+The draw ABI was recovered from instructions and reapplied only inside a
+discarded read-only Ghidra replica: `Glyph_Draw 0x004143D0` takes a glyph in
+ECX and world X/Y; `0x00414EA0` additionally takes uniform art scale;
+`0x00414450` takes independent X/Y art scales; `0x00414540` takes a matrix.
+`Puppet::Present 0x00628AD0` calls the family draw without installing actor
+scale. Thus authored sockets and body offsets cannot inherit art scale unless
+their own native expression applies it. The previous blanket composite-scale
+claim above is superseded by the per-draw audit.
+
+Confirmed Skeleton attachment rules in `0x0048DEE0`:
+
+- Pike sockets always come from the **armored** pike bank `991..1044`,
+  through `BadGuys+0x4BD8`, regardless of the visible armor state. Record 54
+  stretches from point zero to point one. A retained target changes only the
+  first endpoint to `(target.x,target.y-25)` and selects record 56. Width is
+  exactly 7 world units (`float 0x00784A20`); neither length nor width uses
+  actor scale. Pike is drawn after the legs and before the torso.
+- Mace record 46 is fixed-size art at weapon point zero plus the torso's
+  `-bodyHeight-2*abs(sin(stride*.5 degrees))` vertical offset. Its current
+  omission of that offset separates the head from the weapon.
+- Flail chain uses width 3 and local RGBA `(.25,.25,.25,1)`, truncated to
+  `0x3F3F3F`. Its authored branch draws between weapon points zero/one after
+  legs and before torso; the fixed-size head at point one additionally moves
+  by `sin(bodyGaitPhase*90 degrees)*(-3*cos(heading),-3*sin(heading))`.
+- The optional idle orbit is a persistent `Integer(2)` choice in config
+  application `0x00462790`. With body pose zero and choice one, the chain/head
+  instead follow weapon point zero plus
+  `headingVector(f32(id*35-clock*10))*(20,20*.800000011920929)` and draw after
+  the weapon, before headgear. The clock is the application clock, not age.
+- Each burning redraw repeats the chain in its proper position and blend
+  mode. The chain restores the actor's base color before its head, so later
+  body parts in that pass use base color rather than the fire glow color.
+
+Pike event 16 registers only a player target, with tether distance
+`actorScale*103` (`double 0x007866D0`). `0x00484B90` cancels invalid/dead,
+disrupted, cross-region, or lost targets and the explicit modifiers
+**7021 Mod_Knockback / 7022 Mod_Dazzle**, detaches at distance
+`>=1.5*tether`, and otherwise constrains the target to that distance. The
+same tick advances the Skeleton-family vertical recoil by velocity, adds
+`.3499999940395355` gravity, and clears offset/velocity after landing.
+`0x0048D130` consumes existing armor before terminal death and detaches the
+pike; the ownership/state changes remain part of this reopened work.
+
+The expanded draw audit found these additional concrete differences:
+
+- Mage cloak is an **additional part**, not an alternate torso. `0x00491720`
+  always draws the legs, then both body `1729..1818` and optional cloak
+  `1459..1476`; cloak point zero X decides which of those two is first.
+  Both charging sockets always come from the real body, with Y minus 5.
+  The previous cloak replacement dropped the torso and invented a mirrored
+  second socket when the cloak supplied only one point.
+- Positive Mage charge starts additive draw at alpha `charge*charge` and is
+  suppressed while `+0x278` is positive. Fire draws one `255..266` sheet per
+  hand at fixed scale **1.25**, then one record-70 orange glow per hand at
+  alpha/scale **1**. Lightning draws `1836..1839` at scale **.5**, with
+  application-clock phases `floor(AppTick/8)%4` and `(floor(AppTick/8)+10)%4`,
+  then record-70 glows at scale **.75**, color `(.75,1,1)`, alpha one.
+  Frost/Poison draw records **381/382**, respectively, once per hand at
+  scale one, rotation `actorAge*2` degrees, alpha `charge*charge`.
+  Charge changes opacity, not glyph size. The prior compositor substituted
+  other pass counts, sizes, colors, clocks, and missing record-70 glows.
+- Imp `0x00492E10`, GoodImp (same callback), GreenImp `0x004930D0`, and
+  Wraith `0x00496220` explicitly enable additive blending. Raw dispatcher
+  `0x004208A0` maps `App+0x3F1 == Context+0x221 == 1` to
+  `SRCALPHA/ONE`. Both Imp parts are additive; their Y offset of -10 and
+  flight displacement are world units. Wraith's +15 offset is also fixed.
+- Coffin, Spider, and Faculty body draws do not consume actor scale.
+  Faculty uses fixed `float 0x00786C00 == 1.0499999523162842`; its bob is
+  `sin(lightPhase*2 degrees)*8-15`, and robe jitter uses `lightPhase*16`.
+  Heartmonger and DemonSkull keep their existing explicitly separated art
+  scale and world-socket rules pending final comparison of every branch.
+
+The independent application clock is the existing `native-application-tick.ts`
+owner: `0x0081F658 == App+0x28`, 100 Hz, including gameplay pause (entry 217).
+Enemy views now pass that clock separately from actor age; the plan cache
+includes it for idle flails and charged Lightning Mages. Native local RGBA
+packing truncates each `channel*255`; the enemy color helper now follows that
+conversion, including Poison Archer green 127 rather than 128.
+
+The target's `+0x13C` pike back-reference is an **embedded PointerList**, not a
+player-control component. `GoodGuy::ctor 0x0052A410` installs its vtable
+`0x007846CC`; slot `+0x10` appends, and `+0x1C -> 0x004014B0` removes the
+Skeleton pointer. Multiple Skeletons can therefore retain one player.
+Puppet tick `0x00624AC0 -> 0x006247A0` advances age/modifiers while the latched
+Skeleton bypasses Badguy movement/action processing. Detach clears its action
+list through `0x00482E90` as well as every player's back-reference.
+
+The recoil-writer sweep distinguishes shared offsets from unrelated classes:
+Skeleton constructor `0x004771B0` initializes `+0x228/+0x22C` to zero;
+event callback `0x00477580` sets velocity to `-(Float(1)+1)` for claw,
+`-(Float(1)+1.5)` for ordinary weapons, and `-(Float(.5)+1)` for pike.
+The inherited tick integrates this after the action event. Archer has no
+attack recoil writer. Mage `0x00490860` calls the inherited tick first, then
+sets velocity to `-FloatRange(2.5,3.5)` when it starts either cast action.
+Its first displacement therefore occurs on the next tick. These offsets are
+world units, shared by body parts and their attached effects.
+
+Pike state belongs to the Skeleton brain. Its target constraint writes the
+player's root directly, and subsequent native actors see that new position;
+the host must not route it through collision-resolved knockback. Save/restore
+must preserve the target, distance, and recoil; projection uses the final live
+target position. Scene loss, death, armor consumption, Pike break, Dazzle,
+disruption, and actual Knockback release the handle and held action.
+
+Armor depletion callback `0x0048D130` is Skeleton-only. It removes armor,
+sets health to `FloatRange(4,6)` plus headgear bonuses (1:6, 2:10, 4:15,
+5:10), multiplies movement speed by 1.75 and attack speed by 1.5, and
+prevents that hit from entering terminal death. `0x0048CDC0` emits five
+armor fragments plus a record-15 flash at Y-35. These effects belong to
+armor loss, and must not be deferred until a later unarmored death.
+
+Raw `0x0048D130` selects `Sounds+0x1CAC+Integer(3)*0x2C`, the three
+`ArmorCrash/crash1..3.wav` records 173..175, with pitch
+`FloatRange(.8999999761581421,1.25)`. Those stock files are now included in
+Website's existing sound assets. Their source SHA-256 values are
+`58870158c7580a98b87def2bd8ef9c140079fe268f342451547ef3c844dcb6aa`,
+`69dacb989994739fa6d4977d989559c6a35b82582fece5ed024ce1afe8ffa823`, and
+`da88bbb549c6c877269b0415033ff94b0b0c4d7ffb11ddd5b3f0349fd396d0c6`.
+The movement field multiplied at `+0x70` is constructor `baseSpeed`;
+the evaluated chase multiplier remains separate.
+
+Armor fragments use the same `Array<int>::Shuffle 0x004818E0` as the
+Skeleton/Heartmonger bone lists. Its seeded private mixer uses arithmetic
+shift-right 11, multiplier `0x0A67CFCF`, signed absolute value, and one
+full-list-bound swap per entry. The former direct global-random swaps did
+not implement that shared operation. Armor uses base entries 100/102/104/
+106/108 plus `Integer(2)`, a shared initial angle with 72-degree increments
+and signed 10-degree jitter, and a 1.2000000476837158 bounce multiplier.
+
+The staff-combat owner already implements the separate Pike-break flash and
+seven fragments through `createNativeStaffPikeBreakVfx`; it remains their
+canonical producer. Breaking the weapon now also clears its retained target
+and held action, without adding a second effect producer.
+
+Zombie `0x00493390` exposes further body composition errors. Its head
+socket comes from **head bank 2293..2310**, point zero normally or point one
+for body type three, regardless of selected head art. At facing zero those
+points are `(-1,-23.5)` and `(-1,-22.5)`. The former Website path used
+torso point zero `(0,-8.5)` instead, visibly lowering the head. Torso art
+itself draws at point zero from default torso bank `2203..2220`.
+Arm sockets come from points one/two of the selected torso bank.
+
+Neither actor scale nor type-three art scale scales these sockets. Torso
+art rotates by the quantized idle body angle; head sockets use half that
+angle, while arm sockets use half the angle after the selected attack-side
+lean. Type three adds fixed global Y-8, leg displacement +4 along heading,
+torso displacement -5, and overlay displacement -4. It doubles leg art and
+uses exact float `1.149999976158142` for torso/arm/overlay art. The former
+shared root-scale/socket/rotation assumptions were incorrect across the banks.
+
+The rotten draw has **three** fog passes: record 65 at `(0,-15)`, scale 1.5;
+record 11 with rotation `age*.25`, scales `(1.5,1.2000000476837158)`,
+translation `(0,-15)`; then additive record 11 mirrored in X at `(0,-20)`.
+All use local RGBA `(.05,.1,.05,.5)`, truncated RGB `0x0C190C`. The fly
+swarm uses black record 26, radius `(Float(20)+10)` (doubled on the selected
+roll), and the native `(sin,-cos)` heading vector. These are fixed world
+sizes/offsets, with the same type-three Y-8 translation. The prior two
+record-65 clouds, white flies, radius +1, and scaled offsets are superseded.
+
+DemonSkull's body glow uses exact float channels
+`(.6700000166893005,1,.05000000074505806)`, hence `0xAAFF0C` after native
+truncation. Its separate byte-authored flair color remains `0x8CFF0C`.
+The eye-charge helper already includes body offset/bob and the draw's global
+translation adds them again: that seemingly duplicated placement is native,
+and is preserved rather than being treated as a rendering defect.
+
+The Zombie root translation specifically reads **`+0x244`**, the vertical
+velocity, at raw `0x0049369C`; it does not read the integrated `+0x240`
+height. This native quirk is preserved in presentation while physical state
+retains both fields. The torso, half-angle head sockets, and action-adjusted
+arm sockets are now separate outputs of the existing Zombie articulation
+kernel; the extra arm-socket angle crosses the normal replication path.
+
+The previously reconstructed record-10/11 particles also had wrong owners.
+Mage `0x00490860` emits its two independently gated hand puffs only while
+`+0x278` (casting-disabled ticks) is positive. The existing host-owned
+`spawnDampenedMageSmoke` already implements those puffs; the renderer's
+cast-time substitute is removed. Its movement-scalar gate and native RGB
+truncation are retained at that producer.
+
+Rotten Zombie `0x004863A0` creates `Anim_FadeSin_Move` in pre-world manager
+`Region+0x278` on `Integer(75)==3`. Birth uses radius `Float(8)` around
+`(root.x,root.y-15)`, glyph 10/11, phase speed `FloatRange(1,2)`, movement
+speed `FloatRange(.10000000149011612,.25)`, and fixed-world art scale
+`FloatRange(1,3)`. It owns its world position after birth. Tick `0x00454340`
+advances position and the float phase; it retires at phase >=180 and sets
+opacity to `sin(phase degrees)`. Its draw `0x00455A20` is ordinary blending.
+The same class has an Earthquake creator at `0x00613200`; that independently
+owned player-ability emission is outside this enemy-body change.
+
+Fully typed raw/decompiler comparison of `0x0040FC60 -> 0x0040F770`
+corrects the earlier Faculty color interpretation: its argument is the
+**desaturation amount**. It computes float luminance using
+`.3086000084877014/.6093999743461609/.0820000022649765`, then
+`channel*(1-amount)+luminance*amount`, clamps channels, and preserves alpha.
+The former `nativeFacultyColor` reversed the parameter, which is invisible
+at .5 but wrong for Faculty .6/.7. One shared `nativeDesaturateColor`
+implementation now owns the recovered operation across its existing callers.
+Skeleton/Archer/Mage burning base and glow colors must also apply amount .5;
+their former raw orange packing omitted that operation entirely. The Zombie
+particle uses `(.1,.3,.1,1)` at amount .6499999761581421, with no light
+registration. Schema-35 restoration rebuilds stock Faculty appearance from
+the pinned source's matching recipe UID and original color tuples. It also
+recognizes the previous constructor-orange tuple and regenerates its corrected
+color. This avoids trying to invert an already rounded/clamped color; custom
+persisted palettes retain their authored values.
+
+The living-emitter sweep at `0x00486C30` invalidates the Wraith renderer's
+twenty-tick reconstructed wisp history. Native admission byte `+0xD4` gates
+`Integer(4)==1`, with an emission also guaranteed while contact cooldown
+`+0x21C>0`. This is independent of the flaming flag `+0x22C`. Each birth is
+an independent `Anim_FadeAdditive` using BadGuys 21, world position
+`root-(sin(heading),-cos(heading))*30+(0,-15)`, rotation equal to heading,
+unit art scale, alpha `.25+Float(.20000000298023224)`, and fade rate
+`f32(.10000000149011612*.15000000596046448)`. Its pre-world manager owns
+position and retirement after the Wraith moves or dies; it has no light.
+`+0xD4` is render admission, not burning. The renderer's main callback
+`0x00496220` contains only the additive direction strip. Existing contact
+damage/Dazzle and terminal dissolve remain independent owners.
+
+Skeleton, Archer and Mage share the same burning recipe. Skeleton implements
+it in `0x00484B90`; Archer's `0x00485200` has one inline copy after the
+Badguy tick; Mage `0x00490860` calls Skeleton then executes its own copy at
+`0x00490C73`, so a burning Mage has **two independent emission rolls**.
+While alive and movement scalar `+0x1A4!=0`, burning
+`+0x240` rolls `Integer(5)==3` and constructs Fire 2019 (`0x005E7130`).
+It retains the constructor phase/sign draws, copies the actor root, samples
+scale `FloatRange(.6000000238418579,1)`, writes life `.3499999940395355`,
+and copies the sum of primary damage endpoints. It clears Fire `+0x154`,
+which suppresses enrollment in the light-manager list at `0x005FF050`.
+The separate ground sprite at `0x005E7310` still draws. Reuse the existing
+enemy Fire state, painter, tick/contact, transport, save and renderer with
+nullable light registration; its established wire kind remains `demon-fire`.
+Do not add a second Fire simulation or a light to these short-lived children.
+Wraith's flaming flag adds its existing actor light only, with no Fire birth
+in its tick. Imp/GreenImp share `0x00485DC0`; their landing/contact virtuals
+own the already recovered record-15 and FireBurst effects, with no ambient
+world-particle emitter. GoodImp's existing terminal Fire is separately owned
+by the player-primary system.
+
+The same recovered movement scalar gates Skeleton/Archer/Mage light enrollment
+and charge/glow updates, and Imp enrollment. The former web test incorrectly
+set sprite scale to zero to represent stopped movement. That fixture and the
+shared adapter now use effective base movement speed, including staff and
+stasis scalars. Imp glow continues outside the enrollment gate; Wraith's
+flaming light and Demon light remain independent, as their own callbacks show.
+Skeleton recoil also holds when this scalar is zero.
+
+The shared transient fade step now stores its opacity recurrence as float32,
+including the existing Fade/MoveFade/Unbind siblings; double accumulation was
+observable in the new Wraith lifetime regression. No fade recipe is changed.
+Silk 2056 retains an inherited light virtual at `0x005E6140`, but its own
+constructor/initialize/tick `0x005F05D0/0x005F0790/0x005F8B50` do not enroll
+it in the provider list. The tick calls Puppet cleanup `0x006247A0`, rather
+than an inherited Arrow tick, and owns its spline, web-hit flash and five
+fragments. The current absence of a Silk light is therefore verified.
+
+The fresh shadow callback sweep agrees with the existing underlay owner:
+shared humanoid `0x004842A0`; Archer/Mage limb-heading wrapper `0x0048A260`;
+DemonSkull `0x00474A20`; Demon `0x00479540`; doubled Heartmonger
+`0x004A0CC0`; Coffin `0x0049AEE0`; Maggot `0x0049C350`; Spider's ten-unit
+root wrapper `0x00489620`; and Portal `0x004A1CB0`. Imp, GoodImp, GreenImp,
+Wraith and Cocoon have empty shadow slots. Existing tests enumerate the
+simple/complex branches, source limits, poses and mirrors. No body-root scale
+correction is applied to these independent world-space underlays.
+Typed `0x004974D0/0x00498BA0/0x0049F870` also confirms the existing
+DemonSkull, Demon and Heartmonger art-versus-socket scale contracts. In
+particular, Heartmonger legs/torso use `S*1.0499999523162842`, its head adds
+`1.3300000429153442`, and both authored attachment offsets remain world units.
+
+### Reopened presentation inventory dispositions
+
+These nineteen rows supersede the earlier restricted-family scope. Dispositions
+record the recovered implementation; final candidate acceptance is recorded
+separately below. Addresses are preferred-image virtuals for the pinned retail
+image. Empty slots resolve to `0x0055C300`; Crow delegates to its parent-owned
+painter. All stock atlas banks remain the tracked extracted source data.
+
+| Native member | Main / underlay / light | Disposition | Result |
+| --- | --- | --- | --- |
+| Badguy 1000 | `0x0055C300 / 0x004842A0 / 0x0055C300` | `verified-already-at-parity` | Shared parent only; empty main/light slots, inherited transforms and humanoid shadow. |
+| Skeleton 1001 | `0x0048DEE0 / 0x004842A0 / 0x004779E0` | `exact-ported` | All weapons/headgear/armor; pike attachment and retained target, mace/flail order, recoil, burn colors and Fire, armor transition/audio. |
+| SkeletonArcher 1002 | `0x0048F450 / 0x0048A260 / 0x00478180` | `exact-ported` | Shared body/head geometry and burn emitter; held-arrow pose 8 and separate light exclusion at pose 9. |
+| SkeletonMage 1003 | `0x00491720 / 0x0048A260 / 0x004783E0` | `exact-ported` | Torso plus cloak, all four charge recipes, separate clocks, casting-disabled puffs, recoil and duplicate burning providers. |
+| Imp 1004 | `0x00492E10 / 0x0055C300 / 0x00478CC0` | `exact-ported` | Four additive body choices, upper additive strip and world offsets; existing bounce/contact, split and death owners verified. |
+| GoodImp 1005 | `0x00492E10 / 0x0055C300 / 0x00478CC0` | `exact-ported` | Same additive body/upper fix in the actual player-primary renderer; retained independent landing/contact and terminal Fire. |
+| Zombie 1006 | `0x00493390 / 0x004842A0 / 0x0055C300` | `exact-ported` | All torso/head banks, head and arm socket ownership, type-three transforms, native root-velocity draw, three fog passes, flies and world particles. |
+| Wraith 1007 | `0x00496220 / 0x0055C300 / 0x00478E00` | `exact-ported` | Additive strip and fixed world offset; admitted independent wisps; flaming light and terminal dissolve retain separate owners. |
+| DemonSkull 1008 | `0x004974D0 / 0x00474A20 / 0x00474970` | `exact-ported` | Correct float-to-byte glow color; body/overlay scales, double eye offset, charge, attacks and death verified against complete draw. |
+| Demon 1009 | `0x00498BA0 / 0x00479540 / 0x00479470` | `verified-already-at-parity` | Controller, extremities/connectors, mirrors, flame sort, muzzle, shadow and dying-body branches match typed callback. |
+| DireFaculty 1010 | `0x0049DF30 / 0x004842A0 / 0x00479F80` | `exact-ported` | Both sexes and all robe/head banks; fixed art scale, double-phase bob and corrected desaturation; existing casts/light/death verified. |
+| Heartmonger 1011 | `0x0049F870 / 0x004A0CC0 / 0x0047A040` | `verified-already-at-parity` | Independent world sockets, scaled body/head art, tendrils, light, shadow, Crow/terminal ownership retained. |
+| Crow 1012 | `parent-owned / parent-owned / parent-owned` | `verified-already-at-parity` | Parent-controlled orbit/strike and chain; detached Crow painter and corpse handoff remain in the existing boss/child owner. |
+| Coffin 1013 | `0x0049AC90 / 0x0049AEE0 / 0x00479EA0` | `exact-ported` | Fixed art scale; all existing hidden/rise/open/secondary/flip branches, underlay and Maggot handoff verified. |
+| GreenImp 2044 | `0x004930D0 / 0x0055C300 / 0x00478CC0` | `exact-ported` | All four Unholy body choices plus additive upper strip; inherited Imp light, contact and death. |
+| Maggot 2045 | `0x0049C190 / 0x0049C350 / 0x0055C300` | `verified-already-at-parity` | Independent two-pose crawl, ballistic/emergence/death geometry, culling and no light; actual compositor witness retained. |
+| Spider 2057 | `0x004A1670 / 0x00489620 / 0x0055C300` | `exact-ported` | Fixed art scale; authored body/leg/strike banks, native shadow offset, Silk/Webbed/Cocoon and remains retained. |
+| Cocoon 2058 | `0x0055C300 / 0x0055C300 / 0x0055C300` | `verified-already-at-parity` | Empty body/light/shadow slots; target Webbed owns visible shell, release fragments retain their world owner. |
+| Portal 5021 | `0x004A1B30 / 0x004A1CB0 / 0x0047BED0` | `exact-ported` | Correct light radius/intensity; fixed body and three underlay passes, alpha/materialization and child ejection retained. |
+
+The Mac body matrix constructs recipe state, sets its fixture scale, and then
+projects 84 variants at six headings and scales .5/1/2: **1,512
+real NativeEnemyViews**. Each pass releases every view; zero browser errors and
+zero retained body views were measured. CPU contracts cover the full 18-facing
+attachment banks, separate state clocks, save/transport continuation and the
+independent child/underlay owners. These are instruction-derived presentation
+checks, not a claim of pixel-identical stock screenshots.
+
+The corrected compositor also passes **45 isolated light cases**, with player
+and Lantern providers disabled. The same body and application clock are
+rendered with and without the enemy provider; the control difference is zero.
+Every emitting family has a positive pixel witness, including both Faculty
+flicker branches; all native no-light rows retain zero changed pixels.
+Burning Mage preserves two candidates; Archer pose 9 rejects its non-burning
+provider. Both shadow settings and a reset back to zero bodies/providers pass.
+Independent host-created Wraith wisps, rotten-Zombie particles and Skeleton
+Fire change 5,340, 19,819 and 3,163 pixels respectively, with zero additional
+light providers. The retained Firebolt child changes 1,764 pixels against a
+zero-difference paired control. Page, console and failed-response arrays are
+empty. The field-gate regressions additionally prove stasis suppression and
+restoration, and the two independent burning-Mage Fire rolls.
+
+This pass introduces no new platform exception. The previously recorded
+Arrow off-screen retirement difference remains: a headless multiplayer owner
+cannot share one local native Present/admission clock with every client, so
+a landed Arrow can remain until its authoritative physical/fade lifetime.
+
+### Final Mac acceptance for the reopened audit
+
+The candidate was based on `5eb34e452cc05adffc2c8797fed863f59c9d0197`.
+Its 77 changed/new source files matched byte-for-byte between the focused
+checkout and Mac mini before and after the complete gate; the pre-receipt
+source-manifest SHA-256 was
+`b85daf4df424b46c069d83b57a500081b2412fb348e96dd9e84be91ce6007f63`.
+All tests, builds and browser checks ran on the Mac mini.
+
+| Acceptance | Result |
+| --- | --- |
+| `/opt/homebrew/bin/bash ./scripts/validate.sh` | **PASS**, exit 0: backend/contracts, lint, complete frontend and desktop suites, production build/media/bundle limits, and configured renderer quality. The main frontend batch passed all 2,216 tests. |
+| Configured renderer quality | Eight files at 100% statement/branch/function/line coverage; no dead code or duplicate blocks; no quality failures. Mutation report: 398 killed, 142 compile errors, 23 previously documented equivalent exclusions, one timeout, zero survivors. The timeout changed the vertex-loop increment to `vertex -= 1`, making the loop nonterminating. |
+| Body/variant matrix | **PASS**, 84 variants × six headings × three scales = 1,512 real views, including positive-sized Portal art and a valid latched-Pike pose. Every pass released its body views and reported zero browser errors. |
+| Combined compositor and isolated lights | **PASS** on the final source: 45 light cases, independently generated living particles/Fire, native attack/death children, painter order, culling, audio and reset. Page, console and failed-response arrays were empty. |
+| Built `/game` and actual GameHost | **PASS**, all 24 unique cases: four Ironmaw weapons, Foulshaft, Heartmonger/Crows, six Faculty attacks, four Discorporeal attacks, Slumpgut, Portal and six finale cases. All required attacks/children were captured, real audio played, and death owners retired. All page/console/request/response error arrays were empty. |
+| Authority and continuation | Passing regressions cover two simultaneous Pike constraints committed to the player root, release/break/death/stasis/pause, both Mage Fire rolls, armor-to-body transition and sounds, schema-35 restoration, and full/compact presentation transport. |
+
+The final built-client pass completed fourteen cases before its screenshot
+poll missed the short-lived Spit, although the host recorded the Spit, green
+Fire and three Imp children without errors. The unchanged candidate resumed
+from that case and passed the remaining ten, including the required Spit
+flight capture. No product change or relaxed assertion was needed.
+Earlier gate failures were corrected test fixtures: newly required state/audio
+fields and the distinction between an active Pike and a latched Pike. The
+complete gate was rerun successfully after those corrections.
+
+These receipts establish source and Mac acceptance. Publishing this candidate
+is separate from production deployment. Raw screenshots, logs and temporary
+analysis files are disposable after recording these results.

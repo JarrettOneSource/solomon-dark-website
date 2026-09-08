@@ -443,6 +443,8 @@ test('projects GoodImp authoritative flight, upper flame, and detached contact b
     { entry: 254, role: 'contact' },
   ])
   assert.equal(plan.draws[0]!.alpha, 1)
+  assert.equal(plan.draws[0]!.blend, 'add')
+  assert.equal(plan.draws[1]!.blend, 'add')
   assert.equal(plan.draws[0]!.rotation, Math.PI / 6)
   assert.deepEqual(plan.draws[0]!.offset, { x: 0, y: -2 })
   assert.equal(plan.draws[1]!.alpha, 0.8)

@@ -48,14 +48,20 @@ interface ActionClock {
   readonly markerEmitted: boolean
 }
 
-export interface BoneyardSkeletonBrain extends ActionClock {
+interface SkeletonRecoil {
+  readonly verticalOffset: number
+  readonly verticalVelocity: number
+}
+
+export interface BoneyardSkeletonBrain extends ActionClock, SkeletonRecoil {
   readonly action: 'claw' | 'pike' | 'weapon'
   readonly contactTargetPlayerId: string | null
   readonly family: 'skeleton'
+  readonly pike: Readonly<{ playerId: string; position: Readonly<BoneyardPoint>; distance: number }> | null
   readonly phase: 'approach' | 'attack' | 'death'
 }
 
-export interface BoneyardArcherBrain extends ActionClock {
+export interface BoneyardArcherBrain extends ActionClock, SkeletonRecoil {
   readonly aimSeed: number
   readonly attackRange: number
   readonly family: 'archer'
@@ -64,7 +70,7 @@ export interface BoneyardArcherBrain extends ActionClock {
   readonly strafe: NativeArcherStrafeState
 }
 
-export interface BoneyardMageBrain extends ActionClock {
+export interface BoneyardMageBrain extends ActionClock, SkeletonRecoil {
   readonly attackRange: number
   readonly castProgram: 'long' | 'short'
   readonly castRoll: number
@@ -406,6 +412,7 @@ export type BoneyardEnemyDeathEffectKind =
   | 'banish-black'
   | 'scrap'
   | 'black-smoky-bouncer'
+  | 'move-fade-sin'
 
 export interface BoneyardEnemyDeathEffect {
   readonly ageTicks: number
@@ -494,6 +501,9 @@ export type BoneyardEnemyDeathSound =
   | 'zombie-poison-splat'
 
 export type BoneyardEnemyDamageSound =
+  | 'armor-crash-1'
+  | 'armor-crash-2'
+  | 'armor-crash-3'
   | 'bone-crack'
   | 'hit-shield'
   | 'pop-shield'
@@ -871,6 +881,7 @@ export interface BoneyardEnemyStoreStepResult {
   readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly playerDamage: readonly BoneyardEnemyPlayerDamage[]
   readonly playerKnockbacks: readonly BoneyardEnemyPlayerKnockback[]
+  readonly playerPositions: Readonly<Record<string, Readonly<BoneyardPoint>>>
   readonly retired: readonly BoneyardEnemyRetirement[]
   readonly rewards: readonly BoneyardEnemyReward[]
   readonly spawnedActorIds: readonly BoneyardEnemyActorId[]
@@ -965,6 +976,8 @@ export interface WorkingStep {
   nextSyntheticSpawnIntentId: number
   playerDamage: BoneyardEnemyPlayerDamage[]
   playerKnockbacks: BoneyardEnemyPlayerKnockback[]
+  playerPositions: Record<string, Readonly<BoneyardPoint>>
+  playerTargets: Record<string, BoneyardEnemyTargetCandidate>
   pathStatusFactors: Map<BoneyardEnemyActorId, number>
   pendingSpawnIntents: BoneyardEnemySpawnIntent[]
   projectiles: BoneyardEnemyProjectile[]

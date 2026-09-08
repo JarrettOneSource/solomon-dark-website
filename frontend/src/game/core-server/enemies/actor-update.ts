@@ -13,6 +13,7 @@ import { interruptNativeSecondaryAction, moveTowardTarget, nativeSecondaryActorS
 import { stepPortal } from './portal.ts'
 import { NATIVE_ENEMY_BURN_GLOW_PER_TICK, NATIVE_ENEMY_CHARGE_PER_TICK, NATIVE_IMP_GLOW_PER_TICK } from './programs.ts'
 import { applyMageProviderGateAfterAction, magePoseIsFour, stepArcher, stepMage, stepSkeleton } from './skeleton-family.ts'
+import { stepLatchedSkeleton, stepSkeletonRecoil } from './skeleton-body.ts'
 import { stepCocoonActor, stepSpider } from './spider.ts'
 import { refreshTarget, reorientEnemyTowardTarget } from './targeting.ts'
 import { stepWraith } from './wraith.ts'
@@ -61,6 +62,10 @@ export function stepLivingActor(
   let actor = affected.brain.family === 'portal'
     ? affected
     : refreshTarget(affected, context)
+  if (actor.brain.family === 'skeleton' && actor.brain.pike !== null) {
+    const held = stepLatchedSkeleton(work, rollSkeletonFamilyHeadFacing(work, actor), context)
+    return stepEnemyLighting(effect?.timeScale === 0 ? held : stepSkeletonRecoil(held))
+  }
   if (actor.brain.family === 'mage' && actor.brain.disabledPrimaryTicks > 0) {
     actor = { ...actor, brain: { ...actor.brain, disabledPrimaryTicks: actor.brain.disabledPrimaryTicks - 1 } }
   }
@@ -77,7 +82,7 @@ export function stepLivingActor(
     const interrupted = clearSkeletonFamilyHeadFacing(
       interruptNativeSecondaryAction(actor),
     )
-    const lit = stepEnemyLighting(interrupted)
+    const lit = stepEnemyLighting(effect?.timeScale === 0 ? interrupted : stepSkeletonRecoil(interrupted))
     return lit.brain.family === 'mage'
       ? applyMageProviderGateAfterAction(lit)
       : lit
@@ -93,7 +98,7 @@ export function stepLivingActor(
     && actor.brain.family !== 'coffin'
   ) {
     const reoriented = reorientEnemyTowardTarget(actor, context.players)
-    const lit = stepEnemyLighting(reoriented)
+    const lit = stepEnemyLighting(stepSkeletonRecoil(reoriented))
     return lit.brain.family === 'mage'
       ? applyMageProviderGateAfterAction(lit)
       : lit
@@ -109,15 +114,16 @@ export function stepLivingActor(
       context,
       -1,
     )
-    return stepEnemyLighting(fled)
+    return stepEnemyLighting(stepSkeletonRecoil(fled))
   }
   const articulated = rollSkeletonFamilyHeadFacing(work, actor)
   if (articulated.brain.family === 'mage') {
-    const enrolled = stepEnemyLighting(articulated)
+    const enrolled = stepEnemyLighting(stepSkeletonRecoil(articulated))
+    if (enrolled.brain.family !== 'mage') throw new Error('Mage recoil changed brain family')
     return applyMageProviderGateAfterAction(
       finalizeSkeletonFamilyHeadFacing(
         articulated,
-        stepMage(work, enrolled, articulated.brain, context),
+        stepMage(work, enrolled, enrolled.brain, context),
       ),
     )
   }
@@ -141,7 +147,7 @@ export function stepLivingActor(
       case 'coffin': return stepCoffin(work, articulated, articulated.brain, context)
     }
   })()
-  return stepEnemyLighting(finalizeSkeletonFamilyHeadFacing(articulated, stepped))
+  return stepEnemyLighting(finalizeSkeletonFamilyHeadFacing(articulated, stepSkeletonRecoil(stepped)))
 }
 
 function rollSkeletonFamilyHeadFacing(
@@ -199,6 +205,7 @@ function clearSkeletonFamilyHeadFacing(
 function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
   const prior = actor.lighting
   const active = actor.config.scale !== 0
+  const movementActive = actor.config.baseSpeed * actor.staffMovementFactor !== 0
   switch (actor.config.enemyToken) {
     case 'SPIDER':
     case 'COCOON': return actor
@@ -206,7 +213,7 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
     case 'DIREFACULTY': return withEnemyLighting(actor, { charge: 0, glow: actor.brain.family === 'faculty' ? actor.brain.lightIntensity : 0, providerCopies: active ? 1 : 0 })
     case 'HEARTMONGER': return withEnemyLighting(actor, { charge: 0, glow: .5, providerCopies: active ? 1 : 0 })
     case 'SKELETON': {
-      const burning = active && actor.config.burning
+      const burning = movementActive && actor.config.burning
       return withEnemyLighting(actor, {
         ...prior,
         glow: burning
@@ -216,7 +223,7 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
       })
     }
     case 'SKELETONARCHER': {
-      if (!active) return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
+      if (!movementActive) return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
       const burning = actor.config.burning
       return withEnemyLighting(actor, {
         charge: Math.min(1, prior.charge + NATIVE_ENEMY_CHARGE_PER_TICK),
@@ -229,7 +236,7 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
       })
     }
     case 'SKELETONMAGE': {
-      if (!active) return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
+      if (!movementActive) return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
       const burning = actor.config.burning
       const once = burning
         ? Math.min(1, prior.glow + NATIVE_ENEMY_BURN_GLOW_PER_TICK)
@@ -251,7 +258,7 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
       return withEnemyLighting(actor, {
         charge: prior.charge,
         glow,
-        providerCopies: active ? 1 : 0,
+        providerCopies: movementActive ? 1 : 0,
       })
     }
     case 'PORTAL':

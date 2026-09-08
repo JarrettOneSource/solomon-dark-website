@@ -9,7 +9,7 @@ import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import type { PrimarySpellTransientState } from '../../core-kernels/primary-spells.ts'
 import { createPrimarySpellWeldSteamDetonation } from '../../core-kernels/primary-spells.ts'
 import { positionBoneyardEnemy } from '../boneyard-enemy-store.ts'
-import { damageBoneyardEnemy, setBoneyardEnemyHurricaneContactCooldown } from '../enemies/damage.ts'
+import { damageBoneyardEnemy, releaseBoneyardSkeletonPike, setBoneyardEnemyHurricaneContactCooldown } from '../enemies/damage.ts'
 import { validatedDamageMultiplier } from './damage.ts'
 import { bySpellId, nativePrimaryRootTargetRows, parseEnemyTargetId, primaryTargetRows } from './targets.ts'
 import { BoneyardSpellCombatWork } from './work.ts'
@@ -195,6 +195,7 @@ export function resolveTransientForces(work: BoneyardSpellCombatWork): void {
       work.activeKnockbackTargetIds.delete(effect.targetId)
       continue
     }
+    work.enemies = releaseBoneyardSkeletonPike(work.enemies, row.actor.id)
     const requested = {
       x: Math.fround(row.target.position.x + effect.delta.x),
       y: Math.fround(row.target.position.y + effect.delta.y),

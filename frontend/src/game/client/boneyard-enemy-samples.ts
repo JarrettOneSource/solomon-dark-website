@@ -248,6 +248,7 @@ function copyEnemy(enemy: BoneyardEnemySnapshot): BoneyardEnemySnapshot {
     animation: {
       ...enemy.animation,
       spider: enemy.animation.spider === null ? null : { ...enemy.animation.spider },
+      pikeTargetOffset: enemy.animation.pikeTargetOffset === null ? null : { ...enemy.animation.pikeTargetOffset },
       demonFrontExtremityOffset: { ...enemy.animation.demonFrontExtremityOffset },
       demonRearExtremityOffset: { ...enemy.animation.demonRearExtremityOffset },
       effects: enemy.animation.effects.map(copyEnemyEffect),
@@ -388,6 +389,11 @@ function interpolateEnemyAnimation(
     actionProgress: lerp(first.actionProgress, second.actionProgress, blend),
     alpha: lerp(first.alpha, second.alpha, blend),
     bodyPose: discrete.bodyPose,
+    bodyGaitPhase: lerpCycle(first.bodyGaitPhase, second.bodyGaitPhase, blend, 4),
+    pikeTargetOffset: first.pikeTargetOffset !== null && second.pikeTargetOffset !== null ? {
+      x: lerp(first.pikeTargetOffset.x, second.pikeTargetOffset.x, blend),
+      y: lerp(first.pikeTargetOffset.y, second.pikeTargetOffset.y, blend),
+    } : discrete.pikeTargetOffset,
     coffinPose: lerp(first.coffinPose, second.coffinPose, blend),
     coffinRotationRadians: lerp(
       first.coffinRotationRadians,
@@ -455,6 +461,7 @@ function interpolateEnemyAnimation(
       second.zombieBodyRotationRadians,
       blend,
     ),
+    zombieArmSocketRotationRadians: lerp(first.zombieArmSocketRotationRadians, second.zombieArmSocketRotationRadians, blend),
     zombieFrontArmPose: lerp(first.zombieFrontArmPose, second.zombieFrontArmPose, blend),
     zombieFrontArmRotationRadians: lerp(
       first.zombieFrontArmRotationRadians,

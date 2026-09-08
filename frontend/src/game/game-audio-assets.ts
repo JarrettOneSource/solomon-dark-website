@@ -14,6 +14,9 @@ import bite2 from '../assets/game/audio/sfx/bite-2.wav'
 import bite3 from '../assets/game/audio/sfx/bite-3.wav'
 import blind from '../assets/game/audio/sfx/blind.wav'
 import boneCrack from '../assets/game/audio/sfx/bone-crack.wav'
+import armorCrash1 from '../assets/game/audio/sfx/armor-crash-1.wav'
+import armorCrash2 from '../assets/game/audio/sfx/armor-crash-2.wav'
+import armorCrash3 from '../assets/game/audio/sfx/armor-crash-3.wav'
 import boastFailure from '../assets/game/audio/sfx/buzzer.wav'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import chainClank1 from '../assets/game/audio/sfx/chain-clank-1.wav'
@@ -274,6 +277,9 @@ export const GAME_AUDIO_SOURCES = {
     'acid-sizzle': acidSizzle,
     'banshee-die': bansheeDie,
     'bone-crack': boneCrack,
+    'armor-crash-1': armorCrash1,
+    'armor-crash-2': armorCrash2,
+    'armor-crash-3': armorCrash3,
     'big-fire': bigFire,
     'bite-1': bite1,
     'bite-2': bite2,

@@ -442,6 +442,7 @@ export function nativeFireGoodImpPlan(
     NATIVE_GOOD_IMP_BODY_FIRST + state.bodyVariant * 12 + facing,
     'body',
     {
+      blend: 'add',
       offset: { x: 0, y: state.verticalOffset },
       rotation: state.bodyRotationDeg * Math.PI / 180,
       scale: state.bodyScale,
@@ -453,6 +454,7 @@ export function nativeFireGoodImpPlan(
       NATIVE_GOOD_IMP_UPPER_FIRST + nativeImpEffectFrame(state.effectPhase),
       'upper-effect',
       {
+        blend: 'add',
         alpha: state.effectAlpha,
         offset: { x: 0, y: state.verticalOffset - 10 },
         scale: state.bodyScale,

@@ -275,6 +275,9 @@ function projectAnimation(
         actor.config.scale,
       )
     : null
+  const pike = actor.brain.family === 'skeleton' ? actor.brain.pike : null
+  const pikePosition = pike === null ? null
+    : spiderContext?.players[pike.playerId]?.position ?? pike.position
   return {
     spider: actor.brain.family === 'spider' ? nativeSpiderAppearance(
       actor.brain.bodyHeadingDeg, actor.position, spiderContext?.lightAt(actor.position) ?? 0,
@@ -283,6 +286,11 @@ function projectAnimation(
     action,
     actionProgress: actionProgress(actor.brain),
     alpha: actor.brain.family === 'portal' ? actor.brain.alpha : 1,
+    bodyGaitPhase: actor.bodyGaitPhase,
+    mageChargeSuppressed: actor.brain.family === 'mage' && actor.brain.disabledPrimaryTicks > 0,
+    pikeTargetOffset: pikePosition === null ? null : {
+      x: pikePosition.x - actor.position.x, y: pikePosition.y - actor.position.y,
+    },
     bodyPose: impBrain
       ? impBrain.bodyVariant
       : demonBrain
@@ -324,7 +332,9 @@ function projectAnimation(
     verticalOffset: demonBrain
       ? actor.lifeState === 'dying' ? 0 : demonArticulation?.verticalOffset ?? 0
       : impBrain?.verticalOffset
-      ?? zombieBrain?.verticalOffset
+      ?? zombieBrain?.verticalVelocity
+      ?? (actor.brain.family === 'skeleton' || actor.brain.family === 'archer' || actor.brain.family === 'mage'
+        ? actor.brain.verticalOffset : undefined)
       ?? (actor.brain.family === 'spider' ? actor.brain.verticalOffset : undefined)
       ?? coffin.verticalOffset,
     zombieAngularOffsetDeg: zombieBrain?.angularOffsetDeg ?? 0,
@@ -332,6 +342,7 @@ function projectAnimation(
     zombieBodyType: zombieBrain?.bodyType ?? -1,
     zombieFrontArmPose: zombieBeat?.frontArmPose ?? 0,
     zombieBodyRotationRadians: zombieArticulation?.bodyRotationRadians ?? 0,
+    zombieArmSocketRotationRadians: zombieArticulation?.armSocketRotationRadians ?? 0,
     zombieFrontArmRotationRadians: zombieArticulation?.frontArmRotationRadians ?? 0,
     zombieHeadRotationRadians: zombieArticulation?.headRotationRadians ?? 0,
     zombieHeadType: zombieBrain?.headType ?? -1,

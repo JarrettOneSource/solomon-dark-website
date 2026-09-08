@@ -1,9 +1,7 @@
+import { nativeDesaturateColor } from '../../core-kernels/native-color.ts'
 import type {
   BoneyardPoint,
 } from '../../core-kernels/boneyard.ts'
-import {
-  nativeFacultyColor,
-} from '../../core-kernels/native-faculty.ts'
 import {
   drawNativeFloat,
   drawNativeInteger,
@@ -32,7 +30,7 @@ export function spawnTragicCircleEffects(work: WorkingStep, owner: DeathEffectOw
   }
   // The base MagicCircle light provider consumes one signed flicker before the subclass callback.
   float(.25, true)
-  const color = nativeFacultyColor([Math.fround(.75 + float(.5)), 0, 0, 1], .5)
+  const color = nativeDesaturateColor([Math.fround(.75 + float(.5)), 0, 0, 1], .5)
   const tint = (Math.round(color[0] * 255) << 16) | (Math.round(color[1] * 255) << 8) | Math.round(color[2] * 255)
   for (let pair = 0; pair < 1 + (tick & 1); pair += 1) {
     for (const shadow of [false, true]) {

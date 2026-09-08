@@ -15,6 +15,7 @@ import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import type { BoneyardPlayerCombatStatus, BoneyardWorldState } from './boneyard-world-state.ts'
 import type { BoneyardEnemyPlayerKnockback, BoneyardEnemyStore } from './enemies/model.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import { releaseBoneyardSkeletonPike } from './enemies/damage.ts'
 export function spawnPlayerCharacterInBoneyard(
   config: PlayerCharacterConfig,
   world: BoneyardWorldState,
@@ -298,9 +299,11 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
   if (knockbacks.length === 0) return world
   const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
   let bodies = boneyardCombatBodies(players, world.enemies, playerCombat, world.lanternPosition)
+  let enemies = world.enemies
   for (const knockback of knockbacks) {
     const moverId = `enemy-${knockback.targetId}`
     if (!bodies.has(moverId)) continue
+    enemies = releaseBoneyardSkeletonPike(enemies, knockback.targetId)
     const resolved = resolveActorMotion(
       [...bodies.values()].map((body) => ({
         ...body,
@@ -330,7 +333,7 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
     ...world,
     lanternPosition: bodies.get(NATIVE_LANTERN_BODY_ID)?.position ?? world.lanternPosition,
     enemies: commitBoneyardEnemyCollisionPositions(
-      world.enemies,
+      enemies,
       new Map([...bodies.values()].map((body) => [body.id, body.position])),
     ),
   }

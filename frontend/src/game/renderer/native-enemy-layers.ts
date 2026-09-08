@@ -210,8 +210,18 @@ export function boundedUnit(value: number): number {
 }
 
 export function packRgb(red: number, green: number, blue: number): number {
-  const channel = (value: number) => Math.round(boundedUnit(value) * 255)
+  const channel = (value: number) => Math.trunc(boundedUnit(value) * 255)
   return (channel(red) << 16) | (channel(green) << 8) | channel(blue)
+}
+
+/** The view scales actor art; fixed-size native draws retain their world geometry. */
+export function toEnemyLocalSpace(source: NativeEnemySpriteLayer, actorScale: number): NativeEnemySpriteLayer {
+  return { ...source,
+    offset: { x: source.offset.x / actorScale, y: source.offset.y / actorScale },
+    scale: source.scale / actorScale,
+    ...(source.scaleX === undefined ? {} : { scaleX: source.scaleX / actorScale }),
+    ...(source.scaleY === undefined ? {} : { scaleY: source.scaleY / actorScale }),
+  }
 }
 
 export function finiteOrZero(value: number): number {

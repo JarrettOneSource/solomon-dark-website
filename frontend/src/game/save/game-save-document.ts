@@ -58,6 +58,8 @@ import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
 import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
 import type { GameSaveIntegrity, ParsedGameSaveContinuation } from './game-save-contract.ts'
 import { MAX_WEB_GAME_SAVE_JSON_DEPTH, MAX_WEB_GAME_SAVE_JSON_NODES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, onlyKeys, parseGameSaveDocument, record } from './game-save-contract.ts'
+import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
+import { NATIVE_SURVIVAL_BOSS_RECIPE_SOURCES, NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
 export interface CreateGameSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
@@ -1827,6 +1829,31 @@ function normalizeRun(value: unknown): Record<string, unknown> {
   }
 }
 
+function migrateSavedFacultyColor(config: Record<string, unknown>, sourceSha256: string): Record<string, unknown> {
+  const family = record(config.family, 'saved Faculty appearance')
+  const name = config.recipeName
+  const source = NATIVE_SURVIVAL_BOSS_SOURCES.find(row => row.sourceSha256 === sourceSha256)
+  if ((name === 'Dire Sirmin' || name === 'Dire Lucritius' || name === 'Dire Aliss')
+    && source !== undefined && source.recipeUids[name] === config.recipeUid) {
+    const recipe = NATIVE_SURVIVAL_BOSS_RECIPE_SOURCES[name]
+    return { ...family,
+      bodyColor: savedColorMatches(family.bodyColor, nativeDesaturateColor(recipe.bodyTint, 1 - Math.fround(.7)))
+        ? nativeDesaturateColor(recipe.bodyTint, Math.fround(.7)) : family.bodyColor,
+      headColor: savedColorMatches(family.headColor, nativeDesaturateColor(recipe.headTint, 1 - Math.fround(.7)))
+        ? nativeDesaturateColor(recipe.headTint, Math.fround(.7)) : family.headColor,
+    }
+  }
+  const previousOrange = nativeDesaturateColor([1, .5, 0, 1], 1 - Math.fround(.6))
+  if (savedColorMatches(family.bodyColor, previousOrange)) {
+    return { ...family, bodyColor: nativeDesaturateColor([1, .5, 0, 1], Math.fround(.6)) }
+  }
+  return family
+}
+
+function savedColorMatches(value: unknown, color: readonly number[]): boolean {
+  return Array.isArray(value) && value.length === 4 && value.every((channel, index) => channel === color[index])
+}
+
 function normalizeWorld(
   value: unknown,
   loadedBoneyardValue: unknown,
@@ -1901,6 +1928,33 @@ function normalizeWorld(
         }
         normalizedBrain = { ...normalizedBrain, disabledPrimaryTicks }
       }
+      if (savedBrain.family === 'skeleton' || savedBrain.family === 'archer' || savedBrain.family === 'mage') {
+        const verticalOffset = sourceSchemaVersion < 35 ? 0
+          : finiteNumber(savedBrain.verticalOffset, 'saved Skeleton recoil offset')
+        const verticalVelocity = sourceSchemaVersion < 35 ? 0
+          : finiteNumber(savedBrain.verticalVelocity, 'saved Skeleton recoil velocity')
+        if (verticalOffset > 0) throw new Error('saved Skeleton recoil offset is invalid')
+        normalizedBrain = { ...normalizedBrain, verticalOffset, verticalVelocity }
+      }
+      if (savedBrain.family === 'skeleton') {
+        let pike = null
+        if (sourceSchemaVersion >= 35 && savedBrain.pike !== null) {
+          const retained = record(savedBrain.pike, 'saved Skeleton Pike')
+          const position = record(retained.position, 'saved Skeleton Pike position')
+          const distance = finiteNumber(retained.distance, 'saved Skeleton Pike distance')
+          const family = record(config.family, 'saved Skeleton equipment')
+          if (typeof retained.playerId !== 'string' || retained.playerId.length === 0
+            || distance <= 0 || actor.lifeState !== 'alive' || family.weapon !== 'pike'
+            || savedBrain.action !== 'pike' || savedBrain.phase !== 'attack') {
+            throw new Error('saved Skeleton Pike target is invalid')
+          }
+          pike = { distance, playerId: retained.playerId, position: {
+            x: finiteNumber(position.x, 'saved Skeleton Pike X'),
+            y: finiteNumber(position.y, 'saved Skeleton Pike Y'),
+          } }
+        }
+        normalizedBrain = { ...normalizedBrain, pike }
+      }
       if (savedBrain.family === 'demon-skull') {
         normalizedBrain = { ...normalizeSavedDiscorporeal(savedBrain) }
       }
@@ -1920,6 +1974,9 @@ function normalizeWorld(
           : finiteNumber(actor.shadowLateralOffset, 'saved enemy shadow gait offset'),
         config: {
           ...config,
+          ...(sourceSchemaVersion < 35 && config.enemyToken === 'DIREFACULTY' ? {
+            family: migrateSavedFacultyColor(config, loadedBoneyard.sourceSha256),
+          } : {}),
           ...(sourceSchemaVersion < 34 && config.enemyToken === 'SKELETONARCHER' ? {
             family: { ...record(config.family, `game save Archer ${index} config`), strafing: false },
           } : {}),

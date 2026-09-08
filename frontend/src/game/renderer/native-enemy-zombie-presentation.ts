@@ -1,6 +1,6 @@
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { NativeEnemyAnimationSample } from './native-enemy-animation.ts'
-import { boundedPose, finiteOrZero, layer, presentation, requiredPoint, rotatePoint, stableInteger, stableUnit, visualChoice } from './native-enemy-layers.ts'
+import { boundedPose, finiteOrZero, layer, packRgb, presentation, requiredPoint, rotatePoint, toEnemyLocalSpace, visualChoice } from './native-enemy-layers.ts'
 import type { NativeEnemyAuthoredPointResolver, NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 export function zombiePresentation(
   enemy: NativeEnemyVisualSnapshot,
@@ -11,11 +11,10 @@ export function zombiePresentation(
 ): NativeEnemyFamilyPresentation {
   const body = zombieLayers(enemy, facing, animation, authoredPoints)
   const after = enemy.rotten ? zombieFlyblownLayers(spawnAgeTicks) : []
-  if (enemy.rotten) {
-    after.push(...zombieFadeParticleLayers(enemy, spawnAgeTicks))
-  }
   return presentation(body, {
-    after,
+    after: after.map(source => toEnemyLocalSpace({ ...source,
+      offset: { x: source.offset.x, y: source.offset.y + (animation?.zombieBodyType === 3 ? -8 : 0) },
+    }, enemy.scale)),
   })
 }
 
@@ -36,38 +35,40 @@ function zombieLayers(
   const rearArmPose = animation?.zombieRearArmPose ?? 0
   const frontArmPose = animation?.zombieFrontArmPose ?? 0
   const bodyRotationRadians = animation?.zombieBodyRotationRadians ?? 0
-  const bodyScale = bodyType === 3 ? 1.15 : 1
+  const armSocketRotationRadians = animation?.zombieArmSocketRotationRadians ?? 0
+  const bodyScale = bodyType === 3 ? 1.149999976158142 : 1
   const headingRadians = enemy.headingDeg * Math.PI / 180
   const forward = bodyType === 3
     ? { x: Math.sin(headingRadians), y: -Math.cos(headingRadians) }
     : { x: 0, y: 0 }
-  const bodyRootOffset = { x: 1, y: bodyType === 3 ? -8 : 0 }
+  const bodyRootOffset = { x: 0, y: bodyType === 3 ? -8 : 0 }
   const bodyEntry = 2203 + bodyType * 18 + facing
   const bodyPoints = authoredPoints('BadGuys', bodyEntry)
-  const transformBodyPoint = (point: Readonly<{ x: number; y: number }>) => {
-    const scaled = { x: point.x * bodyScale, y: point.y * bodyScale }
-    const rotated = rotatePoint(scaled, bodyRotationRadians)
+  const transformBodyPoint = (point: Readonly<{ x: number; y: number }>, rotation: number) => {
+    const rotated = rotatePoint(point, rotation)
     return {
       x: rotated.x + bodyRootOffset.x,
       y: rotated.y + bodyRootOffset.y,
     }
   }
   const headPoint = transformBodyPoint(
-    requiredPoint(bodyPoints, 0, `Zombie body ${bodyEntry}`),
+    requiredPoint(authoredPoints('BadGuys', 2293 + facing), bodyType === 3 ? 1 : 0, 'Zombie head socket'),
+    bodyRotationRadians * .5,
   )
   const rearArmPoint = transformBodyPoint(
     requiredPoint(bodyPoints, 1, `Zombie body ${bodyEntry}`),
+    armSocketRotationRadians,
   )
   const frontArmPoint = transformBodyPoint(
     requiredPoint(bodyPoints, 2, `Zombie body ${bodyEntry}`),
+    armSocketRotationRadians,
   )
   const bodyShift = { x: forward.x * -5, y: forward.y * -5 }
-  const bodyOffset = bodyType === 3
-    ? {
-        x: bodyRootOffset.x + bodyShift.x,
-        y: bodyRootOffset.y + bodyShift.y,
-      }
-    : bodyRootOffset
+  const torsoAnchor = requiredPoint(authoredPoints('BadGuys', 2203 + facing), 0, 'Zombie torso anchor')
+  const bodyOffset = {
+    x: bodyRootOffset.x + torsoAnchor.x + bodyShift.x,
+    y: bodyRootOffset.y + torsoAnchor.y + bodyShift.y,
+  }
   const layers = [
     layer('BadGuys', 2365 + boundedPose(gaitPose, 7) * 18 + facing, 'zombie-base', {
       offset: {
@@ -129,27 +130,33 @@ function zombieLayers(
       offset: headPoint,
       rotationRadians: animation?.zombieHeadRotationRadians ?? 0,
     }))
-  return layers
+  return layers.map(source => ({ ...source,
+    offset: { x: source.offset.x / enemy.scale, y: source.offset.y / enemy.scale },
+  }))
 }
 
 function zombieFlyblownLayers(spawnAgeTicks: number): NativeEnemySpriteLayer[] {
   const rotationRadians = spawnAgeTicks * 0.25 * Math.PI / 180
   const result = [
-    layer('BadGuys', 65, 'zombie-gas-cloud:front', {
+    layer('BadGuys', 65, 'zombie-gas-cloud:puff', {
+      alpha: .5, offset: { x: 0, y: -15 }, scale: 1.5, tint: packRgb(.05, .1, .05),
+    }),
+    layer('BadGuys', 11, 'zombie-gas-cloud:front', {
       alpha: 0.5,
       offset: { x: 0, y: -15 },
       rotationRadians,
       scaleX: 1.5,
-      scaleY: 1.2,
-      tint: 0x0d1a0d,
+      scaleY: 1.2000000476837158,
+      tint: packRgb(.05, .1, .05),
     }),
-    layer('BadGuys', 65, 'zombie-gas-cloud:mirrored', {
+    layer('BadGuys', 11, 'zombie-gas-cloud:mirrored', {
       alpha: 0.5,
+      blendMode: 'add',
       offset: { x: 0, y: -20 },
       rotationRadians,
       scaleX: -1.5,
-      scaleY: 1.2,
-      tint: 0x0d1a0d,
+      scaleY: 1.2000000476837158,
+      tint: packRgb(.05, .1, .05),
     }),
   ]
   let state = createNativeRng(Math.floor(spawnAgeTicks / 10))
@@ -166,47 +173,16 @@ function zombieFlyblownLayers(spawnAgeTicks: number): NativeEnemySpriteLayer[] {
     state = angle.state
     const verticalBase = drawNativeFloat(state, 10)
     state = verticalBase.state
-    const finalRadius = (radius.value + 1) * (doubled.value === 3 ? 2 : 1)
+    const finalRadius = (radius.value + 10) * (doubled.value === 3 ? 2 : 1)
     const radians = angle.value * Math.PI / 180
     result.push(layer('BadGuys', 26, `zombie-fly:${index}`, {
       alpha: alpha.value + 0.25,
+      tint: 0,
       offset: {
-        x: Math.cos(radians) * finalRadius,
-        y: Math.sin(radians) * finalRadius * 0.8 - verticalBase.value - 15,
+        x: Math.sin(radians) * finalRadius,
+        y: -Math.cos(radians) * finalRadius * .800000011920929 - verticalBase.value - 15,
       },
     }))
-  }
-  return result
-}
-
-function zombieFadeParticleLayers(
-  enemy: NativeEnemyVisualSnapshot,
-  spawnAgeTicks: number,
-): NativeEnemySpriteLayer[] {
-  const fixedAge = Math.floor(spawnAgeTicks)
-  const result: NativeEnemySpriteLayer[] = []
-  for (let age = 0; age < Math.min(40, fixedAge + 1); age += 1) {
-    const emissionAge = Math.max(0, fixedAge - age)
-    if (stableInteger(enemy, emissionAge, 75, 210) !== 3) continue
-    const angle = stableUnit(enemy, 211, emissionAge) * Math.PI * 2
-    const radius = stableUnit(enemy, 212, emissionAge) * 20
-    const velocityAngle = stableUnit(enemy, 213, emissionAge) * Math.PI * 2
-    const velocity = 0.25 + stableUnit(enemy, 214, emissionAge) * 0.75
-    result.push(layer(
-      'BadGuys',
-      10 + stableInteger(enemy, emissionAge, 2, 215),
-      `zombie-fade-particle:${emissionAge}`,
-      {
-        alpha: Math.sin((1 - age / 40) * Math.PI / 2),
-        blendMode: 'add',
-        offset: {
-          x: 1 + Math.cos(angle) * radius + Math.cos(velocityAngle) * velocity * age,
-          y: -15 + Math.sin(angle) * radius + Math.sin(velocityAngle) * velocity * age,
-        },
-        rotationRadians: velocityAngle,
-        scale: 0.5 + stableUnit(enemy, 216, emissionAge) * 0.5,
-      },
-    ))
   }
   return result
 }

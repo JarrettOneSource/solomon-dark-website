@@ -1,7 +1,7 @@
 import { NATIVE_IMP_BODY_POSE_COUNT, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import type { NativeEnemyAnimationSample } from './native-enemy-animation.ts'
-import { boundedPose, boundedUnit, finiteOrZero, layer, nativeEnemyFacingBucket, positiveModulo, presentation, stableInteger, stableUnit, visualChoice } from './native-enemy-layers.ts'
+import { boundedPose, boundedUnit, finiteOrZero, layer, nativeEnemyFacingBucket, positiveModulo, presentation, visualChoice } from './native-enemy-layers.ts'
 import type { NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 export function portalLayers(
   animation: NativeEnemyAnimationSample | undefined,
@@ -33,22 +33,13 @@ export function portalLayers(
 export function wraithPresentation(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  spawnAgeTicks: number,
-  animation: NativeEnemyAnimationSample | undefined,
 ): NativeEnemyFamilyPresentation {
   const body = [layer('BadGuys', 2070 + facing, 'wraith-body', {
-    offset: { x: 0, y: 15 },
+    blendMode: 'add',
+    offset: { x: 0, y: 15 / enemy.scale },
     scale: 2,
   })]
-  return presentation(body, {
-    after: enemy.burning
-      ? wraithWispLayers(
-          enemy,
-          spawnAgeTicks,
-          animation?.state === 'action' ? animation.actionProgress : -1,
-        )
-      : [],
-  })
+  return presentation(body)
 }
 
 export function impLayers(
@@ -66,7 +57,7 @@ export function impLayers(
     ?? visualChoice(enemy, 2, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT)
   return [
     layer(enemy.nativeTypeId === 2044 ? 'Unholy' : 'BadGuys', (enemy.nativeTypeId === 2044 ? 41 : 285) + pose * 12 + facing, 'imp-body', {
-      blendMode: enemy.nativeTypeId === 2044 ? 'add' : 'normal',
+      blendMode: 'add',
       rotationRadians: animation?.impBodyRotationRadians ?? 0,
     }),
     layer(
@@ -74,44 +65,14 @@ export function impLayers(
       (enemy.nativeTypeId === 2044 ? 89 : 333) + boundedPose(upperFrame, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT - 1),
       'imp-upper-effect',
       {
-        blendMode: enemy.nativeTypeId === 2044 ? 'add' : 'normal',
+        blendMode: 'add',
         alpha: animation && animation.impEffectFrame >= 0
           ? animation.impEffectAlpha
           : 0,
-        offset: { x: 0, y: -10 },
+        offset: { x: 0, y: -10 / enemy.scale },
       },
     ),
   ]
-}
-
-function wraithWispLayers(
-  enemy: NativeEnemyVisualSnapshot,
-  spawnAgeTicks: number,
-  actionProgress: number,
-): NativeEnemySpriteLayer[] {
-  const result: NativeEnemySpriteLayer[] = []
-  const fixedAge = Math.floor(spawnAgeTicks)
-  const actionAge = Math.floor(finiteOrZero(actionProgress))
-  for (let age = 0; age < Math.min(20, fixedAge + 1); age += 1) {
-    const emissionAge = Math.max(0, fixedAge - age)
-    if (
-      !(actionProgress >= 0 && age <= actionAge)
-      && stableInteger(enemy, emissionAge, 4, 120) !== 1
-    ) continue
-    const angle = stableUnit(enemy, 121, emissionAge) * Math.PI * 2
-    const alpha = (0.25 + stableUnit(enemy, 122, emissionAge) * 0.5)
-      * (1 - age / 20)
-    const radius = 15 + age * 0.45
-    result.push(layer('BadGuys', 21, `wraith-soul-wisp:${emissionAge}`, {
-      alpha,
-      blendMode: 'add',
-      offset: {
-        x: -Math.cos(angle) * radius,
-        y: -15 - Math.sin(angle) * radius - age * 0.2,
-      },
-    }))
-  }
-  return result
 }
 
 export function coffinSampleLayers(

@@ -132,6 +132,16 @@ function stepDeathEffect(
   const ageTicks = Math.max(0, tick - source.spawnTick)
   if (ageTicks >= source.lifetimeTicks) return null
 
+  if (source.kind === 'move-fade-sin') {
+    const framePhase = Math.fround(source.framePhase + source.frameVelocity)
+    if (framePhase >= 180) return null
+    return {
+      ...source, ageTicks, framePhase, lastStepTick: tick,
+      alpha: Math.min(1, Math.fround(Math.sin(Math.fround(framePhase * Math.fround(Math.PI) / 180)) * source.alphaMultiplier)),
+      position: { x: Math.fround(source.position.x + source.velocity.x), y: Math.fround(source.position.y + source.velocity.y) },
+    }
+  }
+
   if (source.kind === 'bouncer' || source.kind === 'smoky-bouncer' || source.kind === 'black-smoky-bouncer') {
     const skipsAirborneMotion = source.height < 0 && tick % 3 === 0
     const position = skipsAirborneMotion
@@ -209,9 +219,7 @@ function stepDeathEffect(
       rotationDeg: Math.fround(Math.sin(phaseDeg * Math.PI / 180) * oscillation.amplitudeDeg) }
   }
 
-  const opacityTimer = source.kind === 'move-fade-perspective'
-    ? Math.fround(source.opacityTimer - source.alphaLossPerTick)
-    : source.opacityTimer - source.alphaLossPerTick
+  const opacityTimer = Math.fround(source.opacityTimer - source.alphaLossPerTick)
   if (opacityTimer <= 0) return null
   let entry = source.entry
   let framePhase = source.framePhase

@@ -11,7 +11,7 @@ import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-
 import { NATIVE_ENEMY_ACTION_PROGRAMS, nativeEnemyActionFrame, nativeEnemyIdleAnimationSample } from './native-enemy-animation.ts'
 import { NATIVE_IMP_LANDING_FLARE_TICKS, nativeDemonBombMuzzleOrigin, nativeEnemyRawFireBurstPainterPolicy, nativeEnemyRawFireBurstSample, nativeImpContactBurstOrigin, nativeImpLandingFlarePainterPolicy, nativeImpLandingFlareSample } from './native-enemy-attack-effect.ts'
 import { nativeEnemyDeathEffectBypassesWorldTint, nativeEnemyDeathEffectPainterLane, nativeEnemyDeathEffectPainterLayer, nativeEnemyDeathEffectPlan, nativeEnemyDeathEffectViewResourcePlan, nativeEnemyDeathEffectVisualBounds } from './native-enemy-death-effect-presentation.ts'
-import { nativeEnemyFacingBucket } from './native-enemy-layers.ts'
+import { nativeEnemyFacingBucket, packRgb } from './native-enemy-layers.ts'
 import type { NativeEnemyAtlas, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 import { NATIVE_ENEMY_FAMILIES } from './native-enemy-presentation-model.ts'
 import { applyAuthoritativeSample, nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan, nativeEnemyPainterLayer, nativeEnemyViewPlanInputsEqual } from './native-enemy-presentation.ts'
@@ -27,10 +27,11 @@ const geometryManifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
 function nativeEnemyPresentationPlan(
   snapshot: NativeEnemyVisualSnapshot,
   tick: number,
+  applicationTick = tick,
 ) {
   return buildNativeEnemyPresentationPlan(snapshot, tick, (atlas, entry) => (
     geometryManifests[atlas].entries[entry]?.extras ?? []
-  ))
+  ), true, applicationTick)
 }
 
 function manifest(relativePath: string): AtlasManifest {
@@ -585,10 +586,10 @@ test('Zombie keeps its native constructor selectors independent', () => {
   ])
   assert.deepEqual(plan.layers.map((layer) => layer.offset), [
     { x: 0, y: 0 },
-    { x: 1, y: 0 },
-    { x: -11.5, y: -17.5 },
-    { x: 9.5, y: -20.5 },
-    { x: 1, y: -8.5 },
+    { x: 0, y: -8.5 },
+    { x: -12.5, y: -17.5 },
+    { x: 8.5, y: -20.5 },
+    { x: -1, y: -23.5 },
   ])
 
   const rottenComponents = nativeEnemyPresentationPlan({
@@ -605,6 +606,24 @@ test('Zombie keeps its native constructor selectors independent', () => {
     rottenComponents.map(({ entry }) => entry),
     entries,
   )
+})
+
+test('all Zombie body banks use independent head and arm sockets in world space', () => {
+  for (let bodyType = 0; bodyType < 4; bodyType += 1) for (let facing = 0; facing < 18; facing += 1) {
+    const plan = nativeEnemyPresentationPlan({ ...enemy('ZOMBIE'), scale: 2, headingDeg: facing * 20,
+      animation: nativeEnemyIdleAnimationSample({ zombieBodyType: bodyType, zombieHeadType: 3,
+        zombieBodyRotationRadians: Math.PI / 6, zombieArmSocketRotationRadians: -Math.PI / 9 }),
+    }, 100)
+    const head = geometryManifests.BadGuys.entries[2293 + facing]!.extras![bodyType === 3 ? 1 : 0]!
+    const arm = geometryManifests.BadGuys.entries[2203 + bodyType * 18 + facing]!.extras![1]!
+    const rootY = bodyType === 3 ? -8 : 0
+    const headLayer = plan.layers.find(layer => layer.role === 'zombie-head')!
+    const armLayer = plan.layers.find(layer => layer.role === 'zombie-arm-rear')!
+    assert.ok(Math.abs(headLayer.offset.x * 2 - (head.x * Math.cos(Math.PI / 12) - head.y * Math.sin(Math.PI / 12))) < 1e-9)
+    assert.ok(Math.abs(headLayer.offset.y * 2 - (rootY + head.x * Math.sin(Math.PI / 12) + head.y * Math.cos(Math.PI / 12))) < 1e-9)
+    assert.ok(Math.abs(armLayer.offset.x * 2 - (arm.x * Math.cos(-Math.PI / 9) - arm.y * Math.sin(-Math.PI / 9))) < 1e-9)
+    assert.ok(Math.abs(armLayer.offset.y * 2 - (rootY + arm.x * Math.sin(-Math.PI / 9) + arm.y * Math.cos(-Math.PI / 9))) < 1e-9)
+  }
 })
 
 test('Zombie BODY TYPE 1 owns body/head bank three and both scaled overlays', () => {
@@ -629,7 +648,7 @@ test('Zombie BODY TYPE 1 owns body/head bank three and both scaled overlays', ()
     ])
     assert.deepEqual(
       plan.layers.slice(1, 6).map(({ scale }) => scale),
-      [1.15, 1.15, 1.15, 1.15, 1.15],
+      new Array(5).fill(1.149999976158142),
     )
     assert.equal(plan.layers[0]!.scale, 2)
     assert.equal(plan.layers[6]!.scale, 1)
@@ -646,8 +665,8 @@ test('Zombie BODY TYPE 1 owns body/head bank three and both scaled overlays', ()
   }, 100)
   assert.equal(shifted.layers[0]!.offset.x, 4)
   assert.ok(Math.abs(shifted.layers[0]!.offset.y + 1) < 1e-12)
-  assert.ok(Math.abs(shifted.layers[1]!.offset.x + 4) < 1e-12)
-  assert.ok(Math.abs(shifted.layers[1]!.offset.y + 8) < 1e-12)
+  assert.ok(Math.abs(shifted.layers[1]!.offset.x + 9) < 1e-12)
+  assert.ok(Math.abs(shifted.layers[1]!.offset.y + 20) < 1e-12)
 })
 
 test('Wraith, Demon, and Coffin preserve their native spawn compositions', () => {
@@ -967,7 +986,7 @@ test('Skeleton mace, flail, and pike own their native auxiliary records and geom
   const maceHead = mace.layers.find(({ role }) => role === 'skeleton-mace-head')
   assert.deepEqual(
     maceHead && { entry: maceHead.entry, offset: maceHead.offset },
-    { entry: 46, offset: { x: 30, y: -13.5 } },
+    { entry: 46, offset: { x: 30, y: -13.5 + mace.layers.find(({ role }) => role === 'skeleton-weapon')!.offset.y } },
   )
 
   const flail = nativeEnemyPresentationPlan({
@@ -981,11 +1000,13 @@ test('Skeleton mace, flail, and pike own their native auxiliary records and geom
   assert.equal(flail.layers.find(({ role }) => role === 'skeleton-flail-head')?.entry, 46)
   assert.deepEqual(flail.segments, [{
     alpha: 1,
+    beforeRole: 'skeleton-flail-head',
+    blendMode: 'normal',
     end: { x: -11.5, y: -90 },
     role: 'skeleton-flail-chain',
     start: { x: -1, y: -76.5 },
-    tint: 0x777777,
-    width: 1.5,
+    tint: 0x3f3f3f,
+    width: 3,
   }])
 
   const pike = nativeEnemyPresentationPlan({
@@ -997,10 +1018,84 @@ test('Skeleton mace, flail, and pike own their native auxiliary records and geom
     }),
   }, 100)
   const shaft = pike.layers.find(({ role }) => role === 'skeleton-pike-shaft')
-  assert.equal(shaft?.entry, 56)
-  assert.equal(shaft?.rotationRadians, Math.PI / 2)
-  assert.equal(shaft?.scaleX, 1)
-  assert.equal(shaft?.scaleY, 64 / 136)
+  assert.equal(shaft?.entry, 54)
+  assert.deepEqual(shaft?.stretch, {
+    start: geometryManifests.BadGuys.entries[1027]!.extras![0],
+    end: geometryManifests.BadGuys.entries[1027]!.extras![1],
+  })
+  assert.equal(shaft?.scaleX, 7 / 8)
+  assert.ok(pike.layers.indexOf(shaft!) < pike.layers.findIndex(({ role }) => role === 'skeleton-body'))
+})
+
+test('Skeleton pike follows native sockets and a retained target at every art scale', () => {
+  for (const scale of [.5, 1, 2]) {
+    const plan = nativeEnemyPresentationPlan({ ...enemy('SKELETON', ['FLAG_PIKE']), scale,
+      animation: nativeEnemyIdleAnimationSample({ pikeTargetOffset: { x: -70, y: 30 } }),
+    }, 100)
+    const shaft = plan.layers.find(({ role }) => role === 'skeleton-pike-shaft')!
+    assert.equal(shaft.entry, 56)
+    assert.deepEqual({ x: shaft.stretch!.start.x * scale, y: shaft.stretch!.start.y * scale }, { x: -70, y: 5 })
+    const point = geometryManifests.BadGuys.entries[991]!.extras![1]!
+    assert.deepEqual({ x: shaft.stretch!.end.x * scale, y: shaft.stretch!.end.y * scale }, point)
+    assert.equal(shaft.scaleX! * scale * 8, 7)
+  }
+})
+
+test('Skeleton body bob and headgear offsets stay in world units as art scales', () => {
+  const source = { ...enemy('SKELETON', ['FLAG_MACE']),
+    animation: nativeEnemyIdleAnimationSample({ stridePhaseDeg: 90 }),
+  }
+  const native = nativeEnemyPresentationPlan(source, 100)
+  for (const scale of [.5, 2]) {
+    const scaled = nativeEnemyPresentationPlan({ ...source, scale }, 100)
+    for (const expected of native.layers) {
+      const part = scaled.layers.find(({ role }) => role === expected.role)!
+      assert.equal(part.offset.y * scale, expected.offset.y, expected.role)
+      assert.equal(part.offset.x * scale, expected.offset.x, expected.role)
+    }
+    assert.equal(scaled.layers.find(({ role }) => role === 'skeleton-mace-head')!.scale * scale, 1)
+  }
+})
+
+test('Flail head follows body gait and both native idle choices retain their painter order', () => {
+  const source = { ...enemy('SKELETON', ['FLAG_FLAIL']), animation: nativeEnemyIdleAnimationSample({
+    bodyPose: 1, bodyGaitPhase: 1,
+  }) }
+  const moving = nativeEnemyPresentationPlan(source, 100)
+  const head = moving.layers.find(({ role }) => role === 'skeleton-flail-head')!
+  const point = geometryManifests.BadGuys.entries[865]!.extras![1]!
+  assert.deepEqual(head.offset, { x: point.x - 3, y: point.y })
+  assert.ok(moving.layers.indexOf(head) < moving.layers.findIndex(({ role }) => role === 'skeleton-body'))
+  const choices = new Set<boolean>()
+  for (let id = 1; id <= 32; id += 1) {
+    const sample = { ...source, id, animation: nativeEnemyIdleAnimationSample() }
+    const first = nativeEnemyPresentationPlan(sample, 100)
+    const second = nativeEnemyPresentationPlan(sample, 101)
+    const start = geometryManifests.BadGuys.entries[847]!.extras![0]!
+    const before = first.layers.find(({ role }) => role === 'skeleton-flail-head')!
+    const after = second.layers.find(({ role }) => role === 'skeleton-flail-head')!
+    const orbits = before.offset.x !== after.offset.x || before.offset.y !== after.offset.y
+    choices.add(orbits)
+    if (orbits) {
+      const radians = (id * 35 - 100 * 10) * Math.PI / 180
+      assert.deepEqual(before.offset, { x: start.x + Math.sin(radians) * 20,
+        y: start.y - Math.cos(radians) * 20 * .800000011920929 })
+      assert.ok(first.layers.indexOf(before) > first.layers.findIndex(({ role }) => role === 'skeleton-weapon'))
+      assert.equal(nativeEnemyViewPlanInputsEqual(sample, 100, structuredClone(sample), 101), false)
+    }
+  }
+  assert.deepEqual(choices, new Set([false, true]))
+  const burning = nativeEnemyPresentationPlan({ ...source, burning: true,
+    animation: { ...source.animation, hitFlash: .5 },
+  }, 100)
+  assert.equal(burning.segments.length, 6)
+  for (const segment of burning.segments) {
+    assert.ok(burning.layers.some(({ role }) => role === segment.beforeRole))
+    assert.equal(segment.blendMode, segment.role.includes('burn-glow') ? 'add' : 'normal')
+  }
+  const tint = (role: string) => burning.layers.find(part => part.role === role)!.tint
+  assert.equal(tint('skeleton-flail-head:burn-glow-1'), tint('skeleton-body'))
+  assert.equal(tint('skeleton-limbs:burn-glow-2'), tint('skeleton-body'))
 })
 
 test('Archer action bodies attach only the configured native held elemental arrow', () => {
@@ -1071,7 +1166,7 @@ test('Archer elemental tips persist outside release pose at the authored point m
       blendMode: 'add',
       entry: 276,
       offset: { x: -1, y: -38 },
-      tint: 0x008000,
+      tint: 0x007f00,
     },
   )
 
@@ -1109,17 +1204,17 @@ test('burning Archer uses three articulated color passes and two bounded fire ch
 
   const baseBody = plan.layers.find(({ role }) => role === 'archer-body')!
   assert.equal(baseBody.blendMode, 'normal')
-  assert.equal(baseBody.tint >>> 16, 0xff)
-  assert.equal(baseBody.tint & 0xff, 0)
-  assert.ok(((baseBody.tint >>> 8) & 0xff) <= 0x80)
+  assert.ok((baseBody.tint >>> 16) < 255)
+  assert.ok((baseBody.tint & 0xff) > 0)
+  assert.ok([127, 128].includes((baseBody.tint >>> 16) - (baseBody.tint & 0xff)))
 
   const glow = plan.layers.filter(({ role }) => role.includes(':burn-glow-'))
   assert.equal(glow.length, 6)
   assert.ok(glow.every(({ blendMode, tint }) => (
     blendMode === 'add'
-    && tint >>> 16 === 0xff
-    && (tint & 0xff) === 0
-    && ((tint >>> 8) & 0xff) >= 0x40
+    && (tint & 0xff) > 0
+    && [127, 128].includes((tint >>> 16) - (tint & 0xff))
+    && ((tint >>> 8) & 0xff) - (tint & 0xff) >= 31
   )))
   assert.equal(new Set(glow.map(({ tint }) => tint)).size, 1)
 
@@ -1175,8 +1270,8 @@ test('Mage charge and cloak presentation enumerate every native recipe selector'
     state: 'action',
   })
   const expected = [
-    ['FLAG_CASTFIRE', [261, 261, 261, 261]],
-    ['FLAG_CASTLIGHTNING', [1838, 1838, 1838, 1838]],
+    ['FLAG_CASTFIRE', [261, 261, 70, 70]],
+    ['FLAG_CASTLIGHTNING', [1836, 1838, 70, 70]],
     ['FLAG_CASTFROST', [381, 381]],
     ['FLAG_CASTPOISON', [382, 382]],
   ] as const
@@ -1188,14 +1283,15 @@ test('Mage charge and cloak presentation enumerate every native recipe selector'
     }, 130)
     const charge = plan.layers.filter(({ role }) => role.includes('-charge:'))
     assert.deepEqual(charge.map(({ entry }) => entry), entries, flag)
-    assert.ok(charge.every(({ alpha }) => alpha <= 0.25), flag)
+    assert.ok(charge.every(({ alpha, entry }) => alpha === (entry === 70 ? 1 : .25)), flag)
   }
 
   const cloak = nativeEnemyPresentationPlan({
     ...enemy('SKELETONMAGE'),
     mageCloak: true,
   }, 100)
-  assert.equal(cloak.layers.find(({ role }) => role === 'mage-body')?.entry, 1459)
+  assert.equal(cloak.layers.find(({ role }) => role === 'mage-body')?.entry, 1729)
+  assert.equal(cloak.layers.find(({ role }) => role === 'mage-cloak')?.entry, 1459)
 })
 
 test('Rotten Zombie owns the exact two-cloud transform and private-seeded fly swarm', () => {
@@ -1210,8 +1306,9 @@ test('Rotten Zombie owns the exact two-cloud transform and private-seeded fly sw
   assert.deepEqual(gas.map(({ alpha, entry, scaleX, scaleY, tint }) => ({
     alpha, entry, scaleX, scaleY, tint,
   })), [
-    { alpha: 0.5, entry: 65, scaleX: 1.5, scaleY: 1.2, tint: 0x0d1a0d },
-    { alpha: 0.5, entry: 65, scaleX: -1.5, scaleY: 1.2, tint: 0x0d1a0d },
+    { alpha: 0.5, entry: 65, scaleX: undefined, scaleY: undefined, tint: 0x0c190c },
+    { alpha: 0.5, entry: 11, scaleX: 1.5, scaleY: 1.2000000476837158, tint: 0x0c190c },
+    { alpha: 0.5, entry: 11, scaleX: -1.5, scaleY: 1.2000000476837158, tint: 0x0c190c },
   ])
   assert.ok(flies.length >= 5 && flies.length <= 20)
   assert.ok(flies.every(({ alpha, entry }) => entry === 26 && alpha >= 0.25 && alpha <= 0.75))
@@ -1226,55 +1323,7 @@ test('Rotten Zombie owns the exact two-cloud transform and private-seeded fly sw
   )
 })
 
-test('Zombie and Mage retain their low-frequency native record-10/11 transient membership', () => {
-  const zombieEntries = new Set<number>()
-  const mageEntries = new Set<number>()
-  for (let id = 1; id <= 24; id += 1) {
-    const zombie = { ...enemy('ZOMBIE', ['FLAG_ROTTEN']), id }
-    const mage = {
-      ...enemy('SKELETONMAGE'),
-      animation: nativeEnemyIdleAnimationSample({
-        action: 'mage-cast-long',
-        actionProgress: 5,
-        state: 'action',
-      }),
-      id,
-    }
-    for (let tick = 100; tick <= 180; tick += 10) {
-      for (const layer of nativeEnemyPresentationPlan(zombie, tick).layers) {
-        if (layer.role.startsWith('zombie-fade-particle:')) {
-          assert.equal(layer.blendMode, 'add')
-          zombieEntries.add(layer.entry)
-        }
-      }
-      for (const layer of nativeEnemyPresentationPlan(mage, tick).layers) {
-        if (layer.role.startsWith('mage-cast-particle:')) {
-          assert.equal(layer.blendMode, 'add')
-          mageEntries.add(layer.entry)
-        }
-      }
-    }
-  }
-  assert.deepEqual([...zombieEntries].sort(), [10, 11])
-  assert.deepEqual([...mageEntries].sort(), [10, 11])
-})
-
-test('Wraith wisps and Demon flames remain independent ambient members around body redraws', () => {
-  const wraith = nativeEnemyPresentationPlan({
-    ...enemy('WRAITH', ['FLAG_BURNING']),
-    animation: nativeEnemyIdleAnimationSample({
-      action: 'wraith-drain',
-      hitFlash: 0.75,
-      state: 'action',
-    }),
-  }, 120)
-  const wisps = wraith.layers.filter(({ role }) => role.startsWith('wraith-soul-wisp:'))
-  assert.ok(wisps.length > 0)
-  assert.ok(wisps.every(({ atlas, blendMode, entry }) => (
-    atlas === 'BadGuys' && blendMode === 'add' && entry === 21
-  )))
-  assert.ok(wraith.layers.every(({ role }) => !role.startsWith('hit:wraith-soul-wisp:')))
-
+test('Demon flames remain independent ambient members around body redraws', () => {
   const demonStart = nativeEnemyPresentationPlan(enemy('DEMON'), 100)
   const demonNext = nativeEnemyPresentationPlan(enemy('DEMON'), 104)
   const startFlames = demonStart.layers.filter(({ role }) => role.startsWith('demon-flame:'))
@@ -1353,7 +1402,7 @@ test('common native hit redraw covers every survival family body membership', ()
     const hit = plan.layers.filter(({ role }) => role.startsWith('hit:'))
     assert.equal(hit.length, expectedHitLayers[family], family)
     assert.ok(hit.every(({ alpha, blendMode, textureColor, tint }) => (
-      alpha === 0.5 && blendMode === 'normal' && textureColor === 'diffuse'
+      alpha === 0.5 && blendMode === (family === 'IMP' || family === 'WRAITH' ? 'add' : 'normal') && textureColor === 'diffuse'
       && (tint & 0xffff) === 0 && tint <= 0xa50000
     )), family)
   }
@@ -1507,6 +1556,7 @@ test('Wraith opacity and Zombie articulation are sampled rather than wall-clock 
       state: 'locomotion',
       zombieAngularOffsetDeg: 20,
       zombieBodyRotationRadians: -0.15,
+      zombieArmSocketRotationRadians: -.075,
       zombieBodyType: 0,
       zombieFrontArmPose: 2,
       zombieFrontArmRotationRadians: -0.4,
@@ -1522,18 +1572,18 @@ test('Wraith opacity and Zombie articulation are sampled rather than wall-clock 
   assert.equal(zombie.layers[2].entry, 2114)
   assert.equal(zombie.layers[2].rotationRadians, 0.25)
   assert.deepEqual(zombie.layers[2].offset, {
-    x: -14.992224795114133,
-    y: -18.8214969145001,
+    x: -13 * Math.cos(-.075) + 21 * Math.sin(-.075),
+    y: -13 * Math.sin(-.075) - 21 * Math.cos(-.075),
   })
   assert.equal(zombie.layers[3].entry, 2186)
   assert.equal(zombie.layers[3].rotationRadians, -0.4)
   assert.deepEqual(zombie.layers[3].offset, {
-    x: 6.220282238963552,
-    y: -18.993384462637554,
+    x: 8 * Math.cos(-.075) + 18 * Math.sin(-.075),
+    y: 8 * Math.sin(-.075) - 18 * Math.cos(-.075),
   })
   assert.deepEqual(zombie.layers[4].offset, {
-    x: -1.2589952039616357,
-    y: -8.255116029982759,
+    x: -.5 * Math.cos(-.075) + 24 * Math.sin(-.075),
+    y: -.5 * Math.sin(-.075) - 24 * Math.cos(-.075),
   })
   assert.equal(zombie.layers[4].rotationRadians, 0.35)
 })
@@ -1875,6 +1925,117 @@ test('Faculty selects all nine robe poses, every facing, both head banks, and th
           assert.ok(plan.layers.every(({ entry }) => geometryManifests.Faculty.entries[entry]?.empty === false))
         }
       }
+    }
+  }
+})
+
+test('Mage cloak preserves the torso and both authored hand sockets', () => {
+  for (let facing = 0; facing < 18; facing += 1) {
+    for (let bodyPose = 0; bodyPose < 5; bodyPose += 1) {
+      const plan = nativeEnemyPresentationPlan({ ...enemy('SKELETONMAGE'), mageCloak: true,
+        headingDeg: facing * 20, animation: nativeEnemyIdleAnimationSample({ bodyPose }),
+      }, 130)
+      const cloak = geometryManifests.BadGuys.entries[1459 + facing]!
+      assert.deepEqual(plan.layers.map(({ role, entry }) => [role, entry]), [
+        ['mage-limbs', 1585 + facing],
+        ...(cloak.extras![0]!.x < 0
+          ? [['mage-cloak', 1459 + facing], ['mage-body', 1729 + bodyPose * 18 + facing]]
+          : [['mage-body', 1729 + bodyPose * 18 + facing], ['mage-cloak', 1459 + facing]]),
+        ['mage-headgear', 1477 + facing],
+      ])
+    }
+  }
+})
+
+test('Mage charging uses the native fixed-size sheets, hand glows, and suppression gate', () => {
+  for (const mageElement of ['fire', 'lightning', 'frost', 'poison'] as const) {
+    for (const scale of [.5, 1, 2]) {
+      for (const charge of [.25, 1]) {
+        const source = { ...enemy('SKELETONMAGE'), mageElement, scale, mageCloak: true,
+          lighting: { charge, glow: 0, providerCopies: 1 as const },
+          animation: nativeEnemyIdleAnimationSample({ bodyPose: 2 }),
+        }
+        const plan = nativeEnemyPresentationPlan(source, 130)
+        const hands = geometryManifests.BadGuys.entries[1765]!.extras!
+        const draws = plan.layers.filter(({ role }) => role.startsWith(`mage-${mageElement}-charge:`))
+        assert.equal(draws.length, mageElement === 'fire' || mageElement === 'lightning' ? 4 : 2)
+        for (const [index, draw] of draws.slice(0, 2).entries()) {
+          assert.equal(draw.alpha, charge * charge)
+          assert.equal(draw.blendMode, 'add')
+          assert.deepEqual({ x: draw.offset.x * scale, y: draw.offset.y * scale },
+            { x: hands[index]!.x, y: hands[index]!.y - 5 })
+          assert.equal(draw.scale * scale, mageElement === 'fire' ? 1.25 : mageElement === 'lightning' ? .5 : 1)
+        }
+        if (mageElement === 'fire' || mageElement === 'lightning') {
+          assert.ok(draws.slice(2).every(draw => draw.entry === 70 && draw.alpha === 1))
+        } else {
+          assert.ok(draws.every(draw => draw.rotationRadians === Math.PI / 3))
+        }
+        const suppressed = nativeEnemyPresentationPlan({ ...source,
+          animation: { ...source.animation, mageChargeSuppressed: true },
+        }, 130)
+        assert.ok(suppressed.layers.every(({ role }) => !role.includes('-charge:')))
+      }
+    }
+  }
+})
+
+test('Imp siblings and Wraith keep additive art and world offsets at non-unit scale', () => {
+  for (const nativeTypeId of [1004, 1005, 2044]) {
+    const plan = nativeEnemyPresentationPlan({ ...enemy('IMP'), nativeTypeId, scale: 2,
+      animation: nativeEnemyIdleAnimationSample({ verticalOffset: -4, impEffectAlpha: 1, impEffectFrame: 0 }),
+    }, 130)
+    assert.ok(plan.layers.every(({ blendMode }) => blendMode === 'add'))
+    assert.deepEqual(plan.layers.map(({ offset }) => offset.y * 2), [-4, -14])
+  }
+  const wraith = nativeEnemyPresentationPlan({ ...enemy('WRAITH'), scale: 2 }, 130)
+  assert.equal(wraith.layers[0]!.blendMode, 'add')
+  assert.equal(wraith.layers[0]!.offset.y * 2, 15)
+})
+
+test('Faculty art and bob ignore recipe scale and use twice its native phase', () => {
+  const source = enemy('DIREFACULTY')
+  for (const scale of [.5, 1, 2]) {
+    const plan = nativeEnemyPresentationPlan({ ...source, scale,
+      faculty: { ...source.faculty!, lightPhase: 45 },
+    }, 130)
+    assert.equal(plan.layers[0]!.offset.y, -7)
+    assert.equal(plan.rootScale, 1)
+    assert.equal(plan.layers[0]!.scale, 1.0499999523162842)
+  }
+})
+
+test('native color packing truncates channels before the enemy draw', () => {
+  assert.equal(packRgb(.25, .5, .75), 0x3f7fbf)
+  assert.equal(packRgb(-1, 1, 2), 0x00ffff)
+})
+
+test('Mage lightning sheets use the application clock while frost follows actor age', () => {
+  const source = { ...enemy('SKELETONMAGE'), mageElement: 'lightning' as const,
+    animation: nativeEnemyIdleAnimationSample(), lighting: { charge: 1, glow: 0, providerCopies: 1 as const },
+  }
+  const entries = (tick: number, applicationTick: number) => nativeEnemyPresentationPlan(source, tick, applicationTick)
+    .layers.filter(({ role }) => role.endsWith(':sheet')).map(({ entry }) => entry)
+  assert.deepEqual(entries(100, 0), [1836, 1838])
+  assert.deepEqual(entries(100, 7), [1836, 1838])
+  assert.deepEqual(entries(100, 8), [1837, 1839])
+  assert.deepEqual(entries(200, 8), [1837, 1839])
+  assert.equal(nativeEnemyViewPlanInputsEqual(source, 100, structuredClone(source), 100, 7, 8), false)
+  const frost = { ...source, mageElement: 'frost' as const }
+  assert.deepEqual(nativeEnemyPresentationPlan(frost, 130, 8).layers,
+    nativeEnemyPresentationPlan(frost, 130, 999).layers)
+})
+
+test('Coffin and Spider body geometry ignores the actor recipe scale', () => {
+  for (const family of ['COFFIN', 'SPIDER'] as const) {
+    const source = { ...enemy(family), animation: nativeEnemyIdleAnimationSample({
+      spider: family === 'SPIDER' ? { bodyHeadingDeg: 0, outlineAlpha: 0, outlineTint: 0 } : null,
+    }) }
+    const native = nativeEnemyPresentationPlan(source, 130)
+    for (const scale of [.5, 2]) {
+      const plan = nativeEnemyPresentationPlan({ ...source, scale }, 130)
+      assert.equal(plan.rootScale, 1)
+      assert.deepEqual(plan.layers, native.layers)
     }
   }
 })

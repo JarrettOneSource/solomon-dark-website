@@ -4,6 +4,7 @@ import { NATIVE_LANTERN_LIGHT_BASE_INTENSITY, NATIVE_LANTERN_LIGHT_FLICKER, NATI
 import { nativeRandomFloatFromSemanticWord, nativeRandomIntFromSemanticWord, nativeSignedRandomFloatFromSemanticWords } from './native-random-domain.ts'
 import type { NativeSecondaryActorState } from './native-secondary-abilities.ts'
 import type { NativeWeldEtherealBoulderState, NativeWeldHailstonesState, NativeWeldMeteorActorState, NativeWeldProjectileState } from './native-weld-primary-runtime.ts'
+import type { NativeWorldManagerRegistration } from './native-world-manager-order.ts'
 export {
   NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
@@ -494,7 +495,7 @@ export function nativeEnemyProjectileEffectLightProvider(
   pointGain = 1,
 ): NativeBoneyardLightProviderCandidate | null {
   if (effect.kind === 'demon-fire' || effect.kind === 'demon-explosion-lit-array') {
-    if (effect.kind === 'demon-fire' && effect.ageTicks === 0) return null
+    if (effect.kind === 'demon-fire' && (effect.ageTicks === 0 || effect.lightRegistration === null)) return null
     return {
       lane: effect.kind === 'demon-fire' ? 'actor' : 'transient',
       source: effect.kind === 'demon-fire'
@@ -521,6 +522,7 @@ export function nativeEnemyLightSources(
   multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
 ): readonly NativeBoneyardLightSource[] {
   if (enemy.enemyToken === 'ZOMBIE' || enemy.lighting.providerCopies === 0) return []
+  if (enemy.enemyToken === 'SKELETONARCHER' && !enemy.burning && enemy.animation.bodyPose === 9) return []
   const result: NativeBoneyardLightSource[] = []
   const burning = enemy.burning
   for (let copy = 0; copy < enemy.lighting.providerCopies; copy += 1) {
@@ -631,16 +633,16 @@ export function nativeEnemyLightSources(
       case 'PORTAL':
         result.push({
           castsDirectionalShadow: multipleShadows,
-          intensity: Math.fround(
+          radius: Math.fround(
             Math.fround(enemy.animation.alpha)
-            * Math.fround(0.9 + presentationRandom(
+            * Math.fround(0.8999999761581421 + presentationRandom(
               presentationFrame,
               salt ^ 0x47bed0,
-              0.35,
+              0.3500000238418579,
             )),
           ),
           position: { ...enemy.position },
-          radius: Math.fround(enemy.animation.alpha),
+          intensity: Math.fround(enemy.animation.alpha),
         })
         break
       case 'SPIDER':
@@ -1154,7 +1156,7 @@ interface NativeEnemyLightOwner {
   readonly enemyToken: BoneyardWaveEnemyToken
   readonly flags: readonly string[]
   readonly position: Vec2
-  readonly animation: { readonly state: string; readonly alpha: number }
+  readonly animation: { readonly state: string; readonly alpha: number; readonly bodyPose: number }
   readonly lighting: { readonly providerCopies: number; readonly charge: number; readonly glow: number }
 }
 
@@ -1170,6 +1172,7 @@ interface NativeEnemyProjectileEffectLightOwner {
   readonly ageTicks: number
   readonly alpha: number
   readonly position: Vec2
+  readonly lightRegistration: NativeWorldManagerRegistration | null
 }
 
 

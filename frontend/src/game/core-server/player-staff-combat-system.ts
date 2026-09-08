@@ -44,6 +44,7 @@ import {
   applyBoneyardStaffDisable,
   applyBoneyardStaffImpactVerticalVelocity,
   breakBoneyardSkeletonPike,
+  releaseBoneyardSkeletonPike,
   damageBoneyardEnemy,
 } from './enemies/damage.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
@@ -158,6 +159,7 @@ export function stepPlayerStaffCombatSystem(
       ))
       const stepped = stepNativeStaffContactKnockback(transient, targetExists)
       if (targetId !== null && stepped.displacement !== null) {
+        enemies = releaseBoneyardSkeletonPike(enemies, targetId)
         displacements.push({ actorId: targetId, delta: stepped.displacement })
       }
       if (stepped.actor !== null) retained.push(stepped.actor)
@@ -187,7 +189,10 @@ export function stepPlayerStaffCombatSystem(
       rng = stepped.rng
       for (const displacement of stepped.displacements) {
         const actorId = parseEnemyTargetId(displacement.targetId)
-        if (actorId !== null) displacements.push({ actorId, delta: displacement.delta })
+        if (actorId !== null) {
+          enemies = releaseBoneyardSkeletonPike(enemies, actorId)
+          displacements.push({ actorId, delta: displacement.delta })
+        }
       }
       for (const targetId of stepped.dazzledTargetIds) {
         const actorId = parseEnemyTargetId(targetId)

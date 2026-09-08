@@ -91,6 +91,7 @@ test('Demon Fire mirrors around the scaled native origin and draws its ground gl
   assert.deepEqual(plan.groundGlow?.position, source.position)
   assert.equal(plan.groundGlow?.alpha, 0.375)
   assert.equal(plan.groundGlow?.scale, 4)
+  assert.deepEqual(nativeEnemyProjectileEffectPlan({ ...source, lightRegistration: null }), plan)
 })
 
 test('Demon Explosion spans the direct pre-world, shared, and direct post-world intervals', () => {

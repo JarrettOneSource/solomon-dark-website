@@ -19,7 +19,7 @@ test('stationary transient rows reuse vectors without mutating their source bran
   assert.notEqual(steppedDeath, death)
   assert.equal(steppedDeath.position, death.position)
   assert.equal(steppedDeath.velocity, death.velocity)
-  assert.equal(steppedDeath.alpha, 0.9)
+  assert.equal(steppedDeath.alpha, 0.8999999761581421)
   assert.equal(death.alpha, 1)
   assert.notEqual(steppedProjectile, projectile)
   assert.equal(steppedProjectile.position, projectile.position)
@@ -39,6 +39,20 @@ test('moving transient rows keep exact motion while sibling branches remain inde
   assert.deepEqual(first.deathEffects[0]?.position, { x: 12, y: 17 })
   assert.deepEqual(second.deathEffects[0]?.position, { x: 14, y: 14 })
   assert.deepEqual(source.position, { x: 10, y: 20 })
+})
+
+test('moving sine fades keep world motion and their half-sine envelope through restoration and retirement', () => {
+  const source = deathEffect({ kind: 'move-fade-sin', frameVelocity: 2, alphaMultiplier: .5,
+    alphaLossPerTick: 0, lifetimeTicks: 181, velocity: { x: .25, y: -.125 } })
+  const halfway = stepBoneyardTransientEffects([source], [], 55, () => .5, 100, registerTestWorldPainter)
+  const effect = halfway.deathEffects[0]!
+  assert.equal(effect.framePhase, 90)
+  assert.equal(effect.alpha, .5)
+  assert.deepEqual(effect.position, { x: 21.25, y: 14.375 })
+  const saved = JSON.parse(JSON.stringify(halfway.deathEffects))
+  assert.deepEqual(stepBoneyardTransientEffects(saved, [], 99, () => .5, 100, registerTestWorldPainter),
+    stepBoneyardTransientEffects(halfway.deathEffects, [], 99, () => .5, 100, registerTestWorldPainter))
+  assert.equal(stepBoneyardTransientEffects(saved, [], 100, () => .5, 100, registerTestWorldPainter).deathEffects.length, 0)
 })
 
 test('Faculty scraps delay fading until they slow down, then drift, oscillate and retire', () => {
@@ -202,17 +216,17 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
     rotationDeg: effect.rotationDeg,
     scale: effect.scale,
   })), [
-    { ageTicks: 3, alpha: 0.7000000000000001, entry: 113, lastStepTick: 13,
+    { ageTicks: 3, alpha: 0.6999999284744263, entry: 113, lastStepTick: 13,
       position: { x: 10, y: 20 }, rotationDeg: 11, scale: 1 },
-    { ageTicks: 3, alpha: 0.7000000000000001, entry: 113, lastStepTick: 13,
+    { ageTicks: 3, alpha: 0.6999999284744263, entry: 113, lastStepTick: 13,
       position: { x: 10, y: 20 }, rotationDeg: 11, scale: 1 },
-    { ageTicks: 3, alpha: 0.7000000000000001, entry: 113, lastStepTick: 13,
+    { ageTicks: 3, alpha: 0.6999999284744263, entry: 113, lastStepTick: 13,
       position: { x: 16, y: 11 }, rotationDeg: 11, scale: 1 },
-    { ageTicks: 3, alpha: 0.7000000000000001, entry: 113, lastStepTick: 13,
+    { ageTicks: 3, alpha: 0.6999999284744263, entry: 113, lastStepTick: 13,
       position: { x: 10, y: 20 }, rotationDeg: 11, scale: 1 },
-    { ageTicks: 3, alpha: 0.7000000000000001, entry: 43, lastStepTick: 13,
+    { ageTicks: 3, alpha: 0.6999999284744263, entry: 43, lastStepTick: 13,
       position: { x: 13, y: 20 }, rotationDeg: 11, scale: 1 },
-    { ageTicks: 3, alpha: 0.7000000000000001, entry: 50, lastStepTick: 13,
+    { ageTicks: 3, alpha: 0.6999999284744263, entry: 50, lastStepTick: 13,
       position: { x: 10, y: 20 }, rotationDeg: 11, scale: 1 },
   ])
   assert.deepEqual(draws, [])

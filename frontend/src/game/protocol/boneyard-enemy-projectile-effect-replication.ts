@@ -41,7 +41,8 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(descriptor[7])
       && positiveInteger(descriptor[8])
       && nonnegativeInteger(descriptor[9])
-      && descriptor[10] === lightLane(BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[descriptor[2]]!)
+      && (descriptor[10] === lightLane(BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[descriptor[2]]!)
+        || (BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[descriptor[2]] === 'demon-fire' && descriptor[10] === -1))
       && (descriptor[10] === -1 ? descriptor[11] === -1 : nonnegativeInteger(descriptor[11]))
       && (descriptor[12] === 0 || descriptor[12] === 1)
       && nonnegativeInteger(descriptor[13])
@@ -66,7 +67,7 @@ export function boneyardEnemyProjectileEffectDescriptor(
   effect: BoneyardEnemyProjectileEffectSnapshot,
 ): ReplicatedEntityDescriptor {
   const lightRegistration = effect.lightRegistration
-  const lane = lightLane(effect.kind)
+  const lane = effect.kind === 'demon-fire' && lightRegistration === null ? -1 : lightLane(effect.kind)
   if (lane === -1 ? lightRegistration !== null
     : lightRegistration?.managerLane !== (lane === 0 ? 'actor' : 'transient')) {
     throw new Error(`enemy projectile effect ${effect.kind} has invalid light ownership`)

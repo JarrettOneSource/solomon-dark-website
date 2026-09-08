@@ -9,6 +9,9 @@ export interface DeathEffectOwner {
   readonly position: Readonly<BoneyardPoint>
 }
 
+export type BoneyardDeathEffectWork = Pick<WorkingStep,
+  'deathEffects' | 'nextDeathEffectId' | 'registerWorldPainter' | 'rngState'>
+
 export function spawnRadialBouncer(
   work: WorkingStep,
   actor: DeathEffectOwner,
@@ -42,7 +45,7 @@ type BouncerOptions = {
 }
 
 export function spawnBouncer(
-  work: WorkingStep,
+  work: BoneyardDeathEffectWork,
   actor: DeathEffectOwner,
   tick: number,
   entry: number | (() => number),

@@ -41,6 +41,9 @@ const SOURCES = {
     solomondarktheme: 'theme.mp3',
   },
   sounds: {
+    'armor-crash-1': 'armor-crash-1.wav',
+    'armor-crash-2': 'armor-crash-2.wav',
+    'armor-crash-3': 'armor-crash-3.wav',
     'shoot-web-1': 'shoot-web-1.wav',
     'shoot-web-2': 'shoot-web-2.wav',
     'shoot-web-3': 'shoot-web-3.wav',

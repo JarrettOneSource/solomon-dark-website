@@ -16,14 +16,6 @@ export interface NativeFacultyVisualState extends NativeFacultyAppearance {
   readonly lightPhase: number
 }
 
-export function nativeFacultyColor(color: readonly [number, number, number, number], saturation: number):
-  readonly [number, number, number, number] {
-  const luminance = Math.fround(color[0] * .3086000084877014
-    + color[1] * .6093999743461609 + color[2] * .0820000022649765)
-  const base = luminance * (1 - saturation)
-  const mix = (channel: number) => Math.min(1, Math.max(0, Math.fround(base + channel * saturation)))
-  return [mix(color[0]), mix(color[1]), mix(color[2]), Math.min(1, Math.max(0, color[3]))]
-}
 
 export interface NativeFacultyState {
   readonly bodyHeadingDeg: number

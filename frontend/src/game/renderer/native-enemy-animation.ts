@@ -100,6 +100,9 @@ export interface NativeEnemyAnimationSample {
   actionProgress: number
   alpha: number
   bodyPose: number
+  bodyGaitPhase: number
+  mageChargeSuppressed: boolean
+  pikeTargetOffset: Readonly<{ x: number; y: number }> | null
   coffinPose: number
   coffinRotationRadians: number
   coffinScaleX: -1 | 1
@@ -129,6 +132,7 @@ export interface NativeEnemyAnimationSample {
   zombieAngularOffsetDeg: number
   zombieAttackSide: 0 | 1
   zombieBodyRotationRadians: number
+  zombieArmSocketRotationRadians: number
   zombieBodyType: number
   zombieFrontArmPose: number
   zombieFrontArmRotationRadians: number
@@ -242,6 +246,9 @@ export function nativeEnemyIdleAnimationSample(
     actionProgress: 0,
     alpha: 1,
     bodyPose: 0,
+    bodyGaitPhase: 0,
+    mageChargeSuppressed: false,
+    pikeTargetOffset: null,
     coffinPose: 0,
     coffinRotationRadians: 0,
     coffinScaleX: 1,
@@ -271,6 +278,7 @@ export function nativeEnemyIdleAnimationSample(
     zombieAngularOffsetDeg: 0,
     zombieAttackSide: 0,
     zombieBodyRotationRadians: 0,
+    zombieArmSocketRotationRadians: 0,
     zombieBodyType: -1,
     zombieFrontArmPose: 0,
     zombieFrontArmRotationRadians: 0,

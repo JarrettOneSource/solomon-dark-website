@@ -38,7 +38,7 @@ export function dampenBoneyardCasters(source: BoneyardEnemyStore, targetIds: rea
       const rotationDeg = float(360)
       const scale = Math.fround(1.5 + float(.5))
       const alphaLossPerTick = Math.fround(Math.fround(.01) + float(Math.fround(.02)))
-      const tint = Math.round(float(.25) * 255) * 0x010101
+      const tint = Math.trunc(float(.25) * 255) * 0x010101
       const presentationOwner = integer(5) === 3 ? 'world-sorted' : 'pre-world-queue'
       spawnSimpleDeathEffect(work, actor, tick, { alpha: 1, alphaLossPerTick, atlas: 'BadGuys',
         blendMode: 'normal', entry, kind: 'move-fade', lifetimeTicks: 101, presentationOwner,
@@ -58,14 +58,14 @@ export function dampenBoneyardCasters(source: BoneyardEnemyStore, targetIds: rea
 
 export function spawnDampenedMageSmoke(work: WorkingStep, actor: BoneyardEnemyActor, tick: number): void {
   if (actor.brain.family !== 'mage' || actor.brain.disabledPrimaryTicks === 0
-    || actor.lifeState !== 'alive' || actor.config.scale === 0) return
+    || actor.lifeState !== 'alive' || actor.config.baseSpeed * actor.staffMovementFactor === 0) return
   const pose = nativeMageBodyPose({ ...actor.brain, bodyPose: actor.bodyPose })
   for (const slot of [0, 1] as const) {
     if (drawEnemyInteger(work, 5) !== 1) continue
     const entry = drawEnemyInteger(work, 2) === 1 ? 10 : 11
     const scale = Math.fround(Math.fround(.45) + drawEnemyFloat(work,
       Math.fround(Math.fround(.65) - Math.fround(.45))))
-    const tint = Math.round(drawEnemyFloat(work, Math.fround(.1)) * 255) * 0x010101
+    const tint = Math.trunc(drawEnemyFloat(work, Math.fround(.1)) * 255) * 0x010101
     const rotationDeg = drawEnemyFloat(work, 360)
     const attachment = nativeMageBodyAttachment(pose, actor.headingDeg, slot)
     const radius = drawEnemyFloat(work, 5)

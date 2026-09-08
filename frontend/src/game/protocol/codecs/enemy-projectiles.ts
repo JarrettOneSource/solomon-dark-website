@@ -205,7 +205,8 @@ export function boneyardEnemyProjectileEffectSnapshot(
     blendMode,
     entry: nonnegativeInteger(source.entry, `${field}.entry`),
     id: positiveInteger(source.id, `${field}.id`),
-    lightRegistration: kind === 'fire-burst' || kind === 'guided-impact' || kind === 'demon-fire' || kind === 'demon-explosion-lit-array'
+    lightRegistration: kind === 'fire-burst' || kind === 'guided-impact'
+      || (kind === 'demon-fire' && source.lightRegistration !== null) || kind === 'demon-explosion-lit-array'
       ? nativeWorldManagerRegistration(
           source.lightRegistration,
           `${field}.lightRegistration`,

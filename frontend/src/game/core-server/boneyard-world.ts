@@ -526,6 +526,10 @@ export function stepBoneyardWorldTick(
     tick,
   })
   const badguyCountBeforeDeaths = collisionResolvedEnemies.actors.length
+  for (const [playerId, position] of Object.entries(enemyStep.playerPositions)) {
+    const player = nextPlayers[playerId]
+    if (player) nextPlayers[playerId] = { ...player, position }
+  }
   for (const [rewardIndex, reward] of enemyStep.rewards.entries()) {
     const rewardCombat = reward.playerId === null
       ? undefined

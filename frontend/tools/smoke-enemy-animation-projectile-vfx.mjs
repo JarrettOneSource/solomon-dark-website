@@ -5,6 +5,15 @@ import { tmpdir } from 'node:os'
 import { chromium } from 'playwright-core'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { createGameSimulation, enterBoneyardWorld } from '../src/game/core-server/game-simulation.ts'
+import { createBoneyardCatalog, materializeBoneyard } from '../src/game/host/boneyard-catalog.ts'
+import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
+
+const defaultBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
+assert.ok(defaultBoneyard)
+const defaultSnapshot = createGameSnapshot(enterBoneyardWorld(createGameSimulation({
+  local: { discipline: 'arcane', displayName: 'Parity Probe', element: 'fire' },
+}), defaultBoneyard), 'local')
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4182'
 const screenshotPath = process.env.SDR_ENEMY_VFX_SCREENSHOT
@@ -60,7 +69,7 @@ try {
     waitUntil: 'domcontentloaded',
   })
 
-  const receipt = await page.evaluate(async () => {
+  const receipt = await page.evaluate(async (defaults) => {
     document.body.replaceChildren()
     document.body.style.background = '#000'
     document.body.style.margin = '0'
@@ -197,25 +206,23 @@ try {
       animation,
       flags = [],
       armored = false,
-    ) => ({
-      animation,
-      armored,
-      currentHealth: 100,
-      enemyToken,
-      flags,
-      headingDeg: 0,
-      id,
-      lightRegistration: { managerLane: 'actor', registrationOrdinal: id },
-      lighting: enemyLighting[enemyToken],
-      mageCloak: false,
-      maximumHealth: 100,
-      nativeTypeId,
-      position,
-      scale: enemyToken === 'ZOMBIE' ? 1.25 : 1,
-      shieldHealth: 0,
-      shieldMaximumHealth: 0,
-      spawnTick: 20,
-    })
+    ) => {
+      const spawned = enemyStoreModule.stepBoneyardEnemyStore(
+        enemyStoreModule.createBoneyardEnemyStore(`enemy-view-fixture:${id}`), {
+          tick: 20, players: {}, projectileWorldBlocked: () => false,
+          resolveMovement: request => request.requestedPosition,
+          resolveSpawnIntents: () => [{ enemyToken, flags, id, locationPolicy: 'anywhere',
+            nativeTypeId, position, spawnTick: 20, waveOrdinal: 1 }],
+        },
+      ).store
+      return {
+        ...enemyProjectionModule.projectBoneyardEnemies(spawned, 20)[0],
+        animation, armored, currentHealth: 100, headingDeg: 0, id,
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: id },
+        lighting: enemyLighting[enemyToken], maximumHealth: 100,
+        scale: enemyToken === 'ZOMBIE' ? 1.25 : 1,
+      }
+    }
     const mageEffects = [{
       alpha: 1,
       atlas: 'BadGuys',
@@ -468,10 +475,10 @@ try {
       position,
       overrides = {},
     ) => {
-      const presentationOwner = kind === 'late-splat' || kind === 'sprite-array'
+      const presentationOwner = kind === 'late-splat' || kind === 'sprite-array' || kind === 'fire-array'
         ? 'pre-world-queue'
         : kind === 'unbind'
-          ? 'direct-post-world'
+          ? 'late-world-overlay'
           : 'world-sorted'
       return {
         ageTicks: 8,
@@ -484,12 +491,13 @@ try {
         kind,
         ownerActorId: 5,
         painterRegistration: presentationOwner === 'world-sorted'
-          ? { managerLane: 'actor', registrationOrdinal: 120 + id - 401 }
+          ? { managerLane: 'transient', registrationOrdinal: 120 + id - 401 }
           : null,
         position,
         presentationOwner,
         rotationRadians: radians(18),
         scale: 1.2,
+        scaleY: 1,
         shadow: kind === 'bouncer' || kind === 'smoky-bouncer',
         spawnTick: 112,
         tint: 0xffffff,
@@ -536,12 +544,14 @@ try {
       tick: 120,
     }]
     const snapshotAt = (tick, advanced) => ({
+      ...defaults,
       hostPlayerId: 'local',
       levelUpBarrier: null,
       materializingPlayerIds: [],
       modEffects: [],
       players: {
         local: {
+          ...defaults.players.local,
           belt: [null, null, null, null, null, null, null, null],
           config: {
             discipline: 'arcane',
@@ -560,6 +570,7 @@ try {
           position: playerPosition,
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),
           progression: {
+            ...defaults.players.local.progression,
             weldBuildId: null,
             coldSlowTicksRemaining: 0,
             currentHealth: 50,
@@ -632,6 +643,7 @@ try {
       },
       tick,
       world: {
+        ...defaults.world,
         arenaTransition: null,
         deathEffects,
         encounter: null,
@@ -828,9 +840,10 @@ try {
         stretch,
       })),
     ]))
+    const pointGains = { point: () => 1, hit: () => 1 }
     const ambientRequests = ambientAudioModule.nativeBoneyardEnemyAmbientRequests(
       snapshotAt(121.75, true),
-      () => 1,
+      pointGains,
     )
     await Promise.all(audioBrowserModule.GAME_RESIDENT_AUDIO_SOURCES.map((source) => (
       audioBrowserModule.loadGameAudioAsset(source)
@@ -841,8 +854,8 @@ try {
     const ambientAudio = new ambientAudioModule.BoneyardEnemyAmbientAudioSynchronizer(
       ambientDirector,
     )
-    ambientAudio.update(snapshotAt(121.75, true), () => 1)
-    ambientAudio.update({ world: { enemies: [], maggots: [] } }, () => 1)
+    ambientAudio.update(snapshotAt(121.75, true), pointGains)
+    ambientAudio.update({ world: { enemies: [], maggots: [] } }, pointGains)
     ambientAudio.destroy()
     ambientDirector.destroy()
     const ambientAudioEvents = window.__sdrAudioEvents.slice(audioEventStart)
@@ -858,20 +871,171 @@ try {
         type: event.type,
         volume: event.volume,
       }))
-    const renderer = await rendererModule.createBoneyardWorldRenderer({
-      boneyard: loaded,
-      devicePixelRatio: 1,
-      initialSnapshot,
-      modAssets: [],
-      modCatalog: [],
-      playerId: 'local',
-      viewport,
-    })
-    renderer.canvas.id = 'enemy-animation-projectile-vfx-canvas'
-    document.body.append(renderer.canvas)
-    const initialCopy = copyCanvas(renderer.canvas)
-    const initialPixels = capture(initialCopy)
-    const initialDemonPixels = capture(cropCanvas(initialCopy, 810, 430, 280, 260))
+    // This pixel control holds every input fixed, including the independent application clock.
+    const { renderer, initialCopy, initialPixels, initialDemonPixels,
+      privateTrailControlDifference, privateTrailDifference } = await (async () => {
+      const clockDescriptor = Object.getOwnPropertyDescriptor(performance, 'now')
+      const witnessTime = performance.now()
+      Object.defineProperty(performance, 'now', { configurable: true, value: () => witnessTime })
+      try {
+        const renderer = await rendererModule.createBoneyardWorldRenderer({
+          boneyard: loaded,
+          devicePixelRatio: 1,
+          initialSnapshot,
+          modAssets: [],
+          modCatalog: [],
+          playerId: 'local',
+          viewport,
+        })
+        renderer.canvas.id = 'enemy-animation-projectile-vfx-canvas'
+        document.body.append(renderer.canvas)
+        const initialCopy = copyCanvas(renderer.canvas)
+        const initialPixels = capture(initialCopy)
+        const initialDemonPixels = capture(cropCanvas(initialCopy, 810, 430, 280, 260))
+        const trailControlRenderer = await rendererModule.createBoneyardWorldRenderer({
+          boneyard: loaded, devicePixelRatio: 1, initialSnapshot,
+          modAssets: [], modCatalog: [], playerId: 'local', viewport,
+        })
+        const privateTrailControlDifference = compare(initialPixels, capture(trailControlRenderer.canvas))
+        // Equal render counts also preserve the renderer-owned light flicker sequence.
+        renderer.render(initialSnapshot)
+        trailControlRenderer.render({ ...initialSnapshot, world: { ...initialSnapshot.world,
+          enemyProjectileEffects: initialSnapshot.world.enemyProjectileEffects.filter(effect => effect.kind !== 'firebolt-trail'),
+        } })
+        const privateTrailDifference = compare(capture(renderer.canvas), capture(trailControlRenderer.canvas))
+        trailControlRenderer.destroy()
+        return { renderer, initialCopy, initialPixels, initialDemonPixels,
+          privateTrailControlDifference, privateTrailDifference }
+      } finally {
+        if (clockDescriptor) Object.defineProperty(performance, 'now', clockDescriptor)
+        else delete performance.now
+      }
+    })()
+    const isolatedLights = await (async () => {
+      const { BONEYARD_WAVE_ENEMY_TYPES } = await import('/src/game/core-kernels/boneyard-wave-schema.ts')
+      const { DEFAULT_GAME_SETTINGS } = await import('/src/game/game-settings.ts')
+      const { nativePortalRecipe, nativePortalProgram } = await import('/src/game/core-kernels/native-survival-portal.ts')
+      const portalRecipe = nativePortalRecipe(nativePortalProgram(
+        'bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb',
+      ).phases[0])
+      const rows = [
+        ['Skeleton', 'SKELETON', [], 0], ['Burning Skeleton', 'SKELETON', ['FLAG_BURNING'], 1],
+        ['Archer', 'SKELETONARCHER', [], 0], ['Fire Archer', 'SKELETONARCHER', ['FLAG_FIREARROW'], 1],
+        ['Fire Archer pose 9', 'SKELETONARCHER', ['FLAG_FIREARROW'], 0, { bodyPose: 9 }],
+        ['Mage', 'SKELETONMAGE', [], 1], ['Burning Mage', 'SKELETONMAGE', ['FLAG_BURNING'], 2],
+        ['Zombie', 'ZOMBIE', [], 0], ['Rotten Zombie', 'ZOMBIE', ['FLAG_ROTTEN'], 0],
+        ['Imp', 'IMP', [], 1], ['Green Imp', 'IMP', [], 1, {}, 2044],
+        ['Good Imp body', 'IMP', [], 1, {}, 1005],
+        ['Wraith', 'WRAITH', [], 0], ['Burning Wraith', 'WRAITH', ['FLAG_BURNING'], 1],
+        ['Demon', 'DEMON', [], 1], ['Demon Skull', 'DEMONSKULL', [], 1], ['Faculty', 'DIREFACULTY', [], 1],
+        ['Heartmonger', 'HEARTMONGER', [], 1], ['Coffin', 'COFFIN', [], 1],
+        ['Spider', 'SPIDER', [], 0], ['Cocoon', 'COCOON', [], 0], ['Portal', 'PORTAL', [], 1],
+      ]
+      const clean = { ...initialSnapshot, materializingPlayerIds: ['local'],
+        primarySpells: { ...initialSnapshot.primarySpells, projectiles: [], transients: [] },
+        secondaryAbilities: { ...initialSnapshot.secondaryAbilities, actors: [], miscLights: [] },
+        world: { ...initialSnapshot.world, enemies: [], enemyProjectiles: [], enemyProjectileEffects: [],
+          deathEffects: [], mageLightningPulses: [], maggots: [], bossSpells: [], crows: [],
+          lanternPosition: null, lanternLightRegistration: null } }
+      const clockDescriptor = Object.getOwnPropertyDescriptor(performance, 'now')
+      const witnessTime = performance.now()
+      Object.defineProperty(performance, 'now', { configurable: true, value: () => witnessTime })
+      let lit, dark
+      try {
+        const options = { boneyard: loaded, devicePixelRatio: 1, initialSnapshot: clean,
+          modAssets: [], modCatalog: [], playerId: 'local', viewport }
+        lit = await rendererModule.createBoneyardWorldRenderer(options)
+        dark = await rendererModule.createBoneyardWorldRenderer(options)
+        const control = compare(capture(lit.canvas), capture(dark.canvas))
+        const samples = []
+        for (const complexShadows of [false, true]) {
+          const settings = { ...DEFAULT_GAME_SETTINGS, complexShadows, multipleShadows: complexShadows }
+          lit.setSettings(settings)
+          dark.setSettings(settings)
+          for (const [name, token, flags, expectedCandidates, animation = {}, nativeTypeId] of rows) {
+            const store = enemyStoreModule.stepBoneyardEnemyStore(enemyStoreModule.createBoneyardEnemyStore(`light-${name}`), {
+              tick: 20, players: {}, projectileWorldBlocked: () => false, resolveMovement: request => request.requestedPosition,
+              resolveSpawnIntents: () => [{ enemyToken: token, nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[token], flags,
+                id: 1, locationPolicy: 'anywhere', position: { x: 500, y: 333 }, spawnTick: 20, waveOrdinal: 1,
+                ...(token === 'PORTAL' ? { authoredRecipe: portalRecipe } : {}) }],
+            }).store
+            const source = enemyProjectionModule.projectBoneyardEnemies(store, 20)[0]
+            const actor = { ...source, nativeTypeId: nativeTypeId ?? source.nativeTypeId,
+              lighting: { charge: 1, glow: 1, providerCopies: token === 'SKELETONMAGE' && flags.length ? 2
+                : expectedCandidates > 0 || name === 'Fire Archer pose 9' ? 1 : 0 },
+              animation: { ...source.animation, alpha: 1, coffinState: 'open', ...animation } }
+            const before = { ...actor, lighting: { ...actor.lighting, providerCopies: 0 } }
+            lit.render({ ...clean, world: { ...clean.world, enemies: [actor] } })
+            dark.render({ ...clean, world: { ...clean.world, enemies: [before] } })
+            let difference = compare(capture(lit.canvas), capture(dark.canvas))
+            // Faculty randomly suppresses its provider intensity each Present visit.
+            for (let frame = 0; name === 'Faculty' && difference.changedPixels === 0 && frame < 12; frame += 1) {
+              lit.render({ ...clean, world: { ...clean.world, enemies: [actor] } })
+              dark.render({ ...clean, world: { ...clean.world, enemies: [before] } })
+              difference = compare(capture(lit.canvas), capture(dark.canvas))
+            }
+            samples.push({ name, complexShadows, expectedCandidates,
+              candidates: lit.canvas.__sdrBoneyardFrame.lightProviderCandidateCount,
+              accepted: lit.canvas.__sdrBoneyardFrame.lightSourceCount,
+              darkCandidates: dark.canvas.__sdrBoneyardFrame.lightProviderCandidateCount,
+              difference })
+          }
+        }
+        const maggotOnly = { ...clean, world: { ...clean.world, maggots: initialSnapshot.world.maggots } }
+        lit.render(maggotOnly)
+        dark.render(maggotOnly)
+        samples.push({ name: 'Maggot', complexShadows: true, expectedCandidates: 0,
+          candidates: lit.canvas.__sdrBoneyardFrame.lightProviderCandidateCount,
+          accepted: lit.canvas.__sdrBoneyardFrame.lightSourceCount,
+          darkCandidates: dark.canvas.__sdrBoneyardFrame.lightProviderCandidateCount,
+          difference: compare(capture(lit.canvas), capture(dark.canvas)) })
+        const livingEffects = []
+        for (const [token, flags, role] of [
+          ['WRAITH', [], 'wraith-soul-wisp'], ['ZOMBIE', ['FLAG_ROTTEN'], 'zombie-rotten-particle'],
+          ['SKELETON', ['FLAG_BURNING'], 'demon-fire'],
+        ]) {
+          lit.render(clean)
+          dark.render(clean)
+          let store = enemyStoreModule.stepBoneyardEnemyStore(enemyStoreModule.createBoneyardEnemyStore(`emitter-${token}`), {
+            tick: 0, players: {}, projectileWorldBlocked: () => false, resolveMovement: request => request.requestedPosition,
+            resolveSpawnIntents: () => [{ enemyToken: token, nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[token], flags,
+              id: 1, locationPolicy: 'anywhere', position: { x: 500, y: 333 }, spawnTick: 0, waveOrdinal: 1 }],
+          }).store
+          store = { ...store, actors: store.actors.map(actor => ({ ...actor, nextMovementTick: 10000 })) }
+          let effect
+          for (let tick = 1; tick <= 300; tick += 1) {
+            store = enemyStoreModule.stepBoneyardEnemyStore(store, { tick, players: {},
+              projectileWorldBlocked: () => false, resolveMovement: request => request.requestedPosition,
+              resolveSpawnIntents: () => [] }).store
+            effect = [...store.deathEffects, ...store.projectileEffects].find(value => (
+              (value.role === role || value.kind === role) && (role !== 'demon-fire' || value.ageTicks >= 2)
+            ))
+            if (effect) break
+          }
+          if (!effect) throw new Error(`Native ${role} did not emit`)
+          const isFire = role === 'demon-fire'
+          const presented = isFire ? enemyProjectionModule.projectBoneyardEnemyProjectileEffects({ ...store,
+            projectileEffects: [effect] }) : [enemyProjectionModule.projectBoneyardEnemyDeathEffect(effect)]
+          const baseline = { ...clean, materializingPlayerIds: [] }
+          lit.render({ ...baseline, world: { ...baseline.world,
+            deathEffects: isFire ? [] : presented, enemyProjectileEffects: isFire ? presented : [] } })
+          dark.render(baseline)
+          livingEffects.push({ role, birthTick: effect.spawnTick, owner: effect.presentationOwner ?? 'world-sorted',
+            difference: compare(capture(lit.canvas), capture(dark.canvas)),
+            extraLights: lit.canvas.__sdrBoneyardFrame.lightProviderCandidateCount - dark.canvas.__sdrBoneyardFrame.lightProviderCandidateCount })
+        }
+        lit.render(clean)
+        dark.render(clean)
+        return { control, samples, livingEffects, afterReset: { bodies: lit.canvas.__sdrBoneyardFrame.enemyCount,
+          candidates: lit.canvas.__sdrBoneyardFrame.lightProviderCandidateCount,
+          accepted: lit.canvas.__sdrBoneyardFrame.lightSourceCount } }
+      } finally {
+        lit?.destroy()
+        dark?.destroy()
+        if (clockDescriptor) Object.defineProperty(performance, 'now', clockDescriptor)
+        else delete performance.now
+      }
+    })()
     renderer.consumeEnemyEvent({
       actorId: 4,
       eventId: 899,
@@ -1210,6 +1374,9 @@ try {
     window.__skeletonRenderer = skeletonRenderer
     return {
       animationDifference: compare(initialPixels, advancedPixels),
+      privateTrailDifference,
+      privateTrailControlDifference,
+      isolatedLights,
       ambientAudioEvents,
       ambientRequests,
       auxiliaryPlans,
@@ -1255,6 +1422,28 @@ try {
         turned: skeletonPlanAt(7, -1),
       },
     }
+  }, defaultSnapshot)
+
+  await page.locator('#enemy-animation-projectile-vfx-probe').screenshot({
+    path: screenshotPath,
+  })
+  await page.locator('#enemy-death-vfx-probe').screenshot({
+    path: deathScreenshotPath,
+  })
+  await page.locator('#demon-live-composite-probe').screenshot({
+    path: demonScreenshotPath,
+  })
+  await page.locator('#imp-authority-contact-probe').screenshot({
+    path: impContactScreenshotPath,
+  })
+  await page.locator('#skeleton-attack-early-probe').screenshot({
+    path: skeletonEarlyScreenshotPath,
+  })
+  await page.locator('#skeleton-attack-late-probe').screenshot({
+    path: skeletonLateScreenshotPath,
+  })
+  await page.locator('#skeleton-head-turn-probe').screenshot({
+    path: skeletonHeadTurnScreenshotPath,
   })
 
   const expectedFamilies = [
@@ -1316,9 +1505,12 @@ try {
   assert.equal(zombieSample.scale, 1.25)
   assert.equal(zombieSample.renderedScale, 1.25)
   assert.equal(receipt.frame.enemyProjectileCount, 8)
-  assert.equal(receipt.frame.enemyProjectileEffectCount, 9)
+  // Firebolt owns its trail inside its main painter, outside the eight independent effects.
+  assert.equal(receipt.frame.enemyProjectileEffectCount, 8)
   assert.deepEqual(receipt.frame.enemyProjectileIds, [101, 102, 103, 104, 105, 106, 107, 108])
-  assert.deepEqual(receipt.frame.enemyProjectileEffectIds, [201, 202, 203, 204, 205, 206, 207, 208, 209])
+  assert.deepEqual(receipt.frame.enemyProjectileEffectIds, [201, 202, 204, 205, 206, 207, 208, 209])
+  assert.ok(receipt.privateTrailDifference.changedPixels > 0)
+  assert.deepEqual(receipt.privateTrailControlDifference, { changedPixels: 0, channelDelta: 0 })
   assert.equal(receipt.frame.maggotCount, 1)
   assert.equal(receipt.frame.maggotVisibleCount, 1)
   assert.equal(receipt.frame.maggotCulledCount, 0)
@@ -1358,12 +1550,28 @@ try {
   ])
   assert.match(receipt.impAuthority.sounds[0], /^imp-vocal-[1-8]$/)
   assert.match(receipt.impAuthority.sounds[1], /^bite-[1-3]$/)
+  assert.equal(receipt.isolatedLights.control.changedPixels, 0)
+  assert.equal(receipt.isolatedLights.afterReset.candidates, 0)
+  assert.equal(receipt.isolatedLights.afterReset.accepted, 0)
+  for (const row of receipt.isolatedLights.samples) {
+    assert.equal(row.candidates, row.expectedCandidates, row.name)
+    assert.equal(row.darkCandidates, 0, row.name)
+    if (row.expectedCandidates === 0) assert.equal(row.difference.changedPixels, 0, row.name)
+    else assert.ok(row.difference.changedPixels > 0, row.name)
+  }
   assert.ok(receipt.impAuthority.pixelDifference.changedPixels > 50)
   assert.ok(receipt.impAuthority.pixelDifference.channelDelta > 1_000)
   assert.deepEqual(receipt.ambientRequests, [
+    { cue: 'earthquake-loop', gain: 0 },
+    { cue: 'rolling-stone-loop', gain: 0 },
     { cue: 'flyblown-loop', gain: 1 },
     { cue: 'maggots-loop', gain: 0.0025 },
     { cue: 'soul-loop', gain: 1 },
+    { cue: 'steady-wind-loop', gain: 0 },
+    { cue: 'ice-beam-loop', gain: 0 },
+    { cue: 'electric-loop', gain: 0 },
+    { cue: 'eerie-loop', gain: 0 },
+    { cue: 'low-fire-loop', gain: 0 },
   ])
   const ambientStarts = receipt.ambientAudioEvents.filter(({ type }) => (
     type === 'buffer-start'
@@ -1395,7 +1603,7 @@ try {
   )).length, 4)
   assert.equal(receipt.auxiliaryPlans.ZOMBIE.filter(({ role }) => (
     role.startsWith('zombie-gas-cloud:')
-  )).length, 2)
+  )).length, 3)
   assert.ok(receipt.auxiliaryPlans.ZOMBIE.filter(({ role }) => (
     role.startsWith('zombie-fly:')
   )).length >= 5)
@@ -1423,9 +1631,11 @@ try {
       { rotationRadians: -10 * Math.PI / 180, scaleX: -1 },
     ],
   )
-  assert.ok(receipt.auxiliaryPlans.WRAITH.some(({ role }) => (
-    role.startsWith('wraith-soul-wisp:')
-  )))
+  assert.equal(receipt.auxiliaryPlans.WRAITH.some(({ role }) => role.startsWith('wraith-soul-wisp')), false)
+  for (const effect of receipt.isolatedLights.livingEffects) {
+    assert.ok(effect.difference.changedPixels > 0, effect.role)
+    assert.equal(effect.extraLights, 0, effect.role)
+  }
   assert.equal(receipt.auxiliaryPlans.DEMON.filter(({ role }) => (
     role.startsWith('demon-flame:')
   )).length, 5)
@@ -1497,27 +1707,6 @@ try {
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(failedResponses, [])
 
-  await page.locator('#enemy-animation-projectile-vfx-probe').screenshot({
-    path: screenshotPath,
-  })
-  await page.locator('#enemy-death-vfx-probe').screenshot({
-    path: deathScreenshotPath,
-  })
-  await page.locator('#demon-live-composite-probe').screenshot({
-    path: demonScreenshotPath,
-  })
-  await page.locator('#imp-authority-contact-probe').screenshot({
-    path: impContactScreenshotPath,
-  })
-  await page.locator('#skeleton-attack-early-probe').screenshot({
-    path: skeletonEarlyScreenshotPath,
-  })
-  await page.locator('#skeleton-attack-late-probe').screenshot({
-    path: skeletonLateScreenshotPath,
-  })
-  await page.locator('#skeleton-head-turn-probe').screenshot({
-    path: skeletonHeadTurnScreenshotPath,
-  })
   await page.evaluate(() => {
     window.__enemyVfxRenderer.destroy()
     window.__skeletonRenderer.destroy()

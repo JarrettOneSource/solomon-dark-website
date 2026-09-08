@@ -1,5 +1,5 @@
 import type { BoneyardSkeletonWeapon } from '../../core-kernels/boneyard-enemy-config-model.ts'
-import type { DeathEffectOwner } from './death-effects.ts'
+import type { BoneyardDeathEffectWork, DeathEffectOwner } from './death-effects.ts'
 import { spawnBouncer, spawnRadialBouncer, spawnSimpleDeathEffect, spawnUnbind } from './death-effects.ts'
 import { spawnHeartmongerDeparture } from './heartmonger.ts'
 import type { BoneyardEnemyActor, WorkingStep } from './model.ts'
@@ -103,16 +103,32 @@ function spawnSkeletonEquipmentEffects(
     }
   }
 
-  if (!actor.config.family.armor) return
-  for (const firstEntry of [100, 102, 104, 106, 108]) {
-    spawnSkeletonFragmentBouncer(
-      work,
-      actor,
-      tick,
-      () => firstEntry + drawInteger(work, 2),
-      'skeleton-armor-fragment',
-      () => drawUnit(work) * 360,
-    )
+}
+
+export function spawnSkeletonArmorBreak(
+  work: BoneyardDeathEffectWork,
+  actor: BoneyardEnemyActor,
+  tick: number,
+): void {
+  const pieces = [4, 5, 6, 7, 8]
+  shuffleBoneFragments(work, pieces)
+  let angle = drawUnit(work) * 360
+  for (const piece of pieces) {
+    const entry = 92 + piece * 2 + drawInteger(work, 2)
+    spawnBouncer(work, actor, tick, entry, 'skeleton-armor-fragment', () => {
+      const direction = radialVector(angle, 1)
+      const velocity = { x: Math.fround(direction.x * 1.5), y: Math.fround(direction.y) }
+      const distance = Math.fround(15 + drawUnit(work) * 10)
+      return {
+        bounceVelocityMultiplier: 1.2000000476837158,
+        position: {
+          x: Math.fround(Math.fround(actor.position.x + Math.fround(distance * velocity.x)) + velocity.x * 2),
+          y: Math.fround(actor.position.y + Math.fround(distance * velocity.y)),
+        },
+        velocity,
+      }
+    })
+    angle = Math.fround(angle + 72 + signedUnit(drawUnit(work)) * 10)
   }
   spawnSimpleDeathEffect(work, actor, tick, {
     alpha: 1,
@@ -176,9 +192,14 @@ function spawnSkeletonFragmentBouncer(
 }
 
 
-function shuffleBoneFragments(work: WorkingStep, entries: number[]): void {
+function shuffleBoneFragments(work: Pick<WorkingStep, 'rngState'>, entries: number[]): void {
+  // Array<int>::Shuffle 0x004818E0 uses a private signed integer mixer.
+  let seed = drawInteger(work, 100_000)
   for (let index = 0; index < entries.length; index += 1) {
-    const swap = drawInteger(work, entries.length)
+    seed ^= seed << 21
+    seed ^= seed >> 11
+    seed = Math.abs(Math.imul(seed ^ (seed << 4), 0x0a67cfcf))
+    const swap = seed % entries.length
     ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
   }
 }

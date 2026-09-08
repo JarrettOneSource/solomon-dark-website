@@ -7,10 +7,29 @@ import {
   stepNativeWraithFlightClock,
 } from '../../core-kernels/native-wraith-flight.ts'
 import { attackMarker, directPlayerDamage } from './combat.ts'
+import { spawnSimpleDeathEffect } from './death-effects.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardWraithBrain, WorkingStep } from './model.ts'
 import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS } from './programs.ts'
-import { drawInteger, drawUnit } from './random.ts'
+import { drawEnemyFloat, drawEnemyInteger, drawInteger, drawUnit, radialVector } from './random.ts'
 import { targetEligible } from './targeting.ts'
+
+export function spawnWraithWisp(work: WorkingStep, actor: BoneyardEnemyActor,
+  context: BoneyardEnemyStoreStepContext): void {
+  if (actor.lifeState !== 'alive' || actor.brain.family !== 'wraith'
+    || context.nativeVisibility?.(actor.position).admitted === false) return
+  const roll = drawEnemyInteger(work, 4)
+  if (roll !== 1 && actor.brain.contactCooldownTicks <= 0) return
+  const offset = radialVector(actor.headingDeg, 30)
+  spawnSimpleDeathEffect(work, actor, context.tick, {
+    alpha: Math.fround(.25 + drawEnemyFloat(work, .20000000298023224)),
+    alphaLossPerTick: Math.fround(.10000000149011612 * .15000000596046448),
+    atlas: 'BadGuys', blendMode: 'add', entry: 21, kind: 'fade-additive',
+    lifetimeTicks: 32, position: { x: Math.fround(actor.position.x - offset.x),
+      y: Math.fround(actor.position.y - 15 - offset.y) },
+    presentationOwner: 'pre-world-queue', role: 'wraith-soul-wisp',
+    rotationDeg: actor.headingDeg, scale: 1,
+  })
+}
 
 export function stepWraith(
   work: WorkingStep,

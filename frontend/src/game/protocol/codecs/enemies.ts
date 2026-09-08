@@ -121,6 +121,14 @@ export function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEn
     throw new GameProtocolError(`${field}.mageCloak is only valid for SKELETONMAGE`)
   }
   const animation = boneyardEnemyAnimation(source.animation, `${field}.animation`)
+  if (animation.bodyGaitPhase > 4) throw new GameProtocolError(`${field}.animation.bodyGaitPhase is invalid`)
+  if (animation.mageChargeSuppressed && enemyToken !== 'SKELETONMAGE') {
+    throw new GameProtocolError(`${field}.animation.mageChargeSuppressed requires a Mage`)
+  }
+  if (animation.pikeTargetOffset !== null && (enemyToken !== 'SKELETON'
+    || source.weapon !== 'pike' || animation.action !== 'skeleton-pike' || animation.state !== 'action')) {
+    throw new GameProtocolError(`${field}.animation.pikeTargetOffset requires an active Pike`)
+  }
   if ((enemyToken === 'SPIDER') !== (animation.spider !== null)) {
     throw new GameProtocolError(`${field}.animation.spider does not match the enemy family`)
   }
@@ -225,6 +233,9 @@ function boneyardEnemyAnimation(
     'actionProgress',
     'alpha',
     'bodyPose',
+    'bodyGaitPhase',
+    'mageChargeSuppressed',
+    'pikeTargetOffset',
     'coffinPose',
     'coffinRotationRadians',
     'coffinScaleX',
@@ -254,6 +265,7 @@ function boneyardEnemyAnimation(
     'zombieAngularOffsetDeg',
     'zombieAttackSide',
     'zombieBodyRotationRadians',
+    'zombieArmSocketRotationRadians',
     'zombieBodyType',
     'zombieFrontArmPose',
     'zombieFrontArmRotationRadians',
@@ -318,6 +330,10 @@ function boneyardEnemyAnimation(
     actionProgress: nonnegativeFinite(source.actionProgress, `${field}.actionProgress`),
     alpha,
     bodyPose: nonnegativeFinite(source.bodyPose, `${field}.bodyPose`),
+    bodyGaitPhase: nonnegativeFinite(source.bodyGaitPhase, `${field}.bodyGaitPhase`),
+    mageChargeSuppressed: boolean(source.mageChargeSuppressed, `${field}.mageChargeSuppressed`),
+    pikeTargetOffset: source.pikeTargetOffset === null ? null
+      : boneyardPoint(source.pikeTargetOffset, `${field}.pikeTargetOffset`),
     coffinPose: nonnegativeFinite(source.coffinPose, `${field}.coffinPose`),
     coffinRotationRadians: finite(
       source.coffinRotationRadians,
@@ -388,6 +404,7 @@ function boneyardEnemyAnimation(
       source.zombieBodyRotationRadians,
       `${field}.zombieBodyRotationRadians`,
     ),
+    zombieArmSocketRotationRadians: finite(source.zombieArmSocketRotationRadians, `${field}.zombieArmSocketRotationRadians`),
     zombieBodyType: integerWithin(
       source.zombieBodyType,
       `${field}.zombieBodyType`,

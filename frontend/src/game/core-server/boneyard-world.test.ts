@@ -80,6 +80,35 @@ function stepWorld(
   )
 }
 
+test('world commits sequential Pike constraints to the authoritative player root', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = []
+  let world = createBoneyardWorld(loaded)
+  world = { ...world, arenaTransition: null, encounter: null, waves: null, lanternPosition: null }
+  const player = { ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Pike target',
+    element: 'fire' }, world), position: { x: 240, y: 325 } }
+  const spawned = stepBoneyardEnemyStore(world.enemies, {
+    tick: 0, players: {}, projectileWorldBlocked: () => false, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [300, 350].map((y, index) => ({ enemyToken: 'SKELETON',
+      flags: ['FLAG_PIKE'], id: index + 1, locationPolicy: 'anywhere', nativeTypeId: 1001,
+      position: { x: 150, y }, spawnTick: 0, waveOrdinal: 1 })),
+  }).store
+  world = { ...world, enemies: { ...spawned, actors: spawned.actors.map(actor => {
+    if (actor.brain.family !== 'skeleton') throw new Error('expected Skeleton')
+    return { ...actor, targetPlayerId: 'player', nextMovementTick: 1000,
+      brain: { ...actor.brain, action: 'pike', phase: 'attack', markerEmitted: true,
+        pike: { playerId: 'player', position: player.position, distance: 103 } } }
+  }) } }
+  const stepped = stepWorld(world, { player }, {}, 1)
+  const last = stepped.world.enemies.actors[1]!
+  if (last.brain.family !== 'skeleton') throw new Error('expected Skeleton')
+  const target = stepped.players.player!.position
+  assert.notDeepEqual(target, player.position)
+  assert.deepEqual(last.brain.pike?.position, target)
+  assert.ok(Math.abs(Math.hypot(target.x - last.position.x, target.y - last.position.y) - 103) < 1e-4)
+  assert.ok(stepped.world.enemies.actors.every(actor => actor.brain.family === 'skeleton' && actor.brain.pike !== null))
+})
+
 test('emergency Potion admission counts the population after the source death', () => {
   // Native seed 2 hits the first precheck; seed 3 misses first and hits second.
   for (const [population, deaths, sharedSeed, expectedPotions] of [

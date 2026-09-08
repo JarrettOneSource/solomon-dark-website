@@ -334,6 +334,9 @@ function createBrain(
       return { ...created.state, family: 'heartmonger', phase: 'approach', legPhase: 0, torsoPhase: 0 }
     }
     case 'SKELETON': return {
+      verticalOffset: 0,
+      verticalVelocity: 0,
+      pike: null,
       action: skeletonAction(config.family.weapon),
       actionProgress: 0,
       contactTargetPlayerId: null,
@@ -352,6 +355,8 @@ function createBrain(
       return {
         actionProgress: 0,
         aimSeed: 0,
+        verticalOffset: 0,
+        verticalVelocity: 0,
         attackRange: range.range,
         family: 'archer',
         markerEmitted: false,
@@ -382,6 +387,8 @@ function createBrain(
         attackRange: range.range,
         castProgram: 'short',
         castRoll: 0,
+        verticalOffset: 0,
+        verticalVelocity: 0,
         disabledPrimaryTicks: 0,
         family: 'mage',
         lightningTargetPlayerId: null,

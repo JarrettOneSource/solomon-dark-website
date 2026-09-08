@@ -5,7 +5,7 @@ import type {
 } from './boneyard-enemy-config-model.ts'
 import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
-import { nativeFacultyColor } from './native-faculty.ts'
+import { nativeDesaturateColor } from './native-color.ts'
 
 export function validatedAuthoredRecipe(
   enemyToken: BoneyardWaveEnemyToken,
@@ -128,8 +128,8 @@ export function applyAuthoredFamily(
   if (family.kind === 'faculty') {
     const { kind: _kind, ...faculty } = family
     config.faculty = { ...faculty,
-      bodyColor: nativeFacultyColor(family.bodyColor, Math.fround(.7)),
-      headColor: nativeFacultyColor(family.headColor, Math.fround(.7)),
+      bodyColor: nativeDesaturateColor(family.bodyColor, Math.fround(.7)),
+      headColor: nativeDesaturateColor(family.headColor, Math.fround(.7)),
     }
     return
   }

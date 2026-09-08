@@ -661,6 +661,7 @@ function terminalOutputCount(
 }
 
 export function deathBrain(brain: BoneyardEnemyBrain): BoneyardEnemyBrain {
+  if (brain.family === 'skeleton') return { ...brain, pike: null, phase: 'death' }
   if (brain.family === 'demon-skull') return { ...brain, actions: [], phase: 'death' }
   if (brain.family === 'faculty') return { ...brain, action: null, bodyPose: 0,
     handMask: 0, headingLocked: false, lightningActive: false, phase: 'death' }

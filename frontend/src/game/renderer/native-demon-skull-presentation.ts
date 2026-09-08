@@ -1,7 +1,8 @@
 import { nativeDemonSkullBob, nativeDemonSkullEyes, nativeDemonSkullFacing } from '../core-kernels/native-demon-skull-attachments.ts'
 import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
-import { layer, presentation } from './native-enemy-layers.ts'
+import { layer, packRgb, presentation } from './native-enemy-layers.ts'
 import type { NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
+const BODY_GLOW_TINT = packRgb(.6700000166893005, 1, .05000000074505806)
 
 export function demonSkullPresentation(enemy: NativeEnemyVisualSnapshot, tick: number): NativeEnemyFamilyPresentation {
   const state = enemy.demonSkull
@@ -43,9 +44,9 @@ export function demonSkullPresentation(enemy: NativeEnemyVisualSnapshot, tick: n
   if (pose < 2) {
     const alpha = .75 + Math.sin(state.flickerPhaseDeg * Math.PI / 180) * .25
     layers.push(layer('Unholy', overlay, 'discorporeal-body-glow', {
-      alpha, blendMode: 'add', offset, rotationRadians, scale: 3.799999952316284, tint: 0xabff0d }),
+      alpha, blendMode: 'add', offset, rotationRadians, scale: 3.799999952316284, tint: BODY_GLOW_TINT }),
     layer('Unholy', overlay, 'discorporeal-body-glow-outer', {
-      alpha, blendMode: 'add', offset, rotationRadians, scale: 4 / enemy.scale, tint: 0xabff0d }))
+      alpha, blendMode: 'add', offset, rotationRadians, scale: 4 / enemy.scale, tint: BODY_GLOW_TINT }))
   } else {
     const alpha = .5 + random(.5)
     layers.push(layer('Unholy', 2, 'discorporeal-death-core', { alpha, blendMode: 'add',
@@ -54,9 +55,9 @@ export function demonSkullPresentation(enemy: NativeEnemyVisualSnapshot, tick: n
   // Native pose-two overlay indexing reaches blank records; the actor's body remains visible.
   if (pose < 2 && state.chargeGlow > 0) {
     layers.push(layer('Unholy', overlay, 'discorporeal-charge-glow', { alpha: state.chargeGlow,
-      blendMode: 'add', offset, rotationRadians, scale: (4.25 + random(.1, true)) / enemy.scale, tint: 0xabff0d }),
+      blendMode: 'add', offset, rotationRadians, scale: (4.25 + random(.1, true)) / enemy.scale, tint: BODY_GLOW_TINT }),
     layer('Unholy', overlay, 'discorporeal-charge-outer', { alpha: state.chargeGlow * .75,
-      blendMode: 'add', offset, rotationRadians, scale: (4 + state.chargeGlow) / enemy.scale, tint: 0xabff0d }))
+      blendMode: 'add', offset, rotationRadians, scale: (4 + state.chargeGlow) / enemy.scale, tint: BODY_GLOW_TINT }))
   }
   layers.push(...frontEyes)
   return presentation(layers, { hitBody: [] })

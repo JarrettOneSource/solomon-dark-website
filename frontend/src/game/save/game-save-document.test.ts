@@ -11,6 +11,8 @@ import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
+import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
@@ -27,6 +29,9 @@ import { HubWorldRuntime, createHubWorld } from '../core-server/hub-world.ts'
 import { grantPlayerEntitySkillRanks, replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
+import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from '../protocol/boneyard-enemy-replication.ts'
+import { boneyardEnemySnapshot } from '../protocol/codecs/enemies.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import { gameSnapshot as decodeGameSnapshot } from '../protocol/codecs/snapshot.ts'
 import { createGameSnapshotFrame, createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
@@ -2609,6 +2614,89 @@ test('a moved Lantern survives save restore and network snapshot creation', () =
   assert.notEqual(snapshot.world.lanternPosition, restored.state.world.lanternPosition)
 })
 
+test('Pike attachment and recoil survive saves and both enemy wire formats', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 44))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const players = { owner: { alive: true, connected: true, eligible: true, collisionRadius: 25,
+    position: { x: 310, y: 300 }, velocityPerTick: { x: 0, y: 0 } } }
+  const context = { projectileWorldBlocked: () => false, players,
+    resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition,
+    resolveSpawnIntents: () => [], tick: initial.tick }
+  let enemies = stepBoneyardEnemyStore(initial.world.enemies, { ...context,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: ['FLAG_PIKE'], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1001, position: { x: 300, y: 300 },
+      spawnTick: initial.tick, waveOrdinal: 1 }],
+  }).store
+  for (let tick = initial.tick + 1; tick <= initial.tick + 18; tick += 1) {
+    enemies = stepBoneyardEnemyStore(enemies, { ...context, tick }).store
+  }
+  const tick = initial.tick + 18
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
+    state: { ...initial, tick, world: { ...initial.world, enemies } } })
+  const restored = restoreGameSaveDocument(document)
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  const brain = restored.state.world.enemies.actors[0]!.brain
+  if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.equal(brain.pike?.playerId, 'owner')
+  assert.ok(brain.verticalOffset < 0)
+  assert.deepEqual(brain, enemies.actors[0]!.brain)
+  const snapshot = projectBoneyardEnemies(restored.state.world.enemies, tick, {
+    lightAt: () => 0, players: { owner: { position: { x: 400, y: 310 }, primaryTint: 0 } },
+  })[0]!
+  assert.deepEqual(snapshot.animation.pikeTargetOffset, { x: 100, y: 10 })
+  assert.deepEqual(boneyardEnemySnapshot(JSON.parse(JSON.stringify(snapshot)), 'enemy'), snapshot)
+  const transported = materializeBoneyardEnemy(boneyardEnemyDescriptor(snapshot), boneyardEnemySample(snapshot))
+  assert.deepEqual(transported.animation.pikeTargetOffset, { x: 100, y: 10 })
+  assert.ok(Math.abs(transported.animation.verticalOffset - brain.verticalOffset) < .002)
+  const invalidSample = [...boneyardEnemySample(snapshot)]
+  invalidSample[73] = 0
+  assert.throws(() => materializeBoneyardEnemy(boneyardEnemyDescriptor(snapshot), invalidSample), /sample shape/)
+  assert.throws(() => boneyardEnemySnapshot({ ...snapshot, weapon: 'claw' }, 'enemy'), /active Pike/)
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 34
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.pike
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.verticalOffset
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.verticalVelocity
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  if (migrated.world.kind !== 'boneyard') throw new Error('expected migrated Boneyard')
+  const migratedBrain = migrated.world.enemies.actors[0]!.brain
+  if (migratedBrain.family !== 'skeleton') throw new Error('expected migrated Skeleton')
+  assert.equal(migratedBrain.pike, null)
+  assert.equal(migratedBrain.verticalOffset, 0)
+  for (const invalid of [undefined, { ...brain.pike, distance: 0 }, { ...brain.pike, playerId: '' }]) {
+    const bad = JSON.parse(document)
+    bad.continuation.simulation.world.enemies.actors[0].brain.pike = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /Pike/)
+  }
+})
+
+test('legacy stock Faculty saves recover their palette from the native recipe instead of inverting clamped colors', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 47))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const recipe = nativeFacultyRecipe(loadedBoneyard.sourceSha256, 'Dire Sirmin')
+  if (recipe.family.kind !== 'faculty') throw new Error('expected Faculty recipe')
+  const enemies = stepBoneyardEnemyStore(initial.world.enemies, {
+    projectileWorldBlocked: () => false, players: {}, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'DIREFACULTY', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1010, position: { x: 300, y: 300 }, authoredRecipe: recipe,
+      spawnTick: initial.tick, waveOrdinal: 1 }], tick: initial.tick,
+  }).store
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
+    state: { ...initial, world: { ...initial.world, enemies } } })
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 34
+  const family = legacy.continuation.simulation.world.enemies.actors[0].config.family
+  family.bodyColor = nativeDesaturateColor(recipe.family.bodyColor, 1 - Math.fround(.7))
+  family.headColor = nativeDesaturateColor(recipe.family.headColor, 1 - Math.fround(.7))
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  assert.deepEqual(restored.world.enemies.actors[0]!.config.family, enemies.actors[0]!.config.family)
+})
+
 test('featured boss identity survives continuation saves, raw snapshots and incremental frames', () => {
   const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 41))
   assert.ok(loadedBoneyard)
@@ -2747,6 +2835,11 @@ test('Dampen caster delay survives saves and legacy Mages initialize it explicit
   const restoredMage = restored.state.world.enemies.actors[0]!
   if (restoredMage.brain.family !== 'mage') throw new Error('expected Mage')
   assert.equal(restoredMage.brain.disabledPrimaryTicks, 600)
+  const projected = projectBoneyardEnemies(restored.state.world.enemies, initial.tick)[0]!
+  assert.equal(projected.animation.mageChargeSuppressed, true)
+  assert.equal(boneyardEnemySnapshot(JSON.parse(JSON.stringify(projected)), 'Mage').animation.mageChargeSuppressed, true)
+  assert.equal(materializeBoneyardEnemy(boneyardEnemyDescriptor(projected), boneyardEnemySample(projected))
+    .animation.mageChargeSuppressed, true)
   assert.equal(restored.state.world.enemies.deathEffects.length, 73)
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 32

@@ -882,6 +882,17 @@ test('Multiple Shadows changes every MS provider without changing literal flags'
   }, 1, true)?.castsDirectionalShadow, true)
 })
 
+test('Skeleton Fire with no enrollment stays dark while Demon Fire retains its native provider', () => {
+  const source = { kind: 'demon-fire', ageTicks: 2, alpha: .3, position: { x: 20, y: 40 },
+    lightRegistration: null }
+  assert.equal(nativeEnemyProjectileEffectLightProvider(source), null)
+  const lit = nativeEnemyProjectileEffectLightProvider({ ...source,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 2 } })
+  assert.equal(lit?.lane, 'actor')
+  assert.equal(lit?.source.radius, Math.fround(.6))
+  assert.ok(Math.abs(lit!.source.intensity - .9) < 1e-7)
+})
+
 test('enemy FireBurst ZAnimLit follows the rising child and fades by 0.04 per tick', () => {
   const provider = nativeEnemyProjectileEffectLightProvider({
     ageTicks: 5,
@@ -1411,9 +1422,47 @@ test('exhaustively projects every modeled enemy provider family and duplicate en
     animation: { alpha: 0.6 },
     lighting: { charge: 0.6, glow: 0.6, providerCopies: 1 },
   }), 12, true)
-  assert.equal(portal[0]!.radius, Math.fround(0.6))
-  assert.ok(portal[0]!.intensity >= 0.54 && portal[0]!.intensity <= 0.75)
+  assert.equal(portal[0]!.intensity, Math.fround(0.6))
+  assert.ok(portal[0]!.radius >= 0.54 && portal[0]!.radius <= 0.75)
   assert.equal(portal[0]!.castsDirectionalShadow, true)
+})
+
+test('Archer pose nine omits its charge light while burning and Mage providers remain enrolled', () => {
+  for (const bodyPose of [0, 8, 9, 10]) {
+    for (const burning of [false, true]) {
+      const archer = enemy('SKELETONARCHER', {
+        animation: { bodyPose },
+        flags: burning ? ['FLAG_BURNING'] : [],
+        lighting: { charge: 0.8, glow: 0.7, providerCopies: burning ? 2 : 1 },
+      })
+      assert.equal(nativeEnemyLightSources(archer, 12).length,
+        burning ? 2 : bodyPose === 9 ? 0 : 1)
+      assert.equal(nativeEnemyLightSources({ ...archer, enemyToken: 'SKELETONMAGE' }, 12).length,
+        burning ? 2 : 1)
+    }
+  }
+})
+
+test('Portal light fades intensity with alpha while its radius flickers independently', () => {
+  for (const alpha of [0, 0.25, 0.6, 1]) {
+    for (const multipleShadows of [false, true]) {
+      const radii = new Set<number>()
+      for (let tick = 0; tick < 64; tick += 1) {
+        const sources = nativeEnemyLightSources(enemy('PORTAL', {
+          animation: { alpha },
+          lighting: { charge: alpha, glow: alpha, providerCopies: 1 },
+        }), tick, multipleShadows)
+        assert.equal(sources.length, 1)
+        const source = sources[0]!
+        assert.equal(source.intensity, Math.fround(alpha))
+        assert.ok(source.radius >= Math.fround(Math.fround(alpha) * Math.fround(0.8999999761581421)))
+        assert.ok(source.radius <= Math.fround(Math.fround(alpha) * Math.fround(1.25)))
+        assert.equal(source.castsDirectionalShadow, multipleShadows)
+        radii.add(source.radius)
+      }
+      assert.equal(radii.size > 1, alpha !== 0)
+    }
+  }
 })
 
 test('keeps projectile provider randomness presentation-owned and lane ordering explicit', () => {

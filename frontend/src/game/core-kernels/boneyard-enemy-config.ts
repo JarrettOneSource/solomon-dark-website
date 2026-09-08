@@ -5,7 +5,7 @@ import { applyAuthoredFamily, validatedAuthoredRecipe } from './boneyard-enemy-r
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from './boneyard-wave-schema.ts'
 import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
-import { nativeFacultyColor } from './native-faculty.ts'
+import { nativeDesaturateColor } from './native-color.ts'
 import type { NativeLootPolicies } from './native-loot.ts'
 import { NATIVE_WRAITH_COLLISION_RADIUS } from './native-wraith-flight.ts'
 export type {
@@ -123,7 +123,7 @@ export function evaluateBoneyardEnemyConfig(
   const config: MutableConfig = {
     spitWebs: true,
     demonSkullCapabilities: 0,
-    faculty: { bodyColor: nativeFacultyColor([1, .5, 0, 1], Math.fround(.6)),
+    faculty: { bodyColor: nativeDesaturateColor([1, .5, 0, 1], Math.fround(.6)),
       female: false, headColor: [1, 1, 1, 1], headgear: 0, primary: 0, secondary: 0 },
     blindMode: 2,
     crowCount: 1,

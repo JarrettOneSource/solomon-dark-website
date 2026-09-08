@@ -1377,6 +1377,9 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       actionProgress: 4,
       alpha: 1,
       bodyPose: 0,
+      bodyGaitPhase: 0,
+      mageChargeSuppressed: false,
+      pikeTargetOffset: null,
       coffinPose: 0,
       coffinRotationRadians: 0,
       coffinScaleX: 1,
@@ -1417,6 +1420,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
       zombieBodyRotationRadians: 0,
+      zombieArmSocketRotationRadians: 0,
       zombieBodyType: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
@@ -1680,7 +1684,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    82,
+    88,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -1691,7 +1695,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 82)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 88)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,

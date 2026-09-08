@@ -13,6 +13,8 @@ import { validateTick } from './model.ts'
 import { positiveModulo } from './movement.ts'
 import { NATIVE_ENEMY_HIT_LATCH_TICKS } from './programs.ts'
 import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
+import { detachSkeletonPike } from './skeleton-body.ts'
+import { spawnSkeletonArmorBreak } from './skeleton-death.ts'
 interface DamagePresentationWork {
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
@@ -116,8 +118,31 @@ export function damageBoneyardEnemy(
     steeringRngState = reaction.rngState
   }
 
-  const currentHealth = actor.currentHealth - request.amount
+  let currentHealth = actor.currentHealth - request.amount
   const healthDamage = Math.min(Math.max(actor.currentHealth, 0), request.amount)
+  let damagedActor = actor
+  if (currentHealth <= 0 && actor.config.enemyToken === 'SKELETON' && actor.config.family.armor) {
+    const pitch = Math.fround(.8999999761581421 + drawDamageUnit(work) * (1.25 - .8999999761581421))
+    const crash = Math.floor(drawDamageUnit(work) * 3)
+    emitDamageSound(work, actor, request.tick,
+      crash === 0 ? 'armor-crash-1' : crash === 1 ? 'armor-crash-2' : 'armor-crash-3', pitch)
+    spawnSkeletonArmorBreak(work, actor, request.tick)
+    const headgear = actor.config.family.headgear
+    const bonus = headgear === 1 ? 6 : headgear === 2 || headgear === 5 ? 10 : headgear === 4 ? 15 : 0
+    currentHealth = Math.fround(Math.fround(4 + drawDamageUnit(work) * 2) + bonus)
+    damagedActor = {
+      ...detachSkeletonPike(actor),
+      config: {
+        ...actor.config,
+        family: { ...actor.config.family, armor: false },
+        flags: Object.freeze(actor.config.flags.filter(flag => flag !== 'FLAG_ARMOR')),
+        baseSpeed: Math.fround(actor.config.baseSpeed * 1.75),
+        attackSpeed: Math.fround(actor.config.attackSpeed * 1.5),
+      },
+    }
+    if (damagedActor.brain.family !== 'skeleton') throw new Error('Skeleton armor changed brain family')
+    damageBrain = damagedActor.brain
+  }
   const killed = currentHealth <= 0
   if (actor.config.classification !== 'normal') {
     source = { ...source, featuredBossId: killed ? null : actor.id,
@@ -153,7 +178,7 @@ export function damageBoneyardEnemy(
         shieldSoundCooldownTicks: 0,
       }
     : {
-        ...actor,
+        ...damagedActor,
         brain: damageBrain,
         currentHealth,
         lastDamagedByPlayerId: request.sourcePlayerId,
@@ -276,6 +301,20 @@ export function applyBoneyardStaffImpactVerticalVelocity(
   return { ...source, actors }
 }
 
+export function releaseBoneyardSkeletonPike(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+): BoneyardEnemyStore {
+  const index = source.actors.findIndex(actor => actor.id === actorId)
+  const actor = source.actors[index]
+  if (!actor) return source
+  const released = detachSkeletonPike(actor)
+  if (released === actor) return source
+  const actors = [...source.actors]
+  actors[index] = released
+  return { ...source, actors }
+}
+
 export function breakBoneyardSkeletonPike(
   source: BoneyardEnemyStore,
   actorId: BoneyardEnemyActorId,
@@ -296,9 +335,11 @@ export function breakBoneyardSkeletonPike(
   actors[actorIndex] = {
     ...actor,
     bodyPose: 0,
+    headFacingOffset: 0,
     brain: {
       ...actor.brain,
       action: 'claw',
+      pike: null,
       actionProgress: 0,
       contactTargetPlayerId: null,
       markerEmitted: false,

@@ -116,6 +116,18 @@ intensity, no smaller radius, and lies strictly inside the radius-difference
 circle scaled by 145. Ordinary tint query `0x0057F980` takes the maximum source
 contribution with plateau 75, outer radius 145, and vertical scale 0.85.
 
+The 2026-09-07 enemy audit rechecked that ABI against raw Portal instructions
+`0x0047BED0..0x0047BF6B`. After source and raster XY, `0x0057FE40` consumes
+radius as parameter 6 and intensity as parameter 7. Portal stores its live
+alpha in the intensity slot and its alpha-scaled random size in the radius
+slot. The earlier Portal summary had those two fields reversed. The random
+magnitude at `0x00786964` is float `0.3500000238418579`; the added double at
+`0x00784970` is `0.8999999761581421`. Addition is stored as float before the
+alpha multiplication and final float store. Both host queries and renderer
+stamps use the shared corrected Portal source. Other provider families retain
+their independently recovered parameter order; this correction does not swap
+the general light ABI.
+
 The static census closes all compiled provider families rather than only those
 materialized by Website: player; DemonSkull; Skeleton, Archer, and
 Mage; Imp variants; Wraith; Demon; Coffin; DireFaculty; Heartmonger; Portal;

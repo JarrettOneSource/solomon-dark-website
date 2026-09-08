@@ -351,6 +351,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
   'unbind',
   'banish-black',
   'scrap',
+  'move-fade-sin',
 ] as const
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS = [
@@ -500,6 +501,9 @@ export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
   'pop-shield',
   'portal-hurt',
   'zombie-ouch',
+  'armor-crash-1',
+  'armor-crash-2',
+  'armor-crash-3',
 ] as const
 
 export const BONEYARD_ENEMY_DEATH_SOUNDS = [
@@ -743,6 +747,9 @@ export interface BoneyardEnemyAnimationSnapshot {
   actionProgress: number
   alpha: number
   bodyPose: number
+  bodyGaitPhase: number
+  mageChargeSuppressed: boolean
+  pikeTargetOffset: Vector2 | null
   coffinPose: number
   coffinRotationRadians: number
   coffinScaleX: -1 | 1
@@ -772,6 +779,7 @@ export interface BoneyardEnemyAnimationSnapshot {
   zombieAngularOffsetDeg: number
   zombieAttackSide: 0 | 1
   zombieBodyRotationRadians: number
+  zombieArmSocketRotationRadians: number
   zombieBodyType: number
   zombieFrontArmPose: number
   zombieFrontArmRotationRadians: number

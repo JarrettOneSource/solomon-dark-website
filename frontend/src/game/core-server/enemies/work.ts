@@ -45,6 +45,8 @@ export function createEnemyWork(
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
     playerDamage: [],
     playerKnockbacks: [],
+    playerPositions: {},
+    playerTargets: {},
     pathStatusFactors: new Map(),
     pendingSpawnIntents: [],
     projectiles: [...source.projectiles],

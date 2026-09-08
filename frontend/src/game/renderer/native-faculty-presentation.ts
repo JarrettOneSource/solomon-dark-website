@@ -1,7 +1,7 @@
 import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
 import { nativeDeathMagicLayers } from './native-death-magic-presentation.ts'
 import type { NativeEnemyAnimationSample } from './native-enemy-animation.ts'
-import { layer, presentation, requiredPoint } from './native-enemy-layers.ts'
+import { layer, packRgb, presentation, requiredPoint } from './native-enemy-layers.ts'
 import type { NativeEnemyAuthoredPointResolver, NativeEnemyFamilyPresentation, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
 
 export function facultyPresentation(enemy: NativeEnemyVisualSnapshot, facing: number,
@@ -12,8 +12,8 @@ export function facultyPresentation(enemy: NativeEnemyVisualSnapshot, facing: nu
   const pose = Math.trunc(animation?.bodyPose ?? 0)
   const robePose = pose > 0 ? 4 + pose : Math.trunc(animation?.gaitPose ?? 0)
   const bodyEntry = 1 + pose * 18 + facing
-  const bob = (Math.sin(faculty.lightPhase * Math.PI / 180) * 8 - 15) / enemy.scale
-  const jitter = Math.sin(faculty.lightPhase * 16 * Math.PI / 180) * .5 / enemy.scale
+  const bob = Math.sin(faculty.lightPhase * 2 * Math.PI / 180) * 8 - 15
+  const jitter = Math.sin(faculty.lightPhase * 16 * Math.PI / 180) * .5
   const angle = enemy.headingDeg * Math.PI / 180
   const robeOffset = { x: Math.sin(angle) * jitter, y: bob - Math.cos(angle) * jitter }
   const bodyTint = tint(faculty.bodyColor)
@@ -29,12 +29,12 @@ export function facultyPresentation(enemy: NativeEnemyVisualSnapshot, facing: nu
   for (let hand = 0; hand < 2; hand += 1) {
     if ((faculty.handMask & (1 << hand)) === 0) continue
     const anchor = requiredPoint(authoredPoints('Faculty', bodyEntry), hand, 'Faculty hand')
-    const aura = nativeDeathMagicLayers({ x: anchor.x / enemy.scale, y: anchor.y / enemy.scale + bob },
-      1.5 / enemy.scale, tick, rng)
+    const aura = nativeDeathMagicLayers({ x: anchor.x, y: anchor.y + bob },
+      1.5, tick, rng)
     layers.push(...aura.layers)
     rng = aura.rng
   }
-  const headOffset = { x: 0, y: bob + (enemy.headgear === 0 ? -5 / enemy.scale : 0) }
+  const headOffset = { x: 0, y: bob + (enemy.headgear === 0 ? -5 : 0) }
   if (enemy.headgear === 0) {
     layers.push(layer('Faculty', 91 + facing, 'faculty-head-robe', {
       alpha: faculty.bodyColor[3], offset: headOffset, scale: 1.0499999523162842, tint: bodyTint }),
@@ -54,11 +54,11 @@ export function facultyPresentation(enemy: NativeEnemyVisualSnapshot, facing: nu
   const direction = drawNativeFloat(distance.state, 360)
   const deathAngle = direction.value * Math.PI / 180
   return presentation(layers.map((source) => ({ ...source, offset: {
-    x: source.offset.x + Math.sin(deathAngle) * distance.value / enemy.scale,
-    y: source.offset.y - Math.cos(deathAngle) * distance.value / enemy.scale,
+    x: source.offset.x + Math.sin(deathAngle) * distance.value,
+    y: source.offset.y - Math.cos(deathAngle) * distance.value,
   } })))
 }
 
 function tint(color: readonly [number, number, number, number]): number {
-  return (Math.round(color[0] * 255) << 16) | (Math.round(color[1] * 255) << 8) | Math.round(color[2] * 255)
+  return packRgb(color[0], color[1], color[2])
 }

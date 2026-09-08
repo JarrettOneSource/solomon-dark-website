@@ -5,7 +5,7 @@ import { WIZARD_DISCIPLINES, WIZARD_ELEMENTS } from '../core-kernels/player-char
 import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
 import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 34
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 35
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 16 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */

@@ -411,9 +411,11 @@ clamps radius after `SignedFloat(2)` to 200..300. Lightning completion
 
 Faculty configuration color is now closed: `0x0040FC60` computes luminance
 with `(0.3086000084877014, 0.6093999743461609, 0.0820000022649765)`, then
-mixes each original channel with that luminance. `ApplyConfig` uses saturation
+mixes each original channel with that luminance. Entry 091's fresh typed-ABI
+audit corrects the argument direction: this is desaturation amount, with
+`original*(1-amount)+luminance*amount`. `ApplyConfig` uses amount
 `0.699999988079071` (`0x0078542C`, bytes `33 33 33 3F`), clamps through
-`0x0040F770`, and preserves alpha. The constructor uses saturation
+`0x0040F770`, and preserves alpha. The constructor uses amount
 `0.6000000238418579` on orange. This is not a brightness multiplier.
 
 Faculty spell inheritance is closed through `0x005E4990`, `0x005E7E00`,

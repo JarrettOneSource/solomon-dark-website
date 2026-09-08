@@ -20,7 +20,7 @@ import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skelet
 import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
 import { projectBoneyardCrows } from '../host/project-boneyard-crows.ts'
 import { boneyardEnemyLiveCount, createBoneyardEnemyStore, positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import { applyBoneyardStaffDisable, breakBoneyardSkeletonPike, damageBoneyardEnemy, setBoneyardEnemyHurricaneContactCooldown } from './enemies/damage.ts'
+import { applyBoneyardStaffDisable, breakBoneyardSkeletonPike, damageBoneyardEnemy, releaseBoneyardSkeletonPike, setBoneyardEnemyHurricaneContactCooldown } from './enemies/damage.ts'
 import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyMovementRequest, BoneyardEnemySpellSegmentRequest, BoneyardEnemyStore, BoneyardEnemyStoreStepResult, BoneyardEnemyTargets } from './enemies/model.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
@@ -563,7 +563,7 @@ test('enemy fixed ticks own every native persistent-light writer, reset, and enr
     ...spawnedImp.store,
     actors: [{
       ...spawnedImp.store.actors[0]!,
-      config: { ...spawnedImp.store.actors[0]!.config, scale: 0 },
+      config: { ...spawnedImp.store.actors[0]!.config, baseSpeed: 0 },
     }],
   }, 1, FAR_PLAYERS).store.actors[0]!
   assert.deepEqual(imp.lighting, {
@@ -786,12 +786,33 @@ test('native zero-speed gates preserve each family recurrence and enrollment rul
       ...spawned.store,
       actors: [{
         ...actor,
-        config: { ...actor.config, scale: 0 },
+        config: { ...actor.config, baseSpeed: 0 },
         lighting: { charge: 0.3, glow: 0.4, providerCopies: 2 },
       }],
     }, 1, FAR_PLAYERS)
     assert.deepEqual(result.store.actors[0]!.lighting, expected, token)
   }
+})
+
+test('stasis suspends Skeleton-family and Imp providers and Mage retains both native Fire rolls', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'IMP'] as const) {
+    const source = spawnOne(`stasis-light-${token}`, token, { x: 20, y: 40 }, {}, ['FLAG_BURNING']).store
+    const active = step(source, 1, {}).store
+    const actor = active.actors[0]!
+    const frozen = stepWithEffects(active, 2, {}, { [actor.id]: targetEffect(actor.id,
+      { frozenTicks: 10, frozenTimeScale: 0 }) })
+    const lit = frozen.store.actors[0]!.lighting
+    assert.equal(lit.providerCopies, 0, token)
+    assert.equal(lit.charge, actor.lighting.charge, token)
+    assert.equal(lit.glow, actor.lighting.glow + (token === 'IMP' ? .01 : 0), token)
+    assert.equal(frozen.store.projectileEffects.some(effect => effect.spawnTick === 2), false, token)
+    assert.ok(step(frozen.store, 3, {}).store.actors[0]!.lighting.providerCopies > 0, token)
+  }
+  const mage = spawnOne('two-mage-fire-rolls', 'SKELETONMAGE', { x: 0, y: 0 }, {}, ['FLAG_BURNING']).store
+  // Native seed 88 admits both recipe rolls, including the first Fire's constructor draws.
+  const result = step({ ...mage, steeringRngState: createNativeRng(88),
+    actors: mage.actors.map(actor => ({ ...actor, nextMovementTick: 1000 })) }, 1, {})
+  assert.equal(result.store.projectileEffects.filter(effect => effect.spawnTick === 1 && effect.kind === 'demon-fire').length, 2)
 })
 
 test('Demon root follows the planted-extremity midpoint only beyond thirty units', () => {
@@ -2195,7 +2216,7 @@ test('shield damage suppresses body hits, never overflows health, and breaks nat
   const faded = step(immediateBreak.store, 2, players).store.deathEffects
     .find(({ id }) => id === brightParticle.id)
   assert.ok(faded)
-  assert.ok(Math.abs(faded.alpha - (brightParticle.alpha - 0.05)) < 1e-12)
+  assert.equal(faded.alpha, Math.fround(brightParticle.alpha - 0.05))
 
   const firstCue = damageBoneyardEnemy(appliedStore, {
     actorId: appliedStore.actors[0]!.id,
@@ -4104,6 +4125,61 @@ test('every Unbind family retains magic provenance only from its lethal contact'
   }
 })
 
+test('admitted Wraith wisps remain world-owned and emit without the flaming flag', () => {
+  const spawned = spawnOne('wraith-native-wisps', 'WRAITH', { x: 20, y: 40 }, {})
+  const actor = spawned.store.actors[0]!
+  assert.equal(actor.brain.family, 'wraith')
+  if (actor.brain.family !== 'wraith') throw new Error('expected Wraith brain')
+  const active = { ...spawned.store, actors: [{ ...actor, headingDeg: 90,
+    nextMovementTick: 1000, brain: { ...actor.brain, contactCooldownTicks: 20 } }] }
+  const result = step(active, 1, {})
+  const wisp = result.store.deathEffects.find(effect => effect.role === 'wraith-soul-wisp')
+  assert.ok(wisp)
+  assert.deepEqual(wisp.position, { x: -10, y: 25 })
+  assert.equal(wisp.entry, 21)
+  assert.equal(wisp.blendMode, 'add')
+  assert.equal(wisp.presentationOwner, 'pre-world-queue')
+  assert.equal(wisp.painterRegistration, null)
+  assert.equal(wisp.rotationDeg, 90)
+  assert.equal(wisp.scale, 1)
+  assert.ok(wisp.alpha >= .25 && wisp.alpha <= Math.fround(.25 + Math.fround(.2)))
+  assert.equal(wisp.alphaLossPerTick, Math.fround(Math.fround(.1) * .15000000596046448))
+  const moved = positionBoneyardEnemy(result.store, actor.id, { x: 300, y: 400 }).store
+  const killed = damageBoneyardEnemy(moved, { actorId: actor.id, amount: actor.currentHealth,
+    tick: 1, sourcePlayerId: 'player' }).store
+  const next = step(killed, 2, {}).store.deathEffects.find(effect => effect.id === wisp.id)!
+  assert.deepEqual(next.position, wisp.position)
+  assert.equal(next.alpha, Math.fround(wisp.alpha - wisp.alphaLossPerTick))
+  const hidden = stepBoneyardEnemyStore(active, { tick: 1, players: {}, resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [], projectileWorldBlocked: NO_WORLD_CONTACT,
+    nativeVisibility: () => ({ admitted: false, intensity: 0 }) })
+  assert.equal(hidden.store.deathEffects.some(effect => effect.role === 'wraith-soul-wisp'), false)
+  assert.equal(step({ ...result.store, actors: [] }, 40, {}).store.deathEffects.some(effect => effect.id === wisp.id), false)
+})
+
+test('burning Skeleton siblings emit short-lived Fire with ground art and no outbound light', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE'] as const) {
+    let result = spawnOne(`burning-child-${token}`, token, { x: 20, y: 40 }, {}, ['FLAG_BURNING'])
+    let tick = 0
+    while (!result.store.projectileEffects.some(effect => effect.kind === 'demon-fire') && tick < 100) {
+      result = step(result.store, ++tick, {})
+    }
+    const fire = result.store.projectileEffects.find(effect => effect.kind === 'demon-fire')
+    assert.ok(fire, token)
+    assert.equal(fire.lightRegistration, null, token)
+    assert.equal(fire.painterRegistration.managerLane, 'actor', token)
+    assert.equal(fire.fire.life, Math.fround(.35), token)
+    assert.ok(fire.scale >= Math.fround(.6) && fire.scale <= 1, token)
+    assert.equal(fire.fire.damage, result.store.actors[0]!.config.primaryDamage, token)
+    const actor = result.store.actors[0]!
+    assert.deepEqual(fire.position, { x: Math.fround(actor.position.x), y: Math.fround(actor.position.y) }, token)
+    const detached = { ...result.store, actors: [] }
+    const contact = step(detached, tick + (3 - tick % 3), { player: { ...FAR_PLAYERS.player!, position: fire.position } })
+    assert.ok(contact.playerDamage.some(damage => damage.physicalDamage > 0 && damage.magicDamage > 0), token)
+    assert.equal(step(detached, tick + 40, {}).store.projectileEffects.some(effect => effect.id === fire.id), false, token)
+  }
+})
+
 test('Wraith dissolve keeps the shared additive BadGuys-20 FadeScale core', () => {
   const result = killOneAndStep('wraith-fade-scale-core', 'WRAITH')
   const core = result.store.deathEffects.find(
@@ -4681,7 +4757,7 @@ function verifySkeletonProgram(
   expectedMarkerTicks: readonly number[],
   expectedCompletionTick: number,
 ): void {
-  const players = { player: livingTarget(10, 0) }
+  const players = { player: { ...livingTarget(10, 0), summoned: true as const } }
   let result = spawnOne(`skeleton-${expectedAction}`, 'SKELETON', { x: 0, y: 0 }, players, flags)
   const initialGaitPose = result.store.actors[0]!.gaitPose
   result = step(result.store, 1, players)
@@ -5192,11 +5268,14 @@ for (const [name, fragmentPair] of [['Ironmaw', [96, 97]], ['Foulshaft', [98, 99
       }],
       tick: 0,
     })
-    const killed = damageBoneyardEnemy(source.store, {
+    let killed = damageBoneyardEnemy(source.store, {
       actorId: 1,
       amount: 10_000,
       sourcePlayerId: 'player',
       tick: 0,
+    })
+    if (!killed.killed) killed = damageBoneyardEnemy(killed.store, {
+      actorId: 1, amount: 10_000, sourcePlayerId: 'player', tick: 0,
     })
     const death = step(killed.store, 1, FAR_PLAYERS)
     const helmet = death.store.deathEffects.find(({ role }) => role === 'skeleton-headgear-fragment')
@@ -5241,6 +5320,162 @@ test('Heartmonger owns five Crows, summons at its native deadline, and releases 
   assert.equal(retired.store.actors.some(({ id }) => id === actor.id), false)
 })
 
+
+test('Pike contact retains the player, freezes its action, and publishes a direct target constraint', () => {
+  const players = { player: livingTarget(40, 0) }
+  let result = spawnOne('pike-retains-player', 'SKELETON', { x: 0, y: 0 }, players, ['FLAG_PIKE'])
+  for (let tick = 1; tick <= 17; tick += 1) result = step(result.store, tick, players)
+  const actor = result.store.actors[0]!
+  assert.equal(actor.brain.family, 'skeleton')
+  if (actor.brain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.equal(actor.brain.pike?.playerId, 'player')
+  assert.equal(actor.brain.pike?.distance, Math.fround(actor.config.scale * 103))
+  const next = step(result.store, 18, players)
+  assert.deepEqual(next.store.actors[0]!.position, actor.position)
+  assert.equal(skeletonActionProgress(next), actor.brain.actionProgress)
+  assert.equal(next.store.actors[0]!.bodyPose, actor.bodyPose)
+  assert.deepEqual(next.playerPositions.player, { x: actor.config.scale * 103, y: 0 })
+  assert.deepEqual(next.playerDamage, [])
+  const copied = step(structuredClone(result.store), 18, players)
+  assert.deepEqual(copied, next)
+  const released = step(next.store, 19, { player: livingTarget(actor.config.scale * 154.5, 0) })
+  const releasedBrain = released.store.actors[0]!.brain
+  if (releasedBrain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.equal(releasedBrain.pike, null)
+  assert.equal(releasedBrain.phase, 'approach')
+  assert.equal(releasedBrain.actionProgress, 0)
+  assert.deepEqual(released.playerPositions, {})
+})
+
+test('Skeleton armor depletion removes armor with fragments and preserves the living actor until a second lethal hit', () => {
+  const source = spawnOne('armor-stage', 'SKELETON', { x: 100, y: 200 }, FAR_PLAYERS, ['FLAG_ARMOR'])
+  const actor = source.store.actors[0]!
+  const depleted = damageBoneyardEnemy(source.store, {
+    actorId: actor.id, amount: actor.currentHealth + 500, sourcePlayerId: 'player', tick: 0,
+  })
+  assert.equal(depleted.killed, false)
+  const exposed = depleted.store.actors[0]!
+  assert.equal(exposed.lifeState, 'alive')
+  assert.equal(exposed.deathEpoch, null)
+  if (exposed.config.enemyToken !== 'SKELETON') throw new Error('expected Skeleton')
+  assert.equal(exposed.config.family.armor, false)
+  assert.equal(exposed.config.flags.includes('FLAG_ARMOR'), false)
+  assert.ok(exposed.currentHealth >= 4 && exposed.currentHealth <= 6)
+  assert.equal(exposed.config.baseSpeed, Math.fround(actor.config.baseSpeed * 1.75))
+  assert.equal(exposed.config.attackSpeed, Math.fround(actor.config.attackSpeed * 1.5))
+  const armor = depleted.store.deathEffects.filter(effect => effect.role === 'skeleton-armor-fragment')
+  assert.equal(armor.length, 5)
+  assert.deepEqual(armor.map(effect => Math.floor((effect.entry - 92) / 2)).sort(), [4, 5, 6, 7, 8])
+  assert.equal(depleted.store.deathEffects.some(effect => effect.role === 'skeleton-bone'), false)
+  const flash = depleted.store.deathEffects.find(effect => effect.role === 'skeleton-armor-flash')!
+  assert.deepEqual(flash.position, { x: 100, y: 165 })
+  assert.equal(flash.entry, 15)
+  const killed = damageBoneyardEnemy(depleted.store, {
+    actorId: actor.id, amount: exposed.currentHealth, sourcePlayerId: 'player', tick: 0,
+  })
+  assert.equal(killed.killed, true)
+  const death = step(killed.store, 1, FAR_PLAYERS)
+  assert.equal(death.rewards.length, 1)
+  assert.equal(death.store.deathEffects.filter(effect => effect.role === 'skeleton-armor-fragment').length, 5)
+})
+
+test('Pike attachment releases on target loss, control effects, break and death, and survives stasis and pause', () => {
+  const players = { player: livingTarget(10, 0) }
+  let source = spawnOne('pike-lifecycle', 'SKELETON', { x: 0, y: 0 }, players, ['FLAG_PIKE'])
+  for (let tick = 1; tick <= 17; tick += 1) source = step(source.store, tick, players)
+  const actor = source.store.actors[0]!
+  if (actor.brain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.ok(actor.brain.pike)
+  const invalidTargets: readonly BoneyardEnemyTargets[] = [{}, { player: { ...players.player, alive: false } },
+    { player: { ...players.player, connected: false } }, { player: { ...players.player, eligible: false } }]
+  for (const targets of invalidTargets) {
+    const next = step(source.store, 18, targets)
+    const brain = next.store.actors[0]!.brain
+    if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+    assert.equal(brain.pike, null)
+    assert.equal(brain.phase, 'approach')
+    assert.deepEqual(next.playerPositions, {})
+  }
+  for (const patch of [{ dazzleTicks: 3 }, { disruptedTicks: 3 }]) {
+    const next = stepWithEffects(source.store, 18, players, { [actor.id]: targetEffect(actor.id, patch) })
+    const brain = next.store.actors[0]!.brain
+    if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+    assert.equal(brain.pike, null)
+    assert.deepEqual(next.playerPositions, {})
+  }
+  const frozen = stepWithEffects(source.store, 18, players, {
+    [actor.id]: targetEffect(actor.id, { frozenTicks: 10, frozenTimeScale: 0 }),
+  })
+  const frozenBrain = frozen.store.actors[0]!.brain
+  if (frozenBrain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.ok(frozenBrain.pike)
+  assert.equal(frozenBrain.verticalOffset, actor.brain.verticalOffset)
+  assert.equal(frozen.playerPositions.player?.x, actor.brain.pike.distance)
+  const paused = stepBoneyardEnemyStore(source.store, { paused: true,
+    players, projectileWorldBlocked: NO_WORLD_CONTACT, resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [], tick: 18 })
+  assert.deepEqual(paused.store.actors[0]!.brain, actor.brain)
+  assert.deepEqual(paused.playerPositions, {})
+  for (const store of [releaseBoneyardSkeletonPike(source.store, actor.id),
+    breakBoneyardSkeletonPike(source.store, actor.id).store,
+    damageBoneyardEnemy(source.store, { actorId: actor.id, amount: 1000, sourcePlayerId: 'player', tick: 17 }).store]) {
+    const brain = store.actors[0]!.brain
+    if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+    assert.equal(brain.pike, null)
+  }
+})
+
+test('Skeleton attack recoil moves the complete body and settles at the floor', () => {
+  const players = { player: { ...livingTarget(40, 0), summoned: true as const } }
+  for (const flags of [[], ['FLAG_SWORD'], ['FLAG_PIKE']]) {
+    let result = spawnOne(`recoil-${flags.join()}`, 'SKELETON', { x: 0, y: 0 }, players, flags)
+    let recoiled = false
+    for (let tick = 1; tick <= 100; tick += 1) {
+      result = step(result.store, tick, recoiled ? {} : players)
+      const brain = result.store.actors[0]!.brain
+      if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+      if (result.events.some(event => event.type === 'attack-marker')) {
+        assert.ok(brain.verticalOffset < 0, `${flags.join()} recoil at tick ${tick}`)
+        recoiled = true
+      }
+      assert.ok(brain.verticalOffset <= 0)
+    }
+    assert.equal(recoiled, true)
+    const brain = result.store.actors[0]!.brain
+    if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+    assert.equal(brain.verticalOffset, 0)
+    assert.equal(brain.verticalVelocity, 0)
+  }
+})
+
+test('rotten Zombie particles own their world position, ordinary material, and lifetime after the parent moves or dies', () => {
+  let result = spawnOne('rotten-particle-owner', 'ZOMBIE', { x: 0, y: 0 }, FAR_PLAYERS, ['FLAG_ROTTEN'])
+  let tick = 0
+  while (!result.store.deathEffects.some(effect => effect.role === 'zombie-rotten-particle') && tick < 300) {
+    tick += 1
+    result = step(result.store, tick, FAR_PLAYERS)
+  }
+  const effect = result.store.deathEffects.find(effect => effect.role === 'zombie-rotten-particle')!
+  assert.ok(effect)
+  assert.equal(effect.kind, 'move-fade-sin')
+  assert.equal(effect.blendMode, 'normal')
+  assert.equal(effect.presentationOwner, 'pre-world-queue')
+  assert.equal(effect.painterRegistration, null)
+  assert.ok(effect.entry === 10 || effect.entry === 11)
+  assert.ok(effect.scale >= 1 && effect.scale <= 3)
+  assert.ok(effect.frameVelocity >= 1 && effect.frameVelocity <= 2)
+  assert.ok(Math.hypot(effect.velocity.x, effect.velocity.y) <= .250001)
+  const relocated = positionBoneyardEnemy(result.store, effect.ownerActorId, { x: 1000, y: 1000 }).store
+  const killed = damageBoneyardEnemy(relocated, { actorId: effect.ownerActorId,
+    amount: 10_000, sourcePlayerId: 'player', tick }).store
+  const next = step(killed, tick + 1, FAR_PLAYERS)
+  const retained = next.store.deathEffects.find(row => row.id === effect.id)!
+  assert.ok(retained)
+  assert.deepEqual(retained.position, { x: Math.fround(effect.position.x + effect.velocity.x),
+    y: Math.fround(effect.position.y + effect.velocity.y) })
+  assert.equal(retained.framePhase, effect.frameVelocity)
+  assert.ok(retained.alpha > 0 && retained.alpha < .04)
+})
 
 test('breaking a Pike updates the canonical equipment selector and cannot break it twice', () => {
   const initial = spawnOne('break-pike', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS, ['FLAG_PIKE'])

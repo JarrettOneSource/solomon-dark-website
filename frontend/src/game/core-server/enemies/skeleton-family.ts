@@ -7,7 +7,8 @@ import { stepNativeArcherStrafe } from '../../core-kernels/native-archer-strafe.
 import { NATIVE_ENEMY_ACTION_SEED_BOUND, restoreNativeRangeEasyAfterVolley } from '../../core-kernels/native-enemy-targeting.ts'
 import { nextEnemyLootSeed } from '../boneyard-enemy-loot-seed.ts'
 import { withEnemyLighting } from './actor-update.ts'
-import { attackMarker, directContactPlayerDamage } from './combat.ts'
+import { attackMarker, directContactPlayerDamage, directPlayerDamage } from './combat.ts'
+import { drawEnemyFloat } from './random.ts'
 import type { ActionProgram, BoneyardArcherBrain, BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardMageBrain, BoneyardSkeletonBrain, WorkingStep } from './model.ts'
 import { moveTowardTarget, staffAttackSpeed, staffMovementSpeed } from './movement.ts'
 import { BOUNDED_ENEMY_ATTACK_REACH, NATIVE_ARCHER_ACTION_PROGRAM, NATIVE_MAGE_ACTION_PROGRAMS, NATIVE_SKELETON_ACTION_PROGRAMS, NATIVE_SKELETON_CLAW_MARKERS, NATIVE_SKELETON_WEAPON_MARKERS } from './programs.ts'
@@ -158,7 +159,9 @@ export function stepSkeleton(
       return stepSkeletonWeaponAction(work, tracked, brain, context)
     }
     const program = NATIVE_SKELETON_ACTION_PROGRAMS[brain.action]
-    return stepProgressAction(
+    let pike = brain.pike
+    let verticalVelocity = brain.verticalVelocity
+    const stepped = stepProgressAction(
       work,
       tracked,
       brain,
@@ -167,16 +170,18 @@ export function stepSkeleton(
       context.tick,
       brain.contactTargetPlayerId,
       (eventId) => {
-        directContactPlayerDamage(
-          work,
-          actor,
-          brain.contactTargetPlayerId,
-          context.players,
-          BOUNDED_ENEMY_ATTACK_REACH.SKELETON,
-          eventId,
-        )
+        verticalVelocity = Math.fround(-(drawEnemyFloat(work, .5) + 1))
+        const playerId = brain.contactTargetPlayerId
+        const target = playerId === null ? undefined : context.players[playerId]
+        if (!target?.alive || !target.connected || !target.eligible) return
+        if (!target.summoned && playerId !== null) pike = {
+          playerId, position: target.position, distance: Math.fround(actor.config.scale * 103),
+        }
+        directPlayerDamage(work, actor, playerId, eventId)
       },
     )
+    if (stepped.brain.family !== 'skeleton') throw new Error('Pike action changed brain family')
+    return { ...stepped, brain: { ...stepped.brain, pike, verticalVelocity } }
   }
   if (targetWithinAttackReach(
     actor,
@@ -219,8 +224,10 @@ function stepSkeletonWeaponAction(
   const actionProgress = previousProgress
     + program.progressPerTick * staffAttackSpeed(actor)
   let markerEmitted = brain.markerEmitted
+  let verticalVelocity = brain.verticalVelocity
   for (const marker of NATIVE_SKELETON_WEAPON_MARKERS) {
     if (previousProgress >= marker || actionProgress < marker) continue
+    verticalVelocity = Math.fround(-(drawEnemyFloat(work, 1) + 1.5))
     const eventId = attackMarker(
       work,
       actor,
@@ -243,6 +250,7 @@ function stepSkeletonWeaponAction(
       bodyPose: NATIVE_SKELETON_WEAPON_BODY_POSES[0]!,
       brain: {
         ...brain,
+        verticalVelocity,
         actionProgress: 0,
         contactTargetPlayerId: null,
         markerEmitted: false,
@@ -256,7 +264,7 @@ function stepSkeletonWeaponAction(
       NATIVE_SKELETON_WEAPON_BODY_POSES,
       actionProgress,
     ),
-    brain: { ...brain, actionProgress, markerEmitted },
+    brain: { ...brain, actionProgress, markerEmitted, verticalVelocity },
   }
 }
 
@@ -275,6 +283,7 @@ function stepSkeletonClawAction(
     ? rawProgress - (program.strictEnd + 1)
     : rawProgress
   let markerEmitted = brain.markerEmitted
+  let verticalVelocity = brain.verticalVelocity
   for (const marker of NATIVE_SKELETON_CLAW_MARKERS) {
     if (!inclusiveCircularMarkerCrossed(
       previousProgress,
@@ -282,6 +291,7 @@ function stepSkeletonClawAction(
       marker,
       completed,
     )) continue
+    verticalVelocity = Math.fround(-(drawEnemyFloat(work, 1) + 1))
     const eventId = attackMarker(
       work,
       actor,
@@ -308,6 +318,7 @@ function stepSkeletonClawAction(
       bodyPose: bodyPoses[0]!,
       brain: {
         ...brain,
+        verticalVelocity,
         actionProgress: 0,
         contactTargetPlayerId: null,
         markerEmitted: false,
@@ -322,7 +333,7 @@ function stepSkeletonClawAction(
   return {
     ...actor,
     bodyPose: nativeSkeletonFamilyBodyPose(bodyPoses, rawProgress),
-    brain: { ...brain, actionProgress: rawProgress, markerEmitted },
+    brain: { ...brain, actionProgress: rawProgress, markerEmitted, verticalVelocity },
   }
 }
 
@@ -520,6 +531,7 @@ export function stepMage(
           actionProgress: 0,
           castProgram: program.value < 0.5 ? 'short' : 'long',
           castRoll: roll.value,
+          verticalVelocity: Math.fround(-(2.5 + drawEnemyFloat(work, 1))),
           markerEmitted: false,
           phase: 'cast',
         },

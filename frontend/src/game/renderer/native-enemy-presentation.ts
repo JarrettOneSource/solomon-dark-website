@@ -3,9 +3,9 @@ import { demonSkullPresentation } from './native-demon-skull-presentation.ts'
 import type { NativeEnemyActionFrame, NativeEnemyActionName, NativeEnemyActionProgramName, NativeEnemyAnimationSample, NativeEnemyEffectSample, NativeEnemyMaggotSample } from './native-enemy-animation.ts'
 import { NATIVE_ENEMY_ACTION_PROGRAMS, nativeEnemyActionFrame } from './native-enemy-animation.ts'
 import { demonDeathLayers, demonPresentation } from './native-enemy-demon-presentation.ts'
-import { EMPTY_FAMILY_PRESENTATION, boundedUnit, finiteOrZero, layer, nativeEnemyFacingBucket, normalizeEnemyFlag, presentation } from './native-enemy-layers.ts'
+import { EMPTY_FAMILY_PRESENTATION, boundedUnit, finiteOrZero, layer, nativeEnemyFacingBucket, normalizeEnemyFlag, presentation, toEnemyLocalSpace } from './native-enemy-layers.ts'
 import type { NativeEnemyAuthoredPointResolver, NativeEnemyFamily, NativeEnemyFamilyPresentation, NativeEnemyPresentationPlan, NativeEnemySegmentLayer, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
-import { archerPresentation, magePresentation, skeletonPresentation } from './native-enemy-skeleton-presentation.ts'
+import { archerPresentation, magePresentation, skeletonFlailHasIdleOrbit, skeletonPresentation } from './native-enemy-skeleton-presentation.ts'
 import { coffinSampleLayers, coffinSpawnLayers, impLayers, portalLayers, wraithPresentation } from './native-enemy-sprite-presentation.ts'
 import { zombiePresentation } from './native-enemy-zombie-presentation.ts'
 import { facultyPresentation } from './native-faculty-presentation.ts'
@@ -36,9 +36,15 @@ export function nativeEnemyPresentationPlan(
   tick: number,
   authoredPoints: NativeEnemyAuthoredPointResolver,
   complexLighting = true,
+  applicationTick = tick,
 ): NativeEnemyPresentationPlan {
   const family = enemy.enemyToken
   const animation = enemy.animation
+  const rootScale = family === 'PORTAL' || family === 'COFFIN' || family === 'SPIDER'
+    || family === 'COCOON' || family === 'DIREFACULTY' ? 1 : enemy.scale
+  const localAnimation = animation && family !== 'DEMON'
+    ? { ...animation, verticalOffset: animation.verticalOffset / rootScale }
+    : animation
   const sampledHeading = family === 'ZOMBIE'
     ? enemy.headingDeg + (animation?.zombieAngularOffsetDeg ?? 0)
     : family === 'DIREFACULTY' ? enemy.faculty?.bodyHeadingDeg ?? enemy.headingDeg
@@ -70,12 +76,13 @@ export function nativeEnemyPresentationPlan(
         animation,
         actionFrame,
         authoredPoints,
+        applicationTick,
       )
   const layers = animation
     ? applyAuthoritativeSample(
         familyPresentation,
-        effectLayers(animation.effects),
-        family === 'PORTAL' ? { ...animation, hitFlash: 0 } : animation,
+        effectLayers(animation.effects).map(source => toEnemyLocalSpace(source, rootScale)),
+        family === 'PORTAL' ? { ...localAnimation!, hitFlash: 0 } : localAnimation!,
         complexLighting,
       )
     : [
@@ -84,12 +91,13 @@ export function nativeEnemyPresentationPlan(
         ...familyPresentation.after,
       ]
   const segments = animation
-    ? applySegmentSample(familyPresentation.segments, animation, complexLighting)
+    ? applySegmentSample(familyPresentation.segments, localAnimation!, complexLighting)
     : familyPresentation.segments
   return {
     actionFrame,
     facing,
     family,
+    rootScale,
     layers,
     segments,
     spawnAgeTicks,
@@ -101,6 +109,8 @@ export function nativeEnemyViewPlanInputsEqual(
   previousTick: number,
   current: NativeEnemyVisualSnapshot,
   currentTick: number,
+  previousApplicationTick = previousTick,
+  currentApplicationTick = currentTick,
 ): boolean {
   return previous.id === current.id
     && previous.demonSkull === current.demonSkull
@@ -124,6 +134,7 @@ export function nativeEnemyViewPlanInputsEqual(
       !enemyPresentationUsesTick(current)
       || previousTick === currentTick
     )
+    && (!enemyPresentationUsesApplicationTick(current) || previousApplicationTick === currentApplicationTick)
     && enemyAnimationSamplesEqual(previous.animation, current.animation)
 }
 
@@ -157,6 +168,12 @@ function enemyPresentationUsesTick(enemy: NativeEnemyVisualSnapshot): boolean {
   }
 }
 
+function enemyPresentationUsesApplicationTick(enemy: NativeEnemyVisualSnapshot): boolean {
+  return (enemy.enemyToken === 'SKELETON' && enemy.weapon === 'flail' && skeletonFlailHasIdleOrbit(enemy))
+    || (enemy.enemyToken === 'SKELETONMAGE' && enemy.mageElement === 'lightning'
+      && enemy.lighting.charge > 0 && !enemy.animation?.mageChargeSuppressed)
+}
+
 function enemyFlagsEqual(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   for (let index = 0; index < left.length; index += 1) {
@@ -178,6 +195,10 @@ function enemyAnimationSamplesEqual(
     && left.actionProgress === right.actionProgress
     && left.alpha === right.alpha
     && left.bodyPose === right.bodyPose
+    && left.bodyGaitPhase === right.bodyGaitPhase
+    && left.mageChargeSuppressed === right.mageChargeSuppressed
+    && left.pikeTargetOffset?.x === right.pikeTargetOffset?.x
+    && left.pikeTargetOffset?.y === right.pikeTargetOffset?.y
     && left.coffinPose === right.coffinPose
     && left.coffinRotationRadians === right.coffinRotationRadians
     && left.coffinScaleX === right.coffinScaleX
@@ -205,6 +226,7 @@ function enemyAnimationSamplesEqual(
     && left.zombieAngularOffsetDeg === right.zombieAngularOffsetDeg
     && left.zombieAttackSide === right.zombieAttackSide
     && left.zombieBodyRotationRadians === right.zombieBodyRotationRadians
+    && left.zombieArmSocketRotationRadians === right.zombieArmSocketRotationRadians
     && left.zombieBodyType === right.zombieBodyType
     && left.zombieFrontArmPose === right.zombieFrontArmPose
     && left.zombieFrontArmRotationRadians === right.zombieFrontArmRotationRadians
@@ -283,6 +305,7 @@ function familyLayers(
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
+  applicationTick: number,
 ): NativeEnemyFamilyPresentation {
   switch (enemy.enemyToken) {
     case 'SPIDER': return nativeSpiderPresentation(facing, animation)
@@ -297,6 +320,7 @@ function familyLayers(
       animation,
       actionFrame,
       authoredPoints,
+      applicationTick,
     )
     case 'SKELETONARCHER': return archerPresentation(
       enemy,
@@ -313,6 +337,7 @@ function familyLayers(
       animation,
       actionFrame,
       authoredPoints,
+      applicationTick,
     )
     case 'IMP': return presentation(impLayers(enemy, facing, animation))
     case 'PORTAL': return presentation(portalLayers(animation))
@@ -323,12 +348,7 @@ function familyLayers(
       animation,
       authoredPoints,
     )
-    case 'WRAITH': return wraithPresentation(
-      enemy,
-      facing,
-      spawnAgeTicks,
-      animation,
-    )
+    case 'WRAITH': return wraithPresentation(enemy, facing)
     case 'DEMON': return demonPresentation(
       enemy,
       facing,
@@ -429,6 +449,7 @@ export function applySegmentSample(
       ...source,
       alpha: source.alpha * hitFlash,
       role: `hit:${source.role}`,
+      beforeRole: `hit:${source.beforeRole}`,
       tint: nativePuppetHitTint(complexLighting, source.tint),
     })),
   ]

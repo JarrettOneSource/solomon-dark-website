@@ -27,6 +27,7 @@ export interface NativeZombieArticulationInput {
 }
 
 export interface NativeZombieArticulationPose {
+  readonly armSocketRotationRadians: number
   readonly bodyRotationRadians: number
   readonly frontArmRotationRadians: number
   readonly headRotationRadians: number
@@ -74,7 +75,8 @@ export function nativeZombieArticulationPose(
     input.attackSide === 0 ? -bodyLeanDeg : bodyLeanDeg
   )
   return {
-    bodyRotationRadians: degreesToRadians(bodyRotationDeg * 0.5),
+    armSocketRotationRadians: degreesToRadians(bodyRotationDeg * 0.5),
+    bodyRotationRadians: degreesToRadians(idleBodyRotationDeg),
     frontArmRotationRadians: degreesToRadians(
       input.frontArmBaseRotationDeg
         + (input.attackSide === 1 ? selectedArmSwingDeg : 0),

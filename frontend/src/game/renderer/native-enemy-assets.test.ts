@@ -61,15 +61,16 @@ test('every reachable native enemy plan uses a shipped nonempty atlas record', (
       for (const layer of plan.layers) used.add(`${layer.atlas}:${layer.entry}`)
     }
   }
-  const activePike = nativeEnemyPresentationPlan({
+  const latchedPike = nativeEnemyPresentationPlan({
     ...enemy('SKELETON', 1, 0, ['FLAG_PIKE']),
     animation: nativeEnemyIdleAnimationSample({
       action: 'skeleton-pike',
-      actionProgress: 1,
+      actionProgress: 2,
+      pikeTargetOffset: { x: 0, y: -103 },
       state: 'action',
     }),
   }, 500)
-  for (const layer of activePike.layers) used.add(`${layer.atlas}:${layer.entry}`)
+  for (const layer of latchedPike.layers) used.add(`${layer.atlas}:${layer.entry}`)
   assert.ok(used.size > 665)
   for (const key of [
     'BadGuys:26',

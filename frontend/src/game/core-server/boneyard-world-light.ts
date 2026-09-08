@@ -109,7 +109,8 @@ export function boneyardWorldLightQuery(
       flags: actor.config.flags,
       position: actor.position,
       lighting: actor.lighting,
-      animation: { state: actor.lifeState === 'dying' ? 'death' : 'idle', alpha: actor.brain.family === 'portal' ? actor.brain.alpha : 1 },
+      animation: { state: actor.lifeState === 'dying' ? 'death' : 'idle', alpha: actor.brain.family === 'portal' ? actor.brain.alpha : 1,
+        bodyPose: actor.bodyPose },
     }, tick)
     if (sources.length > 0) providers.push({ registration: actor.lightRegistration, sources })
   }

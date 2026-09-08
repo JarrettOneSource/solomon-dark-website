@@ -239,7 +239,8 @@ test('Zombie renderer articulation preserves native quantization and attack side
     headPhaseDeg: 180,
     rearArmBaseRotationDeg: 10,
   })
-  assert.equal(idle.bodyRotationRadians, 20 * Math.PI / 180)
+  assert.equal(idle.bodyRotationRadians, 40 * Math.PI / 180)
+  assert.equal(idle.armSocketRotationRadians, 20 * Math.PI / 180)
   assert.equal(idle.headRotationRadians, 15 * Math.PI / 180)
   assert.equal(idle.rearArmRotationRadians, -10 * Math.PI / 180)
   assert.equal(idle.frontArmRotationRadians, 20 * Math.PI / 180)
@@ -254,7 +255,8 @@ test('Zombie renderer articulation preserves native quantization and attack side
     headPhaseDeg: 0,
     rearArmBaseRotationDeg: 7,
   })
-  assert.equal(attack.bodyRotationRadians, (26 / 3) * 0.5 * Math.PI / 180)
+  assert.equal(attack.bodyRotationRadians, 0)
+  assert.equal(attack.armSocketRotationRadians, (26 / 3) * 0.5 * Math.PI / 180)
   assert.equal(attack.frontArmRotationRadians, 25 * Math.PI / 180)
   assert.equal(attack.rearArmRotationRadians, -7 * Math.PI / 180)
 })

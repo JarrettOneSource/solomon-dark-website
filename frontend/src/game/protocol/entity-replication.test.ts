@@ -466,7 +466,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
   assert.equal(frame.world.entities.spawned[0]!.length, 31)
-  assert.equal(frame.world.entities.samples[0]!.length, 82)
+  assert.equal(frame.world.entities.samples[0]!.length, 88)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
   assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0, 1.25, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   assert.equal(frame.world.entities.samples[0]![30], 25 * 1024)
@@ -547,7 +547,7 @@ test('Demon planted endpoints round-trip only on the Demon family wire', () => {
   const descriptor = boneyardEnemyDescriptor(source)
   const sample = boneyardEnemySample(source)
   assert.equal(descriptor.length, 31)
-  assert.equal(sample.length, 82)
+  assert.equal(sample.length, 88)
   assert.deepEqual(sample.slice(66, 69), [1280, 40, -440])
   assert.deepEqual(materializeBoneyardEnemy(descriptor, sample).animation.demonShadowOffset, { x: 2.5, y: -27.5 })
   assert.equal(materializeBoneyardEnemy(descriptor, sample).animation.shadowLateralOffset, 1.25)
@@ -667,9 +667,9 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 72),
+    ...sample.slice(0, 78),
     1,
-    ...sample.slice(73),
+    ...sample.slice(79),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
     ...sample.slice(0, 37),
@@ -968,6 +968,28 @@ test('enemy projectile effects replicate after their owner projectile retires', 
     REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect,
     10,
   ]])
+})
+
+test('unlit Skeleton Fire retains its painter and ground sprite through full and compact transport', () => {
+  const snapshot = boneyardSnapshot('skeleton-fire')
+  if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  const effect: BoneyardEnemyProjectileEffectSnapshot = {
+    ...enemyProjectileEffectSnapshot(), kind: 'demon-fire', atlas: 'DeadHawg', entry: 46,
+    ageTicks: 2, alpha: .3125, fireFadeAlpha: .125, fireHorizontalSign: -1,
+    lightRegistration: null, lifetimeTicks: 36,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 27 },
+  }
+  snapshot.world.enemyProjectileEffects = [effect]
+  const full = gameSnapshot(snapshot)
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const compact = new EntityReplicationReconstructor().apply(gameSnapshotFrame(frame), 1)
+  for (const decoded of [full, compact]) {
+    if (decoded.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+    const restored = decoded.world.enemyProjectileEffects[0]!
+    assert.equal(restored.lightRegistration, null)
+    assert.deepEqual(restored.painterRegistration, effect.painterRegistration)
+    assert.equal(restored.kind, 'demon-fire')
+  }
 })
 
 test('enemy projectile-effect codecs cover every native alpha domain', () => {
@@ -1494,6 +1516,9 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       actionProgress: 4,
       alpha: 1,
       bodyPose: 2,
+      bodyGaitPhase: 2.75,
+      mageChargeSuppressed: false,
+      pikeTargetOffset: null,
       coffinPose: 0,
       coffinRotationRadians: 0,
       coffinScaleX: 1,
@@ -1534,6 +1559,7 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
       zombieBodyRotationRadians: -0.2,
+      zombieArmSocketRotationRadians: .5,
       zombieBodyType: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,

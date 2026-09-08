@@ -71,6 +71,8 @@ export interface NativeEnemySpriteLayer {
 
 export interface NativeEnemySegmentLayer {
   alpha: number
+  beforeRole: string
+  blendMode: 'add' | 'normal'
   end: Readonly<{ x: number; y: number }>
   role: string
   start: Readonly<{ x: number; y: number }>
@@ -82,6 +84,7 @@ export interface NativeEnemyPresentationPlan {
   actionFrame: NativeEnemyActionFrame | null
   facing: number
   family: NativeEnemyFamily
+  rootScale: number
   layers: readonly NativeEnemySpriteLayer[]
   segments: readonly NativeEnemySegmentLayer[]
   spawnAgeTicks: number

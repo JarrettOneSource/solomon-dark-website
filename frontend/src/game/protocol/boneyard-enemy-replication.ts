@@ -12,7 +12,7 @@ const VALUE_SCALE = 1024
 const DESCRIPTOR_COMPONENTS = 31
 const nameEncoder = new TextEncoder()
 const nameDecoder = new TextDecoder('utf-8', { fatal: true })
-const EFFECT_COMPONENT_OFFSET = 72
+const EFFECT_COMPONENT_OFFSET = 78
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -163,6 +163,10 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[70] >= 0 && sample[70] <= VALUE_SCALE
       && sample[71] >= 0 && sample[71] <= 0xffffff
       && (sample[69] !== -1 || (sample[70] === 0 && sample[71] === 0))
+      && sample[72] >= 0 && sample[72] <= 4 * VALUE_SCALE
+      && (sample[73] === 0 || sample[73] === 1)
+      && (sample[73] === 1 || (sample[74] === 0 && sample[75] === 0))
+      && (sample[76] === 0 || sample[76] === 1)
       && effectComponentsAreValid(sample)
   },
 }
@@ -209,6 +213,13 @@ export function boneyardEnemySample(
   enemy: BoneyardEnemySnapshot,
 ): ReplicatedEntitySample {
   const animation = enemy.animation
+  if (animation.pikeTargetOffset !== null && (enemy.enemyToken !== 'SKELETON'
+    || enemy.weapon !== 'pike' || animation.action !== 'skeleton-pike' || animation.state !== 'action')) {
+    throw new Error('Boneyard Pike target requires an active Pike')
+  }
+  if (animation.mageChargeSuppressed && enemy.enemyToken !== 'SKELETONMAGE') {
+    throw new Error('Boneyard casting suppression requires a Mage')
+  }
   if ((enemy.enemyToken === 'SPIDER') !== (animation.spider !== null)) {
     throw new Error('Boneyard Spider sample does not match the enemy family')
   }
@@ -300,6 +311,12 @@ export function boneyardEnemySample(
     animation.spider === null ? -1 : quantizeCyclic(animation.spider.bodyHeadingDeg, 360, ANGLE_SCALE),
     quantize(animation.spider?.outlineAlpha ?? 0, VALUE_SCALE),
     animation.spider?.outlineTint ?? 0,
+    quantize(animation.bodyGaitPhase, VALUE_SCALE),
+    Number(animation.pikeTargetOffset !== null),
+    quantize(animation.pikeTargetOffset?.x ?? 0, POSITION_SCALE),
+    quantize(animation.pikeTargetOffset?.y ?? 0, POSITION_SCALE),
+    Number(animation.mageChargeSuppressed),
+    quantize(animation.zombieArmSocketRotationRadians, VALUE_SCALE),
     ...effectComponents,
   ]
 }
@@ -318,6 +335,14 @@ export function materializeBoneyardEnemy(
     throw new Error('Boneyard enemy sample identity does not match its descriptor')
   }
   const family = FAMILIES[descriptor[2]]!
+  if (sample[73] === 1 && (family !== 'SKELETON'
+    || BONEYARD_SKELETON_WEAPONS[descriptor[15]] !== 'pike'
+    || ACTIONS[sample[7]] !== 'skeleton-pike' || ANIMATION_STATES[sample[6]] !== 'action')) {
+    throw new Error('Boneyard Pike target requires an active Pike')
+  }
+  if (sample[76] === 1 && family !== 'SKELETONMAGE') {
+    throw new Error('Boneyard casting suppression requires a Mage')
+  }
   if ((family === 'SPIDER') !== (sample[69] !== -1)) {
     throw new Error('Boneyard Spider sample does not match the enemy family')
   }
@@ -373,6 +398,11 @@ export function materializeBoneyardEnemy(
       actionProgress: dequantize(sample[8], VALUE_SCALE),
       alpha: dequantize(sample[9], VALUE_SCALE),
       bodyPose: dequantize(sample[10], VALUE_SCALE),
+      bodyGaitPhase: dequantize(sample[72], VALUE_SCALE),
+      mageChargeSuppressed: sample[76] === 1,
+      pikeTargetOffset: sample[73] === 0 ? null : {
+        x: dequantize(sample[74], POSITION_SCALE), y: dequantize(sample[75], POSITION_SCALE),
+      },
       coffinPose: dequantize(sample[11], VALUE_SCALE),
       coffinRotationRadians: dequantize(descriptor[12], VALUE_SCALE),
       coffinScaleX: descriptor[11] as -1 | 1,
@@ -404,6 +434,7 @@ export function materializeBoneyardEnemy(
       zombieAngularOffsetDeg: dequantize(sample[20], VALUE_SCALE),
       zombieAttackSide: sample[27] as 0 | 1,
       zombieBodyRotationRadians: dequantize(sample[34], VALUE_SCALE),
+      zombieArmSocketRotationRadians: dequantize(sample[77], VALUE_SCALE),
       zombieBodyType: sample[28],
       zombieFrontArmPose: dequantize(sample[21], VALUE_SCALE),
       zombieFrontArmRotationRadians: dequantize(sample[22], VALUE_SCALE),

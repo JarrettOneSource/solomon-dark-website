@@ -94,6 +94,9 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       actionProgress: 0,
       alpha: 1,
       bodyPose: 0,
+      bodyGaitPhase: 0,
+      mageChargeSuppressed: false,
+      pikeTargetOffset: null,
       coffinPose: 0,
       coffinRotationRadians: 0,
       coffinScaleX: 1,
@@ -134,6 +137,7 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
       zombieBodyRotationRadians: 0,
+      zombieArmSocketRotationRadians: 0,
       zombieBodyType: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
@@ -913,6 +917,27 @@ test('interpolates projectile-owned effects after their projectile has retired',
   assert.deepEqual(effect.position, { x: 105, y: 210 })
   assert.ok(Math.abs(effect.rotationRadians) < 1e-9)
   assert.equal(effect.scale, 1.1)
+})
+
+test('interpolates the retained Pike tip and flail phase and holds suppression changes until the next sample', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 100)
+  const first = older.world.enemies[0]!
+  const second = newer.world.enemies[0]!
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: { ...older, world: { ...older.world, enemies: [{ ...first, animation: {
+      ...first.animation, bodyGaitPhase: 3.75, pikeTargetOffset: { x: 100, y: -20 }, mageChargeSuppressed: false,
+    } }] } }, serverTickRate: 100, snapshotRate: 20,
+  })
+  timeline.push({ ...newer, world: { ...newer.world, enemies: [{ ...second, animation: {
+    ...second.animation, bodyGaitPhase: .25, pikeTargetOffset: { x: 120, y: 10 }, mageChargeSuppressed: true,
+  } }] } }, 50)
+  const midpoint = timeline.sample(75).world.enemies[0]!.animation
+  assert.equal(midpoint.bodyGaitPhase, 0)
+  assert.deepEqual(midpoint.pikeTargetOffset, { x: 110, y: -5 })
+  assert.equal(midpoint.mageChargeSuppressed, false)
+  assert.equal(timeline.sample(100).world.enemies[0]!.animation.mageChargeSuppressed, true)
 })
 
 test('interpolates the authoritative Imp flight cycle without changing spawn identity', () => {

@@ -1,10 +1,12 @@
 import { nextBoneyardWaveRandom } from '../../core-kernels/boneyard-wave-timeline.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../../core-kernels/boneyard-zombie-beat.ts'
+import { nativeDesaturateColor } from '../../core-kernels/native-color.ts'
+import { spawnSimpleDeathEffect } from './death-effects.ts'
 import { attackMarker, directContactPlayerDamage } from './combat.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardZombieBrain, WorkingStep } from './model.ts'
 import { moveTowardTarget, positiveModulo, staffAttackSpeed } from './movement.ts'
 import { BOUNDED_ENEMY_ATTACK_REACH } from './programs.ts'
-import { drawUnit, signedUnit } from './random.ts'
+import { drawEnemyFloat, drawEnemyInteger, drawUnit, radialVector, signedUnit } from './random.ts'
 import { targetWithinAttackReach, trackEnemyActionHeading } from './targeting.ts'
 
 export function stepZombie(
@@ -111,6 +113,27 @@ export function stepZombie(
     }
   }
   return moveTowardTarget(work, actor, brain, context, 1)
+}
+
+export function spawnRottenZombieParticle(work: WorkingStep, actor: BoneyardEnemyActor, tick: number): void {
+  if (actor.lifeState !== 'alive' || actor.config.enemyToken !== 'ZOMBIE'
+    || !actor.config.family.rotten || drawEnemyInteger(work, 75) !== 3) return
+  const radius = drawEnemyFloat(work, 8)
+  const displacement = radialVector(drawEnemyFloat(work, 360), radius)
+  const entry = drawEnemyInteger(work, 2) === 1 ? 10 : 11
+  const phaseSpeed = Math.fround(1 + drawEnemyFloat(work, 1))
+  const speed = Math.fround(.10000000149011612 + drawEnemyFloat(work, .25 - .10000000149011612))
+  const velocity = radialVector(drawEnemyFloat(work, 360), speed)
+  const scale = Math.fround(1 + drawEnemyFloat(work, 2))
+  const color = nativeDesaturateColor([Math.fround(.1), Math.fround(.3), Math.fround(.1), 1], Math.fround(.65))
+  const tint = (Math.trunc(color[0] * 255) << 16) | (Math.trunc(color[1] * 255) << 8) | Math.trunc(color[2] * 255)
+  spawnSimpleDeathEffect(work, actor, tick, {
+    alpha: 1, alphaLossPerTick: 0, atlas: 'BadGuys', blendMode: 'normal', entry,
+    frameVelocity: phaseSpeed, kind: 'move-fade-sin', lifetimeTicks: 181,
+    position: { x: Math.fround(actor.position.x + displacement.x), y: Math.fround(actor.position.y - 15 + displacement.y) },
+    presentationOwner: 'pre-world-queue', role: 'zombie-rotten-particle', scale, tint,
+    velocity: { x: Math.fround(velocity.x), y: Math.fround(velocity.y) },
+  })
 }
 
 export function advanceZombieVisual(

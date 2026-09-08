@@ -5,6 +5,7 @@ import type { NativeBoneyardComplexShadowRecord } from './boneyard-complex-shado
 import { NativeEnemyUnderlayView } from './native-enemy-underlay-view.ts'
 import { nativeEnemyUnderlayPlan } from './native-enemy-underlay.ts'
 import { NativeHeartmongerTendrilView } from './native-heartmonger-tendril-view.ts'
+import { nativeApplicationTick } from '../native-application-tick.ts'
 
 import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
@@ -67,7 +68,8 @@ export class NativeEnemyViews {
     this.textures = textures
   }
 
-  update(enemies: readonly NativeEnemyVisualSnapshot[], tick: number, complexLighting = true): void {
+  update(enemies: readonly NativeEnemyVisualSnapshot[], tick: number, complexLighting = true,
+    applicationTick = nativeApplicationTick(performance.now())): void {
     const liveIds = this.liveIds
     liveIds.clear()
     for (const enemy of enemies) {
@@ -79,11 +81,11 @@ export class NativeEnemyViews {
         managed = undefined
       }
       if (!managed) {
-        const view = new NativeEnemyView(this.root, this.underlayRoot, this.textures, enemy, tick, complexLighting)
+        const view = new NativeEnemyView(this.root, this.underlayRoot, this.textures, enemy, tick, complexLighting, applicationTick)
         managed = { family: enemy.enemyToken, view }
         this.views.set(enemy.id, managed)
       } else {
-        managed.view.update(enemy, tick, complexLighting)
+        managed.view.update(enemy, tick, complexLighting, applicationTick)
       }
     }
     for (const [id, managed] of this.views) {
@@ -199,7 +201,7 @@ class NativeEnemyView {
   private readonly tendrils: NativeHeartmongerTendrilView | null
   private readonly underlay: NativeEnemyUnderlayView | null
   private readonly container: Container
-  private readonly segments: Graphics
+  private readonly segments: Graphics[] = []
   private readonly root: Container
   private readonly sprites: Sprite[] = []
   private readonly textures: BoneyardWorldTextures
@@ -209,6 +211,7 @@ class NativeEnemyView {
   private demonMuzzleOffset: Readonly<{ x: number; y: number }> | null = null
   private previousPlanInput: NativeEnemyVisualSnapshot | null = null
   private previousPlanTick = Number.NaN
+  private previousPlanApplicationTick = Number.NaN
   private complexLighting = true
 
   constructor(
@@ -218,6 +221,7 @@ class NativeEnemyView {
     enemy: NativeEnemyVisualSnapshot,
     tick: number,
     complexLighting: boolean,
+    applicationTick: number,
   ) {
     this.root = root
     this.textures = textures
@@ -229,36 +233,36 @@ class NativeEnemyView {
       : null
     this.container = new Container({
       label: `enemy:${enemy.enemyToken}:${enemy.id}`,
+      sortableChildren: true,
     })
     this.container.eventMode = 'none'
-    this.segments = new Graphics({ label: `enemy-segments:${enemy.id}` })
-    this.segments.eventMode = 'none'
-    this.container.addChild(this.segments)
     root.addChild(this.container)
-    this.update(enemy, tick, complexLighting)
+    this.update(enemy, tick, complexLighting, applicationTick)
   }
 
-  update(enemy: NativeEnemyVisualSnapshot, tick: number, complexLighting: boolean): void {
+  update(enemy: NativeEnemyVisualSnapshot, tick: number, complexLighting: boolean, applicationTick: number): void {
     this.tendrils?.update(enemy)
     const previous = this.previousPlanInput
     if (
       previous === null
       || this.complexLighting !== complexLighting
-      || !nativeEnemyViewPlanInputsEqual(previous, this.previousPlanTick, enemy, tick)
+      || !nativeEnemyViewPlanInputsEqual(previous, this.previousPlanTick, enemy, tick,
+        this.previousPlanApplicationTick, applicationTick)
     ) {
       this.complexLighting = complexLighting
-      this.updateVisualPlan(enemy, tick)
+      this.updateVisualPlan(enemy, tick, applicationTick)
     }
     this.previousPlanInput = enemy
     this.previousPlanTick = tick
+    this.previousPlanApplicationTick = applicationTick
     this.container.position.set(enemy.position.x, enemy.position.y)
     this.headingDeg = enemy.headingDeg
   }
 
-  private updateVisualPlan(enemy: NativeEnemyVisualSnapshot, tick: number): void {
+  private updateVisualPlan(enemy: NativeEnemyVisualSnapshot, tick: number, applicationTick: number): void {
     const plan = nativeEnemyPresentationPlan(enemy, tick, (atlas, entry) => (
       nativeEnemySpriteRecord(atlas, entry).points
-    ), this.complexLighting)
+    ), this.complexLighting, applicationTick)
     this.renderedBodyEntry = plan.layers.find(({ role }) => (
       role.endsWith('-body') || role === 'heartmonger-torso'
     ))?.entry ?? null
@@ -282,9 +286,21 @@ class NativeEnemyView {
     } else {
       this.demonMuzzleOffset = null
     }
-    this.segments.clear()
-    for (const segment of plan.segments) {
-      this.segments
+    while (this.segments.length < plan.segments.length) {
+      const graphics = new Graphics()
+      graphics.eventMode = 'none'
+      this.segments.push(graphics)
+      this.container.addChild(graphics)
+    }
+    while (this.segments.length > plan.segments.length) this.segments.pop()!.destroy()
+    for (const [index, segment] of plan.segments.entries()) {
+      const beforeIndex = plan.layers.findIndex(({ role }) => role === segment.beforeRole)
+      if (beforeIndex < 0) throw new Error(`Enemy segment lost its painter boundary: ${segment.beforeRole}`)
+      const graphics = this.segments[index]!
+      graphics.label = segment.role
+      graphics.zIndex = beforeIndex * 2
+      graphics.blendMode = segment.blendMode
+      graphics.clear()
         .moveTo(segment.start.x, segment.start.y)
         .lineTo(segment.end.x, segment.end.y)
         .stroke({
@@ -307,6 +323,7 @@ class NativeEnemyView {
     plan.layers.forEach((layer, index) => {
       const record = nativeEnemySpriteRecord(layer.atlas, layer.entry)
       const sprite = this.sprites[index]
+      sprite.zIndex = index * 2 + 1
       sprite.label = `${layer.role}:${layer.atlas}:${layer.entry}`
       sprite.texture = requiredTexture(this.textures, record.source)
       if (layer.stretch) {
@@ -335,7 +352,7 @@ class NativeEnemyView {
       setNativeDiffuseColor(sprite, layer.textureColor === 'diffuse')
     })
     this.container.position.set(enemy.position.x, enemy.position.y)
-    this.container.scale.set(enemy.enemyToken === 'PORTAL' ? 1 : enemy.scale)
+    this.container.scale.set(plan.rootScale)
     this.headingDeg = enemy.headingDeg
   }
 
@@ -395,6 +412,7 @@ class NativeEnemyView {
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
     this.sprites.length = 0
+    this.segments.length = 0
   }
 }
 

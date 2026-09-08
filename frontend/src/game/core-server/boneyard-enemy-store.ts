@@ -23,6 +23,9 @@ import { stepMageShields } from './enemies/skeleton-family.ts'
 import { stepSpiderRemains } from './enemies/spider-remains.ts'
 import { stepSilks, stepSpiderWebs } from './enemies/spider.ts'
 import { createEnemyWork, finishEnemyStore } from './enemies/work.ts'
+import { spawnRottenZombieParticle } from './enemies/zombie.ts'
+import { spawnBurningSkeletonFire } from './enemies/skeleton-body.ts'
+import { spawnWraithWisp } from './enemies/wraith.ts'
 export function createBoneyardEnemyStore(
   seed: string,
   nativeRegistrationBase = 0,
@@ -149,6 +152,8 @@ export function stepBoneyardEnemyStore(
   }
   if (context.paused) return stepPausedBoneyardEnemyStore(source, context)
   const work = createEnemyWork(source, context, false)
+  work.playerTargets = { ...context.players }
+  context = { ...context, players: work.playerTargets }
   bindEnemyTargets(work, context.players)
   bindWorldPuppetTargets(work, context.puppetTargets ?? [])
   for (const spell of work.bossSpells) {
@@ -199,6 +204,9 @@ export function stepBoneyardEnemyStore(
       : stepLivingActor(work, timedActor, context)
     if (stepped) {
       spawnDampenedMageSmoke(work, stepped, context.tick)
+      spawnRottenZombieParticle(work, stepped, context.tick)
+      spawnBurningSkeletonFire(work, stepped, context.tick)
+      spawnWraithWisp(work, stepped, context)
       const rebound = withNativeCellRebindOrder(work, actor, stepped)
       // Native 0x00625680 rebuilds status scalars from 1.0 every tick. The
       // affected config is a current-tick view, never the next authored row.
@@ -276,6 +284,7 @@ function finishBoneyardEnemyStoreStep(
     events: Object.freeze(work.events),
     playerDamage: Object.freeze(work.playerDamage),
     playerKnockbacks: Object.freeze(work.playerKnockbacks),
+    playerPositions: Object.freeze(work.playerPositions),
     retired: Object.freeze(work.retired),
     rewards: Object.freeze(work.rewards),
     spawnedActorIds: Object.freeze(work.spawnedActorIds),
