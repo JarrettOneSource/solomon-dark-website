@@ -40,6 +40,8 @@ import {
   type MobileUiSize,
 } from './mobile-ui-layout.ts'
 import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
+import type { ProtocolPlayerState } from './protocol/game-state.ts'
+import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
 import {
   NativeUiSettingsAction,
   NativeUiSettingsBinding,
@@ -61,6 +63,9 @@ const NativeSaveTransferSettings = lazy(() => import('./NativeSaveTransferSettin
 interface GameSettingsDialogProps {
   accountUsername: string | null
   context: GameSettingsContext
+  mobileUiPlayer?: ProtocolPlayerState
+  mobileUiInHub?: boolean
+  mobileUiSecondary?: NativeSecondaryPlayerState
   onChange: (settings: GameSettings) => void
   onClose: () => void
   saveTransfer?: NativeSaveTransferController
@@ -100,6 +105,9 @@ const BINDING_GROUPS = Object.freeze([
 export default function GameSettingsDialog({
   accountUsername,
   context,
+  mobileUiPlayer,
+  mobileUiInHub,
+  mobileUiSecondary,
   onChange,
   onClose,
   saveTransfer,
@@ -145,6 +153,27 @@ export default function GameSettingsDialog({
     setMobileUiFullscreen(false)
     setPage('root')
   }, [commitMobileUi, page])
+
+  useLayoutEffect(() => {
+    if (page !== 'mobile-ui' || !mobileUiFullscreen) return
+    const stage = document.querySelector<HTMLElement>('.main-menu-stage')
+    if (!stage) return
+    const resize = () => {
+      const bounds = stage.getBoundingClientRect()
+      const size = mobileUiEditorPageSize(bounds.width, bounds.height, true)
+      setMobileUiPage((current) => current.width === size.width && current.height === size.height
+        ? current : size)
+      if (mobileUiRestoringDefault) {
+        setMobileUiDraft(defaultMobileUiGeometry(
+          size.width, size.height, settings.uiScalePercent / 100,
+        ).layout)
+      }
+    }
+    const observer = new ResizeObserver(resize)
+    observer.observe(stage)
+    resize()
+    return () => observer.disconnect()
+  }, [mobileUiFullscreen, mobileUiRestoringDefault, page, settings.uiScalePercent])
 
   useLayoutEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0
@@ -203,6 +232,9 @@ export default function GameSettingsDialog({
         }}
         onSave={mobileUiFullscreen ? leaveSubpage : undefined}
         page={mobileUiPage}
+        player={mobileUiPlayer}
+        inHub={mobileUiInHub}
+        secondary={mobileUiSecondary}
         presentation={mobileUiFullscreen ? 'fullscreen' : 'windowed'}
         restoringDefault={mobileUiRestoringDefault}
         uiScale={settings.uiScalePercent / 100}
@@ -336,6 +368,7 @@ function RootSettings({
       </NativeUiSettingsGroup>
 
       <NativeUiSettingsGroup title="CONTROLS">
+        <NativeUiSettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
         <NativeUiSettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
       </NativeUiSettingsGroup>
 
@@ -410,7 +443,6 @@ function CloudSettings({
       </NativeUiSettingsGroup>
 
       <NativeUiSettingsGroup title="MOBILE INTERFACE">
-        <NativeUiSettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
         <Suspense fallback={null}>
           <MobileUiLayoutSettingsAction accountUsername={accountUsername} />
         </Suspense>

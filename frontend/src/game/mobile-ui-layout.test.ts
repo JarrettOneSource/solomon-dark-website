@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { freezeNativeBelt } from './core-kernels/native-belt.ts'
 
 import {
   DEFAULT_MOBILE_UI_LAYOUT,
   MOBILE_UI_CANONICAL_HEIGHT,
   MOBILE_UI_CANONICAL_WIDTH,
   MOBILE_UI_ELEMENT_IDS,
+  MOBILE_UI_GRID_SIZE,
   MOBILE_UI_LAYOUT_STORAGE_KEY,
   MOBILE_UI_PAGE_ZOOM_MAX,
   MOBILE_UI_PAGE_ZOOM_MIN,
@@ -20,6 +22,7 @@ import {
   mobileUiElementSnapRect,
   mobileUiElementStyle,
   mobileUiLayoutWith,
+  mobileUiBeltElementId,
   mobileUiLayoutDocument,
   mobileUiLayoutFromDocument,
   mobileUiPagePinchZoom,
@@ -35,6 +38,8 @@ import {
   type MobileUiLayoutStorage,
   type MobileUiPoint,
   type MobileUiResizeHandle,
+  type MobileUiElementTransform,
+  type MobileUiSize,
 } from './mobile-ui-layout.ts'
 
 class MemoryStorage implements MobileUiLayoutStorage {
@@ -43,6 +48,17 @@ class MemoryStorage implements MobileUiLayoutStorage {
   setItem(key: string, value: string) { this.values.set(key, value) }
   removeItem(key: string) { this.values.delete(key) }
 }
+
+test('duplicate potion aliases retain distinct mobile slot positions', () => {
+  const belt = freezeNativeBelt([
+    { kind: 'skill', skillId: 32 }, null, { kind: 'health-potion' },
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, { kind: 'mana-potion' },
+    { kind: 'health-potion' }, { kind: 'mana-potion' },
+  ])
+  const owners = belt.map((_, slot) => mobileUiBeltElementId(belt, slot))
+  assert.deepEqual(owners, ['slot1', 'slot2', 'healthPotion', 'slot4', 'manaPotion', 'slot6', 'slot7', 'slot8'])
+  assert.equal(new Set(owners).size, 8)
+})
 
 test('the mobile layout catalog drains every requested HUD member exactly once', () => {
   assert.deepEqual(MOBILE_UI_ELEMENT_IDS, [
@@ -282,6 +298,99 @@ test('all resize nodes keep their opposite anchor fixed and the dragged node sna
   assert.deepEqual(snapped.guides, [{ axis: 'x', kind: 'grid', position: 64 }])
   assert.equal(mobileUiElementSnapRect(snapped.transform, size, page).right, 64)
 })
+
+for (const page of [{ width: 896, height: 414 }, { width: 667, height: 375 }]) {
+  for (const uiScale of [0.75, 1, 1.25, 1.5]) {
+    const geometry = defaultMobileUiGeometry(page.width, page.height, uiScale)
+    for (const id of MOBILE_UI_ELEMENT_IDS) {
+      test(`${id} has accurate grid anchors and resize guides at ${page.width}x${page.height}, UI ${uiScale}`, () => {
+        const size = geometry.sizes[id]
+        for (const rotation of [0, 30, 90, -45]) {
+          const initial = { x: 50, y: 50, rotation, scale: 1 }
+          const frame = mobileUiElementSnapRect(initial, size, page)
+          const extent = { x: (frame.right - frame.left) / 2, y: (frame.bottom - frame.top) / 2 }
+          for (const anchor of [-1, 0, 1]) {
+            const target = {
+              x: Math.round((page.width / 2 + anchor * extent.x) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+              y: Math.round((page.height / 2 + anchor * extent.y) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+            }
+            const moved = snapMobileUiMove({
+              ...initial,
+              x: (target.x - anchor * extent.x) / page.width * 100,
+              y: (target.y - anchor * extent.y) / page.height * 100,
+            }, size, page)
+            const actual = mobileUiElementSnapRect(moved.transform, size, page)
+            near(actual.centerX + anchor * extent.x, target.x)
+            near(actual.centerY + anchor * extent.y, target.y)
+            assert.equal(moved.guides.length, 2)
+            for (const guide of moved.guides) {
+              const positions = guide.axis === 'x'
+                ? [actual.left, actual.centerX, actual.right]
+                : [actual.top, actual.centerY, actual.bottom]
+              assert.ok(positions.some(position => Math.abs(position - guide.position) < 1e-6))
+              if (guide.kind === 'grid') near(guide.position % MOBILE_UI_GRID_SIZE, 0)
+              else {
+                const dimension = guide.axis === 'x' ? page.width : page.height
+                assert.ok([0, dimension / 2, dimension].includes(guide.position))
+              }
+            }
+          }
+
+          for (const handle of MOBILE_UI_RESIZE_HANDLES) {
+            const direction = {
+              x: handle.includes('west') ? -1 : handle.includes('east') ? 1 : 0,
+              y: handle.includes('north') ? -1 : handle.includes('south') ? 1 : 0,
+            }
+            const radians = rotation * Math.PI / 180
+            const unit = {
+              x: direction.x * size.width / 2 * Math.cos(radians) - direction.y * size.height / 2 * Math.sin(radians),
+              y: direction.x * size.width / 2 * Math.sin(radians) + direction.y * size.height / 2 * Math.cos(radians),
+            }
+            const target = {
+              x: Math.round((page.width / 2 + unit.x * 1.05) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+              y: Math.round((page.height / 2 + unit.y * 1.05) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+            }
+            const start = {
+              ...initial,
+              x: (target.x - unit.x * 1.1) / page.width * 100,
+              y: (target.y - unit.y * 1.1) / page.height * 100,
+            }
+            const startPointer = gridTestHandlePoint(start, size, page, direction)
+            const opposite = gridTestHandlePoint(start, size, page, { x: -direction.x, y: -direction.y })
+            const resized = snapMobileUiResize(start, size, page, handle, startPointer, target)
+            const active = gridTestHandlePoint(resized.transform, size, page, direction)
+            const fixed = gridTestHandlePoint(resized.transform, size, page, { x: -direction.x, y: -direction.y })
+            near(active.x, target.x)
+            near(active.y, target.y)
+            near(fixed.x, opposite.x)
+            near(fixed.y, opposite.y)
+            assert.ok(resized.guides.length > 0, `${id} ${handle} ${rotation}`)
+            for (const guide of resized.guides) near(active[guide.axis], guide.position)
+          }
+        }
+      })
+    }
+  }
+}
+
+function gridTestHandlePoint(
+  transform: MobileUiElementTransform,
+  size: MobileUiSize,
+  page: MobileUiSize,
+  direction: MobileUiPoint,
+): MobileUiPoint {
+  const radians = transform.rotation * Math.PI / 180
+  const x = direction.x * size.width * transform.scale / 2
+  const y = direction.y * size.height * transform.scale / 2
+  return {
+    x: transform.x / 100 * page.width + x * Math.cos(radians) - y * Math.sin(radians),
+    y: transform.y / 100 * page.height + x * Math.sin(radians) + y * Math.cos(radians),
+  }
+}
+
+function near(actual: number, expected: number): void {
+  assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} should equal ${expected}`)
+}
 
 test('pinch resizing snaps scaled bounds while unsnapped gesture and page zoom math stay independent', () => {
   const page = { height: 100, width: 100 }

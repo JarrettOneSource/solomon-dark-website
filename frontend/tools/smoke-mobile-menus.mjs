@@ -144,12 +144,13 @@ try {
   const searchModal = page.locator('.dark-cloud-modal')
   await searchModal.waitFor({ timeout: 10_000 })
   const search = await capture('dark-cloud-search', {
-    done: '.dark-cloud-modal-done',
+    search: '.dark-cloud-modal button[type="submit"]',
     modal: '.dark-cloud-modal',
     stage: '.main-menu-stage',
   })
-  assertDialogFits(search, 'dark-cloud-search', { button: 'done', dialog: 'modal' })
-  await backWithSkull('dark-cloud-search', '.dark-cloud-modal', 'the skull presses DONE on the search modal')
+  assertDialogFits(search, 'dark-cloud-search', { button: 'search', dialog: 'modal' })
+  await backWithSkull('dark-cloud-search', '.dark-cloud-modal', 'the native dialog backdrop dismisses the search modal')
+  assert.equal(await page.locator(PAUSE).count(), 0, 'dismissing Search does not open the background menu')
 
   await openMenuWithSkull('dark-cloud-menu-exit')
   await page.getByRole('button', { name: 'MAIN MENU' }).tap()
@@ -267,7 +268,10 @@ async function openMenuWithSkull(label) {
 async function backWithSkull(label, selector, expectation) {
   const target = page.locator(selector)
   assert.equal(await target.count(), 1, `${label}: ${selector} open before the skull tap`)
-  await page.locator(SKULL).tap()
+  // Native dialogs make the background inert; real taps reach their dismiss backdrop.
+  const skull = await page.locator(SKULL).boundingBox()
+  assert.ok(skull)
+  await page.touchscreen.tap(skull.x + skull.width / 2, skull.y + skull.height / 2)
   await target.waitFor({ state: 'detached', timeout: 10_000 })
   receipts[label] = { ...receipts[label], skullBacksOut: expectation }
 }

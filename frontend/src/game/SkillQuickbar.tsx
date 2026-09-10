@@ -37,6 +37,7 @@ import {
 import { mobileQuickbarBankLayout, mobileQuickbarSlotPlacement } from './mobile-quickbar-layout.ts'
 import {
   mobileUiElementStyle,
+  mobileUiBeltElementId,
   type MobileUiElementId,
   type MobileUiLayoutState,
 } from './mobile-ui-layout.ts'
@@ -125,6 +126,7 @@ export default function SkillQuickbar({
           key={slot}
           mobilePlacement={mobileQuickbarSlotPlacement(slot, mobileBank)}
           mobileUi={mobileUi}
+          mobileUiId={mobileUiBeltElementId(belt, slot)}
           mode={mode}
           offset={offset}
           onInput={onInput}
@@ -152,6 +154,7 @@ function SkillQuickbarSlot({
   mobilePlacement,
   mode,
   mobileUi,
+  mobileUiId,
   offset,
   onInput,
   onUnassign,
@@ -172,6 +175,7 @@ function SkillQuickbarSlot({
   mobilePlacement: ReturnType<typeof mobileQuickbarSlotPlacement>
   mode: SkillQuickbarProps['mode']
   mobileUi: MobileUiLayoutState
+  mobileUiId: MobileUiElementId
   offset: number
   onInput: SkillQuickbarProps['onInput']
   onUnassign: SkillQuickbarProps['onUnassign']
@@ -181,11 +185,6 @@ function SkillQuickbarSlot({
   slot: number
   weldBuildId: number | null
 }) {
-  const mobileUiId: MobileUiElementId = entry?.kind === 'health-potion'
-    ? 'healthPotion'
-    : entry?.kind === 'mana-potion'
-      ? 'manaPotion'
-      : `slot${slot + 1}` as MobileUiElementId
   const pressRef = useRef<{
     castEligible: boolean
     originX: number
@@ -418,7 +417,7 @@ export function NativeSkillIcon({
   )
 }
 
-function CooldownSector({ capacity, remaining }: { capacity: number; remaining: number }) {
+export function CooldownSector({ capacity, remaining }: { capacity: number; remaining: number }) {
   return (
     <svg className="hub-hud-quickbar-cooldown" viewBox="0 0 53 53" aria-hidden>
       <path d={nativeCooldownSectorPath(remaining, capacity)} />

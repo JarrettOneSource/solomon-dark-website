@@ -1,5 +1,150 @@
 # 2026-08-26 — User-authored mobile HUD layout editor
 
+## 2026-09-10 — Slot icons and complete snapping verification
+
+The owner requested verification of every slot/icon and every element's grid
+snap positions, then publication to main. The preceding polish pass verified
+selection and gesture history, but retained generic numbered slot art and
+relied on generic rectangle tests for snapping. This pass reopens those gaps.
+
+Boundary: all 18 mobile layout elements; all eight addressed belt slots in
+empty, primary/secondary/concentration skill, item, and Health/Mana alias
+states; their shared atlas/item renderers; move, resize, pinch, rotation,
+grid/page/sibling alignment, and zoom coordinates. The immutable layout
+document continues to contain transforms only. Belt contents remain owned by
+the game and are sampled from the current local player when opening Settings.
+
+Confirmed source findings at `990908fa`:
+
+- `NativeBeltItemIcon` uses a 53 px wrapper, but `hub.css` pins that wrapper
+  to `(0,0)` even in a larger touch slot. Its center must follow the slot's
+  center, just like the existing skill and fallback-potion icon paths.
+- Entry 293 proves ready/cooldown/unavailable alpha `.75/.25/.375` at
+  `BeltButton::Present 0x005D3E10` and separately records quarter-RGB College
+  modulation. The existing Hub `brightness(.25)` filter is intentional and
+  remains unchanged; editor preview must respect the same scene context.
+- The editor draws purple numbered blocks instead of the current belt. Reuse
+  `NativeSkillIcon` and `NativeBeltItemIcon` with the same root-pixel geometry.
+  Health/Mana aliases continue to use their explicit potion layout owners;
+  an aliased numbered position is a clearly identified spare position, not a
+  second live potion button. No active wizard means no invented skill icons.
+- Native belt assignment allows duplicate potion aliases. The unconditional
+  alias-to-position mapping stacks duplicate buttons at the same location.
+  The first alias owns the dedicated potion position; further copies use their
+  addressed numbered slots. Share this mapping between runtime and editor,
+  preserving all native slot identities and the default aliases in slots 3/4.
+- Grid spacing is 16 editor-page pixels. Move alignment considers each
+  transformed bounding edge and center; resize aligns the dragged handle while
+  preserving the opposite anchor; pinch aligns scaled bounds. Page and sibling
+  lines may be off-grid and must remain distinct from grid lines. Fine numeric
+  adjustments and keyboard nudges remain precise, independent of gesture snap.
+
+Verification must enumerate all 18 actual element sizes, rotations, and resize
+handles; prove guide coordinates match the final geometry and the visible grid
+at windowed zoom; and exercise all eight live slot identities, atlas/item
+centering, availability, cancellation, activation, and potion alias ownership.
+Use Mac-only focused tests, built-client browser journeys, the complete gate,
+then a verified fast-forward push and task cleanup.
+
+### Slot and snapping verification receipt
+
+- All 168 focused layout/belt/presentation tests pass. The geometry matrix
+  covers every element at 667×375 and 896×414, UI scales .75/1/1.25/1.5,
+  rotations 0/30/90/−45, three move anchors, and all eight resize handles.
+  Resize checks preserve the opposite anchor and match emitted guides to the
+  actual rotated handle. Grid, sibling, and page-center targets remain distinct.
+- Built-client Mac Chrome checks pass for all 18 elements, including rendered
+  line positions at desktop zoom. Position arrows provide touch access to
+  thin controls, moving one grid step with snapping on or one pixel with it
+  off. Selection and fine adjustment clear obsolete guides.
+- The browser assigns eight distinct primary/concentration entries, cancels
+  and activates every slot, and compares every editor icon's atlas record,
+  crop offset, opacity, and College RGB filter with the live HUD. It also
+  verifies cooldown-sector centering and the shared cooling-alpha branch.
+- Two Health Potion aliases remain separately reachable and each consumes
+  one item from the same stack. Hat/weapon atlas layers stay centered; the
+  weapon slot equips its owned item. Default aliases and desktop placement
+  retain their previous ownership.
+- Native combat remains sealed through Solomon's prelude. The existing
+  `openBoneyardCombat` fixture completes that prelude before the final joystick
+  aim/hold, rendered Frost Jet, and release assertions. Host-state checks use
+  the existing synchronous-predicate `waitUntil` helper; asynchronous browser
+  predicates were removed because they did not reliably wait for state.
+- The built editor and gameplay journey finishes with empty page, console,
+  response, and unexpected-request error arrays. The supported complete Mac
+  gate and final committed build are required immediately before publication.
+
+## 2026-09-10 — Mobile authoring usability pass
+
+The owner requested a more polished and intuitive mobile UI and editor. This
+remains a Website extension: retail has no touch-layout authoring system.
+The causal trace at Website `990908fa` found the local editor under Online and
+Account, a fullscreen dock without a selector or instructions, 16 px touch
+resize nodes, no undo, and a page size captured only at entry. The same
+`MobileUiEditor` owns all 18 controls; `GameSettingsDialog` owns the draft and
+commit, and `mobile-ui-layout.ts` owns validation and touch-only transforms.
+
+Scope and preservation inventory:
+
+- Pause, FPS/Ping, Health/Mana: preserve existing runtime owners and preview
+  geometry; expose them by name in the phone editor.
+- Movement and primary-attack joysticks: preserve input vectors, held actions,
+  cancellation, and scene membership. Clarify their purpose in presentation.
+- Slots 1–8, Inventory, Skillbook, XP, Health Potion, Mana Potion: preserve all
+  semantic handlers, visibility gates, and saved transform fields.
+- Fullscreen/windowed editor: add shared fine adjustment, gesture-level undo
+  and redo, reset of one control, and recoverable full reset. Selection and
+  no-op taps must not create edits. A new edit after undo clears redo.
+- Settings entry from Title, Dark Cloud, Hub, and Boneyard: local customization
+  belongs in Controls; immutable publication remains in Online and Account.
+- Screen resize and orientation: follow the existing safe stage; regenerate an
+  adaptive default draft, preserve percentage-based custom drafts, and clamp
+  the transient dock when its size or available screen changes.
+- Storage, version-2 sharing, native HUD art, fine-pointer runtime layout,
+  simulation clocks, and network authority: verified existing contracts to
+  preserve. No new native extraction or protocol/schema change is required.
+
+Acceptance: use Mac Chrome to inspect short and full-height landscape phones,
+portrait/landscape round trips, and the desktop editor; exercise control
+selection, adjustment, drag/pinch, undo/redo/reset, save/reopen, and default
+restoration; verify unchanged HUD actions and empty page/console error arrays.
+Run focused layout/input tests and the full Website gate on the Mac mini.
+
+### Implementation and browser receipt
+
+- Local and Mac candidates share base
+  `990908fad069791383392aaf9d0613003a78c5cf`; changed source files were compared
+  by checksum. Mac verification used macOS 26.6.2, Node 22.17.0, .NET SDK
+  10.0.302, and Chrome 152.0.7977.84.
+- The 23 focused layout, quickbar, and movement-input tests passed. Type
+  checking, frontend lint, and the production build passed; lint reports only
+  the 12 existing warnings outside this change.
+- `npm run smoke:game:mobile-ui` passed against the built client and an
+  isolated real game host. It exercises all 18 selections, 44 px adjustment
+  controls, size/rotation, per-control/full reset, undo/redo, assistive click
+  activation, drag/pinch grouping, remaining-finger drag, saved-layout
+  reopening, and desktop keyboard undo. It also proves movement under the
+  saved layout and authoritative primary-attack aim/hold/release in Boneyard.
+- Browser geometry passed at 896×414, 667×375, and 896×366, with a portrait
+  rotation round trip. The desktop editor was inspected at 1280×800. The
+  game retains its existing portrait rotation hint. These are Chrome mobile
+  emulation receipts; no physical-phone result is claimed.
+- `smoke:game:mobile-menus -- --through-hub` passed at 896×366, including
+  settings scrolling, reachable footers, Search dismissal, and the player
+  card. The existing smoke referenced the removed Search Done footer and
+  tried to activate an inert background button. It now checks Search Now and
+  uses real touch coordinates for modal dismissal, matching `NativeUiDialog`
+  and the documented native UI building blocks.
+- Both browser journeys completed with empty error arrays. Runtime native
+  geometry, profile schema, publication API, and authority remain unchanged.
+- The complete `/opt/homebrew/bin/bash ./scripts/validate.sh` gate exited 0
+  on the Mac mini, including backend contracts, all frontend and desktop test
+  groups, production media/bundle checks, and renderer coverage/mutation
+  policy. Frontend lint/build and the final production browser journey were
+  rerun after the last UI refinements; changed smoke scripts passed lint.
+- No commit, push, deployment, or production restart was performed during
+  that initial polish pass; publication was authorized in the follow-up above.
+
 ## Reported smell and parity question
 
 - Owner request: add a Mobile UI editor to Game Settings. It must begin from

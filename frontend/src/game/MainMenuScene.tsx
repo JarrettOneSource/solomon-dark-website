@@ -2451,6 +2451,9 @@ function MainMenuContent({
             <GameSettingsDialog
               accountUsername={accountUsername}
               context="gameplay"
+              mobileUiPlayer={session.getSnapshot().players[session.playerId]}
+              mobileUiInHub={runtimeSnapshot?.world.kind === 'hub'}
+              mobileUiSecondary={session.getSnapshot().secondaryAbilities.players[session.playerId]}
               onChange={requestGameSettingsUpdate}
               onClose={() => {
                 setGameplaySettingsOpen(false)

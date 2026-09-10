@@ -95,6 +95,7 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
       ref={baseRef}
       className={`game-touch-joystick game-touch-joystick-${lane}`}
       data-joystick={lane}
+      data-active={knobOffset.x !== 0 || knobOffset.y !== 0}
       data-mobile-ui-custom={mobileUi.customized || undefined}
       data-mobile-ui-element={mobileUiId}
       data-ui-scale={uiScale}
@@ -119,6 +120,9 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
         className="game-touch-joystick-knob"
         style={{ transform: `translate(-50%, -50%) translate(${knobOffset.x}px, ${knobOffset.y}px)` }}
       />
+      <span aria-hidden className="game-touch-joystick-label">
+        {lane === 'movement' ? 'MOVE' : 'AIM / CAST'}
+      </span>
     </div>
   )
 }

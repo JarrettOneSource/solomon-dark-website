@@ -55,30 +55,164 @@
   z-index: 200;
   top: 8px;
   right: 8px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  width: max-content;
-  height: 42px;
+  width: min(344px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
   border: 1px solid #c6a85f;
-  border-radius: 5px;
-  background: rgb(10 9 7 / 0.94);
+  border-radius: 10px;
+  background: rgb(20 19 16 / 0.97);
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.78), inset 0 0 10px rgb(205 174 94 / 0.08);
-  grid-template-columns: 34px repeat(3, 70px);
 }
 
 .mobile-ui-editor-dock button {
   min-width: 0;
+  min-height: 44px;
   padding: 0 7px;
   border: 0;
   border-left: 1px solid rgb(198 168 95 / 0.34);
   color: #e9d79d;
   background: transparent;
-  font: 700 11px var(--font-display);
+  font: 700 12px var(--font-display);
   letter-spacing: 0.04em;
   touch-action: manipulation;
 }
 
-.mobile-ui-editor-dock button:hover,
+.mobile-ui-editor-dock-heading {
+  display: grid;
+  flex: none;
+  grid-template-columns: 44px 1fr 72px;
+  align-items: center;
+  border-bottom: 1px solid rgb(198 168 95 / 0.34);
+}
+
+.mobile-ui-editor-dock-heading strong { padding-left: 6px; font-size: 15px; }
+
+.mobile-ui-editor-dock-actions {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.mobile-ui-editor-hint {
+  margin: 0;
+  padding: 6px 12px 10px;
+  color: #cfc6ad;
+  font: 13px/1.35 var(--font-display);
+}
+
+.mobile-ui-editor-dock button:disabled,
+.mobile-ui-editor-adjustments button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mobile-ui-editor-inspector {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-top: 1px solid rgb(198 168 95 / 0.34);
+  overscroll-behavior: contain;
+  scrollbar-color: #a89a70 #20211f;
+  touch-action: pan-y;
+}
+
+.mobile-ui-editor-inspector small {
+  display: block;
+  margin-top: 8px;
+  color: #cfc6ad;
+  font: 12px/1.4 var(--font-display);
+}
+
+.mobile-ui-editor-control-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.mobile-ui-editor-control-picker select {
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid #827248;
+  border-radius: 5px;
+  color: #f3e8bd;
+  background: #17140e;
+  font: 14px var(--font-display);
+}
+
+.mobile-ui-editor-details { display: grid; gap: 8px; }
+
+.mobile-ui-editor-adjustments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.mobile-ui-editor-size,
+.mobile-ui-editor-rotation {
+  display: grid;
+  flex: 1 1 260px;
+  align-items: center;
+  grid-template-columns: 78px 44px minmax(44px, 1fr) 44px;
+  gap: 4px;
+}
+
+.mobile-ui-editor-position {
+  display: grid;
+  flex: 1 1 270px;
+  align-items: center;
+  grid-template-columns: 78px repeat(4, 44px);
+  gap: 4px;
+}
+
+.mobile-ui-editor-position button { font-size: 20px; }
+
+.mobile-ui-editor-adjustments output {
+  display: block;
+  color: #f1db9c;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobile-ui-editor-adjustments button,
+.mobile-ui-editor-inspector > button {
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid #827248;
+  border-radius: 5px;
+  color: #f3e8bd;
+  background: #242118;
+  font: 700 12px var(--font-display);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mobile-ui-editor-adjustments input[type='range'] {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  accent-color: #dec27d;
+  touch-action: none;
+}
+
+.mobile-ui-editor-adjustments :focus-visible,
+.mobile-ui-editor-control-picker select:focus-visible {
+  outline: 2px solid #ffe7a1;
+  outline-offset: 2px;
+}
+
+.mobile-ui-editor-inspector .mobile-ui-editor-reset-control,
+.mobile-ui-editor-inspector > button { width: 100%; }
+.mobile-ui-editor-inspector > button { margin-top: 8px; }
+
+.mobile-ui-editor-dock button:hover:not(:disabled),
 .mobile-ui-editor-dock button:focus-visible {
   color: #fff5c9;
   background: rgb(100 82 39 / 0.32);
@@ -356,7 +490,7 @@
   box-shadow: inset 0 0 18px rgb(0 0 0 / 0.62), 0 4px 10px rgb(0 0 0 / 0.4);
 }
 
-.mobile-ui-editor-joystick > span {
+.mobile-ui-editor-joystick > span:first-child {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -369,18 +503,53 @@
   transform: translate(-50%, -50%);
 }
 
-.mobile-ui-editor-slot {
-  display: grid !important;
+.mobile-ui-editor-joystick-label {
+  position: absolute;
+  right: 0;
+  bottom: 10%;
+  left: 0;
+  color: #d9d2bc;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+}
+
+.hub-hud-quickbar-slot.mobile-ui-editor-belt-preview {
   box-sizing: border-box;
-  border: 2px solid rgb(235 228 197 / 0.72);
-  border-radius: 14%;
+  border: 2px solid rgb(226 216 181 / 0.42);
+  border-radius: 14px;
+  background: rgb(9 13 18 / 0.62);
+  box-shadow: inset 0 0 12px rgb(0 0 0 / 0.72), 0 3px 10px rgb(0 0 0 / 0.4);
+  pointer-events: none;
+}
+
+.mobile-ui-editor-belt-preview[data-populated='false'] {
+  border-color: rgb(226 216 181 / 0.18);
+  background: rgb(9 13 18 / 0.32);
+}
+
+.mobile-ui-editor-belt-preview[data-preview-in-hub='true'] .hub-hud-quickbar-skill-icon {
+  filter: brightness(0.25);
+}
+
+.mobile-ui-editor-element > span.mobile-ui-editor-slot-number {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: auto;
+  height: auto;
   color: #fff1b8;
-  background:
-    radial-gradient(circle at 42% 35%, rgb(99 72 133 / 0.9), rgb(23 26 34 / 0.96) 68%),
-    #15181e;
-  box-shadow: inset 0 0 9px rgb(0 0 0 / 0.72), 0 2px 5px rgb(0 0 0 / 0.48);
-  font: 700 38%/1 var(--font-mono);
-  place-items: center;
+  font: 10px/1 var(--font-mono);
+  text-shadow: 0 1px 2px #000;
+}
+
+.mobile-ui-editor-element > span.mobile-ui-editor-slot-alias {
+  display: grid;
+  color: #eee7d1;
+  font: 9px/1.2 var(--font-display);
+  text-align: center;
+  place-content: center;
 }
 
 .mobile-ui-editor-xp { position: relative; }
@@ -398,11 +567,6 @@
   left: 5.385%;
   width: 89.231% !important;
   height: 95.385% !important;
-}
-
-.mobile-ui-editor-potion {
-  width: 53% !important;
-  height: 53% !important;
 }
 
 .mobile-ui-editor-resize-node,
@@ -515,7 +679,7 @@
 
 @media (hover: none) and (pointer: coarse) {
   .mobile-ui-editor-toolbar select,
-  .mobile-ui-editor-toolbar button { min-height: 36px; }
+  .mobile-ui-editor-toolbar button { min-height: 44px; }
   .mobile-ui-editor-resize-node { width: 16px; height: 16px; }
   .mobile-ui-editor-rotate-handle { width: 20px; height: 20px; }
 }

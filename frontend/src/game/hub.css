@@ -388,10 +388,8 @@
 }
 
 .hub-hud-belt-item-icon {
-  inset: 0;
   width: 53px;
   height: 53px;
-  transform: none;
 }
 
 .hub-hud-belt-item-layer {
@@ -425,10 +423,12 @@
 
 .hub-hud-quickbar-cooldown {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
   width: 53px;
   height: 53px;
   fill: rgb(50% 10% 10% / 75%);
+  transform: translate(-50%, -50%);
 }
 
 .hub-hud-quickbar-input-mouse {
@@ -1071,7 +1071,7 @@
     left: auto;
   }
 
-  .hub-hud-quickbar-slot[data-entry-kind='health-potion'] {
+  .hub-hud-quickbar-slot[data-mobile-ui-element='healthPotion'] {
     right: auto;
     bottom: 8px;
     left: calc(50% - 230px);
@@ -1079,7 +1079,7 @@
     height: 100px;
   }
 
-  .hub-hud-quickbar-slot[data-entry-kind='mana-potion'] {
+  .hub-hud-quickbar-slot[data-mobile-ui-element='manaPotion'] {
     right: auto;
     bottom: 8px;
     left: calc(50% + 130px);
@@ -1090,13 +1090,6 @@
   .hub-hud-quickbar-slot:disabled {
     border-color: rgb(226 216 181 / 0.18);
     background: rgb(9 13 18 / 0.32);
-  }
-
-  .hub-hud-quickbar-cooldown {
-    inset: auto;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
   }
 
   .hub-hud-quickbar-input-mouse,

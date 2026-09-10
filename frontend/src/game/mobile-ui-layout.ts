@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import type { PlayerBeltComponent } from './core-kernels/native-belt.ts'
 
 import { UI_SCALE_MAX_PERCENT, UI_SCALE_MIN_PERCENT } from './game-settings.ts'
 import {
@@ -53,15 +54,27 @@ export const MOBILE_UI_RESIZE_HANDLES = Object.freeze([
 export type MobileUiElementId = typeof MOBILE_UI_ELEMENT_IDS[number]
 export type MobileUiResizeHandle = typeof MOBILE_UI_RESIZE_HANDLES[number]
 
+export function mobileUiBeltElementId(belt: PlayerBeltComponent, slot: number): MobileUiElementId {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= belt.length) {
+    throw new RangeError('mobile belt slot must be an integer in 0..7')
+  }
+  const kind = belt[slot]?.kind
+  if ((kind === 'health-potion' || kind === 'mana-potion')
+    && belt.findIndex(entry => entry?.kind === kind) === slot) {
+    return kind === 'health-potion' ? 'healthPotion' : 'manaPotion'
+  }
+  return `slot${slot + 1}` as MobileUiElementId
+}
+
 export const MOBILE_UI_ELEMENT_LABELS: Readonly<Record<MobileUiElementId, string>> = Object.freeze({
   diagnostics: 'FPS / Ping',
   meters: 'Health / Mana',
   healthPotion: 'Health Potion',
   inventory: 'Inventory',
-  leftJoystick: 'Left Joystick',
+  leftJoystick: 'Movement Joystick',
   manaPotion: 'Mana Potion',
   pause: 'Pause',
-  rightJoystick: 'Right Joystick',
+  rightJoystick: 'Aim / Cast Joystick',
   skillbook: 'Skillbook',
   slot1: 'Slot 1',
   slot2: 'Slot 2',

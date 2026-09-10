@@ -40,6 +40,26 @@
   box-shadow: 0 3px 7px rgb(0 0 0 / 0.75), inset 0 0 8px rgb(255 244 205 / 0.2);
 }
 
+.game-touch-joystick-label {
+  position: absolute;
+  right: 0;
+  bottom: 24px;
+  left: 0;
+  color: #d9d2bc;
+  font: 700 calc(11px / var(--hud-display-scale, 1))/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
+
+.game-touch-joystick[data-active='true'] {
+  border-color: #e5cc83;
+  background-color: rgb(198 168 95 / 0.08);
+}
+
+.game-touch-joystick[data-active='true'] .game-touch-joystick-label { opacity: 0.45; }
+
 @media (hover: none) and (pointer: coarse) {
   .game-touch-joystick { display: block; }
 }

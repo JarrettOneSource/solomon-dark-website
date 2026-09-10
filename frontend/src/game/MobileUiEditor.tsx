@@ -12,6 +12,14 @@ import {
 } from 'react'
 
 import { hub } from '../lib/assets.ts'
+import { nativeBeltEntryItem, nativeBeltPotionProjection } from './core-kernels/native-belt.ts'
+import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
+import { nativeSkillCategory, nativeSkillIconRecord } from './core-kernels/player-progression.ts'
+import { MOBILE_JOYSTICK_BASE } from './mobile-quickbar-layout.ts'
+import NativeBeltItemIcon from './NativeBeltItemIcon.tsx'
+import type { ProtocolPlayerState } from './protocol/game-state.ts'
+import { CooldownSector, NativeSkillIcon } from './SkillQuickbar.tsx'
+import { nativeSkillQuickbarIconAlpha, nativeSkillQuickbarCooldownPresentation } from './skill-quickbar.ts'
 import {
   MOBILE_UI_ELEMENT_IDS,
   MOBILE_UI_ELEMENT_LABELS,
@@ -28,6 +36,7 @@ import {
   mobileUiElementRotation,
   mobileUiElementSnapRect,
   mobileUiLayoutWith,
+  mobileUiBeltElementId,
   mobileUiPagePinchZoom,
   mobileUiResizeTransform,
   snapMobileUiMove,
@@ -43,6 +52,7 @@ import {
 } from './mobile-ui-layout.ts'
 
 import './mobile-ui-editor.css'
+import './hub.css'
 
 interface MobileUiEditorProps {
   layout: MobileUiLayout
@@ -50,6 +60,9 @@ interface MobileUiEditorProps {
   onReset: () => void
   onSave?: () => void
   page: MobileUiSize
+  player?: ProtocolPlayerState
+  inHub?: boolean
+  secondary?: NativeSecondaryPlayerState
   presentation?: 'fullscreen' | 'windowed'
   restoringDefault: boolean
   uiScale: number
@@ -99,12 +112,20 @@ interface DockInteraction {
   readonly pointerId: number
 }
 
+interface EditorSnapshot {
+  readonly layout: MobileUiLayout
+  readonly restoringDefault: boolean
+}
+
 export default function MobileUiEditor({
   layout,
   onChange,
   onReset,
   onSave,
   page,
+  player,
+  inHub = false,
+  secondary,
   presentation = 'windowed',
   restoringDefault,
   uiScale,
@@ -117,6 +138,11 @@ export default function MobileUiEditor({
   const [snap, setSnap] = useState(true)
   const [snapGuides, setSnapGuides] = useState<readonly MobileUiSnapGuide[]>([])
   const [zoom, setZoom] = useState(1)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [history, setHistory] = useState<{ past: EditorSnapshot[], future: EditorSnapshot[] }>({
+    past: [], future: [],
+  })
+  const recordedInteraction = useRef(false)
   const [dockPosition, setDockPosition] = useState<MobileUiPoint | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const dockRef = useRef<HTMLDivElement>(null)
@@ -166,27 +192,72 @@ export default function MobileUiEditor({
     const root = rootRef.current
     const dock = dockRef.current
     if (!root || !dock) return
-    setDockPosition((current) => constrainDockPosition(
-      current ?? { x: root.clientWidth - dock.offsetWidth - 8, y: 8 },
-      root,
-      dock,
+    const resize = () => setDockPosition((current) => constrainDockPosition(
+      current ?? { x: (root.clientWidth - dock.offsetWidth) / 2, y: 54 }, root, dock,
     ))
-  }, [page.height, page.width, presentation])
+    const observer = new ResizeObserver(resize)
+    observer.observe(root)
+    observer.observe(dock)
+    resize()
+    return () => observer.disconnect()
+  }, [presentation])
 
   useEffect(() => () => {
     if (zoomFrame.current !== null) cancelAnimationFrame(zoomFrame.current)
   }, [])
 
+  const rememberChange = useCallback(() => {
+    if (recordedInteraction.current) return
+    recordedInteraction.current = true
+    setHistory((current) => ({
+      past: [...current.past.slice(-99), { layout, restoringDefault }],
+      future: [],
+    }))
+  }, [layout, restoringDefault])
+
+  const beginChange = () => {
+    if (elementPointers.current.size === 0 && !handleInteraction.current) {
+      recordedInteraction.current = false
+    }
+  }
+
+  const restoreHistory = (direction: 'undo' | 'redo') => {
+    const source = direction === 'undo' ? history.past : history.future
+    const snapshot = source.at(-1)
+    if (!snapshot) return
+    elementPointers.current.clear()
+    elementPointerOwner.current = null
+    elementInteraction.current = null
+    handleInteraction.current = null
+    const current = { layout, restoringDefault }
+    setHistory(direction === 'undo'
+      ? { past: history.past.slice(0, -1), future: [...history.future, current] }
+      : { past: [...history.past, current], future: history.future.slice(0, -1) })
+    setSnapGuides([])
+    if (snapshot.restoringDefault) onReset()
+    else onChange(snapshot.layout)
+  }
+
+  const resetLayout = () => {
+    if (restoringDefault) return
+    rememberChange()
+    setSnapGuides([])
+    onReset()
+  }
+
   const updateElement = useCallback((
     id: MobileUiElementId,
     transform: MobileUiElementTransform,
+    guides: readonly MobileUiSnapGuide[] = [],
   ) => {
-    onChange(mobileUiLayoutWith(
-      layout,
-      id,
-      constrainMobileUiTransform(transform, geometry.sizes[id], page),
-    ))
-  }, [geometry.sizes, layout, onChange, page])
+    setSnapGuides(guides)
+    const next = constrainMobileUiTransform(transform, geometry.sizes[id], page)
+    const current = layout[id]
+    if (current.x === next.x && current.y === next.y
+      && current.scale === next.scale && current.rotation === next.rotation) return
+    rememberChange()
+    onChange(mobileUiLayoutWith(layout, id, next))
+  }, [geometry.sizes, layout, onChange, page, rememberChange])
 
   const pagePoint = useCallback((clientX: number, clientY: number): MobileUiPoint => {
     const bounds = pageRef.current?.getBoundingClientRect()
@@ -217,6 +288,21 @@ export default function MobileUiEditor({
         page,
       ))
   ), [geometry.sizes, layout, page])
+
+  const nudgeElement = (direction: MobileUiPoint) => {
+    const step = snap ? MOBILE_UI_GRID_SIZE : 1
+    const candidate = {
+      ...layout[selected],
+      x: layout[selected].x + direction.x * step / page.width * 100,
+      y: layout[selected].y + direction.y * step / page.height * 100,
+    }
+    if (!snap) {
+      updateElement(selected, candidate)
+      return
+    }
+    const result = snapMobileUiMove(candidate, geometry.sizes[selected], page, snapTargets(selected))
+    updateElement(selected, result.transform, result.guides)
+  }
 
   const toggleGrid = () => {
     setSnap((enabled) => !enabled)
@@ -290,8 +376,7 @@ export default function MobileUiEditor({
         snapTargets(id),
         MOBILE_UI_SNAP_THRESHOLD / zoom,
       )
-      setSnapGuides(result.guides)
-      updateElement(id, result.transform)
+      updateElement(id, result.transform, result.guides)
       return
     }
     const current = pagePoint(event.clientX, event.clientY)
@@ -312,8 +397,7 @@ export default function MobileUiEditor({
       snapTargets(id),
       MOBILE_UI_SNAP_THRESHOLD / zoom,
     )
-    setSnapGuides(result.guides)
-    updateElement(id, result.transform)
+    updateElement(id, result.transform, result.guides)
   }
 
   const finishElement = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -323,6 +407,16 @@ export default function MobileUiEditor({
     elementPointers.current.delete(event.pointerId)
     if (elementPointers.current.size === 0) elementPointerOwner.current = null
     elementInteraction.current = null
+    const remaining = elementPointers.current.values().next().value
+    const id = elementPointerOwner.current
+    if (remaining && id) {
+      elementInteraction.current = {
+        id,
+        initialPointer: pagePoint(remaining.x, remaining.y),
+        initialTransform: layout[id],
+        kind: 'drag',
+      }
+    }
     setSnapGuides([])
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -406,8 +500,7 @@ export default function MobileUiEditor({
       snapTargets(interaction.id),
       MOBILE_UI_SNAP_THRESHOLD / zoom,
     )
-    setSnapGuides(result.guides)
-    updateElement(interaction.id, result.transform)
+    updateElement(interaction.id, result.transform, result.guides)
   }
 
   const finishHandle = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -598,6 +691,7 @@ export default function MobileUiEditor({
   }
 
   const selectedTransform = layout[selected]
+  const previewScale = geometry.sizes.leftJoystick.width / MOBILE_JOYSTICK_BASE
   return (
     <div
       ref={rootRef}
@@ -606,21 +700,37 @@ export default function MobileUiEditor({
       data-grid-snap={snap}
       data-restoring-default={restoringDefault}
       data-selected-element={selected}
+      onClickCapture={beginChange}
+      onPointerDownCapture={beginChange}
+      onKeyDownCapture={(event) => {
+        recordedInteraction.current = false
+        if (!(event.ctrlKey || event.metaKey) || event.altKey) return
+        const key = event.key.toLowerCase()
+        if (key !== 'z' && key !== 'y') return
+        event.preventDefault()
+        event.stopPropagation()
+        restoreHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo')
+      }}
     >
       {presentation === 'windowed' ? (
         <div className="mobile-ui-editor-toolbar" aria-label="Mobile UI editor tools">
           <label>
-            <span>ELEMENT</span>
+            <span>CONTROL</span>
             <select
               aria-label="Selected mobile UI element"
               value={selected}
-              onChange={(event) => setSelected(event.currentTarget.value as MobileUiElementId)}
+              onChange={(event) => {
+                setSelected(event.currentTarget.value as MobileUiElementId)
+                setSnapGuides([])
+              }}
             >
               {MOBILE_UI_ELEMENT_IDS.map((id) => (
                 <option key={id} value={id}>{MOBILE_UI_ELEMENT_LABELS[id]}</option>
               ))}
             </select>
           </label>
+          <button disabled={!history.past.length} onClick={() => restoreHistory('undo')} type="button">UNDO</button>
+          <button disabled={!history.future.length} onClick={() => restoreHistory('redo')} type="button">REDO</button>
           <button
             aria-pressed={snap}
             data-mobile-ui-grid-toggle
@@ -645,7 +755,7 @@ export default function MobileUiEditor({
             >+</button>
             <button onClick={fitPage} type="button">FIT</button>
           </div>
-          <button data-mobile-ui-reset onClick={onReset} type="button">RESET DEFAULT</button>
+          <button data-mobile-ui-reset disabled={restoringDefault} onClick={resetLayout} type="button">RESET LAYOUT</button>
         </div>
       ) : null}
 
@@ -704,9 +814,13 @@ export default function MobileUiEditor({
                   data-mobile-ui-editor-element={id}
                   data-selected={active}
                   key={id}
-                  onFocus={() => setSelected(id)}
+                  onFocus={() => {
+                    setSelected(id)
+                    setSnapGuides([])
+                  }}
                   onKeyDown={(event) => keyboardMove(id, event)}
                   onPointerCancel={finishElement}
+                  onLostPointerCapture={finishElement}
                   onPointerDown={(event) => beginElement(id, event)}
                   onPointerMove={(event) => moveElement(id, event)}
                   onPointerUp={finishElement}
@@ -721,7 +835,7 @@ export default function MobileUiEditor({
                   } as CSSProperties}
                   tabIndex={active ? 0 : -1}
                 >
-                  <MobileUiElementPreview id={id} />
+                  <MobileUiElementPreview id={id} uiScale={uiScale} player={player} inHub={inHub} previewScale={previewScale} secondary={secondary} size={size} />
                   {active ? (
                     <>
                       {MOBILE_UI_RESIZE_HANDLES.map((handle) => (
@@ -731,6 +845,7 @@ export default function MobileUiEditor({
                           data-resize-handle={handle}
                           key={handle}
                           onPointerCancel={finishHandle}
+                          onLostPointerCapture={finishHandle}
                           onPointerDown={(event) => beginHandle(id, handle, event)}
                           onPointerMove={moveHandle}
                           onPointerUp={finishHandle}
@@ -741,6 +856,7 @@ export default function MobileUiEditor({
                         aria-label={`Rotate ${MOBILE_UI_ELEMENT_LABELS[id]}`}
                         className="mobile-ui-editor-rotate-handle"
                         onPointerCancel={finishHandle}
+                        onLostPointerCapture={finishHandle}
                         onPointerDown={(event) => beginHandle(id, 'rotate', event)}
                         onPointerMove={moveHandle}
                         onPointerUp={finishHandle}
@@ -756,13 +872,22 @@ export default function MobileUiEditor({
       </div>
 
       {presentation === 'windowed' ? (
-        <div className="mobile-ui-editor-status" aria-live="polite">
-          <strong>{MOBILE_UI_ELEMENT_LABELS[selected]}</strong>
-          <span>X {selectedTransform.x.toFixed(1)}%</span>
-          <span>Y {selectedTransform.y.toFixed(1)}%</span>
-          <span>SIZE {Math.round(selectedTransform.scale * 100)}%</span>
-          <span>ROTATE {Math.round(selectedTransform.rotation)}°</span>
-          <small>GRID snaps nearby edges and centres. Drag to move; pinch or use a node to resize.</small>
+        <div className="mobile-ui-editor-details">
+          <MobileUiAdjustments
+            onChange={(transform) => updateElement(selected, transform)}
+            onNudge={nudgeElement}
+            onReset={() => updateElement(selected, geometry.layout[selected])}
+            selected={selected}
+            transform={selectedTransform}
+          />
+          <div className="mobile-ui-editor-status">
+            <strong>{MOBILE_UI_ELEMENT_LABELS[selected]}</strong>
+            <span>X {selectedTransform.x.toFixed(1)}%</span>
+            <span>Y {selectedTransform.y.toFixed(1)}%</span>
+            <span>SIZE {Math.round(selectedTransform.scale * 100)}%</span>
+            <span>ROTATE {Math.round(selectedTransform.rotation)}°</span>
+            <small>GRID snaps nearby edges and centres. Drag to move; pinch or use a node to resize.</small>
+          </div>
         </div>
       ) : (
         <div
@@ -771,35 +896,135 @@ export default function MobileUiEditor({
           aria-label="Mobile UI editor actions"
           style={dockPosition ? { left: dockPosition.x, right: 'auto', top: dockPosition.y } : undefined}
         >
-          <button
-            aria-label="Move editor actions"
-            className="mobile-ui-editor-dock-handle"
-            onPointerCancel={finishDockDrag}
-            onPointerDown={beginDockDrag}
-            onPointerMove={moveDock}
-            onPointerUp={finishDockDrag}
-            type="button"
-          >⠿</button>
-          <button
-            aria-pressed={snap}
-            data-mobile-ui-grid-toggle
-            onClick={toggleGrid}
-            type="button"
-          >GRID {snap ? 'ON' : 'OFF'}</button>
-          <button
-            className="mobile-ui-editor-dock-save"
-            data-mobile-ui-save
-            onClick={onSave}
-            type="button"
-          >SAVE</button>
-          <button data-mobile-ui-reset onClick={onReset} type="button">RESET</button>
+          <div className="mobile-ui-editor-dock-heading">
+            <button
+              aria-label="Move editor actions"
+              className="mobile-ui-editor-dock-handle"
+              onPointerCancel={finishDockDrag}
+              onLostPointerCapture={finishDockDrag}
+              onPointerDown={beginDockDrag}
+              onPointerMove={moveDock}
+              onPointerUp={finishDockDrag}
+              type="button"
+            >⠿</button>
+            <strong>Mobile controls</strong>
+            <button
+              className="mobile-ui-editor-dock-save"
+              data-mobile-ui-save
+              onClick={onSave}
+              type="button"
+            >SAVE</button>
+          </div>
+          <div className="mobile-ui-editor-dock-actions">
+            <button disabled={!history.past.length} onClick={() => restoreHistory('undo')} type="button">UNDO</button>
+            <button disabled={!history.future.length} onClick={() => restoreHistory('redo')} type="button">REDO</button>
+            <button
+              aria-pressed={snap}
+              data-mobile-ui-grid-toggle
+              onClick={toggleGrid}
+              type="button"
+            >GRID {snap ? 'ON' : 'OFF'}</button>
+            <button
+              aria-expanded={toolsOpen}
+              aria-controls="mobile-ui-adjustments"
+              onClick={() => setToolsOpen((open) => !open)}
+              type="button"
+            >ADJUST {toolsOpen ? '−' : '+'}</button>
+          </div>
+          {!toolsOpen ? <p className="mobile-ui-editor-hint">Drag to move. Pinch to resize.</p> : null}
+          {toolsOpen ? (
+            <div className="mobile-ui-editor-inspector" id="mobile-ui-adjustments">
+              <label className="mobile-ui-editor-control-picker">
+                <span>Control</span>
+                <select
+                  aria-label="Selected mobile UI element"
+                  value={selected}
+                  onChange={(event) => {
+                    const id = MOBILE_UI_ELEMENT_IDS.find((candidate) => candidate === event.currentTarget.value)
+                    if (id) {
+                      setSelected(id)
+                      setSnapGuides([])
+                    }
+                  }}
+                >
+                  {MOBILE_UI_ELEMENT_IDS.map((id) => (
+                    <option key={id} value={id}>{MOBILE_UI_ELEMENT_LABELS[id]}</option>
+                  ))}
+                </select>
+              </label>
+              <MobileUiAdjustments
+                onChange={(transform) => updateElement(selected, transform)}
+                onNudge={nudgeElement}
+                onReset={() => updateElement(selected, geometry.layout[selected])}
+                selected={selected}
+                transform={selectedTransform}
+              />
+              <button data-mobile-ui-reset disabled={restoringDefault} onClick={resetLayout} type="button">RESET LAYOUT</button>
+              <small>Changes apply when you save. Undo also restores a reset.</small>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
   )
 }
 
-function MobileUiElementPreview({ id }: { id: MobileUiElementId }) {
+function MobileUiAdjustments({
+  onChange,
+  onNudge,
+  onReset,
+  selected,
+  transform,
+}: {
+  onChange: (transform: MobileUiElementTransform) => void
+  onNudge: (direction: MobileUiPoint) => void
+  onReset: () => void
+  selected: MobileUiElementId
+  transform: MobileUiElementTransform
+}) {
+  return (
+    <div className="mobile-ui-editor-adjustments" aria-label={`Adjust ${MOBILE_UI_ELEMENT_LABELS[selected]}`}>
+      <div className="mobile-ui-editor-position">
+        <span>Move</span>
+        <button aria-label="Move control left" onClick={() => onNudge({ x: -1, y: 0 })} type="button">←</button>
+        <button aria-label="Move control up" onClick={() => onNudge({ x: 0, y: -1 })} type="button">↑</button>
+        <button aria-label="Move control down" onClick={() => onNudge({ x: 0, y: 1 })} type="button">↓</button>
+        <button aria-label="Move control right" onClick={() => onNudge({ x: 1, y: 0 })} type="button">→</button>
+      </div>
+      <div className="mobile-ui-editor-size">
+        <label htmlFor="mobile-ui-control-size">Size <output>{Math.round(transform.scale * 100)}%</output></label>
+        <button aria-label="Make control smaller" disabled={transform.scale <= MOBILE_UI_SCALE_MIN} onClick={() => onChange({ ...transform, scale: transform.scale - 0.05 })} type="button">−</button>
+        <input
+          id="mobile-ui-control-size"
+          min={MOBILE_UI_SCALE_MIN * 100}
+          max={MOBILE_UI_SCALE_MAX * 100}
+          onChange={(event) => onChange({ ...transform, scale: event.currentTarget.valueAsNumber / 100 })}
+          step={5}
+          type="range"
+          value={Math.round(transform.scale * 100)}
+        />
+        <button aria-label="Make control larger" disabled={transform.scale >= MOBILE_UI_SCALE_MAX} onClick={() => onChange({ ...transform, scale: transform.scale + 0.05 })} type="button">+</button>
+      </div>
+      <div className="mobile-ui-editor-rotation">
+        <span>Rotation <output>{Math.round(transform.rotation)}°</output></span>
+        <button aria-label="Rotate control left" onClick={() => onChange({ ...transform, rotation: mobileUiElementRotation(transform.rotation, 0, -Math.PI / 12, false) })} type="button">−15°</button>
+        <button aria-label="Straighten control" disabled={transform.rotation === 0} onClick={() => onChange({ ...transform, rotation: 0 })} type="button">0°</button>
+        <button aria-label="Rotate control right" onClick={() => onChange({ ...transform, rotation: mobileUiElementRotation(transform.rotation, 0, Math.PI / 12, false) })} type="button">+15°</button>
+      </div>
+      <button className="mobile-ui-editor-reset-control" onClick={onReset} type="button">RESET THIS CONTROL</button>
+    </div>
+  )
+}
+
+function MobileUiElementPreview({ id, uiScale, player, inHub, previewScale, secondary, size }: {
+  id: MobileUiElementId
+  uiScale: number
+  player: ProtocolPlayerState | undefined
+  inHub: boolean
+  previewScale: number
+  secondary: NativeSecondaryPlayerState | undefined
+  size: MobileUiSize
+}) {
   if (id === 'pause') {
     return <img className="mobile-ui-editor-pause" draggable={false} src={hub.hud.skull} alt="" />
   }
@@ -827,11 +1052,23 @@ function MobileUiElementPreview({ id }: { id: MobileUiElementId }) {
     return (
       <span className="mobile-ui-editor-joystick" aria-hidden>
         <span />
+        <span className="mobile-ui-editor-joystick-label" style={{ fontSize: 11 * uiScale }}>
+          {id === 'leftJoystick' ? 'MOVE' : 'AIM / CAST'}
+        </span>
       </span>
     )
   }
   if (id.startsWith('slot')) {
-    return <span className="mobile-ui-editor-slot">{id.slice(4)}</span>
+    const slot = Number(id.slice(4)) - 1
+    const entry = player?.belt[slot] ?? null
+    const alias = player && mobileUiBeltElementId(player.belt, slot) !== id
+    return (
+      <>
+        <MobileUiBeltPreview id={id} inHub={inHub} player={player} previewScale={previewScale} secondary={secondary} size={size} />
+        <span className="mobile-ui-editor-slot-number" aria-hidden>{slot + 1}</span>
+        {alias ? <span className="mobile-ui-editor-slot-alias" aria-hidden>{entry?.kind === 'health-potion' ? 'Health' : 'Mana'}<br />control</span> : null}
+      </>
+    )
   }
   if (id === 'inventory') {
     return <img className="mobile-ui-editor-dock-art" draggable={false} src={hub.hud.backpack} alt="" />
@@ -847,13 +1084,65 @@ function MobileUiElementPreview({ id }: { id: MobileUiElementId }) {
       </span>
     )
   }
+  return <MobileUiBeltPreview id={id} inHub={inHub} player={player} previewScale={previewScale} secondary={secondary} size={size} />
+}
+
+function MobileUiBeltPreview({ id, inHub, player, previewScale, secondary, size }: {
+  id: MobileUiElementId
+  inHub: boolean
+  player: ProtocolPlayerState | undefined
+  previewScale: number
+  secondary: NativeSecondaryPlayerState | undefined
+  size: MobileUiSize
+}) {
+  const slot = id.startsWith('slot') ? Number(id.slice(4)) - 1 : null
+  const entry = player && slot !== null && mobileUiBeltElementId(player.belt, slot) === id
+    ? player.belt[slot] : null
+  const potionType = id === 'healthPotion' || entry?.kind === 'health-potion' ? 0
+    : id === 'manaPotion' || entry?.kind === 'mana-potion' ? 1 : null
+  const skillId = entry?.kind === 'skill' ? entry.skillId : null
+  const potion = player && potionType !== null
+    ? nativeBeltPotionProjection(player.economy.backpack, potionType) : null
+  const item = potion?.item
+    ? { ...potion.item, quantity: potion.count }
+    : player && entry?.kind === 'item' ? nativeBeltEntryItem(entry, player.economy) : null
+  const populated = skillId !== null || item !== null || potionType !== null
+  const secondarySkill = skillId !== null && nativeSkillCategory(skillId) === 2
+  const unavailable = secondarySkill && (
+    inHub || (player?.progression.currentMana ?? 0) < (
+      player?.progression.secondaryManaCosts.find(([candidate]) => candidate === skillId)?.[1] ?? 0
+    )
+  )
+  const cooldown = secondarySkill ? nativeSkillQuickbarCooldownPresentation(
+    secondary?.cooldownTicksBySkill[skillId] ?? 0,
+    secondary?.cooldownMaximumTicksBySkill[skillId] ?? 0,
+    secondary?.globalCooldownTicks ?? 0,
+  ) : { capacity: 0, remaining: 0 }
   return (
-    <img
-      className="mobile-ui-editor-potion"
-      draggable={false}
-      src={id === 'healthPotion' ? hub.hud.potionRed : hub.hud.potionBlue}
-      alt=""
-    />
+    <span
+      className="hub-hud-quickbar-slot mobile-ui-editor-belt-preview"
+      data-populated={populated}
+      data-preview-in-hub={inHub}
+      aria-hidden
+      style={{
+        bottom: 'auto',
+        height: size.height / previewScale,
+        left: '50%',
+        pointerEvents: 'none',
+        top: '50%',
+        transform: `translate(-50%, -50%) scale(${previewScale})`,
+        width: size.width / previewScale,
+      }}
+    >
+      {cooldown.remaining > 0 ? <CooldownSector {...cooldown} /> : null}
+      {skillId !== null ? <NativeSkillIcon
+        cooldown={cooldown.remaining > 0}
+        opacity={nativeSkillQuickbarIconAlpha({ cooldown: cooldown.remaining > 0, unavailable })}
+        record={nativeSkillIconRecord(skillId, player?.progression.weldBuildId ?? null)}
+      /> : null}
+      {item && player ? <NativeBeltItemIcon element={player.config.element} item={item} /> : null}
+      {!item && potionType !== null ? <img className="hub-hud-belt-potion-fallback" draggable={false} src={potionType === 0 ? hub.hud.potionRed : hub.hud.potionBlue} alt="" /> : null}
+    </span>
   )
 }
 

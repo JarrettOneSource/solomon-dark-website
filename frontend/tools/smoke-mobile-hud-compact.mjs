@@ -870,7 +870,7 @@ async function exerciseMobileUiEditor(page, context) {
   const pauseMoved = await pauseControl.boundingBox()
   assert.ok(pauseMoved && Math.abs(pauseMoved.x - pauseBefore.x) > 20, 'pause control moves before reset')
   assertGridAlignedRect(pauseMoved, pageBounds, 'pause smart move')
-  await dock.getByRole('button', { name: 'RESET' }).tap()
+  await resetEditorLayout(dock)
   await page.waitForFunction(({ x, y }) => {
     const bounds = document.querySelector('[data-mobile-ui-editor-element="pause"]')?.getBoundingClientRect()
     return bounds && Math.abs(bounds.x - x) < 0.75 && Math.abs(bounds.y - y) < 0.75
@@ -900,7 +900,7 @@ async function exerciseMobileUiEditor(page, context) {
     `GRID OFF does not align a horizontal anchor (${JSON.stringify(pauseUnsnapped)})`)
   assert.ok(rectGridDistance(pauseUnsnapped, pageBounds, 'y') > 1.5,
     `GRID OFF does not align a vertical anchor (${JSON.stringify(pauseUnsnapped)})`)
-  await dock.getByRole('button', { name: 'RESET' }).tap()
+  await resetEditorLayout(dock)
   await gridToggle.tap()
   assert.equal(await gridToggle.getAttribute('aria-pressed'), 'true')
 
@@ -1143,6 +1143,12 @@ async function assertFinePointerMobileUiIsolation(profile) {
   } finally {
     await context.close()
   }
+}
+
+async function resetEditorLayout(dock) {
+  await dock.getByRole('button', { name: /^ADJUST/ }).tap()
+  await dock.getByRole('button', { name: 'RESET LAYOUT', exact: true }).tap()
+  await dock.getByRole('button', { name: /^ADJUST/ }).tap()
 }
 
 async function clearCustomMobileUi(page) {
