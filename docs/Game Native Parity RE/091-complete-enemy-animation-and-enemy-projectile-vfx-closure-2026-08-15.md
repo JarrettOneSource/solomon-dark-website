@@ -2272,3 +2272,89 @@ complete gate was rerun successfully after those corrections.
 These receipts establish source and Mac acceptance. Publishing this candidate
 is separate from production deployment. Raw screenshots, logs and temporary
 analysis files are disposable after recording these results.
+# 2026-09-19 — Slumpgut sideways joints and Zombie arm pose boundary
+
+The reported `SD Web - Slumpgut.png` and `SD Web - Zombie arms.png` were read
+from Windows Downloads. Slumpgut's detached round part also involves the
+shoulder overlay, so this reopens the whole Zombie composite, not a head-only
+offset. The earlier renderer from before `990908fa` reproduces the detached
+shoulder; that commit already corrects the head socket bank, torso placement,
+half-angle socket transforms, and fixed-world socket spacing on `main`.
+At investigation time both remote `main` and the public deployment manifest
+reported `c2312eec86f232940bf71185d931e29a6e71db4f`. The originating tab's build
+is unknown; a deployment manifest does not identify an already-open tab's code.
+
+## Evidence and recovered contract
+
+- Retail 0.72.5 executable SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+  image base `0x00400000`. No native game was opened, as requested.
+- Fresh decompilation and instructions came from the canonical `SolomonDark`
+  Ghidra project through the existing read-only replica wrapper. Wrapper hash:
+  `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+  `decompile_targets.py` hash:
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+- Construction `0x004740C0`, config application `0x00462790`, tick
+  `0x004863A0`, draw `0x00493390`, atlas binding `0x004E0DD0`, record reader
+  `0x00413B10`, glyph geometry `0x00413DE0`, rotation `0x00403120`, matrix
+  composition `0x00402D40`, sprite draw `0x00415130`, and transformed glyph
+  submission `0x00414540` were followed. Config overwrites constructor scale.
+  No extra pivot mutation occurs in the atlas binding or record reader.
+- The original `BadGuys.bundle` hash is
+  `a7b13b464e035e2099081ce942db4aa231fc7c20de1ecacbd9d0a590132c88d3`.
+  All 252 attachment coordinates in its 72 torso and 18 head-controller records
+  exactly match the Website manifest. All 414 composite sprite records are
+  already extracted; this change needs no replacement art or guessed geometry.
+- A disposable Unicorn probe executed the retail draw and matrix instructions
+  with the original bundle coordinates. Only CRT sine/cosine/truncation entry
+  points and external draw/security side effects were substituted. This is
+  instruction-derived supporting evidence, not a clean native runtime capture.
+  On Mac, comparison through `nativeEnemyPresentationPlan` covered four body
+  banks, 18 facings, three body phases, and idle/rear/front attack branches:
+  648 cases, 3,564 draws, matching entries, offsets, scales, rotations, and four
+  corners, maximum numeric difference `0.0000033019675029777318`.
+- The strict arm-bank boundary is a remaining defect. `0x00493390` keeps pose
+  one at progress exactly `50`, chooses pose two only for `50 < progress < 100`,
+  and returns to pose zero at `100`. Both attack-side branches share this rule.
+  At heading 90, the native rear-arm records are `2118` at 50, `2136` just
+  above 50, and `2100` at 100; the front-arm records are `2172`, `2190`, `2154`.
+  The prior Website test incorrectly required pose two at exactly 50.
+- The live `BoneyardScene-hRmGxs6c.js` bundle, SHA-256
+  `463113c6bb50811315521e334fc94231f30fd71ca8f435b882843f6b8fe8e6a6`, contains
+  the corrected head-bank socket lookup, half-angle rotation, and default-torso
+  anchor lookup. This verifies the published code in addition to its manifest.
+
+Confidence is high for the instructions, authored data, and old/current browser
+comparison. Whether the reporting browser had retained an earlier build remains
+unknown; no session was restarted to infer an answer.
+
+## System boundary and membership
+
+Native system: Zombie `1006` composite geometry and articulated arm selection,
+shared by ordinary, rotten, authored, and Slumpgut spawns in every Boneyard.
+
+| Member | Records / owner | Disposition | Evidence |
+| --- | --- | --- | --- |
+| Gait/base | `2365..2508`, eight poses x 18 facings | verified-already-at-parity | Native direct bank selection, existing pose/facing tests and Mac draw comparison |
+| Body types 0, 1, 2 | `2203..2256` | verified-already-at-parity | Every facing and both sway extrema in the native comparison |
+| Body type 3, including Slumpgut | `2257..2274`, root -8, heading shifts and scale 1.149999976158142 | verified-already-at-parity | Native comparison and old/current Mac rendering |
+| Both shoulder overlays | `2275..2292`, type-3 gate | verified-already-at-parity | Both draw sites, facings, idle and attack branches in the comparison |
+| Head types 0, 1, 2, 3 | `2293..2364`; sockets from `2293..2310` | verified-already-at-parity | All banks in native comparison; all 16 body/head combinations in Mac Chrome |
+| Rear arm poses 0, 1, 2 | `2095..2148` | exact-ported | Strict progress-50 selector corrected; before/at/after 50 and 100 regression |
+| Front arm poses 0, 1, 2 | `2149..2202` | exact-ported | Same shared selector and both-arm boundary regression |
+| Constructor/config selectors, snapshot and interpolation | Existing Zombie brain, projection, protocol, timeline | verified-already-at-parity for this geometry contract | Independently selected head/body art and socket angles survive the existing path |
+| Hit redraw and terminal removal | Shared body-plan copy and view retirement | verified-already-at-parity | Same geometry for hit redraw; terminal body lifetime remains covered by existing contracts |
+| Rotten gas, flies, poison, audio and independent death fragments | Separate auxiliary/event owners | out-of-system | They do not choose body sockets or the articulated arm bank; no changes here |
+
+## Implementation and acceptance
+
+Change the shared `nativeZombieBeatPose` boundary, retain the existing native
+geometry, and replace the incorrect expectation with both-arm assertions around
+50 and 100. Verify on the Mac, run the canonical gate, and exercise the built
+Slumpgut journey. The old/current browser comparison is a reproduction of the
+reported appearance; it does not prove which code was loaded in the user's tab.
+
+The regression failed twice before the change (the old expectation and the new
+both-arm boundary test). After correcting the selector, all 97 focused animation
+and presentation tests passed on the Mac. The final canonical gate and built
+Slumpgut journey are required before publication; no native process is needed.

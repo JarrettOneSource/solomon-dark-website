@@ -41,7 +41,7 @@ export function nativeZombieBeatPose(
   if (!Number.isFinite(progress) || progress < 0) {
     throw new Error('native Zombie beat progress must be finite and non-negative')
   }
-  const selectedPose = progress < 50 ? 1 : progress < 100 ? 2 : 0
+  const selectedPose = progress <= 50 ? 1 : progress < 100 ? 2 : 0
   return {
     complete: progress >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.completionProgress,
     frontArmPose: attackSide === 1 ? selectedPose : 0,

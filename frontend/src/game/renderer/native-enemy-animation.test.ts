@@ -178,7 +178,7 @@ test('Zombie beat selects exactly one arm at native thresholds', () => {
   })
   assert.deepEqual(nativeZombieBeatPose(50, 1), {
     complete: false,
-    frontArmPose: 2,
+    frontArmPose: 1,
     locomotionActive: true,
     markerReached: false,
     rearArmPose: 0,
@@ -192,6 +192,18 @@ test('Zombie beat selects exactly one arm at native thresholds', () => {
     rearArmPose: 0,
   })
   assert.equal(nativeZombieBeatPose(125, 0).complete, true)
+})
+
+test('both Zombie arms retain pose one at exactly progress 50', () => {
+  for (const side of [0, 1] as const) {
+    for (const [progress, selectedPose] of [
+      [49.999, 1], [50, 1], [50.001, 2], [99.999, 2], [100, 0],
+    ]) {
+      const pose = nativeZombieBeatPose(progress, side)
+      assert.equal(pose.rearArmPose, side === 0 ? selectedPose : 0)
+      assert.equal(pose.frontArmPose, side === 1 ? selectedPose : 0)
+    }
+  }
 })
 
 test('Imp flight uses constructor fields and collision-driven bounce VFX', () => {
