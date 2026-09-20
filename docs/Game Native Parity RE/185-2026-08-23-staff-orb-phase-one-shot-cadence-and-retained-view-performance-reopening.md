@@ -61,7 +61,8 @@ interpolation, hidden-view work, interruption, and teardown.
 | Air `24`, Water `32`, Earth `40` Constant start | modes `5/8/11`, Staff store `0x00550317` | `exact-ported` | one `0.25` start write, then decay while held; no active-level refresh |
 | Welded Constant/channel/persistent `1003..1008` | sustained dispatcher and same modes | `exact-ported` | all six profiles share the one start edge |
 | ordinary category-2 Cast 2 | modes `4/7/10`; Staff value `0.45` | `exact-ported` | first action update writes once, then decay; all action-owning category-2 rows covered |
-| Dampen mode 21 and actionless/toggle-off secondary branches | callback has no matching `0x00550180` case | `verified-already-at-parity` as non-writers | negative matrix; no fabricated phase |
+| Dampen mode 21 plus shared Cast2 tail | mode 21 has no pulse callback, but `0x0054F11B -> 0x0054CF68` also appends Cast2 | `exact-ported` by the September 20 correction in entry 278 | the additional Cast2 owns one `0.45` opening pulse |
+| Firewalker off, Mindstar, and Regenerate actionless branches | callback has no matching `0x00550180` case | `verified-already-at-parity` as non-writers | negative matrix; no fabricated phase |
 | Ether Blast integer crossings | `0x0054B9C8` | `verified-already-at-parity` writer, `exact-ported` shared consumer | each crossing writes `0.25`; orb and light use the same effective phase |
 | fixed-tick decay and zero/reset | `0x00549012`, constructor/reset | `exact-ported` | float32 recurrence and idle/reset tests |
 | five element painters | `0x00539B80` dispatch | `verified-already-at-parity` | Ether/Fire/Air/Water/Earth geometry, assets, blend, RNG ranges unchanged |
@@ -165,8 +166,8 @@ event recurrence, copies, assets, blend modes, and retained visibility rules.
   Constant start, retains the existing `0.15` Cast 1 and `0.25` Ether Blast
   edges, and decays by the exact float32 factor without any action-occupancy
   refresh. The complete category-2 matrix reports the first Cast 2 action
-  update and writes `0.45`; Dampen and every actionless branch remain negative
-  members. Snapshot projection gives the orb and analytic light the same
+  update and writes `0.45`; actionless branches remain non-writers.
+  Snapshot projection gives the orb and analytic light the same
   effective phase, and both presentation timelines interpolate only that
   numeric phase while retaining discrete light/action ownership.
 - Cast 1 now uses insertion-relative native progress boundaries. Neutral Ether

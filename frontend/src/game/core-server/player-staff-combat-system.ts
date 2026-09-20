@@ -77,6 +77,7 @@ export interface PlayerStaffCombatSystemContext {
   readonly players: Readonly<Record<string, PlayerCharacterState>>
   readonly rng: NativeRngState
   readonly registerWorldPainter?: RegisterNativeWorldPainter
+  readonly secondaryActionPlayerIds: ReadonlySet<string>
   readonly spells: PrimarySpellSimulationState
   readonly tick: number
   readonly worldKey: string
@@ -358,7 +359,9 @@ export function stepPlayerStaffCombatSystem(
   }
 
   for (const [playerId, player] of Object.entries(players)) {
-    if (!context.combatAdmissionEnabled || existingActionOwners.has(playerId)) continue
+    if (!context.combatAdmissionEnabled
+      || existingActionOwners.has(playerId)
+      || context.secondaryActionPlayerIds.has(playerId)) continue
     const progression = playerProgressionAt(playerEntities, playerId)
     const runtime = playerSkillRuntimeAt(playerEntities, playerId)
     const derived = playerSkillDerivedStatsAt(playerEntities, playerId)

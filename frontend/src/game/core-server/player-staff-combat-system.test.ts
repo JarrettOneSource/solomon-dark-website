@@ -62,6 +62,17 @@ test('stationary current contact cannot admit Staff melee until a movement epoch
   assert.deepEqual([...moving.actingPlayerIds], [PLAYER_ID])
 })
 
+test('a secondary action prevents new automatic Staff admission without consuming its RNG', () => {
+  const context = staffFixture()
+  const blocked = stepPlayerStaffCombatSystem({
+    ...context,
+    secondaryActionPlayerIds: new Set([PLAYER_ID]),
+  })
+  assert.deepEqual(blocked.spells.transients, [])
+  assert.deepEqual(blocked.rng, context.rng)
+  assert.deepEqual([...blocked.actingPlayerIds], [])
+})
+
 test('movement-result hostile contact admits without facing while nonhostile contact suppresses fallback', () => {
   const context = staffFixture()
   const facingAway = {
@@ -398,6 +409,7 @@ function staffFixture(
   }
   return {
     combatAdmissionEnabled: true,
+    secondaryActionPlayerIds: new Set<string>(),
     enemies,
     inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
     knockbackTargetVisible: () => true,

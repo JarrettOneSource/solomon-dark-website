@@ -1165,7 +1165,7 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
   assert.equal(planewalkerOff.state.players.player?.cooldownTicksBySkill[12], 2_500)
 
   const dampen = cast(51)
-  assert.equal(dampen.state.players.player?.castAction, null)
+  assert.deepEqual(dampen.state.players.player?.castAction, { weaponKind: 'staff', progress: 0 })
   assert.equal(dampen.state.players.player?.castSpinTicksRemaining, 73)
   assert.deepEqual(dampen.staffCastPulsePlayerIds, [])
   assert.equal(dampen.state.players.player?.globalCooldownTicks, 150)
@@ -1191,6 +1191,29 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
     castAction: null,
     stoneskinTicksRemaining: 0,
   })
+})
+
+test('Dampen appends weapon-selected Cast2 alongside CastSpin and emits its opening pulse once', () => {
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    const base = context(51, 1, 0)
+    const authority = { ...base.players.player!, weaponKind }
+    const accepted = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+      ...base, players: { player: authority },
+    })
+    assert.deepEqual(accepted.state.players.player?.castAction, { weaponKind, progress: 0 })
+    assert.equal(accepted.state.players.player?.castSpinTicksRemaining, 73)
+    let state = accepted.state
+    for (let age = 1; age <= 73; age += 1) {
+      const next = stepNativeSecondaryAbilities(state, {
+        ...base, players: { player: { ...authority, input: input(null) } }, tick: age + 1,
+      })
+      state = next.state
+      assert.deepEqual(next.staffCastPulsePlayerIds, age === 1 ? ['player'] : [])
+      assert.equal(state.players.player!.castAction !== null, age < (weaponKind === 'staff' ? 51 : 64))
+      assert.equal(state.players.player!.castSpinTicksRemaining, 73 - age)
+      assert.equal(state.players.player!.castSequence, 1)
+    }
+  }
 })
 
 test('native RNG sign and bulk advance preserve the retail word stream', () => {

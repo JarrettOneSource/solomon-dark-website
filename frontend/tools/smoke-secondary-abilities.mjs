@@ -21,6 +21,7 @@ import {
 import { freezeNativeBelt } from '../src/game/core-kernels/native-belt.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import { createPrimarySpellSimulation } from '../src/game/core-kernels/primary-spells.ts'
+import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import {
   canPlaceBoneyardBody,
   firstBoneyardPathBlockProgress,
@@ -55,12 +56,14 @@ const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
 const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === '1'
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 const primaryOverlap = process.env.SDR_SECONDARY_PRIMARY_OVERLAP === '1'
+const staffOverlap = process.env.SDR_SECONDARY_STAFF_OVERLAP === '1'
 const phasingFrameCapture = process.env.SDR_PHASING_FRAME_CAPTURE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (comparisonCapture) assert.equal(retainNativeViewport, true)
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
 if (expectBlocked) assert.equal(requestedScene, 'hub')
 if (primaryOverlap) assert.equal(requestedScene, 'boneyard')
+if (staffOverlap) assert.equal(requestedScene, 'boneyard')
 
 const PROOFS = Object.freeze({
   11: { audio: 'leviathan-roar', flash: true, kinds: ['leviathan', 'leviathan-appendage'] },
@@ -295,6 +298,9 @@ try {
         boneyardEnemyBaseline,
       )
     : null
+  const staffOverlapReceipt = staffOverlap
+    ? await castRingOfFireDuringStaffCrowd(page, canvas, host, playerId, baseSkillBook)
+    : null
   if (!retainNativeViewport) await page.setViewportSize({ width: 800, height: 450 })
   await page.waitForTimeout(250)
 
@@ -479,6 +485,10 @@ try {
     const committedPlayer = structuredClone(
       committedState.secondaryAbilities.players[playerId],
     )
+    if (contract.skillId === 51) {
+      assert.ok(committedPlayer.castAction, 'Dampen omitted the common Cast2 action')
+      assert.ok(committedPlayer.castSpinTicksRemaining > 0, 'Dampen omitted CastSpin')
+    }
     const committedPlayerIndex = committedState.playerEntities.identities.findIndex(
       ({ playerId: id }) => id === playerId,
     )
@@ -1023,6 +1033,7 @@ try {
     receipts,
     responseErrors,
     scene: requestedScene,
+    staffOverlap: staffOverlapReceipt,
     screenshotRoot,
     statusEffects,
   }, null, 2)}\n`)
@@ -2257,7 +2268,7 @@ async function captureDampenCancellation(
     [...setup.positiveIds],
   )
   for (const flyout of flyouts) {
-    assert.ok(Math.abs(Math.hypot(flyout.velocity.x, flyout.velocity.y) - 40) < 0.001)
+    assert.ok(Math.abs(Math.hypot(flyout.velocity.x, flyout.velocity.y) - 7) < 0.001)
   }
   const committedHostActors = committed.secondaryAbilities.actors.map((actor) => ({
     ageTicks: actor.ageTicks,
@@ -2879,6 +2890,111 @@ async function castSecondaryPointer(page, target) {
       clientY: y,
     }))
   }, target)
+}
+
+async function castRingOfFireDuringStaffCrowd(page, canvas, host, playerId, baseSkillBook) {
+  armQuickbar(host, playerId, baseSkillBook, [21])
+  const economy = playerEconomy(host, playerId)
+  if (economy.equipment.weapon?.equipmentType !== 'staff') {
+    const recipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'staff')
+    assert.ok(recipe)
+    Object.assign(host.state(), { playerEntities: replacePlayerEconomy(
+      host.state().playerEntities, playerId, { ...economy, equipment: {
+        ...economy.equipment, weapon: createEquipmentInventoryItem(recipe, 95_000),
+      } },
+    ) })
+  }
+  await waitForBeltSkill(page, 'Ring of Fire')
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const origin = getPlayerCharacter(state, playerId).position
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const crowd = stepBoneyardEnemyStore({
+    ...state.world.enemies, actors: [], projectiles: [], lastStepTick: state.tick - 1,
+  }, {
+    projectileWorldBlocked: () => false,
+    players: {},
+    registerWorldPainter: order.register,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => Array.from({ length: 8 }, (_, index) => ({
+      enemyToken: 'SKELETON', flags: [], id: 900_000 + index,
+      locationPolicy: 'anywhere', nativeTypeId: 1001,
+      position: { x: origin.x + Math.sin(index * Math.PI / 4) * 70,
+        y: origin.y - Math.cos(index * Math.PI / 4) * 70 },
+      spawnTick: state.tick, waveOrdinal: 1,
+    })),
+    tick: state.tick,
+  }).store
+  Object.assign(state, { world: { ...state.world, enemies: crowd }, worldManagerOrder: order.state() })
+  const healthBeforeCrowd = playerProgression(host, playerId).currentHealth
+  const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  const renderStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
+  const target = await canvas.evaluate(node => {
+    const bounds = node.getBoundingClientRect()
+    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 - 100 }
+  })
+  await page.mouse.move(target.x, target.y)
+  try {
+    await waitUntil(() => playerProgression(host, playerId).currentHealth < healthBeforeCrowd,
+      'the eight ordinary Skeletons did not damage the wizard', 10_000)
+    await page.keyboard.down('w')
+    let staffAtRequest
+    await waitUntil(() => {
+      staffAtRequest = host.state().primarySpells.transients.find(action => (
+        action.ownerId === playerId && action.kind === 'player-staff-melee' && action.ageTicks < 12
+      ))
+      return staffAtRequest !== undefined
+    }, 'moving into the attacking crowd did not create an automatic Staff swing', 10_000)
+    const requestTick = host.state().tick
+    const hitTick = playerProgression(host, playerId).lastDamageTick
+    assert.ok(hitTick !== null && requestTick - hitTick <= 100)
+    const healthAtRequest = playerProgression(host, playerId).currentHealth
+    const manaAtRequest = playerProgression(host, playerId).currentMana
+    const priorSequence = host.state().secondaryAbilities.players[playerId].castSequence
+    await page.mouse.down({ button: 'right' })
+    await waitUntil(() => host.state().secondaryAbilities.players[playerId].castSequence > priorSequence,
+      'Ring of Fire was swallowed by the live Staff action', 2_000)
+    const committed = host.state()
+    const commitTick = committed.tick
+    const staffAtCommit = committed.primarySpells.transients.find(({ id }) => id === staffAtRequest.id)
+    assert.ok(staffAtCommit, 'Ring of Fire waited until the Staff action retired')
+    assert.ok(commitTick - requestTick <= 12, `secondary admission took ${commitTick - requestTick} ticks`)
+    assert.equal(committed.secondaryAbilities.players[playerId].lastSkillId, 21)
+    assert.ok(committed.secondaryAbilities.players[playerId].castAction)
+    assert.ok(playerProgression(host, playerId).currentMana < manaAtRequest)
+    assert.ok(committed.secondaryAbilities.actors.some(({ kind }) => kind === 'moving-fire'))
+    await page.mouse.up({ button: 'right' })
+    await page.keyboard.up('w')
+    await page.waitForFunction(start => window.__secondaryRenderSamples.slice(start).some(sample => (
+      sample.kinds.includes('moving-fire') && sample.playerAttachmentPose === 9
+    )), renderStart)
+    await waitForAudio(page, audioStart, 'big-fire')
+    const screenshotPath = `${screenshotRoot}/21-ring-of-fire-during-attacking-crowd.png`
+    await page.screenshot({ path: screenshotPath })
+    const receipt = { enemyCount: crowd.actors.length, healthBeforeCrowd, healthAtRequest,
+      hitTick, requestTick, commitTick, admissionTicks: commitTick - requestTick,
+      staffId: staffAtRequest.id, staffAgeAtRequest: staffAtRequest.ageTicks,
+      staffAgeAtCommit: staffAtCommit.ageTicks, screenshotPath }
+    await resetSecondaryWorld(host)
+    return receipt
+  } catch (error) {
+    const current = host.state()
+    process.stderr.write(`${JSON.stringify({ staffCrowdFailure: {
+      character: getPlayerCharacter(current, playerId),
+      weapon: playerEconomy(host, playerId).equipment.weapon?.equipmentType,
+      secondary: current.secondaryAbilities.players[playerId],
+      staffActions: current.primarySpells.transients.filter(({ kind }) => (
+        kind === 'player-staff-melee' || kind === 'player-staff-spin'
+      )),
+      enemies: current.world.enemies.actors.map(({ id, position, targetPlayerId, lifeState }) => (
+        { id, position, targetPlayerId, lifeState }
+      )),
+    } }, null, 2)}\n`)
+    throw error
+  } finally {
+    await page.mouse.up({ button: 'right' })
+    await page.keyboard.up('w')
+  }
 }
 
 async function castSecondaryDuringHeldPrimary(

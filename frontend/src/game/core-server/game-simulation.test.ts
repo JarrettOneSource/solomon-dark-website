@@ -3372,6 +3372,159 @@ test('live Staff melee and spin keep native movement while retaining action owne
   }
 })
 
+test('every secondary reaches its native action branch during damaged Staff melee and Whirl', () => {
+  for (const kind of ['player-staff-melee', 'player-staff-spin'] as const) {
+    for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+      const state = staffSecondaryState(skillId, kind)
+      const next = stepGameSimulationTick(state, { caster: {
+        ...gameplayInput(1, 0),
+        aim: { x: 350, y: 250 },
+        cast: { primary: true, quickbar: 0 },
+      } })
+      const secondary = next.secondaryAbilities.players.caster!
+      const label = `${skillId} during ${kind}`
+      assert.equal(secondary.castSequence, 1, label)
+      assert.equal(secondary.lastSkillId, skillId, label)
+      const actionless = skillId === 78 || skillId === 79
+      assert.equal(next.primarySpells.transients.some(({ id }) => id === 900), true, label)
+      assert.equal(secondary.castAction !== null, !actionless, label)
+      assert.equal(secondary.castSpinTicksRemaining, skillId === 51 ? 73 : 0, label)
+      assert.equal(secondary.globalCooldownTicks, actionless ? 0 : 150, label)
+      assert.equal(getPlayerCharacter(next, 'caster').primaryCast.castSequence, 0, label)
+      assert.equal(getPlayerProgression(next, 'caster').lastDamageTick, state.tick, label)
+      const snapshot = createGameSnapshot(next, 'caster')
+      // Both action owners must survive the normal observer transport.
+      const frame = { acknowledgedInputSequence: 0,
+        frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+        sequence: 1, type: 'server-snapshot' as const }
+      assert.deepEqual(decodeServerGameMessage(encodeGameMessage(frame)), frame, label)
+    }
+  }
+})
+
+test('secondary toggle-off branches preserve Staff and only Planewalker adds a cast action', () => {
+  for (const [skillId, active, replaces] of [
+    [12, { planewalkerTicksRemaining: 500 }, true],
+    [23, { firewalker: true }, false],
+    [78, { mindstar: true }, false],
+    [79, { regenerate: true }, false],
+  ] as const) {
+    const source = staffSecondaryState(skillId, 'player-staff-melee')
+    const next = stepGameSimulationTick({ ...source,
+      secondaryAbilities: { ...source.secondaryAbilities,
+        players: { caster: { ...source.secondaryAbilities.players.caster!, ...active } } },
+    }, { caster: { ...gameplayInput(0, 0), cast: { primary: false, quickbar: 0 } } })
+    assert.equal(next.secondaryAbilities.players.caster!.castSequence, 1, `toggle ${skillId}`)
+    assert.equal(next.primarySpells.transients.some(({ id }) => id === 900), true, `toggle ${skillId}`)
+    assert.equal(next.secondaryAbilities.players.caster!.castAction !== null, replaces, `toggle ${skillId}`)
+  }
+})
+
+test('rejected secondary presses leave the live Staff action and mana intact', () => {
+  for (const rejection of ['mana', 'common-cooldown', 'private-cooldown'] as const) {
+    let source = staffSecondaryState(48, 'player-staff-melee')
+    const secondary = source.secondaryAbilities.players.caster!
+    source = { ...source,
+      playerEntities: rejection === 'mana'
+        ? setPlayerEntityMana(source.playerEntities, 'caster', 0)
+        : source.playerEntities,
+      secondaryAbilities: { ...source.secondaryAbilities, players: { caster: {
+        ...secondary,
+        globalCooldownTicks: rejection === 'common-cooldown' ? 50 : 0,
+        cooldownTicksBySkill: secondary.cooldownTicksBySkill.map((value, id) => (
+          rejection === 'private-cooldown' && id === 48 ? 500 : value
+        )),
+      } } },
+    }
+    const next = stepGameSimulationTick(source, {
+      caster: { ...gameplayInput(0, 0), cast: { primary: false, quickbar: 0 } },
+    })
+    assert.equal(next.secondaryAbilities.players.caster!.castSequence, 0, rejection)
+    assert.ok(next.primarySpells.transients.some(({ id }) => id === 900), rejection)
+    assert.ok(getPlayerProgression(next, 'caster').currentMana >= getPlayerProgression(source, 'caster').currentMana)
+  }
+})
+
+test('host contact cannot start new Staff melee during Cast2 or CastSpin', () => {
+  for (const spin of [false, true]) {
+    let state = staffSecondaryState(spin ? 51 : 21, 'player-staff-melee')
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+      projectileWorldBlocked: () => false, players: {},
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1,
+        locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+        position: { x: 250, y: 200 }, spawnTick: 0, waveOrdinal: 1 }], tick: 0,
+    }).store
+    state = { ...state,
+      world: { ...state.world, enemies: { ...seeded, actors: seeded.actors.map(actor => ({
+        ...actor, currentHealth: 1_000, nextMovementTick: Number.MAX_SAFE_INTEGER,
+      })) } },
+      primarySpells: { ...state.primarySpells, transients: [] },
+      secondaryAbilities: { ...state.secondaryAbilities, players: { caster: {
+        ...state.secondaryAbilities.players.caster!,
+        castAction: spin ? null : { weaponKind: 'staff', progress: 0 },
+        castSpinTicksRemaining: spin ? 73 : 0,
+      } } },
+    }
+    for (let tick = 0; tick < 20; tick += 1) {
+      state = stepGameSimulationTick(state, { caster: gameplayInput(0, -1) })
+      assert.equal(state.primarySpells.transients.some(({ kind }) => (
+        kind === 'player-staff-melee' || kind === 'player-staff-spin'
+      )), false, spin ? 'CastSpin' : 'Cast2')
+    }
+  }
+})
+
+test('continued hits preserve Ring of Fire and the original Staff marker and independent lifetimes', () => {
+  let state = staffSecondaryState(21, 'player-staff-melee')
+  state = stepGameSimulationTick(state, {
+    caster: { ...gameplayInput(0, 0), cast: { primary: false, quickbar: 0 } },
+  })
+  assert.equal(state.secondaryAbilities.players.caster!.castSequence, 1)
+  let sawStaffContact = false
+  for (let tick = 0; tick < 90; tick += 1) {
+    state = { ...state, playerEntities: damagePlayerEntity(state.playerEntities, 'caster', 1, state.tick) }
+    state = stepGameSimulationTick(state, {})
+    assert.equal(state.secondaryAbilities.players.caster!.castSequence, 1)
+    sawStaffContact ||= state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-contact')
+    if (tick < 50) assert.ok(state.primarySpells.transients.some(({ id }) => id === 900))
+  }
+  assert.equal(state.secondaryAbilities.players.caster!.castAction, null)
+  assert.equal(state.secondaryAbilities.players.caster!.globalCooldownTicks, 60)
+  assert.equal(state.primarySpells.transients.some(({ id }) => id === 900), false)
+  assert.equal(sawStaffContact, true)
+})
+
+function staffSecondaryState(
+  skillId: NativeSecondaryAbilityId,
+  kind: NativePlayerStaffAction['kind'],
+): GameSimulationState {
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'body', displayName: 'Surrounded caster', element: 'fire',
+  } }), combatBoneyard(`staff-secondary-${skillId}-${kind}`))
+  state = withPlayerSkillRank(state, 'caster', skillId, 1)
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', skillId, 0)!
+  const base = { ageTicks: 0, contactSequence: 0, headingDegrees: 180, id: 900,
+    origin: { x: 250, y: 250 }, ownerId: 'caster', swooshPitch: 1,
+    worldKey: `boneyard:staff-secondary-${skillId}-${kind}` }
+  const action: NativePlayerStaffAction = kind === 'player-staff-melee'
+    ? { ...base, actionTimingFactor: 1, baseProgressPerTick: Math.fround(0.1), kind,
+        lane: 'primary', outcome: 'normal', progress: 0 }
+    : { ...base, countdown: 360, kind, outcome: 'whirl', turnSign: 1 }
+  const playerEntities = { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({
+      ...progression, currentMana: 10_000, maximumMana: 10_000,
+      currentHealth: 1_000, maximumHealth: 1_000,
+    })),
+  }
+  return { ...state,
+    playerEntities: damagePlayerEntity(playerEntities, 'caster', 1, state.tick),
+    primarySpells: { ...state.primarySpells, nextId: 901, transients: [action] },
+    secondaryAbilities: { ...state.secondaryAbilities, players: { caster: createNativeSecondaryPlayerState() } },
+  }
+}
+
 test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {
   const loaded = combatBoneyard('spell-ordering-run')
   loaded.scene.fences = [{

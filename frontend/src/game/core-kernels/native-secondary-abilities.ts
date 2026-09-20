@@ -4746,9 +4746,7 @@ function castAbility(
     cooldownCapacityTicks,
     authority,
   ))
-  if (skillId !== 51) {
-    nextPlayer = startSecondaryCast(nextPlayer, authority.weaponKind)
-  }
+  nextPlayer = startSecondaryCast(nextPlayer, authority.weaponKind)
   state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'cast', castCue(skillId)))
   if (postCastCue !== null) {
     state = emitNativeSecondaryEvent(state, castEvent(

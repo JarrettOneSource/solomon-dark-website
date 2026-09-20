@@ -1973,9 +1973,9 @@ export function stepGameSimulationTick(
       : input
     return [playerId, staffActionOwnerIds.has(playerId)
       ? {
-          // Native +0xE4 is checked after MoveStep; action occupancy never seals locomotion.
+          // Staff occupancy blocks primary firing, not movement or the independent belt dispatcher.
           ...gatedInput,
-          cast: { primary: false, quickbar: null },
+          cast: { ...gatedInput.cast, primary: false },
         }
       : gatedInput]
   }))
@@ -2513,6 +2513,9 @@ function finishGameSimulationTick(
       players: resolvedPlayers,
       registerWorldPainter: worldManagerOrder.register,
       rng: secondaryAbilities.rng,
+      secondaryActionPlayerIds: new Set(Object.entries(secondaryAbilities.players)
+        .filter(([, player]) => player.castAction !== null || player.castSpinTicksRemaining > 0)
+        .map(([playerId]) => playerId)),
       spells: spellsBeforePrimary,
       tick,
       worldKey: `boneyard:${world.runId}`,
@@ -2584,7 +2587,7 @@ function finishGameSimulationTick(
     postStaffInputs = Object.fromEntries(Object.entries(combatInputs).map(([playerId, input]) => [
       playerId,
       staff.actingPlayerIds.has(playerId)
-        ? { ...input, cast: { primary: false, quickbar: null } }
+        ? { ...input, cast: { ...input.cast, primary: false } }
         : input,
     ]))
   }
