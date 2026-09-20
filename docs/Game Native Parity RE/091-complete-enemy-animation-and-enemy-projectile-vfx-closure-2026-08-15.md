@@ -2358,3 +2358,227 @@ The regression failed twice before the change (the old expectation and the new
 both-arm boundary test). After correcting the selector, all 97 focused animation
 and presentation tests passed on the Mac. The final canonical gate and built
 Slumpgut journey are required before publication; no native process is needed.
+
+## 2026-09-19 — Zombie gas and shared sine-fade birth ownership
+
+The reported screenshot, `SD Web zombie.png` from Windows Downloads (SHA-256
+`48194953f5a258a2deb2723c8e99531be8c0ac592ca77162c9f8743a533cff5d`),
+shows a dark cloud where the report describes the original as translucent
+green. The original comparison image has not been supplied. Both current
+Website `origin/main` and public `deployment.json` identified
+`c2312eec86f232940bf71185d931e29a6e71db4f` during this investigation.
+
+The earlier presence-only cloud checks did not settle this visual report.
+The first recheck confirmed the three attached-cloud materials but stopped
+before the independently emitted gas completed its native first update.
+Continuing that ownership trace found a reproducible opacity defect: newborn
+web gas was published at alpha one, before its sine fade began. The shared
+native class also exposes the same birth defect in Earthquake dust, whose
+pre-world painter owner was incorrect. The correction below preserves the
+recovered textures, colors and blend modes while fixing the first sample and
+the affected painter membership.
+
+### Evidence and recovered boundary
+
+The binary is retail 0.72.5 at preferred image base `0x00400000`, rehashed as
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Read-only Ghidra replica queries decompiled `0x00493390`, `0x004863A0`,
+`0x00414540`, `0x0041E990`, `0x004208A0`, `0x00624B40`, `0x00628AD0`,
+`0x00420030`, `0x00452DB0`, `0x00452DE0`, `0x00455A20` and `0x00454340`.
+Raw instructions and direct PE section reads independently checked the
+arguments and constants. The wrapper SHA-256 was
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+the existing `decompile_targets.py` SHA-256 was
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+The boundary is the Zombie flyblown presentation controlled by actor `+0x24E`:
+all four body variants, recipe-selected flyblown state including Slumpgut,
+the three attached cloud draws and private-seeded flies, and the independently
+owned green particles. Ordinary Zombies do not enter these branches.
+PoisonPool/death fragments, scenery shadows and other enemy-family renderers
+have separate producers and are not recolored by this investigation.
+
+| Member | Instruction/data result | Current Website result |
+| --- | --- | --- |
+| Attached puff | `0x004942DF`, BadGuys 65, `(0,-15)`, scale 1.5, normal blend | Same record, transform and material |
+| Rotating front cloud | `0x004942F8`, BadGuys 11, `(0,-15)`, rotation `age*.25` degrees, scales `(1.5,1.2000000476837158)`, normal blend | Same record, transform and material |
+| Mirrored cloud | `0x00494353` selects additive before `0x00494373`, BadGuys 11 at `(0,-20)` with mirrored X; `0x00494384` restores normal blending | Same record, transform and material |
+| All three cloud colors | `0x00494202..0x00494232` installs RGBA `(.05000000074505806,.10000000149011612,.05000000074505806,.5)`; constants `0x007849F0`, `0x007845E8`, `0x007DE870`; packed RGB `0x0C190C` | Same tint and alpha; the green source puff is darkened by this stock tint |
+| Flies | Renderer restores normal blend, seeds with integer `age/10`, draws 5..20 black BadGuys 26 sprites with alpha `.25..75` | Same private RNG owner, normal blend and black fly tint |
+| Detached gas | Tick `0x004863A0` emits BadGuys 10/11 into `Region+0x278`; `0x00486B24..0x00486B77` builds RGBA `(.1,.3,.1,1)` and desaturates by `.6499999761581421`, producing packed RGB `0x2D3F2D` | The authority emits the same greener, independently positioned particles with normal blending |
+| Detached lifetime | `Anim_FadeSin` constructor `0x004594E0` initializes phase zero and alpha multiplier one; `0x00454340` advances position/phase, computes sine opacity and retires at 180 degrees | Existing `move-fade-sin` owner retains position/lifetime independently of parent movement or death |
+| Draw and lighting state | `0x00414540 -> 0x0041E990` retains the local color; `0x00420030` does not reset it. `0x00452DB0/0x00452DE0` install/restore global color. `0x004208A0` maps modes 0/1 to `SRCALPHA/INVSRCALPHA` and `SRCALPHA/ONE` | These calls do not support replacing the first two cloud passes with additive blending or white tint |
+
+All four consumed source images (BadGuys 10, 11, 26 and 65) are byte-identical
+RGBA crops of the retail `images/BadGuys.png` (SHA-256
+`af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e`).
+Record 65's source art is already green; its center RGBA is `(75,98,47,128)`.
+Record 11's center is `(255,255,255,115)`. This excludes a black replacement
+texture or lost source alpha as the cause.
+
+### Checks and remaining question
+
+Mac Chrome WebGL reproduced the dark attached haze through the current
+`NativeEnemyViews`, packed stock textures and Arena material pipeline. The
+matrix included body types 0..3 with flyblown off and on. All three live
+sprites retained the material settings in the table above. This is web-only
+evidence; it is not a clean-stock visual comparison.
+
+Four focused Mac regressions passed: attached cloud/swarm selection, hit
+redraw exclusion, recipe-selected flyblown state without wave flags, and
+independent detached-particle ownership/lifetime. No complete Website gate or
+new built-client acceptance was run for this source-unchanged investigation.
+
+Confidence is high in the instruction-derived constants, draw order, source
+pixels and matching current source. The unresolved question is which original
+frame, variant or setting demonstrates the reported brighter appearance.
+The user requested static RE without launching the native game; no native
+runtime observation is claimed. The first pass did not prove the complete
+frame lifecycle. The following investigation supersedes its suggestion that
+an original screenshot was necessary before further causal work.
+
+### Continued investigation — the newborn pre-world effect phase
+
+Twelve Mac Chrome pixel samples cover BadGuys 10/11/65, normal/additive blend,
+and full/half parent illumination. Raw framebuffer RGB matches an independent
+evaluation of the retail saturation and blend equations within one byte.
+The WebGL context is opaque (`alpha:false`), so the browser cannot add a
+second background-alpha multiplication. The packed runtime page also contains
+the exact stock RGBA crops. A fresh complete `0x004E0DD0` builder trace drains
+all 2,509 sprite loads and independently confirms offsets `+0x07E0=10`,
+`+0x08A4=11`, `+0x1420=26`, and `+0x31FC=65`. These probes exclude the
+material, packed-page mapping and final browser compositing hypotheses.
+
+The first confirmed divergence is **birth-tick ownership**, not the green
+constants. `Region::Tick 0x0063EFC0` ticks the actor manager at
+`0x0063F127..0x0063F139`, then the transient manager at
+`0x0063F162..0x0063F168`, then direct pre-world manager `+0x278` at
+`0x0063F178..0x0063F17E`. The Zombie inserts its new gas into `+0x278`
+at `0x00486B7A..0x00486B8D` during the earlier actor tick. ObjectManager
+`0x004022A0` initializes and ticks every live member in insertion order.
+Its append chain `0x00402720 -> 0x004013C0 -> 0x004013E0` inserts the
+pointer into that live list without postponing it to another tick.
+
+The actual `Anim_FadeSin_Move` vtable written at `0x00486997` is
+`0x00786B34`: tick slot `+0x08` is `0x00454340`, draw slot `+0x0C` is
+`0x00455A20`, and initialization `+0x04` is the no-op `0x0055C300`.
+Thus the first visible native gas has already moved by one velocity step
+and advanced its phase from zero by `FloatRange(1,2)` degrees. Its alpha is
+approximately `.01745..03490`, then rises smoothly with the sine phase.
+
+The web currently steps retained effects **before** it ticks the Zombie,
+constructs the new gas with `alpha:1`, `framePhase:0`, and
+`lastStepTick:tick`, then publishes it. It drops to roughly `.02` only on
+the next tick. A snapshot landing on that birth exposes a full-opacity puff
+whose native counterpart should be almost transparent. This establishes a
+real dark-puff mechanism; it does not establish that every dark pixel in the
+reported screenshot comes from the newborn particle rather than the separate
+stock attached haze.
+
+The recovered boundary is the first update of an enemy-owned effect in the
+direct pre-world manager. All producers using that same manager are members:
+Zombie gas, Wraith wisps, Imp/Portal terminal sprite arrays, delayed Demon
+fires, Zombie/Demon terminal ground effects, Faculty smoke and terminal
+effects, Discorporeal impact/finale effects, and dampened-caster pre-world
+smoke. Their existing class-specific update programs remain canonical.
+World-sorted Bouncers already have an explicit immediate birth update;
+ordinary world-sorted and post-world effects are separate owners and do not
+acquire a new update from this correction. The attached cloud/swarm and
+texture/material paths are verified controls.
+
+Implementation must commit the first pre-world update before publishing the
+birth frame, including delayed births, without stepping an existing effect
+twice or advancing paused effects. Reuse the existing transient stepper and
+per-effect clock; do not suppress the puff, change its tint, or introduce a
+render-owned fade. Required regressions cover birth/next-tick continuity,
+parent motion/death, delayed births, pause, and the other pre-world programs.
+
+The complete `Anim_FadeSin_Move` creator sweep includes Earthquake tick
+`0x00613200`. Fresh raw code writes the same vtable at `0x00613848` and
+registers the child directly with `Region+0x278` at `0x006139D2..0x006139E5`.
+Its `.5`-degree phase rate and `.5..1` peak alpha do not change the shared
+birth rule. The secondary-ability owner also left the first dust sample at
+alpha one and phase zero, and its renderer incorrectly sent the dust through
+the world-sorted `zanim` path. This sibling enters the correction: reuse its
+own update program for the first sample and the renderer's existing direct
+pre-world underlay. Entry 083 records the corrected native owner. No new
+protocol fields or native-game launch are required.
+
+### Implementation and member coverage
+
+The complete instruction census contains exactly two installations of
+`Anim_FadeSin_Move::vftable`: Zombie `0x00486997` and Earthquake
+`0x00613848`. Both are covered. The enemy authority marks a newly created
+pre-world effect as not yet stepped, then reuses the existing class stepper
+before committing the current tick. The same stepper admits scheduled
+pre-world births when their tick arrives. Its per-effect clock prevents a
+second update. Earthquake reuses one dust advance function at birth and on
+subsequent ticks, and uses the renderer's existing underlay container.
+Its wire/save ordering stamp is retained, but it emits no sorted world painter.
+
+| Member | Disposition | Evidence/check |
+| --- | --- | --- |
+| Zombie moving sine-fade gas, every body/recipe/rotten selector | `exact-ported` | Failing-then-passing authority regression; first phase equals phase speed; birth alpha `.01745..03490`; real host/socket/browser journey |
+| Earthquake moving sine-fade dust, Enhanced Effects on/off | `exact-ported` | Fresh creator/manager instructions; first phase `.5`, first drift step and sine opacity; secondary authority and underlay tests; browser dust is pre-world only |
+| Attached Zombie puff/front/mirrored cloud, all body sizes | `verified-already-at-parity` | Builder load census, exact source and packed pixels, twelve independent GPU material comparisons; colors/blends are retained |
+| Fly swarm and ordinary non-rotten Zombie exclusion | `verified-already-at-parity` | Existing private-RNG/body tests and ordinary-Zombie control in the socket journey |
+| Shared pre-world `fade`, `fade-additive`, `fade-perspective` | `exact-ported` | First-decay and once-only birth tests; Wraith/Faculty/Discorporeal producers retain their own colors and rates |
+| Shared pre-world `move-fade`, `move-fade-perspective` | `exact-ported` | First position/velocity step and opacity assertions; Faculty/Dampen smoke producers retain their own recipes |
+| Shared pre-world `fade-scale`, `fade-scale-perspective` | `exact-ported` | First scale/opacity step assertions; Discorporeal rings and UltraBanish retain their authored multipliers |
+| Pre-world sprite arrays: normal/split Imp, Demon, Portal, Faculty and Unholy impacts | `exact-ported` | First frame/velocity-damping assertions; terminal-family integration tests now expect the already advanced native sample |
+| Delayed pre-world births and Zombie LateSplats | `exact-ported` | Before-birth exclusion, scheduled first update, next-tick continuity and retirement tests |
+| Delayed Demon `fire-array` presentations | `verified-already-at-parity` | Existing absolute-age frame program remains unchanged; terminal and delayed-birth regressions pass |
+| Already sampled effects, pause and restored phase | `verified-already-at-parity` | Repeated commit preserves identity/state; mature sine-envelope restoration test and browser pause/resume |
+| World-sorted Bouncers, other sorted/post-world programs, Earthquake Quake and BoulderBit | `out-of-system` for this direct sine-fade correction | Separate native programs/owners; their current birth/physics tests remain controls |
+
+There is no browser-platform exception or new appearance override.
+No native runtime capture is claimed. Without the original comparison frame,
+the precise contribution of each attached layer to the reported screenshot
+cannot be identified; the premature full-opacity particle is independently
+reproduced and corrected from native instructions and browser pixels.
+
+### Focused validation receipt
+
+- Enemy/transient suites: **133/133 passed** on the Mac; secondary authority
+  and presentation suites: **137/137 passed**. Both Zombie and Earthquake birth
+  regressions failed before their fixes.
+- Controlled GPU birth comparison: unchanged BadGuys 11 and tint `0x2D3F2D`,
+  phase speed `1.0790499448776245`. Old alpha was `1`; corrected/native-model
+  alpha was `0.018831860274076462`. Summed background darkening was `51874`
+  channel units for the old puff and `0` for both corrected and independent
+  native first-frame samples at that framebuffer precision.
+- Real Zombie journey: eight factory-created rotten Zombies plus an ordinary
+  control, at least twenty host-observed births and two birth-frame socket
+  samples, pause/resume, parent death with detached particle retention,
+  retirement and renderer release. Development and built-client journeys
+  passed without page/console/failed-response errors.
+- Earthquake browser: three dust actors across 381 renderer samples used
+  only `BadGuys:10:normal` underlays at direct depth `.5`, with no sorted-world
+  submission. Page/console/response arrays were empty. The diagnostic member
+  set now includes dust so the acceptance checks inspect actual renderer state.
+
+### Final Mac acceptance
+
+The final run completed at `2026-09-20T00:40:35Z`, with all sixteen candidate
+files still byte-identical to the local worktree based on `992813e6`.
+
+- `/opt/homebrew/bin/bash ./scripts/validate.sh`: **PASS**, exit zero,
+  including backend/contracts, lint/type checks, frontend/desktop suites,
+  production build and media/bundle checks, and the configured renderer gate.
+  Renderer coverage remained 100% for statements, branches, functions and
+  lines. Mutation results were 398 killed, 142 compile errors, one timeout,
+  23 already documented equivalent exclusions, zero survivors and no failures.
+- Built Zombie journey: **PASS**. Twenty host birth samples had alpha
+  `.018434518948197365..032353803515434265`; five birth-frame socket samples
+  retained the low opacity after the existing `1/1024` quantization. Twenty
+  gas effects crossed the real socket. Pause/resume, detached survival after
+  parent death, retirement and renderer release all passed; error arrays were
+  empty. Fixtures award no XP so a level-choice barrier cannot hide retirement.
+- Built Earthquake journey: **PASS**. Three dust actors appeared in 363
+  renderer samples, exclusively in the direct pre-world underlay. All four
+  Earthquake child kinds, actual loop audio, screen feedback and settings
+  checks passed with empty page, console and failed-response arrays.
+
+Only this validation receipt was added after the final run; runtime code,
+tests, assets and acceptance tools were unchanged. Publication and deployment
+remain separate from these Mac acceptance results.

@@ -53,6 +53,7 @@ const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 const STORM_RENDER_TARGET_SIZE = 256
 const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
+  'earthquake-dust',
   'acid-rain',
   'dampen-wave',
   'dampened-projectile',
@@ -196,7 +197,7 @@ class NativeSecondaryActorView {
       state.ageTicks,
       pointGain,
     )
-    this.underlayContainer = state.kind === 'acid-rain'
+    this.underlayContainer = state.kind === 'acid-rain' || state.kind === 'earthquake-dust'
       ? new Container({ label: 'native-secondary-underlay' })
       : null
     if (this.underlayContainer) {
@@ -427,7 +428,8 @@ class NativeSecondaryActorView {
     }
     const proxyOwner = this.currentKind === 'acid-rain'
       || this.currentKind === 'storm-cloud'
-    if (this.plan.draws.length === 0 && this.currentKind === 'acid-rain') return layers
+    if (this.plan.draws.length === 0
+      && (this.currentKind === 'acid-rain' || this.currentKind === 'earthquake-dust')) return layers
     if (!proxyOwner) {
       layers.push(this.painterLayer(id, sourceOrder + layers.length))
       return layers

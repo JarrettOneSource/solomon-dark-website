@@ -282,7 +282,8 @@ export function spawnSimpleDeathEffect(
     height: 0,
     id: work.nextDeathEffectId,
     kind: options.kind,
-    lastStepTick: tick,
+    // Region ticks direct pre-world effects after their actor/transient producers.
+    lastStepTick: presentationOwner === 'pre-world-queue' ? tick - 1 : tick,
     lifetimeTicks: options.lifetimeTicks,
     opacityTimer: options.opacityTimer ?? options.alpha,
     ownerActorId: actor.id,

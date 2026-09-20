@@ -2559,21 +2559,8 @@ export function stepNativeSecondaryAbilities(
         break
       }
       case 'earthquake-dust': {
-        const phase = Math.fround(
-          sourceActor.phase + EARTHQUAKE_DUST_PHASE_PER_TICK,
-        )
-        actor = {
-          ...actor,
-          alpha: Math.fround(
-            Math.abs(Math.sin(phase * Math.PI / 180)) * sourceActor.quantity,
-          ),
-          phase,
-          position: {
-            x: Math.fround(sourceActor.position.x + sourceActor.velocity.x),
-            y: Math.fround(sourceActor.position.y + sourceActor.velocity.y),
-          },
-        }
-        retain = phase < 180
+        actor = { ...actor, ...advanceEarthquakeDust(sourceActor) }
+        retain = actor.phase < 180
         break
       }
       case 'earthquake-debris': {
@@ -5706,32 +5693,47 @@ function spawnEarthquakeDust(
   const scale = drawNativeFloat(rotation.state, 2)
   const distance = drawNativeFloat(scale.state, 30)
   const direction = drawNativeUnitVector(distance.state)
+  const dust = actorSeed({
+    enhanced: true,
+    kind: 'earthquake-dust',
+    lifetimeTicks: EARTHQUAKE_DUST_LIFETIME_TICKS,
+    ownerId: parent.ownerId,
+    position: {
+      x: Math.fround(
+        scenery.position.x + direction.value.x * distance.value,
+      ),
+      y: Math.fround(
+        scenery.position.y + direction.value.y * distance.value,
+      ),
+    },
+    quantity: Math.fround(0.5 + magnitude.value),
+    rotationRadians: rotation.value * Math.PI / 180,
+    scale: Math.fround(2 + scale.value),
+    skillId: 41,
+    targetId: scenery.targetId,
+    velocity: {
+      x: Math.fround((velocity.value + 0.25) / 3),
+      y: 0,
+    },
+    worldKey: parent.worldKey,
+  })
   return {
     rng: direction.rng,
-    state: spawn(source, actorSeed({
-      enhanced: true,
-      kind: 'earthquake-dust',
-      lifetimeTicks: EARTHQUAKE_DUST_LIFETIME_TICKS,
-      ownerId: parent.ownerId,
-      position: {
-        x: Math.fround(
-          scenery.position.x + direction.value.x * distance.value,
-        ),
-        y: Math.fround(
-          scenery.position.y + direction.value.y * distance.value,
-        ),
-      },
-      quantity: Math.fround(0.5 + magnitude.value),
-      rotationRadians: rotation.value * Math.PI / 180,
-      scale: Math.fround(2 + scale.value),
-      skillId: 41,
-      targetId: scenery.targetId,
-      velocity: {
-        x: Math.fround((velocity.value + 0.25) / 3),
-        y: 0,
-      },
-      worldKey: parent.worldKey,
-    })),
+    state: spawn(source, { ...dust, ...advanceEarthquakeDust(dust) }),
+  }
+}
+
+function advanceEarthquakeDust(
+  source: Pick<NativeSecondaryActorState, 'phase' | 'position' | 'quantity' | 'velocity'>,
+) {
+  const phase = Math.fround(source.phase + EARTHQUAKE_DUST_PHASE_PER_TICK)
+  return {
+    alpha: Math.fround(Math.abs(Math.sin(phase * Math.PI / 180)) * source.quantity),
+    phase,
+    position: {
+      x: Math.fround(source.position.x + source.velocity.x),
+      y: Math.fround(source.position.y + source.velocity.y),
+    },
   }
 }
 

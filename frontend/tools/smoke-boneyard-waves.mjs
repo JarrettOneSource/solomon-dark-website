@@ -55,6 +55,7 @@ const slumpgutOnly = process.argv.includes('--slumpgut-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
 const deathEffectsOnly = process.argv.includes('--death-effects-only')
 const spiderOnly = process.argv.includes('--spider-only')
+const zombieGasOnly = process.argv.includes('--zombie-gas-only')
 const deterministicSeedBytes = Buffer.alloc(16)
 if (portalOnly) deterministicSeedBytes.writeUInt32BE(1)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
@@ -142,7 +143,15 @@ await page.addInitScript((runtime) => {
 await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
-  if (spiderOnly) {
+  if (zombieGasOnly) {
+    await enterBoneyard(page)
+    const { acceptZombieGasSystem } = await import('./zombie-gas-smoke-acceptance.mjs')
+    const gas = await acceptZombieGasSystem({ host, page, wire, screenshotPath })
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({ status: 'ok', productionFrontend, gas, errors, failedResponses })}\n`)
+  } else if (spiderOnly) {
     await enterBoneyard(page)
     const { acceptSpiderSystem } = await import('./spider-system-smoke-acceptance.mjs')
     const spiders = await acceptSpiderSystem({ host, page, wire, screenshotPath })

@@ -1,6 +1,8 @@
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../../core-kernels/boneyard-mage-lightning.ts'
 import { createNativeWorldManagerOrder } from '../../core-kernels/native-world-manager-order.ts'
+import { stepBoneyardPreWorldEffectBirths } from '../boneyard-transient-effects.ts'
 import type { BoneyardEnemyStore, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
+import { drawUnit } from './random.ts'
 import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
 
 export function createEnemyWork(
@@ -64,6 +66,7 @@ export function createEnemyWork(
 }
 
 export function finishEnemyStore(work: WorkingStep, tick: number): BoneyardEnemyStore {
+  work.deathEffects = stepBoneyardPreWorldEffectBirths(work.deathEffects, tick, () => drawUnit(work))
   return {
     demonSkullEncounter: work.demonSkullEncounter,
     featuredBossId: work.actors.some(actor => actor.id === work.featuredBossId) ? work.featuredBossId : null,

@@ -40,6 +40,19 @@ interface DeathPopulationStep {
   readonly nextDeathEffectId: number
 }
 
+export function stepBoneyardPreWorldEffectBirths(
+  effects: readonly BoneyardEnemyDeathEffect[],
+  tick: number,
+  drawUnit: () => number,
+): BoneyardEnemyDeathEffect[] {
+  return effects.flatMap(effect => {
+    if (effect.presentationOwner !== 'pre-world-queue'
+      || effect.spawnTick !== tick || effect.lastStepTick >= tick) return [effect]
+    const stepped = stepDeathEffect(effect, tick, drawUnit, true)
+    return stepped === null ? [] : [stepped]
+  })
+}
+
 export function stepBornBoneyardBouncer(
   effect: BoneyardEnemyDeathEffect,
   tick: number,
@@ -123,7 +136,8 @@ function stepDeathEffect(
   drawUnit: () => number,
   updateAtBirth = false,
 ): BoneyardEnemyDeathEffect | null {
-  if (tick < source.spawnTick || (tick === source.spawnTick && !updateAtBirth)) {
+  if (tick < source.spawnTick || (tick === source.spawnTick && !updateAtBirth
+    && source.presentationOwner !== 'pre-world-queue')) {
     const waiting = cloneDeathEffect(source)
     waiting.ageTicks = 0
     waiting.lastStepTick = tick

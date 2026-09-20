@@ -423,14 +423,14 @@ function buildNativeSecondaryPresentationPlan(
         scaleY: actor.slowFactor,
       })])
     case 'earthquake-dust':
-      return plan([draw('BadGuys', 10, {
+      return plan([], 'zanim', 0, [], [], null, [], [draw('BadGuys', 10, {
         alpha: Math.min(1, actor.alpha),
         role: 'earthquake-scenery-dust',
         rotationRadians: actor.rotationRadians,
         scaleX: actor.scale,
         scaleY: actor.scale,
         tint: 0x1e1100,
-      })], 'zanim')
+      })])
     case 'earthquake-debris': {
       const draws: NativeSecondarySpriteDraw[] = []
       if (actor.enhanced) {

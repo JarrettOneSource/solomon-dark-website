@@ -4229,7 +4229,7 @@ test('every survival family assembles its native terminal animation classes', ()
       banishScale: 1,
       banishTicks: 100,
       frameDamping: 0.98,
-      frameVelocity: 0.5,
+      frameVelocity: Math.fround(0.5 * 0.98),
       owner: 'pre-world-queue',
       painter: null,
       spriteScale: 2,
@@ -4248,7 +4248,7 @@ test('every survival family assembles its native terminal animation classes', ()
       frameVelocity: splitArray.frameVelocity,
       spriteScale: splitArray.scale,
     },
-    { banishScale: 0.25, banishTicks: 25, frameVelocity: 2, spriteScale: 0.5 },
+    { banishScale: 0.25, banishTicks: 25, frameVelocity: Math.fround(2 * 0.98), spriteScale: 0.5 },
   )
 
   const zombie = killOneAndStep('terminal-classes-zombie', 'ZOMBIE')
@@ -5462,6 +5462,9 @@ test('rotten Zombie particles own their world position, ordinary material, and l
   assert.equal(effect.presentationOwner, 'pre-world-queue')
   assert.equal(effect.painterRegistration, null)
   assert.ok(effect.entry === 10 || effect.entry === 11)
+  assert.equal(effect.tint, 0x2d3f2d)
+  assert.equal(effect.framePhase, effect.frameVelocity)
+  assert.ok(effect.alpha > 0 && effect.alpha < .04, 'new gas fades in before its first published frame')
   assert.ok(effect.scale >= 1 && effect.scale <= 3)
   assert.ok(effect.frameVelocity >= 1 && effect.frameVelocity <= 2)
   assert.ok(Math.hypot(effect.velocity.x, effect.velocity.y) <= .250001)
@@ -5473,8 +5476,8 @@ test('rotten Zombie particles own their world position, ordinary material, and l
   assert.ok(retained)
   assert.deepEqual(retained.position, { x: Math.fround(effect.position.x + effect.velocity.x),
     y: Math.fround(effect.position.y + effect.velocity.y) })
-  assert.equal(retained.framePhase, effect.frameVelocity)
-  assert.ok(retained.alpha > 0 && retained.alpha < .04)
+  assert.equal(retained.framePhase, Math.fround(effect.frameVelocity * 2))
+  assert.ok(retained.alpha > effect.alpha && retained.alpha < .08)
 })
 
 test('breaking a Pike updates the canonical equipment selector and cannot break it twice', () => {

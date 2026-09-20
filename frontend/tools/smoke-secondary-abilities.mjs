@@ -838,6 +838,9 @@ try {
       assert.equal(displacementCover.rectangles.length, 2)
       assert.ok(displacementCover.regions.length > 0)
       assert.ok(displacementCover.regions.every(({ blackFraction }) => blackFraction >= 0.8))
+      await page.waitForFunction(start => window.__secondaryRenderSamples.slice(start)
+        .some(({ actors }) => actors.some(({ kind }) => kind === 'earthquake-dust')),
+      sampleStart, { timeout: 15_000 })
     }
 
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
@@ -1810,6 +1813,22 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       const maximumMagnitude = Math.max(...samples.map(({ cameraMagnitude }) => cameraMagnitude))
       assert.ok(maximumMagnitude > 0)
       return { maximumCameraMagnitude: maximumMagnitude }
+    }
+    case 41: {
+      if (requestedScene !== 'boneyard') return null
+      const dust = actorSamples.filter(({ kind }) => kind === 'earthquake-dust')
+      assert.ok(dust.length > 0, 'Earthquake did not render its native sine-fade dust')
+      const ids = new Set(dust.map(({ id }) => `secondary:${id}`))
+      for (const sample of dust) {
+        assert.deepEqual(sample.mainDrawMembers, [])
+        assert.deepEqual(sample.underlayDrawMembers, ['BadGuys:10:normal'])
+        assert.equal(sample.underlayPrimitiveCount, 1)
+        assert.equal(sample.underlayDepth, .5)
+      }
+      assert.equal(samples.some(({ painterOrder, painterProxyOrder }) => (
+        [...painterOrder, ...painterProxyOrder].some(({ id }) => ids.has(id))
+      )), false, 'direct pre-world dust must not also enter the sorted world queue')
+      return { dustActors: ids.size, dustSamples: dust.length, preWorldOnly: true }
     }
     case 27: {
       const storm = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (

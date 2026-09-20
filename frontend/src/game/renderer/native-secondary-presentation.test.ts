@@ -210,7 +210,7 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
       'shockwave', 'mindblast-shockwave', 'fire-burn', 'ether-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
       'earthquake-scenery-wobble',
     ].includes(kind)) {
-      assert.ok(plan.draws.length > 0, `${kind} unexpectedly became invisible`)
+      assert.ok(plan.draws.length + plan.underlayDraws.length > 0, `${kind} unexpectedly became invisible`)
     }
   }
 })
@@ -2488,8 +2488,8 @@ test('Earthquake children own record 62, brown FadeSin dust, and the enhanced li
     rotationRadians: 0.75,
     scale: 2.5,
   })
-  assert.equal(dust.queueFamily, 'zanim')
-  assert.deepEqual(dust.draws.map((draw) => ({
+  assert.deepEqual(dust.draws, [])
+  assert.deepEqual(dust.underlayDraws.map((draw) => ({
     alpha: draw.alpha,
     entry: draw.entry,
     rotationRadians: draw.rotationRadians,

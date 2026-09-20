@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
+import { stepBoneyardPreWorldEffectBirths, stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 import type { BoneyardEnemyDeathEffect, BoneyardEnemyProjectileEffect } from './enemies/model.ts'
 const registerTestWorldPainter = (managerLane: 'actor' | 'transient') => ({
   managerLane,
@@ -300,6 +300,69 @@ test('delayed births and strict lifetime edges apply across complete transient p
     nextDeathEffectId: 100,
     projectileEffects: [],
   })
+})
+
+test('pre-world effects publish their first class update once, including motion, scale and sine opacity', () => {
+  const rows = [
+    { kind: 'fade' },
+    { kind: 'fade-additive' },
+    { kind: 'fade-perspective' },
+    { kind: 'fade-scale', scaleMultiplier: .5 },
+    { kind: 'fade-scale-perspective', scaleMultiplier: .5 },
+    { kind: 'late-splat', opacityTimer: 3 },
+    { kind: 'move-fade', velocity: { x: 2, y: -3 } },
+    { kind: 'move-fade-perspective', velocity: { x: 2, y: -3 } },
+    { kind: 'move-fade-sin', frameVelocity: 2, velocity: { x: 2, y: -3 } },
+    { kind: 'sprite-array', firstEntry: 401, frameCount: 19, frameVelocity: 1, frameVelocityDamping: .5 },
+    { kind: 'fire-array', firstEntry: 50, frameCount: 32, frameTicks: 4, alphaLossPerTick: 0 },
+  ] satisfies Partial<BoneyardEnemyDeathEffect>[]
+  const source = rows.map((row, index) => deathEffect({ ...row, id: index + 1,
+    lastStepTick: 9, presentationOwner: 'pre-world-queue', painterRegistration: null }))
+  const first = stepBoneyardPreWorldEffectBirths(source, 10, () => .5)
+  assert.equal(first.length, source.length)
+  assert.ok(first.every(effect => effect.ageTicks === 0 && effect.lastStepTick === 10))
+  assert.ok(source.every(effect => effect.lastStepTick === 9 && effect.alpha === 1))
+  const sample = (kind: BoneyardEnemyDeathEffect['kind']) => first.find(effect => effect.kind === kind)!
+  for (const kind of ['fade', 'fade-additive', 'fade-perspective', 'fade-scale',
+    'fade-scale-perspective', 'move-fade', 'move-fade-perspective', 'sprite-array'] as const) {
+    assert.equal(sample(kind).alpha, Math.fround(.9), kind)
+  }
+  assert.equal(sample('fade-scale').scale, .5)
+  assert.equal(sample('fade-scale').scaleY, .5)
+  assert.equal(sample('fade-scale-perspective').scale, .5)
+  assert.equal(sample('late-splat').alpha, Math.fround(2.9) * .25)
+  for (const kind of ['move-fade', 'move-fade-perspective', 'move-fade-sin'] as const) {
+    assert.deepEqual(sample(kind).position, { x: 12, y: 17 }, kind)
+  }
+  assert.equal(sample('move-fade-sin').framePhase, 2)
+  assert.ok(Math.abs(sample('move-fade-sin').alpha - Math.sin(2 * Math.PI / 180)) < 1e-8)
+  assert.equal(sample('sprite-array').entry, 402)
+  assert.equal(sample('sprite-array').frameVelocity, .5)
+  assert.equal(sample('fire-array').entry, 50)
+  assert.equal(sample('fire-array').alpha, 1)
+  const repeated = stepBoneyardPreWorldEffectBirths(first, 10, () => .5)
+  const paused = stepBoneyardPreWorldEffectBirths(first, 20, () => .5)
+  assert.ok(first.every((effect, index) => repeated[index] === effect && paused[index] === effect))
+})
+
+test('future pre-world births start at their scheduled tick and other painter owners retain their clocks', () => {
+  const future = deathEffect({ kind: 'move-fade-sin', frameVelocity: 2, spawnTick: 12,
+    presentationOwner: 'pre-world-queue', painterRegistration: null })
+  const ordinary = deathEffect({ lastStepTick: 9 })
+  const terminal = deathEffect({ lastStepTick: 9, presentationOwner: 'direct-post-world' })
+  const expired = deathEffect({ lastStepTick: 9, alphaLossPerTick: 1,
+    presentationOwner: 'pre-world-queue', painterRegistration: null })
+  assert.deepEqual(stepBoneyardPreWorldEffectBirths([future, ordinary, terminal, expired], 10, () => .5),
+    [future, ordinary, terminal])
+  const before = stepBoneyardTransientEffects([future], [], 11, () => .5, 100, registerTestWorldPainter).deathEffects[0]!
+  assert.equal(before.framePhase, 0)
+  const born = stepBoneyardTransientEffects([before], [], 12, () => .5, 100, registerTestWorldPainter).deathEffects[0]!
+  assert.equal(born.framePhase, 2)
+  assert.ok(born.alpha > .03 && born.alpha < .04)
+  assert.equal(stepBoneyardPreWorldEffectBirths([born], 12, () => .5)[0], born)
+  const next = stepBoneyardTransientEffects([born], [], 13, () => .5, 100, registerTestWorldPainter).deathEffects[0]!
+  assert.equal(next.framePhase, 4)
+  assert.ok(next.alpha > born.alpha && next.alpha < .08)
 })
 
 function deathEffect(

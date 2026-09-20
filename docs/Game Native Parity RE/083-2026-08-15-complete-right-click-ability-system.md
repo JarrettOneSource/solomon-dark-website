@@ -232,6 +232,19 @@ toward the native `[-2,2]` band, and `RandomFloat(1.5)` magnitude. Enhanced
 Effects gates a 360-update brown BadGuys `10` `Anim_FadeSin_Move` dust child
 with `RandomInt(30)==1`.
 
+**2026-09-19 correction:** the complete sine-fade sibling trace in entry 091
+reopens the dust's first sample and painter owner. Raw `0x00613848` installs
+the same `Anim_FadeSin_Move` vtable `0x00786B34` as Zombie gas;
+`0x0061385D..0x00613863` installs phase speed `.5`, and
+`0x006139D2..0x006139E5` appends it directly to `Region+0x278`.
+That manager ticks later in the same Region update. Its first visible phase
+is therefore `.5` degrees, opacity is `sin(.5 degrees) * quantity`, and its
+position already includes one velocity step. The former constructor-alpha-one
+sample and `zanim` main-queue presentation were incorrect. Use the existing
+direct pre-world underlay path, before Region multiplication; no world-queue
+submission is needed for this dust. Earthquake's record-62 Quake and lit
+BoulderBit children are separate native classes and retain their own owners.
+
 Every update, enhanced or not, also gates a lit BadGuys `2008..2010`
 `Anim_BoulderBit` with `RandomInt(15)==1`. Its constructor preserves the
 native hidden bouncer draws, radial placement, two-stage scale clamp, initial

@@ -3126,6 +3126,7 @@ test('enhanced Earthquake births exact FadeSin dust and lit Anim_BoulderBit stat
   assert.deepEqual({
     alpha: dust.alpha,
     lifetimeTicks: dust.lifetimeTicks,
+    phase: dust.phase,
     position: dust.position,
     quantity: dust.quantity,
     rotationRadians: dust.rotationRadians,
@@ -3133,10 +3134,12 @@ test('enhanced Earthquake births exact FadeSin dust and lit Anim_BoulderBit stat
     targetId: dust.targetId,
     velocity: dust.velocity,
   }, {
-    alpha: 1,
+    alpha: Math.fround(Math.sin(.5 * Math.PI / 180) * Math.fround(.5 + dustMagnitude.value)),
     lifetimeTicks: 360,
+    phase: .5,
     position: {
-      x: Math.fround(50 + dustDirection.value.x * dustDistance.value),
+      x: Math.fround(Math.fround(50 + dustDirection.value.x * dustDistance.value)
+        + Math.fround((dustVelocity.value + .25) / 3)),
       y: Math.fround(40 + dustDirection.value.y * dustDistance.value),
     },
     quantity: Math.fround(0.5 + dustMagnitude.value),
@@ -3281,10 +3284,10 @@ test('Earthquake child actors retain their exact sine and three-tick bouncer lif
   const skipped = stepNativeSecondaryAbilities(isolated, context(41, 3, null)).state
   const skippedDust = skipped.actors.find(({ kind }) => kind === 'earthquake-dust')!
   const skippedDebris = skipped.actors.find(({ kind }) => kind === 'earthquake-debris')!
-  assert.equal(skippedDust.phase, Math.fround(0.5))
+  assert.equal(skippedDust.phase, Math.fround(1))
   assert.equal(
     skippedDust.alpha,
-    Math.fround(Math.sin(0.5 * Math.PI / 180) * dust.quantity),
+    Math.fround(Math.sin(Math.PI / 180) * dust.quantity),
   )
   assert.deepEqual(skippedDust.position, {
     x: Math.fround(dust.position.x + dust.velocity.x),
