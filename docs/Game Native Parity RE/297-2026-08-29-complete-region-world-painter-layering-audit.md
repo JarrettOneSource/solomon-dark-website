@@ -978,22 +978,22 @@ The boundary is the ground-fluid painter path: Arena compact glyphs and their
 per-player light targets, Zombie ground stains, and PoisonPool ground draws.
 It is not the entire actor sorter, enemy AI, or combat damage system.
 
-| Member | Recovered owner | Initial disposition / required proof |
+| Member | Recovered owner | Final disposition / proof |
 | --- | --- | --- |
-| Authored compact selector 25 / DeadHawg 139 | Arena slot +0x110, mask grid +0x8F84 | recovered-pending-port; full-scene overlap pixels |
-| Authored compact selector 26 / DeadHawg 140 | same | recovered-pending-port; full-scene overlap pixels |
-| Authored compact selector 27 / DeadHawg 141 | same | recovered-pending-port; full-scene overlap pixels |
-| Authored compact selector 28 / DeadHawg 142 | same | recovered-pending-port; full-scene overlap pixels |
-| Authored compact selector 29 / DeadHawg 143 | same | recovered-pending-port; full-scene overlap pixels |
-| Spider decal DeadHawg 140 | same ground and compact-mask grids | recovered-pending-port; overlapping wizard, growth/fade and cleanup |
-| Spider decal DeadHawg 141 | same | recovered-pending-port; overlapping wizard and cleanup |
-| Spider decal DeadHawg 142 | same | recovered-pending-port; overlapping wizard and cleanup |
-| Environment mode 0 | no direct record-18 aperture; conditional masks still run | recovered-pending-port; no aperture, masks below actors |
-| Environment modes 1 and 2 | record-18 aperture then optional mask per player in +0x110 | recovered-pending-port; both beneath actors; retain existing explicit 14-percent Website brightness policy |
-| Multiple players, materialization, departure and scene teardown | slot-ordered ground-light ownership | recovered-pending-port; retained views and textures retire with owners |
-| Normal and rotten Zombie DeadHawg-30 stain | background manager +0x2C4 | recovered-pending-port; producer, restored saves, both relative-Y directions |
-| Rotten Zombie delayed DeadHawg-31 splats | pre-world manager +0x278 | verified-already-at-parity by binary/producer; overlap regression required |
-| PoisonPool growing/live/fading DeadHawg-0 pair and bubbles | actor +0x28 / direct +0x278 | verified-already-at-parity at current main; overlap and authoritative poison-contact acceptance required |
+| Authored compact selector 25 / DeadHawg 139 | Arena slot +0x110, mask grid +0x8F84 | exact-ported; per-record full-scene overlap pixels in all three environment modes and both lighting settings |
+| Authored compact selector 26 / DeadHawg 140 | same | exact-ported; per-record full-scene overlap pixels in all three environment modes and both lighting settings |
+| Authored compact selector 27 / DeadHawg 141 | same | exact-ported; per-record full-scene overlap pixels in all three environment modes and both lighting settings |
+| Authored compact selector 28 / DeadHawg 142 | same | exact-ported; per-record full-scene overlap pixels in all three environment modes and both lighting settings |
+| Authored compact selector 29 / DeadHawg 143 | same | exact-ported; per-record full-scene overlap pixels in all three environment modes and both lighting settings |
+| Spider decal DeadHawg 140 | same ground and compact-mask grids | exact-ported; overlapping wizard pixels, native lifetime tests, built-game birth/fade/retirement and cleanup |
+| Spider decal DeadHawg 141 | same | exact-ported; per-record overlapping wizard pixels and cleanup |
+| Spider decal DeadHawg 142 | same | exact-ported; per-record overlapping wizard pixels and cleanup |
+| Environment mode 0 | no direct record-18 aperture; conditional masks still run | exact-ported; no aperture and unchanged wizard pixels with masks enabled |
+| Environment modes 1 and 2 | record-18 aperture then optional mask per player in +0x110 | exact-ported; both beneath actors, measured aperture alpha in the existing explicit 14-percent Website brightness interval |
+| Multiple players, materialization, departure and scene teardown | slot-ordered ground-light ownership | exact-ported; joined and materializing players, departed mask-target destruction, and renderer teardown |
+| Normal and rotten Zombie DeadHawg-30 stain | background manager +0x2C4 | exact-ported; normal/rotten producer assertions, schema-35 migration, current-save round trip, both relative-Y pixel cases and real host replication |
+| Rotten Zombie delayed DeadHawg-31 splats | pre-world manager +0x278 | verified-already-at-parity; binary/producer evidence, full-scene overlap pixels and built-game retirement |
+| PoisonPool growing/live/fading DeadHawg-0 pair and bubbles | actor +0x28 / direct +0x278 | verified-already-at-parity; growing/live/fading overlap pixels plus actual movement, poison status, health loss and retirement through the built client |
 | Flying Zombie fragments and Unbind | world queue / later direct owner | out-of-system: airborne actors are not ground fluid; retain their existing ownership |
 | Terrain shape-mask rasterization | separate +0x8F24 geometry producer | out-of-system: existing unimplemented shape contribution, absent from all twelve stock survival templates; no new terrain contract inferred |
 
@@ -1014,3 +1014,58 @@ built `/game` journey before the authorized fast-forward main push. No new
 browser approximation is needed for the changed ordering. Fresh clean-stock
 interactive capture is not claimed; native ordering is instruction-derived,
 and overlapping browser pixels are measured directly.
+
+
+### Implementation validation receipt
+
+- Runtime, tests and browser harnesses are commit
+  `7e7afebe7940429bb27768490c1d22db8b029f6a`, based on
+  `82cc95d713f464c31d4ffa4a7c7c2ad16970883b`. The local and detached Mac
+  worktrees had byte-identical SHA-256 manifests for all 28 changed files.
+  The built frontend's `deployment.json` identifies that candidate. This
+  receipt update changes only this ledger, after validation.
+- Mac regression-first evidence: the original Zombie owner assertion failed
+  (`world-sorted` instead of `background`), and save restoration rejected the
+  correct ground owner. The original full-scene Zombie overlap changed wizard
+  body channels by up to 32; the Spider mask visibly covered the wizard in
+  white. After the fix, all six focused terminal/save tests passed.
+- Mac Chrome/WebGL `smoke-ground-effect-layering.mjs`: **84 cases passed**,
+  including all five authored compact selectors, all three Spider decals,
+  growing/live/fading PoisonPool, both sides of the Zombie stain, and delayed
+  splats. All run in modes 0/1/2 with complex lighting off/on. Maximum change
+  to the sampled opaque wizard pixels with the ground pass enabled was **0**
+  in every case, while each effect produced changed ground pixels. Player
+  arrival, materialization exclusion and complete renderer teardown passed.
+  Browser error and failed-response arrays were empty.
+- Existing `smoke-spider-masks.mjs`: all eight shape/alpha cases passed,
+  including authored rows, DeadSpider, combined masks and cell boundaries.
+  The combined target retains 10,271 nonzero-alpha pixels; ordinary cases have
+  transparent corners. Two-player targets reduce to one on departure, the
+  departed target is destroyed, and teardown leaves no retained children.
+- Built `/game` journey via `smoke-boneyard-waves.mjs --ground-effects-only`
+  with `SDR_GAME_WAVES_SMOKE_PRODUCTION=1`: normal and rotten Zombie deaths
+  produced two background-owned stains, Spider death replicated its decal,
+  and real keyboard movement into the pool applied **1,000 poison ticks**.
+  Health changed from **50 to 49.930999999701974**, with continued damage
+  visible in the client. Pause held tick 1,055; pool fade, stain/decal
+  retirement and return-to-title renderer teardown passed. The screenshot
+  was visually inspected. Page/console/response error arrays were empty.
+- Full Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` exited **0**.
+  Backend integration, formatting/lint, all configured frontend/desktop tests,
+  production build, media policy and renderer quality gates passed. The final
+  quality report at `2026-09-20T11:33:58.423Z` reports no failures, 100-percent
+  coverage in its eight configured renderer targets, and no mutation
+  survivors: 375 killed, 24 timeouts, 142 compile-invalid and 23 existing
+  reviewed equivalents. No threshold, test selection or gate was weakened.
+- Native tooling provenance: read-only Mod Loader wrapper
+  `scripts/Invoke-GhidraHeadless.ps1` SHA-256
+  `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+  `tools/ghidra-scripts/decompile_targets.py` SHA-256
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+  The canonical source project and its replica pool were used without editing
+  Mod Loader. Raw captures and logs are disposable after this durable receipt.
+
+The changed ground-ordering system has no unresolved browser constraint.
+The pre-existing Terrain-mask omission and explicit direct-aperture brightness
+policy remain the separate dispositions listed above. Production deployment
+or live production behavior is not established by these local Mac receipts.
