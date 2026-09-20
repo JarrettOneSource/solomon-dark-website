@@ -43,6 +43,7 @@ import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { NativeBoneyardWeatherView } from './native-boneyard-weather-view.ts'
 import { NativeBossSpellViews } from './native-boss-spell-view.ts'
 import { NativeCompactMaskView } from './native-compact-mask-view.ts'
+import { BoneyardEnvironmentLightView } from './boneyard-environment-light.ts'
 import { NativeDeadSpiderViews } from './native-dead-spider-views.ts'
 import { nativeEnemyDeathEffectPainterLane, nativeEnemyDeathEffectPainterLayer } from './native-enemy-death-effect-presentation.ts'
 import { NativeEnemyDeathEffectViews } from './native-enemy-death-effect-view.ts'
@@ -65,6 +66,7 @@ import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { PlayerWorldView } from './world-player-view.ts'
 export class BoneyardDynamicScene {
   private readonly compactMasks: NativeCompactMaskView
+  readonly environmentLights: BoneyardEnvironmentLightView | null
   private readonly spiderWebs: NativeSpiderWebViews
   private readonly spiderRemains: NativeDeadSpiderViews
   private readonly activeStaticPainterLayers: StaticPainterLayer[] = []
@@ -180,7 +182,13 @@ export class BoneyardDynamicScene {
     ))
     this.gates = new BoneyardGateViews(root, textures)
     this.goodies = new NativeGoodieViews(root, textures)
-    this.compactMasks = new NativeCompactMaskView(root, preWorld, renderer, textures, boneyard.scene)
+    // Arena +0x110 follows compact ground glyphs and precedes +0x2C4 stains.
+    const groundLights = new Container({ label: 'boneyard-ground-lights', sortableChildren: true, eventMode: 'none' })
+    groundLights.zIndex = -0.25
+    preWorld.addChild(groundLights)
+    this.environmentLights = boneyard.scene.environmentMode === 0 ? null
+      : new BoneyardEnvironmentLightView(groundLights, textures.regionLightGlyph)
+    this.compactMasks = new NativeCompactMaskView(groundLights, preWorld, renderer, textures, boneyard.scene)
     this.spiderRemains = new NativeDeadSpiderViews(preWorld, textures)
     this.spiderWebs = new NativeSpiderWebViews(root)
     this.enemies = new NativeEnemyViews(root, textures, preWorld, enemyUnderlays)
@@ -232,6 +240,7 @@ export class BoneyardDynamicScene {
     camera: Camera,
     viewport: GameViewportLayout,
     settings: BoneyardWorldPresentationSettings,
+    now: number,
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
     const enemySnapshots = nativeEnemySnapshots(snapshot)
@@ -783,12 +792,14 @@ export class BoneyardDynamicScene {
     this.solomon?.setActorDepth(solomonPainter?.zIndex ?? 1)
     this.solomon?.setLanternDepth(lanternPainter?.zIndex ?? 1)
     this.spiderWebs.setFragmentDepth(order.foregroundZIndex + 0.25)
+    const groundLightPlayers = Object.fromEntries(Object.entries(snapshot.players).filter(([id]) => !materializingPlayerIds.has(id)))
+    this.environmentLights?.update(groundLightPlayers, now)
     this.compactMasks.update(
-      Object.fromEntries(Object.entries(snapshot.players).filter(([id]) => !materializingPlayerIds.has(id))),
+      groundLightPlayers,
       snapshot.world.spiderRemains,
       snapshot.world.arenaTransition?.phase === 'sealed'
         ? snapshot.world.arenaTransition.combatBounds : this.boneyard.scene.bounds,
-      presentationFrame, order.foregroundZIndex + 1,
+      presentationFrame,
     )
     const weatherLightingOrder = nativeBoneyardWeatherLightingOrder(
       order.foregroundZIndex,
@@ -898,6 +909,7 @@ export class BoneyardDynamicScene {
     this.primarySpells.destroy()
     this.secondaryAbilities.destroy()
     this.compactMasks.destroy()
+    this.environmentLights?.destroy()
     this.spiderWebs.destroy()
     this.spiderRemains.destroy()
     this.enemies.destroy()

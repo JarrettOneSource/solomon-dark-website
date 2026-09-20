@@ -810,17 +810,8 @@ try {
     width: Number(await mobileBoneyard.getAttribute('data-viewport-width')),
   }
   assert.deepEqual(mobileBoneyardViewport, mobileViewport)
-  const environmentLight = mobile.locator('.boneyard-environment-light')
-  const environmentLightBounds = await environmentLight.count() > 0
-    ? await environmentLight.boundingBox()
-    : null
-  if (environmentLightBounds) {
-    assertRect(
-      environmentLightBounds,
-      mobileBoneyardCanvasBounds,
-      'mobile environment light',
-    )
-  }
+  const environmentLights = await mobileBoneyardCanvas.evaluate(node => node.__sdrBoneyardFrame.environmentLightSamples)
+  assert.ok(environmentLights.every(light => light.alpha >= .2375 * .14 && light.alpha <= .25 * .14))
   const playerScreen = await mobileBoneyardCanvas.evaluate((node) => ({
     x: node.__sdrBoneyardFrame.playerScreenX,
     y: node.__sdrBoneyardFrame.playerScreenY,
@@ -994,7 +985,7 @@ try {
     },
     viewport: mobileViewport,
     boneyard: {
-      environmentLight: Boolean(environmentLightBounds),
+      environmentLight: environmentLights.length > 0,
       playerScreen,
       viewport: mobileBoneyardViewport,
     },

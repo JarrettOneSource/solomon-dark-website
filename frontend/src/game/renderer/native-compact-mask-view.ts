@@ -48,7 +48,6 @@ export class NativeCompactMaskView {
     remains: readonly BoneyardSpiderRemainsSnapshot[],
     bounds: Readonly<BoneyardBounds>,
     presentationFrame: number,
-    depth: number,
   ): void {
     const dynamic = remains.flatMap(({ id, state }): CompactMask[] => state.decal === null ? [] : [{
       id: `spider-decal:${id}`, entry: state.decal.entry, position: state.decal.position,
@@ -101,7 +100,7 @@ export class NativeCompactMaskView {
         this.targets.set(playerId, target)
       }
       const sample = drawNativeFloat(createNativeRng(Math.trunc(presentationFrame) ^ slot), 0.050000011920928955)
-      target.update(this.renderer, candidates, player.position, Math.fround(Math.fround(0.95) + sample.value), depth)
+      target.update(this.renderer, candidates, player.position, Math.fround(Math.fround(0.95) + sample.value), slot * 2 + 1)
       slot += 1
     }
     for (const [id, target] of this.targets) {

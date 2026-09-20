@@ -689,7 +689,7 @@ remains.
   constants, target allocator, high/low live layouts, active rectangle,
   provider ordering, target-grid producer, all specialized consumers, current
   web divergence, and stale smoke failure.
-- Intentional difference: the Website's post-world direct player aperture is
+- Intentional difference: the Website's direct player aperture is
   14 percent of native brightness by explicit prior user policy.
 - Known separate debt: Website Wall art remains an approximate stone-band
   raster rather than the complete `0x005EEBB0` generated mesh/decor program;
@@ -816,3 +816,10 @@ remains.
   the final membership and callsite rescan.
 - Publication state: implemented and validated in retained task worktrees only.
   No commit, push, deployment, or live-production claim is made.
+
+
+The 2026-09-20 ground-fluid reopening in entry 297 corrects the direct aperture
+and compact-mask painter interval: Arena `+0x110` draws both before
+`Region+0x2C4`, the Region multiply, and the world queue. Earlier claims that
+these player-local light targets execute after sorted actors are superseded.
+The explicit 14-percent direct-aperture brightness policy is preserved.

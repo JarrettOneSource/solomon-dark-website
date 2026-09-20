@@ -1128,7 +1128,7 @@ function nativeDeathEffectPresentationOwner(
   const role = String(source.role)
   if (kind === 'unbind' || ['dampen-caster-flash', 'mouth-beam-wall-contact',
     'discorporeal-eyes-warmup', 'discorporeal-mouth-warmup'].includes(role)) return 'late-world-overlay'
-  if (role === 'ultra-banish-bone') return 'background'
+  if (role === 'ultra-banish-bone' || kind === 'fade-perspective-clipped') return 'background'
   if (role === 'eye-impact-flash' || role.startsWith('demon-death-fire-burst-')) {
     return 'direct-post-world'
   }
@@ -2125,12 +2125,13 @@ function normalizeWorld(
     enemies: {
       ...enemies,
       featuredBossId,
-      deathEffects: sourceSchemaVersion < 34 ? array(enemies.deathEffects, 'saved enemy death effects').map(value => {
+      deathEffects: sourceSchemaVersion < 36 ? array(enemies.deathEffects, 'saved enemy death effects').map(value => {
         const effect = record(value, 'saved enemy death effect')
         return {
           ...effect,
           ...(sourceSchemaVersion < 33 ? { scaleY: effect.scale } : {}),
-          ...(effect.kind === 'unbind' ? { presentationOwner: 'late-world-overlay', painterRegistration: null } : {}),
+          ...(sourceSchemaVersion < 34 && effect.kind === 'unbind' ? { presentationOwner: 'late-world-overlay', painterRegistration: null } : {}),
+          ...(effect.kind === 'fade-perspective-clipped' ? { presentationOwner: 'background', painterRegistration: null } : {}),
         }
       }) : enemies.deathEffects,
       demonSkullEncounter: sourceSchemaVersion < 34 ? createNativeDemonSkullEncounter() : normalizeDemonSkullEncounter(enemies.demonSkullEncounter),

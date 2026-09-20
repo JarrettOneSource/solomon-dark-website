@@ -1486,8 +1486,9 @@ the dynamic Spider decal. Terrain polygons use a separate owning shape system
 and do not occur in any of the twelve native survival templates; their existing
 missing mask contribution is recorded as follow-up work outside this Spider
 system. This is a scope boundary, not a claimed browser limitation. The compact
-mask contribution renders after the world painters, while the dynamic decal's
-normal dark glyph renders with the pre-main ground content. Native startup
+mask contribution and the dynamic decal's normal glyph both render with
+the pre-main ground content. The earlier post-world mask claim is refuted by
+the concrete Arena slot +0x110 caller; see the 2026-09-20 reopening in entry 297. Native startup
 sets compact selector 25..28 alpha to `.75` and selector 29 to `1` before both
 normal and mask consumers.
 
@@ -2582,3 +2583,16 @@ files still byte-identical to the local worktree based on `992813e6`.
 Only this validation receipt was added after the final run; runtime code,
 tests, assets and acceptance tools were unchanged. Publication and deployment
 remain separate from these Mac acceptance results.
+
+
+### 2026-09-20 ground-fluid ownership correction
+
+[Entry 297](297-2026-08-29-complete-region-world-painter-layering-audit.md#2026-09-20--ground-fluid-and-compact-mask-ownership-reopened)
+records the fresh native caller trace, the overlapping-player browser failure,
+and the full ground-fluid correction. Zombie DeadHawg-30 clipped fades belong
+to background manager `Region+0x2C4`; ordinary and rotten Zombies share that
+producer. PoisonPool and delayed DeadHawg-31 splats retain their already-correct
+ground ownership. Every authored compact mask (selectors 25–29), all three
+Spider decal records (140–142), and their player-local composites render before
+the world queue. Save schema 36 migrates former world-sorted clipped stains.
+The prior isolated mask-alpha receipt did not establish scene compositing order.

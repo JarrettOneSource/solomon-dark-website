@@ -4282,6 +4282,11 @@ test('every survival family assembles its native terminal animation classes', ()
   assert.equal(rotten.store.deathEffects.filter(
     ({ role }) => role === 'zombie-fragment',
   ).length, 22)
+  for (const result of [zombie, rotten]) {
+    const stain = result.store.deathEffects.find(({ role }) => role === 'zombie-clipped-fade')!
+    assert.equal(stain.presentationOwner, 'background')
+    assert.equal(stain.painterRegistration, null)
+  }
   const lateSplats = rotten.store.deathEffects.filter(
     ({ kind }) => kind === 'late-splat',
   )

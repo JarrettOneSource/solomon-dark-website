@@ -89,15 +89,12 @@ try {
   await page.keyboard.down(movementKey)
   const moving = await measure(page, sampleMs)
   await page.keyboard.up(movementKey)
-  const runtime = await canvas.evaluate((node, measuredViewport) => {
+  const runtime = await canvas.evaluate((node) => {
     const context = node.getContext('webgl2') || node.getContext('webgl')
     const extension = context?.getExtension('WEBGL_debug_renderer_info')
-    const environmentLight = document.querySelector('.boneyard-environment-light')
     const frame = node.__sdrBoneyardFrame
     return {
-      environmentLight: environmentLight instanceof HTMLCanvasElement
-        ? environmentLightReceipt(environmentLight, node, frame, measuredViewport)
-        : null,
+      environmentLights: frame.environmentLightSamples,
       domNodes: document.querySelectorAll('*').length,
       environmentMode: Number(document.querySelector('.boneyard-scene')
         ?.getAttribute('data-environment-mode')),
@@ -118,60 +115,7 @@ try {
       weatherStreakRenderer: node.dataset.weatherStreakRenderer,
     }
 
-    function environmentLightReceipt(lightCanvas, worldCanvas, diagnostics, fallbackViewport) {
-      const lightContext = lightCanvas.getContext('2d')
-      if (!lightContext) return null
-      const logicalWidth = Number(worldCanvas.dataset.viewportWidth)
-        || fallbackViewport.width
-      const logicalHeight = Number(worldCanvas.dataset.viewportHeight)
-        || fallbackViewport.height
-      const scaleX = lightCanvas.width / logicalWidth
-      const scaleY = lightCanvas.height / logicalHeight
-      const player = {
-        x: diagnostics.playerScreenX * scaleX,
-        y: diagnostics.playerScreenY * scaleY,
-      }
-      const corners = [
-        { x: 2 * scaleX, y: 2 * scaleY },
-        { x: (logicalWidth - 2) * scaleX, y: 2 * scaleY },
-        { x: 2 * scaleX, y: (logicalHeight - 2) * scaleY },
-        {
-          x: (logicalWidth - 2) * scaleX,
-          y: (logicalHeight - 2) * scaleY,
-        },
-      ]
-      const farthest = corners.reduce((best, point) => (
-        Math.hypot(point.x - player.x, point.y - player.y)
-          > Math.hypot(best.x - player.x, best.y - player.y)
-          ? point
-          : best
-      ))
-      const center = lightContext.getImageData(
-          Math.round(player.x),
-          Math.round(player.y),
-          1,
-          1,
-        ).data
-      const far = lightContext.getImageData(
-          Math.round(farthest.x),
-          Math.round(farthest.y),
-          1,
-          1,
-        ).data
-      return {
-        centerAlpha: center[3],
-        centerRgbTotal: center[0] + center[1] + center[2],
-        composite: getComputedStyle(lightCanvas).mixBlendMode,
-        farAlpha: far[3],
-        farRgbTotal: far[0] + far[1] + far[2],
-        logicalHeight,
-        logicalWidth,
-        physicalHeight: lightCanvas.height,
-        physicalWidth: lightCanvas.width,
-        resolution: Number(worldCanvas.dataset.resolution),
-      }
-    }
-  }, viewport)
+  })
   if (process.env.SDR_GAME_PERF_SCREENSHOT) {
     await page.screenshot({ path: process.env.SDR_GAME_PERF_SCREENSHOT })
   }
@@ -192,43 +136,11 @@ try {
   assert.ok(moving.minimumOversizedVisibleResidentCount > 0, JSON.stringify(moving))
   assert.ok(moving.presentedPlayerPositions > 10, JSON.stringify(moving))
   if (runtime.environmentMode === 1 || runtime.environmentMode === 2) {
-    assert.ok(presentation.startupEnvironmentLight, 'expected startup environment-light diagnostics')
-    assert.equal(
-      presentation.startupEnvironmentLight.physicalWidth,
-      Math.round(
-        presentation.startupEnvironmentLight.logicalWidth
-        * presentation.startupEnvironmentLight.resolution,
-      ),
-    )
-    assert.equal(
-      presentation.startupEnvironmentLight.physicalHeight,
-      Math.round(
-        presentation.startupEnvironmentLight.logicalHeight
-        * presentation.startupEnvironmentLight.resolution,
-      ),
-    )
-    assert.equal(presentation.startupEnvironmentLight.composite, 'plus-lighter')
-    assert.ok(
-      presentation.startupEnvironmentLight.centerAlpha >= 7
-      && presentation.startupEnvironmentLight.centerAlpha <= 11,
-      JSON.stringify(presentation),
-    )
-    assert.ok(presentation.startupEnvironmentLight.centerRgbTotal >= 720, JSON.stringify(presentation))
-    assert.equal(presentation.startupEnvironmentLight.farAlpha, 0, JSON.stringify(presentation))
-    assert.equal(presentation.startupEnvironmentLight.farRgbTotal, 0, JSON.stringify(presentation))
-    assert.ok(runtime.environmentLight, 'expected the native environment-light canvas')
-    assert.equal(runtime.environmentLight.composite, 'plus-lighter')
-    assert.ok(
-      runtime.environmentLight.centerAlpha >= 7
-      && runtime.environmentLight.centerAlpha <= 11,
-      JSON.stringify(runtime),
-    )
-    assert.ok(runtime.environmentLight.centerRgbTotal >= 720, JSON.stringify(runtime))
-    assert.equal(runtime.environmentLight.farAlpha, 0, JSON.stringify(runtime))
-    assert.equal(runtime.environmentLight.farRgbTotal, 0, JSON.stringify(runtime))
-  } else {
-    assert.equal(runtime.environmentLight, null)
-  }
+    for (const lights of [presentation.startupEnvironmentLights, runtime.environmentLights]) {
+      assert.ok(lights.length > 0, 'expected GPU ground-light players')
+      assert.ok(lights.every(light => light.alpha >= .2375 * .14 && light.alpha <= .25 * .14))
+    }
+  } else assert.deepEqual(runtime.environmentLights, [])
   if (minimumFps > 0) {
     assert.ok(idle.averageFps >= minimumFps, JSON.stringify(idle))
     assert.ok(moving.averageFps >= minimumFps, JSON.stringify(moving))
@@ -250,7 +162,7 @@ try {
     viewport,
     presentationFrameCap: presentation.frameCap,
     presentationUncapped: presentation.uncapped,
-    startupEnvironmentLight: presentation.startupEnvironmentLight,
+    startupEnvironmentLights: presentation.startupEnvironmentLights,
   })}\n`)
 } finally {
   await browser.close()
@@ -284,65 +196,11 @@ async function enterBoneyard(page) {
   }
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 30_000 })
-  const startupEnvironmentLight = await page.evaluate((fallbackViewport) => {
-    const environmentLight = document.querySelector('.boneyard-environment-light')
-    const world = document.querySelector('.boneyard-world-canvas')
-    if (!(environmentLight instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) {
-      return null
-    }
-    const context = environmentLight.getContext('2d')
-    const diagnostics = world.__sdrBoneyardFrame
-    if (!context || !diagnostics) return null
-    const logicalWidth = Number(world.dataset.viewportWidth) || fallbackViewport.width
-    const logicalHeight = Number(world.dataset.viewportHeight) || fallbackViewport.height
-    const scaleX = environmentLight.width / logicalWidth
-    const scaleY = environmentLight.height / logicalHeight
-    const player = {
-      x: Math.max(0, Math.min(environmentLight.width - 1, diagnostics.playerScreenX * scaleX)),
-      y: Math.max(0, Math.min(environmentLight.height - 1, diagnostics.playerScreenY * scaleY)),
-    }
-    const corners = [
-      { x: 2 * scaleX, y: 2 * scaleY },
-      { x: (logicalWidth - 2) * scaleX, y: 2 * scaleY },
-      { x: 2 * scaleX, y: (logicalHeight - 2) * scaleY },
-      {
-        x: (logicalWidth - 2) * scaleX,
-        y: (logicalHeight - 2) * scaleY,
-      },
-    ]
-    const farthest = corners.reduce((best, point) => (
-      Math.hypot(point.x - player.x, point.y - player.y)
-        > Math.hypot(best.x - player.x, best.y - player.y)
-        ? point
-        : best
-    ))
-    const center = context.getImageData(
-        Math.round(player.x),
-        Math.round(player.y),
-        1,
-        1,
-      ).data
-    const far = context.getImageData(
-        Math.max(0, Math.min(environmentLight.width - 1, Math.round(farthest.x))),
-        Math.max(0, Math.min(environmentLight.height - 1, Math.round(farthest.y))),
-        1,
-        1,
-      ).data
-    return {
-      centerAlpha: center[3],
-      centerRgbTotal: center[0] + center[1] + center[2],
-      composite: getComputedStyle(environmentLight).mixBlendMode,
-      farAlpha: far[3],
-      farRgbTotal: far[0] + far[1] + far[2],
-      logicalHeight,
-      logicalWidth,
-      physicalHeight: environmentLight.height,
-      physicalWidth: environmentLight.width,
-      resolution: Number(world.dataset.resolution),
-    }
-  }, viewport)
+  const startupEnvironmentLights = await page.locator('.boneyard-world-canvas').evaluate(
+    node => node.__sdrBoneyardFrame.environmentLightSamples,
+  )
   await page.waitForTimeout(1_000)
-  return { ...presentation, startupEnvironmentLight }
+  return { ...presentation, startupEnvironmentLights }
 }
 
 async function provisionPerformanceEndpoint(url) {

@@ -41,7 +41,7 @@ export async function inspectSpiderCompactMasks() {
       root.position.copyFrom(ground.position)
       app.stage.addChild(ground, root)
       const view = new NativeCompactMaskView(root, ground, app.renderer, textures, { bounds, sprites: member.sprites })
-      view.update({ player: { position } }, member.remains, bounds, 82, 1)
+      view.update({ player: { position } }, member.remains, bounds, 82)
       if (root.children.length !== 1) throw new Error(`${member.name} was not admitted to the compact target`)
       const target = root.children[0].texture
       const { pixels, width, height } = app.renderer.extract.pixels({ target })
@@ -52,12 +52,12 @@ export async function inspectSpiderCompactMasks() {
         name: member.name, width, height, nonzeroAlpha,
         corners: [alphaAt(0, 0), alphaAt(width - 1, 0), alphaAt(0, height - 1), alphaAt(width - 1, height - 1)],
       }
-      view.update({ player: { position }, guest: { position: { x: 820, y: 450 } } }, member.remains, bounds, 83, 1)
+      view.update({ player: { position }, guest: { position: { x: 820, y: 450 } } }, member.remains, bounds, 83)
       record.joinedTargets = root.children.length
-      view.update({ guest: { position } }, member.remains, bounds, 84, 1)
+      view.update({ guest: { position } }, member.remains, bounds, 84)
       record.departedTargets = root.children.length
       record.departedTargetDestroyed = target.destroyed
-      view.update({ player: { position } }, member.remains, bounds, 85, 1)
+      view.update({ player: { position } }, member.remains, bounds, 85)
       app.render()
       if (member.name === 'combined') {
         record.image = app.renderer.extract.base64({ target: app.stage })

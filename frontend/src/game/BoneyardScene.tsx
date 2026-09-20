@@ -8,7 +8,7 @@ import {
 import { NATIVE_BOSS_STREAM_CUES, NATIVE_BOSS_STREAM_TICKS, NATIVE_FACULTY_VOICE_CUES } from './core-kernels/native-boss-audio.ts'
 
 import { worldToScreen, type Camera } from '../editor/render.ts'
-import { boneyard, nativeGameOver } from '../lib/assets.ts'
+import { nativeGameOver } from '../lib/assets.ts'
 import {
   boneyardDigIndicatorLayout,
   boneyardTutorialDigIndicatorLayout,
@@ -101,10 +101,6 @@ import type {
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
-import {
-  paintBoneyardEnvironmentLight,
-  type BoneyardEnvironmentLightImages,
-} from './renderer/boneyard-environment-light.ts'
 import {
   BONEYARD_CAMERA_ZOOM,
   boneyardSpectatorStatusesEqual,
@@ -305,7 +301,6 @@ export default function BoneyardScene({
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
-  const environmentLightCanvasRef = useRef<HTMLCanvasElement>(null)
   const digIndicatorRef = useRef<HTMLDivElement>(null)
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
@@ -756,10 +751,6 @@ export default function BoneyardScene({
     setRendererError(null)
     setSpectatorStatus(null)
 
-    const environmentLightPresentation = loaded.scene.environmentMode === 1
-      || loaded.scene.environmentMode === 2
-      ? loadBoneyardEnvironmentLightPresentation()
-      : Promise.resolve(null)
     const gameOverPresentation = Promise.all(
       Object.values(nativeGameOver).map(loadGameImage),
     )
@@ -774,9 +765,8 @@ export default function BoneyardScene({
     })
     void Promise.all([
       rendererPromise,
-      environmentLightPresentation,
       gameOverPresentation,
-    ]).then(([renderer, initialEnvironmentLight]) => {
+    ]).then(([renderer]) => {
       if (cancelled) {
         renderer.destroy()
         return
@@ -791,17 +781,6 @@ export default function BoneyardScene({
       }
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
-      const environmentLight = environmentLightCanvasRef.current
-      if (environmentLight && initialEnvironmentLight) {
-        paintBoneyardEnvironmentLight(
-          environmentLight,
-          boneyardInitialSnapshot.players,
-          renderer.camera(boneyardInitialSnapshot),
-          viewportRef.current,
-          performance.now(),
-          initialEnvironmentLight,
-        )
-      }
       setRendererState('ready')
       onReadyRef.current()
       input.setBlocked(inputBlockedRef.current)
@@ -971,19 +950,6 @@ export default function BoneyardScene({
         setSpectatorStatus((current) => (
           boneyardSpectatorStatusesEqual(current, nextStatus) ? current : nextStatus
         ))
-        const environmentLight = environmentLightCanvasRef.current
-        if (environmentLight && initialEnvironmentLight) {
-          paintBoneyardEnvironmentLight(
-            environmentLight,
-            Object.fromEntries(Object.entries(snapshot.players).filter(([id]) => (
-              !snapshot.materializingPlayerIds.includes(id)
-            ))),
-            camera,
-            viewportRef.current,
-            now,
-            initialEnvironmentLight,
-          )
-        }
         positionDigIndicator(
           digIndicatorRef.current,
           snapshot,
@@ -1089,16 +1055,6 @@ export default function BoneyardScene({
         } as CSSProperties}
       >
         <div ref={hostRef} className="boneyard-world-renderer" />
-        {(loaded.scene.environmentMode === 1 || loaded.scene.environmentMode === 2) ? (
-          <canvas
-            ref={environmentLightCanvasRef}
-            className="boneyard-environment-light"
-            data-composite="plus-lighter"
-            data-native-light="DeadHawg:18"
-            aria-hidden
-          />
-        ) : null}
-
         {run.phase !== 'game-over' ? (
           <>
             {tutorial ? (
@@ -1437,8 +1393,4 @@ function gateState(leaves: readonly {
   return leaves.map((leaf) => (
     `${leaf.id}:${leaf.tip.x.toFixed(3)},${leaf.tip.y.toFixed(3)}`
   )).join('|')
-}
-
-async function loadBoneyardEnvironmentLightPresentation(): Promise<BoneyardEnvironmentLightImages> {
-  return { aperture: await loadGameImage(boneyard.darknessAperture) }
 }

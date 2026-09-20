@@ -1,5 +1,12 @@
 # 2026-08-20 — Late light-source visibility and environment-player pass correction
 
+> **2026-09-20 ordering correction:** The later descriptions of player aperture
+> and compact-mask draws as post-world are superseded by entry 297's ground-fluid
+> reopening. Arena slot `+0x110 -> 0x00470EE0` executes at `0x0046F6BE`, before
+> background manager `+0x2C4`, the Region multiply, and the sorted world queue.
+> Geometry, mode gates and the explicit Website brightness policy are unchanged.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: some new Boneyards retain the player's light while

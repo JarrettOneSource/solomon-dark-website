@@ -502,27 +502,13 @@ try {
     const scene = runPage.locator('.boneyard-scene')
     const environmentMode = await scene.getAttribute('data-environment-mode')
     assert.equal(await scene.getAttribute('data-camera-zoom'), '1.35')
-    assert.equal(
-      await runPage.locator(
-        '.boneyard-environment-light[data-native-light="DeadHawg:18"]',
-      ).count(),
-      environmentMode === '1' || environmentMode === '2' ? 1 : 0,
+    const groundLights = await runPage.locator('.boneyard-world-canvas').evaluate(
+      canvas => canvas.__sdrBoneyardFrame.environmentLightSamples,
     )
     if (environmentMode === '1' || environmentMode === '2') {
-      const environmentLight = runPage.locator('.boneyard-environment-light')
-      assert.equal(await environmentLight.getAttribute('data-composite'), 'plus-lighter')
-      const pixels = await sampleEnvironmentLightPixels(runPage)
-      assert.ok(
-        pixels.centerAlpha >= pixels.expectedCenterAlphaMinimum
-          && pixels.centerAlpha <= pixels.expectedCenterAlphaMaximum
-          && pixels.centerRgbTotal >= 720,
-        `expected an additive player environment light, got ${JSON.stringify(pixels)}`,
-      )
-      assert.deepEqual(
-        { alpha: pixels.farAlpha, rgb: pixels.farRgbTotal },
-        { alpha: 0, rgb: 0 },
-      )
-    }
+      assert.ok(groundLights.length > 0)
+      assert.ok(groundLights.every(light => light.alpha >= .2375 * .14 && light.alpha <= .25 * .14))
+    } else assert.deepEqual(groundLights, [])
   }
 
   const hostDigCount = await page.getByRole('img', { name: 'Solomon Dig' }).count()
@@ -1291,81 +1277,4 @@ async function solomonDigIndicatorReceipt(page) {
       y: Number.parseFloat(indicator.style.top),
     }
   })
-}
-
-async function sampleEnvironmentLightPixels(page) {
-  let lastSample = null
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const sample = await page.evaluate(() => {
-      const canvas = document.querySelector('.boneyard-environment-light')
-      const world = document.querySelector('.boneyard-world-canvas')
-      if (!(canvas instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) return null
-      const context = canvas.getContext('2d')
-      if (!context || canvas.width === 0 || canvas.height === 0) return null
-      const diagnostics = world.__sdrBoneyardFrame
-      if (!diagnostics) return null
-      const viewportWidth = Number(world.dataset.viewportWidth)
-      const viewportHeight = Number(world.dataset.viewportHeight)
-      if (!(viewportWidth > 0) || !(viewportHeight > 0)) return null
-
-      const scaleX = canvas.width / viewportWidth
-      const scaleY = canvas.height / viewportHeight
-      const playerX = diagnostics.playerScreenX * scaleX
-      const playerY = diagnostics.playerScreenY * scaleY
-      const corners = [
-        { x: 2 * scaleX, y: 2 * scaleY },
-        { x: (viewportWidth - 2) * scaleX, y: 2 * scaleY },
-        { x: 2 * scaleX, y: (viewportHeight - 2) * scaleY },
-        { x: (viewportWidth - 2) * scaleX, y: (viewportHeight - 2) * scaleY },
-      ]
-      const farthest = corners.reduce((best, point) => (
-        Math.hypot(point.x - playerX, point.y - playerY)
-          > Math.hypot(best.x - playerX, best.y - playerY)
-          ? point
-          : best
-      ))
-      const center = context.getImageData(
-          Math.round(playerX), Math.round(playerY), 1, 1,
-        ).data
-      const far = context.getImageData(
-          Math.round(farthest.x), Math.round(farthest.y), 1, 1,
-        ).data
-      const overlappingPlayerCount = diagnostics.playerSamples.filter((player) => {
-        const sampleX = (player.x - diagnostics.cameraX) * diagnostics.cameraZoom
-          + viewportWidth / 2
-        const sampleY = (player.y - diagnostics.cameraY) * diagnostics.cameraZoom
-          + viewportHeight / 2
-        return Math.hypot(sampleX - diagnostics.playerScreenX, sampleY - diagnostics.playerScreenY)
-          < 1
-      }).length
-      return {
-        canvasHeight: canvas.height,
-        canvasWidth: canvas.width,
-        centerAlpha: center[3],
-        centerRgbTotal: center[0] + center[1] + center[2],
-        expectedCenterAlphaMaximum: 11 * Math.max(1, overlappingPlayerCount),
-        expectedCenterAlphaMinimum: 7 * Math.max(1, overlappingPlayerCount),
-        farAlpha: far[3],
-        farRgbTotal: far[0] + far[1] + far[2],
-        overlappingPlayerCount,
-        playerX,
-        playerY,
-        viewportHeight,
-        viewportWidth,
-      }
-    })
-    lastSample = sample
-    if (
-      sample
-      && sample.centerAlpha >= sample.expectedCenterAlphaMinimum
-      && sample.centerAlpha <= sample.expectedCenterAlphaMaximum
-      && sample.centerRgbTotal >= 720
-      && sample.farAlpha === 0
-      && sample.farRgbTotal === 0
-    ) return sample
-    await page.waitForTimeout(50)
-  }
-  throw new Error(
-    `environment-light canvas did not paint the bounded player light: ${JSON.stringify(lastSample)}`,
-  )
 }

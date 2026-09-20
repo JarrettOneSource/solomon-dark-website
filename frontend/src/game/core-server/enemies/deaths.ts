@@ -301,6 +301,7 @@ function spawnZombieTerminalEffects(
     kind: 'fade-perspective-clipped',
     lifetimeTicks: 1_000,
     opacityTimer,
+    presentationOwner: 'background',
     role: 'zombie-clipped-fade',
     rotationDeg: drawUnit(work) * 360,
     scale: (1 + drawUnit(work) * 0.25) * 1.5,

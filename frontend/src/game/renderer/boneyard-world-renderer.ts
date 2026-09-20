@@ -481,6 +481,7 @@ export async function createBoneyardWorldRenderer(
         camera,
         viewport,
         settings,
+        frameAt,
       )
       regionLightField.setCompositeZIndex(
         painter.weatherLightingOrder.lightCompositeZIndex,

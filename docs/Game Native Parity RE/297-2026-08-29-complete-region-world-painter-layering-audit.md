@@ -934,3 +934,83 @@ the Website editor but layer differently in stock.
   remaining discrepancy was found inside the Region world-painter system
   boundary. RainOfBones and Faculty lightning remain explicit absent gameplay
   owners, not unimplemented layers of an existing Website actor.
+
+
+## 2026-09-20 — Ground-fluid and compact-mask ownership reopened
+
+The poison-puddle and Spider death-fluid reports reopen the ground-effect
+boundary. Previous receipts checked isolated mask contents and projectile
+plans, but did not overlap those outputs with a player in the complete world.
+The earlier claim that the compact mask belongs after the world queue is
+refuted by its concrete Arena caller. This skipped the owner-to-caller trace
+and composited-pixel acceptance required by the system recovery workflow.
+
+### Evidence before implementation
+
+- Fresh Mac Chrome/WebGL reproduction at `82cc95d7` places a Spider decal under
+  the player but its second `native-compact-player-mask` at depth 3 above the
+  player at depth 1. The latter paints an opaque white shape over the wizard.
+  A mature PoisonPool alone paints below the wizard in this exact revision;
+  its existing underlay ownership is correct. Zombie DeadHawg 30 remains
+  incorrectly world-sorted, so relative Y determines whether it covers actors.
+- Retail 0.72.5 SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred image base `0x00400000`. Read-only canonical Ghidra replica queries
+  recover Arena vtable `0x00785934` and Bonedit vtable `0x0078C184`; both slot
+  `+0x110` entries (`0x00785A44`, `0x0078C294`) point to `0x00470EE0`.
+  Raw instructions `0x0046F6B2..0x0046F6C6` call this slot, then the background
+  manager `Region+0x2C4`, well before `0x0046FDAF` flushes the sorted world.
+  Thus compact glyphs, the mode-1/2 direct record-18 light, and the conditional
+  compact-mask targets are ground content. Confidence: instruction-confirmed.
+- Zombie death `0x004947B0` constructs `Anim_Fade_Perspective_Clipped` with
+  DeadHawg 30 and inserts it into `Region+0x2C4`, not a ZAnim manager.
+  The existing delayed DeadHawg-31 splats use `Region+0x278`.
+  PoisonPool `0x005EDFA0` remains the actor `+0x28` ground callback; its bubbles
+  remain direct `+0x278`. Confidence: high, fresh binary plus existing entry 091.
+- Raw `0x0046F9AC..0x0046F9B2` renders `Region+0x278`; the Region multiply
+  follows, then the world queue. Existing growth, contact, poison, corpse,
+  death-fragment, fade, save, and replication clocks are independent of these
+  rendering owners. Existing extracted atlas records and tables are reused.
+
+### Boundary and complete affected membership
+
+The boundary is the ground-fluid painter path: Arena compact glyphs and their
+per-player light targets, Zombie ground stains, and PoisonPool ground draws.
+It is not the entire actor sorter, enemy AI, or combat damage system.
+
+| Member | Recovered owner | Initial disposition / required proof |
+| --- | --- | --- |
+| Authored compact selector 25 / DeadHawg 139 | Arena slot +0x110, mask grid +0x8F84 | recovered-pending-port; full-scene overlap pixels |
+| Authored compact selector 26 / DeadHawg 140 | same | recovered-pending-port; full-scene overlap pixels |
+| Authored compact selector 27 / DeadHawg 141 | same | recovered-pending-port; full-scene overlap pixels |
+| Authored compact selector 28 / DeadHawg 142 | same | recovered-pending-port; full-scene overlap pixels |
+| Authored compact selector 29 / DeadHawg 143 | same | recovered-pending-port; full-scene overlap pixels |
+| Spider decal DeadHawg 140 | same ground and compact-mask grids | recovered-pending-port; overlapping wizard, growth/fade and cleanup |
+| Spider decal DeadHawg 141 | same | recovered-pending-port; overlapping wizard and cleanup |
+| Spider decal DeadHawg 142 | same | recovered-pending-port; overlapping wizard and cleanup |
+| Environment mode 0 | no direct record-18 aperture; conditional masks still run | recovered-pending-port; no aperture, masks below actors |
+| Environment modes 1 and 2 | record-18 aperture then optional mask per player in +0x110 | recovered-pending-port; both beneath actors; retain existing explicit 14-percent Website brightness policy |
+| Multiple players, materialization, departure and scene teardown | slot-ordered ground-light ownership | recovered-pending-port; retained views and textures retire with owners |
+| Normal and rotten Zombie DeadHawg-30 stain | background manager +0x2C4 | recovered-pending-port; producer, restored saves, both relative-Y directions |
+| Rotten Zombie delayed DeadHawg-31 splats | pre-world manager +0x278 | verified-already-at-parity by binary/producer; overlap regression required |
+| PoisonPool growing/live/fading DeadHawg-0 pair and bubbles | actor +0x28 / direct +0x278 | verified-already-at-parity at current main; overlap and authoritative poison-contact acceptance required |
+| Flying Zombie fragments and Unbind | world queue / later direct owner | out-of-system: airborne actors are not ground fluid; retain their existing ownership |
+| Terrain shape-mask rasterization | separate +0x8F24 geometry producer | out-of-system: existing unimplemented shape contribution, absent from all twelve stock survival templates; no new terrain contract inferred |
+
+### Implementation and acceptance contract
+
+Keep the existing ground parent and native ordering: compact glyphs, per-player
+aperture/mask pairs, background stains/corpses, auxiliary ground effects,
+Region lighting, then sorted actors. Move the existing DOM aperture into this
+GPU ground owner so it cannot independently cover actors. Preserve the current
+brightness policy. Correct Zombie stain ownership at production and save
+restoration; legacy saves must migrate without losing an active stain.
+
+Use the existing renderer and host/browser harnesses. First prove the regression
+fails on Mac, then verify all eight mask records, both Zombie variants and both
+sides of the player, PoisonPool contact/status and fade, multiple players,
+settings, and teardown. Run the exact candidate's full Mac validation and a
+built `/game` journey before the authorized fast-forward main push. No new
+browser approximation is needed for the changed ordering. Fresh clean-stock
+interactive capture is not claimed; native ordering is instruction-derived,
+and overlapping browser pixels are measured directly.

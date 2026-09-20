@@ -607,51 +607,13 @@ smokeFlow: try {
     member.sendInput(memberSeparated.frame.tick + 1, 2, { x: 0, y: 0 })
   }
   await first.page.waitForTimeout(250)
-  const boneyardLighting = await firstBoneyard.evaluate((scene) => {
-    const canvas = scene.querySelector('.boneyard-environment-light')
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      return {
-        environmentMode: Number(scene.dataset.environmentMode),
-        maximumAlpha: 0,
-        nonzeroPixels: 0,
-        present: false,
-      }
-    }
-    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
-    let maximumAlpha = 0
-    let nonzeroPixels = 0
-    for (let index = 3; index < pixels.length; index += 4) {
-      const alpha = pixels[index]
-      if (alpha > 0) nonzeroPixels += 1
-      if (alpha > maximumAlpha) maximumAlpha = alpha
-    }
-    return {
-      environmentMode: Number(scene.dataset.environmentMode),
-      maximumAlpha,
-      nonzeroPixels,
-      present: true,
-    }
-  })
+  const boneyardLighting = await firstBoneyard.evaluate(scene => ({
+    environmentMode: Number(scene.dataset.environmentMode),
+    samples: scene.querySelector('.boneyard-world-canvas').__sdrBoneyardFrame.environmentLightSamples,
+  }))
+  assert.ok(boneyardLighting.samples.every(light => light.alpha >= .2375 * .14 && light.alpha <= .25 * .14))
   const boneyardEvidencePath = evidenceRoot ? join(evidenceRoot, 'boneyard-nameplates.png') : null
-  if (boneyardLighting.present && !chatRoutingOnly) {
-    assert.ok(
-      boneyardLighting.maximumAlpha <= 28,
-      `overlapping direct player light reached alpha ${boneyardLighting.maximumAlpha}`,
-    )
-  }
   if (boneyardEvidencePath) await first.page.screenshot({ path: boneyardEvidencePath })
-  const boneyardWithoutDirectLightPath = evidenceRoot && boneyardLighting.present
-    ? join(evidenceRoot, 'boneyard-without-direct-player-light.png')
-    : null
-  if (boneyardWithoutDirectLightPath) {
-    await first.page.locator('.boneyard-environment-light').evaluate((canvas) => {
-      canvas.style.visibility = 'hidden'
-    })
-    await first.page.screenshot({ path: boneyardWithoutDirectLightPath })
-    await first.page.locator('.boneyard-environment-light').evaluate((canvas) => {
-      canvas.style.visibility = ''
-    })
-  }
 
   await firstBoneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
   await first.page.keyboard.press('t')
@@ -779,7 +741,6 @@ smokeFlow: try {
     invitationEvidencePath,
     boneyardEvidencePath,
     boneyardLighting,
-    boneyardWithoutDirectLightPath,
     boneyardOwnSpeech,
     chatBoneyardEvidencePath,
     chatHubEvidencePath,

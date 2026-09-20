@@ -63,6 +63,7 @@ interface BoneyardRendererFrameDiagnostics {
   complexShadowRecordCount: number
   complexShadowZOrderMismatchCount: number
   enemyAuxiliaryEffectCount: number
+  environmentLightSamples: readonly Readonly<{ playerId: string; alpha: number; x: number; y: number }>[]
   enemyUnderlayLayerCount: number
   enemyAuxiliaryEffectLanes: readonly string[]
   enemyCount: number
@@ -358,6 +359,7 @@ export function createBoneyardRendererDiagnostics(
     complexShadowQuadCount: 0,
     complexShadowRecordCount: 0,
     complexShadowZOrderMismatchCount: 0,
+    environmentLightSamples: [],
     enemyUnderlayLayerCount: 0,
     enemyAuxiliaryEffectCount: 0,
     enemyAuxiliaryEffectLanes: [],
@@ -818,6 +820,7 @@ export function updateBoneyardRendererDiagnostics(input: BoneyardRendererDiagnos
         ? 'applied'
         : 'pending'
       canvas.dataset.roadActiveMeshCount = `${currentStaticWorld.surface.activeRoadMeshCount}`
+      frameDiagnostics.environmentLightSamples = scene.environmentLights?.diagnosticSamples ?? []
       frameDiagnostics.weatherDropCount = scene.weather.activeDropCount
       frameDiagnostics.weatherMode = scene.boneyard.scene.environmentMode
       frameDiagnostics.weatherSplashCount = scene.weather.activeSplashCount

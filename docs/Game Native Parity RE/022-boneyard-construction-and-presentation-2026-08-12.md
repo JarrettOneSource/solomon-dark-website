@@ -1,5 +1,12 @@
 # Boneyard construction and presentation — 2026-08-12
 
+> **2026-09-20 ordering correction:** The later descriptions of player aperture
+> and compact-mask draws as post-world are superseded by entry 297's ground-fluid
+> reopening. Arena slot `+0x110 -> 0x00470EE0` executes at `0x0046F6BE`, before
+> background manager `+0x2C4`, the Region multiply, and the sorted world queue.
+> Geometry, mode gates and the explicit Website brightness policy are unchanged.
+
+
 > **2026-08-29 painter-topology closure:** the complete Region layering cutover
 > in [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
 > supersedes this file's claim that Tree/Building slot-`+0x24` art is one

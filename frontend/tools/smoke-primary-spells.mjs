@@ -876,29 +876,7 @@ async function castAirInBoneyard(page) {
   assert.equal(frame.runPhase, 'active')
   const idleScreenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-idle.png`
   await page.screenshot({ path: idleScreenshotPath })
-  const idleEnvironmentLight = await page.evaluate(() => {
-    const canvas = document.querySelector('.boneyard-environment-light')
-    const world = document.querySelector('.boneyard-world-canvas')
-    const frame = world?.__sdrBoneyardFrame
-    if (!(canvas instanceof HTMLCanvasElement) || !frame) return null
-    const context = canvas.getContext('2d')
-    if (!context) return null
-    const resolutionX = canvas.width / 1_600
-    const resolutionY = canvas.height / 900
-    const sample = context.getImageData(
-      Math.round(frame.playerScreenX * resolutionX),
-      Math.round(frame.playerScreenY * resolutionY),
-      1,
-      1,
-    ).data
-    return {
-      alpha: sample[3],
-      blue: sample[2],
-      composite: getComputedStyle(canvas).mixBlendMode,
-      green: sample[1],
-      red: sample[0],
-    }
-  })
+  const idleEnvironmentLight = await canvas.evaluate(node => node.__sdrBoneyardFrame.environmentLightSamples)
   const gravestones = await visibleGravestones(page, frame)
   assert.ok(gravestones.length > 0, 'expected a visible generated Gravestone')
   const eventStart = await audioEventCount(page)
