@@ -33,6 +33,7 @@ import {
   createBoneyardPresentationTimeline,
   type BoneyardGameSnapshot,
 } from './boneyard-presentation-timeline.ts'
+import { interpolateBoneyardEnemySamples } from './boneyard-enemy-samples.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -233,6 +234,7 @@ function magePulse(tick: number): BoneyardMageLightningPulseSnapshot {
     },
     endpoint: { x: tick + 1, y: 20 },
     id: tick,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     midpoint: { x: tick - 20, y: 10 },
     ownerActorId: 1,
     painterRegistrations: [
@@ -680,8 +682,88 @@ test('merges every 100 Hz Mage pulse discretely across 20 Hz snapshot boundaries
   assert.notEqual(owned, newer.world.mageLightningPulses[0])
   assert.notEqual(owned.source, newer.world.mageLightningPulses[0]!.source)
   assert.notEqual(owned.contact, newer.world.mageLightningPulses[0]!.contact)
+  assert.notEqual(
+    owned.lightRegistration,
+    newer.world.mageLightningPulses[0]!.lightRegistration,
+  )
+  assert.notEqual(
+    owned.painterRegistrations,
+    newer.world.mageLightningPulses[0]!.painterRegistrations,
+  )
   owned.source.x = -999
+  Object.assign(owned.lightRegistration, { registrationOrdinal: -999 })
   assert.equal(timeline.sample(60).world.mageLightningPulses.at(-1)!.source.x, 61)
+  assert.equal(
+    timeline.sample(60).world.mageLightningPulses.at(-1)!
+      .lightRegistration.registrationOrdinal,
+    1,
+  )
+})
+
+test('Mage pulse creator ownership crosses both spawn and retirement interpolation boundaries', () => {
+  const beforeSpawn = snapshotAt(100, 10, 100)
+  beforeSpawn.world.enemies = []
+  const afterSpawn = snapshotAt(105, 20, 120)
+  const spawnedPulse = {
+    ...magePulse(103),
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 73 },
+  }
+  afterSpawn.world.enemies = [{
+    ...afterSpawn.world.enemies[0]!,
+    id: spawnedPulse.ownerActorId,
+    lightRegistration: { ...spawnedPulse.lightRegistration },
+  }]
+  afterSpawn.world.mageLightningPulses = [spawnedPulse]
+
+  const spawning = interpolateBoneyardEnemySamples(
+    beforeSpawn.world,
+    afterSpawn.world,
+    0.6,
+    103,
+  )
+  assert.equal(spawning.enemies.length, 0)
+  assert.equal(spawning.mageLightningPulses.length, 1)
+  assert.deepEqual(
+    spawning.mageLightningPulses[0]!.lightRegistration,
+    spawnedPulse.lightRegistration,
+  )
+
+  const beforeRetirement = snapshotAt(105, 20, 120)
+  const retiredPulse = {
+    ...magePulse(105),
+    contact: {
+      kind: 'target-attached' as const,
+      localOffset: { x: -4, y: 6 },
+      targetPlayerId: 'local',
+    },
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 81 },
+    painterRegistrations: [
+      { managerLane: 'actor' as const, registrationOrdinal: 82 },
+      { managerLane: 'actor' as const, registrationOrdinal: 83 },
+    ],
+  }
+  beforeRetirement.world.mageLightningPulses = [retiredPulse]
+  beforeRetirement.world.enemies = [{
+    ...beforeRetirement.world.enemies[0]!,
+    id: retiredPulse.ownerActorId,
+    lightRegistration: { ...retiredPulse.lightRegistration },
+  }]
+  const afterRetirement = snapshotAt(110, 30, 140)
+  afterRetirement.world.enemies = []
+  afterRetirement.world.mageLightningPulses = []
+
+  const retiring = interpolateBoneyardEnemySamples(
+    beforeRetirement.world,
+    afterRetirement.world,
+    1,
+    105,
+  )
+  assert.equal(retiring.enemies.length, 0)
+  assert.deepEqual(retiring.mageLightningPulses, [retiredPulse])
+  assert.notEqual(
+    retiring.mageLightningPulses[0]!.lightRegistration,
+    retiredPulse.lightRegistration,
+  )
 })
 
 test('late-join Mage pulse state retains only currently live ages', () => {

@@ -4,16 +4,22 @@ import type {
 } from './game-state.ts'
 
 const POSITION_SCALE = 16
-const FRAME_LENGTH = 17
+const FRAME_LENGTH = 18
 
 export function boneyardMageLightningPulseFrame(
   pulse: BoneyardMageLightningPulseSnapshot,
 ): BoneyardMageLightningPulseFrame {
+  if (
+    pulse.lightRegistration.managerLane !== 'actor'
+    || pulse.painterRegistrations.some(({ managerLane }) => managerLane !== 'actor')
+  ) {
+    throw new Error('Boneyard Mage lightning pulse cannot be encoded')
+  }
   const contact = pulse.contact
   const contactPoint = contact.kind === 'world'
     ? contact.position
     : contact.localOffset
-  return [
+  const frame: BoneyardMageLightningPulseFrame = [
     pulse.id,
     pulse.ownerActorId,
     pulse.tick,
@@ -31,7 +37,12 @@ export function boneyardMageLightningPulseFrame(
     pulse.painterRegistrations[0]!.registrationOrdinal,
     pulse.painterRegistrations[1]!.registrationOrdinal,
     pulse.painterRegistrations[2]?.registrationOrdinal ?? -1,
+    pulse.lightRegistration.registrationOrdinal,
   ]
+  if (!boneyardMageLightningPulseFrameIsValid(frame)) {
+    throw new Error('Boneyard Mage lightning pulse cannot be encoded')
+  }
+  return frame
 }
 
 export function boneyardMageLightningPulseFrameIsValid(
@@ -56,6 +67,12 @@ export function boneyardMageLightningPulseFrameIsValid(
     && (frame[10] === 0
       ? nonnegativeInteger(frame[16])
       : frame[16] === -1)
+    && frame[14] !== frame[15]
+    && (frame[16] === -1 || (frame[16] !== frame[14] && frame[16] !== frame[15]))
+    && nonnegativeInteger(frame[17])
+    && frame[17] !== frame[14]
+    && frame[17] !== frame[15]
+    && frame[17] !== frame[16]
 }
 
 export function materializeBoneyardMageLightningPulse(
@@ -78,14 +95,21 @@ export function materializeBoneyardMageLightningPulse(
         },
     endpoint: { x: dequantize(frame[8]), y: dequantize(frame[9]) },
     id: frame[0],
+    lightRegistration: Object.freeze({
+      managerLane: 'actor',
+      registrationOrdinal: frame[17],
+    }),
     midpoint: { x: dequantize(frame[6]), y: dequantize(frame[7]) },
     ownerActorId: frame[1],
     painterRegistrations: Object.freeze([
-      { managerLane: 'actor', registrationOrdinal: frame[14] },
-      { managerLane: 'actor', registrationOrdinal: frame[15] },
+      Object.freeze({ managerLane: 'actor' as const, registrationOrdinal: frame[14] }),
+      Object.freeze({ managerLane: 'actor' as const, registrationOrdinal: frame[15] }),
       ...(frame[16] < 0
         ? []
-        : [{ managerLane: 'actor' as const, registrationOrdinal: frame[16] }]),
+        : [Object.freeze({
+            managerLane: 'actor' as const,
+            registrationOrdinal: frame[16],
+          })]),
     ]),
     seed: frame[3],
     source: { x: dequantize(frame[4]), y: dequantize(frame[5]) },

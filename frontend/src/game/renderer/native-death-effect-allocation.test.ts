@@ -1,0 +1,131 @@
+import assert from 'node:assert/strict'
+import test, { after, before } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { Container, DOMAdapter, Sprite, Texture } from 'pixi.js'
+import { createServer, type ViteDevServer } from 'vite'
+import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
+import type { BoneyardWorldTextures } from './boneyard-textures.ts'
+import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import { nativeEnemyDeathEffectIsBanish, nativeEnemyDeathEffectViewResourcePlan } from './native-enemy-death-effect-presentation.ts'
+
+const kinds: Record<BoneyardEnemyDeathEffectSnapshot['kind'], true> = {
+  banish: true, 'banish-black': true, bouncer: true, 'smoky-bouncer': true,
+  crow: true, fade: true, 'fade-additive': true,
+  'fade-perspective': true, 'fade-perspective-clipped': true,
+  'fade-scale-perspective': true, 'fade-scale': true, 'fire-array': true,
+  'late-splat': true, 'move-fade': true, 'move-fade-perspective': true,
+  'move-fade-sin': true, 'sprite-array': true, unbind: true, scrap: true,
+}
+const lanes: Record<BoneyardEnemyDeathEffectSnapshot['presentationOwner'], true> = {
+  background: true, 'direct-post-world': true, 'pre-world-queue': true,
+  'world-sorted': true, 'late-world-overlay': true,
+}
+const inside = { x: -1000, y: -1000, w: 2000, h: 2000 }
+const outside = { ...inside, x: 10000 }
+const textures = { base: Object.fromEntries([1, 15, 333, 334, 335, 336].map(entry => [
+  nativeEnemySpriteRecord('BadGuys', entry).source, Texture.EMPTY,
+])) } as BoneyardWorldTextures
+let server: ViteDevServer
+let module: typeof import('./native-enemy-death-effect-view.ts')
+before(async () => {
+  server = await createServer({ appType: 'custom', logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)), server: { middlewareMode: true } })
+  module = await server.ssrLoadModule('/src/game/renderer/native-enemy-death-effect-view.ts') as typeof module
+})
+after(async () => { await server?.close() })
+
+test('every death-effect family retains painter order but defers unseen Pixi child resources', t => {
+  t.mock.method(DOMAdapter.get(), 'createCanvas', (width: number, height: number) => ({
+    width, height, getContext: () => ({
+      createLinearGradient: () => ({ addColorStop() {} }), clearRect() {}, fillRect() {},
+    }),
+  }))
+  for (const kind of Object.keys(kinds) as BoneyardEnemyDeathEffectSnapshot['kind'][]) {
+    for (const shadow of [false, true]) {
+      for (const lane of Object.keys(lanes) as BoneyardEnemyDeathEffectSnapshot['presentationOwner'][]) {
+        const root = new Container(), preWorld = new Container()
+        const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+        const effect = fixture(kind, shadow, lane)
+        try {
+          views.update([effect], outside, 900)
+          assert.equal(views.size, 1, `${kind}: logical membership retained`)
+          assert.equal(views.visibleSize, 0)
+          const initialContainer = [...root.children, ...preWorld.children][0]!
+          assert.equal(root.children.length + preWorld.children.length, 1, `${kind}: painter position retained`)
+          assert.equal(initialContainer.children.length, 0, `${kind}: unseen child allocation`)
+          views.setDepth(effect.id, 17.25)
+          views.setRenderable(false)
+          const later = { ...effect, ageTicks: 25, alpha: 0.4, rotationRadians: 0.5 }
+          views.update([later], inside, 900)
+          const expectedRoot = lane === 'background' || lane === 'pre-world-queue' ? preWorld : root
+          const otherRoot = expectedRoot === root ? preWorld : root
+          assert.equal(expectedRoot.children.length, 1)
+          assert.equal(otherRoot.children.length, 0)
+          const container = expectedRoot.children[0]!
+          assert.equal(container, initialContainer)
+          const children = [...container.children]
+          assert.equal(children.length, nativeEnemyDeathEffectViewResourcePlan(later).childCount)
+          assert.equal(container.zIndex, 17.25)
+          assert.equal(container.x, later.position.x)
+          assert.equal(container.y, later.position.y)
+          assert.equal(container.renderable, true)
+          if (!nativeEnemyDeathEffectIsBanish(kind)) {
+            const sprite = container.children[shadow ? 1 : 0]
+            assert.ok(sprite instanceof Sprite)
+            assert.equal(sprite.alpha, 0.4, 'first visible sample uses current alpha, not birth')
+            assert.equal(sprite.rotation, 0.5)
+          }
+          views.update([later], outside, 900)
+          assert.equal(container.renderable, false)
+          views.update([{ ...later, ageTicks: 26 }], inside, 900)
+          assert.equal(expectedRoot.children[0], container, 'offscreen/reentry keeps allocated resources')
+          assert.deepEqual(container.children, children)
+          views.update([], inside, 900)
+          assert.equal(views.size, 0)
+          assert.equal(container.destroyed, true)
+          assert.equal(expectedRoot.children.length, 0)
+        } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+      }
+    }
+  }
+})
+
+test('never-visible effects retire without sprite allocation and still reject changed identity resources', () => {
+  const root = new Container(), preWorld = new Container()
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const effect = fixture('fade', false, 'world-sorted')
+  try {
+    views.update([effect], outside, 900)
+    assert.throws(() => views.update([{ ...effect, kind: 'bouncer' }], outside, 900), /changed retained view resources/)
+    assert.throws(() => views.update([{ ...effect, shadow: true }], outside, 900), /changed retained view resources/)
+    views.update([], outside, 900)
+    assert.equal(views.size, 0)
+    assert.equal(root.children.length + preWorld.children.length, 0)
+  } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+})
+
+test('equal-depth background painters keep birth insertion order across deferred child creation', () => {
+  const root = new Container(), preWorld = new Container({ sortableChildren: true })
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const first = { ...fixture('fade', false, 'background'), position: { x: 10000, y: 10000 } }
+  const second = { ...fixture('fade', false, 'background'), id: 2 }
+  try {
+    views.update([first, second], inside, 900)
+    const originalOrder = [...preWorld.children]
+    assert.deepEqual(originalOrder.map(row => row.children.length), [0, 1])
+    views.setDepth(1, 0); views.setDepth(2, 0)
+    views.update([{ ...first, position: second.position }, second], inside, 900)
+    preWorld.sortChildren()
+    assert.deepEqual(preWorld.children, originalOrder)
+    assert.deepEqual(preWorld.children.map(row => row.children.length), [1, 1])
+  } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+})
+
+function fixture(kind: BoneyardEnemyDeathEffectSnapshot['kind'], shadow: boolean,
+  presentationOwner: BoneyardEnemyDeathEffectSnapshot['presentationOwner']): BoneyardEnemyDeathEffectSnapshot {
+  return { ageTicks: 0, alpha: 1, atlas: 'BadGuys', blendMode: 'add', entry: 1,
+    height: 5, id: 1, kind, ownerActorId: 1,
+    painterRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+    presentationOwner, position: { x: 10, y: 20 }, rotationRadians: 0,
+    scale: 1, scaleY: 1, shadow, spawnTick: 100, tint: 0xffffff }
+}

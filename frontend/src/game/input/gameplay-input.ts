@@ -19,6 +19,10 @@ import {
   createStandardGamepadGameplayState,
   type StandardGamepadAction,
 } from './standard-gamepad.ts'
+import {
+  browserGamepadSampling,
+  type GamepadSampling,
+} from './gamepad-sampling.ts'
 
 interface BrowserInputTarget {
   addEventListener(type: string, listener: EventListener): void
@@ -57,6 +61,7 @@ interface BrowserGameplayInputOptions {
   claimMouseCastStart?: (lane: GameplayMouseCastLane) => boolean
   claimQuickbarPress?: (slot: number) => boolean
   controls?: GameControlBindings
+  gamepadSampling?: GamepadSampling
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
   onGamepadAction?: (action: StandardGamepadAction) => void
@@ -78,7 +83,8 @@ export function createBrowserGameplayInput({
   claimMouseCastStart = () => false,
   claimQuickbarPress = () => false,
   controls: initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
-  getGamepads = () => typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [],
+  gamepadSampling = browserGamepadSampling,
+  getGamepads,
   mouseTarget,
   onGamepadAction = () => {},
   onGamepadPresenceChange = () => {},
@@ -94,6 +100,8 @@ export function createBrowserGameplayInput({
   viewportWidth = () => NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
+  const samplesSharedGamepads = getGamepads === undefined
+  const sampleGamepads = getGamepads ?? (() => gamepadSampling.sampleGameplay())
   let aim: Vector2 | null = null
   let aimOwner: 'gamepad' | 'mouse' | 'touch' | null = null
   let gamepadAimDirection: Vector2 | null = null
@@ -110,7 +118,7 @@ export function createBrowserGameplayInput({
   const gamepad = createStandardGamepadGameplayState()
   const movement = createBrowserMovementInput({
     controls,
-    getGamepads,
+    getGamepads: sampleGamepads,
     onStop: () => {
       aim = null
       aimOwner = null
@@ -131,12 +139,16 @@ export function createBrowserGameplayInput({
 
   const sample = (): BrowserGameplayInputSample => {
     if (blocked) {
+      // Keep the shared menu-transition observation current even though
+      // gameplay actions remain blocked. An injected legacy source retains its
+      // prior no-read-while-blocked behavior.
+      if (samplesSharedGamepads) gamepadSampling.sampleBlockedGameplay()
       return {
         device: 'none',
         input: createIdlePlayerCharacterInput(),
       }
     }
-    const controller = gamepad.sample(getGamepads())
+    const controller = gamepad.sample(sampleGamepads())
     const nextGamepadPresent = controller.gamepad !== null
     const becamePresent = !gamepadPresent && nextGamepadPresent
     if (gamepadPresent !== nextGamepadPresent) {

@@ -683,6 +683,14 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
   assert.notEqual(pulses[0], attacked.store.mageLightningPulses[0])
   assert.notEqual(pulses[0]!.source, attacked.store.mageLightningPulses[0]!.source)
   assert.notEqual(pulses[0]!.contact, attacked.store.mageLightningPulses[0]!.contact)
+  assert.notEqual(
+    pulses[0]!.lightRegistration,
+    attacked.store.mageLightningPulses[0]!.lightRegistration,
+  )
+  assert.notEqual(
+    pulses[0]!.painterRegistrations,
+    attacked.store.mageLightningPulses[0]!.painterRegistrations,
+  )
 })
 
 test('projects Skeleton claw programs from armor and keeps body pose independent of gait', () => {

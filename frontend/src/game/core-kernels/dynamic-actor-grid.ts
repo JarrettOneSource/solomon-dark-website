@@ -67,6 +67,18 @@ export class StableSpatialGrid {
     this.gridRevision += 1
   }
 
+  append(bounds: SpatialBounds): number {
+    const range = this.cellRange(bounds)
+    const index = this.memberships.length
+    if (this.candidateMarks.length <= index) {
+      this.candidateMarks = new Uint32Array(Math.max(16, (index + 1) * 2))
+    }
+    this.memberships.push(range)
+    this.insert(index, range)
+    this.gridRevision += 1
+    return index
+  }
+
   query(bounds: SpatialBounds): readonly number[] {
     const range = this.cellRange(bounds)
     this.candidateIndicesBuffer.length = 0
@@ -155,6 +167,17 @@ export class DynamicActorGrid implements ActorMotionBroadphase {
 
   update(bodyIndex: number, bodies: readonly ActorPhysicsBody[]): void {
     this.grid.update(bodyIndex, bodyBounds(bodies[bodyIndex]))
+  }
+
+  append(body: Readonly<ActorPhysicsBody>): number {
+    return this.grid.append(bodyBounds(body))
+  }
+
+  candidateIndicesAt(position: Readonly<ActorPhysicsBody['position']>, radius: number): readonly number[] {
+    return this.grid.query({
+      minimumX: position.x - radius, minimumY: position.y - radius,
+      maximumX: position.x + radius, maximumY: position.y + radius,
+    })
   }
 
   candidateIndices(

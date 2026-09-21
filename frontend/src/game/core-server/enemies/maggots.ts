@@ -44,6 +44,25 @@ interface NativeMaggotAdmissionCount {
   inactive: number
 }
 
+type NativeMaggotOwnerIndex = ReadonlyMap<BoneyardEnemyActorId, BoneyardEnemyActor>
+
+function indexLiveCoffinOwners(
+  actors: readonly BoneyardEnemyActor[],
+): NativeMaggotOwnerIndex {
+  const owners = new Map<BoneyardEnemyActorId, BoneyardEnemyActor>()
+  for (const actor of actors) {
+    // Admission previously used Array.find, so malformed duplicate IDs retain
+    // the first qualifying actor rather than silently changing ownership.
+    if (
+      actor.lifeState !== 'alive'
+      || actor.config.enemyToken !== 'COFFIN'
+      || owners.has(actor.id)
+    ) continue
+    owners.set(actor.id, actor)
+  }
+  return owners
+}
+
 function nativeMaggotAdmissionCounts(
   maggots: readonly BoneyardMaggotActor[],
 ): Map<BoneyardEnemyActorId, NativeMaggotAdmissionCount> {
@@ -63,12 +82,9 @@ function admitNativeMaggot(
   source: BoneyardMaggotActor,
   context: BoneyardEnemyStoreStepContext,
   admissionCounts: Map<BoneyardEnemyActorId, NativeMaggotAdmissionCount>,
+  owners: NativeMaggotOwnerIndex,
 ): BoneyardMaggotActor | null {
-  const owner = work.actors.find((actor) => (
-    actor.id === source.ownerCoffinActorId
-    && actor.lifeState === 'alive'
-    && actor.config.enemyToken === 'COFFIN'
-  ))
+  const owner = owners.get(source.ownerCoffinActorId)
   if (!owner || owner.config.enemyToken !== 'COFFIN') {
     retireMaggot(work, source, context.tick)
     return null
@@ -106,6 +122,9 @@ export function stepMaggots(
 ): void {
   const retained: BoneyardMaggotActor[] = []
   const admissionCounts = nativeMaggotAdmissionCounts(work.maggots)
+  // The store has already committed actor updates/removals and pre-Maggot
+  // births. No actor row changes until after this method returns.
+  const owners = indexLiveCoffinOwners(work.actors)
   for (const stored of work.maggots) {
     let source = stored.hurricaneContactCooldown <= 0
       ? stored
@@ -119,7 +138,7 @@ export function stepMaggots(
         }
     source = { ...source, hitFeedback: stepNativePuppetHit(source.hitFeedback, context.tick, elapsedTicks) }
     const effect = context.abilityEffects?.[source.id]
-    if (!hasLiveCoffinOwner(work.actors, source.ownerCoffinActorId)) {
+    if (!owners.has(source.ownerCoffinActorId)) {
       retireMaggot(work, source, context.tick)
       continue
     }
@@ -157,6 +176,7 @@ export function stepMaggots(
         emerged,
         context,
         admissionCounts,
+        owners,
       )
       if (admitted === null) continue
       source = admitted
@@ -472,17 +492,6 @@ function emitMaggotDeathSounds(
     squeakPitch,
     squeakGainScale,
   )
-}
-
-function hasLiveCoffinOwner(
-  actors: readonly BoneyardEnemyActor[],
-  ownerCoffinActorId: BoneyardEnemyActorId,
-): boolean {
-  return actors.some((actor) => (
-    actor.id === ownerCoffinActorId
-    && actor.lifeState === 'alive'
-    && actor.config.enemyToken === 'COFFIN'
-  ))
 }
 
 function retireMaggot(

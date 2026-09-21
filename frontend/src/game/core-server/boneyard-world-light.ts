@@ -210,14 +210,12 @@ export function boneyardWorldLightQuery(
   }
   for (const pulse of enemies.mageLightningPulses) {
     if (pulse.tick !== tick) continue
-    const owner = enemies.actors.find(({ id }) => id === pulse.ownerActorId)
-    if (owner === undefined) continue
     const ordinal = secondaryActors.reduce((next, actor) => (
-      actor.targetId === owner.id && nativeSecondaryMiscLightSource(actor) !== null
+      actor.targetId === pulse.ownerActorId && nativeSecondaryMiscLightSource(actor) !== null
         ? Math.max(next, (actor.miscLightAppendOrdinal ?? -1) + 1) : next
     ), 0)
     misc.push({
-      birthTick: pulse.tick, id: pulse.id, ordinal, registration: owner.lightRegistration,
+      birthTick: pulse.tick, id: pulse.id, ordinal, registration: pulse.lightRegistration,
       sources: buildNativeAirPathLightSources({ birthTick: pulse.tick, id: pulse.seed, origin: pulse.source, midpoint: pulse.midpoint, endpoint: pulse.endpoint }),
     })
   }

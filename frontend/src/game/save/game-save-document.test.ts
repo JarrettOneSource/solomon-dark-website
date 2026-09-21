@@ -22,7 +22,7 @@ import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server
 import { emitPlayerStatusBurst } from '../core-server/boneyard-player-status.ts'
 import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
 import { dampenBoneyardCasters } from '../core-server/enemies/dampen.ts'
-import type { BoneyardEnemyDeathEffect, BoneyardEnemyStoreStepContext } from '../core-server/enemies/model.ts'
+import type { BoneyardEnemyDeathEffect, BoneyardEnemyStoreStepContext, BoneyardMageLightningPulse } from '../core-server/enemies/model.ts'
 import { applyGameSimulationHubAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, getPlayerBelt, getPlayerEconomy, getPlayerProgression, stepGameSimulationTick } from '../core-server/game-simulation.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
@@ -179,6 +179,153 @@ test('native rotten Zombie gas and Wraith wisps retain fixed pre-world ownership
       })), /presentation owner is invalid/, `${role}: ${presentationOwner}`)
     }
   }
+})
+
+test('a fresh Boneyard save preserves its unstepped enemy sentinel without admitting pulses', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 72))
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.lastStepTick, -1)
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state,
+  })
+  const restored = restoreGameSaveDocument(document).state
+  if (restored.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(restored.world.enemies.lastStepTick, -1)
+  assert.deepEqual(restored.world.enemies.mageLightningPulses, [])
+  const invalid = JSON.parse(document)
+  invalid.continuation.simulation.world.enemies.mageLightningPulses = [{
+    id: 1, ownerActorId: 1, tick: 0,
+  }]
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /pulse 0 tick is invalid/)
+})
+
+test('Mage pulse saves preserve creator ownership and migrate schema 36 only from an exact live owner', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 73))
+  const initial = enterBoneyardWorld(
+    createGameSimulation({ owner: OWNER }),
+    loadedBoneyard,
+  )
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(initial.worldManagerOrder)
+  const spawned = stepBoneyardEnemyStore(initial.world.enemies, {
+    clipSpellSegment: ({ end }) => end,
+    players: {},
+    projectileWorldBlocked: () => false,
+    registerWorldPainter: order.register,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETONMAGE',
+      flags: ['FLAG_CASTLIGHTNING'],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETONMAGE,
+      position: { x: 20, y: 40 },
+      spawnTick: initial.tick,
+      waveOrdinal: 1,
+    }],
+    tick: initial.tick,
+  }).store
+  const actor = spawned.actors[0]!
+  const pulse: BoneyardMageLightningPulse = {
+    contact: {
+      kind: 'target-attached',
+      localOffset: { x: -4, y: 6 },
+      targetPlayerId: 'owner',
+    },
+    endpoint: { x: 150, y: 40 },
+    id: 1,
+    lightRegistration: { ...actor.lightRegistration },
+    midpoint: { x: 85, y: 40 },
+    ownerActorId: actor.id,
+    painterRegistrations: order.registerMany('actor', 2),
+    seed: 0x1234_5678,
+    source: { x: 20, y: 40 },
+    tick: initial.tick,
+  }
+  const enemies = {
+    ...spawned,
+    mageLightningPulses: [pulse],
+    nextMageLightningPulseId: 2,
+  }
+  const options = {
+    integrity: 'local-only' as const,
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: {
+      ...initial,
+      worldManagerOrder: order.state(),
+      world: { ...initial.world, enemies },
+    },
+  }
+  const current = createGameSaveDocument(options)
+
+  const currentOrphan = JSON.parse(current)
+  currentOrphan.continuation.simulation.world.enemies.actors = []
+  const restoredOrphan = restoreGameSaveDocument(JSON.stringify(currentOrphan)).state
+  if (restoredOrphan.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(
+    restoredOrphan.world.enemies.mageLightningPulses[0]!.lightRegistration,
+    pulse.lightRegistration,
+  )
+  assert.notEqual(
+    restoredOrphan.world.enemies.mageLightningPulses[0]!.lightRegistration,
+    pulse.lightRegistration,
+  )
+
+  const legacy = JSON.parse(current)
+  legacy.schemaVersion = 36
+  delete legacy.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration
+  const restoredLegacy = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  if (restoredLegacy.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(
+    restoredLegacy.world.enemies.mageLightningPulses[0]!.lightRegistration,
+    actor.lightRegistration,
+  )
+
+  const orphanedLegacy = structuredClone(legacy)
+  orphanedLegacy.continuation.simulation.world.enemies.actors = []
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(orphanedLegacy)),
+    /cannot recover its creator registration from an absent legacy owner/,
+  )
+
+  const missingCurrentRegistration = JSON.parse(current)
+  delete missingCurrentRegistration.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrentRegistration)),
+    /creator registration is invalid/,
+  )
+
+  const mismatchedCurrentRegistration = JSON.parse(current)
+  mismatchedCurrentRegistration.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration.registrationOrdinal += 10_000
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(mismatchedCurrentRegistration)),
+    /creator registration does not match its owner/,
+  )
+
+  const duplicateCurrentRegistration = JSON.parse(current)
+  duplicateCurrentRegistration.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration.registrationOrdinal
+      = duplicateCurrentRegistration.continuation.simulation.world.enemies
+        .mageLightningPulses[0].painterRegistrations[0].registrationOrdinal
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(duplicateCurrentRegistration)),
+    /creator and painter registrations must be distinct/,
+  )
+
+  const staleCurrentPulse = JSON.parse(current)
+  staleCurrentPulse.continuation.simulation.tick += 5
+  staleCurrentPulse.continuation.simulation.world.enemies.lastStepTick += 5
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(staleCurrentPulse)),
+    /live pulse age limit/,
+  )
 })
 
 test('cold and poison onset particles retain their native owner across saves', () => {

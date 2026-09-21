@@ -174,6 +174,7 @@ function projectBoneyardMageLightningPulse(
         },
     endpoint: { ...pulse.endpoint },
     id: pulse.id,
+    lightRegistration: { ...pulse.lightRegistration },
     midpoint: { ...pulse.midpoint },
     ownerActorId: pulse.ownerActorId,
     painterRegistrations: pulse.painterRegistrations.map((registration) => ({

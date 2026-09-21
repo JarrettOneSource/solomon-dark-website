@@ -53,3 +53,26 @@ Evidence: complete decompilation and instruction stream for `0x00526520`,
 
 Confidence: high for shared lifecycle, comparison branch, weighting,
 recipient transfer, fixed NPC bodies, and emergent player/Student behavior.
+# September 21, 2026: non-pushing crowd broadphase
+
+The archived wave-37 population contains 277 ordinary actors and 2,140
+Maggots. A current-core CPU capture attributes the majority of movement work
+to the non-pushing solver scanning the entire crowd for every root move.
+The earlier clone-elimination fast path preserved the native solver but did
+not index those repeated searches.
+
+This representation-only boundary covers all non-pushing Boneyard roots:
+ordinary enemies, living Maggots, emerging/newly materialized Maggots, and
+post-manager spawns. Players and the Lantern remain indexed collision
+recipients; their own pushing solver is unchanged. The existing stable grid
+supplies candidate body indices in ascending source order. Every successful
+correction re-queries at the corrected position, resumes strictly after the
+last visited index, and never revisits earlier actors. The exact swept move,
+overlap equation, coincidence/tangency comparisons, placement rejection and
+floating-point operations remain in the shared kernel. Each completed move
+updates the index, and appended bodies acquire a new membership immediately.
+No collision, spawn, RNG, population, or gameplay rule is removed.
+
+The unindexed path remains the reference oracle. Verification covers dense
+and sparse crowds, correction across grid boundaries, rejected placement,
+new actor insertion, sequential moves, and complete archived-state equality.

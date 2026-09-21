@@ -1,0 +1,418 @@
+{
+  "schemaVersion": 1,
+  "createdAtUtc": "2026-09-21T19:08:58.574Z",
+  "nodeVersion": "v22.17.0",
+  "platform": "darwin-arm64",
+  "baselineRevision": "bfa35bd3dcc2f39a5141d873d2c34d975a7d84f6",
+  "candidateHead": "bfa35bd3dcc2f39a5141d873d2c34d975a7d84f6",
+  "changedSourceHashes": [
+    {
+      "file": "core-kernels/actor-physics.ts",
+      "reference": "244ba42aad38dc2b50ecc55e573fa5a1c0525d4191a9fad1556220b71dd75f5e",
+      "candidate": "4f4c46574793c4b5929dc7562a49bd3ca053d1d422e06f3a99330e06daa1fbf5"
+    },
+    {
+      "file": "core-kernels/dynamic-actor-grid.ts",
+      "reference": "c0281526401db2dfff74ab45d6f1c4774f49586adba412021f601b88d2fa5e67",
+      "candidate": "9e6ed406deeab898e8fe707d7358d1e2a5375cd844728fd6a92034a1be0dfb58"
+    },
+    {
+      "file": "core-server/boneyard-world.ts",
+      "reference": "f0cbb0c081c9047d1c48e7897e07fdc5df875158ed586385fe79c50d709a5f83",
+      "candidate": "78a085f38dc2fa1ed6d60c11bb6d3f7771e4d6a138fde582ae0dfaff629976a8"
+    },
+    {
+      "file": "core-server/enemies/maggots.ts",
+      "reference": "a255795d5e030fbb6749fb9fdd038b91ac8b1b2a804a863bfc8a40c230f5089f",
+      "candidate": "11388bad80cdd70ec648bc6339615a973aee3dd7f011cdbd1b8aae59a06a21a9"
+    }
+  ],
+  "baselineMaggotsSha256": "a255795d5e030fbb6749fb9fdd038b91ac8b1b2a804a863bfc8a40c230f5089f",
+  "candidateMaggotsSha256": "11388bad80cdd70ec648bc6339615a973aee3dd7f011cdbd1b8aae59a06a21a9",
+  "archive": "/Users/jarrett/codex-acceptance/solomon-evidence-6a583nbx/eleventh-free-mana-20260921/archive-d6991d9e-9a9d-4e41-9222-663ecff5097b.json",
+  "archiveSha256": "d26cb663f7b1fabcde801b0e3d8626557cbd8bbef2768b820a45fb0d80ddd0d5",
+  "comparisonScope": "Current schema in both variants. Reference restores pre-indexed actor motion, spatial grid, Boneyard movement and the old Maggot owner scan. Both receive the same exact-owner legacy pulse adaptation.",
+  "parameters": {
+    "allocationIterations": 5,
+    "fullIterations": 15,
+    "maggotIterations": 25,
+    "samplesPerVariant": 4
+  },
+  "equivalence": {
+    "archive-worst-tick": {
+      "equal": true,
+      "outputHash": "0b0945cc42829f4b42a599478dc5f66550f0f657e8da0491b74e1f49185f1280",
+      "rngHash": "996b8cdb668409e531cce228f3482aaa90e2fa236f97e9e3c812e5ebc5331db1",
+      "sourceHash": "d3662a001d16fc5ae5eeb93e8a924657dbd1bdc8b34d52000510331ec3305f90"
+    },
+    "archive-last-alive-player-1": {
+      "equal": true,
+      "outputHash": "c4e28ff4222124139a7c8093b8c73b17b3848b114fa4106e36ad170eb8f55007",
+      "rngHash": "498b99cc7050abeee4afc34ed9727b811258e255e51f047ba8ea7ce19ffea40e",
+      "sourceHash": "63fa9686f8c6d58ba69f9fb85ac4ee621d7af2675864866d44b9518929fbfa3b"
+    },
+    "archive-last-alive-player-2": {
+      "equal": true,
+      "outputHash": "70a1e9af424cdbd1f1cdfcea6f209cf55bd39e52027267884a32311147421ff9",
+      "rngHash": "87d25bcbdf4ec9e37b189a2f6c5b527e43e879cdf0ad7c292f7694c93525c5eb",
+      "sourceHash": "0f32275be7d5795d8ef2438ae5108ef8a59f7d2c63fa547d6c62d53a2ac3734b"
+    },
+    "maggot-only-archive-worst-tick": {
+      "equal": true,
+      "outputHash": "4866d5f665a757a84a5350986c27f836495b36fdf936feffccf01815f133b2e2",
+      "rngHash": "110c4b357a31561ded676c17611fd9f37df9bc57f3bf38ce3687d1c340035ae6",
+      "sourceHash": "852f7346e549670afb9d186ae9bda35653a3aa3c522fff26ed07561a0300921f"
+    },
+    "maggot-only-last-alive-player-1": {
+      "equal": true,
+      "outputHash": "15bd9db0826b761318eb91723b82c42396276601c12ed11c5d83e13a155f5a05",
+      "rngHash": "d4c9ddbf109afd1ccfdc00b4ded87031933a7927993654f5cd3faf3e4e64185d",
+      "sourceHash": "85098323e20c34f9a0eb72f7ffbfdc9b74f529421b894cd7fdae3150df5e4666"
+    },
+    "maggot-only-last-alive-player-2": {
+      "equal": true,
+      "outputHash": "dc49d5a7b5ff70d6c4a691ab56030a2e96a238248b48250c61004dc08e41095a",
+      "rngHash": "b09bfe0149b6a023f0e0b82df6a242057106ab26367a85a6c43bf92f1eb6347e",
+      "sourceHash": "9edb3752dbf1d9d8ac51c4ab88a23243d97f4b5120ad97351de18844158bd2e0"
+    },
+    "generated-owner-head-base": {
+      "equal": true,
+      "outputHash": "d37f48c9df477e07854428d182a5463fedf33d7d109f8483306594ccfdd4385d",
+      "rngHash": "b09bfe0149b6a023f0e0b82df6a242057106ab26367a85a6c43bf92f1eb6347e",
+      "sourceHash": "e68091ecee11878177de4075181e2c428fe0fb9970ea49f7d6f4694ecee72f94"
+    },
+    "generated-owner-tail-many-strong": {
+      "equal": true,
+      "outputHash": "a7edf57a42482574ec978a5ea9da5133110fef36dd5dc6382a93dd509fd2b04c",
+      "rngHash": "b09bfe0149b6a023f0e0b82df6a242057106ab26367a85a6c43bf92f1eb6347e",
+      "sourceHash": "92d7293f5c472ad652abf3101ab7aeb7f94bc51b315672fb540d07a715765e57"
+    },
+    "generated-missing-owner": {
+      "equal": true,
+      "outputHash": "87080c50b6a23f7a1762cb274f3d8a36a2556b99be0c04f0e58845edbc008665",
+      "rngHash": "b09bfe0149b6a023f0e0b82df6a242057106ab26367a85a6c43bf92f1eb6347e",
+      "sourceHash": "aab81939677b1315e40297ffffb06303b5a47f7bdb24a213caac62aef7cd50b7"
+    },
+    "generated-converted-owner-id": {
+      "equal": true,
+      "outputHash": "15764e941df8710f4f1ae96570deb3a5326b170abb74506de371acd11a152331",
+      "rngHash": "b09bfe0149b6a023f0e0b82df6a242057106ab26367a85a6c43bf92f1eb6347e",
+      "sourceHash": "491d20e6fb5b03f248ab777c9683d72aa3a60201813cf3573b0d9acb0f766c9b"
+    },
+    "generated-64-owner-style-matrix": {
+      "equal": true,
+      "outputHash": "f1ba5d1063e842b8e1b6c31580071b7bc37151cf4eea7da3cdd7250ed02a7bee",
+      "rngHash": "b09bfe0149b6a023f0e0b82df6a242057106ab26367a85a6c43bf92f1eb6347e",
+      "sourceHash": "c8529a85e51332209c3678925419121360cad62b6f1e439ece1d195e0b8fea70"
+    },
+    "generated-64-owner-admission": {
+      "equal": true,
+      "outputHash": "de8f114dbaa7ae6256cefd9213727b482308f1c2ede7257d98609fb1541d5053",
+      "rngHash": "c3a92aa9354d2eab237e086f254ede0593dbd93a30c1d1df9ae01786ba907b07",
+      "sourceHash": "50b256830326a466db1d5098f8158bafb9c5b7ed99263eb2c7c3682b9c32229f"
+    }
+  },
+  "summaries": {
+    "archive-worst-tick": {
+      "wallPerIterationMs": {
+        "baselineMean": 19.391076383333296,
+        "candidateMean": 20.134562499999994,
+        "candidateMinusBaseline": 0.7434861166666984,
+        "changePercent": 3.834166303969222
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 31.403616666666665,
+        "candidateMean": 33.93591666666667,
+        "candidateMinusBaseline": 2.5323000000000064,
+        "changePercent": 8.063720898389114
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 20375476.8,
+        "candidateMean": 21133031.200000003,
+        "candidateMinusBaseline": 757554.4000000022,
+        "changePercent": 3.717971399815312
+      },
+      "retainedHeapBytes": {
+        "baselineMean": 158806,
+        "candidateMean": 181880,
+        "candidateMinusBaseline": 23074
+      }
+    },
+    "archive-last-alive-player-1": {
+      "wallPerIterationMs": {
+        "baselineMean": 24.523874983333325,
+        "candidateMean": 22.112997200000017,
+        "candidateMinusBaseline": -2.4108777833333086,
+        "changePercent": -9.830737536265232
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 41.535650000000004,
+        "candidateMean": 40.22611666666667,
+        "candidateMinusBaseline": -1.3095333333333343,
+        "changePercent": -3.15279364433525
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 23521240.799999997,
+        "candidateMean": 27879836,
+        "candidateMinusBaseline": 4358595.200000003,
+        "changePercent": 18.530464600319906
+      },
+      "retainedHeapBytes": {
+        "baselineMean": 74962,
+        "candidateMean": 93006,
+        "candidateMinusBaseline": 18044
+      }
+    },
+    "archive-last-alive-player-2": {
+      "wallPerIterationMs": {
+        "baselineMean": 30.86898680000001,
+        "candidateMean": 24.133527100000038,
+        "candidateMinusBaseline": -6.735459699999971,
+        "changePercent": -21.81950364499806
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 43.82686666666667,
+        "candidateMean": 42.34668333333333,
+        "candidateMinusBaseline": -1.4801833333333363,
+        "changePercent": -3.377342360774138
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 23632242,
+        "candidateMean": 30083301.6,
+        "candidateMinusBaseline": 6451059.6000000015,
+        "changePercent": 27.29770455126519
+      },
+      "retainedHeapBytes": {
+        "baselineMean": 80236,
+        "candidateMean": 82660,
+        "candidateMinusBaseline": 2424
+      }
+    },
+    "maggot-only-archive-worst-tick": {
+      "wallPerIterationMs": {
+        "baselineMean": 0.4142675099999997,
+        "candidateMean": 0.505932900000007,
+        "candidateMinusBaseline": 0.09166539000000734,
+        "changePercent": 22.12710091602583
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 1.05331,
+        "candidateMean": 1.2452299999999998,
+        "candidateMinusBaseline": 0.19191999999999987,
+        "changePercent": 18.22065678670095
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 606284,
+        "candidateMean": 619304,
+        "candidateMinusBaseline": 13020,
+        "changePercent": 2.1475084283932855
+      },
+      "retainedHeapBytes": {
+        "baselineMean": 11648,
+        "candidateMean": -20754,
+        "candidateMinusBaseline": -32402
+      }
+    },
+    "maggot-only-last-alive-player-1": {
+      "wallPerIterationMs": {
+        "baselineMean": 1.091977079999988,
+        "candidateMean": 0.9574350000000049,
+        "candidateMinusBaseline": -0.13454207999998302,
+        "changePercent": -12.320961901506621
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 2.3573500000000003,
+        "candidateMean": 2.19381,
+        "candidateMinusBaseline": -0.16354000000000024,
+        "changePercent": -6.937450951280044
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 1406176.7999999998,
+        "candidateMean": 1461489.2000000002,
+        "candidateMinusBaseline": 55312.40000000037,
+        "changePercent": 3.933530975621302
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -49380,
+        "candidateMean": -37870,
+        "candidateMinusBaseline": 11510
+      }
+    },
+    "maggot-only-last-alive-player-2": {
+      "wallPerIterationMs": {
+        "baselineMean": 1.2049904100000004,
+        "candidateMean": 0.6920066700000007,
+        "candidateMinusBaseline": -0.5129837399999997,
+        "changePercent": -42.57160353666213
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 2.08413,
+        "candidateMean": 1.58896,
+        "candidateMinusBaseline": -0.4951700000000001,
+        "changePercent": -23.75907452989977
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 1591242.7999999998,
+        "candidateMean": 1515558.4,
+        "candidateMinusBaseline": -75684.3999999999,
+        "changePercent": -4.756307459804365
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -13094,
+        "candidateMean": -26200,
+        "candidateMinusBaseline": -13106
+      }
+    },
+    "generated-owner-head-base": {
+      "wallPerIterationMs": {
+        "baselineMean": 0.6496299999999974,
+        "candidateMean": 0.7983233299999756,
+        "candidateMinusBaseline": 0.1486933299999782,
+        "changePercent": 22.88892600402981
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 1.13663,
+        "candidateMean": 1.6938900000000001,
+        "candidateMinusBaseline": 0.5572600000000001,
+        "changePercent": 49.02738798025743
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 1470835.6,
+        "candidateMean": 1415464.4,
+        "candidateMinusBaseline": -55371.200000000186,
+        "changePercent": -3.7646083627565274
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -26394,
+        "candidateMean": -13134,
+        "candidateMinusBaseline": 13260
+      }
+    },
+    "generated-owner-tail-many-strong": {
+      "wallPerIterationMs": {
+        "baselineMean": 5.230481250000011,
+        "candidateMean": 1.686657930000001,
+        "candidateMinusBaseline": -3.54382332000001,
+        "changePercent": -67.75329363813324
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 6.00207,
+        "candidateMean": 3.0728700000000004,
+        "candidateMinusBaseline": -2.9291999999999994,
+        "changePercent": -48.80316290879646
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 2793966.8,
+        "candidateMean": 2843371.1999999997,
+        "candidateMinusBaseline": 49404.39999999991,
+        "changePercent": 1.7682529370069755
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -542,
+        "candidateMean": 12962,
+        "candidateMinusBaseline": 13504
+      }
+    },
+    "generated-missing-owner": {
+      "wallPerIterationMs": {
+        "baselineMean": 2.687077489999992,
+        "candidateMean": 1.1142408499999967,
+        "candidateMinusBaseline": -1.5728366399999953,
+        "changePercent": -58.533356252409384
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 2.94031,
+        "candidateMean": 2.3921900000000003,
+        "candidateMinusBaseline": -0.5481199999999999,
+        "changePercent": -18.64157180705436
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 1861666,
+        "candidateMean": 1864449.6,
+        "candidateMinusBaseline": 2783.600000000093,
+        "changePercent": 0.14952198729525357
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -656,
+        "candidateMean": -72,
+        "candidateMinusBaseline": 584
+      }
+    },
+    "generated-converted-owner-id": {
+      "wallPerIterationMs": {
+        "baselineMean": 3.874300010000006,
+        "candidateMean": 1.0049433399999999,
+        "candidateMinusBaseline": -2.8693566700000064,
+        "changePercent": -74.06129268755318
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 4.83828,
+        "candidateMean": 1.8727300000000002,
+        "candidateMinusBaseline": -2.96555,
+        "changePercent": -61.293476194019355
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 1858576,
+        "candidateMean": 1911325.2,
+        "candidateMinusBaseline": 52749.19999999995,
+        "changePercent": 2.8381513588898066
+      },
+      "retainedHeapBytes": {
+        "baselineMean": 25732,
+        "candidateMean": -24,
+        "candidateMinusBaseline": -25756
+      }
+    },
+    "generated-64-owner-style-matrix": {
+      "wallPerIterationMs": {
+        "baselineMean": 2.502957489999999,
+        "candidateMean": 0.8060941800000001,
+        "candidateMinusBaseline": -1.696863309999999,
+        "changePercent": -67.79433197644917
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 3.2414699999999996,
+        "candidateMean": 1.7544600000000001,
+        "candidateMinusBaseline": -1.4870099999999995,
+        "changePercent": -45.87455691399271
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 1429439.2,
+        "candidateMean": 1524351.5999999999,
+        "candidateMinusBaseline": 94912.3999999999,
+        "changePercent": 6.639834698810554
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -13132,
+        "candidateMean": -316,
+        "candidateMinusBaseline": 12816
+      }
+    },
+    "generated-64-owner-admission": {
+      "wallPerIterationMs": {
+        "baselineMean": 3.2284108400000013,
+        "candidateMean": 2.0075470899999845,
+        "candidateMinusBaseline": -1.2208637500000168,
+        "changePercent": -37.816244911382356
+      },
+      "cpuPerIterationMs": {
+        "baselineMean": 4.35904,
+        "candidateMean": 3.53154,
+        "candidateMinusBaseline": -0.8275000000000001,
+        "changePercent": -18.98353765966818
+      },
+      "sampledAllocationPerIterationBytes": {
+        "baselineMean": 4766876.8,
+        "candidateMean": 4742259.6,
+        "candidateMinusBaseline": -24617.200000000186,
+        "changePercent": -0.5164219893411204
+      },
+      "retainedHeapBytes": {
+        "baselineMean": -27450,
+        "candidateMean": -14024,
+        "candidateMinusBaseline": 13426
+      }
+    }
+  },
+  "limitations": "Repeated identical captured ticks, not a full live replay or a Windows FPS measurement. Garbage collection was forced before each timing block, never inside it. Lua decisions, transport and rendering are excluded. Both variants have identical schema and exact-owner legacy pulse adaptation."
+}

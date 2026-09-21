@@ -253,6 +253,7 @@ export function resolveUnpushedMoverMotion(
   moverIndex: number,
   delta: Readonly<Vector2>,
   world: ActorPhysicsWorld,
+  candidatesAt?: (position: Readonly<Vector2>, radius: number) => readonly number[],
 ): Vector2 {
   const mover = bodies[moverIndex]
   if (mover === undefined) throw new RangeError('mover index is outside the crowd')
@@ -262,7 +263,17 @@ export function resolveUnpushedMoverMotion(
   const radius = mover.radius
   let position = world.move(mover.id, mover.position, delta, radius)
   const correction = { x: 0, y: 0 }
+  let candidates = candidatesAt?.(position, radius)
+  let candidateCursor = 0
   for (let otherIndex = 0; otherIndex < bodies.length; otherIndex += 1) {
+    if (candidates !== undefined) {
+      while (candidateCursor < candidates.length && candidates[candidateCursor]! < otherIndex) {
+        candidateCursor += 1
+      }
+      if (candidateCursor >= candidates.length) break
+      otherIndex = candidates[candidateCursor]!
+      candidateCursor += 1
+    }
     if (otherIndex === moverIndex) continue
     const other = bodies[otherIndex]!
     const candidate = placedActorCorrection(
@@ -279,7 +290,13 @@ export function resolveUnpushedMoverMotion(
       ),
       world,
     )
-    if (candidate !== null) position = candidate
+    if (candidate !== null) {
+      position = candidate
+      // Corrections can enter cells outside the initial query. Refresh the
+      // candidates but retain the native, monotonically increasing cursor.
+      candidates = candidatesAt?.(position, radius)
+      candidateCursor = 0
+    }
   }
   return position
 }

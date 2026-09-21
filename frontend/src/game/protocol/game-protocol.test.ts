@@ -1462,6 +1462,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     },
     endpoint: { x: 151, y: 2 },
     id: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     midpoint: { x: 75, y: 0 },
     ownerActorId: 1,
     painterRegistrations: [
@@ -1874,6 +1875,30 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(extraPulseField)),
     /position is not allowed/,
+  )
+
+  const missingPulseCreatorRegistration = JSON.parse(encodeGameMessage(welcome))
+  delete missingPulseCreatorRegistration.snapshot.world
+    .mageLightningPulses[0].lightRegistration
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingPulseCreatorRegistration)),
+    /lightRegistration/,
+  )
+
+  const wrongPulseCreatorLane = JSON.parse(encodeGameMessage(welcome))
+  wrongPulseCreatorLane.snapshot.world.mageLightningPulses[0]
+    .lightRegistration.managerLane = 'transient'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongPulseCreatorLane)),
+    /managerLane must be actor/,
+  )
+
+  const duplicatePulseCreatorRegistration = JSON.parse(encodeGameMessage(welcome))
+  duplicatePulseCreatorRegistration.snapshot.world.mageLightningPulses[0]
+    .lightRegistration.registrationOrdinal = 20
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicatePulseCreatorRegistration)),
+    /creator and painter registrations must be distinct/,
   )
 
   const stalePulse = JSON.parse(encodeGameMessage(welcome))
@@ -2435,6 +2460,7 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
     },
     endpoint: { x: 302, y: 261 },
     id: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
     midpoint: { x: 210, y: 250 },
     ownerActorId: 3,
     painterRegistrations: [
@@ -2501,6 +2527,28 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
   malformedCompactPulse.frame.world.mageLightningPulses[0][13] = null
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(malformedCompactPulse)),
+    /valid compact pulse/,
+  )
+
+  const legacyCompactPulse = JSON.parse(encodeGameMessage(message))
+  legacyCompactPulse.frame.world.mageLightningPulses[0].pop()
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(legacyCompactPulse)),
+    /valid compact pulse/,
+  )
+
+  const missingCompactCreator = JSON.parse(encodeGameMessage(message))
+  missingCompactCreator.frame.world.mageLightningPulses[0][17] = -1
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingCompactCreator)),
+    /valid compact pulse/,
+  )
+
+  const duplicateCompactCreator = JSON.parse(encodeGameMessage(message))
+  duplicateCompactCreator.frame.world.mageLightningPulses[0][17]
+    = duplicateCompactCreator.frame.world.mageLightningPulses[0][14]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicateCompactCreator)),
     /valid compact pulse/,
   )
 

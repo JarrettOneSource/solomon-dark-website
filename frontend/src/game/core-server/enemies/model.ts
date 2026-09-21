@@ -471,6 +471,7 @@ export interface BoneyardMageLightningPulse {
   readonly contact: BoneyardMageLightningTargetContact | BoneyardMageLightningWorldContact
   readonly endpoint: Readonly<BoneyardPoint>
   readonly id: BoneyardMageLightningPulseId
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly midpoint: Readonly<BoneyardPoint>
   readonly ownerActorId: BoneyardEnemyActorId
   readonly painterRegistrations: readonly NativeWorldManagerRegistration[]

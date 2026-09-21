@@ -399,6 +399,7 @@ export interface BoneyardMageLightningPulseSnapshot {
   contact: BoneyardMageLightningContactSnapshot
   endpoint: Vector2
   id: number
+  lightRegistration: NativeWorldManagerRegistration
   midpoint: Vector2
   ownerActorId: number
   painterRegistrations: readonly NativeWorldManagerRegistration[]
@@ -425,6 +426,7 @@ export type BoneyardMageLightningPulseFrame = readonly [
   bodyRegistrationOrdinal: number,
   sourceRegistrationOrdinal: number,
   contactRegistrationOrdinal: number,
+  lightRegistrationOrdinal: number,
 ]
 
 export const BONEYARD_ENEMY_EVENT_TYPES = [

@@ -23,6 +23,7 @@ export function standaloneEnemyWorldManagerOrderState(source: BoneyardEnemyStore
     ...source.projectileEffects.map(({ lightRegistration }) => lightRegistration),
     ...source.projectileEffects.map(({ painterRegistration }) => painterRegistration),
     ...source.deathEffects.map(({ painterRegistration }) => painterRegistration),
+    ...source.mageLightningPulses.map(({ lightRegistration }) => lightRegistration),
     ...source.mageLightningPulses.flatMap(({ painterRegistrations }) => painterRegistrations),
   ]) {
     if (registration === null) continue

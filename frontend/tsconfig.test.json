@@ -165,7 +165,9 @@
     "src/game/renderer/native-rain-cloud.test.ts",
     "src/game/renderer/native-screen-feedback.test.ts",
     "src/game/native-boss-hud.test.ts",
-    "src/game/save/discorporeal-save.test.ts"
+    "src/game/save/discorporeal-save.test.ts",
+    "src/game/renderer/native-death-effect-allocation.test.ts",
+    "src/game/mod-ui/mod-skill-quickbar-keyboard.test.ts"
   ],
   "exclude": []
 }

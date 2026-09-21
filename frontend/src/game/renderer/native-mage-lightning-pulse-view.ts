@@ -48,6 +48,7 @@ export interface NativeMageLightningPulsePainterLayer
 export interface NativeMageLightningPathLightBatch {
   readonly birthTick: number
   readonly id: number
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly ownerActorId: number
   readonly sources: readonly NativeAirPathLightPlan[]
 }
@@ -221,6 +222,27 @@ export class NativeMageLightningPulseViews {
     this.orderedIds.length = 0
     for (const pulse of pulses) {
       if (pulse.tick > presentationTick) continue
+      const expectedPainterCount = pulse.contact.kind === 'world' ? 3 : 2
+      const registrations = [
+        pulse.lightRegistration,
+        ...pulse.painterRegistrations,
+      ]
+      if (
+        registrations.some(({ managerLane, registrationOrdinal }) => (
+          managerLane !== 'actor'
+          || !Number.isSafeInteger(registrationOrdinal)
+          || registrationOrdinal < 0
+        ))
+        || pulse.painterRegistrations.length !== expectedPainterCount
+        || new Set(pulse.painterRegistrations.map(({ registrationOrdinal }) => (
+          registrationOrdinal
+        ))).size !== expectedPainterCount
+        || pulse.painterRegistrations.some(({ registrationOrdinal }) => (
+          registrationOrdinal === pulse.lightRegistration.registrationOrdinal
+        ))
+      ) {
+        throw new Error(`Mage lightning pulse ${pulse.id} has invalid manager registrations`)
+      }
       let view = this.views.get(pulse.id)
       if (!view) {
         view = new NativeMageLightningPulseView(
@@ -258,13 +280,9 @@ export class NativeMageLightningPulseViews {
       this.liveIds.add(pulse.id)
       this.painterRegistrations.set(
         pulse.id,
-        pulse.painterRegistrations ?? Object.freeze(Array.from(
-          { length: pulse.contact.kind === 'world' ? 3 : 2 },
-          (_, index) => Object.freeze({
-            managerLane: 'actor' as const,
-            registrationOrdinal: pulse.id * 3 + index,
-          }),
-        )),
+        Object.freeze(pulse.painterRegistrations.map((registration) => (
+          Object.freeze({ ...registration })
+        ))),
       )
       this.orderedIds.push(pulse.id)
       const sources = view.pathLights
@@ -272,6 +290,7 @@ export class NativeMageLightningPulseViews {
         this.activePathLightBatches.push({
           birthTick: pulse.tick,
           id: pulse.id,
+          lightRegistration: Object.freeze({ ...pulse.lightRegistration }),
           ownerActorId: pulse.ownerActorId,
           sources,
         })

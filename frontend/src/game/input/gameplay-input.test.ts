@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { DEFAULT_GAME_CONTROL_BINDINGS, rebindGameControl } from '../game-settings.ts'
+import { createGamepadSampling } from './gamepad-sampling.ts'
 import { createBrowserGameplayInput } from './gameplay-input.ts'
 import type { GamepadLike } from './movement-input.ts'
 
@@ -312,6 +313,39 @@ test('blocking owns input immediately and drops barrier-time state', () => {
     viewportHeight: 900,
     viewportWidth: 1_600,
   })
+  input.destroy()
+})
+
+test('shared gamepad sampling stays current while blocked without duplicating an active menu read', () => {
+  let reads = 0
+  const sampling = createGamepadSampling(() => {
+    reads += 1
+    return []
+  })
+  const input = createBrowserGameplayInput({
+    gamepadSampling: sampling,
+    mouseTarget: new EventTarget(),
+    onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target: new EventTarget(),
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  input.sample()
+  assert.equal(reads, 1)
+
+  const menu = sampling.createMenuSampler()
+  menu.setActive(true)
+  menu.sample()
+  assert.equal(reads, 2)
+  input.setBlocked(true)
+  input.sample()
+  assert.equal(reads, 2, 'blocked gameplay observes the active menu sample')
+  menu.destroy()
+  input.sample()
+  assert.equal(reads, 3, 'blocked gameplay resumes ownership when the menu closes')
+
   input.destroy()
 })
 

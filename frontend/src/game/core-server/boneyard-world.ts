@@ -276,6 +276,11 @@ export function stepBoneyardWorldTick(
     lanternPosition,
   ).values()]
   const dynamicBodyIndices = new Map(dynamicBodies.map((body, index) => [body.id, index]))
+  const enemyMotionGrid = new DynamicActorGrid(128)
+  enemyMotionGrid.rebuild(dynamicBodies)
+  const enemyMotionCandidates = (position: Readonly<BoneyardPoint>, radius: number) => (
+    enemyMotionGrid.candidateIndicesAt(position, radius)
+  )
   const enemyPhysicsWorld = {
     canPlace: (_bodyId: string, candidate: BoneyardPoint, candidateRadius: number) => (
       canPlaceBoneyardBody(candidate, activeBounds, collision, candidateRadius)
@@ -431,6 +436,7 @@ export function stepBoneyardWorldTick(
         moverIndex = dynamicBodies.length
         dynamicBodies.push(enemyCollisionBody(moverId, position, radius))
         dynamicBodyIndices.set(moverId, moverIndex)
+        enemyMotionGrid.append(dynamicBodies[moverIndex]!)
       }
       // Enemy bodies never push, so the shared solver reduces to one swept root
       // move plus ascending pair separation. The kernel fast path keeps that
@@ -441,7 +447,9 @@ export function stepBoneyardWorldTick(
         moverIndex,
         delta,
         enemyPhysicsWorld,
+        enemyMotionCandidates,
       )
+      enemyMotionGrid.update(moverIndex, dynamicBodies)
       return mover.position
     },
     resolveSpawnPlacement: ({

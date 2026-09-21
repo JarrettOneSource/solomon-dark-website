@@ -268,6 +268,13 @@ test('unpushed mover fast path is an exact single-driver oracle over crowded wor
     const before = structuredClone(bodies)
     const resolved = resolveUnpushedMoverMotion(bodies, moverIndex, delta, blockedWorld)
     assert.deepEqual(resolved, reference, `trial ${trial}`)
+    for (const cellSize of [8, 32, 128]) {
+      const grid = new DynamicActorGrid(cellSize)
+      grid.rebuild(bodies)
+      const indexed = resolveUnpushedMoverMotion(bodies, moverIndex, delta, blockedWorld,
+        (position, radius) => grid.candidateIndicesAt(position, radius))
+      assert.deepEqual(indexed, reference, `indexed trial ${trial}, cell size ${cellSize}`)
+    }
     assert.deepEqual(bodies, before, `trial ${trial} mutated the crowd`)
     const mover = bodies[moverIndex]!
     if (
@@ -287,6 +294,46 @@ test('unpushed mover fast path is an exact single-driver oracle over crowded wor
 
   function randomSigned(maximum: number): number {
     return (random() * 2 - 1) * maximum
+  }
+})
+
+test('indexed unpushed motion re-queries after correction without revisiting earlier bodies', () => {
+  const bodies: ActorPhysicsBody[] = [0, -9, 30].map((x, index) => ({
+    id: `enemy-${index}`, position: { x, y: 0 }, radius: 10,
+    pushEnabled: false, pushStrength: 0, pushResistance: 0, delta: { x: 0, y: 0 },
+  }))
+  const grid = new DynamicActorGrid(5)
+  grid.rebuild(bodies)
+  assert.equal(grid.candidateIndicesAt(bodies[0]!.position, 10).includes(2), false)
+  const expected = resolveUnpushedMoverMotion(bodies, 0, { x: 0, y: 0 }, freePhysicsWorld)
+  let queries = 0
+  const actual = resolveUnpushedMoverMotion(bodies, 0, { x: 0, y: 0 }, freePhysicsWorld,
+    (position, radius) => { queries += 1; return grid.candidateIndicesAt(position, radius) })
+  assert.deepEqual(actual, expected)
+  assert.ok(queries >= 3, 'both successful corrections refresh candidate membership')
+  assert.ok(actual.x < 10, 'earlier collision indices must not be revisited after the second correction')
+})
+
+test('dynamic grid appends, grows and tracks sequential non-pushing moves exactly', () => {
+  const bodies: ActorPhysicsBody[] = []
+  const grid = new DynamicActorGrid(32)
+  grid.rebuild(bodies)
+  for (let index = 0; index < 130; index += 1) {
+    const body: ActorPhysicsBody = { id: `enemy-${index}`, position: {
+      x: (index % 13) * 17 - 100, y: Math.floor(index / 13) * 19 - 100,
+    }, radius: 12, pushEnabled: false, pushStrength: 0, pushResistance: 0, delta: { x: 0, y: 0 } }
+    bodies.push(body)
+    assert.equal(grid.append(body), index)
+  }
+  for (let step = 0; step < 260; step += 1) {
+    const index = step % bodies.length
+    const delta = { x: step % 2 === 0 ? 23 : -11, y: step % 3 === 0 ? 15 : -7 }
+    const expected = resolveUnpushedMoverMotion(bodies, index, delta, freePhysicsWorld)
+    const actual = resolveUnpushedMoverMotion(bodies, index, delta, freePhysicsWorld,
+      (position, radius) => grid.candidateIndicesAt(position, radius))
+    assert.deepEqual(actual, expected, `sequential move ${step}`)
+    bodies[index]!.position = actual
+    grid.update(index, bodies)
   }
 })
 

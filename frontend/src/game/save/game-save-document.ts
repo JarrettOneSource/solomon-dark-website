@@ -1,4 +1,5 @@
 import { nativeWeldMeteorRootPosition } from '../core-kernels/native-weld-meteor.ts'
+import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { boneyardMouthWorldTargets } from '../core-server/boneyard-world-targets.ts'
 import { normalizeSavedDiscorporeal } from './discorporeal-save.ts'
 import { createNativePuppetHit, nativePuppetHitAlpha, receiveNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
@@ -973,7 +974,14 @@ function normalizeWorldPainterOwnership(
 
   const world = record(input.world, 'game save world')
   const normalizedWorld = world.kind === 'boneyard'
-    ? normalizeBoneyardPainterOwnership(world, register, migrateMissing, sourceSchemaVersion < 32, sourceSchemaVersion < 34)
+    ? normalizeBoneyardPainterOwnership(
+        world,
+        register,
+        migrateMissing,
+        sourceSchemaVersion < 32,
+        sourceSchemaVersion < 34,
+        sourceSchemaVersion,
+      )
     : world
   return {
     ...input,
@@ -1022,8 +1030,13 @@ function normalizeBoneyardPainterOwnership(
   migrateMissing: boolean,
   migrateProjectiles: boolean,
   migrateParticleManagers: boolean,
+  sourceSchemaVersion: number,
 ): Record<string, unknown> {
   const enemies = record(source.enemies, 'game save Boneyard enemies')
+  const mageLightningPulses = normalizeSavedMageLightningPulses(
+    enemies,
+    sourceSchemaVersion,
+  )
   const projectiles = array(enemies.projectiles, 'game save enemy projectiles').map(value => (
     normalizeEnemyProjectilePainter(record(value, 'game save enemy projectile'), register, migrateProjectiles)
   ))
@@ -1048,7 +1061,7 @@ function normalizeBoneyardPainterOwnership(
   )
   return {
     ...source,
-    enemies: { ...enemies, deathEffects, projectiles,
+    enemies: { ...enemies, deathEffects, mageLightningPulses, projectiles,
       projectileEffects: migrateParticleManagers ? array(enemies.projectileEffects, 'saved projectile effects').flatMap(value => {
         const effect = record(value, 'saved projectile effect')
         if (effect.kind !== 'firebolt-trail') return [effect]
@@ -1058,6 +1071,113 @@ function normalizeBoneyardPainterOwnership(
     },
     loot: { ...loot, effects: lootEffects },
   }
+}
+
+function normalizeSavedMageLightningPulses(
+  enemies: Record<string, unknown>,
+  sourceSchemaVersion: number,
+): Record<string, unknown>[] {
+  const actors = array(enemies.actors, 'game save Boneyard enemy actors').map(
+    (value, index) => record(value, `game save Boneyard enemy actor ${index}`),
+  )
+  const actorById = new Map(actors.map((actor, index) => [
+    integerWithin(
+      actor.id,
+      `game save Boneyard enemy actor ${index} id`,
+      1,
+      Number.MAX_SAFE_INTEGER,
+    ),
+    actor,
+  ]))
+  const lastStepTick = integerWithin(
+    enemies.lastStepTick,
+    'game save Boneyard enemy tick',
+    // A newly entered world has not run its enemy manager yet. Its canonical
+    // sentinel is -1, and the nonnegative pulse-tick check below still rejects
+    // any pulse in that not-yet-stepped world.
+    -1,
+    Number.MAX_SAFE_INTEGER,
+  )
+  let previousId = 0
+  let previousTick = -1
+  return array(
+    enemies.mageLightningPulses,
+    'game save Mage lightning pulses',
+  ).map((value, index) => {
+    const field = `game save Mage lightning pulse ${index}`
+    const pulse = record(value, field)
+    const id = integerWithin(pulse.id, `${field} id`, 1, Number.MAX_SAFE_INTEGER)
+    const ownerActorId = integerWithin(
+      pulse.ownerActorId,
+      `${field} owner`,
+      1,
+      Number.MAX_SAFE_INTEGER,
+    )
+    const tick = integerWithin(pulse.tick, `${field} tick`, 0, lastStepTick)
+    if (id <= previousId || tick < previousTick) {
+      throw new Error('game save Mage lightning pulse order is invalid')
+    }
+    if (lastStepTick - tick >= NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES) {
+      throw new Error(`${field} exceeds the live pulse age limit`)
+    }
+    previousId = id
+    previousTick = tick
+
+    const contact = record(pulse.contact, `${field} contact`)
+    const painterCount = contact.kind === 'world'
+      ? 3
+      : contact.kind === 'target-attached'
+        ? 2
+        : 0
+    if (painterCount === 0) throw new Error(`${field} contact kind is invalid`)
+    const painterRegistrations = array(
+      pulse.painterRegistrations,
+      `${field} painter registrations`,
+    )
+    if (
+      painterRegistrations.length !== painterCount
+      || painterRegistrations.some(registration => !isManagerRegistration(
+        registration,
+        'actor',
+      ))
+      || new Set(painterRegistrations.map(registration => (
+        (registration as NativeWorldManagerRegistration).registrationOrdinal
+      ))).size !== painterRegistrations.length
+    ) throw new Error(`${field} painter registrations are invalid`)
+
+    const owner = actorById.get(ownerActorId)
+    const savedRegistration = pulse.lightRegistration
+    const lightRegistration = sourceSchemaVersion < 37
+      ? owner?.lightRegistration
+      : savedRegistration
+    if (!isManagerRegistration(lightRegistration, 'actor')) {
+      throw new Error(sourceSchemaVersion < 37 && owner === undefined
+        ? `${field} cannot recover its creator registration from an absent legacy owner`
+        : `${field} creator registration is invalid`)
+    }
+    if (painterRegistrations.some(registration => (
+      (registration as NativeWorldManagerRegistration).registrationOrdinal
+        === lightRegistration.registrationOrdinal
+    ))) {
+      throw new Error(`${field} creator and painter registrations must be distinct`)
+    }
+    if (
+      owner !== undefined
+      && (
+        !isManagerRegistration(owner.lightRegistration, 'actor')
+        || owner.lightRegistration.registrationOrdinal
+          !== lightRegistration.registrationOrdinal
+      )
+    ) throw new Error(`${field} creator registration does not match its owner`)
+
+    return {
+      ...pulse,
+      lightRegistration: { ...lightRegistration },
+      painterRegistrations: painterRegistrations.map(registration => ({
+        ...(registration as NativeWorldManagerRegistration),
+      })),
+    }
+  })
 }
 
 function normalizeEnemyProjectilePainter(

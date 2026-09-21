@@ -83,8 +83,8 @@ export class NativeEnemyDeathEffectViews {
 }
 
 class NativeEnemyDeathEffectView {
-  private readonly banishGraphics: Graphics | null
-  private readonly banishSprites: readonly Sprite[]
+  private banishGraphics: Graphics | null = null
+  private banishSprites: readonly Sprite[] = []
   private bounds: BoneyardBounds | null = null
   private boundsEntry = -1
   private boundsHeight = Number.NaN
@@ -94,12 +94,13 @@ class NativeEnemyDeathEffectView {
   private boundsScale = Number.NaN
   private boundsScaleY = Number.NaN
   private readonly container: Container
-  private readonly effect: Sprite | null
+  private effect: Sprite | null = null
   private gradientIndex = 0
   private readonly gradients: FillGradient[] = []
   private readonly kind: BoneyardEnemyDeathEffectSnapshot['kind']
+  private resourcesCreated = false
   private readonly root: Container
-  private readonly shadow: Sprite | null
+  private shadow: Sprite | null = null
   private readonly shadowed: boolean
   private readonly textures: BoneyardWorldTextures
   visible = false
@@ -113,8 +114,16 @@ class NativeEnemyDeathEffectView {
     this.textures = textures
     this.kind = initial.kind
     this.shadowed = !nativeEnemyDeathEffectIsBanish(initial.kind) && initial.shadow
-    const resources = nativeEnemyDeathEffectViewResourcePlan(initial)
-    this.container = new Container({ label: 'enemy-death-effect' })
+    // Keep native painter insertion order even for equal-depth background
+    // effects that enter the camera in a different order than their birth.
+    this.container = new Container({ label: `enemy-death-effect:${initial.kind}:${initial.id}` })
+    this.container.eventMode = 'none'
+    root.addChild(this.container)
+  }
+
+  private ensureResources(): Container {
+    if (this.resourcesCreated) return this.container
+    const resources = nativeEnemyDeathEffectViewResourcePlan({ kind: this.kind, shadow: this.shadowed })
     this.banishGraphics = resources.banishGraphics
       ? new Graphics({ label: 'enemy-banish-gradients' })
       : null
@@ -133,8 +142,8 @@ class NativeEnemyDeathEffectView {
     if (this.effect) this.container.addChild(this.effect)
     if (this.banishGraphics) this.container.addChild(this.banishGraphics)
     if (this.banishSprites.length > 0) this.container.addChild(...this.banishSprites)
-    this.container.label = `enemy-death-effect:${initial.kind}:${initial.id}`
-    root.addChild(this.container)
+    this.resourcesCreated = true
+    return this.container
   }
 
   update(
@@ -152,6 +161,7 @@ class NativeEnemyDeathEffectView {
     this.visible = visible
     this.container.renderable = visible
     if (!visible) return false
+    const container = this.ensureResources()
     const plan = nativeEnemyDeathEffectPlan(effect)
     if (nativeEnemyDeathEffectIsBanish(effect.kind)) {
       this.updateBanish(effect, viewHeight)
@@ -161,7 +171,7 @@ class NativeEnemyDeathEffectView {
         applyLayer(this.shadow!, plan.shadow, this.textures)
       }
     }
-    this.container.position.set(plan.position.x, plan.position.y)
+    container.position.set(plan.position.x, plan.position.y)
     return true
   }
 

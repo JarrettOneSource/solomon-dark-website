@@ -230,6 +230,7 @@ export function stepMageLightningPulse(
       y: endpointBase.y + endpointOffset.y,
     }),
     id: work.nextMageLightningPulseId,
+    lightRegistration: Object.freeze({ ...actor.lightRegistration }),
     midpoint: Object.freeze({
       x: (actor.position.x + targetPosition.x) * 0.5,
       y: (actor.position.y + targetPosition.y) * 0.5,

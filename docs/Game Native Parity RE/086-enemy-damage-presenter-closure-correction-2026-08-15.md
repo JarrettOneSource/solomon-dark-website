@@ -1,5 +1,39 @@
 # Enemy damage-presenter closure correction (2026-08-15)
 
+## September 21 representation-only resource allocation follow-up
+
+The high-population private endurance run retained over one thousand death
+effects. The current Website renderer constructs Pixi containers and sprites
+for every newly observed effect before its existing exact visual-bounds test,
+including effects that never enter the camera. This is browser resource work,
+not a change to the native effect factory or effect membership.
+
+The repair boundary is the complete `NativeEnemyDeathEffectViews` resource
+lifetime. All nineteen snapshot kinds are included: `banish`, `banish-black`,
+`bouncer`, `smoky-bouncer`, `black-smoky-bouncer`, `fade`, `fade-additive`,
+`fade-perspective`, `fade-perspective-clipped`, `fade-scale-perspective`,
+`fade-scale`, `fire-array`, `late-splat`, `move-fade`, `move-fade-perspective`,
+`move-fade-sin`, `sprite-array`, `unbind`, and `scrap`. Their existing native
+plans, shadowed/unshadowed resource membership, and all presentation-owner
+lanes remain verified-already-at-parity and unchanged by this optimization.
+The Website-only Pixi allocation timing is the exact-ported representation
+change: retain the lightweight identity/bounds record and empty painter
+container immediately, but create its sprites/graphics on the first visible
+sample. The container's original insertion position must survive even when
+same-depth background effects become visible in different orders. Once constructed,
+retain those resources until the effect retires, including offscreen/reentry.
+
+Keep unchanged the visual-bounds predicate, fixed-tick age, transforms,
+texture records, material state, painter registrations/depths and identity
+validation even while offscreen. Visibility must never reset effect age or
+drop an effect from the authoritative or sampled world. Spawn-offscreen,
+enter, leave, reenter, mutation rejection and retirement are the required
+regression branches. Native effect emission, damage, RNG and simulation
+retirement are outside this browser-allocation boundary and remain unchanged.
+
+Verification results belong in `docs/performance-release-20260921.md` after
+execution; this declaration alone asserts no measured speedup.
+
 This secondary report reopens and supersedes the nonterminal-damage portion of
 the immediately preceding hit/death pass. That pass correctly recovered the
 common Actor red latch and terminal family presenters, but it did not enumerate

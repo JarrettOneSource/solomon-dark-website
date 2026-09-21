@@ -176,8 +176,28 @@ test('Mage pulse view exposes independent painter roots and target attachment ow
 test('Mage pulse collection preserves independent world roots, target ownership, and birth-only Misc lights', () => {
   const root = new Container()
   const views = new NativeMageLightningPulseViews(root, AIR_TEXTURES)
-  const world = { ...WORLD_PULSE, id: 11, ownerActorId: 101 }
-  const target = { ...TARGET_PULSE, id: 12, ownerActorId: 102, tick: WORLD_PULSE.tick }
+  const world = {
+    ...WORLD_PULSE,
+    id: 11,
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 101 },
+    ownerActorId: 101,
+    painterRegistrations: [
+      { managerLane: 'actor' as const, registrationOrdinal: 111 },
+      { managerLane: 'actor' as const, registrationOrdinal: 112 },
+      { managerLane: 'actor' as const, registrationOrdinal: 113 },
+    ],
+  }
+  const target = {
+    ...TARGET_PULSE,
+    id: 12,
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 102 },
+    ownerActorId: 102,
+    painterRegistrations: [
+      { managerLane: 'actor' as const, registrationOrdinal: 121 },
+      { managerLane: 'actor' as const, registrationOrdinal: 122 },
+    ],
+    tick: WORLD_PULSE.tick,
+  }
   const playerPosition = (playerId: string) => (
     playerId === 'wizard-two' ? { x: 900, y: 700 } : null
   )
@@ -205,16 +225,37 @@ test('Mage pulse collection preserves independent world roots, target ownership,
   )
   assert.ok(views.pathLights.length > 0)
   assert.deepEqual(
-    views.pathLightBatches.map(({ birthTick, id, ownerActorId }) => ({
+    views.pathLightBatches.map(({ birthTick, id, lightRegistration, ownerActorId }) => ({
       birthTick,
       id,
+      lightRegistration,
       ownerActorId,
     })),
     [
-      { birthTick: WORLD_PULSE.tick, id: 11, ownerActorId: 101 },
-      { birthTick: WORLD_PULSE.tick, id: 12, ownerActorId: 102 },
+      {
+        birthTick: WORLD_PULSE.tick,
+        id: 11,
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 101 },
+        ownerActorId: 101,
+      },
+      {
+        birthTick: WORLD_PULSE.tick,
+        id: 12,
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 102 },
+        ownerActorId: 102,
+      },
     ],
   )
+  assert.notEqual(
+    views.pathLightBatches[0]!.lightRegistration,
+    world.lightRegistration,
+  )
+  assert.equal(Object.isFrozen(views.pathLightBatches[0]!.lightRegistration), true)
+  assert.notEqual(
+    views.painterLayers()[0]!.registration,
+    world.painterRegistrations[0],
+  )
+  assert.equal(Object.isFrozen(views.painterLayers()[0]!.registration), true)
   views.setRenderable(false)
   assert.ok(root.children.every((container) => !container.renderable))
   views.setRenderable(true)
@@ -245,6 +286,51 @@ test('Mage pulse collection preserves independent world roots, target ownership,
   root.destroy()
 })
 
+test('Mage pulse collection rejects malformed creator and painter ownership', () => {
+  const pulse = {
+    ...WORLD_PULSE,
+    id: 21,
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 201 },
+    ownerActorId: 21,
+    painterRegistrations: [
+      { managerLane: 'actor' as const, registrationOrdinal: 211 },
+      { managerLane: 'actor' as const, registrationOrdinal: 212 },
+      { managerLane: 'actor' as const, registrationOrdinal: 213 },
+    ],
+  }
+  for (const invalid of [
+    {
+      ...pulse,
+      lightRegistration: {
+        managerLane: 'transient' as const,
+        registrationOrdinal: 201,
+      },
+    },
+    { ...pulse, painterRegistrations: pulse.painterRegistrations.slice(0, 2) },
+    {
+      ...pulse,
+      painterRegistrations: [
+        pulse.painterRegistrations[0]!,
+        pulse.painterRegistrations[0]!,
+        pulse.painterRegistrations[2]!,
+      ],
+    },
+    {
+      ...pulse,
+      lightRegistration: { ...pulse.painterRegistrations[0]! },
+    },
+  ]) {
+    const root = new Container()
+    const views = new NativeMageLightningPulseViews(root, AIR_TEXTURES)
+    assert.throws(
+      () => views.update([invalid], WORLD_PULSE.tick, () => null),
+      /invalid manager registrations/,
+    )
+    views.destroy()
+    root.destroy()
+  }
+})
+
 test('Mage target contacts occupy the native post-main band in player-slot then birth order', () => {
   const root = new Container()
   const views = new NativeMageLightningPulseViews(root, AIR_TEXTURES)
@@ -252,7 +338,12 @@ test('Mage target contacts occupy the native post-main band in player-slot then 
     {
       ...TARGET_PULSE,
       id: 31,
+      lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 201 },
       ownerActorId: 201,
+      painterRegistrations: [
+        { managerLane: 'actor' as const, registrationOrdinal: 311 },
+        { managerLane: 'actor' as const, registrationOrdinal: 312 },
+      ],
       tick: 501,
     },
     {
@@ -262,13 +353,23 @@ test('Mage target contacts occupy the native post-main band in player-slot then 
         targetPlayerId: 'wizard-one',
       },
       id: 32,
+      lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 202 },
       ownerActorId: 202,
+      painterRegistrations: [
+        { managerLane: 'actor' as const, registrationOrdinal: 321 },
+        { managerLane: 'actor' as const, registrationOrdinal: 322 },
+      ],
       tick: 500,
     },
     {
       ...TARGET_PULSE,
       id: 30,
+      lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 203 },
       ownerActorId: 203,
+      painterRegistrations: [
+        { managerLane: 'actor' as const, registrationOrdinal: 301 },
+        { managerLane: 'actor' as const, registrationOrdinal: 302 },
+      ],
       tick: 500,
     },
   ] as const

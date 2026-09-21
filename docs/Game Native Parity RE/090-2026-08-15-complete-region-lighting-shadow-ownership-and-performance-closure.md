@@ -823,3 +823,120 @@ and compact-mask painter interval: Arena `+0x110` draws both before
 `Region+0x2C4`, the Region multiply, and the world queue. Earlier claims that
 these player-local light targets execute after sorted actors are superseded.
 The explicit 14-percent direct-aperture brightness policy is preserved.
+
+## 2026-09-21 — Mage Air creator-registration lifetime repair
+
+### Reported smell and parity question
+
+- The eleventh Fire-on-Mac / Water-on-Windows wave-100 run stopped at wave 37
+  after Windows raised `Mage Air factory 28139 emitted a light without native
+  manager registration`.
+- The native behavior is already closed above: every Mage Air birth appends its
+  age-zero path-light batch at the Mage creator's stable actor-manager position,
+  and the pulse's independently registered body/source/contact painters and
+  contact attachment then finish their own lifetimes.
+- The parity question is therefore a replication/presentation ownership
+  question, not a request for new native behavior: can a pulse preserve the
+  exact creator registration from authority through interpolation, keyframes,
+  deltas, saves, simulation light queries, and rendering even while its Mage is
+  not in the sampled enemy membership?
+- Falsifiers are a synthesized ordinal, a dropped light, accepting an old wire
+  shape in production, resolving through the sampled caster, mutating a shared
+  registration object, or changing path geometry, age admission, painter
+  registration, target attachment, or Misc-tail ordering.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Native instructions and prior ledger | this file's sealed `Region::Tick 0x0063EFC0`, `ObjectManager::Tick 0x004022A0`, Air factory `0x00531640`, and Arena replay `0x0046EC80` sections; retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | A Mage's synchronous Air batch is keyed by its creator's existing actor-manager registration, while all Misc records replay only after the persistent-provider pass. Nothing in native rendering re-discovers that key from a later sampled actor list. | high |
+| Failed browser run | `solomon-evidence-6a583nbx/eleventh-free-mana-20260921/client-events.jsonl`, Windows event at `2026-09-21T17:53:16.991Z` | Renderer lookup of Mage `28139` failed before the pulse's path light could be submitted. | high for the observed web failure |
+| Bounded reproduction | same evidence directory, `reproduce-mage-owner-boundary.mjs` and `mage-owner-boundary-reproduction.json` | Actual `interpolateBoneyardEnemySamples` admitted one newer pulse and its path light at presentation tick 103 while `interpolateEnemies` still exposed zero enemies. | high for the component boundary; synthetic rather than the exact live frame |
+| Current authority and renderer trace | `enemies/projectile-emission.ts`, `enemies/work.ts`, `host/project-boneyard-enemies.ts`, `boneyard-mage-lightning-replication.ts`, `boneyard-enemy-samples.ts`, `core-server/boneyard-world-light.ts`, `native-mage-lightning-pulse-view.ts`, and `boneyard-scene-lights.ts` at baseline `bfa35bd3` | The pulse owns `ownerActorId` and its separate painter registrations but not the creator light registration. Both simulation and renderer recover the latter from the current enemy array; the renderer additionally contains a forbidden painter-ordinal fallback. | high |
+
+No new native address, class, formula, art record, or timing rule is recovered
+here, so the Mod Loader native report remains unchanged. This entry corrects a
+Website lifetime seam under the already-proven native ownership contract.
+
+### System boundary and membership inventory
+
+Native system: **Mage-generated Air pulse registration lifetime** — from the
+authoritative Mage factory call through retained pulse age, snapshot/protocol/
+save ownership, presentation admission, painter materialization, age-zero
+MiscLight replay, contact attachment, and retirement. The sweep also checks
+the other active MiscLight transient families at this owner-removal seam.
+
+| Member (class/variant/scene/branch) | Native source | Disposition | Proof / required contract |
+| --- | --- | --- | --- |
+| Mage actor and ordinary/charged provider copies | Mage provider `0x004783E0`; actor-manager traversal | `verified-already-at-parity` | actor retains its existing immutable light registration; this repair does not allocate another one |
+| Mage Air pulse construction | `Mage::Tick 0x00490860 -> 0x00531640` | `exact-ported` by this repair | copy the creator's exact actor-manager registration into every pulse at authoritative emission |
+| New Mage and first pulse in the newer interpolation snapshot | same factory plus presentation birth admission | `exact-ported` by this repair | pulse renders and contributes its path batch before sampled enemy membership without a lookup |
+| Retiring/dead/removed Mage with a still-live pulse | independent native child/contact lifetimes | `exact-ported` by this repair | creator registration remains pulse-owned through all retained ages and survives either interpolation direction |
+| World-contact pulse | direct world corona branch | `exact-ported` by this repair | three painter registrations stay distinct; creator registration orders only the age-zero path batch |
+| Target-attached pulse | player embedded-manager contact branch | `exact-ported` by this repair | two painter registrations and target-following contact stay distinct; the same creator registration orders the path batch |
+| Age-zero path lights | Air factory two-leg sampler | `exact-ported` by this repair | exact creator registration, exact append ordinal, no early/duplicate/drop behavior |
+| Ages one through four and finite retirement | native two-tick body, one-tick source, three/five-tick contact branches; retained five-age ledger | `verified-already-at-parity` after ownership propagation | no path batch after age zero; registration remains immutable until the pulse is retired |
+| Authoritative simulation light query | Arena light-query equivalent | `exact-ported` by this repair | consumes the pulse-owned creator registration even after the actor row is absent |
+| Host snapshot projection and presentation copy/interpolation | Website replication seam | `exact-ported` by this repair | each layer makes an owned registration copy and preserves it across future-birth filtering and pulse retirement |
+| Object keyframe and compact keyframe/delta wire forms | Website protocol only | `exact-ported` by this repair | strict actor-lane field/frame column, immutable materialization, malformed/legacy production rejection, coupled protocol bump |
+| Current and prior save documents | Website continuation only | `exact-ported` by this repair | current saves persist the field; the immediately prior schema migrates only from an exact saved owner row and rejects an unrecoverable orphan rather than guessing |
+| Painter body/source/world-contact registrations | native child actor registrations | `verified-already-at-parity` after removing the renderer fallback | exact registration count/order is mandatory; no `pulse.id * 3` reconstruction |
+| Player primary-Air age-zero path batch | shared `0x00531640` factory, player actor creator | `verified-already-at-parity` for this boundary | authority removes a player's transients atomically with its entity; the presentation keeps the older player through the same pre-boundary interval as the older transient, and a newly admitted player cannot cast while materializing. This branch is covered by a focused owner-removal audit and is not used to infer a Mage registration. |
+| MagicCircle and target-owned Burn/ElectricBurn/EtherBurn Misc batches | `0x006006E0`, `0x00628F10`, `0x00629A40`, `0x00629CD0` | `verified-already-at-parity` | each replicated secondary actor already carries its own creator/target registration and append ordinal; no renderer lookup is performed |
+| Chain and Blizzard Air factory geometry siblings | `0x00531F00`, `0x005328D0` | `verified-already-at-parity` | they share the exact path sampler but are owned by their existing primary/weld transient models; no Mage-enemy lookup exists |
+
+There are no `blocked-by-platform` members and no authored table to extract for
+this lifecycle correction.
+
+### Native ownership thread and recovered contract
+
+- The creator registration is an immutable value captured at pulse birth. It
+  is neither a reference to the actor row nor one of the pulse's independently
+  allocated painter registrations.
+- `ownerActorId` remains semantic provenance for diagnostics, damage, and
+  append-ordinal matching. It is not sufficient ownership for later light
+  ordering and must never be dereferenced to recover registration.
+- World and target-attached contacts share creator-registration ownership.
+  Their separate painter counts and their target-following/post-main behavior
+  remain unchanged.
+- Only age zero contributes the Air path-light batch. The pulse ledger remains
+  bounded by `NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES`; copies and interpolation
+  must retain the registration even at ages that emit no path source so every
+  representation has one stable shape.
+- The registration travels as an actor-lane ordinal in the object snapshot and
+  one required compact-frame column. A wire version that lacks the column is a
+  different protocol, not an opportunity for production inference.
+- Saves may recover a pre-field pulse only when its exact owner actor and exact
+  actor-lane light registration are still present in that same authoritative
+  document. An orphaned legacy pulse is unrecoverable and must be rejected.
+  Historical diagnostic archives use an explicit offline adapter, never a
+  permissive production decoder.
+
+### Web implementation consequence and validation contract
+
+- Add the creator light registration to the authoritative pulse and copy it at
+  every store, projection, protocol, save, and presentation boundary.
+- Pass it with the renderer's path-light batch and consume it directly in both
+  `boneyardWorldLightQuery` and `BoneyardSceneLights`; keep `ownerActorId` only
+  for the existing target-modifier append ordinal and diagnostics.
+- Delete the renderer's pulse painter-registration fallback. Missing or wrong
+  counts/lanes remain hard errors; no ordinal may be invented and no light may
+  be silently discarded.
+- Bump the coupled game protocol and save schema. Protocol keyframes and deltas
+  require the new compact column. The production decoder rejects the old frame
+  length; any wave-100 archive replay must opt into a separately named offline
+  conversion.
+- Focused tests cover both contact variants, first-newer-snapshot admission,
+  both retirement directions, every live pulse age, exact manager ordering,
+  owned copies, host projection, compact/object malformed inputs, keyframes,
+  deltas, current-save round trips, exact legacy-save migration, and orphaned
+  legacy-save rejection.
+- Final acceptance remains the Mac-only focused suites, complete
+  `./scripts/validate.sh`, browser error-free Boneyard journey, and the restarted
+  two-client wave-100 stress run owned by the parent.
+
+### Implementation validation receipt
+
+Implementation and validation receipts are intentionally pending while this
+pre-code boundary declaration is recorded. They must be replaced with the exact
+changed-file inventory and parent-run Mac results before publication.

@@ -22,10 +22,12 @@ import { projectBoneyardCrows } from '../host/project-boneyard-crows.ts'
 import { boneyardEnemyLiveCount, createBoneyardEnemyStore, positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { applyBoneyardStaffDisable, breakBoneyardSkeletonPike, damageBoneyardEnemy, releaseBoneyardSkeletonPike, setBoneyardEnemyHurricaneContactCooldown } from './enemies/damage.ts'
 import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
+import { stepMaggots } from './enemies/maggots.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyMovementRequest, BoneyardEnemySpellSegmentRequest, BoneyardEnemyStore, BoneyardEnemyStoreStepResult, BoneyardEnemyTargets } from './enemies/model.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 import { nativeSecondaryActorSpeedScale } from './enemies/movement.ts'
 import { BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE, NATIVE_ARCHER_ACTION_PROGRAM, NATIVE_DEMON_BOMB_ACTION_PROGRAM, NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK, NATIVE_DEMON_RAW_FIRE_BURST_TICKS, NATIVE_IMP_CONSTRUCTION_MAXIMUM, NATIVE_IMP_CONTACT_BASE_RADIUS, NATIVE_IMP_CONTACT_RADIUS_SCALE, NATIVE_IMP_SPLIT_CHILD_COUNT, NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM, NATIVE_MAGE_ACTION_PROGRAMS, NATIVE_SKELETON_ACTION_PROGRAMS, NATIVE_SKELETON_CLAW_MARKERS, NATIVE_SKELETON_WEAPON_MARKERS } from './enemies/programs.ts'
+import { createEnemyWork } from './enemies/work.ts'
 const TOKENS = Object.keys(BONEYARD_WAVE_ENEMY_TYPES).filter((token) => (
   token !== 'PORTAL' && token !== 'COCOON'
 )) as Exclude<BoneyardWaveEnemyToken, 'PORTAL' | 'COCOON'>[]
@@ -2390,6 +2392,18 @@ test('all Mage elements emit their authoritative damage, status, payload, and li
   const first = lightning.store.mageLightningPulses[0]!
   assert.equal(first.tick, 1)
   assert.equal(first.ownerActorId, lightning.store.actors[0]!.id)
+  assert.deepEqual(
+    first.lightRegistration,
+    lightning.store.actors[0]!.lightRegistration,
+  )
+  assert.notEqual(
+    first.lightRegistration,
+    lightning.store.actors[0]!.lightRegistration,
+  )
+  assert.equal(Object.isFrozen(first.lightRegistration), true)
+  assert.ok(first.painterRegistrations.every(({ registrationOrdinal }) => (
+    registrationOrdinal !== first.lightRegistration.registrationOrdinal
+  )))
   assert.deepEqual(first.source, { x: 23, y: -16 })
   assert.deepEqual(first.midpoint, { x: 75, y: 0 })
   assert.equal(first.contact.kind, 'target-attached')
@@ -2422,6 +2436,23 @@ test('all Mage elements emit their authoritative damage, status, payload, and li
   lightning = step(lightning.store, 51, { player: livingTarget(150, 0) })
   assert.deepEqual(lightning.playerDamage, [])
   assert.ok(!lightning.store.mageLightningPulses.some(({ tick }) => tick === 51))
+})
+
+test('Mage lightning pulse ownership outlives caster retirement through its exact age bound', () => {
+  const born = forcedMageAttack('mage-lightning-retired-owner', ['FLAG_CASTLIGHTNING'])
+  const pulse = born.store.mageLightningPulses[0]!
+  const creatorRegistration = pulse.lightRegistration
+  let store: BoneyardEnemyStore = { ...born.store, actors: [] }
+
+  for (let tick = 2; tick <= 5; tick += 1) {
+    store = step(store, tick, {}).store
+    const retained = store.mageLightningPulses.find(({ id }) => id === pulse.id)
+    assert.ok(retained, `pulse retired before native age ${tick - pulse.tick}`)
+    assert.deepEqual(retained.lightRegistration, creatorRegistration)
+  }
+
+  store = step(store, 6, {}).store
+  assert.equal(store.mageLightningPulses.some(({ id }) => id === pulse.id), false)
 })
 
 test('Mage lightning uses a clipped world contact without reusing endpoint displacement', () => {
@@ -3421,6 +3452,226 @@ test('Maggot landing owns 1-in-5 combat admission and a 30-inactive ceiling', ()
   assert.ok(result.store.maggots.every(({ combatActive }) => !combatActive))
   assert.deepEqual(result.retired.map(({ actorId }) => actorId), [10_030])
   assert.equal(boneyardEnemyLiveCount(result.store), 1)
+})
+
+for (const [name, flags, maximumMaggots, maggotHealth, maggotDamage] of [
+  ['base', [], 20, 2, 2],
+  ['many', ['FLAG_MANYMAGGOTS'], 50, 2, 2],
+  ['strong', ['FLAG_STRONGMAGGOTS'], 20, 5, 5],
+  ['many-strong', ['FLAG_MANYMAGGOTS', 'FLAG_STRONGMAGGOTS'], 50, 5, 5],
+] as const) {
+  test(`Maggot owner resolution reads the current ${name} Coffin style without persisted index state`, () => {
+    let result = freezeOpenedCoffin(openedCoffin(
+      `maggot-owner-style-${name}`,
+      FAR_PLAYERS,
+      flags,
+    ))
+    const owner = result.store.actors[0]!
+    if (owner.config.enemyToken !== 'COFFIN') throw new Error('expected Coffin config')
+    assert.equal(owner.config.family.maximumMaggots, maximumMaggots)
+    assert.ok(result.store.maggots.every((maggot) => (
+      maggot.maximumHealth === maggotHealth && maggot.damage === maggotDamage
+    )))
+    const childIds = result.store.maggots.map(({ id }) => id)
+    const effects = Object.fromEntries(result.store.maggots.map(({ id }) => [
+      id,
+      targetEffect(id, { disruptedTicks: 1 }),
+    ]))
+
+    result = stepWithEffects(result.store, 5, FAR_PLAYERS, effects)
+
+    assert.deepEqual(result.store.maggots.map(({ id }) => id), childIds)
+    assert.equal('maggotOwnerIndex' in result.store, false)
+  })
+}
+
+test('one Maggot step indexes ordinary actors once instead of scanning them per child', () => {
+  const source = freezeOpenedCoffin(openedCoffin('maggot-owner-bounded-index', FAR_PLAYERS))
+  const owner = source.store.actors[0]!
+  const decoy = spawnOne(
+    'maggot-owner-bounded-index-decoy',
+    'SKELETON',
+    { x: 0, y: 0 },
+    {},
+  ).store.actors[0]!
+  const actors = [
+    ...Array.from({ length: 127 }, (_, index) => ({ ...decoy, id: 20_000 + index })),
+    owner,
+  ]
+  const template = source.store.maggots[0]!
+  const maggots = Array.from({ length: 256 }, (_, index) => ({
+    ...template,
+    combatActive: false,
+    id: 30_000 + index,
+    movementPhase: 'crawl' as const,
+    verticalOffset: 0,
+  }))
+  const context = {
+    abilityEffects: Object.fromEntries(maggots.map(({ id }) => [
+      id,
+      targetEffect(id, { disruptedTicks: 1 }),
+    ])),
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
+    players: {},
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 5,
+  }
+  const work = createEnemyWork({ ...source.store, actors, maggots }, context, false)
+  let indexedActorReads = 0
+  work.actors = new Proxy(work.actors, {
+    get(target, property, receiver) {
+      if (typeof property === 'string' && /^\d+$/.test(property)) indexedActorReads += 1
+      return Reflect.get(target, property, receiver)
+    },
+  })
+
+  stepMaggots(work, context, 1)
+
+  assert.equal(indexedActorReads, actors.length)
+  assert.equal(work.maggots.length, maggots.length)
+  assert.deepEqual(work.retired, [])
+})
+
+test('Maggot owner indexing preserves first qualifying actor order for duplicate IDs', () => {
+  const source = freezeOpenedCoffin(openedCoffin('maggot-owner-first-match', FAR_PLAYERS))
+  const owner = source.store.actors[0]!
+  if (owner.config.enemyToken !== 'COFFIN') throw new Error('expected Coffin config')
+  const landing = {
+    ...source.store.maggots[0]!,
+    landingBounceVelocity: -0.4,
+    verticalOffset: -0.01,
+    verticalVelocity: 1,
+  }
+  const zeroCapacity = {
+    ...owner,
+    config: {
+      ...owner.config,
+      family: { ...owner.config.family, maximumMaggots: 0 },
+    },
+  }
+  const openCapacity = {
+    ...owner,
+    config: {
+      ...owner.config,
+      family: { ...owner.config.family, maximumMaggots: 50 },
+    },
+  }
+  const winningRngState = boneyardIntegerState(5, 3)
+  const store = {
+    ...source.store,
+    actors: [zeroCapacity, openCapacity],
+    maggots: [landing],
+    rngState: winningRngState,
+  }
+
+  const firstClosed = step(store, 5, FAR_PLAYERS)
+  assert.equal(firstClosed.store.maggots[0]!.combatActive, false)
+  assert.equal(firstClosed.store.rngState, winningRngState)
+
+  const firstOpen = step({ ...store, actors: [openCapacity, zeroCapacity] }, 5, FAR_PLAYERS)
+  assert.equal(firstOpen.store.maggots[0]!.combatActive, true)
+  assert.notEqual(firstOpen.store.rngState, winningRngState)
+})
+
+test('all Maggot lanes retire in child order when the current owner ID is no longer a Coffin', () => {
+  const source = freezeOpenedCoffin(openedCoffin('maggot-owner-converted', FAR_PLAYERS))
+  const owner = source.store.actors[0]!
+  const replacement = spawnOne(
+    'maggot-owner-converted-replacement',
+    'SKELETON',
+    owner.position,
+    {},
+  ).store.actors[0]!
+  const template = source.store.maggots[0]!
+  const children = [
+    { ...template, id: 10_001 },
+    {
+      ...template,
+      combatActive: false,
+      id: 10_002,
+      movementPhase: 'crawl' as const,
+      verticalOffset: 0,
+    },
+    {
+      ...template,
+      combatActive: true,
+      id: 10_003,
+      movementPhase: 'crawl' as const,
+      verticalOffset: 0,
+    },
+    {
+      ...template,
+      combatActive: true,
+      deathStartedTick: 4,
+      id: 10_004,
+      lifeState: 'dying' as const,
+      movementPhase: 'crawl' as const,
+      verticalOffset: 0,
+    },
+  ]
+  const convertedStore = {
+    ...source.store,
+    actors: [{ ...replacement, id: owner.id }],
+    maggots: children,
+  }
+
+  const result = step(convertedStore, 5, {})
+
+  assert.deepEqual(result.retired.map(({ actorId }) => actorId), children.map(({ id }) => id))
+  assert.deepEqual(result.events.map(({ type }) => type), children.map(() => 'enemy-retired'))
+  assert.equal(result.store.maggots.length, 0)
+  assert.equal(result.store.deathEffects.some(({ ownerActorId }) => (
+    children.some(({ id }) => id === ownerActorId)
+  )), false)
+})
+
+test('post-manager Coffin admission cannot rescue an invalid child and the next step rebuilds ownership', () => {
+  const source = freezeOpenedCoffin(openedCoffin('maggot-owner-post-manager', FAR_PLAYERS))
+  const futureOwnerId = source.store.nextActorId
+  const orphan = {
+    ...source.store.maggots[0]!,
+    combatActive: false,
+    movementPhase: 'crawl' as const,
+    ownerCoffinActorId: futureOwnerId,
+    verticalOffset: 0,
+  }
+  const admitted = stepBoneyardEnemyStore({
+    ...source.store,
+    actors: [],
+    maggots: [orphan],
+  }, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    projectileWorldBlocked: NO_WORLD_CONTACT,
+    players: {},
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [intent('COFFIN', 99, { x: 0, y: 0 })],
+    tick: 5,
+  })
+
+  assert.deepEqual(admitted.events.map(({ type }) => type), [
+    'enemy-retired',
+    'enemy-spawned',
+  ])
+  assert.deepEqual(admitted.retired.map(({ actorId }) => actorId), [orphan.id])
+  assert.equal(admitted.store.maggots.length, 0)
+  assert.equal(admitted.store.actors[0]!.id, futureOwnerId)
+  assert.equal(admitted.store.actors[0]!.config.enemyToken, 'COFFIN')
+
+  const restoredChild = {
+    ...orphan,
+    id: admitted.store.nextActorId,
+    ownerCoffinActorId: futureOwnerId,
+  }
+  const rebuilt = step({
+    ...admitted.store,
+    maggots: [restoredChild],
+    nextActorId: restoredChild.id + 1,
+  }, 6, {})
+  assert.deepEqual(rebuilt.retired, [])
+  assert.deepEqual(rebuilt.store.maggots.map(({ id }) => id), [restoredChild.id])
+  assert.equal('maggotOwnerIndex' in rebuilt.store, false)
 })
 
 test('combat Maggot crawl joins the ordinary blocked-goal route owner', () => {
@@ -5147,8 +5398,9 @@ function withCoffinMaximumMaggots(
 function openedCoffin(
   seed: string,
   players: BoneyardEnemyTargets,
+  flags: readonly string[] = [],
 ): BoneyardEnemyStoreStepResult {
-  let result = spawnOne(seed, 'COFFIN', { x: 0, y: 0 }, players)
+  let result = spawnOne(seed, 'COFFIN', { x: 0, y: 0 }, players, flags)
   for (let tick = 1; tick <= 4; tick += 1) {
     result = withCoffinRemaining(result, 1)
     result = step(result.store, tick, players)

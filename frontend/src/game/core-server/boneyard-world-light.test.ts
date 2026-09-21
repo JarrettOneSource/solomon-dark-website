@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createBoneyardCatalog, materializeBoneyard } from '../host/boneyard-catalog.ts'
+import { buildNativeAirPathLightSources } from '../core-kernels/native-air-presentation.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { createPrimarySpellSimulation, type PrimarySpellEtherImpactState } from '../core-kernels/primary-spells.ts'
 import { removeNativeSecondaryOwner, spawnNativeScriptFires } from '../core-kernels/native-secondary-abilities.ts'
@@ -103,4 +104,82 @@ test('an optional light sampler builds once on demand and retains its captured p
   assert.equal(sample(players.owner.position), expected.scalarAt(players.owner.position))
   assert.equal(boundsReads, readsAfterBuild, 'all positions share this phase light field')
   assert.equal(boneyardWorldLightQuery(world, players, world.enemies, 1, environment).scalarAt(point), 0)
+})
+
+test('Mage path lights retain creator registration and ordering after caster removal', () => {
+  const { state, players, world, order } = fixture()
+  const earlierCreator = order.register('actor')
+  const laterCreator = order.register('actor')
+  const painterRegistrations = order.registerMany('actor', 6)
+  const pulse = (
+    id: number,
+    seed: number,
+    x: number,
+    lightRegistration: typeof earlierCreator,
+    contact: Readonly<
+      | { kind: 'world'; position: Readonly<{ x: number; y: number }> }
+      | { kind: 'target-attached'; localOffset: Readonly<{ x: number; y: number }>; targetPlayerId: string }
+    >,
+    painters: typeof painterRegistrations,
+  ) => ({
+    contact,
+    endpoint: { x: x + 240, y: 1000 },
+    id,
+    lightRegistration,
+    midpoint: { x: x + 120, y: 1000 },
+    ownerActorId: id + 100,
+    painterRegistrations: painters,
+    seed,
+    source: { x, y: 1000 },
+    tick: 1,
+  })
+  const laterRegisteredPulse = pulse(
+    1,
+    71,
+    1_000,
+    laterCreator,
+    { kind: 'world', position: { x: 1_240, y: 1000 } },
+    painterRegistrations.slice(0, 3),
+  )
+  const earlierRegisteredPulse = pulse(
+    2,
+    72,
+    1_200,
+    earlierCreator,
+    {
+      kind: 'target-attached',
+      localOffset: { x: -4, y: 6 },
+      targetPlayerId: 'owner',
+    },
+    painterRegistrations.slice(3),
+  )
+  const enemies = {
+    ...world.enemies,
+    actors: [],
+    lastStepTick: 1,
+    mageLightningPulses: [laterRegisteredPulse, earlierRegisteredPulse],
+    nextMageLightningPulseId: 3,
+  }
+  const query = boneyardWorldLightQuery(world, players, enemies, 1, {
+    playerEntities: state.playerEntities,
+  })
+  const expectedEarlier = buildNativeAirPathLightSources({
+    birthTick: 1,
+    endpoint: earlierRegisteredPulse.endpoint,
+    id: earlierRegisteredPulse.seed,
+    midpoint: earlierRegisteredPulse.midpoint,
+    origin: earlierRegisteredPulse.source,
+  })
+  const expectedLater = buildNativeAirPathLightSources({
+    birthTick: 1,
+    endpoint: laterRegisteredPulse.endpoint,
+    id: laterRegisteredPulse.seed,
+    midpoint: laterRegisteredPulse.midpoint,
+    origin: laterRegisteredPulse.source,
+  })
+
+  assert.deepEqual(
+    query.acceptedSources.slice(-(expectedEarlier.length + expectedLater.length)),
+    [...expectedEarlier, ...expectedLater],
+  )
 })

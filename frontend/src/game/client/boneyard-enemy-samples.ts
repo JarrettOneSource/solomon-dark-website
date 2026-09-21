@@ -356,6 +356,7 @@ function copyMageLightningPulse(
           targetPlayerId: pulse.contact.targetPlayerId,
         },
     endpoint: { ...pulse.endpoint },
+    lightRegistration: { ...pulse.lightRegistration },
     midpoint: { ...pulse.midpoint },
     painterRegistrations: pulse.painterRegistrations.map((registration) => ({
       ...registration,

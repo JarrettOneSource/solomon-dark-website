@@ -106,6 +106,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
         },
         endpoint: { x: 151.25, y: -2.5 },
         id: 1,
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 7 },
         midpoint: { x: 75, y: 0 },
         ownerActorId: 7,
         painterRegistrations: [
@@ -686,10 +687,48 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.ok(Math.abs(enemy.position.x - 123.45) <= 1 / 16)
   assert.ok(Math.abs(enemy.animation.gaitPose - 2.75) <= 1 / 1024)
   assert.deepEqual(reconstructed.world.enemyEvents, initial.world.enemyEvents)
-  assert.equal(frame.world.mageLightningPulses[0]?.length, 17)
+  assert.equal(frame.world.mageLightningPulses[0]?.length, 18)
+  assert.equal(frame.world.mageLightningPulses[0]?.[17], 7)
   assert.deepEqual(
     reconstructed.world.mageLightningPulses,
     initial.world.mageLightningPulses,
+  )
+  assert.notEqual(
+    reconstructed.world.mageLightningPulses[0]!.lightRegistration,
+    initial.world.mageLightningPulses[0]!.lightRegistration,
+  )
+  assert.equal(
+    Object.isFrozen(reconstructed.world.mageLightningPulses[0]!.lightRegistration),
+    true,
+  )
+  assert.ok(
+    reconstructed.world.mageLightningPulses[0]!.painterRegistrations
+      .every(Object.isFrozen),
+  )
+
+  const later = structuredClone(initial)
+  later.tick = 1
+  if (later.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  later.world.mageLightningPulses = [{
+    ...later.world.mageLightningPulses[0]!,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
+    tick: 1,
+  }]
+  const delta = createGameSnapshotFrame(
+    later,
+    1,
+    createReplicatedEntityBaseline(initial),
+  )
+  if (delta.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.equal(delta.world.entities.keyframe, false)
+  assert.equal(delta.world.mageLightningPulses[0]?.[17], 8)
+  const reconstructedDelta = reconstructor.apply(delta, 2)
+  if (reconstructedDelta.world.kind !== 'boneyard') {
+    throw new Error('expected Boneyard snapshot')
+  }
+  assert.deepEqual(
+    reconstructedDelta.world.mageLightningPulses,
+    later.world.mageLightningPulses,
   )
 })
 

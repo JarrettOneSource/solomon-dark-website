@@ -75,10 +75,6 @@ export class BoneyardSceneLights {
   private readonly lightProviderOwners: RegisteredBoneyardLightProviderOwner[] = []
   private readonly lightSourceCandidates: NativeBoneyardLightSource[] = []
   private readonly lightMiscTailCandidates: NativeBoneyardLightSource[] = []
-  private readonly enemyLightRegistrations = new Map<
-    number,
-    NativeWorldManagerRegistration
-  >()
   readonly index: NativeBoneyardLightIndex
   private readonly boneyard: LoadedBoneyard
   constructor(boneyard: LoadedBoneyard) {
@@ -416,11 +412,6 @@ export class BoneyardSceneLights {
         sources: [source],
       })
     }
-    const enemyLightRegistrations = this.enemyLightRegistrations
-    enemyLightRegistrations.clear()
-    for (const enemy of snapshot.world.enemies) {
-      enemyLightRegistrations.set(enemy.id, enemy.lightRegistration)
-    }
     for (const batch of mageLightningPulses.pathLightBatches) {
       const miscLightAppendOrdinal = snapshot.secondaryAbilities.actors.reduce(
         (nextOrdinal, actor) => (
@@ -436,10 +427,7 @@ export class BoneyardSceneLights {
         birthTick: batch.birthTick,
         id: batch.id,
         miscLightAppendOrdinal,
-        registration: requiredLightRegistration(
-          enemyLightRegistrations.get(batch.ownerActorId) ?? null,
-          `Mage Air factory ${batch.ownerActorId}`,
-        ),
+        registration: batch.lightRegistration,
         sources: batch.sources,
       })
     }

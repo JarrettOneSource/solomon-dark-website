@@ -596,3 +596,128 @@ no pixels; it is fully current on the first frame where it can.
   renderer/painter waste without inventing a network fix. At this validation
   receipt cutoff, publication and deployment remained separate and had not
   occurred.
+
+## 2026-09-21 — High-population Coffin-owner lookup representation reopening
+
+### Reported smell and parity question
+
+- The eleventh infinite-mana endurance run reached more than 1,900 Maggots
+  while the host fell from approximately 100 ticks/s to 40–60 ticks/s. The
+  archived `lastAliveByPlayer` high-water checkpoint contains 277 ordinary
+  actors and 2,140 Maggots; its 43 living Coffins cover 33 referenced owner
+  IDs and every retained child still has a valid owner.
+- `maggots.ts` nevertheless searches the complete ordinary-actor array once
+  for every child and a second time for every child landing into native
+  admission. This is equivalent lifecycle logic expressed as repeated
+  `O(maggots * actors)` discovery work.
+- Parity question: can owner discovery be represented by one bounded,
+  method-local index per Maggot step while preserving the exact actor-array
+  state visible after same-step actor update/removal and before post-manager
+  wave admission?
+- Falsifiers are any changed child order, RNG word, admission count, tombstone,
+  event, movement/combat result, current owner configuration, owner-loss edge,
+  post-manager ordering, checkpoint shape, or reset behavior.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Existing retail RE | this entry's Coffin/Maggot trace at `0x004A2760`, `0x00479C30`, `0x0048B2A0`, `0x004889B0`, `0x00487FD0`, and `0x0047E410` | The stored Coffin handle owns child validity and current active/inactive admission accounting. No gameplay rule changes are needed. | high |
+| Eleventh-run archive | read-only `archive-d6991d9e-9a9d-4e41-9222-663ecff5097b.json`, run `d3fe51d75225332684c8becc81e91116` | Worst tick 320,824 has 146 actors, 15 Coffins, and 801 Maggots. Player-2's last-alive tick 340,692 has 277 actors, 43 Coffins, and 2,140 Maggots. Both have zero orphaned children. All captured Coffins carry MANYMAGGOTS and STRONGMAGGOTS, with current maximum 50 and child health/damage 5. | high captured web state |
+| Current call order | baseline `bfa35bd3`; `boneyard-enemy-store.ts:192-248`, `coffin.ts:30-220`, `maggots.ts:47-125` | Ordinary actors step and terminal rows are removed, actor-owned spawn intents materialize, then all Maggots step; only afterward does manager/wave admission materialize new actors. `stepMaggots` does not mutate `work.actors`. | high static trace |
+| Current persistence owner | `BoneyardEnemyStore`, `WorkingStep`, `createEnemyWork`, and `finishEnemyStore` | Actor and Maggot arrays persist; no owner index is part of a save/checkpoint/store schema. A local map can be discarded before `finishEnemyStore`. | high static trace |
+
+### System boundary and membership inventory
+
+Native/web system: **one-step Coffin-owned Maggot owner resolution**, beginning
+after ordinary actor stepping/removal and pre-Maggot materialization, covering
+all child validity/admission reads during the ordered Maggot pass, and ending
+before post-manager wave admission and store finalization.
+
+| Member / branch | Disposition | Required proof |
+| --- | --- | --- |
+| first current living Coffin for an owner ID | `verified-already-at-parity`; representation optimized locally | index preserves the first actor-array match for `id`, `alive`, and `COFFIN`, including defensive duplicate-ID fixtures |
+| emerging, inactive crawl, active crawl, and dying children | `verified-already-at-parity` | every child checks the same current owner before any phase-specific branch; retained ordering is unchanged |
+| landing admission and current `maximumMaggots` | `verified-already-at-parity` | base 20 and MANYMAGGOTS 50 styles read the current owner row; STRONGMAGGOTS health/damage and combined style remain untouched |
+| active/inactive admission census and 30-inactive ceiling | `verified-already-at-parity` | unchanged pre-pass census, ordered mutations, 1-in-5 draw position, and 31st-failure retirement |
+| same-step living owner update | `verified-already-at-parity` | index is built after the actor loop and observes the actor row committed for this tick |
+| same-step owner death, conversion, or terminal removal | `verified-already-at-parity` | dying/non-Coffin/absent rows are not indexed; all owned children retire in original order |
+| actor-owned materialization before the Maggot pass | `verified-already-at-parity` | any current actor present at `stepMaggots` entry is indexed exactly once |
+| post-manager wave admission after the Maggot pass | `verified-already-at-parity` | a later Coffin with a reused/future ID cannot rescue a child already invalid this step |
+| child emission during the actor loop | `verified-already-at-parity` | newly appended children retain source owner ID and original array order, then use the same one-step index |
+| pause, run replacement, load, and new-store reset | `verified-already-at-parity` | paused path does not call the index; every active invocation rebuilds it; no map is serialized or returned |
+| save/checkpoint/protocol/renderer/input and native population rules | `out-of-system` — no representation or behavior change | byte-identical state equality and unchanged public/store keys |
+
+There are no `blocked-by-platform` members and no intended gameplay or visual
+difference.
+
+### Native ownership thread and recovered behavioral contract
+
+- The current `work.actors` array is authoritative for this Maggot pass. Its
+  ordering already incorporates earlier same-step removals and insertions.
+  The equivalent index must therefore be constructed at `stepMaggots` entry,
+  never retained across calls or constructed from the source checkpoint.
+- Existing `Array.find` admission semantics select the first qualifying live
+  Coffin. The index must use insert-if-absent rather than last-write-wins so a
+  malformed duplicate-ID boundary fixture remains exactly equivalent.
+- Owner membership is stable only for the synchronous Maggot loop:
+  `stepMaggots` mutates child/effect/event/RNG state but not `work.actors`.
+  The map is invalid immediately after returning and must not enter
+  `BoneyardEnemyStore`, a save, or a diagnostic archive.
+- Owner lookup itself consumes no RNG. The admission census, child iteration,
+  optional `Integer(5)` draw, attack/death effects, cell rebind, and later
+  manager admission retain their existing order.
+
+### Confidence and open questions
+
+- Confirmed: archived population, zero-orphan state, current call order, both
+  repeated scans, first-match semantics, all Coffin flag effects that can
+  influence child admission, and the absence of a persisted index owner.
+- Inferred: repeated scans materially contribute to the terminal host overload;
+  source complexity supports the hypothesis, but only baseline/candidate Mac
+  measurements may quantify it.
+- Unknown pending parent-run measurement: the share of whole-tick CPU and
+  sampled allocation removed at 801 and 2,140 children, and the remaining
+  snapshot/replication cost. No speedup is claimed in this entry yet.
+
+### Web implementation consequence and validation contract
+
+- Build one local `Map<BoneyardEnemyActorId, BoneyardEnemyActor>` from current
+  living Coffins at `stepMaggots` entry and pass it to validity and admission
+  reads. Preserve first-match actor order and do not add a store/model field.
+- Focused tests must cover all child phases, base/MANY/STRONG/combined styles,
+  duplicate IDs, same-step death/conversion/removal, later post-manager spawn,
+  reset/rebuild, exact output/RNG equality, and original child/retirement order.
+- The deterministic comparison must execute baseline `bfa35bd3` from an
+  isolated source copy and the candidate against the archive's worst tick,
+  both `lastAliveByPlayer` checkpoints, and generated owner-head, owner-tail,
+  missing/converted-owner, and landing-admission workloads. It must report
+  complete-state hashes plus gameplay and steering RNG receipts.
+- Performance runs must report wall time, process CPU time, sampled allocation,
+  and retained heap with warmup and alternating isolated processes. The result
+  may claim only what those measurements establish.
+
+### Implementation validation receipt
+
+- `maggots.ts` now constructs one insert-if-absent live-Coffin map at
+  `stepMaggots` entry. Both the universal child-validity branch and landing
+  admission read that map. The former per-child `some` and admission `find`
+  scans are removed; actor order, child order, counts, RNG sites, and the
+  enemy-store call order are unchanged. No model, save, checkpoint, or
+  protocol field exists for the index.
+- `boneyard-enemy-store.test.ts` adds the four base/MANY/STRONG/combined style
+  cases, a 128-actor/256-child read-count bound, defensive duplicate-ID first-
+  match admission, ordered invalidation of emerging/inactive/active/dying
+  children after a non-Coffin conversion, and the post-manager-spawn/next-step-
+  rebuild edge. The existing lethal-Coffin regression remains the same-step
+  death/removal witness.
+- External
+  `/Users/jarrett/codex-acceptance/solomon-fixes-6a583nbx/benchmark-maggot-owner-index.mjs`
+  creates an isolated `git archive` of baseline `bfa35bd3`, alternates fresh
+  baseline/candidate processes, covers the three captured checkpoints and six
+  generated boundary populations, and requires complete output/input/RNG hash
+  equality before reporting wall, process-CPU, sampled-allocation, and retained-
+  heap measurements.
+- Pending parent-owned sequential Mac execution. This worker is explicitly
+  prohibited from running tests, builds, lint, validation, or benchmarks, so
+  no speedup or passing-gate claim is recorded here.

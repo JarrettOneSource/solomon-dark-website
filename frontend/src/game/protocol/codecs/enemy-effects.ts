@@ -380,6 +380,7 @@ export function boneyardMageLightningPulses(
       'contact',
       'endpoint',
       'id',
+      'lightRegistration',
       'midpoint',
       'ownerActorId',
       'painterRegistrations',
@@ -415,18 +416,32 @@ export function boneyardMageLightningPulses(
     if (seed > 0xffff_ffff) {
       throw new GameProtocolError(`${pulseField}.seed must be an unsigned 32-bit integer`)
     }
+    const lightRegistration = nativeWorldManagerRegistration(
+      source.lightRegistration,
+      `${pulseField}.lightRegistration`,
+      'actor',
+    )
+    const painterRegistrations = nativeWorldPainterRegistrations(
+      source.painterRegistrations,
+      `${pulseField}.painterRegistrations`,
+      'actor',
+      contact.kind === 'world' ? 3 : 2,
+    )
+    if (painterRegistrations.some(({ registrationOrdinal }) => (
+      registrationOrdinal === lightRegistration.registrationOrdinal
+    ))) {
+      throw new GameProtocolError(
+        `${pulseField} creator and painter registrations must be distinct`,
+      )
+    }
     return {
       contact,
       endpoint: vector(source.endpoint, `${pulseField}.endpoint`),
       id: positiveInteger(source.id, `${pulseField}.id`),
+      lightRegistration,
       midpoint: vector(source.midpoint, `${pulseField}.midpoint`),
       ownerActorId: positiveInteger(source.ownerActorId, `${pulseField}.ownerActorId`),
-      painterRegistrations: nativeWorldPainterRegistrations(
-        source.painterRegistrations,
-        `${pulseField}.painterRegistrations`,
-        'actor',
-        contact.kind === 'world' ? 3 : 2,
-      ),
+      painterRegistrations,
       seed,
       source: vector(source.source, `${pulseField}.source`),
       tick: nonnegativeInteger(source.tick, `${pulseField}.tick`),

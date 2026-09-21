@@ -1,4 +1,9 @@
 import type { GamepadLike } from './movement-input.ts'
+import {
+  browserGamepadSampling,
+  createGamepadSampling,
+  type GamepadSampling,
+} from './gamepad-sampling.ts'
 
 export type MenuDirection = 'down' | 'left' | 'right' | 'up'
 
@@ -8,6 +13,11 @@ export interface MenuGamepadState {
   direction: MenuDirection | null
   next: boolean
   previous: boolean
+}
+
+export interface MenuDirectionRepeat {
+  move: boolean
+  nextRepeatAt: number
 }
 
 export interface SpatialCandidate<T> {
@@ -23,7 +33,8 @@ interface NavigationOptions {
   cancelFrame?: (frame: number) => void
   document?: Document
   enabled?: () => boolean
-  getGamepads?: () => readonly (GamepadLike & { buttons: readonly GamepadButton[] } | null)[]
+  gamepadSampling?: GamepadSampling
+  getGamepads?: () => readonly (GamepadLike | null)[]
   now?: () => number
   requestFrame?: (callback: FrameRequestCallback) => number
   requireModal?: () => boolean
@@ -48,9 +59,12 @@ export function createGamepadMenuNavigation(
 ): GamepadMenuNavigation {
   const ownerDocument = options.document ?? document
   const root = options.root ?? ownerDocument
-  const getGamepads = options.getGamepads ?? (() => (
-    typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : []
-  ))
+  const injectedGamepads = options.getGamepads !== undefined
+  const gamepadSampling = options.gamepadSampling
+    ?? (options.getGamepads
+      ? createGamepadSampling(options.getGamepads)
+      : browserGamepadSampling)
+  const menuGamepads = gamepadSampling.createMenuSampler()
   const requestFrame = options.requestFrame ?? requestAnimationFrame
   const cancelFrame = options.cancelFrame ?? cancelAnimationFrame
   const now = options.now ?? (() => performance.now())
@@ -60,13 +74,33 @@ export function createGamepadMenuNavigation(
   let previous = emptyGamepadState()
   let nextRepeatAt = 0
   let requiresNeutral = false
+  let observed = emptyGamepadState()
+  let observedSamples = 0
+  let destroyed = false
+  const stopObserving = gamepadSampling.subscribe((gamepads) => {
+    observed = readMenuGamepad(gamepads)
+    observedSamples += 1
+  })
+  let consumedSamples = observedSamples
 
   const update = () => {
+    if (destroyed) return
     const currentTime = now()
-    const current = readMenuGamepad(getGamepads())
-    const scope = options.enabled?.() === false
+    const enabled = options.enabled?.() !== false
+    const scope = !enabled
       ? null
       : activeNavigationRoot(root, options.requireModal?.() === true)
+    // An injected source is intentionally self-owned so deterministic tests and
+    // embedders retain the prior one-read-per-update contract.
+    const ownsSampling = scope !== null
+      || !enabled
+      || injectedGamepads
+      || observedSamples === consumedSamples
+    menuGamepads.setActive(ownsSampling)
+    const current = ownsSampling
+      ? readMenuGamepad(menuGamepads.sample())
+      : observed
+    consumedSamples = observedSamples
     if (!initialized) {
       initialized = true
       lastScope = scope
@@ -91,14 +125,15 @@ export function createGamepadMenuNavigation(
       return
     }
     applyMenuButtons(scope, ownerDocument, previous, current)
-    if (current.direction) {
-      const changed = current.direction !== previous.direction
-      if (changed || currentTime >= nextRepeatAt) {
-        moveFocus(scope, ownerDocument, current.direction)
-        nextRepeatAt = currentTime + (changed ? INITIAL_REPEAT_DELAY_MS : REPEAT_INTERVAL_MS)
-      }
-    } else {
-      nextRepeatAt = 0
+    const repeat = advanceMenuDirectionRepeat(
+      previous.direction,
+      current.direction,
+      currentTime,
+      nextRepeatAt,
+    )
+    nextRepeatAt = repeat.nextRepeatAt
+    if (repeat.move && current.direction) {
+      moveFocus(scope, ownerDocument, current.direction)
     }
     previous = current
     frame = requestFrame(update)
@@ -107,9 +142,28 @@ export function createGamepadMenuNavigation(
 
   return {
     destroy() {
+      if (destroyed) return
+      destroyed = true
       cancelFrame(frame)
+      menuGamepads.destroy()
+      stopObserving()
       previous = emptyGamepadState()
     },
+  }
+}
+
+export function advanceMenuDirectionRepeat(
+  previous: MenuDirection | null,
+  current: MenuDirection | null,
+  now: number,
+  nextRepeatAt: number,
+): MenuDirectionRepeat {
+  if (current === null) return { move: false, nextRepeatAt: 0 }
+  const changed = current !== previous
+  if (!changed && !(now >= nextRepeatAt)) return { move: false, nextRepeatAt }
+  return {
+    move: true,
+    nextRepeatAt: now + (changed ? INITIAL_REPEAT_DELAY_MS : REPEAT_INTERVAL_MS),
   }
 }
 
@@ -121,7 +175,7 @@ function applyMenuButtons(root: ParentNode, ownerDocument: Document, previous: M
 }
 
 export function readMenuGamepad(
-  gamepads: readonly (GamepadLike & { buttons: readonly GamepadButton[] } | null)[],
+  gamepads: readonly (GamepadLike | null)[],
 ): MenuGamepadState {
   for (const gamepad of gamepads) {
     if (!gamepad?.connected || gamepad.mapping !== 'standard') continue
@@ -132,11 +186,11 @@ export function readMenuGamepad(
 }
 
 function readConnectedGamepad(
-  gamepad: GamepadLike & { buttons: readonly GamepadButton[] },
+  gamepad: GamepadLike,
 ): MenuGamepadState {
   const horizontal = gamepad.axes[0] ?? 0
   const vertical = gamepad.axes[1] ?? 0
-  const pressed = (index: number) => Boolean(gamepad.buttons[index]?.pressed)
+  const pressed = (index: number) => Boolean(gamepad.buttons?.[index]?.pressed)
   let direction: MenuDirection | null = null
   if (pressed(12) || vertical <= -AXIS_THRESHOLD) direction = 'up'
   else if (pressed(13) || vertical >= AXIS_THRESHOLD) direction = 'down'
