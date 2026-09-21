@@ -58,7 +58,7 @@ entrance-domain admission, registration, camera target/current presentation,
 | group 10078 | `+0x58=0`, 10076,10077,10076 | exact-ported correction | random-one selection interleaves with that member's fresh raw draw |
 | group 10086 | `+0x58=0`, 10085,10076 | exact-ported correction | same late-survival contract |
 | UIDGroup `+0x5C/+0x60/+0x34` tails | all six exact serialized rows | verified-already-data-complete; out-of-system (no recovered placement consumer) | raw values remain documented; no inferred behavior |
-| dark policy 0 | `0x00463BE0`, scalar `<=0`; 350 fallback | exact-ported predicate/topology; existing server light source projection retained | equality, retry, fallback, and domain assertion |
+| dark policy 0 | `0x00463BE0`, scalar `<=0`; no 350 fallback (corrected in entry 159 on 2026-09-20) | exact-ported predicate/topology; existing server light source projection retained | equality, retry, non-transition, and domain assertion |
 | light policy 1 | scalar `>0` | verified-already-at-parity plus domain admission | waves 2/5/survival cannot enter spawn strip |
 | off-screen policy 2 | camera rectangle predicate | verified-already-at-parity plus domain admission | wave-2/3 batches remain off-screen and north-side |
 | direct and edge policies 3/4 | shared helper branches | verified-already-at-parity; no authored Tutorial producer | negative tests retain ordinary/custom behavior |

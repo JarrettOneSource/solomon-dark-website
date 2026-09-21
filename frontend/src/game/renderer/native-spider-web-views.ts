@@ -6,6 +6,7 @@ import { nativeSilkMesh } from '../core-kernels/native-silk-presentation.ts'
 import type { NativeFadeLineActor, NativeFadeLineState } from '../core-kernels/native-silk-force.ts'
 import type { BoneyardSilkSnapshot } from '../protocol/spider-state.ts'
 import { setNativeVertexColors } from './native-material-batch.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 interface GradientMeshPlan {
   readonly vertices: readonly number[]
@@ -108,6 +109,7 @@ class GradientMeshView {
 
   destroy(): void {
     this.mesh.removeFromParent()
+    destroyOwnedMeshGeometry(this.mesh)
     this.mesh.destroy()
   }
 }

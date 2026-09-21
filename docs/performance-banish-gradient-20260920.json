@@ -1,0 +1,312 @@
+{
+  "date": "2026-09-20",
+  "baselineSourceSha256": "20301c6c0e107a414cafd40449b73732951a1aeb5914b2f0274f681bc829fe5c",
+  "candidateSourceSha256": "027c7cf312f2255f816f1a1f21979d384f3ac6168a011ac833fdca512af3c845",
+  "testSourceSha256": "05377e41a55574e6c165aa0483c3e643f6cd75f01d34fca2f3a555c1d286fab0",
+  "sourceChanges": [
+    "frontend/src/game/renderer/native-enemy-death-effect-view.ts",
+    "frontend/src/game/renderer/native-mesh-lifetime.test.ts",
+    "frontend/tsconfig.test.json"
+  ],
+  "allocationEvidence": {
+    "profile": "/tmp/solomon-party-wave100-6a583nbx/windows-allocations.heapprofile",
+    "scope": "First attempt before the gradient fix; sampled allocations including collected objects, not retained heap.",
+    "updateBanishSampledMiB": 6.316,
+    "gradientRectSampledMiB": 4.753,
+    "buildLinearGradientSampledMiB": 2.001,
+    "inclusiveUpdateBanishCpuMs": 133.509,
+    "profileDurationSeconds": 31.196052
+  },
+  "focusedVerification": {
+    "command": "PATH=/Users/jarrett/.local/bin:/Users/jarrett/.dotnet:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin node --experimental-strip-types --test src/game/renderer/native-mesh-lifetime.test.ts",
+    "workingDirectory": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend",
+    "passed": 7,
+    "failed": 0,
+    "durationMs": 1411.815542,
+    "nodeVersion": "v22.17.0",
+    "fleetJobId": null,
+    "execution": "Fleet run_command; no background job ID",
+    "fullGate": "Pending parent coordinated validation after all concurrent fixes finish.",
+    "fixtureTypeRepairs": "Expanded canonical test typecheck passed after correcting the typed weather callback, concrete uninitialized renderer fixture, and required golem circleSlowTicks. The final coordinated four-suite run passed 39/39 including this seven-test ownership suite."
+  },
+  "comparisonInvestigation": {
+    "initialResult": "Exact mismatch at banish scale 0.75, viewHeight 720, ageTicks 0.29296875, fills[0].pixels[4]: baseline 1, retained 2.",
+    "initialMethod": "Direct getImageData on default-context source canvases. This repeatedly read retained canvases while reading each fresh baseline canvas once.",
+    "resolution": "No runtime code change or tolerance relaxation. Both stable willReadFrequently contexts and production-default source canvases copied to a separate readback canvas passed exact equality.",
+    "inference": "The mismatch was associated with asymmetric readback instrumentation. Browser backend switching was not directly traced."
+  },
+  "browserComparison": {
+    "startedAtUtc": "2026-09-20T18:44:05.086Z",
+    "completedAtUtc": "2026-09-20T18:44:26.988Z",
+    "browserVersion": "153.0.8010.48",
+    "nodeVersion": "v22.17.0",
+    "headless": true,
+    "scope": "Isolated real Chromium Canvas2D byte equality and actual Pixi view state comparison. This does not measure live frame-time or whole-process allocation improvements.",
+    "comparisons": [
+      {
+        "sourceCanvasContext": "willReadFrequently",
+        "failures": [],
+        "samples": 3144,
+        "effects": 12,
+        "pixelsCompared": 9584640,
+        "created": {
+          "before": 18720,
+          "after": 72
+        },
+        "sourcesDestroyed": 72,
+        "minimumCanvasReductionPercent": 99.61538461538461,
+        "sharedTextureDestroyed": false,
+        "scenarios": [
+          {
+            "kind": "banish",
+            "scale": 0.75,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 0.75,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 1,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 1,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 2,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 2,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 0.75,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 0.75,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 1,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 1,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 2,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 2,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          }
+        ]
+      },
+      {
+        "sourceCanvasContext": "default with separate readback canvas",
+        "failures": [],
+        "samples": 3144,
+        "effects": 12,
+        "pixelsCompared": 9584640,
+        "created": {
+          "before": 18720,
+          "after": 72
+        },
+        "sourcesDestroyed": 72,
+        "minimumCanvasReductionPercent": 99.61538461538461,
+        "sharedTextureDestroyed": false,
+        "scenarios": [
+          {
+            "kind": "banish",
+            "scale": 0.75,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 0.75,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 1,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 1,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 2,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish",
+            "scale": 2,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 0.75,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 0.75,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 1,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 1,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 2,
+            "viewHeight": 720,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          },
+          {
+            "kind": "banish-black",
+            "scale": 2,
+            "viewHeight": 1080,
+            "samples": 262,
+            "beforeCanvases": 1560,
+            "afterCanvases": 6
+          }
+        ]
+      }
+    ]
+  },
+  "limits": [
+    "This isolated comparison proves the canvas allocation reduction and output equality for tested samples; it does not prove elimination of long-session GC hitches.",
+    "Current soak DOM counters do not identify node types or retaining paths; not all collected nodes have been attributed to banish canvases.",
+    "No forced GC or live browser profiling was performed.",
+    "The completed wave-28 attempt does not include this fix."
+  ],
+  "baselineGitCommit": "fb9ec4bf9486e0fac5f76e9648c043614bb4d373",
+  "typecheckConfigSha256AtIncludeAddition": "cb67fd83bd22cc6dbd2574ad3ba41419bef1d54a532e10fd82f31b9610c11069",
+  "coordinatedVerification": [
+    {
+      "name": "canonical-typecheck",
+      "command": [
+        "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.test.json",
+        "--incremental",
+        "--tsBuildInfoFile",
+        "/tmp/solomon-spell-geometry-6a583nbx/canonical-test.tsbuildinfo"
+      ],
+      "startedUtc": "2026-09-20T18:49:32.353376+00:00",
+      "finishedUtc": "2026-09-20T18:49:47.813892+00:00",
+      "exitCode": 0
+    },
+    {
+      "name": "focused-lifetimes",
+      "command": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "src/game/renderer/primary-spell-air-native.test.ts",
+        "src/game/renderer/primary-spell-weld-view.test.ts",
+        "src/game/renderer/primary-spell-water-mesh-runs.test.ts",
+        "src/game/renderer/native-mesh-lifetime.test.ts"
+      ],
+      "startedUtc": "2026-09-20T18:49:47.813963+00:00",
+      "finishedUtc": "2026-09-20T18:49:49.380860+00:00",
+      "exitCode": 0
+    }
+  ]
+}

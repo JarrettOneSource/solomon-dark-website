@@ -1,5 +1,6 @@
 import { boneyardMouthWorldTargets } from './boneyard-world-targets.ts'
 import { resolveActorMotion, resolveUnpushedMoverMotion } from '../core-kernels/actor-physics.ts'
+import { DynamicActorGrid } from '../core-kernels/dynamic-actor-grid.ts'
 import { boneyardActiveBounds, boneyardArenaTransitionSafetyClear, startBoneyardArenaTransition, stepBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { isSolomonPlayerLocked, stepSolomonEncounter } from '../core-kernels/boneyard-encounter.ts'
 import { applyBoneyardGateContact, stepBoneyardGateLeaf } from '../core-kernels/boneyard-gate.ts'
@@ -140,7 +141,7 @@ export function stepBoneyardWorldTick(
       ),
     },
     () => true,
-    undefined,
+    new DynamicActorGrid(64),
     (moverId, otherId) => {
       const playerId = movementContactPlayerIds.get(moverId)
       if (playerId !== undefined) {

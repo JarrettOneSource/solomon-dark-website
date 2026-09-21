@@ -27,6 +27,26 @@ test('stationary transient rows reuse vectors without mutating their source bran
   assert.equal(projectile.ageTicks, 0)
 })
 
+test('death effect copies preserve optional metadata and its serialized key order', () => {
+  const ordinary = deathEffect({ spawnTick: 12 })
+  const step = (effect: BoneyardEnemyDeathEffect) => stepBoneyardTransientEffects(
+    [effect], [], 11, () => 0.5, 100, registerTestWorldPainter,
+  ).deathEffects[0]!
+  const expected = step(ordinary)
+  const oscillation = { amplitudeDeg: 20, phaseDeg: 7, stepDeg: 5 }
+  for (const metadata of [
+    {},
+    { painterSortBias: 0 },
+    { scrapOscillation: oscillation },
+    { painterSortBias: -25, scrapOscillation: oscillation },
+  ]) {
+    const source = Object.freeze({ ...metadata, ...ordinary })
+    const before = JSON.stringify(source)
+    assert.equal(JSON.stringify(step(source)), JSON.stringify({ ...metadata, ...expected }))
+    assert.equal(JSON.stringify(source), before, 'retained source branches stay unchanged')
+  }
+})
+
 test('moving transient rows keep exact motion while sibling branches remain independent', () => {
   const source = deathEffect({ kind: 'move-fade', velocity: { x: 2, y: -3 } })
   const first = stepBoneyardTransientEffects(

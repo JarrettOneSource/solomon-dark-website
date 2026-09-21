@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { grantPlayerSkillRanks } from '../core-kernels/player-progression.ts'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { createIdlePlayerCharacterInput, type PlayerCharacterInput } from '../core-kernels/player-character.ts'
@@ -10,6 +12,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import { compileWebLuaDefinition, WebLuaDefinitionRuntime } from '../modding/definition/index.ts'
 import { prepareModHost } from './prepared-mod-host.ts'
+import { modPlayerControlObservation } from './mod-player-control.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 
 const wasmPath = createRequire(import.meta.url).resolve('wasmoon/dist/glue.wasm')
@@ -227,11 +230,154 @@ test('a player-control reducer cannot silently subscribe under an unrelated scop
     /player.control reducers require participant-run scope/)
 })
 
+test('player control exposes owned secondary slots and native cooldowns without live-state aliases', async () => {
+  const fixture = await createFixture(script)
+  try {
+    let state = stepGameSimulationTick(fixture.state, humanInputs())
+    let book = state.playerEntities.skillBooks[0]!
+    for (const skillId of [48, 15, 12, 23, 78, 79]) book = grantPlayerSkillRanks(book, skillId, 1)
+    const secondary = state.secondaryAbilities.players.wizard!
+    assert.ok(secondary)
+    state = {
+      ...state,
+      playerEntities: { ...state.playerEntities,
+        skillBooks: [book],
+        belts: [[
+          { kind: 'skill', skillId: 8 }, { kind: 'skill', skillId: 48 },
+          { kind: 'skill', skillId: 15 }, { kind: 'skill', skillId: 12 },
+          { kind: 'skill', skillId: 23 }, { kind: 'skill', skillId: 78 },
+          { kind: 'skill', skillId: 79 }, { kind: 'skill', skillId: 45 },
+        ]],
+      },
+      secondaryAbilities: { ...state.secondaryAbilities,
+        players: { wizard: { ...secondary, globalCooldownTicks: 50, heldSlot: 2,
+          cooldownTicksBySkill: secondary.cooldownTicksBySkill.map((ticks, id) => id === 48 ? 3000 : ticks),
+          planewalkerTicksRemaining: 100, firewalker: true, mindstar: true, regenerate: true,
+        } },
+      },
+    }
+    const observation = modPlayerControlObservation(state, 'wizard')
+    const player = observation.player as Record<string, unknown>
+    assert.equal(player.secondary_ready, false)
+    assert.equal(player.held_quickbar, 2)
+    assert.deepEqual(player.secondary_abilities, [
+      { slot: 1, skill_id: 48, cooldown_ticks: 3000, active: false },
+      { slot: 2, skill_id: 15, cooldown_ticks: 0, active: false },
+      { slot: 3, skill_id: 12, cooldown_ticks: 0, active: true },
+      { slot: 4, skill_id: 23, cooldown_ticks: 0, active: true },
+      { slot: 5, skill_id: 78, cooldown_ticks: 0, active: true },
+      { slot: 6, skill_id: 79, cooldown_ticks: 0, active: true },
+    ])
+    const slots = player.secondary_abilities as Array<{ cooldown_ticks: number }>
+    slots[0]!.cooldown_ticks = 9999
+    assert.equal(state.secondaryAbilities.players.wizard!.cooldownTicksBySkill[48], 3000)
+    state = { ...state, secondaryAbilities: { ...state.secondaryAbilities,
+      players: { wizard: { ...state.secondaryAbilities.players.wizard!, globalCooldownTicks: 0 } },
+    } }
+    assert.equal((modPlayerControlObservation(state, 'wizard').player as Record<string, unknown>).secondary_ready, true)
+    state = { ...state, secondaryAbilities: { ...state.secondaryAbilities,
+      players: { wizard: { ...state.secondaryAbilities.players.wizard!, castSpinTicksRemaining: 1 } },
+    } }
+    assert.equal((modPlayerControlObservation(state, 'wizard').player as Record<string, unknown>).secondary_ready, false)
+  } finally { fixture.host.close() }
+})
+
+test('the real stress pilot rotates ready abilities, keeps toggles on, and does not spend mana', async () => {
+  const source = readFileSync(new URL('../../../tools/party-soak-pilot.lua', import.meta.url), 'utf8')
+  const fixture = await createFixture(source)
+  try {
+    let state = stepGameSimulationTick(fixture.state, humanInputs())
+    let book = state.playerEntities.skillBooks[0]!
+    for (const id of [48, 15, 23]) book = grantPlayerSkillRanks(book, id, 1)
+    const secondary = state.secondaryAbilities.players.wizard!
+    state = { ...state,
+      playerEntities: { ...state.playerEntities, skillBooks: [book],
+        belts: [[null, { kind: 'skill', skillId: 48 }, { kind: 'skill', skillId: 15 },
+          { kind: 'skill', skillId: 23 }, null, null, null, null]],
+        progressions: [{ ...state.playerEntities.progressions[0]!, currentMana: 0 }],
+      },
+      secondaryAbilities: { ...state.secondaryAbilities,
+        players: { wizard: { ...secondary, firewalker: true } },
+      },
+    }
+    fixture.state = state
+    const slots = []
+    for (let decision = 0; decision < 6; decision += 1) {
+      const inputs = humanInputs()
+      fixture.host.applyPlayerControls(inputs, decision * 100)
+      slots.push(inputs.wizard!.cast.quickbar)
+    }
+    assert.deepEqual(fixture.errors, [])
+    assert.deepEqual(slots, [1, 2, 1, 2, 1, 2])
+    assert.equal(getPlayerProgression(fixture.state, 'wizard').currentMana,
+      getPlayerProgression(fixture.state, 'wizard').maximumMana)
+    assert.equal(Math.abs(fixture.host.extensions.filterMana({ playerId: 'wizard', tick: fixture.state.tick,
+      currentMana: 10, maximumMana: 100, delta: -99, source: 'primary-cast' })), 0)
+    fixture.state = { ...fixture.state, secondaryAbilities: { ...fixture.state.secondaryAbilities,
+      players: { wizard: { ...secondary, globalCooldownTicks: 5 } },
+    } }
+    const blocked = humanInputs()
+    fixture.host.applyPlayerControls(blocked, 600)
+    assert.equal(blocked.wizard!.cast.quickbar, null)
+    fixture.state = { ...fixture.state, secondaryAbilities: { ...fixture.state.secondaryAbilities,
+      players: { wizard: { ...secondary, firewalker: true, heldSlot: 1,
+        cooldownTicksBySkill: secondary.cooldownTicksBySkill.map((ticks, id) => id === 15 ? 500 : ticks),
+      } },
+    } }
+    const released = humanInputs()
+    fixture.host.applyPlayerControls(released, 700)
+    assert.equal(released.wizard!.cast.quickbar, null)
+    assert.equal(fixture.state.secondaryAbilities.players.wizard!.cooldownTicksBySkill[15], 500)
+    assert.equal(fixture.state.playerEntities.skillBooks[0]!.primarySkillId, book.primarySkillId)
+    assert.deepEqual(fixture.errors, [])
+  } finally { fixture.host.close() }
+})
+
+for (const element of ['fire', 'water'] as const) {
+  test(`the actual ${element} stress pilot casts secondaries through native shared cooldowns without mana loss`, async () => {
+    const source = readFileSync(new URL('../../../tools/party-soak-pilot.lua', import.meta.url), 'utf8')
+    const fixture = await createFixture(source, () => 0, element)
+    try {
+      const state = stepGameSimulationTick(fixture.state, humanInputs())
+      let book = state.playerEntities.skillBooks[0]!
+      for (const id of [48, 15]) book = grantPlayerSkillRanks(book, id, 1)
+      fixture.state = { ...state, playerEntities: { ...state.playerEntities,
+        skillBooks: [book],
+        belts: [[{ kind: 'skill', skillId: 48 }, { kind: 'skill', skillId: 15 }, null, null, null, null, null, null]],
+        // A controlled finite-capacity fixture separates spending from the
+        // unchanged native affordability check. No production ranks are granted.
+        progressions: [{ ...state.playerEntities.progressions[0]!, currentMana: 10000, maximumMana: 10000 }],
+      } }
+      const casts: Array<{ tick: number; skillId: number }> = []
+      let sequence = 0
+      for (let tick = 0; tick < 600; tick += 1) {
+        const inputs = humanInputs()
+        fixture.host.applyPlayerControls(inputs, tick * 10)
+        fixture.state = stepGameSimulationTick(fixture.state, inputs, { extensions: fixture.host.extensions })
+        const secondary = fixture.state.secondaryAbilities.players.wizard!
+        if (secondary.castSequence > sequence) {
+          casts.push({ tick: fixture.state.tick, skillId: secondary.lastSkillId! })
+          sequence = secondary.castSequence
+        }
+        assert.equal(getPlayerProgression(fixture.state, 'wizard').currentMana, 10000)
+      }
+      assert.ok(casts.some(cast => cast.skillId === 48))
+      assert.ok(casts.some(cast => cast.skillId === 15))
+      for (let index = 1; index < casts.length; index += 1) {
+        assert.ok(casts[index]!.tick - casts[index - 1]!.tick >= 150,
+          'the native 150-tick shared cooldown must not be bypassed')
+      }
+      assert.equal(fixture.state.playerEntities.skillBooks[0]!.primarySkillId, book.primarySkillId)
+      assert.deepEqual(fixture.errors, [])
+    } finally { fixture.host.close() }
+  })
+}
+
 function humanInputs(): Record<string, PlayerCharacterInput> {
   return { wizard: { ...createIdlePlayerCharacterInput(1234, 700), movement: { x: -1, y: 0 } } }
 }
 
-async function createFixture(source: string, now: () => number = () => 0) {
+async function createFixture(source: string, now: () => number = () => 0, element: 'fire' | 'water' = 'fire') {
   const runtime = await WebLuaDefinitionRuntime.create({ entryScript: 'scripts/main.lua', identity, wasmPath })
   let compiled
   try { compiled = compileWebLuaDefinition(identity, runtime.run(source)) }
@@ -253,7 +399,7 @@ async function createFixture(source: string, now: () => number = () => 0) {
       spawn: { x: 500, y: 500, facingDeg: 0 }, sprites: [], terrain: [] },
   }
   let state = enterBoneyardWorld(createGameSimulation({ wizard: {
-    discipline: 'arcane', displayName: 'Tester', element: 'fire',
+    discipline: 'arcane', displayName: 'Tester', element,
   } }), loaded)
   const errors: string[] = []
   const host = await prepareModHost({ content, log: message => errors.push(message), now,

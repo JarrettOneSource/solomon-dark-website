@@ -1,6 +1,7 @@
 import { setNativeDiffuseColor } from './native-texture-color.ts'
 import { Container, Graphics, GraphicsContext, Matrix, Mesh, MeshGeometry, Sprite } from 'pixi.js'
 
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import type {
   NativeWeldSpriteDraw,
   NativeWeldVisualPlan,
@@ -46,7 +47,7 @@ export class WeldDrawingResources {
 
   destroy(): void {
     this.lines.destroy()
-    for (const geometry of this.meshes) geometry.destroy(true)
+    for (const geometry of this.meshes) destroyOwnedMeshGeometry({ geometry })
     this.meshes.length = 0
   }
 }

@@ -346,8 +346,9 @@ export function materializeNativeLootScriptAction(
         sharedRng: input.sharedRng,
       }
     }
+    const selected = equipmentRecipeItem(recipe, input.itemIds, input.sharedRng)
     const placement = resolveNativeLootPlacement(
-      input.sharedRng,
+      selected.sharedRng,
       input.placement,
       input.sourcePosition,
       NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
@@ -355,7 +356,7 @@ export function materializeNativeLootScriptAction(
     return {
       drops: [sackDrop(
         input,
-        equipmentRecipeItem(recipe, input.itemIds),
+        selected.item,
         'script',
         placement.position,
       )],

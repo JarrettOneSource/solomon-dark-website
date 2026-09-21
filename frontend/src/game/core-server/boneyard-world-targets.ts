@@ -6,6 +6,9 @@ import type { BoneyardWorldState } from './boneyard-world-state.ts'
 import type { BoneyardPuppetTarget } from './enemies/model.ts'
 import { primaryTargetRows } from './spell-combat/targets.ts'
 
+// Arena cleanup and save restoration replace this immutable authored table.
+const sceneryTargetProjections = new WeakMap<readonly PrimarySpellTarget[], readonly BoneyardPuppetTarget[]>()
+
 export function boneyardPrimarySpellTargets(
   world: BoneyardWorldState,
 ): readonly PrimarySpellTarget[] {
@@ -13,8 +16,13 @@ export function boneyardPrimarySpellTargets(
 }
 
 export function boneyardWorldSceneryTargets(world: BoneyardWorldState): BoneyardPuppetTarget[] {
+  let scenery = sceneryTargetProjections.get(world.primarySceneryTargets)
+  if (!scenery) {
+    scenery = world.primarySceneryTargets.map(target => ({ ...target, hitKind: 'scenery' as const }))
+    sceneryTargetProjections.set(world.primarySceneryTargets, scenery)
+  }
   return [
-    ...world.primarySceneryTargets.map(target => ({ ...target, hitKind: 'scenery' as const })),
+    ...scenery,
     ...world.loot.goodies.map(goodie => ({
       ...boneyardPuppetTarget(`goodie:${goodie.id}`, goodie.position, 0x2004, goodie.sceneryRegistrationOrdinal, 'goodie'),
       bodyRadius: 20, nativePriority: 1000, kind: 'scenery' as const,

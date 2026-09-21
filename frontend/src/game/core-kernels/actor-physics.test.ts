@@ -162,6 +162,66 @@ test('dynamic grid is an exact all-pairs oracle over deterministic mixed crowds'
   }
 })
 
+test('dynamic grid preserves idle Boneyard roots, dense passive crowds and contact order', () => {
+  for (const offset of [-64, 0, 63.9]) {
+    const bodies: ActorPhysicsBody[] = [0, 1].map((index) => ({
+      delta: { x: 0, y: 0 },
+      id: `player-${index}`,
+      position: { x: offset + index * 160, y: 0 },
+      pushResistance: 10,
+      pushStrength: 12,
+      radius: 25,
+    }))
+    for (let coffin = 0; coffin < 12; coffin += 1) {
+      const center = { x: offset + (coffin % 4) * 160, y: Math.floor(coffin / 4) * 130 }
+      for (let child = 0; child < 51; child += 1) {
+        bodies.push({
+          delta: { x: 0, y: 0 },
+          driven: false,
+          id: `coffin-${coffin}-body-${child}`,
+          position: child === 50
+            ? { x: center.x + 85, y: center.y + 15 }
+            : { x: center.x + (child % 10 - 4.5) * 11,
+                y: center.y + (Math.floor(child / 10) - 2) * 11 },
+          pushEnabled: false,
+          pushResistance: 0,
+          pushStrength: 0,
+          radius: child === 50 ? 45 : 8,
+        })
+      }
+    }
+    const before = structuredClone(bodies)
+    let rejectedPlacements = 0
+    const world: ActorPhysicsWorld = {
+      canPlace: (_bodyId, position, radius) => {
+        const allowed = position.y - radius >= -30
+        rejectedPlacements += Number(!allowed)
+        return allowed
+      },
+      move: (_bodyId, position, delta, radius) => ({
+        x: position.x + delta.x,
+        y: Math.max(-30 + radius, position.y + delta.y),
+      }),
+    }
+    const referenceContacts: Array<readonly [string, string]> = []
+    const actualContacts: Array<readonly [string, string]> = []
+    const reference = resolveActorMotion(bodies, world, allBodiesCollide, undefined,
+      (moverId, otherId) => referenceContacts.push([moverId, otherId]))
+    const actual = resolveActorMotion(bodies, world, allBodiesCollide, new DynamicActorGrid(64),
+      (moverId, otherId) => actualContacts.push([moverId, otherId]))
+
+    assert.deepEqual(actual, reference, `offset ${offset}`)
+    assert.deepEqual(actualContacts, referenceContacts)
+    assert.deepEqual(bodies, before)
+    assert.ok(rejectedPlacements > 0)
+    assert.ok(actualContacts.length > 0)
+    assert.ok(actual.filter((body, index) => index >= 2 && (
+      body.position.x !== bodies[index]!.position.x
+      || body.position.y !== bodies[index]!.position.y
+    )).length > 30)
+  }
+})
+
 test('unpushed mover fast path is an exact single-driver oracle over crowded worlds', () => {
   let randomState = 0x2f6e2b1d
   const blockedWorld = {

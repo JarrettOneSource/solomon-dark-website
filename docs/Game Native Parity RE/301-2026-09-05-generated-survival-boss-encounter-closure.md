@@ -1,7 +1,177 @@
 # 2026-09-05 — Generated survival boss encounters
 
 Status: native recovery and implementation complete; the full Mac Website gate
-and all 24 Mac browser acceptance cases passed.
+and all 24 Mac browser acceptance cases passed. The 2026-09-20 endurance run
+reopened the transport population envelope below; its validation is recorded
+separately from those earlier receipts.
+
+## 2026-09-20 — Faculty death population transport envelope
+
+The wave-33 Windows/Mac party disconnected when a valid native Faculty death
+burst exceeded `frame.world.entities.samples`' shared 8,192-row limit. The
+earlier death coverage checked individual records and the terminal inventory,
+but never transported the complete population. That omitted downstream
+membership is the reason this previously closed system required reopening.
+
+This boundary covers the complete native Faculty death population, raw world
+snapshot admission, all seven compact entity families, and compact spawn,
+sample, retirement, keyframe and delta transport. Gameplay clocks, random
+draws, emitters, opacity, presentation ordering and retirement remain owned by
+the already recovered native implementation.
+
+| Member | Disposition | Contract |
+| --- | --- | --- |
+| Sirmin, Lucritius, Aliss dying and finale effects | `verified-already-at-parity` | One generated Faculty encounter creates these three actors once per run. The encounter progresses through boss wait and completion to retired; it cannot rearm. |
+| Black-smoky Bouncer and fade children | `verified-already-at-parity` | Native tick `0x00456E40` emits one smoke each airborne tick. Child opacity is `.25 + Float(.44999998807907104)`, loss `.004999999888241291`, maximum 140 retained ticks. The emitter's empty draw slot remains excluded from presentation. |
+| Raw death-effect admission | `exact-ported` | Preserve the existing 8,192 other-effect allowance and add the conservative three-Faculty death envelope: 62,156 total records. |
+| Compact enemies, death effects, enemy projectiles, projectile effects, Maggots, loot and goodies | `exact-ported` | The shared row envelope is the sum of the seven admitted family limits, 77,259, for spawned descriptors, samples and retired keys. |
+| Owner save, checkpoint, file restore, cloud save and signed party recovery | `exact-ported` | The entire native population, including 375 invisible emitters, fits finite 96 MiB / 3,000,000-value continuation budgets. Save-bearing HTTP admission is scoped to its owning routes. |
+| Faculty living, start, dying and terminal smoke save ownership | `exact-ported` | The four shared-constructor roles admit both native ownership branches and preserve their painter registrations exactly. The seven previously admitted Dampen/Tragic/Skull/Dark roles remain covered. |
+| Rotten Zombie gas and Wraith wisp save ownership | `exact-ported` | `move-fade-sin` / `zombie-rotten-particle` and `fade-additive` / `wraith-soul-wisp` retain their fixed pre-world ownership and null painter, as already recovered in ledger 091. |
+| Hub Students | `verified-already-at-parity` | The 256-Student population fits the shared envelope; its native count is unchanged. |
+| Spider remains and silk fragments | `out-of-system` | These separate world arrays previously borrowed the death-effect constant. Retain their existing 8,192-record admission under their own constant. |
+
+The bound follows population ownership, rather than the observed peak of one
+seed. Each Faculty has 250 dying ticks and emits one black-smoky Bouncer on
+each even tick: 125 emitters. Regardless of how long their repeated airborne
+bounces last, one emitter can retain at most 140 one-per-tick smoke children.
+The emitter's inherited opacity also gives a finite 1,002-tick upper lifetime.
+Every other emitted death child is included without subtracting nonoverlapping
+lifetimes: 72 start smoke, 250 dying smoke, and 166 finale children (18 bones,
+one skull, one Unbind, one Banish, one sprite array, 72 terminal smoke and 72
+Scrap). This is 488 additional children per Faculty. Therefore
+`8192 + 3 * (125 * 140 + 488) = 62156` bounds the complete native Faculty
+increment while preserving the earlier allowance for all other effect owners.
+This is a conservative protocol capacity, not a new population cap in the
+simulation and not a claim about arbitrary mod-created populations.
+
+Evidence: immutable endurance archive
+`archive-f070ac96-7094-4825-a69b-71628ae49d57.json`, run
+`98032fbe6a8a9a3f9d1e48552c18cbdb`, protocol 127, Node 22.17.0. Both clients
+reported the row-limit failure at 21:19:43.618/21:19:44.957 UTC. The five-second
+server sample at tick 452953 contained 7,135 death effects; the final retained
+states were already decaying and are not the exact offending packets.
+
+A bounded Mac reproduction used the unchanged native `faculty-integration`
+seed, all normal dying ticks, and the archived 183 loot plus three goodies.
+One Faculty first rejected compact transport at age 248 with 8,201 rows;
+its raw world first rejected at age 250 with 8,214 visible death effects.
+It peaked at 8,483 visible effects / 8,669 rows at age 272. Three simultaneous
+deaths first rejected compact transport at age 104 and raw transport at age
+106, peaking at 25,335 visible effects / 25,521 rows at age 275. Both
+populations retired completely within the 1,100-tick observation. This is a
+bounded native burst, not a cumulative retention leak. First rejected frames,
+raw snapshots, source SHA-256 manifest and per-scenario population receipts
+are retained in `/tmp/solomon-protocol-faculty-repro-before-6a583nbx`.
+
+Protocol 128 identifies the wider admission contract so older decoders cannot
+join and then fail only when a valid population grows. Validation must cover
+the full three-member death lifecycle, raw/keyframe/delta byte envelopes,
+exact effect identity and retirement, and rejection above both finite limits.
+The new full-gate and browser acceptance receipts remain pending.
+
+The same population exposed a second downstream omission in native save
+continuations. At the retained single-death peak, the actual owner projection
+and `createGameSaveDocument` produced 8,304,091 bytes / 430,524 JSON values;
+checkpoint encoding and decoding succeeded, but `restoreGameSaveDocument`
+rejected it with `game save has too many values`. The three-death peak's actual
+writer rejected the document at the old 16 MiB bound. Exact save options,
+the single written document and the separate failure receipt are retained in
+`/tmp/solomon-faculty-save-before-6a583nbx`.
+
+Save continuations also retain the 125 non-drawing emitters per Faculty.
+The three-member envelope is therefore 54,339 records: the 53,964 visible
+children above plus 375 emitters. The per-role native record census has at
+most 49 JSON values per record. Bounding every numeric JSON token by 24 UTF-8
+bytes (including a negative finite binary64 value at maximum magnitude),
+including all record keys, punctuation and the fixed native strings, gives
+79,783,113 bytes / 2,389,620 values for the complete three-member increment.
+Allowing the alternate non-null painter-registration representation for the
+396 smoke/overlay children per member adds fewer than 118,800 bytes / 2,376
+values. Adding the existing 16 MiB / 250,000-value allowance stays below
+96,679,129 bytes and 2,641,996 values. The selected finite save capacities are
+96 MiB and 3,000,000 values, rather than a bound fitted to one observed seed.
+
+The client writer, file admission, restore parser, backend inspector, and
+rejoin admission share these capacities. WebSocket messages already derive
+their bound as twice the save byte allowance plus 64 KiB for JSON escaping.
+Only cloud-save PUT and party-rejoin HTTP routes receive corresponding body
+metadata. The supervisor's rejoin parser adds the save envelope to its
+existing 48 MiB provisioning allowance; unrelated admin routes retain their
+existing bound. Native archive/profile/package limits are outside this
+browser-continuation boundary. All saved native state remains intact.
+
+Admitting those exact native peaks exposed a third downstream omission:
+the restore ownership validator rejected `faculty-dying-smoke` with
+`pre-world-queue`, despite that being an ordinary constructor result. Native
+`0x0049D0D0` / `0x0049E8F0`, already recovered below and ported by
+`spawnFacultySmoke`, select world-sorted ownership for one of five draws and
+pre-world ownership otherwise. The complete shared constructor membership is
+`faculty-living-smoke`, `faculty-start-smoke`, `faculty-dying-smoke` and
+`faculty-terminal-smoke`; all four must retain either authored ownership.
+The existing sibling exceptions for Dampen, Tragic Circle and the five
+Skull/Dark projectile smoke roles remain valid. The correction admits exactly
+these four missing `move-fade` roles with pre-world ownership; background,
+late-overlay, direct-post-world, unknown roles and mismatched kinds retain
+their existing rejection. World-sorted particles still require their transient
+painter registration, and pre-world particles still require null. This is save
+validation only; the producers, random draws and painter order are unchanged.
+The native peak regression compares every restored death-effect value, and
+the role matrix checks both valid owners and invalid combinations.
+
+The six retained live checkpoints then exposed the same classifier omission
+for `move-fade-sin` / `zombie-rotten-particle` (13 effects in the wave-27
+pressure checkpoint and four in the Lua-timeout checkpoint). Completing the
+explicit non-world producer inventory also identified `fade-additive` /
+`wraith-soul-wisp`. These two constructors always choose pre-world ownership;
+their existing native authority tests already asserted it. Ledger 091 records
+the shared first-tick/presentation ownership recovery, including Zombie
+construction at `0x00486997`. The save classifier now admits precisely those
+two kind/role pairs with pre-world/null ownership and rejects other owners.
+All remaining explicit non-world death-effect producers are covered by the
+existing rules: sprite/fire arrays, late splats, perspective movement/scale,
+Blightning, Discorporeal branches, Unbind, warmup/contact overlays, clipped
+background fades, UltraBanish bones, eye flashes and Demon fire bursts.
+Player cold/poison onset uses the existing perspective-movement rule. The
+ordinary world-sorted default remains unchanged. Tests use actual Zombie and
+Wraith emissions through complete save/restore, rather than renamed particles.
+
+Focused Mac verification on the exact candidate is complete. The replay
+encoded and decoded raw worlds, complete keyframes and deltas at every tick
+for both 1,100-tick scenarios: 2,200 states, no rejected messages and unchanged
+peaks and complete retirement. Maximum three-member messages were 11,652,264
+bytes raw, 2,234,497 bytes for a keyframe, and 1,278,609 bytes for a delta.
+Transport uses JSON; there is no separate MessagePack array envelope.
+
+The preserved owner-save options now roundtrip 8,569 / 25,582 complete effects
+with deep equality and identical canonical JSON SHA-256 for every effect.
+Their documents are 8,304,091 / 23,201,670 bytes and 430,524 / 1,179,320 values;
+the escaped checkpoints are 9,246,739 / 25,811,544 bytes. Owner projection may
+normalize unrelated runtime fields; no death-effect value is normalized away.
+The save schema remains 36. The shared WebSocket bound is 201,392,128 bytes.
+
+The real .NET 10 Kestrel backend accepted PUT and returned GET of the same
+native peak padded to 50 MiB with legal JSON whitespace, with identical
+document hashes. Its rejoin route forwarded the same document to the HTTP
+supervisor stub and returned 201; an above-3,000,000-value document returned
+400. Independently, a real Node supervisor accepted a signed 50 MiB native
+save through `/admin/rejoin`, restored it through a WebSocket `client-hello`,
+and issued a checkpoint whose full death-effect array and tick remained
+identical. Padding tests the transport envelope; it is not a measured native
+save size. The finite UTF-8 byte boundary, raw/family/aggregate row boundaries,
+and invalid ownership combinations remain rejection-tested.
+
+The affected save and supervisor suites passed 70 tests. The earlier
+protocol/native-encounter suite passed 75. TypeScript test typechecking and
+scoped backend formatting passed. Targeted lint reported no errors and the
+existing control-character-regex warning in unchanged path validation.
+After the Zombie/Wraith classifier completion, all 47 save-document tests
+passed again, full test typechecking passed, and the two changed save files
+passed targeted lint with no warnings or errors.
+The machine-readable evidence, job IDs, source manifest and immutable raw
+allowlist are in [the Faculty transport receipt](../performance-faculty-protocol-20260920.json).
+The complete Website gate and repeated cross-device endurance acceptance
+remain separate pending work; these focused receipts do not claim wave 100.
 
 ## Reopened boundary and cause
 

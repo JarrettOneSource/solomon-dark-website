@@ -1,5 +1,8 @@
 # Enemy pathfinding and Spawner ambush correction — 2026-08-22
 
+> The 2026-09-20 reopening below supersedes earlier descriptions of the
+> 350-unit retry transition: it belongs to LIGHT, not DARK.
+
 ## Reported smell and parity question
 
 - Reported web behavior: verify that enemy pathfinding mirrors stock and audit
@@ -211,3 +214,173 @@ claim.
   name: stock proposes near the player, then dark/collision placement can move
   the actual roots hundreds of units away. No path/spawn member is blocked by
   the browser platform. Deployment remains separate and was not requested.
+
+
+## 2026-09-20 — LIGHT retry transition recovered from instructions
+
+### Reopened failure and boundary
+
+The two-client endurance run on the Mac mini and Windows failed at tick
+332807, entering wave 28, with `Boneyard has no light collision-safe spawn
+placement for radius 45 from (1072.62109375, 550.5117797851562)`. The exact
+source is generated template 7, SHA-256
+`e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430`.
+Its authored first Deep Portal phase starts at wave 28: recipe 37383, script
+37385, trigger 37386, three Portal births at 479.36651611328125 HP. The world
+caller uses an anywhere raw point, radius 45 for placement, radius 25 for
+reachability, and LIGHT. The last recorded players were near `(1224.77,
+2449.72)` and `(1109.25, 2419.33)`, explaining why a distant raw point needs
+policy handling. The final state archive did not flush before the fatal exit;
+the reproduction preserves the exact geometry and recorded positions, not an
+invented exact pre-crash RNG or full checkpoint.
+
+This pass reopens the shared native collision-ring policy transition in
+`0x00463D30` and its policy decoder `0x00463BE0`. The earlier report accepted
+a decompiler-derived policy name without checking the numeric branch against
+the decoder. That mislabeled LIGHT as DARK and omitted the native escape from
+the very policy used by this Portal phase. This is a pre-existing defect:
+collision, navigation, Portal definitions, and the wave director are byte
+identical to base `fb9ec4bf9486e0fac5f76e9648c043614bb4d373`; the reproduction
+uses neither the dynamic actor solver nor the new lazy-light wrapper.
+
+### Instruction evidence and native contract
+
+Retail `SolomonDark.exe` 0.72.5 is 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. The canonical Windows Ghidra project was
+opened through read-only replica 3 using the existing Mod Loader wrapper at
+revision `08bfba9ef367f7b863848030d0a289dc31e33192`, wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+No Mod Loader source or evidence file changed.
+
+| Evidence | Verified conclusion |
+| --- | --- |
+| `0x00463BE0`, cases 0 and 1 | Policy 0 is DARK (`light <= 0`); policy 1 is LIGHT (`light > 0`). DIRECT is policy 3. |
+| `0x00463FD3..0x00463FE6` and float at `0x007858EC` | After a completed ring increments its radius, transition only when the new radius is strictly greater than 350. Equality does not transition. |
+| `0x00463FEC..0x0046401F` | `CMP ESI,1`, then `MOV ESI,3`: LIGHT becomes DIRECT. Radius resets to twice the actor radius. The diagnostic string is `Coffin Light: %f`. DARK does not own this transition. |
+| `0x00463E3D..0x00463E71` | Existing radius-ring angular count and fresh per-ring RNG remain unchanged. |
+| `0x00469580` and `0x00466200` | Script construction passes a raw origin through policy preparation before collision rings; the first Deep Portal uses the same shared LIGHT decoder. |
+
+The finite maximum search radius, static collision/mobility predicate,
+player-connected domain, and Tutorial target confinement remain existing
+Website safety adaptations. They are not newly inferred native mechanisms.
+The correction changes the owner and strictness of the existing native
+transition; it does not add a new fallback or relax accepted placement.
+
+### Shared transition membership
+
+| Member | Disposition and proof contract |
+| --- | --- |
+| LIGHT: Coffin groups and all eight optional first Deep Portal phases | Exact port of policy-1 transition, strict threshold, and radius restart; test radius 25 (exact equality), 45 (reported family), and 50. |
+| DARK: generated opening/groups, later Portal phases, bosses, Slumpgut, and dark Spider/Tutorial births | Exact port of policy-0 non-transition; no DIRECT conversion from darkness. Preserve normal already-dark placement and RNG order. |
+| DIRECT: terminal children and explicitly direct intents | Verified unchanged identity/retry behavior. |
+| OFFSCREEN: Spider and Tutorial/script intents | Verified unchanged policy predicate and retry behavior; no LIGHT transition. |
+| EDGE: exposed shared placement policy | Verified unchanged outside-policy predicate; no LIGHT transition. |
+| Shared world-owned collision/reachability/bounds | Preserve strict rejection for impossible worlds and disconnected domains; a policy transition cannot bypass placement safety. |
+| Native upstream light-point preparation (`0x0057E9C0`, `0x0057EEE0`) | Separate upstream point-selection owner, outside this ring-transition correction; recovered nearby findings below prevent claiming complete native point-selection parity. |
+
+### Nearby light-point preparation findings
+
+Fresh decompilation and instructions show actual point relocation before the
+collision-ring owner, not merely light-query initialization. DARK helper
+`0x0057E9C0` can search around accepted light-source boundaries. LIGHT helper
+`0x0057EEE0` first queries source-ellipse overlap, and otherwise walks the
+accepted source records in order. It selects the last source with transformed squared
+point distance below 999999, then uses `0x0043A8E0` to normalize that offset to
+75 times source radius. A point with no source inside that range is returned
+unchanged. Region virtual slots `+0xF4/+0xF8` own entry/exit coordinate
+conversion. The current Website's scalar light query does not perform this
+relocation. These are upstream placement differences, preserved explicitly;
+this receipt claims the recovered ring transition only, not complete native
+spawn-coordinate equality. The logged failure is resolved by the native
+LIGHT transition even when the upstream helper leaves a distant point alone.
+
+### Reproduction and validation contract
+
+A Mac-only deterministic probe uses the exact template, raw point, radius,
+recorded player positions, and real eager `boneyardWorldLightQuery`. Nine of
+32 RNG seeds fail before correction despite legal lit regions: 9, 11, 13, 14,
+15, 19, 22, 24, and 25. Clamping the raw point cannot help because it is
+already within the active bounds. The output is preserved as
+`/tmp/solomon-spawn-repro-6a583nbx.json`; the probe source is the adjacent
+`.mjs`. Add focused regressions before changing code, require all policies
+and the strict 350 boundary, replay the full recorded geometry, and run a
+world-level first-Portal materialization check. The root task owns the final
+canonical Mac gate and two-client endurance continuation.
+
+
+### Implementation validation receipt
+
+The runtime diff is three substitutions in `boneyard-collision.ts`: name the
+constant `lightFallbackRadius`, apply the transition to LIGHT, and use strict
+`>` rather than `>=`. Existing placement admission and bounded failure remain
+unchanged. Three new policy tests and one actual-world Portal regression were
+added. Before the fix, the new cases produced three failures, including the
+same radius-45 exception through the real world/store/construction call stack.
+The first post-fix run exposed a test-only incorrect health property name;
+that assertion was corrected to the actor's `currentHealth`.
+
+Mac verification job `job_20260920T185303Z_a390141e68` ran from
+18:53:03.448 to 18:54:05.602 UTC and exited zero. Collision, navigation, and
+world suites passed 74/74; `tsc -p tsconfig.test.json --noEmit` passed. All 32
+exact-map probe seeds now succeed; its duplicate clamped-origin control also
+succeeds (64/64 total rows). All nine previously failing seeds materialize the
+authored wave-28 Portal with exact health, radius-45 collision validity, and
+radius-25 player-connected reachability in the real world tick. An earlier
+30-second foreground suite attempt timed out and is not a passed gate.
+
+The complete evidence directory on the Mac is
+`/tmp/solomon-spawn-fix-6a583nbx/`. It contains the original reproduction,
+red and green tests, type-check output, and three fresh native captures. The
+raw instruction capture SHA-256 is
+`3e37a2e1998327ffdb2ef7a13eddefbd96ac73bdc54ed540eb86acdac15b5618`.
+The root endurance task will add the complete canonical gate and real
+multiplayer continuation; these focused results do not claim wave 100.
+
+### Full-gate fixture correction
+
+The subsequent full gate exposed two impossible authored test arenas in
+`game-simulation.test.ts`: same-tick wave/provider registration and the Solomon
+run-edge combat admission test. Both reused the 500-by-500 cleanup fixture,
+then attached a retail Solomon encounter. Once opening waves activate,
+`createBoneyardArenaTransition` excludes the native 400-unit entrance and
+the birth domain becomes `{ x: 0, y: 0, w: 500, h: 100 }`.
+
+A read-only Node module-loader probe observed the exact eager world-light
+field immediately before each failing birth. At actor radius
+16.051904663443565, all four corners of the legal center rectangle are inside
+the player's positive-light ellipse. The lowest corner light is
+0.010336763542781457 for provider registration and 0.0155471286537745 for
+secondary admission. The ellipse is convex, so it contains the complete
+rectangle, not just the sampled corners. The real indexed light query also
+finds zero dark points among 31,824 samples on a one-unit grid in each failing
+domain. Lantern contributions cannot introduce darkness. The failures are
+therefore required DARK rejection, unrelated to ring sampling or the known
+upstream point-preparation difference.
+
+A width-only probe supplied dark points but retained a 100-unit-high strip.
+The exact native ring RNG reached 11 mobile, connected candidate points, all
+lit, and still correctly rejected the birth. Merely counting dark grid points
+does not prove the native search can admit the fixture's deterministic birth.
+
+Keep the production correction and every existing test assertion. Give only
+these two scenes a complete 1000-by-1000 arena, as already used by the
+world-level native-placement fixture. All actor coordinates, inputs, and
+tested tick edges remain unchanged. The spawn at y=250 now selects the north
+entrance branch, with combat bounds y=375, height 600; neither test asserts an
+entrance side or escape path. The Solomon run event is controlled solely by
+positive retreat motion, and the first test directly starts the director.
+The tests continue to require exact same-tick combat admission, actor counts,
+registration ordinals, and native weapon-pulse values. Other cleanup fixtures
+remain narrow because they do not materialize these opening births. Exact
+before/after observations and focused verification are retained in
+`/tmp/solomon-spawn-fixture-6a583nbx/`.
+
+The complete arena probe passed both original tests at 19:23:45 UTC.
+Uninstrumented Mac job `job_20260920T192416Z_8b5425e48f` then passed all
+156 collision, navigation, world, and game-simulation tests, followed by
+`tsc -p tsconfig.test.json --noEmit` and `git diff --check`; it exited zero at
+19:25:09 UTC. The fixture-only test diff adds four lines and changes no
+existing assertion. `boneyard-collision.ts` remains SHA-256
+`36e1a53a3a1bc1445e71c1eadb80cc0bddbe2ad6a0d0edd1570b48eb52399d5f`.
+The root task still owns the complete gate and wave-100 acceptance.

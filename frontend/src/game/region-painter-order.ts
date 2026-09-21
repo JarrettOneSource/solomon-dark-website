@@ -320,8 +320,8 @@ function nativeRegionPainterRowFromIntegerReference(
 
 function validateEntry(entry: Pick<NativeRegionPainterInsertion, 'id' | 'sortBias' | 'worldY'>): void {
   if (entry.id.length === 0) throw new Error('native Region painter id must not be empty')
-  requireFinite(entry.worldY, `${entry.id} world Y`)
-  requireFinite(entry.sortBias, `${entry.id} sort bias`)
+  if (!Number.isFinite(entry.worldY)) throw new RangeError(`${entry.id} world Y must be finite`)
+  if (!Number.isFinite(entry.sortBias)) throw new RangeError(`${entry.id} sort bias must be finite`)
 }
 
 function validateRegistration(registration: NativeRegionPainterRegistration): void {

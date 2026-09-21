@@ -58,7 +58,7 @@ import { NATIVE_LOOT_EVENT_RETENTION_TICKS, activateBoneyardGoodie, boneyardGood
 import { createBoneyardProjectileVisibility } from './boneyard-projectile-world.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
 import { createBoneyardWorld } from './boneyard-world-construction.ts'
-import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
+import { createBoneyardWorldLightSampler } from './boneyard-world-light.ts'
 import { applyBoneyardSecondaryEnemyKnockbacks, placePlayersInBoneyard, spawnPlayerCharacterInBoneyard } from './boneyard-world-placement.ts'
 import type { BoneyardPlayerMovementContact, BoneyardWorldState } from './boneyard-world-state.ts'
 import { boneyardPrimarySpellTargets, boneyardWorldSceneryTargets } from './boneyard-world-targets.ts'
@@ -3399,7 +3399,7 @@ function finishGameSimulationTick(
       boneyardWorld.collision,
       boneyardWorld.gateLeaves,
     )
-    const spiderLight = boneyardWorldLightQuery(boneyardWorld, secondaryPlayers, boneyardWorld.enemies, tick, {
+    const spiderLightAt = createBoneyardWorldLightSampler(boneyardWorld, secondaryPlayers, boneyardWorld.enemies, tick, {
       inputs, playerEntities, primarySpells, secondaryAbilities,
     })
     const spellCombat = resolveBoneyardSpellCombat(
@@ -3447,7 +3447,7 @@ function finishGameSimulationTick(
       secondaryResult.steamedPulses,
       (ownerId) => primaryInputs[ownerId]?.viewportWidth
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
-      spiderLight.scalarAt,
+      spiderLightAt,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells

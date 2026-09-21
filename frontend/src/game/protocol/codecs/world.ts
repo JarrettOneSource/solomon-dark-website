@@ -612,14 +612,19 @@ function uniqueEntityEntries(
     const key = `${typeId}:${entityId}`
     if (keys.has(key)) throw new GameProtocolError(`${entryField} duplicates ${key}`)
     keys.add(key)
-    const decoded: [number, number, ...number[]] = [
-      typeId,
-      entityId,
-      ...raw.slice(2).map((component, componentIndex) => finite(
-        component,
-        `${entryField}[${componentIndex + 2}]`,
-      )),
-    ]
+    let decoded: [number, number, ...number[]] = [typeId, entityId]
+    for (let componentIndex = 2; componentIndex < raw.length; componentIndex += 1) {
+      const component = raw[componentIndex]
+      if (typeof component !== 'number' || !Number.isFinite(component)) {
+        // Keep the original diagnostics and sparse-row handling on the error path.
+        decoded = [typeId, entityId, ...raw.slice(2).map((value, offset) => finite(
+          value,
+          `${entryField}[${offset + 2}]`,
+        ))]
+        break
+      }
+      decoded.push(component)
+    }
     if (
       (kind === 'descriptor' && !registration.descriptorIsValid(decoded))
       || (kind === 'sample' && !registration.sampleIsValid(decoded))

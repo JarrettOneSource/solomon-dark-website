@@ -1,0 +1,872 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-09-20T22:17:58.000311+00:00",
+  "status": "focused-validation-complete; full Website gate and repeat browser endurance pending",
+  "scope": "Native Faculty population transport, native owner continuation capacity, and shared particle save-ownership admission",
+  "sessionUid": "6a583nbx",
+  "device": "jarretts-mac-mini",
+  "workspace": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx",
+  "baseCommit": "fb9ec4bf9486e0fac5f76e9648c043614bb4d373",
+  "publication": {
+    "committed": false,
+    "pushed": false,
+    "deployed": false
+  },
+  "failure": {
+    "runId": "98032fbe6a8a9a3f9d1e48552c18cbdb",
+    "highestWave": 33,
+    "archiveSha256": "acecc9a0ed8d1daeb589eb3802042c5cb2ff2cab183271b0e9323ff5fa66c1ec",
+    "originalArchive": "/tmp/solomon-party-wave100-third-6a583nbx/archive-f070ac96-7094-4825-a69b-71628ae49d57.json",
+    "clientErrorsUtc": [
+      "2026-09-20T21:19:43.618Z",
+      "2026-09-20T21:19:44.957Z"
+    ],
+    "closeCode": 4008,
+    "error": "frame.world.entities.samples may contain at most 8192 entries",
+    "exactFailedPacketRetained": false,
+    "interpretation": "The bounded native Faculty burst exceeds both independent row guards. Exact native replays reproduce both guards; original sampled archive is already decaying, so replay peaks are not claimed as the original failed packet."
+  },
+  "nativeBudget": {
+    "facultyPerRun": 3,
+    "dyingTicksPerFaculty": 250,
+    "emittersPerFaculty": 125,
+    "maximumSmokePerEmitter": 140,
+    "maximumEmitterLifetimeTicks": 1002,
+    "otherDeathChildrenPerFaculty": 488,
+    "existingOtherEffectsReserve": 8192,
+    "visibleDeathEffectCapacity": 62156,
+    "sumOfSevenAdmittedEntityFamilies": 77259,
+    "separateSpiderCapacityUnchanged": 8192,
+    "saveIncrementRecordsIncludingHiddenEmitters": 54339,
+    "saveIncrementConservativeBytes": 79783113,
+    "saveIncrementConservativeNodes": 2389620,
+    "alternatePainterAllowanceBytes": 118800,
+    "alternatePainterAllowanceNodes": 2376,
+    "previousSaveReserveBytes": 16777216,
+    "previousSaveReserveNodes": 250000,
+    "conservativeSaveBytesIncludingReserve": 96679129,
+    "conservativeSaveNodesIncludingReserve": 2641996,
+    "selectedSaveBytes": 100663296,
+    "selectedSaveNodes": 3000000,
+    "webSocketAndPublicSaveRequestBytes": 201392128,
+    "supervisorRejoinRequestBytes": 251723776,
+    "saveSchemaUnchanged": 36,
+    "protocolVersion": 128,
+    "assumptions": "Fixed native role strings/fields; every finite binary64 numeric JSON token bounded by 24 bytes. Conservative maxima include nonoverlapping roles and the old reserve; no arbitrary mod-population guarantee."
+  },
+  "snapshotBefore": {
+    "startedAtUtc": "2026-09-20T21:32:02.671Z",
+    "node": "v22.17.0",
+    "startTick": 453116,
+    "archiveSha256": "acecc9a0ed8d1daeb589eb3802042c5cb2ff2cab183271b0e9323ff5fa66c1ec",
+    "sourceHashes": {
+      "src/game/core-server/enemies/faculty-death.ts": "bfc77d41d62aae1d79176437096ce5932b51a16a8cba248ee8132656417db106",
+      "src/game/core-server/enemies/deaths.ts": "3c5489278b196d6b6505f338b8c02abc7eb4d1efa84c1fe09572ee4623709e90",
+      "src/game/core-server/enemies/death-effects.ts": "d4f9e911107cd5dc18aac86be47bafbb1385e087eef2f5c3391058d013ec1f65",
+      "src/game/core-server/boneyard-transient-effects.ts": "16214b44d39b874878f3fb586c72800ee4e625d6712e9c4bffacb120b329582b",
+      "src/game/core-server/boneyard-enemy-store.ts": "4368f6b7563f9b949842127848414fd3607ce14cc8f50d309e4e2afc717c031c",
+      "src/game/host/game-snapshot.ts": "f53c048662e92c1944c371da9218012a9432d3871ba1b57f9857efc367814392",
+      "src/game/host/project-boneyard-enemies.ts": "7ddc212acaad29a8a047b9414dd0e720f39e9f8acdee379cc72c506f783ec3ad",
+      "src/game/protocol/game-protocol-limits.ts": "7ab1c8ac489eb28af055be11411d2539b03cb82f535a3248cdae2f0fbdfcd72e",
+      "src/game/protocol/entity-replication.ts": "635d47f63f5fa7005c67e38274153f68771f0f8abaccc0610a8a0b89ecbee8bc",
+      "src/game/protocol/codecs/world.ts": "4ea5e79c77e01eca16ffe33428ea196613c89d8c6d0450d79b32e6f04fb321bb",
+      "src/game/protocol/codecs/snapshot.ts": "cc49fb3f422d8a49b7103dd9443165a6a3e710c1881467d6356667c9d0faa0fb"
+    },
+    "limits": {
+      "deathEffects": 8192,
+      "replicated": 8192
+    },
+    "scenarios": [
+      {
+        "members": 1,
+        "seed": "faculty-integration",
+        "frames": 1100,
+        "maximum": {
+          "age": 272,
+          "tick": 453388,
+          "samples": 8669,
+          "deathEffects": 8569,
+          "visibleDeathEffects": 8483,
+          "families": {
+            "enemies": 0,
+            "deathEffects": 8483,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "roles": {
+            "faculty-dying-bone": 86,
+            "faculty-dying-smoke": 94,
+            "faculty-dying-bone:smoke": 8223,
+            "faculty-bone": 18,
+            "faculty-skull": 1,
+            "death-unbind-star": 1,
+            "faculty-banish": 1,
+            "faculty-terminal-burst": 1,
+            "faculty-terminal-smoke": 72,
+            "faculty-scrap": 72
+          }
+        },
+        "firstFrameFailure": {
+          "age": 248,
+          "tick": 453364,
+          "samples": 8201,
+          "deathEffects": 8103,
+          "visibleDeathEffects": 8014,
+          "families": {
+            "enemies": 1,
+            "deathEffects": 8014,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "error": "frame.world.entities.samples may contain at most 8192 entries",
+          "roles": {
+            "faculty-dying-bone": 89,
+            "faculty-dying-smoke": 110,
+            "faculty-dying-bone:smoke": 7904
+          }
+        },
+        "firstRawFailure": {
+          "age": 250,
+          "tick": 453366,
+          "samples": 8400,
+          "deathEffects": 8304,
+          "visibleDeathEffects": 8214,
+          "families": {
+            "enemies": 0,
+            "deathEffects": 8214,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "error": "snapshot.world.deathEffects may contain at most 8192 entries",
+          "roles": {
+            "faculty-dying-bone": 90,
+            "faculty-dying-smoke": 109,
+            "faculty-dying-bone:smoke": 7939,
+            "faculty-bone": 18,
+            "faculty-skull": 1,
+            "death-unbind-star": 1,
+            "faculty-banish": 1,
+            "faculty-terminal-burst": 1,
+            "faculty-terminal-smoke": 72,
+            "faculty-scrap": 72
+          }
+        },
+        "frameFailures": 66,
+        "rawFailures": 56,
+        "lastEffectTick": 454102,
+        "finalEffects": 0
+      },
+      {
+        "members": 3,
+        "seed": "faculty-integration",
+        "frames": 1100,
+        "maximum": {
+          "age": 275,
+          "tick": 453391,
+          "samples": 25521,
+          "deathEffects": 25582,
+          "visibleDeathEffects": 25335,
+          "families": {
+            "enemies": 0,
+            "deathEffects": 25335,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "roles": {
+            "faculty-dying-bone": 247,
+            "faculty-dying-smoke": 262,
+            "faculty-dying-bone:smoke": 24575,
+            "faculty-bone": 54,
+            "faculty-skull": 3,
+            "death-unbind-star": 3,
+            "faculty-banish": 3,
+            "faculty-terminal-burst": 3,
+            "faculty-terminal-smoke": 216,
+            "faculty-scrap": 216
+          }
+        },
+        "firstFrameFailure": {
+          "age": 104,
+          "tick": 453220,
+          "samples": 8248,
+          "deathEffects": 8214,
+          "visibleDeathEffects": 8059,
+          "families": {
+            "enemies": 3,
+            "deathEffects": 8059,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "error": "frame.world.entities.samples may contain at most 8192 entries",
+          "roles": {
+            "faculty-start-smoke": 100,
+            "faculty-dying-bone:smoke": 7686,
+            "faculty-dying-smoke": 273,
+            "faculty-dying-bone": 155
+          }
+        },
+        "firstRawFailure": {
+          "age": 106,
+          "tick": 453222,
+          "samples": 8513,
+          "deathEffects": 8482,
+          "visibleDeathEffects": 8324,
+          "families": {
+            "enemies": 3,
+            "deathEffects": 8324,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "error": "snapshot.world.deathEffects may contain at most 8192 entries",
+          "roles": {
+            "faculty-start-smoke": 97,
+            "faculty-dying-bone:smoke": 7953,
+            "faculty-dying-smoke": 274,
+            "faculty-dying-bone": 158
+          }
+        },
+        "frameFailures": 365,
+        "rawFailures": 361,
+        "lastEffectTick": 454107,
+        "finalEffects": 0
+      }
+    ],
+    "finishedAtUtc": "2026-09-20T21:33:07.359Z"
+  },
+  "snapshotAfter": {
+    "startedAtUtc": "2026-09-20T21:43:08.112Z",
+    "node": "v22.17.0",
+    "startTick": 453116,
+    "archiveSha256": "acecc9a0ed8d1daeb589eb3802042c5cb2ff2cab183271b0e9323ff5fa66c1ec",
+    "sourceHashes": {
+      "src/game/core-server/enemies/faculty-death.ts": "bfc77d41d62aae1d79176437096ce5932b51a16a8cba248ee8132656417db106",
+      "src/game/core-server/enemies/deaths.ts": "3c5489278b196d6b6505f338b8c02abc7eb4d1efa84c1fe09572ee4623709e90",
+      "src/game/core-server/enemies/death-effects.ts": "d4f9e911107cd5dc18aac86be47bafbb1385e087eef2f5c3391058d013ec1f65",
+      "src/game/core-server/boneyard-transient-effects.ts": "16214b44d39b874878f3fb586c72800ee4e625d6712e9c4bffacb120b329582b",
+      "src/game/core-server/boneyard-enemy-store.ts": "4368f6b7563f9b949842127848414fd3607ce14cc8f50d309e4e2afc717c031c",
+      "src/game/host/game-snapshot.ts": "f53c048662e92c1944c371da9218012a9432d3871ba1b57f9857efc367814392",
+      "src/game/host/project-boneyard-enemies.ts": "7ddc212acaad29a8a047b9414dd0e720f39e9f8acdee379cc72c506f783ec3ad",
+      "src/game/protocol/game-protocol-limits.ts": "1d499fb435aace110d1a8269e7ddbe2d5f2aaefcb897275fbca5b82dd67f1995",
+      "src/game/protocol/entity-replication.ts": "635d47f63f5fa7005c67e38274153f68771f0f8abaccc0610a8a0b89ecbee8bc",
+      "src/game/protocol/codecs/world.ts": "4ea5e79c77e01eca16ffe33428ea196613c89d8c6d0450d79b32e6f04fb321bb",
+      "src/game/protocol/codecs/snapshot.ts": "cc49fb3f422d8a49b7103dd9443165a6a3e710c1881467d6356667c9d0faa0fb"
+    },
+    "limits": {
+      "deathEffects": 62156,
+      "replicated": 77259,
+      "webSocketBytes": 33619968,
+      "protocol": 128
+    },
+    "scenarios": [
+      {
+        "members": 1,
+        "seed": "faculty-integration",
+        "frames": 1100,
+        "maximum": {
+          "age": 272,
+          "tick": 453388,
+          "samples": 8669,
+          "deathEffects": 8569,
+          "visibleDeathEffects": 8483,
+          "families": {
+            "enemies": 0,
+            "deathEffects": 8483,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "roles": {
+            "faculty-dying-bone": 86,
+            "faculty-dying-smoke": 94,
+            "faculty-dying-bone:smoke": 8223,
+            "faculty-bone": 18,
+            "faculty-skull": 1,
+            "death-unbind-star": 1,
+            "faculty-banish": 1,
+            "faculty-terminal-burst": 1,
+            "faculty-terminal-smoke": 72,
+            "faculty-scrap": 72
+          }
+        },
+        "firstFrameFailure": null,
+        "firstRawFailure": null,
+        "frameFailures": 0,
+        "rawFailures": 0,
+        "lastEffectTick": 454102,
+        "finalEffects": 0,
+        "maximumBytes": {
+          "raw": 4006969,
+          "keyframe": 798204,
+          "delta": 461695
+        },
+        "peakSimulationBytes": 8170663
+      },
+      {
+        "members": 3,
+        "seed": "faculty-integration",
+        "frames": 1100,
+        "maximum": {
+          "age": 275,
+          "tick": 453391,
+          "samples": 25521,
+          "deathEffects": 25582,
+          "visibleDeathEffects": 25335,
+          "families": {
+            "enemies": 0,
+            "deathEffects": 25335,
+            "enemyProjectiles": 0,
+            "enemyProjectileEffects": 0,
+            "maggots": 0,
+            "loot": 183,
+            "goodies": 3
+          },
+          "roles": {
+            "faculty-dying-bone": 247,
+            "faculty-dying-smoke": 262,
+            "faculty-dying-bone:smoke": 24575,
+            "faculty-bone": 54,
+            "faculty-skull": 3,
+            "death-unbind-star": 3,
+            "faculty-banish": 3,
+            "faculty-terminal-burst": 3,
+            "faculty-terminal-smoke": 216,
+            "faculty-scrap": 216
+          }
+        },
+        "firstFrameFailure": null,
+        "firstRawFailure": null,
+        "frameFailures": 0,
+        "rawFailures": 0,
+        "lastEffectTick": 454107,
+        "finalEffects": 0,
+        "maximumBytes": {
+          "raw": 11652264,
+          "keyframe": 2234497,
+          "delta": 1278609
+        },
+        "peakSimulationBytes": 23053903
+      }
+    ],
+    "finishedAtUtc": "2026-09-20T21:44:45.238Z"
+  },
+  "saveBefore": {
+    "startedAtUtc": "2026-09-20T21:48:28.552Z",
+    "protocol": 128,
+    "limits": {
+      "saveBytes": 16777216,
+      "saveNodes": 250000,
+      "webSocketBytes": 33619968
+    },
+    "cases": [
+      {
+        "members": 1,
+        "age": 272,
+        "tick": 453388,
+        "effects": 8569,
+        "simulationBytes": 8181612,
+        "simulationNodes": 423929,
+        "maxima": {
+          "recordNodes": 49,
+          "recordBytes": 1017,
+          "recordNumericByteBound": 1633
+        },
+        "byRole": {
+          "faculty-start-smoke": {
+            "nodes": 42,
+            "actualBytes": 849,
+            "numericByteBound": 1401
+          },
+          "faculty-dying-smoke": {
+            "nodes": 42,
+            "actualBytes": 860,
+            "numericByteBound": 1401
+          },
+          "faculty-dying-bone": {
+            "nodes": 44,
+            "actualBytes": 911,
+            "numericByteBound": 1476
+          },
+          "faculty-dying-bone:smoke": {
+            "nodes": 44,
+            "actualBytes": 865,
+            "numericByteBound": 1468
+          },
+          "faculty-bone": {
+            "nodes": 44,
+            "actualBytes": 927,
+            "numericByteBound": 1458
+          },
+          "faculty-skull": {
+            "nodes": 44,
+            "actualBytes": 863,
+            "numericByteBound": 1459
+          },
+          "death-unbind-star": {
+            "nodes": 42,
+            "actualBytes": 745,
+            "numericByteBound": 1399
+          },
+          "faculty-banish": {
+            "nodes": 44,
+            "actualBytes": 754,
+            "numericByteBound": 1463
+          },
+          "faculty-terminal-burst": {
+            "nodes": 42,
+            "actualBytes": 730,
+            "numericByteBound": 1407
+          },
+          "faculty-terminal-smoke": {
+            "nodes": 42,
+            "actualBytes": 868,
+            "numericByteBound": 1404
+          },
+          "faculty-scrap": {
+            "nodes": 49,
+            "actualBytes": 1017,
+            "numericByteBound": 1633
+          }
+        },
+        "writerError": null,
+        "restoreError": "game save has too many values",
+        "checkpointError": null,
+        "saveBytes": 8304091,
+        "saveNodes": 430524,
+        "checkpointBytes": 9246739
+      },
+      {
+        "members": 3,
+        "age": 275,
+        "tick": 453391,
+        "effects": 25582,
+        "simulationBytes": 23079191,
+        "simulationNodes": 1172725,
+        "maxima": {
+          "recordNodes": 49,
+          "recordBytes": 1016,
+          "recordNumericByteBound": 1633
+        },
+        "byRole": {
+          "faculty-start-smoke": {
+            "nodes": 42,
+            "actualBytes": 862,
+            "numericByteBound": 1401
+          },
+          "faculty-dying-smoke": {
+            "nodes": 42,
+            "actualBytes": 858,
+            "numericByteBound": 1401
+          },
+          "faculty-dying-bone": {
+            "nodes": 44,
+            "actualBytes": 913,
+            "numericByteBound": 1476
+          },
+          "faculty-dying-bone:smoke": {
+            "nodes": 44,
+            "actualBytes": 871,
+            "numericByteBound": 1468
+          },
+          "faculty-bone": {
+            "nodes": 44,
+            "actualBytes": 924,
+            "numericByteBound": 1458
+          },
+          "faculty-skull": {
+            "nodes": 44,
+            "actualBytes": 861,
+            "numericByteBound": 1459
+          },
+          "death-unbind-star": {
+            "nodes": 42,
+            "actualBytes": 746,
+            "numericByteBound": 1399
+          },
+          "faculty-banish": {
+            "nodes": 44,
+            "actualBytes": 754,
+            "numericByteBound": 1463
+          },
+          "faculty-terminal-burst": {
+            "nodes": 42,
+            "actualBytes": 730,
+            "numericByteBound": 1407
+          },
+          "faculty-terminal-smoke": {
+            "nodes": 42,
+            "actualBytes": 863,
+            "numericByteBound": 1404
+          },
+          "faculty-scrap": {
+            "nodes": 49,
+            "actualBytes": 1016,
+            "numericByteBound": 1633
+          }
+        },
+        "writerError": "game save exceeds its size limit",
+        "restoreError": null,
+        "checkpointError": null,
+        "saveBytes": null,
+        "saveNodes": null,
+        "checkpointBytes": null
+      }
+    ],
+    "finishedAtUtc": "2026-09-20T21:48:30.929Z"
+  },
+  "saveAfterCapsBeforeOwnershipFix": {
+    "startedAtUtc": "2026-09-20T21:54:47.876Z",
+    "limits": {
+      "saveBytes": 100663296,
+      "saveNodes": 3000000,
+      "webSocketBytes": 201392128
+    },
+    "cases": [
+      {
+        "members": 1,
+        "writerError": null,
+        "restoreError": "game save enemy death effect 15 presentation owner is invalid",
+        "checkpointError": null,
+        "saveBytes": 8304091,
+        "checkpointBytes": 9246739
+      },
+      {
+        "members": 3,
+        "writerError": null,
+        "restoreError": "game save enemy death effect 42 presentation owner is invalid",
+        "checkpointError": null,
+        "saveBytes": 23201670,
+        "checkpointBytes": 25811544
+      }
+    ],
+    "finishedAtUtc": "2026-09-20T21:54:48.403Z"
+  },
+  "saveAfterOwnershipFix": {
+    "startedAtUtc": "2026-09-20T22:07:21.873Z",
+    "protocol": 128,
+    "limits": {
+      "saveBytes": 100663296,
+      "saveNodes": 3000000,
+      "webSocketBytes": 201392128
+    },
+    "normalization": "Owner projection and runtime fields may normalize; complete death-effect arrays must remain deeply equal, with unchanged canonical JSON SHA-256.",
+    "cases": [
+      {
+        "members": 1,
+        "source": "/tmp/solomon-faculty-save-before-6a583nbx/faculty-1-peak-save-options.json",
+        "sourceSha256": "2ee0240aa4a2ffb8f1ff5ade43f4fd6c931c249d5ba22aab3be77fda0fe399cf",
+        "tick": 453388,
+        "effects": 8569,
+        "saveBytes": 8304091,
+        "saveNodes": 430524,
+        "checkpointBytes": 9246739,
+        "saveSha256": "9d816e94f3186f80d075a509bfcac968b9c4ab5eaf70a32af11e708c021b6a6e",
+        "sourceEffectsSha256": "919942dddc218e1d940c8f40e7add21b96832281de38fa95485a62f04428d30e",
+        "restoredEffectsSha256": "919942dddc218e1d940c8f40e7add21b96832281de38fa95485a62f04428d30e",
+        "allEffectsDeeplyEqual": true
+      },
+      {
+        "members": 3,
+        "source": "/tmp/solomon-faculty-save-before-6a583nbx/faculty-3-peak-save-options.json",
+        "sourceSha256": "2fcac81d49d06121e861ca6925382ed6353d065f2a28ffd934853365200d8768",
+        "tick": 453391,
+        "effects": 25582,
+        "saveBytes": 23201670,
+        "saveNodes": 1179320,
+        "checkpointBytes": 25811544,
+        "saveSha256": "0a212dda948869f826b26450b34ce63952e98768e2a4d3dfe2d279081716d181",
+        "sourceEffectsSha256": "1a16da8789bb3c2dd1c0baef428def7207cee997db9e65423e9d04068e9288a9",
+        "restoredEffectsSha256": "1a16da8789bb3c2dd1c0baef428def7207cee997db9e65423e9d04068e9288a9",
+        "allEffectsDeeplyEqual": true
+      }
+    ],
+    "finishedAtUtc": "2026-09-20T22:07:22.806Z"
+  },
+  "normalizationBoundary": "Owner projection may normalize unrelated runtime fields. Every retained death-effect value is deeply equal after save/checkpoint/restore, and its canonical JSON SHA-256 matches.",
+  "httpProof": {
+    "jobId": "job_20260920T220720Z_e886ce2b3b",
+    "test": "tests/test_mod_sync_contract.py::WebsiteModSyncContractTests.test_native_faculty_peak_cloud_save_and_rejoin_transport",
+    "server": "Real dotnet backend/bin/Debug/net10.0/Server.dll using Kestrel; installed ASP.NET 10.0.10 confirmed by root review",
+    "configuration": "ASPNETCORE_ENVIRONMENT=Production, ASPNETCORE_URLS=http://127.0.0.1:<ephemeral>, isolated temporary Storage__Root, loopback ThreadingHTTPServer supervisor stub, fresh test account",
+    "testSaveMinimumBytes": 52428800,
+    "padding": "Legal leading JSON whitespace around the unchanged native peak; explicitly crosses 30,000,000-byte Kestrel default and former 48 MiB admin parser threshold",
+    "assertedResponses": {
+      "cloudPut": 200,
+      "cloudGet": 200,
+      "backendRejoin": 201,
+      "aboveNodeCapPut": 400,
+      "cloudDelete": 204
+    },
+    "exactDocumentHashComparedOnCloudGetAndAtSupervisorStub": true,
+    "scope": "Public save PUT/rejoin body metadata only; no global request-size relaxation"
+  },
+  "signedRecoveryProof": {
+    "jobId": "job_20260920T220849Z_abfffc8a3e",
+    "test": "native Faculty peak rejoins through save-sized HTTP and WebSocket envelopes intact",
+    "saveBytes": 52428800,
+    "httpStatus": 201,
+    "path": "actual Node /admin/rejoin -> signed client-hello on actual WebSocket -> server-welcome -> owner checkpoint -> real restore",
+    "effectsDeeplyEqual": true,
+    "tickUnchanged": true,
+    "fixtureCorrection": "Initial test hello used the generic ether character and correctly rejected; corrected to the saved native fixture fire character. This was a fixture issue, not a production code defect."
+  },
+  "verification": [
+    {
+      "jobId": "job_20260920T213200Z_85db9790de",
+      "result": "baseline native snapshot failures captured"
+    },
+    {
+      "jobId": "job_20260920T214135Z_2b06cb97ef",
+      "result": "75 protocol/native tests passed"
+    },
+    {
+      "jobId": "job_20260920T214252Z_10bc93b1d5",
+      "result": "2200 raw/keyframe/delta states passed; typecheck passed"
+    },
+    {
+      "jobId": "job_20260920T214826Z_0df34970ad",
+      "result": "actual owner save size/node failures captured"
+    },
+    {
+      "jobId": "job_20260920T215446Z_e670f319b4",
+      "result": "post-cap native smoke ownership failure captured"
+    },
+    {
+      "jobId": "job_20260920T220430Z_df75addb7c",
+      "result": "native peak roundtrip and 11-role owner matrix passed"
+    },
+    {
+      "jobId": "job_20260920T220720Z_e886ce2b3b",
+      "result": "immutable native peak exact roundtrip and Kestrel proof passed"
+    },
+    {
+      "jobId": "job_20260920T220849Z_abfffc8a3e",
+      "result": "actual signed HTTP/WS restore and full test typecheck passed"
+    },
+    {
+      "jobId": "job_20260920T220937Z_5f2f3f74f9",
+      "result": "70 affected save/supervisor tests passed; lint 0 errors, existing no-control-regex warning in unchanged path validation"
+    },
+    {
+      "jobId": "job_20260920T221036Z_42e889d364",
+      "result": "three scoped backend files format verification passed"
+    },
+    {
+      "jobId": "job_20260920T221531Z_61ece1d49d",
+      "result": "final fixed-owner regression, save suite, test typecheck and changed-file lint passed"
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/backend/Api/GameSessionEndpoints.cs",
+      "bytes": 19237,
+      "sha256": "fe560b29e648fff0384936b2e00a5e42b879d49d69908dd6d66c294a1e3688ef"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/backend/Api/WebGameSaveEndpoints.cs",
+      "bytes": 5696,
+      "sha256": "3e1711d6e14834b41898b4dfd9f2cc84eb4ea76abf2dbc8ee730789d4982f8c7"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/backend/Services/WebGameSaveInspector.cs",
+      "bytes": 18318,
+      "sha256": "99d77cc018f7339df5f2592759a55b928d561446663e0221e46bc2cfef0af4d1"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/protocol/game-protocol-limits.ts",
+      "bytes": 3093,
+      "sha256": "1d499fb435aace110d1a8269e7ddbe2d5f2aaefcb897275fbca5b82dd67f1995"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/protocol/game-protocol-contract.ts",
+      "bytes": 1761,
+      "sha256": "63d2c76f830f34553444e019a067aba5cef98834671cbc5ea64c8d76523b3a15"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/protocol/entity-replication.test.ts",
+      "bytes": 74052,
+      "sha256": "b8713b378a154b42874026e7b4111f4ca2fe8cca46eda3b5946869e5ab87216b"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/protocol/codecs/spiders.ts",
+      "bytes": 9182,
+      "sha256": "e811144521b558905e75ef7ad8e29177830a401f46426df0ca3a1ab9558b1c31"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/save/game-save-contract.ts",
+      "bytes": 18758,
+      "sha256": "55628fc671fbe8420193e95391b85386ca0b2f4a8fcbad9a1ad29616510f4238"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/save/game-save-document.ts",
+      "bytes": 118880,
+      "sha256": "db6996d7a9a315414cae5e1ede64f5e48030668d82bae60f30a7cb11106d3d95"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/save/game-save-document.test.ts",
+      "bytes": 123181,
+      "sha256": "d5eea9ab39cb7bcfbf47555df2a5bf51560f6d06e6f21f78904c064e62398818"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/host/game-session-supervisor.ts",
+      "bytes": 60633,
+      "sha256": "4104eb6b9b573dbe8c86a360baaa7620264e32501d131209086a0cf68f27a9ec"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/host/game-session-supervisor.test.ts",
+      "bytes": 79503,
+      "sha256": "329162a6d59c90fc84a0a8241f8551adbc45acb616d81f33f90885ca7fc4d922"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/tools/native-faculty-save-fixture.ts",
+      "bytes": 4071,
+      "sha256": "ea2ff26cb1086020266031365875eac035db008811f356503e6b732d58cd756b"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/tests/test_mod_sync_contract.py",
+      "bytes": 89765,
+      "sha256": "98be3d19992c6a7a514eb99f8ef20b0aed477ccc1f9cf5814db739cb27756f89"
+    },
+    {
+      "path": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/docs/Game Native Parity RE/301-2026-09-05-generated-survival-boss-encounter-closure.md",
+      "bytes": 122468,
+      "sha256": "7e7279cf017ece9f4b4a29ea1ed995c0e9633a47294ce53197b9434e979d2406"
+    }
+  ],
+  "rawEvidenceAllowlist": [
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-before-6a583nbx/faculty-1-first-rejected-frame.json",
+      "bytes": 435127,
+      "sha256": "2f1224ac9150ee23e9ba1160cb2b7ef2d2c6e58a7e8c52ecc1ac38a40b7e3e31"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-before-6a583nbx/faculty-1-first-rejected-snapshot.json",
+      "bytes": 3878110,
+      "sha256": "9e9da0095137d907dd7a809166f7493b81ee4b6ea72557208143365545e675e7"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-before-6a583nbx/faculty-3-first-rejected-frame.json",
+      "bytes": 432059,
+      "sha256": "5988a2542b13cdcc978fe000c8478136428642d1e3c9fac9d1432ddeb6855711"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-before-6a583nbx/faculty-3-first-rejected-snapshot.json",
+      "bytes": 3913044,
+      "sha256": "d607bff7b121c45471e09e5dcd5d21f2e6c4e4f28b4251caad6ee95504f761df"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-before-6a583nbx/receipt.json",
+      "bytes": 51451,
+      "sha256": "e06f499cc94d10baa129829db304808d5e2e5bfaa0a0c20106e6ee3e98a1820d"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-after-6a583nbx/faculty-1-peak-keyframe-message.json",
+      "bytes": 796163,
+      "sha256": "49e79b6e09ef0001164e93b4e32f3f174385152309186ea127225a916271a371"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-after-6a583nbx/faculty-1-peak-snapshot.json",
+      "bytes": 4005452,
+      "sha256": "8715e5cbd3ff544ddbd5c4c960d1ce509e36af6abc71b4e46bac58bbae41ef7f"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-after-6a583nbx/faculty-3-peak-keyframe-message.json",
+      "bytes": 2234497,
+      "sha256": "365dce967a086a2679dddb5bfe1bd6a10c277e5f44c684a9d21d7ff71b6f7074"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-after-6a583nbx/faculty-3-peak-snapshot.json",
+      "bytes": 11652264,
+      "sha256": "955d5918484da5f6f15748b94a92be619de54da7026276b62348dc3a6d74a7fd"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-after-6a583nbx/receipt.json",
+      "bytes": 50008,
+      "sha256": "4bcb6aa1961fde8e4410caae14f70b45b2287f120c3cf8c4b1209fa82ed14397"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-before-6a583nbx/faculty-1-created-save.json",
+      "bytes": 8304091,
+      "sha256": "9d816e94f3186f80d075a509bfcac968b9c4ab5eaf70a32af11e708c021b6a6e"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-before-6a583nbx/faculty-1-peak-save-options.json",
+      "bytes": 8332218,
+      "sha256": "2ee0240aa4a2ffb8f1ff5ade43f4fd6c931c249d5ba22aab3be77fda0fe399cf"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-before-6a583nbx/faculty-3-peak-save-options.json",
+      "bytes": 23229797,
+      "sha256": "2fcac81d49d06121e861ca6925382ed6353d065f2a28ffd934853365200d8768"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-before-6a583nbx/receipt.json",
+      "bytes": 4129,
+      "sha256": "a39acc3d47b538ed3c1312081916a82fbacd7c2fc010696cfef586ba0ad37796"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-after-6a583nbx/faculty-1-created-save.json",
+      "bytes": 8304091,
+      "sha256": "9d816e94f3186f80d075a509bfcac968b9c4ab5eaf70a32af11e708c021b6a6e"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-after-6a583nbx/faculty-3-created-save.json",
+      "bytes": 23201670,
+      "sha256": "0a212dda948869f826b26450b34ce63952e98768e2a4d3dfe2d279081716d181"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-after-6a583nbx/receipt.json",
+      "bytes": 697,
+      "sha256": "9380b15ddab2c763beea681e84a8c2902c37139fb24ffccf4f4027484a98217d"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-after-owner-fix-6a583nbx/faculty-1-created-save.json",
+      "bytes": 8304091,
+      "sha256": "9d816e94f3186f80d075a509bfcac968b9c4ab5eaf70a32af11e708c021b6a6e"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-after-owner-fix-6a583nbx/faculty-3-created-save.json",
+      "bytes": 23201670,
+      "sha256": "0a212dda948869f826b26450b34ce63952e98768e2a4d3dfe2d279081716d181"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-after-owner-fix-6a583nbx/receipt.json",
+      "bytes": 1749,
+      "sha256": "6b963728d1a478d84be6419e5693ebe796f0566b5ff3690bd0feed52e84cc8e9"
+    },
+    {
+      "path": "/tmp/solomon-protocol-faculty-repro-6a583nbx.mjs",
+      "bytes": 7457,
+      "sha256": "dd2d627bda72fc200ab00896534b917db6d9d56a9d73aa14c54a7c68129899d4"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-repro-6a583nbx.mjs",
+      "bytes": 6433,
+      "sha256": "6991a78b84a54aee9314094324305cc9bd2693eed3f7adeaa833cdeee1b5b9c0"
+    },
+    {
+      "path": "/tmp/solomon-faculty-save-roundtrip-6a583nbx.mjs",
+      "bytes": 3023,
+      "sha256": "694a4ea5691cab771080f57863cce5229751ea66fa0efa1a9867d35680702965"
+    }
+  ]
+}

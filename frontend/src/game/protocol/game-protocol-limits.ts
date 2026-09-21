@@ -16,7 +16,12 @@ export const MAX_BONEYARD_ENEMIES = 512
 
 export const MAX_BONEYARD_ENEMY_EVENTS = 512
 
-export const MAX_BONEYARD_ENEMY_DEATH_EFFECTS = 8_192
+// Three Faculty deaths can overlap: each has 125 emitters with at most 140
+// retained smoke children, plus 488 other death children. Preserve the existing
+// allowance for other native owners; see native parity ledger 301.
+export const MAX_BONEYARD_ENEMY_DEATH_EFFECTS = 8_192 + 3 * (125 * 140 + 488)
+
+export const MAX_BONEYARD_SPIDER_EFFECTS = 8_192
 
 export const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
 
@@ -49,7 +54,13 @@ export const MAX_STUDENT_PROPS = 8
 
 export const MAX_STUDENTS = 256
 
-export const MAX_REPLICATED_ENTITIES = 8192
+export const MAX_REPLICATED_ENTITIES = MAX_BONEYARD_ENEMIES
+  + MAX_BONEYARD_ENEMY_DEATH_EFFECTS
+  + MAX_BONEYARD_ENEMY_PROJECTILES
+  + MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS
+  + MAX_BONEYARD_MAGGOTS
+  + MAX_BONEYARD_LOOT
+  + MAX_BONEYARD_GOODIES
 
 export const MAX_REPLICATED_COMPONENTS = 160
 

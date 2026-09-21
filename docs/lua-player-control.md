@@ -34,6 +34,22 @@ Only connected living participants in an active Boneyard receive it. Lua makes
 the decisions; the framework provides observations, validation, input lifetime,
 and atomic intent application. No Lua or decision callback runs in the browser.
 
+The player observation additionally includes `secondary_ready`,
+`held_quickbar`, and `secondary_abilities`. The latter contains at most eight
+owned, learned, effective category-2 belt entries, each with its zero-based
+`slot`, `skill_id`, `cooldown_ticks`, and `active` flag. Primary skills, items,
+concentrations, and unlearned entries are excluded. Returned rows are separate
+objects, not aliases into authoritative cooldown storage. Offer options also
+include their native `category`.
+
+`secondary_ready` checks ordinary player cast eligibility, pending offers,
+cast actions, spin actions, and the shared cooldown. The per-entry cooldown
+and current held slot let a controller supply a new ordinary press edge.
+`active` marks Planewalker, Firewalker, Mindstar, and Regenerate while active,
+so a pilot can preserve those toggles rather than repeatedly turn them off.
+These observations do not bypass mana affordability, geometry, shared/private
+cooldowns, or any other native cast-admission rule.
+
 If the execution budget interrupts an event dispatch, its partial reducer state
 and intents roll back together. A scheduled rule that exceeds its budget also
 applies no effects and is cancelled. Functional tests use a controlled budget
@@ -47,8 +63,9 @@ does not change damage, collision, progression, waves, or scoring rules.
 
 Verification covers movement and attacks through simulation, human takeover,
 stale and invalid input, participant isolation, skill selection during frozen
-ticks, and teardown. A separate private monitoring mod and production Mac/NFO
-run will validate sustained behavior through wave 50.
+ticks, teardown, owned ability observations, and the private Fire/Water pilot's
+native cast and mana-spend behavior. These checks do not establish endurance;
+task-specific receipts record the separate real-browser runs.
 
 `frontend/tools/monitor-game-run.mjs` opens real Mac Chrome and starts a normal
 game. It records frame p95/p99/max, long tasks, browser task/script CPU time,

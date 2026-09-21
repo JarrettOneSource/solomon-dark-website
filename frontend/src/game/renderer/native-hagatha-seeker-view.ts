@@ -14,6 +14,7 @@ import {
 import type {
   GameSnapshot,
 } from '../protocol/game-state.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 
@@ -74,6 +75,7 @@ export class NativeHagathaSeekerView {
 
   destroy(): void {
     this.root.removeChild(this.container)
+    for (const mesh of this.meshes) destroyOwnedMeshGeometry(mesh)
     this.container.destroy({ children: true })
     this.rampTexture.destroy(true)
     this.meshes.length = 0
@@ -105,6 +107,7 @@ export class NativeHagathaSeekerView {
       const mesh = this.meshes.pop()!
       this.vertices.pop()
       this.container.removeChild(mesh)
+      destroyOwnedMeshGeometry(mesh)
       mesh.destroy()
     }
   }

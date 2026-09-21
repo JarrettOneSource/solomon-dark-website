@@ -149,19 +149,34 @@ class NativeMaterialBatcher extends Batcher {
     const uvs = texture.uvs
     const textureIdAndRound = textureId << 16 | element.roundPixels & 0xffff
     const nativeTextureModeValue = nativeTextureMode(texture, (element as BatchableSprite | BatchableGraphics).renderable)
-    const write = (x: number, y: number, u: number, v: number): void => {
-      float32View[index++] = transform.a * x + transform.c * y + transform.tx
-      float32View[index++] = transform.d * y + transform.b * x + transform.ty
-      float32View[index++] = u
-      float32View[index++] = v
-      uint32View[index++] = element.color
-      uint32View[index++] = textureIdAndRound
-      float32View[index++] = nativeTextureModeValue
-    }
-    write(bounds.minX, bounds.minY, uvs.x0, uvs.y0)
-    write(bounds.maxX, bounds.minY, uvs.x1, uvs.y1)
-    write(bounds.maxX, bounds.maxY, uvs.x2, uvs.y2)
-    write(bounds.minX, bounds.maxY, uvs.x3, uvs.y3)
+    float32View[index++] = transform.a * bounds.minX + transform.c * bounds.minY + transform.tx
+    float32View[index++] = transform.d * bounds.minY + transform.b * bounds.minX + transform.ty
+    float32View[index++] = uvs.x0
+    float32View[index++] = uvs.y0
+    uint32View[index++] = element.color
+    uint32View[index++] = textureIdAndRound
+    float32View[index++] = nativeTextureModeValue
+    float32View[index++] = transform.a * bounds.maxX + transform.c * bounds.minY + transform.tx
+    float32View[index++] = transform.d * bounds.minY + transform.b * bounds.maxX + transform.ty
+    float32View[index++] = uvs.x1
+    float32View[index++] = uvs.y1
+    uint32View[index++] = element.color
+    uint32View[index++] = textureIdAndRound
+    float32View[index++] = nativeTextureModeValue
+    float32View[index++] = transform.a * bounds.maxX + transform.c * bounds.maxY + transform.tx
+    float32View[index++] = transform.d * bounds.maxY + transform.b * bounds.maxX + transform.ty
+    float32View[index++] = uvs.x2
+    float32View[index++] = uvs.y2
+    uint32View[index++] = element.color
+    uint32View[index++] = textureIdAndRound
+    float32View[index++] = nativeTextureModeValue
+    float32View[index++] = transform.a * bounds.minX + transform.c * bounds.maxY + transform.tx
+    float32View[index++] = transform.d * bounds.maxY + transform.b * bounds.minX + transform.ty
+    float32View[index++] = uvs.x3
+    float32View[index++] = uvs.y3
+    uint32View[index++] = element.color
+    uint32View[index++] = textureIdAndRound
+    float32View[index] = nativeTextureModeValue
   }
 
   override destroy(): void {

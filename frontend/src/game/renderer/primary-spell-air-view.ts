@@ -17,6 +17,7 @@ import {
   buildNativeZAnimSplitBands,
   type NativeZAnimSplitBand,
 } from '../native-zanim-split.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import {
   AIR_LIGHTNING_BRANCH_RECORDS,
   AIR_LIGHTNING_CONTACT_SORT_BIAS,
@@ -326,7 +327,7 @@ export class NativeAirLightningBodyView {
       container.removeFromParent()
       container.destroy({ children: true })
     }
-    for (const resource of this.meshResources) resource.geometry.destroy(true)
+    for (const resource of this.meshResources) destroyOwnedMeshGeometry(resource)
     this.masks.length = 0
   }
 }

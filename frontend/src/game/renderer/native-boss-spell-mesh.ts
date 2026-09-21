@@ -2,6 +2,7 @@ import { MeshSimple, Texture } from 'pixi.js'
 import type { NativeBossSpell } from '../core-kernels/native-boss-spell.ts'
 import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
 import { nativeUltraBanishPlan } from './native-ultra-banish-presentation.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 type MeshSpell = Extract<NativeBossSpell, { kind: 'ultra-banish' | 'mouth-beam-segment' }>
 
@@ -54,5 +55,5 @@ export class NativeBossSpellMesh {
     }
   }
 
-  destroy(): void { this.mesh.geometry.destroy() }
+  destroy(): void { destroyOwnedMeshGeometry(this.mesh) }
 }

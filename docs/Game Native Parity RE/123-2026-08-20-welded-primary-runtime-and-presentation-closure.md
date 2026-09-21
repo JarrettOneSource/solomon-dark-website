@@ -1092,3 +1092,67 @@ empty page, console, failed-response and host-error arrays. Final screenshots
 were inspected. These measurements validate the Mac production build; the
 Windows recording is reproduction context, not a Windows benchmark receipt.
 No required behavioral member is blocked by the platform.
+
+
+## 2026-09-20 — Spell geometry GPU-owner notification
+
+This reopens the browser disposal portion of the 2026-09-05 ownership receipt.
+That pass proved that owned buffers were destroyed but did not check whether
+Pixi's GPU resource manager received the geometry unload event before listeners
+were removed. Its statement that Air and Water explicitly destroy their geometry
+remains true; it did not establish timely removal from GPU resource tracking.
+
+The inspected candidate is Website base
+`fb9ec4bf9486e0fac5f76e9648c043614bb4d373`, in the isolated
+`perf/wave100-6a583nbx` worktree with the installed Pixi 8.19.0 dependency.
+`Geometry.destroy(true)` emits `destroy`, removes all listeners, destroys owned
+buffers, then calls `unload`. `GCSystem.addResource` registers its removal
+callback on `unload`. Therefore direct destruction loses this notification.
+This is a directly inspected JavaScript ownership issue; it does not establish
+unbounded GPU memory growth or recover a new native gameplay rule.
+
+The boundary is the three retained primary-spell mesh owners below. The existing
+native spell plans, semantic actor lifetimes, clipping, materials and order remain
+the authority. Only final disposal of explicitly owned geometry is corrected.
+
+| Member | Ownership and disposition |
+| --- | --- |
+| Air ribbon and optional branch resources, split and unsplit | `exact-ported`: each body allocates its own MeshGeometry/buffers; its clipped displays share them. Unload once after all body displays detach, then destroy buffers. |
+| Weld drawing mesh resources, all plans and clipped displays | `exact-ported`: WeldDrawingResources owns reusable per-plan geometry/buffers. Display removal and topology updates retain these resources until the drawing owner is destroyed. |
+| Combined Water run capacity replacement | `exact-ported`: each run owns its Geometry and two buffers; dispose only the replaced run, retaining the shared shader/atlas and current painter position. |
+| Combined Water final destruction | `exact-ported`: dispose every retained run before the owner destroys its shared shader. Hidden runs stay reusable until this boundary. |
+| Atlas textures, native plans, shared Weld line context | `verified-already-at-parity`: their ownership and existing teardown are unchanged; geometry disposal must preserve textures and shader reuse. |
+| Other mesh families | `out-of-system`: separately covered by the task's mesh ownership audit; this follow-up adds no inferred behavior or resource policy. |
+
+The shared disposal helper will accept a geometry owner rather than require a
+MeshSimple display. This lets Air resource records and Water run records use
+it after their displays have detached without changing sharing. Regression
+acceptance requires one observed `unload` before `destroy`, all owned buffers
+released, resources retained through live/hidden updates, textures preserved,
+and the Water shader destroyed only at the final owner boundary.
+
+The implemented helper now covers every disposal boundary in the inventory.
+The focused Mac run completed at 2026-09-20 18:49:49 UTC: all 39 tests passed
+across Air, Weld, combined Water, and the shared renderer lifetime suite. The
+new Air test runs 100 complete actor lifetimes across split and unsplit draws;
+the Weld tests cover both retained channel families; the Water test grows four
+run capacities, preserves the final run through smaller/hidden/reactivated
+frames, and verifies replacement and final disposal independently. All observe
+one `unload` before `destroy`, release owned buffers, and preserve atlas textures.
+The Water shader remains alive through replacement and is destroyed once when
+its owner retires. These are constructor/update/teardown tests with actual Pixi
+objects, not measurements of GPU memory residency or browser frame time.
+
+The canonical test TypeScript project also passed at 18:49:47 UTC. Its explicit
+include list now covers the previously omitted Air, combined Water, and shared
+mesh lifetime tests. This exposed and corrected test fixture types: Air now
+returns its precise Air state type, and the separately owned mesh lifetime
+fixture now uses its native callback signature, an uninitialized concrete
+renderer, and the current Golem state fields. No casts or exclusions were added
+to suppress these errors. Focused Oxlint reported zero warnings/errors, and
+whitespace checks passed. Commands, timestamps, exit codes and complete logs are
+in `/tmp/solomon-spell-geometry-6a583nbx/validation.json` and sibling logs on the
+Mac. The first temporary typecheck configuration under `/tmp` failed dependency
+resolution; a project-local configuration exposed the fixture errors above,
+which were then resolved before the canonical project passed. The task's full
+Website gate and long-session browser acceptance remain separate later checks.

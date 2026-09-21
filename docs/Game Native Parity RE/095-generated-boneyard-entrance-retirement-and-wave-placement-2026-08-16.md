@@ -157,7 +157,8 @@ RNG stream, so exact stock sample identity and unrelated interleaved draws are
 not claimed. Native placement policy 0 also consults the live Arena light
 raster, which the authoritative Website server does not own. The confined web
 resolver therefore uses the recovered collision/ring path but does not claim
-the stock dark-versus-light candidate identity or its 350-unit fallback rerun;
+the stock dark-versus-light candidate identity or the LIGHT 350-unit fallback rerun
+(corrected in entry 159 on 2026-09-20);
 its retained half-unit mobility probe compensates for the web collision
 materializer's incomplete native body geometry. Native camera/light queries
 likewise use runtime manager state; the browser maps their recovered ownership

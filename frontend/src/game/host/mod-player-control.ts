@@ -1,10 +1,10 @@
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
-import { NATIVE_SKILL_CATALOG } from '../core-kernels/player-progression.ts'
+import { NATIVE_SKILL_CATALOG, nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import {
-  getPlayerCharacter, getPlayerProgression, getPlayerSkillBook,
+  getPlayerBelt, getPlayerCharacter, getPlayerProgression, getPlayerSkillBook,
   selectGameSimulationPlayerSkill, type GameSimulationState,
 } from '../core-server/game-simulation.ts'
-import { playerEntityIndex } from '../core-server/player-entity-store.ts'
+import { playerEntityCanCast, playerEntityIndex } from '../core-server/player-entity-store.ts'
 import type { ModIntent, ModIntentExecutionContext } from '../modding/runtime/index.ts'
 import { decodePlayerCharacterInput } from '../protocol/codecs/input.ts'
 import type { LuaConsoleObject } from '../protocol/codecs/lua.ts'
@@ -138,6 +138,7 @@ export function modPlayerControlObservation(state: GameSimulationState, playerId
   const player = getPlayerCharacter(state, playerId)
   const progression = getPlayerProgression(state, playerId)
   const skillBook = getPlayerSkillBook(state, playerId)
+  const secondary = state.secondaryAbilities.players[playerId]
   const offer = progression.pendingOffer
   const enemies = nearest(state.world.enemies.actors.filter(enemy => (
     enemy.currentHealth > 0 && enemy.lifeState !== 'dying'
@@ -157,11 +158,31 @@ export function modPlayerControlObservation(state: GameSimulationState, playerId
       health: progression.currentHealth, maximum_health: progression.maximumHealth,
       mana: progression.currentMana, maximum_mana: progression.maximumMana,
       level: progression.level, primary_skill_id: skillBook.primarySkillId,
+      secondary_ready: playerEntityCanCast(state.playerEntities, playerId)
+        && progression.pendingOffer === null
+        && (secondary?.castAction ?? null) === null
+        && (secondary?.castSpinTicksRemaining ?? 0) <= 0
+        && (secondary?.globalCooldownTicks ?? 0) <= 0,
+      held_quickbar: secondary?.heldSlot ?? null,
+      secondary_abilities: getPlayerBelt(state, playerId).flatMap((entry, slot) => {
+        if (entry?.kind !== 'skill' || nativeSkillCategory(entry.skillId) !== 2
+          || (skillBook.permanentRanks[entry.skillId] ?? 0) <= 0
+          || (skillBook.effectiveRanks[entry.skillId] ?? 0) <= 0) return []
+        const skillId = entry.skillId
+        return [{ slot, skill_id: skillId,
+          cooldown_ticks: secondary?.cooldownTicksBySkill[skillId] ?? 0,
+          active: skillId === 12 && (secondary?.planewalkerTicksRemaining ?? 0) > 0
+            || skillId === 23 && secondary?.firewalker === true
+            || skillId === 78 && secondary?.mindstar === true
+            || skillId === 79 && secondary?.regenerate === true,
+        }]
+      }),
       offer: offer === null ? null : {
         sequence: offer.sequence,
         options: offer.options.map((option, choiceIndex) => ({
           choice_index: choiceIndex, skill_id: option.skillId, rank: option.targetRank,
           name: NATIVE_SKILL_CATALOG[option.skillId]?.name ?? '',
+          category: nativeSkillCategory(option.skillId),
         })),
       },
     },

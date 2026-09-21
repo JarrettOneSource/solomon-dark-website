@@ -1,0 +1,432 @@
+{
+  "startedAtUtc": "2026-09-21T01:15:14.251Z",
+  "node": "v22.17.0",
+  "scope": "Matched full JSON server-message decode, same native peak payload per variant, detached process, no forced GC; delta has stable prior descriptors and carries all current samples.",
+  "referenceOriginalSha256": "4ea5e79c77e01eca16ffe33428ea196613c89d8c6d0450d79b32e6f04fb321bb",
+  "candidateOriginalSha256": "0456bf07790dfdcf488226bc7b8de00c409304dba12e4ad073fb692acccca0d0",
+  "checks": [
+    {
+      "name": "faculty_1_keyframe",
+      "inputSha256": "49e79b6e09ef0001164e93b4e32f3f174385152309186ea127225a916271a371",
+      "bytes": 796163,
+      "deepEqual": true,
+      "allRowsOwned": true,
+      "outputSha256": "491d4304778c449abcfddf94db4c1248f368bf2a86b1cecb45c89687a9aefae8"
+    },
+    {
+      "name": "faculty_1_delta",
+      "inputSha256": "4f15570fa6d6c0b045ae8addb489543fcceed531ea5f5ae98d1d1c6e8a34b0c5",
+      "bytes": 476446,
+      "deepEqual": true,
+      "allRowsOwned": true,
+      "outputSha256": "cf59d9b57416a12131497324a5ad2b1d26b9df6397850e10f5f96a36ff8422f7"
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "inputSha256": "365dce967a086a2679dddb5bfe1bd6a10c277e5f44c684a9d21d7ff71b6f7074",
+      "bytes": 2234497,
+      "deepEqual": true,
+      "allRowsOwned": true,
+      "outputSha256": "6a62572d877a4247bb4fe47dd98d2367fbac51fdac0d00a2d207fe208a41b377"
+    },
+    {
+      "name": "faculty_3_delta",
+      "inputSha256": "87d24ca1a2422023f3931f09f1d0103e542e27e3135a0ca6307256312ec9f103",
+      "bytes": 1286489,
+      "deepEqual": true,
+      "allRowsOwned": true,
+      "outputSha256": "76bbf9cbe0c9e25dab0482d45de565a02dfcd524e7b4a7a4c2322484e983c700"
+    }
+  ],
+  "measurements": [
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "reference",
+      "block": 0,
+      "iterations": 20,
+      "wallMs": 255.41824999999994,
+      "cpuMs": 377.083
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "candidate",
+      "block": 1,
+      "iterations": 20,
+      "wallMs": 188.09329200000002,
+      "cpuMs": 271.588
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "candidate",
+      "block": 2,
+      "iterations": 20,
+      "wallMs": 187.70220800000016,
+      "cpuMs": 288.252
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "reference",
+      "block": 3,
+      "iterations": 20,
+      "wallMs": 256.8220419999998,
+      "cpuMs": 362.923
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "reference",
+      "block": 4,
+      "iterations": 20,
+      "wallMs": 247.27691700000014,
+      "cpuMs": 368.422
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "candidate",
+      "block": 5,
+      "iterations": 20,
+      "wallMs": 180.73866700000008,
+      "cpuMs": 271.57
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "candidate",
+      "block": 6,
+      "iterations": 20,
+      "wallMs": 198.36358400000017,
+      "cpuMs": 295.408
+    },
+    {
+      "name": "faculty_1_keyframe",
+      "variant": "reference",
+      "block": 7,
+      "iterations": 20,
+      "wallMs": 241.3977500000001,
+      "cpuMs": 337.709
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "reference",
+      "block": 0,
+      "iterations": 20,
+      "wallMs": 133.75770899999998,
+      "cpuMs": 176.796
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "candidate",
+      "block": 1,
+      "iterations": 20,
+      "wallMs": 98.34083400000009,
+      "cpuMs": 128.472
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "candidate",
+      "block": 2,
+      "iterations": 20,
+      "wallMs": 113.48754199999985,
+      "cpuMs": 166.991
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "reference",
+      "block": 3,
+      "iterations": 20,
+      "wallMs": 132.8834999999999,
+      "cpuMs": 174.782
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "reference",
+      "block": 4,
+      "iterations": 20,
+      "wallMs": 141.08395900000005,
+      "cpuMs": 199.376
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "candidate",
+      "block": 5,
+      "iterations": 20,
+      "wallMs": 101.23849999999948,
+      "cpuMs": 145.795
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "candidate",
+      "block": 6,
+      "iterations": 20,
+      "wallMs": 99.78154100000029,
+      "cpuMs": 135.092
+    },
+    {
+      "name": "faculty_1_delta",
+      "variant": "reference",
+      "block": 7,
+      "iterations": 20,
+      "wallMs": 133.54150000000027,
+      "cpuMs": 175.996
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "reference",
+      "block": 0,
+      "iterations": 20,
+      "wallMs": 778.4014999999999,
+      "cpuMs": 1170.959
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "candidate",
+      "block": 1,
+      "iterations": 20,
+      "wallMs": 587.3581249999997,
+      "cpuMs": 954.027
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "candidate",
+      "block": 2,
+      "iterations": 20,
+      "wallMs": 594.8257079999994,
+      "cpuMs": 978.937
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "reference",
+      "block": 3,
+      "iterations": 20,
+      "wallMs": 776.5787500000006,
+      "cpuMs": 1132.722
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "reference",
+      "block": 4,
+      "iterations": 20,
+      "wallMs": 773.8077919999987,
+      "cpuMs": 1158.478
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "candidate",
+      "block": 5,
+      "iterations": 20,
+      "wallMs": 586.9852910000009,
+      "cpuMs": 940.344
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "candidate",
+      "block": 6,
+      "iterations": 20,
+      "wallMs": 584.621083,
+      "cpuMs": 959.633
+    },
+    {
+      "name": "faculty_3_keyframe",
+      "variant": "reference",
+      "block": 7,
+      "iterations": 20,
+      "wallMs": 768.7932920000003,
+      "cpuMs": 1140.059
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "reference",
+      "block": 0,
+      "iterations": 20,
+      "wallMs": 413.68141599999944,
+      "cpuMs": 611.219
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "candidate",
+      "block": 1,
+      "iterations": 20,
+      "wallMs": 327.56362499999886,
+      "cpuMs": 512.821
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "candidate",
+      "block": 2,
+      "iterations": 20,
+      "wallMs": 327.94495800000004,
+      "cpuMs": 503.759
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "reference",
+      "block": 3,
+      "iterations": 20,
+      "wallMs": 434.1706670000003,
+      "cpuMs": 645.385
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "reference",
+      "block": 4,
+      "iterations": 20,
+      "wallMs": 422.72299999999996,
+      "cpuMs": 613.757
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "candidate",
+      "block": 5,
+      "iterations": 20,
+      "wallMs": 323.37716700000055,
+      "cpuMs": 510.808
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "candidate",
+      "block": 6,
+      "iterations": 20,
+      "wallMs": 325.7782499999994,
+      "cpuMs": 516.183
+    },
+    {
+      "name": "faculty_3_delta",
+      "variant": "reference",
+      "block": 7,
+      "iterations": 20,
+      "wallMs": 419.26420900000085,
+      "cpuMs": 631.606
+    }
+  ],
+  "allocations": [
+    {
+      "variant": "reference",
+      "fixture": "faculty_1_delta",
+      "iterations": 300,
+      "sampledAllocatedMiB": 6697.685691833496
+    },
+    {
+      "variant": "candidate",
+      "fixture": "faculty_1_delta",
+      "iterations": 300,
+      "sampledAllocatedMiB": 2767.600311279297
+    }
+  ],
+  "malformedBoundaryComparisons": 146,
+  "finishedAtUtc": "2026-09-21T01:15:32.155Z",
+  "summary": {
+    "summary": [
+      {
+        "name": "faculty_1_delta",
+        "reference": {
+          "meanDecodeMs": 6.765833350000003,
+          "meanCpuMs": 9.086875000000001
+        },
+        "candidate": {
+          "meanDecodeMs": 5.160605212499997,
+          "meanCpuMs": 7.204375000000001
+        },
+        "wallReductionPercent": 23.72550511460655,
+        "cpuReductionPercent": 20.716693032533186
+      },
+      {
+        "name": "faculty_1_keyframe",
+        "reference": {
+          "meanDecodeMs": 12.5114369875,
+          "meanCpuMs": 18.076712500000003
+        },
+        "candidate": {
+          "meanDecodeMs": 9.436221887500006,
+          "meanCpuMs": 14.085225
+        },
+        "wallReductionPercent": 24.579231810641723,
+        "cpuReductionPercent": 22.080826367073126
+      },
+      {
+        "name": "faculty_3_delta",
+        "reference": {
+          "meanDecodeMs": 21.122991150000008,
+          "meanCpuMs": 31.274587500000003
+        },
+        "candidate": {
+          "meanDecodeMs": 16.308299999999985,
+          "meanCpuMs": 25.5446375
+        },
+        "wallReductionPercent": 22.793604919916945,
+        "cpuReductionPercent": 18.321424703043654
+      },
+      {
+        "name": "faculty_3_keyframe",
+        "reference": {
+          "meanDecodeMs": 38.719766674999995,
+          "meanCpuMs": 57.527725
+        },
+        "candidate": {
+          "meanDecodeMs": 29.4223775875,
+          "meanCpuMs": 47.9117625
+        },
+        "wallReductionPercent": 24.01199667740507,
+        "cpuReductionPercent": 16.715353336152262
+      }
+    ],
+    "allocationReductionPercent": 58.678259347794736,
+    "meaning": "Native burst input path measurement; not whole-game FPS, retained heap, or exact original stall cause."
+  },
+  "canonicalValidation": {
+    "status": "running",
+    "jobId": "job_20260921T011922Z_359f785ac4",
+    "sourceManifestSha256": "835c8b8d2f1c8b30b0084a93f441115cf7ee2496b1931ec244f2bc83f3c2224d",
+    "command": "./scripts/validate.sh",
+    "precedingGate": {
+      "jobId": "job_20260921T011614Z_76426a200b",
+      "status": "failed",
+      "cause": "Equipment test fixture expected absent inventorySlot while normalized fixture output had slot0; equipment author corrected its construction. Decoder unchanged."
+    },
+    "decoderRegression": {
+      "status": "passed",
+      "test": "entity frame decoding owns copied rows and preserves malformed component diagnostics",
+      "canonicalTestOrdinal": 1909,
+      "durationMs": 3.923167,
+      "recordedAtUtc": "2026-09-21T01:23:38.353610+00:00"
+    },
+    "familyCapacityRegression": {
+      "status": "passed",
+      "canonicalTestOrdinal": 1910,
+      "durationMs": 455.765208
+    }
+  },
+  "changedTestSha256": "bd92264a208bf1dea69dfbc32d5c068f065e0f5cd0fd93d44a0de10a9ba42548",
+  "invalidatedPreliminaryCoreMeasurements": {
+    "phaseReceipt": "/tmp/solomon-burst-phase-benchmark-6a583nbx-run3/receipt.json",
+    "profileReceipt": "/tmp/solomon-burst-profile-6a583nbx-run1/receipt.json",
+    "reason": "Native peak fixture advanced only enemy store. The unrelated loot store lagged272/275ticks and caused artificial repeated catch-up. These full_core_tick results and the core CPU/allocation profile must not be used for live gameplay attribution.",
+    "scopeUnaffected": "Decoder, reconstruction, snapshot projection, save, and actual Lua component measurements do not step the stale loot store. The separate full-decoder ABBA comparison reported here never steps simulation.",
+    "correctedRepresentativeReceipt": "/tmp/solomon-burst-phase-benchmark-6a583nbx-run4/receipt.json",
+    "correction": "One untimed full simulation step first settles unrelated clocks. Repeated next steps remain a derived representative fixture, not the exact missing two-player pre-stall state."
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/solomon-decode-comparison-6a583nbx-run1/receipt.json",
+      "bytes": 7812,
+      "sha256": "f8c0a2384c2dd1ba99b7c8585416fd66a06ff53532b59f1b6c4940ccf0d33aef"
+    },
+    {
+      "path": "/tmp/solomon-decode-comparison-6a583nbx-run1/reference.heapprofile",
+      "bytes": 4538638,
+      "sha256": "b025d8527fed6062d881bd9d80b2f5011963ea6ea067c1914eded00564bfc0b1"
+    },
+    {
+      "path": "/tmp/solomon-decode-comparison-6a583nbx-run1/candidate.heapprofile",
+      "bytes": 1828725,
+      "sha256": "fa4a48ac8da1c8b31316db4a73af2b4db03252fb7bd1fe7e0aba4e1b91ba0040"
+    },
+    {
+      "path": "/tmp/solomon-decode-comparison-6a583nbx.mjs",
+      "bytes": 5273,
+      "sha256": "4807d2bcdbc9e3d8375c59a7ba3bba240343fc502f9c3098fec882ea17c2e70b"
+    },
+    {
+      "path": "/tmp/solomon-world-codec-before-6a583nbx.ts",
+      "bytes": 23426,
+      "sha256": "4ea5e79c77e01eca16ffe33428ea196613c89d8c6d0450d79b32e6f04fb321bb"
+    }
+  ]
+}

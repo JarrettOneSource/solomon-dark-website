@@ -1,4 +1,4 @@
-import { Container, FillGradient, Graphics, Sprite, type Texture } from 'pixi.js'
+import { Color, Container, FillGradient, Graphics, Sprite, type ICanvas, type Texture } from 'pixi.js'
 
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
@@ -95,6 +95,7 @@ class NativeEnemyDeathEffectView {
   private boundsScaleY = Number.NaN
   private readonly container: Container
   private readonly effect: Sprite | null
+  private gradientIndex = 0
   private readonly gradients: FillGradient[] = []
   private readonly kind: BoneyardEnemyDeathEffectSnapshot['kind']
   private readonly root: Container
@@ -203,7 +204,7 @@ class NativeEnemyDeathEffectView {
   }
 
   private updateBanish(effect: BoneyardEnemyDeathEffectSnapshot, viewHeight: number): void {
-    this.clearGradients()
+    this.gradientIndex = 0
     this.banishGraphics!.clear()
     this.banishGraphics!.blendMode = 'add'
 
@@ -273,16 +274,37 @@ class NativeEnemyDeathEffectView {
     endColor: string,
   ): void {
     if (width <= 0 || height <= 0) return
-    const gradient = new FillGradient({
-      colorStops: [
-        { color: startColor, offset: 0 },
-        { color: endColor, offset: 1 },
-      ],
-      end: { x: 0, y: 1 },
-      start: { x: 0, y: 0 },
-      textureSpace: 'local',
-    })
-    this.gradients.push(gradient)
+    let gradient = this.gradients[this.gradientIndex]
+    this.gradientIndex += 1
+    if (!gradient) {
+      gradient = new FillGradient({
+        colorStops: [
+          { color: startColor, offset: 0 },
+          { color: endColor, offset: 1 },
+        ],
+        end: { x: 0, y: 1 },
+        start: { x: 0, y: 0 },
+        textureSpace: 'local',
+      })
+      this.gradients.push(gradient)
+    } else {
+      const start = Color.shared.setValue(startColor).toHexa()
+      const end = Color.shared.setValue(endColor).toHexa()
+      if (gradient.colorStops[0]!.color !== start || gradient.colorStops[1]!.color !== end) {
+        gradient.colorStops[0]!.color = start
+        gradient.colorStops[1]!.color = end
+        const canvas: ICanvas = gradient.texture.source.resource
+        const context = canvas.getContext('2d')!
+        const fill = context.createLinearGradient(0, 0, canvas.width, 0)
+        fill.addColorStop(0, start)
+        fill.addColorStop(1, end)
+        // Match a newly built Pixi gradient without compositing over the previous alpha.
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        context.fillStyle = fill
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        gradient.texture.source.update()
+      }
+    }
     this.banishGraphics!.rect(x, y, width, height).fill(gradient)
   }
 

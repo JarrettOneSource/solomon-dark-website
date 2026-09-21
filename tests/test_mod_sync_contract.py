@@ -333,7 +333,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     body = self.read_json_body()
                     if (
                         body.get("token") != "R" * 43
-                        or body.get("save") != "rejoin-save"
+                        or (
+                            body.get("save") != "rejoin-save"
+                            and hashlib.sha256(str(body.get("save")).encode()).hexdigest()
+                            != getattr(cls, "native_save_transport_sha256", None)
+                        )
                         or body.get("content") != {
                             "manifestSha256": "0" * 64,
                             "mods": [],
@@ -984,6 +988,51 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
         self.assertEqual(status, 200, loaded)
         self.assertEqual(loaded["save"]["document"], document)
+        status, deleted = self.request(
+            "DELETE", f"/api/game/saves/0?expectedRevision={revision}", headers=auth,
+        )
+        self.assertEqual(status, 204, deleted)
+
+    def test_native_faculty_peak_cloud_save_and_rejoin_transport(self) -> None:
+        destination = Path(self.temp.name) / "native-faculty-peak-save.json"
+        subprocess.run(
+            [shutil.which("node") or "node", "--experimental-strip-types",
+             "tools/native-faculty-save-fixture.ts", str(destination)],
+            cwd=ROOT / "frontend", check=True, capture_output=True, text=True, timeout=60,
+        )
+        native_document = destination.read_text()
+        self.assertGreater(len(native_document.encode()), 16 * 1024 * 1024)
+        # Legal JSON whitespace exercises both the old Kestrel 30 MB default
+        # and the supervisor's 48 MiB provisioning bound without changing state.
+        document = native_document.rjust(50 * 1024 * 1024)
+        digest = hashlib.sha256(document.encode()).hexdigest()
+        type(self).native_save_transport_sha256 = digest
+        self.addCleanup(setattr, type(self), "native_save_transport_sha256", None)
+        auth = {"Authorization": f"Bearer {self.token}"}
+        status, existing = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200, existing)
+        revision = existing["save"]["revision"] if existing["save"] else 0
+        status, saved = self.request(
+            "PUT", "/api/game/saves/0", headers=auth,
+            json_body={"document": document, "expectedRevision": revision},
+        )
+        self.assertEqual(status, 200, saved)
+        revision = saved["revision"]
+        status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200)
+        self.assertEqual(hashlib.sha256(loaded["save"]["document"].encode()).hexdigest(), digest)
+        status, rejoined = self.request(
+            "POST", "/api/game/rejoin", json_body={"save": document, "token": "R" * 43},
+        )
+        self.assertEqual(status, 201, rejoined)
+        excessive = json.loads(native_document)
+        excessive["continuation"]["simulation"]["excessValues"] = [None] * 3_000_000
+        status, rejected = self.request(
+            "PUT", "/api/game/saves/0", headers=auth,
+            json_body={"document": json.dumps(excessive), "expectedRevision": revision},
+        )
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("too many", str(rejected).lower())
         status, deleted = self.request(
             "DELETE", f"/api/game/saves/0?expectedRevision={revision}", headers=auth,
         )

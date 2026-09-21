@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SolomonDarkRevived.Data;
 using SolomonDarkRevived.Services;
@@ -9,7 +10,9 @@ public static class WebGameSaveEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/game/saves/{slot:int}", GetAsync).RequireAuthorization();
-        app.MapPut("/api/game/saves/{slot:int}", PutAsync).RequireAuthorization();
+        app.MapPut("/api/game/saves/{slot:int}", PutAsync)
+            .RequireAuthorization()
+            .WithMetadata(new RequestSizeLimitAttribute(WebGameSaveInspector.MaxRequestBytes));
         app.MapDelete("/api/game/saves/{slot:int}", DeleteAsync).RequireAuthorization();
     }
 

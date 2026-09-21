@@ -1069,3 +1069,108 @@ failure by itself.
   proof is repeated. The final handoff owns that last candidate's exact base,
   commit, acceptance path, and hashes so recording a moving publication SHA in
   this ledger cannot itself invalidate the proven tree.
+
+## 2026-09-21 — Named clothing materialization after the fourth party soak
+
+The fourth Windows/Mac party soak in Fleet session `6a583nbx` ended at
+`2026-09-20T23:57:02.369Z` when both clients rejected
+`frame.players.player-1.economy.backpack[4] named equipment identity is inconsistent`
+and closed with code 4008. The retained archive is
+`/tmp/solomon-party-wave100-fourth-6a583nbx/archive-8d305ab3-cba2-441c-87d1-36ed392b2247.json`.
+Its `lastAliveByPlayer.player-1` retains Cloudcover Hood recipe 16, selector 3,
+records `[37,41]`, and colors `[0x19ffff,null]`. Both owner checkpoints precede
+this pickup. The shared named-loot constructor reproduces that item exactly;
+snapshot copying and save serialization did not corrupt it.
+
+The source recipe declarations were being copied directly into live clothing.
+The decoder correctly rejected unresolved colors, and the living/death
+equipment presenter would also reject them. Ten of the 47 named recipes fail
+the same producer-to-decoder probe: indices `6,7,11,12,16,17,20,21,40,46`.
+The new complete-family regression failed all ten cases in the canonical
+`./scripts/validate.sh` run `job_20260921T010356Z_2288cc26a3`, whose loot group
+reported 120 tests, 110 passed, 10 failed. This reopens the earlier named
+recipe color closure; the previous browser receipt exercised generated items.
+
+### Fresh stock evidence and native membership
+
+Evidence comes from direct retail disassembly, not a modded runtime:
+
+- `SolomonDarkAbandonware/SolomonDark.exe`, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+- `SolomonDarkAbandonware/data/items.cfg`, SHA-256
+  `28e26243457b246ce48ed7f37d4c14820f9e4a67d1ddf5d328e3a0783a641963`.
+- Existing source reports remain under `Mod Loader/docs/reverse-engineering/`:
+  `native-items-equipment-and-loot.md`, `native-loot-selector.md`, and
+  `native-hub-and-economy.md`. The instruction findings below correct the
+  incomplete default/clone descriptions in those earlier reports.
+
+`ItemRecipe_Ctor 0x00573410` initializes primary RGBA to `(1,1,1,0)` and
+secondary to `(1,1,1,1)` through `0x0040F9C0`. Missing primary therefore means
+random color at materialization; missing secondary means opaque white.
+Named clone `0x004699B0` resolves zero-alpha colors with `0x004630E0`, primary
+before secondary, then desaturates both by float32 `0.8` through `0x0040FC60`
+and stores the resulting float4s in the live item at `+0x88/+0x98`.
+
+| Named garment recipes | Resolved primary / trim, packed for the existing web protocol |
+| --- | --- |
+| 1 Arcanoric Robe | `191919 / C6E0E0` |
+| 5 Sublunarous Hat | `191919 / C1A8C1` |
+| 6 Combinator's Cap; 7 Combinator's Cape | `C0C0C0 / FFFFFF` |
+| 11 Bug-Master's Cap; 12 Bug-Master's Robe | `8F618F / FFFFFF` |
+| 16 Cloudcover Hood; 17 Ozone Cape | `98C6C6 / FFFFFF` |
+| 20 Burning Hat; 21 Burning Robe | `723F3F / FFFFFF` |
+| 25 Potter's Apron | `89B789 / E3EEE3` |
+| 40 Yzmar's Handicap; 46 Robe of Thaumic Unperturbability | Random primary / `FFFFFF` |
+
+The random-color helper uses the active shared RNG at `[0x00818B08]`:
+`Integer(9)` chooses the palette; `Integer(2)` gates three signed `Float(.1)`
+jitters. It consumes 2 or 8 words. Its call to clamp `0x0040F770` at
+`0x004632BA` writes a temporary whose result is discarded; the original color
+is returned at `0x004632BF`. The named caller must retain out-of-range jitter
+until desaturation. The separate random-equipment factory owns its additional
+brightness draw; the named clone does not consume that draw.
+
+Independent instruction-oracle values for recipes 40/46 are: initial seed 1
+gives `A1CCD0` in 8 words; seed 3 gives `4C4C73` in 2 words; seed 42 gives
+`B08CA9` in 8 words. Seed 1's source RGB exceeds one and catches premature
+clamping. One initial candidate-selection word followed by seed-1 color
+materialization gives `A47EA0` after 9 total words. These are static opcode
+oracles, not claimed live captures.
+
+Fixed script helper `0x00469FE0` calls the clone at `0x0046A026` before point
+resolution at `0x0046A055` and carrier placement at `0x0046A061`. The web
+enemy, Goodie, and fixed-script paths now all return the shared RNG after
+materialization. Fixed scripts use that state for placement. With seed 1,
+origin `(100,200)` blocked and its first ring candidate accepted, a random
+named garment has primary `A1CCD0`, position
+`(114.96372985839844,200.833984375)`, and 9 total consumed words.
+
+### Web correction and validation boundary
+
+The named-loot producer now materializes two numeric garment colors and keeps
+named recipe identity separate from generated level/effects. No protocol or
+save validator was loosened; malformed unresolved colors remain rejected.
+All 47 recipes have producer/pickup/decoder regression coverage. The 13 named
+garments additionally cover full snapshots, delta/keyframes, storage, nested
+Sacks, equip appearance, both dye channels, checkpoint envelopes, and exact
+save restoration. Seeded tests pin the native color and RNG oracles above.
+
+The random-equipment helper extraction preserves the existing generated-item
+behavior: a diagnostic over 1,000 ordinary-only enemy-item generations, seeds
+1..1000 with `item:3/specificItem:1`, produced identical item/output-RNG SHA-256
+before and after:
+`29b7097162f6ca65249cf5b76339183fbbba3479a1464b97bcdd40155e851a6b`.
+The corrected named-family diagnostic admits all 47 recipes. Complete final
+canonical validation and a new live party soak remain separate acceptance
+steps; this static correction does not itself establish wave-100 success.
+
+### Separate Dowsing follow-up
+
+Dowsing's existing offer model also omits materialized colors, but it is not
+the natural-loot path that ended this soak. Native `0x0055FE59` selects and
+clones all accepted offers first (`0x00554AC8`), including random colors, then
+the separate `0x0055FE80..0x0055FE89` loop assigns their prices. The web loop
+currently interleaves selection/pricing and creates a plain recipe item on
+purchase. A separate correction must persist realized offer colors, preserve
+them on purchase, and fix RNG ordering across offer creation, save, and wire
+ownership. No Dowsing schema or behavior changes are included here.

@@ -116,7 +116,7 @@ export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK =
   NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
 
 export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
-  darkFallbackRadius: 350,
+  lightFallbackRadius: 350,
   movementProbe: 0.5,
   policyViewHeight: 900 / 1.35,
   policyViewWidth: 1600 / 1.35,
@@ -450,8 +450,8 @@ export function resolveNativeBoneyardSpawnPosition(
     }
     ringRadius += radius
     if (
-      activePolicy === 'dark'
-      && ringRadius >= NATIVE_BONEYARD_SPAWN_PLACEMENT.darkFallbackRadius
+      activePolicy === 'light'
+      && ringRadius > NATIVE_BONEYARD_SPAWN_PLACEMENT.lightFallbackRadius
     ) {
       activePolicy = 'direct'
       ringRadius = radius * 2

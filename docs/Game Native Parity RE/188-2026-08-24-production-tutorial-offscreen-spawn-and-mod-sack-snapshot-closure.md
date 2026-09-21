@@ -50,7 +50,7 @@ candidate geometry, collision admission, enemy registration, and failure.
 | Member | Native/current owner | Disposition | Proof contract |
 | --- | --- | --- | --- |
 | direct policy 3 | `0x00466200`; shared resolver | verified-already-at-parity | valid roots remain identity placements; obstructed roots retain ring search |
-| dark policy 0 | same; default opening/ordinary waves | verified-already-at-parity within the documented headless-light projection | existing dark retry/fallback and generated-Arena tests remain unchanged |
+| dark policy 0 | same; default opening/ordinary waves | verified-already-at-parity within the documented headless-light projection | existing dark retry and generated-Arena tests remain unchanged; entry 159 corrects the falsely attributed LIGHT fallback on 2026-09-20 |
 | light policy 1 | same; Coffin and Tutorial rows | verified-already-at-parity within the same projection | existing light predicate tests plus Tutorial light batches |
 | offscreen policy 2 | same; Tutorial waves 2/3 | exact-ported web projection in this closure | world-level exact log-pattern regression, all seven authored batches, collision-safe root outside the native policy view |
 | edge policy 4 | same; authored rectangle path | out-of-system for current Website producers: opaque custom TimeLines remain unsupported and no built-in/default/Tutorial row emits it | negative producer census; resolver retains explicit injected-context contract rather than inventing rectangle metadata |

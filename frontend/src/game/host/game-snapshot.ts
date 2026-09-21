@@ -8,7 +8,7 @@ import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-a
 import { nativePrimarySpellTint } from '../core-kernels/native-skill-colors.ts'
 import { nativePlayerElementEffectPhase, playerLightDriveActive } from '../core-kernels/player-lighting.ts'
 import { effectiveSkillNumericValue } from '../core-kernels/player-skill-runtime.ts'
-import { boneyardWorldLightQuery } from '../core-server/boneyard-world-light.ts'
+import { createBoneyardWorldLightSampler } from '../core-server/boneyard-world-light.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
 import type { GameSimulationState } from '../core-server/game-simulation.ts'
 import { gameSimulationPlayerRecords, getPlayerBelt, getPlayerEconomy, getPlayerProgression, getPlayerSkillBook, getPlayerStatBook } from '../core-server/game-simulation.ts'
@@ -65,7 +65,7 @@ export function createGameSnapshot(
       }
     case 'boneyard': {
       const runId = state.world.runId
-      const lights = boneyardWorldLightQuery(state.world, players, state.world.enemies, state.tick, {
+      const lightAt = createBoneyardWorldLightSampler(state.world, players, state.world.enemies, state.tick, {
         playerEntities: state.playerEntities, primarySpells: state.primarySpells, secondaryAbilities: state.secondaryAbilities,
       })
       const spiderPlayers = Object.fromEntries(Object.entries(players).map(([id, player]) => {
@@ -133,7 +133,7 @@ export function createGameSnapshot(
             walkCycle: state.world.encounter.walkCycle,
           },
           enemies: projectBoneyardEnemies(state.world.enemies, state.tick, {
-            lightAt: lights.scalarAt,
+            lightAt,
             players: spiderPlayers,
           }),
           enemyEvents: state.world.enemyEvents.map((event) => (

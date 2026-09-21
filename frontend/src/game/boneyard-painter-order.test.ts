@@ -96,6 +96,15 @@ test('painter admission rejects invalid records and releases failed-build state'
       { id: 'valid', row: 0, zIndex: 1 },
     ])
   }
+  assert.throws(() => planner.build([{
+    ...valid, id: '', worldY: Number.NaN, sortBias: Number.POSITIVE_INFINITY,
+  }], 0), { name: 'Error', message: 'native Region painter id must not be empty' })
+  assert.throws(() => planner.build([{
+    ...valid, worldY: Number.NaN, sortBias: Number.POSITIVE_INFINITY,
+  }], 0), { name: 'RangeError', message: 'valid world Y must be finite' })
+  assert.throws(() => planner.build([{
+    ...valid, sortBias: Number.NEGATIVE_INFINITY,
+  }], 0), { name: 'RangeError', message: 'valid sort bias must be finite' })
   assert.throws(() => planner.build([valid], Number.NaN), /reference Y must be finite/)
   assert.throws(() => planner.build([valid, {
     ...valid, registration: { managerLane: 'scenery', registrationOrdinal: 0 },

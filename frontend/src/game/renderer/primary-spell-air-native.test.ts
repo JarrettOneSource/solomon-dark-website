@@ -4,7 +4,7 @@ import test from 'node:test'
 import { Container, Mesh, Texture } from 'pixi.js'
 
 import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
-import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
+import type { PrimarySpellAirTransientState, PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
 import {
   AIR_LIGHTNING_BODY_LIFETIME_TICKS,
   AIR_LIGHTNING_CONTACT_LIFETIME_TICKS,
@@ -590,6 +590,41 @@ test('direct Air factory consumers do not allocate ZAnimSplit bands', () => {
   direct.destroy()
 })
 
+test('Air retires shared split and unsplit geometry once after its visible lifetime', () => {
+  for (const split of [false, true]) {
+    for (let cycle = 0; cycle < 50; cycle += 1) {
+      const view = new AirPrimarySpellView(airViewState(0, 100 + cycle), AIR_VIEW_TEXTURES, { split })
+      const meshes = descendantMeshes(view.containers)
+      const resources = [...new Set(meshes.map(mesh => mesh.geometry))].map(geometry => {
+        const buffers = [...geometry.buffers]
+        const events: string[] = []
+        geometry.on('unload', () => {
+          assert.ok(buffers.every(buffer => !buffer.destroyed))
+          events.push('unload')
+        })
+        geometry.on('destroy', () => events.push('destroy'))
+        return { buffers, events, geometry }
+      })
+      assert.ok(resources.length > 0)
+      for (const ageTicks of [1, 2, 4]) {
+        view.update(airViewState(ageTicks, 100 + cycle))
+        for (const { buffers, events, geometry } of resources) {
+          assert.deepEqual(events, [], 'hidden body geometry remains owned until actor retirement')
+          assert.ok(buffers.every(buffer => !buffer.destroyed))
+          assert.ok(meshes.some(mesh => mesh.geometry === geometry))
+        }
+      }
+      view.destroy()
+      assert.ok(meshes.every(mesh => mesh.destroyed))
+      for (const { buffers, events } of resources) {
+        assert.deepEqual(events, ['unload', 'destroy'])
+        assert.ok(buffers.every(buffer => buffer.destroyed))
+      }
+      assert.equal(Texture.EMPTY.destroyed, false)
+    }
+  }
+})
+
 const AIR_VIEW_TEXTURES = {
   branches: [Texture.EMPTY, Texture.EMPTY],
   circle: Texture.EMPTY,
@@ -597,7 +632,7 @@ const AIR_VIEW_TEXTURES = {
   ribbon: Texture.EMPTY,
 } as const
 
-function airViewState(ageTicks: number, id: number): PrimarySpellTransientState {
+function airViewState(ageTicks: number, id: number): PrimarySpellAirTransientState {
   return {
     ageTicks,
     birthTick: 800,

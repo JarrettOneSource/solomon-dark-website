@@ -322,16 +322,14 @@ type MutableDeathEffect = {
 }
 
 /**
- * Explicit field-by-field copy in the spawn-site key order. Spawned records
+ * Explicit field-by-field copy in the established stepped-row key order. Spawned records
  * are frozen, and V8 falls off its fast object-spread path for frozen
  * sources, so `{ ...source }` costs several times more than this literal for
- * the ~130 death effects stepped every tick. The property order matches the
- * spawn literals, so stepped rows serialize identically to spread rows.
+ * the ~130 death effects stepped every tick. Keep optional prefix spreads out
+ * of the common literal while preserving their existing serialized order.
  */
 function cloneDeathEffect(source: BoneyardEnemyDeathEffect): MutableDeathEffect {
-  return {
-    ...(source.painterSortBias === undefined ? {} : { painterSortBias: source.painterSortBias }),
-    ...(source.scrapOscillation === undefined ? {} : { scrapOscillation: source.scrapOscillation }),
+  const copy: MutableDeathEffect = {
     ageTicks: source.ageTicks,
     alpha: source.alpha,
     alphaMultiplier: source.alphaMultiplier,
@@ -369,6 +367,12 @@ function cloneDeathEffect(source: BoneyardEnemyDeathEffect): MutableDeathEffect 
     verticalVelocity: source.verticalVelocity,
     velocity: source.velocity,
     velocityDamping: source.velocityDamping,
+  }
+  if (source.painterSortBias === undefined && source.scrapOscillation === undefined) return copy
+  return {
+    ...(source.painterSortBias === undefined ? {} : { painterSortBias: source.painterSortBias }),
+    ...(source.scrapOscillation === undefined ? {} : { scrapOscillation: source.scrapOscillation }),
+    ...copy,
   }
 }
 

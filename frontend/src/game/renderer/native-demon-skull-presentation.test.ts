@@ -64,9 +64,15 @@ test('UltraBanish owns its gradient quads and light after the actor disappears',
   assert.equal(nativeBossSpellLayers(spell, 150).length, 2)
   const view = new NativeBossSpellMesh(spell, Texture.EMPTY)
   view.update(spell, 150, 900)
+  const buffers = [...view.mesh.geometry.buffers]
+  let unloaded = false
+  view.mesh.geometry.on('unload', () => { unloaded = true })
   let destroyed = false
   view.mesh.geometry.on('destroy', () => { destroyed = true })
   view.destroy()
   view.mesh.destroy()
   assert.equal(destroyed, true)
+  assert.equal(unloaded, true)
+  assert.ok(buffers.every(buffer => buffer.destroyed))
+  assert.equal(Texture.EMPTY.destroyed, false)
 })

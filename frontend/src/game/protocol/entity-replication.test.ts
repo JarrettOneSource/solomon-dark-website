@@ -5,9 +5,17 @@ import { createNativeWaterHailActor } from '../core-kernels/air-water-spell-acto
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { createNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server/boneyard-enemy-store.ts'
+import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
+import type { BoneyardEnemyStore, BoneyardEnemyStoreStepContext } from '../core-server/enemies/model.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { projectBoneyardEnemies, projectBoneyardEnemyDeathEffects } from '../host/project-boneyard-enemies.ts'
+import { decodeServerGameMessage, encodeGameMessage } from './game-protocol.ts'
+import { GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from './game-protocol-contract.ts'
+import { MAX_BONEYARD_ENEMIES, MAX_BONEYARD_ENEMY_DEATH_EFFECTS, MAX_BONEYARD_ENEMY_PROJECTILES, MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS, MAX_BONEYARD_GOODIES, MAX_BONEYARD_LOOT, MAX_BONEYARD_MAGGOTS, MAX_BONEYARD_SPIDER_EFFECTS, MAX_REPLICATED_ENTITIES } from './game-protocol-limits.ts'
 import { BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION, boneyardEnemyDeathEffectDescriptor } from './boneyard-enemy-death-effect-replication.ts'
 import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from './boneyard-enemy-replication.ts'
 import { BONEYARD_LOOT_ENTITY_REGISTRATION, boneyardLootDescriptor, boneyardLootSample, materializeBoneyardLoot } from './boneyard-loot-replication.ts'
@@ -116,6 +124,169 @@ function boneyardSnapshot(runId: string): GameSnapshot {
     },
   }
 }
+
+test('three simultaneous Faculty deaths survive complete raw and compact transport through retirement', () => {
+  const source = boneyardSnapshot('faculty-population')
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const context: BoneyardEnemyStoreStepContext = {
+    nativeViewBounds: { x: -800, y: -500, w: 1600, h: 1000 },
+    projectileWorldBlocked: () => false,
+    clipSpellSegment: ({ end }) => end,
+    players: { wizard: { alive: true, collisionRadius: 25, connected: true, eligible: true,
+      headingDeg: 0, position: { x: 0, y: -200 }, velocityPerTick: { x: 0, y: 0 } } },
+    resolveMovement: ({ position }) => position,
+    resolveSpawnIntents: () => [],
+    tick: 0,
+  }
+  let store = stepBoneyardEnemyStore(createBoneyardEnemyStore('faculty-integration'), {
+    ...context,
+    resolveSpawnIntents: () => (['Dire Sirmin', 'Dire Lucritius', 'Dire Aliss'] as const).map((name, index) => ({
+      authoredRecipe: nativeFacultyRecipe('9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9', name),
+      enemyToken: 'DIREFACULTY', flags: [], id: index + 1, locationPolicy: 'anywhere',
+      nativeTypeId: 1010, pathfindingMode: 2, position: { x: index * 10, y: 0 },
+      spawnTick: 0, waveOrdinal: 32,
+    })),
+  }).store
+  const world = { ...source.world, enemyEvents: [], mageLightningPulses: [], puppetHits: [] }
+  const snapshotAt = (population: BoneyardEnemyStore): GameSnapshot => ({
+    ...source, tick: population.lastStepTick,
+    world: { ...world, enemies: projectBoneyardEnemies(population, population.lastStepTick),
+      deathEffects: projectBoneyardEnemyDeathEffects(population) },
+  })
+  const initial = snapshotAt(store)
+  for (const actor of store.actors) store = damageBoneyardEnemy(store, {
+    actorId: actor.id, amount: actor.currentHealth + 1, tick: 0, sourcePlayerId: 'wizard',
+  }).store
+  let peak = store
+  let peakCount = 0
+  for (let tick = 1; tick <= 1100; tick += 1) {
+    store = stepBoneyardEnemyStore(store, { ...context, tick }).store
+    const count = projectBoneyardEnemyDeathEffects(store).length
+    if (count > peakCount) {
+      peak = store
+      peakCount = count
+    }
+  }
+  assert.ok(peakCount > 8_192, 'the native population must cross the former wire limit')
+  assert.ok(peakCount < MAX_BONEYARD_ENEMY_DEATH_EFFECTS)
+  assert.equal(store.actors.length, 0)
+  assert.equal(store.deathEffects.length, 0)
+  const largest = snapshotAt(peak)
+  const rawPayload = JSON.stringify(largest)
+  assert.ok(Buffer.byteLength(rawPayload) < GAME_WEBSOCKET_MAX_PAYLOAD_BYTES)
+  const raw = gameSnapshot(JSON.parse(rawPayload))
+  if (raw.world.kind !== 'boneyard' || largest.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const expectedIds = largest.world.deathEffects.map(({ id }) => id)
+  assert.deepEqual(raw.world.deathEffects.map(({ id }) => id), expectedIds)
+  for (const keyframe of [true, false]) {
+    const reconstructor = new EntityReplicationReconstructor()
+    reconstructor.reset(initial, 1)
+    const frame = createGameSnapshotFrame(largest, 1, createReplicatedEntityBaseline(initial), keyframe)
+    const payload = encodeGameMessage({ type: 'server-snapshot', acknowledgedInputSequence: 0, frame, sequence: 2 })
+    assert.ok(Buffer.byteLength(payload) < GAME_WEBSOCKET_MAX_PAYLOAD_BYTES)
+    const message = decodeServerGameMessage(payload)
+    if (message.type !== 'server-snapshot') throw new Error('Expected snapshot message')
+    const restored = reconstructor.apply(message.frame, message.sequence)
+    if (restored.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    assert.deepEqual(restored.world.deathEffects.map(({ id }) => id), expectedIds)
+    const retired = createGameSnapshotFrame(snapshotAt(store), 2, createReplicatedEntityBaseline(largest))
+    assert.equal(retired.world.entities.retired.length, peakCount)
+    const cleared = reconstructor.apply(gameSnapshotFrame(JSON.parse(JSON.stringify(retired))), 3)
+    if (cleared.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    assert.equal(cleared.world.deathEffects.length, 0)
+  }
+})
+
+test('entity frame decoding owns copied rows and preserves malformed component diagnostics', () => {
+  const frame = createGameSnapshotFrame(hubSnapshot(1), 0, undefined, true)
+  const rows = {
+    retired: frame.world.entities.samples.map(([typeId, id]) => [typeId, id]),
+    samples: frame.world.entities.samples.map(row => [...row]),
+    spawned: frame.world.entities.spawned.map(row => [...row]),
+  }
+  const input = { ...frame, world: { ...frame.world, entities: { ...frame.world.entities, ...rows } } }
+  const decoded = gameSnapshotFrame(input)
+  for (const field of ['retired', 'samples', 'spawned'] as const) {
+    assert.deepEqual(decoded.world.entities[field], rows[field])
+    assert.notEqual(decoded.world.entities[field], rows[field])
+    assert.notEqual(decoded.world.entities[field][0], rows[field][0])
+    const expectedId = decoded.world.entities[field][0]![1]
+    rows[field][0]![1] += 100
+    assert.equal(decoded.world.entities[field][0]![1], expectedId)
+  }
+  for (const field of ['samples', 'spawned'] as const) {
+    const original = frame.world.entities[field][0]!
+    const replace = (row: unknown[]) => ({ ...frame, world: { ...frame.world,
+      entities: { ...frame.world.entities, [field]: [row] } } })
+    for (let index = 2; index < original.length; index += 1) {
+      for (const value of [null, undefined, NaN, Infinity, -Infinity, '0', false, {}]) {
+        const row: unknown[] = [...original]
+        row[index] = value
+        assert.throws(() => gameSnapshotFrame(replace(row)), {
+          name: 'GameProtocolError',
+          message: `frame.world.entities.${field}[0][${index}] must be finite`,
+        })
+      }
+    }
+    const sparse: unknown[] = [...original]
+    delete sparse[2]
+    assert.throws(() => gameSnapshotFrame(replace(sparse)), {
+      name: 'GameProtocolError',
+      message: `frame.world.entities.${field}[0] has an invalid registered ${field === 'samples' ? 'sample' : 'descriptor'} shape`,
+    })
+    sparse[3] = null
+    assert.throws(() => gameSnapshotFrame(replace(sparse)), {
+      name: 'GameProtocolError',
+      message: `frame.world.entities.${field}[0][3] must be finite`,
+    })
+  }
+})
+
+test('entity frame admission covers all family capacities and rejects rows beyond the finite envelope', () => {
+  const source = boneyardSnapshot('family-capacities')
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const gold: BoneyardLootSnapshot = {
+    activationDelayTicks: 0, ageTicks: 20, alpha: 0, amount: 1, animationPhase: 0,
+    bonusKind: null, bounceHeight: 0, framePhase: 0, id: 1, itemContentId: null,
+    itemNativeSubtype: null, itemNativeTypeId: null, kind: 'gold', nativeTypeId: 2012,
+    orbKind: null, orbValue: 0, painterRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+    position: { x: 0, y: 0 }, rotationDeg: 0, scatterActive: false, scatterProgress: 8.5,
+    scatterSeed: 1, source: 'enemy', spawnTick: 0, tier: 0,
+  }
+  source.world.enemies = Array.from({ length: MAX_BONEYARD_ENEMIES }, (_, index) => ({ ...enemySnapshot(), id: index + 1 }))
+  source.world.deathEffects = Array.from({ length: MAX_BONEYARD_ENEMY_DEATH_EFFECTS }, (_, index) => ({ ...enemyDeathEffectSnapshot(), id: index + 1 }))
+  source.world.enemyProjectiles = Array.from({ length: MAX_BONEYARD_ENEMY_PROJECTILES }, (_, index) => ({ ...enemyProjectileSnapshot(), id: index + 1 }))
+  source.world.enemyProjectileEffects = Array.from({ length: MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS }, (_, index) => ({ ...enemyProjectileEffectSnapshot(), id: index + 1 }))
+  source.world.maggots = Array.from({ length: MAX_BONEYARD_MAGGOTS }, (_, index) => ({ ...maggotSnapshot(), id: index + 1 }))
+  source.world.loot = Array.from({ length: MAX_BONEYARD_LOOT }, (_, index) => ({ ...gold, id: index + 1 }))
+  source.world.goodies = Array.from({ length: MAX_BONEYARD_GOODIES }, (_, index) => ({
+    active: true, exhausted: false, id: index + 1, phase: 0, position: { x: 0, y: 0 },
+    sceneryRegistrationOrdinal: index, subtype: 0, timer: 0,
+  }))
+  assert.doesNotThrow(() => gameSnapshot(source))
+  const frame = createGameSnapshotFrame(source, 0, undefined, true)
+  assert.equal(frame.world.entities.samples.length, MAX_REPLICATED_ENTITIES)
+  assert.equal(frame.world.entities.spawned.length, MAX_REPLICATED_ENTITIES)
+  assert.doesNotThrow(() => gameSnapshotFrame(JSON.parse(JSON.stringify(frame))))
+  const keys = frame.world.entities.samples.map(([typeId, id]) => [typeId, id])
+  assert.doesNotThrow(() => gameSnapshotFrame({ ...frame, world: { ...frame.world,
+    entities: { ...frame.world.entities, retired: keys, samples: [], spawned: [] } } }))
+  for (const field of ['samples', 'spawned', 'retired'] as const) {
+    const rows = field === 'retired' ? keys : frame.world.entities[field]
+    assert.throws(() => gameSnapshotFrame({ ...frame, world: { ...frame.world,
+      entities: { ...frame.world.entities, [field]: [...rows, rows[0]] } } }),
+    new RegExp(`frame.world.entities.${field} may contain at most ${MAX_REPLICATED_ENTITIES} entries`))
+  }
+  const overflowingDeathEffects = [...source.world.deathEffects, enemyDeathEffectSnapshot()]
+  assert.throws(() => gameSnapshot({ ...source, world: { ...source.world,
+    deathEffects: overflowingDeathEffects } }),
+  new RegExp(`snapshot.world.deathEffects may contain at most ${MAX_BONEYARD_ENEMY_DEATH_EFFECTS} entries`))
+  for (const field of ['spiderRemains', 'silkFragments'] as const) {
+    assert.throws(() => gameSnapshot({ ...source, world: { ...source.world,
+      [field]: Array(MAX_BONEYARD_SPIDER_EFFECTS + 1).fill(null) } }),
+    new RegExp(`snapshot.world.${field} may contain at most 8192 entries`))
+  }
+})
 
 test('Puppet hit ownership and strength survive full and compact snapshot transport', () => {
   const source = boneyardSnapshot('puppet-hit-transport')

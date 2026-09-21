@@ -1,0 +1,1868 @@
+{
+  "baselineRevision": "fb9ec4bf9486e0fac5f76e9648c043614bb4d373",
+  "candidateSourcesSha256": {
+    "frontend/src/game/core-server/boneyard-world-light.ts": "dfbbd5dc9dac4d6f6855171b007546ed46685b4bf0b9b2c8030a8bd9f769374e",
+    "frontend/src/game/core-server/game-simulation.ts": "c63acec6f82d632c795d618aa5234f5c755230457529b4e341ae275511dbe629",
+    "frontend/src/game/host/game-snapshot.ts": "f53c048662e92c1944c371da9218012a9432d3871ba1b57f9857efc367814392",
+    "frontend/src/game/core-server/boneyard-transient-effects.ts": "16214b44d39b874878f3fb586c72800ee4e625d6712e9c4bffacb120b329582b",
+    "frontend/src/game/core-server/boneyard-world-targets.ts": "d93b6ed8ef481ee7f74820927a66a224242d2c610f1df36383c4decb8c1f047d"
+  },
+  "node": "v22.17.0",
+  "order": [
+    "baseline-cpu-1",
+    "candidate-cpu-1",
+    "candidate-cpu-2",
+    "baseline-cpu-2"
+  ],
+  "method": "Sequential B/A/A/B existing deterministic runtime benchmark; matching in-memory loader records process.cpuUsage around loop; baseline replaces only five modules with bytes verified against baseline Git revision; task-owned browsers/host paused; unrelated machine workloads preserved.",
+  "allCheckpointAndFinalHashesMatch": true,
+  "reports": [
+    {
+      "label": "baseline-cpu-1",
+      "cpuUsage": {
+        "user": 72102585,
+        "system": 600360
+      },
+      "arenaIndex": 0,
+      "crowd": {
+        "count": 3098,
+        "max": 6.394458000002487,
+        "mean": 1.241035519690175,
+        "p50": 0.9735829999990528,
+        "p90": 1.8197910000017146,
+        "p99": 4.009125000004133,
+        "total": 3844.728040000162
+      },
+      "crowdThreshold": 70,
+      "elapsedMs": 66294.72729200001,
+      "executedTicks": 62500,
+      "finalHash": "66e4ff66b63abdc1",
+      "finalJsonHash": "7ef46f08eea6b59c:695322",
+      "finalTick": 62500,
+      "geometrySha256": "bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0",
+      "hashes": [
+        {
+          "hash": "516bbb1077d04268",
+          "jsonHash": "0a2e0aaaed0cc88a:718886",
+          "tick": 5000
+        },
+        {
+          "hash": "fc0ee2534ce6e629",
+          "jsonHash": "79f90839a8eaa46d:883463",
+          "tick": 10000
+        },
+        {
+          "hash": "23c3a9c010408d70",
+          "jsonHash": "255626958592e0eb:816458",
+          "tick": 15000
+        },
+        {
+          "hash": "c1bf3d5ef927b59d",
+          "jsonHash": "72b95b5dd40ab463:776124",
+          "tick": 20000
+        },
+        {
+          "hash": "27627b871efc3c13",
+          "jsonHash": "1c934b8597c903b1:737915",
+          "tick": 25000
+        },
+        {
+          "hash": "ae0e0f39ff9bd28b",
+          "jsonHash": "234fa36b84965835:790095",
+          "tick": 30000
+        },
+        {
+          "hash": "880f5a9db0e17253",
+          "jsonHash": "9b4202328f7b6488:837777",
+          "tick": 35000
+        },
+        {
+          "hash": "74397ff31cc7bf57",
+          "jsonHash": "4340b39b96ecad8d:627678",
+          "tick": 40000
+        },
+        {
+          "hash": "3baf50f378b08a80",
+          "jsonHash": "5c10876588d15f65:865880",
+          "tick": 45000
+        },
+        {
+          "hash": "e9533904f70657bc",
+          "jsonHash": "08e17671bc9a85db:953334",
+          "tick": 50000
+        },
+        {
+          "hash": "164ce9b6699fa13d",
+          "jsonHash": "bdd8da3ab1c346c0:696226",
+          "tick": 55000
+        },
+        {
+          "hash": "d40b297ffa3b792b",
+          "jsonHash": "4cb37a8187a6fc2f:695482",
+          "tick": 60000
+        }
+      ],
+      "node": "v22.17.0",
+      "overall": {
+        "count": 62500,
+        "max": 45.388999999999896,
+        "mean": 1.0498078369760009,
+        "p50": 0.9725000000034925,
+        "p90": 1.6036659999990661,
+        "p99": 2.595083000000159,
+        "total": 65612.98981100005
+      },
+      "peakDynamicActors": 425,
+      "peakLiveEnemies": 83,
+      "populationSums": {
+        "deathEffects": 6481729,
+        "enemyActors": 1949131,
+        "enemyProjectiles": 70853,
+        "liveEnemies": 1948632,
+        "lootActors": 672139,
+        "mageLightningPulses": 0,
+        "maggots": 0,
+        "primaryProjectiles": 154079,
+        "primaryTransients": 510028,
+        "projectileEffects": 0,
+        "secondaryActors": 0
+      },
+      "seed": 1372610135,
+      "waveLog": [
+        {
+          "live": 8,
+          "phase": "opening",
+          "tick": 1,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "opening-threshold",
+          "tick": 901,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "spawning",
+          "tick": 902,
+          "wave": 1
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 3043,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 5378,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 5403,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 5404,
+          "wave": 1
+        },
+        {
+          "live": 8,
+          "phase": "spawning",
+          "tick": 5479,
+          "wave": 2
+        },
+        {
+          "live": 30,
+          "phase": "wave-threshold",
+          "tick": 6659,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 8552,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 8577,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 8578,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 8653,
+          "wave": 3
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 10176,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 13104,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 13129,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 13130,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 13205,
+          "wave": 4
+        },
+        {
+          "live": 55,
+          "phase": "wave-threshold",
+          "tick": 14813,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 19015,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 19040,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 19041,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 19116,
+          "wave": 5
+        },
+        {
+          "live": 63,
+          "phase": "wave-threshold",
+          "tick": 21273,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 28978,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 29003,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 29004,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 29079,
+          "wave": 6
+        },
+        {
+          "live": 83,
+          "phase": "wave-threshold",
+          "tick": 31320,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 38576,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 38601,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 38602,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 38677,
+          "wave": 7
+        },
+        {
+          "live": 0,
+          "phase": "spawning",
+          "tick": 43580,
+          "wave": 8
+        },
+        {
+          "live": 40,
+          "phase": "wave-threshold",
+          "tick": 45449,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 47262,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 47287,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 47288,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 47363,
+          "wave": 9
+        },
+        {
+          "live": 78,
+          "phase": "wave-threshold",
+          "tick": 49422,
+          "wave": 9
+        }
+      ],
+      "waveStats": [
+        {
+          "wave": 0,
+          "count": 901,
+          "max": 45.388999999999896,
+          "mean": 1.1346644916759168,
+          "p50": 1.025666000000001,
+          "p90": 1.3009999999999309,
+          "p99": 2.683875000000171,
+          "total": 1022.3327070000009
+        },
+        {
+          "wave": 1,
+          "count": 4577,
+          "max": 24.331707999999708,
+          "mean": 1.0684765178064284,
+          "p50": 1.0150839999996606,
+          "p90": 1.290042000000085,
+          "p99": 2.5582920000006197,
+          "total": 4890.417022000022
+        },
+        {
+          "wave": 2,
+          "count": 3174,
+          "max": 8.551290999999765,
+          "mean": 1.2666550608065728,
+          "p50": 1.248875000001135,
+          "p90": 1.518000000000029,
+          "p99": 2.281750000000102,
+          "total": 4020.363163000062
+        },
+        {
+          "wave": 3,
+          "count": 4552,
+          "max": 4.982625000000553,
+          "mean": 1.1056612405536246,
+          "p50": 0.9614579999997659,
+          "p90": 1.6418749999993452,
+          "p99": 2.51995800000077,
+          "total": 5032.969967000099
+        },
+        {
+          "wave": 4,
+          "count": 5911,
+          "max": 3.6398750000007567,
+          "mean": 1.0848630762984155,
+          "p50": 0.9527500000003783,
+          "p90": 1.5327089999991586,
+          "p99": 2.071665999999823,
+          "total": 6412.625643999934
+        },
+        {
+          "wave": 5,
+          "count": 9963,
+          "max": 19.69512499999837,
+          "mean": 1.0117265191207396,
+          "p50": 0.982332999999926,
+          "p90": 1.3299169999991136,
+          "p99": 1.7843749999992724,
+          "total": 10079.831309999929
+        },
+        {
+          "wave": 6,
+          "count": 9598,
+          "max": 10.211374999998952,
+          "mean": 1.0675240829339678,
+          "p50": 0.9761670000007143,
+          "p90": 1.4380830000009155,
+          "p99": 2.079041999997571,
+          "total": 10246.096148000222
+        },
+        {
+          "wave": 7,
+          "count": 4903,
+          "max": 19.305208999998285,
+          "mean": 0.775354558025719,
+          "p50": 0.7459159999998519,
+          "p90": 1.00291599999764,
+          "p99": 1.4431250000052387,
+          "total": 3801.5633980001003
+        },
+        {
+          "wave": 8,
+          "count": 3783,
+          "max": 4.319499999997788,
+          "mean": 1.471080004758078,
+          "p50": 1.4764580000046408,
+          "p90": 1.8766249999971478,
+          "p99": 3.3827499999970314,
+          "total": 5565.095657999809
+        },
+        {
+          "wave": 9,
+          "count": 15138,
+          "max": 33.33229200000642,
+          "mean": 0.9606087193817358,
+          "p50": 0.5767079999932321,
+          "p90": 1.81541599999764,
+          "p99": 3.6188750000001164,
+          "total": 14541.694794000716
+        }
+      ]
+    },
+    {
+      "label": "candidate-cpu-1",
+      "cpuUsage": {
+        "user": 23468646,
+        "system": 283533
+      },
+      "arenaIndex": 0,
+      "crowd": {
+        "count": 3098,
+        "max": 3.0145830000001297,
+        "mean": 0.3905903508715483,
+        "p50": 0.3288750000010623,
+        "p90": 0.6309170000004087,
+        "p99": 1.1868329999997513,
+        "total": 1210.0489070000567
+      },
+      "crowdThreshold": 70,
+      "elapsedMs": 18414.408292,
+      "executedTicks": 62500,
+      "finalHash": "66e4ff66b63abdc1",
+      "finalJsonHash": "7ef46f08eea6b59c:695322",
+      "finalTick": 62500,
+      "geometrySha256": "bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0",
+      "hashes": [
+        {
+          "hash": "516bbb1077d04268",
+          "jsonHash": "0a2e0aaaed0cc88a:718886",
+          "tick": 5000
+        },
+        {
+          "hash": "fc0ee2534ce6e629",
+          "jsonHash": "79f90839a8eaa46d:883463",
+          "tick": 10000
+        },
+        {
+          "hash": "23c3a9c010408d70",
+          "jsonHash": "255626958592e0eb:816458",
+          "tick": 15000
+        },
+        {
+          "hash": "c1bf3d5ef927b59d",
+          "jsonHash": "72b95b5dd40ab463:776124",
+          "tick": 20000
+        },
+        {
+          "hash": "27627b871efc3c13",
+          "jsonHash": "1c934b8597c903b1:737915",
+          "tick": 25000
+        },
+        {
+          "hash": "ae0e0f39ff9bd28b",
+          "jsonHash": "234fa36b84965835:790095",
+          "tick": 30000
+        },
+        {
+          "hash": "880f5a9db0e17253",
+          "jsonHash": "9b4202328f7b6488:837777",
+          "tick": 35000
+        },
+        {
+          "hash": "74397ff31cc7bf57",
+          "jsonHash": "4340b39b96ecad8d:627678",
+          "tick": 40000
+        },
+        {
+          "hash": "3baf50f378b08a80",
+          "jsonHash": "5c10876588d15f65:865880",
+          "tick": 45000
+        },
+        {
+          "hash": "e9533904f70657bc",
+          "jsonHash": "08e17671bc9a85db:953334",
+          "tick": 50000
+        },
+        {
+          "hash": "164ce9b6699fa13d",
+          "jsonHash": "bdd8da3ab1c346c0:696226",
+          "tick": 55000
+        },
+        {
+          "hash": "d40b297ffa3b792b",
+          "jsonHash": "4cb37a8187a6fc2f:695482",
+          "tick": 60000
+        }
+      ],
+      "node": "v22.17.0",
+      "overall": {
+        "count": 62500,
+        "max": 44.98658299999988,
+        "mean": 0.2842242679200007,
+        "p50": 0.24108399999931862,
+        "p90": 0.4101250000003347,
+        "p99": 0.9385000000002037,
+        "total": 17764.016745000044
+      },
+      "peakDynamicActors": 425,
+      "peakLiveEnemies": 83,
+      "populationSums": {
+        "deathEffects": 6481729,
+        "enemyActors": 1949131,
+        "enemyProjectiles": 70853,
+        "liveEnemies": 1948632,
+        "lootActors": 672139,
+        "mageLightningPulses": 0,
+        "maggots": 0,
+        "primaryProjectiles": 154079,
+        "primaryTransients": 510028,
+        "projectileEffects": 0,
+        "secondaryActors": 0
+      },
+      "seed": 1372610135,
+      "waveLog": [
+        {
+          "live": 8,
+          "phase": "opening",
+          "tick": 1,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "opening-threshold",
+          "tick": 901,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "spawning",
+          "tick": 902,
+          "wave": 1
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 3043,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 5378,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 5403,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 5404,
+          "wave": 1
+        },
+        {
+          "live": 8,
+          "phase": "spawning",
+          "tick": 5479,
+          "wave": 2
+        },
+        {
+          "live": 30,
+          "phase": "wave-threshold",
+          "tick": 6659,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 8552,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 8577,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 8578,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 8653,
+          "wave": 3
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 10176,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 13104,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 13129,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 13130,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 13205,
+          "wave": 4
+        },
+        {
+          "live": 55,
+          "phase": "wave-threshold",
+          "tick": 14813,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 19015,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 19040,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 19041,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 19116,
+          "wave": 5
+        },
+        {
+          "live": 63,
+          "phase": "wave-threshold",
+          "tick": 21273,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 28978,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 29003,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 29004,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 29079,
+          "wave": 6
+        },
+        {
+          "live": 83,
+          "phase": "wave-threshold",
+          "tick": 31320,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 38576,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 38601,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 38602,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 38677,
+          "wave": 7
+        },
+        {
+          "live": 0,
+          "phase": "spawning",
+          "tick": 43580,
+          "wave": 8
+        },
+        {
+          "live": 40,
+          "phase": "wave-threshold",
+          "tick": 45449,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 47262,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 47287,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 47288,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 47363,
+          "wave": 9
+        },
+        {
+          "live": 78,
+          "phase": "wave-threshold",
+          "tick": 49422,
+          "wave": 9
+        }
+      ],
+      "waveStats": [
+        {
+          "wave": 0,
+          "count": 901,
+          "max": 44.98658299999988,
+          "mean": 0.4952407713651562,
+          "p50": 0.33333300000003874,
+          "p90": 0.6724169999997684,
+          "p99": 1.9688750000000255,
+          "total": 446.2119350000057
+        },
+        {
+          "wave": 1,
+          "count": 4577,
+          "max": 4.977499999999964,
+          "mean": 0.32101022875245716,
+          "p50": 0.2871660000000702,
+          "p90": 0.4715000000001055,
+          "p99": 1.0711660000001757,
+          "total": 1469.2638169999964
+        },
+        {
+          "wave": 2,
+          "count": 3174,
+          "max": 7.612415999999939,
+          "mean": 0.3084042281033428,
+          "p50": 0.2459999999991851,
+          "p90": 0.5145830000001297,
+          "p99": 1.1848329999993439,
+          "total": 978.87502000001
+        },
+        {
+          "wave": 3,
+          "count": 4552,
+          "max": 3.0393340000000535,
+          "mean": 0.24853756942003452,
+          "p50": 0.20266699999956472,
+          "p90": 0.35095799999999144,
+          "p99": 0.9565000000002328,
+          "total": 1131.343015999997
+        },
+        {
+          "wave": 4,
+          "count": 5911,
+          "max": 2.0572089999996024,
+          "mean": 0.2648489137201948,
+          "p50": 0.21862500000042928,
+          "p90": 0.4044579999999769,
+          "p99": 0.9715420000002268,
+          "total": 1565.5219290000714
+        },
+        {
+          "wave": 5,
+          "count": 9963,
+          "max": 18.610750000000735,
+          "mean": 0.27397895423064816,
+          "p50": 0.25366700000085984,
+          "p90": 0.3469999999997526,
+          "p99": 0.674457999999504,
+          "total": 2729.6523209999477
+        },
+        {
+          "wave": 6,
+          "count": 9598,
+          "max": 9.127125000000888,
+          "mean": 0.29054448843509434,
+          "p50": 0.2469169999985752,
+          "p90": 0.4260420000009617,
+          "p99": 1.0646250000008877,
+          "total": 2788.646000000035
+        },
+        {
+          "wave": 7,
+          "count": 4903,
+          "max": 17.327375000000757,
+          "mean": 0.21787239200488734,
+          "p50": 0.18950000000040745,
+          "p90": 0.304708000001483,
+          "p99": 0.5969999999997526,
+          "total": 1068.2283379999626
+        },
+        {
+          "wave": 8,
+          "count": 3783,
+          "max": 2.4752500000013242,
+          "mean": 0.3098241025641233,
+          "p50": 0.26183300000047893,
+          "p90": 0.46358300000065356,
+          "p99": 0.9384160000008706,
+          "total": 1172.0645800000784
+        },
+        {
+          "wave": 9,
+          "count": 15138,
+          "max": 24.4787499999984,
+          "mean": 0.2915979514467006,
+          "p50": 0.22641700000167475,
+          "p90": 0.4148750000022119,
+          "p99": 0.7632090000006428,
+          "total": 4414.209789000153
+        }
+      ]
+    },
+    {
+      "label": "candidate-cpu-2",
+      "cpuUsage": {
+        "user": 24005788,
+        "system": 287978
+      },
+      "arenaIndex": 0,
+      "crowd": {
+        "count": 3098,
+        "max": 2.871666000000914,
+        "mean": 0.3854726897998802,
+        "p50": 0.32237499999973807,
+        "p90": 0.592333000000508,
+        "p99": 1.1983340000006137,
+        "total": 1194.1943930000289
+      },
+      "crowdThreshold": 70,
+      "elapsedMs": 19154.550167,
+      "executedTicks": 62500,
+      "finalHash": "66e4ff66b63abdc1",
+      "finalJsonHash": "7ef46f08eea6b59c:695322",
+      "finalTick": 62500,
+      "geometrySha256": "bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0",
+      "hashes": [
+        {
+          "hash": "516bbb1077d04268",
+          "jsonHash": "0a2e0aaaed0cc88a:718886",
+          "tick": 5000
+        },
+        {
+          "hash": "fc0ee2534ce6e629",
+          "jsonHash": "79f90839a8eaa46d:883463",
+          "tick": 10000
+        },
+        {
+          "hash": "23c3a9c010408d70",
+          "jsonHash": "255626958592e0eb:816458",
+          "tick": 15000
+        },
+        {
+          "hash": "c1bf3d5ef927b59d",
+          "jsonHash": "72b95b5dd40ab463:776124",
+          "tick": 20000
+        },
+        {
+          "hash": "27627b871efc3c13",
+          "jsonHash": "1c934b8597c903b1:737915",
+          "tick": 25000
+        },
+        {
+          "hash": "ae0e0f39ff9bd28b",
+          "jsonHash": "234fa36b84965835:790095",
+          "tick": 30000
+        },
+        {
+          "hash": "880f5a9db0e17253",
+          "jsonHash": "9b4202328f7b6488:837777",
+          "tick": 35000
+        },
+        {
+          "hash": "74397ff31cc7bf57",
+          "jsonHash": "4340b39b96ecad8d:627678",
+          "tick": 40000
+        },
+        {
+          "hash": "3baf50f378b08a80",
+          "jsonHash": "5c10876588d15f65:865880",
+          "tick": 45000
+        },
+        {
+          "hash": "e9533904f70657bc",
+          "jsonHash": "08e17671bc9a85db:953334",
+          "tick": 50000
+        },
+        {
+          "hash": "164ce9b6699fa13d",
+          "jsonHash": "bdd8da3ab1c346c0:696226",
+          "tick": 55000
+        },
+        {
+          "hash": "d40b297ffa3b792b",
+          "jsonHash": "4cb37a8187a6fc2f:695482",
+          "tick": 60000
+        }
+      ],
+      "node": "v22.17.0",
+      "overall": {
+        "count": 62500,
+        "max": 45.44766699999991,
+        "mean": 0.29566899547199776,
+        "p50": 0.24291700000048877,
+        "p90": 0.44975000000067666,
+        "p99": 1.0180829999990237,
+        "total": 18479.31221699986
+      },
+      "peakDynamicActors": 425,
+      "peakLiveEnemies": 83,
+      "populationSums": {
+        "deathEffects": 6481729,
+        "enemyActors": 1949131,
+        "enemyProjectiles": 70853,
+        "liveEnemies": 1948632,
+        "lootActors": 672139,
+        "mageLightningPulses": 0,
+        "maggots": 0,
+        "primaryProjectiles": 154079,
+        "primaryTransients": 510028,
+        "projectileEffects": 0,
+        "secondaryActors": 0
+      },
+      "seed": 1372610135,
+      "waveLog": [
+        {
+          "live": 8,
+          "phase": "opening",
+          "tick": 1,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "opening-threshold",
+          "tick": 901,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "spawning",
+          "tick": 902,
+          "wave": 1
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 3043,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 5378,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 5403,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 5404,
+          "wave": 1
+        },
+        {
+          "live": 8,
+          "phase": "spawning",
+          "tick": 5479,
+          "wave": 2
+        },
+        {
+          "live": 30,
+          "phase": "wave-threshold",
+          "tick": 6659,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 8552,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 8577,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 8578,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 8653,
+          "wave": 3
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 10176,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 13104,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 13129,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 13130,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 13205,
+          "wave": 4
+        },
+        {
+          "live": 55,
+          "phase": "wave-threshold",
+          "tick": 14813,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 19015,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 19040,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 19041,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 19116,
+          "wave": 5
+        },
+        {
+          "live": 63,
+          "phase": "wave-threshold",
+          "tick": 21273,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 28978,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 29003,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 29004,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 29079,
+          "wave": 6
+        },
+        {
+          "live": 83,
+          "phase": "wave-threshold",
+          "tick": 31320,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 38576,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 38601,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 38602,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 38677,
+          "wave": 7
+        },
+        {
+          "live": 0,
+          "phase": "spawning",
+          "tick": 43580,
+          "wave": 8
+        },
+        {
+          "live": 40,
+          "phase": "wave-threshold",
+          "tick": 45449,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 47262,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 47287,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 47288,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 47363,
+          "wave": 9
+        },
+        {
+          "live": 78,
+          "phase": "wave-threshold",
+          "tick": 49422,
+          "wave": 9
+        }
+      ],
+      "waveStats": [
+        {
+          "wave": 0,
+          "count": 901,
+          "max": 45.44766699999991,
+          "mean": 0.4573153884572754,
+          "p50": 0.33154200000035416,
+          "p90": 0.49483299999997143,
+          "p99": 1.8490420000002814,
+          "total": 412.0411650000051
+        },
+        {
+          "wave": 1,
+          "count": 4577,
+          "max": 4.564458000000286,
+          "mean": 0.3034456925934073,
+          "p50": 0.27958300000000236,
+          "p90": 0.3892080000000533,
+          "p99": 0.9857919999999467,
+          "total": 1388.8709350000254
+        },
+        {
+          "wave": 2,
+          "count": 3174,
+          "max": 7.430707999999868,
+          "mean": 0.2896084930686888,
+          "p50": 0.24262499999986176,
+          "p90": 0.4102920000004815,
+          "p99": 1.0472080000004098,
+          "total": 919.2173570000182
+        },
+        {
+          "wave": 3,
+          "count": 4552,
+          "max": 3.390457999999853,
+          "mean": 0.24122484644113393,
+          "p50": 0.19816699999955745,
+          "p90": 0.3429580000001806,
+          "p99": 0.9488750000000437,
+          "total": 1098.0555010000417
+        },
+        {
+          "wave": 4,
+          "count": 5911,
+          "max": 2.525416999999834,
+          "mean": 0.25520707274572463,
+          "p50": 0.21408299999984592,
+          "p90": 0.39012499999989814,
+          "p99": 0.7917499999994106,
+          "total": 1508.5290069999783
+        },
+        {
+          "wave": 5,
+          "count": 9963,
+          "max": 18.84429199999977,
+          "mean": 0.2620748672086645,
+          "p50": 0.2454170000000886,
+          "p90": 0.32745799999975134,
+          "p99": 0.6126250000006621,
+          "total": 2611.0519019999247
+        },
+        {
+          "wave": 6,
+          "count": 9598,
+          "max": 9.746999999999389,
+          "mean": 0.3039948307980778,
+          "p50": 0.2562500000003638,
+          "p90": 0.49366700000064156,
+          "p99": 1.065999999998894,
+          "total": 2917.742385999951
+        },
+        {
+          "wave": 7,
+          "count": 4903,
+          "max": 28.953833999999915,
+          "mean": 0.2949791062614853,
+          "p50": 0.20987500000046566,
+          "p90": 0.5356670000001031,
+          "p99": 1.0104580000006536,
+          "total": 1446.2825580000626
+        },
+        {
+          "wave": 8,
+          "count": 3783,
+          "max": 2.945583999999144,
+          "mean": 0.421465790642361,
+          "p50": 0.2883750000000873,
+          "p90": 0.8107090000012249,
+          "p99": 1.6130420000008598,
+          "total": 1594.4050860000516
+        },
+        {
+          "wave": 9,
+          "count": 15138,
+          "max": 26.383999999998196,
+          "mean": 0.3027557352358423,
+          "p50": 0.22916600000098697,
+          "p90": 0.42541699999856064,
+          "p99": 0.9007910000000265,
+          "total": 4583.116320000181
+        }
+      ]
+    },
+    {
+      "label": "baseline-cpu-2",
+      "cpuUsage": {
+        "user": 77541478,
+        "system": 606462
+      },
+      "arenaIndex": 0,
+      "crowd": {
+        "count": 3098,
+        "max": 4.192041000002064,
+        "mean": 1.1536888618463383,
+        "p50": 0.9805419999975129,
+        "p90": 1.6428329999980633,
+        "p99": 2.3543330000029528,
+        "total": 3574.128093999956
+      },
+      "crowdThreshold": 70,
+      "elapsedMs": 72294.911709,
+      "executedTicks": 62500,
+      "finalHash": "66e4ff66b63abdc1",
+      "finalJsonHash": "7ef46f08eea6b59c:695322",
+      "finalTick": 62500,
+      "geometrySha256": "bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0",
+      "hashes": [
+        {
+          "hash": "516bbb1077d04268",
+          "jsonHash": "0a2e0aaaed0cc88a:718886",
+          "tick": 5000
+        },
+        {
+          "hash": "fc0ee2534ce6e629",
+          "jsonHash": "79f90839a8eaa46d:883463",
+          "tick": 10000
+        },
+        {
+          "hash": "23c3a9c010408d70",
+          "jsonHash": "255626958592e0eb:816458",
+          "tick": 15000
+        },
+        {
+          "hash": "c1bf3d5ef927b59d",
+          "jsonHash": "72b95b5dd40ab463:776124",
+          "tick": 20000
+        },
+        {
+          "hash": "27627b871efc3c13",
+          "jsonHash": "1c934b8597c903b1:737915",
+          "tick": 25000
+        },
+        {
+          "hash": "ae0e0f39ff9bd28b",
+          "jsonHash": "234fa36b84965835:790095",
+          "tick": 30000
+        },
+        {
+          "hash": "880f5a9db0e17253",
+          "jsonHash": "9b4202328f7b6488:837777",
+          "tick": 35000
+        },
+        {
+          "hash": "74397ff31cc7bf57",
+          "jsonHash": "4340b39b96ecad8d:627678",
+          "tick": 40000
+        },
+        {
+          "hash": "3baf50f378b08a80",
+          "jsonHash": "5c10876588d15f65:865880",
+          "tick": 45000
+        },
+        {
+          "hash": "e9533904f70657bc",
+          "jsonHash": "08e17671bc9a85db:953334",
+          "tick": 50000
+        },
+        {
+          "hash": "164ce9b6699fa13d",
+          "jsonHash": "bdd8da3ab1c346c0:696226",
+          "tick": 55000
+        },
+        {
+          "hash": "d40b297ffa3b792b",
+          "jsonHash": "4cb37a8187a6fc2f:695482",
+          "tick": 60000
+        }
+      ],
+      "node": "v22.17.0",
+      "overall": {
+        "count": 62500,
+        "max": 45.11933399999998,
+        "mean": 1.1446183251199842,
+        "p50": 1.0267499999972642,
+        "p90": 1.7001250000030268,
+        "p99": 2.9328329999989364,
+        "total": 71538.645319999
+      },
+      "peakDynamicActors": 425,
+      "peakLiveEnemies": 83,
+      "populationSums": {
+        "deathEffects": 6481729,
+        "enemyActors": 1949131,
+        "enemyProjectiles": 70853,
+        "liveEnemies": 1948632,
+        "lootActors": 672139,
+        "mageLightningPulses": 0,
+        "maggots": 0,
+        "primaryProjectiles": 154079,
+        "primaryTransients": 510028,
+        "projectileEffects": 0,
+        "secondaryActors": 0
+      },
+      "seed": 1372610135,
+      "waveLog": [
+        {
+          "live": 8,
+          "phase": "opening",
+          "tick": 1,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "opening-threshold",
+          "tick": 901,
+          "wave": 0
+        },
+        {
+          "live": 1,
+          "phase": "spawning",
+          "tick": 902,
+          "wave": 1
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 3043,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 5378,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 5403,
+          "wave": 1
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 5404,
+          "wave": 1
+        },
+        {
+          "live": 8,
+          "phase": "spawning",
+          "tick": 5479,
+          "wave": 2
+        },
+        {
+          "live": 30,
+          "phase": "wave-threshold",
+          "tick": 6659,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 8552,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 8577,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 8578,
+          "wave": 2
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 8653,
+          "wave": 3
+        },
+        {
+          "live": 32,
+          "phase": "wave-threshold",
+          "tick": 10176,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 13104,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 13129,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 13130,
+          "wave": 3
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 13205,
+          "wave": 4
+        },
+        {
+          "live": 55,
+          "phase": "wave-threshold",
+          "tick": 14813,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 19015,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 19040,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 19041,
+          "wave": 4
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 19116,
+          "wave": 5
+        },
+        {
+          "live": 63,
+          "phase": "wave-threshold",
+          "tick": 21273,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 28978,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 29003,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 29004,
+          "wave": 5
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 29079,
+          "wave": 6
+        },
+        {
+          "live": 83,
+          "phase": "wave-threshold",
+          "tick": 31320,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 38576,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 38601,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 38602,
+          "wave": 6
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 38677,
+          "wave": 7
+        },
+        {
+          "live": 0,
+          "phase": "spawning",
+          "tick": 43580,
+          "wave": 8
+        },
+        {
+          "live": 40,
+          "phase": "wave-threshold",
+          "tick": 45449,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull-delay",
+          "tick": 47262,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "wave-lull",
+          "tick": 47287,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "interwave",
+          "tick": 47288,
+          "wave": 8
+        },
+        {
+          "live": 9,
+          "phase": "spawning",
+          "tick": 47363,
+          "wave": 9
+        },
+        {
+          "live": 78,
+          "phase": "wave-threshold",
+          "tick": 49422,
+          "wave": 9
+        }
+      ],
+      "waveStats": [
+        {
+          "wave": 0,
+          "count": 901,
+          "max": 45.11933399999998,
+          "mean": 1.1605600510543854,
+          "p50": 1.0328330000002097,
+          "p90": 1.328375000000051,
+          "p99": 3.094624999999951,
+          "total": 1045.6646060000012
+        },
+        {
+          "wave": 1,
+          "count": 4577,
+          "max": 5.1921250000004875,
+          "mean": 1.040656630980992,
+          "p50": 1.0157090000002427,
+          "p90": 1.2350000000001273,
+          "p99": 1.9423329999999623,
+          "total": 4763.0854
+        },
+        {
+          "wave": 2,
+          "count": 3174,
+          "max": 8.524041999999099,
+          "mean": 1.2695137769376177,
+          "p50": 1.2390840000007302,
+          "p90": 1.5414590000000317,
+          "p99": 2.5974999999998545,
+          "total": 4029.4367279999988
+        },
+        {
+          "wave": 3,
+          "count": 4552,
+          "max": 6.36829200000102,
+          "mean": 1.22893859578205,
+          "p50": 0.9830830000009882,
+          "p90": 1.955207999999402,
+          "p99": 3.7895000000007713,
+          "total": 5594.128487999891
+        },
+        {
+          "wave": 4,
+          "count": 5911,
+          "max": 3.610000000000582,
+          "mean": 1.0735656746743636,
+          "p50": 0.946749999999156,
+          "p90": 1.506915999998455,
+          "p99": 1.9582499999996799,
+          "total": 6345.846703000163
+        },
+        {
+          "wave": 5,
+          "count": 9963,
+          "max": 19.909707999999227,
+          "mean": 1.2580200924420533,
+          "p50": 1.0285420000000158,
+          "p90": 2.4212919999990845,
+          "p99": 3.364540999999008,
+          "total": 12533.654181000176
+        },
+        {
+          "wave": 6,
+          "count": 9598,
+          "max": 10.857083999995666,
+          "mean": 1.0697127160866773,
+          "p50": 0.9813339999964228,
+          "p90": 1.4487089999965974,
+          "p99": 2.0273329999981797,
+          "total": 10267.102648999928
+        },
+        {
+          "wave": 7,
+          "count": 4903,
+          "max": 18.62383299999783,
+          "mean": 0.7801853516214847,
+          "p50": 0.750584000001254,
+          "p90": 1.0133749999949941,
+          "p99": 1.4266250000000582,
+          "total": 3825.2487790001396
+        },
+        {
+          "wave": 8,
+          "count": 3783,
+          "max": 5.254249999998137,
+          "mean": 1.4242638535554257,
+          "p50": 1.4587919999976293,
+          "p90": 1.800916000000143,
+          "p99": 2.347084000000905,
+          "total": 5387.990158000175
+        },
+        {
+          "wave": 9,
+          "count": 15138,
+          "max": 26.430709000000206,
+          "mean": 1.1723138874355499,
+          "p50": 1.1144579999963753,
+          "p90": 1.9026659999944968,
+          "p99": 2.967125000002852,
+          "total": 17746.487627999355
+        }
+      ]
+    }
+  ],
+  "countingProbe": {
+    "ticks": 200,
+    "enemyCount": 28,
+    "primaryProjectiles": 0,
+    "primaryTransients": 36,
+    "probe": {
+      "at stepBoneyardWorldTick (file:///Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/core-server/boneyard-world.ts:295:22)": {
+        "builds": 200,
+        "sampledFields": 0,
+        "scalarSamples": 0
+      },
+      "at finishGameSimulationTick (file:///Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/core-server/game-simulation.ts:3402:25)": {
+        "builds": 200,
+        "sampledFields": 0,
+        "scalarSamples": 0
+      },
+      "at createGameSnapshot (file:///Users/jarrett/codex-acceptance/solomon-perf-6a583nbx/frontend/src/game/host/game-snapshot.ts:68:22)": {
+        "builds": 40,
+        "sampledFields": 0,
+        "scalarSamples": 0
+      }
+    }
+  }
+}

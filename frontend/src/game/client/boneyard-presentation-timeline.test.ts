@@ -844,10 +844,20 @@ test('interpolates independent death-effect transforms without rerolling art ide
     ...older.world.deathEffects[0]!,
     ageTicks: 5,
     alpha: 0.75,
+    entry: 118,
     height: -10,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 99 },
     position: { x: 110, y: 220 },
     rotationRadians: Math.PI * 0.1,
   }]
+  older.world.deathEffects = [
+    ...older.world.deathEffects,
+    { ...older.world.deathEffects[0]!, id: 10 },
+  ]
+  newer.world.deathEffects = [
+    ...newer.world.deathEffects,
+    { ...newer.world.deathEffects[0]!, id: 11, painterRegistration: null },
+  ]
   const timeline = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
     initialSnapshot: older,
@@ -856,7 +866,12 @@ test('interpolates independent death-effect transforms without rerolling art ide
   })
   timeline.push(newer, 50)
 
-  const effect = timeline.sample(75).world.deathEffects[0]!
+  const start = timeline.sample(50).world.deathEffects
+  assert.deepEqual(start.map((effect) => effect.id), [9, 10])
+  assert.deepEqual(start[0]!.position, { x: 100, y: 200 })
+  const middle = timeline.sample(75).world.deathEffects
+  assert.deepEqual(middle.map((effect) => effect.id), [9, 10])
+  const effect = middle[0]!
   assert.equal(effect.id, 9)
   assert.equal(effect.ownerActorId, 1)
   assert.equal(effect.entry, 117)
@@ -865,6 +880,25 @@ test('interpolates independent death-effect transforms without rerolling art ide
   assert.equal(effect.height, -15)
   assert.deepEqual(effect.position, { x: 105, y: 210 })
   assert.ok(Math.abs(effect.rotationRadians) < 1e-9)
+  assert.deepEqual(effect.painterRegistration, { managerLane: 'actor', registrationOrdinal: 9 })
+  effect.position.x = -999
+  assert.equal(Reflect.set(effect.painterRegistration!, 'registrationOrdinal', -999), true)
+  const repeat = timeline.sample(75).world.deathEffects[0]!
+  assert.deepEqual(repeat.position, { x: 105, y: 210 })
+  assert.deepEqual(repeat.painterRegistration, { managerLane: 'actor', registrationOrdinal: 9 })
+  assert.equal(older.world.deathEffects[0]!.position.x, 100)
+  assert.equal(older.world.deathEffects[0]!.painterRegistration!.registrationOrdinal, 9)
+
+  const end = timeline.sample(100).world.deathEffects
+  assert.deepEqual(end.map((effect) => effect.id), [9, 11])
+  assert.equal(end[0]!.entry, 118)
+  assert.equal(end[0]!.ageTicks, 5)
+  assert.deepEqual(end[0]!.position, { x: 110, y: 220 })
+  assert.deepEqual(end[0]!.painterRegistration, { managerLane: 'actor', registrationOrdinal: 99 })
+  assert.notEqual(end[0]!.position, newer.world.deathEffects[0]!.position)
+  assert.notEqual(end[0]!.painterRegistration, newer.world.deathEffects[0]!.painterRegistration)
+  assert.equal(end[1]!.painterRegistration, null)
+  assert.notEqual(end[1]!.position, newer.world.deathEffects[1]!.position)
 })
 
 test('interpolates projectile-owned effects after their projectile has retired', () => {

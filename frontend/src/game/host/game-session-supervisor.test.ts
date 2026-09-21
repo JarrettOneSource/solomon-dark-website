@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import test from 'node:test'
 
 import { WebSocket } from 'ws'
+import { createNativeFacultyDeathSaveFixture } from '../../../tools/native-faculty-save-fixture.ts'
 
 import {
   GAME_PROTOCOL_VERSION,
@@ -19,10 +20,10 @@ import {
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
 import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
-import { createGameSaveDocument } from '../save/game-save-document.ts'
+import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
 import { materializeStockTutorial } from './boneyard-catalog.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
-import { verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
+import { createPartyRecoveryClaim, verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
 import {
   createRuntimeEventPublisher,
   type RuntimeEventEntry,
@@ -1348,6 +1349,49 @@ test('first returning nonleader recovers the updated party run under the origina
   ]))
 })
 
+test('native Faculty peak rejoins through save-sized HTTP and WebSocket envelopes intact', async (context) => {
+  const revision = '4'.repeat(40)
+  const options = { ...createNativeFacultyDeathSaveFixture(), integrity: 'global-clean' as const }
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected native peak')
+  const effects = options.state.world.enemies.deathEffects
+  const unsigned = createGameSaveDocument({ ...options, partyRejoinToken: null })
+  assert.ok(Buffer.byteLength(unsigned) > 16 * 1024 * 1024)
+  const token = createPartyRecoveryClaim(ADMIN_SECRET, {
+    contentManifestSha256: EMPTY_CONTENT.manifestSha256,
+    globalScoreEligible: false, integrity: 'global-clean', leaderboardUserId: 51,
+    partyMemberCount: 1, partyLeaderPlayerId: 'owner',
+    partyRoster: [{ currentHealth: 100, maximumHealth: 100, lifeState: 'alive',
+      displayName: 'Faculty save regression', element: 'fire', playerId: 'owner' }],
+    partyVisibility: 'invite-only', playerId: 'owner', recoveryId: 'F'.repeat(43),
+    runId: options.state.world.runId, sessionKind: 'global-hub', targetRevision: revision,
+  }, unsigned)
+  // Whitespace preserves the signed state while crossing the former 48 MiB
+  // admin-body limit and exercising escaped client-hello save transport.
+  const save = createGameSaveDocument({ ...options, partyRejoinToken: token }).padStart(50 * 1024 * 1024)
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN], revision, snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const response = await fetch(`${supervisor.address.url}/admin/rejoin`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ADMIN_SECRET}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ content: EMPTY_CONTENT, developerAccess: false,
+      leaderboardUserId: 51, save, token }),
+  })
+  assert.equal(response.status, 201, await response.clone().text())
+  const recovered = await joinSaved(supervisor.address.url,
+    await response.json() as ProvisionedEndpoint, BROWSER_ORIGIN, save,
+    { discipline: 'arcane', displayName: 'Faculty save regression', element: 'fire' })
+  context.after(() => closeSocket(recovered.socket))
+  assert.equal(recovered.welcome.gameplayResumeGrace?.reason, 'game-restarted')
+  const checkpoint = await recovered.next(message => message.type === 'server-save-checkpoint')
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  const restored = restoreGameSaveDocument(checkpoint.save)
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected recovered Boneyard')
+  assert.equal(restored.state.tick, options.state.tick)
+  assert.deepEqual(restored.state.world.enemies.deathEffects, effects)
+})
+
 test('ordinary checkpoint survives same-revision host loss and repeated empty suspension', async (context) => {
   const revision = '3'.repeat(40)
   const supervisor = await startGameSessionSupervisor({
@@ -1918,6 +1962,7 @@ async function joinSaved(
   endpoint: ProvisionedEndpoint,
   origin: string,
   save: string,
+  character: PlayerCharacterConfig = CHARACTER,
 ) {
   const socket = await openSocket(websocketUrl(supervisorUrl, endpoint.path), origin)
   const next = messageQueue(socket)
@@ -1928,12 +1973,12 @@ async function joinSaved(
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,
-    character: CHARACTER,
+    character,
     save,
     saveIntent: 'resume',
   }))
-  const welcome = await next(message => message.type === 'server-welcome')
-  assert.equal(welcome.type, 'server-welcome')
+  const welcome = await next(message => message.type === 'server-welcome' || message.type === 'server-disconnect')
+  assert.equal(welcome.type, 'server-welcome', welcome.type === 'server-disconnect' ? welcome.reason : undefined)
   return { next, socket, welcome }
 }
 

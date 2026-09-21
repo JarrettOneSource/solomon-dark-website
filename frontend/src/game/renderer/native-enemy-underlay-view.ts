@@ -4,6 +4,7 @@ import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import type { NativeEnemyUnderlayLayer } from './native-enemy-underlay.ts'
 import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 interface UnderlayMesh {
   readonly colors: Uint32Array
@@ -67,7 +68,7 @@ export class NativeEnemyUnderlayView {
   setRenderable(value: boolean): void { this.container.renderable = value }
 
   destroy(): void {
-    for (const view of this.meshes) view.mesh.geometry.destroy()
+    for (const view of this.meshes) destroyOwnedMeshGeometry(view.mesh)
     this.container.removeFromParent()
     this.container.destroy({ children: true })
     this.meshes.length = 0

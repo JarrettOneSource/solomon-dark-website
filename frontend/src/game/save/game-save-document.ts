@@ -1098,7 +1098,8 @@ function normalizeDeathEffectOwnership(
     : source.presentationOwner
   // These Faculty particles choose either owner when they are constructed.
   const mixedSmokeOwner = source.kind === 'move-fade'
-    && ['dampen-caster-smoke', 'tragic-circle-smoke', 'skull-trail', 'dark-trail', 'skull-impact', 'dark-impact', 'dark-ring-impact'].includes(String(source.role))
+    && ['dampen-caster-smoke', 'tragic-circle-smoke', 'skull-trail', 'dark-trail', 'skull-impact', 'dark-impact', 'dark-ring-impact',
+      'faculty-living-smoke', 'faculty-start-smoke', 'faculty-dying-smoke', 'faculty-terminal-smoke'].includes(String(source.role))
     && presentationOwner === 'pre-world-queue'
   if (presentationOwner !== expectedOwner && !mixedSmokeOwner) {
     throw new Error(`${field} presentation owner is invalid`)
@@ -1134,6 +1135,8 @@ function nativeDeathEffectPresentationOwner(
   }
   if (kind === 'fire-array' || kind === 'late-splat' || kind === 'sprite-array'
     || kind === 'move-fade-perspective' || kind === 'fade-scale-perspective'
+    || (kind === 'move-fade-sin' && role === 'zombie-rotten-particle')
+    || (kind === 'fade-additive' && role === 'wraith-soul-wisp')
     || ['blightning-source-smoke', 'blightning-path-smoke', 'discorporeal-death-branch'].includes(role)) {
     return 'pre-world-queue'
   }

@@ -707,7 +707,7 @@ export async function startGameSessionSupervisor(
     let reservationId: string | null = null
     let reservedHost: GameHost | null = null
     try {
-      const body = await readJsonObject(request)
+      const body = await readJsonObject(request, MAX_PROVISION_REQUEST_BYTES + GAME_WEBSOCKET_MAX_PAYLOAD_BYTES)
       const token = normalizePartyRejoinToken(body.token)
       if (typeof body.save !== 'string'
         || Buffer.byteLength(body.save, 'utf8') > MAX_WEB_GAME_SAVE_BYTES) {
@@ -1428,13 +1428,13 @@ export async function startGameSessionSupervisor(
   }
 }
 
-async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJsonObject(request: IncomingMessage, maximumBytes = MAX_PROVISION_REQUEST_BYTES): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += bytes.length
-    if (size > MAX_PROVISION_REQUEST_BYTES) throw new Error('request body is too large')
+    if (size > maximumBytes) throw new Error('request body is too large')
     chunks.push(bytes)
   }
   const value = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown

@@ -13,6 +13,7 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import { generateNativeRandomEquipmentEffects } from './native-random-equipment.ts'
+import { nativeDesaturateColor } from './native-color.ts'
 import type { NativeLootSelectionInput } from './native-loot.ts'
 
 export interface NativeLootItemIds {
@@ -169,10 +170,7 @@ export function selectEnemyItem(
   rng = selected.state
   const recipe = candidates[selected.value]
   if (recipe) {
-    return {
-      item: equipmentRecipeItem(recipe, input.itemIds),
-      sharedRng: rng,
-    }
+    return equipmentRecipeItem(recipe, input.itemIds, rng)
   }
   const generated = randomEquipment(
     rng,
@@ -194,10 +192,7 @@ function selectGoodieEquipment(
   ))
   if (candidates.length === 0) return { item: null, sharedRng: sourceRng }
   const selected = drawNativeInteger(sourceRng, candidates.length)
-  return {
-    item: equipmentRecipeItem(candidates[selected.value]!, itemIds),
-    sharedRng: selected.state,
-  }
+  return equipmentRecipeItem(candidates[selected.value]!, itemIds, selected.state)
 }
 
 function randomEquipment(
@@ -267,22 +262,9 @@ function randomWearableColors(sourceRng: NativeRngState): {
   readonly iconTints: readonly [number, number]
   readonly sharedRng: NativeRngState
 } {
-  const palette = [
-    [1, 0, 0], [1, 0.5, 0], [1, 1, 0], [0.25, 1, 0.25], [0.25, 1, 1],
-    [0.25, 0.25, 1], [1, 0.25, 1], [0.4, 0.4, 0.4], [0.8, 0.8, 0.8],
-  ] as const
-  const selected = drawNativeInteger(sourceRng, palette.length)
-  let rng = selected.state
-  let color = [...palette[selected.value]!] as [number, number, number]
-  const jitterGate = drawNativeInteger(rng, 2)
-  rng = jitterGate.state
-  if (jitterGate.value === 1) {
-    for (let channel = 0; channel < 3; channel += 1) {
-      const jitter = drawNativeFloat(rng, Math.fround(0.1), true)
-      rng = jitter.state
-      color[channel] = clamp01(Math.fround(color[channel]! + jitter.value))
-    }
-  }
+  const rolled = randomClothingColor(sourceRng)
+  let rng = rolled.sharedRng
+  let color = rolled.color.map(clamp01) as [number, number, number]
   const brightGate = drawNativeInteger(rng, 4)
   rng = brightGate.state
   if (brightGate.value === 1) color = color.map((value) => clamp01(value * 1.85)) as typeof color
@@ -303,6 +285,30 @@ function randomWearableColors(sourceRng: NativeRngState): {
   }
 }
 
+/** Retail 0x004630E0: palette and optional signed jitter, before caller-owned transforms. */
+function randomClothingColor(sourceRng: NativeRngState): {
+  readonly color: readonly [number, number, number]
+  readonly sharedRng: NativeRngState
+} {
+  const palette = [
+    [1, 0, 0], [1, 0.5, 0], [1, 1, 0], [0.25, 1, 0.25], [0.25, 1, 1],
+    [0.25, 0.25, 1], [1, 0.25, 1], [0.4, 0.4, 0.4], [0.8, 0.8, 0.8],
+  ] as const
+  const selected = drawNativeInteger(sourceRng, palette.length)
+  let rng = selected.state
+  const color = palette[selected.value]!.map(Math.fround) as [number, number, number]
+  const jitterGate = drawNativeInteger(rng, 2)
+  rng = jitterGate.state
+  if (jitterGate.value === 1) {
+    for (let channel = 0; channel < 3; channel += 1) {
+      const jitter = drawNativeFloat(rng, Math.fround(0.1), true)
+      rng = jitter.state
+      color[channel] = Math.fround(color[channel]! + jitter.value)
+    }
+  }
+  return { color, sharedRng: rng }
+}
+
 function equipmentIconRecords(
   type: EquipmentType,
   selector: number,
@@ -320,13 +326,34 @@ function equipmentIconRecords(
 export function equipmentRecipeItem(
   recipe: EquipmentRecipe,
   itemIds: NativeLootItemIds,
-): NativeLootItem {
+  sourceRng: NativeRngState,
+): { readonly item: NativeLootItem; readonly sharedRng: NativeRngState } {
+  let sharedRng = sourceRng
+  let iconTints: readonly [number, number] | undefined
+  if (recipe.type === 'hat' || recipe.type === 'robe') {
+    const color = (tint: number): readonly [number, number, number] => [
+      Math.fround(((tint >>> 16) & 0xff) / 255),
+      Math.fround(((tint >>> 8) & 0xff) / 255),
+      Math.fround((tint & 0xff) / 255),
+    ]
+    // ItemRecipe_Ctor defaults COLOR1 alpha to zero (random), COLOR2 to opaque white.
+    const primary = recipe.iconTints[0] === null
+      ? randomClothingColor(sharedRng)
+      : { color: color(recipe.iconTints[0]), sharedRng }
+    sharedRng = primary.sharedRng
+    // Named clone 0x004699B0 desaturates each layer; it has no random-item brightness roll.
+    const desaturate = (rgb: readonly [number, number, number]) => rgbTint(
+      nativeDesaturateColor([...rgb, 1], Math.fround(0.8)),
+    )
+    iconTints = [desaturate(primary.color), desaturate(color(recipe.iconTints[1] ?? 0xffffff))]
+  }
   return {
-    ...createEquipmentInventoryItem(recipe, itemIds.next()),
-    ...((recipe.type === 'hat' || recipe.type === 'robe')
-      ? { iconTints: recipe.iconTints }
-      : {}),
-    nativeSelector: equipmentSelector(recipe.type, recipe.iconRecords),
+    item: {
+      ...createEquipmentInventoryItem(recipe, itemIds.next()),
+      ...(iconTints === undefined ? {} : { iconTints }),
+      nativeSelector: equipmentSelector(recipe.type, recipe.iconRecords),
+    },
+    sharedRng,
   }
 }
 
@@ -406,4 +433,3 @@ function rgbTint(color: readonly number[]): number {
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, Math.fround(value)))
 }
-

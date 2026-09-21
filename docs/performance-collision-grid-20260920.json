@@ -1,0 +1,426 @@
+{
+  "baseRevision": "fb9ec4bf9486e0fac5f76e9648c043614bb4d373",
+  "scope": "Incremental grid optimization over the current performance candidate; all other candidate fixes present in both variants",
+  "archiveId": "f31b30e4-90e8-44bc-847a-7afd53cc8926",
+  "sourceHashes": {
+    "frontend/src/game/core-server/boneyard-world.ts": "f0cbb0c081c9047d1c48e7897e07fdc5df875158ed586385fe79c50d709a5f83",
+    "frontend/src/game/core-kernels/actor-physics.test.ts": "c0d44f54fbaa69e9ca7447019c534739f0683e6c0c1147834da5c725e3fa0975"
+  },
+  "rawFiles": [
+    "host-grid-baseline-1.json",
+    "host-grid-candidate-1.json",
+    "host-grid-candidate-2.json",
+    "host-grid-baseline-2.json"
+  ],
+  "trials": [
+    {
+      "mode": "baseline",
+      "trial": "1",
+      "node": "v22.17.0",
+      "atUtc": "2026-09-20T16:08:15.805Z",
+      "scope": "Same archived core state, zero incoming damage extension; excludes Lua dispatch/snapshots/network; gate stopped; unrelated machine work preserved. Low=actual29enemy checkpoint; empty=derived checkpoint with enemy/transient lists empty and waves disabled.",
+      "effectiveSourceSha256": "602fe85a234de4d1760babad54889c01e4008a7cbdba59c492c32a5968880b39",
+      "rows": [
+        {
+          "label": "heavy",
+          "startUtc": "2026-09-20T16:08:09.932Z",
+          "endUtc": "2026-09-20T16:08:11.335Z",
+          "iterations": 200,
+          "elapsedMs": 1396.316833,
+          "cpuMs": 1952.905,
+          "meanMs": 6.9810164250000275,
+          "p50Ms": 6.967792000000372,
+          "p95Ms": 7.7594160000003285,
+          "p99Ms": 10.885208000000148,
+          "maximumMs": 16.098999999999705,
+          "sourceStateSha256": "4e5f04e9d95e1f904d26198f6597972d5508ec2af6da745d9f23f3ddf7d7d0bb",
+          "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+        },
+        {
+          "label": "low",
+          "startUtc": "2026-09-20T16:08:12.741Z",
+          "endUtc": "2026-09-20T16:08:14.167Z",
+          "iterations": 40,
+          "elapsedMs": 1422.8801249999997,
+          "cpuMs": 1488.358,
+          "meanMs": 35.57087082499995,
+          "p50Ms": 35.531332999999904,
+          "p95Ms": 36.04216700000052,
+          "p99Ms": 36.23512500000015,
+          "maximumMs": 36.23512500000015,
+          "sourceStateSha256": "50981830867463e3aa29d04e91c4f7945e2aea95d9ec25b4cfddc41db9f40a2f",
+          "nextStateSha256": "b4a4b68931f29740e270ddec26117308977c6047da3fce4eb3ba64b8502c8dee"
+        },
+        {
+          "label": "empty",
+          "startUtc": "2026-09-20T16:08:15.447Z",
+          "endUtc": "2026-09-20T16:08:15.465Z",
+          "iterations": 40,
+          "elapsedMs": 16.222332999999708,
+          "cpuMs": 40.927,
+          "meanMs": 0.405235424999978,
+          "p50Ms": 0.35337499999968713,
+          "p95Ms": 0.5279590000000098,
+          "p99Ms": 1.1402499999994689,
+          "maximumMs": 1.1402499999994689,
+          "sourceStateSha256": "ff83c7314a81cd8ea892001958180cd19d36a3a16bfb8bc89158da994955b0d6",
+          "nextStateSha256": "7aa25aa607881e6a3d9d58e72b1874038acc3b15fe4afa81503d83f6e3d0fc9e"
+        }
+      ],
+      "checkpoints": [
+        {
+          "iteration": 25,
+          "tick": 112905,
+          "hash": "b243b5398ee8759cf5f945fbd7d5874cd28e7acdf16d67936e9f82f86c7c8d8d"
+        },
+        {
+          "iteration": 50,
+          "tick": 112930,
+          "hash": "e7f4bb78041454d28f7153985a8e3d96ae7e6720087237c31f6ec574cb414741"
+        }
+      ]
+    },
+    {
+      "mode": "candidate",
+      "trial": "1",
+      "node": "v22.17.0",
+      "atUtc": "2026-09-20T16:08:31.722Z",
+      "scope": "Same archived core state, zero incoming damage extension; excludes Lua dispatch/snapshots/network; gate stopped; unrelated machine work preserved. Low=actual29enemy checkpoint; empty=derived checkpoint with enemy/transient lists empty and waves disabled.",
+      "effectiveSourceSha256": "f0cbb0c081c9047d1c48e7897e07fdc5df875158ed586385fe79c50d709a5f83",
+      "rows": [
+        {
+          "label": "heavy",
+          "startUtc": "2026-09-20T16:08:26.435Z",
+          "endUtc": "2026-09-20T16:08:27.519Z",
+          "iterations": 200,
+          "elapsedMs": 1077.151292,
+          "cpuMs": 1492.286,
+          "meanMs": 5.385109999999966,
+          "p50Ms": 5.274874999999611,
+          "p95Ms": 5.866500000000087,
+          "p99Ms": 6.762250000000222,
+          "maximumMs": 14.228000000000065,
+          "sourceStateSha256": "4e5f04e9d95e1f904d26198f6597972d5508ec2af6da745d9f23f3ddf7d7d0bb",
+          "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+        },
+        {
+          "label": "low",
+          "startUtc": "2026-09-20T16:08:28.898Z",
+          "endUtc": "2026-09-20T16:08:30.226Z",
+          "iterations": 40,
+          "elapsedMs": 1325.7756250000002,
+          "cpuMs": 1381.842,
+          "meanMs": 33.14328545000003,
+          "p50Ms": 32.61899999999969,
+          "p95Ms": 35.069124999999985,
+          "p99Ms": 40.0249160000003,
+          "maximumMs": 40.0249160000003,
+          "sourceStateSha256": "50981830867463e3aa29d04e91c4f7945e2aea95d9ec25b4cfddc41db9f40a2f",
+          "nextStateSha256": "b4a4b68931f29740e270ddec26117308977c6047da3fce4eb3ba64b8502c8dee"
+        },
+        {
+          "label": "empty",
+          "startUtc": "2026-09-20T16:08:31.423Z",
+          "endUtc": "2026-09-20T16:08:31.440Z",
+          "iterations": 40,
+          "elapsedMs": 15.36450000000059,
+          "cpuMs": 33.559,
+          "meanMs": 0.3838166749999118,
+          "p50Ms": 0.33758300000044983,
+          "p95Ms": 0.5056249999997817,
+          "p99Ms": 0.9467919999997321,
+          "maximumMs": 0.9467919999997321,
+          "sourceStateSha256": "ff83c7314a81cd8ea892001958180cd19d36a3a16bfb8bc89158da994955b0d6",
+          "nextStateSha256": "7aa25aa607881e6a3d9d58e72b1874038acc3b15fe4afa81503d83f6e3d0fc9e"
+        }
+      ],
+      "checkpoints": [
+        {
+          "iteration": 25,
+          "tick": 112905,
+          "hash": "b243b5398ee8759cf5f945fbd7d5874cd28e7acdf16d67936e9f82f86c7c8d8d"
+        },
+        {
+          "iteration": 50,
+          "tick": 112930,
+          "hash": "e7f4bb78041454d28f7153985a8e3d96ae7e6720087237c31f6ec574cb414741"
+        }
+      ]
+    },
+    {
+      "mode": "candidate",
+      "trial": "2",
+      "node": "v22.17.0",
+      "atUtc": "2026-09-20T16:09:12.500Z",
+      "scope": "Same archived core state, zero incoming damage extension; excludes Lua dispatch/snapshots/network; gate stopped; unrelated machine work preserved. Low=actual29enemy checkpoint; empty=derived checkpoint with enemy/transient lists empty and waves disabled.",
+      "effectiveSourceSha256": "f0cbb0c081c9047d1c48e7897e07fdc5df875158ed586385fe79c50d709a5f83",
+      "rows": [
+        {
+          "label": "heavy",
+          "startUtc": "2026-09-20T16:09:06.396Z",
+          "endUtc": "2026-09-20T16:09:07.706Z",
+          "iterations": 200,
+          "elapsedMs": 1301.4575830000003,
+          "cpuMs": 2039.589,
+          "meanMs": 6.506189100000001,
+          "p50Ms": 6.081332999999631,
+          "p95Ms": 9.983500000000276,
+          "p99Ms": 12.136416000000281,
+          "maximumMs": 18.553208999999697,
+          "sourceStateSha256": "4e5f04e9d95e1f904d26198f6597972d5508ec2af6da745d9f23f3ddf7d7d0bb",
+          "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+        },
+        {
+          "label": "low",
+          "startUtc": "2026-09-20T16:09:09.242Z",
+          "endUtc": "2026-09-20T16:09:10.715Z",
+          "iterations": 40,
+          "elapsedMs": 1470.4452079999992,
+          "cpuMs": 1573.76,
+          "meanMs": 36.759565674999955,
+          "p50Ms": 35.889666000000034,
+          "p95Ms": 41.91608300000007,
+          "p99Ms": 51.199125000000095,
+          "maximumMs": 51.199125000000095,
+          "sourceStateSha256": "50981830867463e3aa29d04e91c4f7945e2aea95d9ec25b4cfddc41db9f40a2f",
+          "nextStateSha256": "b4a4b68931f29740e270ddec26117308977c6047da3fce4eb3ba64b8502c8dee"
+        },
+        {
+          "label": "empty",
+          "startUtc": "2026-09-20T16:09:12.114Z",
+          "endUtc": "2026-09-20T16:09:12.132Z",
+          "iterations": 40,
+          "elapsedMs": 16.50787499999933,
+          "cpuMs": 42.496,
+          "meanMs": 0.41238119999998163,
+          "p50Ms": 0.35545899999942776,
+          "p95Ms": 0.5724589999999807,
+          "p99Ms": 0.97137500000008,
+          "maximumMs": 0.97137500000008,
+          "sourceStateSha256": "ff83c7314a81cd8ea892001958180cd19d36a3a16bfb8bc89158da994955b0d6",
+          "nextStateSha256": "7aa25aa607881e6a3d9d58e72b1874038acc3b15fe4afa81503d83f6e3d0fc9e"
+        }
+      ],
+      "checkpoints": [
+        {
+          "iteration": 25,
+          "tick": 112905,
+          "hash": "b243b5398ee8759cf5f945fbd7d5874cd28e7acdf16d67936e9f82f86c7c8d8d"
+        },
+        {
+          "iteration": 50,
+          "tick": 112930,
+          "hash": "e7f4bb78041454d28f7153985a8e3d96ae7e6720087237c31f6ec574cb414741"
+        }
+      ]
+    },
+    {
+      "mode": "baseline",
+      "trial": "2",
+      "node": "v22.17.0",
+      "atUtc": "2026-09-20T16:09:23.841Z",
+      "scope": "Same archived core state, zero incoming damage extension; excludes Lua dispatch/snapshots/network; gate stopped; unrelated machine work preserved. Low=actual29enemy checkpoint; empty=derived checkpoint with enemy/transient lists empty and waves disabled.",
+      "effectiveSourceSha256": "602fe85a234de4d1760babad54889c01e4008a7cbdba59c492c32a5968880b39",
+      "rows": [
+        {
+          "label": "heavy",
+          "startUtc": "2026-09-20T16:09:15.617Z",
+          "endUtc": "2026-09-20T16:09:17.671Z",
+          "iterations": 200,
+          "elapsedMs": 2046.9210830000002,
+          "cpuMs": 2616.158,
+          "meanMs": 10.232703930000019,
+          "p50Ms": 9.59795800000029,
+          "p95Ms": 13.96795800000018,
+          "p99Ms": 15.525583000000097,
+          "maximumMs": 17.64612500000021,
+          "sourceStateSha256": "4e5f04e9d95e1f904d26198f6597972d5508ec2af6da745d9f23f3ddf7d7d0bb",
+          "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+        },
+        {
+          "label": "low",
+          "startUtc": "2026-09-20T16:09:20.183Z",
+          "endUtc": "2026-09-20T16:09:22.066Z",
+          "iterations": 40,
+          "elapsedMs": 1880.2101250000005,
+          "cpuMs": 1977.314,
+          "meanMs": 47.00322807499997,
+          "p50Ms": 43.08512499999961,
+          "p95Ms": 63.50883299999987,
+          "p99Ms": 64.25733299999956,
+          "maximumMs": 64.25733299999956,
+          "sourceStateSha256": "50981830867463e3aa29d04e91c4f7945e2aea95d9ec25b4cfddc41db9f40a2f",
+          "nextStateSha256": "b4a4b68931f29740e270ddec26117308977c6047da3fce4eb3ba64b8502c8dee"
+        },
+        {
+          "label": "empty",
+          "startUtc": "2026-09-20T16:09:23.416Z",
+          "endUtc": "2026-09-20T16:09:23.437Z",
+          "iterations": 40,
+          "elapsedMs": 16.88824999999997,
+          "cpuMs": 46.304,
+          "meanMs": 0.4218760500000826,
+          "p50Ms": 0.3429580000010901,
+          "p95Ms": 0.5784590000002936,
+          "p99Ms": 1.4151249999995343,
+          "maximumMs": 1.4151249999995343,
+          "sourceStateSha256": "ff83c7314a81cd8ea892001958180cd19d36a3a16bfb8bc89158da994955b0d6",
+          "nextStateSha256": "7aa25aa607881e6a3d9d58e72b1874038acc3b15fe4afa81503d83f6e3d0fc9e"
+        }
+      ],
+      "checkpoints": [
+        {
+          "iteration": 25,
+          "tick": 112905,
+          "hash": "b243b5398ee8759cf5f945fbd7d5874cd28e7acdf16d67936e9f82f86c7c8d8d"
+        },
+        {
+          "iteration": 50,
+          "tick": 112930,
+          "hash": "e7f4bb78041454d28f7153985a8e3d96ae7e6720087237c31f6ec574cb414741"
+        }
+      ]
+    }
+  ],
+  "means": {
+    "heavy": {
+      "baseline": {
+        "meanTickMs": 8.606860177500023,
+        "meanCpuMs": 2284.5315
+      },
+      "candidate": {
+        "meanTickMs": 5.945649549999984,
+        "meanCpuMs": 1765.9375
+      },
+      "meanTickReductionPercent": 30.919645173938715,
+      "meanCpuReductionPercent": 22.700234161796416
+    },
+    "low": {
+      "baseline": {
+        "meanTickMs": 41.287049449999955,
+        "meanCpuMs": 1732.836
+      },
+      "candidate": {
+        "meanTickMs": 34.95142556249999,
+        "meanCpuMs": 1477.801
+      },
+      "meanTickReductionPercent": 15.345305542292687,
+      "meanCpuReductionPercent": 14.717780563192361
+    },
+    "empty": {
+      "baseline": {
+        "meanTickMs": 0.4135557375000303,
+        "meanCpuMs": 43.6155
+      },
+      "candidate": {
+        "meanTickMs": 0.39809893749994674,
+        "meanCpuMs": 38.0275
+      },
+      "meanTickReductionPercent": 3.737537313233963,
+      "meanCpuReductionPercent": 12.811959051254707
+    }
+  },
+  "candidateCounts": {
+    "baseline": {
+      "atUtc": "2026-09-20T16:02:02.971Z",
+      "scope": "One archived tick with diagnostic counters only; output SHA compared to uninstrumented exact-state replay",
+      "physics": [
+        {
+          "bodies": 733,
+          "rootMoves": 2,
+          "rootZeroDelta": 2,
+          "recursiveAttempts": 355,
+          "recursiveMoves": 186,
+          "pairVisits": 137804,
+          "overlappingPairs": 355
+        }
+      ],
+      "unpushed": {
+        "calls": 208,
+        "pairVisits": 152464,
+        "overlaps": 314
+      },
+      "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+    },
+    "candidate": {
+      "atUtc": "2026-09-20T16:09:51.460Z",
+      "scope": "One archived tick with diagnostic counters only; output SHA compared to uninstrumented exact-state replay",
+      "physics": [
+        {
+          "bodies": 733,
+          "rootMoves": 2,
+          "rootZeroDelta": 2,
+          "recursiveAttempts": 355,
+          "recursiveMoves": 186,
+          "pairVisits": 5968,
+          "overlappingPairs": 355
+        }
+      ],
+      "unpushed": {
+        "calls": 208,
+        "pairVisits": 152464,
+        "overlaps": 314
+      },
+      "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+    }
+  },
+  "diagnosticCoreProfile": {
+    "startUtc": "2026-09-20T15:59:27.596Z",
+    "endUtc": "2026-09-20T15:59:29.770Z",
+    "node": "v22.17.0",
+    "scope": "Repeated same archived lastAlive core tick; pilot incoming damage extension only, excludes Lua dispatch, snapshots, network; running while canonical validation is active",
+    "capturedTick": 112880,
+    "nextTick": 112881,
+    "iterations": 200,
+    "elapsedMs": 2159.0179579999995,
+    "cpuMs": 2596.003,
+    "meanMs": 10.793146210000037,
+    "p50Ms": 9.59045900000001,
+    "p95Ms": 17.95695799999976,
+    "p99Ms": 23.839958000000024,
+    "maximumMs": 40.53987499999994,
+    "sourceStateSha256": "4e5f04e9d95e1f904d26198f6597972d5508ec2af6da745d9f23f3ddf7d7d0bb",
+    "nextStateSha256": "8d3fc9f87b424e472c2183dc2b8a0933195d6f104ae85fed39f5ad5d1a170d1b"
+  },
+  "population": {
+    "tick": 112880,
+    "enemies": 113,
+    "coffins": 12,
+    "maggots": 617,
+    "activePerCoffin": 20,
+    "inactivePerCoffin": 30,
+    "emergingTotal": 17,
+    "oldestMaggotSeconds": 17.42,
+    "orphanMaggots": 0
+  },
+  "checks": {
+    "actorAndBoneyardTests": {
+      "passed": 49,
+      "failed": 0,
+      "durationMs": 36762.132833,
+      "log": "/tmp/solomon-heavy-collision-tests-6a583nbx.log"
+    },
+    "testTypeScript": {
+      "command": "node node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit",
+      "exitCode": 0
+    },
+    "canonicalGate": {
+      "status": "running at handoff",
+      "jobId": "job_20260920T161105Z_905b72e39b",
+      "startedAtUtc": "2026-09-20T16:11:05Z",
+      "owner": "root"
+    }
+  },
+  "limitations": [
+    "Initial combined600-iteration low-density trial exceeded45-second command bound and was discarded without a result; bounded replacement completed.",
+    "Low-density fixture is the original worst-tick checkpoint; its rare navigation work is not representative of ordinary29-enemy ticks.",
+    "Original short CPU profile competed with the prior validation gate. Matched trials ran after those mutation workers were stopped; unrelated Mac work remained active.",
+    "Only200 repeated heavy ticks,40 low and40 empty ticks per trial, plus50 fixed-input forward ticks; this does not establish long-session or wave100 performance.",
+    "All core measurements exclude Lua dispatch, snapshot generation, network, and client rendering."
+  ],
+  "caseLabels": {
+    "heavy": "Archived final tick112880,113 enemies and617 Maggots",
+    "low": "Historical worst-tick checkpoint28296,29 skeletons; not a low-cost fixture",
+    "empty": "Derived empty scene with waves disabled"
+  }
+}

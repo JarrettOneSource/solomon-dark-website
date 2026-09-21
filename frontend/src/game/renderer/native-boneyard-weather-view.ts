@@ -133,7 +133,7 @@ export class NativeBoneyardWeatherView {
     particle.y = y
     particle.scaleX = NATIVE_BONEYARD_WEATHER_STREAK_WIDTH
     particle.scaleY = length / WEATHER_STREAK_RAMP_HEIGHT
-    particle.tint = color
+    if (particle.tint !== color) particle.tint = color
   }
 
   private readonly updateSplashView = (

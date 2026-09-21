@@ -38,6 +38,15 @@ for (const buildId of [1003, 1004] as const) {
     const meshes = contents.map(content => content.children.filter((child): child is Mesh => child instanceof Mesh))
     const geometry = meshes[0]!.map(mesh => mesh.geometry)
     const buffers = geometry.flatMap(resource => resource.buffers)
+    const lifetimeEvents = geometry.map(resource => {
+      const events: string[] = []
+      resource.on('unload', () => {
+        assert.ok(resource.buffers.every(buffer => !buffer.destroyed))
+        events.push('unload')
+      })
+      resource.on('destroy', () => events.push('destroy'))
+      return events
+    })
     const shifted = { ...state, ageTicks: 1, origin: { x: 20, y: 30 }, endpoint: { x: 120, y: -500 } }
     view.update(shifted, 40)
     const plan = nativeWeldVisualPlan(shifted, 40)
@@ -59,7 +68,10 @@ for (const buildId of [1003, 1004] as const) {
       assert.ok(mask instanceof Graphics)
       assert.equal(mask.position.x, -shifted.origin.x)
     }
+    assert.ok(lifetimeEvents.every(events => events.length === 0))
     view.destroy()
+    for (const events of lifetimeEvents) assert.deepEqual(events, ['unload', 'destroy'])
+    assert.ok(meshes.flat().every(mesh => mesh.destroyed))
     assert.ok(buffers.every(buffer => buffer.destroyed))
     assert.equal(Texture.EMPTY.destroyed, false)
   })

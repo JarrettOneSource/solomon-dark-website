@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createNativeFacultyDeathSaveFixture } from '../../../tools/native-faculty-save-fixture.ts'
 import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
@@ -21,7 +22,7 @@ import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server
 import { emitPlayerStatusBurst } from '../core-server/boneyard-player-status.ts'
 import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
 import { dampenBoneyardCasters } from '../core-server/enemies/dampen.ts'
-import type { BoneyardEnemyDeathEffect } from '../core-server/enemies/model.ts'
+import type { BoneyardEnemyDeathEffect, BoneyardEnemyStoreStepContext } from '../core-server/enemies/model.ts'
 import { applyGameSimulationHubAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, getPlayerBelt, getPlayerEconomy, getPlayerProgression, stepGameSimulationTick } from '../core-server/game-simulation.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
@@ -36,7 +37,7 @@ import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import { gameSnapshot as decodeGameSnapshot } from '../protocol/codecs/snapshot.ts'
 import { createGameSnapshotFrame, createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
-import { MAX_WEB_GAME_SAVE_BYTES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, readGameSaveSummary } from './game-save-contract.ts'
+import { MAX_WEB_GAME_SAVE_BYTES, MAX_WEB_GAME_SAVE_JSON_NODES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, readGameSaveSummary } from './game-save-contract.ts'
 import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile, retireGameSaveWizard } from './game-save-document.ts'
 const OWNER = {
   discipline: 'arcane',
@@ -72,6 +73,113 @@ const MOD_STATE = {
   'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
+
+test('native Faculty death peaks survive owner checkpoints and exact continuation restore', () => {
+  for (const members of [1, 3] as const) {
+    const options = createNativeFacultyDeathSaveFixture(members)
+    if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.ok(options.state.world.enemies.deathEffects.length > 8_192)
+    const document = createGameSaveDocument(options)
+    if (members === 3) assert.ok(Buffer.byteLength(document) > 16 * 1024 * 1024)
+    const checkpoint = decodeServerGameMessage(encodeGameMessage({
+      type: 'server-save-checkpoint', reason: 'progress', save: document, sequence: 1,
+    }))
+    if (checkpoint.type !== 'server-save-checkpoint') throw new Error('expected checkpoint')
+    const restored = restoreGameSaveDocument(checkpoint.save)
+    if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.equal(restored.state.tick, options.state.tick)
+    assert.deepEqual(restored.state.world.enemies.deathEffects, options.state.world.enemies.deathEffects)
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {},
+    playerId: 'owner', state: createGameSimulation({ owner: OWNER }),
+  })
+  const oversized = JSON.parse(document)
+  oversized.continuation.simulation.excessValues = Array(MAX_WEB_GAME_SAVE_JSON_NODES).fill(null)
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(oversized)), /too many values/)
+})
+
+test('mixed native smoke owners survive saves while invalid role and owner combinations reject', () => {
+  const options = createNativeFacultyDeathSaveFixture(1)
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const world = options.state.world
+  const template = world.enemies.deathEffects.find(effect => (
+    effect.kind === 'move-fade' && effect.presentationOwner === 'world-sorted'
+  ))
+  assert.ok(template)
+  const saveEffect = (effect: BoneyardEnemyDeathEffect) => createGameSaveDocument({
+    ...options,
+    state: { ...options.state, world: { ...world,
+      enemies: { ...world.enemies, deathEffects: [effect] } } },
+  })
+  for (const role of [
+    'dampen-caster-smoke', 'tragic-circle-smoke', 'skull-trail', 'dark-trail',
+    'skull-impact', 'dark-impact', 'dark-ring-impact', 'faculty-living-smoke',
+    'faculty-start-smoke', 'faculty-dying-smoke', 'faculty-terminal-smoke',
+  ]) {
+    for (const presentationOwner of ['pre-world-queue', 'world-sorted'] as const) {
+      const effect = { ...template, role, presentationOwner,
+        painterRegistration: presentationOwner === 'world-sorted' ? template.painterRegistration : null }
+      const restored = restoreGameSaveDocument(saveEffect(effect)).state
+      if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+      assert.deepEqual(restored.world.enemies.deathEffects, [effect], `${role}: ${presentationOwner}`)
+    }
+    for (const presentationOwner of ['background', 'direct-post-world', 'late-world-overlay'] as const) {
+      assert.throws(() => restoreGameSaveDocument(saveEffect({
+        ...template, role, presentationOwner, painterRegistration: null,
+      })), /presentation owner is invalid/, `${role}: ${presentationOwner}`)
+    }
+  }
+  for (const effect of [
+    { ...template, role: 'faculty-unknown-smoke', presentationOwner: 'pre-world-queue' as const, painterRegistration: null },
+    { ...template, kind: 'fade' as const, role: 'faculty-living-smoke', presentationOwner: 'pre-world-queue' as const, painterRegistration: null },
+    { ...template, role: 'faculty-living-smoke', presentationOwner: 'world-sorted' as const, painterRegistration: null },
+    { ...template, role: 'faculty-living-smoke', presentationOwner: 'pre-world-queue' as const },
+  ]) assert.throws(() => restoreGameSaveDocument(saveEffect(effect)), /presentation|painter registration/)
+})
+
+test('native rotten Zombie gas and Wraith wisps retain fixed pre-world ownership through saves', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 35))
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  for (const [enemyToken, role] of [['ZOMBIE', 'zombie-rotten-particle'], ['WRAITH', 'wraith-soul-wisp']] as const) {
+    const order = createNativeWorldManagerOrder(initial.worldManagerOrder)
+    const context: BoneyardEnemyStoreStepContext = {
+      clipSpellSegment: ({ end }) => end, projectileWorldBlocked: () => false,
+      players: {}, registerWorldPainter: order.register,
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [], tick: initial.tick,
+    }
+    let store = stepBoneyardEnemyStore(createBoneyardEnemyStore(`save-${enemyToken}`), {
+      ...context,
+      resolveSpawnIntents: () => [{ enemyToken, flags: enemyToken === 'ZOMBIE' ? ['FLAG_ROTTEN'] : [],
+        id: 1, locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+        position: { x: 20, y: 40 }, spawnTick: initial.tick, waveOrdinal: 1 }],
+    }).store
+    let tick = initial.tick
+    while (!store.deathEffects.some(effect => effect.role === role) && tick < initial.tick + 300) {
+      tick += 1
+      store = stepBoneyardEnemyStore(store, { ...context, tick }).store
+    }
+    const effect = store.deathEffects.find(candidate => candidate.role === role)
+    assert.ok(effect, role)
+    assert.equal(effect.presentationOwner, 'pre-world-queue')
+    assert.equal(effect.painterRegistration, null)
+    const options = { integrity: 'local-only' as const, loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
+      state: { ...initial, tick, worldManagerOrder: order.state(), world: { ...initial.world, enemies: store } } }
+    const restored = restoreGameSaveDocument(createGameSaveDocument(options)).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.deepEqual(restored.world.enemies.deathEffects, store.deathEffects)
+    for (const presentationOwner of ['world-sorted', 'direct-post-world', 'background', 'late-world-overlay'] as const) {
+      const invalid = { ...effect, presentationOwner,
+        painterRegistration: presentationOwner === 'world-sorted' ? order.register('transient') : null }
+      assert.throws(() => restoreGameSaveDocument(createGameSaveDocument({ ...options,
+        state: { ...options.state, worldManagerOrder: order.state(), world: { ...options.state.world,
+          enemies: { ...store, deathEffects: [invalid] } } },
+      })), /presentation owner is invalid/, `${role}: ${presentationOwner}`)
+    }
+  }
+})
 
 test('cold and poison onset particles retain their native owner across saves', () => {
   const loaded = materializeStockTutorial(Buffer.alloc(16, 35))

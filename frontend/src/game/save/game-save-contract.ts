@@ -7,10 +7,13 @@ import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
 export const WEB_GAME_SAVE_SCHEMA_VERSION = 36
 export const WEB_GAME_SAVE_SLOT = 0
-export const MAX_WEB_GAME_SAVE_BYTES = 16 * 1024 * 1024
+// Three complete Faculty death populations, including their invisible emitters,
+// fit within 96,679,129 bytes / 2,641,996 JSON values after retaining the former
+// 16 MiB / 250,000-value allowance. Native role arithmetic is in parity ledger 301.
+export const MAX_WEB_GAME_SAVE_BYTES = 96 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
 export const MAX_WEB_GAME_SAVE_JSON_DEPTH = 80
-export const MAX_WEB_GAME_SAVE_JSON_NODES = 250_000
+export const MAX_WEB_GAME_SAVE_JSON_NODES = 3_000_000
 
 export interface GameSaveSummary {
   readonly activeRun: boolean

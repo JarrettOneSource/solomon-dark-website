@@ -637,6 +637,8 @@ test('same-tick player primary actors register before projectiles spawned by lat
 test('same-tick wave actors register before player primary actors', () => {
   const loaded = emptyBoneyard()
   loaded.runId = 'wave-provider-order-run'
+  // Opening enemies need a full combat arena beyond the entrance and player light.
+  loaded.scene.bounds = { x: 0, y: 0, w: 1_000, h: 1_000 }
   loaded.scene.solomonDig = {
     frameProgram: [0, 3, 1],
     gravePosition: { x: 240, y: 240 },
@@ -830,6 +832,8 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
 test('the retail Solomon run edge admits primary and secondary combat on its own tick', () => {
   const loaded = emptyBoneyard()
   loaded.runId = 'solomon-combat-admission'
+  // Opening enemies need a full combat arena beyond the entrance and player light.
+  loaded.scene.bounds = { x: 0, y: 0, w: 1_000, h: 1_000 }
   loaded.scene.solomonDig = {
     frameProgram: [0, 3, 1],
     gravePosition: { x: 240, y: 390 },

@@ -190,6 +190,71 @@ test('combined Water mesh carries retired GPU index high water into smaller reac
   destroyTestAtlasTextures(textures)
 })
 
+test('Water run replacement and final disposal unload owned geometry without retiring shared resources', (t) => {
+  const root = new Container()
+  const textures = testAtlasTextures()
+  const shader = testShader()
+  const shaderDestroy = t.mock.method(shader, 'destroy')
+  const runs = new NativeWaterMeshRuns(root, textures, shader)
+  const frame = (count: number) => {
+    runs.beginFrame()
+    for (let id = 1; id <= count; id += 1) runs.update(hail(id))
+    runs.endFrame()
+    runs.beginDepths()
+    for (let id = 1; id <= count; id += 1) runs.appendDepth(id, id)
+    runs.commitDepths()
+  }
+  let current: ReturnType<typeof observeRunRetirement> | undefined
+  for (const count of [1, 2, 3, 5]) {
+    const previous = current
+    frame(count)
+    const mesh = root.children[0]
+    assert.ok(mesh instanceof Mesh)
+    assert.equal(root.children.length, 1)
+    current = observeRunRetirement(mesh)
+    previous?.assertRetired()
+    assert.equal(mesh.shader, shader)
+    assert.equal(shaderDestroy.mock.callCount(), 0)
+    assert.ok(Object.values(textures).every(texture => !texture.destroyed))
+    assert.equal(textures.core.source.destroyed, false)
+  }
+  assert.ok(current)
+  for (const count of [1, 0, 1]) {
+    frame(count)
+    assert.equal(root.children[0], current.mesh, 'smaller and hidden runs retain their allocated geometry')
+    assert.equal(current.mesh.geometry, current.geometry)
+    assert.deepEqual(current.events, [])
+    assert.ok(current.buffers.every(buffer => !buffer.destroyed))
+  }
+  runs.destroy()
+  current.assertRetired()
+  assert.equal(root.children.length, 0)
+  assert.equal(shaderDestroy.mock.callCount(), 1)
+  assert.ok(Object.values(textures).every(texture => !texture.destroyed))
+  assert.equal(textures.core.source.destroyed, false)
+  destroyTestAtlasTextures(textures)
+  root.destroy()
+})
+
+function observeRunRetirement(mesh: Mesh) {
+  const geometry = mesh.geometry
+  const buffers = [...geometry.buffers]
+  const events: string[] = []
+  geometry.on('unload', () => {
+    assert.ok(buffers.every(buffer => !buffer.destroyed))
+    events.push('unload')
+  })
+  geometry.on('destroy', () => events.push('destroy'))
+  return {
+    buffers, events, geometry, mesh,
+    assertRetired() {
+      assert.equal(mesh.destroyed, true)
+      assert.deepEqual(events, ['unload', 'destroy'])
+      assert.ok(buffers.every(buffer => buffer.destroyed))
+    },
+  }
+}
+
 test('combined Water mesh requires one packed atlas source', () => {
   assert.notEqual(Texture.EMPTY.source, Texture.WHITE.source)
   assert.throws(() => new NativeWaterMeshRuns(new Container(), {

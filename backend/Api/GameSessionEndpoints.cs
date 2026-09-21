@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SolomonDarkRevived.Data;
 using SolomonDarkRevived.Services;
@@ -30,7 +31,8 @@ public static class GameSessionEndpoints
         app.MapPost("/api/game/join/admit", AdmitPartyJoinAsync)
             .RequireRateLimiting("party-joins");
         app.MapPost("/api/game/rejoin", RejoinPartyAsync)
-            .RequireRateLimiting("party-joins");
+            .RequireRateLimiting("party-joins")
+            .WithMetadata(new RequestSizeLimitAttribute(WebGameSaveInspector.MaxRequestBytes));
     }
 
     private static async Task<IResult> ListPublicPartiesAsync(

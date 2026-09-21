@@ -9,6 +9,7 @@ import { BONEYARD_ARENA_SEAL_TICKS, startBoneyardArenaTransition } from '../core
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import {
@@ -24,7 +25,7 @@ import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
 import type { PlayerCharacterState } from '../core-kernels/player-character.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
-import { boneyardPrimarySpellTargets } from './boneyard-world-targets.ts'
+import { boneyardPrimarySpellTargets, boneyardWorldSceneryTargets } from './boneyard-world-targets.ts'
 import { createBoneyardWorld as createWorld } from './boneyard-world-construction.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { stepBoneyardWorldTick } from './boneyard-world.ts'
@@ -1160,6 +1161,9 @@ test('the tick-400 generated cleanup retires outside authored scenery targets an
     element: 'fire',
   }, world)
 
+  const originalTargets = boneyardWorldSceneryTargets(world)
+  assert.ok(originalTargets.some(target => target.id === 'scenery:outside-grave'))
+
   const result = stepWorld(world, { player }, {}, 1)
 
   assert.equal(result.world.arenaTransition?.phase, 'sealed')
@@ -1179,6 +1183,37 @@ test('the tick-400 generated cleanup retires outside authored scenery targets an
   assert.deepEqual(boneyardPrimarySpellTargets(result.world).filter(target => target.id.startsWith('goodie:'))
     .map(target => target.position), [{ x: 1200, y: 1000 }])
   assert.equal(result.world.gateLeaves.length, 2)
+  assert.ok(originalTargets.some(target => target.id === 'scenery:outside-grave'),
+    'retiring scenery must not mutate a retained earlier projection')
+  assert.ok(!boneyardWorldSceneryTargets(result.world).some(target => target.id === 'scenery:outside-grave'))
+})
+
+test('scenery projections follow replacement tables and current Goodies without sharing mutable result arrays', () => {
+  const loaded = encounterBoneyard('default')
+  loaded.scene.objects = [
+    { eid: 'grave', pos: { x: 800, y: 1000 }, typeId: 2029, variant: 0 },
+    { eid: 'goodie', pos: { x: 1200, y: 1000 }, typeId: 2061, variant: 0 },
+  ]
+  const world = createBoneyardWorld(loaded)
+  const first = boneyardWorldSceneryTargets(world)
+  const second = boneyardWorldSceneryTargets(world)
+  assert.notEqual(first, second)
+  first.pop()
+  assert.deepEqual(boneyardWorldSceneryTargets(world), second)
+  const changed = {
+    ...world,
+    primarySceneryTargets: world.primarySceneryTargets.map(target => (
+      target.id === 'scenery:grave' ? { ...target, active: false, position: { x: 900, y: 1100 } } : target
+    )),
+    loot: { ...world.loot, goodies: world.loot.goodies.map(goodie => ({
+      ...goodie, position: { x: 1300, y: 1100 },
+    })) },
+  }
+  const projected = boneyardWorldSceneryTargets(changed)
+  assert.equal(projected.find(target => target.id === 'scenery:grave')?.active, false)
+  assert.deepEqual(projected.find(target => target.id === 'scenery:grave')?.position, { x: 900, y: 1100 })
+  assert.deepEqual(projected.find(target => target.hitKind === 'goodie')?.position, { x: 1300, y: 1100 })
+  assert.deepEqual(second.find(target => target.hitKind === 'goodie')?.position, { x: 1200, y: 1000 })
 })
 
 test('direct spawn materialization escapes the captured object-213 grave with a mobile body', () => {
@@ -1399,6 +1434,57 @@ test('world spawn reachability uses the living player footprint for larger enemi
     assert.equal(result.world.enemies.actors.length, 1)
     const actor = result.world.enemies.actors[0]!
     assert.equal(canPlaceBoneyardBody(actor.position, world.bounds, world.collision, actor.config.collisionRadius), true)
+  }
+})
+
+test('wave-28 Deep Portal materializes after LIGHT search misses the recorded distant players', () => {
+  const template = NATIVE_GENERATED_BONEYARDS[7]!
+  assert.equal(template.sourceSha256, 'e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430')
+  const created = createBoneyardWorld({
+    ...template,
+    choice: { id: 'default-random', name: 'Wave-28 regression', source: 'default' },
+    runId: 'wave-28-light-regression',
+    seed: 'wave-28-light-regression',
+  })
+  const world = {
+    ...created,
+    bounds: created.arenaTransition!.combatBounds,
+    arenaTransition: null, encounter: null, waves: null,
+  }
+  const players = Object.fromEntries(([
+    ['fire', { x: 1224.7665413875088, y: 2449.718724341462 }],
+    ['air', { x: 1109.253626541078, y: 2419.334726384252 }],
+  ] as const).map(([element, position]) => [element, {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane', displayName: 'Recorded Portal target',
+      element: element === 'fire' ? 'fire' : 'air',
+    }, world),
+    position,
+  }]))
+  const phase = nativePortalProgram(template.sourceSha256).phases[0]!
+  assert.equal(phase.name, 'Deep Portal')
+  assert.equal(phase.startWave, 28)
+  for (const seed of [9, 11, 13, 14, 15, 19, 22, 24, 25]) {
+    const result = stepWorld({
+      ...world, enemies: { ...world.enemies, steeringRngState: createNativeRng(seed) },
+    }, players, {}, 332_807, [{
+      authoredRecipe: nativePortalRecipe(phase), enemyToken: 'PORTAL', flags: [],
+      flanking: true, id: 1, locationPolicy: 'anywhere', nativeTypeId: 5021,
+      navigationClearance: 25, pathfindingMode: 2, placementRadius: 45,
+      position: { x: 1072.62109375, y: 550.5117797851562 },
+      positionPolicy: phase.placementPolicy, reachabilityRadius: 25,
+      spawnTick: 332_807, waveOrdinal: 28,
+    }])
+    assert.equal(result.world.enemies.actors.length, 1, `seed ${seed}`)
+    const actor = result.world.enemies.actors[0]!
+    assert.equal(actor.config.enemyToken, 'PORTAL')
+    assert.equal(actor.currentHealth, 479.36651611328125)
+    assert.equal(actor.waveOrdinal, 28)
+    assert.equal(canPlaceBoneyardBody(actor.position, world.bounds, world.collision, 45), true)
+    assert.ok(Object.values(players).some(player => findBoneyardEnemyRoute({
+      bodyRadius: 25, bounds: world.bounds, clearance: 25, end: player.position,
+      endBodyRadius: 25, start: actor.position, world: world.collision,
+    }) !== null))
   }
 })
 

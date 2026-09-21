@@ -18,7 +18,10 @@ function interpolateEnemyDeathEffects(
     if (!newerEffect) return copyEnemyDeathEffect(olderEffect)
     const discrete = blend < 1 ? olderEffect : newerEffect
     return {
-      ...copyEnemyDeathEffect(discrete),
+      ...discrete,
+      painterRegistration: discrete.painterRegistration === null
+        ? null
+        : { ...discrete.painterRegistration },
       ageTicks: lerp(olderEffect.ageTicks, newerEffect.ageTicks, blend),
       alpha: lerp(olderEffect.alpha, newerEffect.alpha, blend),
       height: lerp(olderEffect.height, newerEffect.height, blend),

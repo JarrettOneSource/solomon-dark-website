@@ -6,8 +6,11 @@ namespace SolomonDarkRevived.Services;
 
 public static class WebGameSaveInspector
 {
-    public const int MaxDocumentBytes = 16 * 1024 * 1024;
-    private const int MaxNodes = 250_000;
+    // Match game-save-contract.ts: the native three-Faculty death envelope,
+    // including the existing reserve, is below 96,679,129 bytes / 2,641,996 values.
+    public const int MaxDocumentBytes = 96 * 1024 * 1024;
+    public const int MaxRequestBytes = MaxDocumentBytes * 2 + 64 * 1024;
+    private const int MaxNodes = 3_000_000;
 
     public static void Inspect(string? document)
     {
@@ -19,7 +22,7 @@ public static class WebGameSaveInspector
         var bytes = Encoding.UTF8.GetBytes(document);
         if (bytes.Length > MaxDocumentBytes)
         {
-            throw new InvalidDataException("Browser game saves may not exceed 16 MiB.");
+            throw new InvalidDataException("Browser game saves may not exceed 96 MiB.");
         }
 
         JsonDocument parsed;

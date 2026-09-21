@@ -48,6 +48,7 @@ import {
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 import { nativePuppetHitAlpha, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import { multiplyNativeTints, nativePuppetHitTint, renderNativeDiffuseMask, setNativeDiffuseColor } from './native-texture-color.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
@@ -558,6 +559,9 @@ class NativeSecondaryActorView {
       }
       this.stormLightning.destroy()
     }
+    for (const mesh of this.gradientMeshes) destroyOwnedMeshGeometry(mesh)
+    for (const mesh of this.meshMeshes) destroyOwnedMeshGeometry(mesh)
+    for (const mesh of this.quadMeshes) destroyOwnedMeshGeometry(mesh)
     if (this.directPrimitives) {
       for (const mesh of this.gradientMeshes) {
         mesh.parent?.removeChild(mesh)
@@ -652,6 +656,7 @@ class NativeSecondaryActorView {
     const mesh = this.gradientMeshes.pop()!
     this.gradientVertices.pop()
     mesh.parent?.removeChild(mesh)
+    destroyOwnedMeshGeometry(mesh)
     mesh.destroy()
   }
 
@@ -662,6 +667,7 @@ class NativeSecondaryActorView {
     this.meshVertexColors.pop()
     this.meshVertices.pop()
     this.container.removeChild(mesh)
+    destroyOwnedMeshGeometry(mesh)
     mesh.destroy()
   }
 
@@ -669,6 +675,7 @@ class NativeSecondaryActorView {
     const mesh = this.quadMeshes.pop()!
     this.quadVertices.pop()
     this.container.removeChild(mesh)
+    destroyOwnedMeshGeometry(mesh)
     mesh.destroy()
   }
 }

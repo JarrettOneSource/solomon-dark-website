@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { extname, resolve, sep } from 'node:path'
+import { pipeline } from 'node:stream'
 
 const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -61,21 +62,27 @@ export async function startStaticClientServer({ root, host = '127.0.0.1', port =
         response.end()
         return
       }
-      const requestedExists = await regularFile(requested)
-      if (!requestedExists && extname(path)) {
+      const requestedInfo = await regularFileInfo(requested)
+      if (!requestedInfo && extname(path)) {
         response.writeHead(404, securityHeaders())
         response.end()
         return
       }
-      const file = requestedExists ? requested : indexPath
+      const file = requestedInfo ? requested : indexPath
+      const fileInfo = requestedInfo ?? await stat(indexPath)
       const extension = extname(file).toLowerCase()
       response.writeHead(200, {
         ...securityHeaders(),
         'cache-control': file === indexPath ? 'no-store' : 'public, max-age=31536000, immutable',
         'content-type': CONTENT_TYPES.get(extension) ?? 'application/octet-stream',
+        'content-length': fileInfo.size,
       })
       if (request.method === 'HEAD') response.end()
-      else createReadStream(file).pipe(response)
+      else pipeline(createReadStream(file), response, (error) => {
+        if (error && error.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+          process.stderr.write(`Desktop client response failed: ${String(error)}\n`)
+        }
+      })
     } catch (error) {
       response.writeHead(500, securityHeaders())
       response.end()
@@ -124,14 +131,15 @@ function safePathname(rawUrl = '/') {
   }
 }
 
-async function regularFile(path) {
+async function regularFileInfo(path) {
   try {
-    return (await stat(path)).isFile()
+    const info = await stat(path)
+    return info.isFile() ? info : null
   } catch {
-    return false
+    return null
   }
 }
 
 async function requireFile(path) {
-  if (!await regularFile(path)) throw new Error(`Desktop client is missing ${path}`)
+  if (!await regularFileInfo(path)) throw new Error(`Desktop client is missing ${path}`)
 }

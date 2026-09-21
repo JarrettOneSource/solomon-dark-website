@@ -6,7 +6,7 @@ import { createPrimarySpellSimulation, type PrimarySpellEtherImpactState } from 
 import { removeNativeSecondaryOwner, spawnNativeScriptFires } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords } from './game-simulation.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
+import { boneyardWorldLightQuery, createBoneyardWorldLightSampler } from './boneyard-world-light.ts'
 
 function fixture() {
   const loaded = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 67))!
@@ -74,4 +74,33 @@ test('secondary light follows its live owner and contributes no light before ign
   const burning = { ...born, actors: born.actors.map(actor => ({ ...actor, radius: 1 })) }
   assert.equal(query(burning), 1)
   assert.equal(query(removeNativeSecondaryOwner(burning, 'owner')), 0)
+})
+
+test('an optional light sampler builds once on demand and retains its captured phase', () => {
+  const { state, players, world, point, order } = fixture()
+  const impact: PrimarySpellEtherImpactState = {
+    kind: 'ether-impact', id: 1, ageTicks: 0, birthTick: 1, origin: point,
+    ownerId: 'owner', visualScale: 1, worldKey: `boneyard:${world.runId}`,
+    painterRegistration: order.register('actor'), lightRegistration: order.register('actor'),
+  }
+  const environment = {
+    playerEntities: state.playerEntities,
+    primarySpells: { ...createPrimarySpellSimulation(), nextId: 2, transients: [impact] },
+  }
+  const expected = boneyardWorldLightQuery(world, players, world.enemies, 1, environment)
+  let boundsReads = 0
+  const observedWorld = {
+    ...world,
+    get bounds() { boundsReads += 1; return world.bounds },
+  }
+  const sample = createBoneyardWorldLightSampler(observedWorld, players, world.enemies, 1, environment)
+  assert.equal(boundsReads, 0, 'unused samplers must not construct a light field')
+  environment.primarySpells = { ...environment.primarySpells, transients: [] }
+  assert.equal(sample(point), expected.scalarAt(point))
+  assert.ok(sample(point) > 0, 'later phase replacement must not erase captured light')
+  const readsAfterBuild = boundsReads
+  assert.ok(readsAfterBuild > 0)
+  assert.equal(sample(players.owner.position), expected.scalarAt(players.owner.position))
+  assert.equal(boundsReads, readsAfterBuild, 'all positions share this phase light field')
+  assert.equal(boneyardWorldLightQuery(world, players, world.enemies, 1, environment).scalarAt(point), 0)
 })

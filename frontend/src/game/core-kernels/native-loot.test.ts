@@ -3,8 +3,22 @@ import test from 'node:test'
 
 import { ALL_DISABLED, input } from '../../../tools/native-loot-test-fixture.ts'
 
-import { createNativeRng } from './native-rng.ts'
-import { DOWSING_EQUIPMENT_RECIPES } from './hub-economy.ts'
+import { createNativeRng, drawNativeInteger } from './native-rng.ts'
+import {
+  DOWSING_EQUIPMENT_RECIPES, FOMENTIUS_STOCK_DEFINITIONS,
+  createFomentiusInventoryItem, createHubEconomy, dyeInventoryClothing,
+  equipInventoryItem, findInventoryItem, insertLootInventoryItem, transferInventoryItem,
+  type HubEconomyState, type HubInventoryItem,
+} from './hub-economy.ts'
+import { inventoryItem } from '../protocol/codecs/items.ts'
+import { gameSnapshot } from '../protocol/codecs/snapshot.ts'
+import { createGameSnapshotFrame, createGameSnapshotProjection } from '../protocol/entity-replication.ts'
+import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
+import { createGameSimulation, getPlayerEconomy } from '../core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
+import { playerLivingNativeEquipmentAppearance } from './player-equipment-appearance.ts'
 import {
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   NATIVE_LOOT_OPEN_PLACEMENT,
@@ -19,10 +33,166 @@ import {
 } from './native-loot.ts'
 import {
   createNativeLootItemIds,
+  equipmentRecipeItem,
+  selectEnemyItem,
   resolveNativeGoodieContents,
   potionItem,
   miscItem,
 } from './native-loot-items.ts'
+
+for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+  test(`named loot ${recipe.name} survives pickup and strict inventory decoding`, () => {
+    const result = materializeNativeLootScriptAction(input(), {
+      kind: 'drop-item', recipeIndex: recipe.sourceIndex,
+    })
+    const drop = result.drops[0]
+    assert.ok(drop?.item)
+    const picked = insertLootInventoryItem(createHubEconomy(1), drop.item)
+    assert.equal(picked.accepted, true)
+    const item = picked.state.backpack.find(({ recipeIndex }) => recipeIndex === recipe.sourceIndex)
+    assert.ok(item)
+    assert.deepEqual(inventoryItem(item, 'frame.players.player-1.economy.backpack'), item)
+  })
+}
+
+test('named clothing applies native recipe colors and consumes only its own random-color words', () => {
+  const expected = [
+    [1, 0x191919, 0xc6e0e0], [5, 0x191919, 0xc1a8c1],
+    [6, 0xc0c0c0, 0xffffff], [7, 0xc0c0c0, 0xffffff],
+    [11, 0x8f618f, 0xffffff], [12, 0x8f618f, 0xffffff],
+    [16, 0x98c6c6, 0xffffff], [17, 0x98c6c6, 0xffffff],
+    [20, 0x723f3f, 0xffffff], [21, 0x723f3f, 0xffffff],
+    [25, 0x89b789, 0xe3eee3],
+  ] as const
+  const rng = createNativeRng(1)
+  for (const [index, primary, secondary] of expected) {
+    const generated = equipmentRecipeItem(DOWSING_EQUIPMENT_RECIPES[index]!, createNativeLootItemIds(1), rng)
+    assert.deepEqual(generated.item.iconTints, [primary, secondary], `recipe ${index}`)
+    assert.strictEqual(generated.sharedRng, rng, `recipe ${index} must not draw random colors`)
+    for (const iconTints of [[null, secondary], [primary, null]] as const) {
+      assert.throws(() => inventoryItem({ ...generated.item, iconTints }, 'item'), /named equipment identity/)
+    }
+  }
+  // Raw 0x004630E0/0x004699B0 instruction goldens. Seed 1 retains out-of-range jitter until desaturation.
+  for (const [seed, primary, words] of [[1, 0xa1ccd0, 8], [3, 0x4c4c73, 2], [42, 0xb08ca9, 8]] as const) {
+    for (const index of [40, 46]) {
+      const source = createNativeRng(seed)
+      const generated = equipmentRecipeItem(DOWSING_EQUIPMENT_RECIPES[index]!, createNativeLootItemIds(1), source)
+      assert.deepEqual(generated.item.iconTints, [primary, 0xffffff], `recipe ${index}, seed ${seed}`)
+      let expectedRng = source
+      for (let word = 0; word < words; word += 1) expectedRng = drawNativeInteger(expectedRng, 1).state
+      assert.deepEqual(generated.sharedRng, expectedRng, 'named clone has no random-item brightness draw')
+      assert.equal(generated.item.recipeIndex, index)
+      assert.equal(generated.item.generatedLevel, undefined)
+      assert.equal(generated.item.nativeEffects, undefined)
+    }
+  }
+})
+
+test('named random colors advance enemy, Goodie, and fixed-script RNG before placement', () => {
+  const sourceRng = createNativeRng(1)
+  let expectedRng = sourceRng
+  for (let word = 0; word < 9; word += 1) expectedRng = drawNativeInteger(expectedRng, 1).state
+  for (const recipeIndex of [40, 46]) {
+    const ownedRecipeIndexes = DOWSING_EQUIPMENT_RECIPES
+      .map(({ sourceIndex }) => sourceIndex).filter((index) => index !== recipeIndex)
+    const selection = input({
+      policies: { ...ALL_DISABLED, specificItem: 4 },
+      participant: { ...input().participant, ownedRecipeIndexes },
+    })
+    const enemy = selectEnemyItem(sourceRng, selection)
+    assert.equal(enemy.item?.recipeIndex, recipeIndex)
+    assert.deepEqual(enemy.item?.iconTints, [0xa47ea0, 0xffffff])
+    assert.deepEqual(enemy.sharedRng, expectedRng)
+    const goodie = resolveNativeGoodieContents({
+      advancedUnlocks: [], itemIds: createNativeLootItemIds(1), ownedRecipeIndexes,
+      playerLevel: 100, selector: 10, sharedRng: sourceRng,
+    })
+    assert.equal(goodie.items[0]?.recipeIndex, recipeIndex)
+    assert.deepEqual(goodie.items[0]?.iconTints, [0xa47ea0, 0xffffff])
+    assert.deepEqual(goodie.sharedRng, expectedRng)
+    const script = materializeNativeLootScriptAction(input({
+      sharedRng: sourceRng,
+      placement: { canPlace: ({ x, y }) => x !== 100 || y !== 200 },
+    }), { kind: 'drop-item', recipeIndex })
+    assert.deepEqual(script.drops[0]?.item?.iconTints, [0xa1ccd0, 0xffffff])
+    assert.deepEqual(script.drops[0]?.position, { x: 114.96372985839844, y: 200.833984375 })
+    assert.deepEqual(script.sharedRng, expectedRng)
+  }
+})
+
+test('all named garments retain realized colors through frames, containers, equip, dye, and save restore', () => {
+  const initial = createGameSimulation({ owner: {
+    discipline: 'arcane', displayName: 'Helvidius', element: 'ether',
+  } })
+  const baseline = createGameSnapshotProjection(createGameSnapshot(initial, 'owner')).baseline
+  const retain = (economy: HubEconomyState, label: string) => {
+    const state = { ...initial, playerEntities: replacePlayerEconomy(initial.playerEntities, 'owner', economy) }
+    const snapshot = createGameSnapshot(state, 'owner')
+    assert.deepEqual(gameSnapshot(snapshot), snapshot, `${label}: full snapshot`)
+    for (const forceKeyframe of [false, true]) {
+      const message = {
+        acknowledgedInputSequence: 0,
+        frame: createGameSnapshotFrame(snapshot, 1, baseline, forceKeyframe),
+        sequence: 2,
+        type: 'server-snapshot' as const,
+      }
+      assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message, `${label}: frame`)
+    }
+    const saved = createGameSaveDocument({
+      integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner', state,
+    })
+    const checkpoint = decodeServerGameMessage(encodeGameMessage({
+      type: 'server-save-checkpoint', reason: 'progress', save: saved, sequence: 1,
+    }))
+    if (checkpoint.type !== 'server-save-checkpoint') throw new Error('expected checkpoint')
+    const restored = getPlayerEconomy(restoreGameSaveDocument(checkpoint.save).state, 'owner')
+    assert.deepEqual(restored.backpack, economy.backpack, `${label}: backpack`)
+    assert.deepEqual(restored.storage, economy.storage, `${label}: storage`)
+    assert.deepEqual(restored.equipment, economy.equipment, `${label}: equipment`)
+  }
+  for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+    if (recipe.type !== 'hat' && recipe.type !== 'robe') continue
+    const generated = equipmentRecipeItem(recipe, createNativeLootItemIds(1), createNativeRng(1))
+    const picked = insertLootInventoryItem(getPlayerEconomy(initial, 'owner'), generated.item)
+    assert.equal(picked.accepted, true)
+    const item = picked.state.backpack.find(({ recipeIndex }) => recipeIndex === recipe.sourceIndex)!
+    retain(picked.state, `${recipe.name}: pickup`)
+
+    const stored = transferInventoryItem(picked.state, item.id, 'to-storage')
+    assert.equal(stored.accepted, true)
+    retain(stored.state, `${recipe.name}: stored`)
+    const sack: HubInventoryItem = {
+      contents: [item], equipmentType: null, iconRecords: [70], id: picked.state.nextItemId,
+      kind: 'sack', name: 'Sack', nativeSubtype: 0, nativeTypeId: 7008,
+      quantity: 1, rarity: null, recipeIndex: null,
+    }
+    const nested = insertLootInventoryItem({ ...picked.state, backpack: [] }, sack)
+    assert.equal(nested.accepted, true)
+    retain(nested.state, `${recipe.name}: nested`)
+
+    const equipped = equipInventoryItem(picked.state, item.id, recipe.type, { creativityRank: 0, playerLevel: 100 })
+    assert.equal(equipped.accepted, true)
+    const appearance = playerLivingNativeEquipmentAppearance('ether', equipped.state.equipment)[recipe.type]
+    assert.ok(appearance)
+    assert.deepEqual([appearance.primaryTint, appearance.secondaryTint], item.iconTints)
+    retain(equipped.state, `${recipe.name}: equipped`)
+
+    const dye = createFomentiusInventoryItem(
+      FOMENTIUS_STOCK_DEFINITIONS.find(({ kind }) => kind === 'dye')!, picked.state.nextItemId, 2,
+    )
+    const withDye = insertLootInventoryItem(picked.state, dye)
+    assert.equal(withDye.accepted, true)
+    const cloth = dyeInventoryClothing(withDye.state, dye.id, item.id, 'cloth', [1, 9])
+    assert.equal(cloth.accepted, true)
+    assert.deepEqual(findInventoryItem(cloth.state.backpack, item.id)?.iconTints, [0x6d363e, item.iconTints![1]])
+    retain(cloth.state, `${recipe.name}: dyed cloth`)
+    const trim = dyeInventoryClothing(cloth.state, dye.id, item.id, 'trim', [1])
+    assert.equal(trim.accepted, true)
+    assert.deepEqual(findInventoryItem(trim.state.backpack, item.id)?.iconTints, [0x6d363e, 0x7b3b3b])
+    retain(trim.state, `${recipe.name}: dyed trim`)
+  }
+})
 
 test('Scatter Curse applies the native Orb value multiplier after private materialization', () => {
   const source = input({ policies: { ...ALL_DISABLED, orb: 3 } })

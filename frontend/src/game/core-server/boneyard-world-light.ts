@@ -57,6 +57,22 @@ interface LightOwner {
   readonly sources: readonly NativeBoneyardLightSource[]
 }
 
+/** Capture this immutable simulation phase; build its light field only if sampled. */
+export function createBoneyardWorldLightSampler(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  enemies: BoneyardEnemyStore,
+  tick: number,
+  environment: BoneyardLightEnvironment = {},
+): (position: Readonly<BoneyardPoint>) => number {
+  const capturedEnvironment = { ...environment }
+  let scalarAt: ((position: Readonly<BoneyardPoint>) => number) | null = null
+  return position => {
+    scalarAt ??= boneyardWorldLightQuery(world, players, enemies, tick, capturedEnvironment).scalarAt
+    return scalarAt(position)
+  }
+}
+
 /** The simulation queries the stock view of every participant at a fixed tick. */
 export function boneyardWorldLightQuery(
   world: BoneyardWorldState,

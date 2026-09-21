@@ -1,0 +1,362 @@
+{
+  "schemaVersion": 1,
+  "createdAtUtc": "2026-09-20T15:50:32.909556+00:00",
+  "device": "jarretts-mac-mini",
+  "repository": "/Users/jarrett/codex-acceptance/solomon-perf-6a583nbx",
+  "head": "fb9ec4bf9486e0fac5f76e9648c043614bb4d373",
+  "branch": "perf/wave100-6a583nbx",
+  "method": {
+    "scope": "Matched microbenchmarks of quad packing, retained painter admission, retained rain updates, and death-effect interpolation; no whole-game FPS claim.",
+    "timing": "One warmup of each variant; five paired timing rounds with before/after order alternated; allocation sampling runs separately from timing.",
+    "allocation": "Node inspector HeapProfiler sampling at 16384 bytes with includeObjectsCollectedByMajorGC and includeObjectsCollectedByMinorGC true; no forced GC. Sum of profile selfSize estimates total allocation, including objects collected during the sample.",
+    "confounders": [
+      "Other Mac workloads were active; root validation was started during this work. Millisecond differences are descriptive, not an isolated hardware benchmark.",
+      "Node V8 and deterministic microbench fixtures differ from the Windows Chromium game. Allocation estimates are sampling estimates; zero sampled bytes does not prove zero allocations in every runtime.",
+      "The first runner completed quads/painter then failed on isolated Vite baseline dependency identity; those completed raw outputs and profiles were preserved, and only the rain stage was rerun after resolving it."
+    ]
+  },
+  "benchmark": {
+    "node": "v22.23.2",
+    "forcedGc": false,
+    "samplingIntervalBytes": 16384,
+    "timingIncludesSampling": false,
+    "rounds": 5,
+    "results": {
+      "quads": {
+        "operationCount": 300000,
+        "milliseconds": {
+          "before": [
+            10.256541000000027,
+            10.287417000000005,
+            10.057333999999969,
+            10.188375000000008,
+            10.045416999999986
+          ],
+          "after": [
+            8.156082999999967,
+            8.16395799999998,
+            8.093958999999984,
+            8.07487500000002,
+            8.096375000000023
+          ]
+        },
+        "medianMs": {
+          "before": 10.188375000000008,
+          "after": 8.096375000000023
+        },
+        "sampledAllocatedBytes": {
+          "before": 41777760,
+          "after": 0
+        }
+      },
+      "painter": {
+        "operationCount": {
+          "frames": 1000,
+          "entriesPerFrame": 600
+        },
+        "milliseconds": {
+          "before": [
+            144.27316699999994,
+            143.6679999999999,
+            151.73250000000007,
+            142.155708,
+            138.724375
+          ],
+          "after": [
+            138.8927920000001,
+            135.4647910000001,
+            135.0892080000001,
+            135.45245799999998,
+            134.00433399999997
+          ]
+        },
+        "medianMs": {
+          "before": 143.6679999999999,
+          "after": 135.45245799999998
+        },
+        "sampledAllocatedBytes": {
+          "before": 238428624,
+          "after": 197026704
+        }
+      },
+      "rain": {
+        "operationCount": {
+          "frames": 1040,
+          "dropVisits": 532468,
+          "trace": "Seeded native storm at 130 presentation Hz and 100 simulation Hz; light captured once per drop."
+        },
+        "milliseconds": {
+          "before": [
+            45.187625000000025,
+            45.953750000000014,
+            45.17345899999998,
+            46.04049999999995,
+            45.16704199999981
+          ],
+          "after": [
+            39.132499999999936,
+            39.10566700000004,
+            39.14970900000003,
+            39.47133300000007,
+            39.544583999999986
+          ]
+        },
+        "medianMs": {
+          "before": 45.187625000000025,
+          "after": 39.14970900000003
+        },
+        "sampledAllocatedBytes": {
+          "before": 170141784,
+          "after": 134725680
+        },
+        "normalizationCalls": {
+          "before": 528952,
+          "after": 404640
+        }
+      },
+      "deathInterpolation": {
+        "operationCount": {
+          "samples": 1000,
+          "olderEffects": 130,
+          "newerEffects": 130,
+          "matchedEffects": 122,
+          "retiredEffects": 8,
+          "spawnedEffects": 8,
+          "otherEnemyCollectionsEmpty": true
+        },
+        "milliseconds": {
+          "before": [
+            25.131166000000007,
+            23.459459000000038,
+            27.028832999999963,
+            23.394041000000016,
+            23.254208000000062
+          ],
+          "after": [
+            20.043750000000045,
+            18.926832999999988,
+            21.115666000000033,
+            18.561708000000067,
+            18.49958300000003
+          ]
+        },
+        "medianMs": {
+          "before": 23.459459000000038,
+          "after": 18.926832999999988
+        },
+        "sampledAllocatedBytes": {
+          "before": 120679000,
+          "after": 81165584
+        }
+      }
+    },
+    "equivalent": true
+  },
+  "sources": {
+    "frontend/src/game/renderer/native-material-batch.ts": {
+      "beforeSha256": "b6ba10c38d03dff99772d84e5879bc7e30d9e16f3e9e3d0f3d33d5a3c9a8c7c5",
+      "afterSha256": "e627a95bf905696f2425d2e225fb7c7ff812d9f3d60e13d0fc8ee7104e2dded5",
+      "baselineMatchesHead": true,
+      "beforeSource": "/tmp/solomon-allocation-6a583nbx/native-material-batch.ts.before"
+    },
+    "frontend/src/game/renderer/native-boneyard-weather-view.ts": {
+      "beforeSha256": "0075469c5adc801b88b470b24834e93a837e51fa09f63bb996866eb7b3e13d5a",
+      "afterSha256": "90c1747f7ebea599b12fed97a5f857ceab0cc4ad12d0865ab82bc4ee071b959c",
+      "baselineMatchesHead": true,
+      "beforeSource": "/tmp/solomon-allocation-6a583nbx/native-boneyard-weather-view.ts.before"
+    },
+    "frontend/src/game/region-painter-order.ts": {
+      "beforeSha256": "8c3cd430dd62743e3ab8fad7a45b3ae46145d2f92d388ae40061249610f6c9d0",
+      "afterSha256": "adc2bdf8ed6cc85ee8b2e4c3742badfa7f8c9a0acc86d24ce49efccad325c6e6",
+      "baselineMatchesHead": true,
+      "beforeSource": "/tmp/solomon-allocation-6a583nbx/region-painter-order.ts.before"
+    },
+    "frontend/src/game/client/boneyard-enemy-samples.ts": {
+      "beforeSha256": "3ef6bb14e9092f9f47d92f104d13a4b9158cf37587fcd4586a4180ac73f31de5",
+      "afterSha256": "4d73653a22c2c6e9f8dfec24e5115771e6cb9f788d4c4d54372cdf7193fa9461",
+      "baselineMatchesHead": true,
+      "beforeSource": "/tmp/solomon-allocation-6a583nbx/boneyard-enemy-samples.ts.before"
+    },
+    "frontend/src/game/boneyard-painter-order.test.ts": {
+      "afterSha256": "d16cdd4bf90a74fde6ca5d5a54967ae30321f91dd63547db340cb1f98d4c0eaf"
+    },
+    "frontend/src/game/renderer/native-fixed-function-render-pipeline.test.ts": {
+      "afterSha256": "18341838365b8651a59ef2fe3667a8935dc5ad169e8218f706cab60a98101538"
+    },
+    "frontend/src/game/renderer/native-mesh-lifetime.test.ts": {
+      "afterSha256": "cd658d9882389bf9562b78e40940f8431bd649c15d81bc390b19f9abc46d4f77"
+    },
+    "frontend/src/game/client/boneyard-presentation-timeline.test.ts": {
+      "afterSha256": "a02a735f12d5b41fb01a114654f6a2b7789ad054d7cf6c44022c57bdd08854cf"
+    }
+  },
+  "tests": {
+    "commands": [
+      "node --experimental-strip-types --test --test-reporter=spec src/game/boneyard-painter-order.test.ts src/game/renderer/native-fixed-function-render-pipeline.test.ts src/game/renderer/native-mesh-lifetime.test.ts",
+      "node node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit",
+      "node --experimental-strip-types --test --test-reporter=spec src/game/renderer/native-fixed-function-render-pipeline.test.ts"
+    ],
+    "results": [
+      "28/28 focused tests passed before the quad fixture type correction.",
+      "After replacing the fake quad object with real BatchableSprite fixtures, test typechecking completed with no diagnostics and the two fixed-function tests passed again.",
+      "The first full gate found the quad test-only type mismatch; root owns the full-gate restart after corrections."
+    ],
+    "equivalence": [
+      "72 full Uint32Array comparisons through the actual installed NativeMaterialBatcher, across two transforms, three colors, four alpha/diffuse modes and three offsets; untouched prefix/suffix sentinels compared.",
+      "All256 grayscale colors match Pixi public alpha/tint/color; repeated identical colors do not normalize; retained drops hide, retire, reuse, and clean up correctly.",
+      "Existing painter ordering/reuse/retirement tests plus exact invalid-id/world-Y/sort-bias diagnostics and order.",
+      "Optional interpolation measurement matches all output fields at six blend values including spawn/retirement; root owns the expanded ownership timeline tests."
+    ]
+  },
+  "benchmarkArtifacts": {
+    "benchmark.mjs": {
+      "path": "/tmp/solomon-allocation-6a583nbx/benchmark.mjs",
+      "sha256": "64faf107f2ac1cc001a05c7012cedb40728d65c8cbc7c160f27346de20cac5ed",
+      "bytes": 9554,
+      "modifiedAtUtc": "2026-09-20T15:45:48.676075+00:00"
+    },
+    "interpolation-benchmark.mjs": {
+      "path": "/tmp/solomon-allocation-6a583nbx/interpolation-benchmark.mjs",
+      "sha256": "b7a07f1a0bbf96bff66657853098bf16ad8f97824762c60797cf3ba64b0d21e6",
+      "bytes": 5522,
+      "modifiedAtUtc": "2026-09-20T15:49:18.007811+00:00"
+    },
+    "deathInterpolation-after.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/deathInterpolation-after.heapprofile",
+      "sha256": "686dd62bfcebeaae8db281df285c755eb46b28e56f9c61965f9ed6c2e786a842",
+      "bytes": 203450,
+      "modifiedAtUtc": "2026-09-20T15:49:19.208088+00:00"
+    },
+    "deathInterpolation-before.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/deathInterpolation-before.heapprofile",
+      "sha256": "4fb477467d983eaec2520eec6d90d72a85fc37f335361aed5b80f2a3d2cfd9dc",
+      "bytes": 309342,
+      "modifiedAtUtc": "2026-09-20T15:49:19.171943+00:00"
+    },
+    "painter-after.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/painter-after.heapprofile",
+      "sha256": "e8e0698c926d715f655b7df9d9994252e1cda2dfa2fb17c1d64bbf1340093963",
+      "bytes": 431727,
+      "modifiedAtUtc": "2026-09-20T15:44:26.313614+00:00"
+    },
+    "painter-before.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/painter-before.heapprofile",
+      "sha256": "361094330d67ad78c1fa50aba6e09863b25664fca1840d26237e071552014aab",
+      "bytes": 536767,
+      "modifiedAtUtc": "2026-09-20T15:44:26.153144+00:00"
+    },
+    "quads-after.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/quads-after.heapprofile",
+      "sha256": "7caab9fd56a465a69e404c690c1cb75d44f2940541cb484cfedf1576bd7d2f55",
+      "bytes": 153,
+      "modifiedAtUtc": "2026-09-20T15:44:24.268134+00:00"
+    },
+    "quads-before.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/quads-before.heapprofile",
+      "sha256": "0574f5a834ec55c8daa5531b96a8a6bb5ee54ab45a73eb4ece79bb770793e25e",
+      "bytes": 104747,
+      "modifiedAtUtc": "2026-09-20T15:44:24.256740+00:00"
+    },
+    "rain-after.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/rain-after.heapprofile",
+      "sha256": "8e3d2303ed3eeab7723292be17acbc05d1606bc47aded316c47434029934f681",
+      "bytes": 337686,
+      "modifiedAtUtc": "2026-09-20T15:46:01.534739+00:00"
+    },
+    "rain-before.heapprofile": {
+      "path": "/tmp/solomon-allocation-6a583nbx/rain-before.heapprofile",
+      "sha256": "814b94887cde38302e5ff6cea3d37895cbe070ff8a84833f324221f4c8fb8669",
+      "bytes": 428282,
+      "modifiedAtUtc": "2026-09-20T15:46:01.471652+00:00"
+    }
+  },
+  "liveWindowsProfile": {
+    "captureEvents": [
+      {
+        "atUtc": "2026-09-20T15:26:37.434Z",
+        "event": "profiling.start",
+        "durationSeconds": 30,
+        "cpuSamplingIntervalMicroseconds": 1000,
+        "heapSamplingIntervalBytes": 65536,
+        "includesCollectedAllocations": true,
+        "description": "Passive CDP observer; sampling overhead window; no inputs changed or forced GC"
+      },
+      {
+        "atUtc": "2026-09-20T15:27:08.678Z",
+        "event": "profiling.stop",
+        "cpuSamples": 20227,
+        "heapSamples": 69705
+      },
+      {
+        "atUtc": "2026-09-20T15:27:08.696Z",
+        "event": "profiling.saved",
+        "cpuFile": "windows-cpu.cpuprofile",
+        "allocationFile": "windows-allocations.heapprofile"
+      }
+    ],
+    "durationSeconds": 31.196052,
+    "cpuSamples": 20227,
+    "heapSamples": 69705,
+    "sampledAllocatedBytes": 4592157732,
+    "sampledGcCpuMs": 531.861,
+    "categoriesMiB": {
+      "pageRenderUpdate": 2454.631,
+      "pixiRendering": 930.47,
+      "presentationInterpolation": 482.74,
+      "snapshotInputEngine": 312.989,
+      "react": 183.781,
+      "other": 14.812
+    },
+    "categoryMethod": "Each allocation classified once by its closest recognized enclosing page render, Pixi render, presentation, engine or React stack. These are coarse stack categories, not exact source ownership.",
+    "inclusiveHotspots": [
+      {
+        "name": "native-material-batch packQuadAttributes",
+        "allocatedMiB": 419.513,
+        "cpuMs": 679.727
+      },
+      {
+        "name": "NativeBoneyardWeather visitDrops",
+        "allocatedMiB": 246.738,
+        "cpuMs": 294.867
+      },
+      {
+        "name": "NativeRegionPainterPlanner build",
+        "allocatedMiB": 236.758,
+        "cpuMs": 1132.939
+      },
+      {
+        "name": "interpolateEnemyDeathEffects",
+        "allocatedMiB": 204.401,
+        "cpuMs": 67.126
+      },
+      {
+        "name": "nativeEnemyDeathEffectPlan (unchanged)",
+        "allocatedMiB": 109.521,
+        "cpuMs": 121.155
+      },
+      {
+        "name": "NativeUiTextGlyphs (unchanged)",
+        "allocatedMiB": 45.833,
+        "cpuMs": 31.449
+      }
+    ],
+    "overlapWarning": "Inclusive hotspot subtrees are already contained in the coarse categories and total; do not add these tables together. Interpolation categories also contain the death-effect interpolation subtree.",
+    "files": {
+      "windows-cpu.cpuprofile": {
+        "path": "/tmp/solomon-party-wave100-6a583nbx/windows-cpu.cpuprofile",
+        "sha256": "7f655c9a2a328fb1702fe44298985b8f7383fdc008e8b73a92a27b4bf64f7379",
+        "bytes": 587971
+      },
+      "windows-allocations.heapprofile": {
+        "path": "/tmp/solomon-party-wave100-6a583nbx/windows-allocations.heapprofile",
+        "sha256": "f58da8310d009d12ec3585bef518b613ca51bc291d820ce4e3f22ea29d78f3af",
+        "bytes": 3392468
+      },
+      "windows-profile-events.jsonl": {
+        "path": "/tmp/solomon-party-wave100-6a583nbx/windows-profile-events.jsonl",
+        "sha256": "5a92e4dd373092bf46c9d7045c1cc239778c5819c9256c81025d3eed5fed919e",
+        "bytes": 538
+      }
+    }
+  }
+}

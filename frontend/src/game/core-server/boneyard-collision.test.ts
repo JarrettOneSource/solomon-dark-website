@@ -423,6 +423,60 @@ test('native spawn placement draws a fresh retry angle for every radius ring', (
   assert.ok(Math.hypot(placed.position.x - origin.x, placed.position.y - origin.y) > 25.1)
 })
 
+test('native LIGHT retries change to DIRECT only after the radius exceeds 350', () => {
+  const origin = { x: 1_000, y: 1_000 }
+  const bounds = { x: 0, y: 0, w: 2_000, h: 2_000 }
+  const world = { circles: [], polygons: [], segments: [] }
+  for (const [radius, expectedAngleDraws] of [[25, 15], [45, 8], [50, 8]] as const) {
+    const source = createNativeRng(59)
+    let expectedRng = source
+    let finalAngle = 0
+    for (let index = 0; index < expectedAngleDraws; index += 1) {
+      const draw = drawNativeFloat(expectedRng, 360)
+      expectedRng = draw.state
+      finalAngle = draw.value * Math.PI / 180
+    }
+    const placed = resolveNativeBoneyardSpawnPosition(
+      origin, bounds, world, radius, 'light', source, { lightAt: () => 0 },
+    )
+    assert.deepEqual(placed.rngState, expectedRng, `radius ${radius}`)
+    assert.deepEqual(placed.position, {
+      x: Math.fround(origin.x + Math.sin(finalAngle) * radius * 2),
+      y: Math.fround(origin.y - Math.cos(finalAngle) * radius * 2 * 0.8),
+    }, `radius ${radius} restarts at twice the actor radius`)
+  }
+})
+
+test('native LIGHT fallback remains subject to collision and domain admission', () => {
+  const origin = { x: 500, y: 500 }
+  const bounds = { x: 0, y: 0, w: 1_000, h: 1_000 }
+  const empty = { circles: [], polygons: [], segments: [] }
+  const source = createNativeRng(59)
+  for (const [world, acceptsDomain] of [
+    [{ ...empty, circles: [{ center: origin, radius: 2_000 }] }, () => true],
+    [empty, () => false],
+  ] as const) {
+    assert.throws(() => resolveNativeBoneyardSpawnPosition(
+      origin, bounds, world, 45, 'light', source, { acceptsDomain, lightAt: () => 0 },
+    ), /no light collision-safe spawn placement/)
+  }
+})
+
+test('DARK, OFFSCREEN, and EDGE retries never acquire the LIGHT fallback', () => {
+  const origin = { x: 500, y: 500 }
+  const bounds = { x: 0, y: 0, w: 1_000, h: 1_000 }
+  const world = { circles: [], polygons: [], segments: [] }
+  for (const policy of ['dark', 'offscreen', 'edge'] as const) {
+    assert.throws(() => resolveNativeBoneyardSpawnPosition(
+      origin, bounds, world, 25, policy, createNativeRng(59), {
+        isOffscreen: () => false,
+        isOutsidePolicyBounds: () => false,
+        lightAt: () => 1,
+      },
+    ), new RegExp(`no ${policy} collision-safe spawn placement`))
+  }
+})
+
 test('native offscreen policy views clamp strictly and reject a point visible to any player', () => {
   const bounds = { x: 0, y: 0, w: 2_000, h: 1_600 }
   const center = { x: 1_000, y: 800 }

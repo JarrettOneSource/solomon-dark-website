@@ -5,7 +5,7 @@ import type { NativeSilkState } from '../../core-kernels/native-silk.ts'
 import type { NativeSpiderAppearance } from '../../core-kernels/native-spider-appearance.ts'
 import type { NativeWebbedState } from '../../core-kernels/native-webbed.ts'
 import type { BoneyardSilkSnapshot, BoneyardSpiderRemainsSnapshot } from '../spider-state.ts'
-import { MAX_BONEYARD_ENEMY_DEATH_EFFECTS, MAX_PLAYERS } from '../game-protocol-limits.ts'
+import { MAX_BONEYARD_SPIDER_EFFECTS, MAX_PLAYERS } from '../game-protocol-limits.ts'
 import { nativeWorldManagerRegistration, vector } from './native-state.ts'
 import {
   GameProtocolError, boolean, finite, finiteWithin, integerWithin, limitedArray,
@@ -44,7 +44,7 @@ export function spiderWorldFields(source: ReturnType<typeof record>, field: stri
     }
   })
   const remainsIds = new Set<number>()
-  const spiderRemains = limitedArray(source.spiderRemains, `${field}.spiderRemains`, MAX_BONEYARD_ENEMY_DEATH_EFFECTS).map((value, index) => {
+  const spiderRemains = limitedArray(source.spiderRemains, `${field}.spiderRemains`, MAX_BONEYARD_SPIDER_EFFECTS).map((value, index) => {
     const name = `${field}.spiderRemains[${index}]`
     const row = record(value, name)
     onlyKeys(row, name, ['id', 'spawnTick', 'state'])
@@ -57,7 +57,7 @@ export function spiderWorldFields(source: ReturnType<typeof record>, field: stri
     }
   })
   const fragmentIds = new Set<number>()
-  const silkFragments = limitedArray(source.silkFragments, `${field}.silkFragments`, MAX_BONEYARD_ENEMY_DEATH_EFFECTS).map((value, index) => {
+  const silkFragments = limitedArray(source.silkFragments, `${field}.silkFragments`, MAX_BONEYARD_SPIDER_EFFECTS).map((value, index) => {
     const name = `${field}.silkFragments[${index}]`
     const row = record(value, name)
     onlyKeys(row, name, ['id', 'spawnTick', 'state'])

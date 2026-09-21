@@ -27,6 +27,7 @@ import {
   type WaterFrostJetPlan,
 } from '../core-kernels/primary-spell-water.ts'
 import { NATIVE_ARENA_SATURATION } from './native-arena-render-pipeline.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import {
   NATIVE_AIR_WATER_SPRITES,
   nativeWaterAuraVisualPlan,
@@ -322,7 +323,7 @@ export class NativeWaterMeshRuns {
     for (const run of this.runs) {
       this.root.removeChild(run.mesh)
       run.mesh.destroy()
-      run.geometry.destroy(true)
+      destroyOwnedMeshGeometry(run)
     }
     this.shader.destroy(true)
     this.runs.length = 0
@@ -350,7 +351,7 @@ export class NativeWaterMeshRuns {
       const childIndex = this.root.getChildIndex(run.mesh)
       this.root.removeChild(run.mesh)
       run.mesh.destroy()
-      run.geometry.destroy(true)
+      destroyOwnedMeshGeometry(run)
       this.root.addChildAt(replacement.mesh, childIndex)
     } else {
       this.root.addChild(replacement.mesh)
