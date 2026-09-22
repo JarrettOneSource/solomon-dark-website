@@ -19,6 +19,8 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 // Optional private continuation is never copied into a public receipt.
 const output = process.env.SDR_COFFIN_OUTPUT || '/tmp/solomon-coffin-spawn'
+const viewport = { width: 1638, height: 921 }
+const deviceScaleFactor = 1.5625
 await mkdir(output, { recursive: true })
 const frontend = await preview({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
@@ -42,7 +44,7 @@ try {
     await writeFile(`${output}/saved-continuation.json`, JSON.stringify(restored, null, 2))
   }
   receipts.push(await journey('native-burst'))
-  const receipt = { status: 'ok', browser: browser.version(), receipts }
+  const receipt = { status: 'ok', browser: browser.version(), viewport, deviceScaleFactor, receipts }
   await writeFile(`${output}/receipt.json`, JSON.stringify(receipt, null, 2))
   console.log(JSON.stringify(receipt))
 } finally {
@@ -77,7 +79,7 @@ async function journey(name, document, saveSha256) {
       if (entry.event === 'simulation.tick_lag') warnings.push(entry.details)
     },
   })
-  const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+  const context = await browser.newContext({ viewport, deviceScaleFactor })
   const page = await context.newPage()
   const windows = []
   try {
@@ -202,7 +204,7 @@ async function journey(name, document, saveSha256) {
           'Hurricane did not kill the emerging Coffins', 12_000)
         await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas')
           .__sdrBoneyardFrame.enemyDeathEffectVisibleCount > 100)
-        await page.screenshot({ path: `${output}/${name}-burst.png` })
+        // GPU readback/PNG encoding must not contaminate the timed burst.
         const measured = await measuring
         assert.ok(measured.peakVisibleEffects >= 500, 'the complete terminal burst must reach the renderer')
         windows.push({ name: 'spawn-and-hurricane-death', ...measured })

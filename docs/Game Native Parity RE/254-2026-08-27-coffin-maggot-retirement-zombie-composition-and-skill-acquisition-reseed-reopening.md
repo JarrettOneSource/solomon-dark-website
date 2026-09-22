@@ -844,17 +844,80 @@ movement work. A killed-owner replay entered Game Over, so its lower mean is
 not a matched optimization speedup. No game-speed or network-speed improvement
 is claimed from these tests.
 
-**Report disposition: investigated, not proven fixed.** The existing native
-contract and current Mac reproduction pass, but the supplied material contains
-neither the video's exact simulation/input trace nor the affected browser's
-CPU/network trace. The follow-up save has no Hurricane and cannot reconstruct
-the video event. Its schema 37 also already postdates the relevant recent
-performance fixes, so their presence alone cannot establish that they fixed
-this historical incident. There is no demonstrated runtime defect to patch,
-no evidence that a multi-second freeze is native, and no basis for a Discord
-completion reaction. A recurrence should be correlated with its run archive,
-client diagnostics and deployed revision using this maintained probe. Native
-membership is closed; attribution of the historical stall remains open.
+### Read-only production correlation
+
+The matching NFO archive was subsequently recovered from
+`/var/lib/solomon-dark-game/run-archives/30b12adb-bd0c-47d2-b17b-341b5c55de1e.sdrrun.gz`.
+Compressed size is 127,397 bytes; SHA-256 is
+`eb1646ba4de455b1ca76afe76e213fca5fedf9520f7277c4e11b299e995c56e6`.
+It belongs to run `8850348c71f4b54d7dfa7875371d813b`, session
+`eVDuDu1gh3JrhfOGKCYm7A0JEJCCPIIX`, deployed revision `ed0a2d598`,
+and closed at `2026-09-22T02:29:49.362Z`. Its final living checkpoint is
+tick 145498; the complete enemy store is deeply equal to the submitted save
+after normal restoration. The only projected-snapshot difference is the
+restored secondary skill selection. Its historical worst core tick is
+127.586 ms at tick 132054, with three enemies and no Maggots, not the later
+Coffin population. The last 330 ticks average approximately 9.2–10.0 ms per
+100-tick window and contain alternating over-budget movement work, not a
+multi-second stopped simulation.
+
+Diagnostic database row 191 supplies the same run/session/revision. Original
+ZIP `2026/09/b3559fc1-a662-45fb-a718-ad784fa60744.zip`, SHA-256
+`f3427d9ef4346910942b7544b645a74a8f4772578466e9977eaa7402e9784a50`,
+contains `browser/game-client.json`, captured `2026-09-22T02:29:48.827Z`.
+It reports Windows Opera/Chrome 151, viewport **1638 × 921**, pixel ratio
+**1.5625**, online and visible, with no recorded client failure. The maintained
+probe now uses that viewport/pixel ratio for both browser journeys; the table
+above is the earlier 1600 × 900, ratio-1 measurement.
+
+At the matching viewport, every final focused browser window has p99 and
+maximum frame interval 16.8 ms. The eight-Coffin window renders **640 visible
+death effects**, advances 801.87 ticks in eight seconds, then returns to zero
+effects. Construction takes 1.860 ms. The on-camera saved-owner kill takes
+0.689 ms and removes all 105 children present at that later measurement edge.
+The generated run records 2,085 host ticks, none over 10 ms, maximum 6.539 ms;
+the saved run records 1,575 ticks, 17 over budget, maximum 76.087 ms. Error
+arrays remain empty, and Mac lint passes.
+
+An earlier ratio-1.5625 attempt performed PNG screenshot capture inside the
+timed burst and recorded one 500 ms frame. That capture-contaminated sample is
+excluded from runtime performance conclusions. The maintained probe performs
+GPU readback only outside measurement windows; actual rendered visibility is
+asserted through the live renderer, and ordinary before/after screenshots
+remain available. No gameplay code was changed to remove that probe artifact.
+
+During the active, unpaused stall its samples retain 59–61 rendered frames per
+second. Server tick 143865 stops advancing for about eleven seconds, while
+frame p99 remains 16.8–31.6 ms. Maximum snapshot gap reaches **11,227 ms**;
+ping reaches **8,322 ms**. Snapshot delivery then jumps to tick 145190. This
+directly falsifies a multi-second main-thread/render freeze for this captured
+follow-up occurrence. It does not prove that the earlier video has the same
+cause.
+
+The matching host journal records `replication.flow_control_started` at
+`02:29:29.262Z`, then recovery after **14,578 ms**, with **263** snapshots
+skipped while eight outstanding snapshots awaited acknowledgments. A second
+interval lasts 2,622 ms. The native 100-Hz authority continued running. The
+existing browser-facing compression, eight-snapshot high-water/two-snapshot
+low-water policy, immediate decode acknowledgments, and recovery-keyframe
+branch were reviewed; no missing recovery branch or unbounded snapshot queue
+was found. Loopback proxy compression remains deliberately disabled, while
+the browser-facing socket negotiates bounded permessage-deflate. Neither
+transport policy nor payload contents are changed by this report.
+
+**Report disposition: investigated, not proven fixed.** Current Coffin
+mechanics/presentation pass; the matched follow-up stall is delayed snapshot
+delivery/acknowledgment rather than expensive Coffin rendering. The available
+receipts do not distinguish the affected client's network/browser transport
+from the proxy/socket compression and delivery path, and contain no packet or
+network-worker profile for that interval. The earlier video's exact trace is
+also absent. An arbitrary Coffin count/VFX reduction or transport timeout would
+not be an evidenced repair. The existing performance fixes were already in
+the affected revision, so they cannot justify an already-fixed claim. Native
+membership is closed; transport-cause attribution remains open, and no Discord
+completion reaction is warranted. All original production archives and
+diagnostics were read-only and remain preserved; only task-owned copies are
+disposable.
 
 Publication requires the current rebased candidate's complete Mac
 `/opt/homebrew/bin/bash ./scripts/validate.sh` plus another built-browser run
