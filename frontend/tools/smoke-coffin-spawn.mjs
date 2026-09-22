@@ -144,18 +144,20 @@ async function journey(name, document, saveSha256) {
       Object.assign(before, { playerEntities: { ...before.playerEntities, locomotions } })
       windows.push({ name: 'saved-coffins-in-view', ...await measure(page, 3000) })
       await page.screenshot({ path: `${output}/${name}-coffins.png` })
-      const current = host.state()
-      const coffins = current.world.enemies.actors.filter(actor => actor.config.enemyToken === 'COFFIN')
-      const childIds = current.world.enemies.maggots.map(actor => actor.id)
-      assert.equal(coffins.length, 2)
-      const measuring = measure(page, 5000)
-      let enemies = current.world.enemies
-      for (const actor of coffins) enemies = damageBoneyardEnemy(enemies, {
-        actorId: actor.id, amount: actor.currentHealth, sourcePlayerId: playerId, tick: current.tick,
-      }).store
-      Object.assign(current, { world: { ...current.world, enemies } })
-      burst = { coffins: coffins.length, children: childIds.length }
-      windows.push({ name: 'saved-owner-death', ...await measuring })
+      let childIds
+      const measured = await measure(page, 5000, () => {
+        const current = host.state()
+        const coffins = current.world.enemies.actors.filter(actor => actor.config.enemyToken === 'COFFIN')
+        childIds = current.world.enemies.maggots.map(actor => actor.id)
+        assert.equal(coffins.length, 2)
+        let enemies = current.world.enemies
+        for (const actor of coffins) enemies = damageBoneyardEnemy(enemies, {
+          actorId: actor.id, amount: actor.currentHealth, sourcePlayerId: playerId, tick: current.tick,
+        }).store
+        Object.assign(current, { world: { ...current.world, enemies } })
+        burst = { coffins: coffins.length, children: childIds.length }
+      })
+      windows.push({ name: 'saved-owner-death', ...measured })
       assert.ok(host.state().world.enemies.maggots.every(actor => !childIds.includes(actor.id)))
     } else {
       learnHurricane(host.state(), playerId)
@@ -168,32 +170,34 @@ async function journey(name, document, saveSha256) {
           actor.kind === 'air-hurricane' && actor.contactCharge > 0.5
         )), 'Hurricane did not charge', 15_000)
         windows.push({ name: 'hurricane-baseline', ...await measure(page, 2000) })
-        const state = host.state()
-        const index = state.playerEntities.identities.findIndex(row => row.playerId === playerId)
-        const center = state.playerEntities.locomotions[index].position
-        const order = createNativeWorldManagerOrder(state.worldManagerOrder)
         const flags = [[], ['FLAG_MANYMAGGOTS'], ['FLAG_STRONGMAGGOTS'], ['FLAG_MANYMAGGOTS', 'FLAG_STRONGMAGGOTS']]
-        const firstId = state.world.enemies.nextActorId
-        const spawned = stepBoneyardEnemyStore({ ...state.world.enemies, lastStepTick: state.tick - 1 }, {
-          players: {}, tick: state.tick, projectileWorldBlocked: () => false,
-          registerWorldPainter: order.register, resolveMovement: ({ requestedPosition }) => requestedPosition,
-          resolveSpawnIntents: () => Array.from({ length: 8 }, (_, i) => ({
-            enemyToken: 'COFFIN', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
-            flags: flags[i % 4], id: firstId + i, locationPolicy: 'anywhere',
-            position: { x: center.x + Math.cos(i * Math.PI / 4) * 130,
-              y: center.y + Math.sin(i * Math.PI / 4) * 130 },
-            spawnTick: state.tick, waveOrdinal: 22,
-          })),
-        }).store
-        const ids = spawned.actors.filter(actor => actor.id >= firstId).map(actor => actor.id)
-        assert.equal(ids.length, 8)
-        // A low-health fixture isolates the reported immediate terminal edge;
-        // native damage, cooldown, spawn phases and debris are unmodified.
-        const enemies = { ...spawned, actors: spawned.actors.map(actor => (
-          ids.includes(actor.id) ? { ...actor, currentHealth: 1 } : actor
-        )) }
-        Object.assign(state, { world: { ...state.world, enemies }, worldManagerOrder: order.state() })
-        const measuring = measure(page, 8000)
+        let ids
+        const measuring = measure(page, 8000, () => {
+          const state = host.state()
+          const index = state.playerEntities.identities.findIndex(row => row.playerId === playerId)
+          const center = state.playerEntities.locomotions[index].position
+          const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+          const firstId = state.world.enemies.nextActorId
+          const spawned = stepBoneyardEnemyStore({ ...state.world.enemies, lastStepTick: state.tick - 1 }, {
+            players: {}, tick: state.tick, projectileWorldBlocked: () => false,
+            registerWorldPainter: order.register, resolveMovement: ({ requestedPosition }) => requestedPosition,
+            resolveSpawnIntents: () => Array.from({ length: 8 }, (_, i) => ({
+              enemyToken: 'COFFIN', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+              flags: flags[i % 4], id: firstId + i, locationPolicy: 'anywhere',
+              position: { x: center.x + Math.cos(i * Math.PI / 4) * 130,
+                y: center.y + Math.sin(i * Math.PI / 4) * 130 },
+              spawnTick: state.tick, waveOrdinal: 22,
+            })),
+          }).store
+          ids = spawned.actors.filter(actor => actor.id >= firstId).map(actor => actor.id)
+          assert.equal(ids.length, 8)
+          // A low-health fixture isolates the reported immediate terminal edge;
+          // native damage, cooldown, spawn phases and debris are unmodified.
+          const enemies = { ...spawned, actors: spawned.actors.map(actor => (
+            ids.includes(actor.id) ? { ...actor, currentHealth: 1 } : actor
+          )) }
+          Object.assign(state, { world: { ...state.world, enemies }, worldManagerOrder: order.state() })
+        })
         await waitUntil(() => host.state().world.enemies.deathEffects.some(effect => effect.role === 'coffin-skull'),
           'Hurricane did not kill the emerging Coffins', 12_000)
         await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas')
@@ -218,6 +222,7 @@ async function journey(name, document, saveSha256) {
     }
     assert.deepEqual(errors, { page: [], console: [], responses: [], requests: [], wire: [], host: [] })
     for (const window of windows) {
+      assert.ok(window.actionMs < 250, `${name}/${window.name}: host action stalled for ${window.actionMs} ms`)
       assert.ok(window.maximum < 250, `${name}/${window.name}: a frame stalled for ${window.maximum} ms`)
       assert.ok(window.p99 < 50, `${name}/${window.name}: p99 frame interval ${window.p99} ms`)
       assert.ok(window.tickAdvance >= window.milliseconds * 0.08,
@@ -234,12 +239,14 @@ async function journey(name, document, saveSha256) {
   }
 }
 
-async function measure(page, milliseconds) {
-  return page.evaluate(milliseconds => new Promise(resolve => {
+async function measure(page, milliseconds, onStarted) {
+  await page.evaluate(milliseconds => new Promise(started => {
+    let finish
+    window.__sdrCoffinMeasurement = new Promise(resolve => { finish = resolve })
     const frames = [], ticks = [], effects = [], visibleEffects = [], children = []
     let first, previous
     function sample(now) {
-      if (first === undefined) first = now
+      if (first === undefined) { first = now; started() }
       if (previous !== undefined) frames.push(now - previous)
       previous = now
       const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
@@ -249,7 +256,7 @@ async function measure(page, milliseconds) {
       }
       if (now - first < milliseconds) return requestAnimationFrame(sample)
       frames.sort((a, b) => a - b)
-      resolve({ milliseconds, frames: frames.length, p95: frames[Math.ceil(frames.length * .95) - 1],
+      finish({ milliseconds, frames: frames.length, p95: frames[Math.ceil(frames.length * .95) - 1],
         p99: frames[Math.ceil(frames.length * .99) - 1], maximum: frames.at(-1),
         over100: frames.filter(value => value > 100).length,
         tickAdvance: ticks.at(-1) - ticks[0], peakEffects: Math.max(...effects),
@@ -257,6 +264,12 @@ async function measure(page, milliseconds) {
     }
     requestAnimationFrame(sample)
   }), milliseconds)
+  // Acknowledge the first sampled frame before changing host state. Otherwise
+  // the very allocation frame being investigated could precede the measurement.
+  const actionStart = performance.now()
+  await onStarted?.()
+  const actionMs = performance.now() - actionStart
+  return { ...await page.evaluate(() => window.__sdrCoffinMeasurement), actionMs }
 }
 
 function learnHurricane(state, playerId) {

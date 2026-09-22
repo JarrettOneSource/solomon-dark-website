@@ -767,7 +767,7 @@ also documented above.
 | Emerging, inactive, active, dying Maggots | `verified-already-at-parity` | Owner invalidation tests; all 103 original children retire on the next tick; on-camera saved descendants retire in Chrome |
 | Coffin body, bones, main/extra fragments, skull, ground decoration, audio/reward | `verified-already-at-parity` | Full entry-081 recipes pass; independent visible debris and break sound; complete terminal retirement |
 | Shared Skeleton/Archer/Mage, Zombie, Wraith, Demon, Imp/Portal terminal effects | `verified-already-at-parity` | Existing per-family terminal/death-effect allocation cases; no runtime module changed |
-| Snapshot, interpolation, visibility, lighting, painter order | `verified-already-at-parity` | Built WebGL renders 619 simultaneous visible effects; complete live wire decodes with no errors |
+| Snapshot, interpolation, visibility, lighting, painter order | `verified-already-at-parity` | Built WebGL renders 629 simultaneous visible effects; complete live wire decodes with no errors |
 | Pause, save restore, resume, run replacement, renderer destroy | `verified-already-at-parity` | Original save restores; native level-up pause was directly observed in the initial fixture; separate fresh-run journey and full renderer/host teardown |
 | Hurricane and other lethal producers | `verified-already-at-parity` | Ordinary held Air input charges Hurricane; real contact kills all eight; shared combat tests pass |
 | Zombie composition, progression seed, unrelated spells and campaign reports | `out-of-system` | Separate recovered systems; no shared defect identified by this investigation |
@@ -814,24 +814,30 @@ as performance evidence. The maintained probe now asserts actual simulation
 advance, p99 below 50 ms, no frame at or above 250 ms, at least 500 simultaneous
 visible debris effects, all eight body removals, complete debris expiry, and
 the break audio. These are test acceptance limits, not new gameplay constants.
+Timing is armed and its first frame acknowledged before mutating host state,
+so the first allocation frame cannot precede the measurement. The synchronous
+host action is measured separately and must also stay below 250 ms. The
+on-camera kill action measured 1.629 ms; the eight-Coffin construction action
+measured 1.651 ms. The following guarded-start run supersedes the preliminary
+frame measurements taken before that acknowledgment was added.
 
 M2 Mac mini, macOS 26.6.2 arm64, Node 22.17.0, Chrome 153.0.8010.53:
 
 | Built-browser window | Frames | p99 / maximum frame ms | Tick advance | Peak total / visible death effects |
 | --- | ---: | ---: | ---: | ---: |
-| Original save, 3 seconds | 181 | 16.8 / 16.8 | 301.85 | 66 / 17 |
-| Same save, camera moved to its Coffins, 3 seconds | 181 | 16.8 / 16.8 | 301.75 | 33 / 5 |
-| Both saved owners killed, 5 seconds | 301 | 16.8 / 16.8 | 501.25 | 176 / 162 |
-| Saved-scene restoration, 3 seconds | 180 | 16.8 / 16.8 | 300.18 | 175 / 169 |
-| Empty fixture baseline, 3 seconds | 181 | 16.8 / 16.8 | 301.52 | 0 / 0 |
-| Charged Hurricane baseline, 2 seconds | 121 | 16.8 / 16.8 | 201.88 | 0 / 0 |
-| Eight Coffins spawn and die, 8 seconds | 481 | 16.8 / 16.8 | 802.06 | 619 / 619 |
-| Full burst restoration, 3 seconds | 181 | 16.8 / 16.8 | 301.57 | 0 / 0 |
+| Original save, 3 seconds | 178 | 33.4 / 50.0 | 328.36 | 66 / 17 |
+| Same save, camera moved to its Coffins, 3 seconds | 178 | 33.3 / 50.0 | 302.77 | 34 / 5 |
+| Both saved owners killed, 5 seconds | 301 | 16.8 / 16.8 | 503.45 | 171 / 161 |
+| Saved-scene restoration, 3 seconds | 180 | 16.8 / 16.8 | 299.97 | 178 / 169 |
+| Empty fixture baseline, 3 seconds | 181 | 16.8 / 16.8 | 301.41 | 0 / 0 |
+| Charged Hurricane baseline, 2 seconds | 120 | 16.8 / 16.8 | 200.17 | 0 / 0 |
+| Eight Coffins spawn and die, 8 seconds | 481 | 16.8 / 16.8 | 801.26 | 629 / 629 |
+| Full burst restoration, 3 seconds | 181 | 16.8 / 16.8 | 301.28 | 0 / 0 |
 
 Every browser page/console/response/request/wire/host error array is empty;
 neither private host reports a `simulation.tick_lag` warning. The generated
-run has 2,035 measured host ticks, zero over 10 ms, and a 2.366 ms maximum.
-The saved run has 1,494 measured host ticks, 62 over 10 ms, and a 75.824 ms
+run has 2,019 measured host ticks, zero over 10 ms, and a 3.141 ms maximum.
+The saved run has 1,519 measured host ticks, 228 over 10 ms, and a 95.292 ms
 maximum, mainly before the child population is removed. Earlier unpaced
 30-second save replays also showed costly cold navigation construction and
 movement work. A killed-owner replay entered Game Over, so its lower mean is
