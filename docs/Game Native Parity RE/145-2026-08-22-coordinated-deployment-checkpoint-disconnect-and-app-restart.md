@@ -1,5 +1,96 @@
 # 2026-08-22 — Coordinated deployment checkpoint, disconnect, and app restart
 
+## 2026-09-22 — Report 11: lazy-module failure recovery reopened
+
+Evidence recorded before implementation, candidate `e2ca812e8`:
+
+- The original forwarded message `1551776640894509067` supplies two still
+  images, no save/video or reproduction steps. Both original PNGs were read.
+  `1551776640273481728__image.png` shows Firefox's failed dynamic import of
+  `/assets/ModPowerups-BZKsUtVf.js` reaching React Router's default developer
+  error page. The other image shows a white world, retained HUD, Dire Aliss,
+  and a disconnected party member. Their causal relationship is unknown.
+- Source trace: `main.tsx` has two route roots and no error element. The Game,
+  editor and viewer entries and all MainMenu/settings/Dark Cloud lazy children
+  therefore bubble import failures to the default router error UI. Game's
+  revision watcher lives inside the lazy page; failure before mount or a
+  fatal child render removes that watcher. The earlier release pass omitted
+  this degraded branch of the reload lifecycle.
+- At 2026-09-22 15:08 UTC the reported module returned HTTP 200 with JavaScript
+  content and the live manifest reported `ed0a2d598f1df5ac51f9c335e453c7d7041fcb5a`.
+  A missing historical release, transient network failure or browser cache
+  failure cannot be distinguished from the screenshot. Do not claim a 404
+  diagnosis or change deployment retention on that assumption.
+- Native evidence remains the settled `0x005CD3A0` save owner above. Hashed
+  ECMAScript modules and route recovery are a browser extension, not a native
+  gameplay rule. Preserve existing checkpoint/drain behavior and storage.
+
+### Boundary and complete membership
+
+The owner is the eager Website route error boundary, from lazy rejection to
+same-location reload or explicit home navigation. No stock data table changes.
+
+| Member | Disposition | Acceptance |
+| --- | --- | --- |
+| Shell routes: Game, Boneyard editor, and every nested scene/settings/mod UI import, including ModPowerups | exact-ported | useful reload UI; real missing Game and ModPowerups chunks |
+| Standalone BoneyardViewer root | exact-ported | same failure owner and reload path |
+| Changed valid deployment revision | exact-ported | reuse manifest parser, reload once per target revision per tab |
+| Same revision, missing/malformed manifest, offline or blocked session storage | exact-ported | usable manual reload, no automatic loop |
+| Repeated stale HTML or persistently missing chunk after reload | exact-ported | session-scoped guard prevents reload loops |
+| Non-import runtime error | exact-ported | safe error page and manual recovery; no automatic reload |
+| Successful routes, game saves, deployment drain, party authority | verified-already-at-parity | preserve existing owners; full Mac gate and game journey |
+| White playfield still | out-of-system | separate renderer/Region investigation in entry 017; do not attribute it to a module failure |
+
+Implementation contract: use one eagerly imported error element for both route
+roots. Recognize browser module/CSS load failures, check the existing no-store
+deployment manifest once, and reload only for a different validated revision
+not already attempted in this tab. Manual recovery remains available even
+offline. Never clear saves, auto-reload arbitrary programming errors, or claim
+that retry proves the original network cause.
+
+Mac regression, canonical gate and browser results will be recorded below.
+
+The first Mac regression reproduced another branch on the same owner: after
+the missing Game chunk recovered, a stale HTML build paired with the changed
+manifest caused the existing Game watcher to reload 79 times in 30 seconds.
+Its unguarded reload bypassed the new boundary's guard. The single-attempt
+claim must therefore live in `deployment-revision.ts` and be shared by both
+callers. A blocked/previously attempted reload must present a manual action
+in the game update screen. This is a controlled stale-release reproduction,
+not evidence that the reporter experienced those 79 reloads.
+
+### Implementation and focused Mac receipt
+
+`RouteError` is eager on both route roots. Its browser/Vite error classifier
+does not classify ordinary fetch/API or runtime failures as missing modules.
+The existing manifest validator remains strict. Both recovery paths use
+`reloadForDeploymentRevision`; `GameDeploymentUpdate` supplies a manual action
+when the claim is unavailable or already consumed. No dependencies were added.
+
+Mac Chrome `153.0.8010.53` reproduced the default router failure before this
+change. The built candidate passes manual Game/editor/viewer recovery, changed
+revision, stale HTML with and without a surviving module, unavailable manifest,
+blocked storage, and ordinary runtime-error cases. Each failure injects a real
+module request rejection/evaluation error; expected errors remain in the test
+receipt. Recovery uses the same location and never clears save storage. The
+specific ModPowerups rejection recovers through Title/Create/College/Boneyard
+with empty subsequent error arrays. Ten focused module, deployment and screen
+feedback tests pass; frontend lint and production build pass.
+
+The built-candidate deployment smoke also passes against an isolated Mac
+backend/database: anonymous IndexedDB and authenticated cloud checkpoints
+advance from revision 1 to 2 before reload, both resume and persist revision 4,
+and the profile-only and killed-wizard branches retain their expected economy
+and Last Game state. No production service was used for this acceptance.
+
+`smoke-module-recovery.mjs` and `smoke-white-playfield.mjs` reproduce these
+checks. The existing boss tool now accepts repeated `--case` selectors, and
+the deployment smoke accepts an owned screenshot directory. The publication
+gate must run the complete canonical Mac gate and these browser checks again
+on the rebased commit under the campaign lock. Full-gate and publication SHA
+receipts belong to the report outcome so this document does not claim a
+future check passed. The unresolved white still is explicit in entry 017.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the machine-local deployment worker validates a new

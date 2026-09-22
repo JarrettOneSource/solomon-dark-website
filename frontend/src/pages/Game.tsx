@@ -10,7 +10,7 @@ import type {
   HallOfFameEntry,
 } from '../game/core-kernels/hall-of-fame.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
-import { waitForDeploymentRevision } from '../game/deployment-revision.ts'
+import { reloadForDeploymentRevision, waitForDeploymentRevision } from '../game/deployment-revision.ts'
 import {
   type GameConnectionStage,
   type GameEndpoint,
@@ -84,6 +84,7 @@ export default function Game() {
   const [profileSave, setProfileSave] = useState<GameProfileSave | null>(null)
   const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
   const [deploymentRestart, setDeploymentRestart] = useState<DeploymentRestartState | null>(null)
+  const [deploymentReloadRequired, setDeploymentReloadRequired] = useState(false)
   const saveCoordinator = useRef<GameSaveCoordinator | null>(null)
 
   useEffect(() => {
@@ -102,8 +103,10 @@ export default function Game() {
       intervalMs: deploymentRestart ? 500 : 15_000,
       signal: controller.signal,
       targetRevision: deploymentRestart?.targetRevision ?? null,
-    }).then(() => {
-      if (!controller.signal.aborted) window.location.reload()
+    }).then((revision) => {
+      if (!controller.signal.aborted && revision && !reloadForDeploymentRevision(revision)) {
+        setDeploymentReloadRequired(true)
+      }
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         diagnostics.warning(
@@ -482,7 +485,10 @@ export default function Game() {
               total={loadProgress.total}
             />
           )}
-      {deploymentRestart && <GameDeploymentUpdate saved={deploymentRestart.saved} />}
+      {(deploymentRestart || deploymentReloadRequired) && <GameDeploymentUpdate
+        saved={deploymentRestart?.saved ?? false}
+        reloadRequired={deploymentReloadRequired}
+      />}
     </>
   )
 }

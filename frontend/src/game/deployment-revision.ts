@@ -30,7 +30,7 @@ export async function waitForDeploymentRevision(options: {
   intervalMs: number
   signal: AbortSignal
   targetRevision: string | null
-}): Promise<void> {
+}): Promise<string | null> {
   while (!options.signal.aborted) {
     try {
       const response = await fetch(
@@ -49,9 +49,9 @@ export async function waitForDeploymentRevision(options: {
           liveRevision,
           options.targetRevision,
         )
-      ) return
+      ) return liveRevision
     } catch (error) {
-      if (options.signal.aborted) return
+      if (options.signal.aborted) return null
       if (error instanceof TypeError) {
         // The Website is expected to be briefly unreachable during cutover.
       } else {
@@ -60,6 +60,22 @@ export async function waitForDeploymentRevision(options: {
     }
     await abortableDelay(options.intervalMs, options.signal)
   }
+  return null
+}
+
+/** Shared by initial module recovery and the already-mounted game watcher. */
+export function reloadForDeploymentRevision(revision: string): boolean {
+  try {
+    const key = 'sdr.deployment-reload-revision'
+    if (sessionStorage.getItem(key) === revision) return false
+    // Claim before navigating, including when stale HTML loads successfully.
+    sessionStorage.setItem(key, revision)
+  } catch {
+    // Without storage we cannot guarantee a loop-free automatic reload.
+    return false
+  }
+  window.location.reload()
+  return true
 }
 
 function abortableDelay(durationMs: number, signal: AbortSignal): Promise<void> {

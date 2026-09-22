@@ -31,7 +31,7 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const frontend = fileURLToPath(new URL('../', import.meta.url))
 const output = process.env.SDR_BOSS_PROOF_OUTPUT || '/tmp/solomon-native-bosses'
-const selectedCase = process.argv.find(argument => argument.startsWith('--case='))?.slice(7)
+const selectedCases = process.argv.filter(argument => argument.startsWith('--case=')).map(argument => argument.slice(7))
 const fromCase = process.argv.find(argument => argument.startsWith('--from='))?.slice(7)
 const portalRoots = process.argv.includes('--portal-roots')
 const character = { discipline: 'arcane', element: portalRoots ? 'air' : 'fire', displayName: 'Boss acceptance' }
@@ -67,16 +67,16 @@ const cases = portalRoots ? [
   { id: 'discorporeal-death', name: 'The Discorporeal', token: 'DEMONSKULL', death: true, spells: ['ultra-banish'], milliseconds: 8500 },
   { id: 'discorporeal-mega', name: 'The Discorporeal', token: 'DEMONSKULL', death: true, mega: true, spells: ['ultra-banish', 'unholy-soul'], milliseconds: 8500 },
 ]
-assert.ok(!selectedCase || cases.some(row => row.id === selectedCase), 'Unknown boss acceptance case')
+assert.ok(selectedCases.every(id => cases.some(row => row.id === id)), 'Unknown boss acceptance case')
 const startIndex = fromCase ? cases.findIndex(row => row.id === fromCase) : 0
-assert.ok(startIndex >= 0 && !(selectedCase && fromCase), 'Use a known starting case or one selected case')
+assert.ok(startIndex >= 0 && !(selectedCases.length && fromCase), 'Use a known starting case or selected cases')
 await mkdir(output, { recursive: true })
 const server = await startStaticClientServer({ root: resolve(frontend, '../backend/wwwroot') })
 const receipts = []
 let browser
 try {
   browser = await chromium.launch({ channel: 'chrome', executablePath: process.env.SDR_CHROME_PATH, headless: true })
-  for (const row of cases.slice(startIndex).filter(row => !selectedCase || row.id === selectedCase)) {
+  for (const row of cases.slice(startIndex).filter(row => !selectedCases.length || selectedCases.includes(row.id))) {
     const receipt = await acceptBoss(row)
     receipts.push(receipt)
     await writeFile(resolve(output, 'receipt.json'), JSON.stringify(receipts, null, 2))

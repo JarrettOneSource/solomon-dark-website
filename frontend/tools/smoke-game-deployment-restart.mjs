@@ -34,6 +34,7 @@ const legacySavePaths = (process.env.SDR_GAME_DEPLOYMENT_LEGACY_SAVES || '')
   .filter(Boolean)
 const adminSecret = 'deployment-smoke-supervisor-secret-0123456789'
 const storageRoot = await mkdtemp(`${tmpdir()}/solomon-deployment-smoke-`)
+const screenshotRoot = process.env.SDR_GAME_DEPLOYMENT_SCREENSHOT_DIR || tmpdir()
 const children = []
 let browser = null
 
@@ -257,7 +258,7 @@ async function exercisePlayer({ account, label }) {
       unacknowledgedPlayers: 0,
     })
     await updatePanel.getByText(/Your game is saved/).waitFor({ timeout: 10_000 })
-    const screenshotPath = `/tmp/solomon-deployment-update-${label}.png`
+    const screenshotPath = resolve(screenshotRoot, `solomon-deployment-update-${label}.png`)
     await page.screenshot({ path: screenshotPath })
     const finalSave = await waitForSave(
       page,
@@ -309,7 +310,7 @@ async function exercisePlayer({ account, label }) {
     await activeWizardDialog.getByText('Kill character?').waitFor()
     await activeWizardDialog.getByText(/Lucritius will scavenge his equipment/).waitFor()
     await activeWizardDialog.getByText('Are you sure you want to do this?').waitFor()
-    const promptScreenshotPath = `/tmp/solomon-active-wizard-${label}.png`
+    const promptScreenshotPath = resolve(screenshotRoot, `solomon-active-wizard-${label}.png`)
     await page.screenshot({ path: promptScreenshotPath })
     await activeWizardDialog.getByRole('button', { exact: true, name: 'NO' }).click()
     await activeWizardDialog.waitFor({ state: 'detached' })
@@ -422,7 +423,7 @@ async function exerciseKilledWizard(document) {
     const dialog = page.getByRole('dialog', { name: 'Kill character?' })
     await dialog.waitFor({ timeout: 10_000 })
     await dialog.getByText('Are you sure you want to do this?').waitFor()
-    const promptScreenshotPath = '/tmp/solomon-kill-wizard-prompt.png'
+    const promptScreenshotPath = resolve(screenshotRoot, 'solomon-kill-wizard-prompt.png')
     await page.screenshot({ path: promptScreenshotPath })
     await dialog.getByRole('button', { exact: true, name: 'YES' }).click()
     await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -435,7 +436,7 @@ async function exerciseKilledWizard(document) {
     assert.equal(retiredDocument.profile.economy.gold, 500)
     assert.equal(retiredDocument.profile.economy.storage.at(-1)?.kind, 'sack')
     assert.equal(retiredDocument.profile.economy.storage.at(-1)?.contents.length, 5)
-    const screenshotPath = '/tmp/solomon-kill-wizard-create.png'
+    const screenshotPath = resolve(screenshotRoot, 'solomon-kill-wizard-create.png')
     await page.screenshot({ path: screenshotPath })
     assert.deepEqual(pageErrors, [])
     assert.deepEqual(consoleErrors, [])
@@ -509,7 +510,7 @@ async function exerciseProfileOnly(document) {
     await page.getByRole('button', { name: 'Open inventory, 12345 gold' }).waitFor({
       timeout: 30_000,
     })
-    const screenshotPath = '/tmp/solomon-profile-only-new-game.png'
+    const screenshotPath = resolve(screenshotRoot, 'solomon-profile-only-new-game.png')
     await page.screenshot({ path: screenshotPath })
     assert.deepEqual(pageErrors, [])
     assert.deepEqual(consoleErrors, [])
@@ -639,7 +640,7 @@ async function exerciseHistoricalSave(document, label) {
         await page.waitForTimeout(1_000)
       }
     }
-    const screenshotPath = `/tmp/solomon-${label}-resume.png`
+    const screenshotPath = resolve(screenshotRoot, `solomon-${label}-resume.png`)
     await page.screenshot({ path: screenshotPath })
     assert.deepEqual(pageErrors, [])
     assert.deepEqual(consoleErrors, [])

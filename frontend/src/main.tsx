@@ -27,6 +27,7 @@ import Account from './pages/Account'
 import About from './pages/About'
 import Wizard from './pages/Wizard'
 import NotFound from './pages/NotFound'
+import RouteError from './pages/RouteError'
 import { Spinner } from './components/ui'
 import NativeLoader from './game/NativeLoader'
 
@@ -41,6 +42,7 @@ const Game = lazy(() => import('./pages/Game'))
 const router = createBrowserRouter([
   {
     path: '/boneyards',
+    errorElement: <RouteError />,
     lazy: async () => {
       const { default: Component } = await import('./pages/BoneyardViewer')
       return { Component }
@@ -48,6 +50,7 @@ const router = createBrowserRouter([
   },
   {
     element: <Shell />,
+    errorElement: <RouteError />,
     children: [
       { path: '/', element: <Home /> },
       {
