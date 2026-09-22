@@ -721,3 +721,137 @@ difference.
 - Pending parent-owned sequential Mac execution. This worker is explicitly
   prohibited from running tests, builds, lint, validation, or benchmarks, so
   no speedup or passing-gate claim is recorded here.
+
+## 2026-09-22 — Report 09 Coffin spawn and immediate-destruction investigation
+
+### Evidence recorded before implementation
+
+The original Discord report `1551775779329679463` describes a large stall
+when skills/Hurricane immediately destroy newly spawned Coffins. Its 15.25 s
+video shows active combat and then a prolonged unchanged combat frame. The
+separately posted save is a related observation, not an asserted recording of
+that exact event. Both original attachments remain in the report archive.
+
+The ZIP's schema-37 browser continuation has SHA-256
+`10c1c24c6e36b5929e60a06c1b14b3af3ea0cb33a4e3eb4554b748f255d9b0af`.
+At tick 145498 / wave 22 it contains 40 ordinary enemies (two Coffins,
+18 Zombies, 13 Mages, five Skeletons, two Archers), 103 Maggots, 64 independent
+death effects, and no active primary or secondary spell actors. The two
+Coffins were born at ticks 142721/142746 and are alive/open, so this checkpoint
+alone cannot prove an immediate-destruction defect or assign the video stall
+to Hurricane. The single saved wizard is Ether/Body with weld build 1001.
+
+Instruction-derived native truth is reused from this entry and entry 081:
+retail 0.72.5, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`; Coffin construction/tick/emission
+`0x00479940/0x004A2760/0x00479C30`, Maggot admission/update
+`0x004889B0/0x0048B2A0`, Coffin death `0x0049B310`, and Maggot
+parent-loss/death `0x0047E410/0x0049C830`. No new clean-stock or injected
+runtime observation is claimed. The complete existing table extraction,
+body removal, native child admission, and independent debris recipes remain
+the contract; no population cap, delayed death, or reduced VFX is authorized.
+
+### Boundary and membership
+
+System: Coffin creation through terminal handoff and all owned Maggot
+lifetimes, plus the existing shared browser representation of those actors
+and independent death effects. This reopens the performance acceptance of
+the already recovered lifecycle, not the unrelated Zombie/skill-seed systems
+also documented above.
+
+| Member | Disposition | Proof |
+| --- | --- | --- |
+| Hidden, rising, holding, opening, open Coffins | `verified-already-at-parity` | Constructor/phase enemy-store cases; real constructor through Hurricane terminal edge |
+| Base, MANYMAGGOTS, STRONGMAGGOTS, combined | `verified-already-at-parity` | Four-style admission/ordering tests; all four styles in the eight-Coffin browser burst |
+| Emerging, inactive, active, dying Maggots | `verified-already-at-parity` | Owner invalidation tests; all 103 original children retire on the next tick; on-camera saved descendants retire in Chrome |
+| Coffin body, bones, main/extra fragments, skull, ground decoration, audio/reward | `verified-already-at-parity` | Full entry-081 recipes pass; independent visible debris and break sound; complete terminal retirement |
+| Shared Skeleton/Archer/Mage, Zombie, Wraith, Demon, Imp/Portal terminal effects | `verified-already-at-parity` | Existing per-family terminal/death-effect allocation cases; no runtime module changed |
+| Snapshot, interpolation, visibility, lighting, painter order | `verified-already-at-parity` | Built WebGL renders 619 simultaneous visible effects; complete live wire decodes with no errors |
+| Pause, save restore, resume, run replacement, renderer destroy | `verified-already-at-parity` | Original save restores; native level-up pause was directly observed in the initial fixture; separate fresh-run journey and full renderer/host teardown |
+| Hurricane and other lethal producers | `verified-already-at-parity` | Ordinary held Air input charges Hurricane; real contact kills all eight; shared combat tests pass |
+| Zombie composition, progression seed, unrelated spells and campaign reports | `out-of-system` | Separate recovered systems; no shared defect identified by this investigation |
+
+Current-main base is `0f45a4c01759e87ee418ec668078f330009b36ae`.
+`ed0a2d598` already includes the one-step Coffin owner index, indexed crowd
+movement, and lazy offscreen death-effect allocation. September 20–21
+performance receipts distinguish matched tick improvements from live browser
+claims. Reports 05/10/11 have no completed campaign outcomes at investigation
+start. No duplicate implementation is justified before current-main replay.
+
+### Validation contract
+
+All Website execution belongs to the isolated Mac worktree. Restore the
+unaltered continuation through the maintained save loader; separately exercise
+the native constructor, lethal contact, full terminal burst, and restoration
+with controlled inputs. Measure host ticks and real browser frames with
+baseline/stress/restoration, retain native populations, and capture page,
+console, failed-response, wire and host errors.
+
+### Mac investigation receipt and limits
+
+The unchanged runtime at base `0f45a4c01` passes 196 focused tests covering
+enemy-store lifecycle, spell contact, Hurricane, lazy death-effect allocation,
+and every Maggot presentation bank. Its production build passes. The initial
+7,150 tracked files match byte-for-byte across the local and detached Mac
+worktrees; the subsequently added probe is transferred and hash-checked too.
+
+`frontend/tools/smoke-coffin-spawn.mjs` is the only executable addition. It
+uses the built app, isolated ephemeral ports, private host/browser context,
+ordinary Title/Create/College/Boneyard and saved Last Game journeys, and the
+existing native constructors/combat/snapshot/render/audio owners. An optional
+`SDR_COFFIN_SAVE` points at a private browser continuation; only its SHA-256
+and aggregate measurements enter the receipt. It clears the copy's rejoin
+capability to avoid reconnecting the original party. The archive is untouched.
+`SDR_COFFIN_OUTPUT` selects disposable screenshots and aggregate JSON.
+
+In the generated fixture, eight Coffins are created in four native flag styles
+at ordinary positions around a genuinely charging Hurricane. Only fixture
+health is set to one to isolate immediate death. The wizard's fixture level is
+75 so XP cannot pause the measurement. The first low-level attempt correctly
+opened the native level-up barrier after two deaths; that attempt is rejected
+as performance evidence. The maintained probe now asserts actual simulation
+advance, p99 below 50 ms, no frame at or above 250 ms, at least 500 simultaneous
+visible debris effects, all eight body removals, complete debris expiry, and
+the break audio. These are test acceptance limits, not new gameplay constants.
+
+M2 Mac mini, macOS 26.6.2 arm64, Node 22.17.0, Chrome 153.0.8010.53:
+
+| Built-browser window | Frames | p99 / maximum frame ms | Tick advance | Peak total / visible death effects |
+| --- | ---: | ---: | ---: | ---: |
+| Original save, 3 seconds | 181 | 16.8 / 16.8 | 301.85 | 66 / 17 |
+| Same save, camera moved to its Coffins, 3 seconds | 181 | 16.8 / 16.8 | 301.75 | 33 / 5 |
+| Both saved owners killed, 5 seconds | 301 | 16.8 / 16.8 | 501.25 | 176 / 162 |
+| Saved-scene restoration, 3 seconds | 180 | 16.8 / 16.8 | 300.18 | 175 / 169 |
+| Empty fixture baseline, 3 seconds | 181 | 16.8 / 16.8 | 301.52 | 0 / 0 |
+| Charged Hurricane baseline, 2 seconds | 121 | 16.8 / 16.8 | 201.88 | 0 / 0 |
+| Eight Coffins spawn and die, 8 seconds | 481 | 16.8 / 16.8 | 802.06 | 619 / 619 |
+| Full burst restoration, 3 seconds | 181 | 16.8 / 16.8 | 301.57 | 0 / 0 |
+
+Every browser page/console/response/request/wire/host error array is empty;
+neither private host reports a `simulation.tick_lag` warning. The generated
+run has 2,035 measured host ticks, zero over 10 ms, and a 2.366 ms maximum.
+The saved run has 1,494 measured host ticks, 62 over 10 ms, and a 75.824 ms
+maximum, mainly before the child population is removed. Earlier unpaced
+30-second save replays also showed costly cold navigation construction and
+movement work. A killed-owner replay entered Game Over, so its lower mean is
+not a matched optimization speedup. No game-speed or network-speed improvement
+is claimed from these tests.
+
+**Report disposition: investigated, not proven fixed.** The existing native
+contract and current Mac reproduction pass, but the supplied material contains
+neither the video's exact simulation/input trace nor the affected browser's
+CPU/network trace. The follow-up save has no Hurricane and cannot reconstruct
+the video event. Its schema 37 also already postdates the relevant recent
+performance fixes, so their presence alone cannot establish that they fixed
+this historical incident. There is no demonstrated runtime defect to patch,
+no evidence that a multi-second freeze is native, and no basis for a Discord
+completion reaction. A recurrence should be correlated with its run archive,
+client diagnostics and deployed revision using this maintained probe. Native
+membership is closed; attribution of the historical stall remains open.
+
+Publication requires the current rebased candidate's complete Mac
+`/opt/homebrew/bin/bash ./scripts/validate.sh` plus another built-browser run
+while holding the campaign publication lock. The campaign outcome records the
+final commit/gate/cleanup receipt separately; this pre-publication measurement
+does not claim deployment.
