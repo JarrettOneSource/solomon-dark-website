@@ -905,6 +905,17 @@ was found. Loopback proxy compression remains deliberately disabled, while
 the browser-facing socket negotiates bounded permessage-deflate. Neither
 transport policy nor payload contents are changed by this report.
 
+A separate Mac diagnostic used the actual `startGameSessionSupervisor`, its
+authenticated private-session provisioning, and its browser-facing proxy to
+resume the same saved run in the built app. At the matching viewport/pixel
+ratio, fifteen seconds delivered 305 snapshots and advanced 1,520 ticks while
+rendering 901 frames; frame p99/maximum were 16.8 ms. The maximum observed
+snapshot gap was 241.604 ms, with 9,576,929 logical message characters (not
+compressed wire bytes), no flow-control or tick-lag warnings, and empty
+page/console/response/wire/host errors. Both private supervisor and browser
+were closed afterward. This verifies the existing proxy path locally, not the
+historical external network route; it also fails to reproduce the long stall.
+
 **Report disposition: investigated, not proven fixed.** Current Coffin
 mechanics/presentation pass; the matched follow-up stall is delayed snapshot
 delivery/acknowledgment rather than expensive Coffin rendering. The available
