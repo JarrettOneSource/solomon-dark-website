@@ -19,7 +19,7 @@ import {
   type NativeUiPartyMenuRequest,
   type NativeUiPartyMenuTagPresentation,
 } from './native-ui-party-menu.ts'
-import { measureNativeUiText } from './native-ui-text.ts'
+import { measureNativeUiText, wrapNativeUiText } from './native-ui-text.ts'
 
 /**
  * The hub party chip: the party menu's marble and UI.17 frame at card size, a
@@ -154,8 +154,6 @@ export function planNativeUiPartyChip(spec: NativeUiPartyChipSpec): NativeUiPart
 
   let y = layout.bodyTop
   const error = spec.error
-    ? fitNativeUiPartyMenuText(spec.error, 'medium', textWidth, layout.error.scale)
-    : ''
   if (error) {
     body.push({
       kind: 'text',
@@ -163,6 +161,8 @@ export function planNativeUiPartyChip(spec: NativeUiPartyChipSpec): NativeUiPart
       text: {
         align: 'left',
         font: 'medium',
+        lineHeight: layout.error.height / layout.error.scale,
+        maxWidth: textWidth,
         scale: layout.error.scale,
         text: error,
         tint: NATIVE_UI_PARTY_MENU.errorTint,
@@ -170,7 +170,7 @@ export function planNativeUiPartyChip(spec: NativeUiPartyChipSpec): NativeUiPart
         y: y + layout.error.baselineOffset,
       },
     })
-    y += layout.error.height
+    y += wrapNativeUiText(error, 'medium', textWidth, layout.error.scale).length * layout.error.height
   }
 
   const rowSpecs: ChipRowSpec[] = spec.expanded

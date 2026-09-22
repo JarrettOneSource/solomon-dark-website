@@ -295,8 +295,9 @@ Bonedit.54 gear tinted gold where the member count used to sit, and the ControlP
 arrow. Members and pending requests hang under the header as the same UI.50 bracket rows
 the menu's Members tab uses (`nativeUiPartyMenuBracketRowNodes`), with the roster face
 at 0.65 and body-face YOU, LEADER, OFFLINE, or WANTS TO JOIN tags right-aligned. An
-action error is one medium-face line under the header. The plan is 236 px wide and its
-height follows the body; the host places and scales the card (1:1 at 11, 174 on a
+action error wraps in the medium face under the header, retaining the complete message
+and moving the roster and its hit regions below all measured lines. The plan is 236 px
+wide and its height follows the body; the host places and scales the card (1:1 at 11, 174 on a
 pointer, 0.55 in screen pixels under the pause skull on touch).
 
 Actions are `header`, `settings` (only when the spec asks for the gear), and one

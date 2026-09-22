@@ -1349,7 +1349,7 @@ test('the party chip collapses to its header on touch and keeps the error line',
     error: 'Only the party leader can do that.',
     expanded: false,
   }))
-  assert.equal(withError.height, 84)
+  assert.equal(withError.height, 106)
   assert.equal(partySprite(withError.nodes, 'chip:frame-corner-top-left').scale, 0.4)
   const error = partyText(withError.nodes, 'chip:error')
   assert.equal(error.font, 'medium')
@@ -1359,6 +1359,56 @@ test('the party chip collapses to its header on touch and keeps the error line',
   const errorRows = planNativeUiPartyChip(chipSpec({ error: 'Nope.' }))
   assert.equal(errorRows.rows[0]!.bounds.top, 76)
   assert.equal(errorRows.height, 192)
+})
+
+test('every party rejection keeps its complete message above the card rows and in the menu', () => {
+  const messages = [
+    'Only the party leader can do that.',
+    'That party is full.',
+    'That wizard is not in the Courtyard.',
+    'That wizard is already in a party.',
+    'That invitation is already pending.',
+    'That join request is already pending.',
+    'That party is private.',
+    'You cannot target yourself.',
+    'That invitation has expired.',
+    'That join request has expired.',
+    'That invitation belongs to another wizard.',
+    'That wizard is no longer available.',
+    'That wizard is already in your party.',
+    'That party is no longer available.',
+  ]
+  for (const message of messages) {
+    const menu = planNativeUiPartyMenu(partySpec({ error: message }))
+    assert.equal(partyText(menu.nodes, 'party:error').text, message)
+    for (const mode of [
+      { collapsible: false, expanded: true, settings: true },
+      { collapsible: true, expanded: false, settings: false },
+      { collapsible: true, expanded: true, settings: true },
+    ]) {
+      const spec = chipSpec({ ...mode, requests: [{ id: 'r1', name: 'Zed' }] })
+      const baseline = planNativeUiPartyChip(spec)
+      const plan = planNativeUiPartyChip({ ...spec, error: message })
+      const error = partyText(plan.nodes, 'chip:error')
+      assert.equal(error.text, message)
+      const layout = layoutNativeUiText(error)
+      assert.equal(layout.lines.map(line => line.text).join(' '), message)
+      assert.ok(layout.lines.every(line => line.width <= 188), message)
+      assert.deepEqual(layout.unsupportedCodePoints, [])
+      const ink = layout.glyphs.map(nativeUiGlyphInkBounds)
+      assert.ok(ink.every(bounds => bounds.left >= 12 && bounds.left + bounds.width <= 224), message)
+      const bottom = Math.max(...ink.map(bounds => bounds.top + bounds.height))
+      assert.ok(bottom < (plan.rows[0]?.bounds.top ?? plan.height - 12), message)
+      const errorHeight = layout.lines.length * 22
+      assert.equal(plan.height, mode.expanded ? baseline.height + errorHeight : 62 + errorHeight)
+      for (const [index, row] of plan.rows.entries()) {
+        assert.equal(row.bounds.top, baseline.rows[index]!.bounds.top + errorHeight)
+        assert.deepEqual(plan.actions.find(action => action.id === row.id)?.bounds, row.bounds)
+      }
+      assert.deepEqual(planNativeUiPartyChip({ ...spec, error: null }), baseline)
+      assert.deepEqual(planNativeUiPartyChip({ ...spec, error: '' }), baseline)
+    }
+  }
 })
 
 test('a long chip name truncates before its tags and a hyphenated one takes the menu face', () => {

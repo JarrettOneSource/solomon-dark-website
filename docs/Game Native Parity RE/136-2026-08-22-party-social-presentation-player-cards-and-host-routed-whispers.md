@@ -1,5 +1,129 @@
 # 2026-08-22 — Party social presentation, player cards, and host-routed whispers
 
+## 2026-09-22 — Report 04: complete party action messages
+
+### Evidence recorded before implementation
+
+The report archive `2026-09-21/04-invitation-text-cut-off/report.txt` and its
+original `1551759812386365491__image.png` show the card ending the duplicate
+invitation error at `That invitation is alread`. At Website base
+`ed0a2d598f1df5ac51f9c335e453c7d7041fcb5a`, `planNativeUiPartyChip` passes
+every error through `fitNativeUiPartyMenuText`, the same prefix-truncation
+helper used for roster names. It then reserves exactly one 22-pixel line.
+This source trace explains the screenshot without a CSS or GPU clipping theory.
+The earlier UI pass skipped complete-message coverage for the error branch.
+
+Native evidence is reused from entries 114, 183 and 189: retail 0.72.5,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`; `ExactText_Render` `0x0043BCD0`, Fonts construction
+`0x004EA3D0`, and MsgBox line/layout `0x005BCCB0`/`0x005AB060` own finite bitmap
+glyphs and content-sized multiline presentation. The complete extracted font
+and atlas tables remain in `frontend/src/assets/game/native-ui-assets.json`.
+The card consumes UI.49 marble, UI.17 frame, UI.38 skull, UI.50 brackets,
+Bonedit.54 gear, ControlPanel.0 arrow, and medium/menu/body/roster font wrappers.
+These are established asset/instruction facts, not new clean-stock observations.
+
+Entry 114 explicitly establishes that Website social parties have no retail
+owner. Card dimensions, 0.85 text scale, 22-pixel line pitch, responsive scaling
+and rejection wording are Website policy; stock does not prescribe truncating
+these messages. Preserve the native glyph tables and existing card composition,
+reuse the shared text layout, and allocate all measured lines before roster
+and request rows. No new native constants or asset extraction are needed.
+
+### Boundary, membership, lifecycle and acceptance
+
+Boundary: the shared party action-error presentation in the Hub card and its
+menu sibling. All reasons flow from host party results through
+`MainMenuScene.partyActionErrorMessage` into the two `HubScene` consumers.
+An unsuccessful result replaces the message, a successful result clears it,
+and session teardown clears it. Card layout must have no retained error-height
+state. The message stays visible when touch collapses the roster.
+
+| Rejection member | Complete message | Final disposition / proof |
+| --- | --- | --- |
+| `not-leader` | Only the party leader can do that. | out-of-system (Website policy; verified) |
+| `party-full` | That party is full. | out-of-system (Website policy; verified) |
+| `not-in-hub` | That wizard is not in the Courtyard. | out-of-system (Website policy; verified) |
+| `already-in-party` | That wizard is already in a party. | out-of-system (Website policy; verified) |
+| `already-invited` | That invitation is already pending. | out-of-system (Website policy; verified) |
+| `already-requested` | That join request is already pending. | out-of-system (Website policy; verified) |
+| `party-private` | That party is private. | out-of-system (Website policy; verified) |
+| `self-invite`, `self-kick` | You cannot target yourself. | out-of-system (Website policy; verified) |
+| `invitation-missing` | That invitation has expired. | out-of-system (Website policy; verified) |
+| `request-missing` | That join request has expired. | out-of-system (Website policy; verified) |
+| `not-recipient` | That invitation belongs to another wizard. | out-of-system (Website policy; verified) |
+| `player-missing` | That wizard is no longer available. | out-of-system (Website policy; verified) |
+| `same-party` | That wizard is already in your party. | out-of-system (Website policy; verified) |
+| `party-missing`, null fallback | That party is no longer available. | out-of-system (Website policy; verified) |
+
+| Sibling/branch | Final disposition | Proof contract |
+| --- | --- | --- |
+| Desktop, touch collapsed, touch expanded | out-of-system (Website policy; verified) | Every message retains all characters; glyphs remain within the card. |
+| Roster/request rows, gear present/absent | out-of-system (Website policy; verified) | Measured error height shifts visible rows and action bounds together. |
+| No error, empty error, error replacement/removal | out-of-system (Website policy; verified) | Existing baseline geometry returns without stale padding. |
+| Party menu error | out-of-system (Website policy; verified) | All rejection messages fit its 680-pixel line without shortening. |
+| UI workbench Party Chip previews | out-of-system (Website authoring surface; verified) | The only other runtime caller uses the same plan and the already-covered `not-leader` message; no independent clipping or text renderer. |
+| Native bitmap font and chrome tables | verified-already-at-parity | Existing complete corpus and native-UI tests; no asset changes. |
+| Invitation accept/deny modal | out-of-system (separate MsgBox consumer) | Existing content-wrapped body; browser journey checks invitation lifecycle. |
+| Player-name shortening | out-of-system (bounded roster identity) | Keep the existing name/tag collision contract. |
+| Boneyard, run membership, routing, audio | out-of-system (no error-card owner) | No simulation, protocol, or audio changes. |
+
+Focused Mac tests must cover every row, wrapped ink bounds, shifted action
+rectangles, and clearing. Real Mac Chrome acceptance must enter `/game`, invite
+the same player twice through Player Card, observe the full authoritative
+duplicate error, open/close the menu, collapse/expand touch, and clear the error
+with a successful action. The canonical gate and browser run must use the exact
+publication candidate. No browser limitation or unresolved native fact has
+been identified.
+
+### Implementation and focused Mac receipt
+
+The shared card now preserves `spec.error`, wraps through `wrapNativeUiText`,
+and reserves 22 pixels per measured line. The native glyph renderer receives
+the same width, scale, and line pitch. No string-specific truncation exception,
+CSS width adjustment, new font, timer, network change, or dependency was added.
+The menu sibling already holds every rejection without shortening and is
+covered by the same complete-message regression.
+
+`out-of-system` above means an intentional Website feature rather than an
+unimplemented member. The regression covers all 14 distinct messages and all
+three card modes, complete glyph sequences, line/ink bounds, roster and request
+hit regions, and removal of the error. On `mac-mini`, the new regression failed
+against the old implementation (`Only the party leader c` and a one-line card),
+then passed after the shared layout fix. `npm --prefix frontend run test:native-ui`
+passed all 123 tests; `npm --prefix frontend run build` passed type checking,
+production build, host build and bundle budget.
+
+The maintained browser acceptance command is:
+
+```sh
+node --experimental-strip-types frontend/tools/smoke-party-action-errors.mjs
+```
+
+It uses the built candidate, ephemeral loopback ports, an owned shared-Hub
+host, and independent Chrome contexts. It drives Player Card twice, verifies
+all rendered error glyphs and card/row bounds, opens/closes the menu, collapses
+and expands touch, denies, reinvites successfully (restoring the 98-pixel
+one-member card), and accepts to reach two party members. Portrait gameplay is
+outside this matrix: `/game` intentionally shows its landscape-orientation
+requirement before entry. Supported desktop and landscape-touch viewports are
+the acceptance surface; no gameplay orientation policy was changed.
+
+The focused browser run passed on Mac Chrome `153.0.8010.53` at `1600x900`,
+`844x390` touch and `667x375` touch. The reported error rendered as
+`That invitation is` / `already pending.` with every glyph inside the card,
+above all roster rows. Logical height was 142 with the member row and 106 for
+collapsed touch; successful reinvitation restored 98. Every journey accepted
+the invitation and reached two members. Page, console, failed HTTP response,
+unexpected request failure and socket-error arrays were empty. Desktop and
+844x390 captures were visually inspected; disposable captures are removed
+during task cleanup.
+
+Publication requires the exact candidate's Mac canonical gate
+`/opt/homebrew/bin/bash ./scripts/validate.sh` and the browser command above
+under the report-04 campaign publication lock. The final worker outcome records
+the published commit and those receipts separately from this source evidence.
+
 ## Reported smell and parity question
 
 - Publication request: recover the completed Claude party/social rework, carry
