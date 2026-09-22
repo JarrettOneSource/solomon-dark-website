@@ -2675,7 +2675,7 @@ function parseHubSkorcha(value: unknown): HubSkorchaState | null {
     || hatRateDegreesPerTick < 0
     || hatRateDegreesPerTick > 1.8
     || (!hatActive && hatPhaseDegrees !== 0)
-    || (hatActive && hatRateDegreesPerTick < 0.45)
+    || (hatActive && hatRateDegreesPerTick < Math.fround(0.45))
   ) throw new Error('game save Skorcha hat state is invalid')
   return {
     dismissalIndex: integerWithin(
@@ -2688,7 +2688,7 @@ function parseHubSkorcha(value: unknown): HubSkorchaState | null {
     gestureTicksRemaining: integerWithin(
       source.gestureTicksRemaining,
       'game save Skorcha gesture timer',
-      1,
+      0,
       29,
     ),
     hatActive,

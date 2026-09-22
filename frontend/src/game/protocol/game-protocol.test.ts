@@ -672,7 +672,7 @@ test('protocol v80 carries authoritative present Skorcha population and animatio
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
   const malformed = JSON.parse(encodeGameMessage(message))
-  malformed.frame.world.skorcha.hatFrame = 5
+  malformed.frame.world.skorcha.hatFrame = 4
   assert.throws(() => decodeServerGameMessage(JSON.stringify(malformed)), /hatFrame/)
 })
 

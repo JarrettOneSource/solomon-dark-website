@@ -1144,8 +1144,7 @@ class HubSkorchaView {
     this.container.zIndex = hubWorldDepthForActor(state.position.y)
     this.container.scale.x = state.variant === 1 ? -1 : 1
     this.body.texture = this.textures.skorcha[state.gesture]
-    this.hat.visible = state.hatFrame < 4
-    if (state.hatFrame < 4) this.hat.texture = this.textures.skorcha[3 + state.hatFrame]
+    this.hat.texture = this.textures.skorcha[3 + state.hatFrame]
   }
 }
 

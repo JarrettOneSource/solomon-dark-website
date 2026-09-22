@@ -80,11 +80,12 @@ No member is browser-blocked.
 - Replace the flat definition with a generated, hash-pinned graph catalog and
   explicit Chat/selector state machine.
 - Fresh render disassembly splits Skorcha's College `510..516` sheet exactly:
-  gesture `+0x178` selects body records `510..512`, rounded common-animation
+  gesture `+0x178` selects body records `510..512`, truncated common-animation
   phase `+0x144` selects hat records `513..516`, and actor `+0x17C` flips
   placement variant 1.
   The inherited hat sweep retains its `Integer(200)==2` start, randomized
-  `0.45..1.8`-degree rate, sine index `0..4`, and blank index-4 apex.
+  `0.45..1.8`-degree rate and sine index `0..3`. The former rounded-index/blank
+  apex claim was incorrect; see the report-15 instruction audit below.
 - Live Mac traversal exposed the Painting ownership distinction already present
   in the stock callbacks: radius-15 Paintings sit behind paired radius-40
   solids, and `0x00506190 -> 0x00506100` starts Memorator speech rather than a
@@ -1316,3 +1317,167 @@ a normal fast-forward push. The final documentation update changes no tested
 runtime source. Task worktrees, processes and disposable verification artifacts
 are removed after remote-main verification; no production deployment is part
 of this request.
+
+## 2026-09-22 — Report 15: Skorcha head animation conversion reopened
+
+### Report and failure of the earlier recovery
+
+Soggy's original Discord message `1551788032602939483`, report archive
+`2026-09-21/15-skorcha-head-disappears`, includes the 7.023-second
+`1551788032317857872__MISSING_HEAD.mp4`. The Courtyard variant beside
+Machinimbus keeps its body and talk marker while its head intermittently
+vanishes. All of the video was inspected with a half-second contact sheet.
+The earlier pass inferred rounding from a decompiler conversion helper without
+checking its instructions, then invented a blank fifth head frame. The native
+asset contains four head frames, all nonempty. This is a port defect.
+
+### Native evidence recorded before implementation
+
+Retail `SolomonDark.exe` 0.72.5 was rehashed to
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+All addresses below are preferred-base `0x00400000` addresses. Fresh read-only
+Ghidra queries used canonical `Decompiled Game/ghidra_project/SolomonDark`,
+program `SolomonDark.exe`, through the existing replica pool and Mod Loader
+wrapper (revision `08bfba9ef367f7b863848030d0a289dc31e33192`, wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`).
+`decompile_targets.py`, `dump_function_instructions.py`,
+`refs_to_addr_decompile.py`, and `dump_vtable_around.py` were used read-only.
+No native/GUI session was taken over; this receipt is static instruction and
+asset evidence, not a new clean-stock runtime capture.
+
+- `Tyrannia` (Skorcha), type 5007, constructor `0x00502450`, vtable
+  `0x007918BC`, update `0x0050B1F0`, renderer `0x0051C560`, ordinary actor
+  destruction `0x005061C0 -> 0x006289F0`.
+- The constructor sets body selector `+0x178` and countdown `+0x174` to zero.
+  The inherited `NPC` constructor `0x005016E0` initializes an enabled,
+  inactive common animator at `+0x13C`, with phase/output/rate zero and
+  frame count four at `+0x14C`.
+- The update calls `0x00501610` on that animator, decrements the body countdown,
+  draws `Integer(10)+20` first when it expires, then redraws `Integer(3)` until
+  the body differs. A fresh actor therefore shows body zero until its first
+  fixed tick. The old web constructor randomized both fields and reversed
+  these two draw operations.
+- `0x00501610` starts on `Integer(200)==2`, samples a float rate from
+  `(Float(3)+1) * 0.44999998807907104`, advances float phase at 100 Hz, and
+  clears active/phase at 180 degrees. Its output is float
+  `sin(float(phase * float(pi) / 180)) * (4 - 0.009999999776482582)`.
+- At `0x0051C5F2..0x0051C5F8`, the renderer loads output `+0x144` and calls
+  `0x00747360`. Its `CVTTSD2SI` at `0x00747375` **truncates**. The x87 fallback
+  `0x00747396` corrects the rounded intermediate toward zero as well. Thus the
+  apex output near 3.99 selects index 3, never 4. Body is drawn first, head
+  second, at the same actor root and horizontal scale `+0x17C`.
+- Builder `0x0050B720` retains the one-in-three initial presence draw and all
+  three placements below; variant 1 sets horizontal scale -1. There is no
+  head-specific collision, audio, interaction, or destruction branch.
+
+Stock `College.bundle` SHA-256
+`30c4de0227568bc38db18afa37c689da7b511205549da4b2ae97149c93ca772c` has 543
+records; `College.png` SHA-256
+`34c10e60d30590b6211c678152d47cc30033679db5c986dc615d9923a71c43bd`.
+The complete consumed table was reread with Website's native bundle parser:
+
+| Record | Role | Atlas x,y,w,h | Registration center x,y | Logical size |
+| --- | --- | --- | --- | --- |
+| 510 | body 0 | 167,793,46,44 | -11,-6 | 350x350 |
+| 511 | body 1 | 128,583,46,43 | -11,-6.5 | 350x350 |
+| 512 | body 2 | 163,1072,46,43 | -11,-6.5 | 350x350 |
+| 513 | head 0 | 171,847,44,54 | 0,-30 | 350x350 |
+| 514 | head 1 | 160,1583,44,53 | 0,-29.5 | 350x350 |
+| 515 | head 2 | 157,720,43,50 | -0.5,-29 | 350x350 |
+| 516 | head 3 | 165,1918,43,49 | -0.5,-28.5 | 350x350 |
+
+Every row has nonzero alpha. Record 517 belongs to Hagatha, not a fifth head.
+The already extracted seven-frame Website sheet is complete and needs no edit.
+
+### Boundary, membership, and implementation contract
+
+The reopened system is Skorcha's two-channel actor animation, including
+construction, all body/head combinations, authority/replication, mirroring,
+presence transitions and teardown. Existing Chat content and the explicitly
+user-directed 20–40-minute shared-Hub schedule remain separate owners.
+
+| Member | Native source / web consumer | Final disposition |
+| --- | --- | --- |
+| Placement 0 (1437.5,732.5), every body/head frame | builder, Tyrannia renderer | exact-ported |
+| Placement 1 (1637,403.5), mirrored, every body/head frame | builder, Tyrannia renderer | exact-ported |
+| Placement 2 (669,705.5), report scene, every body/head frame | builder, Tyrannia renderer | exact-ported |
+| Inactive, activation, rising/apex/falling, reset; body redraw | constructor/update/common animator | exact-ported |
+| Snapshot, codec, discrete client sample and retained view | `hub-skorcha`, `game-snapshot`, Hub codec, `HubSkorchaView` | exact-ported |
+| Legacy save validation before Hub reconstruction | `parseHubSkorcha`, constructor countdown 0 and float minimum rate 0.44999998807907104 | exact-ported: Mac save restoration and invalid-boundary assertions |
+| Absent, timed arrival/departure, Chat interruption, reconstruction | existing host-owned schedule and actor lifecycle | verified-already-at-parity: timer/collision tests and Mac arrival/departure journeys |
+| Common animator caller `0x0050A4C0` (NPC), Luthacus and Shlorio | four-frame `hubCommonTraderFrameAt` | verified-already-at-parity: uses truncation; existing per-bank tests |
+| Common animator caller `0x0050B110` (PotionGuy) | `hubPotionTraderActorFrameAt` | verified-already-at-parity: uses truncation; existing four-frame test |
+| Common animator caller `0x00505950` (Astronomer), four assistants | `pulseFrame`, `clampInteger`, three-frame banks | verified-already-at-parity: uses truncation; existing assistant tests |
+| Common animator caller `0x0050B6B0` (Painting) | player-equipment portrait pipeline | out-of-system: no Skorcha head bank or rounded selector |
+| Common animator caller `0x00513090` (Memorator) | authored memorial actor/body and speech | out-of-system: no Skorcha head bank or rounded selector |
+| Remaining base-NPC subclasses / Students / Hagatha | their own renderers and authored banks | out-of-system: do not consume this body/head bank; no refuted rounding path |
+
+Those are all six direct common-animator call sites, including Skorcha at
+`0x0050B204`. The sole reference to `0x0051C560` is Tyrannia's vtable slot at
+`0x007918D8`. There is no second head-bank consumer to patch.
+
+Implementation must truncate the authoritative selector, remove the invented
+index-4 hidden-head branch, bound the replicated selector to 0..3, and restore
+native initial body/countdown and delay-before-gesture ordering. Regression
+coverage must include all phases, all placements, body independence, protocol
+rejection, and appearance/departure. Mac Chrome acceptance must prove visible
+head pixels throughout complete live cycles, real Chat, every placement, and
+lifecycle; the exact candidate must pass the canonical Mac gate. No browser
+approximation is necessary. The exact final rebased candidate must pass the full
+Mac gate and repeat these browser journeys under the campaign publication lock.
+
+
+### Implementation and focused Mac receipt
+
+The host now truncates the native float output to 0..3. All seven extracted
+textures remain unchanged; `HubSkorchaView` always submits the selected head
+above the body. Native constructor pose/countdown and redraw order are restored.
+Protocol 132 rejects the nonexistent fifth frame and admits constructor
+countdown zero. The existing shared-world schedule, Chat content, collision,
+mirroring, and teardown remain intact.
+
+- Mac-only red regression: 47 passes, four expected failures (initial pose,
+  truncation, delay-first RNG, and nonexistent frame rejection). After the
+  implementation, all 90 Skorcha/protocol/Hub math tests passed, including the
+  existing PotionGuy, Luthacus, Shlorio, and Astronomer sibling coverage.
+- Mac production build passed. The 10 changed/new file SHA-256 manifest matched
+  WSL byte-for-byte: `f7f6aff42f24bdc86c21e51dd7500413386771a931a690af69b3e730c3b82ac9`.
+  This identifies the focused pre-receipt tree; the final publication receipt
+  identifies the complete rebased commit separately.
+- `node --experimental-strip-types frontend/tools/smoke-skorcha-animation.mjs`
+  passed all five built `/game` journeys on Mac Chrome using WebGL2,
+  `ANGLE Metal Renderer: Apple M2`. The tool reuses the actual NPC navigation
+  and Chat journey, with isolated ephemeral HTTP/WebSocket ports and a fresh
+  browser profile per scenario. Only the seed, population windows, and an empty
+  Student fixture are controlled to keep the head crop unoccluded.
+- Placement seeds 3, 16, 2 covered variants 0, 1, 2. Each naturally produced
+  every one of the 12 body/head combinations and two complete head sweeps.
+  Across 277, 586, and 175 browser frames, minimum blue head-pixel counts in the
+  upper-head-only crop were 327, 325, and 329 of 640 pixels respectively.
+  The crop excludes the body and marker, so a live body/marker cannot hide a
+  missing-head regression. The report-matching variant-2 screenshot was also
+  inspected directly.
+- Seed 0 began absent, appeared on its scheduled tick and opened normal Chat.
+  Variant 2 then disappeared while Chat was open: actor, prompt and dialog all
+  retired. All five journeys had empty page-error, console-error, and failed-
+  response arrays. Full gate and browser rerun at publication are mandatory;
+  the campaign outcome carries that exact-commit receipt.
+
+Publication rebase preserves the other reports on main and advances their
+protocol 131 to 132 for the narrowed Skorcha selector/constructor contract.
+
+
+The first full Mac gate exposed the legacy save reader as another animation-
+state consumer: it validated an optional old serialized Skorcha before
+reconstructing the current Hub, but still required countdown >= 1. The same
+reader's decimal 0.45 lower bound excluded the native float minimum already
+recovered above. Both are representation-boundary corrections: accept countdown
+0..29 and the float minimum; continue rejecting invalid state and reconstructing
+Hub actors instead of persisting a client-provided NPC. Save restoration tests
+must cover constructor zero, active native minimum rate, ordinary countdown
+bounds and invalid negative/overflow countdowns before closure.
+
+The corrected legacy save reader passed the complete Mac save-document suite,
+including both previously failing restoration journeys and the native rate and
+countdown boundary assertions. The full canonical gate restarts on this final
+committed tree.

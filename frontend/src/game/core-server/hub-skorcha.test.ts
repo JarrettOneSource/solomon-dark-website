@@ -57,8 +57,10 @@ test('the authoritative population generator reaches absence and every exact Sko
   for (const [variant, state] of variants) {
     const placement = NATIVE_HUB_NPC_CATALOG.skorcha.placements[variant]!
     assert.deepEqual(state.position, { x: placement.x, y: placement.y })
-    assert.ok(state.gesture >= 0 && state.gesture < 3)
-    assert.ok(state.gestureTicksRemaining >= 20 && state.gestureTicksRemaining <= 29)
+    assert.equal(state.gesture, 0)
+    assert.equal(state.gestureTicksRemaining, 0)
+    assert.equal(state.hatActive, false)
+    assert.equal(hubSkorchaHatFrame(state), 0)
     assert.ok(state.dismissalIndex >= 0 && state.dismissalIndex < 3)
   }
 })
@@ -173,7 +175,7 @@ test('phase edges add and remove Skorcha collision on the same authoritative tic
 
 test('Skorcha changes to a distinct gesture after an exact Integer(10)+20 interval', () => {
   for (const variant of [0, 1, 2] as const) {
-    let state = createHubSkorchaAtVariant(createNativeRng(100 + variant), variant)
+    let state = stepHubSkorcha(createHubSkorchaAtVariant(createNativeRng(100 + variant), variant))
     const initialGesture = state.gesture
     const interval = state.gestureTicksRemaining
     for (let tick = 1; tick < interval; tick += 1) {
@@ -187,19 +189,52 @@ test('Skorcha changes to a distinct gesture after an exact Integer(10)+20 interv
   }
 })
 
-test('Skorcha common animator reaches the four hat records and native blank apex', () => {
-  let state = createHubSkorchaAtVariant(createNativeRng(317), 2)
-  const frames = new Set<number>()
-  let activationObserved = false
-  for (let tick = 0; tick < 20_000 && frames.size < 5; tick += 1) {
-    state = stepHubSkorcha(state)
-    activationObserved ||= state.hatActive
-    frames.add(hubSkorchaHatFrame(state))
+test('Skorcha truncates the entire head sweep to four authored frames in every placement and body pose', () => {
+  const samples = [
+    [0, 0], [14, 0], [15, 1], [30, 1], [31, 2], [48, 2],
+    [49, 3], [90, 3], [131, 3], [132, 2], [149, 2], [150, 1],
+    [165, 1], [166, 0], [179, 0],
+  ] as const
+  for (const variant of [0, 1, 2] as const) {
+    const initial = createHubSkorchaAtVariant(createNativeRng(317), variant)
+    for (const gesture of [0, 1, 2] as const) {
+      for (const [hatPhaseDegrees, expected] of samples) {
+        assert.equal(hubSkorchaHatFrame({
+          ...initial, gesture, hatActive: true, hatPhaseDegrees,
+        }), expected, `variant ${variant}, body ${gesture}, phase ${hatPhaseDegrees}`)
+      }
+    }
+    let state = initial
+    const frames = new Set<number>()
+    let completedPulses = 0
+    for (let tick = 0; tick < 5_000; tick += 1) {
+      const stepped = stepHubSkorcha(state)
+      if (state.hatActive && !stepped.hatActive) {
+        completedPulses += 1
+        assert.equal(stepped.hatPhaseDegrees, 0)
+        assert.equal(hubSkorchaHatFrame(stepped), 0)
+      }
+      state = stepped
+      frames.add(hubSkorchaHatFrame(state))
+    }
+    assert.ok(completedPulses > 1)
+    assert.deepEqual([...frames].sort(), [0, 1, 2, 3])
   }
-  assert.equal(activationObserved, true)
-  assert.deepEqual([...frames].sort(), [0, 1, 2, 3, 4])
-  assert.ok(state.hatPhaseDegrees >= 0 && state.hatPhaseDegrees < 180)
-  assert.ok(state.hatRateDegreesPerTick >= 0 && state.hatRateDegreesPerTick <= 1.8)
+})
+
+test('Skorcha draws the body delay before retrying its previous gesture', () => {
+  const words = new Array<number>(55).fill(0)
+  words[1] = 9 << 6 // After the inactive head gate: Integer(10) yields 9.
+  words[3] = 2 << 6 // Gesture zero is retried, then gesture two is accepted.
+  const state = stepHubSkorcha({
+    ...createHubSkorchaAtVariant(createNativeRng(73), 0),
+    gesture: 0,
+    gestureTicksRemaining: 1,
+    rng: { indexA: 0, indexB: 31, words },
+  })
+  assert.equal(state.gestureTicksRemaining, 29)
+  assert.equal(state.gesture, 2)
+  assert.equal(state.rng.indexA, 4)
 })
 
 test('Hub world preserves forced absence/presence and advances Skorcha on the host tick', () => {
@@ -209,7 +244,7 @@ test('Hub world preserves forced absence/presence and advances Skorcha on the ho
   })
   assert.equal(absent.skorcha, null)
 
-  const skorcha = createHubSkorchaAtVariant(createNativeRng(73), 2)
+  const skorcha = stepHubSkorcha(createHubSkorchaAtVariant(createNativeRng(73), 2))
   const present = createHubWorld([], { skorcha, skorchaVisibleTicks: 10 })
   const stepped = stepHubWorldTick(present, {}, {}, {})
   assert.equal(stepped.world.skorcha?.variant, 2)

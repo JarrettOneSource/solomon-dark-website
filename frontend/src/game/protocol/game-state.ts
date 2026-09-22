@@ -190,7 +190,7 @@ export interface ProtocolHubSkorchaState {
   dismissalIndex: 0 | 1 | 2
   gesture: 0 | 1 | 2
   gestureTicksRemaining: number
-  hatFrame: 0 | 1 | 2 | 3 | 4
+  hatFrame: 0 | 1 | 2 | 3
   position: Vector2
   variant: 0 | 1 | 2
 }

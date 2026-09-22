@@ -613,10 +613,10 @@ export function hubSkorchaState(value: unknown, field: string): ProtocolHubSkorc
     gestureTicksRemaining: integerWithin(
       source.gestureTicksRemaining,
       `${field}.gestureTicksRemaining`,
-      1,
+      0,
       29,
     ),
-    hatFrame: integerWithin(source.hatFrame, `${field}.hatFrame`, 0, 4) as 0 | 1 | 2 | 3 | 4,
+    hatFrame: integerWithin(source.hatFrame, `${field}.hatFrame`, 0, 3) as 0 | 1 | 2 | 3,
     position: vector(source.position, `${field}.position`),
     variant: integerWithin(source.variant, `${field}.variant`, 0, 2) as 0 | 1 | 2,
   }

@@ -562,6 +562,9 @@ async function exerciseSkorcha(canvas) {
   if (expectedSkorchaVariant !== null) assert.equal(state.variant, expectedSkorchaVariant)
   assert.equal(await canvas.getAttribute('data-skorcha-present'), 'true')
   await navigateHubRegion(page, canvas, 'courtyard', { x: state.x, y: state.y }, 35, log)
+  const animation = process.env.SDR_GAME_NPC_VERIFY_SKORCHA_ANIMATION === '1'
+    ? await exerciseSkorchaAnimation(canvas)
+    : null
   const dialog = await openInteraction('skorcha', 'Skorcha')
   await assertSpeech(dialog, 'ENFORCER_INTRO')
   const dismissalKey = `ENFORCER_DISMISS${state.dismissalIndex + 1}`
@@ -571,11 +574,82 @@ async function exerciseSkorcha(canvas) {
   await dialog.getByRole('button', { name: 'Skip' }).click()
   await dialog.waitFor({ state: 'hidden' })
   receipts.push({
+    ...(animation ? { animation } : {}),
     dismissalKey,
     gesture: state.gesture,
     interaction: 'skorcha',
     variant: state.variant,
   })
+}
+
+async function exerciseSkorchaAnimation(canvas) {
+  const receipt = await canvas.evaluate(async (node) => {
+    const crop = document.createElement('canvas')
+    crop.width = 32
+    crop.height = 20
+    const context = crop.getContext('2d', { willReadFrequently: true })
+    const started = performance.now()
+    const frames = new Set()
+    const poses = new Map()
+    let samples = 0
+    let completedSweeps = 0
+    let apexSeen = false
+    let minimumBluePixels = Infinity
+    while (performance.now() - started < 30_000) {
+      await new Promise(requestAnimationFrame)
+      const frame = node.__sdrHubFrame
+      const actor = frame.skorcha
+      if (!actor) throw new Error('Skorcha disappeared during animation proof')
+      if (actor.hatFrame < 0 || actor.hatFrame > 3) {
+        throw new Error(`Skorcha selected unauthored head frame ${actor.hatFrame}`)
+      }
+      frames.add(actor.hatFrame)
+      if (actor.hatFrame === 3) apexSeen = true
+      if (actor.hatFrame === 0 && apexSeen) {
+        completedSweeps += 1
+        apexSeen = false
+      }
+      const player = frame.playerScreenPositions[frame.localPlayerId]
+      const scale = Number(node.dataset.cameraZoom)
+      const rootX = player.x + (actor.x - frame.playerX) * scale
+      const rootY = player.y + (actor.y - frame.playerY) * scale
+      // The upper head crop excludes all three bodies' top edge (-28), the
+      // interaction marker, and the player standing beside the actor.
+      const resolution = node.width / Number(node.dataset.viewportWidth)
+      context.clearRect(0, 0, crop.width, crop.height)
+      context.drawImage(node,
+        (rootX - 16 * scale) * resolution,
+        (rootY - 53 * scale) * resolution,
+        32 * scale * resolution, 20 * scale * resolution,
+        0, 0, crop.width, crop.height,
+      )
+      const pixels = context.getImageData(0, 0, crop.width, crop.height).data
+      let bluePixels = 0
+      for (let index = 0; index < pixels.length; index += 4) {
+        const [red, green, blue, alpha] = pixels.subarray(index, index + 4)
+        if (alpha > 200 && blue > red + 15 && blue > green + 5) bluePixels += 1
+      }
+      if (bluePixels < 10) {
+        throw new Error(`Missing Skorcha head pixels: ${JSON.stringify({
+          actor, bluePixels, rootX, rootY, scale, resolution,
+        })}`)
+      }
+      minimumBluePixels = Math.min(minimumBluePixels, bluePixels)
+      const pose = `${actor.gesture}:${actor.hatFrame}`
+      poses.set(pose, Math.min(poses.get(pose) ?? Infinity, bluePixels))
+      samples += 1
+      if (poses.size === 12 && completedSweeps >= 2) break
+    }
+    return {
+      completedSweeps, frames: [...frames].sort(), minimumBluePixels,
+      poses: Object.fromEntries([...poses].sort()), samples,
+    }
+  })
+  assert.deepEqual(receipt.frames, [0, 1, 2, 3])
+  assert.equal(Object.keys(receipt.poses).length, 12)
+  assert.ok(receipt.completedSweeps >= 2)
+  await page.screenshot({ path: `${screenshotRoot}-skorcha-animation.png` })
+  return receipt
 }
 
 async function exerciseSkorchaDisappearance(canvas) {

@@ -147,25 +147,16 @@ export function createHubSkorchaAtVariant(
 ): HubSkorchaState {
   const placement = NATIVE_HUB_NPC_CATALOG.skorcha.placements[variant]
   if (!placement) throw new RangeError('native Skorcha placement is invalid')
-  const gesture = drawNativeInteger(
-    sourceRng,
-    NATIVE_HUB_NPC_CATALOG.skorcha.animationStateCount,
-  )
-  const dismissal = drawNativeInteger(gesture.state, 3)
-  const delay = drawNativeInteger(
-    dismissal.state,
-    NATIVE_HUB_NPC_CATALOG.skorcha.animationDelay.drawCount,
-  )
+  const dismissal = drawNativeInteger(sourceRng, 3)
   return {
     dismissalIndex: dismissal.value as 0 | 1 | 2,
-    gesture: gesture.value as HubSkorchaGesture,
-    gestureTicksRemaining: delay.value
-      + NATIVE_HUB_NPC_CATALOG.skorcha.animationDelay.offsetTicks,
+    gesture: 0,
+    gestureTicksRemaining: 0,
     hatActive: false,
     hatPhaseDegrees: 0,
     hatRateDegreesPerTick: 0,
     position: { x: placement.x, y: placement.y },
-    rng: delay.state,
+    rng: dismissal.state,
     variant,
   }
 }
@@ -176,7 +167,11 @@ export function stepHubSkorcha(source: HubSkorchaState): HubSkorchaState {
   if (source.gestureTicksRemaining > 1) {
     return { ...withHat, gestureTicksRemaining: source.gestureTicksRemaining - 1 }
   }
-  let rng = withHat.rng
+  const delay = drawNativeInteger(
+    withHat.rng,
+    NATIVE_HUB_NPC_CATALOG.skorcha.animationDelay.drawCount,
+  )
+  let rng = delay.state
   let gesture: HubSkorchaGesture
   do {
     const draw = drawNativeInteger(
@@ -186,24 +181,21 @@ export function stepHubSkorcha(source: HubSkorchaState): HubSkorchaState {
     rng = draw.state
     gesture = draw.value as HubSkorchaGesture
   } while (gesture === source.gesture)
-  const delay = drawNativeInteger(
-    rng,
-    NATIVE_HUB_NPC_CATALOG.skorcha.animationDelay.drawCount,
-  )
   return {
     ...withHat,
     gesture,
     gestureTicksRemaining: delay.value
       + NATIVE_HUB_NPC_CATALOG.skorcha.animationDelay.offsetTicks,
-    rng: delay.state,
+    rng,
   }
 }
 
-export function hubSkorchaHatFrame(source: HubSkorchaState): 0 | 1 | 2 | 3 | 4 {
+export function hubSkorchaHatFrame(source: HubSkorchaState): 0 | 1 | 2 | 3 {
   if (!source.hatActive) return 0
-  const phaseRadians = Math.fround(source.hatPhaseDegrees * Math.PI / 180)
+  const phaseRadians = Math.fround(source.hatPhaseDegrees * Math.fround(Math.PI) / 180)
   const wave = Math.fround(Math.sin(phaseRadians))
-  return Math.max(0, Math.min(4, Math.round(Math.fround(wave * 3.99)))) as 0 | 1 | 2 | 3 | 4
+  // Tyrannia_Render 0x0051C5F8 calls the truncating CVTTSD2SI helper.
+  return Math.trunc(Math.fround(wave * (4 - Math.fround(0.01)))) as 0 | 1 | 2 | 3
 }
 
 function stepHubSkorchaHat(source: HubSkorchaState): Pick<
@@ -217,7 +209,7 @@ function stepHubSkorchaHat(source: HubSkorchaState): Pick<
     return {
       hatActive: true,
       hatPhaseDegrees: 0,
-      hatRateDegreesPerTick: Math.fround(Math.fround(rate.value + 1) * 0.45),
+      hatRateDegreesPerTick: Math.fround(Math.fround(rate.value + 1) * Math.fround(0.45)),
       rng: rate.state,
     }
   }

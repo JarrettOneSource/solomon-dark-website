@@ -1373,6 +1373,24 @@ test('Hub resume reconstructs its authoritative Skorcha population with the othe
   assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
   assert.notDeepEqual(restored.state.world.skorcha, serializedSkorcha)
   assert.deepEqual(restored.state.gameRng, hubSeed.state)
+
+  for (const gestureTicksRemaining of [0, 1, 29]) {
+    document.continuation.simulation.world.skorcha = {
+      ...serializedSkorcha,
+      gestureTicksRemaining,
+      hatActive: true,
+      hatPhaseDegrees: 90,
+      hatRateDegreesPerTick: Math.fround(0.45),
+    }
+    const legacy = restoreGameSaveDocument(JSON.stringify(document)).state
+    assert.equal(legacy.world.kind, 'hub')
+    if (legacy.world.kind !== 'hub') throw new Error('expected restored Hub')
+    assert.deepEqual(legacy.world.skorcha, reconstructedHub.skorcha)
+  }
+  for (const gestureTicksRemaining of [-1, 30]) {
+    document.continuation.simulation.world.skorcha.gestureTicksRemaining = gestureTicksRemaining
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(document)), /Skorcha gesture timer/)
+  }
 })
 
 test('schema 16 resumes every College admission phase and its exact player position', () => {
