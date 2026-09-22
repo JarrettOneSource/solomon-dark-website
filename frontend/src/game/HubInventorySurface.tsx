@@ -636,7 +636,7 @@ export function NativeHubSurface({
         aria-label={label}
         data-renderer-state={rendererState}
         {...hubInventorySurfaceDiagnostics({
-          chat, dyeModal, inventoryDrag, inventorySelection, notice, pressedControl,
+          chat, dyeModal, inventoryDrag: displayedInventoryDrag, inventorySelection, notice, pressedControl,
           sackPath, sackTransition, semanticTooltip, statsPage, surface,
         })}
       >

@@ -26,10 +26,10 @@ the read-only replica wrapper, without occupying a native GUI session. Retail
 | Evidence | Recovered contract | Confidence |
 | --- | --- | --- |
 | `0x00575850` holder commit | Ordinary holders write the item at `+4` and current tick at `+8` synchronously; kind 7 inserts into the parent root instead. | high, decompiled instructions |
-| `0x0056DE50`, calls at `0x0056E650/0x0056E66A`, then `0x0056E8FD` | Blank placement commits the destination and root before common release cleanup. Potion merge, Sack/parent insertion, equipment attach and StoreGrid callbacks are synchronous branches of this same release owner. | high, static control flow |
+| `0x0056DE50`, calls at `0x0056E650/0x0056E66A`, then `0x0056E8FD` | Blank placement commits the destination and root before the common inventory refresh. Potion merge, Sack/parent insertion, equipment attach and StoreGrid callbacks are synchronous branches of this same release owner. | high, static control flow |
 | `0x0056FC90`, `0x00570371..0x00570444` | Equipment removal detaches/inserts and clears the source holder before retiring presentation; Hat/Robe retain their existing refusal dialogs. | high, static control flow |
 | `0x0056F5A0`, `0x0056F6B3..0x0056F71E` | Occupied-grid Flyby calls the release router before clearing screen `+0x3C4` and destroying itself; its existing 20-tick motion and independent fades remain native. | high, static control flow |
-| Website `ed0a2d598`, InventoryActions and HubStorageActions | Immediate releases clear `dragging` while dispatching an asynchronous action. Every old root/sink painter then sees the old economy with no held item until feedback arrives. | high, source trace; browser regression planned below |
+| Website `ed0a2d598`, InventoryActions and HubStorageActions | Immediate releases clear `dragging` while dispatching an asynchronous action. Every old root/sink painter then sees the old economy with no held item until feedback arrives. | high, source trace and failing Mac pixel regression |
 
 System boundary: InventoryScreen/StoreGrid drag presentation ownership from
 pointer capture through immediate or Flyby release, authoritative completion
@@ -38,15 +38,16 @@ identity-based handoff; no item table, authored slot, transform, sound, or
 quantity rule changes. The complete existing item/slot catalogs and extraction
 above remain authoritative.
 
-| Member | Recovery and planned disposition |
+| Member | Final disposition and proof |
 | --- | --- |
-| Blank addressed cell, matching stack, Sack insertion, parent return | `recovered-pending-port`: retain source suppression until host result; preserve native immediate action/audio. |
-| Hat, Robe, Staff/Wand, Ring 0/1/2, Amulet equipment sinks and removable equipment sources | `recovered-pending-port`: same handoff; retain native admission, aliases, swaps, locked ring, and Hat/Robe refusal. |
-| Luthacus StoreGrid to backpack and backpack to storage | `recovered-pending-port`: same handoff in both directions and selected StoreGrid painter. |
-| Empty-Sack unforge; belt binding; unforge confirmation | `recovered-pending-port` for the immediate unforge mutation; belt binding and confirmation retain the source item and are `out-of-system` for move ownership. |
+| Blank addressed cell, matching stack, Sack insertion, parent return | `exact-ported`: Mac pixel checks cover blank placement, merge, Sack insertion, two nested roots and both parent-return paths; native immediate action/audio retained. |
+| Hat, Robe, Staff/Wand, Ring 0/1/2, Amulet equipment sinks and removable equipment sources | `exact-ported`: all six equipment types, all three rings, occupied replacement, level rejection and protected clothing passed Mac browser checks; focused contracts retain aliases and locked-ring admission. |
+| Luthacus StoreGrid to backpack and backpack to storage | `exact-ported`: deposit/withdraw old-source pixels remain suppressed through feedback; authoritative items cross roots once. |
+| Empty-Sack unforge | `exact-ported`: immediate mutation has the same held-item handoff; browser verifies removal and the native result notice. |
+| Belt binding and unforge confirmation | `out-of-system`: neither moves the item on initial release; their existing source restoration remains correct. |
 | Ordinary occupied swap and invalid return Flybys | `verified-already-at-parity`: existing 20-tick owner suppresses lanes through feedback; preserve its independent tails. |
-| Rejected action, pointer cancellation, page/screen replacement, close, death/session teardown | `recovered-pending-port`: rejection restores the authoritative source; cancellation has no pending action; no drag leaks into another owner. |
-| College, Boneyard, Fomentius, Hagatha, Luthacus, Shlorio | `recovered-pending-port`: all share HubInventorySurface; verify scene and companion callers. |
+| Rejected action, pointer cancellation, page/screen replacement, close, death/session teardown | `exact-ported`: rejected level admission restores source pixels, pointer cancellation emits no action, nested root changes discard page-local presentation, and close during withheld feedback followed by reopen leaves no drag. Death/session teardown uses that same unmounted owner. |
+| College, Boneyard, Fomentius, Hagatha, Luthacus, Shlorio | `exact-ported`: blank/equip/unequip pixel checks pass in all six scenes; shared HubInventorySurface owns completion. |
 
 Implementation consequence: keep one local released drag at its release point
 until an authoritative action result is available, resolving it in the same
@@ -61,8 +62,39 @@ Validation contract: Mac Chrome with the production build, real pointer input,
 controlled server-to-browser snapshot suspension, old-slot pixel comparison
 before/after release, authoritative destination/rejection checks, sibling/page
 and scene coverage, zero page/console/failed-response errors, and the exact
-candidate's full `/opt/homebrew/bin/bash ./scripts/validate.sh`. Final receipts
-and dispositions follow after execution.
+candidate's full `/opt/homebrew/bin/bash ./scripts/validate.sh` under the campaign publication lock.
+
+### Implementation and focused Mac receipt
+
+`InventoryActionHandler` carries the released drag only for immediate actions.
+`HubInventorySurface` retains it until newer matching action feedback, derives
+its disappearance alongside the new economy before rendering, and clears the
+owner on root change/unmount. Inventory and StoreGrid actions are locked during
+this interval. The existing renderer hides all source aliases and draws the
+single held icon; no item catalog, protocol, save, or native animation changed.
+
+The baseline production build `ed0a2d598` failed the Mac Chrome old-slot pixel
+regression: 1,302 channels differed by more than eight levels, maximum 221;
+reviewed crops show an empty cell while dragging and the ring returning after
+release. The fixed production build completed **45 browser receipts** across
+College, Boneyard and all four services, with **zero** old-slot channel changes
+on every delayed-feedback release, correct authoritative outcomes, and empty
+page-error, console-error and failed-response arrays. The test waits for the
+new owner's first two presentation frames before checking native reveal; a
+retained canvas's previous settled flag is not readiness of its next owner.
+The eight-level raster tolerance covers only minor reveal/rounding variation;
+it does not mask the 221-level original item flash.
+
+Mac focused checks passed **92/92** inventory presentation, renderer contract,
+and economy tests, plus frontend lint and the production build (Node 22.17.0).
+The maintained browser journey is
+`frontend/tools/smoke-inventory-drop-handoff.mjs`; it uses private ephemeral
+host/static-server ports, a fresh Chrome context and save database, controlled
+WebSocket delivery, native pointer gestures and visible pixels. The final
+publication receipt records the rebased commit and the full canonical gate
+plus this repeated journey on that exact tree. No native GUI session or Mod
+Loader file was changed. Disposable captures are removed after publication;
+the user's original report/video remain preserved.
 
 ## Reported smell and parity question
 
