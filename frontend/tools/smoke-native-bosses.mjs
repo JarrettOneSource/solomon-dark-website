@@ -21,7 +21,7 @@ import { canPlaceBoneyardBody, firstBoneyardPathBlockProgress } from '../src/gam
 import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import { createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
+import { grantPlayerEntitySkillRanks, replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { createBoneyardCatalog, materializeBoneyard } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
@@ -33,11 +33,17 @@ const frontend = fileURLToPath(new URL('../', import.meta.url))
 const output = process.env.SDR_BOSS_PROOF_OUTPUT || '/tmp/solomon-native-bosses'
 const selectedCase = process.argv.find(argument => argument.startsWith('--case='))?.slice(7)
 const fromCase = process.argv.find(argument => argument.startsWith('--from='))?.slice(7)
-const character = { discipline: 'arcane', element: 'fire', displayName: 'Boss acceptance' }
+const portalRoots = process.argv.includes('--portal-roots')
+const character = { discipline: 'arcane', element: portalRoots ? 'air' : 'fire', displayName: 'Boss acceptance' }
 const catalog = createBoneyardCatalog()
 const loaded = materializeBoneyard(catalog, 'default-random', Buffer.alloc(16, 42))
 assert.ok(loaded)
-const cases = [
+const portalPhases = nativePortalProgram('9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9').phases
+const cases = portalRoots ? [
+  ...portalPhases.map((phase, index) => ({ id: `portal-root-${index + 1}`, token: 'PORTAL',
+    portalPhase: phase, rootProof: true, fireAtBoss: true, milliseconds: 11000 })),
+  { id: 'portal-root-death', token: 'PORTAL', portalPhase: portalPhases[0], death: true, milliseconds: 6500 },
+] : [
   ...['claw', 'sword', 'mace', 'flail'].map((weapon, index) => ({ id: `ironmaw-${weapon}`, name: 'Ironmaw', token: 'SKELETON', weapon: index, fireAtBoss: true })),
   { id: 'foulshaft', name: 'Foulshaft', token: 'SKELETONARCHER', projectiles: ['arrow'] },
   { id: 'heartmonger', name: 'Heartmonger', token: 'HEARTMONGER', crows: 5 },
@@ -82,6 +88,7 @@ try {
 }
 
 function recipe(row) {
+  if (row.portalPhase) return nativePortalRecipe(row.portalPhase)
   const sha = row.weapon === undefined ? loaded.sourceSha256
     : NATIVE_SURVIVAL_BOSS_SOURCES.find(source => source.ironmawWeapon === row.weapon).sourceSha256
   if (row.token === 'SKELETON' || row.token === 'SKELETONARCHER') return nativeSkeletonBossRecipe(sha, row.name)
@@ -95,7 +102,7 @@ function recipe(row) {
 function fixture(row) {
   let state = enterBoneyardWorld(createGameSimulation({ proof: character }), loaded)
   const world = state.world
-  const point = clearLocation(world, row.fireAtBoss ? 75 : 200)
+  const point = clearLocation(world, row.rootProof ? 180 : row.fireAtBoss ? 75 : 200)
   const current = gameSimulationPlayerRecords(state).proof
   state = { ...state, playerEntities: replacePlayerCharacter(state.playerEntities, 'proof', { ...current,
     position: point.player, headingIndex: 12 }), world: { ...world, encounter: null, waves: null, arenaTransition: null,
@@ -103,6 +110,21 @@ function fixture(row) {
     // Keep the observer alive through every attack using the existing shield state.
     secondaryAbilities: { ...state.secondaryAbilities, players: { proof: { ...createNativeSecondaryPlayerState(),
       magicShieldAbsorb: 1000000, magicShieldMaximum: 1000000 } } } }
+  if (row.rootProof) {
+    let rng = createNativeRng(42)
+    for (const [skillId, rank] of [[29, 1], [56, 4], [64, 2]]) {
+      const current = state.playerEntities.skillBooks[0].permanentRanks[skillId]
+      if (current >= rank) continue
+      const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'proof', skillId, rank - current, rng)
+      state = { ...state, playerEntities: granted.store }
+      rng = granted.rng
+    }
+    state = { ...state, playerEntities: { ...state.playerEntities,
+      progressions: state.playerEntities.progressions.map(player => ({ ...player,
+        currentHealth: player.maximumHealth, currentMana: player.maximumMana,
+      })),
+    } }
+  }
   const order = createNativeWorldManagerOrder(state.worldManagerOrder)
   const authored = recipe(row)
   let enemies = stepBoneyardEnemyStore(state.world.enemies, { tick: 0, players: {},
@@ -165,13 +187,20 @@ async function acceptBoss(row) {
   const errors = { page: [], console: [], responses: [], requests: [] }
   const capturedEffects = new Set()
   const observed = { spells: new Set(), projectiles: new Set(), crows: 0, detachedCrows: 0, imps: 0,
-    minimumHealth: seeded.initialHealth, retired: false, capabilities: 0 }
+    minimumHealth: seeded.initialHealth, retired: false, capabilities: 0,
+    maximumRootDrift: 0, maximumHurricaneCharge: 0, portalImps: 0 }
   const interval = setInterval(() => {
     const world = host.state().world
     if (world.kind !== 'boneyard') return
     for (const spell of world.enemies.bossSpells) observed.spells.add(spell.kind)
     for (const projectile of world.enemies.projectiles) observed.projectiles.add(projectile.kind)
     const boss = world.enemies.actors.find(actor => actor.id === 1)
+    if (row.rootProof && boss) observed.maximumRootDrift = Math.max(observed.maximumRootDrift,
+      Math.hypot(boss.position.x - seeded.position.x, boss.position.y - seeded.position.y))
+    for (const effect of host.state().primarySpells.transients) {
+      if (effect.kind === 'air-hurricane') observed.maximumHurricaneCharge = Math.max(observed.maximumHurricaneCharge, effect.contactCharge)
+    }
+    observed.portalImps = Math.max(observed.portalImps, world.enemies.actors.filter(actor => actor.config.enemyToken === 'IMP').length)
     observed.retired ||= !boss
     if (boss) observed.minimumHealth = Math.min(observed.minimumHealth, boss.currentHealth)
     if (boss?.brain.family === 'heartmonger') observed.crows = Math.max(observed.crows, boss.brain.crows.length)
@@ -233,7 +262,7 @@ async function acceptBoss(row) {
     await page.getByRole('button', { name: 'Play', exact: true }).click()
     await page.getByRole('button', { name: 'New game', exact: true }).click()
     await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30000 })
-    await page.getByRole('button', { name: /fire/i }).click()
+    await page.getByRole('button', { name: new RegExp(character.element, 'i') }).click()
     await page.locator('.create-menu-discipline-arcane').click()
     await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90000 })
     await page.locator('[data-gameplay-resume-grace-phase]').waitFor({ state: 'hidden', timeout: 30000 })
@@ -289,6 +318,7 @@ async function acceptBoss(row) {
     const rendered = await page.evaluate(() => {
       const samples = window.__bossFrames.flatMap(frame => frame.enemies).filter(enemy => enemy.id === 1)
       return { frames: window.__bossFrames.length, samples: samples.length,
+        rootPositions: [...new Set(samples.map(enemy => `${enemy.x}/${enemy.y}`))].length,
         poses: [...new Set(samples.map(enemy => `${enemy.bodyEntry}/${enemy.limbsEntry}/${enemy.bodyPose}/${enemy.gaitPose}/${enemy.x}/${enemy.y}`))].length,
         families: [...new Set(samples.map(enemy => enemy.enemyToken))],
         peakDeathEffects: Math.max(0, ...window.__bossFrames.map(frame => frame.deathEffects)),
@@ -297,20 +327,30 @@ async function acceptBoss(row) {
       }
     })
     assert.ok(rendered.frames > 30, `${row.id}: missing rendered frames`)
-    // Heartmonger retires on its first death update; its children own the complete finale.
-    if (!row.death || row.token !== 'HEARTMONGER') {
+    // Heartmonger and Portal retire on their first death update; their children own the finale.
+    if (!row.death || !['HEARTMONGER', 'PORTAL'].includes(row.token)) {
       assert.ok(rendered.samples > 0 && rendered.poses > 1, `${row.id}: missing live animation frames`)
     }
     if (row.death) assert.ok(rendered.peakDeathEffects > 0)
-    const expectedAudio = row.death ? row.token === 'DEMONSKULL' ? 'unholy-die' : row.token === 'HEARTMONGER' ? 'heart-break' : 'faculty-die'
+    const expectedAudio = row.death ? row.token === 'PORTAL' ? 'portal-die' : row.token === 'DEMONSKULL' ? 'unholy-die' : row.token === 'HEARTMONGER' ? 'heart-break' : 'faculty-die'
       : row.action === 'flair' ? 'unholy-scream' : row.action === 'spit' ? 'unholy-spits'
       : row.action === 'eyes' || row.action === 'mouth' ? 'eye-laser-charge'
       : row.token === 'DIREFACULTY' ? row.action === 'secondary'
         ? ({ 'Dire Sirmin': 'magic-storm', 'Dire Aliss': 'magic-circle', 'Dire Lucritius': 'big-fire' }[row.name])
         : row.name === 'Dire Aliss' ? 'lightning-start' : 'throw-dark'
-      : row.token === 'SKELETONARCHER' ? 'shoot-arrow' : row.fireAtBoss ? 'throw-fire' : null
+      : row.token === 'SKELETONARCHER' ? 'shoot-arrow' : row.rootProof ? 'lightning-start' : row.fireAtBoss ? 'throw-fire' : null
     if (expectedAudio) assert.ok(rendered.audio.some(source => source === `${expectedAudio}.wav` || source.startsWith(`${expectedAudio}-`)),
       `${row.id}: missing real ${expectedAudio} playback`)
+    if (row.rootProof) {
+      assert.equal(observed.maximumRootDrift, 0, `${row.id}: Portal drifted from its settled root`)
+      assert.equal(rendered.rootPositions, 1, `${row.id}: rendered Portal root drifted`)
+      assert.ok(observed.maximumHurricaneCharge >= .5, `${row.id}: Hurricane never charged`)
+      assert.ok(observed.portalImps > 0, `${row.id}: Portal failed to eject a live Imp`)
+      for (const cue of ['steady-wind-loop', 'fireball-hit', 'portal-hurt']) {
+        assert.ok(rendered.audio.some(source => source === `${cue}.wav` || source.startsWith(`${cue}-`)),
+          `${row.id}: ${cue} never played`)
+      }
+    }
     if (row.id === 'discorporeal-mouth') {
       await page.setViewportSize({ width: 960, height: 640 })
       await page.waitForTimeout(200)

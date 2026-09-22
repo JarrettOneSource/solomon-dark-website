@@ -33,6 +33,8 @@ export function stepCoffin(
   brain: BoneyardCoffinBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
+  // Coffin::Tick restores +0x23C/+0x240 before every living phase.
+  actor = { ...actor, position: brain.anchorPosition }
   const tick = context.tick
   if (brain.phase === 'open') {
     const speed = Math.fround(actor.config.baseSpeed * actor.staffMovementFactor)

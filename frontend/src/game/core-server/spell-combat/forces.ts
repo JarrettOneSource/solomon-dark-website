@@ -27,6 +27,9 @@ export function resolveHurricaneContacts(work: BoneyardSpellCombatWork): void {
   )).sort(bySpellId)
   if (hurricanes.length > 0) {
     for (const row of primaryTargetRows(work.enemies)) {
+      // These ticks inherit Puppet, bypassing Badguy's Hurricane callback.
+      if ('brain' in row.actor && (row.actor.brain.family === 'portal'
+        || row.actor.brain.family === 'coffin' || row.actor.brain.family === 'cocoon')) continue
       if (!row.target.active || !nativeHurricaneMovementDue(row.actor.id, work.tick)) continue
       let deltaX = Math.fround(0)
       let deltaY = Math.fround(0)

@@ -725,7 +725,9 @@ test('movement contact follows the Coffin hidden-to-rising hostile edge', () => 
             configuredActor.config.scale,
           ),
         }
-      : configuredActor.brain
+      : configuredActor.brain.family === 'coffin'
+        ? { ...configuredActor.brain, anchorPosition: contactPosition }
+        : configuredActor.brain
     world = {
       ...world,
       enemies: {

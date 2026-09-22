@@ -417,6 +417,7 @@ function createBrain(
     }
     case 'PORTAL': return {
       ...createNativePortalState(config.family.frequency, () => drawUnit(work)),
+      anchorPosition: null,
       family: 'portal',
       hurtTicksRemaining: 0,
       phase: 'active',
@@ -496,6 +497,7 @@ function createBrain(
       const launchRotationDeg = signedUnit(drawUnit(work)) * 15
       return {
         family: 'coffin',
+        anchorPosition: Object.freeze({ ...owner.position }),
         launchRotationDeg,
         launchScale,
         maggotCharge: 0,

@@ -129,6 +129,7 @@ export interface BoneyardDemonBrain {
 }
 
 export interface BoneyardCoffinBrain {
+  readonly anchorPosition: Readonly<BoneyardPoint>
   readonly family: 'coffin'
   readonly launchRotationDeg: number
   readonly launchScale: -1 | 1
@@ -139,6 +140,7 @@ export interface BoneyardCoffinBrain {
 }
 
 export interface BoneyardPortalBrain extends NativePortalState {
+  readonly anchorPosition: Readonly<BoneyardPoint> | null
   readonly family: 'portal'
   readonly hurtTicksRemaining: number
   readonly phase: 'active' | 'death'

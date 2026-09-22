@@ -907,3 +907,143 @@ escape direction forever.
   receipt cutoff, publication and deployment were separate: the candidate
   remained uncommitted in the isolated task worktree and had not been pushed
   or deployed.
+
+## 2026-09-22 — Report 08: stationary hostile roots and Hurricane ownership
+
+### Report and reopened boundary
+
+Soggy's original Discord message `1551775675772313660` reports Deep Portals
+being pushed. The archived nine-second `Deep_Portal_Push.mp4` shows sustained
+Lightning with Hurricane moving a Portal around the player. The report and
+original attachment remain in the user's archive. Base Website `ed0a2d598`
+applies Hurricane to every damageable hostile and gives every hostile zero
+body resistance. The earlier Portal closure called the actor stationary but
+omitted its native root anchor and its exclusion from Badguy's movement tick.
+That skipped the ownership and sibling sweep; this entry reopens those rules.
+
+System boundary: **stationary hostile root ownership and admission to Hurricane
+movement/contact**, including all Portal recipes, Coffin and Cocoon siblings,
+ordinary Badguy/Maggot/GoodImp controls, forced displacement, save continuation,
+and the existing Portal child/death/phase lifecycle. Room-transition portals
+and navigation-mesh portals are unrelated systems.
+
+### Evidence recorded before implementation
+
+- Re-hashed retail 0.72.5, 4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+  image base `0x00400000`. Static evidence uses canonical `SolomonDark.gpr` /
+  `SolomonDark.exe` through the existing read-only replica wrapper. No native
+  GUI or injected session was taken from another worker.
+- Wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+  `decompile_targets.py` SHA-256
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+  Queries used `decompile_targets.py`, `refs_to_addr_decompile.py`, and
+  `dump_insns_around.py` with explicit canonical project/replica paths.
+  Scratch outputs were task-owned, not edits to Mod Loader.
+- **Instructions:** Portal constructor `0x0047BD60`, specifically
+  `0x0047BE5F..0x0047BE65`, loads float32 `150` at `0x0078489C` into body
+  resistance `+0x28`. Its radius is `45` (`0x00785E50`). Player strength `12`
+  therefore takes the shared solver's full mover-separation branch rather
+  than moving the Portal. Resistance is finite, not invented infinity.
+- **Instructions:** Portal tick `0x00489CC0` calls only Puppet tick
+  `0x00624AC0`, not Badguy tick `0x004835F0`. During materialization it resolves
+  a zero move; at native age 9, `0x00489D3B..0x00489D4F` copies settled root
+  `+0x18/+0x1C` to anchor `+0x218/+0x21C`, then radius becomes 5. Every active
+  tick ends with `0x0048A230..0x0048A244` copying the anchor back to the root.
+  Ejection can temporarily use the current root to construct the child, then
+  restores the anchor. Direct external impulses can be transient; they do
+  not replace the anchor. This is not blanket damage or knockback immunity.
+- **Complete Hurricane xrefs:** `0x0047CB20` has exactly three calls:
+  `0x004838E2`, `0x004839D1` in Badguy tick, and `0x00488713` in Maggot tick
+  `0x004881A0`. The Badguy tick caller census is `0x00484B90`, `0x00485200`,
+  `0x00485DC0`, `0x004863A0`, `0x00486C30`, `0x00487300`, `0x00489000`,
+  `0x00489610`, `0x004963C0`, `0x0049D0D0` (two calls), plus its own vtable
+  slot `0x00785DB4`. Skeleton/Mage/Archer, Imp/GoodImp, Zombie, Wraith, Demon,
+  Heartmonger, Spider, DemonSkull, and DireFaculty retain that owner. Portals,
+  Coffins, and Cocoons never call it: neither orbit force nor Hurricane-only
+  damage/RNG/contact cooldown applies to them. Lightning remains independent.
+- **Sibling decompilation:** Coffin ctor `0x00479940` writes resistance 1;
+  init `0x00487F30` captures `+0x23C/+0x240`; tick `0x004A2760` calls Puppet
+  tick and restores that root before its phase switch. Cocoon tick
+  `0x00475D10` calls Puppet tick and restores target-owned `+0x214/+0x218`;
+  the existing web Cocoon already follows its player-owned placement.
+- **Force boundary:** Portal vtable `0x007868CC` slot `+0x38` inherits
+  `0x00623C60`, which routes delta movement through `0x00525800`; it is not
+  an immovable override. Frost/Blizzard, staff/Hail, and secondary impulses
+  must retain their ordinary transient motion and damage. Root restoration
+  belongs to the next owning actor tick. Pause must not advance that tick.
+- Existing source-SHA census above already drains all 80 recipe rows across
+  twelve generated sources and every Deep Portal 1..7/frequency/phase branch.
+  The catalog hash, authored counts, HP, placement, assets, cues, and child
+  ejection arithmetic are unchanged. Confidence is high (instructions,
+  complete xrefs, and static data); no clean-stock visual run is claimed.
+
+### Membership and implementation contract
+
+| Member | Final disposition | Required proof |
+| --- | --- | --- |
+| Deep Portal (8 source rows) | exact-ported | Resistance 150, materialization anchor, Hurricane exclusion, active reset |
+| Deep Portal 2 (12 rows) | exact-ported | Same owner, exact authored row retained |
+| Deep Portal 3 (12 rows) | exact-ported | Same owner, exact authored row retained |
+| Deep Portal 4 (12 rows) | exact-ported | Same owner, exact authored row retained |
+| Deep Portal 5 (12 rows) | exact-ported | Same owner, exact authored row retained |
+| Deep Portal 6 (12 rows) | exact-ported | Same owner, exact authored row retained |
+| Deep Portal 7 (12 rows) | exact-ported | Same owner, exact authored row retained |
+| Coffin hidden/rising/holding/opening/open | exact-ported | Resistance 1, captured spawn root restored, no Hurricane contact |
+| Cocoon active/owner teardown | exact-ported | No Hurricane contact; existing target-owned placement/release retained |
+| Skeleton, including Ironmaw | verified-already-at-parity for Hurricane admission | `0x00484B90 -> 0x004835F0`; moving/damageable control |
+| SkeletonMage | verified-already-at-parity for Hurricane admission | `0x00490860 -> Skeleton tick`; moving/damageable control |
+| SkeletonArcher, including Foulshaft | verified-already-at-parity for Hurricane admission | `0x00485200 -> 0x004835F0`; moving/damageable control |
+| Imp, including Portal-ejected children | verified-already-at-parity for Hurricane admission | `0x00485DC0 -> 0x004835F0`; moving/damageable control |
+| Zombie, including Slumpgut | verified-already-at-parity for Hurricane admission | `0x004863A0 -> 0x004835F0`; moving/damageable control |
+| Wraith | verified-already-at-parity for Hurricane admission | `0x00486C30 -> 0x004835F0`; moving/damageable control |
+| Demon | verified-already-at-parity for Hurricane admission | `0x00487300 -> 0x004835F0`; moving/damageable control |
+| Heartmonger | verified-already-at-parity for Hurricane admission | `0x00489000 -> 0x004835F0`; same retained consumer |
+| Spider | verified-already-at-parity for Hurricane admission | `0x00489610 -> 0x004835F0`; moving/damageable control |
+| DemonSkull / The Discorporeal | verified-already-at-parity for Hurricane admission | `0x004963C0 -> 0x004835F0`; same retained consumer |
+| DireFaculty: Sirmin, Aliss, Lucritius | verified-already-at-parity for Hurricane admission | Two calls in `0x0049D0D0`; same retained consumer for every faculty identity |
+| Maggot | verified-already-at-parity for Hurricane admission | `0x004881A0 -> 0x0047CB20`; existing motion/damage regression |
+| Friendly GoodImp | verified-already-at-parity for Hurricane admission | Imp movement owner; existing orbit-only regression retains its friendly damage override |
+| Portal Imp ejection; damage/death/audio; boss-phase release | verified-already-at-parity except root source | Existing store/director/kernel suites and real browser lifecycle |
+| Frost/Blizzard/staff/Hail/secondary force | exact-ported for root retention | Transient displacement remains; next tick restores Portal/Coffin anchor |
+| Save/resume, legacy save, pause, world replacement | exact-ported | Persist anchor, migrate old save from current root, validate coordinates, no client-owned anchor |
+| Room transitions, navmesh portals, Solomon flyby | out-of-system | Different owner; no shared stationary-hostile contract |
+
+Implementation uses the existing family brain, body solver, Hurricane
+consumer, and durable-save normalization. No new dependency or visual offset.
+The real Mac browser journey must hold Lightning/Hurricane on all seven Portal
+names, demonstrate zero root drift with real damage, retain animation and Imp
+births, and finish a Portal death with clean page/console/network errors.
+Automated checks and the canonical gate run only on the exact Mac candidate.
+
+### Validation receipt
+
+- Mac candidate at `/Users/jarrett/codex-acceptance/soggy-20260922-r08`;
+  Node v22.17.0, arm64, .NET 10.0.302. Changed-file SHA-256 manifests matched
+  the isolated Website source before checks. No Website checks ran on WSL.
+- Red: 84 of 85 focused cases failed against the base, including all 80 Portal
+  resistances, both Hurricane-excluded siblings, and both missing anchors.
+  Green: all 87 stationary-hostile tests and the full test TypeScript project
+  passed. The adjacent store/world/spell/director/save/kernel run passed
+  394/395; the remaining old Coffin contact fixture moved its root without
+  moving its newly modeled anchor. Updating that fixture restored all 42
+  world tests. Frontend lint and the production build passed.
+- Browser pre-publication proof: real Mac Chrome 153, production build,
+  1600x900 WebGL, `smoke-native-bosses.mjs --portal-roots`. All seven authored
+  Portal names sustained 11 seconds of real pointer-held Lightning/Hurricane;
+  each reached Hurricane charge 1, lost HP to Lightning, emitted a live Imp,
+  played the Hurricane/ejection/hurt cues, and had maximum authoritative root
+  drift exactly 0. All had hundreds of rendered animated samples. A separate
+  Portal death retired the actor and rendered its terminal effects with the
+  PortalDie cue. All eight cases had empty page/console/response/request errors.
+- The final locked publication gate repeats the canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` and this complete browser
+  journey against the exact rebased commit, adding an explicit rendered-root
+  uniqueness assertion. Final gate/publication/cleanup hashes and the Discord
+  reaction receipt are recorded in report 08's structured campaign outcome.
+- Save schema 38 retains the Portal/Coffin anchor; schemas through 37 recover
+  their only known root from saved position (unopened Portals still use null).
+  No old unrecorded spawn coordinate is guessed. Native transient impulses
+  remain possible; the next native owning tick restores the settled anchor.
+  No browser approximation, blocked member, or production deployment is
+  introduced by this change.

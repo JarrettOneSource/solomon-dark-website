@@ -61,6 +61,7 @@ import type { GameSaveIntegrity, ParsedGameSaveContinuation } from './game-save-
 import { MAX_WEB_GAME_SAVE_JSON_DEPTH, MAX_WEB_GAME_SAVE_JSON_NODES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, onlyKeys, parseGameSaveDocument, record } from './game-save-contract.ts'
 import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
 import { NATIVE_SURVIVAL_BOSS_RECIPE_SOURCES, NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
+import { NATIVE_PORTAL_ACTOR_PROGRAM } from '../core-kernels/native-survival-portal.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
 export interface CreateGameSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
@@ -2043,6 +2044,23 @@ function normalizeWorld(
             ),
           }
         : savedBrain
+      if (savedBrain.family === 'portal' || savedBrain.family === 'coffin') {
+        const materializing = savedBrain.family === 'portal'
+          && finiteNumber(savedBrain.ageTicks, 'saved Portal age') < NATIVE_PORTAL_ACTOR_PROGRAM.materializationTicks
+        const savedAnchor = sourceSchemaVersion < 38
+          ? materializing ? null : actor.position
+          : savedBrain.anchorPosition
+        if (materializing) {
+          if (savedAnchor !== null) throw new Error('saved Portal anchor must be null before materialization')
+          normalizedBrain = { ...normalizedBrain, anchorPosition: null }
+        } else {
+          const anchor = record(savedAnchor, 'saved stationary enemy anchor')
+          normalizedBrain = { ...normalizedBrain, anchorPosition: {
+            x: finiteNumber(anchor.x, 'saved stationary enemy anchor X'),
+            y: finiteNumber(anchor.y, 'saved stationary enemy anchor Y'),
+          } }
+        }
+      }
       if (savedBrain.family === 'mage') {
         const disabledPrimaryTicks = sourceSchemaVersion < 34 ? 0
           : finiteNumber(savedBrain.disabledPrimaryTicks, `game save Mage ${index} casting delay`)

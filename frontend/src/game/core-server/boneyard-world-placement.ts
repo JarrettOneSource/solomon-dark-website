@@ -393,7 +393,11 @@ export function boneyardEnemyBodies(
       .filter((actor) => actor.brain.family !== 'cocoon' && boneyardEnemyActorFlags(actor) !== 0)
       .map((actor) => {
         const id = `enemy-${actor.id}`
-        return enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor))
+        return {
+          ...enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor)),
+          // Constructor-owned resistance: Portal +0x28 = 150, Coffin = 1.
+          pushResistance: actor.brain.family === 'portal' ? 150 : actor.brain.family === 'coffin' ? 1 : 0,
+        }
       }),
     ...enemies.maggots
       .filter((maggot) => maggot.lifeState === 'alive')
