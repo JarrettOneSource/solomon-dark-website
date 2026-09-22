@@ -283,7 +283,6 @@ import bannerMidnight from '../assets/game/banner-midnight.png'
 import animCrawler from '../assets/game/anim-crawler.png'
 import animTomeBlue from '../assets/game/anim-tome-blue.png'
 import animTomeRed from '../assets/game/anim-tome-red.png'
-import frameGold from '../assets/game/frame-gold.png'
 import flourishVert from '../assets/game/flourish-vert.png'
 import gateIron from '../assets/game/gate-iron.png'
 import portalRing from '../assets/game/portal-ring.png'
@@ -366,7 +365,6 @@ export const art = {
   animCrawler,
   animTomeBlue,
   animTomeRed,
-  frameGold,
   flourishVert,
   gateIron,
   portalRing,

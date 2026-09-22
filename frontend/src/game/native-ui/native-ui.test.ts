@@ -131,6 +131,9 @@ test('native UI catalog drains all stock presentation records and font wrappers'
   assert.throws(() => nativeUiRecord('UI', 1.5), /nonnegative integer/)
   assert.deepEqual(nativeUiRecord('UI', 17).frame, [743, 588, 80, 83])
   assert.deepEqual(nativeUiRecord('UI', 8).frame, [824, 587, 49, 112])
+  assert.deepEqual(nativeUiRecord('Skills', 0).frame, [672, 191, 90, 90])
+  assert.deepEqual(nativeUiRecord('Skills', 5).frame, [584, 191, 87, 88])
+  assert.deepEqual(nativeUiRecord('Skills', 14).frame, [763, 191, 87, 88])
 })
 
 test('native bitmap text shares exact measurement, wrapping, kerning, and no-fallback layout', () => {

@@ -451,6 +451,94 @@ protocol, replication, save, or teardown state in this correction.
 - The Esc/MsgBox `UI.8` ownership remains the existing three-piece bottom
   group; the stock Kill capture visibly re-proves it below the message frame.
 
+## 2026-09-22 — Report 01: Player Card corner anchoring and portrait record
+
+### Report, boundary, and evidence before implementation
+
+Soggy's original Discord message `1551639233188601876` in thread
+`1542255501855825960` reports the upper-right College character-card artifact.
+The preserved attachment `1551639232685015121__image.png` (1349 by 849)
+also shows white fragments beside the portrait. This reopens the earlier
+frame-corner closure: it checked record identity and panel bounds without
+checking the transformed corner bounds, and missed the sibling portrait crop.
+
+The owning boundary is stock frame-record membership and its DOM projection
+in the shared `PlayerCardDialog`, including both caller families and pointer
+layouts. Entry 136 establishes that player cards and social actions are
+intentional Website extensions; there is no retail player-selection menu to
+invent. Native art remains the contract for their borrowed chrome.
+
+| Evidence class | Source | Recovered fact | Confidence |
+| --- | --- | --- | --- |
+| Preserved report image | report 01 original attachment | right corner reflects outside the panel; portrait shows adjacent white artwork | high, direct observation |
+| Current source | `ed0a2d598f1df5ac51f9c335e453c7d7041fcb5a`, `hub.css` | right corner uses negative X scale around `top right`, mapping its local interval to the exterior of its right anchor at both 0.9 desktop and 0.55 touch scale | high, coordinate-derived |
+| Retail UI assets | existing sealed UI catalog; `UI.png` SHA-256 `37d5e8fc543af12a9d8019e738dbe1e29b648211144a3782c3a32e71f76cd2eb` | `UI.17` is `[743,588,80,83]`, zero trim, no rotation; no source-art change is needed | high, static data |
+| Retail Skills assets | `SolomonDarkAbandonware/images/Skills.png` SHA-256 `ac1678d6aef8ddefa0def73754b6688c58f1aeaf88c461a4ed6f92c139ed2638`; `Skills.bundle` SHA-256 `a1efe484b5cbcc5402d48a2a8dc11e1e26c06763dbb612edd66547700d3259cf` | all 166 bundle rows parsed read-only through `tools/native_bundle_art.py`; Website Skills atlas has the identical image hash | high, static data |
+| Complete frame family | Skills rows 0, 5, 14 | glow `[672,191,90,90]`, white `[584,191,87,88]`, gold `[763,191,87,88]`; logical sizes match, zero trim, no rotation or attachment points | high, bundle-derived |
+| Contaminated extraction | `tools/extract-assets.sh`, gold crop `[764,188,92,95]`; bitmap SHA-256 `cf8b6ab0fa0db24dabfefe2ea5133f9886ef03396ef5e973805e3afd993fdb77` | omits the frame's first column and intersects Skills 83 `[851,191,43,43]`, 75 `[851,235,41,44]`, and 26 `[763,280,177,74]`; trim cannot separate them | high, static bounds plus inspected pixels |
+
+### Complete membership and implementation contract
+
+| Member | Final disposition | Acceptance |
+| --- | --- | --- |
+| Player Card left `UI.17`, desktop/touch | verified-already-at-parity | exact record, inward horizontal span, symmetric edge overhang |
+| Player Card right `UI.17`, desktop/touch | exact-ported | reflect into the panel while retaining the same right anchor and authored scale; percentage translation is local-record geometry, not a pixel nudge |
+| Touch portrait orientation gate | verified-already-at-parity (existing Website policy) | College UI hides behind the landscape prompt; rotating back restores the same card without stale geometry |
+| Skills 14 gold portrait, all five elements | exact-ported | shared native sprite/catalog supplies the full exact record; frame fits the existing 92/72-pixel portrait box without adjacent art |
+| Skills 0 glow and 5 white siblings | verified-already-at-parity for live native consumers | catalog-backed consumers remain unchanged; unused legacy standalone crops/extractor rows are removed with the gold crop |
+| Skills 26, 75, 83 neighboring art | out-of-system (different authored records) | never enters the portrait frame |
+| Hub world/party selection, self and peer | exact-ported through shared card | local identity/activity, same chrome, reopen/close, no persistent stale selection |
+| MainMenuScene chat/connected-player selection, including remote sessions | exact-ported through shared card | same chrome and guest/registered, available/unavailable stats, message/invite action projection |
+| Former PartySettingsDialog | out-of-system (already removed on current main) | native party menu/chip use the shared pure plan; no old CSS-mirrored corner consumer remains |
+| Dark Cloud, Settings, MsgBox/SimpleMenu and native nine-slices | verified-already-at-parity | existing catalog/plan mirroring and UI.8 bottom-group contracts remain intact; no matching exterior-anchor transform |
+| Player body/head/staff layers, class text and social authority | out-of-system (separate recovered owners) | retain all five element sheets and host-derived state; borrowed frame cannot change these |
+
+Both card callers share construction, focus, Escape/backdrop/Close cleanup,
+and stat/action projection. Art is static and local: no native clock, audio,
+randomness, network authority, save state, or renderer lifetime changes are
+required. No browser platform prevents exact record membership or anchoring.
+
+### Validation contract
+
+Use a failing real Mac Chrome journey on the built current-main candidate,
+then the same journey after correction. Measure both transformed corner bounds
+against their panel, inspect the frame source bounds, and exercise five
+elements, desktop/report size, portrait rotation gate and short touch landscape, reopen and
+close paths, and local/remote card callers. Capture page/console/response/request
+errors. Pin the recovered frame-family records in the existing native-UI
+contracts. Run the complete Mac canonical gate on the exact published tree.
+
+### Implementation validation receipt
+
+- Mac mini macOS 26.6.2 arm64, Node 22.17.0, Chrome 153.0.8010.53.
+  Baseline production build at `ed0a2d598` reproduced both artifacts. At
+  1349 by 849, panel right was 843.125 while the right corner occupied
+  845.654..906.359. The retained browser regression failed on that geometry.
+  Reviewed baseline capture SHA-256:
+  `d6205d4beeb9b9da48a6e04dc55d3fcbd1fb1db21d87263136962f16f6e3a26b`.
+- Corrected corner span is 784.949..845.654, symmetric with the left overhang.
+  The portrait now displays only Skills 14 and its four bounds match the
+  portrait within one screen pixel. Reviewed corrected desktop capture:
+  `c8b703cddd62aeb8b26b773ea34a15202ee8078928fe7e02f89f14557095370a`;
+  mobile capture:
+  `0e779b07b92f888119f1d0a9bc08563bfe24a6bbe19b76672a23648ee16e27fb`.
+- Exact transferred focused tree `8993ce2423d3ae18cbcc7000f1c0b302c430d4f9`
+  passed the production-browser journey: 18 card checks across five elements,
+  1349x849 / 1600x900 pointer and 896x414 / 896x366 / 844x390 touch, plus
+  390x844 orientation-gate hide/restore. Both local and cross-host chat callers,
+  guest and registered badges, absent and populated stats, Message/Invite
+  projection, Escape, Close, backdrop, skull dismissal, and reopen are covered.
+  Page, console, failed-response, and request-failure arrays were empty.
+- Mac `npm --prefix frontend run test:native-ui` passed 122/122; the production
+  build passed. The whole Skills frame family remains in the sealed catalog;
+  all three obsolete standalone crops and their extractor rows are removed.
+- The publication contract is a fresh exact-commit
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` followed by
+  `node --experimental-strip-types frontend/tools/smoke-player-card.mjs` under
+  the campaign publication lock. Its final commit and results are recorded in
+  report 01's completion outcome; no production deployment is initiated by
+  this task. Disposable captures are removed after verified publication.
+
 ## 2026-08-31 — Reopened: reusable DOM message and button interface
 
 ### Reported smell and parity question

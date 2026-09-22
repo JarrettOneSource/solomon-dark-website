@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from 'react'
 
-import { art, skillIcons } from '../lib/assets.ts'
+import { skillIcons } from '../lib/assets.ts'
 import { nativeWizardClassTitle } from './core-kernels/native-wizard-class.ts'
 import type {
   WizardDiscipline,
@@ -11,6 +11,7 @@ import {
   playerCharacterAtlasCssFrame,
 } from './renderer/player-character-atlas.ts'
 import { NativeUiSprite } from './native-ui/react-raw.ts'
+import { nativeUiRecord } from './native-ui/core.ts'
 import './hub.css'
 
 export interface PlayerCardView {
@@ -162,6 +163,7 @@ export default function PlayerCardDialog({
 }
 
 const WIZARD_PORTRAIT_HEADING_INDEX = 12
+const [PORTRAIT_FRAME_WIDTH, PORTRAIT_FRAME_HEIGHT] = nativeUiRecord('Skills', 14).logicalSize
 
 function WizardPortrait({ element }: { element: WizardElement }) {
   const layers = [
@@ -185,7 +187,15 @@ function WizardPortrait({ element }: { element: WizardElement }) {
           )} />
         </span>
       ))}
-      <img className="hub-wizard-portrait-frame" src={art.frameGold} alt="" />
+      <NativeUiSprite
+        atlas="Skills"
+        className="hub-wizard-portrait-frame"
+        record={14}
+        style={{
+          position: 'absolute',
+          transform: `scale(calc(var(--hub-portrait-size) / ${PORTRAIT_FRAME_WIDTH}), calc(var(--hub-portrait-size) / ${PORTRAIT_FRAME_HEIGHT}))`,
+        }}
+      />
     </span>
   )
 }

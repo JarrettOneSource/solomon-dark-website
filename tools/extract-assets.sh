@@ -80,9 +80,6 @@ crop Skills.png word-mind    602 120 102  52
 crop Skills.png word-water   812 120 112  55
 crop Skills.png word-air     265 380  62  52
 crop Skills.png word-arcane  778 290 158  55
-crop Skills.png frame-white  582 188  95  95
-crop Skills.png frame-glow   678 188  95  95
-crop Skills.png frame-gold   764 188  92  95
 crop Skills.png icon-boot    186   0  59  59
 crop Skills.png icon-heart   186 150  59  59
 crop Skills.png icon-fist    246 139  59  59

@@ -119,6 +119,12 @@ ornaments. Web-authored panels may reuse the clean `UI.17` corner art, but must
 not attach `UI.8` to their top corners or combine the two records into one
 bitmap.
 
+The Skills frame family is catalogued separately: `Skills.0` (glow),
+`Skills.5` (white), and `Skills.14` (gold). Use the exact native records instead
+of broad trimmed crops. The Player Card fits `Skills.14` to its responsive
+portrait size. Its right `UI.17` decoration reflects into the panel from the
+right anchor, including the record-width translation required by that pivot.
+
 ## Tabs
 
 Supply the semantic band for each tab. Selection preserves native Dark Cloud

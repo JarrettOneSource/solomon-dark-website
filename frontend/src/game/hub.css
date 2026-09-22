@@ -713,7 +713,8 @@
 .hub-player-profile-corner-right {
   left: auto;
   right: -6px;
-  transform: scaleX(-1) scale(0.9);
+  /* Reflect the local record into the panel from its right-edge anchor. */
+  transform: scaleX(-1) scale(0.9) translateX(100%);
   transform-origin: top right;
 }
 
@@ -725,15 +726,16 @@
 }
 
 .hub-wizard-portrait {
+  --hub-portrait-size: 92;
   position: relative;
   display: block;
   overflow: hidden;
   /* Transformed sprite layers escape border-radius clipping under scaled ancestors; hard-clip.
-     Square with softened corners to match the frame-gold plate, like the native loadout portraits. */
+     Square with softened corners to match Skills.14, like the native loadout portraits. */
   clip-path: inset(0 round 7px);
   flex: none;
-  width: 92px;
-  height: 92px;
+  width: calc(var(--hub-portrait-size) * 1px);
+  height: calc(var(--hub-portrait-size) * 1px);
   border-radius: 7px;
   background: radial-gradient(circle at 50% 28%, #3b3526, #0c0b09 72%);
   box-shadow: 0 0 14px rgb(0 0 0 / 0.65), inset 0 0 10px rgb(0 0 0 / 0.7);
@@ -754,8 +756,7 @@
 .hub-wizard-portrait-frame {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  transform-origin: top left;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
 }
 
@@ -1160,7 +1161,7 @@
   .hub-player-profile-corner-right {
     left: auto;
     right: -4px;
-    transform: scaleX(-1) scale(0.55);
+    transform: scaleX(-1) scale(0.55) translateX(100%);
   }
 
   .hub-player-profile-header {
@@ -1169,8 +1170,7 @@
   }
 
   .hub-player-profile .hub-wizard-portrait {
-    width: 72px;
-    height: 72px;
+    --hub-portrait-size: 72;
   }
 
   /* 72/92 of the 92 px mapping: translate(-53.5px, -18.5px) scale(1.15) scaled by 0.7826. */
