@@ -44,7 +44,7 @@ Boundary inventory, with final focused Mac dispositions:
 | --- | --- | --- |
 | Mage world-contact and player-attached factories, retained ages 0–4 | Birth/owner/painter identity and live age freeze with Arena; stale/future births remain invalid | exact-ported; ten terminal cases pass object/compact validation and late-join sampling through complete exit |
 | Mage body, source/path light, world corona, attached corona | Existing two/one/five/three-tick presentation lifetimes, evaluated at stopped Arena time | exact-ported; ten retained factories render eight live coronas (five world, three attached), including age-zero light and body |
-| Object snapshots and compact keyframes/deltas | One validated Arena clock; no relaxed five-age bound or missing-owner fallback | exact-ported; unit decode and complete real-host browser stream pass; protocol 130 prevents mixing old clock semantics |
+| Object snapshots and compact keyframes/deltas | One validated Arena clock; no relaxed five-age bound or missing-owner fallback | exact-ported; unit decode and complete real-host browser stream pass; protocol 131 prevents mixing old clock semantics |
 | Snapshot interpolation and late join | Freeze exactly at the all-dead boundary, including an event between ordinary 20 Hz samples | exact-ported; fractional sampling and ten late-join cases retain all eligible factories |
 | Enemy/Maggot hit and movement presentation, projectiles, boss effects, weather | Absolute Arena-time consumers share the freeze; explicit actor ages already stay frozen | exact-ported; shared projection/render clock, unchanged enemy-store identity, existing projection/animation coverage and built browser journey |
 | Player death/held weapon/burst, Game Over fade/input/automatic exit, score archive and loadout | Continue their established terminal clocks, then discard old world | verified-already-at-parity; corpse reaches frame 3 while the eight coronas stay visible; both browser exit paths return to loadout |
@@ -72,7 +72,7 @@ terminal clock and strict age bound. No new authored table or constant is needed
 `gameRunWorldTick` derives the resident Arena tick from the existing run clock;
 the protocol checks that elapsed terminal time cannot precede tick zero. The
 host projector, pulse validator, sampled membership and world renderer use it.
-The wire shape and save schema are unchanged; protocol **130** marks the new
+The wire shape and save schema are unchanged; protocol **131** marks the new
 clock semantics. Global tick, death progression, score archival and Game Over
 timing continue independently. No pulse is discarded to make a bad frame pass.
 
@@ -209,6 +209,11 @@ the UI timeline fixtures also use valid absolute ticks. The client, timeline
 and complete host suites, plus test TypeScript, pass after this correction.
 No production age bound or malformed-frame assertion was weakened. The failed
 gate was stopped and the campaign lock released before fixture repair.
+
+The final rebase includes report 13's already published protocol-130 Frost
+Missile event cutover. This report therefore advances to 131, keeping clients
+with the earlier terminal-clock semantics out of the new session. No new
+snapshot field, save migration, or Frost behavior change is introduced here.
 
 ## Why the prior parity claim is reopened
 
