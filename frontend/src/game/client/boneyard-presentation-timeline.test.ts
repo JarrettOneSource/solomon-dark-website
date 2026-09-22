@@ -1238,21 +1238,21 @@ test('presents normal Game Over entry and both exit paths at the 100 Hz clock', 
 
   const exit = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: gameOverSnapshot(110, 500, 1),
+    initialSnapshot: gameOverSnapshot(610, 500, 1),
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  exit.push(gameOverSnapshot(115, 505, 6), 50)
+  exit.push(gameOverSnapshot(615, 505, 6), 50)
   assert.equal(exit.sample(75).run.gameOverExitTicks, 3)
   assert.equal(exit.sample(75).run.gameOverTicks, 502)
 
   const automaticAcceptance = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: gameOverSnapshot(120, 950, null),
+    initialSnapshot: gameOverSnapshot(1120, 950, null),
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  automaticAcceptance.push(gameOverSnapshot(125, 955, 5, 'automatic'), 50)
+  automaticAcceptance.push(gameOverSnapshot(1125, 955, 5, 'automatic'), 50)
   assert.equal(automaticAcceptance.sample(75).run.gameOverExitTicks, null)
   assert.equal(automaticAcceptance.sample(100).run.gameOverExitTicks, 5)
 })

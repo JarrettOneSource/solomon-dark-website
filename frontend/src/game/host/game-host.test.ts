@@ -24,6 +24,7 @@ import {
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
+  type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import {
   replacePlayerCharacter,
@@ -3639,6 +3640,7 @@ test('Tutorial Game Over forces a Hub keyframe and clears Boneyard before the Co
   const collegeSnapshot = nextMessage(client.socket, message => (
     message.type === 'server-snapshot' && message.snapshot.world.kind === 'hub'
   ))
+  advanceGameOverTestClock(host.state(), 1_200)
   Object.assign(host.state().run, {
     gameOverEventId: 1,
     gameOverExitKind: 'automatic',
@@ -3679,6 +3681,7 @@ test('shared-Hub Tutorial College deployment checkpoint detaches the completed B
 
   const tutorial = host.playerState(client.welcome.playerId)
   assert.ok(tutorial)
+  advanceGameOverTestClock(tutorial, 1_200)
   Object.assign(tutorial.run, {
     gameOverEventId: 1,
     gameOverExitKind: 'automatic',
@@ -5019,6 +5022,7 @@ test('host returns the same multiplayer session from Game Over through loadout t
       portraitScale: 0.925,
     }])),
   }
+  advanceGameOverTestClock(host.state(), GAME_OVER_INPUT_ACCEPT_TICK)
   Object.assign(host.state().run, {
     gameOverEventId: 1,
     gameOverTicks: GAME_OVER_INPUT_ACCEPT_TICK,
@@ -5053,6 +5057,7 @@ test('host returns the same multiplayer session from Game Over through loadout t
     && message.snapshot.run.phase === 'loadout'
     && message.snapshot.world.kind === 'hub'
   ))
+  advanceGameOverTestClock(host.state(), GAME_OVER_INPUT_ACCEPT_TICK + GAME_OVER_INPUT_EXIT_FADE_TICKS - 2)
   Object.assign(host.state().run, {
     gameOverExitKind: 'input',
     gameOverExitTicks: GAME_OVER_INPUT_EXIT_FADE_TICKS - 1,
@@ -5883,12 +5888,19 @@ function forceHallArchive(
 ): void {
   const state = playerId ? host.playerState(playerId) : host.state()
   if (!state || state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  advanceGameOverTestClock(state, NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick - 1)
   Object.assign(state.run, {
     gameOverEventId: 1,
     gameOverTicks: NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick - 1,
     nextGameOverEventId: 2,
     phase: 'game-over',
   })
+}
+
+function advanceGameOverTestClock(state: GameSimulationState, gameOverTicks: number): void {
+  // Fast-forward the live terminal clock without moving the frozen Arena epoch.
+  state.tick += gameOverTicks - state.run.gameOverTicks
+  Object.assign(state.run, { gameOverTicks })
 }
 
 function collectChatMessages(socket: WebSocket): {

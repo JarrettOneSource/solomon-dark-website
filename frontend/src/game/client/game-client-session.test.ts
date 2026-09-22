@@ -893,6 +893,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
 
   const gameOverState = {
     ...activeState,
+    tick: activeState.tick + 500,
     run: {
       ...activeState.run,
       gameOverEventId: 1,

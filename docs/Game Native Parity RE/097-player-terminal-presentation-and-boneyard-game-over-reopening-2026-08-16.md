@@ -201,6 +201,15 @@ concrete cumulative leak and allocation churn across active play and Game Over;
 without a historical heap/CPU trace, it is not proof that these defects caused
 the particular pre-crash video stall.
 
+The first complete gate exposed older client/host fixtures that fast-forwarded
+only `gameOverTicks`, sometimes beyond the entire simulation age. Those frames
+correctly fail the new epoch validation. Their test helpers now advance the
+outer and terminal clocks together while preserving the stopped Arena epoch;
+the UI timeline fixtures also use valid absolute ticks. The client, timeline
+and complete host suites, plus test TypeScript, pass after this correction.
+No production age bound or malformed-frame assertion was weakened. The failed
+gate was stopped and the campaign lock released before fixture repair.
+
 ## Why the prior parity claim is reopened
 
 The 2026-08-14 pass recovered the death-frame thresholds and the tick-1000
