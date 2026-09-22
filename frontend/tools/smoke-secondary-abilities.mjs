@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { acceptItemSets } from './item-set-smoke-acceptance.mjs'
 import { acceptLanternAndCursor } from './lantern-cursor-smoke-acceptance.mjs'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
@@ -256,6 +257,10 @@ try {
     () => host.state().secondaryAbilities.players[playerId] !== undefined,
     'secondary player state did not materialize',
   )
+
+  const itemSets = process.env.SDR_ITEM_SET_ACCEPTANCE === '1'
+    ? await acceptItemSets({ page, host, playerId, waitUntil, screenshotRoot })
+    : null
 
   armQuickbar(host, playerId, baseSkillBook, NATIVE_SECONDARY_ABILITY_IDS.slice(0, 8))
   await page.waitForFunction(() => {
@@ -880,9 +885,14 @@ try {
       `${contract.name} did not advance across authoritative animation ticks`,
     )
     if (contract.skillId !== 78 && contract.skillId !== 79) {
+      const castPoses = playerEconomy(host, playerId).equipment.weapon?.equipmentType === 'wand'
+        ? [1, 2] : [9]
       assert.ok(
-        samples.some(({ playerAttachmentPose }) => playerAttachmentPose === 9),
-        `${contract.name} never presented its native Cast2 pose`,
+        samples.some(({ playerAttachmentPose }) => castPoses.includes(playerAttachmentPose)),
+        `${contract.name} never presented its native Cast2 pose: ${JSON.stringify({
+          poses: [...new Set(samples.map(sample => sample.playerAttachmentPose))],
+          samples: samples.length, sampleStart, committedCastAction: committedPlayer?.castAction,
+        })}`,
       )
     }
     if (proof.kinds.length > 0) {
@@ -1027,6 +1037,7 @@ try {
     browser: browserReceipt,
     consoleErrors,
     insufficientMana: insufficientManaReceipt,
+    itemSets,
     lanternCursor,
     pageErrors,
     playerAtlasContexts,
@@ -1037,6 +1048,12 @@ try {
     screenshotRoot,
     statusEffects,
   }, null, 2)}\n`)
+} catch (error) {
+  const failedPage = browser.contexts()[0]?.pages()[0]
+  process.stderr.write(`${JSON.stringify({ pageErrors, consoleErrors, responseErrors,
+    body: await failedPage?.locator('body').innerText() })}\n`)
+  await failedPage?.screenshot({ path: `${screenshotRoot}/failure.png` })
+  throw error
 } finally {
   await browser.close()
   await host.close()
@@ -1597,7 +1614,8 @@ function armMaximumSet(host, playerId, skillId, baseEquipment) {
     playerEntities: replacePlayerEconomy(
       state.playerEntities,
       playerId,
-      { ...state.playerEntities.economies[index], equipment },
+      { ...state.playerEntities.economies[index], equipment,
+        revision: state.playerEntities.economies[index].revision + 1 },
     ),
   })
 }
@@ -1698,7 +1716,8 @@ function maximumSetReceipt(state, playerId, skillId) {
       const parent = owned.find(({ kind }) => kind === 'leviathan')
       assert.equal(parent?.quantity, 5)
       assert.equal(owned.filter(({ kind }) => kind === 'leviathan-appendage').length, 5)
-      return { appendages: 5, damage: parent.damage }
+      assert.equal(parent.damage, 7, 'rank six Leviathan stores raw damage before equipment')
+      return { appendages: 5, rawDamage: parent.damage }
     }
     case 21: {
       const wave = owned.find(({ kind }) => kind === 'shockwave')
@@ -2566,6 +2585,7 @@ async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
       if (actor.id === enemy.id) {
         return {
           ...actor,
+          ...(skillId === 11 || skillId === 76 ? { currentHealth: 1_000 } : {}),
           nextMovementTick: state.tick + 100_000,
           position,
         }
@@ -2637,10 +2657,19 @@ async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
 async function collectCombatProof(host, playerId, skillId, baseline, scene) {
   if (scene !== 'boneyard' || !baseline || !COMBAT_PROOF_SKILLS.has(skillId)) return null
   let receipt = null
+  const boltDamages = new Set()
   try {
     await waitUntil(() => {
       const state = host.state()
       if (state.world.kind !== 'boneyard') return false
+      if (skillId === 11) {
+        for (const bolt of state.secondaryAbilities.actors.filter(actor => (
+          actor.kind === 'ether-bolt' && actor.ownerId === playerId
+        ))) {
+          assert.equal(bolt.damage, 22, 'Bug-Master adds four, then doubles damage exactly once')
+          boltDamages.add(bolt.damage)
+        }
+      }
       const enemy = state.world.enemies.actors.find(({ id }) => id === baseline.enemyId)
       const effect = state.secondaryAbilities.targetEffects.find(({ targetId, worldKey }) => (
         targetId === baseline.enemyId && worldKey === baseline.worldKey
@@ -2652,7 +2681,8 @@ async function collectCombatProof(host, playerId, skillId, baseline, scene) {
       const actorKinds = state.secondaryAbilities.actors
         .filter(({ ownerId }) => ownerId === playerId)
         .map(({ kind }) => kind)
-      const succeeded = skillId === 35 ? frozen && frostBurn : damaged
+      const succeeded = skillId === 35 ? frozen && frostBurn
+        : skillId === 76 ? damaged && frozen && frostBurn : damaged
       if (!succeeded) return false
       receipt = {
         actorKinds,
@@ -2682,6 +2712,10 @@ async function collectCombatProof(host, playerId, skillId, baseline, scene) {
       },
     }, null, 2)}\n`)
     throw error
+  }
+  if (skillId === 11) {
+    assert.deepEqual([...boltDamages], [22], 'observe a live Leviathan bolt payload')
+    receipt = { ...receipt, boltDamages: [...boltDamages] }
   }
   if (skillId === 72) {
     const state = host.state()

@@ -372,10 +372,16 @@ export function effectiveSecondaryAbilityRankStats(
   skillBook: PlayerSkillBookComponent,
   skillId: number,
 ): NativeSecondaryAbilityRankStats {
+  return nativeSecondaryAbilityRankStats(skillId, skillBook.effectiveRanks[skillId] ?? 0)
+}
+
+export function nativeSecondaryAbilityRankStats(
+  skillId: number,
+  rank: number,
+): NativeSecondaryAbilityRankStats {
   if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
     throw new RangeError(`skill ${skillId} is not a native secondary`)
   }
-  const rank = skillBook.effectiveRanks[skillId] ?? 0
   const entry = SHARED_STAT_BOOK.entries[skillId]
   if (!entry || !Number.isInteger(rank) || rank < 1 || rank > entry.maximumLevel) {
     throw new RangeError(`secondary skill ${skillId} has invalid effective rank ${rank}`)

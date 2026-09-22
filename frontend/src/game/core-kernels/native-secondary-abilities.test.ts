@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { actorHeadingVector } from './actor-heading.ts'
+import { nativeEquipmentRecipeEffects, resolveNativeEquipmentEffects } from './native-equipment-effects.ts'
 import {
   bindNativeBeltSkill,
   createNativePlayerBelt,
@@ -4213,7 +4214,7 @@ test('Ether Drain and Leviathan preserve their recovered phase boundaries', () =
   assert.equal(leviathan.quantity, 1)
 })
 
-test('Call Leviathan selects inclusive quantity while the full outfit skips the selector and doubles damage', () => {
+test('Call Leviathan maximum selects all appendages without changing the stored base damage', () => {
   const source = createNativeSecondarySimulation(123)
   const ordinaryContext = context(11, 1, 0, 100, [], 5)
   const ordinary = stepNativeSecondaryAbilities(source, ordinaryContext).state
@@ -4246,8 +4247,8 @@ test('Call Leviathan selects inclusive quantity while the full outfit skips the 
   const maximumAppendages = maximum.actors.filter(({ kind }) => kind === 'leviathan-appendage')
   assert.equal(maximumParent.quantity, 5)
   assert.equal(maximumAppendages.length, 5)
-  assert.equal(maximumParent.damage, configured.values.mDamage * 2)
-  assert.ok(maximumAppendages.every(({ damage }) => damage === configured.values.mDamage * 2))
+  assert.equal(maximumParent.damage, configured.values.mDamage)
+  assert.ok(maximumAppendages.every(({ damage }) => damage === configured.values.mDamage))
   assert.deepEqual(maximum.rng, advanceNativeRngWords(source.rng, 1 + 5 * 5))
 })
 
@@ -5300,4 +5301,48 @@ test('ElectricBurn source has two no-flash branches while each chained target ha
     assert.deepEqual(result.state.rng, chain.state)
   }
   assert.deepEqual([...gates].sort(), [0, 1, 2])
+})
+
+
+test('Leviathan resolves Bug-Master damage once per shot and responds to equipment changes', () => {
+  const modifiers = (recipes: readonly number[]) => resolveNativeEquipmentEffects(
+    new Array<number>(83).fill(0),
+    recipes.map(recipeIndex => ({ recipeIndex, effects: nativeEquipmentRecipeEffects(recipeIndex) })),
+  ).modifiers
+  const full = modifiers([11, 12, 13, 14, 15])
+  const missingLoop = modifiers([11, 12, 13, 15])
+  const initial = context(11, 1, 0, 100, [], 2)
+  const castContext = {
+    ...initial,
+    players: { player: { ...initial.players.player!, maximumLeviathan: true,
+      offensiveFactors: { damage: 1, manaCost: 1, equipment: full } } },
+  }
+  const born = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), castContext).state
+  const parent = born.actors.find(({ kind }) => kind === 'leviathan')!
+  const appendage = born.actors.find(({ kind }) => kind === 'leviathan-appendage')!
+  assert.equal(parent.damage, 3, 'store ranked base damage, before any equipment')
+  assert.equal(parent.quantity, 2, 'maximum uses the cast rank quantity')
+  const ready = { ...born, actors: [
+    { ...parent, ageTicks: 100 },
+    { ...appendage, ageTicks: 100, slowFactor: 0, targetId: 500, quantity: 1 },
+  ] }
+  const target = { family: 'ZOMBIE' as const, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 500, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
+  for (const [equipment, expected, damageFactor] of [
+    [full, 14, 1], [missingLoop, 6, 1], [modifiers([]), 3, 1], [full, 14, 1],
+    [full, 18.899999618530273, 1.35],
+  ] as const) {
+    const idle = context(11, 102, null)
+    const result = stepNativeSecondaryAbilities(ready, {
+      ...idle, players: { player: { ...idle.players.player!,
+        offensiveFactors: { damage: damageFactor, manaCost: 1, equipment } } },
+      target: () => target, targets: () => [target],
+    }).state
+    const bolt = result.actors.find(({ kind }) => kind === 'ether-bolt')!
+    assert.equal(bolt.damage, expected)
+    assert.equal(result.actors.find(({ kind }) => kind === 'leviathan')!.quantity, 2)
+    const later = stepNativeSecondaryAbilities({ ...result, actors: [bolt] }, context(11, 103, null)).state
+    assert.equal(later.actors.find(({ kind }) => kind === 'ether-bolt')!.damage, expected,
+      'already emitted bolts retain their payload after gear changes')
+  }
 })

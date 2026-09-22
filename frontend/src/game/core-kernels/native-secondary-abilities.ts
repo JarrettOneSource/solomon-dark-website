@@ -1709,7 +1709,7 @@ export function stepNativeSecondaryAbilities(
                   )
                   state = spawn(state, actorSeed({
                     alpha: 1,
-                    damage: actor.damage,
+                    damage: Math.fround(resolveNativeSkillDamageValue(11, parent.damage, owner.offensiveFactors)),
                     kind: 'ether-bolt',
                     lifetimeTicks: NATIVE_ETHER_BOLT_LIFETIME_TICKS,
                     ownerId: actor.ownerId,
@@ -3866,6 +3866,8 @@ function resolvedSecondaryAbilityRankStats(
   skillId: NativeSecondaryAbilityId,
 ): NativeSecondaryAbilityRankStats {
   const ranked = effectiveSecondaryAbilityRankStats(authority.skillBook, skillId)
+  // Leviathan stores its ranked base; each emitted bolt resolves the live caster's modifiers.
+  if (skillId === 11) return ranked
   const values = Object.fromEntries(Object.entries(ranked.values).map(([property, value]) => {
     if (property === 'mDamage' || property === 'mDamage1' || property === 'mDamage2') {
       return [property, resolveNativeSkillDamageValue(
@@ -3983,7 +3985,7 @@ function castAbility(
         authority.maximumLeviathan,
       )
       state = { ...state, rng: birth.rng }
-      const damage = v.mDamage * (authority.maximumLeviathan ? 2 : 1)
+      const damage = v.mDamage
       const parentId = state.nextActorId
       spawnActor({
         damage,

@@ -6,7 +6,9 @@ import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-dir
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
-import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import { NATIVE_WELD_COMPONENT_SKILL_IDS } from '../core-kernels/player-progression.ts'
+import { nativeEquipmentTooltipSets } from '../core-kernels/native-equipment-effects.ts'
+import type { EquipmentSlot, HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createEquipmentInventoryItem, insertLootInventoryItem } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
@@ -3127,4 +3129,99 @@ test('Dampen caster delay survives saves and legacy Mages initialize it explicit
     bad.continuation.simulation.world.enemies.actors[0].brain.disabledPrimaryTicks = invalid
     assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /casting delay/)
   }
+})
+
+
+test('every complete item set survives authoritative equip, refresh, save, and member removal', () => {
+  const expectedBits = [0, 0x1800, 1, 2, 4, 16, 8]
+  for (const [setIndex, set] of nativeEquipmentTooltipSets().entries()) {
+    let state = createGameSimulation({ owner: OWNER })
+    const economy = getPlayerEconomy(state, 'owner')
+    const permanent = [...state.playerEntities.skillBooks[0]!.permanentRanks]
+    const items = set.memberRecipeIndices.map(recipeIndex => createEquipmentInventoryItem(
+      DOWSING_EQUIPMENT_RECIPES[recipeIndex]!, 100 + recipeIndex,
+    ))
+    state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy, backpack: items, nextItemId: 200,
+    }) }
+    let ringIndex = 0
+    for (const item of items) {
+      const slot: EquipmentSlot = item.equipmentType === 'ring'
+        ? ringIndex++ === 0 ? 'ring-0' : 'ring-1'
+        : item.equipmentType === 'wand' || item.equipmentType === 'staff' ? 'weapon'
+          : item.equipmentType === 'hat' ? 'hat' : item.equipmentType === 'robe' ? 'robe' : 'amulet'
+      const result = applyGameSimulationHubAction(state, 'owner', { type: 'equip', itemId: item.id, slot })
+      assert.equal(result.accepted, true, `${set.name}: ${item.name}: ${result.reason}`)
+      state = result.state
+    }
+    const full = state.playerEntities.skillRuntimes[0]!.equipmentModifiers
+    const book = state.playerEntities.skillBooks[0]!
+    assert.equal(full.featureBits, expectedBits[setIndex], set.name)
+    if (setIndex === 0) assert.equal(full.recharge.scale, 3)
+    if (setIndex === 1) {
+      assert.ok(Math.abs(full.weldEffect - 1.5) < 0.000001)
+      assert.ok(NATIVE_WELD_COMPONENT_SKILL_IDS.every(id => book.effectiveRanks[id]! >= 1))
+    }
+    if (setIndex === 2) {
+      assert.equal(full.skillDamageMultiplier[11], 2)
+      assert.equal(full.skillDamageFlat[11], 4)
+    }
+    if (setIndex === 3) {
+      assert.equal(book.effectiveRanks[29], 1)
+      assert.equal(full.classManaCostMultiplier[2], Math.fround(0.8))
+    }
+    if (setIndex === 5) assert.equal(full.classCastSpeedMultiplier[3], Math.fround(1.1))
+    if (setIndex === 6) assert.equal(full.classCastSpeedMultiplier[4], Math.fround(1.1))
+    assert.deepEqual(book.permanentRanks, permanent, 'set grants never become permanent skills')
+    const refreshed = replacePlayerEconomy(state.playerEntities, 'owner', getPlayerEconomy(state, 'owner'))
+    assert.deepEqual(refreshed.skillRuntimes[0]!.equipmentModifiers, full, 'refresh never stacks bonuses')
+    const save = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+      mods: [], modState: {}, playerId: 'owner', state })
+    const restored = restoreGameSaveDocument(save).state
+    assert.deepEqual(restored.playerEntities.skillRuntimes[0]!.equipmentModifiers, full, set.name)
+    assert.deepEqual(restored.playerEntities.skillBooks[0]!.effectiveRanks, book.effectiveRanks)
+    for (const item of items) {
+      const equipped = getPlayerEconomy(restored, 'owner')
+      const without = { ...equipped, equipment: {
+        hat: equipped.equipment.hat?.id === item.id ? economy.equipment.hat : equipped.equipment.hat,
+        robe: equipped.equipment.robe?.id === item.id ? economy.equipment.robe : equipped.equipment.robe,
+        weapon: equipped.equipment.weapon?.id === item.id ? null : equipped.equipment.weapon,
+        amulet: equipped.equipment.amulet?.id === item.id ? null : equipped.equipment.amulet,
+        rings: equipped.equipment.rings.map(ring => ring?.id === item.id ? null : ring) as [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null],
+      } }
+      const removed = replacePlayerEconomy(restored.playerEntities, 'owner', without)
+      assert.equal(removed.skillRuntimes[0]!.equipmentModifiers.featureBits & 0x81f, 0, item.name)
+      if (setIndex === 0) assert.equal(removed.skillRuntimes[0]!.equipmentModifiers.recharge.scale, 1)
+      if (setIndex === 3) assert.equal(removed.skillBooks[0]!.effectiveRanks[29], 0)
+      const reequipped = replacePlayerEconomy(removed, 'owner', equipped)
+      assert.deepEqual(reequipped.skillRuntimes[0]!.equipmentModifiers, full, item.name)
+      assert.deepEqual(reequipped.skillBooks[0]!.permanentRanks, permanent)
+    }
+  }
+})
+
+
+test('saved Leviathans recover raw cast-rank damage without changing clocks or RNG', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 11))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) throw new Error('expected stock encounter')
+  state = { ...state, world: { ...state.world, encounter: { ...state.world.encounter,
+    phase: 'gone', lifetimeTicksRemaining: 0, runEventId: 1 } } }
+  const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'owner', 11, 2, state.gameRng)
+  state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 11, 0)!
+  const position = state.playerEntities.locomotions[0]!.position
+  state = stepGameSimulationTick(state, { owner: {
+    aim: { x: position.x + 100, y: position.y }, cast: { primary: false, quickbar: 0 },
+    movement: { x: 0, y: 0 }, viewportWidth: 1600, viewportHeight: 900,
+  } })
+  assert.ok(state.secondaryAbilities.actors.some(actor => actor.kind === 'leviathan'))
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state })
+  const legacy = JSON.parse(document)
+  for (const actor of legacy.continuation.simulation.secondaryAbilities.actors) actor.damage = 28
+  const resumed = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.deepEqual(resumed.secondaryAbilities.actors, state.secondaryAbilities.actors)
+  assert.deepEqual(resumed.secondaryAbilities.rng, state.secondaryAbilities.rng)
+  assert.deepEqual(resumed.playerEntities.skillBooks, state.playerEntities.skillBooks)
 })

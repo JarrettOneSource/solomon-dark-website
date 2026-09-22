@@ -241,3 +241,39 @@ test("Sorceror's Amulet applies only its authored ten-percent Ether damage effec
   })
   assert.deepEqual(unequipped.modifiers, createNativeEquipmentModifiers())
 })
+
+
+test('all seven sets require every distinct equipped recipe and contribute each authored bonus once', () => {
+  const cases = [
+    [[0, 1, 2, 3, 4, 5], [[21, 3, 1, 0]]],
+    [[6, 7, 8, 9, 10], [[37, 0, 0, 0], [38, 20, 2, 0]]],
+    [[11, 12, 13, 14, 15], [[26, 0, 0, 0], [25, 2, 1, 11]]],
+    [[16, 17, 18, 19], [[27, 0, 0, 0], [7, 1, 0, 29], [11, -20, 2, 2]]],
+    [[20, 21], [[28, 0, 0, 0]]],
+    [[22, 23, 24], [[30, 0, 0, 0], [13, 10, 2, 3]]],
+    [[25, 26, 27, 28], [[29, 0, 0, 0], [13, 10, 2, 4]]],
+  ] as const
+  assert.deepEqual(nativeEquipmentTooltipSets().map(set => set.memberRecipeIndices),
+    cases.map(([members]) => members))
+  for (const [members, rows] of cases) {
+    const expected = rows.map(([kind, magnitude, operator, target]) => ({ kind, magnitude, operator, target }))
+    assert.deepEqual(nativeEquipmentSetEffects(members), expected)
+    assert.deepEqual(nativeEquipmentSetEffects([...members, ...members]), expected, 'no duplicate set application')
+    for (const missing of members) {
+      const partial = members.filter(index => index !== missing)
+      assert.deepEqual(nativeEquipmentSetEffects(partial), [], `missing recipe ${missing}`)
+      assert.deepEqual(nativeEquipmentSetEffects([...partial, partial[0]!]), [], 'a duplicate cannot substitute')
+      const sources = members.map(recipeIndex => ({
+        recipeIndex: recipeIndex === missing ? null : recipeIndex,
+        effects: [],
+      }))
+      assert.deepEqual(resolveNativeEquipmentEffects(new Array(83).fill(0), sources).modifiers,
+        createNativeEquipmentModifiers(), 'recipe-less lookalikes cannot substitute')
+    }
+  }
+  assert.deepEqual(nativeEquipmentSetEffects([20, 21, 22, 23, 24]), [
+    { kind: 28, magnitude: 0, operator: 0, target: 0 },
+    { kind: 30, magnitude: 0, operator: 0, target: 0 },
+    { kind: 13, magnitude: 10, operator: 2, target: 3 },
+  ], 'compatible complete sets compose')
+})

@@ -1,5 +1,11 @@
 # 2026-08-20 — Secondary-ability native ownership correction
 
+> 2026-09-22 correction: [report 07's instruction-closed equipment audit](101-2026-08-20-player-passive-and-equipment-effect-consumers.md#2026-09-22--report-07-complete-item-set-investigation)
+> supersedes the Leviathan damage claim and historical parent-damage receipts
+> below. The maximum feature controls quantity only; authored set FX25 applies
+> once through the live caster's damage resolver when each EtherBolt is born.
+> Leviathan retains raw cast-rank damage, including through continuation saves.
+
 ## Supersession boundary and binary evidence
 
 Visual inspection reopened Magic Storm, Raise Golem, Call Leviathan, Ring of

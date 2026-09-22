@@ -530,3 +530,199 @@ There is no browser-platform exception or approximation.
   version, save schema, or Mod Loader edit remains. This receipt is the sole
   post-validation documentation write; no runtime, test, build, asset, or
   protocol byte changed after the final green gate/browser candidate.
+
+
+## 2026-09-22 — Report 07 complete item-set investigation
+
+### Question, boundary, and pre-implementation evidence
+
+Report 07 (Discord message `1551774168389783623`) requests testing complete
+sets; it demonstrates no malfunction and has no attachment. The related report
+06 image shows Bug-Master's Loop, five membership rows, maximum tentacles, and
+Call Leviathan damage x2. That archive and its image remain untouched. Report
+06's authorized boss loot extension is outside this investigation.
+
+The owning system is exact equipped-recipe set completion, its two-pass
+progression refresh, all seven sets / 29 members / 13 set FX rows, downstream
+spell materialization, Inventory ItemInfo, authority replication, save/load,
+and removal. Individual item effects retain the full 47-recipe / 86-effect
+catalog shared with entry 142. Generated lookalikes, backpack/storage-only
+ownership, and duplicate rings cannot replace a missing distinct recipe.
+
+Fresh static source identity: retail `SolomonDark.exe` 0.72.5 SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+image base `0x00400000`; stock `data/items.cfg` SHA-256
+`28e26243457b246ce48ed7f37d4c14820f9e4a67d1ddf5d328e3a0783a641963`.
+The read-only historical native item catalog has SHA-256
+`38a8d0ed70f91c09dca34e28e31769b98b20f9f9ffe6b04a44899206e135f35b`.
+Its complete extracted rows are already Website-owned in
+`native-equipment-effects-catalog.json`; stock CFG inspection confirms the
+following entire set table. These are data/instruction findings, not an
+injected or clean-stock GUI observation.
+
+| Set and all recipe members | Complete bonus contract | Final disposition |
+| --- | --- | --- |
+| Arcanus Spectrum Paraclosm: 0,1,2,3,4,5 | FX21 recharge x3 | verified-already-at-parity |
+| Combinator's Coutrement: 6,7,8,9,10 | FX37 energize weld components; FX38 additive +.20 weld scalar | verified-already-at-parity |
+| Pandimensional Bug-Master: 11,12,13,14,15 | FX26 maximum tentacles; FX25 Call Leviathan damage x2 | exact-ported (shot-time correction) |
+| Tempest Kit: 16,17,18,19 | FX27 maximum Storm; FX7 Hurricane +1; FX11 Air mana cost x.8 | verified-already-at-parity |
+| Burning Man: 20,21 | FX28 Ring of Fire contact explosions | verified-already-at-parity |
+| Frostburn Jewels: 22,23,24 | FX30 FreezeWave FrostBurn; FX13 Water cast speed x1.1 | verified-already-at-parity |
+| Fete of Clay: 25,26,27,28 | FX29 two Golems; FX13 Earth cast speed x1.1 | verified-already-at-parity |
+
+Existing instruction recovery identifies completion `0x00555DA0`, seven sinks
+`scene+0x1428..0x1440`, removal/refresh `0x0066F020`, progression refresh
+`0x0065F9A0/0x0065F5B0`, skill/stat passes `0x00656F60/0x00657310`, set-FX
+walker `0x00579D10`, and FX application `0x00576AA0`. Every required UID must
+be equipped; each completed set contributes its FX once, and refresh rebuilds
+ranks/modifiers from permanent state. Features feed dispatcher `0x0054CC50`;
+Combinator energizing feeds `0x00666020`, weld scalar feeds the shared welded
+vector materializer. Set completion has no independent actor, animation,
+audio, or timer. Spell consumers own those lifetimes (entries 083/084/123).
+The host refreshes on equipment transactions; clients receive the resulting
+inventory/skill/stat state. Active spells retain their cast-time payload.
+
+The code sweep found two contracts requiring fresh dispatcher confirmation:
+Leviathan currently doubles the already equipment-resolved damage again, and
+Tempest currently doubles only the base Storm duration before its Tornado
+extension. No runtime change is justified until instructions settle these.
+
+Validation will cover each full set, each single missing member, duplicate and
+recipe-less substitutions, simultaneous compatible sets, repeat refresh,
+unequip/re-equip, permanent-rank isolation, save restoration, real Inventory
+transactions, and all secondary feature consumers on the exact Mac candidate.
+
+
+### Fresh instruction closure before the fix
+
+Read-only canonical-project replicas and existing Mod Loader scripts recovered
+`0x0054CC50` and `0x006145D0` (decompile plus full raw-instruction dump).
+Wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+decompiler script `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+No native game or GUI session was used or interrupted.
+
+The earlier closure's regression asserted that the maximum feature alone
+doubles damage. It skipped the downstream shot-consumer and equipment-change
+lifecycle census, conflating the quantity feature with the separate FX25 row.
+This reopening closes that missing ownership/lifecycle rule across all sets.
+
+**Confirmed bug:** `0x0054E2D2..0x0054E2E1` reads skill 11's raw ranked
+`mDamage` and writes Leviathan `+0x154` without calling the damage resolver.
+The maximum feature branch changes quantity only. On each shot,
+`0x00614E07..0x00614E2D` reads that stored base, looks up the current caster
+progression, calls `0x0065FFF0` once with skill 11, and writes the resolved
+payload to EtherBolt `+0x14C`. Thus the set's authored FX25 multiplier applies
+once at shot time, including after equipment removal/replacement; existing
+bolts keep their already materialized damage. The former cast-time resolved
+payload and extra maximum-feature x2 are both incorrect. This supersedes the
+entry 084 parent-damage receipt and this section's preliminary blanket
+cast-time-payload statement for Leviathan. Quantity/rank/base damage remain
+cast-time values; maximum tentacles do not disappear when gear is removed.
+
+The intervening initializer `0x005F4750` was also recovered in full through
+the same read-only replica wrapper. Its five quantity branches allocate the
+15 authored appendage layout rows already retained in
+`native-secondary-leviathan.ts`; it updates the appendage list, maximum scale
+`+0x140`, and radius `+0x30`. It neither reads nor writes damage `+0x154`.
+There is no hidden initialization multiplier between the raw rank store and
+the shot-time resolver.
+
+**Rejected hypothesis:** Tempest is already correct. Instructions
+`0x0054DD17..0x0054DD28` double Storm `+0x13C` first, then
+`0x0054DE36..0x0054DE3F` add Magic Tornado's duration. Preserve
+`2000 + bonusTicks`, not `2 * (1000 + bonusTicks)`.
+
+Implementation consequence: keep Leviathan's raw ranked damage in the existing
+parent/appendage payload; resolve the current owner's offensive factors only
+at EtherBolt birth. Reuse the shared damage resolver without inventing another
+set multiplier. Tests must cover no set, full set, missing Loop, re-equip,
+feature-only maximum, existing bolt retention, and lifetime/quantity stability.
+
+
+Continuation compatibility follows the same recovered ownership: old Website
+saves persisted the incorrectly resolved Leviathan damage, but also persisted
+its cast-time rank. At restore, normalize parent/appendage damage from that
+rank's stock `mDamage` row. Preserve every already emitted EtherBolt payload.
+This canonicalizes the derived cache without changing the save schema, rank,
+quantity, clocks, RNG, or player equipment, and prevents applying the new
+shot-time resolver to an old already-resolved value.
+
+
+### Membership closure and Mac acceptance
+
+| Shared member/branch | Disposition | Proof |
+| --- | --- | --- |
+| Each of the 29 recipes above; all 13 set effects | verified-already-at-parity except corrected Bug-Master consumer | Exact full table assertion, every single missing recipe, duplicate recipe and recipe-less substitutions; 29 real browser equip transactions |
+| Hat, Robe, all three ring sinks, Amulet, Staff/Wand sinks | verified-already-at-parity | Existing sink/admission tests; real click-to-slot equip, including both Staff aliases and two distinct rings |
+| Partial set, backpack-only ownership, compatible simultaneous sets, refresh/removal/restoration | verified-already-at-parity | Pure resolver and authoritative lifecycle tests; seven browser member-replacement/re-equip cycles |
+| Combinator energizing and weld scalar | verified-already-at-parity | All weld component ranks become effective, permanent ranks remain unchanged, total item+set scalar is 1.5 |
+| Tempest Hurricane grant and Air mana discount | verified-already-at-parity | Rank 1 and float32 .8 while complete; grant retires on removal |
+| Frostburn Water / Clay Earth cast speed | verified-already-at-parity | Independent float32 1.1 class lanes |
+| Leviathan quantity, raw payload, live shot-time modifiers, emitted bolt retention | exact-ported | Red/green Mac regressions plus Chrome/WebGL2 browser 7 raw -> (7+4)*2 = 22 bolt; target HP 1000 -> 978 |
+| Ring of Fire, Magic Storm, Ring of Ice, two Golems, Comet sibling FreezeWave | verified-already-at-parity | Built Mac combat journeys and shared secondary regression suite |
+| Ordinary save roundtrip and old resolved-damage Leviathan saves | exact-ported for Leviathan cache repair; other sets verified-already-at-parity | Seven full sets roundtrip; old 28-damage cache is rebuilt from saved cast rank without changing clocks/RNG |
+| Hub/Boneyard, authority-to-client inventory/skills presentation, teardown | verified-already-at-parity | Real Hub Inventory -> Boneyard journey; shared host/snapshot and secondary owner-lifetime tests |
+| Named-item loot selection / report 06 boss pools | out-of-system | Already published separately; this report tests equipment after acquisition |
+
+All automated checks were run on `mac-mini`, in detached acceptance worktree
+`/Users/jarrett/codex-acceptance/soggy-20260922-r07`, with Node 22.17.0,
+Homebrew Bash 5.3.15, macOS Darwin 25.6.0 arm64, and installed Google Chrome.
+Local/Mac changed-file SHA-256 manifests matched before validation. No Website
+check ran on WSL or Windows; Windows supplied only read-only static RE.
+
+The focused suite passed 107 equipment/secondary tests plus the all-seven-set
+authoritative equip/save/removal regression and the legacy-Leviathan save
+regression; test TypeScript checking passed. The two Leviathan behavior tests
+first failed with 12 instead of 6 and 28 instead of raw 3, then passed after the
+shared fix. The save test first retained old 28 instead of the saved rank's raw
+value, then passed after canonical restoration.
+
+The built-client Chrome journey (`SDR_ITEM_SET_ACCEPTANCE=1`, Boneyard skills
+`11,21,27,35,45,76`) passed all seven full/partial/re-equipped sets, permanent-rank
+isolation, Inventory panels, and WebGL2 spell combat. Arcanus recharge was 3;
+Combinator feature bits were 6144 and weld scalar 1.5; other complete-set bits
+were 1,2,4,16,8. Bug-Master's screenshot was inspected: all five membership rows
+were green and stock maximum-tentacles/x2-damage text remained intact.
+Combat proved the 22-damage bolt, Burning-Man contact explosion, 2000-tick
+Tempest cloud, 1210 Frozen / 121000 FrostBurn ticks, and two attacking Golems.
+Page, console, and failed-response arrays were empty. The complete combined
+journey passed, including the correct native Staff/Wand Cast2 pose family for
+every cast and Comet impact/FrostBurn on a surviving target.
+
+Publication requires the unchanged committed/rebased candidate to pass
+`/opt/homebrew/bin/bash ./scripts/validate.sh` and the complete combined real-browser journey
+again while report 07 owns the campaign lock. The final outcome records that
+exact commit and gate result. Disposable screenshots/logs/manifests are removed
+after publication; this ledger and maintained tests are the durable receipts.
+No native runtime approximation or browser-platform limitation was introduced.
+
+The strengthened Comet receipt retained its target through impact: HP
+1000 -> 939.4999980926514, Frozen 1000 ticks and
+FrostBurn 100000 ticks. Its native Cast2 pose, comet/trail/impact
+WebGL presentation, impact audio, and all three empty error arrays passed.
+
+
+The combined browser run exposed a fixture-owned replication error, not a
+native spell error. `armMaximumSet` changed equipment without incrementing
+`economy.revision`, while `entity-replication.ts` sends the equipment column
+only when that revision changes (or at a full baseline). This left Comet's
+browser with the preceding Clay wand while authority had restored the Staff.
+`world-player-view.ts` correctly uses Wand poses 1/2 rather than Staff pose 9;
+a Staff Cast2 viewed through a stale Wand correctly reported wand pose 0.
+The captured failure had 364 frames, start index 2853, and a live Staff
+Cast2 at progress .3000000119, disproving the rolling-buffer hypothesis.
+The fixture must advance the inventory revision and assert the actual native
+Staff/Wand pose family. This closes the same seven-sink replication boundary
+without changing gameplay or weakening any animation check.
+
+After that fixture correction, the unchanged runtime passed the full combined
+seven-set / six-ability journey with all pose assertions and empty page, console,
+and response-error arrays. No capture exception or skipped ability is needed.
+
+The shot payload also preserves the explicit float32 store at `0x00614E2D`
+(`FSTP float ptr [EBX+0x14C]`). A 1.35 outgoing factor on the 14-damage case
+stores `18.899999618530273`, not an unrounded JavaScript double. This applies
+to live percentage modifiers alongside the complete-set bonus.
+
+The added fractional case failed on Mac with `18.900000000000002`, then the
+float32 bolt store passed all 107 focused tests and test TypeScript checking.

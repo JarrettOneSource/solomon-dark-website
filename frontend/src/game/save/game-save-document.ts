@@ -39,7 +39,7 @@ import { createNativeWraithFlightState } from '../core-kernels/native-wraith-fli
 import type { PlayerCharacterConfig, PlayerPrimaryCastState } from '../core-kernels/player-character.ts'
 import { createIdlePlayerPrimaryCast, createPlayerCharacter } from '../core-kernels/player-character.ts'
 import type { PlayerSkillBookComponent, PlayerStatBookComponent } from '../core-kernels/player-progression.ts'
-import { buildPlayerSkillOffer, isNativeBeltSkill, nativeWeldBuild, nativeWeldComponentRanksForBuild } from '../core-kernels/player-progression.ts'
+import { buildPlayerSkillOffer, isNativeBeltSkill, nativeSecondaryAbilityRankStats, nativeWeldBuild, nativeWeldComponentRanksForBuild } from '../core-kernels/player-progression.ts'
 import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-runtime.ts'
 import { createPlayerSkillRuntime, playerSkillDerivedStats, refreshPlayerCombatFromSkillStats, refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
 import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
@@ -1699,6 +1699,11 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): Ga
   let rng = parseNativeRng(source.rng, 'game save secondary RNG')
   const actors = array(source.actors, 'game save secondary actors').map((value, index) => {
     const actor = record(value, `game save secondary actor ${index}`)
+    if (actor.kind === 'leviathan' || actor.kind === 'leviathan-appendage') {
+      // Older saves stored equipment-resolved damage; bolts now resolve the live caster once.
+      const rank = finiteNumber(actor.rank, 'saved Leviathan rank')
+      return { ...actor, damage: nativeSecondaryAbilityRankStats(11, rank).values.mDamage }
+    }
     if (actor.kind === 'golem') {
       const golem = record(actor.golem, 'saved Golem')
       const circleSlowTicks = sourceSchemaVersion < 34 ? 0
