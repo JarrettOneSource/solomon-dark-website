@@ -169,6 +169,38 @@ and does not justify attributing the historical lag to the already published
 stationary-owner correction. No new optimization or lag-resolution claim is
 made from these measurements.
 
+### Retained-factory resource admission
+
+The terminal lifetime sweep also found an allocation consequence before its
+repair: the view collection constructs a complete lightning view before asking
+whether its contact has expired. Attached factories at ages 3/4 legitimately
+remain in the five-age wire lane, but their three-age corona is already dead.
+While the Arena is frozen, those rows would repeatedly allocate and destroy
+hidden body/source/contact resources on every render. World contacts have the
+same unnecessary reconstruction when sampled after age four. The collection
+must use the existing fully extracted world/attached alpha tables to skip an
+expired presentation before construction, while still retiring a previously
+live view and preserving all logical wire records. This affects normal sampling,
+late joining and frozen Game Over; it changes no visible lifetime or geometry.
+
+The same early-expiry branch deletes the view and target attachment but omits
+the factory's painter-registration entry. That leaves one heap-owned registry
+row per normally expired pulse until the entire renderer is destroyed. Normal
+end-of-update removal already releases all three owners. Expiry must use the
+same complete teardown; the regression checks retained registrations as well
+as scene-child admission, so invisible accumulated rows cannot pass it.
+
+Mac red/green proof: 120 repeated expired samples previously allocated **360**
+scene children instead of zero. A separate real-Pixi 1,000-factory lifecycle
+comparison leaves **1,000** retained painter-registration rows on `d05c812d`
+despite zero views/children; the candidate leaves **zero** rows, views and
+children. All seven Mage renderer tests pass, as do frontend lint/build and
+both rebuilt Game Over browser exits. The existing alpha tables now gate
+construction and both retirement paths release registrations. This fixes a
+concrete cumulative leak and allocation churn across active play and Game Over;
+without a historical heap/CPU trace, it is not proof that these defects caused
+the particular pre-crash video stall.
+
 ## Why the prior parity claim is reopened
 
 The 2026-08-14 pass recovered the death-frame thresholds and the tick-1000

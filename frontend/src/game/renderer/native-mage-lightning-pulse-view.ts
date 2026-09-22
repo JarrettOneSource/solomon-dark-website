@@ -4,6 +4,8 @@ import type { BoneyardMageLightningPulseSnapshot } from '../protocol/game-state.
 import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import {
+  NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_ALPHAS,
+  NATIVE_MAGE_LIGHTNING_WORLD_CONTACT_ALPHAS,
   nativeMageLightningPulsePlan,
   type NativeMageLightningPulseInput,
   type NativeMageLightningPulsePlan,
@@ -222,6 +224,13 @@ export class NativeMageLightningPulseViews {
     this.orderedIds.length = 0
     for (const pulse of pulses) {
       if (pulse.tick > presentationTick) continue
+      const contactAlphas = pulse.contact.kind === 'world'
+        ? NATIVE_MAGE_LIGHTNING_WORLD_CONTACT_ALPHAS
+        : NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_ALPHAS
+      // The wire retains attached factories after their shorter contact fade.
+      // A stopped Arena must not recreate those expired views every frame.
+      if (Number.isFinite(presentationTick)
+        && presentationTick - pulse.tick >= contactAlphas.length) continue
       const expectedPainterCount = pulse.contact.kind === 'world' ? 3 : 2
       const registrations = [
         pulse.lightRegistration,
@@ -256,6 +265,7 @@ export class NativeMageLightningPulseViews {
       if (!view.update(presentationTick)) {
         view.destroy()
         this.views.delete(pulse.id)
+        this.painterRegistrations.delete(pulse.id)
         this.targetWorldY.delete(pulse.id)
         continue
       }

@@ -1,5 +1,23 @@
 # Complete enemy animation and enemy-projectile VFX closure — 2026-08-15
 
+## 2026-09-22 — Mage factory retirement and terminal clock
+
+Report 10 reopens the Mage world/attached factory lifecycle through Game Over.
+The complete evidence and acceptance are in entry 097: Arena time must stop
+without advancing the pulse's native age, expired three-age attached contacts
+must not be reconstructed from the five-age wire lane, and every retired
+factory must release its painter-registration row. A Mac 1,000-factory probe
+found 1,000 invisible retained rows before repair and zero afterward. Native
+body/source/contact constants, authored geometry and light ownership remain
+unchanged. Both contact variants, active retirement, late join, frozen terminal
+sampling and renderer destruction are covered by the shared correction.
+
+The sibling sweep also inspected `PrimarySpellWorldView` and
+`NativeSecondaryWorldView`: their ordinary absence-driven teardown removes
+view/state or diagnostic/composite membership, and they do not own this
+separate Mage painter-registration map. No parallel symptom patch is needed
+in Player Air, Storm, Chain or Blizzard.
+
 > Reopened 2026-09-05: the historical Spider/Silk/Cocoon exclusions below are
 > false for retail survival. The investigation at the end of this document
 > supersedes those exclusions; implementation and browser receipts are recorded

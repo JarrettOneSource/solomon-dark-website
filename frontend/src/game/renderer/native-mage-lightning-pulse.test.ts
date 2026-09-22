@@ -286,6 +286,42 @@ test('Mage pulse collection preserves independent world roots, target ownership,
   root.destroy()
 })
 
+test('retained expired Mage factories never recreate retired scene resources', () => {
+  for (const input of [WORLD_PULSE, TARGET_PULSE]) {
+    for (const initiallyLive of [false, true]) {
+      const root = new Container()
+      const views = new NativeMageLightningPulseViews(root, AIR_TEXTURES)
+      let added = 0
+      root.on('childAdded', () => { added++ })
+      const pulse = { ...input, id: 1, ownerActorId: 1,
+        lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 1 },
+        painterRegistrations: Array.from({ length: input.contact.kind === 'world' ? 3 : 2 }, (_, index) => ({
+          managerLane: 'actor' as const, registrationOrdinal: 2 + index,
+        })),
+      }
+      if (initiallyLive) {
+        views.update([pulse], input.tick, () => ({ x: 900, y: 700 }))
+        assert.equal(views.size, 1)
+        assert.ok(added > 0)
+      }
+      const allocatedAtBirth = added
+      const expiredTick = input.tick + (input.contact.kind === 'world' ? 5 : 3)
+      for (let frame = 0; frame < 120; frame++) {
+        views.update([pulse], expiredTick, () => ({ x: 900, y: 700 }))
+      }
+      assert.equal(views.size, 0)
+      assert.equal(root.children.length, 0)
+      // Invisible registry entries retain heap state even when every scene root is gone.
+      const registrations = Reflect.get(views, 'painterRegistrations')
+      assert.ok(registrations instanceof Map)
+      assert.equal(registrations.size, 0)
+      assert.equal(added, allocatedAtBirth, 'a retained expired factory must not allocate scene children')
+      views.destroy()
+      root.destroy()
+    }
+  }
+})
+
 test('Mage pulse collection rejects malformed creator and painter ownership', () => {
   const pulse = {
     ...WORLD_PULSE,
