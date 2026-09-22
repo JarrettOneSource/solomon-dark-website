@@ -27,6 +27,8 @@ const backend = spawn(process.env.SDR_DOTNET || 'dotnet', [resolve(repository, '
 let host, browser
 const pageErrors = [], consoleErrors = [], failedResponses = [], requestFailures = []
 const expectedMissingSaves = []
+const navigationAborts = []
+let navigating = false
 try {
   const baseUrl = await backendReady(backend)
   const credential = randomBytes(32).toString('base64url')
@@ -42,7 +44,14 @@ try {
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push({ text: message.text(), url: message.location().url })
   })
-  page.on('requestfailed', request => requestFailures.push({ url: request.url(), failure: request.failure() }))
+  page.on('requestfailed', request => {
+    const record = { url: request.url(), failure: request.failure(), resourceType: request.resourceType() }
+    const url = new URL(record.url)
+    if (navigating && request.method() === 'GET' && record.failure?.errorText === 'net::ERR_ABORTED'
+      && url.origin === baseUrl && (url.pathname === '/favicon.png' || /^\/assets\/.+\.(png|mp3)$/.test(url.pathname))) {
+      navigationAborts.push(record)
+    } else requestFailures.push(record)
+  })
   page.on('response', response => {
     if (response.status() < 400) return
     const record = { status: response.status(), url: response.url() }
@@ -93,12 +102,17 @@ try {
       username, email: `${username}@example.invalid`, password,
     }) })
   assert.equal(registered.status, 201)
+  navigating = true
   await page.goto(`${baseUrl}/login`)
+  navigating = false
   await page.getByPlaceholder('Faelificus').fill(username)
   await page.locator('input[type="password"]').fill(password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.waitForURL(`${baseUrl}/account`)
-  await enterElementHub(page, baseUrl, 'water')
+  navigating = true
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  navigating = false
+  await startElementHub(page, 'water')
   await enterBoneyard(page)
   const account = await freshOpening('signed-in-new-game')
   assert.notEqual(account.runId, second.runId)
@@ -112,7 +126,7 @@ try {
   assert.deepEqual(failedResponses, [])
   assert.deepEqual(requestFailures, [])
   console.log(JSON.stringify({ status: 'ok', first, firstLive, second, secondLive, account,
-    pageErrors, consoleErrors, failedResponses, requestFailures, expectedMissingSaves, wireErrors: wire.errors }))
+    pageErrors, consoleErrors, failedResponses, requestFailures, expectedMissingSaves, navigationAborts, wireErrors: wire.errors }))
 
   async function freshOpening(label) {
     await waitUntil(() => wire.loadedBoneyard?.runId === host.state().world.runId

@@ -1089,6 +1089,10 @@ at `0x00461AF4/0x00461B22`. Its twenty-second lifetime includes growth after
 instruction-derived facts for retail 0.72.5, SHA-256
 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, image
 base `0x00400000`; no new clean-stock GUI capture is claimed.
+The local `SolomonDarkAbandonware/SolomonDark.exe` SHA-256 was rechecked in
+this investigation. Fresh GNU objdump output at `0x00461AD0..0x00461B35`
+confirms both removal calls to `0x00588260`, with owner offsets `+0x8F84`
+and `+0x8AF4`, against that same executable.
 
 Fresh Mac inspection of the current generated bank confirms compact-row
 counts by template index 0–11: **57, 0, 47, 0, 19, 37, 0, 0, 50, 0, 39, 41**.
@@ -1097,7 +1101,7 @@ Therefore a stain visible before the first Spider spawn does not itself
 establish leaked state. Preserve authored content unless browser evidence
 identifies an incorrect owner.
 
-### Boundary and membership before browser investigation
+### Boundary and final membership
 
 This reopening covers compact ground-content lifetime from map construction
 through enemy death, retirement, same-run continuation, new run, and account
@@ -1105,14 +1109,38 @@ replacement. It does not reopen already recovered AI, damage, art, or painter
 geometry. The earlier ground-layer receipt retired effects before leaving;
 it did not test leaving while those effects were still alive.
 
-| Member | Native ownership and required outcome | Investigation disposition |
+| Member | Native ownership and required outcome | Final disposition / proof |
 | --- | --- | --- |
-| Authored selectors 25, 26, 27, 28, 29 / DeadHawg 139–143 | Map-owned rows survive enemy retirement and recur when that map is loaded | recovered-pending-verification |
-| All twelve generated templates and stock Tutorial | Preserve each source's complete authored-row membership | recovered-pending-verification |
-| Spider temporary DeadHawg 140, 141, 142 and corpse banks 208–227 | Run-owned, paired ground/mask removal at retirement and scene disposal | recovered-pending-verification |
-| New run after leaving live effects; fresh account after Guest | New enemy store and renderer; no prior temporary stain | recovered-pending-verification |
-| Last game in the same run | Preserve saved live effects and their remaining clocks | recovered-pending-verification |
-| Zombie ordinary/rotten ground stains, delayed splats, PoisonPool | Sibling run-owned effects must not cross the same boundary | recovered-pending-verification |
+| Authored selector 25 / DeadHawg 139 | Map-owned | verified-already-at-parity; selector-25 mask remains after temporary effects retire |
+| Authored selector 26 / DeadHawg 140 | Map-owned | verified-already-at-parity; selector-26 mask and exact report sprite-63 in three fresh run generations |
+| Authored selector 27 / DeadHawg 141 | Map-owned | verified-already-at-parity; selector-27 mask remains after temporary effects retire |
+| Authored selector 28 / DeadHawg 142 | Map-owned | verified-already-at-parity; selector-28 mask remains after temporary effects retire |
+| Authored selector 29 / DeadHawg 143 | Map-owned | verified-already-at-parity; selector-29 mask remains after temporary effects retire |
+| Generated template 0 | 57 authored rows | verified-already-at-parity; complete bank census and catalog geometry-hash test |
+| Generated template 1 | 0 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 2 | 47 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 3 | 0 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 4 | 19 authored rows | verified-already-at-parity; same census/hash test and exact attachment match |
+| Generated template 5 | 37 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 6 | 0 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 7 | 0 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 8 | 50 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 9 | 0 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 10 | 39 authored rows | verified-already-at-parity; same census and hash test |
+| Generated template 11 | 41 authored rows | verified-already-at-parity; same census and hash test |
+| Stock Tutorial | 11 authored rows | verified-already-at-parity; complete source census and existing catalog test |
+| Spider temporary DeadHawg 140 | Paired ground/mask lifetime | verified-already-at-parity; DeadSpider-140 removal and texture teardown |
+| Spider temporary DeadHawg 141 | Paired ground/mask lifetime | verified-already-at-parity; DeadSpider-141 removal and texture teardown |
+| Spider temporary DeadHawg 142 | Paired ground/mask lifetime | verified-already-at-parity; DeadSpider-142 removal and texture teardown |
+| Corpse banks 208–227 and empty index 20 | Twenty-unit effect with separate body visibility | verified-already-at-parity; complete direction-bank and retirement unit tests |
+| New Game after leaving live effects | New enemy store and renderer | verified-already-at-parity; built browser journey without reloading the page |
+| Fresh account after Guest | New account save owner, enemy store and renderer | verified-already-at-parity; real local API registration/login and built browser journey |
+| Last game in the same run | Preserve saved effects and remaining clocks | verified-already-at-parity; live Spider, pool, two stains and delayed splats restored |
+| Terminal Game Over to Create/College, then next Boneyard | The completed Arena is discarded; the next Arena constructs its own enemy store | verified-already-at-parity; entry 235, existing all-dead/loadout simulation test in the canonical gate, and shared renderer disposal |
+| Ordinary Zombie DeadHawg-30 stain | Run-owned background effect | verified-already-at-parity; native death producer, save/resume and both new-generation boundaries |
+| Rotten Zombie DeadHawg-30 stain | Same owner, distinct producer | verified-already-at-parity; same per-producer journey |
+| Rotten Zombie delayed DeadHawg-31 splats | Run-owned pre-world effect | verified-already-at-parity; six restored splats and zero in new generations |
+| PoisonPool | Run-owned ground callback | verified-already-at-parity; contact, poison, save/resume, and zero in new generations |
 | Weather rain/splash particles | Separate weather owner; scene disposal is checked, no puddle-lifetime inference | out-of-system |
 
 ### Acceptance contract
@@ -1122,3 +1150,69 @@ patches from actual death effects, exercise new-run and account boundaries
 with effects alive, and preserve same-run continuation. Record observed
 dispositions before delivery. Run the exact candidate's canonical Mac gate
 and built `/game` journey under the campaign publication lock.
+
+### Report attachment identification
+
+A fresh Mac Chrome/WebGL render of template index **4**, with no prior game
+and `spiderRemains: []`, reproduces the attachment's complete local scene:
+the Tree above the wizard, both grave rows, Solomon's hole and lantern, and
+the pale patch between the two upper gravestones. The patch is authored
+**`sprite-63`, selector 26 / DeadHawg 140**, at
+`(849.0390014648438, 1112.963623046875)`, rotation
+`15.861599922180176` degrees, `s1 = s2 = 1`, flags `1`.
+It is already in the source scene, independently of any enemy store.
+The template's original generated-file SHA-256 is
+`bec9377cf539bb193e8af6ad72fa78a5e47e44206a1fef4d6bf3bfbda3f04a08`.
+Solomon's root is `(827.8855590820312, 1333.528564453125)`.
+The 2026-09-22 disposable `map-4.png` was visually compared with the original
+attachment. This identifies native authored content, not an observed
+cross-game Spider-decal leak. Native appearance and lifetime remain unchanged.
+
+### Mac implementation and investigation receipt
+
+Report disposition: **native_behavior**. No runtime, authored data, asset,
+save policy, or native lifetime was changed. Changes are limited to this
+ledger and reusable browser acceptance tooling. A native-behavior finding
+does not authorize the report's Discord fixed reaction.
+
+- `native-dead-spider.test.ts`, `spider-save.test.ts`, and
+  `boneyard-catalog.test.ts`: **13/13 passed** on Mac. These cover both corpse
+  banks, decal admission/retirement, current and legacy continuation, all
+  generated-source geometry identities, and Tutorial projection.
+- `smoke-spider-masks.mjs`: **10/10 cases passed**, expanded from one sampled
+  death record to all three. Authored targets remain after temporary records
+  disappear; temporary sprites are destroyed; the departing player's target
+  is destroyed; every case leaves zero retained children at teardown.
+  Page/console/failed-response arrays are empty.
+- `smoke-ground-effect-lifecycle.mjs` uses the built `/game` client, a private
+  host, a real .NET account API, isolated SQLite storage and a new Chrome
+  profile. It reproduces actual Spider and ordinary/rotten Zombie deaths,
+  keyboard movement onto the pool, 1,000 poison ticks and health loss, then
+  leaves while the Spider decal still has over eighteen seconds remaining.
+  Last game restores the same run with one Spider remains, one pool, two
+  background stains and six delayed splats. New Game without a page reload
+  and a real Guest-to-account login each create a distinct run containing
+  **zero temporary remains/pools/stains/splats**, while authored sprite-63
+  remains identical. The original and signed-in screenshots were inspected.
+- The focused journey at `2026-09-22T15:56:33Z` has empty page, console,
+  failed-response, unexpected-request-failure and wire-error arrays. Four
+  static media/favicon requests canceled by explicit full-page navigation
+  are separately recorded as expected `net::ERR_ABORTED` events. This is not
+  a production-account or production-deployment test.
+- Final publication requires the campaign lock, rebase to current main,
+  byte-identical local/Mac candidate files, the complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`, and this built lifecycle
+  journey again. The publication outcome records the exact candidate and
+  final gate/browser results. Disposable databases, profiles, screenshots,
+  probe source, logs and worktrees are removed after publication.
+
+There is no unresolved behavior or platform approximation within this
+reopened lifetime boundary. A different report with actual retained dynamic
+records would reopen it; this attachment's patch is positively identified as
+authored native content.
+
+The terminal-path sweep confirms `enterPostRunLoadout` replaces the completed
+Boneyard with `createHubWorld`; subsequent `createBoneyardWorld` constructs
+`createBoneyardEnemyStore`. `BoneyardScene` disposes its renderer (including
+the compact grids) on unmount or a changed `loaded` world. No player/profile
+owner carries those transient records across Game Over.
