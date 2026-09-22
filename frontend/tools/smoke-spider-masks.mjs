@@ -25,7 +25,7 @@ try {
     const { inspectSpiderCompactMasks } = await import('/tools/spider-mask-browser-probe.mjs')
     return inspectSpiderCompactMasks()
   })
-  assert.equal(records.length, 8)
+  assert.equal(records.length, 10)
   for (const record of records) {
     assert.equal(record.width, 256)
     assert.equal(record.height, 256)
@@ -37,6 +37,9 @@ try {
     assert.equal(record.joinedTargets, 2)
     assert.equal(record.departedTargets, 1)
     assert.equal(record.departedTargetDestroyed, true)
+    assert.equal(record.retiredGroundSprites, 0)
+    assert.equal(record.retiredSpritesDestroyed, true)
+    assert.equal(record.authoredMaskRetained, !record.name.startsWith('DeadSpider-'))
     assert.equal(record.remainingChildren, 0)
     if (record.image) {
       await writeFile(process.env.SDR_SPIDER_MASK_SCREENSHOT || '/tmp/solomon-spider-masks.png', Buffer.from(record.image.split(',')[1], 'base64'))

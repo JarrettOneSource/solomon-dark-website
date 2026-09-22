@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 
 export async function enterElementHub(page, baseUrl, element) {
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
+  await startElementHub(page, element)
+}
+
+/** Start from the resident title so lifecycle checks do not reload the page. */
+export async function startElementHub(page, element) {
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()

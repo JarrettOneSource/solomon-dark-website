@@ -7,7 +7,7 @@ import { getPlayerCharacter, getPlayerProgression } from '../src/game/core-serve
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 
-export async function acceptGroundEffects({ host, page, wire, screenshotPath }) {
+export async function acceptGroundEffects({ host, page, wire, screenshotPath, onLiveEffects }) {
   const playerId = host.hostPlayerId()
   await openBoneyardCombat(host, playerId)
   const state = host.state()
@@ -77,6 +77,8 @@ export async function acceptGroundEffects({ host, page, wire, screenshotPath }) 
     health: canvas.__sdrBoneyardFrame.localPlayerHealth,
   }))
   assert.equal(samples.renderer, 'webgl')
+  if (onLiveEffects) return onLiveEffects({ stains: stains.length, startingHealth,
+    poisonedHealth: poisoned.currentHealth, poisonTicks: poisoned.poisonTicksRemaining, samples })
   await page.keyboard.press('Escape')
   const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
   await pause.waitFor({ timeout: 10000 })

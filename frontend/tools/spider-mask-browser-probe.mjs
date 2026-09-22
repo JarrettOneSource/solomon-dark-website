@@ -31,7 +31,8 @@ export async function inspectSpiderCompactMasks() {
   const edgeWidth = nativeEnemySpriteRecord('DeadHawg', 139).width
   try {
     for (const member of [...sprites.map(sprite => ({ name: `selector-${sprite.atlasEntry}`, sprites: [sprite], remains: [] })),
-      { name: 'DeadSpider', sprites: [], remains: [{ id: 1, spawnTick: 0, state }] },
+      ...[140, 141, 142].map(entry => ({ name: `DeadSpider-${entry}`, sprites: [],
+        remains: [{ id: 1, spawnTick: 0, state: { ...state, decal: { ...state.decal, entry } } }] })),
       { name: 'combined', sprites, remains: [{ id: 1, spawnTick: 0, state }] },
       { name: 'cell-boundary', sprites: [{ ...sprites[0], pos: { x: position.x + 256 + edgeWidth / 2 + 1, y: position.y }, s1: 10 }], remains: [] },
     ]) {
@@ -63,6 +64,11 @@ export async function inspectSpiderCompactMasks() {
         record.image = app.renderer.extract.base64({ target: app.stage })
         record.image = await record.image
       }
+      const temporarySprites = [...ground.children]
+      view.update({ player: { position } }, [], bounds, 86)
+      record.retiredGroundSprites = ground.children.length
+      record.retiredSpritesDestroyed = temporarySprites.every(sprite => sprite.destroyed)
+      record.authoredMaskRetained = root.children.some(child => child.visible)
       view.destroy()
       record.remainingChildren = root.children.length + ground.children.length
       records.push(record)

@@ -1069,3 +1069,56 @@ The changed ground-ordering system has no unresolved browser constraint.
 The pre-existing Terrain-mask omission and explicit direct-aperture brightness
 policy remain the separate dispositions listed above. Production deployment
 or live production behavior is not established by these local Mac receipts.
+
+## 2026-09-22 — Report 12: ground stains across run and account boundaries
+
+### Evidence before implementation
+
+The original report `1551777701390721136` and its attachment
+`1551777701063426099__image.png` show a pale patch near the wizard during the
+opening Solomon encounter, described as a Spider puddle surviving a previous
+run and a Guest-to-account change. The attachment alone cannot identify its
+producer. The report archive remains unmodified.
+
+The native ownership recovered in entry 091 distinguishes two producers of
+the same DeadHawg art. `Arena::Initialize 0x00470A90` admits authored compact
+rows 25–29 to its mask grid. `Anim_DeadSpider::Tick 0x00461740` instead inserts
+one temporary row into both grids at `0x00461A0A/0x00461A3C` and removes both
+at `0x00461AF4/0x00461B22`. Its twenty-second lifetime includes growth after
+0.8 seconds and fading during the final second. These are existing
+instruction-derived facts for retail 0.72.5, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, image
+base `0x00400000`; no new clean-stock GUI capture is claimed.
+
+Fresh Mac inspection of the current generated bank confirms compact-row
+counts by template index 0–11: **57, 0, 47, 0, 19, 37, 0, 0, 50, 0, 39, 41**.
+The stock Tutorial additionally contains eleven authored compact rows.
+Therefore a stain visible before the first Spider spawn does not itself
+establish leaked state. Preserve authored content unless browser evidence
+identifies an incorrect owner.
+
+### Boundary and membership before browser investigation
+
+This reopening covers compact ground-content lifetime from map construction
+through enemy death, retirement, same-run continuation, new run, and account
+replacement. It does not reopen already recovered AI, damage, art, or painter
+geometry. The earlier ground-layer receipt retired effects before leaving;
+it did not test leaving while those effects were still alive.
+
+| Member | Native ownership and required outcome | Investigation disposition |
+| --- | --- | --- |
+| Authored selectors 25, 26, 27, 28, 29 / DeadHawg 139–143 | Map-owned rows survive enemy retirement and recur when that map is loaded | recovered-pending-verification |
+| All twelve generated templates and stock Tutorial | Preserve each source's complete authored-row membership | recovered-pending-verification |
+| Spider temporary DeadHawg 140, 141, 142 and corpse banks 208–227 | Run-owned, paired ground/mask removal at retirement and scene disposal | recovered-pending-verification |
+| New run after leaving live effects; fresh account after Guest | New enemy store and renderer; no prior temporary stain | recovered-pending-verification |
+| Last game in the same run | Preserve saved live effects and their remaining clocks | recovered-pending-verification |
+| Zombie ordinary/rotten ground stains, delayed splats, PoisonPool | Sibling run-owned effects must not cross the same boundary | recovered-pending-verification |
+| Weather rain/splash particles | Separate weather owner; scene disposal is checked, no puddle-lifetime inference | out-of-system |
+
+### Acceptance contract
+
+Use the existing Mac host/browser and mask harnesses to distinguish authored
+patches from actual death effects, exercise new-run and account boundaries
+with effects alive, and preserve same-run continuation. Record observed
+dispositions before delivery. Run the exact candidate's canonical Mac gate
+and built `/game` journey under the campaign publication lock.
