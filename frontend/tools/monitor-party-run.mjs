@@ -17,6 +17,8 @@ const sampleMs = positive('SDR_SOAK_SAMPLE_MS', 5000)
 const stallMs = positive('SDR_SOAK_STALL_MS', 20 * 60 * 1000)
 const profileSlowWindows = process.env.SDR_SOAK_PROFILE_SLOW_WINDOWS === '1'
 const profileThresholdFps = positive('SDR_SOAK_PROFILE_MIN_FPS', 90)
+const localPeer = process.env.SDR_SOAK_LOCAL_PEER === '1'
+const headless = process.env.SDR_SOAK_HEADLESS === '1'
 const pilotModId = 'local.performance.party-soak'
 const runtime = JSON.parse(await readFile(process.env.SDR_SOAK_RUNTIME_FILE || join(output, 'runtime.json'), 'utf8'))
 await mkdir(output, { recursive: true })
@@ -38,17 +40,20 @@ let stopSignal = null
 let profilingFailure = null
 process.once('SIGINT', () => { stopSignal = 'SIGINT' })
 process.once('SIGTERM', () => { stopSignal = 'SIGTERM' })
-event('monitor.started', { pid: process.pid, targetWave, maximumMs, sampleMs, stallMs, profileSlowWindows, profileThresholdFps })
+event('monitor.started', { pid: process.pid, targetWave, maximumMs, sampleMs, stallMs, profileSlowWindows, profileThresholdFps, localPeer, headless })
 
 try {
-  const mac = await chromium.launch({
+  const launchOptions = {
     executablePath: process.env.SDR_CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    headless: false, handleSIGINT: false, handleSIGTERM: false,
+    headless, handleSIGINT: false, handleSIGTERM: false,
     args: ['--autoplay-policy=no-user-gesture-required'],
-  })
+  }
+  const mac = await chromium.launch(launchOptions)
   clients.push(await createClient(mac, 'mac', process.env.SDR_SOAK_MAC_ELEMENT || SOAK_ELEMENTS.mac))
-  const windows = await chromium.connectOverCDP(process.env.SDR_SOAK_WINDOWS_CDP || 'http://127.0.0.1:9431')
-  clients.push(await createClient(windows, 'windows', process.env.SDR_SOAK_WINDOWS_ELEMENT || SOAK_ELEMENTS.windows))
+  const peer = localPeer ? await chromium.launch(launchOptions)
+    : await chromium.connectOverCDP(process.env.SDR_SOAK_WINDOWS_CDP || 'http://127.0.0.1:9431')
+  clients.push(await createClient(peer, localPeer ? 'mac-peer' : 'windows',
+    process.env.SDR_SOAK_PEER_ELEMENT || process.env.SDR_SOAK_WINDOWS_ELEMENT || SOAK_ELEMENTS.windows))
   await Promise.all(clients.map(async client => {
     await client.page.bringToFront()
     await enterElementHub(client.page, baseUrl, client.element)
@@ -66,7 +71,7 @@ try {
     }, clients[1].playerId)
     const invitation = clients[1].page.locator('[data-party-invitation]')
     await invitation.waitFor({ timeout: 30000 })
-    await invitation.getByRole('button', { name: 'Accept', exact: true }).click()
+    await invitation.getByRole('button', { name: /^accept$/i }).click()
   }
   await Promise.all(clients.map(client => client.page.waitForFunction(() => (
     window.__sdrSoak?.party?.memberPlayerIds.length === 2
@@ -75,12 +80,15 @@ try {
   assert.equal(parties[0].id, parties[1].id, 'both browsers must join the same authoritative party')
   expectedParty = parties[0].id
   event('party.joined', { partyId: expectedParty, players: clients.map(c => ({ name: c.name, id: c.playerId })) })
-  await enterBoneyard(clients[0].page)
+  const leader = clients.find(client => client.playerId === parties[0].leaderPlayerId)
+  assert.ok(leader, 'the authoritative party leader must be one of the monitored clients')
+  await enterBoneyard(leader.page)
   await Promise.all(clients.map(async client => {
     await client.page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90000 })
     await client.page.waitForFunction(() => (
       document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.playerCount === 2
     ), undefined, { timeout: 30000 })
+    await client.page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 30000 })
     await client.page.screenshot({ path: join(output, `${client.name}-entry.png`) })
     client.previousMetrics = metricMap(await client.cdp.send('Performance.getMetrics'))
     client.previousTick = null
@@ -152,18 +160,22 @@ try {
   }))
   await writeFile(join(output, 'result.json'), JSON.stringify({
     completed, passed: completed && failure === null && errorCount === 0 && stopSignal === null,
-    stopSignal, targetWave, highestWave, samples, runId: expectedRun, partyId: expectedParty,
+    stopSignal, targetWave, highestWave, samples, runId: expectedRun, partyId: expectedParty, localPeer, headless,
     startedAtUtc: new Date(startedAt).toISOString(), finishedAtUtc: new Date().toISOString(),
     errorCount, failure: failure && clean(failure),
-    clients: clients.map(({ name, playerId, summary, reducerHealth, checkpoints, profiler }) => ({
-      name, playerId, reducerHealth, diagnosticCheckpoint: checkpoints.status(),
+    viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1,
+    clients: clients.map(({ name, element, playerId, summary, reducerHealth, checkpoints, profiler }) => ({
+      name, element, playerId, reducerHealth, diagnosticCheckpoint: checkpoints.status(),
       cpuDiagnostic: profiler?.status() ?? null, ...summary,
     })),
     mutation: SOAK_MUTATION,
   }, null, 2))
   await Promise.all(clients.map(async client => {
+    await client.cdp.detach().catch(() => {})
     await client.context.close().catch(() => {})
+    event('monitor.context_closed', { client: client.name })
     await client.browser.close().catch(() => {})
+    event('monitor.browser_closed', { client: client.name })
   }))
   await Promise.all([events, ...streams].map(stream => new Promise(done => stream.end(done))))
 }
@@ -342,7 +354,8 @@ async function sampleClient(client) {
     taskCpuPercent: (after.TaskDuration - client.previousMetrics.TaskDuration) / seconds * 100,
     heapMiB: after.JSHeapUsedSize / 1048576, documents: after.Documents, nodes: after.Nodes,
     snapshots: network.snapshots, snapshotHz: network.snapshots / seconds,
-    snapshotP99GapMs: percentile(network.gaps, 0.99), ingressKiBPerSecond: network.bytes / 1024 / seconds,
+    snapshotP99GapMs: percentile(network.gaps, 0.99), maximumSnapshotGapMs: Math.max(0, ...network.gaps),
+    ingressKiBPerSecond: network.bytes / 1024 / seconds,
     serverTickHz: client.previousTick === null ? null : (sampled.tick - client.previousTick) / seconds,
     checkpointSequence: client.checkpointSequence, reducerHealth: client.reducerHealth,
     cpuProfiling: client.profiler?.overlaps(sampleStartedAt, Date.now()) ?? false,
@@ -357,6 +370,7 @@ function updateSummary(summary, row) {
   summary.minimumFps = Math.min(summary.minimumFps ?? Infinity, row.renderFps)
   summary.meanFps = (summary.meanFps ?? 0) + (row.renderFps - (summary.meanFps ?? 0)) / summary.samples
   summary.maximumFrameMs = Math.max(summary.maximumFrameMs ?? 0, row.maximumFrameMs)
+  summary.maximumSnapshotGapMs = Math.max(summary.maximumSnapshotGapMs ?? 0, row.maximumSnapshotGapMs)
   summary.maximumHeapMiB = Math.max(summary.maximumHeapMiB ?? 0, row.heapMiB)
   summary.firstHeapMiB ??= row.heapMiB
   summary.finalHeapMiB = row.heapMiB

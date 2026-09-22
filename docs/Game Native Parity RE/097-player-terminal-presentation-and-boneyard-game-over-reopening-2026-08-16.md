@@ -1,5 +1,121 @@
 # Player terminal presentation and Boneyard Game Over reopening — 2026-08-16
 
+## 2026-09-22 — Report 05 integrated multiplayer review
+
+Recorded before acceptance-tool changes, on `87b824c305a396b7d3622e4d23a0d7a79d033e56`.
+The umbrella report `1551772749280706613` describes an Air/Ether multiplayer
+run, occasional freezes and a late crash, with improved performance. It has no
+attachments of its own. Both complete related videos were sampled across their
+15.25/15.595-second durations; both report-11 images and report-09's intact ZIP
+were inspected. Report 09 ends with an unchanged combat scene; report 10 has
+several holds and resumed action but does not record the crash. The white image
+has a visible HUD and living player, Dire Aliss, and a disconnected participant.
+It supplies no duration or triggering state. The original archives are read-only.
+
+The completed outcomes for 09, 10 and 11 are all **investigated**, not fixed.
+The same-run terminal archive below establishes the repaired Game Over crash;
+the 1,000-factory comparison establishes the repaired Mage registration leak.
+Neither establishes the cause of the preceding video holds or white image.
+Entry 254 separately establishes an 11.227-second delivery gap and a
+14.578-second acknowledgment/backpressure interval while rendering continued.
+The network-worker/packet trace for that historical interval is unavailable.
+Entry 145's module recovery is independently repaired. Entry 297's report-12
+patch is authored stock decoration and must remain present.
+
+The September 20–21 `performance-*` receipts are prior measured work, already
+present in main; their historical wave-100 target is not this report's result.
+No new population limit, effect reduction, flash suppression, relaxed protocol
+validation, or speculative transport timeout follows from the report.
+
+System boundary: integrated browser party-run lifecycle, reusing the complete
+native ownership inventories in entries 051/058/091/097/161/254 and 017/083/145.
+Retail 0.72.5 SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`, remains the oracle. This pass adds no native
+recovery or authored constants. The required membership is:
+
+| Member | Established contract and acceptance |
+| --- | --- |
+| Air and Ether party members; College entry, shared launch, native waves and generated bosses | One authoritative run, ordinary skill acquisition/input and native wave timing; two real Mac browsers must progress beyond the reported 38-wave range |
+| Coffin four-style admission, anchored/Hurricane-excluded owners, Maggot descendants and independent death effects | Reuse entry 254 and its saved/burst browser journey without reducing populations or VFX |
+| Mage world/attached factories, both clocks, every live age, orphan and registration retirement | Reuse entries 091/097, focused tests and both built Game Over exits |
+| Compact snapshots, per-client acknowledgments, bounded backpressure and recovery keyframes | Healthy peer must keep advancing during an intentionally withheld-ack interval; stalled peer must recover without a decoder error |
+| Region flash writers, both lighting modes, context restoration and run teardown | Reuse entries 017/083; native white flash birth/decay remains visible and eventually clear |
+| Lazy-module retry/reload guard and retained save | Reuse entry 145's built-client recovery journey |
+| Authored map decoration | Out of this repair; preserve report 12's verified native behavior |
+| Historical stall trigger and white-frame attribution | Unresolved evidence, separate from reproducible implementation defects and current-candidate acceptance |
+
+Acceptance reuses the maintained private Lua soak pilot, explicitly a modified
+stress workload (invulnerability, no mana spending and automatic learned
+abilities). It does not skip waves, grant ranks, change cooldowns or claim normal
+balance. The existing monitor needs a second isolated Mac browser option and
+headless ownership so acceptance neither runs on Windows nor uses another
+worker's GUI/CDP session. Report the platforms and workload explicitly. Final
+dispositions and measurements follow the exact-candidate Mac gate and journeys.
+
+The initial two-Mac pilot exposed an acceptance-harness assumption: concurrent
+entry assigned Ether `player-1` and party leadership, but the old monitor always
+clicked launch in the first (Air) browser. The host correctly kept the party in
+College. Reuse the authoritative `leaderPlayerId` to select the launching page;
+do not bypass leadership or change gameplay. The same harness used an exact
+mixed-case `Accept` selector for the native uppercase `ACCEPT` button. Both
+corrections belong to test navigation, not a claimed playtest-runtime repair.
+
+### Focused integration receipt
+
+Mac mini arm64, Node 22.17.0, Chrome 153.0.8010.53; the initial 7,163 tracked
+files match SHA-for-SHA. All 150 focused simulation, protocol, supervisor and
+Mage-view tests pass. The two-browser startup pilot passes through wave 3 with
+both reducers enabled and no client errors. CDP sessions are explicitly detached
+before their contexts and browsers close; both browser closures and host exit
+were observed. Sampling begins after the shared loading barrier releases.
+
+The built-client constituent journeys pass:
+
+- Both terminal exits retain all ten logical Mage factories and eight visible
+  coronas, progress the corpse to frame three, and reach loadout. Maximum
+  snapshot gaps are 181/188 ms, with all six error arrays empty.
+- The original schema-37 continuation restores through the maintained loader.
+  Its two Coffins and 103 then-current children retire correctly. A separate
+  eight-Coffin/four-style burst retains Hurricane exclusion and renders 611
+  simultaneous death effects at 16.8 ms p99/max frame intervals. Both journeys
+  have empty page/console/request/response/wire/host error arrays.
+- Both lighting modes clear the native white Comet flash, restore their WebGL
+  contexts, and display the world. The real ModPowerups retry and all nine
+  route/module recovery cases pass; intentional failures are separate from
+  unexpected error arrays.
+- `smoke-multiplayer-recovery.mjs` provisions two authenticated tickets through
+  the real supervisor, joins one party and enters one Boneyard. Both browser
+  sockets negotiate bounded permessage-deflate. During a 15-second injected
+  acknowledgment hold, the affected client renders 900 frames but receives only
+  eight snapshots; its healthy peer receives 300 snapshots and advances 1,500
+  ticks. Releasing the eight held acknowledgments crosses the skipped sequence
+  window and restores 60 snapshots/300 ticks in the next three seconds, with
+  empty error arrays. The host records a 14,571 ms flow-control interval. This
+  demonstrates the recovery mechanism and reproduces the *shape* of report
+  09's symptom; it does not identify that historical interval's trigger.
+
+Final member dispositions for the verified native contracts above are
+`verified-already-at-parity`; no gameplay code is changed by report 05. The
+authored decoration is `out-of-system`, because report 12 proved it stock.
+Historical stall/white-image attribution is `out-of-system` for an evidenced
+source repair and remains explicitly unresolved report evidence. The sustained
+Air/Ether acceptance uses the same native wave/party contract and is recorded
+separately in the campaign outcome after the remaining workers finish; these
+focused receipts are not a claim that the long run or full gate has passed.
+
+Reproduction from the Mac `frontend` directory uses
+`node --experimental-strip-types tools/smoke-multiplayer-recovery.mjs` with
+`SDR_MULTIPLAYER_RECOVERY_OUTPUT` pointing at a disposable directory. The
+existing `party-soak-runtime.mjs` and `monitor-party-run.mjs` support
+`SDR_SOAK_LOCAL_PEER=1 SDR_SOAK_HEADLESS=1 SDR_SOAK_MAC_ELEMENT=Air
+SDR_SOAK_PEER_ELEMENT=Ether SDR_SOAK_WAVE=46`; success requires both clients to
+enter wave 47 in the same run. Supply a task-owned output directory and unused
+web/host ports. Final publication still requires the exact rebased candidate's
+canonical Mac gate and real-browser journeys under the shared lock. Their final
+commit/hash and results belong in report 05's outcome, not inferred from the
+preliminary measurements here. There is no production-deployment claim.
+
 ## 2026-09-22 — Report 10 terminal Arena clock investigation
 
 Recorded before implementation, against `d05c812d1`. Report 10's original
