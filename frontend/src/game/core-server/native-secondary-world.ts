@@ -398,12 +398,14 @@ function applyContact(
   const damaged = damageBoneyardEnemy(source, {
     actorId: contact.targetId,
     etherDrainCapture,
+    hitStrength: contact.hitStrength,
     magic: contact.kind !== 'physical',
     amount: contact.amount * damageMultiplier,
     hasMagicDamage: contact.kind !== 'physical',
     lethalObserver,
     registerWorldPainter,
     sourcePlayerId: contact.ownerId,
+    suppressHurtSound: contact.suppressHurtSound,
     tick,
   })
   return { enemies: damaged.store, events: damaged.events }

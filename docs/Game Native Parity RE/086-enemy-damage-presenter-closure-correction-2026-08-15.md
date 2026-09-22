@@ -231,3 +231,140 @@ There are no browser-platform approximations or undisposed members inside the
 implemented Website enemy-damage presenter. The separately documented Imp
 materialization phase and the remaining numeric death-effect physics are not
 producers in this system and remain outside this closure.
+
+## 2026-09-22 — Report 02: periodic damage lost its native hit response
+
+### Report, evidence, and boundary (recorded before implementation)
+
+Soggy's tentative report is the original Discord message
+`1542255501855825960/1551640716747341854`, archived at
+`/home/user/solomon-darker-bug-reports/2026-09-21/02-burning-enemies-red-glow/report.txt`.
+Its only attachment, `1551640716214669466__afterburn_red_glow.mp4`, is
+1920x1080, 180 frames, 6.0178 seconds; SHA-256
+`2d4761fb420cfc94c16283e643b64804ff4fb3eb03c8099cacf87bb57a5158e0`.
+Inspection across the full clip shows persistent solid red enemy silhouettes
+while Fire damage continues. This is a body hit redraw, distinct from the
+correct small target light and additive flame children.
+
+This reopens the damage-presenter contract: the earlier pass recovered the
+receiver but did not carry the modifier's damage-context strength and sound
+flags through every producer. The system boundary here is **target modifier
+periodic-damage response metadata, from the native producer to the existing
+shared enemy receiver, replicated hit sample, and body renderer**. The ordinary
+hit renderer is already capable of representing zero and fractional strength.
+Do not remove native flame art, illumination, ordinary contact flashes, or the
+separate permanent `FLAG_BURNING` enemy variant.
+
+Fresh static evidence uses retail 0.72.5, preferred base `0x00400000`, 4,723,200
+bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Ghidra `SolomonDark/SolomonDark.exe` was read through the existing read-only
+replica wrapper, explicitly passing the canonical `Decompiled Game/ghidra_project`
+and `ghidra_project_replicas` paths. No native GUI session was taken over.
+This is instruction evidence, not a claimed new clean-stock visual capture.
+Read-only Mod Loader revision: `08bfba9ef367f7b863848030d0a289dc31e33192`;
+wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+The decompiler, full instruction dumps, and xref census were reconciled.
+
+| Native evidence | Recovered contract | Confidence |
+| --- | --- | --- |
+| Burn tick `0x00629A40`; instructions `0x00629AA5`, `0x00629ABE` | Damage flags OR `0x18`; `FLDZ` stores hit strength zero at `0x0081C6F8` before dispatch | high, instructions |
+| FrostBurn tick `0x006278B0`; `0x00627914`, `0x0062792D` | Same flags and zero strength as Burn | high, instructions |
+| ElectricBurn `0x00628F10`, source `0x006290A1..0x006290D0` | `Int(3)==1` gives `0.25+Float(0.5)` strength; other two branches give **zero**, not 0.25; flags `0x0A` | high, instructions |
+| ElectricBurn chained target `0x00629763..0x0062978E` | Each admitted arc target gets `0.25+Float(0.5)` strength, without source gate | high, instructions |
+| Steamed `0x00625F40`, `0x00625F8B..0x00625FC8` | Flags `0x0A`, strength `0.25+Float(0.5)`; preserve the separate stored Fire explosion payload | high, instructions |
+| Poisoned `0x00627160` | Separate poison damage slot `0x0081C6F0`, flags `0x88`, green material and strength 0.75; not ordinary Burn | high, decompilation plus binary constants |
+| EtherBurn `0x00629CD0` | Flame/light presentation only; no periodic damage dispatch | high, decompilation |
+| Common reaction `0x00627F80`, `0x00627F99..0x00627FBB` | Positive physical+magic damage refreshes timer `+0x78=1` and copies context strength to `+0x7C`, including zero. Flag 8 clears the separate reaction latch `+0x80` | high, instructions |
+| Zombie `0x0048B1E0`, Skeleton family `0x0048A600` | Flag `0x10` suppresses hurt cue, independently of strength; shield path remains separate | high, fresh Zombie decompilation and prior family census |
+| Shared renderer `0x00624B40` and tick `0x00624AC0` | Red body alpha uses strength times the decaying timer; zero strength hides the red pass without canceling damage or timer. Native complex/simple lighting behavior is unchanged | high, decompilation and existing renderer tests |
+
+### Membership sweep and implementation consequences
+
+The factory is the only direct Burn-constructor xref (`0x005B94FE` in
+`0x005B7080`); Burn's only tick reference is vtable slot `0x0079E510`.
+The shared reaction has two direct callers (Badguy contact `0x0048A290` and
+PlayerWizard contact `0x0052F540`) and 92 inherited vtable/data references.
+The strength-global census has 29 references in 24 functions. Besides the
+modifier members below, the direct spell/contact writers are `0x0044FFE0`,
+`0x0045B940`, `0x0047CB20`, `0x00490860`, `0x00649890`, `0x0053F9C0`,
+`0x005408F0`, `0x00541870`, `0x00543860`, `0x005F2360`, `0x005F3830`,
+`0x005F8620`, `0x005FF1D0`, `0x005FFDC0`, `0x00604E90`, `0x0061C440`,
+`0x00645540`, and `0x0047A580`: out-of-system direct-hit producers, not
+periodic modifier dispatches. Their default hit behavior must remain intact.
+
+| Member | Final disposition / acceptance contract |
+| --- | --- |
+| Burn from primary Fire/Explode and Ember, Ring of Fire, Firewalker/Fire Wall patches, Fire Magic Trap | exact-ported: one shared modifier path, strength zero and quiet hurt cue; unchanged 200-tick damage, refresh/merge, flame and light lifetime |
+| FrostBurn from enhanced Ring of Ice / FreezeWave | exact-ported: same zero-strength/quiet response; preserve frost art and damage |
+| ElectricBurn Magic Trap source | exact-ported: transport sampled strength, correct no-flash gate, retain existing RNG draw order/light |
+| ElectricBurn Ball Lightning / Ground Spark source and chained targets | exact-ported: source gate and independent arc strength; retain damage, targets, stun and lifetime |
+| Steamed from Steam Jet | exact-ported: fractional hit strength, retain damage and explosion/Ember payload |
+| EtherBurn | verified-already-at-parity: no periodic damage; existing five art records and target light remain |
+| Poisoned | out-of-system: separate player poison slot/material owner; not carried by the enemy secondary damage list |
+| Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon, Coffin, Spider, DireFaculty, Heartmonger, DemonSkull | exact-ported through the common receiver; assert each family's zero-strength HP damage and positive-strength direct-hit control |
+| Coffin-owned Maggot | exact-ported through the same contact transport and separate Maggot receiver |
+| Portal | verified-already-at-parity: separate native hurt animation; generic red body pass is disabled, retain that response |
+| Cocoon | verified-already-at-parity: separate release-only damage receiver, no ordinary body hit pass |
+| Shield absorption, immunity, target death/removal, owner exit, world reset | verified-already-at-parity: retain existing authoritative gates and teardown; zero strength must not bypass HP damage, cause shield overflow, or retain orphan effects |
+| Burn art `BadGuys[333..342]`, Ether art `[246..250]`, Frost art `[10,11]`, target MiscLight | verified-already-at-parity; all authored rows already extracted; no asset/table substitution |
+| Simple/complex lighting; snapshot/keyframe/delta interpolation | verified-already-at-parity: existing zero/fractional hit sample and material rules; verify actual rendered samples and no red pixels during isolated Burn |
+
+Native scalar constants were read directly from the verified PE: float
+`0x007DE870=0.5`, double `0x007DE8F0=0.25`, float `0x007DE934=0.75`.
+There is no additional authored table in this response transport. Existing
+fixed-tick clocks, modifier merge and removal, target light registration,
+flame fading, renderer ordering and replicated state remain their current
+owners. The correction belongs in `native-secondary-abilities.ts`'s damage
+result and `native-secondary-world.ts`'s existing receiver call, using its
+already-supported `hitStrength` and `suppressHurtSound` inputs.
+
+Acceptance: a failing regression against the current Mac candidate before the
+change, focused per-producer and per-recipient checks, then the complete Mac
+canonical gate and a real Chrome Title/Create/College/Boneyard journey. The
+browser must show normal direct-hit feedback, isolated Burn HP loss with
+flames/light and no solid red body, refresh, expiry, target removal and reset;
+page/console/network/wire failures must be empty. No platform approximation is
+needed. Publication requires the exact final tree to pass the canonical Mac gate and this browser journey again while the campaign lock is held.
+
+
+### Implementation and focused Mac receipt
+
+The existing damage contact now carries optional `hitStrength` and
+`suppressHurtSound`; the existing enemy receiver consumes them. Burn/FrostBurn
+supply zero/quiet, ElectricBurn transports the sampled source/arc response,
+and Steamed supplies its native fractional strength. The native hit timer
+still refreshes, HP damage continues, and ordinary direct hits are unchanged.
+No renderer, atlas, protocol, save-schema, or Mod Loader change was needed.
+
+On the isolated Mac acceptance worktree, the initial two Burn regressions
+failed specifically on missing response fields and `red alpha 1 != 0`. After
+the shared correction they passed for all twelve common enemy families and
+all five Fire producer identities. Three sibling regressions likewise failed
+before their correction. The five focused files then passed **237 tests**;
+additional Maggot zero/fractional/direct response and shield break/no-overflow
+checks passed **2/2**. Existing coverage retains the 200-tick damage sum,
+strongest-payload refresh, two Burn RNG words, ten flame records, final-50-tick
+light fade, EtherBurn's no-damage lane, and all renderer families.
+
+The maintained browser journey is `frontend/tools/smoke-burn-response.mjs`.
+It uses owned ephemeral preview/host ports and a fresh Chrome context, real
+Title/Create/College/Boneyard navigation, and target staging at the native
+modifier interface. The first Mac Chrome `153.0.8010.53` run decoded 118 wire
+frames with empty page, console, failed-response, failed-request and wire-error
+arrays. At sample tick 310.17, Zombie/Skeleton/Imp each had hit alpha zero,
+**39 flame primitives and 3 target lights** were present, and each target had
+lost HP. A preceding ordinary hit produced positive red alpha. Refresh at
+334 retained the same three modifier IDs beyond their original expiry;
+by sample 535.18 both flames and lights were zero. Target removal and world
+reset also cleared their owners. Inspected screenshots showed textured bodies
+with the native flames, followed by clean expiry, without red silhouettes.
+The original reporter archive is preserved; these disposable test captures
+are removed after publication.
+
+The final canonical command is `/opt/homebrew/bin/bash ./scripts/validate.sh`
+from the exact Mac worktree. Publication also reruns the focused integration
+file and the browser journey in both Complex Lighting modes. The campaign
+execution outcome records the final commit, full gate, browser receipts, and
+publication identity; no production deployment is initiated by this report.

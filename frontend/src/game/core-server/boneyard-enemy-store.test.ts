@@ -11,6 +11,7 @@ import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schem
 import { nextBoneyardWaveRandom, randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { buildNativeEnemySteering } from '../core-kernels/native-enemy-pathfinding.ts'
+import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { advanceNativeRngWords, createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from '../core-kernels/native-rng.ts'
 import type { NativeSecondaryMovementModifierKind, NativeSecondaryTargetEffectPatch, NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
@@ -18,6 +19,7 @@ import { nativeHeartmongerRecipe } from '../core-kernels/native-survival-heartmo
 import { nativePortalChildPosition, nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
 import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skeleton-bosses.ts'
 import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
+import { resolveBoneyardNativeSecondaryCombat } from './native-secondary-world.ts'
 import { projectBoneyardCrows } from '../host/project-boneyard-crows.ts'
 import { boneyardEnemyLiveCount, createBoneyardEnemyStore, positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { applyBoneyardStaffDisable, breakBoneyardSkeletonPike, damageBoneyardEnemy, releaseBoneyardSkeletonPike, setBoneyardEnemyHurricaneContactCooldown } from './enemies/damage.ts'
@@ -5542,7 +5544,6 @@ for (const [name, fragmentPair] of [['Ironmaw', [96, 97]], ['Foulshaft', [98, 99
   })
 }
 
-
 test('Heartmonger owns five Crows, summons at its native deadline, and releases six birds on death', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('heartmonger'), {
     projectileWorldBlocked: NO_WORLD_CONTACT, players: FAR_PLAYERS, resolveMovement: DIRECT_MOVEMENT,
@@ -5576,7 +5577,6 @@ test('Heartmonger owns five Crows, summons at its native deadline, and releases 
   assert.equal(retired.rewards[0]?.experience, 850)
   assert.equal(retired.store.actors.some(({ id }) => id === actor.id), false)
 })
-
 
 test('Pike contact retains the player, freezes its action, and publishes a direct target constraint', () => {
   const players = { player: livingTarget(40, 0) }
@@ -5748,4 +5748,21 @@ test('breaking a Pike updates the canonical equipment selector and cannot break 
   assert.equal(configured.family.weapon, 'claw')
   assert.equal(configured.flags.includes('FLAG_PIKE'), false)
   assert.equal(breakBoneyardSkeletonPike(broken.store, actor.id).broke, false)
+})
+
+test('Maggot periodic contacts retain zero and fractional native hit strengths', () => {
+  const source = openedCoffin('burn-response-maggot', FAR_PLAYERS).store
+  const maggot = source.maggots[0]!
+  assert.ok(maggot)
+  const ready = { ...source, maggots: [{ ...maggot, combatActive: true }] }
+  for (const hitStrength of [0, 0.375, 1]) {
+    const result = resolveBoneyardNativeSecondaryCombat(ready, {
+      damage: [{ amount: 0.01, kind: 'fire', ownerId: 'player', sourceActorId: 1,
+        targetId: maggot.id, hitStrength, suppressHurtSound: true }],
+      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+    }, source.lastStepTick)
+    const damaged = result.enemies.maggots[0]!
+    assert.ok(damaged.currentHealth < maggot.currentHealth)
+    assert.equal(nativePuppetHitAlpha(damaged.hitFeedback, source.lastStepTick), hitStrength)
+  }
 })

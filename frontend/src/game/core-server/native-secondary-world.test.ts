@@ -5,6 +5,7 @@ import { createNativeFacultyAction } from '../core-kernels/native-faculty-action
 import { createNativeDarkFireballs } from '../core-kernels/native-faculty-spells.ts'
 import { createNativeGuidedMissile } from '../core-kernels/native-guided-missile.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
 import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
@@ -382,4 +383,54 @@ test('Spider Ether Drain capture preserves rewards while suppressing sound and c
     const next = stepBoneyardEnemyStore(retired.store, { ...context, tick: 3 })
     assert.deepEqual(next.rewards, [])
   }
+})
+
+test('periodic zero-strength contacts damage every common enemy receiver without a red redraw or hurt cue', () => {
+  const families = ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'IMP', 'ZOMBIE',
+    'WRAITH', 'DEMON', 'COFFIN', 'SPIDER', 'DIREFACULTY', 'HEARTMONGER', 'DEMONSKULL'] as const
+  for (const enemyToken of families) {
+    const source = stepBoneyardEnemyStore(createBoneyardEnemyStore(`burn-${enemyToken}`), {
+      projectileWorldBlocked: () => false, players: {}, tick: 0,
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [{ enemyToken, flags: [], id: 1, locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+        position: { x: 100, y: 100 }, spawnTick: 0, waveOrdinal: 1 }],
+    }).store
+    const actor = source.actors[0]!
+    const contact = { amount: 0.01, kind: 'fire' as const, ownerId: 'player', sourceActorId: 1,
+      targetId: actor.id, hitStrength: 0, suppressHurtSound: true }
+    const result = resolveBoneyardNativeSecondaryCombat(source, { damage: [contact],
+      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [] }, 0)
+    const burned = result.enemies.actors[0]!
+    assert.ok(burned.currentHealth < actor.currentHealth, `${enemyToken}: HP loss`)
+    assert.equal(nativePuppetHitAlpha(burned.hitFeedback, 0), 0, `${enemyToken}: zero red alpha`)
+    assert.equal(burned.hitFeedback.timer, 1, `${enemyToken}: damage still refreshes timer`)
+    assert.equal(result.events.filter(event => event.type === 'enemy-damage-sound').length, 0)
+    const direct = resolveBoneyardNativeSecondaryCombat(source, { damage: [{ ...contact,
+      hitStrength: 1, suppressHurtSound: false }], dampenedCasterTargetIds: [],
+      dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [] }, 0)
+    assert.equal(nativePuppetHitAlpha(direct.enemies.actors[0]!.hitFeedback, 0), 1,
+      `${enemyToken}: ordinary hit remains visible`)
+  }
+})
+
+test('quiet periodic damage keeps shield absorption and break separate from body feedback', () => {
+  const source = stepBoneyardEnemyStore(createBoneyardEnemyStore('burn-shield'), {
+    projectileWorldBlocked: () => false, players: {}, tick: 0,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'ZOMBIE', flags: [], id: 1, locationPolicy: 'anywhere',
+      nativeTypeId: 1006, position: { x: 100, y: 100 }, spawnTick: 0, waveOrdinal: 1 }],
+  }).store
+  const actor = source.actors[0]!
+  const result = resolveBoneyardNativeSecondaryCombat({ ...source, actors: [{ ...actor,
+    shieldHealth: 0.001, shieldMaximumHealth: 0.001 }] }, {
+    damage: [{ amount: 0.01, kind: 'fire', ownerId: 'player', sourceActorId: 1,
+      targetId: actor.id, hitStrength: 0, suppressHurtSound: true }],
+    dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+  }, 0)
+  assert.equal(result.enemies.actors[0]!.currentHealth, actor.currentHealth)
+  assert.equal(result.enemies.actors[0]!.shieldHealth, 0)
+  assert.equal(result.enemies.actors[0]!.hitFeedback.timer, 0)
+  assert.deepEqual(result.events.filter(event => event.type === 'enemy-damage-sound').map(event => event.sound),
+    ['hit-shield', 'pop-shield'])
 })

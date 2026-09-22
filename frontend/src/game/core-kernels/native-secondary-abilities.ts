@@ -456,9 +456,11 @@ export interface NativeSecondaryTickContext {
 export interface NativeSecondaryDamageContact {
   readonly amount: number
   readonly etherDrain?: boolean
+  readonly hitStrength?: number
   readonly kind: NativeSecondaryDamageKind
   readonly ownerId: string
   readonly sourceActorId: number
+  readonly suppressHurtSound?: boolean
   readonly targetId: number
 }
 
@@ -1469,6 +1471,8 @@ export function stepNativeSecondaryAbilities(
     damage.push({
       amount: kind === 'lightning' && (effect?.prismaticTicks ?? 0) > 0 ? amount * 2 : amount,
       ...(actor.kind === 'ether-drain' ? { etherDrain: true } : {}),
+      ...(actor.kind === 'fire-burn' ? { hitStrength: 0, suppressHurtSound: true } : {}),
+      ...(actor.kind === 'electric-burn' ? { hitStrength: actor.phase } : {}),
       kind,
       ownerId: actor.ownerId,
       sourceActorId: actor.id,
@@ -1494,10 +1498,20 @@ export function stepNativeSecondaryAbilities(
           .slice(0, effect.electricBurn.arcCount)
           .map(({ target }) => target)
         for (const target of [sourceTarget, ...arcTargets]) {
+          // Mod_ElectricBurn gates only its source's hit flash; arcs always sample one.
+          const gate = target === sourceTarget ? drawNativeInteger(rng, 3) : null
+          rng = gate?.state ?? rng
+          let hitStrength = 0
+          if (gate === null || gate.value === 1) {
+            const flash = drawNativeFloat(rng, 0.5)
+            rng = flash.state
+            hitStrength = Math.fround(0.25 + flash.value)
+          }
           const targetEffect = nativeSecondaryTargetEffect(state, effect.worldKey, target.id)
           damage.push({
             amount: effect.electricBurn.damagePerTick
               * ((targetEffect?.prismaticTicks ?? 0) > 0 ? 2 : 1),
+            hitStrength,
             kind: 'lightning',
             ownerId: effect.electricBurn.ownerId,
             sourceActorId: effect.electricBurn.sourceActorId,
@@ -1515,8 +1529,11 @@ export function stepNativeSecondaryAbilities(
     if (effect.steamed !== null) {
       const target = context.target(effect.worldKey, effect.targetId)
       if (target) {
+        const flash = drawNativeFloat(rng, 0.5)
+        rng = flash.state
         damage.push({
           amount: effect.steamed.damagePerTick,
+          hitStrength: Math.fround(0.25 + flash.value),
           kind: 'fire',
           ownerId: effect.steamed.ownerId,
           sourceActorId: effect.steamed.sourceActorId,
@@ -1542,9 +1559,11 @@ export function stepNativeSecondaryAbilities(
     if (!target) continue
     damage.push({
       amount: effect.frostBurnDamagePerTick,
+      hitStrength: 0,
       kind: 'ice',
       ownerId: effect.frostBurnOwnerId,
       sourceActorId: effect.frostBurnSourceActorId,
+      suppressHurtSound: true,
       targetId: target.id,
     })
     const gate = drawNativeInteger(rng, 2)
@@ -2912,7 +2931,7 @@ export function stepNativeSecondaryAbilities(
           true,
         )
         const scalarGate = drawNativeInteger(light.state, 3)
-        let contactScalar = MAGIC_TRAP_ELECTRIC_BURN_CONTACT_SCALAR_BASE
+        let contactScalar = 0
         rng = scalarGate.state
         if (scalarGate.value === 1) {
           const scalar = drawNativeFloat(

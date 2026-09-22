@@ -1870,6 +1870,7 @@ test('Magic Trap ElectricBurn owns exact target-following RNG, light state, and 
   })
   assert.deepEqual(result.damage, [{
     amount: born.damage,
+    hitStrength: Math.fround(0.25 + scalar.value),
     kind: 'lightning',
     ownerId: 'player',
     sourceActorId: born.id,
@@ -3719,6 +3720,8 @@ test('Burn owns two RNG words per tick, target-scaled flame and light, max merge
   assert.deepEqual(first.state.rng, lightDraw.state)
   assert.deepEqual(first.damage, [{
     amount: Math.fround(2 / 200),
+    hitStrength: 0,
+    suppressHurtSound: true,
     kind: 'fire',
     ownerId: 'player',
     sourceActorId: born.id,
@@ -5237,4 +5240,64 @@ test('Acid Rain uses the strict native radius-200 root attack area', () => {
     assert.equal(queryRadius, 200, expected.name)
     assert.equal(result.damage.length, expected.hit ? 1 : 0, expected.name)
   }
+})
+
+test('Burn damage carries the native quiet zero-strength response for every Fire producer', () => {
+  const target = { family: 'ZOMBIE', id: 17, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 40, y: 60 }, radius: 10, scale: 1, shieldHealth: 0 }
+  for (const skillId of [21, 22, 23, 50, 73] as const) {
+    const source = applyNativeSecondaryFireBurn(createNativeSecondarySimulation(2), {
+      damage: 2, ownerId: 'player', rank: 1, skillId, target, worldKey: 'boneyard:test',
+    })
+    const result = stepNativeSecondaryAbilities(source, { ...context(73, 1, null), target: () => target })
+    assert.deepEqual(result.damage, [{ amount: Math.fround(0.01), hitStrength: 0,
+      suppressHurtSound: true, kind: 'fire', ownerId: 'player', sourceActorId: source.actors[0]!.id,
+      targetId: target.id }], `producer ${skillId}`)
+  }
+})
+
+test('FrostBurn preserves quiet zero-strength damage while Steamed samples a fractional hit', () => {
+  const target = { family: 'ZOMBIE', id: 17, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 40, y: 60 }, radius: 10, scale: 1, shieldHealth: 0 }
+  for (const skillId of [35, 76] as const) {
+    const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(3), 'boneyard:test', 17, {
+      frostBurnTicks: 2, frostBurnDamagePerTick: 0.01, frostBurnOwnerId: 'player',
+      frostBurnSkillId: skillId, frostBurnSourceActorId: 1,
+    })
+    const result = stepNativeSecondaryAbilities(source, { ...context(35, 1, null), target: () => target })
+    assert.equal(result.damage[0]!.hitStrength, 0)
+    assert.equal(result.damage[0]!.suppressHurtSound, true)
+  }
+  const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(3), 'boneyard:test', 17, {
+    steamed: { damagePerTick: 0.01, emberDamage: 0, emberFragments: 0, explodeDamage: 0,
+      explodeRadius: 0, ownerId: 'player', sourceActorId: 1, ticks: 2 },
+  })
+  const draw = drawNativeFloat(source.rng, 0.5)
+  const result = stepNativeSecondaryAbilities(source, { ...context(35, 1, null), target: () => target })
+  assert.equal(result.damage[0]!.hitStrength, Math.fround(0.25 + draw.value))
+  assert.notEqual(result.damage[0]!.suppressHurtSound, true)
+  assert.deepEqual(result.state.rng, draw.state)
+})
+
+test('ElectricBurn source has two no-flash branches while each chained target has its own fractional hit', () => {
+  const target = { family: 'ZOMBIE', id: 17, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 40, y: 60 }, radius: 10, scale: 1, shieldHealth: 0 }
+  const gates = new Set<number>()
+  for (let seed = 1; seed <= 12; seed += 1) {
+    const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(seed), 'boneyard:test', 17, {
+      electricBurn: { damagePerTick: 0.01, arcCount: 1, stunFactor: 1,
+        ownerId: 'player', sourceActorId: 1, ticks: 2 },
+    })
+    const gate = drawNativeInteger(source.rng, 3)
+    gates.add(gate.value)
+    const main = gate.value === 1 ? drawNativeFloat(gate.state, 0.5) : null
+    const chain = drawNativeFloat(main?.state ?? gate.state, 0.5)
+    const result = stepNativeSecondaryAbilities(source, { ...context(35, 1, null), target: () => target,
+      targets: () => [target, { ...target, id: 18, position: { x: 60, y: 60 } }] })
+    assert.deepEqual(result.damage.map(({ hitStrength }) => hitStrength), [
+      main === null ? 0 : Math.fround(0.25 + main.value), Math.fround(0.25 + chain.value),
+    ])
+    assert.deepEqual(result.state.rng, chain.state)
+  }
+  assert.deepEqual([...gates].sort(), [0, 1, 2])
 })
