@@ -13,15 +13,21 @@ Read-only production diagnostics 189/190 independently record the same
 at 01:46:04.056/01:46:03.747 UTC on September 22. The latter connection closes
 with code 4008. Related performance records 184–188 identify revision
 `ed0a2d598` and run `eb1e284360d931a965a41c2fa252ac9b`; they contain both
-frame stalls and delivery stalls. Neither the precise video timestamp nor a
-terminal authoritative snapshot is present. A matching code-path reproduction
-can establish a defect, but cannot attribute every historical stall to it.
+frame stalls and delivery stalls. These client records alone contain neither
+the precise video timestamp nor terminal state. The subsequent server archive
+correlation below resolves the terminal state, without attributing every
+historical stall to this crash.
 
 Native truth is the retail 0.72.5 identity and GameOver/PlayerWizard ownership
 recovered below: frozen Arena simulation with independently advancing player
 death and Game Over clocks. No new injected or clean-stock capture is claimed.
-Current Game Over cadence constants and input branches remain authoritative;
-this work changes clock ownership, not their timing or authored assets.
+The superseding normal Game Over family is recorded in entry 161 and
+`game-runtime-architecture.md`: native input `0x005C7910`, Riff-completion
+gate `0x005CF5EE..0x005CF650`, click at 500 with 20-tick exit, and fallback at
+951 with 250-tick exit. The established Website request selects that normal
+screen over the fade-only Boneyard sibling described in this entry's older
+sections. This work changes clock ownership, not that branch, its timing,
+authored assets, audio or participant-owned loadout barrier.
 
 The previous Mage lifetime repair recovered immutable light ownership but
 missed this stopped-world boundary. `stepGameSimulationTick` retains the enemy
@@ -45,7 +51,7 @@ Boundary inventory, with final focused Mac dispositions:
 | Active play, surviving-peer spectating, pause and save restoration | Existing active/paused clocks and strict pulse validation remain intact | verified-already-at-parity; simulation/save/timeline regressions and original continuation restore pass |
 | Coffin populations, native Hurricane exclusion, lazy allocation and crowd indices | Reuse main's recovered fixes and report 09's saved-run probe | verified-already-at-parity; saved and eight-Coffin browser workloads pass without reducing effects or actors |
 | Terminal Mindblast, player overlays and screen/scenery feedback | Existing event-owned terminal progression is separate from enemy pulse age | out-of-system; neither emitted terminal events nor their feedback clocks are reinterpreted |
-| Historical network/scheduler stall cause | No contemporaneous server tick trace or exact video replay | out-of-system for the demonstrated terminal-clock repair; unresolved report evidence |
+| Historical network/scheduler stall cause | Server windows show late tick pressure, but no CPU trace identifies its owner and the exact video timestamp is unavailable | out-of-system for the demonstrated terminal-clock repair; unresolved report evidence |
 
 Acceptance: first reproduce the rejection on Mac through real simulation and
 wire decode; cover both contact variants and all live ages, frozen snapshots,
@@ -57,7 +63,7 @@ The Mac regression now reproduces the exact recorded `GameProtocolError` on
 unchanged runtime `d05c812d1`: retain a valid pulse at all-dead entry, advance
 five terminal ticks, and decode the host's actual compact keyframe. The native
 enemy store is unchanged. This confirms the clock mismatch independently of
-the unavailable historical terminal state. The repair will derive Arena time
+the historical terminal state located later below. The repair derives Arena time
 from snapshot tick minus Game Over elapsed ticks, preserving the separate
 terminal clock and strict age bound. No new authored table or constant is needed.
 
@@ -102,11 +108,66 @@ Mac-only focused evidence, Chrome `153.0.8010.53`:
 
 These are controlled Mac proofs, not a Windows/Firefox/Opera reproduction of
 the exact historical run. The source-level crash condition is resolved. The
-video's earlier lag lacks the corresponding host profile/terminal snapshot;
+video's earlier lag lacks the corresponding host CPU profile and exact timing;
 its cause remains unassigned, so report 10 is **investigated**, not marked
 fully fixed or given a Discord completion reaction. Final publication requires
 the rebased exact-tree canonical gate and both browser tools again under the
 campaign publication lock; its commit/manifest/result belong in the outcome.
+
+### Exact same-run archive correlation
+
+A further read-only journal inspection found `run_archive.saved` immediately
+before both code-4008 disconnects. The original server artifact remains at
+`/var/lib/solomon-dark-game/run-archives/1855ab6b-ef4e-4319-8275-1813353dff44.sdrrun.gz`,
+SHA-256 `dac1cdf81d3f69ec20e9868badafe9823b9ae391045c44283f65e7d29e576ac0`.
+It records revision `ed0a2d598f1df5ac51f9c335e453c7d7041fcb5a`, protocol 129,
+run `eb1e284360d931a965a41c2fa252ac9b`, and Game Over at
+`2026-09-22T01:46:03.037Z`. This is the same run as diagnostics 184–190,
+not an assertion that the uncertain video wave estimate was exact.
+
+Its terminal state is tick **1455415**, Game Over age zero, wave **36**,
+230 enemies, 306 Maggots, 259 independent death effects, and five attached
+Mage factories born at ticks 1455411–1455415. One player just entered dying;
+the other is already spectating. Using the unchanged captured terminal state
+on Mac, the former outer-clock validator rejects the oldest factory at tick
+**1455416**, Game Over age **one**. The corrected production projection and
+compact decoder accept every subsequent terminal snapshot through loadout.
+This establishes the historical crash's causal boundary, beyond the synthetic
+regression. No pulse, enemy or effect was removed from this terminal replay.
+
+The final four recorded host windows average 8.03, 9.78, 10.32 and 11.58 ms per
+tick; the final window has 75/90 ticks over 10 ms and maximum tick 17.25 ms.
+The retained last 60 windows have a maximum backlog of 322.3 ms. This proves
+late host pressure but does not identify which computation or system-level
+contention caused it. The run's single worst 99.41 ms tick was wave-zero
+entry, not the late fight; its location must not be mislabeled as this video.
+
+Current-candidate Mac diagnostics (100 repeated complete ticks after warmup):
+the last-alive workload averages **2.87 ms**, p95 **3.91**, maximum **4.81**;
+the initial-entry workload averages **23.47 ms**, maximum **27.49**. The
+last-alive measurement explicitly applies the existing schema-37-to-38 save
+anchor policy to five legacy stationary actors in a private copy; raw archive
+replay otherwise lacks the later native-anchor fields. This is a disclosed
+current-workload adaptation, not an exact historical simulation comparison.
+The terminal replay above needs no such adaptation because Arena dynamics are
+stopped. Production archive readers remain strict; no protocol fallback was
+added, and the original archive bytes remain unchanged.
+
+The unaltered last-alive projection also renders through the actual Mac Chrome
+WebGL renderer at the reported 1638x921 / 1.5625 pixel ratio for 300 frames:
+render p99 **7.4 ms**, maximum **8.4 ms**, frame p99/maximum **16.8 ms**, no
+slow frames and empty page/console/response errors. This isolates renderer
+cost; it does not measure live delivery or promise equal Windows performance.
+
+A bounded same-Mac ABBA comparison also checked the captured `ed0a2d598`
+revision against this candidate (20 warmup and 200 measured repeated
+last-alive ticks per block). Baseline means were **2.99/2.69 ms**; candidate
+means were **4.00/3.05 ms**, with unchanged input values verified structurally
+after each block and the five explicit legacy-anchor additions only in the
+candidate. Shared-Mac load was not stopped. This gives no consistent speedup
+and does not justify attributing the historical lag to the already published
+stationary-owner correction. No new optimization or lag-resolution claim is
+made from these measurements.
 
 ## Why the prior parity claim is reopened
 
