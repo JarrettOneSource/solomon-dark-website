@@ -1,5 +1,69 @@
 # 2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation
 
+## 2026-09-22 — Report 03: released-item ownership across host feedback
+
+### Report, evidence, and reopened boundary
+
+The six-second `menu_bug_items.mp4` attached to Discord message
+`1551640808787284108` shows dragged items briefly returning to their previous
+inventory cells on release, including equipment drops. The original archive
+is preserved at `2026-09-21/03-dropped-items-flash-in-old-menu`; attachment
+SHA-256 is `3ab9a1f8643524dae4c24716a61abafcd9a9d560c7cfc424ff2196f09c663a4a`.
+This reopens the earlier claim that release presentation was complete: the
+prior pass covered the native Flyby clock but omitted the asynchronous handoff
+between immediate release actions and authoritative snapshots.
+
+Fresh static recovery used the canonical `SolomonDark` Ghidra project through
+the read-only replica wrapper, without occupying a native GUI session. Retail
+0.72.5 was re-hashed: 4,723,200 bytes,
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, image base
+`0x00400000`. Read-only Mod Loader tool revision was
+`08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`,
+`decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+| Evidence | Recovered contract | Confidence |
+| --- | --- | --- |
+| `0x00575850` holder commit | Ordinary holders write the item at `+4` and current tick at `+8` synchronously; kind 7 inserts into the parent root instead. | high, decompiled instructions |
+| `0x0056DE50`, calls at `0x0056E650/0x0056E66A`, then `0x0056E8FD` | Blank placement commits the destination and root before common release cleanup. Potion merge, Sack/parent insertion, equipment attach and StoreGrid callbacks are synchronous branches of this same release owner. | high, static control flow |
+| `0x0056FC90`, `0x00570371..0x00570444` | Equipment removal detaches/inserts and clears the source holder before retiring presentation; Hat/Robe retain their existing refusal dialogs. | high, static control flow |
+| `0x0056F5A0`, `0x0056F6B3..0x0056F71E` | Occupied-grid Flyby calls the release router before clearing screen `+0x3C4` and destroying itself; its existing 20-tick motion and independent fades remain native. | high, static control flow |
+| Website `ed0a2d598`, InventoryActions and HubStorageActions | Immediate releases clear `dragging` while dispatching an asynchronous action. Every old root/sink painter then sees the old economy with no held item until feedback arrives. | high, source trace; browser regression planned below |
+
+System boundary: InventoryScreen/StoreGrid drag presentation ownership from
+pointer capture through immediate or Flyby release, authoritative completion
+or rejection, page/surface interruption, and teardown. Every item uses the same
+identity-based handoff; no item table, authored slot, transform, sound, or
+quantity rule changes. The complete existing item/slot catalogs and extraction
+above remain authoritative.
+
+| Member | Recovery and planned disposition |
+| --- | --- |
+| Blank addressed cell, matching stack, Sack insertion, parent return | `recovered-pending-port`: retain source suppression until host result; preserve native immediate action/audio. |
+| Hat, Robe, Staff/Wand, Ring 0/1/2, Amulet equipment sinks and removable equipment sources | `recovered-pending-port`: same handoff; retain native admission, aliases, swaps, locked ring, and Hat/Robe refusal. |
+| Luthacus StoreGrid to backpack and backpack to storage | `recovered-pending-port`: same handoff in both directions and selected StoreGrid painter. |
+| Empty-Sack unforge; belt binding; unforge confirmation | `recovered-pending-port` for the immediate unforge mutation; belt binding and confirmation retain the source item and are `out-of-system` for move ownership. |
+| Ordinary occupied swap and invalid return Flybys | `verified-already-at-parity`: existing 20-tick owner suppresses lanes through feedback; preserve its independent tails. |
+| Rejected action, pointer cancellation, page/screen replacement, close, death/session teardown | `recovered-pending-port`: rejection restores the authoritative source; cancellation has no pending action; no drag leaks into another owner. |
+| College, Boneyard, Fomentius, Hagatha, Luthacus, Shlorio | `recovered-pending-port`: all share HubInventorySurface; verify scene and companion callers. |
+
+Implementation consequence: keep one local released drag at its release point
+until an authoritative action result is available, resolving it in the same
+render as the new economy. Lock further inventory gestures during that handoff.
+Reuse the existing drag renderer/source suppression and feedback sequence;
+do not predict inventory mutations, add arbitrary timers, or invent Flybys for
+native immediate branches. Network latency is a browser multiplayer constraint:
+the held icon can remain at the release point while awaiting authority, but
+must never flash at the old slot. Rejection restores it only with host feedback.
+
+Validation contract: Mac Chrome with the production build, real pointer input,
+controlled server-to-browser snapshot suspension, old-slot pixel comparison
+before/after release, authoritative destination/rejection checks, sibling/page
+and scene coverage, zero page/console/failed-response errors, and the exact
+candidate's full `/opt/homebrew/bin/bash ./scripts/validate.sh`. Final receipts
+and dispositions follow after execution.
+
 ## Reported smell and parity question
 
 - Reported web behavior: items can be dragged inside InventoryScreen but cannot
