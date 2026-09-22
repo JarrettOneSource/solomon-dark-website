@@ -13,6 +13,7 @@ import {
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { observeGoldPlacementWire, proveGoldPlacement } from './smoke-loot-gold-placement.mjs'
 import { proveKeyDrops } from './smoke-loot-key-drops.mjs'
+import { proveDireBossDrops } from './smoke-dire-boss-loot.mjs'
 import {
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   NATIVE_LOOT_OPEN_PLACEMENT,
@@ -63,6 +64,7 @@ const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
 const charmOwnerOnly = process.argv.includes('--charm-owner-only')
 const goldPlacementOnly = process.argv.includes('--gold-placement-only')
 const keyDropsOnly = process.argv.includes('--key-drops-only')
+const direBossDropsOnly = process.argv.includes('--dire-boss-drops-only')
 const ALL_DISABLED = Object.freeze({
   gold: 4,
   item: 4,
@@ -98,7 +100,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  ...(goldPlacementOnly || keyDropsOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
+  ...(goldPlacementOnly || keyDropsOnly || direBossDropsOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -117,7 +119,7 @@ const [hostPage, guestPage] = await Promise.all([
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
-const goldWires = goldPlacementOnly || keyDropsOnly
+const goldWires = goldPlacementOnly || keyDropsOnly || direBossDropsOnly
   ? [hostPage, guestPage].map((page) => observeGoldPlacementWire(page, host.address.url))
   : []
 
@@ -208,6 +210,21 @@ try {
     })
     process.stdout.write(`${JSON.stringify({
       goldPlacement, consoleErrors, failedResponses, pageErrors, useBuiltFrontend,
+    }, null, 2)}\n`)
+    break smoke
+  }
+
+  if (direBossDropsOnly) {
+    const direBossDrops = await proveDireBossDrops({
+      host, hostPage, guestPage, hostPlayerId: playerId, guestPlayerId,
+      position: arenaCenter(host.state().world.bounds),
+      movePlayer, waitUntil, screenshotRoot, wires: goldWires,
+    })
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
+      consoleErrors: [], failedResponses: [], pageErrors: [],
+    })
+    process.stdout.write(`${JSON.stringify({
+      direBossDrops, consoleErrors, failedResponses, pageErrors, useBuiltFrontend,
     }, null, 2)}\n`)
     break smoke
   }

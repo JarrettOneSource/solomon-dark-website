@@ -1,5 +1,117 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-09-22 — Report 06: approved Dire faculty item pools
+
+### Contract and evidence recorded before implementation
+
+Report `06-dire-boss-item-set-drops`, original Discord message
+`1551773398898573425`, requests one associated item when a Dire boss rolls an
+Item. Its preserved attachment shows Bug-Master's Loop and the complete
+five-piece outfit. The user explicitly approved implementing this extension.
+This section records intentional design, not a claim that stock has boss sets.
+
+Fresh SHA-256 verification of retail 0.72.5 (preferred base `0x00400000`):
+`SolomonDark.exe` = `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`;
+`data/items.cfg` = `28e26243457b246ce48ed7f37d4c14820f9e4a67d1ddf5d328e3a0783a641963`.
+This is static source evidence, reconciled with the existing instruction
+recovery in this entry; no injected observation is represented as stock play.
+
+The causal trace remains `Badguy` retirement `0x004819D0` -> category selector
+`0x0047C070` -> Item selection `0x0046A360` -> named clone `0x004699B0` ->
+Sack 2013 -> pickup `0x005E6B50` / inventory insertion `0x0055FF20`.
+The ordinary named pool has 47 definitions, seven sets and all six equipment
+classes; generated equipment uses the existing 110 placeholder rows.
+Entry 301's fully extracted twelve generated sources contain all 36 Dire
+faculty recipes. Every one has Gold 5, Item 3, Orb/Potion/Powerup 4 and
+specificItem 4: forced Item plus policy-5 supplemental Gold. Policy 5
+suppresses the primary Gold candidate; an eligible Key can still compete.
+Native faculty death waits 250 ticks before its sole reward.
+The native catalogs contain no boss-to-item-set association table.
+
+Fresh `items.cfg` inspection identifies the report's Ring of Fire necklace as
+**Theptoplasmar Amulet**, recipe 3 (`FX_ADDSKILL "Ring of Fire" +1`), which
+belongs to Arcanus Spectrum, not Burning Man. Burning Man supplies the two
+fire garments and `FX_MAXRINGOFFIRE`; Tempest Kit is the complete Air set.
+These identities and effects are reused, without inventing or renaming items.
+
+### Boundary and membership inventory
+
+Boundary: generated Dire faculty Item identity selection and its existing
+host-owned death, ground carrier, pickup, replication and inventory lifecycle.
+Associations are approved Website design; authored items and downstream rules
+remain native. Resolve by generated source SHA, DIREFACULTY token and recipe
+UID, so a custom actor name or unrelated recipe cannot opt into this feature.
+
+| Member | Source / complete membership | Disposition / acceptance |
+| --- | --- | --- |
+| Dire Sirmin, all 12 sources | Outfit recipes 11 Cap, 12 Robe, 13 Wand, 14 Loop, 15 Pan-Dimensional Strangler | `out-of-system` stock association; approved extension implemented; all source/member assertions and built Mac pickup/ItemInfo journey pass |
+| Dire Lucritius, all 12 sources | Burning Man recipes 20 Hat, 21 Robe, plus Ring of Fire recipe 3 Theptoplasmar Amulet | `out-of-system` stock association; approved extension implemented; all source/member assertions and built Mac pickup/ItemInfo journey pass |
+| Dire Aliss, all 12 sources | Tempest recipes 16 Cloudcover Hood, 17 Ozone Cape, 18 Lightning Rod, 19 Storm Choker | `out-of-system` stock association; approved extension implemented; all source/member assertions and built Mac pickup/ItemInfo journey pass |
+| Remaining Arcanus members 0,1,2,4,5; Combinator 6..10; Frostburn 22..24; Fete of Clay 25..28; standalone 29..46 | All remaining named rows, six random classes, 110 placeholders | `verified-already-at-parity`; ordinary selection unchanged, retained exhaustive loot tests |
+| Gold, Key, Orb, Potion, Powerup, no-drop, suppression and supplemental Gold | selector policies 0..5 and disable bits, source-slot gate, emergency precheck | `verified-already-at-parity`; override consulted only inside selected Item materialization; deterministic comparison of all other results and RNG |
+| Ordinary enemies, non-Dire bosses, tutorial, Goodies, scripted drops and mod-authored content | independent source admission and existing reward paths | `out-of-system` new association; retain stock selection and explicit mod rewards |
+| Faculty birth/death and reward retirement; save/reload and run reset | entry 301; source SHA/UID already saved in encounter and actor config | `verified-already-at-parity`; no additional mutable drop-progress or network/save schema |
+| Named clothing, carrier placement, first pickup, full inventory, equipment and set effects | existing clone/store, protocol, inventory and effects catalog | `verified-already-at-parity`; reuse same live item and existing identity/effects, verify all 12 pool items |
+
+### Intentional selection rule
+
+Only after an admitted enemy Item outcome, select one named item from its
+associated pool using the existing shared deterministic RNG. Prefer recipes
+not currently owned by the credited player; once the entire pool is owned,
+allow a repeat from that pool so an Item outcome still yields an item. This
+exhaustion rule intentionally differs from stock's empty unique-item pool.
+No persisted collection history or pity timer is added. Reuse canonical set
+membership and named cloning, preserving colors, rarity, FX and existing set
+completion. All associated recipes have native minimum level zero.
+
+### Validation contract
+
+Mac regression first, then each of the 12 item identities and 36 source/boss
+combinations; ownership/exhaustion, deterministic replay, ordinary/non-Item
+behavior and explicit scripts. Real built Chrome host/guest journey: enter
+Boneyard, kill each generated Dire actor, wait its actual death lifecycle,
+observe and decode one associated Sack, collect it once into authoritative
+inventory, and select its native ItemInfo panel. Inventory insertion assigns
+a fresh player-owned ID while preserving the recipe and item properties. Keep page, console and failed-response
+arrays empty. Run the complete canonical Mac gate on the publication candidate.
+
+### Implementation and preliminary Mac receipt
+
+The implementation adds one generated-source/UID association lookup, threads
+an optional Item pool through the authoritative reward boundary, and uses the
+existing named clone only after the stock Item branch wins. Scripted items
+never consult that pool. No dependency, asset, protocol, save field, boss clock
+or equipment effect was added or changed.
+
+At base `ed0a2d598f1df5ac51f9c335e453c7d7041fcb5a`, changed-file SHA-256
+manifests matched between the assigned WSL worktree and Mac acceptance path
+`/Users/jarrett/codex-acceptance/soggy-20260922-r06`. Mac Node 22.17.0 ran
+the failing regression (expected Loop recipe 14, stock selected recipe 9),
+then passed all 163 loot tests and 10 faculty encounter tests. Production
+frontend/host builds and the game bundle budget passed.
+
+Mac Chrome 153, two isolated 1600x900 WebGL2 contexts, real host and built
+frontend: `SDR_LOOT_BUILT=1 node --experimental-strip-types
+tools/smoke-loot-drops.mjs --dire-boss-drops-only` exited zero on 2026-09-22.
+Source SHA was `2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f`.
+Each of twelve actual faculty deaths retained all 250 dying ticks, produced
+one associated enemy Sack plus supplemental Gold, replicated to both clients,
+and credited the recipe exactly once to the collecting player (zero guest
+duplicates). Collection order was Sirmin 11,13,12,14,15; Lucritius 21,3,20;
+Aliss 16,19,18,17. Every collected piece opened its native ItemInfo panel.
+The Ring of Fire amulet panel retained its original Arcanus set membership;
+Bug-Master and Burning Man panels showed the stock effects and set rows.
+Console, page and failed-response arrays were empty. Receipt stdout SHA-256:
+`706164170af1f55f06ffa29e43bd858813e3b3c9df137a0783f74daf19307d6a`. Disposable screenshots/logs are removed after publication.
+
+The browser fixture stages a cap-level party to avoid unrelated level-up
+modals, preserves the encounter/transition/wave ownership trio, and resolves
+the new inventory ID assigned by normal pickup. It does not bypass death,
+selection, shared RNG, ground pickup, replication or ItemInfo. The authored
+recipe policies are unmodified. Final publication repeats the full canonical
+Mac gate and this journey on the exact rebased, receipt-updated commit; the
+outcome records that final commit and gate identity without a receipt-edit loop.
+
 ## 2026-09-05 — Drop-rate audit and early-wave Wizard Key correction
 
 ### Report and evidence

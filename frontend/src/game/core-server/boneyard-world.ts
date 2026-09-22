@@ -23,6 +23,7 @@ import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { createBoneyardEnemyVisibility } from './boneyard-enemy-visibility.ts'
 import { materializeBoneyardEnemyLoot, retireBoneyardGoodiesOutsideBounds, spawnBoneyardCustomLootItems, stepBoneyardLootStore } from './boneyard-loot-store.ts'
+import { direBossItemRecipePool } from '../core-kernels/dire-boss-loot.ts'
 import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
 import type { BoneyardLightEnvironment } from './boneyard-world-light.ts'
 import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
@@ -545,6 +546,11 @@ export function stepBoneyardWorldTick(
       : playerCombat[reward.playerId]
     const materialized = materializeBoneyardEnemyLoot(loot, {
       actorSeed: reward.lootSource.actorSeed,
+      itemRecipePool: direBossItemRecipePool(
+        waves?.bossEncounters.find(encounter => encounter.kind === 'faculty')?.sourceSha256,
+        reward.lootSource.enemyToken,
+        reward.lootSource.recipeUid,
+      ),
       advancedUnlocks: rewardCombat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
       arena: {
         disableMask: 0,

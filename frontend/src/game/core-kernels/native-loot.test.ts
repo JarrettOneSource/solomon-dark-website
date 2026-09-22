@@ -1,3 +1,6 @@
+import { direBossItemRecipePool } from './dire-boss-loot.ts'
+import { NATIVE_SURVIVAL_BOSS_SOURCES } from './native-survival-boss-catalog.ts'
+import type { NativeFacultyName } from './native-survival-faculty.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -39,6 +42,130 @@ import {
   potionItem,
   miscItem,
 } from './native-loot-items.ts'
+
+test('an approved Dire item pool yields a missing associated piece instead of unrelated equipment', () => {
+  const source = input()
+  const result = rollNativeEnemyLoot({
+    ...source,
+    itemRecipePool: [11, 12, 13, 14, 15],
+    participant: { ...source.participant, ownedRecipeIndexes: [11, 12, 13, 15] },
+    policies: { ...source.policies, item: 3, specificItem: 4 },
+  })
+  assert.equal(result.selectedCategory, 'item')
+  assert.equal(result.drops.length, 1)
+  assert.equal(result.drops[0]?.item?.recipeIndex, 14)
+  assert.equal(result.drops[0]?.source, 'enemy')
+})
+
+const DIRE_POOLS: readonly (readonly [NativeFacultyName, readonly number[]])[] = [
+  ['Dire Sirmin', [11, 12, 13, 14, 15]],
+  ['Dire Lucritius', [20, 21, 3]],
+  ['Dire Aliss', [16, 17, 18, 19]],
+]
+
+for (const source of NATIVE_SURVIVAL_BOSS_SOURCES) {
+  for (const [name, expected] of DIRE_POOLS) {
+    test(`${source.sourceSha256.slice(0, 8)} ${name} selects every associated item and then permits repeats`, () => {
+      const itemRecipePool = direBossItemRecipePool(source.sourceSha256, 'DIREFACULTY', source.recipeUids[name])
+      assert.deepEqual(itemRecipePool, expected)
+      const base = input()
+      for (const missing of expected) {
+        const result = lootOutcome({
+          ...base, itemIds: createNativeLootItemIds(1), itemRecipePool,
+          participant: { ...base.participant, ownedRecipeIndexes: expected.filter(index => index !== missing) },
+          policies: { ...base.policies, item: 3, specificItem: 4 },
+        })
+        const item = result.drops[0]?.item
+        assert.equal(item?.recipeIndex, missing)
+        assert.equal(item?.name, DOWSING_EQUIPMENT_RECIPES[missing]!.name)
+        assert.equal(result.drops.length, 1)
+        assert.equal(result.lastSuccessfulItemLevel, base.arena.level)
+      }
+      const repeatInput = () => ({
+        ...input(), itemRecipePool,
+        participant: { ...base.participant, ownedRecipeIndexes: expected },
+        policies: { ...base.policies, item: 3 as const, specificItem: 4 },
+      })
+      const repeat = lootOutcome(repeatInput())
+      assert.ok(expected.includes(repeat.drops[0]?.item?.recipeIndex ?? -1))
+      assert.deepEqual(repeat, lootOutcome(repeatInput()))
+    })
+  }
+}
+
+test('Dire association requires the generated source, Faculty family and matching recipe UID', () => {
+  for (const source of NATIVE_SURVIVAL_BOSS_SOURCES) {
+    for (const name of ['Ironmaw', 'Foulshaft', 'Heartmonger', 'The Discorporeal'] as const) {
+      assert.equal(direBossItemRecipePool(source.sourceSha256, 'DIREFACULTY', source.recipeUids[name]), undefined)
+    }
+    assert.equal(direBossItemRecipePool(source.sourceSha256, 'SKELETON', source.recipeUids['Dire Sirmin']), undefined)
+    assert.equal(direBossItemRecipePool(source.sourceSha256, 'DIREFACULTY', undefined), undefined)
+    assert.equal(direBossItemRecipePool('custom', 'DIREFACULTY', source.recipeUids['Dire Sirmin']), undefined)
+    assert.equal(direBossItemRecipePool(undefined, 'DIREFACULTY', source.recipeUids['Dire Sirmin']), undefined)
+  }
+})
+
+test('Dire pools preserve non-Item results, disable gates, source-slot suppression and scripted items', () => {
+  const itemRecipePool = [11, 12, 13, 14, 15]
+  for (const category of ['gold', 'orb', 'potion', 'powerup'] as const) {
+    for (let seed = 1; seed <= 32; seed += 1) {
+      const makeInput = () => input({
+        actorSeed: seed, sharedRng: createNativeRng(seed),
+        policies: { ...ALL_DISABLED, [category]: 3 },
+      })
+      assert.deepEqual(lootOutcome({ ...makeInput(), itemRecipePool }), lootOutcome(makeInput()))
+    }
+  }
+  for (const extra of [
+    { arena: { ...input().arena, disableMask: 32 } },
+    { participant: { ...input().participant, slot: 1 } },
+    { policies: ALL_DISABLED },
+  ]) {
+    const makeInput = () => input({ policies: { ...ALL_DISABLED, item: 3 }, ...extra })
+    assert.deepEqual(lootOutcome({ ...makeInput(), itemRecipePool }), lootOutcome(makeInput()))
+  }
+  const keyInput = () => input({ actorSeed: 311, sharedRng: createNativeRng(100),
+    key: { current: 5, level: 10, remaining: 1 } })
+  const key = lootOutcome({ ...keyInput(), itemRecipePool })
+  assert.equal(key.selectedCategory, 'key')
+  assert.deepEqual(key, lootOutcome(keyInput()))
+  for (const action of [
+    { kind: 'drop-item', recipeIndex: 0 },
+    { kind: 'drop-random-item', mode: 4 },
+  ] as const) {
+    assert.deepEqual(materializeNativeLootScriptAction(input({ itemRecipePool }), action),
+      materializeNativeLootScriptAction(input(), action))
+  }
+})
+
+test('Dire pools do not change category competition and retain supplemental Gold', () => {
+  const categories = new Set()
+  for (let seed = 1; seed <= 128; seed += 1) {
+    const makeInput = () => input({ actorSeed: seed, sharedRng: createNativeRng(seed),
+      policies: { ...ALL_DISABLED, gold: 3, item: 3, specificItem: 4 } })
+    const ordinary = lootOutcome(makeInput())
+    const associated = lootOutcome({ ...makeInput(), itemRecipePool: [11, 12, 13, 14, 15] })
+    assert.equal(associated.selectedCategory, ordinary.selectedCategory)
+    categories.add(associated.selectedCategory)
+    if (ordinary.selectedCategory !== 'item') assert.deepEqual(associated, ordinary)
+    else {
+      assert.equal(associated.drops.filter(drop => drop.kind === 'sack').length, 1)
+    }
+  }
+  assert.ok(categories.has('item') && categories.has('gold'))
+  const supplemented = rollNativeEnemyLoot(input({
+    itemRecipePool: [11, 12, 13, 14, 15],
+    policies: { ...ALL_DISABLED, gold: 5, item: 3, specificItem: 4 },
+  }))
+  assert.equal(supplemented.selectedCategory, 'item')
+  assert.ok(supplemented.drops.some(drop => drop.kind === 'gold'))
+  assert.equal(supplemented.drops.filter(drop => drop.kind === 'sack').length, 1)
+})
+
+function lootOutcome(source: Parameters<typeof rollNativeEnemyLoot>[0]) {
+  const { itemIds, ...result } = rollNativeEnemyLoot(source)
+  return { ...result, nextItemId: itemIds.peek() }
+}
 
 for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
   test(`named loot ${recipe.name} survives pickup and strict inventory decoding`, () => {

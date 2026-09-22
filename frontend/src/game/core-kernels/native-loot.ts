@@ -129,6 +129,8 @@ export interface NativeLootDropSpec {
 
 export interface NativeLootSelectionInput {
   readonly actorSeed: number
+  /** Approved enemy Item identity override; category rolls and scripts remain stock. */
+  readonly itemRecipePool?: readonly number[]
   readonly arena: NativeLootArenaInput
   readonly explicitGoldAmount: number | null
   readonly dropDelayContext: number
@@ -517,7 +519,7 @@ function materializeSelected(
       sharedRng: phase.state,
     }
   }
-  const selected = selectEnemyItem(sharedRng, input)
+  const selected = selectEnemyItem(sharedRng, input, input.itemRecipePool)
   const placement = selected.item === null
     ? null
     : resolveNativeLootPlacement(

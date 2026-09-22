@@ -135,7 +135,20 @@ export function resolveNativeGoodieContents(
 export function selectEnemyItem(
   sourceRng: NativeRngState,
   input: NativeLootSelectionInput,
+  itemRecipePool?: readonly number[],
 ): ItemSelectionResult {
+  if (itemRecipePool !== undefined) {
+    const pool = itemRecipePool.map(index => {
+      const recipe = DOWSING_EQUIPMENT_RECIPES[index]
+      if (!recipe) throw new RangeError('enemy Item pool requires valid named recipes')
+      return recipe
+    })
+    if (pool.length === 0) throw new RangeError('enemy Item pool must not be empty')
+    const missing = pool.filter(recipe => !input.participant.ownedRecipeIndexes.includes(recipe.sourceIndex))
+    const candidates = missing.length > 0 ? missing : pool
+    const selected = drawNativeInteger(sourceRng, candidates.length)
+    return equipmentRecipeItem(candidates[selected.value]!, input.itemIds, selected.state)
+  }
   let rng = sourceRng
   const candidates: Array<EquipmentRecipe | null> = []
   const recipes = DOWSING_EQUIPMENT_RECIPES.filter((recipe) => (

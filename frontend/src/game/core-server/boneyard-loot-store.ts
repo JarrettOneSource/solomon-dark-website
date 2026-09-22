@@ -216,6 +216,7 @@ export interface NativeHagathaLastWordLoot {
 export interface BoneyardEnemyLootMaterializationInput {
   readonly advancedUnlocks: readonly boolean[]
   readonly actorSeed: number
+  readonly itemRecipePool?: readonly number[]
   readonly arena: Omit<NativeLootArenaInput, 'lastSuccessfulItemLevel'>
   readonly inventoryHasHealthPotion: boolean
   readonly modifiers: NativeLootModifiers
@@ -488,6 +489,7 @@ function enemyLootSelectionInput(
 ): NativeLootSelectionInput {
   return {
     actorSeed: input.actorSeed,
+    itemRecipePool: input.itemRecipePool,
     arena: {
       ...input.arena,
       lastSuccessfulItemLevel: source.lastSuccessfulItemLevel,
