@@ -193,23 +193,41 @@ async function journey(name, document, saveSha256) {
           }).store
           ids = spawned.actors.filter(actor => actor.id >= firstId).map(actor => actor.id)
           assert.equal(ids.length, 8)
-          // A low-health fixture isolates the reported immediate terminal edge;
-          // native damage, cooldown, spawn phases and debris are unmodified.
-          const enemies = { ...spawned, actors: spawned.actors.map(actor => (
-            ids.includes(actor.id) ? { ...actor, currentHealth: 1 } : actor
-          )) }
-          Object.assign(state, { world: { ...state.world, enemies }, worldManagerOrder: order.state() })
+          Object.assign(state, { world: { ...state.world, enemies: spawned }, worldManagerOrder: order.state() })
         })
+        await waitUntil(() => ids && host.state().world.enemies.actors
+          .filter(actor => ids.includes(actor.id))
+          .every(actor => actor.brain.family === 'coffin' && actor.brain.phase !== 'hidden'),
+        'Coffins did not enter their native visible phase', 12_000)
+        const current = host.state()
+        const alive = current.world.enemies.actors.filter(actor => ids.includes(actor.id) && actor.lifeState === 'alive')
+        assert.ok(alive.length > 0)
+        assert.ok(current.primarySpells.transients.some(actor => actor.kind === 'air-hurricane' && actor.contactCharge > 0))
+        const order = createNativeWorldManagerOrder(current.worldManagerOrder)
+        let enemies = current.world.enemies
+        for (const actor of alive) {
+          assert.equal(actor.hurricaneContactCooldown, 0, 'Coffins never enter Badguy Hurricane contact')
+          assert.deepEqual(actor.position, actor.brain.anchorPosition, 'Coffins retain their native root')
+          // Hurricane is presentation-only for this sibling. Drive the burst
+          // through the same eligible damage/terminal owner used by other skills.
+          const damaged = damageBoneyardEnemy(enemies, { actorId: actor.id,
+            amount: actor.currentHealth, magic: true, hasMagicDamage: true,
+            sourcePlayerId: playerId, tick: current.tick, registerWorldPainter: order.register })
+          assert.equal(damaged.accepted, true)
+          enemies = damaged.store
+        }
+        Object.assign(current, { world: { ...current.world, enemies }, worldManagerOrder: order.state() })
         await waitUntil(() => host.state().world.enemies.deathEffects.some(effect => effect.role === 'coffin-skull'),
-          'Hurricane did not kill the emerging Coffins', 12_000)
+          'Eligible damage did not retire the emerging Coffins', 12_000)
         await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas')
           .__sdrBoneyardFrame.enemyDeathEffectVisibleCount > 100)
         // GPU readback/PNG encoding must not contaminate the timed burst.
         const measured = await measuring
         assert.ok(measured.peakVisibleEffects >= 500, 'the complete terminal burst must reach the renderer')
-        windows.push({ name: 'spawn-and-hurricane-death', ...measured })
+        windows.push({ name: 'spawn-and-immediate-death', ...measured })
         assert.ok(host.state().world.enemies.actors.every(actor => !ids.includes(actor.id)))
-        burst = { coffins: ids.length, styles: flags, removed: ids.length }
+        burst = { coffins: ids.length, styles: flags, removed: ids.length,
+          hurricaneExcluded: true, lethalSource: 'shared-magic-damage' }
       } finally { await page.mouse.up() }
     }
     await page.screenshot({ path: `${output}/${name}-after.png` })

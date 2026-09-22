@@ -762,17 +762,17 @@ also documented above.
 
 | Member | Disposition | Proof |
 | --- | --- | --- |
-| Hidden, rising, holding, opening, open Coffins | `verified-already-at-parity` | Constructor/phase enemy-store cases; real constructor through Hurricane terminal edge |
+| Hidden, rising, holding, opening, open Coffins | `verified-already-at-parity` | Constructor/phase cases and entry 051's stationary-root correction; eligible damage through the common terminal owner |
 | Base, MANYMAGGOTS, STRONGMAGGOTS, combined | `verified-already-at-parity` | Four-style admission/ordering tests; all four styles in the eight-Coffin browser burst |
 | Emerging, inactive, active, dying Maggots | `verified-already-at-parity` | Owner invalidation tests; all 103 original children retire on the next tick; on-camera saved descendants retire in Chrome |
 | Coffin body, bones, main/extra fragments, skull, ground decoration, audio/reward | `verified-already-at-parity` | Full entry-081 recipes pass; independent visible debris and break sound; complete terminal retirement |
 | Shared Skeleton/Archer/Mage, Zombie, Wraith, Demon, Imp/Portal terminal effects | `verified-already-at-parity` | Existing per-family terminal/death-effect allocation cases; no runtime module changed |
-| Snapshot, interpolation, visibility, lighting, painter order | `verified-already-at-parity` | Built WebGL renders 629 simultaneous visible effects; complete live wire decodes with no errors |
+| Snapshot, interpolation, visibility, lighting, painter order | `verified-already-at-parity` | Rebased built WebGL renders 624 simultaneous visible effects; complete live wire decodes with no errors |
 | Pause, save restore, resume, run replacement, renderer destroy | `verified-already-at-parity` | Original save restores; native level-up pause was directly observed in the initial fixture; separate fresh-run journey and full renderer/host teardown |
-| Hurricane and other lethal producers | `verified-already-at-parity` | Ordinary held Air input charges Hurricane; real contact kills all eight; shared combat tests pass |
+| Hurricane and other lethal producers | `verified-already-at-parity` after `55dcb2a17` | Hurricane excludes Coffin/Portal/Cocoon; ordinary eligible damage still reaches the shared terminal producer |
 | Zombie composition, progression seed, unrelated spells and campaign reports | `out-of-system` | Separate recovered systems; no shared defect identified by this investigation |
 
-Current-main base is `0f45a4c01759e87ee418ec668078f330009b36ae`.
+Initial investigation base was `0f45a4c01759e87ee418ec668078f330009b36ae`.
 `ed0a2d598` already includes the one-step Coffin owner index, indexed crowd
 movement, and lazy offscreen death-effect allocation. September 20–21
 performance receipts distinguish matched tick improvements from live browser
@@ -796,6 +796,31 @@ and every Maggot presentation bank. Its production build passes. The initial
 7,150 tracked files match byte-for-byte across the local and detached Mac
 worktrees; the subsequently added probe is transferred and hash-checked too.
 
+**Publication-base correction, recorded before adapting the probe:** current
+main `55dcb2a174ce5b830838efaf2822d2d9b90c1d40` includes report 08's fresh
+whole-owner recovery in entry 051. Hurricane helper `0x0047CB20` has calls only
+from Badguy `0x004835F0` and Maggot `0x004881A0`; Coffin, Portal and Cocoon
+call Puppet directly and are excluded from both Hurricane force and damage.
+Coffin `0x004A2760` restores its initialized `+0x23C/+0x240` root each tick.
+The initial probe incorrectly treated the previous web Hurricane eligibility
+as native truth; the new xref evidence supersedes that assumption. No runtime
+fix is duplicated or reverted. Final acceptance must keep all four Coffin
+styles anchored with zero Hurricane contact cooldown, and test immediate
+destruction through the common eligible-damage handler while Hurricane
+presentation remains active. The historical measurements below describe the
+pre-correction web candidate, not proof that Hurricane should kill Coffins.
+
+The corrected probe on that publication base passes **283/283** focused
+stationary-owner/store/combat/Hurricane/death-effect/Maggot tests and a fresh
+production build. At the reporter's viewport and pixel ratio, all eight
+Coffins retain the Hurricane exclusion and retire through eligible shared
+magic damage. The burst reaches **624 visible effects**, advances 801.48 ticks
+in eight seconds, and has p99/maximum frame interval 16.8 ms. Independent
+effects retain their complete native lifetime and eventually expire; all
+page/console/response/request/wire/host errors remain empty. The two saved
+owners and their then-current 105 children also retire normally with 16.8 ms
+frame intervals. The complete gate repeats this exact final implementation.
+
 `frontend/tools/smoke-coffin-spawn.mjs` is the only executable addition. It
 uses the built app, isolated ephemeral ports, private host/browser context,
 ordinary Title/Create/College/Boneyard and saved Last Game journeys, and the
@@ -805,10 +830,13 @@ and aggregate measurements enter the receipt. It clears the copy's rejoin
 capability to avoid reconnecting the original party. The archive is untouched.
 `SDR_COFFIN_OUTPUT` selects disposable screenshots and aggregate JSON.
 
-In the generated fixture, eight Coffins are created in four native flag styles
-at ordinary positions around a genuinely charging Hurricane. Only fixture
-health is set to one to isolate immediate death. The wizard's fixture level is
-75 so XP cannot pause the measurement. The first low-level attempt correctly
+In the initial, superseded fixture, eight Coffins were created in four native
+flag styles around a charging Hurricane, with fixture health set to one.
+That eligibility assumption is corrected above: the final probe retains
+constructed health, waits for native emergence, verifies anchored roots and
+zero Hurricane cooldown, then applies eligible lethal magic damage through the
+shared handler. The wizard's fixture level is 75 so XP cannot pause the
+measurement. The first low-level attempt correctly
 opened the native level-up barrier after two deaths; that attempt is rejected
 as performance evidence. The maintained probe now asserts actual simulation
 advance, p99 below 50 ms, no frame at or above 250 ms, at least 500 simultaneous
@@ -923,8 +951,10 @@ receipts do not distinguish the affected client's network/browser transport
 from the proxy/socket compression and delivery path, and contain no packet or
 network-worker profile for that interval. The earlier video's exact trace is
 also absent. An arbitrary Coffin count/VFX reduction or transport timeout would
-not be an evidenced repair. The existing performance fixes were already in
-the affected revision, so they cannot justify an already-fixed claim. Native
+not be an evidenced repair. The September 20–21 performance fixes were already
+in the affected revision. Report 08 subsequently corrected the native Coffin
+Hurricane eligibility/anchor bug; that published repair is retained and
+verified here, but does not by itself explain the archived delivery gap. Native
 membership is closed; transport-cause attribution remains open, and no Discord
 completion reaction is warranted. All original production archives and
 diagnostics were read-only and remain preserved; only task-owned copies are
