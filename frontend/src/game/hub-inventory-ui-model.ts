@@ -2,6 +2,12 @@ import type { HubInventoryAction, HubTraderId } from './core-kernels/hub-economy
 import type { ModBoastSelection } from './core-kernels/boast.ts'
 import type { HubInteractionId } from './hub-inventory-presentation.ts'
 import type { HubNpcChatContent } from './hub-npc-dialogue.ts'
+import type { HubInventoryDragModel } from './renderer/hub-inventory/model.ts'
+
+export type InventoryActionHandler = (
+  action: HubInventoryAction,
+  releasedDrag?: HubInventoryDragModel,
+) => void
 
 export interface HubServiceSelection {
   readonly id: number

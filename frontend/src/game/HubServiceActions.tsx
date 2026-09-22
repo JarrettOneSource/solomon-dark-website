@@ -3,7 +3,6 @@ import { activateSelection } from './hub-inventory-pointer.ts'
 import type { ReactNode } from 'react'
 import {
   HAGATHA_PERKS,
-  type HubInventoryAction,
   type HubTraderId,
 } from './core-kernels/hub-economy.ts'
 import type { NativeHudRect } from './native-hud-layout.ts'
@@ -21,7 +20,7 @@ import {
   hubHagathaOfferSlotPosition,
   hubOwnedPerkSlotRect,
 } from './renderer/hub-inventory-render-contract.ts'
-import type { HubServiceSelection } from './hub-inventory-ui-model.ts'
+import type { HubServiceSelection, InventoryActionHandler } from './hub-inventory-ui-model.ts'
 import type { InventoryFlybyRequest } from './use-hub-inventory-flybys.ts'
 import { InventoryActions } from './HubInventoryActions.tsx'
 import { NativeAction } from './HubNativeAction.tsx'
@@ -59,13 +58,13 @@ export function ServiceActions({
   beltRects: readonly NativeHudRect[]
   economy: ProtocolPlayerEconomy
   inventorySelection: HubInventorySelectionModel | null
-  onAction: (action: HubInventoryAction) => void
+  onAction: InventoryActionHandler
   onBeltBind: (itemId: number, slot: number) => void
   onClose: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onInsufficientGold: () => void
-  onInventoryAction: (action: HubInventoryAction) => void
+  onInventoryAction: InventoryActionHandler
   onInventorySelect: (selection: HubInventorySelectionModel | null) => void
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
   onFocusInspection: (inspection: HubServiceInspectionModel | null) => void
@@ -118,6 +117,7 @@ export function ServiceActions({
     serviceActions = (
       <InventoryShopStorageActions
         economy={economy}
+        transitionLocked={transitionLocked}
         selection={selection}
         onAction={onAction}
         onClose={onClose}

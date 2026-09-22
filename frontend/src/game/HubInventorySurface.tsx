@@ -187,6 +187,33 @@ export function NativeHubSurface({
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
+  const [releasedInventoryDrag, setReleasedInventoryDrag] = useState<{
+    readonly action: HubInventoryAction['type']
+    readonly drag: HubInventoryDragModel
+    readonly feedbackSequence: number
+    readonly sackPath: readonly number[]
+  } | null>(null)
+  // Source suppression and the dragger retire together with the host result,
+  // including rejection. Clearing on pointer-up exposes the old snapshot.
+  const awaitingInventoryDrop = releasedInventoryDrag !== null
+    && releasedInventoryDrag.sackPath === sackPath
+    && !(economy.actionFeedback
+      && economy.actionFeedback.sequence > releasedInventoryDrag.feedbackSequence
+      && economy.actionFeedback.action === releasedInventoryDrag.action)
+  const displayedInventoryDrag = inventoryDrag
+    ?? (awaitingInventoryDrop ? releasedInventoryDrag.drag : null)
+  useEffect(() => {
+    if (!awaitingInventoryDrop) setReleasedInventoryDrag(null)
+  }, [awaitingInventoryDrop])
+  const dispatchInventoryAction = (action: HubInventoryAction, drag?: HubInventoryDragModel) => {
+    if (drag) setReleasedInventoryDrag({
+      action: action.type,
+      drag,
+      feedbackSequence: economy.actionFeedback?.sequence ?? 0,
+      sackPath,
+    })
+    onAction(action)
+  }
   const [statsPage, setStatsPage] = useState(0)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
@@ -194,6 +221,7 @@ export function NativeHubSurface({
     economy.actionFeedback, onAction, sackPath,
   )
   const inventoryTransitionLocked = sackTransition !== null || inventoryFlyby !== null
+    || awaitingInventoryDrop
 
   const modalSlides = useSyncExternalStore(
     subscribeNativeModalSlideProgress,
@@ -315,6 +343,7 @@ export function NativeHubSurface({
   useEffect(() => {
     setInventorySelection(null)
     setInventoryDrag(null)
+    setReleasedInventoryDrag(null)
   }, [sackPath])
 
   useEffect(() => {
@@ -434,7 +463,7 @@ export function NativeHubSurface({
     if (surface.kind === 'inventory') return {
       belt,
       config,
-      dragging: inventoryDrag,
+      dragging: displayedInventoryDrag,
       dyeModal,
       economy,
       flybys: inventoryFlybys,
@@ -464,7 +493,7 @@ export function NativeHubSurface({
     return {
       belt,
       config,
-      dragging: inventoryDrag,
+      dragging: displayedInventoryDrag,
       dyeModal,
       economy,
       flybys: inventoryFlybys,
@@ -487,7 +516,7 @@ export function NativeHubSurface({
     config,
     economy,
     dyeModal,
-    inventoryDrag,
+    displayedInventoryDrag,
     inventoryFlybys,
     inventorySelection,
     highlightedNpcSelectorId,
@@ -726,15 +755,15 @@ export function NativeHubSurface({
               inventorySelection={inventorySelection}
               selection={serviceSelection}
               trader={surface.trader}
-              onAction={(action) => {
+              onAction={(action, drag) => {
                 if (action.type.startsWith('buy-')) audio.playSound('click')
-                onAction(action)
+                dispatchInventoryAction(action, drag)
               }}
-              onInventoryAction={(action) => {
+              onInventoryAction={(action, drag) => {
                 if (action.type !== 'consume' && action.type !== 'transfer'
                   && action.type !== 'unforge' && action.type !== 'equip'
                   && action.type !== 'move-inventory-item') audio.playSound('click')
-                onAction(action)
+                dispatchInventoryAction(action, drag)
               }}
               onBeltBind={(itemId, slot) => {
                 audio.playSound('pick-skill')
@@ -771,13 +800,13 @@ export function NativeHubSurface({
               beltRects={inventoryBeltRects}
               economy={economy}
               selection={inventorySelection}
-              onAction={(action) => {
+              onAction={(action, drag) => {
                 if (action.type !== 'consume' && action.type !== 'unforge'
                   && action.type !== 'bind-belt-item' && action.type !== 'equip'
                   && action.type !== 'move-inventory-item') {
                   audio.playSound('click')
                 }
-                onAction(action)
+                dispatchInventoryAction(action, drag)
               }}
               onBeltBind={(itemId, slot) => {
                 audio.playSound('pick-skill')

@@ -39,7 +39,7 @@ import {
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
 } from './renderer/hub-inventory-render-contract.ts'
-import type { InventoryMoveAction } from './hub-inventory-ui-model.ts'
+import type { InventoryActionHandler, InventoryMoveAction } from './hub-inventory-ui-model.ts'
 import type { InventoryFlybyRequest } from './use-hub-inventory-flybys.ts'
 import { pointerStagePosition, pointInRect } from './hub-inventory-pointer.ts'
 import { NativeAction } from './HubNativeAction.tsx'
@@ -75,7 +75,7 @@ export function InventoryActions({
   beltRects: readonly NativeHudRect[]
   companion?: boolean
   economy: ProtocolPlayerEconomy
-  onAction: (action: HubInventoryAction) => void
+  onAction: InventoryActionHandler
   onBeltBind: (itemId: number, slot: number) => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
@@ -293,7 +293,7 @@ export function InventoryActions({
         point,
         economy,
         thirdRingUnlocked,
-        onAction,
+        (action) => onAction(action, { ...press.source, pointer: point }),
         onBeltBind,
         onFlyby,
         onMoveSound,

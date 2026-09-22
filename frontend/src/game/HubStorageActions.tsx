@@ -3,7 +3,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { projectInventoryRootSlots, type HubInventoryAction } from './core-kernels/hub-economy.ts'
+import { projectInventoryRootSlots } from './core-kernels/hub-economy.ts'
 import type { ProtocolPlayerEconomy } from './protocol/game-state.ts'
 import type {
   HubInventoryDragModel,
@@ -15,7 +15,7 @@ import {
   HUB_SHOP_PANEL,
   hubShopSlotPosition,
 } from './renderer/hub-inventory-render-contract.ts'
-import type { HubServiceSelection } from './hub-inventory-ui-model.ts'
+import type { HubServiceSelection, InventoryActionHandler } from './hub-inventory-ui-model.ts'
 import { pointerStagePosition, pointInRect } from './hub-inventory-pointer.ts'
 import { NativeAction } from './HubNativeAction.tsx'
 import { EmptyStoreGridActions } from './HubStoreGridActions.tsx'
@@ -31,9 +31,10 @@ export function InventoryShopStorageActions({
   onInteractionSound,
   onSelect,
   selection,
+  transitionLocked,
 }: {
   economy: ProtocolPlayerEconomy
-  onAction: (action: HubInventoryAction) => void
+  onAction: InventoryActionHandler
   onClose: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
@@ -42,6 +43,7 @@ export function InventoryShopStorageActions({
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
+  transitionLocked: boolean
 }) {
   const pressRef = useRef<StoragePointerPress | null>(null)
   const lastActivationRef = useRef<StorageActivation | null>(null)
@@ -50,6 +52,7 @@ export function InventoryShopStorageActions({
     .map(({ item, slot }) => ({ depth: 0, item, parentSackId: null, slot }))
 
   const clearStorageSelection = () => {
+    if (transitionLocked) return
     pressRef.current = null
     lastActivationRef.current = null
     onDragChange(null)
@@ -68,7 +71,7 @@ export function InventoryShopStorageActions({
   const beginPointer = (itemId: number) => (
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
-    if (event.button !== 0) return
+    if (transitionLocked || event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     if (event.pointerType === 'touch') {
@@ -144,6 +147,11 @@ export function InventoryShopStorageActions({
         direction: 'to-backpack',
         gesture: 'drag',
         itemId: press.itemId,
+      }, {
+        equipmentSlot: null,
+        itemId: press.itemId,
+        owner: 'storage',
+        pointer: point,
       })
       return
     }
@@ -211,6 +219,7 @@ export function InventoryShopStorageActions({
           return (
             <NativeAction
               key={item.id}
+              disabled={transitionLocked}
               data={{
                 'data-inventory-item-id': item.id,
                 'data-inventory-depth': depth,
