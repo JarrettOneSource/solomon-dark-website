@@ -245,6 +245,12 @@ async function releaseItem(inventory, source, point, name, accepted = true, flyb
   await page.mouse.up()
   await waitForHostFeedback(sequence)
   if (flyby) await page.waitForTimeout(150) // Native trailing fades finish at tick 29.
+  if (name === 'fomentius-blank') {
+    const shopItem = inventory.getByRole('button', { name: /^Buy Health Potion for / }).first()
+    await shopItem.dblclick()
+    await waitForHostFeedback(sequence + 1)
+    assert.equal(currentEconomy().actionFeedback.action, 'buy-fomentius')
+  }
   const released = await captureSourcePixels(clip, `${name}-released`)
   const maxChannelDifference = pixelDifference(released, held)
   // Companion reveal can still change the dark slot by up to five levels.

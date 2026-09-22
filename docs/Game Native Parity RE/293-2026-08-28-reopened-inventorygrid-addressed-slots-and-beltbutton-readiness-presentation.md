@@ -85,6 +85,12 @@ retained canvas's previous settled flag is not readiness of its next owner.
 The eight-level raster tolerance covers only minor reveal/rounding variation;
 it does not mask the 221-level original item flash.
 
+A sibling Fomentius purchase while drop snapshots are withheld also passes: the
+host broadcasts immediately after each `client-hub-action`, ordered feedback
+completes the drop before the later purchase, and no held item or input lock
+remains after both snapshots arrive. This falsifies the suspected feedback
+replacement problem without adding a speculative protocol or input queue.
+
 Mac focused checks passed **92/92** inventory presentation, renderer contract,
 and economy tests, plus frontend lint and the production build (Node 22.17.0).
 The maintained browser journey is
