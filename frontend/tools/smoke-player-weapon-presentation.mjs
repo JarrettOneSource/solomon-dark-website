@@ -39,14 +39,15 @@ await page.route('**/__weapon-proof', route => route.fulfill({
 try {
   await page.goto(`http://127.0.0.1:${address.port}/__weapon-proof`)
   const receipt = await page.evaluate(async () => {
-    const [fixture, actors, simulation, snapshots, items, secondary, mods] = await Promise.all([
+    const [fixture, actors, simulation, snapshots, items, secondary, mods, staffProgram] = await Promise.all([
       import('/tools/player-damage-smoke-fixture.mjs'),
-      import('/src/game/renderer/hub-actors.ts'),
+      import('/src/game/renderer/world-player-view.ts'),
       import('/src/game/core-server/game-simulation.ts'),
       import('/src/game/host/game-snapshot.ts'),
       import('/src/game/core-kernels/hub-economy.ts'),
       import('/src/game/core-kernels/native-secondary-abilities.ts'),
       import('/src/game/renderer/mod-presentation-assets.ts'),
+      import('/src/assets/game/player-staff-attachment-program.json'),
     ])
     const loaded = await fixture.loadPlayerProofTextures()
     const modTextures = await mods.loadModPresentationTextures([])
@@ -71,6 +72,7 @@ try {
     const view = new actors.PlayerWorldView('fire', loaded.textures, modTextures, application.renderer, false)
     application.stage.addChild(view.container)
     const failures = []
+    let effectFrames = 0
     let frames = 0
     let damageFrames = 0
     for (let selector = 0; selector < 6; selector += 1) {
@@ -91,7 +93,7 @@ try {
               } },
               progression: { ...source.progression, lastDamageTick: 100 },
             }
-            view.setSecondaryState({
+            view.setStatusEffects({
               ...secondary.createNativeSecondaryPlayerState(),
               castAction: pose === 0 ? null : { weaponKind: 'wand', progress: pose === 1 ? 0.5 : 1 },
             }, 100)
@@ -110,17 +112,95 @@ try {
             }
             if (view.hitFixed.texture === view.fixed.texture
               && view.hitStaffFront.texture === view.staffFront.texture) damageFrames += 1
+            if (view.orbSpriteCount > 0 && view.elementEffectScale === Math.fround(0.6)) {
+              effectFrames += 1
+            }
             frames += 1
           }
         }
       }
     }
+    let staffFrames = 0
+    view.setStatusEffects(secondary.createNativeSecondaryPlayerState(), 200)
+    for (let selector = 0; selector < 6; selector += 1) {
+      const weapon = { ...items.createEquipmentInventoryItem(items.DOWSING_EQUIPMENT_RECIPES[18], 199),
+        recipeIndex: null, nativeSelector: selector }
+      for (let pose = 0; pose < 10; pose += 1) {
+        for (let headingIndex = 0; headingIndex < 24; headingIndex += 1) {
+          view.update({ ...source, headingIndex,
+            economy: { ...source.economy, equipment: { ...source.economy.equipment, weapon } },
+          }, 200, pose)
+          application.renderer.render(application.stage)
+          const [x, y] = staffProgram.default.frames[pose][headingIndex].start
+          if (view.orbSpriteCount === 0 || view.elementEffectScale !== 1
+            || view.orbFrontBase.container.x !== x || view.orbFrontBase.container.y !== y) {
+            failures.push({ selector, pose, headingIndex, family: 'staff' })
+          }
+          staffFrames += 1
+        }
+      }
+    }
+    const programs = [8, 16, 24, 32, 40, ...Array.from({ length: 15 }, (_, i) => 1000 + i)]
+    const programReceipts = []
+    for (const recipeIndex of [2, 13, 28, 41, 42, 43, 44, 45, 18]) {
+      const weapon = items.createEquipmentInventoryItem(items.DOWSING_EQUIPMENT_RECIPES[recipeIndex], 200)
+      const kind = weapon.equipmentType
+      for (const selectedPrimaryId of programs) {
+        for (const phase of [0, Math.fround(0.45)]) {
+          view.setStatusEffects(secondary.createNativeSecondaryPlayerState(), 200)
+          const player = {
+            ...source, headingIndex: 6, position: { x: 450, y: 300 },
+            lighting: { ...source.lighting, overlayEffectPhase: phase },
+            primaryCast: { ...source.primaryCast, selectedPrimaryId },
+            progression: { ...source.progression, damageX4TicksRemaining: 100, hardenCoating: 1 },
+            economy: { ...source.economy, equipment: { ...source.economy.equipment, weapon } },
+          }
+          view.update(player, 200)
+          application.renderer.render(application.stage)
+          const expectedScale = Math.fround((kind === 'wand' ? Math.fround(0.6) : 1) * (1 + 10 * phase))
+          const tip = kind === 'wand' ? { x: 39.5, y: -5 } : { x: 38.5, y: -61.5 }
+          if (view.orbSpriteCount === 0 || view.damageX4SpriteCount < 2
+            || view.elementEffectScale !== expectedScale
+            || view.orbFrontBase.container.x !== tip.x || view.orbFrontBase.container.y !== tip.y
+            || view.orbHardenOverlay.container.y !== tip.y
+            || view.orbFrontOverlay.container.y !== tip.y + 1
+            || view.orbFrontBase.container.zIndex <= view.head.zIndex
+            || (phase === 0 && view.orbFrontOverlay.container.zIndex >= view.head.zIndex)
+            || (phase > 0 && view.orbFrontOverlay.container.zIndex <= view.head.zIndex)) {
+            failures.push({ recipeIndex, selectedPrimaryId, phase, count: view.orbSpriteCount,
+              actualScale: view.elementEffectScale, expectedScale, tip })
+          }
+          programReceipts.push({ recipeIndex, selectedPrimaryId, phase, count: view.orbSpriteCount })
+          if (selectedPrimaryId !== 8 || phase !== 0) continue
+          view.setStatusEffects({ ...secondary.createNativeSecondaryPlayerState(), stoneskinTicksRemaining: 100 }, 200)
+          view.update(player, 200)
+          if (view.orbHardenOverlay.container.visible) failures.push({ recipeIndex, lifecycle: 'stoneskin' })
+          view.setStatusEffects({ ...secondary.createNativeSecondaryPlayerState(), planewalkerTicksRemaining: 100 }, 200)
+          view.update(player, 200)
+          if (view.orbSpriteCount !== 0) failures.push({ recipeIndex, lifecycle: 'planewalker' })
+          view.setStatusEffects(secondary.createNativeSecondaryPlayerState(), 200)
+          view.update(player, 200)
+          if (view.orbSpriteCount === 0) failures.push({ recipeIndex, lifecycle: 'restore' })
+          for (const suppressed of [
+            { ...player, primaryCast: { ...player.primaryCast, selectedPrimaryId: -1 } },
+            { ...player, economy: { ...player.economy, equipment: { ...player.economy.equipment, weapon: null } } },
+            { ...player, progression: { ...player.progression, lifeState: 'dying', deathTick: 153 } },
+          ]) {
+            view.update(suppressed, 200)
+            if (view.orbSpriteCount !== 0 || view.damageX4SpriteCount !== 0) failures.push({ recipeIndex, lifecycle: 'suppressed' })
+          }
+          view.update(player, 200, null, false)
+          if (view.orbSpriteCount !== 0) failures.push({ recipeIndex, lifecycle: 'scene-suppressed' })
+        }
+      }
+    }
     view.destroy()
+    if (!view.container.destroyed) failures.push({ lifecycle: 'destroy' })
     const previews = []
     for (let heading = 0; heading < 24; heading += 4) {
       for (let pose = 0; pose < 3; pose += 1) {
         const sample = new actors.PlayerWorldView('fire', loaded.textures, modTextures, application.renderer, false)
-        sample.setSecondaryState({
+        sample.setStatusEffects({
           ...secondary.createNativeSecondaryPlayerState(),
           castAction: pose === 0 ? null : { weaponKind: 'wand', progress: pose === 1 ? 0.5 : 1 },
         }, 200)
@@ -142,10 +222,13 @@ try {
       modTextures.destroy()
       loaded.destroy()
     }
-    return { frames, damageFrames, failures }
+    return { frames, staffFrames, damageFrames, effectFrames, programCases: programReceipts.length, failures }
   })
   assert.equal(receipt.frames, 1728)
+  assert.equal(receipt.staffFrames, 1440)
+  assert.equal(receipt.programCases, 360)
   assert.equal(receipt.damageFrames, receipt.frames)
+  assert.equal(receipt.effectFrames, receipt.frames, 'every Wand pose must render its selected-element effect at native scale')
   assert.equal(receipt.failures.length, 0, JSON.stringify(receipt.failures.slice(0, 5)))
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])

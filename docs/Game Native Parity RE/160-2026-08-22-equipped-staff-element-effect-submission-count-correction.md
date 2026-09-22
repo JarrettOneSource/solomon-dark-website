@@ -1,5 +1,12 @@
 # 2026-08-22 — Equipped Staff element-effect submission count correction
 
+> **2026-09-22 equipped-Wand reopening:** entry [010](010-staff-and-orb-rendering.md)
+> supersedes the Wand exclusion and the body-heading approximation in the
+> equipped effect call census. Staff and Wand now share socket-derived pass
+> admission; Wand uses its own 72 endpoints and native 0.6 scale. The shared
+> Damage x4 and Harden copies follow the same corrected attachment contract.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: the Staff orb VFX became far too large after the

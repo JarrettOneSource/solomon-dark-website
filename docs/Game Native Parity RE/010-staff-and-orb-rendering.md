@@ -1,5 +1,163 @@
 # Staff and orb rendering
 
+## 2026-09-22 — Report 14: equipped Wand selected-element effect
+
+### Evidence and recovered contract (recorded before implementation)
+
+Report 14's original `Ether_2.mp4` (4.017 s) shows a bare Wand tip while
+Ether Blast fires; `Ether_1.mp4` (4.027 s) shows the Staff's magenta effect.
+Both 1920x1080 attachments were reviewed across their full duration. They are
+Website observations, not clean-stock captures. The original archive remains
+under `2026-09-21/14-ether-blast-wand-effect-missing/`.
+
+Fresh read-only Ghidra evidence uses retail 0.72.5 `SolomonDark.exe`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`, canonical `Decompiled Game/ghidra_project/SolomonDark`, and
+the existing replica pool. The unmodified Mod Loader wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49` (checkout
+`08bfba9ef367f7b863848030d0a289dc31e33192`). Queries used
+`decompile_targets.py` on `0x0053B1D0/0x0054BA80/0x005468C0/0x00579820` and
+`dump_function_instructions.py` on the helper, main renderer, and
+`0x00579680`. No native session was injected or commandeered.
+
+- `0x0053B1D0` owns **both equipped weapon** effects. Death `+0x160`, the
+  global suppression flag, and negative selected primary return before any
+  painter. Slot 12 or actor `+0x21C` supplies selection, as in entry 237.
+- At `0x0053B261`, type `0x1B5C` chooses the Staff's virtual point-1 socket.
+  The non-Staff equipped branch `0x0053B321..0x0053B412` clamps `K-14` to
+  `0..2`, reads point 1 of Clothes `796+24*pose+heading`, and calls the **same**
+  selected-program dispatcher `0x00539B80`. All 72 rows, both endpoints,
+  already reside in `player-weapon-attachment-program.json`; the exact
+  extractor is `tools/player_attachment_art.py:write_player_weapon_attachment_program`.
+  The existing `playerWandSpellEmitterOffset` is the reusable consumer.
+- Instructions `0x0053B3CD..0x0053B3F2` pass
+  `f32(actorScale * 0.6000000238418579 * (1+10*phase))`. The exact double at
+  `0x0078C6F0` has bytes `000000403333e33f`; doubles at `0x007DE810/820` are
+  10 and 1. Do not round the pulse before multiplying by the Wand factor.
+- All five main-render helper xrefs and three alternate-render xrefs remain
+  those in entry 160. Equipped Wands never take the null-item back call.
+  Native pose 9 alone gets the special one-copy StaffCast2 treatment: Wand
+  Cast2 writes K=15/16 and takes the ordinary heading/pulse submission gates.
+  CastSpin explicitly writes K=9 even with a Wand, so it retains that gate
+  while its Wand socket clamps to idle. Ordinary heading 90 admits both copies;
+  270 is front only. High phase means strictly greater than float32 0.1.
+- The shared dispatcher prepends Damage x4's two gold BadGuys-7 layers
+  (entry 275), so their Wand position/scale must change together. Harden's
+  alternate pass uses the same equipped helper. Painter programs, phase
+  clocks, pulse writers, weapon authority, audio, damage, and replication
+  already exist and require no new state or assets.
+
+This reopens a skipped membership rule: entries 160/237 explicitly recorded
+the Wand painter but excluded it, and entry 008 later ported Wand art and
+emitters without bringing that consumer back into scope. The current
+`PlayerWorldView` gates every effect on `ordinaryStaffVisible` and always uses
+the Staff socket/scale. The correction belongs in shared player presentation,
+not Ether Blast or a scene-specific renderer.
+
+### System boundary and membership
+
+Native system: equipped-weapon selected-element submission, including its
+geometry, shared program and halo, body-pass ordering, lifecycle, and all live
+world consumers. The separate null-item hand painter is explicitly outside
+this equipped-item branch: it selects randomized hand frames, compares hand
+depth, and uses a distinct 0.8 factor at `0x0053B431..0x0053B66B`; substituting
+Wand or Staff geometry there would be false.
+
+| Member | Native/data owner | Final disposition |
+| --- | --- | --- |
+| Wand generated selectors 0, 1, 2, 3, 4, 5 | common Clothes 15, point bank 796..867 | exact-ported |
+| Cosmofluxic, Bug-Master, Kiln; Qubar Ether/Fire/Air/Water/Earth | recipes 2, 13, 28, 41, 42, 43, 44, 45 | exact-ported |
+| Wand idle/moving/Constant, Cast1, Cast2; all 24 headings per pose | three complete extracted rows of 24 endpoints; entry 008 clocks | exact-ported |
+| Wand CastSpin | K=9 special submission, clamped socket pose 0 | exact-ported |
+| Staff selectors 0..5, ten poses, 24 headings | virtual point 1; entry 160 call census | exact-ported; socket admission corrected; geometry preserved |
+| Pure Ether 8, Fire 16, Air 24, Water 32, Earth 40 | shared dispatcher, entry 237 | exact-ported on Wand; existing painter programs unchanged |
+| Weld 1000..1009; internal doubled-pure 1010..1014 | all fifteen extracted programs, entry 237 | exact-ported on Wand; internal rows remain planner-only |
+| Negative/default selection; Plane Orb 80/Planewalker; restoration | helper entry guards and dispatcher default | exact-ported on Wand |
+| Low/high pulse, heading 90/270 boundaries, weapon swap | main renderer 0x0054BA80 | exact-ported on Wand |
+| Damage x4 halo; Harden overlay; Stoneskin suppression | dispatcher prefix and alternate render 0x005468C0 | exact-ported on Wand |
+| Hub Courtyard/private rooms, Tutorial, Boneyard; local and remote players | shared PlayerWorldView, authoritative equipment/selection/action snapshots | exact-ported on Wand |
+| Death, unequip, pre-Create sentinel, world change and view destruction | helper guards; existing view lifecycle | exact-ported negative/restore coverage |
+| Bare-hand randomized effects | null-item branch 0x0053B431 | out-of-system: distinct unequipped owner/geometry |
+| Create, Inventory preview, Memorial and death weapon art | UI/corpse composition, not the live equipped helper | out-of-system: preserve their existing independent callers |
+| Mod Staff | Website wearable ABI | verified-already-at-parity: retain existing Staff treatment |
+| Gameplay, light providers and audio | existing spell/phase/status owners | verified-already-at-parity: presentation-only correction |
+
+The instruction/data evidence is high confidence; no guessed geometry or
+browser approximation is needed. Focused Mac assertions must cover all pose
+endpoints, pulse scales and submission boundaries; real Mac Chrome must show
+the built `/game` in Hub and Boneyard with Wand/Staff swaps, all pure programs,
+Ether Blast, negative/restore states, and empty error arrays. The final publication step must repeat the complete canonical gate and this
+built-browser journey on the rebased candidate under the campaign lock.
+
+### Additional caller recovery before code
+
+Fresh `0x0054BC5B..0x0054BDA1` and `0x0053B830` falsify another shared
+assumption in entry 160: the angular gate is the **socket vector**, not body
+heading. For equipped items it computes integer degrees from
+`atan2(socket.x, -(socket.y+20))`, normalizes negative angles, then truncates.
+The double at `0x007DE920` is exactly 20. All Staff poses and all Wand poses
+must therefore use their authored socket for admission. This corrects the
+same assumption across both equipped families, including the 90/270 edge
+tests. No extra point extraction is needed.
+
+The same caller instructions distinguish the transforms and painter order.
+Ordinary low-phase back-angle preservation at `0x0054C09E` is after the
+weapon and before the head; pose-9 low-phase `0x0054C7FE` and high-phase
+`0x0054C8AE` are after the head/hit pass and include the attachment translation.
+Ordinary base `0x0054C842` is after that pass but outside the attachment
+translation. The alternate/Harden helper is also outside that translation.
+At `0x0054BB80..0x0054BB99`, K=9 also zeros the lateral attachment bob.
+The resolved presented heading must select both the body and its socket.
+These positions must remain distinct; the previous shared loop added the
+attachment offset to all copies. Staff and Wand admission, placement and
+depth rows above are now `exact-ported` together.
+
+### Implementation and Mac acceptance receipt
+
+`player-character-presentation.ts` now owns the equipped-kind socket/scale and
+socket-derived call admission; `world-player-view.ts` enables both equipped
+families and preserves the distinct base/attachment/Harden transforms and
+head-relative order. No new asset, dependency, protocol field, gameplay RNG,
+light registration, or audio owner was introduced. Every inventory row above
+has its final disposition. There is no platform exception or material unknown
+inside the equipped branch.
+
+On the assigned Mac worktree, the pre-change renderer failed the added real
+Chrome regression with `0 !== 1728` visible Wand effects. After the correction:
+
+- The focused presentation, native painter, and retained-view suite passes
+  **36/36**; type checking and frontend lint pass.
+- `smoke-player-weapon-presentation.mjs` passes **1,728/1,728** combinations
+  of generated Wand selectors, all headings/poses, four Robe states, and hit
+  overlays, plus **1,440** Staff selector/pose/heading frames against the
+  independently extracted attachment table. It additionally passes **360** named-Wand/Staff, pure/Weld/internal
+  program, and pulse cases; checks socket coordinates, native scale, depth,
+  Damage x4, Harden/Stoneskin, Planewalker restore, unequip, sentinel, death,
+  scene suppression, and destruction. Page/console/failed-response arrays
+  are empty. The stale smoke import and status setter were updated to the
+  existing current-main player-view interface.
+- `smoke-equipped-element-effects.mjs` uses the production build and an
+  isolated authenticated host, ephemeral ports, and a fresh Chrome profile.
+  The real Title/Create/Hub/Boneyard journey has **22** selection/equip
+  checkpoints: five pure spells on Wand and Staff plus unequip in both worlds.
+  Wand idle scale is exactly `0.6000000238418579`, Staff scale 1. Ether has
+  19–27 visible sprites in these sampled frames; Fire 3, Air 6, Water/Earth 4.
+  All members use the same addressed-player view in every live scene.
+- With learned Ether Blast (skill 14), the host charges naturally, real mouse
+  input releases `ether-blast`, and all **65** sampled charge/cast/recovery
+  frames retain the tip effect. The inspected Hub and Boneyard screenshots
+  show the magenta star/rays attached to the Wand. Page, console, request,
+  response, and decoded-wire error arrays are all empty.
+- Production frontend/game-host builds and the bundle budget pass. The final
+  publication gate is `/opt/homebrew/bin/bash ./scripts/validate.sh`, followed
+  by both Chrome scripts, on the byte-identical rebased tree. Its final result
+  and published commit are recorded in report 14's campaign outcome.
+
+These are browser observations and instruction/data parity evidence, not a
+claim that a new clean-stock GUI comparison was performed. The original videos
+and archive are preserved; task screenshots, manifests, logs, and acceptance
+worktrees are disposable after publication.
+
 `0x00578D20` supports an optional two-system staff composition:
 
 1. generated four-vertex staff-body/glow quads along the attachment endpoints,

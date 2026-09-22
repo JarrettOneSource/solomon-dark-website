@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createHubEconomy } from './core-kernels/hub-economy.ts'
+import weaponProgram from '../assets/game/player-weapon-attachment-program.json' with { type: 'json' }
 import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
 import {
   NATIVE_PLAYER_DEATH_WEAPON_BOUNCER,
@@ -24,7 +25,7 @@ import {
   playerCharacterRobeFixedPose,
   playerCharacterStaffIsFront,
   playerCharacterStaffOrbOffset,
-  playerCharacterStaffOrbPasses,
+  playerCharacterEquippedOrbPasses,
   playerStaffActionPose,
 } from './player-character-presentation.ts'
 
@@ -415,7 +416,7 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)
   assert.deepEqual(plan.orbPasses, {
-    frontBase: true,
+    frontBase: false,
     frontOverlay: true,
   })
   const pulsingPlan = createPlayerCharacterDrawPlan({
@@ -503,65 +504,62 @@ test('ordinary no-weapon art never reuses a Staff action pose as a Hand-bank ind
   assert.equal(createPlayerCharacterDrawPlan(state, 1, null, { weaponKind: 'staff', progress: 1 }).bareAttachmentPose, null)
 })
 
-test('Staff element effects preserve exact native call membership across every heading and pose', () => {
-  assert.deepEqual(playerCharacterStaffOrbPasses(0, 0, 0), {
-    frontBase: false,
-    frontOverlay: true,
-  })
-  assert.deepEqual(playerCharacterStaffOrbPasses(6, 0, 0), {
-    frontBase: true,
-    frontOverlay: true,
-  })
-  assert.deepEqual(playerCharacterStaffOrbPasses(7, 0, 0), {
-    frontBase: true,
-    frontOverlay: false,
-  })
-  assert.deepEqual(playerCharacterStaffOrbPasses(18, 0, 0), {
-    frontBase: true,
-    frontOverlay: false,
-  })
-  assert.deepEqual(playerCharacterStaffOrbPasses(19, 0, 0), {
-    frontBase: false,
-    frontOverlay: true,
-  })
-  assert.equal(playerCharacterStaffOrbPasses(7, 0, 0.10000000149011612).frontOverlay, false)
-  assert.equal(playerCharacterStaffOrbPasses(
-    7,
-    0,
-    0.10000000149011612 + Number.EPSILON,
-  ).frontOverlay, true)
-  assert.deepEqual(playerCharacterStaffOrbPasses(7, 9, 0), {
-    frontBase: false,
-    frontOverlay: true,
-  })
-  assert.deepEqual(playerCharacterStaffOrbPasses(7, 9, 0.45), {
-    frontBase: false,
-    frontOverlay: true,
-  })
-
-  for (let heading = 0; heading < 24; heading += 1) {
-    for (let pose = 0; pose <= 9; pose += 1) {
-      for (const phase of [0, 0.10000000149011612, 0.10000000149011634, 0.45]) {
-        const passes = playerCharacterStaffOrbPasses(
-          heading,
-          pose as Parameters<typeof playerCharacterStaffOrbPasses>[1],
-          phase,
-        )
-        const frontAngle = heading >= 6 && heading <= 18
-        const backAngle = heading <= 6 || heading > 18
-        const expectedCopies = pose === 9
-          ? 1
-          : Number(frontAngle) + Number(
-              phase > 0.10000000149011612 || backAngle,
-            )
-        assert.equal('backBase' in passes, false, `${heading}:${pose}:${phase}`)
-        assert.equal(
-          Object.values(passes).filter(Boolean).length,
-          expectedCopies,
-          `${heading}:${pose}:${phase}`,
-        )
+test('equipped effects use socket direction and native pose/pulse gates', () => {
+  const sockets = [
+    { point: { x: 0, y: -40 }, front: false, back: true },
+    { point: { x: 20, y: -20 }, front: true, back: true },
+    { point: { x: 20, y: 0 }, front: true, back: false },
+    { point: { x: -20, y: -20 }, front: true, back: false },
+    { point: { x: -20, y: -40 }, front: false, back: true },
+  ]
+  for (const { point, front, back } of sockets) {
+    for (const pose of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16]) {
+      for (const phase of [0, Math.fround(0.1), Math.fround(0.1) + Number.EPSILON, 0.45]) {
+        assert.deepEqual(playerCharacterEquippedOrbPasses(point, pose, phase), {
+          frontBase: pose !== 9 && front,
+          frontOverlay: pose === 9 || back || phase > Math.fround(0.1),
+        }, `${JSON.stringify(point)}:${pose}:${phase}`)
       }
     }
+  }
+})
+
+test('Wand effects follow every authored endpoint, selected pose, and unrounded native scale', () => {
+  const state = {
+    config: FIRE_CONFIG, gaitDegrees: 0, headingIndex: 0,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId: 8 },
+    velocity: { x: 0, y: 0 }, walkCyclePrimary: 0,
+  }
+  for (const [pose, progress] of [[0, 0], [1, 0.5], [2, 1.5]] as const) {
+    for (let headingIndex = 0; headingIndex < 24; headingIndex += 1) {
+      const plan = createPlayerCharacterDrawPlan(
+        { ...state, headingIndex }, 1, null,
+        { weaponKind: 'wand', progress }, 0, 'wand',
+      )
+      const [x, y] = weaponProgram.wand[pose]![headingIndex]!.end
+      assert.deepEqual(plan.orbOffset, { x, y })
+      assert.equal(plan.wandAttachmentPose, pose)
+      assert.equal(plan.orbOverlayAfterHead, false, 'Wand Cast2 is K=15/16, not K=9')
+    }
+  }
+  const staff = createPlayerCharacterDrawPlan({ ...state, headingIndex: 6 })
+  const wand = createPlayerCharacterDrawPlan({ ...state, headingIndex: 6 }, 1, null, null, 0, 'wand')
+  assert.deepEqual(staff.orbPasses, { frontBase: false, frontOverlay: true })
+  assert.deepEqual(wand.orbPasses, { frontBase: true, frontOverlay: false })
+  assert.deepEqual(wand.orbOffset, { x: 39.5, y: -5 })
+  const spin = createPlayerCharacterDrawPlan(state, 1, null, 'spin', 0, 'wand')
+  assert.equal(spin.orbOverlayAfterHead, true)
+  assert.equal(spin.wandAttachmentPose, 0)
+  assert.deepEqual(spin.orbPasses, { frontBase: false, frontOverlay: true })
+  const movingSpin = createPlayerCharacterDrawPlan({ ...state, gaitDegrees: 90 }, 1, null, 'spin', 0, 'wand')
+  assert.deepEqual(movingSpin.frontAttachmentOffset, { x: 0, y: 1 })
+  const movingWandCast = createPlayerCharacterDrawPlan(
+    { ...state, gaitDegrees: 90 }, 1, null, { weaponKind: 'wand', progress: 1.5 }, 0, 'wand',
+  )
+  assert.ok(movingWandCast.frontAttachmentOffset.x > 0)
+  for (const phase of [0, Math.fround(0.1), Math.fround(0.17), Math.fround(0.45), 1]) {
+    assert.equal(playerEquippedElementEffectScale(phase, 'wand'), Math.fround(0.6000000238418579 * (1 + 10 * phase)))
+    assert.equal(playerEquippedElementEffectScale(phase, 'staff'), Math.fround(1 + 10 * phase))
   }
 })
 

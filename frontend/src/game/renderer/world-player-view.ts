@@ -143,13 +143,13 @@ export class PlayerWorldView {
     const damageX4Texture = textures.secondary[nativeSecondarySpriteKey('BadGuys', 7)]
     this.damageX4FrontBase = new PlayerDamageX4VfxView(damageX4Texture)
     this.damageX4FrontBase.container.label = 'player-damage-x4-vfx-front-base'
-    this.damageX4FrontBase.container.zIndex = 6
+    this.damageX4FrontBase.container.zIndex = 8.5
     this.damageX4FrontOverlay = new PlayerDamageX4VfxView(damageX4Texture)
     this.damageX4FrontOverlay.container.label = 'player-damage-x4-vfx-front-overlay'
     this.damageX4FrontOverlay.container.zIndex = 6
     this.orbFrontBase = new NativeElementVfxView(null, textures.elementVfx)
     this.orbFrontBase.container.label = 'native-element-vfx-front-base'
-    this.orbFrontBase.container.zIndex = 6
+    this.orbFrontBase.container.zIndex = 8.5
     this.orbFrontOverlay = new NativeElementVfxView(null, textures.elementVfx)
     this.orbFrontOverlay.container.label = 'native-element-vfx-front-overlay'
     this.orbFrontOverlay.container.zIndex = 6
@@ -253,17 +253,19 @@ export class PlayerWorldView {
     this.statusMaterial = player.progression
     const playerTextures = this.textures.players[player.config.element]
     const elementEffectPhase = player.lighting.overlayEffectPhase
+    const weaponKind = player.economy.equipment.weapon?.equipmentType === 'wand' ? 'wand' : 'staff'
+    const heading = spriteFrameIndex(
+      Math.round(this.resolveHeadingIndex(player, movementFacing)),
+      24,
+    )
     const plan = createPlayerCharacterDrawPlan(
-      player,
+      heading === player.headingIndex ? player : { ...player, headingIndex: heading },
       1,
       staffActionPose,
       this.secondaryState?.castAction
         ?? ((this.secondaryState?.castSpinTicksRemaining ?? 0) > 0 ? 'spin' : null),
       elementEffectPhase,
-    )
-    const heading = spriteFrameIndex(
-      Math.round(this.resolveHeadingIndex(player, movementFacing)),
-      24,
+      weaponKind,
     )
     this.currentHeadingIndex = heading
     const pose = spriteFrameIndex(plan.robePose, 5)
@@ -370,14 +372,14 @@ export class PlayerWorldView {
     )
     this.orbFrontBase.container.visible = !death.visible
       && elementEffectVisible
-      && ordinaryStaffVisible
+      && ordinaryWeaponVisible
       && plan.orbPasses.frontBase
     this.orbFrontOverlay.container.visible = !death.visible
       && elementEffectVisible
-      && ordinaryStaffVisible
+      && ordinaryWeaponVisible
       && plan.orbPasses.frontOverlay
     this.orbHardenOverlay.container.visible = !death.visible && elementEffectVisible
-      && ordinaryStaffVisible && player.progression.hardenCoating > 0
+      && ordinaryWeaponVisible && player.progression.hardenCoating > 0
       && (this.secondaryState?.stoneskinTicksRemaining ?? 0) <= 0
     this.damageX4HardenOverlay.container.visible = this.orbHardenOverlay.container.visible
       && selectedPrimaryAvailable && player.progression.damageX4TicksRemaining > 0
@@ -387,6 +389,9 @@ export class PlayerWorldView {
     this.damageX4FrontOverlay.container.visible = this.orbFrontOverlay.container.visible
       && selectedPrimaryAvailable
       && player.progression.damageX4TicksRemaining > 0
+    for (const view of [this.damageX4FrontOverlay, this.orbFrontOverlay]) {
+      view.container.zIndex = plan.orbOverlayAfterHead ? 8.5 : 6
+    }
     this.robe.visible = !death.visible
     this.robeSecondary.visible = !death.visible && robeHasSecondary
     this.unselectedRobeAttachment.visible = !death.visible
@@ -546,11 +551,12 @@ export class PlayerWorldView {
     for (const view of [
       this.damageX4FrontBase,
       this.orbFrontBase,
-      this.damageX4FrontOverlay,
-      this.orbFrontOverlay,
       this.damageX4HardenOverlay,
       this.orbHardenOverlay,
     ]) {
+      view.container.position.set(orbOffset.x, orbOffset.y)
+    }
+    for (const view of [this.damageX4FrontOverlay, this.orbFrontOverlay]) {
       view.container.position.set(
         orbOffset.x + attachmentOffset.x,
         orbOffset.y + attachmentOffset.y,
@@ -558,6 +564,7 @@ export class PlayerWorldView {
     }
     this.currentElementEffectScale = playerEquippedElementEffectScale(
       player.lighting.overlayEffectPhase,
+      weaponKind,
     )
     const selectedPrimaryId = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       ? 80

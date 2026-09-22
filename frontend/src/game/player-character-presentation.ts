@@ -5,8 +5,9 @@ import type {
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { NativeSecondaryCastAction } from './core-kernels/native-secondary-cast-action.ts'
 import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-action.ts'
+import { actorHeadingFromVector } from './core-kernels/actor-heading.ts'
 import { primaryCastPresentationPose, primarySpellEmitterOffset, type PrimarySpellTransientState } from './core-kernels/primary-spells.ts'
-import { playerStaffAttachmentOffset, playerWandPrimaryPose, type PlayerStaffAttachmentPose, type PlayerWandAttachmentPose } from './core-kernels/native-player-weapon.ts'
+import { playerStaffAttachmentOffset, playerWandPrimaryPose, playerWandSpellEmitterOffset, type PlayerStaffAttachmentPose, type PlayerWandAttachmentPose } from './core-kernels/native-player-weapon.ts'
 
 export {
   isPlayerModEquipmentAppearance,
@@ -56,14 +57,15 @@ export interface PlayerCharacterDrawPlan {
   headOffset: Vector2
   headingSheetOffsetY: number
   moving: boolean
-  orbPasses: PlayerStaffOrbPasses
+  orbPasses: PlayerEquippedOrbPasses
+  orbOverlayAfterHead: boolean
   orbOffset: Vector2
   robePose: number
   staffFront: boolean
   unselectedPrimaryAttachment: boolean
 }
 
-export interface PlayerStaffOrbPasses {
+export interface PlayerEquippedOrbPasses {
   readonly frontBase: boolean
   readonly frontOverlay: boolean
 }
@@ -110,6 +112,7 @@ export function createPlayerCharacterDrawPlan(
   staffActionPose: PlayerStaffAttachmentPose | null = null,
   secondaryCast: NativeSecondaryCastAction | 'spin' | null = null,
   elementEffectPhase = state.primaryCast.weaponPulse,
+  weaponKind: 'staff' | 'wand' = 'staff',
 ): PlayerCharacterDrawPlan {
   const castElement = selectedPrimaryCastElement(
     state.primaryCast.selectedPrimaryId,
@@ -137,15 +140,21 @@ export function createPlayerCharacterDrawPlan(
     ? 0
     : null
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
+  const orbOffset = weaponKind === 'wand'
+    ? playerWandSpellEmitterOffset(state.headingIndex, wandAttachmentPose)
+    : playerStaffAttachmentOffset(state.headingIndex, attachmentPose)
+  const effectPose = weaponKind === 'wand'
+    && secondaryCast !== 'spin' && secondaryCast?.weaponKind !== 'staff'
+    ? 14 + wandAttachmentPose
+    : attachmentPose
   return {
     attachmentPose,
     wandAttachmentPose,
     bareAttachmentPose,
     fixedRobeOffset: playerCharacterFixedRobeOffset(state.gaitDegrees, scale),
-    frontAttachmentOffset: playerCharacterFrontAttachmentOffset(
-      state.gaitDegrees,
-      scale,
-    ),
+    frontAttachmentOffset: effectPose === 9
+      ? { x: 0, y: scale }
+      : playerCharacterFrontAttachmentOffset(state.gaitDegrees, scale),
     headOffset: playerCharacterHeadOffset(
       state.headingIndex,
       state.gaitDegrees,
@@ -153,14 +162,14 @@ export function createPlayerCharacterDrawPlan(
     ),
     headingSheetOffsetY: -state.headingIndex * 170,
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
-    orbPasses: playerCharacterStaffOrbPasses(
-      state.headingIndex,
-      attachmentPose,
+    orbPasses: playerCharacterEquippedOrbPasses(
+      orbOffset,
+      effectPose,
       elementEffectPhase,
     ),
-    orbOffset: secondaryCastActive
-      ? playerStaffAttachmentOffset(state.headingIndex, 9)
-      : playerStaffAttachmentOffset(state.headingIndex, attachmentPose),
+    orbOverlayAfterHead: effectPose === 9
+      || elementEffectPhase > NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD,
+    orbOffset,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
     unselectedPrimaryAttachment,
@@ -169,8 +178,9 @@ export function createPlayerCharacterDrawPlan(
 
 export function playerEquippedElementEffectScale(
   effectPhase: number,
+  weaponKind: 'staff' | 'wand' = 'staff',
 ): number {
-  return Math.fround(1 + 10 * effectPhase)
+  return Math.fround((weaponKind === 'wand' ? Math.fround(0.6) : 1) * (1 + 10 * effectPhase))
 }
 
 function selectedPrimaryCastElement(
@@ -190,12 +200,13 @@ export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
   return primarySpellEmitterOffset(headingIndex, -1)
 }
 
-export function playerCharacterStaffOrbPasses(
-  headingIndex: number,
-  attachmentPose: PlayerStaffAttachmentPose,
+export function playerCharacterEquippedOrbPasses(
+  socket: Vector2,
+  attachmentPose: number,
   elementEffectPhase: number,
-): PlayerStaffOrbPasses {
-  const headingDegrees = normalizedIndex(headingIndex, 24) * 15
+): PlayerEquippedOrbPasses {
+  // PlayerWizard::Render derives this angle from the emitter, not body facing.
+  const headingDegrees = Math.trunc(actorHeadingFromVector(socket.x, socket.y + 20))
   const backAngle = headingDegrees <= 90 || headingDegrees > 270
   return {
     frontBase: attachmentPose !== 9
