@@ -498,6 +498,7 @@ export const BONEYARD_ENEMY_ACTION_SOUNDS = [
 ] as const
 
 export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
+  'freeze',
   'bone-crack',
   'hit-shield',
   'pop-shield',

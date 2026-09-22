@@ -78,11 +78,10 @@ continuous presentation fields but never reroll authority.
 
 ## Effects, VFX, and lighting contract
 
-- Frost direct contact attaches 150-tick `.5` ColdSlow, applies direct damage,
-  then helper `0x00643920` revisits every still-live root in its float32 radius:
-  `push*120`, followed by fifteen multiplies by `1.024999976158142`. Each area
-  hit receives damage `/20` and ColdSlow. Direct target participation is not
-  deduplicated from damage.
+- Frost contact is corrected by the 2026-09-22 report-13 reopening below:
+  zero widen installs direct ColdSlow; positive widen invokes the area helper.
+  Chill Wind does not gate either branch. The old push-radius and `/20`
+  description confused native fields and missed the helper's second division.
 - Ball/Ground ElectricBurn is a target-owned modifier. Each tick includes the
   source plus the configured nearest distinct roots inside 200, preserves
   registration order on distance ties, damages, and installs 25-tick Stun.
@@ -1156,3 +1155,189 @@ Mac. The first temporary typecheck configuration under `/tmp` failed dependency
 resolution; a project-local configuration exposed the fixture errors above,
 which were then resolved before the canonical project passed. The task's full
 Website gate and long-session browser acceptance remain separate later checks.
+
+## 2026-09-22 — Report 13: Frost Missile cold-contact ownership
+
+### Report and evidence recorded before implementation
+
+Report 13 tentatively says base Frost Jet welded with Magic Missile does not
+slow, and asks whether Chill Wind is required. The original report and its
+919x707 PNG were read in the user's archive. The image establishes the cast
+appearance, not a timed slow measurement. No clean-stock GUI session was
+commandeered; the contract below is instruction/data evidence, not a claimed
+live-stock observation.
+
+The previous closure skipped the branch/field ownership sweep: it tested an
+invented positive-Chill vector and encoded that assumption in its tests. This
+reopening owns **FrostMissile impact ColdSlow**, including direct, area,
+scenery/terrain, weak cast, and target-effect expiry. Movement while the missile
+is flying is a separate `+0x16C` push consumer, not the cold-contact predicate.
+
+Retail 0.72.5 was hashed again: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`. The existing read-only wrapper used the canonical
+`Decompiled Game/ghidra_project/SolomonDark` project through replica `slot-01`.
+Wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+The decompiler was checked against `dump_function_instructions.py` (950
+instructions per target) for `0x005F25B0`, `0x00643920`, and `0x0053F3C0`.
+`refs_to_addr_decompile.py` finds **one** caller of `0x00643920`, at
+`0x005F276D`; no other spell owns this particular damage-area helper.
+
+- Rebuild `0x00666020`'s existing seven-word ABI remains correct:
+  damage min/max, mana, quantity, speed, Chill push, Cone widen.
+  Handler `0x0053F3C0` copies vector `[6]` to actor `+0x168` and vector `[5]`
+  (with fan/pitch scaling) to `+0x16C`. Constructor `0x005E4FB0` zeros both.
+- Contact `0x005F2616..0x005F2625` compares **`+0x168 == 0`**. The equal
+  branch constructs `Mod_ColdSlow 0x1B69`, sets duration `+0x14 = 150` and
+  factor `+0x1C = .5`, then damages the direct hostile. No Chill prerequisite.
+- `0x005F2711..0x005F276D` invokes the helper when **`+0x168 > 0`**, even
+  without a hostile direct target. Thus scenery/terrain impacts can splash.
+  Direct damage precedes the area query; surviving direct targets participate
+  again, dead/pending-remove targets do not.
+- Handler `0x005F2728` divides damage by the binary's double `10.0` at
+  `0x007DE810`, stores float32, then helper `0x00643AF2` divides by that same
+  constant and stores float32. Area damage is `f32(f32(damage/10)/10)`, not
+  `/20`. The helper skips the gameplay area pass for nonpositive damage.
+- Radius uses **widen** times double `120.0` (`0x0078E470`), then fifteen
+  separate float32 multiplies by double `1.024999976158142`
+  (`0x0079E1D8`). The query mask is `0x2`, without line-of-sight filtering.
+  Every returned root receives `.5` ColdSlow for 1.5 seconds (150 stock ticks).
+- Insufficient mana zeros push and widen (`0x0053F6D3` branch), halves damage,
+  and retains the zero-widen direct slow; the weak byte is not a slow gate.
+- Stock `chill_wind.cfg` drains ranks 0..10: push `[0,10,20,30,40,50,60,70,80,90,100]`.
+  Stock `cone_of_ice.cfg` drains ranks 0..11: widen
+  `[0,30,50,70,80,90,100,110,120,130,140,150]`. Their existing vector scalars
+  are respectively float32 `push*.019999999552965164` and `widen/150`.
+  Base Frost Jet and every primary rank retain zero widen without Cone.
+
+### Membership and acceptance
+
+| Member | Native source | Final disposition | Acceptance |
+| --- | --- | --- | --- |
+| Base and every Chill-only Frost Missile | zero-widen contact branch | exact-ported | direct 150-tick half-speed; no splash at every Chill rank |
+| Every Cone rank, with/without Chill | positive-widen helper, all 12 CFG rows | exact-ported | radius, direct plus area damage, neighbor slow, outside exclusion |
+| Low-mana Frost Missile | cast-time zeroed upgrades | exact-ported | direct slow survives; no learned splash |
+| Scenery/terrain/blocked-birth impact | null/nonhostile contact reaches helper | exact-ported | area without direct hit; no replay on subsequent ticks |
+| Dead direct target and zero-damage area | direct-before-query and helper damage gate | exact-ported | no dead-target reslow; positive-damage neighbor contact only |
+| ColdSlow merge, movement, material, replication and expiry | existing target-effect owner | verified-already-at-parity | `.5` movement, frost material, 150-tick expiry and retirement |
+| Frost impact FadeFrost and area Iceblast/audio | contact and `0x00643920`; Iceblast `0x00785514` | exact-ported | keep ordinary impact; recover area presentation below |
+| Target-contact freeze sound, direct/area/weak/refresh | registry 36; `0x005F26F2` / `0x00643C25` | exact-ported | target position, native pitch/RNG, five real Chrome plays |
+| Base Water, Blizzard, Hail and other modifier producers | their separate contact owners in entries 121/123 | out-of-system | they do not call `0x00643920`; existing common-status tests remain required |
+| Flight Chill push/Arrow force | tick `0x005FD7A0`, `+0x16C` | out-of-system | independent movement path; does not produce ColdSlow |
+
+Use the existing combat and target-effect owners, not a renderer-side slow.
+Authoritative contacts must precede replicated presentation. Focused regression
+and all final gates/browser checks run only on the isolated Mac candidate.
+
+Area presentation recovery: `0x00643920` creates `Anim_Iceblast` (vtable
+`0x00785514`) before the ordinary FadeFrost. Its DeadHawg record is 114
+(singleton `0x00819994`, field `+0xC78`, independently mapped in entry 121), initial XY scale `2*widen`, alpha `1.5`, loss float32
+`.1`, growth float32 `1.024999976158142`, white tint and zero rotation.
+Tick `0x00452ED0` subtracts alpha, retires at `<=0`, and multiplies XY scale;
+draw `0x00455B30` clamps alpha to one and uses Y scale `X*.800000011920929`.
+The atlas is constructor-specific: the Meteor Iceblast uses a different
+BadGuys asset; sharing the animation class does not share its image. It fits
+inside the existing 20-tick impact owner with a separately expiring
+presentation child. Raw `0x006439F9` registers that child in `Region+0x278`,
+the direct pre-world interval established in entry 297. It must use the
+existing underlay container, while FadeFrost remains world-sorted; combining
+both in the same painter interval would incorrectly cover intervening actors. The helper and ordinary impact each play `icestart` at
+pitch 1.5. Other Iceblast constructors (Meteor, Comet, Ring of Ice) supply
+their own data; their existing programs remain unchanged.
+
+
+### Implementation and Mac evidence
+
+The initial mechanics receipt below predates restoration of target-contact
+sound RNG draws. Those additional native draws change later random cast damage;
+the final audio-inclusive receipt follows this table.
+
+The authoritative projectile contact now selects direct versus area cold from
+widen, and passes terrain/blocked-birth payloads from `stepPrimarySpells` to the
+same combat resolver. No status is inferred by a client or renderer. The
+existing impact lifetime carries the independent, shorter Iceblast visual and
+both native impact sound requests. The existing enemy-event shape carries the added native freeze cue; its
+expanded sound enum requires a protocol revision. No dependency is added. Base Water and the other Weld families retain their existing owners.
+
+Mac focused acceptance: 200 tests across combat, primary casting, welded
+runtime, welded rendering and primary audio pass. Test TypeScript, production
+frontend/host builds, bundle budget, and frontend lint pass. The first new
+base-contact regression failed against the unchanged implementation because
+no ColdSlow was queued; it now passes. Regressions cover Chill ranks 0..10,
+Cone ranks 1..11, weak casts, direct survival/death, scenery, terrain,
+blocked birth, no impact replay, area float32 damage, Iceblast retirement,
+and duplicate-free impact audio updates/hydration. The actual view test also
+checks that Iceblast attaches to the pre-world root, FadeFrost remains in the
+world root, and both owners detach/destroy when the impact retires.
+
+Real Chrome 153.0.8010.53 on the Mac loaded the production build, traversed
+Title → Create → College → Boneyard, and cast using browser mouse input.
+Task-owned host fixtures supplied the rank matrix and three live Skeletons;
+fixtures are test instrumentation, not clean-stock evidence. The browser and
+host used their own random local ports, isolated profile/context, and no
+production database or runtime. The host sampled actual emitted vectors,
+damage, target effects and expiry. Every row reached exactly 150 slow ticks,
+factor `.5`, frost material enabled, and expiry after the last live tick:
+
+| Case | Cold targets | First / last cold tick | Damage result |
+| --- | --- | --- | --- |
+| Base, no Chill/Cone | direct only | 200 / 349 | direct `1.2842655181884766` |
+| Chill rank 1, no Cone | direct only | 420 / 569 | direct `1.272083044052124` |
+| Cone rank 1, no Chill | direct and neighbor | 639 / 788 | direct `1.2273075580596924`, plus `f32(f32(damage/10)/10)` on both |
+| Weak, both upgrades learned | direct only | 865 / 1014 | weak damage `.804347038269043`; emitted push/widen zero |
+
+The third, outside Skeleton remained undamaged in every case. Impact rendering
+was observed, base/Cone screenshots inspected, and ten Frost/ice audio events
+captured. Page, console, failed HTTP response and failed request arrays were
+empty. The final publication candidate must repeat the complete canonical
+Mac gate and this real-browser matrix after the campaign publication lock and
+rebase; those exact-head receipts belong to the report outcome. Disposable
+captures and probe scripts are removed after publication. No native behavior
+was removed to satisfy the tentative report, and no platform approximation is
+introduced for this cold-contact system.
+
+The additional motion probe follows the **actually contacted** hostile (native
+homing can select either nearby Skeleton), rather than assuming fixture ID 1.
+On the same production tree its measured cold/baseline travel ratios were
+`.466103`, `.466106`, `.466107`, and `.405069` for base, Chill, Cone, and weak
+casts. These include native hit pauses and collision, so are not a replacement
+for the exact `.5` status scalar. Every case still lasted ticks `t..t+149`;
+the additional host-error array was empty. Post-impact material captures are
+also inspected during final browser acceptance.
+
+
+### Target-contact sound recovery
+
+The final audio sweep distinguishes registry 36 `sounds/freeze.wav` from the
+separate player-status `frosted.wav`. The stock freeze file is 15,384 bytes,
+SHA-256 `6c224f2acbb7c0193cc0b75ae3eb3dc3f49070542f1de63a90f4aa7ab6db35f8`;
+no existing Website WAV matches that hash. Registry singleton offset `+0x648`
+selects this sound. Direct contact `0x005F26BD..0x005F26F2` and each area target
+`0x00643BF0..0x00643C25` play it after attaching ColdSlow and before damage,
+at the target position, with float32 `1 + Float(float32(.2), signed=true)`.
+The amplitude is the directly extracted float at `0x00784CE8`. Refreshing an
+existing slow still makes this contact request. The authority must consume
+these RNG draws in target traversal order; a renderer must not reroll them.
+
+This in-system member is ported through the existing enemy sound event, exact
+stock WAV, and captured pitch. It applies to base/Chill-only/weak direct contact
+and every positive-damage Cone area target, including terrain-impact neighbors.
+The player `frosted` cue remains unchanged. The native cast cue, helper
+`icestart`, and ordinary FadeFrost `icestart` retain their separate owners.
+The new sound enum is versioned with the existing game protocol contract.
+Regression acceptance includes cue count, actor/position ownership, bounded
+pitch, and the exact subsequent RNG state; final Chrome acceptance must observe
+all five target-contact play requests across the four-case matrix.
+
+
+The audio-inclusive Mac run passed 302 combat, casting, renderer, audio, and
+protocol tests, the test TypeScript project, production build and budget, and
+the real Chrome matrix. Five registry-36 play requests were observed, at pitches
+`1.0267540`, `.8902840`, `1.0188400`, `.9379840`, and `1.0433220`; each request
+used volume one at these near-target distances. All page, console, failed HTTP,
+failed-request, and host-error arrays were empty. The four slow cases still
+lasted exactly 150 ticks with factor `.5`; all outside targets stayed untouched.
+The sound enum uses protocol 130 (published base 129). The final rebased
+candidate's canonical gate and repeat browser receipt remain publication gates.

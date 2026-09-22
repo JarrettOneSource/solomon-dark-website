@@ -504,6 +504,7 @@ export type BoneyardEnemyDeathSound =
   | 'zombie-poison-splat'
 
 export type BoneyardEnemyDamageSound =
+  | 'freeze'
   | 'armor-crash-1'
   | 'armor-crash-2'
   | 'armor-crash-3'

@@ -51,6 +51,7 @@ import {
   type PrimarySpellChannelEmission,
   type PrimarySpellSimulationState,
   type PrimarySpellTickContext,
+  type PrimarySpellTickResult,
 } from './primary-spells.ts'
 import {
   NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
@@ -290,6 +291,7 @@ function stepSpellKernel(
   spellObstructionPoint: PrimarySpellTickContext['spellObstructionPoint'] = EMPTY_SPELL_WORLD.spellObstructionPoint,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
+  frostMissileWorldContacts: PrimarySpellTickResult['frostMissileWorldContacts']
   manaUnderflow: boolean
   manaSpent: number
   state: DirectSpellHarness
@@ -328,6 +330,7 @@ function stepSpellKernel(
   })
   return {
     channelEmissions: result.channelEmissions,
+    frostMissileWorldContacts: result.frostMissileWorldContacts,
     manaUnderflow: result.manaUnderflowPlayerIds.includes(PLAYER_ID),
     manaSpent: result.manaSpent[PLAYER_ID]!,
     state: {
@@ -1455,6 +1458,49 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   }).spells.projectiles[0]
   assert.equal(noRankOneRetarget.kind, 'ether')
   assert.equal(noRankOneRetarget.targetId, null)
+})
+
+test('blocked Frost Missile birth queues one area payload and retires the projectile', () => {
+  const profile = weldedProfile(1001, 'one-shot', [4, 10, 12, 1, 1, 0, 0.2])
+  let harness = { ...directSpellHarness('ether'), primarySkill: profile }
+  for (let tick = 0; tick <= PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    const result = stepSpellKernel(harness, true, 1_000, true, () => true, profile, () => false)
+    harness = result.state
+    if (result.frostMissileWorldContacts.length > 0) {
+      assert.equal(result.frostMissileWorldContacts.length, 1)
+      assert.equal(result.frostMissileWorldContacts[0]!.vector[6], 0.2)
+      assert.deepEqual(result.state.spells.projectiles, [])
+      assert.ok(result.state.spells.transients.some(({ kind }) => kind === 'weld-impact'))
+      return
+    }
+  }
+  assert.fail('blocked birth lost its area contact')
+})
+
+test('Frost Missile terrain retirement preserves its exact payload for the same-tick area contact', () => {
+  const profile = weldedProfile(1001, 'one-shot', [4, 10, 12, 1, 1, 0, 0.2])
+  let harness = { ...directSpellHarness('ether'), primarySkill: profile }
+  while (harness.spells.projectiles.length === 0) {
+    assert.ok(harness.tick < 100)
+    harness = stepSpellKernel(harness, true, 1_000).state
+  }
+  const frost = { ...harness.spells.projectiles[0]!, ageTicks: 5 }
+  const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canTraverseProjectile: () => false,
+    inputs: {}, players: {}, previousPlayers: {},
+    spells: { ...harness.spells, projectiles: [frost] }, tick: harness.tick + 1, viewScale: 1,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  assert.deepEqual(result.frostMissileWorldContacts, [frost])
+  assert.deepEqual(result.spells.projectiles, [])
+  const next = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    inputs: {}, players: {}, previousPlayers: {},
+    spells: result.spells, tick: harness.tick + 2, viewScale: 1,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  assert.deepEqual(next.frostMissileWorldContacts, [])
 })
 
 test('Ether defers actor contact to combat and owns the terrain-impact lifetime', () => {

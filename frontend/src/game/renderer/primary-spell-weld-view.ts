@@ -91,7 +91,10 @@ export class WeldPrimarySpellView {
     this.drawingViews = (this.split ? bandContents : [this.container]).map(
       root => new WeldDrawingView(root, this.drawing, textures, this.split),
     )
-    if (state.kind === 'weld-meteor') this.underlayContainer = new Container({ label: 'meteor-ground-pass', eventMode: 'none' })
+    if (state.kind === 'weld-meteor'
+      || (state.kind === 'weld-impact' && state.buildId === 1001 && state.vector[6]! > 0)) {
+      this.underlayContainer = new Container({ label: 'weld-pre-world-pass', eventMode: 'none' })
+    }
     this.underlayView = this.underlayContainer === undefined ? null
       : new WeldDrawingView(this.underlayContainer, this.drawing, textures, false)
     this.containers = Object.freeze([this.container, ...this.bandContainers])

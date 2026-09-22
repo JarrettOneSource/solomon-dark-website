@@ -172,6 +172,7 @@ const SOURCES = {
     unforge: 'unforge.wav',
     'unlock-skill': 'unlockskill.wav',
     'wizard-ouch-1': 'wizard-ouch-1.wav',
+    freeze: 'freeze.wav',
     frosted: 'frosted.wav',
     poisoned: 'poisoned.wav',
     'wizard-ouch-2': 'wizard-ouch-2.wav',

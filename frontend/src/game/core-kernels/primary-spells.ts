@@ -575,6 +575,7 @@ export interface PrimarySpellTickContext {
 }
 
 export interface PrimarySpellTickResult {
+  frostMissileWorldContacts: readonly NativeWeldProjectileState[]
   channelEmissions: readonly PrimarySpellChannelEmission[]
   fireActorContacts: readonly NativeFireActorContact[]
   manaUnderflowPlayerIds: readonly string[]
@@ -874,6 +875,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     .filter((effect) => effect.kind === 'earth-called-rock')
     .map((effect) => effect.id))
   const fireActorContacts: NativeFireActorContact[] = []
+  const frostMissileWorldContacts: NativeWeldProjectileState[] = []
   for (const effect of context.spells.transients) {
     if (effect.kind === 'harden-shard' || effect.kind === 'harden-burst') {
       const stepped = stepNativeHardenEffect(effect, context.tick, rng, (position) => (
@@ -1155,6 +1157,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         transients = [...transients, ...detonation.transients]
         nextId = detonation.nextId
       } else {
+        if (spell.buildId === 1001) frostMissileWorldContacts.push(spell)
         const impact = createPrimarySpellWeldImpact(nextId, spell, context.tick, rng)
         rng = impact.rng
         transients = [...transients, impact.impact]
@@ -1660,6 +1663,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             transients = [...transients, ...detonation.transients]
             nextId = detonation.nextId
           } else {
+            if (born.buildId === 1001) frostMissileWorldContacts.push(born)
             const impact = createPrimarySpellWeldImpact(nextId, born, context.tick, rng)
             rng = impact.rng
             transients = [...transients, impact.impact]
@@ -2363,6 +2367,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   return {
     channelEmissions,
     fireActorContacts,
+    frostMissileWorldContacts,
     manaUnderflowPlayerIds: Object.freeze([...manaUnderflowPlayerIds].sort()),
     manaSpent,
     players,

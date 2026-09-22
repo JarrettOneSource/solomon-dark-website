@@ -1,3 +1,4 @@
+import { drawNativeFloat } from '../../core-kernels/native-rng.ts'
 import { consumeNativeEarthBoulderContact } from '../../core-kernels/native-earth-boulder.ts'
 import { isMagicMissileDerivedWeldBuild } from '../../core-kernels/native-weld-primary-runtime.ts'
 import { nativeFireDirectDamage } from '../../core-kernels/primary-spell-fire-effects.ts'
@@ -39,15 +40,71 @@ const NATIVE_WELD_BALL_LIGHTNING_BURN_TICKS = 100
 
 const NATIVE_WELD_GROUND_SPARK_BURN_TICKS = 50
 
-export function nativeWeldFrostRadialRadius(pushScalar: number): number {
-  if (!Number.isFinite(pushScalar) || pushScalar < 0) {
-    throw new RangeError('Frost Missile push scalar must be finite and non-negative')
+export function nativeWeldFrostRadialRadius(widenScalar: number): number {
+  if (!Number.isFinite(widenScalar) || widenScalar < 0) {
+    throw new RangeError('Frost Missile widen scalar must be finite and non-negative')
   }
-  let radius = Math.fround(pushScalar * NATIVE_WELD_FROST_RADIUS_BASE)
+  let radius = Math.fround(widenScalar * NATIVE_WELD_FROST_RADIUS_BASE)
   for (let step = 0; step < NATIVE_WELD_FROST_RADIUS_GROWTH_STEPS; step += 1) {
     radius = Math.fround(radius * NATIVE_WELD_FROST_RADIUS_GROWTH)
   }
   return radius
+}
+
+/** FrostMissile::Contact -> Region helper 0x00643920; Chill Wind is unrelated. */
+export function resolveFrostMissileAreaContact(
+  work: BoneyardSpellCombatWork,
+  projectile: Extract<PrimarySpellProjectileState, { kind: 'weld' }>,
+): void {
+  if (projectile.buildId !== 1001 || projectile.vector[6]! <= 0
+    || projectile.damage <= 0 || projectile.worldKey !== work.worldKey) return
+  const amount = Math.fround(Math.fround(projectile.damage / 10) / 10)
+  for (const row of nativePrimaryRootTargetRows(
+    work.enemies,
+    projectile.position,
+    nativeWeldFrostRadialRadius(projectile.vector[6]!),
+    0x2,
+  )) {
+    queueFrostMissileCold(work, row.actor)
+    const damaged = damageBoneyardEnemy(work.enemies, {
+      hasMagicDamage: true,
+      magic: true,
+      lethalObserver: work.lethalObserver,
+      actorId: row.actor.id,
+      amount,
+      sourcePlayerId: projectile.ownerId,
+      registerWorldPainter: work.registerWorldPainter,
+      tick: work.tick,
+    })
+    if (!damaged.accepted) continue
+    work.enemies = damaged.store
+    work.events.push(...damaged.events)
+    work.hits.push(spellHit(projectile, row.actor.id, amount, damaged.killed, work.tick))
+  }
+}
+
+function queueFrostMissileCold(
+  work: BoneyardSpellCombatWork,
+  target: Readonly<{ id: number; position: Readonly<Vector2> }>,
+): void {
+  work.queueTargetEffect(target.id, {
+    coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
+    coldSlowMaterial: true,
+    coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
+  })
+  const pitch = drawNativeFloat(work.rng, Math.fround(0.2), true)
+  work.rng = pitch.state
+  work.events.push({
+    actorId: target.id,
+    eventId: work.enemies.nextEventId,
+    gainScale: 1,
+    pitch: Math.fround(1 + pitch.value),
+    sound: 'freeze',
+    sourcePosition: { ...target.position },
+    tick: work.tick,
+    type: 'enemy-damage-sound',
+  })
+  work.enemies = { ...work.enemies, nextEventId: work.enemies.nextEventId + 1 }
 }
 
 function continuePiercingEtherProjectile(
@@ -199,6 +256,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
       if (!target) continue
       const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
       if (!actor) {
+        resolveFrostMissileAreaContact(work, projectile)
         work.consumedProjectileIds.add(projectile.id)
         if (projectile.buildId === 1000) {
           const detonation = createPrimarySpellWeldFireDetonation(
@@ -221,12 +279,8 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
         continue
       }
 
-      if (projectile.buildId === 1001 && projectile.vector[5]! > 0) {
-        work.queueTargetEffect(actor.id, {
-          coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
-          coldSlowMaterial: true,
-          coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
-        })
+      if (projectile.buildId === 1001 && projectile.vector[6] === 0) {
+        queueFrostMissileCold(work, actor)
       }
       if (projectile.buildId === 1002 || projectile.buildId === 1009) {
         const burnTicks = projectile.buildId === 1002
@@ -270,38 +324,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
       work.events.push(...damaged.events)
       work.hits.push(spellHit(projectile, actor.id, amount, damaged.killed, work.tick))
 
-      if (projectile.buildId === 1001 && projectile.vector[5]! > 0) {
-        const radialDamage = projectile.damage / 20
-        const radialRows = nativePrimaryRootTargetRows(
-          work.enemies,
-          projectile.position,
-          nativeWeldFrostRadialRadius(projectile.vector[5]!),
-          0x2,
-        )
-        for (const row of radialRows) {
-          if (row.actor.id !== actor.id) {
-            work.queueTargetEffect(row.actor.id, {
-              coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
-              coldSlowMaterial: true,
-              coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
-            })
-          }
-          const radial = damageBoneyardEnemy(work.enemies, {
-            hasMagicDamage: true,
-            magic: true,
-            lethalObserver: work.lethalObserver,
-            actorId: row.actor.id,
-            amount: radialDamage,
-            sourcePlayerId: projectile.ownerId,
-            registerWorldPainter: work.registerWorldPainter,
-            tick: work.tick,
-          })
-          if (!radial.accepted) continue
-          work.enemies = radial.store
-          work.events.push(...radial.events)
-          work.hits.push(spellHit(projectile, row.actor.id, radialDamage, radial.killed, work.tick))
-        }
-      }
+      resolveFrostMissileAreaContact(work, projectile)
 
       if (projectile.buildId === 1009 && projectile.contactsRemaining > 1) {
         work.updatedProjectiles.set(projectile.id, {

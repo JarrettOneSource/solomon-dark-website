@@ -60,7 +60,7 @@ export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
 
 export type NativeWeldBadGuysRecord = typeof NATIVE_WELD_BADGUYS_RECORDS[number]
 
-export const NATIVE_WELD_DEADHAWG_RECORDS = Object.freeze([19] as const)
+export const NATIVE_WELD_DEADHAWG_RECORDS = Object.freeze([19, 114] as const)
 export type NativeWeldDeadHawgRecord = typeof NATIVE_WELD_DEADHAWG_RECORDS[number]
 export type NativeWeldAtlas = 'BadGuys' | 'DeadHawg'
 export type NativeWeldRecord = NativeWeldBadGuysRecord | NativeWeldDeadHawgRecord
@@ -455,14 +455,30 @@ function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWel
     ), { regionLightPoint: state.position })
   }
   if (state.buildId === 1001) {
+    // Region::0x00643920 creates an independent Iceblast before FadeFrost.
+    let burstAlpha = Math.fround(1.5)
+    let burstScale = Math.fround(state.vector[6]! * 2)
+    for (let tick = 0; tick < state.ageTicks; tick += 1) {
+      burstAlpha = Math.fround(burstAlpha - Math.fround(0.1))
+      burstScale = Math.fround(burstScale * Math.fround(1.025))
+    }
     return positioned(state.position, elementVfxSprites(
       'water',
       frame,
       state.presentationScale,
       state.alpha,
       'frost-missile-impact',
-    ))
+    ), {
+      underlays: state.vector[6]! > 0 && burstAlpha > 0 ? [sprite(114, 'frost-missile-iceblast', {
+        atlas: 'DeadHawg',
+        alpha: Math.min(1, burstAlpha),
+        blend: 'add',
+        scaleX: burstScale,
+        scaleY: Math.fround(burstScale * 0.800000011920929),
+      })] : [],
+    })
   }
+
   if (state.buildId === 1002 || state.buildId === 1009) {
     const draws = lightningCore(
       state.id,

@@ -344,17 +344,20 @@ test('plays each Frost, Ball Lightning, and GroundSpark impact sound once', () =
         weldImpactAudioActor(initial, 1001, 51, 1.5, null),
         weldImpactAudioActor(initial, 1002, 52, 1.5, 0),
         weldImpactAudioActor(initial, 1009, 53, 1.05, 2),
+        { ...weldImpactAudioActor(initial, 1001, 54, 1.5, null), vector: [8, 8, 5, 1, 1, 0, 0.5] },
       ],
     },
     tick: initial.tick + 1,
   }
   synchronizer.update(impacted)
   synchronizer.update(impacted)
-  assert.deepEqual(audio.sounds, ['ice-start', 'throw-lightning-1', 'shock-3'])
+  assert.deepEqual(audio.sounds, ['ice-start', 'throw-lightning-1', 'shock-3', 'ice-start', 'ice-start'])
   assert.deepEqual(audio.soundOptions, [
     { playbackRate: 1.5, volume: 1 },
     { playbackRate: 1.5, volume: 1 },
     { playbackRate: 1.05, volume: 1 },
+    { playbackRate: 1.5, volume: 1 },
+    { playbackRate: 1.5, volume: 1 },
   ])
   synchronizer.destroy()
 

@@ -3448,6 +3448,7 @@ function finishGameSimulationTick(
       (ownerId) => primaryInputs[ownerId]?.viewportWidth
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
       spiderLightAt,
+      cast.frostMissileWorldContacts,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells

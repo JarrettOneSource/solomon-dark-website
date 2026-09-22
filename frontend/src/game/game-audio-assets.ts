@@ -1,3 +1,4 @@
+import freeze from '../assets/game/audio/sfx/freeze.wav'
 import academy from '../assets/game/audio/music/academy.mp3'
 import combat from '../assets/game/audio/music/combat.mp3'
 import prelude from '../assets/game/audio/music/prelude.mp3'
@@ -390,6 +391,7 @@ export const GAME_AUDIO_SOURCES = {
     'unlock-skill': unlockSkill,
     unforge,
     'wizard-ouch-1': wizardOuch1,
+    freeze,
     frosted,
     poisoned,
     'wizard-ouch-2': wizardOuch2,

@@ -303,6 +303,12 @@ export class PrimarySpellAudioSynchronizer {
             volume,
           })
         } else if (effect.buildId === 1001 && effect.impactSoundPitch !== null) {
+          if (effect.vector[6]! > 0) {
+            this.audio.playSound('ice-start', {
+              playbackRate: effect.impactSoundPitch,
+              volume,
+            })
+          }
           this.audio.playSound('ice-start', {
             playbackRate: effect.impactSoundPitch,
             volume,

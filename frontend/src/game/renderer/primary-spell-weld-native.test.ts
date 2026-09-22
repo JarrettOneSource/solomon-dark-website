@@ -56,7 +56,7 @@ test('Weld atlas membership covers every recovered direct owner', () => {
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
   assert.equal(NATIVE_WELD_SPRITES[44].atlas, 'BadGuys')
   assert.equal(NATIVE_WELD_SPRITES[76].entry, 76)
-  assert.deepEqual(NATIVE_WELD_DEADHAWG_RECORDS, [19])
+  assert.deepEqual(NATIVE_WELD_DEADHAWG_RECORDS, [19, 114])
   assert.equal(NATIVE_WELD_DEADHAWG_SPRITES[19].atlas, 'DeadHawg')
 })
 
@@ -471,6 +471,46 @@ test('Weld presentation guard excludes unrelated primary actors', () => {
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
     origin: { x: 0, y: 0 }, ownerId: 'wizard', worldKey: WORLD_KEY,
   }), false)
+})
+
+test('Frost Missile Iceblast uses and releases the pre-world interval separately from FadeFrost', () => {
+  const root = new Container()
+  const preWorldRoot = new Container()
+  const view = new PrimarySpellWorldView(root, textures(), { preWorldRoot })
+  const frost = { ...projectile(1001), vector: [8, 8, 2, 1, 1, 0, 0.5] }
+  const impact = {
+    ...createPrimarySpellWeldImpact(1, frost, 1, createNativeRng(1)).impact,
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 1 }],
+  }
+  view.update({ nextId: 2, projectiles: [], transients: [impact] }, WORLD_KEY, 1)
+  assert.equal(root.children.length, 1)
+  assert.equal(preWorldRoot.children.length, 1)
+  const burst = preWorldRoot.children[0]!
+  assert.equal(burst.label, 'weld-pre-world-pass')
+  assert.ok(burst.children.length > 0)
+  view.update({ nextId: 2, projectiles: [], transients: [] }, WORLD_KEY, 21)
+  assert.equal(root.children.length, 0)
+  assert.equal(preWorldRoot.children.length, 0)
+  assert.equal(burst.destroyed, true)
+  view.destroy()
+})
+
+test('Cone Frost Missile adds the independent white Iceblast and retires it before FadeFrost', () => {
+  const base = createPrimarySpellWeldImpact(1, projectile(1001), 1, createNativeRng(1)).impact
+  assert.equal((nativeWeldVisualPlan(base).underlays ?? []).some(({ role }) => role === 'frost-missile-iceblast'), false)
+  const expanded = { ...base, vector: [8, 8, 2, 1, 1, 0, 0.5] }
+  const burst = nativeWeldVisualPlan(expanded).underlays![0]!
+  assert.equal(burst.role, 'frost-missile-iceblast')
+  assert.equal(burst.atlas, 'DeadHawg')
+  assert.equal(burst.record, 114)
+  assert.equal(burst.alpha, 1)
+  assert.equal(burst.scaleX, 1)
+  assert.equal(burst.scaleY, Math.fround(0.8))
+  const aged = nativeWeldVisualPlan({ ...expanded, ageTicks: 1 }).underlays![0]!
+  assert.equal(aged.scaleX, Math.fround(1.025))
+  const expired = nativeWeldVisualPlan({ ...expanded, ageTicks: 15 })
+  assert.equal(expired.underlays!.some(({ role }) => role === 'frost-missile-iceblast'), false)
+  assert.ok(expired.sprites.some(({ role }) => role.startsWith('frost-missile-impact')))
 })
 
 function projectile(buildId: 1000 | 1001 | 1002 | 1009) {

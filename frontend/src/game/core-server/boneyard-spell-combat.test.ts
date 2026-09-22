@@ -10,7 +10,7 @@ import { createNativeRng, drawNativeFloat, drawNativeSign } from '../core-kernel
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
 import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
-import { createNativeWeldPersistentActor } from '../core-kernels/native-weld-primary-runtime.ts'
+import { createNativeWeldPersistentActor, spawnNativeWeldOneShot } from '../core-kernels/native-weld-primary-runtime.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import type { NativeFireActorContact } from '../core-kernels/primary-spell-fire-effects.ts'
@@ -131,6 +131,7 @@ function resolveCombatWithAuthority(
     ) => Readonly<{ x: number; y: number }>
     damageMultiplier?: (actorId: number, kind: string) => number
     fireActorContacts?: readonly NativeFireActorContact[]
+    frostMissileWorldContacts?: readonly Extract<PrimarySpellProjectileState, { kind: 'weld' }>[]
     fireballCorridorLength?: number
     primarySceneryTargets?: readonly PrimarySpellTarget[]
     rngSeed?: number
@@ -153,6 +154,8 @@ function resolveCombatWithAuthority(
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
     options.steamedPulses ?? [],
     () => options.fireballCorridorLength ?? 1_600,
+    null,
+    options.frostMissileWorldContacts ?? [],
   )
 }
 
@@ -938,6 +941,34 @@ test('welded missile contacts preserve each native elemental payload and impact 
   }])
 })
 
+test('base Frost Missile slows without Chill Wind, including every Chill-only rank', () => {
+  const enemies = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
+  for (let chillRank = 0; chillRank <= 10; chillRank += 1) {
+    const result = resolveCombatWithAuthority(enemies, spellState({
+      projectiles: [projectile({
+        buildId: 1001,
+        id: 804,
+        kind: 'weld',
+        vector: [5, 5, 10, 1, 1, Math.fround(chillRank * 10 * Math.fround(0.02)), 0],
+      })],
+    }), [], 34)
+    assert.deepEqual(result.targetEffects, [{
+      targetId: 1,
+      patch: { coldSlowFactor: 0.5, coldSlowMaterial: true, coldSlowTicks: 150 },
+      worldKey: WORLD_KEY,
+    }], `Chill Wind rank ${chillRank}`)
+    assert.deepEqual(result.hits.map(({ amount }) => amount), [5])
+    const freeze = drawNativeFloat(createNativeRng(0), Math.fround(0.2), true)
+    assert.deepEqual(result.rng, freeze.state)
+    const cues = result.events.filter(({ sound }) => sound === 'freeze')
+    assert.equal(cues.length, 1)
+    assert.equal(cues[0]!.actorId, 1)
+    assert.deepEqual(cues[0]!.sourcePosition, enemies.actors[0]!.position)
+    assert.equal(cues[0]!.pitch, Math.fround(1 + freeze.value))
+    assert.deepEqual(result.spells.projectiles, [])
+  }
+})
+
 test('Frost Missile owns its fifteen-step radial damage and ColdSlow contact', () => {
   const radius = nativeWeldFrostRadialRadius(0.2)
   let expectedRadius = Math.fround(0.2 * 120)
@@ -964,15 +995,103 @@ test('Frost Missile owns its fifteen-step radial damage and ColdSlow contact', (
       damage: 5,
       id: 804,
       kind: 'weld',
-      vector: [5, 5, 10, 1, 1, 0.2, 0],
+      vector: [5, 5, 10, 1, 1, 0, 0.2],
     })],
   }), [], 34)
   assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
     { actorId: 1, amount: 5 },
-    { actorId: 1, amount: 0.25 },
-    { actorId: 2, amount: 0.25 },
+    { actorId: 1, amount: Math.fround(0.05) },
+    { actorId: 2, amount: Math.fround(0.05) },
   ])
   assert.deepEqual(result.targetEffects.map(({ targetId }) => targetId), [1, 2])
+})
+
+test('Cone Frost Missile splashes every authored widen rank without Chill Wind', () => {
+  for (const widen of [30, 50, 70, 80, 90, 100, 110, 120, 130, 140, 150]) {
+    const scale = Math.fround(widen / 150)
+    const radius = nativeWeldFrostRadialRadius(scale)
+    const spawned = spawnEnemies([
+      { position: { x: 0, y: 0 }, token: 'SKELETON' },
+      { position: { x: radius - 1, y: 0 }, token: 'SKELETON' },
+      { position: { x: radius + 100, y: 0 }, token: 'SKELETON' },
+    ])
+    const enemies = {
+      ...spawned,
+      actors: spawned.actors.map(actor => ({ ...actor, currentHealth: 100, maximumHealth: 100 })),
+    }
+    const result = resolveCombatWithAuthority(enemies, spellState({
+      projectiles: [projectile({
+        buildId: 1001, damage: 5, id: 804, kind: 'weld',
+        vector: [5, 5, 10, 1, 1, 0, scale],
+      })],
+    }), [], 34)
+    assert.deepEqual(result.targetEffects.map(({ targetId, patch }) => [targetId, patch]), [
+      [1, { coldSlowFactor: 0.5, coldSlowMaterial: true, coldSlowTicks: 150 }],
+      [2, { coldSlowFactor: 0.5, coldSlowMaterial: true, coldSlowTicks: 150 }],
+    ], `Cone widen ${widen}`)
+    assert.deepEqual(result.events.filter(({ sound }) => sound === 'freeze').map(({ actorId }) => actorId), [1, 2])
+    const firstCue = drawNativeFloat(createNativeRng(0), Math.fround(0.2), true)
+    const secondCue = drawNativeFloat(firstCue.state, Math.fround(0.2), true)
+    assert.deepEqual(result.rng, secondCue.state)
+    assert.deepEqual(result.hits.map(({ amount }) => amount), [5, Math.fround(0.05), Math.fround(0.05)])
+  }
+})
+
+test('Cone Frost Missile retains area contact on scenery and terrain, without replay', () => {
+  const enemies = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
+  const frost = projectile({
+    ageTicks: 200, buildId: 1001, id: 804, kind: 'weld',
+    vector: [5, 5, 10, 1, 1, 0, 0.5],
+  })
+  if (frost.kind !== 'weld') throw new Error('expected Frost Missile')
+  for (const worldContact of [false, true]) {
+    const result = resolveCombatWithAuthority(enemies, spellState({
+      projectiles: worldContact ? [] : [frost],
+    }), [], 34, {
+      frostMissileWorldContacts: worldContact ? [frost] : [],
+      primarySceneryTargets: [sceneryTarget('tree', 8, 0)],
+    })
+    assert.deepEqual(result.hits.map(({ amount }) => amount), [Math.fround(0.05)])
+    assert.equal(result.targetEffects[0]?.patch.coldSlowTicks, 150)
+    const next = resolveCombatWithAuthority(result.enemies, result.spells, [], 35)
+    assert.deepEqual(next.hits, [])
+    assert.deepEqual(next.targetEffects, [])
+  }
+})
+
+test('Cone Frost Missile excludes its dead direct target and suppresses zero-damage area contacts', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 50, y: 0 }, token: 'SKELETON' },
+  ])
+  const frost = projectile({
+    buildId: 1001, damage: 100, id: 804, kind: 'weld',
+    vector: [100, 100, 10, 1, 1, 0, 0.5],
+  })
+  if (frost.kind !== 'weld') throw new Error('expected Frost Missile')
+  const result = resolveCombatWithAuthority(enemies, spellState({ projectiles: [frost] }), [], 34)
+  assert.deepEqual(result.targetEffects.map(({ targetId }) => targetId), [2])
+  const zero = resolveCombatWithAuthority(enemies, spellState({}), [], 34, {
+    frostMissileWorldContacts: [{ ...frost, damage: 0 }],
+  })
+  assert.deepEqual(zero.hits, [])
+  assert.deepEqual(zero.targetEffects, [])
+})
+
+test('underpowered Frost Missile retains direct ColdSlow after its upgrades are suppressed', () => {
+  const birth = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 804, origin: { x: 0, y: 0 },
+    ownerId: 'wizard', primarySkill: weldProfile(1001, [4, 4, 10, 3, 1.5, 2, 1], 'one-shot'),
+    rng: createNativeRng(17), targets: [], underpowered: true, worldKey: WORLD_KEY,
+  })
+  const frost = birth.projectiles[0]!
+  const enemies = spawnEnemies([{ position: frost.position, token: 'SKELETON' }])
+  const result = resolveCombatWithAuthority(enemies, spellState({ projectiles: birth.projectiles }), [], 34)
+  assert.equal(frost.underpowered, true)
+  assert.deepEqual(frost.vector.slice(5), [0, 0])
+  assert.equal(result.targetEffects[0]?.patch.coldSlowTicks, 150)
+  assert.equal(result.targetEffects[0]?.patch.coldSlowFactor, 0.5)
+  assert.deepEqual(result.hits.map(({ amount }) => amount), [2])
 })
 
 test('Crawling Shock uses its 15-unit query and survives exactly its captured contacts', () => {

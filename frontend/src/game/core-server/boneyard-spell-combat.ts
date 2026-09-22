@@ -11,12 +11,12 @@ import type { NativeSecondarySteamedPulse } from '../core-kernels/native-seconda
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { NativeFireActorContact } from '../core-kernels/primary-spell-fire-effects.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
-import type { PrimarySpellChannelEmission, PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import type { PrimarySpellChannelEmission, PrimarySpellProjectileState, PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import type { BoneyardEnemyLethalObserver, BoneyardEnemyStore } from './enemies/model.ts'
 import { resolveChannelContacts } from './spell-combat/channels.ts'
 import { resolveFireContacts } from './spell-combat/fire.ts'
 import { resolveHurricaneContacts, resolveTransientForces } from './spell-combat/forces.ts'
-import { resolveProjectileContacts } from './spell-combat/projectiles.ts'
+import { resolveFrostMissileAreaContact, resolveProjectileContacts } from './spell-combat/projectiles.ts'
 import { resolveDelayedContacts, resolvePersistentContacts } from './spell-combat/transients.ts'
 import { BoneyardSpellCombatWork, finishSpellCombat } from './spell-combat/work.ts'
 
@@ -45,6 +45,7 @@ export function resolveBoneyardSpellCombat(
   steamedPulses: readonly NativeSecondarySteamedPulse[] = [],
   fireballHostileCorridorLength: (ownerId: string) => number = () => 1_600,
   lightAt: BoneyardSpellLightSampler | null = null,
+  frostMissileWorldContacts: readonly Extract<PrimarySpellProjectileState, { kind: 'weld' }>[] = [],
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   const work = new BoneyardSpellCombatWork({
@@ -52,6 +53,7 @@ export function resolveBoneyardSpellCombat(
   })
   resolveHurricaneContacts(work)
   resolveTransientForces(work)
+  for (const projectile of frostMissileWorldContacts) resolveFrostMissileAreaContact(work, projectile)
   resolveProjectileContacts(work)
   resolvePersistentContacts(work)
   resolveDelayedContacts(work)

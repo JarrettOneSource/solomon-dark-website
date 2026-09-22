@@ -147,6 +147,7 @@ export type GameSoundCue =
   | 'unforge'
   | 'unlock-skill'
   | 'wizard-ouch-1'
+  | 'freeze'
   | 'frosted'
   | 'poisoned'
   | 'wizard-ouch-2'
