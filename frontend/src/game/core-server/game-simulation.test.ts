@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createBoneyardPresentationTimeline, isBoneyardGameSnapshot } from '../client/boneyard-presentation-timeline.ts'
+import { gameSnapshot } from '../protocol/codecs/snapshot.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
@@ -4695,6 +4697,75 @@ test('Last Word adds ground Gold and Sack contents to the durable terminal profi
     'Robe',
     'Staff',
   ])
+})
+
+test('Game Over keeps every live Mage pulse age valid through wire, late join, and terminal exit', () => {
+  for (const contactKind of ['world', 'target-attached'] as const) {
+    for (let age = 0; age < 5; age++) {
+      let state = enterBoneyardWorld(createGameSimulation(), combatBoneyard('frozen-mage'))
+      for (let tick = 0; tick < 10; tick++) state = stepGameSimulationTick(state, {})
+      state = { ...state, playerEntities: damagePlayerEntity(
+        state.playerEntities, 'local-player', 1000, state.tick,
+      ) }
+      state = stepGameSimulationTick(state, {})
+      assert.equal(state.run.phase, 'game-over')
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const frozenTick = state.tick
+      state = { ...state, world: { ...state.world, enemies: {
+        ...state.world.enemies,
+        nextMageLightningPulseId: 2,
+        mageLightningPulses: [{
+          id: 1, ownerActorId: 1, tick: frozenTick - age, seed: 42,
+          source: { x: 200, y: 200 }, midpoint: { x: 250, y: 200 },
+          endpoint: { x: 300, y: 200 },
+          contact: contactKind === 'world'
+            ? { kind: 'world', position: { x: 300, y: 200 } }
+            : { kind: 'target-attached', localOffset: { x: 0, y: 0 }, targetPlayerId: 'local-player' },
+          lightRegistration: { managerLane: 'actor', registrationOrdinal: 100 },
+          painterRegistrations: Array.from({ length: contactKind === 'world' ? 3 : 2 }, (_, index) => ({
+            managerLane: 'actor' as const, registrationOrdinal: 101 + index,
+          })),
+        }],
+      } } }
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const frozenStore = state.world.enemies
+      while (state.run.phase === 'game-over') {
+        if ([0, 1, 5, 40, 300, GAME_OVER_AUTOMATIC_ACCEPT_TICK,
+          GAME_OVER_AUTOMATIC_ACCEPT_TICK + GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS - 1,
+        ].includes(state.run.gameOverTicks)) {
+          const snapshot = createGameSnapshot(state, 'local-player')
+          const message = { acknowledgedInputSequence: 0,
+            frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+            sequence: 1, type: 'server-snapshot' as const }
+          assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+          assert.deepEqual(gameSnapshot(snapshot), snapshot)
+          assert.ok(isBoneyardGameSnapshot(snapshot))
+          for (const invalidBirth of [frozenTick - 5, frozenTick + 1]) {
+            const invalid = { ...snapshot, world: { ...snapshot.world,
+              mageLightningPulses: snapshot.world.mageLightningPulses.map(pulse => ({
+                ...pulse, tick: invalidBirth,
+              })),
+            } }
+            assert.throws(() => gameSnapshot(invalid), /live pulse age limit|exceeds its snapshot tick/)
+            assert.throws(() => decodeServerGameMessage(encodeGameMessage({ ...message,
+              frame: createGameSnapshotFrame(invalid, 0, undefined, true),
+            })), /live pulse age limit|exceeds its snapshot tick/)
+          }
+          assert.throws(() => gameSnapshot({ ...snapshot, run: {
+            ...snapshot.run, gameOverTicks: snapshot.tick + 1,
+          } }), /gameOverTicks exceeds its snapshot tick/)
+          const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+            initialSnapshot: snapshot, serverTickRate: 100, snapshotRate: 20 })
+          assert.deepEqual(timeline.sample(100).world.mageLightningPulses,
+            snapshot.world.mageLightningPulses)
+          assert.equal(state.world.kind === 'boneyard' && state.world.enemies, frozenStore)
+        }
+        state = stepGameSimulationTick(state, {})
+      }
+      assert.equal(state.run.phase, 'loadout')
+      assert.equal(state.world.kind, 'hub')
+    }
+  }
 })
 
 test('one dead player spectates until all-dead Game Over returns the session through loadout', () => {

@@ -1,3 +1,4 @@
+import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { Application, Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
 import 'pixi.js/unsafe-eval'
 import type { Camera } from '../../editor/render.ts'
@@ -460,9 +461,9 @@ export async function createBoneyardWorldRenderer(
         canvas.dataset.levelUpPresentationId = 'none'
       }
       const worldPresentationFrame = skillPickerWorldPresentationFrame(
-        snapshot.tick,
+        gameRunWorldTick(snapshot.tick, snapshot.run),
         frameCount,
-        snapshot.levelUpBarrier !== null,
+        snapshot.levelUpBarrier !== null || snapshot.run.phase === 'game-over',
       )
       const painter = scene.update(
         snapshot,

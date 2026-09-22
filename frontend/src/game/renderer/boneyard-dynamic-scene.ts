@@ -1,3 +1,4 @@
+import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { NativeSceneryHitView } from './native-scenery-hit-view.ts'
 import type { ContainerChild } from 'pixi.js'
 import { Application, Container } from 'pixi.js'
@@ -150,7 +151,7 @@ export class BoneyardDynamicScene {
     this.complexShadows = new BoneyardComplexShadowPresentation(root, shadowCasters)
     this.staticLighting = new BoneyardStaticLighting(
       boneyard, mainLayers, buildingResidents, wallResidents, treeResidents,
-      treeInputs, initialSnapshot.tick,
+      treeInputs, gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
     )
     this.sceneryHits = new NativeSceneryHitView(mainLayers, mainResidents, treeResidents, buildingResidents)
     this.treeResidents = treeResidents
@@ -210,7 +211,7 @@ export class BoneyardDynamicScene {
     root.addChild(this.levelUp.container)
     this.weather = new NativeBoneyardWeather({
       enhancedEffects: true,
-      initialTick: initialSnapshot.tick,
+      initialTick: gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
       mode: boneyard.scene.environmentMode,
     })
     this.weatherView = new NativeBoneyardWeatherView(
@@ -243,6 +244,7 @@ export class BoneyardDynamicScene {
     now: number,
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
+    const worldTick = gameRunWorldTick(snapshot.tick, snapshot.run)
     const enemySnapshots = nativeEnemySnapshots(snapshot)
     const livePlayerIds = this.livePlayerIds
     livePlayerIds.clear()
@@ -290,7 +292,7 @@ export class BoneyardDynamicScene {
       snapshot.world.gateLeaves,
     )
     this.weather.advanceTo(
-      snapshot.tick,
+      worldTick,
       weatherBounds,
       viewport.height / camera.zoom,
       (position, radius) => boneyardBodyCollides(
@@ -321,10 +323,10 @@ export class BoneyardDynamicScene {
       pointGainAt,
     )
     this.gates.update(snapshot.world.gateLeaves)
-    this.goodies.update(snapshot.world.goodies, snapshot.tick, puppetHits, settings.complexLighting)
-    this.enemies.update(enemySnapshots, snapshot.tick, settings.complexLighting)
+    this.goodies.update(snapshot.world.goodies, worldTick, puppetHits, settings.complexLighting)
+    this.enemies.update(enemySnapshots, worldTick, settings.complexLighting)
     this.spiderRemains.update(snapshot.world.spiderRemains)
-    this.bossSpells.update(snapshot.world.bossSpells, snapshot.tick, viewport.height)
+    this.bossSpells.update(snapshot.world.bossSpells, worldTick, viewport.height)
     const visibleWorldBounds = boneyardVisibleWorldBounds(camera, viewport)
     this.enemyDeathEffects.update(
       snapshot.world.deathEffects,
@@ -332,7 +334,7 @@ export class BoneyardDynamicScene {
       viewport.height,
     )
     this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects, pointGainAt)
-    this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick, snapshot.world.enemyProjectileEffects,
+    this.enemyProjectiles.update(snapshot.world.enemyProjectiles, worldTick, snapshot.world.enemyProjectileEffects,
       puppetHits, settings.complexLighting)
     this.maggots.update(snapshot.world.maggots, visibleWorldBounds, settings.complexLighting)
     const visibleMaggots = this.maggots.visibleSnapshots
@@ -341,7 +343,7 @@ export class BoneyardDynamicScene {
     this.modEffects.update(snapshot)
     this.mageLightningPulses.update(
       snapshot.world.mageLightningPulses,
-      snapshot.tick,
+      worldTick,
       (playerId) => snapshot.players[playerId]?.position ?? null,
     )
     const mageLightningPainterLayers = this.mageLightningPulses.painterLayers()
@@ -351,7 +353,7 @@ export class BoneyardDynamicScene {
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
     const lanternPosition = snapshot.world.lanternPosition
-    this.solomon?.update(snapshot.world.encounter, snapshot.tick, lanternPosition)
+    this.solomon?.update(snapshot.world.encounter, worldTick, lanternPosition)
 
     const { dig, lanternLight, localPlayerLight, lightProviderCandidateCount,
       lightMiscTailCandidateCount, lightSources, worldLightScalar } = this.lights.update(
@@ -413,7 +415,7 @@ export class BoneyardDynamicScene {
       this.enemies.setLighting(enemy.id, nativeSecondaryTargetMaterialTint(
         lightTint,
         secondaryEffectsByTarget.get(enemy.id),
-      ), lightScalar, shadowRecords, settings.complexShadows, snapshot.tick)
+      ), lightScalar, shadowRecords, settings.complexShadows, worldTick)
     }
     for (const actor of snapshot.world.loot) {
       this.loot.setTint(actor.id, nativeBoneyardLightTint(worldLightScalar(actor.position)))

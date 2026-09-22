@@ -2,6 +2,7 @@ import { receiveNativePuppetHit, stepNativePuppetHit, type NativeWorldPuppetHit 
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
+import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import type { NativeBossSpell } from '../core-kernels/native-boss-spell.ts'
 import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
@@ -197,10 +198,11 @@ function interpolateSnapshot(
       newer.secondaryAbilities,
       blend,
     ),
-    run: interpolateGameRunLifecycle(older.run, newer.run, blend),
+    run: interpolateGameRunLifecycle(older.run, newer.run, blend, targetTick, newer.tick),
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
-      ...interpolateBoneyardEnemySamples(older.world, newer.world, blend, targetTick),
+      ...interpolateBoneyardEnemySamples(older.world, newer.world, blend,
+        Math.min(targetTick, gameRunWorldTick(newer.tick, newer.run))),
       featuredBossId: blend >= 1 ? newer.world.featuredBossId : older.world.featuredBossId,
       bossNarration: blend >= 1 ? newer.world.bossNarration : older.world.bossNarration,
       bossSpells: interpolateBossSpells(older.world.bossSpells, newer.world.bossSpells, blend),
@@ -253,13 +255,20 @@ function interpolateGameRunLifecycle(
   older: GameRunLifecycleState,
   newer: GameRunLifecycleState,
   blend: number,
+  targetTick: number,
+  newerTick: number,
 ): GameRunLifecycleState {
   const discrete = blend < 1 ? older : newer
   const sameGameOver = older.phase === 'game-over'
     && newer.phase === 'game-over'
     && older.runId === newer.runId
     && older.gameOverEventId === newer.gameOverEventId
-  if (!sameGameOver) return discrete
+  if (!sameGameOver) {
+    const entryTick = gameRunWorldTick(newerTick, newer)
+    return newer.phase === 'game-over' && targetTick >= entryTick
+      ? { ...newer, gameOverTicks: Math.floor(targetTick) - entryTick }
+      : discrete
+  }
   return {
     ...discrete,
     gameOverExitTicks: older.gameOverExitTicks !== null
@@ -419,7 +428,7 @@ function presentationCopy(
     run: snapshot.run,
     tick: snapshot.tick,
     world: {
-      ...copyBoneyardEnemySamples(snapshot.world, snapshot.tick),
+      ...copyBoneyardEnemySamples(snapshot.world, gameRunWorldTick(snapshot.tick, snapshot.run)),
       featuredBossId: snapshot.world.featuredBossId,
       bossNarration: snapshot.world.bossNarration,
       bossSpells: snapshot.world.bossSpells,

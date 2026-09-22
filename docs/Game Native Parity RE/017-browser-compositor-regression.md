@@ -86,6 +86,12 @@ Do not silently discard frozen native actors or relax the five-age validator
 as a screenshot fix. The original diagnostic records remain on the server;
 no production runtime or database was changed.
 
+Report 10 subsequently reproduced that exact rejection through the real Mac
+simulation and compact decoder, and repaired the stopped-Arena/live-terminal
+clock boundary across transport and rendering. Its source evidence, contact
+membership and acceptance are recorded in entry 097. This establishes a real
+crash defect, without assigning the unsampled white frame or preceding lag to it.
+
 Report 11 remains an investigation for the original white frame despite the
 independently fixed module-recovery defect in entry 145. No fixed Discord
 reaction is justified without resolving that ambiguity.

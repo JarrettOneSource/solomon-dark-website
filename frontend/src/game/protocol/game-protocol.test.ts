@@ -2014,6 +2014,7 @@ test('protocol v115 carries packed order-preserving Hail, Demon endpoints, mod B
   )
   const gameOverState = {
     ...active,
+    tick: 2_000,
     run: {
       ...active.run,
       gameOverEventId: 1,

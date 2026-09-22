@@ -1,5 +1,113 @@
 # Player terminal presentation and Boneyard Game Over reopening — 2026-08-16
 
+## 2026-09-22 — Report 10 terminal Arena clock investigation
+
+Recorded before implementation, against `d05c812d1`. Report 10's original
+15.595-second, 1920x1080 MP4 was inspected across its full duration. It shows
+repeated holds during a crowded Air/Ether fight, followed by resumed movement;
+it does not show the subsequent crash. The uncertain wave-46 label is reporter
+context, not an observed wave counter. Original attachments remain untouched.
+
+Read-only production diagnostics 189/190 independently record the same
+`frame.world.mageLightningPulses[0] exceeds the live pulse age limit` failure
+at 01:46:04.056/01:46:03.747 UTC on September 22. The latter connection closes
+with code 4008. Related performance records 184–188 identify revision
+`ed0a2d598` and run `eb1e284360d931a965a41c2fa252ac9b`; they contain both
+frame stalls and delivery stalls. Neither the precise video timestamp nor a
+terminal authoritative snapshot is present. A matching code-path reproduction
+can establish a defect, but cannot attribute every historical stall to it.
+
+Native truth is the retail 0.72.5 identity and GameOver/PlayerWizard ownership
+recovered below: frozen Arena simulation with independently advancing player
+death and Game Over clocks. No new injected or clean-stock capture is claimed.
+Current Game Over cadence constants and input branches remain authoritative;
+this work changes clock ownership, not their timing or authored assets.
+
+The previous Mage lifetime repair recovered immutable light ownership but
+missed this stopped-world boundary. `stepGameSimulationTick` retains the enemy
+store during Game Over while advancing `state.tick` and `run.gameOverTicks`.
+Projection retains pulse birth ticks, while wire validation, interpolation and
+rendering currently age them against that advancing outer clock. The causal
+hypothesis is a pulse valid at terminal entry becoming invalid five ticks
+later despite no Arena update. Do not drop the pulse or enlarge its native
+five-age lifetime to hide that mismatch.
+
+Boundary inventory, with final focused Mac dispositions:
+
+| Member | Recovered contract | Disposition and proof |
+| --- | --- | --- |
+| Mage world-contact and player-attached factories, retained ages 0–4 | Birth/owner/painter identity and live age freeze with Arena; stale/future births remain invalid | exact-ported; ten terminal cases pass object/compact validation and late-join sampling through complete exit |
+| Mage body, source/path light, world corona, attached corona | Existing two/one/five/three-tick presentation lifetimes, evaluated at stopped Arena time | exact-ported; ten retained factories render eight live coronas (five world, three attached), including age-zero light and body |
+| Object snapshots and compact keyframes/deltas | One validated Arena clock; no relaxed five-age bound or missing-owner fallback | exact-ported; unit decode and complete real-host browser stream pass; protocol 130 prevents mixing old clock semantics |
+| Snapshot interpolation and late join | Freeze exactly at the all-dead boundary, including an event between ordinary 20 Hz samples | exact-ported; fractional sampling and ten late-join cases retain all eligible factories |
+| Enemy/Maggot hit and movement presentation, projectiles, boss effects, weather | Absolute Arena-time consumers share the freeze; explicit actor ages already stay frozen | exact-ported; shared projection/render clock, unchanged enemy-store identity, existing projection/animation coverage and built browser journey |
+| Player death/held weapon/burst, Game Over fade/input/automatic exit, score archive and loadout | Continue their established terminal clocks, then discard old world | verified-already-at-parity; corpse reaches frame 3 while the eight coronas stay visible; both browser exit paths return to loadout |
+| Active play, surviving-peer spectating, pause and save restoration | Existing active/paused clocks and strict pulse validation remain intact | verified-already-at-parity; simulation/save/timeline regressions and original continuation restore pass |
+| Coffin populations, native Hurricane exclusion, lazy allocation and crowd indices | Reuse main's recovered fixes and report 09's saved-run probe | verified-already-at-parity; saved and eight-Coffin browser workloads pass without reducing effects or actors |
+| Terminal Mindblast, player overlays and screen/scenery feedback | Existing event-owned terminal progression is separate from enemy pulse age | out-of-system; neither emitted terminal events nor their feedback clocks are reinterpreted |
+| Historical network/scheduler stall cause | No contemporaneous server tick trace or exact video replay | out-of-system for the demonstrated terminal-clock repair; unresolved report evidence |
+
+Acceptance: first reproduce the rejection on Mac through real simulation and
+wire decode; cover both contact variants and all live ages, frozen snapshots,
+late presentation, player death and complete exit. Then run a built Mac
+browser journey and the saved high-load workload with baseline/stress/recovery
+measurements and empty error arrays, followed by the exact-tree canonical gate.
+
+The Mac regression now reproduces the exact recorded `GameProtocolError` on
+unchanged runtime `d05c812d1`: retain a valid pulse at all-dead entry, advance
+five terminal ticks, and decode the host's actual compact keyframe. The native
+enemy store is unchanged. This confirms the clock mismatch independently of
+the unavailable historical terminal state. The repair will derive Arena time
+from snapshot tick minus Game Over elapsed ticks, preserving the separate
+terminal clock and strict age bound. No new authored table or constant is needed.
+
+### Implementation and focused acceptance receipt
+
+`gameRunWorldTick` derives the resident Arena tick from the existing run clock;
+the protocol checks that elapsed terminal time cannot precede tick zero. The
+host projector, pulse validator, sampled membership and world renderer use it.
+The wire shape and save schema are unchanged; protocol **130** marks the new
+clock semantics. Global tick, death progression, score archival and Game Over
+timing continue independently. No pulse is discarded to make a bad frame pass.
+
+The complete September 20–21 performance receipts and campaign outcomes 09/11
+were reviewed before this change. No duplicate allocation, crowd-index or
+light-registration optimization is made. Mage native ownership is additionally
+covered by entries 058/091 (`0x00490860 -> 0x00531640`) and the existing
+`native-mage-lightning-pulse` lifetime tests. The original MP4 SHA-256 is
+`c19d91a8b41c6b9dddd286a21c0d265d4727999857a1c82f50bb950b7541a3b1`.
+
+Mac-only focused evidence, Chrome `153.0.8010.53`:
+
+- 216 initial simulation/protocol/projection/timeline/save checks pass; the
+  added fractional terminal-entry regression, test TypeScript, frontend lint
+  and production build also pass. A test-only narrowing error and an older
+  zero-tick/950-terminal-tick fixture were corrected before acceptance.
+- `tools/smoke-game-over-mage.mjs` traverses Title/Create/College/Boneyard at
+  1920x1080, seeds explicitly identified valid orphan pulse fixtures, then
+  exercises real authority, keyframes/deltas, renderer, corpse and UI exit.
+  Automatic/input paths receive 241/110 terminal frames, maximum gaps
+  166.3/206.3 ms, ten retained factories and eight visible coronas. Both reach
+  loadout with all six error arrays empty. The initial harness incorrectly
+  expected ten rendered coronas and exact tick-159 receipt at 20 Hz; correcting
+  those assertions preserved native lifetime and the actual frame-3 check.
+- `tools/smoke-coffin-spawn.mjs` restores the related schema-37 continuation
+  SHA-256 `10c1c24c6e36b5929e60a06c1b14b3af3ea0cb33a4e3eb4554b748f255d9b0af`.
+  Baseline, in-view owners, owner death and recovery each have 16.8 ms p99/max
+  frame intervals; 104 then-current children retire after both owners die.
+  The separate eight-Coffin/four-style burst reaches 621 visible effects with
+  16.8 ms p99/max, 802.05 simulation ticks in eight seconds and a 2.35 ms
+  triggering action. Hurricane exclusion, eligible lethal damage, independent
+  debris lifetime and break audio remain intact. All error arrays are empty.
+
+These are controlled Mac proofs, not a Windows/Firefox/Opera reproduction of
+the exact historical run. The source-level crash condition is resolved. The
+video's earlier lag lacks the corresponding host profile/terminal snapshot;
+its cause remains unassigned, so report 10 is **investigated**, not marked
+fully fixed or given a Discord completion reaction. Final publication requires
+the rebased exact-tree canonical gate and both browser tools again under the
+campaign publication lock; its commit/manifest/result belong in the outcome.
+
 ## Why the prior parity claim is reopened
 
 The 2026-08-14 pass recovered the death-frame thresholds and the tick-1000

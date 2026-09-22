@@ -30,6 +30,11 @@ export interface GameRunLifecycleState {
   readonly runId: string | null
 }
 
+// GameOver owns a live terminal clock while the resident Arena is stopped.
+export function gameRunWorldTick(tick: number, run: GameRunLifecycleState): number {
+  return run.phase === 'game-over' ? Math.floor(tick) - run.gameOverTicks : tick
+}
+
 export function gameRunLifecyclesEqual(
   first: GameRunLifecycleState,
   second: GameRunLifecycleState,

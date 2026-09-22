@@ -150,6 +150,7 @@ export function gameWorldSnapshot(
   value: unknown,
   field: string,
   snapshotTick: number,
+  worldTick: number,
 ): GameSnapshot['world'] {
   const source = record(value, field)
   if (source.kind === 'hub') return hubWorldSnapshot(source, field)
@@ -234,7 +235,7 @@ export function gameWorldSnapshot(
     const mageLightningPulses = boneyardMageLightningPulses(
       source.mageLightningPulses,
       `${field}.mageLightningPulses`,
-      snapshotTick,
+      worldTick,
     )
     const enemyIds = new Set<number>()
     const enemies = limitedArray(
@@ -394,6 +395,7 @@ export function gameWorldSnapshotFrame(
   value: unknown,
   field: string,
   snapshotTick: number,
+  worldTick: number,
 ): GameSnapshotFrame['world'] {
   const source = record(value, field)
   if (source.kind === 'boneyard') {
@@ -496,7 +498,7 @@ export function gameWorldSnapshotFrame(
       mageLightningPulses: boneyardMageLightningPulseFrames(
         source.mageLightningPulses,
         `${field}.mageLightningPulses`,
-        snapshotTick,
+        worldTick,
       ),
       runId,
       solomonPainterRegistration: nullableNativeWorldManagerRegistration(

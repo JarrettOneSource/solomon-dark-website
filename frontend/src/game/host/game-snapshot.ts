@@ -1,4 +1,5 @@
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
+import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { SPLIT_MIND_CHARM_SELECTOR, hagathaOffers, projectInventoryRootSlots } from '../core-kernels/hub-economy.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
@@ -65,7 +66,8 @@ export function createGameSnapshot(
       }
     case 'boneyard': {
       const runId = state.world.runId
-      const lightAt = createBoneyardWorldLightSampler(state.world, players, state.world.enemies, state.tick, {
+      const worldTick = gameRunWorldTick(state.tick, state.run)
+      const lightAt = createBoneyardWorldLightSampler(state.world, players, state.world.enemies, worldTick, {
         playerEntities: state.playerEntities, primarySpells: state.primarySpells, secondaryAbilities: state.secondaryAbilities,
       })
       const spiderPlayers = Object.fromEntries(Object.entries(players).map(([id, player]) => {
@@ -132,7 +134,7 @@ export function createGameSnapshot(
             voiceTicksRemaining: state.world.encounter.voiceTicksRemaining,
             walkCycle: state.world.encounter.walkCycle,
           },
-          enemies: projectBoneyardEnemies(state.world.enemies, state.tick, {
+          enemies: projectBoneyardEnemies(state.world.enemies, worldTick, {
             lightAt,
             players: spiderPlayers,
           }),
@@ -145,7 +147,7 @@ export function createGameSnapshot(
             state.world.enemies,
           ),
           mageLightningPulses: projectBoneyardMageLightningPulses(state.world.enemies),
-          maggots: projectBoneyardMaggots(state.world.enemies, state.tick),
+          maggots: projectBoneyardMaggots(state.world.enemies, worldTick),
           gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),
           goodies: state.world.loot.goodies.map((goodie) => ({
             active: goodie.active,

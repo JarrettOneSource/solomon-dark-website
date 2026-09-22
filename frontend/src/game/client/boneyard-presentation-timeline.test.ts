@@ -648,6 +648,31 @@ test('interpolates the persistent Tutorial camera age between authority snapshot
   })
 })
 
+test('freezes Mage samples at the exact all-dead edge between snapshots', () => {
+  const active = snapshotAt(100, 10, 100)
+  active.world.mageLightningPulses = [96, 97, 98, 99, 100].map(magePulse)
+  const terminal = snapshotAt(105, 10, 100)
+  terminal.run = { ...terminal.run, phase: 'game-over', gameOverTicks: 3,
+    gameOverEventId: 1, nextGameOverEventId: 2 }
+  terminal.world.mageLightningPulses = [98, 99, 100, 101, 102].map(magePulse)
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: active, serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(terminal, 50)
+  assert.equal(timeline.sample(60).run.phase, 'active')
+  for (const now of [70, 75, 80, 95, 100]) {
+    const sample = timeline.sample(now)
+    assert.equal(sample.run.phase, 'game-over')
+    assert.equal(Math.floor(sample.tick) - sample.run.gameOverTicks, 102)
+    assert.deepEqual(sample.world.mageLightningPulses.map(pulse => pulse.tick), [98, 99, 100, 101, 102])
+  }
+  timeline.push({ ...terminal, tick: 110, run: { ...terminal.run, gameOverTicks: 8 } }, 100)
+  for (const now of [110, 125, 149, 150]) {
+    const sample = timeline.sample(now)
+    assert.equal(Math.floor(sample.tick) - sample.run.gameOverTicks, 102)
+    assert.deepEqual(sample.world.mageLightningPulses.map(pulse => pulse.tick), [98, 99, 100, 101, 102])
+  }
+})
+
 test('merges every 100 Hz Mage pulse discretely across 20 Hz snapshot boundaries', () => {
   const older = snapshotAt(100, 10, 100)
   older.world.mageLightningPulses = [96, 97, 98, 99, 100].map(magePulse)

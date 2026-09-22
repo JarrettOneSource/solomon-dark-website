@@ -1,4 +1,5 @@
 import {
+  gameRunWorldTick,
   GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
   GAME_OVER_EXIT_KINDS,
@@ -174,8 +175,8 @@ export function gameSnapshot(value: unknown): GameSnapshot {
     : validatedPlayerId(source.hostPlayerId, 'snapshot.hostPlayerId')
   const tick = nonnegativeInteger(source.tick, 'snapshot.tick')
   const modEffects = protocolModEffects(source.modEffects, 'snapshot.modEffects', players, tick)
-  const world = gameWorldSnapshot(source.world, 'snapshot.world', tick)
-  const run = gameRunLifecycle(source.run, 'snapshot.run')
+  const run = gameRunLifecycle(source.run, 'snapshot.run', tick)
+  const world = gameWorldSnapshot(source.world, 'snapshot.world', tick, gameRunWorldTick(tick, run))
   const levelUpBarrier = source.levelUpBarrier === null
     ? null
     : playerLevelUpBarrier(source.levelUpBarrier, 'snapshot.levelUpBarrier', players, run)
@@ -241,8 +242,8 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     : validatedPlayerId(source.hostPlayerId, 'frame.hostPlayerId')
   const tick = nonnegativeInteger(source.tick, 'frame.tick')
   const modEffects = protocolModEffects(source.modEffects, 'frame.modEffects', players, tick)
-  const world = gameWorldSnapshotFrame(source.world, 'frame.world', tick)
-  const run = gameRunLifecycle(source.run, 'frame.run')
+  const run = gameRunLifecycle(source.run, 'frame.run', tick)
+  const world = gameWorldSnapshotFrame(source.world, 'frame.world', tick, gameRunWorldTick(tick, run))
   const levelUpBarrier = source.levelUpBarrier === null
     ? null
     : playerLevelUpBarrier(source.levelUpBarrier, 'frame.levelUpBarrier', players, run)
@@ -326,7 +327,7 @@ export function protocolModEffects(
   })
 }
 
-function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState {
+function gameRunLifecycle(value: unknown, field: string, tick: number): GameRunLifecycleState {
   const source = record(value, field)
   onlyKeys(source, field, [
     'eligiblePlayerIds',
@@ -393,6 +394,9 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
     throw new GameProtocolError(`${field}.gameOverEventId requires a completed run`)
   }
   const gameOverTicks = nonnegativeInteger(source.gameOverTicks, `${field}.gameOverTicks`)
+  if (gameOverTicks > tick) {
+    throw new GameProtocolError(`${field}.gameOverTicks exceeds its snapshot tick`)
+  }
   const gameOverExitKind = source.gameOverExitKind === null
     ? null
     : limitedString(source.gameOverExitKind, `${field}.gameOverExitKind`, 32)
