@@ -37,6 +37,7 @@ import {
   decodeServerGameMessage,
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'
+import { GameSaveCheckpointReceiver } from '../protocol/game-save-checkpoint-transfer.ts'
 import type {
   BoneyardChoice,
   LoadedBoneyard,
@@ -61,6 +62,7 @@ import type {
   PartyActionRejection,
   ServerLuaResultMessage,
   ServerDeploymentRestartMessage,
+  ServerSaveCheckpointMessage,
   ServerWelcomeMessage,
 } from '../protocol/game-server-messages.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
@@ -360,6 +362,7 @@ export function connectGameClientSession(
     const pendingPlayerCardRequests = new Map<number, PendingPlayerCardRequest>()
     let pendingLeaveSave: PendingLeaveSave | null = null
     const entityReplication = new EntityReplicationReconstructor()
+    const saveCheckpointReceiver = new GameSaveCheckpointReceiver()
     let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
@@ -454,14 +457,24 @@ export function connectGameClientSession(
         return
       }
       if (message.type === 'server-save-checkpoint') {
-        if (message.sequence <= (latestSaveCheckpoint?.sequence ?? 0)) return
-        latestSaveCheckpoint = {
-          document: message.save,
-          reason: message.reason,
-          sequence: message.sequence,
-          streamId: saveStreamId,
+        saveCheckpointReceiver.acceptComplete(message)
+        publishSaveCheckpoint(message)
+        return
+      }
+      if (message.type === 'server-save-checkpoint-chunk') {
+        let checkpoint
+        try {
+          checkpoint = saveCheckpointReceiver.acceptChunk(message)
+        } catch (error) {
+          fail(error)
+          return
         }
-        for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
+        if (checkpoint) publishSaveCheckpoint(checkpoint)
+        options.transport.send(encodeGameMessage({
+          type: 'client-save-checkpoint-chunk-ack',
+          sequence: message.sequence,
+          nextOffset: message.offset + message.data.length,
+        }))
         return
       }
       if (message.type === 'server-save-before-leave') {
@@ -840,6 +853,7 @@ export function connectGameClientSession(
         destroyed = true
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
+        saveCheckpointReceiver.close()
         removeClose()
         removeMessage()
         if (options.transport.readyState === 'open') {
@@ -1675,6 +1689,17 @@ export function connectGameClientSession(
       if (state.predictedTicks === maximumTicks) state.remainderMs = 0
     }
 
+    function publishSaveCheckpoint(message: ServerSaveCheckpointMessage): void {
+      if (message.sequence <= (latestSaveCheckpoint?.sequence ?? 0)) return
+      latestSaveCheckpoint = {
+        document: message.save,
+        reason: message.reason,
+        sequence: message.sequence,
+        streamId: saveStreamId,
+      }
+      for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
+    }
+
     function fail(error: unknown): void {
       const failure = GameConnectionFailure.from(error)
       if (!settled) {
@@ -1682,6 +1707,7 @@ export function connectGameClientSession(
         destroyed = true
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
+        saveCheckpointReceiver.close()
         rejectPendingLeaveSave(failure)
         rejectPendingLuaExecutions(failure)
         rejectPendingPlayerCardRequests(failure)
@@ -1701,6 +1727,7 @@ export function connectGameClientSession(
       destroyed = true
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
+      saveCheckpointReceiver.close()
       rejectPendingLeaveSave(failure)
       rejectPendingLuaExecutions(failure)
       rejectPendingPlayerCardRequests(failure)
@@ -1777,6 +1804,7 @@ export function connectGameClientSession(
       destroyed = true
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
+      saveCheckpointReceiver.close()
       rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       rejectPendingLuaExecutions(new Error('The game is restarting for an update.'))
       rejectPendingPlayerCardRequests(new Error('The game is restarting for an update.'))

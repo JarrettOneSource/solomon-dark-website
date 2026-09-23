@@ -74,6 +74,16 @@ export interface ServerSaveCheckpointMessage {
   sequence: number
 }
 
+/** Offsets and lengths count UTF-16 code units, matching JSON string slicing. */
+export interface ServerSaveCheckpointChunkMessage {
+  type: 'server-save-checkpoint-chunk'
+  data: string
+  offset: number
+  totalLength: number
+  reason: ServerSaveCheckpointMessage['reason']
+  sequence: number
+}
+
 export interface ServerSaveBeforeLeaveMessage {
   type: 'server-save-before-leave'
   checkpointSequence: number
@@ -211,6 +221,7 @@ export type ServerGameMessage =
   | ServerBoneyardLoadedMessage
   | ServerSaveBeforeLeaveMessage
   | ServerSaveCheckpointMessage
+  | ServerSaveCheckpointChunkMessage
   | ServerLeaderboardReceiptMessage
   | ServerLuaResultMessage
   | ServerModCatalogMessage

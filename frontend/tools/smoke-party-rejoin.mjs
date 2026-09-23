@@ -19,6 +19,7 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../src/game/protocol/game-protocol-contract.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { GameSaveCheckpointReceiver } from '../src/game/protocol/game-save-checkpoint-transfer.ts'
 
 const staticServer = process.env.SDR_PARTY_REJOIN_URL
   ? null
@@ -796,10 +797,19 @@ async function resolveAllOffers(client, acknowledgeSkillPickerGrace = true) {
 }
 
 function messageQueue(socket, label) {
+  const checkpointReceiver = new GameSaveCheckpointReceiver()
   const buffered = []
   const waiters = []
   socket.on('message', data => {
-    const message = JSON.parse(data.toString())
+    let message = JSON.parse(data.toString())
+    if (message.type === 'server-save-checkpoint') checkpointReceiver.acceptComplete(message)
+    if (message.type === 'server-save-checkpoint-chunk') {
+      const complete = checkpointReceiver.acceptChunk(message)
+      socket.send(JSON.stringify({ type: 'client-save-checkpoint-chunk-ack',
+        sequence: message.sequence, nextOffset: message.offset + message.data.length }))
+      if (!complete) return
+      message = complete
+    }
     if (message.type === 'server-snapshot') {
       socket.send(JSON.stringify({
         type: 'client-snapshot-ack',

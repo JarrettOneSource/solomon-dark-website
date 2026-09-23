@@ -711,7 +711,7 @@ This example uses the confirmed 60 Hz Windows display and a 45 FPS trigger:
 
 ```sh
 SDR_SOAK_OUTPUT=/tmp/solomon-party-run node --experimental-strip-types tools/party-soak-runtime.mjs
-SDR_SOAK_OUTPUT=/tmp/solomon-party-run SDR_SOAK_STALL_MS=3600000 SDR_SOAK_PROFILE_SLOW_WINDOWS=1 SDR_SOAK_PROFILE_MIN_FPS=45 caffeinate -di node tools/monitor-party-run.mjs
+SDR_SOAK_OUTPUT=/tmp/solomon-party-run SDR_SOAK_STALL_MS=3600000 SDR_SOAK_PROFILE_SLOW_WINDOWS=1 SDR_SOAK_PROFILE_MIN_FPS=45 caffeinate -di node --experimental-strip-types tools/monitor-party-run.mjs
 ```
 
 The monitor defaults to Fire on Mac, Air on Windows, a 12-hour maximum, a

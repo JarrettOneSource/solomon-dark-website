@@ -53,6 +53,7 @@ import type {
 import type { GameSnapshot } from '../protocol/game-state.ts'
 import type { PlayerSocialProfile } from '../protocol/party-state.ts'
 import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
+import { GameSaveCheckpointReceiver } from '../protocol/game-save-checkpoint-transfer.ts'
 import type { BoneyardScene, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
   createBoneyardCatalog,
@@ -145,6 +146,8 @@ type TestChatMessage = Extract<
 interface TestReplicationState {
   readonly frames: Map<number, MaterializedServerSnapshotMessage>
   readonly reconstructor: EntityReplicationReconstructor
+  readonly checkpointReceiver: GameSaveCheckpointReceiver
+  readonly chunks: Map<string, TestServerGameMessage>
 }
 
 const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
@@ -1939,7 +1942,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   runtimeEvents.length = 0
   let pauseCheckpointCount = 0
   const countPauseCheckpoint = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = materializeServerMessage(first.socket, decodeServerGameMessage(data.toString()))
     if (message.type === 'server-save-checkpoint') pauseCheckpointCount += 1
   }
   first.socket.on('message', countPauseCheckpoint)
@@ -2671,13 +2674,13 @@ test('multiplayer SkillPicker holds through final close then resumes without a t
     [first.welcome.playerId, 0],
     [second.welcome.playerId, 0],
   ])
-  const countBarrierCheckpoint = (playerId: string) => (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+  const countBarrierCheckpoint = (playerId: string, socket: WebSocket) => (data: WebSocket.RawData) => {
+    const message = materializeServerMessage(socket, decodeServerGameMessage(data.toString()))
     if (message.type !== 'server-save-checkpoint' || message.reason !== 'progress') return
     barrierCheckpoints.set(playerId, (barrierCheckpoints.get(playerId) ?? 0) + 1)
   }
-  const countFirstCheckpoint = countBarrierCheckpoint(first.welcome.playerId)
-  const countSecondCheckpoint = countBarrierCheckpoint(second.welcome.playerId)
+  const countFirstCheckpoint = countBarrierCheckpoint(first.welcome.playerId, first.socket)
+  const countSecondCheckpoint = countBarrierCheckpoint(second.welcome.playerId, second.socket)
   first.socket.on('message', countFirstCheckpoint)
   second.socket.on('message', countSecondCheckpoint)
   context.after(() => first.socket.off('message', countFirstCheckpoint))
@@ -2847,7 +2850,7 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   const firstOffer = getPlayerProgression(host.state(), playerId).pendingOffer!
   let intermediateCheckpointCount = 0
   const countIntermediateCheckpoint = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = materializeServerMessage(client.socket, decodeServerGameMessage(data.toString()))
     if (message.type === 'server-save-checkpoint') intermediateCheckpointCount += 1
   }
   client.socket.on('message', countIntermediateCheckpoint)
@@ -4958,7 +4961,7 @@ test('host retains the profile and removes only the continuation on Game Over', 
 
   let laterProgress = 0
   const countProgress = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = materializeServerMessage(client.socket, decodeServerGameMessage(data.toString()))
     if (message.type === 'server-save-checkpoint' && message.reason === 'progress') {
       laterProgress += 1
     }
@@ -6156,13 +6159,28 @@ function materializeServerMessage(
     const state: TestReplicationState = {
       frames: new Map(),
       reconstructor: new EntityReplicationReconstructor(),
+      checkpointReceiver: new GameSaveCheckpointReceiver(),
+      chunks: new Map(),
     }
     state.reconstructor.reset(message.snapshot, message.snapshotSequence)
     replicationBySocket.set(socket, state)
     return message
   }
-  if (message.type !== 'server-snapshot') return message
   const state = replicationBySocket.get(socket)
+  if (message.type === 'server-save-checkpoint-chunk') {
+    if (!state) throw new Error('test socket received a checkpoint before its welcome')
+    const key = `${message.sequence}:${message.offset}`
+    const cached = state.chunks.get(key)
+    if (cached) return cached
+    const result = state.checkpointReceiver.acceptChunk(message) ?? message
+    state.chunks.set(key, result)
+    while (state.chunks.size > 64) state.chunks.delete(state.chunks.keys().next().value!)
+    socket.send(encodeGameMessage({ type: 'client-save-checkpoint-chunk-ack',
+      sequence: message.sequence, nextOffset: message.offset + message.data.length }))
+    return result
+  }
+  if (message.type === 'server-save-checkpoint') state?.checkpointReceiver.acceptComplete(message)
+  if (message.type !== 'server-snapshot') return message
   if (!state) throw new Error('test socket received a snapshot before its welcome')
   const cached = state.frames.get(message.sequence)
   if (cached) return cached

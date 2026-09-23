@@ -19,6 +19,7 @@ import {
 } from '../src/game/protocol/game-protocol.ts'
 import * as replication from '../src/game/protocol/entity-replication.ts'
 import { GameSaveCoordinator } from '../src/game/save/game-save-coordinator.ts'
+import { GameSaveCheckpointReceiver } from '../src/game/protocol/game-save-checkpoint-transfer.ts'
 
 const AUTHENTICATION = { kind: 'shared', credential: 'benchmark-secret' }
 const ONLINE_PREFERENCES = {
@@ -225,10 +226,19 @@ async function connectClient(url, displayName) {
     snapshotSequences: [],
     socket,
   }
+  const checkpointReceiver = new GameSaveCheckpointReceiver()
   socket.on('message', data => {
     let message
     try {
       message = decodeServerGameMessage(data.toString())
+      if (message.type === 'server-save-checkpoint') checkpointReceiver.acceptComplete(message)
+      if (message.type === 'server-save-checkpoint-chunk') {
+        const complete = checkpointReceiver.acceptChunk(message)
+        socket.send(encodeGameMessage({ type: 'client-save-checkpoint-chunk-ack',
+          sequence: message.sequence, nextOffset: message.offset + message.data.length }))
+        if (!complete) return
+        message = complete
+      }
       if (message.type === 'server-welcome') {
         lane.playerId = message.playerId
         reconstructor.reset(message.snapshot, message.snapshotSequence)

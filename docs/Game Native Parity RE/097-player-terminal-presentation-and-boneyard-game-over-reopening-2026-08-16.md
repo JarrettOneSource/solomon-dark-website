@@ -1,5 +1,84 @@
 # Player terminal presentation and Boneyard Game Over reopening — 2026-08-16
 
+## 2026-09-23 — Remaining reports: checkpoint delivery ownership
+
+The renewed production-path probe restores report 09's original continuation
+through the real session supervisor, authenticated ticket and WebSocket proxy.
+The supervisor runs separately from the receiver. A byte-paced TCP relay bounds
+only downstream throughput; payloads and native simulation remain unchanged.
+At 10 MiB/s, maximum snapshot gap is 110.8 ms. At 256 KiB/s it is 620.6 ms; at
+64 KiB/s it is 2,472.6 ms. The last gap immediately follows the 1,022,739-byte
+periodic checkpoint; other gaps in that constrained run remain below 236 ms.
+The server spends 38 ms publishing that checkpoint. This is a reproduced
+ordered-stream transfer stall, not an inference from serialization duration.
+The same mechanism can retain a just-started Region flash (entry 017).
+
+The historical Coffin session published 1,353,777 and 1,351,856 bytes near its
+14,578 ms flow-control interval. Exact historical network conditions are not
+available. Current-main reproduction is sufficient to repair the transport
+owner; do not change Coffin populations, gameplay timing or native flash losses.
+
+The implementation boundary is checkpoint delivery, including its protocol,
+producer, receiver, supersession, interruption and lifecycle barriers. Large
+background checkpoints will use a bounded window of acknowledged small chunks.
+A complete save is published to storage only after exact reassembly; interrupted
+or superseded transfers preserve the last complete checkpoint. Explicit leave,
+Game Over and coordinated restart retain atomic checkpoint/control ordering
+while gameplay is leaving or deliberately frozen. This is an intentional wire
+protocol cutover, enabled for normal clients, with no legacy negotiation path.
+
+Acceptance covers bounded in-flight chunks, malformed/oversized/out-of-order
+fragments, Unicode content, progress supersession, whole-save replacement,
+disconnect cleanup, explicit leave/restart correlation, original-save delivery
+through the real supervisor at the same three rates, and native white-flash
+retirement during a checkpoint transfer. Existing snapshot limits and native
+pause/terminal contracts remain enforced. Implementation and final dispositions
+follow the failing reproduction above.
+
+The first transport trial exposed a separate admission case: the existing
+23,327,545-character Faculty recovery fixture holds gameplay for renderer
+readiness, while repeated dense snapshots consume about 280 ms per chunk-window
+round trip in the same-process test. Streaming its first checkpoint unnecessarily
+delays admission. The connected/bootstrap checkpoint therefore retains atomic
+delivery, like the other lifecycle barriers; periodic active-play saves stream.
+An active stream must also finish before a newer background save replaces it,
+otherwise repeated checkpoints can starve storage on a slow connection. Keep
+only the latest waiting save; an atomic lifecycle checkpoint cancels both.
+These rules preserve progress without increasing the bounded in-flight window.
+
+Protocol 134 implements four acknowledged 8192-code-unit fragments in flight,
+streaming background documents above 65536 code units. The receiver validates
+contiguity, identity, reason and length, then applies the existing UTF-8 byte
+limit to the complete document. Raw test clients, the performance benchmark and
+the party monitor use the same assembler. No new dependency or HTTP/authentication
+surface is introduced.
+
+The 152 focused Mac tests pass, including the 23 MB Faculty recovery case,
+interleaved gameplay, Unicode boundaries, malformed input, repeated publication,
+atomic replacement, disconnect cleanup and leave/deployment ordering. The Mac
+production build also passes. Matched real-supervisor 45-second trials give:
+
+| Downstream rate | Whole-save maximum snapshot gap | Streamed maximum snapshot gap |
+| --- | ---: | ---: |
+| 10 MiB/s | 110.8 ms | 120.1 ms |
+| 256 KiB/s | 620.6 ms | 120.3 ms |
+| 64 KiB/s | 2472.6 ms | 306.7 ms |
+
+All three trials decode without errors. Large periodic saves complete at the
+two faster rates. At 64 KiB/s, the original continuation reaches Game Over
+before its background transfer finishes; the complete final profile replaces
+it, as required. Bootstrap ping can still reach 2.59 seconds on this constrained
+connection; this repair does not claim to remove initial admission latency or
+the bandwidth cost of snapshots themselves. Two real browsers independently
+prove fading/retirement during a save, and the old-delivery mutation reproduces
+the whiteout (entry 017). Their pause-owner resume and terminal replacement also
+pass. Full canonical and remaining lifecycle acceptance are recorded in the
+campaign receipt at publication.
+
+The final 64 KiB/s disposable receipt SHA-256 is
+`4ae3f4072f56578addd8be0d3574fa6598c388ebdc2cc526dbf3191134bad742`.
+
+
 ## 2026-09-23 — Final campaign acceptance
 
 Runtime `59bf21d5722843a792545f7ee9d65a2d198f3599` passed the exact-tree Mac

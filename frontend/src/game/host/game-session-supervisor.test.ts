@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import test from 'node:test'
 
 import { WebSocket } from 'ws'
+import { GameSaveCheckpointReceiver } from '../protocol/game-save-checkpoint-transfer.ts'
 import { createNativeFacultyDeathSaveFixture } from '../../../tools/native-faculty-save-fixture.ts'
 
 import {
@@ -2033,6 +2034,8 @@ function socketClosed(socket: WebSocket): Promise<{ code: number; reason: string
 }
 
 function messageQueue(socket: WebSocket) {
+  const checkpointReceiver = new GameSaveCheckpointReceiver()
+  let checkpointProgress = 'none'
   const buffered: ServerGameMessage[] = []
   const waiters: Array<{
     predicate: (message: ServerGameMessage) => boolean
@@ -2041,7 +2044,16 @@ function messageQueue(socket: WebSocket) {
     timeout: ReturnType<typeof setTimeout>
   }> = []
   socket.on('message', (data) => {
-    const message = decodeServerGameMessage(data.toString())
+    let message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-save-checkpoint') checkpointReceiver.acceptComplete(message)
+    if (message.type === 'server-save-checkpoint-chunk') {
+      checkpointProgress = `${message.sequence}:${message.offset + message.data.length}/${message.totalLength}`
+      const complete = checkpointReceiver.acceptChunk(message)
+      socket.send(encodeGameMessage({ type: 'client-save-checkpoint-chunk-ack',
+        sequence: message.sequence, nextOffset: message.offset + message.data.length }))
+      if (!complete) return
+      message = complete
+    }
     if (message.type === 'server-snapshot') {
       socket.send(encodeGameMessage({
         type: 'client-snapshot-ack',
@@ -2077,7 +2089,7 @@ function messageQueue(socket: WebSocket) {
       const timeout = setTimeout(() => {
         const index = waiters.findIndex((waiter) => waiter.resolve === resolve)
         if (index >= 0) waiters.splice(index, 1)
-        reject(new Error(`timed out waiting for game message; buffered=${buffered.map(message => (
+        reject(new Error(`timed out waiting for game message; checkpoint=${checkpointProgress}; buffered=${buffered.map(message => (
           message.type === 'server-party-state'
             ? `${message.type}:${message.state.party.memberPlayerIds.length}:${message.state.party.visibility}`
             : message.type

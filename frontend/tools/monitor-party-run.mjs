@@ -9,6 +9,7 @@ import { enterBoneyard, enterElementHub } from './game-smoke-navigation.mjs'
 import { createSlowWindowsCpuProfile } from './party-soak-cpu-profile.mjs'
 import { createDiagnosticCheckpointWriter } from './party-soak-evidence.mjs'
 import { SOAK_ELEMENTS, SOAK_MUTATION } from './party-soak-settings.mjs'
+import { GameSaveCheckpointReceiver } from '../src/game/protocol/game-save-checkpoint-transfer.ts'
 
 const output = resolve(required('SDR_SOAK_OUTPUT'))
 const baseUrl = process.env.SDR_SOAK_URL || 'http://127.0.0.1:4191'
@@ -243,6 +244,7 @@ async function createClient(browser, name, element) {
     path: pathname(request.url()), message: clean(request.failure()?.errorText),
   }))
   page.on('websocket', socket => {
+    const checkpointReceiver = new GameSaveCheckpointReceiver()
     socket.on('framereceived', ({ payload }) => {
       if (closing) return
       const bytes = typeof payload === 'string' ? Buffer.byteLength(payload) : payload.length
@@ -254,9 +256,13 @@ async function createClient(browser, name, element) {
         else client.resumeGrace = message.grace !== null
         client.activeSnapshotAt = null
       }
-      if (prefix.includes('"type":"server-save-checkpoint"')) {
+      if (prefix.includes('"type":"server-save-checkpoint')) {
         try {
-          const message = JSON.parse(typeof payload === 'string' ? payload : payload.toString())
+          let message = JSON.parse(typeof payload === 'string' ? payload : payload.toString())
+          if (message.type === 'server-save-checkpoint-chunk') {
+            message = checkpointReceiver.acceptChunk(message)
+            if (!message) return
+          } else checkpointReceiver.acceptComplete(message)
           const save = JSON.parse(message.save)
           const health = checkpointReducerHealth(save)
           const disabled = health.find(row => row.modId === pilotModId && row.key === 'pilot' && row.disabled)

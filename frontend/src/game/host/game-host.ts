@@ -67,6 +67,7 @@ import type { SharedGameWorldsState, SharedPartyRun } from './shared-game-worlds
 import { acceptSharedPartyInvitation, addSharedHubPlayer, confirmSharedPartyLoadout, continueSharedPartyGameOver, createSharedGameWorlds, denySharedPartyInvitation, detachSharedGamePlayer, inviteSharedPartyPlayer, joinSharedPartyPlayer, kickSharedPartyPlayer, leaveSharedParty, rejoinSharedPartyRunPlayer, removeSharedGamePlayer, replaceSharedGameStateForPlayer, restoreSharedGamePlayer, sharedGameStateForPlayer, sharedLoadedBoneyardForPlayer, sharedPartySaveStateForPlayer, startSharedPartyRun, stepSharedGameWorlds } from './shared-game-worlds.ts'
 import type { MaterializedWebSessionContent, WebSessionContentSummary } from './web-mod-content.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
+import { GameSaveCheckpointSender } from '../protocol/game-save-checkpoint-transfer.ts'
 import { monitorWebSocketHeartbeat, resolveGameHeartbeatInterval } from './websocket-heartbeat.ts'
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -291,6 +292,7 @@ interface HostGameplayResumeGrace {
 }
 
 interface HostClient {
+  saveCheckpointSender: GameSaveCheckpointSender
   acknowledgedSequence: number
   acknowledgedSnapshotSequence: number
   activeInput: PlayerCharacterInput
@@ -1630,6 +1632,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const resumeToken = randomBytes(32).toString('base64url')
         if (replacedClient) {
           clients.delete(replacedClient.socket)
+          replacedClient.saveCheckpointSender.close()
           supersededClients.add(replacedClient.socket)
           disconnectCauses.set(replacedClient.socket, {
             reason: 'wizard resumed in another browser',
@@ -1652,6 +1655,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ?? playerReferences.get(playerId)
           ?? createPlayerReference()
         const joinedClient: HostClient = {
+          saveCheckpointSender: new GameSaveCheckpointSender(checkpoint => {
+            if (socket.readyState === WebSocket.OPEN) socket.send(encodeGameMessage(checkpoint))
+          }),
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
@@ -1878,6 +1884,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (restart.pending.delete(socket)) {
           restart.acknowledged.add(socket)
           if (restart.pending.size === 0) restart.resolveReady()
+        }
+        return
+      }
+      if (message.type === 'client-save-checkpoint-chunk-ack') {
+        try { client.saveCheckpointSender.acknowledge(message) }
+        catch (error) {
+          disconnect(socket, 'invalid-message', error instanceof Error ? error.message : 'Invalid checkpoint acknowledgment.')
         }
         return
       }
@@ -3339,6 +3352,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       publishPlayerActivity(client, 'left-game')
       client.socialConnection?.close()
       clients.delete(socket)
+      client.saveCheckpointSender.close()
       saveCheckpointScheduler.cancel(client.playerId)
       collegeIntroReadyPlayerIds.delete(client.playerId)
       const activeDeploymentRestart = deploymentRestart
@@ -4076,12 +4090,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const sequence = previousSequence + 1
     saveSequences.set(client.playerId, sequence)
     saveDocuments.set(client.playerId, document)
-    client.socket.send(encodeGameMessage({
+    // Admission and forced lifecycle saves stay atomic; progress yields to snapshots.
+    client.saveCheckpointSender.publish({
       type: 'server-save-checkpoint',
       save: document,
       reason: terminal ? 'game-over' : 'progress',
       sequence,
-    }))
+    }, force || source === 'connected' ? 'atomic' : 'background')
     return sequence
   }
 

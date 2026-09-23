@@ -177,6 +177,12 @@ export interface ClientSaveBeforeLeaveMessage {
   requestId: number
 }
 
+export interface ClientSaveCheckpointChunkAckMessage {
+  type: 'client-save-checkpoint-chunk-ack'
+  sequence: number
+  nextOffset: number
+}
+
 export interface ClientDeploymentReadyMessage {
   type: 'client-deployment-ready'
   checkpointSequence: number
@@ -307,6 +313,7 @@ export type ClientGameMessage =
   | ClientReadyCollegeIntroMessage
   | ClientResumeGraceReadyMessage
   | ClientSaveBeforeLeaveMessage
+  | ClientSaveCheckpointChunkAckMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
   | ClientStartTutorialMessage

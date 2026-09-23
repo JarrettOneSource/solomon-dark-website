@@ -44,6 +44,8 @@ import { createGameClientDiagnostics } from './game-diagnostics.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 import type { GameTransport, GameTransportClose } from './game-transport.ts'
 import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
+import { GameSaveCheckpointSender, SAVE_CHECKPOINT_STREAM_THRESHOLD } from '../protocol/game-save-checkpoint-transfer.ts'
+import type { ServerSaveCheckpointChunkMessage, ServerSaveCheckpointMessage } from '../protocol/game-server-messages.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -1920,6 +1922,60 @@ test('client requests a keyframe after a replication gap and resumes cleanly', a
   session.destroy()
 })
 
+test('client keeps gameplay and its last complete save live throughout a background transfer', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  receiveWelcome(transport, snapshot)
+  const session = await connecting
+  context.after(() => session.destroy())
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint',
+    save: '{"previous":true}', reason: 'progress', sequence: 1 }))
+  const checkpoints: GameSaveCheckpoint[] = []
+  session.onSaveCheckpoint(checkpoint => checkpoints.push(checkpoint))
+  const initialCount = checkpoints.length
+  const wire: Array<ServerSaveCheckpointMessage | ServerSaveCheckpointChunkMessage> = []
+  const sender = new GameSaveCheckpointSender(message => wire.push(message))
+  const save = JSON.stringify({ continuation: '😀'.repeat(SAVE_CHECKPOINT_STREAM_THRESHOLD) })
+  sender.publish({ type: 'server-save-checkpoint', save, reason: 'progress', sequence: 2 }, 'background')
+  const receiveChunk = () => {
+    transport.receive(encodeGameMessage(wire.shift()!))
+    const ack = decodeClientGameMessage(transport.sent.at(-1)!)
+    assert.equal(ack.type, 'client-save-checkpoint-chunk-ack')
+    if (ack.type === 'client-save-checkpoint-chunk-ack') sender.acknowledge(ack)
+  }
+  receiveChunk()
+  assert.equal(session.getSaveCheckpoint()?.sequence, 1)
+  assert.equal(checkpoints.length, initialCount)
+  transport.receive(encodeGameMessage({ type: 'server-snapshot', acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame({ ...snapshot, tick: snapshot.tick + 5 }, 0, undefined, true),
+    sequence: 2 }))
+  assert.equal(session.getSnapshot().tick, snapshot.tick + 5)
+  while (wire.length) receiveChunk()
+  assert.equal(checkpoints.length, initialCount + 1)
+  assert.equal(session.getSaveCheckpoint()?.document, save)
+  sender.publish({ type: 'server-save-checkpoint', save, reason: 'progress', sequence: 3 }, 'background')
+  receiveChunk()
+  session.destroy()
+  assert.equal(session.getSaveCheckpoint()?.sequence, 2)
+  assert.equal(checkpoints.length, initialCount + 1)
+})
+
+test('client rejects a discontinuous save transfer without publishing a partial document', async () => {
+  const transport = new MemoryTransport()
+  let fatal: GameConnectionFailure | null = null
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport, onFatal: failure => { fatal = failure } })
+  receiveWelcome(transport, createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'))
+  const session = await connecting
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint-chunk', data: 'abc',
+    offset: 1, totalLength: 6, sequence: 1, reason: 'progress' }))
+  assert.ok(fatal)
+  assert.equal(transport.readyState, 'closed')
+  assert.equal(session.getSaveCheckpoint(), null)
+})
+
 test('client acknowledges deployment only after the final save and keeps update close nonfatal', async () => {
   const transport = new MemoryTransport()
   const targetRevision = 'a'.repeat(40)
@@ -1946,6 +2002,8 @@ test('client acknowledges deployment only after the final save and keeps update 
     createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
   )
   await connecting
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint-chunk', data: 'abc',
+    offset: 0, totalLength: 6, reason: 'progress', sequence: 8 }))
   transport.receive(encodeGameMessage({
     type: 'server-save-checkpoint',
     save: '{"checkpoint":"deployment"}',
@@ -1996,6 +2054,8 @@ test('client correlates a forced leave checkpoint and stays connected until stor
     type: 'client-save-before-leave',
     requestId: 1,
   })
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint-chunk', data: 'abc',
+    offset: 0, totalLength: 6, reason: 'progress', sequence: 8 }))
   transport.receive(encodeGameMessage({
     type: 'server-save-checkpoint',
     save: '{"checkpoint":"leave"}',
