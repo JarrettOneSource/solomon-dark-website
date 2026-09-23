@@ -1,5 +1,36 @@
 # Player terminal presentation and Boneyard Game Over reopening — 2026-08-16
 
+## 2026-09-23 — Final campaign acceptance
+
+Runtime `59bf21d5722843a792545f7ee9d65a2d198f3599` passed the exact-tree Mac
+canonical gate, all 24 boss cases, the isolated two-peer Faculty burst, both
+Game Over exits, original/four-style Coffin journeys, and real-supervisor ACK
+recovery. The Air/Ether endurance run entered wave 47 after about 42 minutes,
+with zero client errors and maximum active snapshot gaps of 540.1/690.4 ms.
+Both mean frame rates were approximately 59.4 FPS. Dense effects still produced
+brief 21–22 FPS windows and up to 269 ms frames; three private-pilot deadline
+misses recovered without disabling either reducer. The historical screenshots
+and lag intervals retain the attribution limits recorded below.
+
+| Owning member | Final disposition |
+| --- | --- |
+| Air/Ether party lifecycle, native waves and bosses | Verified through wave 47; complete actor populations retained |
+| Coffins, anchored owners, descendants and independent effects | Verified original continuation and native burst; no population reduction |
+| Mage terminal clocks and painter registration lifetime | Confirmed defect repaired in report 10; both terminal exits reverified |
+| Replication, bounded backlog, recovery and large-effect delivery | Host scheduling/compression repaired; sustained bound and forced ACK recovery verified |
+| Native scale/fade families and old-save migration | Implemented and verified across the entry 301 inventory |
+| Death-view allocation and retirement across 20 kinds/five lanes | Implemented with retained identities/order; complete matrix and browser coverage |
+| Pause-owner release during joining-peer readiness | Implemented; failing session regression and two-browser journey now pass |
+| Native flashes, lighting/context restoration and module recovery | Previously verified contracts retained; no new approximation |
+| Authored decoration (report 12) | Verified native behavior; unchanged |
+| Specific historical lag/white-image attribution | Unresolved evidence, outside an established source repair; no speculative fix or completion reaction |
+
+The code was published by normal fast-forward, with local HEAD, origin/main
+and the remote main ref equal. See [the campaign receipt](../soggy-report-campaign-20260921.md)
+for measured limits and all fifteen report dispositions. The earlier pending
+acceptance statements below describe their historical investigation checkpoints.
+
+
 ## 2026-09-22 — Report 05 integrated multiplayer review
 
 Recorded before acceptance-tool changes, on `87b824c305a396b7d3622e4d23a0d7a79d033e56`.
