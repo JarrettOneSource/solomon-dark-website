@@ -1,5 +1,144 @@
 # 2026-08-27 — enemy target tracking, Archer volley, and NavMesh reopening
 
+## 2026-09-23 — report 17 interleaved static-query investigation
+
+Status: implementation and focused/native-model/browser checks complete; final
+canonical publication gate pending. Historical severe-lag attribution remains unproven.
+Owner: Fleet `79wso1qm`, `/root`. The private report archive remains outside Git.
+
+### Source, reproduction and evidence limits
+
+The report describes a level-5 Fire wizard, roughly ten visible Skeletons, and
+severe lag, with screen capture offered as an unverified alternative cause.
+Its retained ZIP is 910,204 bytes, SHA-256
+`c25a1996016f22a4aafffeeb749ff80c35859ba2be14aba2412822eb70f17392`.
+The embedded schema-39 browser continuation is 881,156 bytes, SHA-256
+`af57c8b577c1b8af62337df6fba67f8de02de3704ab6224fa407dbac223ac929`.
+It actually stores level 6, tick 278718, 24 live Skeletons and three live
+Skeleton Archers across the arena, and 496 circles/18 polygons/20 segments.
+The total population does not establish how many were visible to the reporter.
+
+On unchanged Website `e2ea3ad8d`, an isolated Mac M2/Node 22.17.0 replay of
+300 saved ticks measured 8.10 ms mean, 13.01 ms p95 and 16.01 ms p99 per tick.
+The first cold navigation build took 478.80 ms; that direct stepping probe
+does not establish a mid-game stall because host loading separately prepares
+navigation. Snapshot projection averaged 0.24 ms. Sampled self CPU attributed
+43.02% to `PrimitiveCellGrid.selectCells`; the endpoint attachment/clearance
+call chain owned most inclusive time. Every initial player/enemy endpoint
+was collision-free, falsifying an embedded-root shortcut as this repair.
+
+A separate 50-tick diagnostic counted 79,922 static selections. Only 29,994
+matched the immediately previous rectangle; a simulated 64-entry recent-query
+cache matched 64,575. The former one-entry optimization was measured with
+consecutive point queries, not these interleaved endpoint rectangles. No
+diagnostic instrumentation belongs in production. A longer initial browser
+trial returned to College after death; it is not valid sustained-combat
+acceptance. Fresh independent live scenarios and before/after state hashes
+are required. Neither the reporter's historical severity nor their capture
+software's responsibility is established by the CPU profile.
+
+### Fresh stock recovery
+
+Retail 0.72.5 `SolomonDark.exe` was freshly hashed: 4,723,200 bytes,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`. Ghidra 12.0.3 read the canonical analyzed
+`SolomonDark` project through its leased read-only replica. Mod Loader tools
+were read-only at `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+
+| Evidence | Recovered fact | Implementation consequence |
+| --- | --- | --- |
+| `00524180`, raw `0052445D/0052447B/00524566..00524591` | Region LOS divides by cell widths at `+C8/+CC`, bounds-checks dimensions `+C0/+C4`, and visits `2C`-stride cells from `+B0`. | Candidate lookup is spatial; retain the existing static primitive adapter and its exact narrow phase. |
+| Raw `0052467C`, `005247D1`, `00524BBC`, `00524C8E` | Wide/zero-width queries retain cell/polygon/segment tests, masks, and final exact intersections. | A candidate cache cannot cache a clearance answer or omit later coordinate/radius/mask checks. |
+| `00522F50`, `00523140`, complete instruction bodies | Separate actor grids use `+D8/+DC`, `+E0/+E4`, `+B4`, stride `18`; rectangle queries test roots and circle queries retain strict squared-radius comparison. | Dynamic bodies are a distinct changing owner and are excluded from this static cache. |
+| `00483D40`, `005DDDD0` fresh decompiles | Retained route clocks and NavMesh endpoint selection precede normal collision movement; endpoint lookup has containing/local/fallback branches. | Do not throttle route attempts, alter endpoint selection, or change route clocks to hide expensive lookup. |
+| Complete fresh xrefs to `00524180` | Six sites in `00483D40` (two), `004857B0`, `004896A0`, `006042C0`, `00620B60`. | Preserve shared hostile/NPC/spell line-query behavior, not a Skeleton-only exception. |
+| Complete fresh rectangle/circle xrefs | Rectangle callers `00642090`, `00641500`, `00641340`, `00641B10`, `00642680`; circle caller `00642280`. | Nearby dynamic actor-query membership is recorded but remains unchanged. |
+
+The new memo is a Website representation optimization, not a claim that retail
+uses an LRU cache. Cell size, entry capacity and retention budget are internal
+allocation choices, not recovered gameplay constants. Static instructions are
+the native evidence here; no clean-stock FPS comparison is claimed.
+
+### Boundary, membership and proposed change
+
+System: candidate enumeration for an immutable static-collision view, beneath
+every exact query. Keep the immediate-rectangle fast path; retain at most 64
+recent rectangles with at most 1,024 candidate indices each. Cache owned copies
+of all three ordered arrays, never the grids' reusable scratch buffers. Larger
+selections still execute normally and are not retained. Geometry identity is
+already weakly owned; no cache may retain another world or dynamic Gate pose.
+
+| Member / branch | Current disposition | Required proof |
+| --- | --- | --- |
+| Circles, polygons, segments; point/radius and segment-box queries | exact-ported | Exact candidate indices and family/source order; every exact predicate still executes. |
+| Interleaved rectangles and immediate repeats | exact-ported | Reuse without scratch aliasing, missing indices or duplicate entries. |
+| Empty/single-cell/multi-cell/global oversized primitives | exact-ported | Same candidates and global fallback, including negative/boundary/unsafe coordinates. |
+| Eviction and retention limits | exact-ported | Bounded entries and indices; evicted/oversized queries remain correct. |
+| Gate overlays, replacement worlds, restored worlds, teardown | exact-ported | Live overlays are appended after base lookup; fresh identity has no stale cache. |
+| All 12 generated arenas, Tutorial/mod geometry, saved report scene | exact-ported | Existing all-pairs oracle plus exact saved-state replay and browser scenarios. |
+| Dynamic actors, route results, RNG, ticks, damage, spells, saves/wire | out-of-system: deliberately unchanged | Identical complete simulation hashes and existing behavioral tests. |
+
+No authored geometry or gameplay table changes are proposed. The complete
+primitive inventory comes from each existing collision world; no special seed,
+population threshold or report-specific object list is allowed.
+
+### Measured acceptance before the publication gate
+
+The shared memo retains owned immutable candidate arrays, not coordinates,
+collision answers, enemy routes or Gate poses. The source change is confined
+to `boneyard-collision-broadphase.ts`; its inputs and every gameplay consumer
+are unchanged. Five new focused cases cover interleaving/scratch ownership,
+least-recently-used eviction, the exact total-index budget, huge/unsafe
+coordinate fallback, and changing Gate overlays. The Gate regression initially
+queried the authored two-unit center gap; its corrected leaf-intersection
+fixture preserves that gap rather than changing collision behavior. All 41
+collision/navigation/pathfinding tests pass, including every generated arena's
+existing all-pairs contact/path/movement oracle.
+
+Three alternating baseline/candidate trials each replayed the exact original
+1,000 ticks and compared complete order-sensitive simulation SHA-256 values
+at all 20 checkpoints. Every pair matches, including the natural death boundary.
+Performance samples below exclude the first 50 warm-up ticks and exclude
+non-alive/non-active ticks, leaving the same 873 active ticks per trial:
+
+| Measurement (median across three trials) | Original | Candidate |
+| --- | ---: | ---: |
+| Mean active tick | 6.349 ms | 3.192 ms |
+| Active tick p95 | 12.759 ms | 6.370 ms |
+| Active tick p99 | 13.324 ms | 7.146 ms |
+
+The worst active tick across the three trials was 14.091 versus 9.062 ms.
+These are isolated Mac measurements, not a measurement of the reporter's PC
+or a promise that every game tick stays below 10 ms. Cold navigation setup
+is unchanged. Paired receipt SHA-256:
+`4814059287ffb774340011432dc3e476e30bab3dfd70978278932a51d25e8413`.
+
+The maintained two-player deterministic runtime benchmark then ran 62,500
+ticks on each of generated arenas 0, 1 and 2, before and after. All 375
+checkpoint pairs, final state/ordered-JSON hashes, geometry hashes, population
+sums and wave events match. Peak live enemies are 83/92/90. These ordinary
+workloads are essentially neutral: mean ticks 0.306/0.279/0.275 ms before,
+0.309/0.284/0.276 ms after. The benefit is the reproduced expensive interleaved
+query pattern, not a universal speedup. Benchmark extensions retain their
+existing invulnerability/no-loot behavior identically on both sides; no such
+extension is used in the saved-scene browser acceptance. Arena comparison
+SHA-256: `20e1eb3e70dc68836815fb2cc764c1afebc0bfa693b47ad34304b3507b5beba6`.
+
+Production-client Mac Chrome 153 independently restores the original saved
+world for idle, held Fireball and movement. Each three-second sample requires
+active Boneyard gameplay, a living player, unblocked input and over 200
+presented ticks; casting commits five real shots and movement changes the
+actual player root by over 300 units. Candidate samples remain near 60 FPS,
+with maximum received-snapshot gaps 61.3–64.8 ms and empty page/console/wire/
+HTTP/host error arrays. The original also remained near 60 FPS. The candidate
+combat frame was visually inspected. No historical capture-state explanation
+or severe visible-freeze reproduction is claimed.
+
+Final exact-tree canonical validation, publication, reaction and cleanup
+receipts are written to the existing private report archive after they succeed.
+Task-local raw profiles, native logs and screenshots remain disposable.
+
 ## 2026-09-04 — repeated static collision candidate selection
 
 The optimization starts at Website `3c5e76d6`. A Mac M2 CPU profile of the

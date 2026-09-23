@@ -834,6 +834,115 @@ test('long-lived static grids retain candidates after deduplication counter roll
   assert.deepEqual(index.selectBounds(-127, -127, 127, 127).circleIndices, [0])
 })
 
+test('interleaved static selections reuse owned arrays without mutating retained candidates', () => {
+  const index = new BoneyardCollisionBroadphase({
+    circles: [
+      { center: { x: 0, y: 0 }, radius: 20 },
+      { center: { x: 512, y: 512 }, radius: 20 },
+    ],
+    polygons: [{ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }] }],
+    segments: [{ start: { x: 0, y: 0 }, end: { x: 15, y: 15 }, radius: 0 }],
+  })
+  const first = { ...index.selectBounds(-127, -127, 127, 127) }
+  assert.deepEqual(first, { circleIndices: [0], polygonIndices: [0], segmentIndices: [0] })
+  assert.deepEqual(index.selectBounds(384, 384, 639, 639), {
+    circleIndices: [1], polygonIndices: [], segmentIndices: [],
+  })
+  const epoch = Reflect.get(Reflect.get(index, 'circles'), 'epoch')
+  const revisited = index.selectBounds(-126, -126, 126, 126)
+  assert.equal(Reflect.get(Reflect.get(index, 'circles'), 'epoch'), epoch,
+    'revisiting a retained rectangle must not enumerate the grid again')
+  assert.strictEqual(revisited.circleIndices, first.circleIndices)
+  assert.strictEqual(revisited.polygonIndices, first.polygonIndices)
+  assert.strictEqual(revisited.segmentIndices, first.segmentIndices)
+  assert.ok(Object.isFrozen(first.circleIndices))
+  assert.deepEqual(first, { circleIndices: [0], polygonIndices: [0], segmentIndices: [0] })
+})
+
+test('recent static selections are bounded, least-recently used, and correct after eviction', () => {
+  const index = new BoneyardCollisionBroadphase({
+    circles: [{ center: { x: 0, y: 0 }, radius: 1_000_000 }],
+    polygons: [], segments: [],
+  })
+  const query = (cell: number) => index.selectBounds(cell * 128, 0, cell * 128 + 1, 1)
+  for (let cell = 0; cell < 64; cell += 1) assert.deepEqual(query(cell).circleIndices, [0])
+  const cache = Reflect.get(index, 'recentSelections') as Map<string, unknown>
+  assert.equal(cache.size, 64)
+  const firstEpoch = Reflect.get(Reflect.get(index, 'circles'), 'epoch')
+  query(0)
+  assert.equal(Reflect.get(Reflect.get(index, 'circles'), 'epoch'), firstEpoch)
+  query(64)
+  assert.equal(cache.size, 64)
+  const newEpoch = Reflect.get(Reflect.get(index, 'circles'), 'epoch')
+  query(0)
+  assert.equal(Reflect.get(Reflect.get(index, 'circles'), 'epoch'), newEpoch)
+  assert.deepEqual(query(1).circleIndices, [0])
+  assert.equal(Reflect.get(Reflect.get(index, 'circles'), 'epoch'), newEpoch + 1)
+  for (let cell = 65; cell < 300; cell += 1) assert.deepEqual(query(cell).circleIndices, [0])
+  assert.equal(cache.size, 64)
+})
+
+test('oversized candidate selections bypass retention without omitting or reordering primitives', () => {
+  const circles = Array.from({ length: 1025 }, (_, id) => ({
+    center: { x: id % 20, y: Math.floor(id / 20) }, radius: 1,
+  }))
+  const index = new BoneyardCollisionBroadphase({ circles, polygons: [], segments: [] })
+  const expected = circles.map((_, id) => id)
+  assert.deepEqual(index.selectBounds(-1, -1, 127, 127).circleIndices, expected)
+  const cache = Reflect.get(index, 'recentSelections') as Map<string, unknown>
+  assert.equal(cache.size, 0)
+  assert.deepEqual(index.selectBounds(256, 256, 383, 383).circleIndices, [])
+  assert.equal(cache.size, 1)
+  assert.deepEqual(index.selectBounds(-1, -1, 127, 127).circleIndices, expected)
+  assert.equal(cache.size, 1)
+})
+
+test('the exact retention boundary includes all families and preserves widely separated geometry', () => {
+  const circles = Array.from({ length: 1022 }, () => ({ center: { x: 0, y: 0 }, radius: 1 }))
+  const index = new BoneyardCollisionBroadphase({
+    circles,
+    polygons: [{ points: [{ x: -1, y: -1 }, { x: 1, y: -1 }, { x: 0, y: 1 }] }],
+    segments: [{ start: { x: -1, y: 0 }, end: { x: 1, y: 0 }, radius: 0 }],
+  })
+  index.selectBounds(-127, -127, 127, 127)
+  const cache = Reflect.get(index, 'recentSelections') as Map<string, unknown>
+  assert.equal(cache.size, 1, '1024 indices are retained; only larger selections bypass')
+  const far = new BoneyardCollisionBroadphase({
+    circles: [
+      { center: { x: -1e12, y: 0 }, radius: 1 },
+      { center: { x: 1e12, y: 0 }, radius: 1 },
+      { center: { x: 1e20, y: 0 }, radius: 1 },
+    ], polygons: [], segments: [],
+  })
+  for (let repeat = 0; repeat < 3; repeat += 1) {
+    assert.deepEqual(far.selectBounds(-1e13, -1, 0, 1).circleIndices, [0, 2])
+    assert.deepEqual(far.selectBounds(0, -1, 1e13, 1).circleIndices, [1, 2])
+    assert.deepEqual(far.selectBounds(-1e13, -1, 1e13, 1).circleIndices, [0, 1, 2])
+  }
+})
+
+test('retained base queries never retain a moving Gate pose', () => {
+  const scene = makeScene()
+  scene.fences = [{
+    eid: 'moving-gate', typeId: 3005, segmentCode: 2,
+    points: [{ x: 200, y: 200 }, { x: 200, y: 400 }],
+  }]
+  const base = createBoneyardCollisionWorld(scene)
+  const leaves = createBoneyardGateLeaves(scene.fences, 'cache-gate')
+  const closed = withBoneyardGateCollision(base, leaves)
+  const open = withBoneyardGateCollision(base, leaves.map(leaf => ({
+    ...leaf, tip: { x: leaf.hinge.x + 100, y: leaf.hinge.y },
+  })))
+  for (let repeat = 0; repeat < 3; repeat += 1) {
+    assert.notEqual(firstBoneyardPathBlockProgress(
+      { x: 100, y: 275 }, { x: 250, y: 275 }, scene.bounds, closed, 1,
+    ), null)
+    assert.equal(firstBoneyardPathBlockProgress(
+      { x: 100, y: 275 }, { x: 250, y: 275 }, scene.bounds, open, 1,
+    ), null)
+  }
+})
+
 function makeScene(): BoneyardScene {
   return {
     name: 'collision-test',

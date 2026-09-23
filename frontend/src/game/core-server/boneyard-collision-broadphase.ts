@@ -25,6 +25,8 @@ interface PrimitiveCell {
 
 const COLLISION_BROADPHASE_CELL_SIZE = 128
 const MAXIMUM_INDEXED_CELLS_PER_PRIMITIVE = 4_096
+const MAXIMUM_RECENT_SELECTIONS = 64
+const MAXIMUM_RETAINED_SELECTION_INDICES = 1_024
 const EMPTY_INDICES: readonly number[] = Object.freeze([])
 
 /**
@@ -41,6 +43,7 @@ export class BoneyardCollisionBroadphase {
     polygonIndices: EMPTY_INDICES,
     segmentIndices: EMPTY_INDICES,
   }
+  private readonly recentSelections = new Map<string, CollisionBroadphaseSelection>()
 
   private hasSelection = false
   private minimumCellX = 0
@@ -80,21 +83,49 @@ export class BoneyardCollisionBroadphase {
       && maximumCellX === this.maximumCellX
       && maximumCellY === this.maximumCellY
     ) return this.selection
-    this.selection.circleIndices = this.circles.selectCells(
-      minimumCellX, minimumCellY, maximumCellX, maximumCellY,
-    )
-    this.selection.polygonIndices = this.polygons.selectCells(
-      minimumCellX, minimumCellY, maximumCellX, maximumCellY,
-    )
-    this.selection.segmentIndices = this.segments.selectCells(
-      minimumCellX, minimumCellY, maximumCellX, maximumCellY,
-    )
+    const key = `${minimumCellX}:${minimumCellY}:${maximumCellX}:${maximumCellY}`
+    const retained = this.recentSelections.get(key)
+    if (retained) {
+      this.recentSelections.delete(key)
+      this.recentSelections.set(key, retained)
+      Object.assign(this.selection, retained)
+    } else {
+      this.selection.circleIndices = this.circles.selectCells(
+        minimumCellX, minimumCellY, maximumCellX, maximumCellY,
+      )
+      this.selection.polygonIndices = this.polygons.selectCells(
+        minimumCellX, minimumCellY, maximumCellX, maximumCellY,
+      )
+      this.selection.segmentIndices = this.segments.selectCells(
+        minimumCellX, minimumCellY, maximumCellX, maximumCellY,
+      )
+      this.retainSelection(key)
+    }
     this.minimumCellX = minimumCellX
     this.minimumCellY = minimumCellY
     this.maximumCellX = maximumCellX
     this.maximumCellY = maximumCellY
     this.hasSelection = true
     return this.selection
+  }
+
+  private retainSelection(key: string): void {
+    const { circleIndices, polygonIndices, segmentIndices } = this.selection
+    if (circleIndices.length + polygonIndices.length + segmentIndices.length
+      > MAXIMUM_RETAINED_SELECTION_INDICES) return
+
+    // Multi-cell results point into each grid's scratch buffer. Retain owned
+    // arrays, not a buffer the next query rewrites. Gate poses are not indexed.
+    const retained = Object.freeze({
+      circleIndices: Object.freeze([...circleIndices]),
+      polygonIndices: Object.freeze([...polygonIndices]),
+      segmentIndices: Object.freeze([...segmentIndices]),
+    })
+    if (this.recentSelections.size === MAXIMUM_RECENT_SELECTIONS) {
+      this.recentSelections.delete(this.recentSelections.keys().next().value!)
+    }
+    this.recentSelections.set(key, retained)
+    Object.assign(this.selection, retained)
   }
 }
 
