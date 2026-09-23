@@ -4980,6 +4980,12 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   })
   assert.ok(firstReady)
   assert.equal(firstReady.run.phase, 'loadout')
+  assert.equal(getPlayerCharacter(firstReady, 'first').config.displayName, 'First Reborn')
+  assert.equal(getPlayerCharacter(firstReady, 'second').config.displayName,
+    getPlayerCharacter(loadout, 'second').config.displayName)
+  assert.equal(confirmGameSimulationLoadout(firstReady, 'first', {
+    discipline: 'arcane', displayName: 'TooLate', element: 'fire',
+  }), null, 'a confirmed peer cannot revise its submitted name while waiting')
   const hub = confirmGameSimulationLoadout(firstReady, 'second', {
     discipline: 'mind',
     displayName: 'Second Reborn',
@@ -4987,6 +4993,8 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   })
   assert.ok(hub)
   assert.equal(hub.run.phase, 'hub')
+  assert.equal(getPlayerCharacter(hub, 'first').config.displayName, 'First Reborn')
+  assert.equal(getPlayerCharacter(hub, 'second').config.displayName, 'Second Reborn')
   assert.equal(getPlayerCharacter(hub, 'first').config.element, 'air')
   assert.equal(getPlayerCharacter(hub, 'first').config.discipline, 'body')
   assert.equal(getPlayerCharacter(hub, 'second').config.element, 'water')
@@ -5646,5 +5654,33 @@ function inertModExtensions(contentId: string): GameSimulationExtensions {
     filterDamage: input => input.amount,
     filterMana: input => input.delta,
     hasConsumable: candidate => candidate === contentId,
+  }
+}
+
+
+for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
+  for (const discipline of ['arcane', 'body', 'mind'] as const) {
+    test(`all native loadouts commit an independent next-wizard name: ${element}/${discipline}`, () => {
+      const source = createGameSimulation({ owner: {
+        discipline: 'arcane', displayName: 'PreviousMage', element: 'fire',
+      } })
+      const loadout = {
+        ...source,
+        run: { ...source.run, eligiblePlayerIds: ['owner'], phase: 'loadout' as const },
+      }
+      const confirmed = confirmGameSimulationLoadout(loadout, 'owner', {
+        discipline, displayName: 'NextMage', element,
+      })
+      assert.ok(confirmed)
+      assert.deepEqual(getPlayerCharacter(confirmed, 'owner').config, {
+        discipline, displayName: 'NextMage', element,
+      })
+      assert.equal(getPlayerCharacter(loadout, 'owner').config.displayName, 'PreviousMage')
+      const snapshot = createGameSnapshot(confirmed, 'owner')
+      assert.equal(gameSnapshot(snapshot).players.owner!.config.displayName, 'NextMage')
+      assert.equal(confirmGameSimulationLoadout(confirmed, 'owner', {
+        discipline, displayName: 'TooLate', element,
+      }), null, 'a completed Create is not an in-game rename action')
+    })
   }
 }

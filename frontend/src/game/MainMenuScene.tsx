@@ -2086,7 +2086,6 @@ function MainMenuContent({
             backDisabled={collegeLoadoutActive}
             displayName={wizardName}
             onBack={() => { void leaveCreate() }}
-            onDisplayNameChange={setWizardName}
             onDisciplineCommit={beginHubLoading}
             onStart={startHub}
             retainedLoadoutCanConfirm={runtimeRunPhase === 'loadout' && Boolean(

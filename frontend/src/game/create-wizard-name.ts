@@ -27,6 +27,8 @@ export const CREATE_WIZARD_NAME_VALUE_BOUNDS = Object.freeze({
 })
 
 const CREATE_WIZARD_NAME_DEFAULT = 'Helvidius'
+// CreateWizardMenu::Update, 0058A8FF: the empty final TextBox uses this literal.
+export const NATIVE_EMPTY_WIZARD_NAME = 'Genericus'
 const CREATE_WIZARD_NAME_TEXT_TOP = 19
 
 export function initialCreateWizardName(value: string): string {
@@ -87,6 +89,10 @@ export function validateCreateWizardName(value: string): CreateWizardNameValidat
     }
   }
   return { ok: true, value }
+}
+
+export function finalizeCreateWizardName(value: string): CreateWizardNameValidation {
+  return validateCreateWizardName(value.length === 0 ? NATIVE_EMPTY_WIZARD_NAME : value)
 }
 
 export function measureCreateWizardName(value: string): number {

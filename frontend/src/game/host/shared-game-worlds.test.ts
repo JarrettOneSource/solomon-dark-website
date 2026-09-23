@@ -489,17 +489,29 @@ test('post-run confirmation merges the progressed party back into the shared Hub
 
   const firstReady = confirmSharedPartyLoadout(worlds, 'player-a', {
     discipline: 'body',
+    displayName: 'AureliaNew',
     element: 'air',
   })
   assert.equal(firstReady.accepted, true)
   assert.equal(firstReady.state.runs.length, 1)
+  assert.equal(playerCharacterAt(firstReady.state.runs[0]!.state.playerEntities,
+    'player-a')!.config.displayName, 'AureliaNew')
+  assert.equal(playerCharacterAt(firstReady.state.runs[0]!.state.playerEntities,
+    'player-b')!.config.displayName, 'Basil')
+  assert.equal(confirmSharedPartyLoadout(firstReady.state, 'player-a', {
+    discipline: 'body', displayName: 'TooLate', element: 'air',
+  }).accepted, false)
   const returned = confirmSharedPartyLoadout(firstReady.state, 'player-b', {
     discipline: 'mind',
+    displayName: 'BasilNew',
     element: 'water',
   })
   assert.equal(returned.accepted, true)
   worlds = returned.state
   assert.equal(worlds.runs.length, 0)
+  assert.equal(playerCharacterAt(worlds.hub.playerEntities, 'player-a')!.config.displayName, 'AureliaNew')
+  assert.equal(playerCharacterAt(worlds.hub.playerEntities, 'player-b')!.config.displayName, 'BasilNew')
+  assert.equal(playerCharacterAt(worlds.hub.playerEntities, 'player-c')!.config.displayName, 'Cassia')
   assert.deepEqual(
     new Set(worlds.hub.playerEntities.identities.map(({ playerId }) => playerId)),
     new Set(['player-a', 'player-b', 'player-c']),
@@ -527,6 +539,7 @@ test('post-run confirmation merges the progressed party back into the shared Hub
   worlds = stepSharedGameWorlds(worlds, {})
   const waiting = confirmSharedPartyLoadout(worlds, 'player-a', {
     discipline: 'arcane',
+    displayName: 'AureliaAgain',
     element: 'ether',
   })
   assert.equal(waiting.accepted, true)

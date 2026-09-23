@@ -1,5 +1,122 @@
 # 2026-08-20 — Create-wizard name field ownership and editing
 
+## 2026-09-23 — Report 18: new-wizard draft after a completed run
+
+Status: stock recovery, implementation and focused browser acceptance complete;
+canonical publication gate pending. Fleet
+`u9g3q8ic`, `/root`. This reopening supersedes the earlier assumption below
+that a connected loadout cannot accept a name because no message exists.
+Current `client-confirm-loadout` already carries `displayName`, and both the
+private and shared host paths commit it through the validated loadout owner.
+The UI still treats every retained connection as a reason to lock the input,
+clear and reroll. That is a stale lifecycle assumption, not a browser limit.
+The report's account-login correlation remains unverified.
+
+The system boundary is the Create wizard-name draft: fresh entry, College
+admission, post-run creation, editable/committing/peer-wait states, and the
+authoritative next-wizard commit. It includes input, native bitmap display,
+clear/reroll, five elements, three disciplines, failure/retry, subsequent
+creation, replication and save restoration. Account/profile identity and
+arbitrary in-combat renaming are outside that boundary and must not change.
+
+Fresh retail 0.72.5 image identity: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. The existing Ghidra 12.0.3 replica wrapper runs read-only;
+no Mod Loader source is changed. Recovered Create builder `00593C30` registers
+the TextBox at `+027C`, its heading font and measured-width gate, and initializes
+one name from the complete 273-row `data/magenames.txt` table. Input
+`004337E0` handles Backspace, character conversion, the font-glyph gate and
+measured-width rejection; clear `004322B0` empties the TextBox. Construction
+and finalization callers were traced through the following instruction edges.
+
+At `0058A8B3` the Create update takes `this + 027C`, reads its TextBox string
+with `0042DDA0`, and copies it into the temporary name at `00B3BD04`. After
+`005D0290` initializes the next wizard, `0058A972..0058A983` copies that
+same draft into Game `+1C90`. There is no account-name write at this boundary.
+The complete constructor xref census has two callers: class factory `00504AD0`
+and Create-entry owner `005D07D0`. The latter allocates a new `0x604` Create
+object at `005D087D`; the ordinary next-wizard path therefore owns an editable
+TextBox rather than an immutable name belonging to the expired wizard.
+`005CFA80` has two callers: ordinary startup `005D0290` and test-run startup
+`005D2380`. The test-run branch does not change the Create input contract.
+
+Pristine-main `8C44A7F8` was reproduced in real Mac Chrome 153.0.8010.53.
+Fresh creation accepted `FirstMage` in both anonymous and fixture-signed-in
+contexts. After actual Boneyard death and Game Over dismissal, both returned
+to a retained Create whose input was `readOnly:true`; select-all plus actual
+typing left `FirstMage` unchanged. Page, console, HTTP and host errors were
+empty. This establishes a run-lifecycle cause in both account states, not an
+authentication restriction. The same browser also reported the global site's
+selection color `rgb(23,18,8)` and gold selection background, explaining the
+duplicate small DOM text visible over the native name in the report image.
+
+Implementation consequence: the mounted Create scene owns one local TextBox
+draft seeded from the committed retained name or the fresh-entry seed. Only
+finalization or an already-confirmed waiting player locks editing. The same
+gate owns typing, clear and the explicitly web-only reroll. Existing
+`client-confirm-loadout` remains the only connected commit. No packet or
+server validation is relaxed, no live-run rename is added, and only this
+semantic input's selected DOM text is hidden behind the native glyph view.
+
+The final branch sweep found one additional extractable mismatch in this same
+editor: stock `0058A8E2..0058A90E` accepts an empty TextBox and installs the
+literal `Genericus` from VA `00797C34` (retail file offset `00396834`). The
+previous browser disabled discipline commit for an empty draft. The committed
+name resolver now supplies the exact stock default while leaving an empty
+editing display empty and retaining every ordinary glyph/width check. This is
+not the separate `Helvidius` sanitization fallback for a web account seed.
+The selected valid name is captured when discipline finalization begins; an
+asynchronous callback never rereads an editable or newly replicated draft.
+
+### Membership dispositions and focused acceptance
+
+| Member | Disposition | Verified contract |
+| --- | --- | --- |
+| Fresh anonymous/signed-in creation | `exact-ported` draft ownership | Real input changes initial hello/config to FirstMage; fixture account username stays separate. |
+| College admission | `verified-already-at-parity` | Existing admission regression commits Reborn and preserves the incoming transition; the same scene draft is passed to the unchanged confirmation handler. |
+| Post-run private creation | `exact-ported` | Actual damage, death and Game Over return to editable Create in both account states; NextMage2 commits once through client-confirm-loadout. |
+| Shared-party confirmation and merge | `verified-already-at-parity` | Updated shared-world regression checks each new name, unaffected bystander Cassia, peer waiting, second confirmation rejection, Hub merge and disconnect continuation. |
+| Finalization and already-ready peer | `exact-ported` transaction ownership | Captured name is immutable during finalization; a second real browser proves ready-player typing/clear/reroll locked while its unready peer remains editable. |
+| Snapshot refresh and subsequent Create | `exact-ported` | Host updates cannot overwrite the local draft; a later actual run/death/Create seeds the previously committed NextMage2. |
+| 42 heading glyphs, 132 kern pairs, 273 random names, 372-pixel width | `verified-already-at-parity` | Complete existing data membership tests; actual input rejects the twelfth A and unsupported hyphen, without promoting invalid values. |
+| Empty commit | `exact-ported` | Static literal Genericus at 00797C34, dedicated positive/negative tests, and real private/multiplayer empty-name confirmations preserve nonempty wire validation. |
+| Input/clear eligibility and selected DOM layer | `exact-ported` | Clear works before commit; local scoped transparent selection leaves native glyphs as sole visual text owner. No global input style changed. |
+| All five elements by three disciplines | `verified-already-at-parity` | Fifteen new authoritative cases check exact config name, snapshot decoding, unchanged source and rejected later rename. |
+| Local save, cloud save and account separation | `verified-already-at-parity` | Each browser's actual selected store round-trips NextMage2; account fixture API receives no rename request; peer config stays independent. |
+| Account/retained-name seeding and below-name reroll | `out-of-system` as pre-existing web conveniences | These are not stock Dark Cloud authentication or the native top-corner dice. Their existing data/source choices remain, with corrected editor eligibility. |
+| Connection retry transport, mid-run renaming and unrelated inputs | `out-of-system` | No new network action, retry mechanism or global style mutation. A failed onStart still releases the existing pending state without replacing the local draft. |
+| Class factory and test-run startup callers | `out-of-system` | The complete ctor/finalizer xrefs are recorded above; these are alternate creation infrastructure, not additional editable-name restrictions. |
+
+All 114 focused simulation/shared-world/name tests pass on Mac. The built
+Chrome journey covers anonymous and fixture-signed-in UI states, local and
+cloud save adapters, a real second client, initial and repeated creation,
+clear/reroll, both selection phases, snapshot stability, frozen submission,
+peer waiting and Genericus. Page/console/HTTP/host/unexpected-API arrays are
+empty. Browser data fixtures are confined to local HTTP handlers; no real
+account was logged into or modified, and no production save was written.
+
+The initial candidate test incorrectly attempted to read IndexedDB for a
+signed-in session, which correctly uses the cloud save adapter. That harness
+wait was stopped, the actual store selection was inspected, and the maintained
+journey now polls the proper store with a bounded local read. No production
+save code changed. The initial baseline New Game locator also needed
+case-insensitive accessible-name matching. Neither setup failure was a game
+regression or a waived acceptance assertion.
+
+The final source still requires the complete canonical Mac gate and a fresh
+production-client journey before publication, reaction and cleanup. No new
+platform-limited member or native asset approximation was introduced. Fresh
+stock claims in this reopening are instruction/static-data derived; no new
+clean-stock runtime recording is claimed.
+
+## Historical August implementation and receipts
+
+The following entries preserve prior investigation history. Their assertion
+that retained Create must be read-only because no authoritative message exists
+is superseded by the September 23 recovery and implementation above. There is
+still no arbitrary mid-run rename API; that fact does not prohibit a new
+wizard's name in the existing loadout-confirmation transaction.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the loadout screen paints a fixed `HELVIDIUS` sprite

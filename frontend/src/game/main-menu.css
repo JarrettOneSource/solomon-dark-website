@@ -371,6 +371,12 @@
   outline-offset: 0.125cqw;
 }
 
+/* Pixi owns the visible native glyphs, including while HTML owns selection. */
+.create-menu-name-input::selection {
+  color: transparent;
+  background: transparent;
+}
+
 .create-menu-name-clear,
 .create-menu-name-randomize {
   position: absolute;

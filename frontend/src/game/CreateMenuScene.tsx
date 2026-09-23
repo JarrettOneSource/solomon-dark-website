@@ -14,6 +14,7 @@ import type {
 } from './core-kernels/player-character.ts'
 import {
   CREATE_WIZARD_NAME_MAX_LENGTH,
+  finalizeCreateWizardName,
   randomStockWizardName,
   validateCreateWizardName,
 } from './create-wizard-name.ts'
@@ -47,7 +48,6 @@ interface CreateMenuSceneProps {
   backDisabled?: boolean
   displayName: string
   onBack: () => void
-  onDisplayNameChange: (displayName: string) => void
   onDisciplineCommit: () => void
   onStart: (
     displayName: string,
@@ -76,7 +76,6 @@ export default function CreateMenuScene({
   backDisabled = false,
   displayName,
   onBack,
-  onDisplayNameChange,
   onDisciplineCommit,
   onStart,
   retainedLoadoutCanConfirm = false,
@@ -88,7 +87,11 @@ export default function CreateMenuScene({
   const nameInputRef = useRef<HTMLInputElement>(null)
   const rendererRef = useRef<CreateMenuRenderer | null>(null)
   const onStartRef = useRef(onStart)
-  const activeDisplayNameRef = useRef(retainedLoadout?.displayName ?? displayName)
+  // A retained connection does not make the next wizard's name immutable.
+  // Keep the draft with this Create instance, not with incoming snapshots.
+  const [nameDraft, setNameDraft] = useState(() => retainedLoadout?.displayName ?? displayName)
+  const activeDisplayNameRef = useRef(nameDraft)
+  const pendingDisplayNameRef = useRef(nameDraft)
   const selectedElementRef = useRef<WizardElement | null>(null)
   const hoveredActionRef = useRef<CreateMenuAction | null>(retainedLoadout?.element ?? null)
   const phaseStartedAtRef = useRef(0)
@@ -105,7 +108,12 @@ export default function CreateMenuScene({
   const [nameValidationMessage, setNameValidationMessage] = useState<string | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
   onStartRef.current = onStart
-  activeDisplayNameRef.current = retainedLoadout?.displayName ?? displayName
+  const nameLocked = pendingDiscipline !== null
+    || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
+  const activeDisplayName = retainedLoadout && !retainedLoadoutCanConfirm
+    ? retainedLoadout.displayName
+    : nameDraft
+  activeDisplayNameRef.current = activeDisplayName
   viewportRef.current = viewport
 
   useEffect(() => rendererRef.current?.resize(viewport), [viewport])
@@ -224,7 +232,7 @@ export default function CreateMenuScene({
       }
       audio.playStream('catch-it')
       void onStartRef.current(
-        activeDisplayNameRef.current,
+        pendingDisplayNameRef.current,
         selectedElement,
         pendingDiscipline,
       ).then((started) => {
@@ -253,13 +261,15 @@ export default function CreateMenuScene({
   }
 
   const selectDiscipline = (discipline: WizardDiscipline) => {
-    if (!validateCreateWizardName(activeDisplayNameRef.current).ok) return
+    const name = finalizeCreateWizardName(activeDisplayNameRef.current)
+    if (!name.ok) return
     if (
       !selectedElementRef.current
       || pendingDiscipline
       || !disciplinesVisible
       || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
     ) return
+    pendingDisplayNameRef.current = name.value
     audio.playSound('pick-skill')
     onDisciplineCommit()
     setPendingDiscipline(discipline)
@@ -286,14 +296,13 @@ export default function CreateMenuScene({
     viewport,
     fixedGameStageBounds(viewport, 'center', 'bottom'),
   )
-  const activeDisplayName = retainedLoadout?.displayName ?? displayName
-  const nameValidation = validateCreateWizardName(activeDisplayName)
+  const nameValidation = finalizeCreateWizardName(activeDisplayName)
 
   const updateDisplayName = (nextName: string) => {
-    if (retainedLoadout) return
+    if (nameLocked) return
     if (nextName.length === 0) {
-      onDisplayNameChange('')
-      setNameValidationMessage('Enter a wizard name.')
+      setNameDraft('')
+      setNameValidationMessage(null)
       return
     }
     const validation = validateCreateWizardName(nextName)
@@ -302,22 +311,22 @@ export default function CreateMenuScene({
       return
     }
     setNameValidationMessage(null)
-    onDisplayNameChange(validation.value)
+    setNameDraft(validation.value)
   }
 
   const clearWizardName = () => {
-    if (retainedLoadout || pendingDiscipline) return
+    if (nameLocked) return
     audio.playSound('click')
-    onDisplayNameChange('')
-    setNameValidationMessage('Enter a wizard name.')
+    setNameDraft('')
+    setNameValidationMessage(null)
     nameInputRef.current?.focus({ preventScroll: true })
   }
 
   const randomizeWizardName = () => {
-    if (retainedLoadout || pendingDiscipline) return
+    if (nameLocked) return
     audio.playSound('click')
     setNameValidationMessage(null)
-    onDisplayNameChange(randomStockWizardName())
+    setNameDraft(randomStockWizardName())
     nameInputRef.current?.focus({ preventScroll: true })
   }
 
@@ -370,7 +379,7 @@ export default function CreateMenuScene({
           maxLength={CREATE_WIZARD_NAME_MAX_LENGTH}
           onChange={(event) => updateDisplayName(event.target.value)}
           ref={nameInputRef}
-          readOnly={Boolean(retainedLoadout)}
+          readOnly={nameLocked}
           spellCheck={false}
           type="text"
           value={activeDisplayName}
@@ -380,7 +389,7 @@ export default function CreateMenuScene({
           aria-label="Clear wizard name"
           className="create-menu-name-clear"
           data-game-name-clear="true"
-          disabled={Boolean(retainedLoadout) || pendingDiscipline !== null}
+          disabled={nameLocked}
           onClick={clearWizardName}
           title="Clear wizard name"
         />
@@ -389,7 +398,7 @@ export default function CreateMenuScene({
           aria-label="Randomize wizard name"
           className="create-menu-name-randomize"
           data-game-name-randomize="true"
-          disabled={Boolean(retainedLoadout) || pendingDiscipline !== null}
+          disabled={nameLocked}
           onClick={randomizeWizardName}
           title="Randomize wizard name"
         />

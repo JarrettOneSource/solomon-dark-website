@@ -6,6 +6,8 @@ import {
   CREATE_WIZARD_NAME_MAX_WIDTH,
   CREATE_WIZARD_NAME_VALUE_BOUNDS,
   STOCK_WIZARD_NAMES,
+  NATIVE_EMPTY_WIZARD_NAME,
+  finalizeCreateWizardName,
   initialCreateWizardName,
   initialCreateWizardNameForSession,
   layoutCreateWizardName,
@@ -60,6 +62,16 @@ test('wizard-name input uses the native measured-width boundary', () => {
   })
   assert.equal(initialCreateWizardName('A'.repeat(64)), 'A'.repeat(11))
   assert.ok(STOCK_WIZARD_NAMES.every((name) => validateCreateWizardName(name).ok))
+})
+
+test('empty Create commit uses the stock Genericus literal without relaxing other names', () => {
+  assert.equal(NATIVE_EMPTY_WIZARD_NAME, 'Genericus')
+  assert.deepEqual(finalizeCreateWizardName(''), { ok: true, value: 'Genericus' })
+  assert.deepEqual(finalizeCreateWizardName('NextMage'), { ok: true, value: 'NextMage' })
+  for (const value of [' ', 'Bad-Name', 'A'.repeat(12), 'A'.repeat(65)]) {
+    assert.equal(finalizeCreateWizardName(value).ok, false)
+  }
+  assert.equal(validateCreateWizardName('').ok, false, 'the editing/glyph validator remains strict')
 })
 
 test('stock wizard-name membership is complete and random selection is bounded', () => {

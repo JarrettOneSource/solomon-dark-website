@@ -1,5 +1,17 @@
 # 2026-08-20 — Multiplayer world nameplates and health bars
 
+## September 23, 2026 correction — retained Create names
+
+The historical retained-loadout read-only conclusions below are superseded by
+[report 18's name-editor recovery](108-2026-08-20-create-wizard-name-field-ownership-and-editing.md).
+The existing client-confirm-loadout message already carries a new wizard name;
+private and shared host confirmation, peer merge and save consumers support it.
+Only finalizing or already-confirmed players remain locked. A Create-local
+draft prevents snapshots from replacing edits, while account username remains
+independent. This does not add an arbitrary in-run rename operation and does
+not alter world-nameplate rendering or glyph catalogs.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: multiplayer Website actors render and the fixed ally
