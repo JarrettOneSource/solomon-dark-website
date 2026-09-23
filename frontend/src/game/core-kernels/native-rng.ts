@@ -6,7 +6,7 @@ export interface NativeRngState {
 
 const NATIVE_RNG_MASK = 0x3fffffff
 const NATIVE_RNG_WORD_COUNT = 55
-const NATIVE_FLOAT_DIVISOR = 100_000
+export const NATIVE_FLOAT_DIVISOR = 100_000
 
 export function createNativeRng(seed: number): NativeRngState {
   if (!Number.isSafeInteger(seed)) throw new RangeError('native RNG seed must be a safe integer')

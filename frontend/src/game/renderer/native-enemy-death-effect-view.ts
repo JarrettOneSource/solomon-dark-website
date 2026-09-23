@@ -7,7 +7,7 @@ import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import {
   nativeEnemyDeathEffectIsBanish,
-  nativeEnemyDeathEffectPlan,
+  nativeEnemyDeathEffectVerticalScale,
   nativeEnemyDeathEffectViewResourcePlan,
   nativeEnemyDeathEffectVisualBounds,
 } from './native-enemy-death-effect-presentation.ts'
@@ -162,16 +162,13 @@ class NativeEnemyDeathEffectView {
     this.container.renderable = visible
     if (!visible) return false
     const container = this.ensureResources()
-    const plan = nativeEnemyDeathEffectPlan(effect)
     if (nativeEnemyDeathEffectIsBanish(effect.kind)) {
       this.updateBanish(effect, viewHeight)
     } else {
-      applyLayer(this.effect!, plan.effect, this.textures)
-      if (plan.shadow) {
-        applyLayer(this.shadow!, plan.shadow, this.textures)
-      }
+      applyLayer(this.effect!, effect, this.textures)
+      if (this.shadow) applyLayer(this.shadow, effect, this.textures, true)
     }
-    container.position.set(plan.position.x, plan.position.y)
+    container.position.set(effect.position.x, effect.position.y)
     return true
   }
 
@@ -352,27 +349,28 @@ function positiveModulo(value: number, divisor: number): number {
 
 function applyLayer(
   sprite: Sprite,
-  layer: ReturnType<typeof nativeEnemyDeathEffectPlan>['effect'],
+  effect: BoneyardEnemyDeathEffectSnapshot,
   textures: BoneyardWorldTextures,
+  shadow = false,
 ): void {
-  const record = layer.atlas === 'BadGuys'
+  const record = effect.atlas === 'BadGuys'
     && (
-      layer.entry === 15
-      || layer.entry === 52
-      || layer.entry === 83
-      || (layer.entry >= 377 && layer.entry <= 380)
+      effect.entry === 15
+      || effect.entry === 52
+      || effect.entry === 83
+      || (effect.entry >= 377 && effect.entry <= 380)
     )
-    ? nativeLootSpriteRecord('BadGuys', layer.entry)
-    : nativeEnemySpriteRecord(layer.atlas, layer.entry)
-  sprite.label = `${layer.atlas}:${layer.entry}`
+    ? nativeLootSpriteRecord('BadGuys', effect.entry)
+    : nativeEnemySpriteRecord(effect.atlas, effect.entry)
+  sprite.label = `${effect.atlas}:${effect.entry}`
   sprite.texture = requiredTexture(textures, record.source)
   sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
-  sprite.position.set(layer.offset.x, layer.offset.y)
-  sprite.scale.set(layer.scale.x, layer.scale.y)
-  sprite.rotation = layer.rotationRadians
-  sprite.alpha = layer.alpha
-  sprite.blendMode = layer.blendMode
-  sprite.tint = layer.tint
+  sprite.position.set(0, shadow ? 2 : effect.height)
+  sprite.scale.set(effect.scale, nativeEnemyDeathEffectVerticalScale(effect, shadow))
+  sprite.rotation = effect.rotationRadians
+  sprite.alpha = effect.alpha
+  sprite.blendMode = shadow ? 'normal' : effect.blendMode
+  sprite.tint = shadow ? 0x000000 : effect.tint
 }
 
 function deathEffectArtRecord(

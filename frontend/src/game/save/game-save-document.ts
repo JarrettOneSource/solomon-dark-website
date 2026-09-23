@@ -27,7 +27,8 @@ import { applyNativeHagathaPurchaseRuntime, createNativeHagathaRuntimeState, rem
 import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import { NATIVE_HUB_HELP_ROW_COUNT, NATIVE_HUB_NPC_CATALOG, createNativeHubNpcState, nativeBoastDefinition } from '../core-kernels/native-hub-npc.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
-import { createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from '../core-kernels/native-rng.ts'
+import { NATIVE_FLOAT_DIVISOR, createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from '../core-kernels/native-rng.ts'
+import { NATIVE_BANISH_RING_ALPHA_LOSS, NATIVE_FADE_ALPHA_LOSS, NATIVE_TRAGIC_CONTACT_ALPHA_LOSS } from '../core-server/boneyard-transient-effects.ts'
 import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
 import { nativeSecondaryPainterManagerLane } from '../core-kernels/native-secondary-abilities.ts'
 import { nativeSpiderWaveDefinitions } from '../core-kernels/native-spider-wave-data.ts'
@@ -2271,14 +2272,15 @@ function normalizeWorld(
     enemies: {
       ...enemies,
       featuredBossId,
-      deathEffects: sourceSchemaVersion < 36 ? array(enemies.deathEffects, 'saved enemy death effects').map(value => {
-        const effect = record(value, 'saved enemy death effect')
-        return {
+      deathEffects: sourceSchemaVersion < 39 ? array(enemies.deathEffects, 'saved enemy death effects').flatMap(value => {
+        const effect = normalizeLegacyGrowingEffect(record(value, 'saved enemy death effect'), sourceSchemaVersion)
+        if (effect === null) return []
+        return [{
           ...effect,
           ...(sourceSchemaVersion < 33 ? { scaleY: effect.scale } : {}),
           ...(sourceSchemaVersion < 34 && effect.kind === 'unbind' ? { presentationOwner: 'late-world-overlay', painterRegistration: null } : {}),
-          ...(effect.kind === 'fade-perspective-clipped' ? { presentationOwner: 'background', painterRegistration: null } : {}),
-        }
+          ...(sourceSchemaVersion < 36 && effect.kind === 'fade-perspective-clipped' ? { presentationOwner: 'background', painterRegistration: null } : {}),
+        }]
       }) : enemies.deathEffects,
       demonSkullEncounter: sourceSchemaVersion < 34 ? createNativeDemonSkullEncounter() : normalizeDemonSkullEncounter(enemies.demonSkullEncounter),
       bossNarration: sourceSchemaVersion < 34 ? createNativeBossNarration() : enemies.bossNarration,
@@ -2438,6 +2440,70 @@ function rejectUnexpectedKeys(
 function array(value: unknown, field: string): unknown[] {
   if (!Array.isArray(value)) throw new Error(`${field} is invalid`)
   return value
+}
+
+function normalizeLegacyGrowingEffect(source: Record<string, unknown>, schemaVersion: number): Record<string, unknown> | null {
+  if (source.kind !== 'fade-scale' && source.kind !== 'fade-scale-perspective') return source
+  const scale = finiteNumber(source.scale, 'saved scale-fade X scale')
+  const scaleY = finiteNumber(schemaVersion < 33 ? source.scale : source.scaleY, 'saved scale-fade Y scale')
+  const effect: Record<string, unknown> = { ...source, scale: Math.fround(scale), scaleY: Math.fround(scaleY) }
+  const ring = source.role === 'ultra-banish-ring' || source.role === 'discorporeal-death-ring'
+  const wraith = source.role === 'wraith-dissolve-core'
+  const tragic = source.role === 'tragic-circle-contact'
+  if (!ring && !wraith && !tragic) return effect
+  const lastTick = integerWithin(source.lastStepTick, 'saved scale-fade last tick', -1, Number.MAX_SAFE_INTEGER)
+  const spawnTick = integerWithin(source.spawnTick, 'saved scale-fade birth', 0, Number.MAX_SAFE_INTEGER)
+  const updates = Math.max(0, lastTick - spawnTick + Number(ring))
+  let multiplier = Math.fround(finiteNumber(source.scaleMultiplier, 'saved scale-fade multiplier'))
+  let opacity = ring ? 3 : 2
+  let initialScale = ring ? 2 : 1
+  const loss = ring ? NATIVE_BANISH_RING_ALPHA_LOSS : wraith ? NATIVE_FADE_ALPHA_LOSS : NATIVE_TRAGIC_CONTACT_ALPHA_LOSS
+  if (source.role === 'ultra-banish-ring' && source.alphaLossPerTick === Math.fround(.005)) {
+    // Recover the stored Float(.025) magnitude; never consume or rewind world RNG.
+    const index = Math.round((multiplier - 1.045) / Math.fround(.025) * NATIVE_FLOAT_DIVISOR)
+    const magnitude = Math.fround(Math.fround(index / NATIVE_FLOAT_DIVISOR) * Math.fround(.025))
+    if (index < 0 || index > NATIVE_FLOAT_DIVISOR || Math.fround(1.045 + magnitude) !== multiplier) {
+      throw new Error('saved UltraBanish multiplier is invalid')
+    }
+    multiplier = Math.fround(Math.fround(1.045) + magnitude)
+  }
+  if (wraith) {
+    const position = record(source.position, 'saved Wraith core position')
+    effect.position = { x: Math.fround(finiteNumber(position.x, 'saved Wraith core X') - 1),
+      y: Math.fround(finiteNumber(position.y, 'saved Wraith core Y')) }
+    multiplier = Math.fround(1.02)
+  }
+  if (tragic) {
+    // Even the maximum native birth opacity (.75) has retired by update 16.
+    if (updates >= 16) return null
+    const previousLoss = finiteNumber(source.alphaLossPerTick, 'saved Tragic Circle loss')
+    opacity = finiteNumber(source.opacityTimer, 'saved Tragic Circle opacity')
+    const currentOpacity = opacity
+    for (let step = 0; step < updates; step++) opacity = Math.fround(opacity + previousLoss)
+    let check = opacity
+    for (let step = 0; step < updates; step++) check = Math.fround(check - previousLoss)
+    if (opacity < .5 || opacity > .75 || check !== currentOpacity) throw new Error('saved Tragic Circle opacity is invalid')
+    const previousInitialScale = Math.fround(scale / multiplier ** updates)
+    const index = Math.round(Math.abs(previousInitialScale - 1) / Math.fround(.65) * NATIVE_FLOAT_DIVISOR)
+    const magnitude = Math.fround(index / NATIVE_FLOAT_DIVISOR)
+    const signed = previousInitialScale < 1 ? -magnitude : magnitude
+    if (index < 0 || index > NATIVE_FLOAT_DIVISOR
+      || Math.fround(1 + signed * Math.fround(.65)) !== previousInitialScale) {
+      throw new Error('saved Tragic Circle scale is invalid')
+    }
+    initialScale = Math.fround(1 + magnitude * Math.fround(.65))
+    multiplier = Math.fround(1.1)
+    effect.blendMode = 'add'
+  }
+  let grownScale = initialScale
+  for (let step = 0; step < updates; step++) {
+    opacity = Math.fround(opacity - loss)
+    if (opacity <= 0) return null
+    grownScale = Math.fround(grownScale * multiplier)
+  }
+  return { ...effect, alphaLossPerTick: loss, opacityTimer: opacity,
+    alpha: Math.min(1, opacity) * finiteNumber(source.alphaMultiplier, 'saved scale-fade alpha multiplier'),
+    scale: grownScale, scaleY: grownScale, scaleMultiplier: multiplier }
 }
 
 function finiteNumber(value: unknown, field: string): number {

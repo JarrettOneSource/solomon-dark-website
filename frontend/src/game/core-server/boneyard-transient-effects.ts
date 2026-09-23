@@ -7,6 +7,11 @@ import {
   type BoneyardEnemyProjectileEffect,
 } from './enemies/model.ts'
 
+// Anim_Fade constructor 0x00452E20 and its native caller multipliers.
+export const NATIVE_FADE_ALPHA_LOSS = Math.fround(.1)
+export const NATIVE_BANISH_RING_ALPHA_LOSS = Math.fround(NATIVE_FADE_ALPHA_LOSS * .25)
+export const NATIVE_TRAGIC_CONTACT_ALPHA_LOSS = Math.fround(NATIVE_FADE_ALPHA_LOSS * .5)
+
 interface BoneyardTransientStepResult {
   readonly deathEffects: BoneyardEnemyDeathEffect[]
   readonly nextDeathEffectId: number
@@ -45,12 +50,17 @@ export function stepBoneyardPreWorldEffectBirths(
   tick: number,
   drawUnit: () => number,
 ): BoneyardEnemyDeathEffect[] {
-  return effects.flatMap(effect => {
+  const retained: BoneyardEnemyDeathEffect[] = []
+  for (const effect of effects) {
     if (effect.presentationOwner !== 'pre-world-queue'
-      || effect.spawnTick !== tick || effect.lastStepTick >= tick) return [effect]
+      || effect.spawnTick !== tick || effect.lastStepTick >= tick) {
+      retained.push(effect)
+      continue
+    }
     const stepped = stepDeathEffect(effect, tick, drawUnit, true)
-    return stepped === null ? [] : [stepped]
-  })
+    if (stepped !== null) retained.push(stepped)
+  }
+  return retained
 }
 
 export function stepBornBoneyardBouncer(
@@ -286,7 +296,7 @@ function stepDeathEffect(
       break
     case 'fade-scale-perspective':
     case 'fade-scale':
-      scale *= source.scaleMultiplier
+      scale = Math.fround(Math.fround(scale) * Math.fround(source.scaleMultiplier))
       break
     case 'banish-black':
     case 'banish':
@@ -312,7 +322,9 @@ function stepDeathEffect(
   faded.position = position
   faded.rotationDeg = source.rotationDeg + source.angularVelocityDeg
   faded.scale = scale
-  faded.scaleY = source.kind === 'fade-scale' ? source.scaleY * source.scaleMultiplier : source.scaleY
+  faded.scaleY = source.kind === 'fade-scale' || source.kind === 'fade-scale-perspective'
+    ? Math.fround(Math.fround(source.scaleY) * Math.fround(source.scaleMultiplier))
+    : source.scaleY
   faded.velocity = velocity
   return faded
 }

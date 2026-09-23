@@ -17,7 +17,10 @@ import { createEnemyWork } from './enemies/work.ts'
 import { bindWorldPuppetTargets } from './enemies/registration.ts'
 import { spawnDemonSkullBeamSegments } from './enemies/demon-skull-effects.ts'
 import { createNativeGuidedMissile } from '../core-kernels/native-guided-missile.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
+import { stepBoneyardPreWorldEffectBirths, stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
+import { projectBoneyardEnemyDeathEffect } from '../host/project-boneyard-enemies.ts'
+import { BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION, boneyardEnemyDeathEffectSample } from '../protocol/boneyard-enemy-death-effect-replication.ts'
 import { createNativeSilk } from '../core-kernels/native-silk.ts'
 import { nativePrimaryPolygonTargets } from '../core-kernels/primary-spell-targeting.ts'
 
@@ -261,4 +264,45 @@ test('mega UltraBanish uses background Bouncers with the native long fade and se
   assert.ok(bones[0]!.lifetimeTicks > 1300)
   assert.ok(bones[0]!.bounceVelocity < bones[0]!.verticalVelocity * 3)
   assert.ok(bones[0]!.entry >= 1819 && bones[0]!.entry <= 1822)
+})
+
+test('every Discorporeal and UltraBanish ring uses the inherited quarter-loss through complete wire-safe retirement', () => {
+  const base = spawned()
+  const dying = step(damageBoneyardEnemy(base, { actorId: 1, amount: 20000, sourcePlayerId: null, tick: 0 }).store).store
+  const rings = dying.deathEffects.filter(effect => effect.role === 'discorporeal-death-ring')
+  assert.equal(rings.length, 2)
+  for (const megaDeath of [false, true]) {
+    let rng = base.steeringRngState
+    let draw = 0
+    // Retail 0x00460AB0: light radius, shake radius, shake angle, ring multiplier.
+    for (const maximum of [1, 15, 360, Math.fround(.025)]) {
+      const next = drawNativeFloat(rng, maximum)
+      rng = next.state
+      draw = next.value
+    }
+    const next = step({ ...base, actors: [], bossSpells: [{ kind: 'ultra-banish', id: 10,
+      ageTicks: 0, spawnTick: 0, ownerActorId: 1, damage: 0, position: { x: 0, y: 0 },
+      painterRegistration: { managerLane: 'transient', registrationOrdinal: 10 },
+      alpha: 1, flashAlpha: 1.5, lightRadius: 1, remainingTicks: megaDeath ? 2000 : 150, megaDeath,
+    }], nextProjectileId: 11 }).store
+    const ring = next.deathEffects.find(effect => effect.role === 'ultra-banish-ring')!
+    assert.ok(ring)
+    assert.equal(ring.scaleMultiplier, Math.fround(Math.fround(1.045) + draw))
+    rings.push(ring)
+  }
+  for (const ring of rings) {
+    assert.equal(ring.alphaLossPerTick, Math.fround(.1 * .25))
+    let effects = [ring]
+    const register = () => ({ managerLane: 'transient' as const, registrationOrdinal: 1000 })
+    for (let tick = ring.spawnTick; tick <= ring.spawnTick + 150; tick++) {
+      effects = stepBoneyardPreWorldEffectBirths(effects, tick, () => .5)
+      effects = stepBoneyardTransientEffects(effects, [], tick, () => .5, 1000, register).deathEffects
+      for (const effect of effects) {
+        assert.equal(effect.scaleY, effect.scale)
+        assert.equal(BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION.sampleIsValid(
+          boneyardEnemyDeathEffectSample(projectBoneyardEnemyDeathEffect(effect))), true)
+      }
+    }
+    assert.deepEqual(effects, [])
+  }
 })

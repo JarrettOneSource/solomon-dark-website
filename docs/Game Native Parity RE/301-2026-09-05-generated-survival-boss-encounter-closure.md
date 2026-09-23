@@ -1,5 +1,130 @@
 # 2026-09-05 — Generated survival boss encounters
 
+## 2026-09-22 — Report 05: scale-fade constructor and lifetime reopening
+
+Recorded before the corrected constructor repair. The two-Mac Air/Ether run
+on `87b824c30` disconnects both clients at wave 40, tick 219886, with code 4008
+and `frame.world.entities.samples[0] has an invalid registered sample shape`.
+The retained host archive reproduces it: UltraBanish ring 252686 is age 458,
+opacity .704978466, scale 10508004392577.607, multiplier 1.0658926963806152.
+Its quantized scale is 10760196497999470. It remains alive in the Website;
+the native effect would already have retired. This is separate from report
+10's terminal-clock defect, without claiming every historical crash shares it.
+
+### Fresh instruction evidence and corrected causal model
+
+Retail SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`, was verified again. The canonical SolomonDark
+project/program was queried through the read-only replica wrapper. Tool hashes:
+wrapper `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py` `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+Raw retail instructions and complete scalar/vtable bytes corroborate the result.
+
+The decisive inherited constant is **float32 .1**, at `0x007845E8`, loaded by
+constructor `0x00452E20` at `0x00452E7F` and stored at `+0x24`. The earlier .02
+assumption was false. The exploratory range exemption based on it is discarded:
+all existing safe-integer wire checks remain. Fix the producing lifetime,
+not the rejection of an impossibly old native ring.
+
+| Resident growing-fade producer | Native evidence | Required contract |
+| --- | --- | --- |
+| Ordinary/mega UltraBanish ring | `0x00460D6C..0x00460E55`; loss multiply at `0x00460E02` | DeadHawg 16, both scales 2, opacity 3, loss **f32(.1*.25)=.025**; multiplier f32(f32(1.045)+Float(.025)); additive perspective |
+| Both Discorporeal opening rings | `0x00496520..0x004966D7`; loss multiplies `0x004965C0/0x004966A9` | Same opacity/scales/loss .025; multipliers f32(1.025)/f32(1.035), not a 600-tick ring |
+| Tragic Circle contact | `0x005F71A2..0x005F72E0`; FPU stack at `0x005F72A8..0x005F72C5` retains .5 for the loss multiply | Opacity f32(.5+Float(.25)); loss **f32(.1*.5)=.05**; unsigned Float(1) for f32(1+u*f32(.65)), one RNG word; multiplier f32(1.1), additive FadeScale, sort bias 50 |
+| Wraith dissolve core | `0x0047FB95..0x0047FC28` | Opacity 2, inherited loss f32(.1), scale 1, multiplier f32(1.02); root X+0, Y-15; additive FadeScale |
+
+`0x007DE8F0` is double .25; `0x007DE808` is double .5;
+`0x007DE9D0=2`, `0x007DE8E0=3`, `0x007856A4=f32(1.045)`,
+`0x00784D88=f32(.025)`, `0x00787084=f32(1.025)`,
+`0x00787080=f32(1.035)`, `0x00785150=f32(1.1)`,
+`0x00786C24=f32(1.02)`, double `0x007DE840=0`, double `0x00784D80=15`,
+and double `0x00784F90=0.6499999761581421`.
+
+Shared tick `0x00452ED0` subtracts float32 loss and retires at nonpositive
+opacity. `0x00452EF7..0x00452F11` multiplies **both** scale fields `+0x2C/+0x30`
+by `+0x44`, storing both as float32. The Website omitted the perspective Y
+update and these stores. Ordinary FadeScale draw `0x00455DF0` enables additive
+blend and uses X for both drawing axes. Perspective draw `0x00456340` uses
+both stored axes, with the native .75 Y factor; `0x0045B090` wraps it with
+additive blend. The six vtables sharing the tick are Iceblast `0x00785514`,
+FadeScale_Perspective `0x00785624`, FadeScaleAdditive_Perspective `0x0078564C`,
+FadeScale `0x00785A84`, FadeScale_Clipped `0x00793034`, and
+FadeGrowAdditive_Perspective `0x0079F360`. Ghidra symbols confirm every class.
+Other spell presentation lanes are separately owned; the resident death-effect
+representation consumes the two growing kinds enumerated above.
+
+The nearby BlackSmokyBouncer is **not** a reason to reduce the Faculty burst:
+`0x00456FD2..0x00456FD8` directly installs `0x0078536C=.004999999888241291`.
+Its large existing smoke population remains the recovered native contract.
+
+### Boundary, compatibility and acceptance
+
+Cover both growing kinds, all four resident producers, ordinary/mega modes,
+constructor RNG order, all live ages, parent/child retirement, interpolation,
+render bounds/blend, compact keyframes/deltas and saves. Retain every wire
+ID, age, scale, entry, position and alpha bound. No actor cap, arbitrary scale
+clamp, shorter-than-native lifetime, or speculative transport timeout is added.
+
+Schema 39 repairs legacy deterministic ring clocks from their known birth
+opacity/scale and saved update count, discarding only effects already expired
+under the recovered native lifetime. It also repairs the known perspective Y
+loss. Recorded stochastic state remains authoritative; migration must not reroll
+or rewind the world's RNG. Future Tragic Circle births use the recovered
+unsigned draw, additive blend and correct fade. Plain FadeScale draws its X
+scale on both axes; the perspective siblings retain independent Y. Current-schema independent axes remain intact.
+Protocol 133 follows the campaign's already published 132.
+
+The first red/green checks established the lost Y and missing float32 stores,
+but their broad-scale admission hypothesis and long .005 ring fixture were
+invalidated by the inherited-constant read above. Those expectations are
+removed. Acceptance must prove the corrected native constructor loss, strict
+rejection of the captured impossible scale, every legitimate live sample,
+legacy restoration and full native child retirement, followed by the exact
+rebased Mac gate and sustained Air/Ether run. Historical white-frame attribution
+remains unproven; this repair is not a claim about an unsampled screenshot.
+
+The corrected constructor regressions first fail on the .005/.01 losses,
+Wraith's X offset and plain FadeScale's Y selection. They pass after the
+producing rules are repaired, together with the complete focused simulation,
+protocol, renderer and save suites, test TypeScript, lint and production build.
+The old large-scale wire exemption is removed; every sample component retains
+its original safe-integer requirement. Its indexed validation avoids the old
+temporary `slice` allocation without weakening a bound.
+
+All 100,001 native Float magnitudes, both scale signs and representative ages
+0/7/14 verify the reversible legacy parameter calculations on Mac. Public save
+tests cover live/expired rings, Wraith, Tragic Circle, current-schema independent
+axes and unchanged world RNG. The captured failing archive SHA-256
+`af5daf4986c2c66df2590a5aa1d695e13807d707fdf3ebfc283e7790e288bfee` still rejects
+before migration at tick 219886. Its nine ring ages are 317–458: all exceed
+the recovered native lifetime. Schema-38 restoration removes those expired
+rows, and the otherwise retained state passes the unchanged strict wire decoder.
+
+Built Chrome 153 ordinary/mega Discorporeal journeys retire all descendants
+at ticks 914/3938 with empty error arrays. The longer mega Bouncers retain their
+separate native lifetime; they are not shortened along with the incorrectly
+long-lived rings. Final exact-tree gate and sustained-party results are recorded
+in the campaign outcome after the publication-lock acceptance run.
+
+Focused per-member dispositions, supported by the Mac checks above:
+
+| Member | Disposition | Evidence |
+| --- | --- | --- |
+| Ordinary and mega UltraBanish rings | `exact-ported` | Constructor loss/RNG regressions, every legitimate live sample, captured-failure migration, and full child retirement |
+| Both Discorporeal opening rings | `exact-ported` | Both native multipliers, float32 axes, ordinary/mega browser retirement at ticks 914/3938 |
+| Tragic Circle contact | `exact-ported` | Unsigned one-word size draw, .05 loss, additive draw, legacy signed-size recovery without changing world RNG |
+| Wraith dissolve core | `exact-ported` | Zero X offset, .1 inherited loss, float32 growth, plain FadeScale drawing X on both axes |
+| Shared resident scale tick, interpolation, bounds and retained view | `exact-ported` | Both growing kinds plus all-family property, ownership, visibility and teardown tests |
+| Safe-integer entity IDs, ages and quantized sample fields | `verified-already-at-parity` | Captured impossible scale still rejects; the exploratory range exemption is removed |
+| Schema-39 compatibility and protocol 133 | `exact-ported` | Legacy live/expired effects, current-schema independent axes, strict decode and unchanged RNG checks |
+| BlackSmokyBouncer and other separately owned death recipes | `verified-already-at-parity` | Direct .005 constructor constant retained; authored populations and complete retirement preserved |
+| Other spell-owned presentation lanes outside resident death effects | `out-of-system` | They do not consume this enemy death-effect representation or its four affected constructors; the shared native tick and its six vtables were included in the instruction inventory above |
+
+These focused dispositions do not claim that the final canonical gate or
+sustained multiplayer run has already passed. Those remain publication gates.
+
+## Previous closure and earlier reopenings
+
 Status: native recovery and implementation complete; the full Mac Website gate
 and all 24 Mac browser acceptance cases passed. The 2026-09-20 endurance run
 reopened the transport population envelope below; its validation is recorded
@@ -1281,7 +1406,7 @@ when submitted to the light map.
 Death begins with the 600-tick UnholyDie stream at global gain one,
 LightningStart pitches .5 and 1, and MagicShieldExplode at one. Two pre-world
 DeadHawg:16 additive perspective scale-fades start at scale 2, opacity 3,
-loss .005, and scale multipliers 1.025/1.035. Earthquake loop gain is one.
+loss .025 (corrected by the report-05 constructor trace above), and scale multipliers 1.025/1.035. Earthquake loop gain is one.
 The authoritative death countdown starts 1000; pose changes from one to two
 at remaining<=600, with a second green flash on exactly 600. It freezes the
 alive phase counters and retains action-owned glow/jitter until native writes.

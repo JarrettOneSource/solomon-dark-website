@@ -95,8 +95,9 @@ The built-client constituent journeys pass:
   demonstrates the recovery mechanism and reproduces the *shape* of report
   09's symptom; it does not identify that historical interval's trigger.
 
-Final member dispositions for the verified native contracts above are
-`verified-already-at-parity`; no gameplay code is changed by report 05. The
+At this initial focused checkpoint the contracts above were
+`verified-already-at-parity`; the sustained reopening below and entry 301
+supersede that preliminary implementation scope. The
 authored decoration is `out-of-system`, because report 12 proved it stock.
 Historical stall/white-image attribution is `out-of-system` for an evidenced
 source repair and remains explicitly unresolved report evidence. The sustained
@@ -115,6 +116,78 @@ web/host ports. Final publication still requires the exact rebased candidate's
 canonical Mac gate and real-browser journeys under the shared lock. Their final
 commit/hash and results belong in report 05's outcome, not inferred from the
 preliminary measurements here. There is no production-deployment claim.
+
+### Sustained-run reopening: observed Faculty delivery stall
+
+The preliminary Air/Ether run on the unchanged `87b824c30` gameplay reaches
+the native Dire Faculty wave 32. At `2026-09-22T23:06:03Z` it contains 13,464
+independent death effects. Over the following ten seconds the host drops from
+100 Hz to 40–45 Hz, with event-loop maxima of 1,229/1,707 ms. Both peers enter
+flow control for 15,798/15,941 ms; their largest observed snapshot gaps are
+4,843/4,650 ms. Air still renders about 58 FPS during its worst delivery
+window. No browser/host error or protocol rejection is emitted. This is a
+reproduced current-candidate stall, so a successful process exit or positive
+snapshot count per five-second sample cannot close report 05.
+
+The nearest save checkpoint completed in 31 ms (27 ms synchronous publication),
+before the large burst. Wave-30 screenshots were captured almost three minutes
+earlier, outside this interval. Other campaign Mac validation was active, so
+shared scheduling may affect the timings; the owning computation still needs a
+controlled profile. The existing native Faculty death fixture and fully
+extracted death-effect recipes are the oracle. Do not reduce the 13,464 effects,
+alter native emission/lifetime, or relax any decoder bound. Reopen simulation
+copying, projection, entity codec/reconstruction, socket compression and their
+lifecycle together; the earlier focused receipts do not establish sustained
+burst acceptance. Historical causal attribution remains separate until supported.
+
+The sustained run later fails at wave 40 on an over-aged UltraBanish ring;
+the complete native constructor/lifetime repair is in entry 301. Entry 086
+records the separately measured high-population allocation reduction.
+The monitor now accepts `SDR_SOAK_MAX_SNAPSHOT_GAP_MS`; report 05 uses 1000 ms.
+It retains raw gap measurements and separately measures active delivery,
+excluding explicit native pause/resume-grace and task screenshot readback
+windows. Those exclusions do not hide flow-control intervals during gameplay.
+A five-second window containing one snapshot is no longer sufficient acceptance.
+This is a test limit, not a gameplay timeout or transport-policy change.
+
+### Production database and telemetry coverage
+
+A read-only September 22 audit opened the Website SQLite database with
+`mode=ro` and `PRAGMA query_only=ON`. From September 21 00:00 EDT onward,
+`DiagnosticLogs` contains records 177–195: seventeen performance reports
+covering eight run IDs, plus the two explicit Mage pulse-age failures 189/190.
+The latter match the original party and the repaired terminal-clock defect.
+The `RuntimeEvents` table is empty at the audit; its thirty-minute/2,000-row
+retention cannot establish the health of a historical run.
+
+The durable game-service journal supplies 2,970 structured events. Matching
+sessions have 113 recovered flow-control intervals of at least one second,
+108 of them in the original Soggy/Solomonest/Snackers party. The longest is
+14,578 ms in the follow-up Coffin run, matching diagnostic 191's 11,227 ms
+snapshot gap and 8,322 ms ping. Diagnostics 181/182/185/186 also record visible,
+unpaused-flagged frame and delivery stalls; record 181's maximum frame is
+1,223 ms, while record 182's maximum snapshot gap is 9,360 ms. These are
+submitted-window maxima, not whole-run percentiles or proof of one cause.
+
+The same journal measures 365 checkpoint publications with synchronous slices
+of at least 50 ms, including 34 of at least 100 ms and a maximum of 181 ms.
+This is a concrete shorter-stutter cost, not an explanation for fourteen
+seconds of delayed acknowledgments. The matched original party archive has
+2,246 over-budget steps in 224,290 measured steps, a 99.4 ms worst world step,
+and up to 322.3 ms recent scheduler lateness. World-step timings exclude
+snapshot encoding, some callbacks, and other sessions' work. Checkpoint
+replays likewise cannot reconstruct an uncaptured historical network trace.
+
+Archive correlation uses run ID, session, revision and time together, because
+restored run IDs have older segments. All inspected reports describe earlier
+deployed builds (`fb9ec4bf`, `ed0a2d598`, or `292136712`); they are not production
+acceptance of subsequent main commits. Explicit deployment shutdowns and
+normal empty-session closes are kept separate from client faults.
+
+Final acceptance must cover the actual captured crash state, native Faculty
+burst populations, checkpoint work, and sustained active delivery. The
+allocation and ring-lifetime repairs address reproduced candidate defects;
+historical stall/white-frame attribution remains a separate evidence limit.
 
 ## 2026-09-22 — Report 10 terminal Arena clock investigation
 

@@ -5,7 +5,7 @@ import { WIZARD_DISCIPLINES, WIZARD_ELEMENTS } from '../core-kernels/player-char
 import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
 import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 38
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 39
 export const WEB_GAME_SAVE_SLOT = 0
 // Three complete Faculty death populations, including their invisible emitters,
 // fit within 96,679,129 bytes / 2,641,996 JSON values after retaining the former

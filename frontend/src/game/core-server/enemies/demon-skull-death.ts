@@ -1,4 +1,5 @@
 import { NATIVE_DEMON_SKULL_DEATH_STREAM_TICKS } from '../../core-kernels/native-demon-skull.ts'
+import { NATIVE_BANISH_RING_ALPHA_LOSS } from '../boneyard-transient-effects.ts'
 import { createBossSpellOwner } from './boss-spell-construction.ts'
 import { spawnSimpleDeathEffect } from './death-effects.ts'
 import { UNHOLY_GREEN } from './demon-skull-effects.ts'
@@ -17,7 +18,7 @@ export function stepDyingDemonSkull(work: WorkingStep, actor: BoneyardDemonSkull
     emitEnemyActionSound(work, tick, actor, 'magic-shield-explode', 1)
     flash(work, actor, tick, 1, Math.fround(.05))
     for (const scaleMultiplier of [Math.fround(1.025), Math.fround(1.035)]) {
-      spawnSimpleDeathEffect(work, actor, tick, { alpha: 1, opacityTimer: 3, alphaLossPerTick: Math.fround(.005),
+      spawnSimpleDeathEffect(work, actor, tick, { alpha: 1, opacityTimer: 3, alphaLossPerTick: NATIVE_BANISH_RING_ALPHA_LOSS,
         atlas: 'DeadHawg', entry: 16, blendMode: 'add', kind: 'fade-scale-perspective', lifetimeTicks: 1000,
         presentationOwner: 'pre-world-queue', role: 'discorporeal-death-ring', scale: 2, scaleMultiplier, tint: UNHOLY_GREEN })
     }

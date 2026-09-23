@@ -101,6 +101,94 @@ test('native Faculty death peaks survive owner checkpoints and exact continuatio
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(oversized)), /too many values/)
 })
 
+test('legacy growing fades recover native ring clocks and retire already expired rings', () => {
+  const options = createNativeFacultyDeathSaveFixture(1)
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const world = options.state.world
+  const template = world.enemies.deathEffects[0]!
+  const multiplier = Math.fround(1.035)
+  const ageTicks = 40
+  let oldOpacity = 3, oldScale = 2, expectedOpacity = 3, expectedScale = 2
+  for (let step = 0; step <= ageTicks; step++) {
+    oldOpacity = Math.fround(oldOpacity - Math.fround(.005))
+    oldScale *= multiplier
+    expectedOpacity = Math.fround(expectedOpacity - Math.fround(.025))
+    expectedScale = Math.fround(expectedScale * multiplier)
+  }
+  const effect: BoneyardEnemyDeathEffect = { ...template, kind: 'fade-scale-perspective',
+    role: 'discorporeal-death-ring', atlas: 'DeadHawg', entry: 16, firstEntry: 16,
+    presentationOwner: 'pre-world-queue', painterRegistration: null, lifetimeTicks: 1000,
+    ageTicks, lastStepTick: options.state.tick, spawnTick: options.state.tick - ageTicks,
+    alpha: 1, alphaMultiplier: 1, opacityTimer: oldOpacity, alphaLossPerTick: Math.fround(.005),
+    scale: oldScale, scaleY: 2, scaleMultiplier: multiplier }
+  const document = createGameSaveDocument({ ...options, state: { ...options.state,
+    world: { ...world, enemies: { ...world.enemies, deathEffects: [effect,
+      { ...effect, id: effect.id + 1, ageTicks: 200, spawnTick: options.state.tick - 200,
+        scale: 10508004392577.607, opacityTimer: .7 },
+    ] } } } })
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 38
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state.world
+  if (restored.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(restored.enemies.deathEffects.length, 1)
+  assert.equal(restored.enemies.deathEffects[0]?.scale, expectedScale)
+  assert.equal(restored.enemies.deathEffects[0]?.scaleY, expectedScale)
+  assert.equal(restored.enemies.deathEffects[0]?.opacityTimer, expectedOpacity)
+  assert.equal(restored.enemies.deathEffects[0]?.alphaLossPerTick, Math.fround(.025))
+  const current = restoreGameSaveDocument(document).state.world
+  if (current.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(current.enemies.deathEffects[0]?.scaleY, 2, 'current schema retains explicitly stored axes')
+})
+
+test('legacy Wraith and Tragic fades restore recovered constructors without consuming world RNG', () => {
+  const options = createNativeFacultyDeathSaveFixture(1)
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const world = options.state.world
+  const template = world.enemies.deathEffects[0]!
+  const order = createNativeWorldManagerOrder(options.state.worldManagerOrder)
+  const cases = [
+    { role: 'wraith-dissolve-core', age: 5, initialOpacity: 2, oldLoss: .1,
+      initialScale: 1, nextInitialScale: 1, multiplier: 1.02, nextLoss: Math.fround(.1) },
+    { role: 'tragic-circle-contact', age: 7, initialOpacity: Math.fround(.63), oldLoss: Math.fround(.01),
+      initialScale: Math.fround(1 - Math.fround(.4) * Math.fround(.65)),
+      nextInitialScale: Math.fround(1 + Math.fround(.4) * Math.fround(.65)),
+      multiplier: Math.fround(1.1), nextLoss: Math.fround(.05) },
+  ]
+  const expected: Array<{ scale: number; opacity: number }> = []
+  const effects = cases.map((row, index): BoneyardEnemyDeathEffect => {
+    let opacity = row.initialOpacity, scale = row.initialScale
+    let nextOpacity = row.initialOpacity, nextScale = row.nextInitialScale
+    for (let step = 0; step < row.age; step++) {
+      opacity = Math.fround(opacity - row.oldLoss); scale *= row.multiplier
+      nextOpacity = Math.fround(nextOpacity - row.nextLoss)
+      nextScale = Math.fround(nextScale * Math.fround(row.multiplier))
+    }
+    expected.push({ scale: nextScale, opacity: nextOpacity })
+    return { ...template, id: world.enemies.nextDeathEffectId + index, kind: 'fade-scale', role: row.role,
+      atlas: 'BadGuys', entry: row.role === 'wraith-dissolve-core' ? 20 : 7,
+      firstEntry: row.role === 'wraith-dissolve-core' ? 20 : 7, lifetimeTicks: 1000,
+      presentationOwner: 'world-sorted', painterRegistration: order.register('transient'),
+      position: { x: 13, y: 19 }, ageTicks: row.age, lastStepTick: options.state.tick,
+      spawnTick: options.state.tick - row.age, alpha: Math.min(1, opacity), alphaMultiplier: 1,
+      opacityTimer: opacity, alphaLossPerTick: row.oldLoss, scale, scaleY: scale, scaleMultiplier: row.multiplier }
+  })
+  const document = JSON.parse(createGameSaveDocument({ ...options, state: { ...options.state,
+    worldManagerOrder: order.state(), world: { ...world, enemies: { ...world.enemies,
+      deathEffects: effects, nextDeathEffectId: world.enemies.nextDeathEffectId + effects.length } } } }))
+  document.schemaVersion = 38
+  const restored = restoreGameSaveDocument(JSON.stringify(document)).state.world
+  if (restored.kind !== 'boneyard') throw new Error('expected Boneyard')
+  restored.enemies.deathEffects.forEach((effect, index) => {
+    assert.equal(effect.scale, expected[index]!.scale)
+    assert.equal(effect.scaleY, expected[index]!.scale)
+    assert.equal(effect.opacityTimer, expected[index]!.opacity)
+    assert.equal(effect.alphaLossPerTick, cases[index]!.nextLoss)
+  })
+  assert.equal(restored.enemies.deathEffects[0]?.position.x, 12)
+  assert.equal(restored.enemies.deathEffects[1]?.blendMode, 'add')
+  assert.deepEqual(restored.enemies.steeringRngState, world.enemies.steeringRngState)
+})
+
 test('mixed native smoke owners survive saves while invalid role and owner combinations reject', () => {
   const options = createNativeFacultyDeathSaveFixture(1)
   if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')

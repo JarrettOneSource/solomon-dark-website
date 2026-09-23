@@ -1,4 +1,5 @@
 import { bindNativeQueryTarget } from './registration.ts'
+import { NATIVE_TRAGIC_CONTACT_ALPHA_LOSS } from '../boneyard-transient-effects.ts'
 import {
   actorHeadingFromVector,
 } from '../../core-kernels/actor-heading.ts'
@@ -355,11 +356,11 @@ function stepCircle(work: WorkingStep, source: Extract<NativeBossSpell, { kind: 
     for (const [id, player] of Object.entries(context.players)) {
       if (targetEligible(player) && nativeTragicCircleContains(spell.position, player.position)) {
         const rotationDeg = drawEnemyFloat(work, 360)
-        const scale = Math.fround(1 + drawEnemyFloat(work, 1, true) * Math.fround(.65))
+        const scale = Math.fround(1 + drawEnemyFloat(work, 1) * Math.fround(.65))
         const alpha = Math.fround(.5 + drawEnemyFloat(work, .25))
         spawnSimpleDeathEffect(work, { id: spell.ownerActorId, position: player.position }, context.tick, {
-          alpha, alphaLossPerTick: Math.fround(.01), atlas: 'BadGuys', entry: 7, blendMode: 'normal', kind: 'fade-scale',
-          lifetimeTicks: 1000, painterSortBias: 50, position: { x: player.position.x, y: player.position.y - 15 },
+          alpha, alphaLossPerTick: NATIVE_TRAGIC_CONTACT_ALPHA_LOSS, atlas: 'BadGuys', entry: 7, blendMode: 'add', kind: 'fade-scale',
+          lifetimeTicks: 1000, painterSortBias: 50, position: { x: Math.fround(player.position.x), y: Math.fround(player.position.y - 15) },
           role: 'tragic-circle-contact', rotationDeg, scale, scaleMultiplier: Math.fround(1.1), tint: 0x800000,
         })
         contact(work, context, spell.ownerActorId, id, 0, 0, { tragicCircle: true })

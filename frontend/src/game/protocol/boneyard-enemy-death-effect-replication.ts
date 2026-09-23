@@ -34,11 +34,13 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
         : descriptor[9] === -1)
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
-    return sample.length === SAMPLE_LENGTH
-      && sample[0] === BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID
-      && positiveEntityId(sample[1])
-      && sample.slice(2).every(Number.isSafeInteger)
-      && sample[5] >= 0 && sample[5] <= VALUE_SCALE * 1.25
+    if (sample.length !== SAMPLE_LENGTH
+      || sample[0] !== BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID
+      || !positiveEntityId(sample[1])) return false
+    for (let index = 2; index < SAMPLE_LENGTH; index++) {
+      if (!Number.isSafeInteger(sample[index])) return false
+    }
+    return sample[5] >= 0 && sample[5] <= VALUE_SCALE * 1.25
       && sample[6] > 0
       && nonnegativeInteger(sample[7])
       && sample[8] >= 0 && sample[8] <= 0xffffff

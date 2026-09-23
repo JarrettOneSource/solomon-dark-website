@@ -350,6 +350,7 @@ test('pre-world effects publish their first class update once, including motion,
   assert.equal(sample('fade-scale').scale, .5)
   assert.equal(sample('fade-scale').scaleY, .5)
   assert.equal(sample('fade-scale-perspective').scale, .5)
+  assert.equal(sample('fade-scale-perspective').scaleY, .5)
   assert.equal(sample('late-splat').alpha, Math.fround(2.9) * .25)
   for (const kind of ['move-fade', 'move-fade-perspective', 'move-fade-sin'] as const) {
     assert.deepEqual(sample(kind).position, { x: 12, y: 17 }, kind)
@@ -383,6 +384,34 @@ test('future pre-world births start at their scheduled tick and other painter ow
   const next = stepBoneyardTransientEffects([born], [], 13, () => .5, 100, registerTestWorldPainter).deathEffects[0]!
   assert.equal(next.framePhase, 4)
   assert.ok(next.alpha > born.alpha && next.alpha < .08)
+})
+
+test('growing fade siblings preserve both native float32 axes through full ring life', () => {
+  for (const kind of ['fade-scale', 'fade-scale-perspective'] as const) {
+    for (const multiplier of [Math.fround(1.025), Math.fround(1.035), 1.0658926963806152]) {
+      const source = deathEffect({ kind, scale: 2, scaleY: 1.5, scaleMultiplier: multiplier,
+        opacityTimer: 3, alphaLossPerTick: Math.fround(.025), lifetimeTicks: 1000,
+        spawnTick: 0, lastStepTick: -1, presentationOwner: 'pre-world-queue', painterRegistration: null })
+      let effects = [source]
+      let x = source.scale, y = source.scaleY, opacity = source.opacityTimer
+      for (let tick = 0; tick <= 600; tick++) {
+        opacity = Math.fround(opacity - source.alphaLossPerTick)
+        effects = stepBoneyardPreWorldEffectBirths(effects, tick, () => .5)
+        effects = stepBoneyardTransientEffects(effects, [], tick, () => .5, 100, registerTestWorldPainter).deathEffects
+        if (opacity <= 0) {
+          assert.equal(effects.length, 0, `${kind}: native opacity retirement`)
+          break
+        }
+        x = Math.fround(x * multiplier)
+        y = Math.fround(y * multiplier)
+        assert.equal(effects[0]?.scale, x, `${kind} X at ${tick}`)
+        assert.equal(effects[0]?.scaleY, y, `${kind} Y at ${tick}`)
+      }
+      assert.equal(effects.length, 0)
+      assert.equal(source.scale, 2)
+      assert.equal(source.scaleY, 1.5)
+    }
+  }
 })
 
 function deathEffect(

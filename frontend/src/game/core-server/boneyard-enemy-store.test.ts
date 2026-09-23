@@ -4439,6 +4439,9 @@ test('Wraith dissolve keeps the shared additive BadGuys-20 FadeScale core', () =
     ({ role }) => role === 'wraith-dissolve-core',
   )
   assert.ok(core)
+  assert.deepEqual(core.position, { x: 12, y: 19 })
+  assert.equal(core.alphaLossPerTick, Math.fround(.1))
+  assert.equal(core.scaleMultiplier, Math.fround(1.02))
   assert.deepEqual(
     { atlas: core.atlas, blendMode: core.blendMode, entry: core.entry },
     { atlas: 'BadGuys', blendMode: 'add', entry: 20 },

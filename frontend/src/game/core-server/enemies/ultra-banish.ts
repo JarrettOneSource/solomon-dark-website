@@ -1,4 +1,5 @@
 import type { NativeBossSpell } from '../../core-kernels/native-boss-spell.ts'
+import { NATIVE_BANISH_RING_ALPHA_LOSS } from '../boneyard-transient-effects.ts'
 import { createBossSpellOwner } from './boss-spell-construction.ts'
 import { spawnBouncer, spawnSimpleDeathEffect } from './death-effects.ts'
 import { UNHOLY_GREEN } from './demon-skull-effects.ts'
@@ -43,9 +44,9 @@ export function stepUltraBanishSpell(work: WorkingStep, source: UltraSpell,
       screenFlashOnlyIfClear: true, screenFlash: { red: .25, green: 1, blue: .25,
         alpha: source.alpha * .5, decayPerTick: Math.fround(.1), pointAttenuated: false } })
     spawnSimpleDeathEffect(work, { id: source.ownerActorId, position: source.position }, context.tick,
-      { alpha: 1, opacityTimer: 3, alphaLossPerTick: Math.fround(.005), atlas: 'DeadHawg', entry: 16,
+      { alpha: 1, opacityTimer: 3, alphaLossPerTick: NATIVE_BANISH_RING_ALPHA_LOSS, atlas: 'DeadHawg', entry: 16,
         blendMode: 'add', kind: 'fade-scale-perspective', lifetimeTicks: 1000, presentationOwner: 'pre-world-queue',
-        role: 'ultra-banish-ring', scale: 2, scaleMultiplier: Math.fround(1.045 + drawEnemyFloat(work, Math.fround(.025))),
+        role: 'ultra-banish-ring', scale: 2, scaleMultiplier: Math.fround(Math.fround(1.045) + drawEnemyFloat(work, Math.fround(.025))),
         tint: UNHOLY_GREEN })
     if (source.remainingTicks > 100 && drawEnemyInteger(work, 2) === 1 && source.megaDeath) {
       const angleDeg = drawEnemyFloat(work, 360)

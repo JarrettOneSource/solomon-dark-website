@@ -1505,6 +1505,27 @@ test('enemy death effects replicate independent motion and exact retirement iden
   )))
 })
 
+test('impossible death-effect scales and discrete components retain safe-integer rejection', () => {
+  const snapshot = boneyardSnapshot('invalid-scale-ring')
+  if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  snapshot.world.deathEffects = [enemyDeathEffectSnapshot()]
+  const keyframe = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const sample = keyframe.world.entities.samples.find(row => row[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect)!
+  assert.equal(BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION.sampleIsValid(sample), true)
+  for (let index = 1; index < sample.length; index++) {
+    const invalid = [...sample] as [number, number, ...number[]]
+    invalid[index] = Number.MAX_SAFE_INTEGER + 1
+    assert.equal(BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION.sampleIsValid(invalid), false, `column ${index}`)
+  }
+  for (const index of [6, 11]) {
+    const invalid = cloneSnapshotFrame(keyframe)
+    const effect = invalid.world.entities.samples.find(row => row[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect)!
+    Reflect.set(effect, index, 10760196497999470)
+    assert.throws(() => decodeServerGameMessage(encodeGameMessage({ type: 'server-snapshot',
+      acknowledgedInputSequence: 0, frame: invalid, sequence: 1 })), /invalid registered sample shape/)
+  }
+})
+
 test('loot and Goodies replicate compact state, ordered events, and retirement', () => {
   const initial = boneyardSnapshot('loot-run')
   if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')

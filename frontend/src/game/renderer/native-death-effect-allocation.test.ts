@@ -6,7 +6,7 @@ import { createServer, type ViteDevServer } from 'vite'
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
-import { nativeEnemyDeathEffectIsBanish, nativeEnemyDeathEffectViewResourcePlan } from './native-enemy-death-effect-presentation.ts'
+import { nativeEnemyDeathEffectIsBanish, nativeEnemyDeathEffectPlan, nativeEnemyDeathEffectViewResourcePlan } from './native-enemy-death-effect-presentation.ts'
 
 const kinds: Record<BoneyardEnemyDeathEffectSnapshot['kind'], true> = {
   banish: true, 'banish-black': true, bouncer: true, 'smoky-bouncer': true,
@@ -55,7 +55,7 @@ test('every death-effect family retains painter order but defers unseen Pixi chi
           assert.equal(initialContainer.children.length, 0, `${kind}: unseen child allocation`)
           views.setDepth(effect.id, 17.25)
           views.setRenderable(false)
-          const later = { ...effect, ageTicks: 25, alpha: 0.4, rotationRadians: 0.5 }
+          const later = { ...effect, ageTicks: 25, alpha: 0.4, rotationRadians: 0.5, scale: 2, scaleY: 3 }
           views.update([later], inside, 900)
           const expectedRoot = lane === 'background' || lane === 'pre-world-queue' ? preWorld : root
           const otherRoot = expectedRoot === root ? preWorld : root
@@ -74,6 +74,20 @@ test('every death-effect family retains painter order but defers unseen Pixi chi
             assert.ok(sprite instanceof Sprite)
             assert.equal(sprite.alpha, 0.4, 'first visible sample uses current alpha, not birth')
             assert.equal(sprite.rotation, 0.5)
+            const plan = nativeEnemyDeathEffectPlan(later)
+            if (kind === 'fade-scale') assert.equal(plan.effect.scale.y, later.scale)
+            if (kind === 'fade-scale-perspective') assert.equal(plan.effect.scale.y, later.scaleY * .75)
+            for (const [index, layer] of (shadow ? [plan.shadow!, plan.effect] : [plan.effect]).entries()) {
+              const child = container.children[index]
+              assert.ok(child instanceof Sprite)
+              assert.equal(child.x, layer.offset.x)
+              assert.equal(child.y, layer.offset.y)
+              assert.equal(child.scale.x, layer.scale.x)
+              assert.equal(child.scale.y, layer.scale.y)
+              assert.equal(child.alpha, layer.alpha)
+              assert.equal(child.tint, layer.tint)
+              assert.equal(child.blendMode, layer.blendMode)
+            }
           }
           views.update([later], outside, 900)
           assert.equal(container.renderable, false)

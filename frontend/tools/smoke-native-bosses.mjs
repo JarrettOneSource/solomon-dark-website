@@ -184,6 +184,7 @@ async function acceptBoss(row) {
     boneyards: catalog, host: '127.0.0.1', port: 0, snapshotRate: 20, luaWasmPath: resolve(frontend, 'dist-game-host/lua54.wasm') })
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
   const page = await context.newPage()
+  const profiler = process.env.SDR_BOSS_PROFILE === '1' ? await context.newCDPSession(page) : null
   const errors = { page: [], console: [], responses: [], requests: [] }
   const capturedEffects = new Set()
   const observed = { spells: new Set(), projectiles: new Set(), crows: 0, detachedCrows: 0, imps: 0,
@@ -297,6 +298,10 @@ async function acceptBoss(row) {
       await page.mouse.down()
     }
     const milliseconds = row.milliseconds ?? 5500
+    if (profiler) {
+      await profiler.send('Profiler.enable')
+      await profiler.send('Profiler.start')
+    }
     for (const part of [0, 1]) {
       const end = Date.now() + milliseconds / 2
       while (Date.now() < end) {
@@ -307,6 +312,11 @@ async function acceptBoss(row) {
       await page.screenshot({ path: resolve(output, `${row.id}-${part === 0 ? 'active' : 'end'}.png`) })
     }
     await page.mouse.up()
+    if (profiler) {
+      const { profile } = await profiler.send('Profiler.stop')
+      await writeFile(resolve(output, `${row.id}-browser.cpuprofile`), JSON.stringify(profile))
+      await profiler.send('Profiler.disable')
+    }
     for (const kind of row.spells ?? []) assert.ok(observed.spells.has(kind) && capturedEffects.has(kind), `${row.id}: missing ${kind} capture`)
     for (const kind of row.projectiles ?? []) assert.ok(observed.projectiles.has(kind) && capturedEffects.has(kind), `${row.id}: missing ${kind} capture`)
     if (row.crows) assert.equal(observed.crows, row.crows)
@@ -341,6 +351,27 @@ async function acceptBoss(row) {
       : row.token === 'SKELETONARCHER' ? 'shoot-arrow' : row.rootProof ? 'lightning-start' : row.fireAtBoss ? 'throw-fire' : null
     if (expectedAudio) assert.ok(rendered.audio.some(source => source === `${expectedAudio}.wav` || source.startsWith(`${expectedAudio}-`)),
       `${row.id}: missing real ${expectedAudio} playback`)
+    let retirement = null
+    if (row.death) {
+      const deadline = Date.now() + 120000
+      while (Date.now() < deadline) {
+        assert.deepEqual(errors, { page: [], console: [], responses: [], requests: [] })
+        const state = host.state()
+        assert.equal(state.world.kind, 'boneyard', `${row.id}: lost the live world during child retirement`)
+        const store = state.world.enemies
+        const remaining = store.deathEffects.length + store.projectileEffects.length
+          + store.projectiles.length + store.bossSpells.length + store.detachedCrows.length
+        if (remaining === 0 && !store.actors.some(actor => actor.id === 1)) {
+          retirement = { tick: state.tick, remaining }
+          break
+        }
+        await page.waitForTimeout(50)
+      }
+      assert.ok(retirement, `${row.id}: native children did not complete their lifetimes`)
+      await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas')
+        ?.__sdrBoneyardFrame?.enemyDeathEffectCount === 0)
+      await page.screenshot({ path: resolve(output, `${row.id}-retired.png`) })
+    }
     if (row.rootProof) {
       assert.equal(observed.maximumRootDrift, 0, `${row.id}: Portal drifted from its settled root`)
       assert.equal(rendered.rootPositions, 1, `${row.id}: rendered Portal root drifted`)
@@ -367,7 +398,7 @@ async function acceptBoss(row) {
       await page.screenshot({ path: resolve(output, `${row.id}-resized.png`) })
     }
     assert.deepEqual(errors, { page: [], console: [], responses: [], requests: [] })
-    return { id: row.id, name: seeded.name, position: seeded.position, barBounds, resizedBar, rendered, capturedEffects: [...capturedEffects],
+    return { id: row.id, name: seeded.name, position: seeded.position, barBounds, resizedBar, rendered, retirement, capturedEffects: [...capturedEffects],
       observed: { ...observed, spells: [...observed.spells], projectiles: [...observed.projectiles] }, errors }
   } catch (error) {
     await page.screenshot({ path: resolve(output, `${row.id}-failure.png`) }).catch(() => {})
@@ -376,6 +407,7 @@ async function acceptBoss(row) {
     throw error
   } finally {
     clearInterval(interval)
+    await profiler?.detach()
     await context.close()
     await host.close()
   }

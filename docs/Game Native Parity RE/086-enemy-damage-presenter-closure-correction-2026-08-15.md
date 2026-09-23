@@ -1,5 +1,54 @@
 # Enemy damage-presenter closure correction (2026-08-15)
 
+## 2026-09-22 — Report 05 high-population allocation reopening
+
+Recorded before the allocation change. The two-browser native wave-32 burst
+reaches 13,464 effects and reproduces long delivery gaps (entry 097). An
+unmodded three-Faculty host probe retains all 26,048 effects, then retires them;
+it spends 2.12 seconds of a 12-second profile in GC, with 377 ms inclusively in
+`stepBoneyardPreWorldEffectBirths`. That method allocates a one-element temporary
+array for every ordinary resident on every tick despite changing only fresh
+pre-world births. A direct ordered loop can keep the same returned ownership,
+birth/retirement decisions and RNG order without those temporary arrays.
+
+Built Mac Chrome profiles of all three individual Faculty death journeys
+(8,575 effects each) identify 145–189 ms in the immutable death-plan factory
+over each approximately seven-second profile. The retained view immediately
+unpacks those newly frozen position/layer/offset/scale objects into existing
+Pixi sprites. Profiles also attribute about 245–252 ms to GC; these figures
+overlap neither one another nor establish whole-run improvement by themselves.
+The minified factory was matched by its field/formula sequence to
+`nativeEnemyDeathEffectPlan`, not inferred from the function's short name.
+
+Boundary: all **20** current death-effect kinds, including Crow, both shadow
+states, all five owner lanes, first visibility, moving/scaling bounds, depth,
+offscreen/reentry and retirement. Reuse the same native vertical-scale formula
+in bounds, the immutable plan API and the retained sprite adapter. The adapter
+can write identical scalar values directly; the public immutable plan remains
+available. An unshadowed visual bound needs no one-element array or union copy.
+Keep every container's birth insertion position and all sprites/textures,
+effects, lifetimes and draw order. This supersedes no earlier lazy-allocation,
+gradient, movement-grid or duplicate-interpolation-copy repair.
+
+Acceptance requires all-family real-Pixi property/lifecycle checks, identical
+outputs against a baseline that already includes the separately recovered
+float32 ring repair, controlled alternating timing blocks, and the built Mac
+browser and sustained-party journeys. No speedup or stall closure is claimed
+before those measurements.
+
+The alternating Mac comparison now passes. Six complete real-Pixi container /
+sprite property trees match the preserved `bf8b6e5ad` baseline byte-for-byte,
+and the pre-world population output is deeply equal. The six native Faculty
+snapshots contain 8,336–8,366 effects. Eight alternating blocks (20 warmups,
+100 retained-view updates and 200 pre-world passes per block) measure mean
+view update **6.471 → 4.752 ms (26.6% lower)** and pre-world pass
+**.2032 → .0761 ms (62.6% lower)**. No profiling or forced GC runs inside the
+timing blocks. The CPU-only adapter uses the same empty texture and canvas
+stubs as the real-Pixi contract tests; this isolates update cost and is not a
+GPU/FPS claim. All-family retained-view properties, ownership, visibility,
+insertion order and teardown tests also pass. Full built-browser and sustained
+party acceptance remain the separate delivery gates.
+
 ## September 21 representation-only resource allocation follow-up
 
 The high-population private endurance run retained over one thousand death

@@ -68,6 +68,18 @@ export function nativeEnemyDeathEffectViewResourcePlan(
   return effect.shadow ? SHADOWED_SPRITE_VIEW_RESOURCES : UNSHADOWED_SPRITE_VIEW_RESOURCES
 }
 
+export function nativeEnemyDeathEffectVerticalScale(
+  effect: Pick<BoneyardEnemyDeathEffectSnapshot, 'kind' | 'scale' | 'scaleY'>,
+  shadow = false,
+): number {
+  if (shadow) return effect.scaleY * 0.75
+  if (effect.kind === 'fade-scale') return effect.scale
+  if (effect.kind === 'move-fade-perspective') return Math.fround(effect.scaleY * Math.fround(0.8))
+  return effect.kind === 'fade-scale-perspective' || effect.kind === 'fade-perspective'
+    || effect.kind === 'fade-perspective-clipped' || effect.kind === 'late-splat'
+    ? effect.scaleY * 0.75 : effect.scaleY
+}
+
 export function nativeEnemyDeathEffectVisualBounds(
   effect: BoneyardEnemyDeathEffectSnapshot,
   resolveArt: (
@@ -77,29 +89,22 @@ export function nativeEnemyDeathEffectVisualBounds(
   viewHeight = 900,
 ): BoneyardBounds {
   if (nativeEnemyDeathEffectIsBanish(effect.kind)) return nativeBanishVisualBounds(effect, resolveArt, viewHeight)
-  const perspective = effect.kind === 'fade-scale-perspective' || effect.kind === 'fade-perspective'
-    || effect.kind === 'fade-perspective-clipped'
-    || effect.kind === 'late-splat'
   const art = resolveArt(effect.atlas, effect.entry)
-  const bounds = [boneyardTransformedArtBounds(
+  const main = boneyardTransformedArtBounds(
     { x: effect.position.x, y: effect.position.y + effect.height },
     { anchorX: art.anchorX, anchorY: art.anchorY, h: art.height, w: art.width },
     effect.rotationRadians * 180 / Math.PI,
     effect.scale,
-    effect.kind === 'move-fade-perspective'
-      ? Math.fround(effect.scaleY * Math.fround(0.8))
-      : perspective ? effect.scaleY * 0.75 : effect.scaleY,
-  )]
-  if (effect.shadow) {
-    bounds.push(boneyardTransformedArtBounds(
-      { x: effect.position.x, y: effect.position.y + 2 },
-      { anchorX: art.anchorX, anchorY: art.anchorY, h: art.height, w: art.width },
-      effect.rotationRadians * 180 / Math.PI,
-      effect.scale,
-      effect.scaleY * 0.75,
-    ))
-  }
-  return unionBounds(bounds)
+    nativeEnemyDeathEffectVerticalScale(effect),
+  )
+  if (!effect.shadow) return main
+  return unionBounds([main, boneyardTransformedArtBounds(
+    { x: effect.position.x, y: effect.position.y + 2 },
+    { anchorX: art.anchorX, anchorY: art.anchorY, h: art.height, w: art.width },
+    effect.rotationRadians * 180 / Math.PI,
+    effect.scale,
+    nativeEnemyDeathEffectVerticalScale(effect, true),
+  )])
 }
 
 function nativeBanishVisualBounds(
@@ -169,9 +174,6 @@ function positiveModulo(value: number, divisor: number): number {
 export function nativeEnemyDeathEffectPlan(
   effect: BoneyardEnemyDeathEffectSnapshot,
 ): NativeEnemyDeathEffectPlan {
-  const perspective = effect.kind === 'fade-scale-perspective' || effect.kind === 'fade-perspective'
-    || effect.kind === 'fade-perspective-clipped'
-    || effect.kind === 'late-splat'
   const main: NativeEnemyDeathEffectLayer = Object.freeze({
     alpha: effect.alpha,
     atlas: effect.atlas,
@@ -181,9 +183,7 @@ export function nativeEnemyDeathEffectPlan(
     rotationRadians: effect.rotationRadians,
     scale: Object.freeze({
       x: effect.scale,
-      y: effect.kind === 'move-fade-perspective'
-      ? Math.fround(effect.scaleY * Math.fround(0.8))
-      : perspective ? effect.scaleY * 0.75 : effect.scaleY,
+      y: nativeEnemyDeathEffectVerticalScale(effect),
     }),
     tint: effect.tint,
   })
@@ -198,7 +198,7 @@ export function nativeEnemyDeathEffectPlan(
           entry: effect.entry,
           offset: Object.freeze({ x: 0, y: 2 }),
           rotationRadians: effect.rotationRadians,
-          scale: Object.freeze({ x: effect.scale, y: effect.scaleY * 0.75 }),
+          scale: Object.freeze({ x: effect.scale, y: nativeEnemyDeathEffectVerticalScale(effect, true) }),
           tint: 0x000000,
         })
       : null,

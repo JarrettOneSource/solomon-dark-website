@@ -9,6 +9,7 @@ import {
 } from '../core-kernels/native-faculty-actions.ts'
 import {
   createNativeRng,
+  drawNativeFloat,
 } from '../core-kernels/native-rng.ts'
 import {
   nativeFacultyRecipe,
@@ -55,6 +56,26 @@ const context: BoneyardEnemyStoreStepContext = {
   resolveSpawnIntents: () => [],
   tick: 1,
 }
+
+test('Tragic Circle contact uses unsigned scale, additive blend, half the Fader loss and three RNG words', () => {
+  const source: BoneyardEnemyStore = { ...createBoneyardEnemyStore('tragic-native-constructor'),
+    bossSpells: [{ kind: 'tragic-circle', id: 1, ageTicks: 0, spawnTick: 0, ownerActorId: 1,
+      damage: 0, position: { x: 0, y: -200 }, remainingTicks: 150,
+      painterRegistration: { managerLane: 'actor', registrationOrdinal: 1 } }], nextProjectileId: 2 }
+  const withoutContact = stepBoneyardEnemyStore(source, { ...context, players: {} }).store
+  const rotation = drawNativeFloat(withoutContact.steeringRngState, 360)
+  const scale = drawNativeFloat(rotation.state, 1)
+  const opacity = drawNativeFloat(scale.state, .25)
+  const withContact = stepBoneyardEnemyStore(source, context).store
+  const effect = withContact.deathEffects.find(row => row.role === 'tragic-circle-contact')
+  assert.ok(effect)
+  assert.equal(effect.alphaLossPerTick, Math.fround(.1 * .5))
+  assert.equal(effect.blendMode, 'add')
+  assert.equal(effect.rotationDeg, rotation.value)
+  assert.equal(effect.scale, Math.fround(1 + scale.value * Math.fround(.65)))
+  assert.equal(effect.opacityTimer, Math.fround(.5 + opacity.value))
+  assert.deepEqual(withContact.steeringRngState, opacity.state)
+})
 
 function spawned(): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('faculty-integration'), {

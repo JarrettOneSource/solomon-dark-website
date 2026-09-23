@@ -1,4 +1,5 @@
 import type { EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
+import { NATIVE_FADE_ALPHA_LOSS } from '../boneyard-transient-effects.ts'
 import { spawnTerminalChildren } from './construction.ts'
 import type { DeathEffectOwner } from './death-effects.ts'
 import { spawnBouncer, spawnSimpleDeathEffect, spawnSpriteArray, spawnUnbind } from './death-effects.ts'
@@ -425,17 +426,17 @@ function spawnWraithDissolve(
   }
   spawnSimpleDeathEffect(work, actor, tick, {
     alpha: 1,
-    alphaLossPerTick: 0.1,
+    alphaLossPerTick: NATIVE_FADE_ALPHA_LOSS,
     atlas: 'BadGuys',
     blendMode: 'add',
     entry: 20,
     kind: 'fade-scale',
     lifetimeTicks: 20,
     opacityTimer: 2,
-    position: { x: actor.position.x + 1, y: actor.position.y - 15 },
+    position: { x: Math.fround(actor.position.x), y: Math.fround(actor.position.y - 15) },
     role: 'wraith-dissolve-core',
     scale: 1,
-    scaleMultiplier: 1.02,
+    scaleMultiplier: Math.fround(1.02),
   })
   for (let index = 0; index < 12; index += 1) {
     spawnBouncer(work, actor, tick, 27, `wraith-dissolve-bouncer:${index}`, () => {
