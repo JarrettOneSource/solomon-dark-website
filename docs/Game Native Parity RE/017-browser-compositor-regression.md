@@ -52,6 +52,11 @@ duration. Total network loss can still hold authoritative time; explicit pauses
 and terminal clocks remain native. The existing normal-flash, deliberate-pause,
 context restoration and teardown contracts remain the acceptance baseline.
 
+Final code candidate `ee91f4b8b` passed the complete Mac gate and remaining
+browser lifecycle journeys, including native flash/context checks. The repair
+was published and reports 09–11 received verified completion reactions; the
+original screenshot's attribution limit remains unchanged.
+
 Disposable browser receipt SHA-256: simple
 `a099e0fa42a9b6af4cd1ae77f345e7f1c96d20fc74b818f30ce7e90fc80911bb`, complex
 `8aebcad8b0925d2095612a02c82971885377fbf684fd6298dc4a187dfe4b9f76`.

@@ -20,7 +20,7 @@ owner; do not change Coffin populations, gameplay timing or native flash losses.
 
 The implementation boundary is checkpoint delivery, including its protocol,
 producer, receiver, supersession, interruption and lifecycle barriers. Large
-background checkpoints will use a bounded window of acknowledged small chunks.
+background checkpoints use a bounded window of acknowledged small chunks.
 A complete save is published to storage only after exact reassembly; interrupted
 or superseded transfers preserve the last complete checkpoint. Explicit leave,
 Game Over and coordinated restart retain atomic checkpoint/control ordering
@@ -72,8 +72,9 @@ connection; this repair does not claim to remove initial admission latency or
 the bandwidth cost of snapshots themselves. Two real browsers independently
 prove fading/retirement during a save, and the old-delivery mutation reproduces
 the whiteout (entry 017). Their pause-owner resume and terminal replacement also
-pass. Full canonical and remaining lifecycle acceptance are recorded in the
-campaign receipt at publication.
+pass. The exact final code candidate `ee91f4b8b` passed the complete Mac gate
+and all remaining lifecycle journeys. The campaign receipt records publication,
+reactions and the final measurements.
 
 The final 64 KiB/s disposable receipt SHA-256 is
 `4ae3f4072f56578addd8be0d3574fa6598c388ebdc2cc526dbf3191134bad742`.
@@ -87,7 +88,29 @@ journey also needs the real local HTTP backend to accept its telemetry uploads,
 using its existing URL option instead of the static-file fallback.
 
 
-## 2026-09-23 — Final campaign acceptance
+### Follow-up closure
+
+`ee91f4b8b37addbe6f2229d95205aa932cebaa7d` passed the full Mac canonical gate
+and was published to main by verified normal fast-forward. Original reports
+09–11 received verified completion reactions. Their historical trigger limits
+remain explicit; report 12 is excluded.
+
+| Owning member | Follow-up disposition |
+| --- | --- |
+| Background checkpoint delivery and complete-save publication | Bounded fragments implemented; focused, slow-link and browser checks pass |
+| Repeated publication, stale/malformed ACKs, Unicode and teardown | Covered by transfer/codec/client tests; incomplete saves remain private |
+| Admission, explicit leave, terminal profiles and coordinated restart | Atomic ordering retained; large-save, rejoin and real update/reconnect checks pass |
+| Native feedback writers, clocks, intentional pauses and WebGL lifecycle | Unchanged; both lighting modes, delayed traffic, frozen time and context recovery pass |
+| Original Coffin continuation and native burst families | Reverified with full populations and ownership |
+| Independent peers, snapshot backpressure and recovery | Real supervisor caps backlog at eight; 15-second ACK hold recovers in 32.6 ms |
+| Endurance checkpoint consumers | Fresh Fire/Water run reaches wave 4 with six complete writes per client and no errors; earlier Air/Ether wave-47 receipt retained |
+| Original image/video attribution | Exact historical trigger remains unknown; current checkpoint-induced stalls/whiteout are reproduced and repaired |
+
+See [the campaign receipt](../soggy-report-campaign-20260921.md) for measurements
+and disposable receipt hashes.
+
+
+## 2026-09-23 — Initial campaign acceptance
 
 Runtime `59bf21d5722843a792545f7ee9d65a2d198f3599` passed the exact-tree Mac
 canonical gate, all 24 boss cases, the isolated two-peer Faculty burst, both
