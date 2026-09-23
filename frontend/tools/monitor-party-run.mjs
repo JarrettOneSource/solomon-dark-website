@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { chromium } from 'playwright-core'
 
 import { enterBoneyard, enterElementHub } from './game-smoke-navigation.mjs'
@@ -104,11 +105,14 @@ try {
     if (stopSignal !== null) break
     const rows = await Promise.all(clients.map(sampleClient))
     samples += 1
+    // Retain both peers' failing windows before an assertion stops the run.
+    for (let index = 0; index < rows.length; index += 1) {
+      clients[index].stream.write(JSON.stringify(rows[index]) + '\n')
+      updateSummary(clients[index].summary, rows[index])
+    }
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index]
       const client = clients[index]
-      client.stream.write(JSON.stringify(row) + '\n')
-      updateSummary(client.summary, row)
       assert.ok(row.runId, `${client.name} Boneyard renderer disappeared`)
       assert.equal(row.hidden, false, `${client.name} browser became hidden`)
       assert.equal(row.lifeState, 'alive', `${client.name} pilot died`)
@@ -170,22 +174,26 @@ try {
     }
   }))
   await Promise.all(clients.map(async client => {
-    await client.cdp.detach().catch(() => {})
-    await client.context.close().catch(() => {})
+    await withDeadline(client.cdp.detach(), 5000, 'CDP detach timed out').catch(error => {
+      event('monitor.cleanup_warning', { client: client.name, message: clean(error.message) })
+    })
+    await withDeadline(client.context.close(), 5000, 'Context close timed out').catch(error => {
+      event('monitor.cleanup_warning', { client: client.name, message: clean(error.message) })
+    })
     event('monitor.context_closed', { client: client.name })
     const owned = ownedBrowsers.get(client.browser)
     if (owned) {
       try {
-        await withDeadline(owned.close(), 15000, `${client.name} browser did not exit`)
+        await withDeadline(client.browser.close(), 15000, `${client.name} browser did not exit`)
       } catch {
-        event('monitor.browser_force_closed', { client: client.name, pid: owned.process().pid })
-        await owned.kill()
+        event('monitor.browser_force_closed', { client: client.name, pid: owned.pid })
+        killOwnedBrowser(owned)
       }
     } else await client.browser.close()
     event('monitor.browser_closed', { client: client.name })
   }))
-  for (const [browser, server] of ownedBrowsers) {
-    if (!clients.some(client => client.browser === browser)) await server.kill()
+  for (const [browser, owned] of ownedBrowsers) {
+    if (!clients.some(client => client.browser === browser)) killOwnedBrowser(owned)
   }
   await writeFile(join(output, 'result.json'), JSON.stringify({
     completed, passed: completed && failure === null && errorCount === 0 && stopSignal === null,
@@ -323,15 +331,26 @@ async function createClient(browser, name, element) {
 }
 
 async function launchOwnedBrowser(options) {
-  const server = await chromium.launchServer({ ...options, host: '127.0.0.1' })
+  const browser = await chromium.launch(options)
   try {
-    const browser = await chromium.connect(server.wsEndpoint())
-    ownedBrowsers.set(browser, server)
+    const cdp = await browser.newBrowserCDPSession()
+    const info = await cdp.send('SystemInfo.getProcessInfo')
+    await cdp.detach()
+    const pid = info.processInfo.find(row => row.type === 'browser')?.id
+    assert.ok(Number.isSafeInteger(pid) && pid > 0, 'Owned Chrome PID is required')
+    const group = Number(execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8' }).trim())
+    assert.equal(group, pid, 'Owned Chrome must have its own process group')
+    ownedBrowsers.set(browser, { pid, group })
     return browser
   } catch (error) {
-    await server.kill()
+    await browser.close()
     throw error
   }
+}
+
+function killOwnedBrowser(owned) {
+  try { process.kill(-owned.group, 'SIGKILL') }
+  catch (error) { if (error.code !== 'ESRCH') throw error }
 }
 
 async function sampleClient(client) {

@@ -135,6 +135,47 @@ test('equal-depth background painters keep birth insertion order across deferred
   } finally { views.destroy(); root.destroy(); preWorld.destroy() }
 })
 
+test('mixed retirement preserves unrelated painters and surviving resources in both roots', () => {
+  const root = new Container({ sortableChildren: true }), preWorld = new Container({ sortableChildren: true })
+  const worldPainter = new Container({ label: 'unrelated-world', zIndex: 3 })
+  const preWorldPainter = new Container({ label: 'unrelated-background', zIndex: 3 })
+  root.addChild(worldPainter); preWorld.addChild(preWorldPainter)
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const effects = Array.from({ length: 2048 }, (_, index) => ({
+    ...fixture('fade', true, index % 2 === 0 ? 'world-sorted' : 'background'), id: index + 1,
+  }))
+  try {
+    views.update(effects, inside, 900)
+    for (const effect of effects) views.setDepth(effect.id, 7 - effect.id)
+    root.sortChildren(); preWorld.sortChildren()
+    const original = [root, preWorld].map(parent => [...parent.children])
+    const retainedIds = new Set([2, 5, 6])
+    const expired = new Set(original.flat().filter(child => (
+      effects.some(effect => !retainedIds.has(effect.id) && child.label.endsWith(`:${effect.id}`))
+    )))
+    const resources = new Map(original.flat().map(child => [child, [...child.children]]))
+    views.update(effects.filter(effect => retainedIds.has(effect.id)), inside, 900)
+    assert.equal(views.size, retainedIds.size)
+    for (const [index, parent] of [root, preWorld].entries()) {
+      assert.deepEqual(parent.children, original[index]!.filter(child => !expired.has(child)))
+      for (const child of parent.children) {
+        assert.equal(child.parent, parent)
+        assert.equal(child.destroyed, false)
+        assert.deepEqual(child.children, resources.get(child))
+        for (const resource of child.children) assert.equal(resource.destroyed, false)
+      }
+    }
+    for (const child of expired) {
+      assert.equal(child.parent, null)
+      assert.equal(child.destroyed, true)
+      for (const resource of resources.get(child)!) assert.equal(resource.destroyed, true)
+    }
+    views.destroy()
+    assert.deepEqual(root.children, [worldPainter])
+    assert.deepEqual(preWorld.children, [preWorldPainter])
+  } finally { views.destroy(); root.destroy({ children: true }); preWorld.destroy({ children: true }) }
+})
+
 function fixture(kind: BoneyardEnemyDeathEffectSnapshot['kind'], shadow: boolean,
   presentationOwner: BoneyardEnemyDeathEffectSnapshot['presentationOwner']): BoneyardEnemyDeathEffectSnapshot {
   return { ageTicks: 0, alpha: 1, atlas: 'BadGuys', blendMode: 'add', entry: 1,

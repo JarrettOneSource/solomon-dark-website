@@ -1205,7 +1205,7 @@ export function connectGameClientSession(
       },
       requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
-        if (gameplayResumeGrace !== null) return
+        if (gameplayResumeGrace !== null && source !== null) return
         if (source !== null) {
           if (snapshot.world.kind === 'hub') return
           if (

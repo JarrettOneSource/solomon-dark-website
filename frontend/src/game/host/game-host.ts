@@ -74,6 +74,7 @@ export const GAME_REPLICATION_HIGH_WATER_MARK = 8
 export const GAME_REPLICATION_LOW_WATER_MARK = 2
 const NO_HUB_ACTIVITIES: Readonly<Record<string, HubPlayerActivity | null>> = Object.freeze({})
 const DEFAULT_DEPLOYMENT_SAVE_TIMEOUT_MS = 30_000
+const MAX_CATCH_UP_TICKS = 25
 const GAME_CHAT_RATE_LIMIT = 5
 const GAME_CHAT_RATE_WINDOW_MS = 5_000
 const PARTY_JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -3521,7 +3522,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     ticking = true
     try {
       let steps = 0
-      while (now >= nextTickAt && steps < 25) {
+      // Keep fixed steps intact while allowing compression and socket callbacks
+      // to drain between expensive catch-up slices.
+      while (now >= nextTickAt && steps < MAX_CATCH_UP_TICKS
+        && (steps === 0 || performance.now() - now < GAME_FIXED_TICK_SECONDS * 1000)) {
         processFailedBots()
         processPendingBotSummons()
         processPendingBotInvitations(now)
@@ -3873,9 +3877,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       pruneLeaderboardRunState()
       prunePartyRejoinSlots()
-      if (steps === 25 && now >= nextTickAt) {
-        if (now - lastTickLagWarningAt >= 10_000) {
-          lastTickLagWarningAt = now
+      const finishedAt = performance.now()
+      if (finishedAt - nextTickAt >= MAX_CATCH_UP_TICKS * GAME_FIXED_TICK_SECONDS * 1000) {
+        if (finishedAt - lastTickLagWarningAt >= 10_000) {
+          lastTickLagWarningAt = finishedAt
           logGameServerEvent(
             options.log,
             'game-host',
@@ -3883,13 +3888,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             'simulation.tick_lag',
             'The authoritative simulation fell behind and dropped accumulated wall-clock time.',
             logDetails({
-              behindMs: Math.max(0, Math.round(now - nextTickAt)),
+              behindMs: Math.max(0, Math.round(finishedAt - nextTickAt)),
               playerCount: clients.size,
               serverTick: state.tick,
             }),
           )
         }
-        nextTickAt = now + GAME_FIXED_TICK_SECONDS * 1000
+        nextTickAt = finishedAt + GAME_FIXED_TICK_SECONDS * 1000
       }
     } catch (error) {
       logGameServerEvent(

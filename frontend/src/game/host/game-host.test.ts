@@ -349,7 +349,7 @@ test('snapshot compression is bounded and skips sub-kilobyte control messages', 
     concurrencyLimit: 4,
     serverNoContextTakeover: true,
     threshold: 1_024,
-    zlibDeflateOptions: { level: 3, memLevel: 7 },
+    zlibDeflateOptions: { chunkSize: 128 * 1_024, level: 3, memLevel: 7 },
   })
 })
 

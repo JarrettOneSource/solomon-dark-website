@@ -189,6 +189,138 @@ burst populations, checkpoint work, and sustained active delivery. The
 allocation and ring-lifetime repairs address reproduced candidate defects;
 historical stall/white-frame attribution remains a separate evidence limit.
 
+### Final-candidate sustained delivery failure — 2026-09-23
+
+Candidate `23ac703e5efceaa590a5554662695bfe59aca2b6` passed the complete Mac
+canonical gate and all native-boss, Game Over, Coffin and acknowledgment-recovery
+browser journeys. Its subsequent two-browser Air/Ether run failed at wave 31:
+the active snapshot gap reached **2,131.8 ms**, exceeding the declared 1,000 ms
+acceptance limit. Neither client reported a decoder error. The measured Air
+window still rendered 59.4 FPS, with 27.9 ms frame p99 and 28.7 ms maximum.
+
+Both host peers entered flow control at `2026-09-23T03:09:02.914Z`, recovering
+after 3,180/3,468 ms and skipping 62/67 snapshots. A Faculty death produced
+8,110 effects in the corresponding host sample; that five-second interval
+measured 95.1 Hz, 211.4 ms maximum event-loop delay, and 94.5% process CPU.
+The retained worst-tick state at tick 136378 contains 7,057 effects. Its full
+806,022-byte keyframe compresses to 206,755 bytes: eight isolated Mac trials
+measure 6.7–8.4 ms compression, 6.3–22.9 ms validation/decode, and 3.3–10.5 ms
+reconstruction. Those isolated measurements do not establish the live cause.
+
+The failed window previously wrote only the first peer before throwing. The
+monitor now retains both peers' windows before assertions and separately
+records browser-local snapshot arrival/acknowledgment timing. Temporary,
+task-owned host instrumentation correlates send completion and received
+acknowledgments. This distinguishes transport/processing latency from the
+external observer's delivery timestamps. The gameplay source and acceptance
+limit are unchanged during this investigation; the sustained gate remains
+failed, and publication is still blocked on resolving that failure.
+
+### Host delivery boundary reopening
+
+The instrumented repeat on the same gameplay tree fails at wave 30 on September
+23 at 04:14 UTC: both real browsers keep rendering at 58–59 FPS but receive
+snapshots 3,283/3,175 ms apart. Joining host send completion, browser receipt,
+browser acknowledgment send, and host acknowledgment receipt by sequence shows
+3.18–8.75 seconds in the host send queue; delivery after send completion takes
+1–24 ms and browser receipt-to-acknowledgment takes under 5 ms. Host receipt of
+those acknowledgments is itself delayed by as much as 2.85 seconds. This rules
+out delayed observer events and browser decode as the cause of this interval.
+It does not by itself distinguish compression callbacks from host scheduling.
+
+The host loops through up to 25 overdue fixed steps before yielding. During
+this burst, 100-step mean simulation times rise to 16.5/21.4 ms; a batch can
+therefore monopolize the event loop for hundreds of milliseconds, repeatedly
+postponing the compression callbacks that drain a large ordered WebSocket
+message. A 26,050-effect stock Faculty fixture confirms allocation/collection
+pressure (4.59 ms mean, 33.20 ms p99 over 500 decaying ticks; most sampled CPU
+is garbage collection). This is a focused workload, not a historical replay.
+
+The next controlled experiment bounds the host's synchronous catch-up slice
+while retaining fixed 100 Hz simulation steps, existing debt shedding, all
+native populations and lifetimes, and the eight-snapshot backpressure limit.
+A short real-socket Faculty replay must improve delivery before the full
+Air/Ether journey is repeated. The shared-Hub and private-host branches use
+the same scheduler and must both retain their lifecycle and pause behavior.
+
+The short two-socket Faculty replay reproduces the failure without rendering:
+26,050 native effects retire normally, but send completion takes 3,412 ms and
+snapshots arrive up to 5,661 ms apart. Bounding the catch-up slice to 10 ms
+still yields a 3,259 ms send delay and 3,340 ms snapshot gap. That experiment
+was removed: scheduling alone does not repair delivery.
+
+Installed Node 22.17's `node:zlib` `processCallback` submits another worker
+operation whenever its output buffer fills. The installed `ws` codec waits
+for every such callback before publishing the complete ordered message.
+With the default 16 KiB output buffer, large compressed checkpoints/snapshots
+therefore need many event-loop round trips while native ticks occupy the
+same thread. The next isolated experiment uses the existing zlib output-buffer
+option at the shared compression owner. It keeps compression level, concurrency,
+context isolation, payload limits, native populations, and scheduler unchanged.
+
+The shared-browser regression also exposes a concrete pause deadlock. The owner
+pauses the resumed Faculty fixture through Escape, a second browser joins, and
+the host announces pending resume readiness while the owner still holds the
+pause. The owner's RESUME GAME button calls `requestGameplayPause(null)`, but
+the client suppresses every pause request while a resume grace exists. Both
+clients remain at "Waiting on players" indefinitely. The host already admits
+an owner releasing their pause during grace; the client must preserve that
+release path while continuing to reject a new pause or another owner's release.
+This belongs to the same multiplayer freeze lifecycle and is included in the
+focused session regression and the two-browser burst journey.
+
+The compression-only 128 KiB experiment reduces the short socket replay's
+maximum send delay from 3,412 to 1,550 ms, but the browser still reaches a
+1,478 ms active gap. Combining that existing zlib option with a one-fixed-tick
+synchronous catch-up budget reduces the browser gap to 434 ms; all 26,050
+native effects retire and both clients report no errors. The guest in that
+initial proof joins after most of the burst, so the maintained regression now
+pauses through the real menu until both peers are present. The host still
+performs complete fixed steps and sheds only accumulated wall-clock debt; the
+250 ms debt cap is measured after the batch, so yielding cannot accumulate an
+unbounded backlog. Compression retains its level 3, four-operation concurrency,
+no-context-takeover and payload/backpressure limits. The output buffer adds
+112 KiB per initialized deflater compared with Node's default.
+
+The owner-release session regression fails before the client correction
+(expected a new release message; no message sent), then passes after admitting
+only `source === null` during grace. A different player's pause remains
+unreleasable, and starting/replacing a pause during grace remains suppressed.
+The full host/client tests, two-present-browser Faculty regression, unchanged-host
+negative comparison and exact-candidate sustained acceptance are still pending.
+The temporary wire timestamps are removed from the maintained endurance monitor;
+its durable changes retain both failing peer windows and bound owned-browser
+shutdown. No publication or production acceptance is inferred from these pilots.
+
+### Isolated-host focused acceptance
+
+The expanded fixture initially shared a Node process between Playwright and the
+host. With two browser streams, driver-side parsing and collection could delay
+the same simulation thread; those measurements are not isolated host acceptance.
+`native-faculty-delivery-host.mjs` now runs the unchanged host in a forked process,
+matching the production/endurance ownership boundary. Browser receipt timing
+resets across explicit pause/grace messages. The owner pauses through the real
+menu, the guest joins, the owner releases the pause and both clients resume.
+
+Three consecutive Mac Chrome runs retain 26,023, 25,910 and 25,956 native effects
+when both peers are present. Their respective maximum active snapshot gaps are
+714.6/543.2 ms, 370.7/413.3 ms and 391.0/522.1 ms. All effects retire, both players
+continue rendering and receiving updates, and all client error arrays are empty.
+The candidate retains the 1,000 ms bound and requires over 25,000 effects before
+resuming. The 120 host/client tests, full frontend lint/build, and entry 086's
+complete effect-family/mixed-root lifecycle checks pass.
+
+The old-host control cannot pause quickly enough to preserve the same starting
+population: only 23,097 effects remain when the guest joins. A separate negative
+control allowed that reduced starting population solely for diagnosis; it then
+measured 254.3/320.7 ms and did not reproduce the original long-run failure.
+This short comparison is therefore inconclusive for isolating the transport
+change. It does not replace the previously failing Air/Ether endurance scenario,
+and its reduced population is not accepted as candidate coverage. Entry 086's
+independent real-Pixi measurements establish the dense-retirement improvement.
+The exact-candidate full gate and wave-46 endurance run remain required before
+publication; historical stall/white-image attribution remains explicitly unknown.
+
 ## 2026-09-22 — Report 10 terminal Arena clock investigation
 
 Recorded before implementation, against `d05c812d1`. Report 10's original

@@ -698,7 +698,7 @@ test('client publishes Hub activity locally but reserves gameplay pause for Bone
   removeGrace()
 })
 
-test('client replaces only its own modal pause source and emits a strict release', async () => {
+test('client replaces only its own modal pause source and emits a strict release', async (context) => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
@@ -711,6 +711,7 @@ test('client replaces only its own modal pause source and emits a strict release
     createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
   )
   const session = await connecting
+  context.after(() => session.destroy())
   receiveSnapshot(
     transport,
     createGameSnapshot(
@@ -741,7 +742,17 @@ test('client replaces only its own modal pause source and emits a strict release
     source: 'skill-selector',
     type: 'client-gameplay-pause',
   })
+  // A peer joining an already-paused Boneyard can start readiness while the
+  // original owner still needs to release the pause through RESUME GAME.
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'game-rejoined', remainingMs: null, sequence: 9 },
+  }))
+  const duringGrace = transport.sent.length
+  session.requestGameplayPause('pause-menu')
+  assert.equal(transport.sent.length, duringGrace)
   session.requestGameplayPause(null)
+  assert.equal(transport.sent.length, duringGrace + 1)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     paused: false,
     type: 'client-gameplay-pause',
@@ -755,7 +766,6 @@ test('client replaces only its own modal pause source and emits a strict release
   session.requestGameplayPause('skill-book')
   session.requestGameplayPause(null)
   assert.equal(transport.sent.length, messageCount)
-  session.destroy()
 })
 
 test('client correlates bounded host Lua results and rejects guest or retired execution', async () => {

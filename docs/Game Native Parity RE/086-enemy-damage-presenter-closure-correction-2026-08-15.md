@@ -1,5 +1,45 @@
 # Enemy damage-presenter closure correction (2026-08-15)
 
+## 2026-09-23 — Report 05 renderer retirement reopening
+
+Recorded before implementation. The two-present-browser Faculty fixture retains
+25,477–26,023 simultaneous native effects, then retires all of them. Host/client
+unit tests, lint and build pass, but delivery still intermittently exceeds one
+second after the scheduler/compression repair. Browser CPU profiles identify
+Pixi `Container.removeChild` as the largest named self-time owner during the
+burst; the view currently removes each expired sibling separately, repeatedly
+searching and shifting the shared child array. A real-Pixi Mac replay with
+25,802 projected native Faculty effects, all offscreen so no sprite resources
+are created, measures 461–703 ms to retire all effects and 299–404 ms to retire
+alternating half. This proves a renderer teardown cost independent of GPU work,
+without attributing every historical stall to it.
+
+The owning boundary remains all twenty effect kinds and all five painter lanes.
+Use installed Pixi's complete child removal/re-add APIs to batch dense
+retirements within each affected parent, retaining survivor identities,
+transforms, resources, relative order and unrelated root children. Scene updates
+are synchronous and no game renderer subscribes to these child membership
+events. Only expired views are destroyed. Partial-range removal is unsuitable
+in the installed Pixi implementation because its range helper passes the end
+index to a count-based array utility; use the full-list API instead. Recheck
+both full and mixed retirement and the two-browser journey before accepting
+this optimization. Ordinary small retirement batches need measured comparison
+so a large sibling list is not needlessly detached for one expired effect.
+
+The controlled comparison reduces full-population median retirement from
+468.26 ms to 19.53 ms, and alternating-half retirement from 242.29 ms to
+22.48 ms. Small batches should not rebuild a large live sibling list: at
+404 removals the two paths are approximately equal (15.43/15.97 ms), while
+101 removals favor individual removal (11.35/18.74 ms). The adapter therefore
+batches only parents losing at least 512 effect containers. This is a measured
+renderer threshold, not a native population or lifetime change. The mixed-root
+regression retains unrelated children and surviving sprite identities, destroys
+only expired resources, and preserves order through later full teardown.
+With the final per-parent threshold, the measured medians are 23.20 ms for
+full retirement and 18.90 ms for alternating-half retirement.
+All four Mac allocation/lifecycle tests pass, including the complete 20-kind,
+two-shadow-state, five-lane matrix. Built-browser repeat acceptance remains pending.
+
 ## 2026-09-22 — Report 05 high-population allocation reopening
 
 Recorded before the allocation change. The two-browser native wave-32 burst

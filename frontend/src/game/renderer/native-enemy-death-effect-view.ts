@@ -13,6 +13,10 @@ import {
 } from './native-enemy-death-effect-presentation.ts'
 import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 
+// Measured crossover for a large native Faculty population; small removals
+// avoid rebuilding an otherwise unchanged parent's child list.
+const MIN_BATCH_RETIREMENT = 512
+
 export class NativeEnemyDeathEffectViews {
   private readonly liveIds = new Set<number>()
   private readonly root: Container
@@ -47,11 +51,13 @@ export class NativeEnemyDeathEffectViews {
       }
       if (view.update(effect, visibleBounds, viewHeight)) this.visibleCount += 1
     }
+    const retired: NativeEnemyDeathEffectView[] = []
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
-      view.destroy()
+      retired.push(view)
       this.views.delete(id)
     }
+    this.destroyViews(retired)
   }
 
   setDepth(id: number, depth: number): void {
@@ -75,10 +81,32 @@ export class NativeEnemyDeathEffectViews {
   }
 
   destroy(): void {
-    for (const view of this.views.values()) view.destroy()
+    this.destroyViews([...this.views.values()])
     this.views.clear()
     this.liveIds.clear()
     this.visibleCount = 0
+  }
+
+  private destroyViews(views: readonly NativeEnemyDeathEffectView[]): void {
+    if (views.length >= MIN_BATCH_RETIREMENT) {
+      const byRoot = new Map<Container, Set<Container>>()
+      for (const view of views) {
+        const root = view.container.parent
+        if (!root) continue
+        let retired = byRoot.get(root)
+        if (!retired) { retired = new Set(); byRoot.set(root, retired) }
+        retired.add(view.container)
+      }
+      for (const [root, retired] of byRoot) {
+        if (retired.size < MIN_BATCH_RETIREMENT) continue
+        // Pixi removes individual siblings with indexOf/splice. Detach once,
+        // then restore survivors in their exact order before rendering resumes.
+        const survivors = root.children.filter(child => !retired.has(child))
+        root.removeChildren()
+        for (const child of survivors) root.addChild(child)
+      }
+    }
+    for (const view of views) view.destroy()
   }
 }
 
@@ -93,13 +121,12 @@ class NativeEnemyDeathEffectView {
   private boundsRotation = Number.NaN
   private boundsScale = Number.NaN
   private boundsScaleY = Number.NaN
-  private readonly container: Container
+  readonly container: Container
   private effect: Sprite | null = null
   private gradientIndex = 0
   private readonly gradients: FillGradient[] = []
   private readonly kind: BoneyardEnemyDeathEffectSnapshot['kind']
   private resourcesCreated = false
-  private readonly root: Container
   private shadow: Sprite | null = null
   private readonly shadowed: boolean
   private readonly textures: BoneyardWorldTextures
@@ -110,7 +137,6 @@ class NativeEnemyDeathEffectView {
     textures: BoneyardWorldTextures,
     initial: BoneyardEnemyDeathEffectSnapshot,
   ) {
-    this.root = root
     this.textures = textures
     this.kind = initial.kind
     this.shadowed = !nativeEnemyDeathEffectIsBanish(initial.kind) && initial.shadow
@@ -206,7 +232,6 @@ class NativeEnemyDeathEffectView {
 
   destroy(): void {
     this.clearGradients()
-    this.root.removeChild(this.container)
     this.container.destroy({ children: true })
   }
 
