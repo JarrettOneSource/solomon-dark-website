@@ -16,7 +16,7 @@ import { archiveCompletedRunEconomy, createNativeUnforgeBonuses, hubEconomyInven
 import type { HubParticipantState, HubParticipantTransition, HubRegionId, HubTransitionPhase } from '../core-kernels/hub-regions.ts'
 import { createHubCollegeIntroParticipantState, isHubRegionId, isHubTransitionEdge } from '../core-kernels/hub-regions.ts'
 import type { NativeBeltEntry, NativeBeltItemTypeId, PlayerBeltComponent } from '../core-kernels/native-belt.ts'
-import { freezeNativeBelt, migrateSkillQuickbarToNativeBelt, nativeBeltOwnedItem, nativeInventoryItemCanBindToBelt } from '../core-kernels/native-belt.ts'
+import { autofillNewlyLearnedNativeBeltSkills, freezeNativeBelt, migrateSkillQuickbarToNativeBelt, nativeBeltOwnedItem, nativeInventoryItemCanBindToBelt } from '../core-kernels/native-belt.ts'
 import { createNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
 import { createNativeDampenedSpell } from '../core-kernels/native-dampened-spell.ts'
 import { createNativeDemonSkullEncounter } from '../core-kernels/native-demon-skull.ts'
@@ -1534,6 +1534,7 @@ function normalizePlayerStore(
         ? legacyBook.skillQuickbar
         : array(legacyBook.secondaryBelt, 'game save secondary belt')
     let skillBook = normalizeSkillBook(legacyBook, index)
+    const savedSkillBook = skillBook
     const statBook = statBooks[index]!
     const economy = economies[index]!
     const created = createPlayerSkillRuntime(skillBook, statBook, economy)
@@ -1575,7 +1576,7 @@ function normalizePlayerStore(
       }
     }
     const refreshed = refreshPlayerSkillRuntime(runtime, skillBook, statBook, economy)
-    belts.push(sourceSchemaVersion >= 18
+    const restoredBelt = sourceSchemaVersion >= 18
       ? normalizeSavedBelt(
           (source.belts as unknown[])[index],
           index,
@@ -1584,7 +1585,10 @@ function normalizePlayerStore(
         )
       : migrateSkillQuickbarToNativeBelt(legacyQuickbar!.map((entry) => (
           entry === null ? null : finiteNumber(entry, 'game save skill quickbar entry')
-        ))))
+        )))
+    belts.push(autofillNewlyLearnedNativeBeltSkills(
+      restoredBelt, savedSkillBook, refreshed.skillBook,
+    ))
     primaryCasts.push(normalizePrimaryCast(source.primaryCasts[index], refreshed.skillBook))
     skillBooks.push(refreshed.skillBook)
     skillRuntimes.push(refreshed.runtime)
@@ -1906,7 +1910,7 @@ function normalizeSavedBelt(
     if (source.kind === 'skill') {
       rejectUnexpectedKeys(source, field, ['kind', 'skillId'])
       const skillId = finiteNumber(source.skillId, `${field} skill`)
-      if (!isNativeBeltSkill(skillId) || (skillBook.permanentRanks[skillId] ?? 0) < 1) {
+      if (!isNativeBeltSkill(skillId) || (skillBook.effectiveRanks[skillId] ?? 0) < 1) {
         throw new Error(`${field} skill is invalid`)
       }
       return Object.freeze({ kind: 'skill', skillId })

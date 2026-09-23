@@ -103,6 +103,7 @@ export interface PlayerSkillBookComponent {
   readonly disciplineRoot: number
   readonly effectiveRanks: readonly number[]
   readonly elementRoot: number
+  /** Native visible acquisition order, including currently equipment-granted skills. */
   readonly learnedSkillOrder: readonly number[]
   readonly permanentRanks: readonly number[]
   readonly primarySkillId: NativePlayerPrimarySkillId
@@ -411,7 +412,7 @@ export function selectPlayerPrimarySkill(
   if (nativeSkillCategory(skillId) !== 1) {
     throw new RangeError(`skill ${skillId} is not a native primary attack`)
   }
-  if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
+  if ((skillBook.effectiveRanks[skillId] ?? 0) < 1) {
     throw new Error(`primary skill ${skillId} is not learned`)
   }
   if (skillId === SPELL_WELDING_SKILL_ID && skillBook.weldBuildId === null) {
@@ -597,7 +598,7 @@ export function grantPlayerWeldBuild(
   return {
     ...next,
     effectiveRanks: Object.freeze(effectiveRanks),
-    learnedSkillOrder: learned
+    learnedSkillOrder: learned && !next.learnedSkillOrder.includes(SPELL_WELDING_SKILL_ID)
       ? Object.freeze([...next.learnedSkillOrder, SPELL_WELDING_SKILL_ID])
       : next.learnedSkillOrder,
     permanentRanks: Object.freeze(permanentRanks),
@@ -1002,7 +1003,7 @@ export function applyPlayerSkillChoice(
   effectiveRanks[chosen.skillId] = nextRank
   const nextBook: PlayerSkillBookComponent = {
     ...skillBook,
-    learnedSkillOrder: rank === 0
+    learnedSkillOrder: rank === 0 && !skillBook.learnedSkillOrder.includes(chosen.skillId)
       ? Object.freeze([...skillBook.learnedSkillOrder, chosen.skillId])
       : skillBook.learnedSkillOrder,
     permanentRanks: Object.freeze(permanentRanks),
@@ -1200,7 +1201,9 @@ export function grantNativeWeirdCasterSkill(
     skillBook: {
       ...skillBook,
       effectiveRanks: Object.freeze(effectiveRanks),
-      learnedSkillOrder: Object.freeze([...skillBook.learnedSkillOrder, skillId]),
+      learnedSkillOrder: skillBook.learnedSkillOrder.includes(skillId)
+        ? skillBook.learnedSkillOrder
+        : Object.freeze([...skillBook.learnedSkillOrder, skillId]),
       permanentRanks: Object.freeze(permanentRanks),
     },
     skillId,

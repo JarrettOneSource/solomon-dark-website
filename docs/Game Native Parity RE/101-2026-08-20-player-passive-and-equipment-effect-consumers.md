@@ -726,3 +726,168 @@ to live percentage modifiers alongside the complete-set bonus.
 
 The added fractional case failed on Mac with `18.900000000000002`, then the
 float32 bolt store passed all 107 focused tests and test TypeScript checking.
+
+## September 23, 2026 reopening — equipment-granted skill availability
+
+Status: implementation, focused regressions and real Chrome acceptance complete.
+Full-gate, publication and reaction receipts belong to the report archive's
+release record; publication requires the final unchanged candidate to pass the
+canonical Mac gate.
+Owner: Fleet `vzzjmsam`, `/root`; report archive entry 16. No other report is
+claimed by this reopening. The archive remains private retained evidence and is
+not copied into this repository.
+
+### Failure and corrected system boundary
+
+The earlier equipment closure proved numeric effective ranks, but did not carry
+zero-permanent-rank grants through the learned/visible list, BeltButton binding,
+client input, SkillScreen, wire validation or save validation. Consequently a
+Fire wizard could have effective Call Leviathan rank 1 internally yet receive
+no usable belt entry. Closing an isolated resolver test was not closure of the
+item-granted ability system.
+
+The reopened system is equipment-derived skill availability: all native Grant
+Skill/Add Skill sources, their effective-rank and visible-list lifetime, shared
+primary/secondary/concentration consumers, automatic/manual belt placement,
+replication, persistence and source removal. It does not change loot generation,
+spell damage/cooldown behavior, native FX ordering, or unrelated reports 17/18.
+
+### Evidence and identity
+
+Freshly hashed retail 0.72.5 `SolomonDark.exe`: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Ghidra 12.0.3 project `SolomonDark`, program
+`SolomonDark.exe`, canonical Windows source project and read-only replica pool.
+The existing Mod Loader checkout was used read-only at
+`08bfba9ef367f7b863848030d0a289dc31e33192`; no Mod Loader files were changed.
+Wrapper SHA-256:
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+`decompile_targets.py` SHA-256:
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+The wrapper ran `-readOnly -noanalysis`. Target decompiles covered
+`00660580,00660320,005C85E0,00576AA0,0065F5B0,005D5600,0065F9A0,0066B380,
+00656F60,006623F0`; raw instruction dumps covered the complete grant setter,
+normal acquisition and first-empty belt helper. Complete xrefs found exactly
+two calls to `00660580`, both in the kind-4/kind-7 branches of `00576AA0`;
+`005C85E0` has three callers: fresh creation `005D0290`, normal acquisition
+`00660320` and temporary grant `00660580`. Raw logs are task-owned scratch,
+not maintained source.
+
+| Native owner | Recovered contract | Confidence |
+| --- | --- | --- |
+| `00660580`, writes `00660627/00660685` | Grant writes row `+22` effective rank only; it never promotes row `+20` permanent rank. Requested rank is capped, then Revelation gives its existing floor of two. A higher existing effective rank is not lowered. | High, raw instructions |
+| `00660709..0066074E`, `RET 0xC` | The grant has three stack arguments: skill, magnitude and automatic-belt flag. New public grants enter the unique visible list `+850/+854`; category 1/2 optionally call first-empty placement. Decompiler's inferred two-argument signature conflates magnitude and flag; raw stack offsets resolve it. | High, raw instructions |
+| `00660320` | Normal learning's automatic-placement test uses the prior **effective** rank, not the permanent rank. Permanently learning an already item-granted ability must not duplicate its visible row or automatic binding. | High, raw instructions |
+| `005C85E0` | Scans eight entries at stride `EC` for type `7000`. It copies the first empty slot's rectangle, passes it through the shared maximum-overlap drop routing, and writes type `1B67`/skill. Thus normal nonoverlapping slots fill left-to-right; a full belt is untouched and manual duplicates remain legal. | High, raw instructions |
+| `0065F5B0`, `00656F60`, `00576AA0` | Start from permanent ranks; preserve the existing source/FX order and grant-containing-source-last behavior. Kind 7 grants an absent skill or boosts an already available one. Boost-only effects do not grant unknown skills. | High, existing full FX recovery plus fresh callers |
+| `006623F0`, call `006635FD` | After recomputing effective ranks, remove visible-list entries whose effective rank is zero. Other equipped sources or permanent learning keep the entry available. | High, fresh decompile |
+| `0066B380` | SkillScreen consumes that visible list, including temporary item grants, in its recorded order. The visible list is not synonymous with permanent learning. | High, fresh decompile |
+| `0065F9A0`, `005D5600` | Selected primary/concentration and activation use effective availability. Grant removal cannot leave a castable unavailable skill. | High, fresh decompile and maintained activation contract |
+
+### Complete membership and implementation contract
+
+Named granting recipes (all 15, all 20 kind-4/kind-7 rows): Pentaclostic Ring;
+Arcanoric Robe; Cosmofluxic Wand; Theptoplasmar Amulet; Synertauxic Ring;
+Sublunarous Hat; Bug-Master's Wand; Pan-Dimensional Strangler; Storm Choker;
+Clayshaper's Ring; Claybaker's Ring; Kiln; Absolox's Boomstick; Ringwall;
+Yzmar's Handicap. The two kind-4 rows are Strangler/Call Leviathan (1) and
+Ringwall/Shield (2); the other eighteen are kind-7 rows. Tempest Kit contributes the twenty-first
+grant row: its complete four-member set (recipes 16, 17, 18, 19) grants
+Hurricane (kind 7, target 29, rank 1). Every row is tested
+against the same shared availability path, not a recipe-15 special case.
+
+Random Grant Skill's complete enabled target family is the deduplicated union
+of `8,11,16,21,22,23,24,27,29,32,40,50,52,55,65,72,73,74` and category-three
+rows `57..63,65..71` (31 IDs), at authored magnitudes 1/2/4. Generation and its
+RNG schedule stay unchanged. Category-three manual belt support remains the
+existing explicit web extension from ledger 246; only category 1/2 auto-fill.
+Spell Welding still requires a real Weld build: a numeric grant must not invent
+one. Ordinary boost, boost-class, all-skills, completed sets, Revelation,
+Mindstar and maximum-Weld numeric effects retain their separate established
+ordering; derived effective component ranks alone do not invent visible grants.
+
+The implementation preserves permanent ranks and unlocks, tracks grant
+acquisition order in the shared equipment resolver, reconciles it with the
+existing visible order, and uses effective availability at belt/selection gates.
+Repeated refresh and rank-up must not fill cleared slots or create duplicates.
+Grant removal prunes unavailable rows/bindings; remaining providers and learned
+skills survive. Saved/native portable progression must not turn temporary
+skills into permanent learning. The portable format's existing lack of native
+inventory materialization remains an explicit pre-existing boundary, not a
+reason to disable full web-save/equipment restoration.
+
+Acceptance matrix: exact Strangler rank 1, Revelation rank 2, all named grant
+rows and random targets, grant versus boost order/caps, first free/full belt,
+manual placement/duplicates, refresh/no-repeat, known-skill acquisition,
+unequip/re-equip/provider replacement, primary/concentration paths, both scene
+UIs, wire round-trip/negative validation, full and profile save restoration,
+old saved effective-only grants, no permanent promotion, and unaffected peers.
+All executable acceptance runs on the isolated Mac candidate.
+
+### Closure dispositions
+
+| Member / branch | Disposition | Evidence |
+| --- | --- | --- |
+| All 15 named recipes / 20 grant rows listed above, plus the Tempest Kit set row | `exact-ported` shared availability, visibility and belt lifecycle | Exhaustive resolver-to-player-store regression membership; no recipe-specific shortcut |
+| All 31 enabled random grant targets at magnitudes 1/2/4 | `exact-ported` shared availability | Cartesian target/magnitude tests, category-specific belt and primary selection assertions |
+| Numeric effect ordering, caps, Revelation, Mindstar, maximum-Weld and boost-only gates | `verified-already-at-parity` | Existing complete effect/passive suites retained; effective ranks remain separate from permanent ranks |
+| Visible order, first empty/full belt, manual duplicates, refresh, normal learning after grant and final-provider removal | `exact-ported` | Equipment-granted-skills regressions, full snapshot validation and real hub/Boneyard interaction |
+| Primary / concentration selection, source replacement, unequip and snapshot commit ordering | `exact-ported` | Native `0065F9A0` selection pass; deterministic RNG assertions and Chrome reproduction of the removed-primary crash |
+| Replication, full/profile saves, older missing-visible-row saves and native progression export | `exact-ported` within the existing format contract | Protocol 135, strict negative cases, save round trips and explicit no-permanent-promotion test |
+| Unrelated peers | `verified-already-at-parity` after shared-path changes | A two-owner snapshot preserves the unaffected player's five relevant components and does not expose the grant to that peer |
+| Category-three manual belt binding | `out-of-system` native behavior change: existing explicit web extension | Preserved from ledger 246; it is still not automatically belted |
+| Spell Welding numeric grant without a concrete Weld build | `verified-already-at-parity` rejection | Grant does not synthesize an unavailable Weld build |
+| Retail inventory materialization | `out-of-system` pre-existing portable-format boundary | The native projection does not promote grants; complete browser inventory/save restoration remains available |
+
+The removal journey exposed a second defect at the same system boundary:
+equipping a replacement ring removed the selected item-only Magic Missile,
+then the host tried to publish an inventory snapshot before the next unpaused
+tick. `nativePrimarySpellSummary` correctly rejected unavailable primary 8.
+The fix completes the existing native concentration/primary autofill pass in
+the authoritative inventory transaction, using the simulation's gameplay RNG,
+before snapshot/save publication. The common boundary also covers belt-driven
+equipment/sack actions and equipment removal during mod-package reconciliation.
+It does not accept unavailable primaries or weaken the snapshot decoder.
+Replacing or unequipping the source consumes exactly one fallback draw in the
+single-primary fixture and does not require advancing the paused game tick.
+
+### Accepted executable evidence
+
+The 15 focused equipment-grant tests and 83 simulation tests pass together
+(98/98), as does test TypeScript checking. Both new paused-inventory removal
+tests first failed with primary 8 remaining selected instead of available
+primary 16. The initial report-specific red regression also preceded the fix.
+
+The maintained `frontend/tools/smoke-equipment-grants.mjs` journey uses the
+production static client and a real authenticated localhost host in Mac Chrome.
+It verifies the named Strangler at effective rank 1/permanent rank 0, automatic
+slot 1, manual duplicate slot 7, item-only Magic Missile and Channel Mana
+selection, a real key-triggered Call Leviathan cast after the authentic Solomon
+combat admission, replicated Leviathan/appendage renderer primitives, removal
+of both bindings, re-acquisition, Revelation rank 2, and removal of the primary
+and concentration source with an immediate valid fallback. Original permanent
+ranks remain unchanged. Page, console and failed-response error arrays are empty.
+
+Test fixture corrections were not runtime relaxations: a level-one wizard gets
+a level-one generated ring; combat admission is not bypassed; Revelation
+fixture changes are published on an unpaused tick instead of assuming an
+out-of-band host mutation is already visible to a paused client. The repeatable
+arena uses the zero-byte seed already used by secondary-ability acceptance.
+
+One earlier unseeded arena attempt failed before the item-grant cast with
+`Boneyard has no dark collision-safe spawn placement` (radius
+14.645516911521554, origin 771.48876953125 / 1003.5650024414062).
+Its seed was not retained, so neither reproducibility nor a historical baseline
+is claimed. Random arena generation/light-domain placement is outside this
+equipment-availability fix and remains an explicitly recorded follow-up; no
+spawn acceptance rule was weakened to obtain the passing grant journey.
+
+Receipt SHA-256 values (raw execution logs and screenshots are disposable):
+
+- Initial report-specific red regression: `19a8abaaf0c15ff6b28ee0068d8cdfb7f4914db2167581e4fe3a73fdfd411845`
+- Paused-removal red tests: `1539053e7fcc5c6dbf11a3ffb168bb424e1a7906a953fef9779ed1b9659b7c8c`
+- Accepted 98-test run: `1fdef215a3ae7ffee284880fff9c2ddc373e4a4eb8f656473e99ed5597219163`
+- Accepted complete Chrome journey: `88f5f04086fdc13886e3f5fbb2b8eec6327d8a251fbf70a20de672d39d30642c`
+- Removed-primary browser failure: `37eb11575ae8d3dbe004b240385ecdc4b3cc1cb936d0bb70359f5ead6a448e0d`
+- Separate unseeded arena failure: `bc317bb50dd65c95da8c4e1e7c81b155f09bf9a4f69008c6dbbac18e7df4fcbc`

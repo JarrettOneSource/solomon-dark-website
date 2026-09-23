@@ -222,8 +222,8 @@ export function playerBelt(
       if (!isNativeBeltSkill(skillId)) {
         throw new GameProtocolError(`${entryField}.skillId is not belt-eligible`)
       }
-      const permanentRank = progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0
-      if (permanentRank < 1) throw new GameProtocolError(`${entryField}.skillId is not learned`)
+      const effectiveRank = progression.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0
+      if (effectiveRank < 1) throw new GameProtocolError(`${entryField}.skillId is not learned`)
       return Object.freeze({ kind, skillId })
     }
     if (kind === 'health-potion' || kind === 'mana-potion') {

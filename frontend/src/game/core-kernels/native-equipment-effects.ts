@@ -73,6 +73,7 @@ export interface NativeEquipmentEffectSource {
 
 export interface NativeEquipmentResolution {
   readonly effectiveRanks: readonly number[]
+  readonly grantedSkillOrder: readonly number[]
   readonly modifiers: NativeEquipmentModifiers
 }
 
@@ -223,18 +224,27 @@ export function resolveNativeEquipmentEffects(
   ]
 
   const effectiveRanks = [...permanentRanks]
+  const grantedSkillOrder: number[] = []
   const skillPassSources = [
     ...allSources.filter(({ effects }) => !effects.some(({ kind }) => kind === 4)),
     ...allSources.filter(({ effects }) => effects.some(({ kind }) => kind === 4)),
   ]
   for (const source of skillPassSources) {
     for (const effect of source.effects) {
+      const previousRank = effectiveRanks[effect.target] ?? 0
       applyNativeEquipmentSkillEffect(
         effectiveRanks,
         permanentRanks,
         effect,
         ownedHagathaSelectors,
       )
+      // Native 00660580 records temporary acquisition in the visible list,
+      // independently of the save-facing permanent rank. Keep FX source order.
+      if (
+        (effect.kind === 4 || effect.kind === 7)
+        && effect.target >= 8 && effect.target <= 79
+        && previousRank === 0 && (effectiveRanks[effect.target] ?? 0) > 0
+      ) grantedSkillOrder.push(effect.target)
     }
   }
 
@@ -244,6 +254,7 @@ export function resolveNativeEquipmentEffects(
   }
   return Object.freeze({
     effectiveRanks: Object.freeze(effectiveRanks),
+    grantedSkillOrder: Object.freeze(grantedSkillOrder),
     modifiers: freezeNativeEquipmentModifiers(modifiers),
   })
 }

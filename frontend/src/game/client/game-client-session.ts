@@ -748,7 +748,7 @@ export function connectGameClientSession(
           || slot > 7
           || (skillId !== null && !isNativeBeltSkill(skillId))
           || (skillId !== null
-            && (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1)
+            && (progression?.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1)
         ) throw new Error('The quickbar skill is unavailable.')
         session.sendInput(STOPPED_INPUT)
         options.transport.send(encodeGameMessage({
@@ -1318,7 +1318,7 @@ export function connectGameClientSession(
           !progression
           || nativeSkillCategory(skillId) !== 3
           || progression.mindChugTicksRemaining !== 0
-          || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+          || (progression.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1
         ) throw new Error('The concentration is unavailable.')
         session.sendInput(STOPPED_INPUT)
         options.transport.send(encodeGameMessage({
@@ -1335,7 +1335,7 @@ export function connectGameClientSession(
           || progression.mindChugTicksRemaining !== 0
           || (slot === 1 && !progression.splitMind)
           || progression.concentrationSkillIds[slot === 0 ? 1 : 0] === skillId
-          || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+          || (progression.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1
         ) throw new Error('The concentration is unavailable.')
         session.sendInput(STOPPED_INPUT)
         options.transport.send(encodeGameMessage({
@@ -1349,7 +1349,7 @@ export function connectGameClientSession(
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           nativeSkillCategory(skillId) !== 1
-          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1
           || (skillId === 52 && progression?.weldBuildId === null)
         ) throw new Error('The primary skill is unavailable.')
         session.sendInput(STOPPED_INPUT)

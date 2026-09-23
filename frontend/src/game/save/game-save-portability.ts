@@ -509,7 +509,11 @@ export async function createPortableGameProfileFromWebSave(
       experienceBonus: profile.economy.unforgeBonuses.experience,
       firewalkerActive: secondary.firewalker,
       hagathaOwnership: Object.freeze(hagathaOwnership),
-      learnedOrder: Object.freeze([...skillBook.learnedSkillOrder]),
+      // Portable native inventory is retained, not materialized. Its progression
+      // projection cannot turn an equipment-only visible row into a learned rank.
+      learnedOrder: Object.freeze(skillBook.learnedSkillOrder.filter(skillId => (
+        (skillBook.permanentRanks[skillId] ?? 0) > 0
+      ))),
       level: progression.level,
       manaCostReduction: profile.economy.unforgeBonuses.manaCostReduction,
       maximumHealth: progression.maximumHealth,

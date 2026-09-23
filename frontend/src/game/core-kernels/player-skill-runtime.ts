@@ -187,9 +187,22 @@ export function refreshPlayerSkillRuntime(
     ),
     source.mindstarActive,
   )
+  // Native +850/+854 is the currently visible acquisition order, not a list
+  // restricted to permanent learning. Remove expired grants only after the FX
+  // pass; keep existing rows in place when another provider still supplies them.
+  const visibleOrder = skillBook.learnedSkillOrder.filter(skillId => (
+    effectiveRanks[skillId] !== 0
+  ))
+  for (const skillId of equipment.grantedSkillOrder) {
+    if (!visibleOrder.includes(skillId)) visibleOrder.push(skillId)
+  }
+  const learnedSkillOrder = sameNumbers(visibleOrder, skillBook.learnedSkillOrder)
+    ? skillBook.learnedSkillOrder
+    : Object.freeze(visibleOrder)
   let nextSkillBook = ranksEqual(effectiveRanks, skillBook.effectiveRanks)
+    && learnedSkillOrder === skillBook.learnedSkillOrder
     ? skillBook
-    : { ...skillBook, effectiveRanks }
+    : { ...skillBook, effectiveRanks, learnedSkillOrder }
   const weldBuild = nextSkillBook.weldBuildId === null
     ? null
     : nativeWeldBuild(nextSkillBook.weldBuildId)

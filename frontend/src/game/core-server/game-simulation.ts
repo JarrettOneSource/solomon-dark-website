@@ -75,7 +75,7 @@ import { boneyardNativeSecondaryDampenCandidates, boneyardNativeSecondaryTarget,
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import { applyPlayerContacts, finiteModMutation, gameWorldKey } from './player-contact-system.ts'
 import type { PlayerEntityStore } from './player-entity-store.ts'
-import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
+import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, autofillPlayerEntitySkillSelections, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
 import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 export type PlayerId = string
@@ -1162,13 +1162,41 @@ export function reconcileGameSimulationPlayerModPackages(
   const reconciled = reconcileHubEconomyModPackages(economy, availableModIds)
   return reconciled === economy
     ? state
-    : {
+    : finalizeInventorySkillAvailability(state, {
         ...state,
         playerEntities: replacePlayerEconomy(state.playerEntities, playerId, reconciled),
-      }
+      }, playerId)
 }
 
 export function applyGameSimulationHubAction(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  action: HubInventoryAction,
+  extensions?: GameSimulationExtensions,
+): GameSimulationInventoryActionResult {
+  const result = applyGameSimulationHubActionTransaction(state, playerId, action, extensions)
+  const finalized = finalizeInventorySkillAvailability(state, result.state, playerId)
+  return finalized === result.state ? result : { ...result, state: finalized }
+}
+
+function finalizeInventorySkillAvailability(
+  previous: GameSimulationState,
+  next: GameSimulationState,
+  playerId: PlayerId,
+): GameSimulationState {
+  if (playerSkillBookAt(previous.playerEntities, playerId)?.effectiveRanks
+    === playerSkillBookAt(next.playerEntities, playerId)?.effectiveRanks) return next
+  // An inventory operation can be committed while gameplay is paused. Finish
+  // the native concentration/primary selection pass with the simulation RNG
+  // before publishing or saving; an unavailable selected primary is not a
+  // valid intermediate snapshot. Belt sack and ordinary equipment share this.
+  const selected = autofillPlayerEntitySkillSelections(next.playerEntities, playerId, next.gameRng)
+  return selected.store === next.playerEntities && selected.rng === next.gameRng
+    ? next
+    : { ...next, gameRng: selected.rng, playerEntities: selected.store }
+}
+
+function applyGameSimulationHubActionTransaction(
   state: GameSimulationState,
   playerId: PlayerId,
   action: HubInventoryAction,
@@ -2617,7 +2645,6 @@ function finishGameSimulationTick(
       && category === 3
       && slot !== (secondaryAbilities.players[playerId]?.heldSlot ?? null)
       && (playerProgressionAt(playerEntities, playerId)?.mindChugTicksRemaining ?? 0) === 0
-      && (skillBook?.permanentRanks[skillId] ?? 0) > 0
       && (skillBook?.effectiveRanks[skillId] ?? 0) > 0
     ) {
       playerEntities = selectPlayerEntityConcentrationSkill(playerEntities, playerId, skillId)

@@ -196,7 +196,9 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
   })
   if (
     new Set(learnedSkillOrder).size !== learnedSkillOrder.length
-    || learnedSkillOrder.length !== learnedPermanentIds.length
+    || learnedSkillOrder.some(skillId => !learnedSkills.some(([id, , effectiveRank]) => (
+      id === skillId && effectiveRank > 0
+    )))
     || learnedPermanentIds.some((skillId) => !learnedSkillOrder.includes(skillId))
   ) throw new GameProtocolError(`${field}.learnedSkillOrder must contain every learned public skill`)
   const concentrationSkillIds = limitedArray(

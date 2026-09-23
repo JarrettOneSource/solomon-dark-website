@@ -215,7 +215,7 @@ export function nativeSkillBookPages(
     const ranks = rankBySkillId.get(id)
     if (!ranks) return []
     const [, permanentRank, effectiveRank] = ranks
-    if (permanentRank <= 0) return []
+    if (effectiveRank <= 0) return []
     const skill = NATIVE_SKILL_CATALOG[id]
     if (!skill) return []
     const category = nativeSkillCategory(id)

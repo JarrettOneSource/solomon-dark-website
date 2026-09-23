@@ -102,7 +102,7 @@ export function bindNativeBeltSkill(
   if (skillId !== null && !isNativeBeltSkill(skillId)) {
     throw new RangeError(`skill ${skillId} is not a native belt skill`)
   }
-  if (skillId !== null && (skillBook.permanentRanks[skillId] ?? 0) < 1) {
+  if (skillId !== null && (skillBook.effectiveRanks[skillId] ?? 0) < 1) {
     throw new Error(`belt skill ${skillId} is not learned`)
   }
   const entries = [...source]
@@ -143,8 +143,8 @@ export function autofillNewlyLearnedNativeBeltSkills(
 ): PlayerBeltComponent {
   let belt = source
   for (const skillId of current.learnedSkillOrder) {
-    if ((previous.permanentRanks[skillId] ?? 0) > 0) continue
-    if ((current.permanentRanks[skillId] ?? 0) < 1) continue
+    if (previous.learnedSkillOrder.includes(skillId)) continue
+    if ((current.effectiveRanks[skillId] ?? 0) < 1) continue
     const category = nativeSkillCategory(skillId)
     if ((category !== 1 && category !== 2) || !isNativeBeltSkill(skillId)) continue
     const slot = belt.indexOf(null)
@@ -168,7 +168,7 @@ export function refreshNativePlayerBelt(
     }
     if (entry.kind === 'skill') {
       const retained = isNativeBeltSkill(entry.skillId)
-        && (skillBook.permanentRanks[entry.skillId] ?? 0) > 0
+        && (skillBook.effectiveRanks[entry.skillId] ?? 0) > 0
       if (retained) return entry
       changed = true
       return null
