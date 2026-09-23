@@ -78,6 +78,14 @@ campaign receipt at publication.
 The final 64 KiB/s disposable receipt SHA-256 is
 `4ae3f4072f56578addd8be0d3574fa6598c388ebdc2cc526dbf3191134bad742`.
 
+The final recovery sweep also exposed an acceptance-helper defect: it chose a
+private College only for pre-v4 saves. Current-schema saves still carry an
+independent `local-only` integrity value, including report 09's continuation.
+Route those fixtures to the existing private-session admission as well; the
+production host correctly refuses them in the global Hub. The party-rejoin
+journey also needs the real local HTTP backend to accept its telemetry uploads,
+using its existing URL option instead of the static-file fallback.
+
 
 ## 2026-09-23 — Final campaign acceptance
 

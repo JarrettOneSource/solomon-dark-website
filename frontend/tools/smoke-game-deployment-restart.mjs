@@ -539,7 +539,7 @@ async function exerciseHistoricalSave(document, label) {
       ? continuation.simulation.world.participants[sourceSummary.playerId]?.collegeIntro?.phase
         ?? null
       : null
-    const ticket = parsed.schemaVersion < 4
+    const ticket = parsed.schemaVersion < 4 || parsed.integrity === 'local-only'
       ? await issuePrivateTicket(supervisor.url)
       : await issueHubTicket(supervisor.url)
     const endpoint = new URL(ticket.path, supervisor.url)
