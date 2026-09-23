@@ -2,8 +2,10 @@
 
 ## 2026-09-23 — report 17 interleaved static-query investigation
 
-Status: implementation and focused/native-model/browser checks complete; final
-canonical publication gate pending. Historical severe-lag attribution remains unproven.
+Status: implementation, native-model checks, final canonical Mac validation and
+production-browser acceptance complete. Historical severe-lag attribution
+remains unproven; the confirmed CPU bottleneck is optimized without behavioral
+changes.
 Owner: Fleet `79wso1qm`, `/root`. The private report archive remains outside Git.
 
 ### Source, reproduction and evidence limits
@@ -75,8 +77,8 @@ already weakly owned; no cache may retain another world or dynamic Gate pose.
 | Interleaved rectangles and immediate repeats | exact-ported | Reuse without scratch aliasing, missing indices or duplicate entries. |
 | Empty/single-cell/multi-cell/global oversized primitives | exact-ported | Same candidates and global fallback, including negative/boundary/unsafe coordinates. |
 | Eviction and retention limits | exact-ported | Bounded entries and indices; evicted/oversized queries remain correct. |
-| Gate overlays, replacement worlds, restored worlds, teardown | exact-ported | Live overlays are appended after base lookup; fresh identity has no stale cache. |
-| All 12 generated arenas, Tutorial/mod geometry, saved report scene | exact-ported | Existing all-pairs oracle plus exact saved-state replay and browser scenarios. |
+| Gate overlays, replacement worlds, restored worlds, teardown | verified-already-at-parity | Live overlays are appended after base lookup; fresh identity has no stale cache. |
+| All 12 generated arenas, Tutorial/mod geometry, saved report scene | verified-already-at-parity | Existing all-pairs oracle plus exact saved-state replay and browser scenarios. |
 | Dynamic actors, route results, RNG, ticks, damage, spells, saves/wire | out-of-system: deliberately unchanged | Identical complete simulation hashes and existing behavioral tests. |
 
 No authored geometry or gameplay table changes are proposed. The complete
@@ -138,6 +140,26 @@ or severe visible-freeze reproduction is claimed.
 Final exact-tree canonical validation, publication, reaction and cleanup
 receipts are written to the existing private report archive after they succeed.
 Task-local raw profiles, native logs and screenshots remain disposable.
+
+### Final canonical acceptance
+
+The exact code candidate `7d4c77a644e517ae6afcd0d6a7087ccfbfba437b`
+passed `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac, including
+all backend/frontend, lint/type, production build, media and renderer
+quality/mutation gates. Final production Chrome save journeys then passed
+independent idle, casting and movement checks. All 7,173 tracked files matched
+the WSL source before and after acceptance; the candidate remained clean.
+The final browser samples stayed near 60 FPS, committed five Fireballs and
+332.7 units of movement, retained a living active player, and reported no
+page/console/wire/HTTP/host errors. Maximum snapshot gaps were 77.3, 65.3
+and 64.3 ms. Original severe visible freezes remain unreproduced.
+
+Full canonical log SHA-256:
+`65118b5405072d5828f5931a5e1b1dd4195c89a435b71d4a3ac378fd5a859806`.
+Final acceptance summary SHA-256:
+`70967de108f0423066257852f0d5f23589bef387f188bc2c2bedd9db8b19e426`.
+This closure record is documentation-only: runtime, tests, assets and build
+inputs are unchanged from the fully validated code candidate.
 
 ## 2026-09-04 — repeated static collision candidate selection
 
