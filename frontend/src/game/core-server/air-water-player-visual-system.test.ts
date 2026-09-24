@@ -312,7 +312,7 @@ test('every authored Hail rank keeps the exact visual threshold and conditional 
         const id = Array.from({ length: 20 }, (_, i) => i + 1)
           .find(id => waterFrostJetKind(id) === (mode === 'over' ? 'over' : 'normal'))!
         for (const roll of [Math.max(0, chance - 1), chance, 249]) {
-          const emission = { ...waterEmission(), id, worldKey, primarySkill: profile, underpowered: mode === 'underpowered' }
+          const emission: PrimarySpellChannelEmission = { ...waterEmission(), id, worldKey, primarySkill: profile, underpowered: mode === 'underpowered' }
           const frost: PrimarySpellTransientState = {
             ageTicks: 0, direction: { x: 1, y: 0 }, id, kind: 'water',
             lightRegistration: null, obstructionDistance: null, obstructionPoint: null,
@@ -325,7 +325,7 @@ test('every authored Hail rank keeps the exact visual threshold and conditional 
           const rolls = chance > 0 && mode === 'normal'
           const succeeds = rolls && roll < chance
           let expectedRng = rolls ? drawNativeInteger(rng, 250).state : rng
-          const expected = succeeds
+          const expected: ReturnType<typeof createNativeWaterHailActor> | null = succeeds
             ? createNativeWaterHailActor(100, emission.ownerId, worldKey, 1, emission.origin, frost.direction, expectedRng)
             : null
           if (expected) expectedRng = expected.rng

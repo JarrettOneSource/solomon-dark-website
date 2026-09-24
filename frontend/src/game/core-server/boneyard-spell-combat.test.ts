@@ -2642,7 +2642,7 @@ test('Hail contact uses the unscaled authored threshold and draws damage only be
         const rolls = chance > 0 && !underpowered
         const succeeds = rolls && roll < chance
         let expectedRng = rolls ? drawNativeInteger(rng, 3_000).state : rng
-        const damage = succeeds ? drawNativeSpellDamage(expectedRng, profile.hailDamageMinimum, profile.hailDamageMaximum) : null
+        const damage: ReturnType<typeof drawNativeSpellDamage> | null = succeeds ? drawNativeSpellDamage(expectedRng, profile.hailDamageMinimum, profile.hailDamageMaximum) : null
         if (damage) expectedRng = damage.rng
         const result = resolveCombatWithAuthority(enemies, spellState({}), [emission({
           damage: 1, id: 11, kind: 'water', origin: { x: 0, y: 0 }, primarySkill: profile, underpowered,
