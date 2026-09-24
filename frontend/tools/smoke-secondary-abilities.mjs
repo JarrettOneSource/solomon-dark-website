@@ -1206,7 +1206,25 @@ async function capturePrimaryStatusEffectExpiry(
       active: (effect) => (effect?.coldSlowTicks ?? 0) > 0,
       name: 'frost-jet',
       primarySkillId: 32,
-      ranks: [[32, 1]],
+      ranks: [[32, 1], [33, 0], [34, 0], [36, 0], [37, 0], [38, 0], [39, 0]],
+      coldFactor: 0.5,
+      coldTicks: 25,
+    },
+    {
+      active: (effect) => (effect?.coldSlowTicks ?? 0) > 0,
+      name: 'frost-jet-chill',
+      primarySkillId: 32,
+      ranks: [[32, 1], [33, 1], [34, 0], [36, 0], [37, 0], [38, 0], [39, 0]],
+      coldFactor: 0.5,
+      coldTicks: 25,
+    },
+    {
+      active: (effect) => (effect?.coldSlowTicks ?? 0) > 0,
+      name: 'frost-jet-permafrost',
+      primarySkillId: 32,
+      ranks: [[32, 1], [33, 0], [34, 0], [36, 0], [37, 0], [38, 0], [39, 1]],
+      coldFactor: Math.fround(0.5 / 1.5),
+      coldTicks: 200,
     },
     {
       active: (effect) => (effect?.stunTicks ?? 0) > 0,
@@ -1217,6 +1235,10 @@ async function capturePrimaryStatusEffectExpiry(
   ]) {
     await releasePrimaryPointer(page)
     armPrimaryStatusSkill(host, playerId, baseSkillBook, testCase)
+    const selectedBook = getPlayerSkillBook(host.state(), playerId)
+    for (const [id, rank] of testCase.ranks) {
+      assert.equal(selectedBook.effectiveRanks[id], rank, `${testCase.name} skill ${id}`)
+    }
     const target = preparePrimaryStatusTarget(host, playerId, enemyBaseline)
     const pointer = await primaryStatusTargetPointer(page, canvas, target)
     await pressPrimaryPointer(page, pointer)
@@ -1263,9 +1285,11 @@ async function capturePrimaryStatusEffectExpiry(
       assert.ok(enemy, `${testCase.name} target retired during its modifier`)
       assert.deepEqual(enemy.config, target.authoredConfig)
       enablePrimaryStatusTargetMovement(host, target.id)
-      if (testCase.name === 'frost-jet') {
+      if (testCase.primarySkillId === 32) {
         assert.equal(activeEffect.coldSlowMaterial, true)
-        assert.ok(activeEffect.timeScale > 0 && activeEffect.timeScale < 1)
+        assert.equal(activeEffect.coldSlowFactor, testCase.coldFactor)
+        assert.equal(activeEffect.timeScale, testCase.coldFactor)
+        assert.ok(activeEffect.coldSlowTicks > 0 && activeEffect.coldSlowTicks <= testCase.coldTicks)
       } else {
         assert.equal(activeEffect.timeScale, 0)
         const heldPosition = { ...enemy.position }
@@ -1319,6 +1343,7 @@ async function capturePrimaryStatusEffectExpiry(
       authoredConfigPreserved: true,
       enemyId: target.id,
       name: testCase.name,
+      ranks: testCase.ranks,
       recoveredScreenshotPath,
       recoveredTick: recoveredState.tick,
       recoveryDistance,

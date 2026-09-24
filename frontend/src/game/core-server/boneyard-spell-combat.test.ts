@@ -6,6 +6,8 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-directo
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
+import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
+import { createPlayerSkillBook, playerStatBook } from '../core-kernels/player-progression.ts'
 import { createNativeRng, drawNativeFloat, drawNativeSign } from '../core-kernels/native-rng.ts'
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
@@ -1604,6 +1606,62 @@ test('Chill Wind excludes Firebolt and Guided Missile projectile families', () =
   )
   assert.deepEqual(result.enemies.projectiles, projectiles)
   assert.deepEqual(result.enemies.projectileEffects, [])
+})
+
+test('pure Frost Jet owns ColdSlow even with zero Chill Wind; weak casts retain their own factor', () => {
+  const source = createPlayerSkillBook({ discipline: 'arcane', displayName: 'Frost', element: 'water' })
+  for (let chill = 0; chill <= 10; chill += 1) {
+    for (const permafrost of [0, 1]) {
+      for (const underpowered of [false, true]) {
+        const permanentRanks = [...source.permanentRanks]
+        const effectiveRanks = [...source.effectiveRanks]
+        for (const [id, rank] of [[33, chill], [39, permafrost]] as const) {
+          permanentRanks[id] = rank
+          effectiveRanks[id] = rank
+        }
+        const primarySkill = nativePrimarySkillProfile(
+          { ...source, permanentRanks, effectiveRanks }, playerStatBook(), { damage: 1, manaCost: 1 },
+        )
+        if (primarySkill.kind !== 'water') throw new Error('expected Water profile')
+        const result = resolveCombatWithAuthority(
+          spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }]),
+          spellState({}),
+          [emission({ id: 11, kind: 'water', origin: { x: 0, y: 0 }, primarySkill, underpowered })],
+          1,
+        )
+        assert.deepEqual(result.targetEffects, [{
+          patch: {
+            coldSlowFactor: underpowered ? 0.75 : Math.fround(0.5 / (permafrost ? 1.5 : 1)),
+            coldSlowMaterial: true,
+            coldSlowTicks: !underpowered && permafrost ? 200 : 25,
+          },
+          targetId: 1,
+          worldKey: WORLD_KEY,
+        }], `Chill ${chill}, Permafrost ${permafrost}, weak ${underpowered}`)
+        assert.equal(result.hits.length, 1)
+        assert.equal(result.hits[0]?.spellKind, 'water')
+        if (underpowered || chill === 0) assert.equal(result.enemies.actors[0]?.position.x, 50)
+      }
+    }
+  }
+})
+
+test('base Frost slow remains contact-owned rather than becoming an ungated aura', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 50, y: 0 }, token: 'SKELETON' },
+    { position: { x: 50, y: 100 }, token: 'SKELETON' },
+    { position: { x: 240, y: 0 }, token: 'SKELETON' },
+  ])
+  const water = emission({ id: 11, kind: 'water' })
+  const clear = resolveCombatWithAuthority(enemies, spellState({}), [water], 1)
+  assert.deepEqual(clear.targetEffects.map(({ targetId }) => targetId), [1])
+  const blocked = resolveCombatWithAuthority(enemies, spellState({}), [water], 1, {
+    firstWorldContact: () => 0.5,
+  })
+  assert.deepEqual(blocked.targetEffects, [])
+  assert.deepEqual(blocked.hits, [])
+  const released = resolveCombatWithAuthority(enemies, spellState({}), [], 2)
+  assert.deepEqual(released.targetEffects, [])
 })
 
 test('Chill Wind drains every authored percent through the normalized near-target impulse', () => {

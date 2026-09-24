@@ -252,6 +252,30 @@ test('normalizes every authored Chill Wind percent before the Water handler', ()
   }
 })
 
+test('Frost Jet slowing is independent of every Frost, Chill Wind and Cone rank', () => {
+  const stats = playerStatBook()
+  for (let frost = 1; frost <= 25; frost += 1) {
+    for (let chill = 0; chill <= 10; chill += 1) {
+      for (let cone = 0; cone <= 11; cone += 1) {
+        for (const permafrost of [0, 1]) {
+          const profile = nativePrimarySkillProfile(
+            book('water', { 32: frost, 33: chill, 34: cone, 39: permafrost }),
+            stats,
+            { damage: 1, manaCost: 1 },
+          )
+          assert.equal(profile.kind, 'water')
+          if (profile.kind !== 'water') throw new Error('expected Water profile')
+          const label = `Frost ${frost}, Chill ${chill}, Cone ${cone}, Permafrost ${permafrost}`
+          assert.equal(profile.coldMovementFactor, Math.fround(0.5 / (permafrost ? 1.5 : 1)), label)
+          assert.equal(profile.coldDurationTicks, permafrost ? 200 : 25, label)
+          assert.equal(profile.pushbackFactor, Math.fround(chill * 10 * 0.009999999776482582), label)
+          assert.equal(profile.auraRadiusScale, 0, label)
+        }
+      }
+    }
+  }
+})
+
 test('drains every Cone of Ice authored width and mana row into its cached profile', () => {
   const widen = [0, 30, 50, 70, 80, 90, 100, 110, 120, 130, 140, 150]
   const mana = [0, 7.5, 10, 20, 25, 30, 35, 40, 45, 50.5, 51, 51.5]

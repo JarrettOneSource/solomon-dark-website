@@ -1,5 +1,105 @@
 # 2026-08-28 — Frost Jet upgrade presentation and Chill impulse correction
 
+## 2026-09-24 — Report 19: base Frost Jet slow is stock behavior
+
+The report alleges that the Frost Missile correction leaked slowing into base
+Frost Jet, and that Chill Wind should be required. Fresh instruction and authored
+data checks contradict that premise. This is a verification reopening, not
+permission to remove a native mechanic. The earlier tests covered broad Water
+contact and Chill displacement but did not explicitly pin their independence
+across the complete rank matrix. Add that regression coverage; leave gameplay
+unchanged. Work and native analysis run on the Mac mini M2, Fleet `z9y0milo`.
+
+### Fresh evidence and causal contract
+
+- Retail 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, preferred base `00400000`,
+  SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+  M2 Ghidra 12.0.3 uses the existing `sdr-ghidra-headless` wrapper, SHA-256
+  `26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`, and
+  a disposable read-only replica of `SolomonDark/SolomonDark.exe`. No Windows
+  execution or Mod Loader modification is needed.
+- Original `data/wizardskills/frost_jet.cfg` explicitly describes its jet as
+  slowing enemies. `chill_wind.cfg` describes pushback and arrow tumbling;
+  `permafrost.cfg` increases cold slow strength and sets a two-second minimum.
+  Their SHA-256 values are respectively
+  `23e9614f2e9a66f8beee2ffe03c4337b9178c2f839f0a1d303143bdc8eb2dd3a`,
+  `fa4d1bd3d2559d40ad1dea8900f641b2fe1f822f0c915fcd4cb3fe302d119e25`, and
+  `c04639960f721048108a6a5bca6a1f4416349437feb67ebd5b543ab63e27deb8`.
+  Cone data SHA-256 is
+  `ac33f90b865dcc0b89b6f1617449e1dcd8468084a4c598386c67b5ad326ccb5c`.
+- The sole direct caller of pure-Water handler `00543860` is dispatcher
+  `00548A00` at `00548A97`. Following the eligible-hostile and local-owner
+  branches, `005442DD` allocates modifier `1B69` before any Chill test.
+  `00544321..0054433E` writes `float32(0.5 / cache[8B4])`; raw double
+  `007DE808` is exactly `0.5`. `00544352` sets lifetime to 25 ticks.
+- The low-mana branch replaces that factor with float `0.75` from `007DE934`
+  and retains 25 ticks. Powered Permafrost changes the denominator to 1.5 and
+  extends the lifetime to two simulation seconds. `00820230` is a runtime
+  clock global: its zero-initialized file bytes are not evidence of its live
+  value. The existing 100-Hz clock contract supplies the 200-tick conversion.
+- Only later, `00544504..0054451D` tests cached Chill strength and skips the
+  displacement path at zero. Projectile force uses its separate target-mask
+  branch `0054420A..00544229`. Neither branch owns the preceding ColdSlow.
+- Fresh consumer `00623080` multiplies actor movement scalar `+120` and adds
+  the cold material. Merge `00628000` keeps the larger remaining lifetime and
+  smaller factor; it does not compound repeated Frost contacts. Tick owner
+  `006247A0` decrements and removes expired modifiers. Its apply entry is
+  referenced by vtable slot `0079E32C`; the merge entry by `0079E334/0079E360`.
+  Shared non-Frost modifier users keep ledger 158's unchanged contract.
+- Repository history independently rejects the alleged cross-spell leak:
+  the pure-Water slow in `spell-combat/channels.ts` predates the campaign at
+  `a83ee4c13` (September 5). The Frost Missile correction `a52114a9` does not
+  modify that file. Stock instructions, rather than commit history alone,
+  establish why retaining that existing behavior is correct.
+
+### System boundary and member dispositions
+
+The boundary is pure Frost Jet's target-owned slow, independently of its Chill
+push, Cone query geometry and Permafrost modifier. No production behavior,
+balance value, protocol or save schema will be changed for this report.
+
+| Member | Disposition | Proof |
+| --- | --- | --- |
+| Frost Jet ranks 1..25, Chill 0..10, Cone 0..11 | verified-already-at-parity | Complete profile matrix retains factor 0.5 and 25 ticks without Permafrost. |
+| Permafrost ranks 0..1 | verified-already-at-parity | Matrix and real casting isolate the 1.5 denominator and 200-tick duration. |
+| Low mana with learned upgrades | verified-already-at-parity | All 44 Chill/Permafrost/normal-or-weak contact combinations retain weak factor 0.75, 25 ticks and no displacement. Existing combined-upgrade suppression tests also pass. |
+| Clear cone contact / blocked line / missed cone | verified-already-at-parity | Explicit target membership, blocked-LOS and no-emission negative cases. |
+| Chill displacement and Arrow callback | verified-already-at-parity | Existing normalized all-rank/taper/collision/Arrow tests remain; zero Chill does not disable slow. |
+| ColdSlow refresh, material, release and expiry | verified-already-at-parity | Fresh native apply/merge/tick trace plus built-client cast/release/recovery with exact rank isolation and unchanged enemy configuration. |
+| Frost Missile and other cold producers | out-of-system | Distinct producers; existing direct/radial/weak Missile regression tests remain passing, shared modifier semantics unchanged. |
+| Cold Aura, Hail, Ring of Ice and unrelated render art | out-of-system | Distinct producers and separate reports; no retuning or reversal of report 25's published Aura correction. |
+
+The report screenshot has no motion or skill-state trace; it cannot establish
+an unexpected duration or prove the absence of other upgrades. Browser proof
+must isolate actual skill ranks and measure the authoritative modifier. Final
+acceptance and publication receipts are appended after validation. No member
+requires a browser-platform approximation.
+
+### Verification implementation and initial acceptance
+
+Only tests, the existing status browser harness and this ledger are changed.
+The rank matrix covers 6,600 Frost/Chill/Cone/Permafrost combinations. Together
+with the real-profile contact, obstruction and release cases, all 76 focused
+profile/combat tests pass on M2. Existing Frost Missile slow and Chill Arrow
+tests are included in that same run. An initial new assertion used the old
+`auraRadius` spelling; it was corrected to report 25's `auraRadiusScale`
+without changing production code or weakening the absent-Aura check.
+
+The built-client Chrome journey casts through actual browser input. It checks
+the skill book rather than relying on a name or screenshot to infer upgrades.
+Base Frost with every Water upgrade zero installs factor `0.5` for 25 ticks.
+Adding rank-one Chill still installs `0.5` for 25 ticks. Permafrost with Chill
+zero installs `0.3333333432674408` for 200 ticks. All three own cold material,
+leave authored enemy configuration unchanged, expire after release, and permit
+movement afterward. The sampled release-to-recovered intervals are 26, 27 and
+201 ticks respectively; these include browser input delivery/polling and the
+first observed moving tick, not a claim of different modifier lifetimes.
+The unchanged Lightning stun control also recovers. Page, console and HTTP
+error arrays are empty. The active base-Frost screenshot was visually checked.
+
+This is a local built-client verification against stock instruction/data
+truth, not a new clean-stock runtime capture or a production deployment.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Frost Jet does not visibly respond to Chill Wind or
