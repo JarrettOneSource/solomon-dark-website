@@ -3,7 +3,8 @@
 ## 2026-09-24 — Report 20: Ring of Ice artwork and child painter ownership
 
 Fleet `8g5zlwy0`, M2. The native recovery and focused implementation/browser
-checks below are complete; the final rebased canonical acceptance is pending. This reopening supersedes the old Ring
+checks below are complete; the exact rebased candidate also passed its complete
+canonical M2 gate and final built-client acceptance. This reopening supersedes the old Ring
 record-114/121 assertions in entries 083, 121 and 123. The previous pass
 confused inline bundle fields with the separate compact-decoration record
 range, then tested primitive counts rather than the actual bound images.
@@ -127,6 +128,40 @@ verified 16. Structural fixtures were corrected to use the repository's existing
 headless shader probe and a valid painter registration. Save coverage explicitly
 separates persistent world actors from the intentional resume input reset;
 none of these setup corrections weakens the gameplay or asset contracts.
+
+
+### Final report 20 acceptance
+
+The clean candidate `425bd2be7ca372b11de836efb540960dcc58604b` was rebased onto the separately
+completed report 21 release `882b106a55a19e6d3c9e1a2aec837bfd8a0f9de4` before its final gate.
+All **7,178** tracked source files matched the frozen manifest
+before and after `/opt/homebrew/bin/bash ./scripts/validate.sh`. The complete
+backend/frontend, lint/type, production-build/media and renderer quality/mutation
+gates finished with recorded exit **0** at `2026-09-24T07:48:54.308602+00:00`.
+Fleet job `job_20260924T071750Z_b804436ed5` then completed both final browser
+journeys and the identity checks with exit 0.
+
+The focused Ring/atlas/Frost Missile/resource tests passed **169/169**. The
+additional save test passed its seven live-age boundaries, including age 175
+and the following retirement tick, and preserved legacy lifetime-175 records.
+The full pre-gate Boneyard run also passed **2,579/2,579**. The final built
+Ring and Comet each proved record 17 in the background, three additive record
+16 bursts before the world, and 200 record-72 snow children in the sorted lane.
+The final Ring screenshot was visually reviewed. A real Frost Missile impact
+proved record 16, unchanged 0.5 ColdSlow and normal retirement. College
+Ring rejection remained intact. Both journeys had empty page, console and
+failed-response arrays; no production account or save was modified.
+
+Receipt SHA-256 values:
+
+- Full gate: `ffafb7cdaf86a76d032156ee32b6d84c524a97f442844541c66231c38a5379d3`.
+- Final Boneyard browser: `5d66c89f8b19b316650b0ff3e70d5f1c575256e16b8594b6d67a4f482a83a385`.
+- Final College browser: `f2ba7d78af291db05b4dee826bdcd910c2196670527381c2e127dfd71ea598ef`.
+- Frozen manifest: `2b1946a5f3b886afdb6cf648f4c260650ff68863294ef28da824960baf9bc10d`.
+
+This receipt is documentation-only. Publication, completion reaction and
+post-push cleanup are recorded separately in the retained M2 report archive;
+these validation results are not a claim of manual production deployment.
 
 
 ## Supersession boundary and binary evidence
