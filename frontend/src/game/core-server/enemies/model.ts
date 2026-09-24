@@ -639,11 +639,12 @@ export interface BoneyardEnemyPlayerDamage {
   readonly suppressHitResponse?: boolean
   readonly suppressFlash?: boolean
   readonly playerId: string
+  /** Omitted: infer the actor; null: native contact deliberately has no source. */
   readonly source?: Readonly<{
     position: Readonly<BoneyardPoint>
     collisionRadius: number
     reflectableActorId: BoneyardEnemyActorId | null
-  }>
+  }> | null
   readonly manaDamageMaximumFraction?: number
   readonly tragicCircle?: boolean
   readonly crowBlindChancePercent?: number

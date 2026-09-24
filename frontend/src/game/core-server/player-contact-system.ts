@@ -114,6 +114,7 @@ export function applyPlayerContacts(
     const runtime = playerEntities.skillRuntimes[playerIndex]!
     const derived = playerSkillDerivedStatsAt(playerEntities, damage.playerId)!
     const progression = playerEntities.progressions[playerIndex]!
+    // Silk uses 25 raw physical damage against an active Shield (0x005F8EF6).
     if (damage.webbedStrength !== undefined
       && (secondaryAbilities.players[damage.playerId]?.magicShieldAbsorb ?? 0) > 0) {
       damage = { ...damage, physicalDamage: 25 }
@@ -313,7 +314,8 @@ export function applyPlayerContacts(
     }
 
     function applyWebContact(): void {
-      if (damage.webbedStrength === undefined) return
+      // Native Shield removes incoming Webbed even when this hit breaks it.
+      if (damage.webbedStrength === undefined || shieldActive) return
       const prior = world.enemies.webbedPlayers[damage.playerId] ?? null
       const web = applyNativeWebbed(prior, damage.webbedStrength)
       let enemies = {
@@ -418,7 +420,7 @@ function squaredVectorDistance(left: Readonly<Vector2>, right: Readonly<Vector2>
 }
 
 function playerContactSource(world: BoneyardWorldState, damage: BoneyardEnemyPlayerDamage) {
-  if (damage.source !== undefined) return damage.source
+  if (damage.source !== undefined) return damage.source ?? undefined
   const actor = world.enemies.actors.find(actor => actor.id === damage.actorId)
     ?? world.enemies.maggots.find(actor => actor.id === damage.actorId)
   return actor === undefined ? undefined : { position: actor.position, reflectableActorId: actor.id,

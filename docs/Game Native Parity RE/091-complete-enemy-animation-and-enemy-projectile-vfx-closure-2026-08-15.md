@@ -2614,3 +2614,181 @@ ground ownership. Every authored compact mask (selectors 25–29), all three
 Spider decal records (140–142), and their player-local composites render before
 the world queue. Save schema 36 migrates former world-sorted clipped stains.
 The prior isolated mask-alpha receipt did not establish scene compositing order.
+
+## 2026-09-24 — Report 29: Silk contacts against Magic Shield and Deflect
+
+### Reported symptom and recovered boundary
+
+Discord report 29 (`1552460574317740083`, with follow-up
+`1552512375603601480`) reports that one Spider web pops a full rank-one
+Magic Shield. The follow-up compares rank three. This investigation covers
+**Silk's harmful-contact packet and its PlayerWizard defense/modifier receivers**,
+not Spider rendering or report 30. The September 5 encounter, spline, force,
+Cocoon, save and presentation census above remains the surrounding contract.
+
+The reported 25-point Shield loss is native behavior, not an enemy-balance bug.
+Two adjacent differences were exposed by tracing the full packet: the Website
+admitted Webbed through the Shield, and implicitly attributed the source-less
+Silk hit to its parent Spider. The latter permits false facing/retaliation on
+Deflect. Neither difference is fixed by reducing damage.
+
+### Fresh evidence and provenance
+
+All investigation and validation run directly on `mac-mini-m2`, Fleet
+`3nhxsgos`, from an isolated Website worktree based on `04df9502`. No Codex CLI,
+Mod Loader edits, Windows work, or production restart is involved.
+
+| Evidence | Exact source | Finding |
+| --- | --- | --- |
+| Retail executable, freshly hashed | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed 0.72.5 image as the existing catalog. |
+| Native instructions | `Silk::Tick 0x005F8B50`, contact window `0x005F8ECF..0x005F8FA8` | Reset contact packet at `0x0081C6E0`, set physical damage with FLD1, replace it with float `0x007DE968 = 25` only when target `+0x1C4 > 0`, append Webbed, then call `0x0063E7D0`. |
+| Packet reset and source consumers | `0x006246F0`, `PlayerWizard::Contact 0x00548150` | Reset clears the source pointer. Silk never assigns a new source before delivery. Deflect turns/reflects only with a non-null source. |
+| Modifier construction and dispatch | `0x00623B10`, `0x0063E7D0`, `0x00627BD0` | Webbed has ID `0x1B79`; its strength comes from Silk `+0x22C` and controls Cocoon HP, not direct damage. Constructor xrefs are the Silk contact and generic factory. |
+| Shield receiver | `0x0052F540`, particularly `0x0052F85C..0x0052FA04` | Subtract physical + magical damage, break when capacity reaches zero, zero both HP damage channels, and remove every incoming modifier except IDs `0x1B72/0x1B69/0x1B6E`. Webbed is removed even on the breaking hit. |
+| Modifier-list erasure | wrapper `0x004BA880`; global list `0x00809340`, vtable `0x0079E628`, slot `+0x1C -> 0x006244F0` | Locate the queued modifier and erase its entry; this is not application to the player. |
+| Untouched authored data | `data/wizardskills/magic_shield.cfg`, SHA-256 `62134c9f4536fb86ab32e0adaf94a93186cbe351a0faf45b82e17ad66a26a0c0` | Full absorb table is `0,25,50,100,200,250,300,350,400,450,500,550,600`; cap 7, maximum/equipment rank 12. |
+| Untouched authored upgrade | `data/wizardskills/explosive_shield.cfg`, SHA-256 `ec1aa71063e4a0874e6b55e24d81ab57bb2da2e11adedcf025e02ccfac57b595` | One upgrade rank, explosion 50% of Shield capacity and additional mana cost 20. |
+
+Ghidra 12.0.3 used the existing M2 `sdr-ghidra-headless` wrapper (SHA-256
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`)
+with a disposable read-only, no-analysis replica of `SolomonDark/SolomonDark.exe`.
+The unchanged `decompile_targets.py` SHA-256 is
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+Task-owned probes additionally read the precise instruction windows, float
+literal, virtual removal slot and complete constructor/receiver xrefs.
+Decompiler artifacts such as reading the low half of double `1.0` as a zero
+float are not used as numeric evidence. This is static retail evidence, not a
+claimed live-stock capture or an injected-runtime observation.
+
+### Membership and implementation plan, recorded before source edits
+
+| Member | Native contract | Disposition before implementation |
+| --- | --- | --- |
+| Unshielded accepted Silk | One raw physical damage, Webbed applied once | verified-already-at-parity; expand regression |
+| Shield ranks 1 through 12 | Every authored capacity; 25 raw physical damage before resistance | verified-already-at-parity; full-table regression |
+| Positive Shield, including final/breaking hit | No HP overflow and no incoming Webbed; existing web severity is not cleared | recovered-pending-port: block new Webbed using pre-contact Shield state |
+| Next contact after Shield breaks | Ordinary one-point hit and Webbed, including within the same contact batch | verified-already-at-parity after the admission correction; assert boundary |
+| Cocoon HP variants | Strength does not scale the one/25 damage or bypass Shield | verified-already-at-parity; cover 10, 50 and 250 payloads |
+| Damage resistance and Harden | Resist before Shield; Harden armor does not reduce Shield loss | verified-already-at-parity; assert both branches |
+| Deflect, with/without Shield and concentration | Reject damage/modifier, preserve heading, no parent retaliation because source is null | recovered-pending-port: explicit source-less metadata and no fallback |
+| Ordinary actor and explicit projectile sources | Preserve their existing facing/reflection behavior | verified-already-at-parity via shared receiver controls |
+| Explosive Shield and shield presentation | Existing break particles/audio/explosion remain owned by the secondary system | verified-already-at-parity; breaking-contact regression and browser playback |
+| Existing Webbed/Cocoon, pause/save/reset | Target-owned lifecycle from the prior complete Spider census | verified-already-at-parity; retain full Spider browser journey |
+| Other attacks and trail brightness (report 30) | Separate producer/presentation contracts | out-of-system; no inferred balance or visual changes |
+
+### Ownership and validation contract
+
+Keep the 25-point branch at the authoritative contact boundary, where the
+current Shield state can change between contacts. Preserve `actorId` for event
+ownership, but represent `source: null` separately from an omitted source
+(which still resolves an ordinary actor). The sole production Webbed producer
+is `enemies/spider.ts`; no browser or wire-schema change is needed for this
+host-internal metadata. Shield absorption filters only the new Webbed packet,
+not existing target web state and not the independent cold/poison lanes.
+
+Regression tests must first fail on the unmodified source. Cover all ranks,
+custom Cocoon strengths, surviving/breaking/absent Shield, pre-existing webs,
+resistance, Harden, source-less Deflect and ordinary-source controls. Exercise
+real Silk collision rather than only synthetic damage records. Then run the
+complete canonical M2 gate and built Chrome `/game` journey: real Shield cast,
+live Spider spit, authoritative Shield/web values on the wire, actual up/hit/pop
+audio, normal unshielded stacking, pause, save/restore and Cocoon release.
+No gameplay balance change or browser approximation is authorized by these
+findings. Implementation and publication receipts follow after verification.
+
+### Implemented receiver corrections and focused acceptance
+
+The pre-implementation `recovered-pending-port` rows above are now
+**exact-ported**. `BoneyardEnemyPlayerDamage.source` distinguishes an omitted
+ordinary-actor source from deliberate native `null`; Silk emits the latter and
+the shared receiver does not fall back to the parent Spider. The Webbed filter
+uses the Shield state captured before the current hit. Existing web state,
+health overflow handling, 25-point raw damage, resistance, Harden ordering,
+Explosive Shield and other projectile source handling remain unchanged.
+All other in-scope rows retain `verified-already-at-parity` with expanded
+regressions. Report 30 remains `out-of-system`; there are no platform-blocked
+members or unresolved gameplay branches in this contact investigation.
+
+The pre-fix run reproduced both the blocked-Webbed and source/Deflect-facing
+failures. The final focused group passes **56/56** tests with no skips:
+`spider-cocoon.test.ts` (22), `spider-silk-combat.test.ts` (4), and
+`mage-player-contact.test.ts` (30). The Cocoon file gains 20 cases, including
+all twelve authored Shield ranks, all three Cocoon-strength payloads,
+partial/breaking/same-batch hits, old webs, true equipment resistance through
+`replacePlayerEconomy`, Harden, source-less concentrated Deflect, Explosive
+Shield and Stoneskin. Tests use the real native Silk constructor and enemy
+store collision before calling the authoritative receiver. Test TypeScript
+checking also passes. The established ordinary-projectile/actor tests remain
+controls for the shared source metadata change.
+
+Built Chrome `/game` acceptance on M2 completed with exit 0 using
+`SDR_GAME_WAVES_SMOKE_PRODUCTION=1`, the task-owned screenshot prefix and
+`node --experimental-strip-types tools/smoke-boneyard-waves.mjs --spider-only`.
+The maintained journey uses actual right-button Shield casts and live enemy
+Silk, not direct Shield or impact-outcome injection:
+
+| Browser branch | Authoritative and replicated result |
+| --- | --- |
+| Rank one, full 25 Shield | One impact leaves 0 Shield; health remains 50; no Webbed. |
+| Rank three, full 100 Shield | Four impacts leave 75, 50, 25, 0; health remains 50; no Webbed, including the breaking hit. |
+| Ordinary unshielded Silk afterward | Severities 1, 2, 3; third hit creates the normal target-owned Cocoon. |
+| Pause and save/reload | Tick 1899 remains paused; the same saved run and Cocoon restore successfully. |
+| Normal primary attack release and Spider death | Cocoon releases the player; the ordinary death/decal path remains intact. |
+| Actual sound playback | Shield up/hit/pop, shoot-web, disintegrate, Webbed and Spider death all observed. |
+| Client/transport | Production frontend true; page/console, HTTP failure and reconstructed-wire error checks all pass. |
+
+The 1600x900 captures were opened with Fleet's original-detail image viewer:
+full rank-one cast, rank-one break without Webbed, surviving rank-three shell,
+restored Cocoon and release effects. Screenshots supplement the state and
+playback assertions; they are not treated as proof of hidden contact logic.
+The unchanged 25-point damage branch and authored capacities are deliberate.
+
+Receipt/probe reproducibility hashes (scratch files are disposable after the
+release receipt, not retained merely because their hashes are recorded):
+
+- Built browser log: `9b399d7758e54dbf8775cdf91eb67364ac6edeac705846874edcea8cd0cff4e7`.
+- Bounded native contact/Shield instruction and xref probe:
+  `cd5013f995075f79120721f8965518dfdf34bfc472dc77327bac6c92e35d97c3`.
+- Native modifier-list virtual-slot resolution probe:
+  `a845c3826f0b263022340ec037d5f3f559862d08abfaef0336ecd5f7509bc462`.
+
+The completed full canonical Website gate is recorded below. No production
+restart or live-deployment claim is part of this browser receipt.
+
+
+### Complete canonical M2 gate
+
+`/opt/homebrew/bin/bash ./scripts/validate.sh` completed **exit 0** on the
+unchanged candidate source, from 2026-09-24 22:33:23 UTC to 23:04:40 UTC.
+Fleet job: `job_20260924T223323Z_6eb274f263`. This was the unmodified full gate,
+including its complete renderer mutation stage, not a static-only or reduced
+substitute.
+
+- 24 Python Website/backend contract tests pass.
+- 3,861 Node test executions across the canonical suites pass, with zero
+  failures or skips; the Boneyard suite contains 2,615 cases.
+- Backend build/format, frontend lint/types, desktop checks, production frontend
+  and game-host builds, bundle budgets and media policy pass.
+- Scoped renderer coverage is 100% statements, branches, functions and lines;
+  prohibited types, dead code and duplicate blocks are all zero. Complexity
+  and CRAP checks pass.
+- All 607 renderer mutations are accounted for: 441 killed, one detected by
+  timeout, 142 compile errors, and 23 pre-existing documented equivalents.
+  No mutation survives; the unchanged 100% threshold and final failure array
+  pass. The timeout is a mutation outcome, not a skipped normal test.
+
+Full-gate log SHA-256:
+`d47058b0aa4862cf9af553ef15d0e203e1f9eac6b091a931422d6910a0ef9376`.
+Renderer summary SHA-256:
+`d5a19abcd5156f29b300a780bc43c912eb521b9afe92d6ab4ce1526d256dfefe`.
+The source/test/browser-helper patch remained byte-identical throughout the
+full gate and browser acceptance; its pre-commit diff SHA-256 was
+`3f582675ec8b38fbae7a8756bf3c172d53855f2c07b1ef9211542ab7c811f99b`.
+Only this ledger's acceptance prose was added afterward.
+
+Publication and Discord completion are separate actions: their verified commit,
+remote equality, both reaction read-backs and task cleanup are recorded in the
+M2 archive `STATUS.md` and report-29 completion receipt after publication.
+Original report wording and source messages are preserved. The supported
+conclusion is stock-intended damage plus two repaired contact-parity bugs,
+not a reduction in Spider damage or a verified production deployment.

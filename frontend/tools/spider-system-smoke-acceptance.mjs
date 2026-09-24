@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { bindNativeBeltSkill } from '../src/game/core-kernels/native-belt.ts'
+import { createNativeSecondaryPlayerState } from '../src/game/core-kernels/native-secondary-abilities.ts'
+import { grantPlayerSkillRanks } from '../src/game/core-kernels/player-progression.ts'
 import { createNativeRng, drawNativeInteger } from '../src/game/core-kernels/native-rng.ts'
 import { createNativeSpiderWaveState } from '../src/game/core-kernels/native-spider-wave-program.ts'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
+import { replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { resolveBoneyardSpawnPosition } from '../src/game/core-server/boneyard-collision.ts'
 import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import { openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
@@ -54,6 +57,8 @@ export async function acceptSpiderSystem({ host, page, wire, screenshotPath }) {
   }
   await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas')?.dataset.enemyFamilies.includes('SPIDER'))
   await page.screenshot({ path: imagePath(screenshotPath, 'spiders') })
+
+  const shields = await acceptSilkShields({ host, page, wire, screenshotPath, playerId, position, bounds })
 
   const severities = []
   const silkIds = []
@@ -142,7 +147,7 @@ export async function acceptSpiderSystem({ host, page, wire, screenshotPath }) {
   for (const name of ['shoot-web-', 'disintegrate', 'webbed-', 'spider-die']) {
     assert.ok(audio.some(source => source.includes(name)), `missing real audio playback: ${name}`)
   }
-  return { phase: phase.name, startWave: phase.startWave, births, severities, silkIds, pausedTick, restoredRunId: runId, audio: audio.filter(source => /shoot-web|disintegrate|webbed-|spider-die/.test(source)) }
+  return { phase: phase.name, startWave: phase.startWave, births, shields, severities, silkIds, pausedTick, restoredRunId: runId, audio: audio.filter(source => /shoot-web|disintegrate|webbed-|spider-die/.test(source)) }
 }
 
 function spiders(host) { return host.state().world.enemies.actors.filter(actor => actor.config.enemyToken === 'SPIDER' && actor.lifeState === 'alive') }
@@ -166,4 +171,71 @@ function primeSpit(host, playerId, position, bounds) {
       brain: { ...actor.brain, actionState: 0, spitTicksRemaining: 0, preferredDistance: 400, attached: false },
     }),
   } }
+}
+
+/** Fixture only grants a loadout/mana and primes normal enemy decisions; all outcomes are live. */
+async function acceptSilkShields({ host, page, wire, screenshotPath, playerId, position, bounds }) {
+  const receipts = []
+  for (const [rank, capacity] of [[1, 25], [3, 100]]) {
+    let state = host.state()
+    const index = state.playerEntities.identities.findIndex(identity => identity.playerId === playerId)
+    assert.ok(index >= 0)
+    const currentBook = state.playerEntities.skillBooks[index]
+    const book = grantPlayerSkillRanks(currentBook, 54, rank - (currentBook.permanentRanks[54] ?? 0))
+    const skillBooks = [...state.playerEntities.skillBooks]
+    skillBooks[index] = book
+    const belts = [...state.playerEntities.belts]
+    belts[index] = bindNativeBeltSkill(belts[index], book, 54, 0)
+    const progressions = [...state.playerEntities.progressions]
+    progressions[index] = { ...progressions[index], currentMana: 1_000, maximumMana: 1_000 }
+    state.playerEntities = replacePlayerEconomy({ ...state.playerEntities, skillBooks, belts, progressions },
+      playerId, state.playerEntities.economies[index])
+    const current = state.secondaryAbilities.players[playerId] ?? createNativeSecondaryPlayerState()
+    state.secondaryAbilities = { ...state.secondaryAbilities, players: {
+      ...state.secondaryAbilities.players, [playerId]: { ...current,
+        cooldownTicksBySkill: current.cooldownTicksBySkill.map(() => 0), globalCooldownTicks: 0,
+      },
+    } }
+    await page.waitForFunction(() => document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
+      ?.getAttribute('aria-label')?.startsWith('Magic Shield, right mouse button'))
+    const canvas = await page.locator('.boneyard-world-canvas').boundingBox()
+    assert.ok(canvas)
+    await page.mouse.click(canvas.x + canvas.width / 2 + 100, canvas.y + canvas.height / 2,
+      { button: 'right', delay: 100 })
+    await waitUntil(() => host.state().secondaryAbilities.players[playerId]?.magicShieldAbsorb === capacity,
+      `real rank-${rank} Magic Shield cast did not resolve`, 10_000)
+    await waitUntil(() => wire.latestSnapshot?.secondaryAbilities.players[playerId]?.magicShieldAbsorb === capacity,
+      'Shield cast was not replicated', 10_000)
+    await page.screenshot({ path: imagePath(screenshotPath, `shield-${rank}-full`) })
+    const health = host.state().playerEntities.progressions[index].currentHealth
+    const remainingCapacity = []
+    for (let remaining = capacity - 25; remaining >= 0; remaining -= 25) {
+      primeSpit(host, playerId, position, bounds)
+      await waitUntil(() => wire.latestSnapshot?.world.kind === 'boneyard'
+        && wire.latestSnapshot.world.spiderSilks.length > 0, 'shield test did not receive live Silk', 10_000)
+      await waitUntil(() => host.state().secondaryAbilities.players[playerId]?.magicShieldAbsorb === remaining,
+        `rank-${rank} Silk hit did not leave ${remaining} Shield`, 10_000)
+      state = host.state()
+      state.world = { ...state.world, enemies: { ...state.world.enemies,
+        actors: state.world.enemies.actors.map(actor => actor.brain.family !== 'spider' ? actor : {
+          ...actor, brain: { ...actor.brain, actionState: 3, actionTicksRemaining: 100_000 },
+        }),
+      } }
+      const impactTick = state.tick
+      assert.equal(state.world.enemies.webbedPlayers[playerId], undefined, 'Shield admitted Webbed')
+      assert.equal(state.playerEntities.progressions[index].currentHealth, health, 'Shield hit damaged health')
+      await waitUntil(() => wire.latestSnapshot?.tick >= impactTick
+        && wire.latestSnapshot.secondaryAbilities.players[playerId]?.magicShieldAbsorb === remaining,
+      'client did not receive the Shield impact', 10_000)
+      assert.equal(wire.latestSnapshot.world.webbedPlayers[playerId], undefined, 'client retained blocked Webbed')
+      remainingCapacity.push(remaining)
+      await page.screenshot({ path: imagePath(screenshotPath, `shield-${rank}-remaining-${remaining}`) })
+    }
+    receipts.push({ rank, capacity, remainingCapacity, health, webbed: false })
+  }
+  const audio = await page.evaluate(() => window.__sdrAudioPlaySources.map(source => new URL(source, location.href).pathname))
+  for (const name of ['magic-shield-up', 'hit-shield', 'pop-shield']) {
+    assert.ok(audio.some(source => source.includes(name)), `missing live Shield playback: ${name}`)
+  }
+  return { receipts, audio: audio.filter(source => /shield/.test(source)) }
 }

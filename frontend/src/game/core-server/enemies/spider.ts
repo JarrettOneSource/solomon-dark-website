@@ -199,6 +199,8 @@ export function stepSilks(work: WorkingStep, context: BoneyardEnemyStoreStepCont
         })
         work.playerDamage.push({
           actorId: actor.ownerActorId, playerId, eventId,
+          // 0x005F8ECF resets the native damage source; the parent owns only the event.
+          source: null,
           physicalDamage: 1, magicDamage: 0, webbedStrength: state.cocoonHealth,
           coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
         })
