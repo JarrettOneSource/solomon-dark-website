@@ -310,6 +310,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
           )
         : projectile.damage
       const damaged = damageBoneyardEnemy(work.enemies, {
+        suppressHitReaction: projectile.buildId === 1002,
         hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,

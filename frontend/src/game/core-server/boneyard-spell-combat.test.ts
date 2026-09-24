@@ -375,6 +375,7 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
   assert.deepEqual(movements, [{ x: 100, y: 14.986320495605469 }])
   assert.equal(result.enemies.actors[0]?.currentHealth, 80)
   assert.equal(result.enemies.actors[0]?.hurricaneContactCooldown, 100)
+  assert.equal(result.enemies.actors[0]?.hitReactionTimer, 0)
   assert.deepEqual(result.hits.map(({ amount, ownerId, spellKind }) => ({
     amount,
     ownerId,
@@ -688,6 +689,10 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
     { damage: 9, ownerId: 'wizard', targetId: 1 },
     { damage: 9, ownerId: 'wizard', targetId: 2 },
   ])
+  assert.deepEqual(result.enemies.actors.map(actor => actor.hitReactionTimer), [0, 1, 0],
+    'Fire suppresses reaction; the following direct GoodImp hit still reacts')
+  assert.ok(result.enemies.actors[0]!.hitFeedback.strength >= 0.25
+    && result.enemies.actors[0]!.hitFeedback.strength <= 0.75)
 })
 
 test('Fire and Ether skip a hidden Coffin and contact the next hostile actor', () => {
@@ -929,6 +934,7 @@ test('welded missile contacts preserve each native elemental payload and impact 
       vector: [5, 5, 10, 1, 1, 2, 0.64],
     })],
   }), [], 33)
+  assert.equal(lightning.enemies.actors[0]!.hitReactionTimer, 0)
   assert.deepEqual(lightning.targetEffects, [{
     patch: { electricBurn: {
       arcCount: 2,
@@ -1640,6 +1646,8 @@ test('pure Frost Jet owns ColdSlow even with zero Chill Wind; weak casts retain 
         }], `Chill ${chill}, Permafrost ${permafrost}, weak ${underpowered}`)
         assert.equal(result.hits.length, 1)
         assert.equal(result.hits[0]?.spellKind, 'water')
+        assert.equal(result.enemies.actors[0]?.hitReactionTimer, 0,
+          'Native Frost contact may slow but must not reuse its visual timer to stop movement')
         if (underpowered || chill === 0) assert.equal(result.enemies.actors[0]?.position.x, 50)
       }
     }
@@ -1785,6 +1793,8 @@ test('Hail damage consumes the owning Frost contact target multiplier', () => {
     { amount: 1, spellKind: 'water' },
     { amount: 3, spellKind: 'water-hail' },
   ])
+  assert.equal(result.enemies.actors[0]!.hitReactionTimer, 1,
+    'The separate physical Hail proc resets its context and retains an ordinary reaction')
 })
 
 test('a physical Hail kill after a nonlethal Frost hit preserves the physical Unbind branch', () => {
@@ -1877,6 +1887,8 @@ test('Lightning chains to the nearest unused roots, decays in float32, and attac
   assert.equal(result.hits[0]?.amount, 1)
   assert.equal(result.hits[1]?.amount, secondHop * 2, 'Prismatic doubles electric damage')
   assert.equal(result.hits[2]?.amount, thirdHop)
+  assert.ok(result.enemies.actors.every(actor => actor.hitReactionTimer === 0),
+    'Lightning chain contacts suppress reaction independently of the explicit Stun modifier')
   assert.deepEqual(result.targetEffects, [1, 2, 3].map((targetId) => ({
     patch: { stunFactor: 0.3, stunTicks: 25 },
     targetId,
@@ -1932,6 +1944,7 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
     { patch: { stunFactor: 0.4, stunTicks: 25 }, targetId: 2, worldKey: WORLD_KEY },
   ])
   assert.equal(result.spells.transients.filter(({ kind }) => kind === 'fire-explosion').length, 2)
+  assert.ok(result.enemies.actors.every(actor => actor.hitReactionTimer === 0))
   const flameFades = result.spells.transients.filter(({ kind }) => (
     kind === 'weld-flame-lash-fade'
   ))
@@ -1972,6 +1985,7 @@ test('Blizzard Beam uses its root polygon, 100-unit chains, and Cold-before-Stun
     { kind: 'cold', targetId: 1 }, { kind: 'stun', targetId: 1 },
   ])
   assert.equal(result.spells.transients.some(({ kind }) => kind === 'weld-channel'), false)
+  assert.equal(result.enemies.actors[0]!.hitReactionTimer, 0)
 })
 
 test('Blizzard root membership covers every survival family after Coffin rises', () => {
@@ -2277,6 +2291,7 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
     worldKey: WORLD_KEY,
   }
   const impact = resolveCombatWithAuthority(enemies, spellState({ transients: [meteor] }), [], 3)
+  assert.equal(impact.enemies.actors[0]!.hitReactionTimer, 1, 'Meteor impact is a direct contact')
   assert.deepEqual(impact.hits.map(({ actorId, amount }) => ({ actorId, amount })), [{
     actorId: 1,
     amount: 10,
@@ -2292,6 +2307,7 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
   assert.deepEqual(pulse.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
     { actorId: 1, amount: 1 },
   ])
+  assert.equal(pulse.enemies.actors[0]!.hitReactionTimer, 0, 'The landed periodic Meteor contact carries flag 8')
 })
 
 test('released Ethereal Boulder pieces own independent native residual pools', () => {

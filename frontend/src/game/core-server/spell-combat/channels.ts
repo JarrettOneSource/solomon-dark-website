@@ -200,6 +200,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(work.enemies, {
+              suppressHitReaction: true,
               hasMagicDamage: true,
               magic: true,
               lethalObserver: work.lethalObserver,
@@ -364,6 +365,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(work.enemies, {
+              suppressHitReaction: true,
               hasMagicDamage: true,
               magic: true,
               lethalObserver: work.lethalObserver,
@@ -444,6 +446,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
                 work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
               )
               const damaged = damageBoneyardEnemy(work.enemies, {
+                suppressHitReaction: true,
                 hasMagicDamage: true,
                 magic: true,
                 lethalObserver: work.lethalObserver,
@@ -548,6 +551,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
         work.damageMultiplier(row.actor.id, 'water', emission.ownerId),
       )
       const damaged = damageBoneyardEnemy(work.enemies, {
+        suppressHitReaction: true,
         hasMagicDamage: true,
         magic: true,
         actorId: row.actor.id,

@@ -83,6 +83,7 @@ export function resolveHurricaneContacts(work: BoneyardSpellCombatWork): void {
           sourcePlayerId: contact.ownerId,
           registerWorldPainter: work.registerWorldPainter,
           suppressHurtSound: damage.suppressHitSound,
+          suppressHitReaction: true,
           tick: work.tick,
         })
         if (damaged.accepted) {

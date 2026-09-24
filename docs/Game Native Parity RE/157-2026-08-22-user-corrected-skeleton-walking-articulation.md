@@ -1,5 +1,13 @@
 # 2026-08-22 — User-corrected Skeleton walking articulation
 
+> **2026-09-24 correction — report 23:** the native movement gate below reads
+> Actor `+0x80`, not the visual hit timer `+0x78`. The earlier implementation
+> conflated them and ignored damage flag 8, making Firewalker/periodic contact
+> stop Skeleton-family movement. Ledger [086](086-enemy-damage-presenter-closure-correction-2026-08-15.md)
+> now owns the separate reaction state, complete producer census and acceptance.
+> The recovered gait rates, weapon/rest poses and movement ordering below remain
+> unchanged; ordinary hits still pause movement, while no-reaction contacts do not.
+
 ## Reported smell and parity question
 
 - User correction: stock Skeleton arms visibly move while the actor walks; the

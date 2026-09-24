@@ -201,6 +201,8 @@ export interface BoneyardEnemyLightingState {
 
 export interface BoneyardEnemyActor {
   readonly hitFeedback: NativePuppetHitState
+  /** Native Actor +80, independent of visual feedback +78 and sampled strength. */
+  readonly hitReactionTimer: number
   readonly blizzardPushAccumulator: number
   readonly blizzardPushLastTick: number | null
   readonly bodyGaitPhase: number
@@ -894,6 +896,8 @@ export interface BoneyardEnemyStoreStepResult {
 
 export interface DamageBoneyardEnemyRequest {
   readonly hitStrength?: number
+  /** Native contact flag 8 clears movement reaction, not the visual feedback. */
+  readonly suppressHitReaction?: boolean
   readonly etherDrainCapture?: boolean
   readonly magic?: boolean
   readonly actorId: BoneyardEnemyActorId

@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
+import { BONEYARD_SKELETON_WEAPONS } from '../core-kernels/boneyard-enemy-config-model.ts'
 import { createNativeFacultyAction } from '../core-kernels/native-faculty-actions.ts'
 import { createNativeDarkFireballs } from '../core-kernels/native-faculty-spells.ts'
 import { createNativeGuidedMissile } from '../core-kernels/native-guided-missile.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
+import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skeleton-bosses.ts'
 import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
 import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
@@ -26,6 +29,67 @@ const EMPTY_COLLISION: BoneyardCollisionWorld = Object.freeze({
   circles: Object.freeze([]),
   polygons: Object.freeze([]),
   segments: Object.freeze([]),
+})
+
+test('native flag-8 contacts clear movement reaction independently of strength and hurt audio for every skeleton boss source', () => {
+  const bosses = NATIVE_SURVIVAL_BOSS_SOURCES.flatMap(source => [
+    { enemyToken: 'SKELETON' as const, recipe: nativeSkeletonBossRecipe(source.sourceSha256, 'Ironmaw') },
+    { enemyToken: 'SKELETONARCHER' as const, recipe: nativeSkeletonBossRecipe(source.sourceSha256, 'Foulshaft') },
+  ])
+  const rows = [
+    ...['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE'].map(enemyToken => ({
+      enemyToken: enemyToken as 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE', recipe: undefined,
+    })),
+    ...bosses,
+    ...BONEYARD_SKELETON_WEAPONS.flatMap(weapon => [false, true].map(armor => ({
+      enemyToken: 'SKELETON' as const,
+      recipe: { ...nativeSkeletonBossRecipe(NATIVE_SURVIVAL_BOSS_SOURCES[0]!.sourceSha256, 'Ironmaw'),
+        family: { kind: 'skeleton' as const, headgear: 0 as const, weapon, armor } },
+    }))),
+  ]
+  const context: BoneyardEnemyStoreStepContext = {
+    tick: 0, projectileWorldBlocked: () => false,
+    resolveSpawnIntents: () => [],
+    players: { player: { alive: true, connected: true, eligible: true,
+      position: { x: 1000, y: 1000 }, velocityPerTick: { x: 0, y: 0 }, collisionRadius: 25 } },
+    resolveMovement: request => request.requestedPosition,
+  }
+  for (const [index, row] of rows.entries()) {
+    const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore(`reaction-${index}`), {
+      ...context, resolveSpawnIntents: () => [{ enemyToken: row.enemyToken, authoredRecipe: row.recipe,
+        flags: [], id: 1, locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[row.enemyToken],
+        position: { x: 100, y: 100 }, spawnTick: 0, waveOrdinal: 1 }],
+    }).store
+    const original = spawned.actors[0]!
+    for (const hitStrength of [0, 0.375, 1]) {
+      for (const suppressHurtSound of [false, true]) {
+        const contact = { amount: 0.001, kind: 'fire' as const, ownerId: 'player', sourceActorId: 1,
+          targetId: original.id, hitStrength, suppressHurtSound }
+        const apply = (store: typeof spawned, tick: number, suppressHitReaction: boolean) => (
+          resolveBoneyardNativeSecondaryCombat(store, { damage: [{ ...contact, suppressHitReaction }],
+            dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [] }, tick).enemies
+        )
+        const direct = apply(spawned, 0, false)
+        assert.equal(direct.actors[0]!.hitReactionTimer, 1, 'Ordinary zero-strength/quiet damage still reacts')
+        const paused = stepBoneyardEnemyStore(direct, { ...context, tick: 100, paused: true }).store
+        assert.equal(paused.actors[0]!.hitReactionTimer, 1, 'Pause freezes the independent reaction clock')
+        assert.equal(paused.actors[0]!.hitFeedback.timer, 1)
+        const suppressed = apply(direct, 0, true)
+        assert.equal(suppressed.actors[0]!.hitReactionTimer, 0, 'Flag 8 clears an existing reaction')
+        assert.equal(suppressed.actors[0]!.hitFeedback.timer, 1)
+        assert.equal(suppressed.actors[0]!.hitFeedback.strength, hitStrength)
+        let free = suppressed, held = direct
+        for (let tick = 1; tick <= 40; tick += 1) {
+          free = stepBoneyardEnemyStore(apply(free, tick, true), { ...context, tick }).store
+          held = stepBoneyardEnemyStore(apply(held, tick, false), { ...context, tick }).store
+        }
+        assert.notDeepEqual(free.actors[0]!.position, original.position, `${row.enemyToken}/${index} flag8 movement`)
+        assert.deepEqual(held.actors[0]!.position, original.position, `${row.enemyToken}/${index} direct reaction`)
+        assert.strictEqual(free.actors[0]!.config, original.config)
+        assert.ok(free.actors[0]!.currentHealth < original.currentHealth)
+      }
+    }
+  }
 })
 
 function consumeShuffle(source: NativeRngState, count: number): NativeRngState {
@@ -431,6 +495,7 @@ test('quiet periodic damage keeps shield absorption and break separate from body
   assert.equal(result.enemies.actors[0]!.currentHealth, actor.currentHealth)
   assert.equal(result.enemies.actors[0]!.shieldHealth, 0)
   assert.equal(result.enemies.actors[0]!.hitFeedback.timer, 0)
+  assert.equal(result.enemies.actors[0]!.hitReactionTimer, 0)
   assert.deepEqual(result.events.filter(event => event.type === 'enemy-damage-sound').map(event => event.sound),
     ['hit-shield', 'pop-shield'])
 })

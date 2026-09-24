@@ -1872,6 +1872,7 @@ test('Magic Trap ElectricBurn owns exact target-following RNG, light state, and 
   assert.deepEqual(result.damage, [{
     amount: born.damage,
     hitStrength: Math.fround(0.25 + scalar.value),
+    suppressHitReaction: true,
     kind: 'lightning',
     ownerId: 'player',
     sourceActorId: born.id,
@@ -3651,12 +3652,15 @@ test('Fire contact uses the global third-tick lane, strict center radius, one re
   )
   assert.deepEqual(accepted.damage, [{
     amount: lane + lane,
+    hitStrength: Math.fround(0.25 + response.value),
+    suppressHitReaction: true,
     kind: 'fire',
     ownerId: 'player',
     sourceActorId: patch.id,
     targetId: inside.id,
   }])
   assert.deepEqual(accepted.state.rng, response.state)
+  assert.equal(accepted.damage[0]!.suppressHitReaction, true)
   const burn = accepted.state.actors.filter(({ kind }) => kind === 'fire-burn')
   assert.equal(burn.length, 1)
   assert.deepEqual({
@@ -3687,6 +3691,47 @@ test('Fire contact uses the global third-tick lane, strict center radius, one re
     presentationOnly.state.actors.some(({ kind }) => kind === 'fire-burn'),
     false,
   )
+})
+
+test('Firewalker and Fire Wall use fractional no-reaction contacts while Ring segments remain visual-only', () => {
+  for (const skillId of [21, 23, 73] as const) {
+    const born = cast(skillId).state
+    const patch = born.actors.find(actor => actor.kind === 'fire-patch' || actor.kind === 'moving-fire')!
+    assert.ok(patch)
+    const target = { family: 'SKELETON', id: 17, lightRegistration: TARGET_LIGHT_REGISTRATION,
+      position: { ...patch.position }, radius: 10, scale: 1, shieldHealth: 0 }
+    const source = { ...born, actors: [patch] }
+    const response = drawNativeFloat(source.rng, 0.5)
+    const result = stepNativeSecondaryAbilities(source, { ...context(skillId, 3, null),
+      targets: () => [target], target: () => target })
+    if (skillId === 21) {
+      assert.equal(patch.damage, 0, 'Ring damage belongs to its separate wave, not MovingFire visuals')
+      assert.deepEqual(result.damage, [])
+      assert.deepEqual(result.state.rng, source.rng)
+      continue
+    }
+    assert.equal(result.damage.length, 1, `skill ${skillId}`)
+    assert.equal(result.damage[0]!.suppressHitReaction, true)
+    assert.equal(result.damage[0]!.hitStrength, Math.fround(0.25 + response.value))
+    assert.deepEqual(result.state.rng, response.state, 'Carry the existing response draw; do not add another')
+  }
+})
+
+test('Acid Rain and Ether Drain preserve their native no-reaction contacts', () => {
+  const target = { family: 'SKELETON', id: 17, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
+  for (const skillId of [72, 74] as const) {
+    let state = cast(skillId).state
+    let contacts = 0
+    for (let tick = 2; tick <= 180; tick += 1) {
+      const result = stepNativeSecondaryAbilities(state, { ...context(skillId, tick, null),
+        targets: () => [target], target: () => target })
+      assert.ok(result.damage.every(contact => contact.suppressHitReaction === true), `skill ${skillId}`)
+      contacts += result.damage.length
+      state = result.state
+    }
+    assert.ok(contacts > 0, `skill ${skillId} must actually damage a target`)
+  }
 })
 
 test('Burn owns two RNG words per tick, target-scaled flame and light, max merge, terminal fade, and 200 damage ticks', () => {
@@ -3722,6 +3767,7 @@ test('Burn owns two RNG words per tick, target-scaled flame and light, max merge
   assert.deepEqual(first.damage, [{
     amount: Math.fround(2 / 200),
     hitStrength: 0,
+    suppressHitReaction: true,
     suppressHurtSound: true,
     kind: 'fire',
     ownerId: 'player',
@@ -5258,7 +5304,7 @@ test('Burn damage carries the native quiet zero-strength response for every Fire
     })
     const result = stepNativeSecondaryAbilities(source, { ...context(73, 1, null), target: () => target })
     assert.deepEqual(result.damage, [{ amount: Math.fround(0.01), hitStrength: 0,
-      suppressHurtSound: true, kind: 'fire', ownerId: 'player', sourceActorId: source.actors[0]!.id,
+      suppressHurtSound: true, suppressHitReaction: true, kind: 'fire', ownerId: 'player', sourceActorId: source.actors[0]!.id,
       targetId: target.id }], `producer ${skillId}`)
   }
 })
@@ -5274,6 +5320,7 @@ test('FrostBurn preserves quiet zero-strength damage while Steamed samples a fra
     const result = stepNativeSecondaryAbilities(source, { ...context(35, 1, null), target: () => target })
     assert.equal(result.damage[0]!.hitStrength, 0)
     assert.equal(result.damage[0]!.suppressHurtSound, true)
+    assert.equal(result.damage[0]!.suppressHitReaction, true)
   }
   const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(3), 'boneyard:test', 17, {
     steamed: { damagePerTick: 0.01, emberDamage: 0, emberFragments: 0, explodeDamage: 0,
@@ -5282,6 +5329,7 @@ test('FrostBurn preserves quiet zero-strength damage while Steamed samples a fra
   const draw = drawNativeFloat(source.rng, 0.5)
   const result = stepNativeSecondaryAbilities(source, { ...context(35, 1, null), target: () => target })
   assert.equal(result.damage[0]!.hitStrength, Math.fround(0.25 + draw.value))
+  assert.equal(result.damage[0]!.suppressHitReaction, true)
   assert.notEqual(result.damage[0]!.suppressHurtSound, true)
   assert.deepEqual(result.state.rng, draw.state)
 })
@@ -5304,6 +5352,7 @@ test('ElectricBurn source has two no-flash branches while each chained target ha
     assert.deepEqual(result.damage.map(({ hitStrength }) => hitStrength), [
       main === null ? 0 : Math.fround(0.25 + main.value), Math.fround(0.25 + chain.value),
     ])
+    assert.ok(result.damage.every(contact => contact.suppressHitReaction === true))
     assert.deepEqual(result.state.rng, chain.state)
   }
   assert.deepEqual([...gates].sort(), [0, 1, 2])

@@ -457,6 +457,7 @@ export interface NativeSecondaryDamageContact {
   readonly amount: number
   readonly etherDrain?: boolean
   readonly hitStrength?: number
+  readonly suppressHitReaction?: boolean
   readonly kind: NativeSecondaryDamageKind
   readonly ownerId: string
   readonly sourceActorId: number
@@ -1465,11 +1466,15 @@ export function stepNativeSecondaryAbilities(
     target: NativeSecondaryTarget,
     amount: number,
     kind: NativeSecondaryDamageKind,
+    hitStrength?: number,
   ): void => {
     if (!(amount > 0)) return
     const effect = nativeSecondaryTargetEffect(state, actor.worldKey, target.id)
     damage.push({
       amount: kind === 'lightning' && (effect?.prismaticTicks ?? 0) > 0 ? amount * 2 : amount,
+      ...(hitStrength === undefined ? {} : { hitStrength }),
+      ...(['fire-patch', 'moving-fire', 'fire-burn', 'electric-burn', 'acid-rain', 'ether-drain'].includes(actor.kind)
+        ? { suppressHitReaction: true } : {}),
       ...(actor.kind === 'ether-drain' ? { etherDrain: true } : {}),
       ...(actor.kind === 'fire-burn' ? { hitStrength: 0, suppressHurtSound: true } : {}),
       ...(actor.kind === 'electric-burn' ? { hitStrength: actor.phase } : {}),
@@ -1512,6 +1517,7 @@ export function stepNativeSecondaryAbilities(
             amount: effect.electricBurn.damagePerTick
               * ((targetEffect?.prismaticTicks ?? 0) > 0 ? 2 : 1),
             hitStrength,
+            suppressHitReaction: true,
             kind: 'lightning',
             ownerId: effect.electricBurn.ownerId,
             sourceActorId: effect.electricBurn.sourceActorId,
@@ -1534,6 +1540,7 @@ export function stepNativeSecondaryAbilities(
         damage.push({
           amount: effect.steamed.damagePerTick,
           hitStrength: Math.fround(0.25 + flash.value),
+          suppressHitReaction: true,
           kind: 'fire',
           ownerId: effect.steamed.ownerId,
           sourceActorId: effect.steamed.sourceActorId,
@@ -1560,6 +1567,7 @@ export function stepNativeSecondaryAbilities(
     damage.push({
       amount: effect.frostBurnDamagePerTick,
       hitStrength: 0,
+      suppressHitReaction: true,
       kind: 'ice',
       ownerId: effect.frostBurnOwnerId,
       sourceActorId: effect.frostBurnSourceActorId,
@@ -1927,7 +1935,8 @@ export function stepNativeSecondaryAbilities(
               damage: owner.fireBurnDamage,
               target,
             })
-            addDamage(actor, target, nativeFireContactDamage(actor.damage), 'fire')
+            addDamage(actor, target, nativeFireContactDamage(actor.damage), 'fire',
+              Math.fround(0.25 + response.value))
           }
         }
         break

@@ -399,6 +399,7 @@ function applyContact(
     actorId: contact.targetId,
     etherDrainCapture,
     hitStrength: contact.hitStrength,
+    suppressHitReaction: contact.suppressHitReaction,
     magic: contact.kind !== 'physical',
     amount: contact.amount * damageMultiplier,
     hasMagicDamage: contact.kind !== 'physical',

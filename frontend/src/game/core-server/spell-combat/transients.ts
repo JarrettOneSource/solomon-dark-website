@@ -305,6 +305,7 @@ export function resolveDelayedContacts(work: BoneyardSpellCombatWork): void {
           lethalObserver: work.lethalObserver,
           actorId: row.actor.id,
           amount: pulse.amount,
+          suppressHitReaction: !effect.impactDue,
           sourcePlayerId: effect.ownerId,
           registerWorldPainter: work.registerWorldPainter,
           tick: work.tick,

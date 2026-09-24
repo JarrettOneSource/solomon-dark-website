@@ -709,6 +709,49 @@ test('schema 19 compact inventory roots migrate to schema 27 addressed slots', (
   )
 })
 
+test('schema 41 preserves independent hit reaction and legacy migration retires only the unrecoverable latch', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    tick: state.tick, players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: order.register, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON, locationPolicy: 'anywhere',
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const hit = damageBoneyardEnemy(spawned, { actorId: spawned.actors[0]!.id, amount: 0.1,
+    hitStrength: 0.375, sourcePlayerId: 'owner', tick: state.tick, registerWorldPainter: order.register })
+  state = { ...state, world: { ...state.world, enemies: hit.store }, worldManagerOrder: order.state() }
+  const document = createGameSaveDocument({ state, loadedBoneyard, integrity: 'global-clean',
+    mods: [], modState: {}, playerId: 'owner' })
+  const current = restoreGameSaveDocument(document).state
+  if (current.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  assert.equal(current.world.enemies.actors[0]!.hitReactionTimer, 1)
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 40
+  delete legacy.continuation.simulation.world.enemies.actors[0].hitReactionTimer
+  const recovered = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.deepEqual(recovered, { ...current, world: { ...current.world,
+    enemies: { ...current.world.enemies,
+      actors: current.world.enemies.actors.map(actor => ({ ...actor, hitReactionTimer: 0 })) } } })
+  for (const invalid of [undefined, null, -0.01, 1.01, '1']) {
+    const malformed = JSON.parse(document)
+    malformed.continuation.simulation.world.enemies.actors[0].hitReactionTimer = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /hit reaction/)
+  }
+  const future = { ...JSON.parse(document), schemaVersion: 999 }
+  assert.deepEqual(restoreGameSaveDocument(JSON.stringify(future)).state, current)
+  const suppressed = JSON.parse(document)
+  suppressed.continuation.simulation.world.enemies.actors[0].hitReactionTimer = 0
+  const suppressedRestore = restoreGameSaveDocument(JSON.stringify(suppressed)).state
+  if (suppressedRestore.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(suppressedRestore.world.enemies.actors[0]!.hitFeedback.timer, 1)
+  assert.equal(suppressedRestore.world.enemies.actors[0]!.hitReactionTimer, 0)
+})
+
 test('schema 25 active Wraiths migrate from the fabricated phase brain to native flight state', () => {
   const loadedBoneyard = materializeBoneyard(
     createBoneyardCatalog(),

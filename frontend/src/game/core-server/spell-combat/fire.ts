@@ -1,4 +1,5 @@
 import type { NativeFireActorContact } from '../../core-kernels/primary-spell-fire-effects.ts'
+import { drawNativeFloat } from '../../core-kernels/native-rng.ts'
 import type { PrimarySpellFireExplosionState } from '../../core-kernels/primary-spells.ts'
 import { damageBoneyardEnemy } from '../enemies/damage.ts'
 import { transientSpellHit, validatedDamageMultiplier } from './damage.ts'
@@ -77,7 +78,15 @@ export function resolveFireContacts(work: BoneyardSpellCombatWork): void {
         * validatedDamageMultiplier(
           work.damageMultiplier(actor.id, contact.kind, contact.ownerId),
         )
+      let hitStrength: number | undefined
+      if (contact.kind === 'fire-patch') {
+        const response = drawNativeFloat(work.rng, 0.5)
+        work.rng = response.state
+        hitStrength = Math.fround(0.25 + response.value)
+      }
       const damaged = damageBoneyardEnemy(work.enemies, {
+        hitStrength,
+        suppressHitReaction: contact.kind === 'fire-patch',
         hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,

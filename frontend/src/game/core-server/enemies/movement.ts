@@ -21,7 +21,7 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   if (context.tick < actor.nextMovementTick) return actor
   if (
     skeletonFamilyMovementPausedByHit(actor)
-    && actor.hitFeedback.timer > 0
+    && actor.hitReactionTimer > 0
   ) {
     return {
       ...actor,

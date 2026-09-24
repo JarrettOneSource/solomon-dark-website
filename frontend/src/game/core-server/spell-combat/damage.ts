@@ -51,6 +51,7 @@ export function applyDamageWithDisintegrate(
   readonly killed: boolean
 } {
   const ordinary = damageBoneyardEnemy(source, {
+    suppressHitReaction: true,
     hasMagicDamage: true,
     magic: true,
     lethalObserver,
@@ -90,6 +91,7 @@ export function applyDamageWithDisintegrate(
     }
   }
   const executed = damageBoneyardEnemy(ordinary.store, {
+    suppressHitReaction: true,
     hasMagicDamage: true,
     magic: true,
     lethalObserver,

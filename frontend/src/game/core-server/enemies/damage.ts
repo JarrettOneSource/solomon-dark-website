@@ -163,6 +163,7 @@ export function damageBoneyardEnemy(
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
         hitFeedback: receiveNativePuppetHit(request.tick, request.hitStrength),
+        hitReactionTimer: request.suppressHitReaction ? 0 : 1,
         lethalMagicDamage: request.hasMagicDamage === true,
         lifeState: 'dying',
         lighting: actor.config.enemyToken === 'SKELETONARCHER'
@@ -184,6 +185,7 @@ export function damageBoneyardEnemy(
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
         hitFeedback: receiveNativePuppetHit(request.tick, request.hitStrength),
+        hitReactionTimer: request.suppressHitReaction ? 0 : 1,
       }
   const actors = [...source.actors]
   actors[index] = nextActor

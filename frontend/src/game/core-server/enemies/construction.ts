@@ -179,6 +179,7 @@ export function materializeSpawnIntents(
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
       hitFeedback: createNativePuppetHit(context.tick),
+      hitReactionTimer: 0,
       lastMovementTick: null,
       lethalMagicDamage: false,
       shadowLateralOffset: 0,

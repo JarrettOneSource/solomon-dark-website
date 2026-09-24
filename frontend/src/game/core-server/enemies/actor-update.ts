@@ -1,4 +1,4 @@
-import { stepNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
+import { stepNativePuppetHit, stepNativePuppetHitTimer } from '../../core-kernels/native-puppet-hit.ts'
 import { NATIVE_SKELETON_HEAD_FACING_OFFSETS, NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT, NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import { NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP } from '../../core-kernels/native-hurricane.ts'
 import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
@@ -24,7 +24,8 @@ export function stepDamagePresentationTimers(
   tick: number,
 ): BoneyardEnemyActor {
   if (elapsedTicks <= 0) return actor
-  actor = { ...actor, hitFeedback: stepNativePuppetHit(actor.hitFeedback, tick, elapsedTicks) }
+  actor = { ...actor, hitFeedback: stepNativePuppetHit(actor.hitFeedback, tick, elapsedTicks),
+    hitReactionTimer: stepNativePuppetHitTimer(actor.hitReactionTimer, elapsedTicks) }
   if (actor.brain.family === 'spider') {
     actor = { ...actor, brain: { ...actor.brain, spitTicksRemaining: Math.max(0, actor.brain.spitTicksRemaining - elapsedTicks) } }
   }

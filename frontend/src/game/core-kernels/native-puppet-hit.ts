@@ -27,11 +27,15 @@ export function receiveNativePuppetHit(tick: number, strength = 1): NativePuppet
 
 export function stepNativePuppetHit(source: NativePuppetHitState, tick: number, elapsedTicks = 1): NativePuppetHitState {
   if (source.timer === 0) return source
-  let timer = source.timer
+  return { ...source, tick, timer: stepNativePuppetHitTimer(source.timer, elapsedTicks) }
+}
+
+/** Puppet 0x00624AC0 applies these stores independently to visual +78 and reaction +80. */
+export function stepNativePuppetHitTimer(timer: number, elapsedTicks = 1): number {
   for (let index = 0; index < Math.min(20, elapsedTicks) && timer > 0; index += 1) {
     timer = Math.max(0, Math.fround(timer - TIMER_STEP))
   }
-  return { ...source, tick, timer }
+  return timer
 }
 
 export function nativePuppetHitTimer(source: Pick<NativePuppetHitState, 'tick' | 'timer'>, tick: number): number {

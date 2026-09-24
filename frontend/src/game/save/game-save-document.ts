@@ -2117,10 +2117,18 @@ function normalizeWorld(
         normalizedBrain = { ...normalizedBrain, strafe: { direction: direction.value,
           limbHeadingDeg: finiteNumber(actor.headingDeg, `game save Archer ${index} heading`), movementRamp: 0, turnBlend: 0 } }
       }
+      const hitReactionTimer = sourceSchemaVersion < 41 ? 0
+        : finiteNumber(actor.hitReactionTimer, `game save enemy ${index} hit reaction`)
+      if (hitReactionTimer < 0 || hitReactionTimer > 1) {
+        throw new Error(`game save enemy ${index} hit reaction must be within [0,1]`)
+      }
       return {
         ...actor,
         hitFeedback: normalizeSavedPuppetHit(actor.hitFeedback, actor.lastDamageTick,
           savedTick, sourceSchemaVersion, `game save enemy ${index} hit feedback`),
+        // Older continuations did not retain native contact flag 8. Retire only
+        // this unrecoverable transient reaction; visual feedback and RNG stay intact.
+        hitReactionTimer,
         brain: normalizedBrain,
         lethalMagicDamage,
         shadowLateralOffset: sourceSchemaVersion < 34 ? 0

@@ -1,5 +1,180 @@
 # Enemy damage-presenter closure correction (2026-08-15)
 
+## 2026-09-24 — Report 23: independent movement-reaction latch
+
+### Reopened boundary and causal finding
+
+Discord report `1552401822541676715` describes IronMaw stopping in Firewalker
+and tentatively asks about Foulshaft. Original nine-second video SHA-256:
+`835da5fedb41c76886313b0af74d3698428de9e12025e3cea104974241af9045`.
+No original continuation was supplied. This investigation does not assume
+the reported occurrence was a frozen clock or a permanent authored speed change.
+
+The previous periodic-response pass recovered the flag-8 instruction but failed
+to implement its separate state. Ledger 157 then represented the movement gate
+with the visual hit timer. These are different native fields: `+0x78` is the
+visual feedback clock; `+0x80` is the movement-reaction clock. Looking only at
+red pixels and HP loss did not validate the movement consumer. Repeated fire
+contacts refresh the visual clock even when stock explicitly clears reaction.
+
+Boundary: common positive-damage reaction from contact flag 8, through the
+target-owned latch and fixed update, to Skeleton/Archer/Mage movement, including
+their authored boss variants and continuation persistence. This is not a
+boss-specific immunity, a Firewalker damage change, or a new stun policy.
+
+### Fresh native proof
+
+Retail `SolomonDark.exe` 0.72.5, preferred base `0x00400000`, 4,723,200 bytes,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+All analysis runs on the M2 through the existing read-only replica wrapper
+`/Users/jarrett/.local/bin/sdr-ghidra-headless` (SHA-256
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`),
+canonical analyzed project `Decompiled Game/ghidra_project/SolomonDark`, program
+`SolomonDark.exe`. Raw instructions, decompilation, exact scalar bytes, direct
+xrefs, the full damage-flag-global census and float `+0x80` census were checked.
+Task probes/logs are disposable under `/tmp/solomon-report23-a3u8qy39`.
+No injected or newly recorded clean-stock runtime is claimed.
+
+| Native owner | Instruction-derived contract |
+| --- | --- |
+| Context reset `006246F0` | Clears damage lanes and flags, initializes visual strength to one. |
+| Reaction `00627F80`, stores `00627F99..00627FAF` | Positive physical plus magic damage writes both clocks to one; flag 8 immediately writes reaction zero, independently of visual strength and hurt-sound flag 16. A suppressing hit clears an earlier ordinary reaction, not merely avoids refreshing it. |
+| Base constructor `006287D0` | Both clocks initialize to zero. |
+| Puppet tick `00624AC0` | Independently subtracts promoted float32 `.05` (double `007DE8A0=0.05000000074505806`) from both clocks, stores float32, and clamps at zero. |
+| Skeleton/Archer/Mage movers `004773E0/00477B40/00478380` | Test reaction `+80`, never visual `+78`, before the shared movement/gait builder. Equipped/armored Skeleton and Mage rest-pose overrides remain unchanged. |
+| Shield `0048A290`, hurt cue `0048A600` | Pure shield absorption bypasses both body clocks. Hurt sound uses visual `+78` and flag 16, not the movement latch. |
+| Fire/Fire_Goodguy/MovingFire contact `005FF1D0` | Flag `0x4A` at `005FF51E` includes no-reaction. `005FF556..005FF562` stores `0.25+Float(.5)` as visual strength. Existing physical/magic split and three-tick query stay unchanged. |
+| Burn/FrostBurn `00629A40/006278B0` | Flags `0x18`, zero visual strength; suppress both reaction and hurt sound. |
+| ElectricBurn/Steamed `00628F10/00625F40` | Flags `0x0A`; sampled visual strength does not imply movement reaction. |
+| Lightning/Flame Lash/Blizzard/Frost Jet `0053F9C0/005408F0/00541870/00543860` | Their ordinary and chain contact writers use `0x2A` or `0x0A`; explicit Stun/ColdSlow remains a separate modifier. |
+| Hurricane `0047CB20`, Acid Rain `00604E90`, Ether Drain `005F8620` | No-reaction flag appears as `8`, `0x18`, and `0x10A` respectively. |
+| Ball Lightning `005F2360`, landed Meteor pulse `00621590` | Contact flags `0x2A` and `8`; Meteor impact is a separate direct contact. |
+
+The remaining `+80` float reads in Faculty projectile logic `004804D0`, Silk
+contact `005F6AC0`, Magic Circle `005FB020` and player progression consumers
+address player maximum mana, not the Actor latch. Stack/UI/geometry offsets
+are not additional reaction consumers. The constructor is the additional
+in-system zero writer. Prismatic `00645540` writes `0x18` but delivers a
+modifier without positive HP damage, so it does not arm either body clock.
+
+### Membership and implementation contract (recorded before code)
+
+| Member | Disposition during recovery | Acceptance requirement |
+| --- | --- | --- |
+| Native context defaults; ordinary, quiet, zero-strength and no-reaction hits | recovered-pending-port | Independent clocks; no inference from strength, element, magic damage or audio suppression. |
+| Constructor, repeated hits, positive-to-suppressed transition, 20-tick expiry, paused world | recovered-pending-port | Exact repeated float stores; movement resumes at the native boundary without modifying config. |
+| All Skeleton weapons, armor branches, Archer/Mage; four Ironmaw weapon recipes and Foulshaft | recovered-pending-port | Same shared gate; each member moves during flag-8 contact, ordinary hits still pause it. |
+| Firewalker and Fire Wall; primary fire patches and their MovingFire sibling | recovered-pending-port | Carry flag 8 and fractional strength without changing damage, cadence, area or lifetime; reuse the existing secondary response draw and restore the missing primary per-target draw. |
+| Burn/FrostBurn/ElectricBurn/Steamed; Acid Rain/Ether Drain | recovered-pending-port | Carry their native suppression bit through both secondary damage paths. |
+| Lightning/Frost Jet and welded Flame Lash/Blizzard; Ball Lightning, Hurricane, landed Meteor pulses | recovered-pending-port | Fix every same-bit producer, preserving separately authored slow, freeze, stun, knockback and damage. |
+| Direct Fireball, ordinary missiles, melee, Boulder, Meteor impact, GoodImp attacks | verified-already-at-parity at the reaction default | Positive direct-hit control remains a 20-tick reaction; no blanket magic/fire immunity. |
+| Other enemy families, Maggot, Portal/Cocoon, player/scenery/projectile visual feedback | out-of-system for Skeleton movement gating | Preserve their distinct movement/presentation consumers; no new motion gate. |
+| Shield absorption, death, armor break, owner/world removal, client snapshots | recovered-pending-port for new field lifecycle; existing behavior retained | Shield does not refresh clocks; snapshots retain unchanged visual fields; authoritative reaction never becomes a client-local timer. |
+| Pre-cutover and current full saves | recovered-pending-port | Store the new authoritative scalar with strict current validation. Legacy files lack source flags; retire only their unrecoverable transient reaction, preserving visual feedback, actors, progression and RNG. |
+
+There is no new authored table in the latch mechanism. The complete existing
+Skeleton weapon/headgear/armor catalogs and twelve generated Boneyard boss
+recipe sources remain the data authority; none is approximated or retuned.
+No browser platform prevents representing the recovered state.
+
+The primary implementation consequence is an enemy-owned `hitReactionTimer`
+separate from `NativePuppetHitState`, plus an explicit suppression bit at the
+contact boundary. Renderer/protocol visual contracts remain unchanged. Old
+saves cannot recover a historical source flag; clearing their at-most-20-tick
+reaction is an explicit save cutover, not an inference that zero visual
+strength means no reaction. Focused failing tests, full M2 validation and
+production-browser Firewalker journeys are required before final dispositions.
+
+
+### Source exceptions and implemented ownership
+
+The full flag census also includes Steam-particle `0045B940` (modifier delivery;
+its positive periodic damage belongs to the covered Steamed owner), hostile
+GuidedMissile `005F3EE0` (player contact), PoisonPool `005F8030` and Poisoned
+`00627160` (separate player poison lane). They are not unhandled Skeleton-body
+movement writers. Existing ledgers 070, 091, 096 and 123 own those distinct
+contracts. `00649890` resets the common context to flags 3, not flag 8.
+
+The learned physical Hail proc is a required direct-hit exception: Water's
+handler calls `006246F0` again before its separate physical damage, so the
+preceding Frost no-reaction flag is not inherited. The regression asserts a
+reaction after Hail while pure Frost remains slowed by its modifier but not
+movement-locked by visual feedback. Ground Spark and ordinary Frost Missiles
+retain their direct-contact defaults; Ball Lightning explicitly carries flag 8.
+Ring of Fire's 30 MovingFire children are visual-only, with zero contact damage;
+the initial over-broad fixture assumption was corrected, not the game changed.
+
+The enemy actor now owns `hitReactionTimer`, initialized to zero, assigned in
+the positive body-damage receiver, and decremented with the same native float
+stores as the independently retained visual clock. Every identified positive
+Skeleton-targeting flag-8 producer carries an explicit `suppressHitReaction`
+through its existing contact interface. No enemy recipe, authored speed, attack
+rate, HP, damage, radius, status duration, physics or collision policy is retuned.
+The primary fire-patch path additionally restores the missing native per-target
+visual-strength draw. Secondary Firewalker/Fire Wall already spent that draw;
+passing its existing value consumes no additional secondary RNG.
+
+Save schema 41 stores the authoritative reaction field. Full current and
+compatible future saves retain it; malformed or missing current fields are
+rejected. Schema 40 and earlier lack historical contact flags, so their
+unrecoverable at-most-20-tick reaction is retired explicitly. Full-state deep
+comparison verifies no other restoration change, including visual feedback,
+player progression/equipment, enemy configuration and saved RNG. No wire field
+or client-local reaction clock was introduced.
+
+### Focused and browser acceptance before the canonical gate
+
+All 366 focused tests passed, including exact timer stores, positive-to-flag-8
+clearing, zero-strength/quiet direct controls, shield absorption, every authored
+boss source and all six Skeleton weapons with and without armor, paused clocks,
+all changed spell producers, direct Hail/GoodImp/Meteor-impact exceptions, and
+strict full-save migration. The full Boneyard command also passed its 2,583-test
+main suite, along with its prerequisite suites. Type checking, production build
+and lint passed; lint retains 16 pre-existing warnings and no errors.
+
+The unchanged runtime at base `a6b8f818` reproduced the stall using a real
+Firewalker key cast after Title/Create/College/Boneyard/Solomon navigation.
+Each of four Ironmaw weapon variants and Foulshaft took about 7.92 HP damage
+over a 100-tick post-first-contact window while moving exactly zero units.
+The first corrected run at the same trial corridor moved 24.45–48.26 units,
+kept taking native fire damage and subsequently entered ordinary attack states.
+This is a gameplay-state comparison, not a claim of pixel-identical runtime
+RNG histories or a replay of the reporter's unsupplied continuation.
+
+The maintained `frontend/tools/smoke-firewalker-movement.mjs` then moved its
+trial corridor closer to the arena center and waited for the actual client
+camera and attack frame, so captures do not mislabel a delayed locomotion frame.
+Its Chrome 153.0.8010.53 production journey verifies all five authored bosses,
+real fire HP loss, more than ten units of motion reaching the decoded client,
+unchanged native maximum HP and actual rendered `skeleton-claw-b`,
+`skeleton-weapon` and `archer-shot` actions. Every page/console/HTTP/request/host
+and wire error array is empty. Captures remain disposable. The fixture explicitly
+holds wave generation and replenishes player health/mana, while leaving the
+boss recipe, collision, pathfinding, attack and fire damage programs native.
+
+The earliest arena seed (all bytes 42) failed the pre-existing stock-policy
+opening spawn constraint before the experiment. The established zero-byte
+acceptance seed was used instead, without relaxing spawn admission. An initial
+movement measurement incorrectly included the short pre-contact approach;
+measuring after the first actual damage separates that from the reproduced
+sustained hit lock. These fixture issues are not claimed as game fixes.
+
+Maintained browser command, from the production-built `frontend` directory:
+
+```sh
+SDR_FIREWALKER_OUTPUT=/tmp/solomon-firewalker \
+node --experimental-strip-types tools/smoke-firewalker-movement.mjs
+```
+
+Disposable proof SHA-256 values (recording a hash does not retain the capture):
+
+- Native instructions/field census: `62a9c19835f820ed6fb3291f3c5100affdb8036bd3a2ae5322bdcf66cd001b6b`.
+- Complete damage flag census: `c8c0609523a46d5bc5d58ddfd859a93ee7f0cc6a6c4dc8a6a9bf731ed3f01433`.
+- Water/Hail and Air source recovery: `cc0506e733b274130775900ec38d578db94a889e019427cbbf4723894174501c`.
+- Unchanged-runtime five-boss baseline: `7ab2507cc4c2424aff758ffe9d5f577343bb7d4c0cf3e1da6450fabf42a2682d`.
+- Initial corrected same-corridor browser: `0cf4052f44227a51f1f82193fdb4edb4b8859651b15fc9ba6970a77bc9ce55d0`.
+- Framed five-boss rendered-attack browser: `8a91ff8d93029f2b0af1ed8db78adad4a04946498b44e274e50631f9060bd393`.
+
 ## 2026-09-23 — Report 05 renderer retirement reopening
 
 Recorded before implementation. The two-present-browser Faculty fixture retains
