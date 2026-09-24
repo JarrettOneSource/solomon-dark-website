@@ -57,20 +57,20 @@ are not additional reaction consumers. The constructor is the additional
 in-system zero writer. Prismatic `00645540` writes `0x18` but delivers a
 modifier without positive HP damage, so it does not arm either body clock.
 
-### Membership and implementation contract (recorded before code)
+### Membership inventory (declared before code; final dispositions after acceptance)
 
-| Member | Disposition during recovery | Acceptance requirement |
+| Member | Final disposition | Verified contract |
 | --- | --- | --- |
-| Native context defaults; ordinary, quiet, zero-strength and no-reaction hits | recovered-pending-port | Independent clocks; no inference from strength, element, magic damage or audio suppression. |
-| Constructor, repeated hits, positive-to-suppressed transition, 20-tick expiry, paused world | recovered-pending-port | Exact repeated float stores; movement resumes at the native boundary without modifying config. |
-| All Skeleton weapons, armor branches, Archer/Mage; four Ironmaw weapon recipes and Foulshaft | recovered-pending-port | Same shared gate; each member moves during flag-8 contact, ordinary hits still pause it. |
-| Firewalker and Fire Wall; primary fire patches and their MovingFire sibling | recovered-pending-port | Carry flag 8 and fractional strength without changing damage, cadence, area or lifetime; reuse the existing secondary response draw and restore the missing primary per-target draw. |
-| Burn/FrostBurn/ElectricBurn/Steamed; Acid Rain/Ether Drain | recovered-pending-port | Carry their native suppression bit through both secondary damage paths. |
-| Lightning/Frost Jet and welded Flame Lash/Blizzard; Ball Lightning, Hurricane, landed Meteor pulses | recovered-pending-port | Fix every same-bit producer, preserving separately authored slow, freeze, stun, knockback and damage. |
-| Direct Fireball, ordinary missiles, melee, Boulder, Meteor impact, GoodImp attacks | verified-already-at-parity at the reaction default | Positive direct-hit control remains a 20-tick reaction; no blanket magic/fire immunity. |
-| Other enemy families, Maggot, Portal/Cocoon, player/scenery/projectile visual feedback | out-of-system for Skeleton movement gating | Preserve their distinct movement/presentation consumers; no new motion gate. |
-| Shield absorption, death, armor break, owner/world removal, client snapshots | recovered-pending-port for new field lifecycle; existing behavior retained | Shield does not refresh clocks; snapshots retain unchanged visual fields; authoritative reaction never becomes a client-local timer. |
-| Pre-cutover and current full saves | recovered-pending-port | Store the new authoritative scalar with strict current validation. Legacy files lack source flags; retire only their unrecoverable transient reaction, preserving visual feedback, actors, progression and RNG. |
+| Native context defaults; ordinary, quiet, zero-strength and no-reaction hits | exact-ported | Independent clocks; no inference from strength, element, magic damage or audio suppression. |
+| Constructor, repeated hits, positive-to-suppressed transition, 20-tick expiry, paused world | exact-ported | Exact repeated float stores; movement resumes at the native boundary without modifying config. |
+| All Skeleton weapons, armor branches, Archer/Mage; four Ironmaw weapon recipes and Foulshaft | exact-ported | Same shared gate; each member moves during flag-8 contact, ordinary hits still pause it. |
+| Firewalker and Fire Wall; primary fire patches and their MovingFire sibling | exact-ported | Carry flag 8 and fractional strength without changing damage, cadence, area or lifetime; reuse the existing secondary response draw and restore the missing primary per-target draw. |
+| Burn/FrostBurn/ElectricBurn/Steamed; Acid Rain/Ether Drain | exact-ported | Carry their native suppression bit through both secondary damage paths. |
+| Lightning/Frost Jet and welded Flame Lash/Blizzard; Ball Lightning, Hurricane, landed Meteor pulses | exact-ported | Fix every same-bit producer, preserving separately authored slow, freeze, stun, knockback and damage. |
+| Direct Fireball, ordinary missiles, melee, Boulder, Meteor impact, GoodImp attacks | verified-already-at-parity | Positive direct-hit control remains a 20-tick reaction; no blanket magic/fire immunity. |
+| Other enemy families, Maggot, Portal/Cocoon, player/scenery/projectile visual feedback | out-of-system (not a Skeleton movement consumer) | Preserve their distinct movement/presentation consumers; no new motion gate. |
+| Shield absorption, death, armor break, owner/world removal, client snapshots | exact-ported | Shield does not refresh clocks; snapshots retain unchanged visual fields; authoritative reaction never becomes a client-local timer. |
+| Pre-cutover and current full saves | exact-ported | Store the new authoritative scalar with strict current validation. Legacy files lack source flags; retire only their unrecoverable transient reaction, preserving visual feedback, actors, progression and RNG. |
 
 There is no new authored table in the latch mechanism. The complete existing
 Skeleton weapon/headgear/armor catalogs and twelve generated Boneyard boss
@@ -82,8 +82,8 @@ separate from `NativePuppetHitState`, plus an explicit suppression bit at the
 contact boundary. Renderer/protocol visual contracts remain unchanged. Old
 saves cannot recover a historical source flag; clearing their at-most-20-tick
 reaction is an explicit save cutover, not an inference that zero visual
-strength means no reaction. Focused failing tests, full M2 validation and
-production-browser Firewalker journeys are required before final dispositions.
+strength means no reaction. Focused failing regressions, full M2 validation and production-browser
+Firewalker journeys now satisfy the final dispositions above.
 
 
 ### Source exceptions and implemented ownership
@@ -174,6 +174,57 @@ Disposable proof SHA-256 values (recording a hash does not retain the capture):
 - Unchanged-runtime five-boss baseline: `7ab2507cc4c2424aff758ffe9d5f577343bb7d4c0cf3e1da6450fabf42a2682d`.
 - Initial corrected same-corridor browser: `0cf4052f44227a51f1f82193fdb4edb4b8859651b15fc9ba6970a77bc9ce55d0`.
 - Framed five-boss rendered-attack browser: `8a91ff8d93029f2b0af1ed8db78adad4a04946498b44e274e50631f9060bd393`.
+
+
+### Final canonical M2 acceptance — 2026-09-24
+
+The clean candidate `55739585dac6ddfc5ef434c542a521f4ce5059c0` completed the full
+`/opt/homebrew/bin/bash ./scripts/validate.sh` gate with exit zero at 12:42 UTC.
+All 24 Website/backend integration tests and 3,786 frontend/desktop tests
+passed, together with backend formatting/build, frontend lint/type/boundary
+checks, production builds, media policy and the full renderer quality/mutation
+checks. The renderer report has no failures or surviving mutants. No gate was
+removed, skipped or weakened. All 7,179 tracked source files matched their
+pre-validation SHA-256 manifest after both the gate and the browser run.
+
+The script then ran the exact production client's maintained Firewalker journey
+and exited zero at 12:43:04 UTC. Chrome 153.0.8010.53 observed:
+
+| Authored boss | Motion over 100 post-contact ticks | Native fire HP loss in window | Subsequent rendered action |
+| --- | ---: | ---: | --- |
+| ironmaw-claw | 68.451 world units | 2.880 | `skeleton-claw-b` |
+| ironmaw-sword | 54.121 world units | 4.080 | `skeleton-weapon` |
+| ironmaw-mace | 68.906 world units | 1.920 | `skeleton-weapon` |
+| ironmaw-flail | 74.350 world units | 2.160 | `skeleton-weapon` |
+| foulshaft | 54.503 world units | 2.400 | `archer-shot` |
+
+All five bosses retained their authored maximum HP and continued to receive
+real Firewalker damage. Decoded client positions confirmed their movement;
+the browser recorded each actual attack frame atomically rather than inferring
+it from a later screenshot. Both melee and archer attack screenshots were
+inspected; stock scenery can partially occlude Foulshaft. Page, console, HTTP,
+failed-request, host and wire error arrays were all empty. The helper's player
+health/mana and wave-hold controls remain explicitly test-only.
+
+The original baseline's five zero-displacement trials and the first corrected
+same-corridor trials isolate the repaired hit lock. The final centered-corridor
+journey independently verifies movement, actual damage, replication and attack
+presentation. These are not claims of identical cross-run RNG histories or an
+exact replay of the reporter's unsupplied save. No native speed/HP/damage
+retuning or FPS optimization is claimed; no new clean-stock runtime capture
+was performed. There is no newly blocked-by-platform member.
+
+Canonical log SHA-256: `4930c74192c19d0bc1d2ac9c576ae063dba740e9b81c97e334b1078fbc61af70`.
+
+Final browser receipt SHA-256: `5fdc8352e358a9fca9f74791c3d38525ffd5c8ff30c3a46a7b4c0f63cad35e2e`.
+
+Source-manifest SHA-256: `1c7a93a31f20394e2a4c366dd5567d7189ea44ceac24bcbe7c8d646d70559596`.
+
+This final receipt/disposition update changes documentation only. Runtime,
+tests, assets and build-input bytes remain those of the fully validated
+candidate above. Publication, Discord reaction and task-cleanup receipts are
+recorded separately in the private M2 archive; these local checks do not
+claim production deployment or a verified live rollout.
 
 ## 2026-09-23 — Report 05 renderer retirement reopening
 
