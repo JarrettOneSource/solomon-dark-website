@@ -3121,6 +3121,53 @@ test('featured boss identity survives continuation saves, raw snapshots and incr
   }
 })
 
+test('Ring visual RNG and late ground fade survive save restoration without a schema change', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) throw new Error('expected stock encounter')
+  state = { ...state, world: { ...state.world, encounter: { ...state.world.encounter,
+    phase: 'gone', lifetimeTicksRemaining: 0, runEventId: 1 } } }
+  const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'owner', 35, 1, state.gameRng)
+  state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 35, 0)!
+  const position = state.playerEntities.locomotions[0]!.position
+  state = stepGameSimulationTick(state, { owner: {
+    aim: { x: position.x + 100, y: position.y }, cast: { primary: false, quickbar: 0 },
+    movement: { x: 0, y: 0 }, viewportWidth: 1600, viewportHeight: 900,
+  } })
+  const visual = state.secondaryAbilities.actors.find(actor => actor.kind === 'freeze-wave-visual')
+  assert.ok(visual?.presentationRng)
+  assert.equal(visual.lifetimeTicks, 176)
+  for (const age of [0, 69, 70, 90, 91, 174, 175]) {
+    while ((state.secondaryAbilities.actors.find(actor => actor.id === visual.id)?.ageTicks ?? 176) < age) {
+      state = stepGameSimulationTick(state, {})
+    }
+    const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+      mods: [], modState: {}, playerId: 'owner', state })
+    const restored = restoreGameSaveDocument(document).state
+    assert.deepEqual(restored.secondaryAbilities.actors.find(actor => actor.id === visual.id),
+      state.secondaryAbilities.actors.find(actor => actor.id === visual.id))
+    const resumed = stepGameSimulationTick(restored, {}).secondaryAbilities
+    const uninterrupted = stepGameSimulationTick(state, {}).secondaryAbilities
+    // Resume intentionally cancels the old held-input/cast-pose state; the
+    // already-born world actors, their RNG and target effects must continue.
+    assert.equal(restored.secondaryAbilities.players.owner?.castAction, null)
+    assert.deepEqual(resumed.actors, uninterrupted.actors, `resumed Ring age ${age}`)
+    assert.deepEqual(resumed.rng, uninterrupted.rng)
+    assert.deepEqual(resumed.targetEffects, uninterrupted.targetEffects)
+    const legacyDuration = JSON.parse(document)
+    legacyDuration.continuation.simulation.secondaryAbilities.actors
+      .find((actor: { id: number }) => actor.id === visual.id).lifetimeTicks = 175
+    if (age < 175) {
+      assert.equal(restoreGameSaveDocument(JSON.stringify(legacyDuration)).state.secondaryAbilities.actors
+        .find(actor => actor.id === visual.id)?.lifetimeTicks, 175)
+    }
+  }
+  const ended = stepGameSimulationTick(state, {})
+  assert.equal(ended.secondaryAbilities.actors.some(actor => actor.id === visual.id), false)
+})
+
 test('Golem CircleSlow continues through a save and old saves default to an unmodified Golem', () => {
   const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
   assert.ok(loadedBoneyard)

@@ -61,12 +61,12 @@ import type {
   NativeStormWeatherComposite,
 } from './native-secondary-presentation-types.ts'
 import {
-  freezeWaveVisualDraws,
   raindropGradient,
   stormAuxiliaryDraws,
   stormCloudDraws,
   stormWeatherComposite,
 } from './native-secondary-weather-presentation.ts'
+import { freezeWaveVisualDraws } from './native-freeze-wave-presentation.ts'
 import {
   ETHER_PRIMARY_FLIGHT_RECORDS,
   etherPrimaryCompositorPlan,
@@ -156,6 +156,7 @@ function buildNativeSecondaryPresentationPlan(
     meshes: readonly NativeSecondaryMeshDraw[] = [],
     underlayDraws: readonly NativeSecondarySpriteDraw[] = EMPTY_SECONDARY_DRAWS,
     worldY = root.y,
+    backgroundDraws: readonly NativeSecondarySpriteDraw[] = EMPTY_SECONDARY_DRAWS,
   ): NativeSecondaryPresentationPlan => scratch?.writePlan(
     draws,
     gradients,
@@ -167,7 +168,9 @@ function buildNativeSecondaryPresentationPlan(
     stormComposite,
     underlayDraws,
     worldY,
+    backgroundDraws,
   ) ?? {
+    backgroundDraws,
     draws,
     gradients,
     meshes,
@@ -352,8 +355,11 @@ function buildNativeSecondaryPresentationPlan(
       return plan(prismaticWaveDraws(actor, presentationFrame, draw))
     case 'freeze-wave':
       return plan([])
-    case 'freeze-wave-visual':
-      return plan(freezeWaveVisualDraws(actor, draw))
+    case 'freeze-wave-visual': {
+      const visual = freezeWaveVisualDraws(actor, draw)
+      return plan(visual.draws, 'zanim', 0, [], [], null, [],
+        visual.underlayDraws, root.y, visual.backgroundDraws)
+    }
     case 'frost-burn-flare':
       return plan([draw('BadGuys', clampEntry(actor.frame, 10, 11), {
         alpha: actor.alpha,

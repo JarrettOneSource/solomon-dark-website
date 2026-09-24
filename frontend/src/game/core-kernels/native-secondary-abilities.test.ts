@@ -4719,7 +4719,7 @@ test('Ring of Ice owns the float32 93-tick expansion and one-contact ledger', ()
   const born = state.actors.find(({ kind }) => kind === 'freeze-wave')!
   const visual = state.actors.find(({ kind }) => kind === 'freeze-wave-visual')!
   assert.equal(born.phase, Math.fround(0.924))
-  assert.equal(visual.lifetimeTicks, 175)
+  assert.equal(visual.lifetimeTicks, 176)
   assert.deepEqual(visual.presentationRng, source.rng)
   assert.deepEqual(state.rng, consumeFreezeWaveConstruction(source.rng, 100))
   assert.equal(state.actors.some(({ kind }) => kind === 'ice-blast'), false)
@@ -4740,6 +4740,12 @@ test('Ring of Ice owns the float32 93-tick expansion and one-contact ledger', ()
   assert.deepEqual(wave.hitTargetIds, [3])
   state = stepNativeSecondaryAbilities(state, context(35, 94, null)).state
   assert.equal(state.actors.some(({ kind }) => kind === 'freeze-wave'), false)
+  for (let age = 94; age <= 175; age += 1) {
+    state = stepNativeSecondaryAbilities(state, context(35, age + 1, null)).state
+  }
+  assert.equal(state.actors.find(({ kind }) => kind === 'freeze-wave-visual')?.ageTicks, 175)
+  state = stepNativeSecondaryAbilities(state, context(35, 177, null)).state
+  assert.equal(state.actors.some(({ kind }) => kind === 'freeze-wave-visual'), false)
 
   const enhancedContext = context(35, 1, 0)
   const enhanced = stepNativeSecondaryAbilities(source, {
@@ -5061,7 +5067,7 @@ test('Comet whistles after crossing below 175 ticks remaining and impacts exactl
     expectedScreenFlash(1, 1, 1, 0.005, false),
   ])
   const visual = state.actors.find(({ kind }) => kind === 'freeze-wave-visual')!
-  assert.equal(visual.lifetimeTicks, 175)
+  assert.equal(visual.lifetimeTicks, 176)
   const debris = state.actors.filter(({ kind }) => kind === 'comet-debris')
   assert.ok(debris.length >= 33 && debris.length <= 72)
   assert.ok(debris.every((piece) => (

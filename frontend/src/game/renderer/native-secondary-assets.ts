@@ -30,7 +30,7 @@ const BADGUYS_ENTRIES = Object.freeze([
   ...range(333, 433), ...range(446, 450), ...range(2008, 2010),
 ])
 const DEADHAWG_ENTRIES = Object.freeze([
-  2, 4, 5, 6, 16, 17, 18, ...range(46, 87), 114, 121, ...range(177, 179), ...range(200, 207),
+  2, 4, 5, 6, 16, 17, 18, ...range(46, 87), ...range(177, 179), ...range(200, 207),
 ])
 const CLOTHES_ENTRIES = Object.freeze([1, 2])
 const GOLEM_ENTRIES = Object.freeze(range(1, 208).filter((entry) => {

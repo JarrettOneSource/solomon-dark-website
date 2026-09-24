@@ -706,7 +706,9 @@ export class BoneyardDynamicScene {
     for (const layer of secondaryAbilityPainterLayers) {
       this.secondaryAbilities.setDepth(
         layer.id,
-        layer.lane === 'pre-world-queue'
+        layer.lane === 'background'
+          ? 0
+          : layer.lane === 'pre-world-queue'
           ? 0.5
           : positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )

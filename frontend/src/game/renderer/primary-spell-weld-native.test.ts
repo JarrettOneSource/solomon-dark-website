@@ -56,7 +56,7 @@ test('Weld atlas membership covers every recovered direct owner', () => {
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
   assert.equal(NATIVE_WELD_SPRITES[44].atlas, 'BadGuys')
   assert.equal(NATIVE_WELD_SPRITES[76].entry, 76)
-  assert.deepEqual(NATIVE_WELD_DEADHAWG_RECORDS, [19, 114])
+  assert.deepEqual(NATIVE_WELD_DEADHAWG_RECORDS, [19, 16])
   assert.equal(NATIVE_WELD_DEADHAWG_SPRITES[19].atlas, 'DeadHawg')
 })
 
@@ -488,6 +488,7 @@ test('Frost Missile Iceblast uses and releases the pre-world interval separately
   const burst = preWorldRoot.children[0]!
   assert.equal(burst.label, 'weld-pre-world-pass')
   assert.ok(burst.children.length > 0)
+  assert.ok(burst.children.some(child => child.label === 'frost-missile-iceblast:DeadHawg:16'))
   view.update({ nextId: 2, projectiles: [], transients: [] }, WORLD_KEY, 21)
   assert.equal(root.children.length, 0)
   assert.equal(preWorldRoot.children.length, 0)
@@ -502,7 +503,7 @@ test('Cone Frost Missile adds the independent white Iceblast and retires it befo
   const burst = nativeWeldVisualPlan(expanded).underlays![0]!
   assert.equal(burst.role, 'frost-missile-iceblast')
   assert.equal(burst.atlas, 'DeadHawg')
-  assert.equal(burst.record, 114)
+  assert.equal(burst.record, 16)
   assert.equal(burst.alpha, 1)
   assert.equal(burst.scaleX, 1)
   assert.equal(burst.scaleY, Math.fround(0.8))

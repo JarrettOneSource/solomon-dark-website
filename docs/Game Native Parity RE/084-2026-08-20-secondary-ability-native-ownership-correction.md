@@ -1,10 +1,133 @@
 # 2026-08-20 — Secondary-ability native ownership correction
 
+## 2026-09-24 — Report 20: Ring of Ice artwork and child painter ownership
+
+Fleet `8g5zlwy0`, M2. The native recovery and focused implementation/browser
+checks below are complete; the final rebased canonical acceptance is pending. This reopening supersedes the old Ring
+record-114/121 assertions in entries 083, 121 and 123. The previous pass
+confused inline bundle fields with the separate compact-decoration record
+range, then tested primitive counts rather than the actual bound images.
+
+### Evidence and causal model
+
+Retail 0.72.5 `SolomonDark.exe` is 4,723,200 bytes, preferred base `00400000`,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+All new static work runs on M2 through the existing Ghidra 12.0.3 read-only,
+no-analysis replica wrapper. Mod Loader is a read-only instrument, not an
+edited repository. These are fresh instruction/static-data findings, not a
+new clean-stock runtime recording.
+
+The complete DeadHawg sequential-record trace of builder `004E8A90` maps
+`004E8DDA`, singleton `00819994 + 0C78`, to **record 16**, and `004E8DFF`,
+field `+0D3C`, to **record 17**. The different array at `+19F0` contains records
+114..144. Record 16 is the 119-by-119 blue-white edge; record 17 is the
+294-by-236 white ice circle. Record 114 is a 229-by-215 leaf pile and record
+121 is 89-by-89 dirt. The current assets are correctly extracted; the runtime
+selected the wrong records. Replacing the image files would corrupt ordinary
+arena decorations and is not the repair.
+
+Ring factory `00644460` has two direct callers: secondary dispatcher
+`0054CC50` at `0054D258`, and Comet impact `0061E9C0` at `0061EBC0`.
+It creates three additive `Anim_Iceblast` children using field `+0C78` in
+direct manager `Region+278`, then an ordinary `Anim_Fade` using `+0D3C` in
+background manager `Region+2C4`, and 100/200 WhirlSnow children wrapped in
+ZAnim. The gameplay FreezeWave is correctly invisible: vtable `0079D994`
+has empty body-render slots. Its existing contact, light, freeze and
+Frostburn owners must remain unchanged.
+
+The three burst losses are float32 **.05, .05, .065**, with growth factors
+float32 **1.02, 1.015, 1.01** and initial life 4.5. Tick `00452ED0` stores the
+subtraction and each scale multiplication every tick. Draw `00455B30` clamps
+life to one, uses additive blending and rotation-before-world-axis scale
+`(s, .8*s)`. Closed-form powers/subtraction and a shared .05 loss are wrong.
+The ground circle starts at 1.75, loses float32 .01 and has fixed scale 1.5.
+Its float32 tail requires the visual bundle to survive through age 175,
+retiring at 176, without extending the 93-tick gameplay wave.
+
+WhirlSnow's world/ZAnim root stays at the original cast point; its radial and
+height displacement are draw-local (`00453F70`, `00458A00`, `005E00B0`). Thus
+the snow cohort may retain one equal-Y painter group, but neither the ground
+circle nor the additive bursts belongs in that group. Their direct managers
+precede the sorted world and its player sprites. Frost Missile area helper
+`00643920` also uses `+0C78`; its Iceblast must use record 16, not 114. Its
+existing .1 loss, 1.025 growth and pre-world placement remain unchanged.
+
+The pristine `f4a2469b` built-client Ring/Comet browser journey passed its old
+checks with no page/console/HTTP errors while visibly drawing leaves/dirt in
+the Ring. That is a concrete counterexample to the old count-only acceptance.
+
+### Membership and verified disposition
+
+| Member | Native contract | Disposition / proof |
+| --- | --- | --- |
+| Ring 35, all ranks | Shared factory; rank changes freeze duration, not artwork | exact-ported; existing rank/contact tests and real cast with 16/17/72 assets |
+| Comet 76 impact | Same factory and visual bindings | exact-ported; real impact verifies all three child layers |
+| Three Iceblast children | Record 16, three rotations, distinct loss/growth, direct +278 | exact-ported; every age 0..176 and actual retained Sprite affine/parent checks |
+| Ground ice circle | Record 17, scale 1.5, float32 fade, direct +2C4 | exact-ported; source dimensions, alpha tail, background parent and visible circle |
+| Normal/Enhanced snow | BadGuys 72, 100/200, eight RNG draws each, fixed root | exact-ported; complete child membership, unchanged construction RNG, native direction and update recurrence |
+| Shared Frost Missile Iceblast | Record 16 from the same inline field | exact-ported; real cast/impact/ColdSlow/retirement, preload closure and retained underlay sprite |
+| Gameplay FreezeWave/light/Frozen/ColdSlow/Frostburn | Existing 93-tick owner and target modifiers | verified-already-at-parity; unchanged gameplay code and combat browser assertions |
+| College entry | Existing Hub category-two ability seal | verified-already-at-parity; Ring rejected without mana, cooldown, actor, event or audio side effects |
+| Boneyard, repeated casts, resume, teardown | Same direct-layer program and saved presentation RNG | exact-ported; retained-view repeated spawning/removal, presentation replay and saved live-actor boundary tests |
+| Legitimate decoration records 114..144 | Separate compact-decoration array +19F0 | out-of-system; original source textures, manifests and scenery consumers unchanged |
+| Anim_UltraBanish and DemonSkull tick | Distinct native factories 00460AB0/004963C0 also read +0C78 | out-of-system; complete singleton field census identifies these independent producer families, not callers of the Ring/Frost Missile helpers or consumers of their incorrect record mappings |
+| Meteor markers and other secondary sprites | Different sprite fields/factories | out-of-system; their independent artwork, including DeadHawg 19, is unchanged |
+
+No platform constraint requires a visual approximation. The fix must use the
+existing extracted art, retain all construction RNG draws, preserve gameplay
+and the wire/save contract, split the two direct layers from the snow, and
+exercise actual sprites rather than only counting primitives. The full exact
+candidate M2 validation and built-client browser journeys remain required
+before the authorized push, checkmark and task cleanup.
+
 > 2026-09-22 correction: [report 07's instruction-closed equipment audit](101-2026-08-20-player-passive-and-equipment-effect-consumers.md#2026-09-22--report-07-complete-item-set-investigation)
 > supersedes the Leviathan damage claim and historical parent-damage receipts
 > below. The maximum feature controls quantity only; authored set FX25 applies
 > once through the live caster's damage resolver when each EtherBolt is born.
 > Leviathan retains raw cast-rank damage, including through continuation saves.
+
+### Implementation and pre-canonical evidence
+
+`native-freeze-wave-presentation.ts` now holds the shared bound artwork and
+complete deterministic child program. `NativeSecondaryWorldView` owns and
+cleans separate background and pre-world containers, while the fixed-root
+snow stays in the ordinary native queue. Boneyard routing places the circle
+at direct depth 0, the bursts at 0.5, and snow at its sorted-world depth.
+Both the actual container tree and real rendered scene prove that the ground
+and edge no longer cover the wizard. No original image, packed atlas, manifest,
+protocol or save schema was modified. The only authoritative lifetime change
+is the cosmetic visual bundle's 175-to-176 tail; the gameplay wave remains 93.
+Old saved lifetime-175 bundles are accepted unchanged rather than silently
+rewritten. Resume retains the born actors and their RNG; it intentionally
+clears old held-input/cast-pose metadata under the pre-existing save contract.
+
+WhirlSnow now uses native `(sin,-cos)` direction with the float32 radians store,
+and repeated float32 angle, angular-decay, radius, height and life updates.
+Every birth draw is still consumed in the original order, including children
+that have already expired by the requested presentation age. Clone/replay
+assertions ensure rendering cannot mutate authority RNG or depend on wall time.
+The complete DeadHawg singleton census contains 185 references across 86
+functions; +0C78 has the four named consumers, and +0D3C belongs to Ring alone.
+
+The initial built-client Ring and Comet journeys rendered leaves/dirt while
+passing the old primitive-count assertions. The strengthened journey instead
+requires exact sprite members and all layer depths. Corrected Ring and Comet
+both present 204 primitives at an early Enhanced frame (200 snow, three blue
+edges and one white ground circle), then retire normally. A real learned Frost
+Missile cast produces a record-16 additive splash, retains its existing 0.5
+ColdSlow, is received/rendered by the built client, and retires. Browser page,
+console and failed-response arrays are empty. The Ring and Comet screenshots
+were visually inspected; the missing white circle and icy edge are restored.
+
+A first College test incorrectly expected an admitted Ring cast. Its failure
+had no browser errors and reflects the existing Hub combat seal, not this
+renderer change. The correct negative journey passed without modifying that
+seal. A stale preload test still expected record 114 and was corrected to the
+verified 16. Structural fixtures were corrected to use the repository's existing
+headless shader probe and a valid painter registration. Save coverage explicitly
+separates persistent world actors from the intentional resume input reset;
+none of these setup corrections weakens the gameplay or asset contracts.
+
 
 ## Supersession boundary and binary evidence
 

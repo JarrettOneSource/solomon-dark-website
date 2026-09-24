@@ -31,12 +31,14 @@ import {
 import { boneyardEnemyActorFlags } from '../src/game/core-server/enemies/model.ts'
 import { getPlayerCharacter, getPlayerSkillBook } from '../src/game/core-server/game-simulation.ts'
 import {
+  grantPlayerEntityWeldBuild,
   replacePlayerEconomy,
   selectPlayerEntityPrimarySkill,
   setPlayerEntityMana,
 } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
+import { nativeWeldVisualPlan } from '../src/game/renderer/primary-spell-weld-native.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotRoot = process.env.SDR_SECONDARY_ABILITY_SCREENSHOT_ROOT
@@ -999,6 +1001,9 @@ try {
     }
   }
 
+  const sharedIceblast = process.env.SDR_ICEBLAST_ACCEPTANCE === '1'
+    ? await captureSharedFrostMissile(page, canvas, host, playerId, baseSkillBook, boneyardEnemyBaseline)
+    : null
   const browserReceipt = await canvas.evaluate((node) => ({
     context: (node.getContext('webgl2') || node.getContext('webgl'))?.constructor.name,
     rendererName: node.dataset.rendererName,
@@ -1046,6 +1051,7 @@ try {
     scene: requestedScene,
     staffOverlap: staffOverlapReceipt,
     screenshotRoot,
+    sharedIceblast,
     statusEffects,
   }, null, 2)}\n`)
 } catch (error) {
@@ -1189,6 +1195,48 @@ async function measureMagentaPixels(page, screenshot) {
     }
     return { magentaPixelCount, maximumBlueMinusGreen, maximumRedMinusGreen }
   }, screenshot.toString('base64'))
+}
+
+async function captureSharedFrostMissile(page, canvas, host, playerId, baseSkillBook, enemyBaseline) {
+  assert.ok(enemyBaseline, 'shared Iceblast proof requires a real Boneyard run')
+  await releasePrimaryPointer(page)
+  armPrimaryStatusSkill(host, playerId, baseSkillBook, {
+    primarySkillId: 32,
+    ranks: [[8, 1], [32, 1], [33, 0], [34, 1], [36, 0], [37, 0], [38, 0], [39, 0]],
+  })
+  const initial = host.state()
+  const granted = grantPlayerEntityWeldBuild(initial.playerEntities, playerId, 1001, initial.gameRng)
+  Object.assign(initial, { playerEntities: granted.store, gameRng: granted.rng })
+  assert.equal(getPlayerSkillBook(initial, playerId).weldBuildId, 1001)
+  const target = preparePrimaryStatusTarget(host, playerId, enemyBaseline)
+  const pointer = await primaryStatusTargetPointer(page, canvas, target)
+  let impact
+  await pressPrimaryPointer(page, pointer)
+  try {
+    await waitUntil(() => {
+      impact = host.state().primarySpells.transients.find(actor => (
+        actor.kind === 'weld-impact' && actor.buildId === 1001 && actor.ownerId === playerId
+      ))
+      return Boolean(impact)
+    }, 'real Frost Missile did not produce an impact', 10_000)
+  } finally { await releasePrimaryPointer(page) }
+  assert.ok(impact && impact.vector[6] > 0)
+  const burst = nativeWeldVisualPlan(impact).underlays
+  assert.equal(burst[0]?.record, 16)
+  assert.equal(burst[0]?.blend, 'add')
+  await page.waitForFunction(id => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return Object.keys(frame?.primarySpellPainterDepths ?? {}).some(key => key.startsWith(`primary-spell:${id}`))
+  }, impact.id, { timeout: 2_000 })
+  const screenshot = `${screenshotRoot}/frost-missile-iceblast.png`
+  await page.screenshot({ path: screenshot })
+  const effect = host.state().secondaryAbilities.targetEffects.find(row => row.targetId === target.id)
+  assert.ok(effect && effect.coldSlowTicks > 0)
+  const position = { ...impact.position }
+  await waitUntil(() => !host.state().primarySpells.transients.some(actor => actor.id === impact.id),
+    'Frost Missile impact did not retire', 3_000)
+  return { impactId: impact.id, buildId: impact.buildId, position, coldFactor: effect.coldSlowFactor,
+    record: burst[0].record, blend: burst[0].blend, screenshot, retired: true }
 }
 
 async function capturePrimaryStatusEffectExpiry(
@@ -1933,12 +1981,30 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       return { sharedGalaxyLayers: 4, shimmerRecord: 38 }
     }
     case 35:
-      assert.ok(actorSamples.some(({ kind, primitiveCount }) => (
-        kind === 'freeze-wave-visual' && primitiveCount >= 104
-      )))
-      return { ringPrimitiveCount: Math.max(...actorSamples
-        .filter(({ kind }) => kind === 'freeze-wave-visual')
-        .map(({ primitiveCount }) => primitiveCount)) }
+    case 76: {
+      const rings = actorSamples.filter(({ kind }) => kind === 'freeze-wave-visual')
+      if (skillId === 76 && rings.length === 0 && state.world.kind !== 'boneyard') return null
+      assert.ok(rings.length > 0, 'Ring/Comet never rendered its shared FreezeWave program')
+      const early = rings.find(({ backgroundPrimitiveCount, underlayPrimitiveCount, mainDrawMembers }) => (
+        backgroundPrimitiveCount === 1 && underlayPrimitiveCount === 3 && mainDrawMembers.length >= 100
+      ))
+      assert.ok(early, 'missing native ground, burst or snow lane')
+      assert.deepEqual(early.backgroundDrawMembers, ['DeadHawg:17:normal'])
+      assert.deepEqual(early.underlayDrawMembers, ['DeadHawg:16:add', 'DeadHawg:16:add', 'DeadHawg:16:add'])
+      assert.ok(early.mainDrawMembers.every(member => member === 'BadGuys:72:normal'))
+      assert.equal(early.backgroundDepth, 0)
+      assert.equal(early.underlayDepth, 0.5)
+      assert.ok(early.depth > early.underlayDepth)
+      assert.ok(rings.every(sample => [...sample.backgroundDrawMembers, ...sample.underlayDrawMembers, ...sample.mainDrawMembers]
+        .every(member => !member.startsWith('DeadHawg:114:') && !member.startsWith('DeadHawg:121:'))))
+      return {
+        ringPrimitiveCount: Math.max(...rings.map(({ primitiveCount }) => primitiveCount)),
+        background: early.backgroundDrawMembers,
+        preWorld: early.underlayDrawMembers,
+        snowCount: early.mainDrawMembers.length,
+        layerDepths: [early.backgroundDepth, early.underlayDepth, early.depth],
+      }
+    }
     case 45: {
       assert.ok(actorSamples.some(({ kind, primitiveCount }) => (
         kind === 'golem' && primitiveCount >= 5

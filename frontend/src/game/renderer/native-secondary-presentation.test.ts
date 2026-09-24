@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { Container, DOMAdapter, Sprite, Texture, type Renderer } from 'pixi.js'
+import { createServer } from 'vite'
+import type { PlayerWorldTextures } from './world-player-textures.ts'
+import type { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 import { nativeSecondaryMiscLightSource, nativeSecondaryProviderLightSource } from '../core-kernels/native-boneyard-light-model.ts'
 import {
   nativeRegionPointGain,
@@ -805,30 +810,38 @@ test('Ether Drain uses the exact parent painter, child classes, capture pulse, a
   assert.notEqual(nativeSecondaryProviderLightSource(source, 13)?.intensity, light.intensity)
 })
 
+test('Ring artwork resolves inline bundle records instead of compact decoration indices', () => {
+  const source = { ...actor('freeze-wave-visual'), ageTicks: 0 }
+  const plan = nativeSecondaryPresentationPlan(source)
+  assert.deepEqual([...plan.underlayDraws, ...plan.backgroundDraws].filter(draw => draw.atlas === 'DeadHawg')
+    .map(draw => draw.entry), [16, 16, 16, 17])
+})
+
 test('gameplay waves stay invisible while the independent Ring visual owns exact children', () => {
   assert.equal(nativeSecondaryPresentationPlan(actor('shockwave')).draws.length, 0)
   assert.equal(nativeSecondaryPresentationPlan(actor('freeze-wave')).draws.length, 0)
   const ring = nativeSecondaryPresentationPlan({
     ...actor('freeze-wave-visual'),
     enhanced: false,
-  }).draws
-  assert.deepEqual(ring.slice(0, 4).map(({ entry }) => entry), [114, 114, 114, 121])
-  assert.equal(ring.length, 104)
-  assert.ok(ring.slice(4).every(({ entry }) => entry === 72))
+  })
+  assert.deepEqual(ring.underlayDraws.map(({ entry, blend }) => [entry, blend]), [[16, 'add'], [16, 'add'], [16, 'add']])
+  assert.deepEqual(ring.backgroundDraws.map(({ entry, blend, scaleX, scaleY }) => [entry, blend, scaleX, scaleY]), [[17, 'normal', 1.5, 1.5]])
+  assert.equal(ring.draws.length, 100)
+  assert.ok(ring.draws.every(({ entry }) => entry === 72))
   const enhanced = nativeSecondaryPresentationPlan({
     ...actor('freeze-wave-visual'),
     enhanced: true,
   }).draws
-  assert.equal(enhanced.length, 204)
-  assert.ok(enhanced.slice(4).every(({ entry }) => entry === 72))
+  assert.equal(enhanced.length, 200)
+  assert.ok(enhanced.every(({ entry }) => entry === 72))
   const late = nativeSecondaryPresentationPlan({
     ...actor('freeze-wave-visual'),
     ageTicks: 100,
     enhanced: false,
-  }).draws
-  assert.equal(late.some(({ entry }) => entry === 114), false)
-  assert.equal(late.filter(({ entry }) => entry === 121).length, 1)
-  assert.ok(late.filter(({ entry }) => entry === 72).length > 0)
+  })
+  assert.equal(late.underlayDraws.length, 0)
+  assert.equal(late.backgroundDraws[0]?.entry, 17)
+  assert.ok(late.draws.length > 0)
   assert.deepEqual(nativeSecondaryPresentationPlan({
     ...actor('freeze-wave-visual'),
     ageTicks: 175,
@@ -839,6 +852,99 @@ test('gameplay waves stay invisible while the independent Ring visual owns exact
     ...actor('dampen-wave'),
     ageTicks: 0,
   }).draws.length, 39)
+})
+
+test('Ring burst and ground lifetimes use repeated float32 stores, including unequal third loss', () => {
+  const source = { ...actor('freeze-wave-visual'), ageTicks: 0, enhanced: true }
+  const rngBefore = structuredClone(source.presentationRng)
+  const life = [4.5, 4.5, 4.5]
+  const scale = [1, 1, 1]
+  const growth = [1.02, 1.015, 1.01].map(Math.fround)
+  const loss = [0.05, 0.05, 0.065].map(Math.fround)
+  let groundLife = Math.fround(1.75)
+  for (let age = 0; age <= 176; age += 1) {
+    const plan = nativeSecondaryPresentationPlan({ ...source, ageTicks: age })
+    for (let index = 0; index < 3; index += 1) {
+      const burst = plan.underlayDraws.find(draw => draw.role === `freeze-wave-burst-${index}`)
+      assert.equal(Boolean(burst), life[index]! > 0, `burst ${index}, age ${age}`)
+      if (burst) {
+        assert.equal(burst.alpha, Math.min(1, life[index]!))
+        assert.equal(burst.scaleX, scale[index])
+        assert.equal(burst.scaleY, Math.fround(scale[index]! * Math.fround(0.8)))
+      }
+      life[index] = Math.fround(life[index]! - loss[index]!)
+      scale[index] = Math.fround(scale[index]! * growth[index]!)
+    }
+    assert.equal(plan.backgroundDraws.length, Number(groundLife > 0), `ground age ${age}`)
+    if (groundLife > 0) assert.equal(plan.backgroundDraws[0]!.alpha, Math.min(groundLife, 1))
+    groundLife = Math.fround(groundLife - Math.fround(0.01))
+    assert.deepEqual(nativeSecondaryPresentationPlan(structuredClone({ ...source, ageTicks: age }), age + 999), plan)
+    assert.deepEqual(source.presentationRng, rngBefore, 'render replay must not consume authority RNG')
+  }
+})
+
+test('retained Ring views split background, pre-world and snow, then remove every child', async (t) => {
+  const server = await createServer({ appType: 'custom', logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)), server: { middlewareMode: true } })
+  try {
+    // Match the existing mesh-lifetime fixture: ownership checks do not render.
+    const canvasProbe = t.mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
+    const module = await server.ssrLoadModule('/src/game/renderer/native-secondary-world-view.ts') as {
+      NativeSecondaryWorldView: typeof NativeSecondaryWorldView
+    }
+    canvasProbe.mock.restore()
+    for (const enhanced of [false, true]) {
+      const root = new Container({ sortableChildren: true })
+      const preWorld = new Container({ sortableChildren: true })
+      const textures = { secondary: {
+        'DeadHawg:16': Texture.EMPTY, 'DeadHawg:17': Texture.EMPTY, 'BadGuys:72': Texture.EMPTY,
+      } } as unknown as PlayerWorldTextures
+      const view = new module.NativeSecondaryWorldView(root, textures, {} as Renderer, { preWorldRoot: preWorld })
+      const source = { ...actor('freeze-wave-visual'), ageTicks: 0, enhanced,
+        painterRegistrations: [{ managerLane: 'transient' as const, registrationOrdinal: 1 }] }
+      view.update({ actors: [source] }, source.worldKey)
+      assert.equal(view.primitiveCount, enhanced ? 204 : 104)
+      assert.deepEqual(view.painterLayers().map(({ lane }) => lane), ['background', 'pre-world-queue', 'world-sorted'])
+      const ground = preWorld.children.find(child => child.label.startsWith('native-secondary-background:'))!
+      const burst = preWorld.children.find(child => child.label.startsWith('native-secondary-underlay:'))!
+      assert.ok(ground && burst)
+      assert.equal(ground.zIndex, 0)
+      assert.equal(burst.zIndex, 0.5)
+      assert.equal(ground.children.length, 1)
+      assert.equal(burst.children.length, 3)
+      assert.equal(root.children[0]!.children.length, enhanced ? 200 : 100)
+      const expected = nativeSecondaryPresentationPlan(source)
+      for (const [index, draw] of expected.underlayDraws.entries()) {
+        const sprite = burst.children[index] as Sprite
+        const matrix = { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }
+        writeNativeRotationThenScaleMatrix(matrix, draw.rotationRadians, draw.scaleX,
+          draw.scaleY, draw.offset.x, draw.offset.y)
+        assert.equal(sprite.blendMode, 'add')
+        assert.equal(sprite.alpha, draw.alpha)
+        sprite.updateLocalTransform()
+        for (const key of ['a', 'b', 'c', 'd', 'tx', 'ty'] as const) {
+          assert.ok(Math.abs(sprite.localTransform[key] - matrix[key]) < 1e-9, key)
+        }
+      }
+      view.setRenderable(false)
+      assert.equal(ground.renderable, false)
+      assert.equal(burst.renderable, false)
+      view.setRenderable(true)
+      view.update({ actors: [{ ...source, ageTicks: 175 }] }, source.worldKey)
+      assert.equal(view.primitiveCount, 1)
+      assert.equal(ground.children[0]!.visible, true)
+      assert.ok(burst.children.every(child => !child.visible))
+      view.update({ actors: [] }, source.worldKey)
+      assert.equal(root.children.length, 0)
+      assert.equal(preWorld.children.length, 0)
+      assert.equal(view.primitiveCount, 0)
+      view.update({ actors: [source] }, source.worldKey)
+      view.destroy()
+      assert.equal(root.children.length, 0)
+      assert.equal(preWorld.children.length, 0)
+      root.destroy(); preWorld.destroy()
+    }
+  } finally { await server.close() }
 })
 
 test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled lights', () => {

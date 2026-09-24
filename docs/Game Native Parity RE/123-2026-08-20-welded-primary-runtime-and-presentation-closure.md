@@ -1,5 +1,15 @@
 # 2026-08-20 — Welded-primary runtime and presentation closure
 
+> **2026-09-24 correction — report 20:** historical Ring/Comet/Frost Missile
+> Iceblast references to DeadHawg records 114/121 below are superseded by
+> [ledger 084](084-2026-08-20-secondary-ability-native-ownership-correction.md).
+> Fresh builder tracing proves inline fields +0C78/+0D3C bind records **16/17**;
+> 114..144 is a different compact-decoration array. The Ring now separates
+> background ice, direct additive bursts and fixed-root ZAnim snow, with the
+> native float32 child clocks. Original historical receipts are retained, not
+> evidence that the old artwork mapping was correct.
+
+
 > **2026-08-29 split-painter closure:** the Region layering cutover in
 > [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
 > supersedes only the Flame Lash and Blizzard Beam parent-layer closure. Both

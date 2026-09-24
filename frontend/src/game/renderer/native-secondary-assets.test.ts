@@ -77,8 +77,18 @@ test('the stock right-click atlas membership is complete and every row is regist
     assert.equal(membership.DeadHawg.includes(4), true)
     assert.equal(membership.DeadHawg.includes(18), true)
     assert.equal(membership.DeadHawg.includes(46), true)
-    assert.equal(membership.DeadHawg.includes(114), true)
-    assert.equal(membership.DeadHawg.includes(121), true)
+    assert.equal(membership.DeadHawg.includes(16), true)
+    assert.equal(membership.DeadHawg.includes(17), true)
+    assert.equal(membership.DeadHawg.includes(114), false)
+    assert.equal(membership.DeadHawg.includes(121), false)
+    for (const [entry, width, height] of [[16, 119, 119], [17, 294, 236]]) {
+      const record = module.nativeSecondarySpriteRecord('DeadHawg', entry!) as unknown as {
+        source: string; width: number; height: number
+      }
+      assert.equal(record.width, width)
+      assert.equal(record.height, height)
+      assert.equal(record.source, `boneyard-combat:DeadHawg:${entry}`)
+    }
     assert.equal(membership.DeadHawg.includes(207), true)
     assert.equal(membership.BadGuys.includes(333), true)
     assert.equal(membership.BadGuys.includes(342), true)

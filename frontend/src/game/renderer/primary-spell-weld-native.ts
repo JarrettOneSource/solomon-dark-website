@@ -1,3 +1,4 @@
+import { NATIVE_ICEBLAST_RECORD } from './native-freeze-wave-presentation.ts'
 import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
@@ -60,7 +61,7 @@ export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
 
 export type NativeWeldBadGuysRecord = typeof NATIVE_WELD_BADGUYS_RECORDS[number]
 
-export const NATIVE_WELD_DEADHAWG_RECORDS = Object.freeze([19, 114] as const)
+export const NATIVE_WELD_DEADHAWG_RECORDS = Object.freeze([19, NATIVE_ICEBLAST_RECORD] as const)
 export type NativeWeldDeadHawgRecord = typeof NATIVE_WELD_DEADHAWG_RECORDS[number]
 export type NativeWeldAtlas = 'BadGuys' | 'DeadHawg'
 export type NativeWeldRecord = NativeWeldBadGuysRecord | NativeWeldDeadHawgRecord
@@ -469,7 +470,7 @@ function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWel
       state.alpha,
       'frost-missile-impact',
     ), {
-      underlays: state.vector[6]! > 0 && burstAlpha > 0 ? [sprite(114, 'frost-missile-iceblast', {
+      underlays: state.vector[6]! > 0 && burstAlpha > 0 ? [sprite(NATIVE_ICEBLAST_RECORD, 'frost-missile-iceblast', {
         atlas: 'DeadHawg',
         alpha: Math.min(1, burstAlpha),
         blend: 'add',

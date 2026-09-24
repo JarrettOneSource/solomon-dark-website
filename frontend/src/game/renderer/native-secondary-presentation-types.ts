@@ -90,6 +90,7 @@ export const NATIVE_SECONDARY_RAINDROP_GRADIENTS = {
 } as const
 
 export interface NativeSecondaryPresentationPlan {
+  readonly backgroundDraws: readonly NativeSecondarySpriteDraw[]
   readonly draws: readonly NativeSecondarySpriteDraw[]
   readonly gradients: readonly NativeSecondaryGradientDraw[]
   readonly meshes: readonly NativeSecondaryMeshDraw[]

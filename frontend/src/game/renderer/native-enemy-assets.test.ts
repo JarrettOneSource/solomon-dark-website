@@ -158,7 +158,7 @@ test('every reachable projectile and welded painter record is selected for prelo
     }
     assert.equal(required.has('BadGuys:28'), true)
     assert.equal(required.has('BadGuys:30'), true)
-    assert.equal(required.has('DeadHawg:114'), true)
+    assert.equal(required.has('DeadHawg:16'), true)
     assert.equal(required.size, 105)
 
     const deathEffectRecords = [

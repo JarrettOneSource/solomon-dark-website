@@ -223,6 +223,7 @@ export function nativeGolemPresentationPlan(
     root: { ...actor.position },
     sortBias: 0,
     stormComposite: null,
+    backgroundDraws: [],
     underlayDraws: [],
     worldY: actor.position.y + center.y,
   }
@@ -275,6 +276,7 @@ export function nativeGolemDeathPresentationPlan(
     root: { ...actor.position },
     sortBias: 0,
     stormComposite: null,
+    backgroundDraws: [],
     underlayDraws: [],
     worldY: actor.position.y,
   }

@@ -166,6 +166,7 @@ export class NativeSecondaryPresentationScratch {
 
   copyPlan(source: NativeSecondaryPresentationPlan): NativeSecondaryPresentationPlan {
     const target = this.planStorage
+    target.backgroundDraws = source.backgroundDraws
     target.draws = source.draws
     target.gradients = source.gradients
     target.meshes = source.meshes
@@ -190,8 +191,10 @@ export class NativeSecondaryPresentationScratch {
     stormComposite: NativeStormWeatherComposite | null,
     underlayDraws: readonly NativeSecondarySpriteDraw[],
     worldY: number,
+    backgroundDraws: readonly NativeSecondarySpriteDraw[] = EMPTY_SECONDARY_DRAWS,
   ): NativeSecondaryPresentationPlan {
     const target = this.planStorage
+    target.backgroundDraws = backgroundDraws
     target.draws = draws
     target.gradients = gradients
     target.meshes = meshes
