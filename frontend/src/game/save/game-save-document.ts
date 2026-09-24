@@ -1,3 +1,4 @@
+import { hubActionFeedback } from '../protocol/codecs/economy.ts'
 import { nativeWeldMeteorRootPosition } from '../core-kernels/native-weld-meteor.ts'
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { boneyardMouthWorldTargets } from '../core-server/boneyard-world-targets.ts'
@@ -1797,10 +1798,19 @@ function normalizeEconomy(
   if (sourceSchemaVersion >= 13 && typeof source.collegeIntroPending !== 'boolean') {
     throw new Error('game save player economy College intro state is invalid')
   }
-  const feedback = source.actionFeedback && typeof source.actionFeedback === 'object'
+  const priorFeedback = source.actionFeedback && typeof source.actionFeedback === 'object'
     && !('unforgeOutcome' in source.actionFeedback)
     ? { ...source.actionFeedback, unforgeOutcome: null }
     : source.actionFeedback
+  // Old book receipts cannot reconstruct a historical random result. Retire
+  // their presentation only; do not alter ranks, inventory or gameplay RNG.
+  const feedback = sourceSchemaVersion < 42 && priorFeedback && typeof priorFeedback === 'object'
+    ? ('action' in priorFeedback && priorFeedback.action === 'read-skill-book'
+        ? null
+        : { ...priorFeedback, skillBookOutcome: null })
+    : sourceSchemaVersion >= 42 && priorFeedback !== null
+      ? hubActionFeedback(priorFeedback, 'game save player economy.actionFeedback')
+      : priorFeedback
   const tonicPurchases = Number(source.tonicPurchases)
   const sourceOutcomes = Array.isArray(source.ownedPerkSelectors)
     ? [...source.ownedPerkSelectors]

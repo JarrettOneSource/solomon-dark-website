@@ -1262,3 +1262,25 @@ test('Bonus kinds 0 and 1 queue a picker or increase one learned below-cap skill
     [increased.skillId],
   )
 })
+
+test('random rank awards use effective eligibility and permanent caps for every native row', () => {
+  const source = createPlayerSkillBook(ETHER_ARCANE)
+  const rng = createNativeRng(43)
+  for (let id = 8; id < 82; id += 1) {
+    const maximum = playerStatBook().entries[id]!.maximumLevel
+    const permanentRanks = Array(NATIVE_SKILL_ROW_COUNT).fill(0)
+    const effectiveRanks = Array(NATIVE_SKILL_ROW_COUNT).fill(0)
+    effectiveRanks[id] = 1
+    const book = { ...source, permanentRanks, effectiveRanks }
+    const result = increaseRandomLearnedSkill(book, rng)
+    assert.equal(result.skillId, maximum > 0 ? id : null, `effective-only row ${id}`)
+    if (maximum > 0) {
+      assert.equal(result.skillBook.permanentRanks[id], 1)
+      assert.deepEqual(result.rng, drawNativeInteger(rng, 1).state)
+    }
+    permanentRanks[id] = maximum
+    const capped = increaseRandomLearnedSkill({ ...book, permanentRanks }, rng)
+    assert.equal(capped.skillId, null, `capped row ${id}`)
+    assert.strictEqual(capped.rng, rng)
+  }
+})

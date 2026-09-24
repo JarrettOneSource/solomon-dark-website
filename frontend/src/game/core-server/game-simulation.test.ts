@@ -1006,6 +1006,7 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
     transferDirection: null,
     transferGesture: null,
     unforgeOutcome: null,
+    skillBookOutcome: null,
   })
   assert.equal(getPlayerEconomy(purchased.state, 'second').gold, 500)
   assert.strictEqual(
@@ -1026,6 +1027,7 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
     transferDirection: null,
     transferGesture: null,
     unforgeOutcome: null,
+    skillBookOutcome: null,
   })
 
   if (purchased.state.world.kind !== 'hub') throw new Error('expected Hub world')
@@ -1777,6 +1779,7 @@ test('simulation owns recursive sack moves, Fabric Dye commits, and nested potio
     transferDirection: null,
     transferGesture: null,
     unforgeOutcome: null,
+    skillBookOutcome: null,
   })
   assert.equal(
     findInventoryItem(getPlayerEconomy(moved.state, 'first').backpack, destinationSack.id)
@@ -5684,3 +5687,5 @@ for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
     })
   }
 }
+
+import './inventory-skill-book.test.ts'

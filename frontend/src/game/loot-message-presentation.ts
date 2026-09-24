@@ -34,6 +34,13 @@ export class NativeLootMessagePresentation {
 
   consume(event: BoneyardLootEventSnapshot): boolean {
     if (event.text === undefined) return false
+    return this.consumeText({
+      eventId: event.eventId, tick: event.tick, text: event.text,
+      tint: nativeLootMessageTint(event),
+    })
+  }
+
+  consumeText(event: Readonly<{ eventId: number; tick: number; text: string; tint: number }>): boolean {
     this.advance(Math.max(this.lastTick, event.tick - 1))
     const gold = goldAmount(event.text)
     const activeIndex = this.messages.findIndex(({ eventId }) => eventId === this.activeEventId)
@@ -64,7 +71,7 @@ export class NativeLootMessagePresentation {
       lifetime: NATIVE_LOOT_MESSAGE_INITIAL_LIFETIME,
       offset: NATIVE_LOOT_MESSAGE_INITIAL_OFFSET,
       text: event.text,
-      tint: nativeLootMessageTint(event),
+      tint: event.tint,
     }))
     this.activeEventId = event.eventId
     return true

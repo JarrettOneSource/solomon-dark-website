@@ -1,4 +1,5 @@
 import { NativeUiText } from './native-ui/react-raw.ts'
+import './loot-message-presentation.css'
 
 interface NativeLootBitmapTextProps {
   readonly text: string

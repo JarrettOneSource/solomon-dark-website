@@ -12,6 +12,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
+import SkillBookFeedback from './SkillBookFeedback.tsx'
+import { useSkillBookFeedback } from './use-skill-book-feedback.ts'
 import CollegeInvitationDialog from './CollegeInvitationDialog.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
@@ -433,6 +435,8 @@ function MainMenuContent({
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
+  const bookFeedback = useSkillBookFeedback(session, audio)
+  const skillBookResultOpen = bookFeedback.skillId !== null
   const [observerSession, setObserverSession] = useState<GameObserverSession | null>(null)
   const collegeLoadoutNameSeededRef = useRef(false)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameClientSnapshot | null>(null)
@@ -1661,7 +1665,7 @@ function MainMenuContent({
       runtimeSnapshot?.world.kind === 'boneyard'
       && runtimeSnapshot.world.tutorial?.introActive === true
     )
-  const socialModalOpen = resolvedPlayerCard !== null
+  const socialModalOpen = skillBookResultOpen || resolvedPlayerCard !== null
     || (session !== null && (
       partyConsent !== null
       || (partyConsent === null && collegeInvitations.length > 0)
@@ -1695,7 +1699,7 @@ function MainMenuContent({
     runtimeSnapshot?.world.kind === 'boneyard'
       ? skillBookOpen
         ? 'skill-book'
-        : inventoryScreenOpen
+        : inventoryScreenOpen || skillBookResultOpen
           ? 'inventory'
           : null
       : null
@@ -2296,6 +2300,11 @@ function MainMenuContent({
             />
           </Suspense>
         ) : null}
+
+        {session ? <SkillBookFeedback
+          skillId={bookFeedback.skillId} hubMessages={bookFeedback.hubMessages}
+          onDismiss={bookFeedback.dismiss} style={nativeStageStyle}
+        /> : null}
 
         {session && skillBookOpen && runtimeProgression ? (
           <Suspense fallback={null}>

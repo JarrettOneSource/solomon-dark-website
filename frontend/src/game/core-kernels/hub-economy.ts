@@ -328,9 +328,14 @@ export interface HubEquipmentState {
   readonly weapon: HubInventoryItem | null
 }
 
+export type NativeSkillBookOutcome =
+  | { readonly kind: 'choice' }
+  | { readonly kind: 'rank'; readonly skillId: number | null }
+
 export interface HubActionFeedback {
   readonly accepted: boolean
   readonly action: HubInventoryAction['type']
+  readonly skillBookOutcome: NativeSkillBookOutcome | null
   readonly dowsingPitch: number | null
   readonly reason: HubEconomyRejection | null
   readonly sequence: number

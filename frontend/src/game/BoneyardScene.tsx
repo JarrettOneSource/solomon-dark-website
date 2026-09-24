@@ -1,3 +1,4 @@
+import { NativeSkillBookFeedbackCursor, nativeSkillBookWorldMessage } from './skill-book-feedback.ts'
 import {
   useEffect,
   useLayoutEffect,
@@ -332,6 +333,9 @@ export default function BoneyardScene({
   const [lootEventSynchronizer] = useState(() => (
     new BoneyardLootEventSynchronizer(boneyardInitialSnapshot)
   ))
+  const [bookFeedbackCursor] = useState(() => new NativeSkillBookFeedbackCursor(
+    boneyardInitialSnapshot.players[playerId]?.economy.actionFeedback ?? null,
+  ))
   const [lootMessagePresentation] = useState(() => (
     new NativeLootMessagePresentation(boneyardInitialSnapshot.tick)
   ))
@@ -401,6 +405,12 @@ export default function BoneyardScene({
         volume: sound.volume * spatialGain,
       })
     })
+    const bookFeedback = bookFeedbackCursor.consume(snapshot.players[playerId]?.economy.actionFeedback ?? null)
+    if (bookFeedback?.outcome.kind === 'rank' && bookFeedback.outcome.skillId !== null) {
+      lootMessagePresentation.consumeText(nativeSkillBookWorldMessage(
+        bookFeedback.sequence, bookFeedback.outcome.skillId, snapshot.tick,
+      ))
+    }
     setLootMessages(lootMessagePresentation.sample(snapshot.tick))
     setRun((current) => (
       snapshot.run.phase === 'game-over' && current.phase === 'game-over'
@@ -432,7 +442,7 @@ export default function BoneyardScene({
       audio.playStream(cue)
     }
     previousAudioRunRef.current = snapshot.run
-  }), [audio, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
+  }), [audio, bookFeedbackCursor, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
 
   useEffect(() => subscribeEnemyEvent((event) => {
     if (event.runId !== loaded.runId) return

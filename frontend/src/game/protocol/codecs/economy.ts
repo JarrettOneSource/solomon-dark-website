@@ -1,3 +1,4 @@
+import type { NativeSkillBookOutcome } from '../../core-kernels/hub-economy.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   type DowsingOffer,
@@ -397,7 +398,7 @@ function nativeUnforgeBonuses(
   }
 }
 
-function hubActionFeedback(
+export function hubActionFeedback(
   value: unknown,
   field: string,
 ): NonNullable<ProtocolPlayerEconomy['actionFeedback']> {
@@ -411,6 +412,7 @@ function hubActionFeedback(
     'transferDirection',
     'transferGesture',
     'unforgeOutcome',
+    'skillBookOutcome',
   ])
   const action = limitedString(source.action, `${field}.action`, 32)
   if (![
@@ -492,7 +494,14 @@ function hubActionFeedback(
   if ((accepted && action === 'unforge') !== (unforgeOutcome !== null)) {
     throw new GameProtocolError(`${field}.unforgeOutcome does not match action`)
   }
+  const skillBookOutcome = source.skillBookOutcome === null
+    ? null
+    : nativeSkillBookOutcome(source.skillBookOutcome, `${field}.skillBookOutcome`)
+  if ((accepted && action === 'read-skill-book') !== (skillBookOutcome !== null)) {
+    throw new GameProtocolError(`${field}.skillBookOutcome does not match action`)
+  }
   return {
+    skillBookOutcome,
     accepted,
     action: action as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['action'],
     dowsingPitch,
@@ -502,6 +511,24 @@ function hubActionFeedback(
     transferGesture: transferGesture as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['transferGesture'],
     unforgeOutcome,
   }
+}
+
+function nativeSkillBookOutcome(
+  value: unknown,
+  field: string,
+): NativeSkillBookOutcome {
+  const source = record(value, field)
+  if (source.kind === 'choice') {
+    onlyKeys(source, field, ['kind'])
+    return { kind: 'choice' }
+  }
+  onlyKeys(source, field, ['kind', 'skillId'])
+  if (source.kind !== 'rank') throw new GameProtocolError(`${field}.kind is not supported`)
+  const skillId = source.skillId === null ? null : positiveInteger(source.skillId, `${field}.skillId`)
+  if (skillId !== null && (skillId < 8 || skillId > 81)) {
+    throw new GameProtocolError(`${field}.skillId is outside the native rank-award rows`)
+  }
+  return { kind: 'rank', skillId }
 }
 
 function nativeUnforgeOutcome(value: unknown, field: string): NativeUnforgeOutcome {

@@ -1,0 +1,10 @@
+.skill-book-result-dialog.native-ui-dialog {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+}
+.skill-book-result-dialog::backdrop { background: rgb(0 0 0 / 75%); }
+.skill-book-hub-messages-stage { pointer-events: none; z-index: 45; }
+.skill-book-result-dialog .native-ui-button { pointer-events: auto; }

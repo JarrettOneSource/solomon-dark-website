@@ -53,3 +53,5 @@ function event(
     type: 'loot-pickup',
   }
 }
+
+import './skill-book-feedback.test.ts'

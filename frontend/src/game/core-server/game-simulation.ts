@@ -1,3 +1,4 @@
+import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
 import { finalizeBoneyardPuppetQueries } from './enemies/puppet-hits.ts'
 import type { BoastDefinition, BoastResolver, BoastSelection } from '../core-kernels/boast.ts'
 import { boastUsesRandomSkillChoices, failBoast, scoreBoast, succeedBoast } from '../core-kernels/boast.ts'
@@ -1366,6 +1367,7 @@ function applyGameSimulationHubActionTransaction(
   const actionFeedback = {
     accepted: result.accepted,
     action: action.type,
+    skillBookOutcome: null,
     dowsingPitch: result.dowsingPitch,
     reason: result.reason,
     sequence: (economy.actionFeedback?.sequence ?? 0) + 1,
@@ -1484,7 +1486,9 @@ function applyGameSimulationHubActionTransaction(
     }
   }
   if (result.accepted && action.type === 'read-skill-book') {
+    let skillBookOutcome: NativeSkillBookOutcome
     if (skillBookItem?.nativeSubtype === 2) {
+      skillBookOutcome = { kind: 'choice' }
       const granted = grantPlayerEntityBonusSkillChoice(playerEntities, playerId, gameRng)
       playerEntities = granted.store
       gameRng = granted.rng
@@ -1517,7 +1521,15 @@ function applyGameSimulationHubActionTransaction(
       const increased = increaseRandomPlayerEntitySkill(playerEntities, playerId, gameRng)
       playerEntities = increased.store
       gameRng = increased.rng
+      skillBookOutcome = { kind: 'rank', skillId: increased.skillId }
+    } else {
+      throw new Error('Accepted skill book has an invalid native subtype')
     }
+    const updatedEconomy = playerEconomyAt(playerEntities, playerId)!
+    playerEntities = replacePlayerEconomy(playerEntities, playerId, {
+      ...updatedEconomy,
+      actionFeedback: { ...actionFeedback, skillBookOutcome },
+    })
   }
   const modConsumption = result.accepted && action.type === 'consume' && consumedPotion?.modContent
     ? Object.freeze({
@@ -3976,6 +3988,7 @@ function activateGameSimulationBeltSlot(
     const actionFeedback = {
       accepted: result.accepted,
       action: 'activate-belt-slot',
+      skillBookOutcome: null,
       dowsingPitch: null,
       reason: result.reason,
       sequence: (economy.actionFeedback?.sequence ?? 0) + 1,

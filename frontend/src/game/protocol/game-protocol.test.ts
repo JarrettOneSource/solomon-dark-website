@@ -1029,6 +1029,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
           economy: {
             ...player.economy,
             actionFeedback: {
+              skillBookOutcome: null,
               accepted: true,
               action: 'dowse',
               dowsingPitch: 0.875,
@@ -1069,6 +1070,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
           economy: {
             ...player.economy,
             actionFeedback: {
+              skillBookOutcome: null,
               accepted: true,
               action: 'dye',
               dowsingPitch: null,
@@ -1170,6 +1172,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
           economy: {
             ...player.economy,
             actionFeedback: {
+              skillBookOutcome: null,
               accepted: true,
               action: 'unforge',
               dowsingPitch: null,
@@ -1213,6 +1216,26 @@ test('server welcome round-trips content, kernel, character, and world ownership
       },
     },
   })), GameProtocolError)
+  const bookWelcome = (skillBookOutcome: unknown, action = 'read-skill-book', accepted = true) => JSON.stringify({
+    ...welcome, snapshot: { ...welcome.snapshot, players: { ...welcome.snapshot.players,
+      'player-1': { ...player, economy: { ...player.economy, actionFeedback: {
+        accepted, action, skillBookOutcome, sequence: 3, dowsingPitch: null,
+        reason: accepted ? null : 'item-not-found', transferDirection: null,
+        transferGesture: null, unforgeOutcome: null,
+      } } },
+    } },
+  })
+  for (const outcome of [{ kind: 'choice' }, { kind: 'rank', skillId: null },
+    { kind: 'rank', skillId: 8 }, { kind: 'rank', skillId: 81 }]) {
+    assert.doesNotThrow(() => decodeServerGameMessage(bookWelcome(outcome)))
+  }
+  for (const outcome of [undefined, null, {}, { kind: 'rank' }, { kind: 'rank', skillId: 7 },
+    { kind: 'rank', skillId: 82 }, { kind: 'rank', skillId: 32.5 },
+    { kind: 'choice', skillId: 32 }, { kind: 'other', skillId: 32 }]) {
+    assert.throws(() => decodeServerGameMessage(bookWelcome(outcome)), GameProtocolError)
+  }
+  assert.throws(() => decodeServerGameMessage(bookWelcome({ kind: 'rank', skillId: 32 }, 'consume')), GameProtocolError)
+  assert.throws(() => decodeServerGameMessage(bookWelcome({ kind: 'choice' }, 'read-skill-book', false)), GameProtocolError)
   assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
     blindnessTicksRemaining: 0,
     deathWeaponPainterRegistration: null,

@@ -1144,7 +1144,7 @@ export function increaseRandomLearnedSkill(
   for (let skillId = 8; skillId < 82; skillId += 1) {
     const rank = skillBook.permanentRanks[skillId] ?? 0
     const maximum = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
-    if (rank > 0 && rank < maximum) eligible.push(skillId)
+    if ((skillBook.effectiveRanks[skillId] ?? 0) > 0 && rank < maximum) eligible.push(skillId)
   }
   if (eligible.length === 0) {
     return { rng: sourceRng, skillBook, skillId: null }

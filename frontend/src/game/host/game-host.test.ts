@@ -2392,6 +2392,7 @@ test('game host routes global Hub shortcuts and rejects stale inventory commands
     transferDirection: null,
     transferGesture: null,
     unforgeOutcome: null,
+    skillBookOutcome: null,
   })
 
   const pong = nextMessage(client.socket, (message) => (

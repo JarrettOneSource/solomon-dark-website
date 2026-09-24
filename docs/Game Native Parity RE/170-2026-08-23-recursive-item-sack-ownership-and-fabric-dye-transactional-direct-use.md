@@ -1,5 +1,148 @@
 # 2026-08-23 — Recursive Item_Sack ownership and Fabric Dye transactional direct-use
 
+## 2026-09-24 — Report 24: Book of Skill result ownership reopening
+
+The previous book closure proved consumption and rank mutation, but did not
+recover the complete caller tail, confirmation, acquisition stream, or the
+native distinction between effective and permanent eligibility. This reopening
+covers both Item_Misc books and the shared random-rank selector, not general
+sack navigation (report 22 is separate).
+
+### Evidence and recovered contract
+
+Report `1552401881559732317` and its unchanged video are retained in the M2
+archive `2026-09-23/24-skill-book-no-notification`. Video SHA-256:
+`017dd522b995ae4df494c625d617cad1ae65b78071e585b0e8902dc0a151be85`.
+The submitted clip lacks a save or readable before/after skill census, so it
+cannot establish lost progression. A fresh unchanged-build Chrome reproduction
+in College consumed subtype 3 and increased Frost Jet from rank 1 to 2, then
+closed Inventory with no confirmation dialog. Page/console/HTTP/host errors
+were empty. The first two multiplayer fixtures did not open Inventory and are
+not accepted evidence of this defect; their setup is being corrected separately.
+
+Retail 0.72.5, preferred base `00400000`, 4,723,200 bytes, executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, was read
+on M2 through the existing `sdr-ghidra-headless` unique read-only replica wrapper.
+Its SHA-256 is `26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`.
+Raw range listings, constant bytes, complete dispatcher xrefs and shared helper
+instructions are task scratch, not changes to Mod Loader. The decompiler's
+incorrect Array<int> nonreturn inference hides the caller tail; the actual
+instructions at `0056D531..0056D857` are the evidence, not that incomplete C.
+No new clean-stock runtime recording is claimed.
+
+* Both books are type 7012. Subtype 2 uses Inventory record 44 and subtype 3
+  record 45; names are both `Book of Skill`. Root and nested item lookup share
+  dispatcher `0056D1B0` and exact-ID consumption. Dye/key siblings are unchanged.
+* Both branches remove the book, play `SoundStream +13BC` at gain one
+  (`0056D471`, `0056D828`), and close Inventory. The fresh binder at
+  `004F0A90..004F0AAC` identifies `sounds\magicbookget__stream.wav`, registry
+  129, 185,716 bytes, SHA-256
+  `ab0ac9b19633d93575673f61893c5e7ba509ec315263a9b39378a494ed575999`.
+  The neighboring magicbook stream 130 is world-Bonus birth, not book use.
+* Subtype 2 calls `0067C320`: increment pending skill count, instantiate the
+  existing picker if absent, retain its native acquisition/offer clocks. It
+  does not create a rank-result dialog.
+* Subtype 3 scans every skill ID 8..81 in ascending order. Entry effective
+  rank `+22` must be positive and permanent rank `+20` must be strictly below
+  definition maximum `+58`. Thus equipment-only effective grants can qualify.
+  The fully extracted native skill/stat catalog already owns every row and cap;
+  no new guessed per-skill table is introduced. Empty eligibility still consumes
+  the book and plays the stream, but creates no grant, random draw or dialog.
+* With a nonempty list, `0056D549` selects one ID using the existing shared
+  native Integer routine. This is random, **not a player-selected improvement**.
+  The shared world Bonus-kind-1 branch `005D5910` has the same effective/base
+  eligibility and random grant, but only the world text (no confirmation).
+* Before `00660320(id,1)` / refresh `0065F9A0`, the book caller queues
+  `<skill name> +1` via `005CA7C0` with RGB `(0.5,0.5,1)` and creates a MsgBox.
+  It contains `Skill improved` (menu font, RGB `.7,.7,1`, gap 10), then the
+  same `<skill name> +1` (medium font, same tint, gap zero), and one `OKAY`
+  button. Strings are at `0079542C`, `0079543C`, `007930D8`. The message uses
+  the shared auto-sized single-action layout centered at `(800,450)` in the
+  canonical 1600x900 stage. `00461E60` derives half-width/half-height and
+  MsgBox vtable `00788E04 +B4 -> 005AB2C0` takes padding 25, not a Y offset.
+* Authority must publish the actual selected skill alongside accepted action
+  feedback. Presentation cannot guess it from a later rank diff or perform
+  another random draw. The result owns the existing Inventory pause until
+  acknowledged, so closing the inventory cannot start multiplayer Resuming
+  before the result is visible. College remains locally modal, never globally
+  paused. Stale/replayed/rejected/other-player receipts do not replay results.
+
+### Recovered membership and implemented dispositions
+
+| Member | Native source | Final disposition and proof |
+| --- | --- | --- |
+| Both book definitions, root/nested consumption and stale-ID rejection | 7012 subtypes2/3, `0056D1B0` | exact-ported: atomic consumption, actual outcome, both browser flows |
+| All74 rows8..81, absent/effective-only/permanent/capped states | `0056D4B6..0056D52F`, complete native catalog | exact-ported: per-row assertions, equipped-only grant and provider-removal test |
+| Random rank selection and acquisition RNG | `0056D549`, `00660320` | verified-already-at-parity: exact selection/order retained; book and Bonus helper RNG agree |
+| Empty rank candidates | `0056D531 -> 0056D7CA` | exact-ported: book consumed, explicit empty outcome, no fabricated rank/message/RNG |
+| Bonus skill point and ordinary picker | `0067C320` | verified-already-at-parity for grant; exact-ported acquisition stream, existing picker verified |
+| World Bonus-kind1 random skill | `005D5910` | exact-ported shared eligibility; existing world text/no-MsgBox unchanged |
+| Book acquisition stream129 | binder `004F0A90..004F0AAC` | exact-ported: identical WAV hash, actual BufferSource starts at rate1 |
+| Bonus birth stream130 | separate native sound owner | out-of-system: unchanged |
+| Named rank confirmation and world text | `0056D570..0056D7A0` | exact-ported: all-row MsgBox layout, common text clock, inspected mouse/touch frames |
+| Owner-only receipt, duplicate/stale snapshots and teardown | native owner fields, web authority | exact-ported: strict wire, sequence cursor, scene/owner/session reset |
+| Boneyard result hold and College local modal | caller close+MsgBox, existing web pause | exact-ported: two-client tick held through result, one OKAY resumes; College stays local |
+| Current/legacy feedback persistence | existing save migration | exact-ported: schema42 strict outcome; old presentation retired, ranks/items/RNG preserved |
+| Dye, keys, sacks, ordinary Skills panel and book-ineligible belt | distinct subtype/type gates | out-of-system: preserve existing behavior and report22 changes |
+
+No new browser-platform approximation is required. The authoritative action
+receipt carries the selected skill; presentation does not infer rank changes
+or draw randomness. The complete table above replaces the earlier provisional
+inventory. Final integrated full-gate and publication receipts follow below.
+
+### Implementation and browser acceptance
+
+Protocol136 adds a strict `skillBookOutcome` to the existing player-owned action
+receipt: `choice`, or `rank` with the actual selected ID/null. It is finalized
+in the same transaction as removal and skill grant. Non-book actions carry
+null; malformed combinations are rejected. Save schema42 reuses the strict
+decoder. Earlier book receipts are retired, never assigned a guessed historical
+skill. That migration changes no rank, inventory object, or saved gameplay RNG.
+
+The root scene owns the result independently of Inventory. Its existing
+Inventory pause remains active until OKAY, and only the recipient's receipt
+can trigger the result/audio. Initial/restored or repeated receipts do not
+replay. Scene/owner/session teardown clears the result and stream. The common
+world-text owner supplies the native clock/color. Its unchanged CSS is now
+loaded by the shared bitmap-text component so College does not depend on a
+Boneyard-only lazy chunk. The result uses the existing MsgBox/DataLine/Button
+owners; its button has the same active pointer seam as other native controls.
+
+Before final integrated validation, Chrome153.0.8010.53 on M2 passed College
+1600x900, nested two-client Boneyard1600x900, and nested touch844x390 journeys.
+Every journey consumed both book types. Rank books changed exactly the named
+skill once, emitted one native acquisition buffer, showed the confirmation,
+and accepted real OKAY clicks/taps. Choice books used the ordinary picker and
+granted the chosen skill only on selection. Each journey observed exactly two
+book audio starts and empty page/console/HTTP/request/wire/host error arrays.
+
+The Boneyard test entered through ordinary College and Solomon interactions.
+While the guest's rank result was displayed, authoritative tick stayed fixed
+and resume grace stayed `none`; OKAY released the pause and gameplay advanced.
+The other player received no result, audio or rank mutation. The fixture only
+adds exact stock book items and replenishes health during inspection; it does
+not alter grant/offer RNG, caps, spell or loot behavior. Touch is Mac Chrome
+emulation, not physical-device acceptance. Desktop and touch result frames
+were visually inspected.
+
+Two acceptance findings were corrected before this passed receipt: the audio
+probe initially expected HTML media whereas native streams use WebAudio; it
+now observes real buffer starts at rate1/positive gain. The first modal also
+inherited a pointer-inert stage; its native OKAY hit target now works without
+weakening modal isolation. The failed fixtures are not successful evidence.
+
+Maintained command, from frontend after a production build:
+
+```sh
+SDR_ITEM_SKILL_BOOK_OUTPUT=/tmp/solomon-item-skill-books \
+node --experimental-strip-types tools/smoke-item-skill-books.mjs
+```
+
+No fresh clean-stock runtime/pixel capture or production deployment is claimed.
+The original report does not contain enough state to prove a lost rank; the
+unchanged-build reproduction verifies an actual grant with missing feedback.
+
+
 ## Reopened system and parity question
 
 Issue 18 reported that sacks and dyes do not work. This reopens the complete

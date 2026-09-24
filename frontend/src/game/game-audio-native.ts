@@ -182,6 +182,7 @@ export type GameStreamCue =
   | GameOverSolomonVoiceCue
   | NativeTutorialCue
   | 'death-guitar'
+  | 'magic-book-get'
   | 'dye'
   | 'arch-intro-0'
   | 'boast-failure'
