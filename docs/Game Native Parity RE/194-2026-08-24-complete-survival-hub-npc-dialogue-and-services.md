@@ -1523,23 +1523,23 @@ explicit Done, interruption, re-entry, and owning Game/actor reconstruction.
 All currently consumed aggregate text, commands, geometry and service catalogs
 remain unchanged. The generator owns the recovered one-shot metadata.
 
-| Member | Compiled caller(s) | Intro / questions | Provisional disposition |
+| Member | Compiled caller(s) | Intro / questions | Final disposition |
 | --- | --- | --- | --- |
-| Hagatha | `0x0050B7DC`, `0x0050B814` | one-shot intro; repeatable WITCH_Q; live Buy command | recovered-pending-port |
-| Fomentius | `0x0050B909` | one-shot intro; live Buy command | recovered-pending-port |
-| Provokatus | `0x0050BA01` | one-shot intro; live Boast command | recovered-pending-port |
-| Luthacus | `0x0050BAF8` | one-shot intro; live Inventory command | recovered-pending-port |
-| Skorcha | `0x0050BC5D`, `0x0050BC80/A3/C6` | one-shot intro; three repeatable exhausted-graph fallback rows | recovered-pending-port |
-| Machinimbus | `0x0050BD69/89` | one-shot intro; repeatable TEACHER_Q; live Spells command | recovered-pending-port |
-| survival Archchancellor | `0x0050BEB4/ED` | one-shot intro and ARCH_Q; repeatable fallback | recovered-pending-port |
-| Semicus | `0x0050C03F` | one-shot intro; live Books command | recovered-pending-port |
-| Shlorio | `0x0050C16B/A3` | one-shot intro; repeatable DOWSER_Q; live Dowse command | recovered-pending-port |
-| Declarius | `0x0050C302/33B/374/3AB` | one-shot intro and both questions; repeatable fallback | recovered-pending-port |
-| first Office Archchancellor | `0x0051448C/4AD/4CE/4EF/50E` | one-shot intro and three questions; repeatable fallback | recovered-pending-port |
-| first Office Polisher | `0x0051436F/390/3B1/3D0` | one-shot intro and both questions; repeatable fallback | recovered-pending-port |
-| Boast response / dynamic !BOAST insertion | `0x004FC45E`, `0x004FD8F9` | service response/replacement, not a reusable actor intro | verify unchanged service owner |
-| book response insertion | `0x004FFE70` | selector response, not actor conversation history | verify unchanged service owner |
-| ten Paintings / memorial inspections | existing special eulogy callback | no ordinary Chat graph row consumption | verify unchanged special owner |
+| Hagatha | `0x0050B7DC`, `0x0050B814` | one-shot intro; repeatable WITCH_Q; live Buy command | ported-exact; native row/contact regressions passed |
+| Fomentius | `0x0050B909` | one-shot intro; live Buy command | ported-exact; native row/contact regressions passed |
+| Provokatus | `0x0050BA01` | one-shot intro; live Boast command | ported-exact; native row/contact regressions passed |
+| Luthacus | `0x0050BAF8` | one-shot intro; live Inventory command | ported-exact; native row/contact regressions passed |
+| Skorcha | `0x0050BC5D`, `0x0050BC80/A3/C6` | one-shot intro; three repeatable exhausted-graph fallback rows | ported-exact; native row/contact regressions passed |
+| Machinimbus | `0x0050BD69/89` | one-shot intro; repeatable TEACHER_Q; live Spells command | ported-exact; native row/contact regressions passed |
+| survival Archchancellor | `0x0050BEB4/ED` | one-shot intro and ARCH_Q; repeatable fallback | ported-exact; native row/contact regressions passed |
+| Semicus | `0x0050C03F` | one-shot intro; live Books command | ported-exact; native row/contact regressions passed |
+| Shlorio | `0x0050C16B/A3` | one-shot intro; repeatable DOWSER_Q; live Dowse command | ported-exact; native row/contact regressions passed |
+| Declarius | `0x0050C302/33B/374/3AB` | one-shot intro and both questions; repeatable fallback | ported-exact; native row/contact regressions passed |
+| first Office Archchancellor | `0x0051448C/4AD/4CE/4EF/50E` | one-shot intro and three questions; repeatable fallback | ported-exact; native row/contact regressions passed |
+| first Office Polisher | `0x0051436F/390/3B1/3D0` | one-shot intro and both questions; repeatable fallback | ported-exact; native row/contact regressions passed |
+| Boast response / dynamic !BOAST insertion | `0x004FC45E`, `0x004FD8F9` | service response/replacement, not a reusable actor intro | verified unchanged by canonical service/integration regressions |
+| book response insertion | `0x004FFE70` | selector response, not actor conversation history | verified unchanged by canonical service/integration regressions |
+| ten Paintings / memorial inspections | existing special eulogy callback | no ordinary Chat graph row consumption | verified unchanged; all ten Paintings passed Chrome acceptance |
 | later-story/other story-region graphs | `0x00513D5A..4085`, `0x00514659..49DD` | remaining ANNAL/POTIONGUY/ITEMGUY/LIBRARIAN _0 and _1 rows, story MEMORATOR | out-of-system: not Website survival/first Office membership; no invented population |
 | ambient Students and recipe GameNPC | existing native census above | distinct no-op/script owners | out-of-system: not named-Hub Chat graph |
 
@@ -1606,3 +1606,64 @@ five story questions, contact engagement/rearming, keyboard and pointer
 interaction, introductory voice count, retained wiping audio, and normal
 Office exit to Create. Existing general NPC/College smoke helpers now expect
 last-answer closure and exhausted-graph re-entry rather than a false farewell.
+
+
+### Final exact-candidate M2 acceptance
+
+Fully validated implementation/tests/browser candidate:
+`3a76d5c457fa9ff2a0f771bbd2308fffc3082e11`, based on `269da867`.
+The existing interrupted-session gate was allowed to complete without restarting,
+skipping stages or changing the frozen source. Fleet job
+`job_20260924T204145Z_01d89afe77` exited zero at
+`2026-09-24T21:22:28Z`, after both the canonical gate and fresh browser journey.
+All 7,193 source files matched before and after acceptance. This final ledger
+update is documentation-only; every other source/build/test/asset file remains
+byte-identical to that candidate.
+
+The 21 focused dialogue/contact regressions passed. The complete
+`/opt/homebrew/bin/bash ./scripts/validate.sh` passed on M2 with Node 22.17.0:
+24 Website/backend tests, 3,812 frontend/desktop tests, backend/frontend builds,
+formatting/lint/type/boundary checks, production media policy, and the full
+renderer quality/coverage/mutation gate. The renderer report has no failures,
+surviving mutants or uncovered mutants. Its measured classification is 441
+killed, one timeout, 142 compile-invalid mutations and 23 existing documented
+equivalent exclusions. The timeout changes `vertex += 1` to `vertex -= 1` in
+`native-material-batch.ts:121`; it is not an omitted check or a surviving mutant.
+No quality configuration or equivalent exclusion was changed by this task.
+
+The post-gate built-client Chrome journey passed with empty console, page,
+failed-response and WebSocket error arrays. It verified the guided first
+Archchancellor introduction, all three questions, partial close/reopen, direct
+Done closure, last-answer closure, and exhausted-graph return greeting. The
+Polisher opened on actual forward collision contact; both questions, partial
+reopening, engagement latching, keyboard interaction and an actual pointer click
+on the visible actor were verified. Introduction audio started once; seven
+wipe-audio probe events confirm the existing Polisher loop remained active.
+Normal Office exit reached Create. Final Polisher contact and Archchancellor
+remaining-choice frames were visually inspected.
+
+Sibling acceptance also passed normal Office Archchancellor, Declarius and all
+ten Paintings. The final rebuilt Skorcha check used deterministic native
+population seed 2, verified initial closure and exhausted re-entry, and had no
+page/console/HTTP errors. An earlier Skorcha fixture failed because its generated
+population omitted him; the replacement uses the existing generator rather than
+injecting an NPC. All three native fallback indices have focused regression
+coverage. Shared service commands and repeatable questions remain covered by
+the full Hub/service suite.
+
+The story browser fixture restores a native Tutorial save and prepares only its
+completed-Tutorial boundary; the live host owns subsequent College walking and
+NPC admission. This is M2 local built-client acceptance, not physical-mobile or
+production acceptance. Native evidence remains the verified retail instructions
+and authored data described above; no fresh clean-stock runtime/pixel recording
+is claimed. No member is blocked by a new browser limitation. Later-story and
+ambient/scripted owners remain explicitly outside this recovered named-Hub
+system. No manual production deployment or restart was performed. Publication,
+Discord completion and exact-path cleanup require their separate closeout proof.
+
+Receipt SHA-256 values (execution captures are disposable after closeout):
+
+- Complete canonical gate: `a9efa9ec1532c0b2970f112af96d17df1687986d55f02b2443c708cf38eec08e`.
+- Final browser receipt: `56c5b485659c13d4913ff312d408c36a2cb06f1e6d74b287a662949f54c2f449`.
+- Frozen 7,193-file source manifest: `f4b4229b724e0780fe91e7c96d0509408c5a733595a84fb47446d6c7235030ea`.
+- Final renderer summary: `f73faa2caec95c98b48f4fed19aa53f483f86775ea08b178d5506405aaccd0ae`.
