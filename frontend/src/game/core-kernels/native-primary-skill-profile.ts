@@ -320,7 +320,9 @@ export function nativePrimarySkillProfile(
           * factors.damage,
         hailDamageMinimum: rankedOr(statBook, 38, 'mDamage1', hailRank, 0)
           * factors.damage,
-        hailThreshold: Math.round(hailChance * 30),
+        // Native 0x00662B57..64 stores mToHit as float32, then truncates it.
+        // Both the 250-cell visual and 3,000-cell damage rolls use this value.
+        hailThreshold: Math.trunc(Math.fround(hailChance)),
         halfAngleDegrees: 15 + widenHalfDegrees * 0.5,
         kind: 'water',
         minimumColdDurationTicks,

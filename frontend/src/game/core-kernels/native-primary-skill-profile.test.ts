@@ -135,7 +135,7 @@ test('resolves Water geometry, armor, aura, hail, and permafrost payloads', () =
     hailChance: 8,
     hailDamageMaximum: 30,
     hailDamageMinimum: 12,
-    hailThreshold: 240,
+    hailThreshold: 8,
     halfAngleDegrees: 32.5,
     kind: 'water',
     manaCost: (17.5 + 10 + 20 + 8 + 10 + 10) * 0.75,
@@ -228,9 +228,37 @@ test('drains every Frost Jet damage, Harden, and Hail authored rank', () => {
     assert.equal(profile.hailDamageMinimum, hailMinimum[rank], `Hail minimum rank ${rank}`)
     assert.equal(profile.hailDamageMaximum, hailMaximum[rank], `Hail maximum rank ${rank}`)
     assert.equal(profile.hailChance, hailChance[rank], `Hail chance rank ${rank}`)
-    assert.equal(profile.hailThreshold, hailChance[rank]! * 30, `Hail threshold rank ${rank}`)
+    assert.equal(profile.hailThreshold, hailChance[rank]!, `Hail threshold rank ${rank}`)
     assert.equal(profile.manaCost, 12.5 + hailMana[rank]!, `Hail mana rank ${rank}`)
   }
+})
+
+test('Hail caches an unscaled float32-to-integer stat value, including terminal rows', () => {
+  for (const [authored, expected] of [[0, 0], [0.999999999, 1], [1.9, 1], [8.9, 8], [25, 25]]) {
+    const statBook = playerStatBook()
+    const entries = [...statBook.entries]
+    entries[38] = {
+      ...entries[38]!,
+      numericProperties: { ...entries[38]!.numericProperties, mToHit: [0, authored!] },
+    }
+    const profile = nativePrimarySkillProfile(
+      book('water', { 32: 1, 38: 10 }), { ...statBook, entries }, FACTORS,
+    )
+    assert.ok(profile.kind === 'water')
+    assert.equal(profile.hailChance, authored)
+    assert.equal(profile.hailThreshold, expected)
+  }
+})
+
+test('Hail chance follows effective rank without scaling by damage, mana, or percent', () => {
+  const source = book('water', { 32: 1, 38: 1 })
+  const effectiveRanks = [...source.effectiveRanks]
+  effectiveRanks[38] = 10
+  const profile = nativePrimarySkillProfile({ ...source, effectiveRanks }, playerStatBook(), FACTORS)
+  assert.ok(profile.kind === 'water')
+  assert.equal(profile.hailChance, 25)
+  assert.equal(profile.hailThreshold, 25)
+  assert.equal(source.permanentRanks[38], 1)
 })
 
 test('normalizes every authored Chill Wind percent before the Water handler', () => {

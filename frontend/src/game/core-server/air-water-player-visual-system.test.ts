@@ -20,6 +20,8 @@ import {
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
+import { createPlayerSkillBook, playerStatBook } from '../core-kernels/player-progression.ts'
 import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
 import {
   finalizeAirWaterPlayerVisualActors,
@@ -295,6 +297,53 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
     painterOrder.state().nextRegistrationOrdinal.actor,
     expectedHail.length,
   )
+})
+
+test('every authored Hail rank keeps the exact visual threshold and conditional RNG in both worlds', () => {
+  const chances = [0, 5, 8, 10, 12, 14, 16, 18, 20, 22, 25]
+  const baseBook = createPlayerSkillBook({ discipline: 'arcane', displayName: 'Hail', element: 'water' })
+  for (const [rank, chance] of chances.entries()) {
+    const effectiveRanks = [...baseBook.effectiveRanks]
+    effectiveRanks[38] = rank
+    const profile = nativePrimarySkillProfile({ ...baseBook, effectiveRanks }, playerStatBook(), { damage: 1, manaCost: 1 })
+    assert.ok(profile.kind === 'water')
+    for (const worldKey of ['hub:college', 'boneyard:run']) {
+      for (const mode of ['normal', 'over', 'underpowered'] as const) {
+        const id = Array.from({ length: 20 }, (_, i) => i + 1)
+          .find(id => waterFrostJetKind(id) === (mode === 'over' ? 'over' : 'normal'))!
+        for (const roll of [Math.max(0, chance - 1), chance, 249]) {
+          const emission = { ...waterEmission(), id, worldKey, primarySkill: profile, underpowered: mode === 'underpowered' }
+          const frost: PrimarySpellTransientState = {
+            ageTicks: 0, direction: { x: 1, y: 0 }, id, kind: 'water',
+            lightRegistration: null, obstructionDistance: null, obstructionPoint: null,
+            origin: emission.origin, ownerId: emission.ownerId, speed: 4,
+            underpowered: emission.underpowered, variant: 0, worldKey,
+          }
+          const words = new Array<number>(55).fill(0)
+          words[0] = roll * 64
+          const rng = { indexA: 0, indexB: 31, words }
+          const rolls = chance > 0 && mode === 'normal'
+          const succeeds = rolls && roll < chance
+          let expectedRng = rolls ? drawNativeInteger(rng, 250).state : rng
+          const expected = succeeds
+            ? createNativeWaterHailActor(100, emission.ownerId, worldKey, 1, emission.origin, frost.direction, expectedRng)
+            : null
+          if (expected) expectedRng = expected.rng
+          const result = synchronizeAirWaterPlayerVisualActors({ nextId: 100, projectiles: [], transients: [frost] },
+            [visualOwner(emission.ownerId, worldKey, emission.queryOrigin)], 1, rng, [emission])
+          const hail = result.spells.transients.filter(actor => actor.kind === 'water-hail')
+          assert.equal(hail.length, succeeds ? 1 : 0, `${worldKey}/${mode}/rank ${rank}/roll ${roll}`)
+          if (expected) {
+            const { painterRegistrations, ...actor } = hail[0]!
+            assert.ok(painterRegistrations)
+            assert.deepEqual(actor, expected.actor)
+          }
+          assert.deepEqual(result.rng, expectedRng)
+          assert.equal(result.spells.nextId, succeeds ? 101 : 100)
+        }
+      }
+    }
+  }
 })
 
 test('shared Water finalization creates Aura after contact and advances Hail in Hub', () => {

@@ -4,11 +4,12 @@ import test from 'node:test'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
+import { drawNativeSpellDamage } from '../core-kernels/air-water-spell-actors.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { createPlayerSkillBook, playerStatBook } from '../core-kernels/player-progression.ts'
-import { createNativeRng, drawNativeFloat, drawNativeSign } from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign, type NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
 import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
@@ -137,6 +138,7 @@ function resolveCombatWithAuthority(
     fireballCorridorLength?: number
     primarySceneryTargets?: readonly PrimarySpellTarget[]
     rngSeed?: number
+    rng?: NativeRngState
     steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
 ) {
@@ -146,7 +148,7 @@ function resolveCombatWithAuthority(
     emissions,
     tick,
     WORLD_KEY,
-    createNativeRng(options.rngSeed ?? 0),
+    options.rng ?? createNativeRng(options.rngSeed ?? 0),
     options.firstWorldContact ?? null,
     undefined,
     options.damageMultiplier ?? (() => 1),
@@ -2616,6 +2618,42 @@ test('Disintegrate executes only below the strict post-hit twenty-percent gate',
   assert.equal(below.enemies.actors[0]?.lethalMagicDamage, true)
   assert.equal(below.enemies.actors[0]?.currentHealth, 0)
   assert.equal(below.hits[0]?.amount, 5)
+})
+
+test('Hail contact uses the unscaled authored threshold and draws damage only below it', () => {
+  const chances = [0, 5, 8, 10, 12, 14, 16, 18, 20, 22, 25]
+  const baseBook = createPlayerSkillBook({ discipline: 'arcane', displayName: 'Hail', element: 'water' })
+  const spawned = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
+  const enemies = { ...spawned, actors: spawned.actors.map(actor => ({
+    ...actor, currentHealth: 1_000, maximumHealth: 1_000,
+    config: { ...actor.config, maximumHealth: 1_000 },
+  })) }
+  for (const [rank, chance] of chances.entries()) {
+    const effectiveRanks = [...baseBook.effectiveRanks]
+    effectiveRanks[38] = rank
+    const profile = nativePrimarySkillProfile({ ...baseBook, effectiveRanks }, playerStatBook(), { damage: 1, manaCost: 1 })
+    assert.ok(profile.kind === 'water')
+    for (const underpowered of [false, true]) {
+      for (const roll of [Math.max(0, chance - 1), chance, 2_999]) {
+        const words = new Array<number>(55).fill(0)
+        words[0] = roll * 64
+        words[1] = 50_000 * 64
+        const rng = { indexA: 0, indexB: 31, words }
+        const rolls = chance > 0 && !underpowered
+        const succeeds = rolls && roll < chance
+        let expectedRng = rolls ? drawNativeInteger(rng, 3_000).state : rng
+        const damage = succeeds ? drawNativeSpellDamage(expectedRng, profile.hailDamageMinimum, profile.hailDamageMaximum) : null
+        if (damage) expectedRng = damage.rng
+        const result = resolveCombatWithAuthority(enemies, spellState({}), [emission({
+          damage: 1, id: 11, kind: 'water', origin: { x: 0, y: 0 }, primarySkill: profile, underpowered,
+        })], 1, { rng })
+        const hits = result.hits.filter(hit => hit.spellKind === 'water-hail')
+        assert.equal(hits.length, succeeds ? 1 : 0, `rank ${rank}/roll ${roll}/weak ${underpowered}`)
+        if (damage) assert.equal(hits[0]!.amount, damage.value)
+        assert.deepEqual(result.rng, expectedRng)
+      }
+    }
+  }
 })
 
 test('underpowered channels suppress every learned Air and Water branch', () => {

@@ -360,8 +360,9 @@ than becoming an Air/Water-only boolean.
 - Frost cone reach is `205 + 4*mWiden`; half aperture is `15+mWiden`. Every
   candidate needs line of sight. Visual particles remain presentation-only.
 - Native Hail tests an integer in `[0,2999]` against
-  `round(mToHit*30)` for each gameplay contact and draws damage only on
-  success. Before the target query, each shipped-default Frost visual child
+  `trunc(float32(mToHit))` for each gameplay contact and draws damage only on
+  success. The report-26 reopening below corrects this paragraph's former,
+  unsupported `round(mToHit*30)` inference. Before the target query, each shipped-default Frost visual child
   independently tests `Integer(250)` against the same threshold. A successful
   visual allocation consumes the `Anim_Bouncer` constructor draws
   `Float(3), Float(20), Float(360), Float(10)`, then `Anim_Hail` signed `Float(0.1)`,
@@ -925,3 +926,178 @@ The authenticated cloud-slot integration test uses 30 and rejects 31.
   or suppressions were added to manufacture a result. Available TypeScript,
   Oxc unused-symbol checks, boundary checks, and a manual reference/diff sweep
   found no remaining defect in the Harden cutover.
+
+
+## 2026-09-24 — Report 26: unscaled Hail chance cache
+
+### Report and evidence
+
+Report 26 (`1552402802158997668`) describes excessive Hail and lag after the
+older size correction. Its only attachment is a still image, SHA-256
+`e222ea321eb981bef0ffb70b674597bedf8890bcf61fab8b5bc8d2b606f8f210`.
+The image establishes visible density, not frame rate or a stock particle count.
+The original report is retained privately in the M2 Discord archive.
+
+Fresh read-only M2 Ghidra 12.0.3 queries used the existing canonical
+`SolomonDark/SolomonDark.exe` replica wrapper, SHA-256
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`.
+The retail executable is the same 4,723,200-byte image at preferred base
+`0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Disposable decompilation, raw instruction windows, xrefs and field-access
+census reside under `/tmp/solomon-report26-w89cedgq/native/`. No loader
+injection, live-stock timing measurement, or clean-stock screenshot is claimed.
+
+**This entry supersedes the earlier `round(mToHit * 30)` claim.** That
+conversion was an inference from a percentage label and the 3,000-cell damage
+roll, not the upstream cache writer. Tests repeated the same wrong assumption.
+
+### Recovered ownership and contract
+
+`hail.cfg` contains the authored `mToHit` table directly. The ranked lookup
+`0x005290F0` selects the effective rank and calls `0x0065D540`, which matches the
+property name and returns a float32 table element, clamping to the last row.
+It applies no percentage or Hail-specific multiplier. The sole `mToHit` string
+xref is the cache refresh at `0x00662B0A`.
+
+The decisive instructions are `0x00662B52 CALL 0x005290F0`,
+`0x00662B57 FSTP float [ESP+0x14]`, `0x00662B5B FLD float [ESP+0x14]`,
+`0x00662B5F CALL 0x00747360`, and `0x00662B64 MOV [EDI+0x8A8],EAX`.
+The conversion helper truncates toward zero; there is **no multiplication**.
+All authored values are integral, but the float32 store must precede truncation
+for substituted fractional stat rows.
+
+Water owns both reads of this same cache:
+
+- `0x00543F02..0x00543F27`: on a paid Normal Frost child, when the cache is
+  positive, consume `Integer(250)` and allocate Hail only when the roll is
+  strictly below the cached integer. Over and underpowered branches bypass it.
+- `0x005443B6..0x005443DF`: after accepted ordinary Water contact, consume
+  `Integer(3000)` when the same cache is positive. Only a strictly lower roll
+  permits the subsequent Hail damage draw. Particle collision does not own
+  this damage event.
+
+The unique Hail constructor call is `0x00543F4C`; its sole vtable writer is
+`0x0045406E`, and the sole tick-vtable reference is `0x00785024`.
+The fresh constructor/base/update/draw trace confirms the previous corrected
+scale, nine-word construction, 134-tick repeated-float retirement, bounces,
+sound gating, BadGuys record 32 and unchanged scale/alpha draw. The patch must
+not change those contracts or add a population cap.
+
+The normal Frost-loop count is still
+`1 - trunc((widenHalfDegrees + 15) / divisor)`, with native divisors -10 for
+Enhanced Effects and -20 otherwise (`0x00543948..0x0054397F`). Hail trials
+remain within the Normal-child branch; the Web product's existing shipped
+Enhanced Effects policy is unchanged. There is no extra Hail quality branch.
+
+### Complete authored data
+
+Original `data/wizardskills/hail.cfg` SHA-256:
+`a6dbc7816fd807b04db1e0860d476e6df38262f3718e96655dc10e5b632e9e72`.
+Normal learning cap is five; maximum effective rank is ten; Skills icon is 65.
+The original text's percentage label is retained rather than rewriting stock UI.
+
+| Rank | Cached threshold | Damage minimum | Damage maximum | Added mana |
+| --- | --- | --- | --- | --- |
+| 0 | 0 | 0 | 0 | 0 |
+| 1 | 5 | 5 | 10 | 7.5 |
+| 2 | 8 | 8 | 20 | 10 |
+| 3 | 10 | 10 | 30 | 20 |
+| 4 | 12 | 12 | 40 | 25 |
+| 5 | 14 | 14 | 50 | 30 |
+| 6 | 16 | 16 | 60 | 35 |
+| 7 | 18 | 17 | 70 | 40 |
+| 8 | 20 | 18 | 80 | 45 |
+| 9 | 22 | 19 | 90 | 50.5 |
+| 10 | 25 | 20 | 100 | 51 |
+
+The mana table additionally contains 51.5 at index 11, beyond maximum effective
+rank; no matching extra Hail damage/chance row exists. Cone of Ice's complete
+widening table is `0,30,50,70,80,90,100,110,120,130,140,150`, normalized by one
+half before the loop. Its Enhanced/ordinary loop counts for ranks 0..11 are
+`2,4,5,6,6,7,7,8,8,9,9,10` / `1,2,3,3,3,4,4,4,4,5,5,5`.
+
+At rank one the visual comparator must use 5, not 150; at rank ten it must
+use 25, not 750. The old implementation therefore made every eligible visual
+trial succeed from rank three onward. The damage comparator likewise uses 25,
+not 750, at maximum rank. These are thresholds, not claims of uniform 250- or
+3,000-cell probabilities: the native integer helper masks to a power-of-two
+range then applies modulo, so its distribution is biased. Both consumers keep
+that existing RNG behavior. This is a stock correction, not a balance
+adjustment or renderer cap.
+
+### System boundary and membership
+
+Boundary: authored Hail rank -> native chance cache -> its visual and direct
+contact consumers, including restoration and presentation of actors they own.
+
+| Member | Disposition before implementation | Proof / required result |
+| --- | --- | --- |
+| Rank zero and every authored rank, including equipment-effective ranks | recovered-pending-port | unscaled float32-to-integer cache; zero remains no-trial/no-draw |
+| Substituted fractional/short stat arrays | recovered-pending-port | float32 store, truncation and terminal-row lookup |
+| Paid Normal Water visual allocation in both shared simulation callers | recovered-pending-port | exact `< threshold` boundary in 250 cells; constructor RNG only on success |
+| Water gameplay contact | recovered-pending-port | same corrected cache in 3,000 cells; damage RNG only on success |
+| Over/underpowered Water, released input and rank removal | verified-already-at-parity | existing branch owners suppress new Hail; old actors keep native retirement |
+| Enhanced Effects and Cone of Ice loop variants | verified-already-at-parity | existing native loop formula and authored tables; no quality change |
+| Anim_Bouncer / Anim_Hail construction, airborne/bounce/settled/fade/draw | verified-already-at-parity | fresh functions 453060/454030/458D80/4540B0, unchanged nine-word constructor and 134-tick life |
+| BadGuys 32, ordinary Sprite and combined Water mesh, painter registration | verified-already-at-parity | same authoritative actor geometry and rendering; no new art/material or stale-tail changes |
+| Bounce sounds and native random stream | verified-already-at-parity | unchanged event gates/samples/pitch; fewer successful births intentionally consume fewer constructor draws |
+| Local authority, remote replication, compact Hail table and interpolation | verified-already-at-parity | replicas receive authoritative actor membership, never roll a local Hail chance |
+| Save continuation, rebuild and owner/world teardown | verified-already-at-parity | cache is recomputed from skill books; no chance field in saved Hail actors; existing valid actors drain normally |
+| Shared College combat admission | verified-already-at-parity | sealed combat policy remains; lower-level Hub fixtures do not grant emission permission |
+| Cold Aura, Frost core construction/RNG model, welded Hailstones and other spells | out-of-system | separate data/factories; no unrelated retuning or representation changes |
+
+### Implementation and acceptance plan
+
+Change only the existing shared Water profile's cache conversion. Preserve the
+raw displayed `hailChance`, damage magnitude, mana, actor schema, save version,
+geometry, sound and lifetime. No migration is necessary: future emissions use
+newly derived profiles; pre-existing valid visual actors retire within 134
+ticks without a load-time random draw or wholesale effect deletion.
+
+Regression evidence must fail on the old cache: all native rank rows,
+equipment-derived rank, fractional/terminal property rows, exact visual and
+combat equality boundaries, rank zero and underpowered no-draw behavior, and
+post-release retirement. Keep existing constructor/audio/render/protocol/save
+suites. Built Chrome acceptance must exercise real College/Boneyard navigation,
+held Hail ranks 0/1/2/3/10 at maximum Cone of Ice, authoritative counts, renderer
+counts, native scales/ages, release-to-zero, error arrays and frame timings.
+Record untouched-main and candidate results separately; a fast M2 baseline is
+not proof of reproducing the reporter's hardware-specific lag. Run the entire
+canonical M2 gate on the final integrated source tree before publication.
+
+
+### Report 26 focused implementation receipt
+
+The only production behavior change is the shared cache expression in
+`native-primary-skill-profile.ts`. Four profile regression failures and the
+visual/combat boundary failures reproduced the old defect before that edit.
+After correction all 87 tests across the profile, visual-system and combat
+files pass. The profile test file was absent from the canonical gate's explicit
+file list; it is now included in `pretest:boneyard`, alongside the existing two
+consumer suites. The new `tools/smoke-hail.mjs` uses the existing production
+preview, authenticated private host and real Chrome navigation helpers.
+
+The field census separates the actual cache reset (`0x00661759`, value zero)
+from refresh (`0x00662B64`, authored truncated value) and four Water reads.
+Unrelated same-offset hits are Sprite-array constructors/destructors
+`0x005AE6B0/0x005AF5D0/0x005B49E0/0x005B53C0`, glyph/render UI access
+`0x0051EAF0` and named menu builders/renderers, and the Courtyard constructor's
+stack temporary (`0x00506490`). They do not scale the Hail cache.
+Fresh `0x00401170` instructions/decompilation confirm the existing shifted-word,
+power-of-two mask and modulo distribution; it is preserved, not normalized.
+
+Untouched production baseline `e25963a1` on M2 Chrome `153.0.8010.53` passed the
+valid fixture run. At ranks 0/1/2/3/10, steady mean Hail populations were
+0 / 623.79798 / 973.08081 / 1004.70202 / 1020.71717; peaks were
+0 / 651 / 1000 / 1026 / 1048. Each held spell was released to zero authoritative
+actors and zero Hail mesh members. Positive-rank five-second samples were near
+60 FPS with approximately 16.7-ms p95 frame intervals; the reporter's severe lag
+was **not** reproduced on this M2. These results establish excessive simulated
+population, not a baseline FPS deficit. No page/console/HTTP/request/wire/host
+errors occurred. The first probe attempt failed solely because its private rank
+reset omitted learned-skill ordering; that fixture was repaired by restoring the
+complete valid pre-grant component store, without changing production code.
+
+Final integrated canonical validation and post-gate browser receipt follow
+below when completed. No published completion is claimed by this checkpoint.
