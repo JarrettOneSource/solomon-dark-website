@@ -337,7 +337,7 @@ function aura(
 ): PrimarySpellWaterAuraState {
   return {
     ageTicks: 0,
-    alphaDecay: Math.fround(0.15 / 720),
+    alphaDecay: 0.006250000558793545,
     birthTick: 0,
     durationTicks: 720,
     id,

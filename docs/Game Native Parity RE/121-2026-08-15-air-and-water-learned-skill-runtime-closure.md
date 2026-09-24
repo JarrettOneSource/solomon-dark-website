@@ -1,5 +1,220 @@
 # 2026-08-15 — Air and Water learned-skill runtime closure
 
+## 2026-09-24 — Report 25: Cold Aura radius, lifetime, and RNG reopening
+
+This entry supersedes the Cold Aura radius/fade/RNG claims below. The earlier
+closure skipped the upstream skill-cache writer and the base `Anim_Fade`
+constructor, and treated the signed rotation draw as an unsigned cosmetic draw.
+It also failed to carry the Water handler's six-tick branch around the gameplay
+query. Renderer optimization did not validate these simulation assumptions.
+
+### Evidence and provenance
+
+Report 25 is message `1552402198971814019`, archived under
+`2026-09-23/25-cold-aura-severe-lag-visual-glitch`. Its original save ZIP has
+SHA-256 `d39a80ccae1d5844d4db483368f547b18e78b1c51cf9001d20fb24e35b506e2b`;
+the original video has SHA-256
+`f0138abd4a35d4eede57ecb8c2e05ca17c3d3c9093364c9f7396e8f09e6acdb1`.
+The private save contains 122 Aura actors, each with a 2,800-tick lifetime and
+loss `0.00017857144121080637`; the oldest is already 1,436 ticks old.
+
+The exact retail executable remains 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+image base `0x00400000`. M2 Ghidra 12.0.3 read-only replicas of
+`SolomonDark/SolomonDark.exe` were invoked through the existing
+`/Users/jarrett/.local/bin/sdr-ghidra-headless` wrapper (SHA-256
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`).
+Constructor/tick/caller decompilation, raw instruction listings, constant bytes,
+vtable xrefs, and the `+0x8AC/+0x8B0` writer sweep are separate evidence classes.
+Temporary probe/log provenance is `/tmp/solomon-report25-dcamq034/`; these are
+disposable, not maintained Mod Loader artifacts. No injected observation or
+fresh clean-stock runtime capture is being claimed.
+
+On unmodified `aeb3987d`, the production Chrome `153.0.8010.53` client restored
+the original save through IndexedDB/Last game. The five-second screenshot
+reproduced an almost entirely white ground layer with dark scenery silhouettes.
+The M2 nevertheless sustained 60.00 FPS (p95 16.7 ms); this establishes the
+whiteout and pathological effect population, not the reporter's hardware lag.
+All page/console/HTTP/request/wire/host error arrays were empty. Recovery only
+cleared the private party-rejoin token; it did not alter gameplay state.
+
+### System boundary and membership inventory
+
+Native system: skill-37 Cold Aura, from ranked cache construction to the
+Water-held six-tick branch, target-owned slow application, the unique
+`Anim_ColdAura` actor, both web presentation paths, and continuation restoration.
+
+| Member | Native evidence | Final implementation disposition | Proof |
+| --- | --- | --- | --- |
+| Rank zero and ranks 1–10, including effective equipment ranks | catalog row 37; cache refresh `0x006623F0`, instructions `0x00662BBC..0x00662BDE` | exact-ported | every radius/percent/mana row, zero-rank gate |
+| Cache initialization and serialization | `0x00661530`, `0x0067C830`; `+0x8AC/+0x8B0` float stores | verified-already-at-parity for ownership; normalized radius exact-ported above | preserve player-owned rank/economy/RNG on restore |
+| Paid held Water, underpowered Water, released primary | `0x00543860`, normal-cast gate and `0x005447AA..0x00544A57` | exact-ported | both birth and slow query occur only on global tick modulo six |
+| Near/far targets and Permafrost modifier composition | radius query after `0x005448C0`, modifier writes `0x00544959..0x00544A02` | exact-ported for radius/cadence; modifier ownership unchanged | exact radius, minimum duration, movement/material merge |
+| Unique 0x54-byte Aura constructor | sole call `0x005447DD -> 0x0045AF20`; base `0x00452E20` | exact-ported | three RNG words, signed rotation, precise float-store chain |
+| Aura update, expiry, parent follow/loss | `0x0045AFB0`; vtable `0x00785540` slot `+8` | exact-ported for scalar arithmetic; parent follow already present | native repeated float32 subtraction/addition/multiplication, exact final tick, owner/world teardown |
+| Additive BadGuys record 14, ordinary Sprite and combined Water Mesh | unique draw `0x00455C90`, vtable slot `+0xC`; record is 63×63 | exact-ported | same native scalar plan on both render paths; no resurrected mesh indices |
+| Boneyard, remote observers, full/delta snapshots | shared Water finalizer, actor manager registration and protocol | exact-ported | no client RNG; shared native scalar fields |
+| Shared College admission | user-requested noncombat policy, ledger 141 and `hub-combat-input.ts` | verified-already-at-parity | no Aura or other primary emission from held input; lower-level Sprite fixtures do not bypass admission |
+| Enhanced Effects on/off | no quality-setting branch around Aura allocation | verified-already-at-parity | retain six-tick Aura creation regardless of Hail/Frost quality |
+| Audio/light providers and vtable siblings | vtable slots `0x0..0x20`; no-op slots `+0x10/+0x14`; draw restores additive state | verified-already-at-parity | no independent Aura sound/light or extra painter root |
+| Schema ≤39 Aura continuation actors | saved wrong lifetimes and missing historical signed RNG draw | exact-ported | retire only these obsolete cosmetic actors; preserve progression, items, enemies, and saved RNG |
+| Frost Jet core, Hail, Hurricane, Ring of Ice and welded spells | separate factories/vtables and damage owners | out-of-system | no visual caps, spell retuning, or unrelated performance changes |
+
+### Recovered contract
+
+`0x00662BCA` divides the authored `mRadius` float by the double `7.0` at
+`0x007852D0`, then stores float32 at skill cache `+0x8B0`. This is a normalized
+radius scale, **not feet and not world units**. The Water query multiplies that
+cache by double `120.0` at `0x0078E470`, with a float32 argument store. The old
+profile multiplied authored feet by 120 directly, making the gameplay radius
+seven times too large.
+
+Base `Anim_Fade` writes alpha `1.0` and loss float32
+`0.10000000149011612` (`0x007845E8`). The Water caller writes alpha `0.5` and
+performs these loss stores in order:
+
+```
+loss = f32(f32(f32(0.1) * f32(0.1)) * 0.5)
+loss = f32(f32(loss / radiusScale) * 1.25)
+```
+
+The second `0.1` is the double at `0x007849E8` containing the promoted float32
+value; `0.5` is at `0x007DE808`, and `1.25` at `0x00784740`. The caller's
+intermediate stores are `0x00544831`, `0x00544839`, `0x005448A5`, and
+`0x005448B3`. Neither the previous `0.00125 / authoredRadius` formula nor a
+single algebraically collapsed float expression represents those instructions.
+
+The constructor calls `Float(1, signed=true)` followed by `Float(360, false)`.
+`0x00401310` consumes a magnitude word and a separate sign word for the first
+call: three authoritative RNG words total, not two. Every update subtracts
+loss from alpha and stores float32, multiplies scale by
+`1.0149999856948853`, adds the signed rotation step with a float32 store, follows
+its live parent, and subtracts float32 `0.02` from red down to zero. Green and
+blue stay one. Draw uses this state additively, alpha capped at `0.5`; it does
+not own light or audio. Ceil(initial/loss) is not the exact lifetime because
+native subtraction rounds after every tick (rank two lives 81 ticks, not 80).
+
+| Rank | Authored feet | Normalized radius | World query radius | Alpha loss | Lifetime ticks |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 0 | 0 | no actor | 0 |
+| 1 | 6 | 0.8571428656578064 | 102.85714721679688 | 0.00729166716337204 | 69 |
+| 2 | 7 | 1 | 120 | 0.006250000558793545 | 81 |
+| 3 | 8 | 1.1428571939468384 | 137.1428680419922 | 0.0054687499068677425 | 92 |
+| 4 | 9 | 1.2857142686843872 | 154.28570556640625 | 0.004861111752688885 | 103 |
+| 5 | 9.5 | 1.3571428060531616 | 162.8571319580078 | 0.0046052634716033936 | 109 |
+| 6 | 10 | 1.4285714626312256 | 171.42857360839844 | 0.0043750000186264515 | 115 |
+| 7 | 10.5 | 1.5 | 180 | 0.004166666883975267 | 121 |
+| 8 | 11 | 1.5714285373687744 | 188.57142639160156 | 0.003977273125201464 | 126 |
+| 9 | 11.5 | 1.6428571939468384 | 197.1428680419922 | 0.0038043479435145855 | 132 |
+| 10 | 12 | 1.7142857313156128 | 205.71429443359375 | 0.00364583358168602 | 138 |
+
+The complete row-37 percent table is `0,40,50,55,60,65,70,75,80,85,90`;
+mana is `0,7.5,10,20,25,30,35,40,45,50.5,51,51.5`. The final mana-only row has
+no matching radius row beyond authored maximum rank ten. Normal learning cap
+four and effective maximum ten remain unchanged. Skills icon 64 and BadGuys
+record 14 are the only Aura-specific presentation records.
+
+### Implementation and validation contract
+
+Keep the cached normalized radius in the Water profile; convert to world units
+only at the query. Use a shared Cold Aura scalar kernel for native loss,
+repeated-float lifetime, and presentation, without new wire fields. Restore old
+continuations through a versioned cosmetic-actor retirement, not a load-time
+random redraw or a visual-size clamp. Native actor-manager birth order and the
+existing parent/mesh ownership remain authoritative.
+
+Acceptance requires per-rank numeric oracles, signed RNG state comparison,
+six-tick query/birth admission, release and owner/world teardown, both renderer
+paths, and a save migration preserving non-Aura state. Then run the complete
+Mac gate and production Chrome journeys for the original save and fresh held
+Water. Record errors, live population/lifetimes, drain behavior, and screenshots.
+The original M2 baseline already reaches 60 FPS, so no FPS speedup claim is an
+acceptance criterion. Correct bounded native effects and removal of the
+reproduced whiteout are the measurable target.
+
+### Report 25 implementation and browser acceptance
+
+The scalar owner is now `core-kernels/native-cold-aura.ts`. The internal Water
+profile explicitly carries `auraRadiusScale`; only the target-query seam
+converts to world units. Both actor creation and slow application use the same
+six-tick admission constant. The constructor consumes the native signed draw,
+and the renderer reconstructs the stored float32 state rather than unbounded
+age-based growth or algebraic linear fade. The maximum authored lifetime is
+138 ticks, not an implementation-imposed population or scale cap.
+
+Save schema 40 retires only obsolete Aura actors from earlier continuations.
+The original schema-39 Boneyard save was restored directly and deep-compared:
+`playerEntities` and `gameRng` exactly equal their saved values, and
+`primarySpells` differs only by removing the 122 old Aura actors. Current and
+future-version Aura actors remain, with strict painter registration checks.
+Legacy Hail cutover 28/29 and all native death-effect painter owners remain
+covered. Ordinary College recovery still consumes its pre-existing Hub seed;
+Aura migration adds no draw of its own.
+
+There are 153 passing focused spell/profile/contact/renderer/protocol/version
+tests, plus 55 passing full-save/version tests (the two version tests overlap).
+Coverage includes all ten native lifetime oracles, rank-zero rejection, signed
+three-word RNG equivalence, near/far targets outside the Frost cone, minimum
+and Permafrost slow durations, birth and contact cadence, owner/world teardown,
+current/future/obsolete saves, and both Sprite and combined Water Mesh cleanup.
+A 738-tick maximum-rank test reaches exactly 23 simultaneous actors, retains the
+last live actor at tick 737, retires it at 738, and consumes no RNG after release.
+The initial full gate exposed two older save-fixture assumptions that Aura
+would survive its old schema; these were updated to assert the new explicit
+cutover without weakening current-save painter validation.
+
+Maintained browser command, run from `frontend` after `npm run build`:
+
+```sh
+SDR_COLD_AURA_SAVE=/private/path/browser-game-save.json \
+SDR_COLD_AURA_OUTPUT=/tmp/solomon-cold-aura \
+node --experimental-strip-types tools/smoke-cold-aura.mjs
+```
+
+The optional private save is never checked in. Without it, the command still
+runs fresh Boneyard casting and the College combat-seal journey. It starts
+isolated authenticated hosts on ephemeral loopback ports, uses the production
+Vite build, follows real menus, and releases its browsers/hosts on exit.
+
+M2 Chrome `153.0.8010.53` acceptance on 2026-09-24:
+
+| Journey | Live Aura maximum | Mean FPS | p95 frame time | Outcome |
+| --- | ---: | ---: | ---: | --- |
+| Original saved continuation, first 5 seconds | 0 | 60.002 | 16.7 ms | no white ground obstruction |
+| Same continuation, next 10 seconds | 0 | 60.003 | 16.7 ms | no obsolete Aura reappears |
+| Fresh Boneyard, maximum-rank held Water, 6 seconds | 23 | 59.338 | 16.8 ms | bounded local cyan Aura; no whiteout |
+| Boneyard after release, 2 seconds | 0 | 60.000 | 16.7 ms | drained in 133 observed ticks; zero Aura mesh rows |
+| Shared College, held input for 6 seconds | 0 | 60.003 | 16.7 ms | no primary emission crosses the existing product-policy seal |
+
+The fresh casting fixture explicitly grants the maximum authored rank, prevents
+level-up interruption, and replenishes mana/health; those controls are not used
+for the original-save journey and are not production behavior. Boneyard held
+casting had a maximum 66.7 ms frame. Maximum snapshot delivery gaps were
+204.1 ms for original recovery, 191.3 ms in Boneyard, and 302.8 ms in College.
+All page, console, HTTP, failed-request, WebSocket/protocol and host error arrays
+were empty. Screenshots of original recovery, sustained casting and release
+were inspected. The M2 baseline already delivered 60 FPS while whited out;
+these results do not establish a hardware FPS improvement or identify every
+lag cause in other reports.
+
+The initial browser fixture incorrectly expected casting in College. Ledger
+141 records the user's noncombat-Hub direction; the acceptance was corrected
+to verify that policy, not bypass it. Lower-level Hub Sprite/actor fixtures
+exercise shared presentation without claiming admitted live College combat.
+There are no newly platform-blocked implementation members. A fresh clean-stock
+runtime/pixel comparison was not performed; native numeric oracles are grounded
+in the exact retail instruction/constant evidence above. Production deployment
+and report completion are separate from local acceptance and are recorded in
+the archive `STATUS.md` only after the full canonical gate/publication boundary.
+
+Disposable evidence SHA-256 receipts (not retention instructions):
+
+- Complete browser receipt: `df32b097ea886c616b5ba1b31905d4a28c4522dcc82bfbf36ff8d507e3517e38`.
+- Native instruction/constant/xref proof: `b7816d1f7d5e419c38b68b856e5c9573fe96c719740d00cfcbd638cba8c3abcd`.
+- Native rank/cache decompilation: `c3f7c07e723674b29894522ff4255d50715b63ed332727f3f2fa4e852ae3a2a7`.
+- Complete cached-radius writer sweep: `f35f13e305474106595c77290958dba8b590f7ad63722704cd9e421801ed0b5a`.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: player skill/stat books and the level-up picker retain

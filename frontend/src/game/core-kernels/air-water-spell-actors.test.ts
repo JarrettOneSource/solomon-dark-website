@@ -22,7 +22,7 @@ import {
   type NativeWaterRingSkillProfile,
   type NativeWaterHailTickResult,
 } from './air-water-spell-actors.ts'
-import { createNativeRng } from './native-rng.ts'
+import { createNativeRng, drawNativeFloat } from './native-rng.ts'
 
 const STORM = {
   activeTicks: 1_200,
@@ -184,7 +184,7 @@ test('Hail lifetime height envelope includes the complete first bounce arc', () 
   assert.equal(minimum, NATIVE_HAIL_MINIMUM_HEIGHT)
 })
 
-test('Cold Aura snapshots native fade and its two cosmetic RNG draws', () => {
+test('Cold Aura uses the normalized native radius and three signed-rotation RNG words', () => {
   const initial = createNativeRng(43)
   const born = createNativeWaterAuraActor(
     10,
@@ -192,17 +192,49 @@ test('Cold Aura snapshots native fade and its two cosmetic RNG draws', () => {
     'boneyard:run',
     44,
     { x: 100, y: 200 },
-    720,
+    1,
     initial,
   )
-  assert.equal(born.actor.alphaDecay, Math.fround(0.15 / 720))
-  assert.equal(born.actor.durationTicks, 2_400)
-  assert.ok(born.actor.rotationStepDegrees >= 0)
-  assert.ok(born.actor.rotationStepDegrees < 1)
+  assert.equal(born.actor.alphaDecay, 0.006250000558793545)
+  assert.equal(born.actor.durationTicks, 81)
+  const step = drawNativeFloat(initial, 1, true)
+  const rotation = drawNativeFloat(step.state, 360)
+  assert.equal(born.actor.rotationStepDegrees, step.value)
+  assert.equal(born.actor.initialRotationDegrees, rotation.value)
+  assert.deepEqual(born.rng, rotation.state)
+  assert.ok(born.actor.rotationStepDegrees >= -1)
+  assert.ok(born.actor.rotationStepDegrees <= 1)
   assert.ok(born.actor.initialRotationDegrees >= 0)
   assert.ok(born.actor.initialRotationDegrees < 360)
-  assert.equal(born.rng.indexA, (initial.indexA + 2) % 55)
-  assert.equal(born.rng.indexB, (initial.indexB + 2) % 55)
+  assert.equal(born.rng.indexA, (initial.indexA + 3) % 55)
+  assert.equal(born.rng.indexB, (initial.indexB + 3) % 55)
+})
+
+test('Cold Aura drains every authored radius through the native float-store lifetime', () => {
+  const rows = [
+    [6, 0.00729166716337204, 69],
+    [7, 0.006250000558793545, 81],
+    [8, 0.0054687499068677425, 92],
+    [9, 0.004861111752688885, 103],
+    [9.5, 0.0046052634716033936, 109],
+    [10, 0.0043750000186264515, 115],
+    [10.5, 0.004166666883975267, 121],
+    [11, 0.003977273125201464, 126],
+    [11.5, 0.0038043479435145855, 132],
+    [12, 0.00364583358168602, 138],
+  ] as const
+  for (const [feet, alphaDecay, durationTicks] of rows) {
+    const result = createNativeWaterAuraActor(
+      1, 'owner', 'hub:0', 0, { x: 0, y: 0 }, Math.fround(feet / 7), createNativeRng(17),
+    )
+    assert.equal(result.actor.alphaDecay, alphaDecay, `${feet} feet loss`)
+    assert.equal(result.actor.durationTicks, durationTicks, `${feet} feet expiry`)
+  }
+  for (const radius of [0, -1, NaN, Infinity]) {
+    assert.throws(() => createNativeWaterAuraActor(
+      1, 'owner', 'hub:0', 0, { x: 0, y: 0 }, radius, createNativeRng(17),
+    ), RangeError)
+  }
 })
 
 test('Hail owns Bouncer motion, bounce RNG, audio sequence, and 134-tick life', () => {

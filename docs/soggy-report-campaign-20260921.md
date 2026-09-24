@@ -165,3 +165,30 @@ Follow-up receipt SHA-256 values:
 - Update/reconnect and original Coffin save: `290e37a32fab34453eb4c04f0785b9992414e8e4b8df0c7607a186b514ac69d9`
 - Short Fire/Water run: `05733a4490bb76df1c34008ee43298fdeff1c77607d51ff8a7608e46764d5ad1`
 - Slow-link white-flash receipts and transport trial hashes are in ledgers 017/097.
+
+
+## September 24 — report 25 Cold Aura follow-up
+
+The new M2 archive item `25-cold-aura-severe-lag-visual-glitch` exposes a separate
+native translation defect, not a reopening of the checkpoint-transfer fix.
+The supplied save's 122 oversized, long-lived Aura effects reproduce the white
+ground obstruction. Stock skill-cache refresh divides authored radius by seven;
+the port omitted that conversion and reconstructed the base fade incorrectly.
+The same recovery found the missed signed RNG word, repeated-float lifetime,
+and six-tick gameplay-query branch. All are now shared native-owned behavior.
+
+Schema 40 retires obsolete Aura effects without changing the original
+Boneyard save's player state or RNG. Maximum authored rank reaches 23 live Aura
+actors per caster and drains on the stock 138-tick maximum lifetime. Real M2
+Chrome acceptance proves original-save visibility, sustained Boneyard casting,
+release/mesh cleanup and the existing College combat seal with no browser,
+protocol or host errors. The original M2 baseline already rendered at 60 FPS;
+this result does not claim a measured FPS gain on the reporter's hardware.
+
+Ledger 121 owns the full per-member inventory, exact retail provenance, rank
+oracles, implementation, 153 focused tests, 55 save tests, reusable browser
+command and numeric acceptance receipts. Original source text/media remain in
+the M2 archive. Final full-gate, publication, Discord reaction and cleanup
+receipts belong to the archive's `STATUS.md`; local browser success alone is
+not a claim that production has deployed. Reports 19–24 and 26–31 are separate
+open work and are not closed by this repair.

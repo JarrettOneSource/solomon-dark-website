@@ -1679,10 +1679,12 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   )
   return {
     ...source,
-    // Older checkpoints lack Hail's native sign draw; retire those cosmetic actors.
-    transients: sourceSchemaVersion < 29
-      ? transients.filter(transient => transient.kind !== 'water-hail')
-      : transients,
+    // Obsolete cosmetic actors lack native constructor/RNG state. Do not
+    // redraw them or alter the saved gameplay RNG/progression during recovery.
+    transients: transients.filter(transient => (
+      (sourceSchemaVersion >= 29 || transient.kind !== 'water-hail')
+      && (sourceSchemaVersion >= 40 || transient.kind !== 'water-aura')
+    )),
   }
 }
 

@@ -12,6 +12,7 @@ import {
   type PrimarySpellWaterHailState,
 } from './primary-spells.ts'
 import type { Vector2 } from './vector.ts'
+import { nativeColdAuraAlphaDecay, nativeColdAuraLifetimeTicks } from './native-cold-aura.ts'
 
 export const NATIVE_STORM_FADE_PER_TICK = 0.01
 export const NATIVE_STORM_FADE_TICKS = 101
@@ -58,10 +59,6 @@ const NATIVE_HAIL_LIFE_BY_AGE = Object.freeze(Array.from(
     return life
   },
 ))
-export const NATIVE_WATER_AURA_INITIAL_ALPHA = Math.fround(0.5)
-export const NATIVE_WATER_AURA_ALPHA_RADIUS_FACTOR = Math.fround(0.15)
-export const NATIVE_WATER_AURA_SCALE_FACTOR = 1.0149999856948853
-export const NATIVE_WATER_AURA_RED_FADE_PER_TICK = Math.fround(0.02)
 
 export interface NativeAirStormSkillProfile {
   readonly activeTicks: number
@@ -237,9 +234,9 @@ export interface NativeWaterAuraBirthResult {
 }
 
 /**
- * Anim_ColdAura construction at 0x0045AF20 consumes Float(1), then Float(360).
- * Its final fade is 0.00125 / stock-radius; Website profiles store that radius
- * in world units (stock-radius * 120), giving the equivalent 0.15 / radius.
+ * Anim_ColdAura at 0x0045AF20 consumes Float(1, signed=true), then Float(360).
+ * Radius is the normalized +0x8B0 cache; its conversion/fade stores are shared
+ * with the Water profile, gameplay query, and both presentation paths.
  */
 export function createNativeWaterAuraActor(
   id: number,
@@ -247,21 +244,18 @@ export function createNativeWaterAuraActor(
   worldKey: string,
   birthTick: number,
   origin: Readonly<Vector2>,
-  radius: number,
+  radiusScale: number,
   sourceRng: NativeRngState,
 ): NativeWaterAuraBirthResult {
-  if (!Number.isFinite(radius) || radius <= 0) {
-    throw new RangeError('Cold Aura radius must be positive and finite')
-  }
-  const rotationStep = drawNativeFloat(sourceRng, 1)
+  const alphaDecay = nativeColdAuraAlphaDecay(radiusScale)
+  const rotationStep = drawNativeFloat(sourceRng, 1, true)
   const initialRotation = drawNativeFloat(rotationStep.state, 360)
-  const alphaDecay = Math.fround(NATIVE_WATER_AURA_ALPHA_RADIUS_FACTOR / radius)
   return {
     actor: {
       ageTicks: 0,
       alphaDecay,
       birthTick,
-      durationTicks: Math.ceil(NATIVE_WATER_AURA_INITIAL_ALPHA / alphaDecay),
+      durationTicks: nativeColdAuraLifetimeTicks(alphaDecay),
       id,
       initialRotationDegrees: initialRotation.value,
       kind: 'water-aura',

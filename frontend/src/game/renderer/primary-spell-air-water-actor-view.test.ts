@@ -22,6 +22,7 @@ import {
   nativeWaterAuraVisualPlan,
 } from './primary-spell-air-water-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import { nativeColdAuraVisualState } from '../core-kernels/native-cold-aura.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
@@ -225,11 +226,11 @@ test('Hail and Cold Aura plans retain their authoritative motion fields', () => 
   })
   assert.deepEqual(nativeWaterAuraVisualPlan({
     ageTicks: 25,
-    alphaDecay: Math.fround(0.15 / 720),
+    alphaDecay: 0.006250000558793545,
     initialRotationDegrees: 90,
     rotationStepDegrees: 0.5,
   }), {
-    alpha: Math.max(0, Math.fround(0.5 - 25 * Math.fround(0.15 / 720))),
+    alpha: 0.34375014901161194,
     rotationRadians: 102.5 * Math.PI / 180,
     scale: repeatedFloatScale(1.0149999856948853, 25),
     tint: 0x80ffff,
@@ -245,14 +246,46 @@ test('Hail and Cold Aura plans retain their authoritative motion fields', () => 
     x: 0,
     y: 2,
   })
-  for (const ageTicks of [200, 0, 100, 200]) {
+  for (const ageTicks of [80, 0, 50, 80]) {
     assert.equal(nativeWaterAuraVisualPlan({
       ageTicks,
-      alphaDecay: Math.fround(0.15 / 720),
+      alphaDecay: 0.006250000558793545,
       initialRotationDegrees: 90,
       rotationStepDegrees: 0.5,
     }).scale, repeatedFloatScale(1.0149999856948853, ageTicks))
   }
+})
+
+test('Cold Aura reconstructs native float stores and never grows after retirement', () => {
+  const source = {
+    alphaDecay: 0.006250000558793545,
+    initialRotationDegrees: 90,
+    rotationStepDegrees: Math.fround(-0.1),
+  }
+  const rows = [
+    [1, 0.4937500059604645, 0.9800000190734863, 89.9000015258789, 1.0149999856948853],
+    [25, 0.34375014901161194, 0.5000004768371582, 87.50003814697266, 1.4509447813034058],
+    [50, 0.18750029802322388, 3.8743019104003906e-7, 85.00007629394531, 2.1052405834198],
+    [80, 3.3061951398849487e-7, 0, 82.0001220703125, 3.2906579971313477],
+    [81, 0, 0, 81.9001235961914, 3.340017795562744],
+  ] as const
+  for (const [ageTicks, alpha, red, rotationDegrees, scale] of rows) {
+    assert.deepEqual(nativeColdAuraVisualState({ ...source, ageTicks }), {
+      alpha, red, rotationDegrees, scale,
+    })
+    assert.deepEqual(nativeWaterAuraVisualPlan({ ...source, ageTicks }), {
+      alpha, scale, rotationRadians: rotationDegrees * (Math.PI / 180),
+      tint: (Math.round(red * 255) << 16) | 0x00ffff,
+    })
+  }
+  assert.deepEqual(
+    nativeWaterAuraVisualPlan({ ...source, ageTicks: 1_000_000 }),
+    nativeWaterAuraVisualPlan({ ...source, ageTicks: 81 }),
+  )
+  assert.deepEqual(
+    nativeWaterAuraVisualPlan({ ...source, ageTicks: 25.75 }),
+    nativeWaterAuraVisualPlan({ ...source, ageTicks: 25 }),
+  )
 })
 
 test('Hurricane painter owns the stock core and both enhanced/low lane branches', () => {
@@ -303,8 +336,8 @@ function actorFixture(): PrimarySpellSimulationState {
     position: { x: 10, y: 20 },
   }, {
     ...common,
-    alphaDecay: Math.fround(0.15 / 720),
-    durationTicks: 2_400,
+    alphaDecay: 0.006250000558793545,
+    durationTicks: 81,
     id: 2,
     initialRotationDegrees: 90,
     kind: 'water-aura',

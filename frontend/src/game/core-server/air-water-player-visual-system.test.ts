@@ -6,6 +6,7 @@ import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { stepPrimarySpells } from '../core-kernels/primary-spells.ts'
 import {
   createNativeWaterHailActor,
   stepNativeWaterHailActor,
@@ -131,9 +132,9 @@ test('Cold Aura follows its live owner instead of retaining its birth point', ()
     projectiles: [],
     transients: [{
       ageTicks: 10,
-      alphaDecay: Math.fround(0.15 / 720),
+      alphaDecay: 0.006250000558793545,
       birthTick: 1,
-      durationTicks: 2_400,
+      durationTicks: 81,
       id: 4,
       initialRotationDegrees: 90,
       kind: 'water-aura',
@@ -155,6 +156,71 @@ test('Cold Aura follows its live owner instead of retaining its birth point', ()
   const aura = result.spells.transients[0]
   assert.ok(aura?.kind === 'water-aura')
   assert.deepEqual(aura.origin, { x: 30, y: 40 })
+  assert.equal(synchronizeAirWaterPlayerVisualActors(
+    source, [], 12, createNativeRng(0),
+  ).spells.transients.length, 0)
+  assert.equal(synchronizeAirWaterPlayerVisualActors(source, [{
+    hurricaneContactCharge: 0, hurricaneCharge: 0,
+    hurricaneDamageMaximum: 0, hurricaneDamageMinimum: 0,
+    ownerId: 'water', position: { x: 30, y: 40 }, worldKey: 'boneyard:other',
+  }], 12, createNativeRng(0)).spells.transients.length, 0)
+})
+
+test('Cold Aura births only on paid six-tick Water emissions in both scenes', () => {
+  const initial = createNativeRng(43)
+  for (const worldKey of ['hub:courtyard', 'boneyard:run']) {
+    for (const auraRadiusScale of [0, 1]) {
+      for (const underpowered of [false, true]) {
+        for (let tick = 0; tick <= 12; tick += 1) {
+          const emission = { ...waterEmission({ auraRadiusScale }), worldKey, underpowered }
+          const result = finalizeAirWaterPlayerVisualActors(
+            { nextId: 1, projectiles: [], transients: [] }, [emission], tick,
+            initial, createNativeWorldManagerOrder().register,
+          )
+          const active = auraRadiusScale > 0 && !underpowered && tick % 6 === 0
+          assert.equal(result.spells.transients.length, active ? 1 : 0)
+          assert.equal(result.spells.nextId, active ? 2 : 1)
+          assert.equal(result.rng.indexA, (initial.indexA + (active ? 3 : 0)) % 55)
+        }
+      }
+    }
+  }
+  const released = finalizeAirWaterPlayerVisualActors(
+    { nextId: 1, projectiles: [], transients: [] }, [], 6,
+    initial, createNativeWorldManagerOrder().register,
+  )
+  assert.deepEqual(released.rng, initial)
+  assert.deepEqual(released.spells.transients, [])
+})
+
+test('maximum-rank Cold Aura reaches its native 23-actor population and drains after release', () => {
+  const emission = waterEmission({ auraRadiusScale: Math.fround(12 / 7) })
+  const order = createNativeWorldManagerOrder()
+  let rng = createNativeRng(43)
+  let spells: PrimarySpellSimulationState = { nextId: 1, projectiles: [], transients: [] }
+  let peak = 0
+  let releaseRng = rng
+  for (let tick = 0; tick <= 738; tick += 1) {
+    const step = stepPrimarySpells({
+      spells, rng, tick, castAuthority: {}, inputs: {}, players: {}, previousPlayers: {},
+      viewScale: 1, registerWorldPainter: order.register,
+      canPlaceProjectile: () => true, canTraverseProjectile: () => true,
+      spellObstructionPoint: () => null, spellRangeEndpoint: (_owner, start) => start,
+      spellTargets: () => [], worldKeyForPlayer: () => emission.worldKey,
+    })
+    const finalized = finalizeAirWaterPlayerVisualActors(
+      step.spells, tick <= 600 ? [emission] : [], tick, step.rng, order.register,
+    )
+    spells = finalized.spells
+    rng = finalized.rng
+    peak = Math.max(peak, spells.transients.length)
+    assert.ok(spells.transients.every(actor => actor.kind === 'water-aura' && actor.ageTicks < 138))
+    if (tick === 600) releaseRng = rng
+    if (tick === 737) assert.equal(spells.transients.length, 1)
+  }
+  assert.equal(peak, 23)
+  assert.deepEqual(spells.transients, [])
+  assert.deepEqual(rng, releaseRng)
 })
 
 test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter', () => {
@@ -232,7 +298,7 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
 })
 
 test('shared Water finalization creates Aura after contact and advances Hail in Hub', () => {
-  const emission = waterEmission({ auraRadius: 720 })
+  const emission = waterEmission({ auraRadiusScale: 1 })
   const painterOrder = createNativeWorldManagerOrder()
   const hailBirth = createNativeWaterHailActor(
     1,
@@ -255,8 +321,8 @@ test('shared Water finalization creates Aura after contact and advances Hail in 
   }, [emission], 6, hailBirth.rng, painterOrder.register)
   const aura = result.spells.transients.find(({ kind }) => kind === 'water-aura')
   assert.ok(aura?.kind === 'water-aura')
-  assert.equal(aura.alphaDecay, Math.fround(0.15 / 720))
-  assert.equal(aura.durationTicks, 2_400)
+  assert.equal(aura.alphaDecay, 0.006250000558793545)
+  assert.equal(aura.durationTicks, 81)
   assert.deepEqual(aura.origin, emission.queryOrigin)
   assert.deepEqual(aura.painterRegistrations, [{
     managerLane: 'actor',
@@ -285,7 +351,7 @@ function visualOwner(
 }
 
 function waterEmission(overrides: Readonly<{
-  auraRadius?: number
+  auraRadiusScale?: number
   hailThreshold?: number
   origin?: Readonly<{ x: number; y: number }>
   widenHalfDegrees?: number
@@ -304,7 +370,7 @@ function waterEmission(overrides: Readonly<{
       armorMaximum: 0,
       armorPerSecond: 0,
       auraMovementFactor: 0.5,
-      auraRadius: overrides.auraRadius ?? 0,
+      auraRadiusScale: overrides.auraRadiusScale ?? 0,
       auraSlowFactor: 0.5,
       coldDurationTicks: 25,
       coldMovementFactor: 0.5,

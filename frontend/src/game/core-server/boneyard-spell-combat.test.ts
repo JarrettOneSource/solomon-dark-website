@@ -2584,7 +2584,7 @@ test('underpowered channels suppress every learned Air and Water branch', () => 
     armorMaximum: 25,
     armorPerSecond: 8,
     auraMovementFactor: 0.4,
-    auraRadius: 120,
+    auraRadiusScale: 1,
     auraSlowFactor: 0.4,
     coldDurationTicks: 200,
     coldMovementFactor: 0.25,
@@ -2644,7 +2644,7 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
     armorMaximum: 0,
     armorPerSecond: 0,
     auraMovementFactor: 0.4,
-    auraRadius: 120,
+    auraRadiusScale: 1,
     auraSlowFactor: 0.4,
     coldDurationTicks: 200,
     coldMovementFactor: 0.25,
@@ -2705,6 +2705,34 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
     false,
     'shared visual synchronization owns Aura birth outside Boneyard combat',
   )
+})
+
+test('Cold Aura query has native radius and six-tick cadence independently of the Frost cone', () => {
+  const enemies = spawnEnemies([
+    { position: { x: -80, y: 0 }, token: 'SKELETON' },
+    { position: { x: -300, y: 0 }, token: 'SKELETON' },
+  ])
+  const water = emission({ id: 1, kind: 'water', origin: { x: 0, y: 0 } })
+  assert.ok(water.primarySkill.kind === 'water')
+  for (const coldDurationTicks of [25, 200]) {
+    for (const auraRadiusScale of [0, 1]) {
+      for (const underpowered of [false, true]) {
+        for (const tick of [1, 5, 6, 7, 12]) {
+          const result = resolveCombatWithAuthority(enemies, spellState({}), [{
+            ...water, underpowered,
+            primarySkill: { ...water.primarySkill, auraRadiusScale, coldDurationTicks,
+              auraMovementFactor: 0.4 },
+          }], tick)
+          const active = auraRadiusScale > 0 && !underpowered && tick % 6 === 0
+          assert.deepEqual(result.targetEffects, active ? [{
+            patch: { coldSlowFactor: 0.4, coldSlowMaterial: true, coldSlowTicks: coldDurationTicks },
+            targetId: 1, worldKey: WORLD_KEY,
+          }] : [])
+          assert.deepEqual(result.hits, [])
+        }
+      }
+    }
+  }
 })
 
 test('world-mismatched spells remain live without touching Boneyard actors', () => {
@@ -2975,7 +3003,7 @@ function emission(options: {
           armorMaximum: 0,
           armorPerSecond: 0,
           auraMovementFactor: 1,
-          auraRadius: 0,
+          auraRadiusScale: 0,
           auraSlowFactor: 1,
           coldDurationTicks: 25,
           coldMovementFactor: 0.5,

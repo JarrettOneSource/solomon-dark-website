@@ -3,18 +3,13 @@ import type {
   PrimarySpellWaterAuraState,
   PrimarySpellWaterHailState,
 } from '../core-kernels/primary-spells.ts'
-import {
-  NATIVE_WATER_AURA_INITIAL_ALPHA,
-  NATIVE_WATER_AURA_RED_FADE_PER_TICK,
-  NATIVE_WATER_AURA_SCALE_FACTOR,
-} from '../core-kernels/air-water-spell-actors.ts'
+import { nativeColdAuraVisualState } from '../core-kernels/native-cold-aura.ts'
 import {
   nativeEnemySpriteRegistration,
   type NativeEnemySpriteRegistration,
 } from './native-enemy-sprite-registration.ts'
 
 const DEGREES_TO_RADIANS = Math.PI / 180
-const NATIVE_WATER_AURA_SCALE_BY_AGE = [Math.fround(1)]
 
 export interface NativeWaterAuraVisualPlan {
   readonly alpha: number
@@ -85,20 +80,12 @@ export function nativeWaterAuraVisualPlan(
     'ageTicks' | 'alphaDecay' | 'initialRotationDegrees' | 'rotationStepDegrees'
   >,
 ): NativeWaterAuraVisualPlan {
-  const age = Math.max(0, Math.trunc(state.ageTicks))
-  while (NATIVE_WATER_AURA_SCALE_BY_AGE.length <= age) {
-    NATIVE_WATER_AURA_SCALE_BY_AGE.push(Math.fround(
-      NATIVE_WATER_AURA_SCALE_BY_AGE.at(-1)! * NATIVE_WATER_AURA_SCALE_FACTOR,
-    ))
-  }
-  const red = Math.max(0, Math.fround(1 - age * NATIVE_WATER_AURA_RED_FADE_PER_TICK))
+  const native = nativeColdAuraVisualState(state)
   return Object.freeze({
-    alpha: Math.max(0, Math.fround(NATIVE_WATER_AURA_INITIAL_ALPHA - age * state.alphaDecay)),
-    rotationRadians: (
-      state.initialRotationDegrees + age * state.rotationStepDegrees
-    ) * DEGREES_TO_RADIANS,
-    scale: NATIVE_WATER_AURA_SCALE_BY_AGE[age]!,
-    tint: (Math.round(red * 255) << 16) | 0x00ffff,
+    alpha: native.alpha,
+    rotationRadians: native.rotationDegrees * DEGREES_TO_RADIANS,
+    scale: native.scale,
+    tint: (Math.round(native.red * 255) << 16) | 0x00ffff,
   })
 }
 

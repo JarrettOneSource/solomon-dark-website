@@ -19,9 +19,9 @@ import {
   type NativeWeldPrimaryVector,
 } from './native-weld-primary-profile.ts'
 
-export type { NativeOffensiveSpellFactors } from './native-offensive-resolution.ts'
+import { nativeColdAuraRadiusScale } from './native-cold-aura.ts'
 
-export const NATIVE_WATER_AURA_WORLD_UNITS_PER_FOOT = 120
+export type { NativeOffensiveSpellFactors } from './native-offensive-resolution.ts'
 
 interface NativePrimarySkillProfileBase {
   readonly damageMaximum: number
@@ -67,7 +67,8 @@ export interface NativeAirPrimarySkillProfile extends NativePrimarySkillProfileB
 export interface NativeWaterPrimarySkillProfile extends NativePrimarySkillProfileBase {
   readonly armorMaximum: number
   readonly armorPerSecond: number
-  readonly auraRadius: number
+  /** Native +0x8B0: authored radius in feet divided by seven. */
+  readonly auraRadiusScale: number
   readonly auraMovementFactor: number
   readonly auraSlowFactor: number
   readonly coldDurationTicks: number
@@ -309,10 +310,7 @@ export function nativePrimarySkillProfile(
         ...common,
         armorMaximum: rankedOr(statBook, 36, 'mMaxArmor', hardenRank, 0),
         armorPerSecond: rankedOr(statBook, 36, 'mArmorPlus', hardenRank, 0),
-        auraRadius: Math.fround(
-          rankedOr(statBook, 37, 'mRadius', auraRank, 0)
-            * NATIVE_WATER_AURA_WORLD_UNITS_PER_FOOT,
-        ),
+        auraRadiusScale: nativeColdAuraRadiusScale(rankedOr(statBook, 37, 'mRadius', auraRank, 0)),
         auraMovementFactor: Math.fround(auraSlowFactor / slowdownScale),
         auraSlowFactor,
         coldDurationTicks: Math.max(25, minimumColdDurationTicks),

@@ -125,7 +125,7 @@ test('resolves Water geometry, armor, aura, hail, and permafrost payloads', () =
     armorMaximum: 50,
     armorPerSecond: 12,
     auraMovementFactor: Math.fround(Math.fround(0.5) / Math.fround(1.5)),
-    auraRadius: 840,
+    auraRadiusScale: 1,
     auraSlowFactor: Math.fround(0.5),
     coldDurationTicks: 200,
     coldMovementFactor: Math.fround(Math.fround(0.5) / Math.fround(1.5)),
@@ -164,7 +164,7 @@ test('drains every Cold Aura radius and Permafrost-scaled movement row', () => {
       assert.equal(profile.kind, 'water')
       if (profile.kind !== 'water') throw new Error('expected Water profile')
       const auraSlowFactor = Math.fround(1 - percentages[auraRank]! / 100)
-      assert.equal(profile.auraRadius, Math.fround(radiiFeet[auraRank]! * 120))
+      assert.equal(profile.auraRadiusScale, Math.fround(radiiFeet[auraRank]! / 7))
       assert.equal(profile.auraSlowFactor, auraSlowFactor)
       assert.equal(
         profile.auraMovementFactor,

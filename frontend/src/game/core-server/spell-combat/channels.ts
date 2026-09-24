@@ -3,6 +3,7 @@ import {
   drawNativeSpellDamage,
 } from '../../core-kernels/air-water-spell-actors.ts'
 import { drawNativeFloat, drawNativeInteger } from '../../core-kernels/native-rng.ts'
+import { NATIVE_COLD_AURA_PERIOD_TICKS, nativeColdAuraQueryRadius } from '../../core-kernels/native-cold-aura.ts'
 import {
   createNativeWeldBlizzardContactGlow,
   nativeWeldBlizzardContactPolygon,
@@ -627,11 +628,15 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
       }
     }
 
-    if (!emission.underpowered && profile.auraRadius > 0) {
+    if (
+      !emission.underpowered
+      && profile.auraRadiusScale > 0
+      && work.tick % NATIVE_COLD_AURA_PERIOD_TICKS === 0
+    ) {
       for (const row of nativePrimaryRootTargetRows(
         work.enemies,
         emission.queryOrigin,
-        profile.auraRadius,
+        nativeColdAuraQueryRadius(profile.auraRadiusScale),
         0x2,
       )) {
         work.queueTargetEffect(row.actor.id, {

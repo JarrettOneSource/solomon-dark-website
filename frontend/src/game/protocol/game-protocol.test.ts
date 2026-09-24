@@ -4429,9 +4429,9 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
     },
     {
       ageTicks: 2,
-      alphaDecay: Math.fround(0.15 / 720),
+      alphaDecay: 0.006250000558793545,
       birthTick: 3,
-      durationTicks: 2_400,
+      durationTicks: 81,
       id: 2,
       initialRotationDegrees: 90,
       kind: 'water-aura',

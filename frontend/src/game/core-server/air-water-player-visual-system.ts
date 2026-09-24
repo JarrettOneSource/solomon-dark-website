@@ -4,6 +4,7 @@ import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { NATIVE_COLD_AURA_PERIOD_TICKS } from '../core-kernels/native-cold-aura.ts'
 import {
   createNativeWaterAuraActor,
   createNativeWaterHailActor,
@@ -221,13 +222,13 @@ export function finalizeAirWaterPlayerVisualActors(
   let nextId = source.nextId
   let rng = sourceRng
   const withAura: PrimarySpellTransientState[] = [...source.transients]
-  if (tick % 6 === 0) {
+  if (tick % NATIVE_COLD_AURA_PERIOD_TICKS === 0) {
     for (const emission of channelEmissions) {
       if (
         emission.kind !== 'water'
         || emission.primarySkill.kind !== 'water'
         || emission.underpowered
-        || emission.primarySkill.auraRadius <= 0
+        || emission.primarySkill.auraRadiusScale <= 0
       ) continue
       const aura = createNativeWaterAuraActor(
         nextId,
@@ -235,7 +236,7 @@ export function finalizeAirWaterPlayerVisualActors(
         emission.worldKey,
         tick,
         emission.queryOrigin,
-        emission.primarySkill.auraRadius,
+        emission.primarySkill.auraRadiusScale,
         rng,
       )
       rng = aura.rng

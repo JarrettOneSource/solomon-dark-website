@@ -449,11 +449,11 @@ test('cold and poison onset particles retain their native owner across saves', (
   }
 })
 
-test('Hail save cutover retires old cosmetic particles while preserving current particles and the run', () => {
+test('Hail and Aura save cutovers retire obsolete particles while preserving current particles and the run', () => {
   const state = createGameSimulation({ owner: OWNER })
   const painterOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
   const aura = createNativeWaterAuraActor(
-    1, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, 720, createNativeRng(37),
+    1, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, 1, createNativeRng(37),
   ).actor
   const hail = createNativeWaterHailActor(
     2, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, { x: 1, y: 0 }, createNativeRng(37),
@@ -468,15 +468,19 @@ test('Hail save cutover retires old cosmetic particles while preserving current 
   })
   const current = restoreGameSaveDocument(document).state
   assert.deepEqual(current.primarySpells.transients, transients)
-  const previous = JSON.parse(document)
-  previous.schemaVersion = 28
-  previous.continuation.simulation.primarySpells.transients[1].scale = 1.5
-  const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
-  assert.deepEqual(migrated.primarySpells, { nextId: 3, projectiles: [], transients: [transients[0]] })
-  assert.deepEqual(migrated.run, current.run)
-  assert.deepEqual(migrated.playerEntities, current.playerEntities)
-  assert.deepEqual(migrated.combatRng, current.combatRng)
-  assert.deepEqual(migrated.gameRng, current.gameRng)
+  for (const schemaVersion of [28, 29, 39]) {
+    const previous = JSON.parse(document)
+    previous.schemaVersion = schemaVersion
+    if (schemaVersion === 28) previous.continuation.simulation.primarySpells.transients[1].scale = 1.5
+    const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
+    assert.deepEqual(migrated.primarySpells, {
+      nextId: 3, projectiles: [], transients: schemaVersion < 29 ? [] : [transients[1]],
+    })
+    assert.deepEqual(migrated.run, current.run)
+    assert.deepEqual(migrated.playerEntities, current.playerEntities)
+    assert.deepEqual(migrated.combatRng, current.combatRng)
+    assert.deepEqual(migrated.gameRng, current.gameRng)
+  }
 })
 
 test('Harden saves retain current coating and migrate the former armor-only cache', () => {
@@ -917,7 +921,7 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
   assert.doesNotThrow(() => createGameSnapshot(restoredBoneyard.state, 'owner'))
 })
 
-test('schema 22 restores late Water painters and every native death-effect owner', () => {
+test('schema 22 retires obsolete Water painters and restores every native death-effect owner', () => {
   const loadedBoneyard = materializeBoneyard(
     createBoneyardCatalog(),
     'default-random',
@@ -998,7 +1002,7 @@ test('schema 22 restores late Water painters and every native death-effect owner
     `boneyard:${loadedBoneyard.runId}`,
     0,
     { x: 200, y: 150 },
-    720,
+    1,
     createNativeRng(1),
   )
   const hail = createNativeWaterHailActor(
@@ -1063,10 +1067,9 @@ test('schema 22 restores late Water painters and every native death-effect owner
   assert.equal(restored.state.world.kind, 'boneyard')
   if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.deepEqual(
-    restored.state.primarySpells.transients.map(({ painterRegistrations }) => (
-      painterRegistrations?.map(({ managerLane }) => managerLane)
-    )),
-    [['actor']],
+    restored.state.primarySpells.transients,
+    [],
+    'Both Hail and Aura predate their native constructor/save cutovers',
   )
   assert.deepEqual(
     restored.state.world.enemies.deathEffects.map((effect) => ({
@@ -1098,14 +1101,24 @@ test('schema 22 restores late Water painters and every native death-effect owner
     createGameSnapshot(restored.state, 'owner'),
   ))
 
+  // The legacy actors are intentionally gone. A newly created current-schema
+  // Aura must still carry a valid painter registration; do not weaken that rule.
+  const currentOrder = createNativeWorldManagerOrder(restored.state.worldManagerOrder)
   const current = JSON.parse(createGameSaveDocument({
     integrity: restored.integrity,
     loadedBoneyard,
     mods: restored.mods,
     modState: restored.modState,
     playerId: restored.playerId,
-    state: restored.state,
+    state: {
+      ...restored.state,
+      primarySpells: { ...restored.state.primarySpells, transients: [{
+        ...aura.actor, painterRegistrations: [currentOrder.register('actor')],
+      }] },
+      worldManagerOrder: currentOrder.state(),
+    },
   }))
+  assert.doesNotThrow(() => restoreGameSaveDocument(JSON.stringify(current)))
   const missingOwner = structuredClone(current)
   delete missingOwner.continuation.simulation.world.enemies.deathEffects[0]
     .presentationOwner
