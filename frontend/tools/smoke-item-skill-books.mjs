@@ -10,7 +10,8 @@ import { getPlayerEconomy, getPlayerSkillBook, getPlayerProgression } from '../s
 import { replacePlayerEconomy, restorePlayerEntityHealth } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
-import { enterElementHub, enterBoneyard, openBoneyardCombat } from './game-smoke-navigation.mjs'
+import { enterElementHub, enterBoneyard, openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
+import { observeGoldPlacementWire } from './smoke-loot-gold-placement.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const output = process.env.SDR_ITEM_SKILL_BOOK_OUTPUT || '/tmp/solomon-item-skill-books'
@@ -39,7 +40,7 @@ async function journey(scenario) {
     createBoneyardSeedBytes: () => Buffer.alloc(16),
     log: event => { if (event.level === 'error') errors.host.push({ event: event.event, message: event.message }) },
   })
-  const contexts = [], pages = []
+  const contexts = [], pages = [], wires = []
   let refill
   try {
     for (let index = 0; index < scenario.peers; index += 1) {
@@ -47,6 +48,7 @@ async function journey(scenario) {
         hasTouch: scenario.touch, isMobile: scenario.touch, deviceScaleFactor: 1 })
       contexts.push(context)
       const page = await context.newPage(); pages.push(page)
+      wires.push(observeGoldPlacementWire(page, host.address.url))
       page.on('pageerror', error => errors.page.push(error.message))
       page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
       page.on('response', response => { if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`) })
@@ -92,7 +94,7 @@ async function journey(scenario) {
     const otherAudio = peerId ? await audioCount(pages[0]) : 0
     const before = [...getPlayerSkillBook(host.state(), playerId).permanentRanks]
     const peerBefore = peerId ? [...getPlayerSkillBook(host.state(), peerId).permanentRanks] : null
-    const rankBook = insertBook(host, playerId, 3, scenario.nested)
+    const rankBook = await insertBook(host, playerId, 3, scenario.nested, wires.at(-1))
     await openAndUse(page, rankBook, scenario.touch)
     const dialog = page.getByRole('dialog', { name: 'Skill improved', exact: true })
     await dialog.waitFor({ timeout: 10000 })
@@ -128,7 +130,7 @@ async function journey(scenario) {
     assert.ok(host.state().tick > resumedTick)
     assert.deepEqual(getPlayerSkillBook(host.state(), playerId).permanentRanks, after)
 
-    const choiceBook = insertBook(host, playerId, 2, false)
+    const choiceBook = await insertBook(host, playerId, 2, false, wires.at(-1))
     await openAndUse(page, choiceBook, scenario.touch)
     const picker = page.getByRole('dialog', { name: /Select a skill/ })
     await picker.waitFor({ timeout: 15000 })
@@ -163,7 +165,7 @@ async function journey(scenario) {
 async function ready(page, scene) {
   await page.locator(`.${scene}-scene[data-gameplay-input-blocked="false"][data-renderer-state="ready"]`).waitFor({ timeout: 30000 })
 }
-function insertBook(host, playerId, subtype, nested) {
+async function insertBook(host, playerId, subtype, nested, wire) {
   const state = host.state(), economy = getPlayerEconomy(state, playerId)
   const book = createNativeSkillBookInventoryItem(NATIVE_SKILL_BOOK_DEFINITIONS.find(row => row.nativeSubtype === subtype), 1)
   // Item_Sack subtype0, Inventory70, from the existing native shop definition.
@@ -172,6 +174,12 @@ function insertBook(host, playerId, subtype, nested) {
   assert.equal(inserted.accepted, true)
   Object.assign(state, { playerEntities: replacePlayerEconomy(state.playerEntities, playerId, inserted.state) })
   const added = inserted.state.backpack.at(-1)
+  // This is an out-of-band fixture insertion, not a game action. Wait for its
+  // authoritative replica before opening Inventory and pausing the next tick.
+  await waitUntil(() => {
+    assert.deepEqual(wire.errors, [])
+    return wire.snapshot?.players[playerId]?.economy.backpack.some(item => item.id === added.id)
+  }, 'Fixture book did not reach its owning client', 10000)
   return { rootId: added.id, bookId: nested ? added.contents[0].id : added.id, nested }
 }
 async function openAndUse(page, item, touch) {

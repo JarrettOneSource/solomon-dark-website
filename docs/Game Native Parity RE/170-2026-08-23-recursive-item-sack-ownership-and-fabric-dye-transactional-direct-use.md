@@ -143,6 +143,25 @@ The original report does not contain enough state to prove a lost rank; the
 unchanged-build reproduction verifies an actual grant with missing feedback.
 
 
+
+### Integrated acceptance fixture correction
+
+The first integrated candidate `084b1a2271b68aefc88814c6354bd022b2307f88`
+passed the complete canonical M2 gate with exit0, including24 backend/Website
+and3,808 frontend/desktop tests. Its post-gate browser then exposed an
+out-of-band test setup race: the second injected book existed in authority,
+but Inventory paused before that book reached the owner's cached snapshot.
+The book was not lost and no grant had occurred. A diagnostic that allowed the
+next authority update passed without changing runtime.
+
+The maintained acceptance helper now waits for the injected item's actual
+owner-only replicated inventory before opening Inventory. It uses the existing
+wire reconstructor, not a guessed delay or a production compatibility path.
+All three journeys subsequently passed, including the exact prior failing
+Boneyard sequence. This correction changes only the browser helper and ledger;
+all runtime, asset, protocol, save and unit-test bytes remain identical to084b1a22.
+The final exact-tree gate is repeated below for the corrected helper candidate.
+
 ## Reopened system and parity question
 
 Issue 18 reported that sacks and dyes do not work. This reopens the complete
