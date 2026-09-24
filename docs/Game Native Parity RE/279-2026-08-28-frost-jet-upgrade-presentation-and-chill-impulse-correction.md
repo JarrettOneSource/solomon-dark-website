@@ -100,6 +100,39 @@ error arrays are empty. The active base-Frost screenshot was visually checked.
 This is a local built-client verification against stock instruction/data
 truth, not a new clean-stock runtime capture or a production deployment.
 
+### Final M2 acceptance receipt
+
+Candidate `543e73b36bc9fee08d98ebfee94f81d1eaab638b` passed the complete
+`/opt/homebrew/bin/bash ./scripts/validate.sh` gate with a recorded exit code
+of zero, followed by a fresh production-client status journey. Fleet job
+`job_20260924T053054Z_812585c4bc` completed successfully at
+`2026-09-24T06:01:45.085876Z`. All 7,176 tracked file hashes matched the frozen
+manifest after validation and the worktree remained clean. Backend/frontend
+tests, lint/types, builds, media policy and renderer quality/mutation gates
+all passed. The first canonical attempt caught a missing TypeScript Water
+union narrowing in the new fixture; it was corrected and the entire gate
+repeated, not bypassed.
+
+The final browser run again observed base/Chill/permafrost factors
+`0.5 / 0.5 / 0.3333333432674408` and initial lifetimes `25 / 25 / 200`.
+All three recovered movement with unchanged authored configuration; the
+sampled release-to-recovered intervals were `26 / 27 / 202` ticks. The
+Lightning control also recovered. Page, console and HTTP errors were empty.
+
+Receipt SHA-256 values:
+
+- Full gate: `49a88d8814134996bf3d220bca276ae56fbbe48793963e5b3278ae33aae12bd5`.
+- Browser: `40384ba42e234f9aac410838694f49bfee7afe68bab73051610ce61b6fb7da7e`.
+- Manifest: `d7f85444dbddc27be18e03949c362707d4c07a967f48a3e075e7be154e908d92`.
+- Focused tests: `d1387452639686b57f487f4c325e9ce8a2ebccbd036a61bf8b19c3bcec8bc6e7`.
+- Acceptance: `e60a164d4d86f3be4d66b2d9f6504866ed2321231760dddb02a9bd5aea98af14`.
+
+Disposition: report 19's requested absence of base slowing is not stock
+behavior. Preserve the existing mechanic and close the investigation with
+explicit regression coverage. This receipt is the sole post-validation
+documentation change. No gameplay, test, browser, build, asset, protocol or
+save byte changes after the accepted candidate.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Frost Jet does not visibly respond to Chill Wind or
