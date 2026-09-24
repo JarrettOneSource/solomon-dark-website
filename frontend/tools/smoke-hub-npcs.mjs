@@ -569,6 +569,8 @@ async function exerciseSkorcha(canvas) {
   await assertSpeech(dialog, 'ENFORCER_INTRO')
   const dismissalKey = `ENFORCER_DISMISS${state.dismissalIndex + 1}`
   await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  await openInteraction('skorcha', 'Skorcha')
   await assertSpeech(dialog, dismissalKey)
   await page.screenshot({ path: `${screenshotRoot}-skorcha.png` })
   await dialog.getByRole('button', { name: 'Skip' }).click()
@@ -846,9 +848,10 @@ async function exerciseMemorator(canvas) {
   ]) {
     await dialog.getByRole('button', { name: label }).click()
     await assertSpeech(dialog, key)
-    await skipSpeech(dialog)
+    await dialog.getByRole('button', { name: 'Skip' }).click()
   }
-  await dialog.getByRole('button', { name: 'Done' }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  await openInteraction('memorator', 'Declarius')
   await assertSpeech(dialog, 'MEMORATOR_DISMISS')
   await dialog.getByRole('button', { name: 'Skip' }).click()
   await dialog.waitFor({ state: 'hidden' })
@@ -924,8 +927,9 @@ async function exerciseArchchancellor(canvas) {
   await skipSpeech(dialog)
   await dialog.getByRole('button', { name: 'Equipment?' }).click()
   await assertSpeech(dialog, 'ARCH_Q')
-  await skipSpeech(dialog)
-  await dialog.getByRole('button', { name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  await openInteraction('arch-chancellor', 'The Archchancellor')
   await assertSpeech(dialog, 'ARCH_DISMISS')
   await page.screenshot({ path: `${screenshotRoot}-archchancellor.png` })
   await dialog.getByRole('button', { name: 'Skip' }).click()

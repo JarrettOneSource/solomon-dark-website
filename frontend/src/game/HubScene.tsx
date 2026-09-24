@@ -40,6 +40,7 @@ import {
   hubTeacherSummonVolume,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
+import { createHubNpcContactState, stepHubNpcContact } from './hub-npc-contact.ts'
 import GameHud from './GameHud.tsx'
 import CollegeIntroOverlay from './CollegeIntroOverlay.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
@@ -594,6 +595,7 @@ export default function HubScene({
     let cancelled = false
     let stopPresentationLoop: (() => void) | null = null
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
+    const npcContact = createHubNpcContactState()
     const publishInput = (nextInput: PlayerCharacterInput) => onInput(
       gameplayHudHiddenRef.current
         ? { ...nextInput, cast: { primary: false, quickbar: null } }
@@ -751,8 +753,38 @@ export default function HubScene({
       onReadyRef.current()
       input.setBlocked(inputBlockedRef.current || modalOpenRef.current)
       stopPresentationLoop = startGamePresentationLoop((now) => {
-        publishInput(input.sample().input)
+        const requestedInput = input.sample().input
+        publishInput(requestedInput)
         const snapshot = samplePresentation(now)
+        const participant = snapshot.world.participants[playerId]
+        const localPlayer = snapshot.players[playerId]
+        const surface = hubUiSurfaceRef.current
+        if (surface?.kind === 'dialogue') npcContact.engaged.add(surface.interaction)
+        if (participant && localPlayer) {
+          const interaction = stepHubNpcContact(npcContact, {
+            availability: {
+              skorchaPosition: snapshot.world.skorcha?.position ?? null,
+              storyOffice: localPlayer.economy.collegeIntroPending,
+            },
+            enabled: !inputBlockedRef.current && !modalOpenRef.current
+              && surface === null && participant.transition === null
+              && participant.collegeIntro === null,
+            movement: requestedInput.movement,
+            position: localPlayer.position,
+            region: participant.region,
+            tick: snapshot.tick,
+          })
+          if (interaction !== null) {
+            const acknowledgement = hubNpcHintAcknowledgementAction(
+              interaction, localPlayer.economy.npc.helpFlags,
+            )
+            if (acknowledgement) onHubAction(acknowledgement)
+            const next: HubUiSurface = { interaction, kind: 'dialogue', source: 'world' }
+            hubUiSurfaceRef.current = next
+            setHubUiSurface(next)
+            input.setBlocked(true)
+          }
+        }
         const teacherSeconds = snapshot.tick / 100
         for (const releaseIndex of hubTeacherReleasesBetween(
           previousTeacherSeconds,

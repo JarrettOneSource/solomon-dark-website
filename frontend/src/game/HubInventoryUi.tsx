@@ -131,6 +131,8 @@ export default function HubInventoryUi({
   const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
   const hagathaPurchasePendingRef = useRef(false)
   const noteboxSequenceRef = useRef(0)
+  // Native rows belong to the live Game, not the remounted Chat modal.
+  const dialogueHistoryRef = useRef(new Set<string>())
   const [npcNotebox, setNpcNotebox] = useState<NativeNoteboxNotice | null>(null)
   const [inventorySackPath, setInventorySackPath] = useState<readonly number[]>([])
   const [inventorySackTransition, setInventorySackTransition] =
@@ -392,6 +394,7 @@ export default function HubInventoryUi({
       belt={belt}
       closing={inventoryCloseTarget !== null}
       config={config}
+      dialogueHistory={dialogueHistoryRef.current}
       economy={economy}
       forceModalHudSettled={forceModalHudSettled}
       inputSuspended={inputSuspended}

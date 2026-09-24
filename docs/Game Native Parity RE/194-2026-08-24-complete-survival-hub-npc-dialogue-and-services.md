@@ -1481,3 +1481,128 @@ The corrected legacy save reader passed the complete Mac save-document suite,
 including both previously failing restoration journeys and the native rate and
 countdown boundary assertions. The full canonical gate restarts on this final
 committed tree.
+
+
+## 2026-09-24 — Reports 27–28: Chat row lifetime and exhausted-graph fallback reopened
+
+### Report and earlier recovery failure
+
+The original closure recovered every text but flattened the native mutable graph
+into a permanent introductory speech, permanent questions, and a Done-triggered
+farewell. Report 27 exposes both errors: the first Office Archchancellor repeats
+his entire introduction on re-entry, and Done incorrectly plays “Yes, hello
+again.” Report 28 shares the source message and concerns the first Office
+Polisher's admission to that same Chat owner. Neither report is closed by
+changing dialogue text or by a special-case Archchancellor greeting flag.
+
+### Evidence recorded before implementation
+
+This pass uses read-only instructions from the byte-verified retail 0.72.5
+image, preferred base `0x00400000`, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+It is static evidence on the M2, not a new Windows clean-stock recording,
+Ghidra run, injected-loader observation, or live-memory observation. The
+existing canonical recovery above provides the actor/content ownership thread.
+
+| Owner | Instruction evidence | Recovered contract |
+| --- | --- | --- |
+| automatic-row builder `0x004FB3A0` | `0x004FB4C7`, `0x004FB4D3..DD` | Row `+0x108` is automatic; `+0x109` is the caller's one-shot bit. |
+| question builder `0x004FB570` | `0x004FB685..96` | Normal row has its independently supplied one-shot bit, not an automatic universal repeat policy. |
+| fallback builder `0x004FB700` | separate graph list `+0x24` | Fallback is not a Done callback. |
+| answer start `0x004FD6A0` | `0x004FDB32`, `0x004FDC81..CCD` | Clear automatic flag; one-shot selected row is removed from active/fallback lists and queued on graph `+0x3C` for destruction. Consumption occurs on selection, including interrupted speech. |
+| Chat disposal `0x004FCB40` | `0x004FCD08` calls `0x004F7250`; that routine destroys graph's retired rows | Closing frees consumed rows; it does not restore them. |
+| next row `0x004FFB00` | full `0x004FFB00..BB0` | Automatic row first, otherwise remaining choices. An empty graph selects fallback only on opening (Chat age at most five native ticks); after an answer, an empty graph closes. |
+| Done/Skip `0x004FFC40` | `0x004FFC50..C98` | Choice-phase Done starts close; speech-phase Skip advances remaining rows, or closes an exhausted graph. Neither inserts a fallback farewell. |
+| Game/actor ownership | Polisher constructor `0x0050B4F0`, graph link `0x0050B60D..618` | Actor points at Game-owned dialogue `+0x2214`; a transient Chat must not own/reset conversation history. |
+| first Office graph | `0x00514353..3D0`, `0x00514466..50E` | Arch and Polisher intros and all five questions are one-shot. Both fallback rows are repeatable. |
+
+### System boundary and complete consumed membership
+
+System: the named Hub NPC Chat graph, from automatic intro through selections,
+explicit Done, interruption, re-entry, and owning Game/actor reconstruction.
+All currently consumed aggregate text, commands, geometry and service catalogs
+remain unchanged. The generator owns the recovered one-shot metadata.
+
+| Member | Compiled caller(s) | Intro / questions | Provisional disposition |
+| --- | --- | --- | --- |
+| Hagatha | `0x0050B7DC`, `0x0050B814` | one-shot intro; repeatable WITCH_Q; live Buy command | recovered-pending-port |
+| Fomentius | `0x0050B909` | one-shot intro; live Buy command | recovered-pending-port |
+| Provokatus | `0x0050BA01` | one-shot intro; live Boast command | recovered-pending-port |
+| Luthacus | `0x0050BAF8` | one-shot intro; live Inventory command | recovered-pending-port |
+| Skorcha | `0x0050BC5D`, `0x0050BC80/A3/C6` | one-shot intro; three repeatable exhausted-graph fallback rows | recovered-pending-port |
+| Machinimbus | `0x0050BD69/89` | one-shot intro; repeatable TEACHER_Q; live Spells command | recovered-pending-port |
+| survival Archchancellor | `0x0050BEB4/ED` | one-shot intro and ARCH_Q; repeatable fallback | recovered-pending-port |
+| Semicus | `0x0050C03F` | one-shot intro; live Books command | recovered-pending-port |
+| Shlorio | `0x0050C16B/A3` | one-shot intro; repeatable DOWSER_Q; live Dowse command | recovered-pending-port |
+| Declarius | `0x0050C302/33B/374/3AB` | one-shot intro and both questions; repeatable fallback | recovered-pending-port |
+| first Office Archchancellor | `0x0051448C/4AD/4CE/4EF/50E` | one-shot intro and three questions; repeatable fallback | recovered-pending-port |
+| first Office Polisher | `0x0051436F/390/3B1/3D0` | one-shot intro and both questions; repeatable fallback | recovered-pending-port |
+| Boast response / dynamic !BOAST insertion | `0x004FC45E`, `0x004FD8F9` | service response/replacement, not a reusable actor intro | verify unchanged service owner |
+| book response insertion | `0x004FFE70` | selector response, not actor conversation history | verify unchanged service owner |
+| ten Paintings / memorial inspections | existing special eulogy callback | no ordinary Chat graph row consumption | verify unchanged special owner |
+| later-story/other story-region graphs | `0x00513D5A..4085`, `0x00514659..49DD` | remaining ANNAL/POTIONGUY/ITEMGUY/LIBRARIAN _0 and _1 rows, story MEMORATOR | out-of-system: not Website survival/first Office membership; no invented population |
+| ambient Students and recipe GameNPC | existing native census above | distinct no-op/script owners | out-of-system: not named-Hub Chat graph |
+
+### Implementation and falsification contract
+
+Keep graph consumption with the participant's live Hub owner, not with a
+remounted modal, a global singleton, or permanent account storage. Different
+story/survival row keys must never consume one another. Use the same remaining
+choice projection for rendered text and semantic hit targets. Consume a row
+when its speech begins, retain consumed rows across close/reopen, and retain
+repeatable questions and commands. An exhausted graph gives its fallback on
+reopening only; Done and last-answer completion close directly.
+
+Report 28 additionally requires a real first Office walk/click journey. Verify
+its native contact predicate (six eligible 100-Hz contact ticks, forward dot
+product strictly greater than float32 0.7), conditional presence, geometry, complete dialogue,
+marker/art and wipe loop. Record the actual missing admission edge before
+changing it. Do not widen physics radii to make a mouse click pass.
+
+Focused tests must cover every intro and one-shot question, repeatable siblings,
+interrupted speech, partial/exhausted reopen, fresh-owner isolation, selector
+responses and unchanged text. Final acceptance requires the complete M2 gate
+and a built real-Chrome first Office journey, all Arch/Polisher rows and Done,
+re-entry without the original voice, normal exit/Create, and clean console,
+page, failed-response and wire-error arrays. Publication/reaction stay pending
+until both reports meet this boundary.
+
+### Reproduced first Office and contact-owner correction
+
+The built `269da867` baseline was exercised in real M2 Chrome through the
+existing completed-Tutorial fixture and the live host's College exit/walk.
+No Office position, NPC state or dialogue was injected. Arch introduction
+opened at `(521.0498, 546.7892)`; choice-phase Done incorrectly opened
+`ARCH_DISMISS_0`. A continuous south-side Polisher approach measured a minimum
+presented center distance of `38.9627`, with no dialogue. Pressing E at that
+same encounter opened `POLISHER_INTRO_0`. Thus the Polisher's text/actor were
+not missing: ordinary collision-to-Chat admission was absent. Earlier
+right-side approaches met the native statue boundary rather than the NPC;
+those were fixture positioning failures, not evidence to enlarge colliders.
+
+Fresh native instructions `0x0054B0F0..0054B278` confirm the shared named-NPC
+contact path: eligible NPC, no existing engagement (`NPC+0x170`) or suppression
+(`+0x158`), forward normalized movement dot strictly greater than float32 0.7,
+counter `+2` each native tick with threshold above 10, then virtual Chat action
+at vtable `+0x68`. `0x00505010` rearms engagement only after leaving
+`distance² <= 5 * NPC.radius² + 1500`. This is not a proximity-only auto-open
+or a new collision size.
+
+`hub-npc-contact.ts` restores that admission for all eleven currently consumed
+named NPC actors, with participant-local engagement and native-tick dwell.
+The local Hub presentation selects the private Chat surface; existing host
+actions still own hint acknowledgement, purchases, inventory and services.
+Scripted first-Office admission retains its own authoritative movement owner.
+Paintings keep their separate eulogy action, absent Skorcha and non-story
+Polisher remain excluded, and the existing 25-unit player radius, NPC radii,
+0.1-unit separation epsilon and statue architecture are unchanged.
+
+`smoke-story-office-dialogue.mjs` is the maintained built-Chrome regression
+entrypoint. It uses the established Tutorial save/completion fixture and real
+host ticks thereafter; it does not set dialogue history, teleport into the
+Office, dispatch hidden UI handlers or alter the NPC population. It checks
+retail text, partial and exhausted conversations, direct Done closure, all
+five story questions, contact engagement/rearming, keyboard and pointer
+interaction, introductory voice count, retained wiping audio, and normal
+Office exit to Create. Existing general NPC/College smoke helpers now expect
+last-answer closure and exhausted-graph re-entry rather than a false farewell.

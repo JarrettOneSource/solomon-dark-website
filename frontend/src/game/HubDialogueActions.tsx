@@ -227,7 +227,7 @@ export function DialogueActions({
     )
   }
 
-  const choices = hubNpcChatChoices(interaction, storyOffice)
+  const choices = chat.content.choices ?? hubNpcChatChoices(interaction, storyOffice)
   return (
     <div className="hub-native-dialogue-actions">
       {choices.map((choice, index) => (

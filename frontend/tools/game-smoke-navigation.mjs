@@ -152,8 +152,7 @@ async function completeCollegeIntroDialogue(page) {
     await dialog.getByRole('button', { exact: true, name: label }).click()
     await dialog.getByRole('button', { name: 'Skip' }).click()
   }
-  await dialog.getByRole('button', { exact: true, name: 'Done' }).click()
-  await dialog.getByRole('button', { name: 'Skip' }).click()
+  // The final one-shot answer exhausts the native graph and closes Chat.
   await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
 }
 

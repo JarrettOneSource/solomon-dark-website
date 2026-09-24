@@ -31,6 +31,7 @@ export interface NativeHubDialogueRecord {
   readonly key: string
   readonly label: string
   readonly lines: readonly string[]
+  readonly oneShot?: boolean
 }
 export interface NativeHubNpcCommand {
   readonly label: string

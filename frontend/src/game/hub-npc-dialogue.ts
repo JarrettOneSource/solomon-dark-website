@@ -28,11 +28,12 @@ import {
   type HubInteractionId,
 } from './hub-inventory-presentation.ts'
 
-export type HubNpcChatNext = 'choices' | 'close' | 'dismissal'
+export type HubNpcChatNext = 'choices' | 'close'
 
 export type HubNpcChatContent =
   | {
       readonly kind: 'choices'
+      readonly choices?: readonly HubNpcChatChoice[]
     }
   | {
       readonly kind: 'selector'
@@ -72,6 +73,7 @@ export function createHubNpcChatContent(
   eulogyIndexOverride: number | null = null,
   storyOffice = false,
   memorialPortrait: HubMemorialPortrait | null = null,
+  consumed: ReadonlySet<string> = EMPTY_CONSUMED_ROWS,
 ): HubNpcChatContent {
   const interaction = hubInteractionDialogue(interactionId, storyOffice)
   if (memorialPortrait !== null) {
@@ -93,20 +95,45 @@ export function createHubNpcChatContent(
       'close',
     )
   }
-  if (interaction.introRecord === null) {
-    return interaction.dismissals.length > 0
-      ? hubNpcDismissal(interactionId, randomIndex, storyOffice) ?? { kind: 'choices' }
-      : { kind: 'choices' }
+  if (interaction.introRecord === null || !rowAvailable(interaction.introRecord, consumed)) {
+    const choices = hubNpcChatChoices(interactionId, storyOffice, consumed)
+    return choices.length > 0
+      ? { kind: 'choices', choices }
+      : hubNpcDismissal(interactionId, randomIndex, storyOffice) ?? { kind: 'choices', choices }
   }
   return speech(
     interaction.introRecord.key,
     interaction.introRecord.lines,
-    hasChoices(interactionId, storyOffice)
-      ? 'choices'
-      : interaction.dismissals.length > 0
-        ? 'dismissal'
-        : 'close',
+    hubNpcChatChoices(interactionId, storyOffice, consumed).length > 0 ? 'choices' : 'close',
   )
+}
+
+const EMPTY_CONSUMED_ROWS: ReadonlySet<string> = new Set()
+
+function rowAvailable(record: NativeHubDialogueRecord, consumed: ReadonlySet<string>): boolean {
+  return record.oneShot !== true || !consumed.has(record.key)
+}
+
+/** Native Chat::Say retires one-shot rows when speech starts, not when it ends. */
+export function consumeHubNpcSpeech(
+  consumed: Set<string>,
+  interactionId: HubInteractionId,
+  key: string,
+  storyOffice = false,
+): void {
+  const interaction = hubInteractionDialogue(interactionId, storyOffice)
+  const record = interaction.introRecord?.key === key
+    ? interaction.introRecord
+    : interaction.questions.find(row => row.key === key)
+  if (record?.oneShot === true) consumed.add(key)
+}
+
+export function hubNpcChatChoiceContent(
+  interactionId: HubInteractionId,
+  storyOffice = false,
+  consumed: ReadonlySet<string> = EMPTY_CONSUMED_ROWS,
+): HubNpcChatContent {
+  return { kind: 'choices', choices: hubNpcChatChoices(interactionId, storyOffice, consumed) }
 }
 
 function hubMemorialInspectionLines(
@@ -133,6 +160,7 @@ function hubMemorialInspectionLines(
 export function hubNpcChatChoices(
   interactionId: HubInteractionId,
   storyOffice = false,
+  consumed: ReadonlySet<string> = EMPTY_CONSUMED_ROWS,
 ): readonly HubNpcChatChoice[] {
   const interaction = hubInteractionDialogue(interactionId, storyOffice)
   return [
@@ -141,7 +169,7 @@ export function hubNpcChatChoices(
       label,
       selector,
     })),
-    ...interaction.questions.map(({ key, label }) => ({
+    ...interaction.questions.filter(row => rowAvailable(row, consumed)).map(({ key, label }) => ({
       key,
       kind: 'question' as const,
       label,
@@ -153,11 +181,17 @@ export function hubNpcQuestion(
   interactionId: HubInteractionId,
   questionKey: string,
   storyOffice = false,
+  consumed: ReadonlySet<string> = EMPTY_CONSUMED_ROWS,
 ): HubNpcChatContent | null {
   const question = hubInteractionDialogue(interactionId, storyOffice).questions.find(
-    ({ key }) => key === questionKey,
+    row => row.key === questionKey && rowAvailable(row, consumed),
   )
-  return question ? recordSpeech(question, 'choices') : null
+  if (!question) return null
+  const remaining = question.oneShot === true
+    ? new Set([...consumed, question.key])
+    : consumed
+  return recordSpeech(question,
+    hubNpcChatChoices(interactionId, storyOffice, remaining).length > 0 ? 'choices' : 'close')
 }
 
 export function hubNpcDismissal(
@@ -311,11 +345,6 @@ export function hubBoastFailureText(
         && boast.modId === (state.selected as ModBoastSelection).modId
       ))?.name
   return label ? `FAILED "${label}"` : null
-}
-
-function hasChoices(interactionId: HubInteractionId, storyOffice: boolean): boolean {
-  const interaction = hubInteractionDialogue(interactionId, storyOffice)
-  return interaction.commands.length > 0 || interaction.questions.length > 0
 }
 
 function recordSpeech(record: NativeHubDialogueRecord, next: HubNpcChatNext): HubNpcChatContent {

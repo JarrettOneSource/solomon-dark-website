@@ -83,7 +83,7 @@ export function buildDialogue(
 
   let contentHeight = 0
   if (model.content.kind === 'choices') {
-    const choices = hubNpcChatChoices(model.interaction, model.storyOffice)
+    const choices = model.content.choices ?? hubNpcChatChoices(model.interaction, model.storyOffice)
     const rowHeight = Math.min(52, HUB_CHAT_PANEL.contentHeight / Math.max(1, choices.length))
     choices.forEach((choice, index) => addBitmapText(
       context,

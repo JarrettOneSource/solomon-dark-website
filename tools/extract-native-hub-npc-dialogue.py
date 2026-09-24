@@ -287,6 +287,16 @@ def build(source_root: Path) -> dict[str, Any]:
     missing = sorted(required.difference(dialogue))
     if missing:
         raise ValueError(f"survival aggregate is missing {missing}")
+    # Retail Chat row +0x109, recovered from 0x0050B720 / 0x00513BE0.
+    # Price/explanation questions WITCH_Q, TEACHER_Q and DOWSER_Q repeat.
+    for row in interactions.values():
+        if row["intro"]:
+            dialogue[row["intro"]]["oneShot"] = True
+    for key in ("ARCH_Q", "MEMORATOR_Q1", "MEMORATOR_Q2"):
+        dialogue[key]["oneShot"] = True
+    for row in story_office_interactions.values():
+        for key in [row["intro"], *row["questions"]]:
+            story_dialogue[key]["oneShot"] = True
     return {
         "badEulogies": [speech[f"SAY_BADEULOGY_{index}"] for index in range(8)],
         "boastInstruction": "To succeed at your boast, you must\nsurvive until at least Wave 30",

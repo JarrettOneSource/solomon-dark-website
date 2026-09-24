@@ -1338,7 +1338,6 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
 
   await dialog.getByRole('button', { name: 'Skip' }).click()
   await dialog.getByRole('button', { name: 'Done' }).click()
-  await dialog.getByRole('button', { name: 'Skip' }).click()
   await waitForHostCollegeState(host, playerId, null)
   const acknowledgedSave = await waitForLocalCollegeSave(page, playerId, null)
   assert.equal(acknowledgedSave.starterTint, title9Wizard.primaryTint)

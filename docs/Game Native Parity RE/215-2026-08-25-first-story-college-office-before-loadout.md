@@ -1,5 +1,18 @@
 # 2026-08-25 — First story-College Office before loadout
 
+## 2026-09-24 dialogue-owner correction (reports 27–28)
+
+The complete mutable Chat lifecycle and named-NPC collision admission are
+recovered in the 2026-09-24 continuation of
+`194-2026-08-24-complete-survival-hub-npc-dialogue-and-services.md`.
+The initial Arch speech and all first-Office questions are one-shot selections.
+Done closes directly; the `_DISMISS_0` records are exhausted-graph greetings
+on a subsequent interaction, not farewell callbacks. The Polisher retains his
+native conditional presence, art, animation, audio and collision geometry, and
+now shares the normal six-tick forward-contact Chat admission. This corrects
+the earlier explicit-interaction-only interpretation without adding another
+scripted Polisher conversation to the automatic College introduction.
+
 ## Reported smell and parity question
 
 - Reported production behavior: after Tutorial death, the web port opens the

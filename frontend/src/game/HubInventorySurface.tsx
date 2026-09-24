@@ -39,7 +39,8 @@ import {
 } from './hub-inventory-presentation.ts'
 import {
   createHubNpcChatContent,
-  hubNpcDismissal,
+  consumeHubNpcSpeech,
+  hubNpcChatChoiceContent,
   hubNpcQuestion,
   hubNpcSelectorAction,
   hubBoastInstruction,
@@ -92,6 +93,7 @@ export function NativeHubSurface({
   belt,
   closing,
   config,
+  dialogueHistory,
   economy,
   forceModalHudSettled,
   inputSuspended,
@@ -122,6 +124,7 @@ export function NativeHubSurface({
   belt: PlayerBeltComponent
   closing: boolean
   config: PlayerCharacterConfig
+  dialogueHistory: Set<string>
   economy: ProtocolPlayerEconomy
   forceModalHudSettled: boolean
   inputSuspended: boolean
@@ -153,7 +156,7 @@ export function NativeHubSurface({
   const advanceChatRef = useRef<() => void>(() => undefined)
   const chatRandomIndexRef = useRef(
     surface.kind === 'dialogue' && surface.interaction === 'skorcha'
-      ? skorchaDismissalIndex - 1
+      ? skorchaDismissalIndex
       : economy.revision + economy.npc.boast.failureSequence,
   )
   const selectorResponseTimeoutRef = useRef<number | null>(null)
@@ -175,6 +178,7 @@ export function NativeHubSurface({
           memorial === null
             ? null
             : hubMemorialPortraitForInteraction(surface.interaction, memorial),
+          dialogueHistory,
         )
       : { kind: 'choices' },
     phaseStartedAtMs: performance.now(),
@@ -374,7 +378,22 @@ export function NativeHubSurface({
     return () => window.clearTimeout(timeout)
   }, [dyeModal?.selectedAtMs])
 
+  // Keep initial render pure (including React StrictMode's repeated initializer).
+  // Native selection retires the row once the committed speech starts.
+  useEffect(() => {
+    if (surface.kind === 'dialogue' && chat.content.kind === 'speech') {
+      consumeHubNpcSpeech(dialogueHistory, surface.interaction, chat.content.key, storyOffice)
+    }
+  }, [chat.content, dialogueHistory, storyOffice, surface])
+
   const beginChatContent = useCallback((content: HubNpcChatContent) => {
+    if (surface.kind === 'dialogue') {
+      if (content.kind === 'speech') {
+        consumeHubNpcSpeech(dialogueHistory, surface.interaction, content.key, storyOffice)
+      } else if (content.kind === 'choices') {
+        content = hubNpcChatChoiceContent(surface.interaction, storyOffice, dialogueHistory)
+      }
+    }
     chatCompletionHandledRef.current = false
     setHighlightedNpcSelectorId(null)
     setChat({
@@ -383,7 +402,7 @@ export function NativeHubSurface({
       phaseStartedAtMs: performance.now(),
       selectorScroll: 0,
     })
-  }, [])
+  }, [dialogueHistory, storyOffice, surface])
 
   const selectorRows = useMemo((): readonly HubNpcSelectorRow[] => (
     chat.content.kind === 'selector'
@@ -395,17 +414,6 @@ export function NativeHubSurface({
     if (surface.kind !== 'dialogue' || chat.content.kind !== 'speech') return
     if (chat.content.next === 'choices') {
       beginChatContent({ kind: 'choices' })
-      return
-    }
-    if (chat.content.next === 'dismissal') {
-      chatRandomIndexRef.current += 1
-      const dismissal = hubNpcDismissal(
-        surface.interaction,
-        chatRandomIndexRef.current,
-        storyOffice,
-      )
-      if (dismissal) beginChatContent(dismissal)
-      else onClose()
       return
     }
     if (
@@ -421,23 +429,15 @@ export function NativeHubSurface({
     chat.content,
     economy.npc.boast.selected,
     modContent,
-    onClose,
-    onNotebox,
-    storyOffice,
-    surface,
+      onClose,
+      onNotebox,
+      surface,
   ])
   advanceChatRef.current = advanceChat
 
   const dismissOrCloseChat = useCallback(() => {
-    if (surface.kind !== 'dialogue') return
-    const dismissal = hubNpcDismissal(
-      surface.interaction,
-      ++chatRandomIndexRef.current,
-      storyOffice,
-    )
-    if (dismissal) beginChatContent(dismissal)
-    else onClose()
-  }, [beginChatContent, onClose, storyOffice, surface])
+    if (surface.kind === 'dialogue') onClose()
+  }, [onClose, surface])
 
   useEffect(() => {
     if (surface.kind !== 'dialogue') return
@@ -716,6 +716,7 @@ export function NativeHubSurface({
                     surface.interaction,
                     choice.key,
                     storyOffice,
+                    dialogueHistory,
                   )
                   if (answer) beginChatContent(answer)
                   return
