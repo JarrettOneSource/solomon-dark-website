@@ -156,6 +156,42 @@ There are no new platform-limited implementation members. Native evidence is
 static instruction/data recovery, not a new clean-stock runtime capture.
 
 
+### Final M2 gate and browser receipt — 2026-09-24
+
+Clean candidate `d748432d24a8b6fa28a9414a56e738a63626a4bf` completed the canonical
+`/opt/homebrew/bin/bash ./scripts/validate.sh` with exit zero on M2. All
+24 Website/backend integration tests and 3,775 frontend/desktop tests passed,
+along with backend/frontend builds, formatting, lint/type/boundary checks,
+production media policy and the complete renderer quality/mutation gate. Its
+renderer report has no failures and no surviving mutants. The earlier focused
+loot/economy/simulation/save run passed 301 tests, and the final three-test
+save-version rerun includes the profile-retirement assertion. No production
+logic, data, assets or balance bytes differ from base `f4a2469b`.
+
+A fresh post-gate production Chrome `153.0.8010.53` run exited zero.
+It repeated all four conditional death witnesses, both-client WebGL2/rendered
+loot admission, one-time guest inventory pickup with preserved native item
+effects, both-client Sack retirement, College removal without refund, and the
+Boneyard inspection-only boundary. Host, console, page, HTTP/request and both
+protocol error arrays were empty. The earlier same-source ground/inventory
+captures were inspected; no visual retuning or clean-stock pixel comparison
+is claimed. These results verify the current stock contract, not the exact
+unrecorded two-run history in the report.
+
+Disposable receipt hashes (recorded conclusions do not authorize retention):
+
+- Full canonical gate: `dff2b0dc995d53289084174a2d4c2ce41509b802d7ce26146593784b32c6cb04`.
+- Final two-browser receipt: `87d3456f9bcf36ea9006cc9cedffd7bb37d6c00d273a95141fcd757cd4e3680f`.
+- Complete native instructions/constants/xrefs: `dc026e8fc6ecdc33382025d8c2ede6eac89f75213284edd612d8f93b80ba19b4`.
+- Complete normalized field census: `ab6bd7455152f2ec137642eda611944612609f6934d8c9d980ce26b7df3b89be`.
+- Native reset/serialization/UI disambiguation: `6b865690edc728793323481c7fecda15130f7842d34bc8b908b96db16ca67b91`.
+
+This final documentation-only receipt leaves every runtime, test, tool and
+build-input byte identical to the accepted candidate. Publication, completion
+reactions and cleanup are recorded separately in the private archive status.
+No manual deployment or independently verified live rollout is claimed.
+
+
 ## 2026-09-22 — Report 06: approved Dire faculty item pools
 
 ### Contract and evidence recorded before implementation
