@@ -2,8 +2,8 @@
 
 ## 2026-09-23 — Report 18: new-wizard draft after a completed run
 
-Status: stock recovery, implementation and focused browser acceptance complete;
-canonical publication gate pending. Fleet
+Status: native recovery, implementation, full canonical Mac validation and final
+built-client browser acceptance complete. Fleet
 `u9g3q8ic`, `/root`. This reopening supersedes the earlier assumption below
 that a connected loadout cannot accept a name because no message exists.
 Current `client-confirm-loadout` already carries `displayName`, and both the
@@ -103,11 +103,43 @@ save code changed. The initial baseline New Game locator also needed
 case-insensitive accessible-name matching. Neither setup failure was a game
 regression or a waived acceptance assertion.
 
-The final source still requires the complete canonical Mac gate and a fresh
-production-client journey before publication, reaction and cleanup. No new
+The exact committed source passed the complete canonical Mac gate and a fresh
+production-client journey. Publication, reaction and cleanup are recorded in
+the private report archive after their independent verification. No new
 platform-limited member or native asset approximation was introduced. Fresh
 stock claims in this reopening are instruction/static-data derived; no new
 clean-stock runtime recording is claimed.
+
+### Final exact-source release acceptance
+
+Validated runtime commit `c2f8ef001d3f68529800304ea6aaad5807e4782e` completed the full Mac
+`/opt/homebrew/bin/bash ./scripts/validate.sh` gate and then the fresh built-client
+name journey at `2026-09-24T00:01:26.371184+00:00`. Fleet job
+`job_20260923T232920Z_81a98da4b6` exited 0. All 7,174 source files matched the
+committed WSL manifest before and after validation; the acceptance tree was
+clean. The complete gate included backend integration, frontend contracts,
+lint/types, production builds/media and renderer quality/mutation checks.
+
+The focused matrix passed 114/114. Final Chrome `153.0.8010.53` again changed
+FirstMage to NextMage2 in anonymous and local fixture-signed-in contexts,
+persisted the new name through each actual local/cloud store, restored it on
+subsequent creation, and committed Genericus for an empty name. A second real
+browser verified independently editable peer names and the ready-player lock.
+The account remained CloudTester rather than changing to a wizard name. All
+page, console, HTTP, host and unexpected-API error arrays were empty. The final
+signed-in Create screenshot was visually checked for one native glyph layer.
+
+Full-gate log SHA-256: `f6b0d2e06924a4ee4c26abfe29070f134f8feca0b4140dc2cb569fc85fee3096`.
+Final-browser log SHA-256: `79455982ed714a1556f6c766dfef75e028df2c67b5280cd64c4f1a3e3bf06e5b`.
+Source-manifest SHA-256: `e93846658d7d7e874850fb51cf719f3d5b4187890d4095067a7a2292cc9194d0`.
+Focused-tests log SHA-256: `89639c027be73d89516061527d5c02f9c1dab4e3591b23d86b398e5a636f9f2c`.
+
+This acceptance receipt is a documentation-only follow-up. No runtime, test,
+asset, build or browser-tool byte changed after the complete gate. The separate
+WSL restart cleared disposable WSL /tmp outputs while Mac validation ran; the
+committed source, named report archive and Mac acceptance remained intact.
+This did not change the candidate or turn a missing capture into native proof.
+
 
 ## Historical August implementation and receipts
 
