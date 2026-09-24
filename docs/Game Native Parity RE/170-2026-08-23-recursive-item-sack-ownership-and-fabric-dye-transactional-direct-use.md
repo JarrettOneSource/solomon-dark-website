@@ -162,6 +162,49 @@ Boneyard sequence. This correction changes only the browser helper and ledger;
 all runtime, asset, protocol, save and unit-test bytes remain identical to084b1a22.
 The final exact-tree gate is repeated below for the corrected helper candidate.
 
+
+### Final integrated M2 acceptance and resumed closeout
+
+Candidate `713b9e62eee31f39a23e14dd44c988bb10dd7c91` completed the canonical
+`/opt/homebrew/bin/bash ./scripts/validate.sh` with exit zero on M2. All
+7,188 tracked files matched the candidate's frozen SHA-256 manifest both
+after the gate and during resumed review by Fleet `c48vi697` (original task
+`qbpltokc`). The gate passed 24 Website/backend integration tests and
+3,808 frontend/desktop tests, backend/frontend production builds, format/lint/
+type/boundary checks, production media policy, and full renderer quality and
+mutation checks. The renderer report contains no failures or surviving mutants.
+The preceding focused book/progression/protocol/save/text/audio suite passed
+446 tests; those results are not additional disjoint full-gate coverage.
+
+The post-gate production Chrome `153.0.8010.53` journey also exited zero.
+College desktop, two-client Boneyard, and touch-emulated College each consumed
+both stock book variants, with root and nested inventory coverage. Each rank
+book reported the actual selected skill, changed exactly that permanent rank
+once, played one registry129 stream, displayed the native confirmation and
+accepted a real OKAY click/tap. Choice books used the existing picker and
+played the second acquisition stream. In the two-client case, the result held
+the authoritative tick and prevented premature Resuming until acknowledgment;
+the other player received no grant, result or acquisition sound. Every
+host/page/console/HTTP/request/protocol error array was empty. Final multiplayer
+and touch result screenshots were inspected during closeout. Touch acceptance
+is Chrome emulation on M2, not a physical mobile-device claim.
+
+The source Discord message still matched its archived text and attachment ID;
+the original video SHA-256 remained unchanged. The report does not provide a
+save or before/after ranks, so this receipt does not retroactively establish a
+lost historical skill grant. The baseline reproduced an actual rank grant
+with missing feedback. Native behavior is grounded in the verified retail
+instructions, tables and original audio bytes, not a new clean-stock recording.
+No new browser-platform approximation is introduced.
+
+Full-gate log SHA-256: `0eedf9d50a6676995b04e91afa778eb16e3d5d5d5e30db523a0bd2137b63e016`.
+Post-gate browser receipt SHA-256: `b150401e6b454d24fd88bafd607e099b334e13e8d9816f0379b5a0321d80c6f2`.
+This final documentation follow-up changes no runtime, test, asset, protocol,
+save or build-input bytes from the accepted candidate. Publication, authorized
+Discord reaction and task-cleanup outcomes are recorded separately in the M2
+archive `STATUS.md`; local acceptance is not a production deployment claim.
+
+
 ## Reopened system and parity question
 
 Issue 18 reported that sacks and dyes do not work. This reopens the complete
