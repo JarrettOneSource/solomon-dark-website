@@ -141,6 +141,50 @@ Pre-gate log hashes (raw files are disposable task scratch):
 - `browser-touch.txt`: `2d128afa3d46507d7337da435f8dab4cec4dd6ba76630c4efaeb99c5eb20ebdc`.
 
 
+### Final current-main M2 acceptance and session recovery
+
+The interrupted `d3csbyqe` session had finished canonical and desktop/touch
+acceptance on `60ff56395d5f2e77af3ab416d5232c1cf12379e7` but had not published.
+Session `dkvcfavl` reused its clean worktree and verified all 7,178 old source
+hashes and six stored acceptance-log hashes. No duplicate fix was introduced.
+After the separately published report 23 change, the existing commit was
+rebased cleanly onto `2905f0606339212bd167b92eee4c9a08b30fe46c`.
+
+Code candidate `14168d69026ddf07a7407bfddbd75bda99b1e330` then passed the complete
+`/opt/homebrew/bin/bash ./scripts/validate.sh` gate on M2, followed by fresh
+production-build desktop and touch browser journeys. All three recorded exit
+codes are zero. The gate included 24 backend/Website contracts, 3,792
+frontend/desktop tests, formatting/lint/type/build/media checks, and the full
+configured renderer-quality/mutation checks. Its 108 Hub UI tests include the
+Sack transition regressions. All 7,179 source hashes matched before and after
+acceptance, and the candidate remained clean.
+
+The final 1600x900 journey recorded 26 transitions at 369.7–376.0 ms and 575
+moving-frame samples. The 844x390 touch journey recorded six transitions at
+368.6–372.6 ms and 132 moving-frame samples. The pre-fix baseline's six
+transitions took 1,599.2–1,607.0 ms. The modeled native duration remains 370 ms;
+these browser measurements include scheduling and observation boundaries.
+Every recorded transition rejected repeated game-back input while moving.
+All final page-error, console-error and failed-response arrays were empty.
+The full journey retained its expected 12 close / 26 open audio counts.
+
+Both final moving screenshots were visually inspected: page contents travel
+vertically within the stationary backpack clip; equipment, gold and outer
+controls do not move with the pages. The touch journey used real touchscreen
+taps. Empty/nested roots, parent return, companion inventories, item movement,
+dyes, belt operations and paused Boneyard inventory passed through the existing
+full journey. No production account/save, original artwork, protocol or save
+schema was changed. Native evidence is the instruction/data recovery above;
+no new clean-stock runtime recording or production deployment is claimed.
+
+Final acceptance completed 2026-09-24T13:39:05Z. Raw execution logs and captures
+are disposable task scratch; the following hashes identify the checked result:
+- `full-gate-final.txt`: `7ff7bc5878fbae7faf53e9dd21e006534eb098941ac1478b1e95cbaceb41ecd1`.
+- `browser-final-full.txt`: `ad1b6404f9fb00eab461deaea9a666a0851f94a783fafc319335ba8f08ed74e8`.
+- `browser-final-touch.txt`: `494ed689a810cb55bb9b07121965710eeda0897487e4b79d7b5740c3befe2a80`.
+- `candidate-manifest.json`: `bcc97f034f583fae8a3a7176b6c1003992f88564148f0346112dfce1ddcaad0c`.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: Sacks collected from chests appear not to function,
