@@ -116,11 +116,31 @@ export function hubInventoryFlybyPoint(
   }
 }
 
+/** InventoryScreen::BuildPage 00560D30: +0x20 is grid height, not width. */
+export function nativeInventorySackPageHeight(screenHeight: number): 220 | 295 | 365 {
+  if (!Number.isFinite(screenHeight) || screenHeight <= 0) {
+    throw new RangeError('native InventoryScreen height must be positive and finite')
+  }
+  if (screenHeight > 320 && screenHeight <= 600) return 220
+  return screenHeight > 800 ? 365 : 295
+}
+
+const SACK_PAGE_HEIGHT = nativeInventorySackPageHeight(HUB_NATIVE_UI_SIZE.height)
+
 export const HUB_SACK_PAGE_TRANSITION = {
   nativeTickMs: 10,
+  pageHeight: SACK_PAGE_HEIGHT,
   pixelsPerTick: 10,
-  stageWidth: 1_600,
-  ticks: 160,
+  ticks: Math.ceil(SACK_PAGE_HEIGHT / 10),
+} as const
+
+// The native 900-high layout puts the grid at 462; its painter insets the
+// stationary clip by 30 at each end. Page translation must not move this mask.
+export const HUB_SACK_PAGE_CLIP = {
+  x: 0,
+  y: 492,
+  width: HUB_NATIVE_UI_SIZE.width,
+  height: SACK_PAGE_HEIGHT - 60,
 } as const
 
 export const HUB_MODAL_HUD_CONTROLS = {
@@ -143,8 +163,8 @@ export function hubSackPageOffsets(
   startedAtMs: number,
   nowMs: number,
 ): {
-  readonly incomingX: number
-  readonly outgoingX: number
+  readonly incomingY: number
+  readonly outgoingY: number
   readonly settled: boolean
   readonly ticks: number
 } {
@@ -153,17 +173,19 @@ export function hubSackPageOffsets(
     Math.max(0, Math.floor((nowMs - startedAtMs) / HUB_SACK_PAGE_TRANSITION.nativeTickMs)),
   )
   const travel = ticks * HUB_SACK_PAGE_TRANSITION.pixelsPerTick
+  const settled = ticks === HUB_SACK_PAGE_TRANSITION.ticks
+  const remaining = settled ? 0 : HUB_SACK_PAGE_TRANSITION.pageHeight - travel
   return direction === 'open'
     ? {
-        incomingX: HUB_SACK_PAGE_TRANSITION.stageWidth - travel,
-        outgoingX: travel === 0 ? 0 : -travel,
-        settled: ticks === HUB_SACK_PAGE_TRANSITION.ticks,
+        incomingY: remaining,
+        outgoingY: travel === 0 ? 0 : -travel,
+        settled,
         ticks,
       }
     : {
-        incomingX: -HUB_SACK_PAGE_TRANSITION.stageWidth + travel,
-        outgoingX: travel,
-        settled: ticks === HUB_SACK_PAGE_TRANSITION.ticks,
+        incomingY: remaining === 0 ? 0 : -remaining,
+        outgoingY: travel,
+        settled,
         ticks,
       }
 }

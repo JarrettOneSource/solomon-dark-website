@@ -18,6 +18,7 @@ import {
   HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_PARENT_HOLDER,
+  HUB_SACK_PAGE_CLIP,
   HUB_UNFORGE_TARGET,
   hubInventoryFlybyFrame,
   hubInventoryFlybyPoint,
@@ -196,6 +197,12 @@ function buildSackPages(
   dragging: HubInventoryDragModel | null,
   hiddenItemIds: ReadonlySet<number>,
 ): InventorySackPages | null {
+  const viewport = new Container({ label: 'native-sack-page-viewport', eventMode: 'none' })
+  const { x, y, width, height } = HUB_SACK_PAGE_CLIP
+  const clip = new Graphics({ label: 'native-sack-page-clip', eventMode: 'none' })
+    .rect(x, y, width, height).fill(0xffffff)
+  viewport.mask = clip
+  layer.addChild(viewport, clip)
   let sackPages: InventorySackPages | null = null
   if (model.sackTransition) {
     const outgoing = new Container()
@@ -222,8 +229,8 @@ function buildSackPages(
       inventorySackAtPath(model.economy.backpack, model.sackTransition.toPath),
       hiddenItemIds,
     )
-    layer.addChild(outgoing, incoming)
-    sackPages = { incoming, outgoing, transition: model.sackTransition }
+    viewport.addChild(outgoing, incoming)
+    sackPages = { clip, incoming, outgoing, transition: model.sackTransition }
   } else {
     const page = new Container()
     page.label = 'native-sack-page-current'
@@ -237,7 +244,7 @@ function buildSackPages(
       inventorySackAtPath(model.economy.backpack, model.sackPath),
       hiddenItemIds,
     )
-    layer.addChild(page)
+    viewport.addChild(page)
   }
 
   return sackPages

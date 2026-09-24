@@ -1,5 +1,11 @@
 # 2026-08-27 — InventoryScreen Sack return-control presentation closure
 
+> **2026-09-24 report 22:** [entry 252](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-24--report-22-native-vertical-sack-page-transition)
+> supersedes only the historical 160-tick horizontal page-motion statement.
+> Native navigation uses grid-height Y motion and settles after 37 updates
+> on the fixed 900-high stage. The stationary Game-owned return glyph, shadow,
+> hit rectangle and one-parent action remain unchanged.
+
 ## Reported smell and parity question
 
 - Reported production behavior: Sack contents can now be entered, but the

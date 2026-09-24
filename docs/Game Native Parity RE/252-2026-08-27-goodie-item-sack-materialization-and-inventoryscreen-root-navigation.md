@@ -1,5 +1,146 @@
 # 2026-08-27 — Goodie Item_Sack materialization and InventoryScreen root navigation
 
+> **2026-09-24 report 22 correction:** the reopening below supersedes this
+> entry's horizontal/full-screen/160-tick Sack transition claims. The native
+> countdown uses the InventoryGrid's **height**, and its moving field is the
+> grid's **Y offset**. Goodie construction and authoritative inventory ownership
+> are unaffected.
+
+## 2026-09-24 — Report 22: native vertical Sack-page transition
+
+### Cause and evidence
+
+The reporter describes slow navigation between Sacks. The preceding pass
+recovered the ten-pixel step but did not resolve the rectangle layout or the
+offset's downstream renderer. It substituted the 1,600-pixel stage width for
+`InventoryGrid+0x20` and X for `InventoryGrid+0xBC`; its tests repeated that
+assumption. This is a shared page-motion defect, not a network round trip,
+activation delay, or reason to alter item-use semantics.
+
+Fresh static recovery ran on the M2 through the existing read-only/noanalysis
+`sdr-ghidra-headless` replica wrapper and the canonical `SolomonDark` project.
+Retail 0.72.5 `SolomonDark.exe` SHA-256 is
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. Wrapper SHA-256 is
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`.
+The Mod Loader checkout was an unchanged read-only instrument. Evidence below
+is instruction/data-derived; no fresh clean-stock runtime recording is claimed.
+
+| Source | Recovered contract | Confidence |
+| --- | --- | --- |
+| Rectangle dispatcher `0x00427770` | widget `+0x14/+0x18/+0x1C/+0x20` are X/Y/width/height. The first InventoryGrid starts at screen `+0x188`, making screen `+0x1A8` its height. | high, explicit stores |
+| Activation `0x0056D920`, `0x0056DA3E..0x0056DA88`, `0x0056DC26..0x0056DC6E` | Both return and entry load the active grid's height, convert it to integer and store countdown `+0x16C`. Direction `+0x170` is -1 for return and +1 for entry. The incoming grid starts at minus/plus that height. `+0x168` rejects repeated activation. | high, raw instructions |
+| Update `0x00551A10`, `0x00551CDE..0x00551D9D` | Both grid `+0xBC` fields subtract `direction*10` each 100 Hz UI update. Countdown subtracts ten; at <=0, active page flips, incoming offset snaps to zero, old page retires and the lock clears. | high, raw instructions |
+| SwipeArea drawing `0x00431860`, auxiliary `0x00431BF0` | `+0xB8` adds to Graphics X `+0x238`; `+0xBC` adds to Graphics Y `+0x23C` before the virtual painter. The transition is vertical. | high, downstream consumer |
+| Root constructor `0x00427370`, InventoryScreen constructor `0x00560380` | Screen size is the backbuffer size. A separate 1024x600 temporary rectangle is centered by `0x00404000`; it positions panels but does not replace the screen's height. | high, constructor and raw operands |
+| Page builder `0x00560D30` | The complete height table below determines page travel, independently of screen width, inventory contents and Sack depth. | high, all branches and constants |
+| Grid painter `0x0055A070`, shared clip in `0x00431860` | Clip the fixed grid rectangle, then inset the drawing clip by 30 at top/bottom. Apply page Y offset to contents, not to the clip. | high, constant data and calls |
+
+### Complete authored layout table
+
+| Native screen height H | Rows | Grid height | Updates to settle |
+| --- | ---: | ---: | ---: |
+| 320 < H <= 600 | 2 | 220 | 22 |
+| H <= 320 or 600 < H <= 800 | 3 | 241 + 54 = 295 | 30 |
+| H > 800 | 4 | 311 + 54 = 365 | 37 |
+
+Sources: float constants `0x0079501C=220`, `0x00792318=241`,
+`0x00795018=311`, `0x0078C568=600`, `0x0078ADF4=320`;
+double constants `0x00795010=54`, `0x00785D10=800`.
+The Website's existing uniformly scaled 1600x900 logical stage uses the last
+row even on a smaller physical viewport; this fix does not introduce a new
+responsive inventory layout.
+
+At 1600x900, the centered temporary rectangle has Y=150 and bottom=750.
+Constructor `+0x3AC=750-261=489`, then grid Y=`489-27=462`.
+Its fixed clip is Y=`462+30=492`, height=`365-60=305`, width=1600.
+Constants `0x00794F40=261`, `0x00786C30=27`, `0x00784D50=30`,
+`0x007849A0=60` are doubles. The current first/last slot edges, 496 and
+793, remain inside that clip. Equipment, backdrop, chains, gold and the
+Game-owned return/tome controls stay outside the moving page containers.
+
+For entry, outgoing Y is `-10*t`, incoming Y is `365-10*t`; return reverses
+the signs. At t=36 the incoming page is five pixels from zero. At t=37 the
+native countdown crosses zero and incoming Y snaps to zero. The outgoing
+page may reach +/-370 before retirement; do not incorrectly clamp both pages
+to 365 or extend the lock to another tick. Nominal duration is **370 ms**, not
+1,600 ms. Browser scheduling may delay the first painted or observed frame;
+it does not change this fixed-step state contract.
+
+### Boundary and membership inventory
+
+Native system: InventoryScreen's child-root page transition, from accepted
+Sack/back activation through fixed-step motion, clip, lock and page retirement.
+
+| Member | Disposition after focused/browser acceptance | Required proof |
+| --- | --- | --- |
+| Entry and one-parent return | exact-ported | opposite Y signs, ten-pixel steps, exact37-update boundary |
+| Empty, filled and nested Sacks | exact-ported | same timing/model at every depth; no special content gate |
+| Native two-/three-/four-row height branches | exact-ported | extracted table and branch-boundary tests; fixed900 stage uses365 |
+| Stationary grid clip and vertical translation | exact-ported | fixed `[0,492,1600,305]` mask, no horizontal motion or panel/HUD spill |
+| Transition input lock and reactivation | exact-ported | repeated back/activation cannot skip roots; next edge works after370ms |
+| Standalone College and paused Boneyard inventory | exact-ported | real built-client navigation and unchanged pause/authority |
+| Fomentius, Hagatha, Luthacus and Shlorio companion backpack pages | exact-ported | same shared renderer and page timer; no trader transaction on navigation |
+| Close/reopen, stale-path reconciliation and renderer teardown | exact-ported | no retained path/timer/page mask after owner retirement |
+| Backpack open/back/outer-close cues, existing same-item activation | verified-already-at-parity | unchanged producers and input guard; browser audio checks |
+| Item tree, IDs, mutations, save and protocol | verified-already-at-parity | local navigation sends no host inventory action; unchanged schema/data |
+| Goodie reward construction, heterogeneous belt actions and stats-page swiping | out-of-system | distinct producers; this pass changes only Sack-root transitions |
+
+Handler caller census: `0x0056E950` calls activation at `0x0056EAD2`;
+pointer `0x0056F760` calls it at `0x0056FA85/0x0056FAE3`.
+Update has one vtable reference at `0x00794F5C`. InventoryGrid vtable
+`0x00794C64` routes shared rectangle/draw handling to the recovered consumers.
+No member requires a browser approximation.
+
+### Implementation and acceptance plan
+
+Replace the single shared page contract with grid-height/Y motion. Keep the
+React lock timer derived from that same contract. Render the outgoing and
+incoming grids inside a stationary clipped owner; do not move other UI.
+Add red/green tick/branch/clip tests and browser measurements from transition
+attribute changes and actual renderer samples. Compare unmodified baseline
+with the corrected build, exercise all page hosts and nested/empty branches,
+and rerun the complete canonical M2 gate. Final dispositions and measured
+browser results will be recorded after those gates pass.
+
+### Pre-publication implementation receipt
+
+The shared renderer now uses grid-height Y offsets, and both page containers
+sit inside the fixed native grid clip. The existing React page lock derives
+its deadline from the corrected shared 37-tick contract; root mutation,
+activation thresholds, audio, inventory IDs and save/protocol schemas are
+unchanged. No atlas/art bytes changed.
+
+The old build's six empty/filled/nested transitions measured 1599.2–1607.0 ms.
+The initial corrected equivalent journey measured 369.3–372.9 ms. A complete
+built-client Sack/Dye journey passed all existing item movement, dye,
+companion-service, storage, belt and Boneyard checks; its 26 recorded page
+transitions took 369.5–380.2 ms. Every sampled moving frame retained X=0,
+correct ten-pixel Y steps, and actual mask bounds `[0,492,1600,305]`.
+Repeated `KeyI` during every recorded transition was ignored without skipping
+roots; subsequent navigation succeeded. Existing audio counts remained
+12 close / 26 open at the harness's original accounting boundary.
+
+The 844x390 coarse-pointer journey additionally used real Playwright
+`touchscreen.tap` twice to activate each Sack, not synthetic double-clicks;
+six transitions took 368.4–373.1 ms. Moving and settled images were visually
+inspected: both pages are vertically clipped inside the backpack; equipment,
+return/tome controls and gold remain stationary. All page/console/failed-response
+arrays were empty. No production account or save was modified.
+
+`npm run test:hub-ui --prefix frontend` passed 108/108 tests, including the
+new red/green transition boundary, all native height branches, 822 sampled
+open/back millisecond offsets and shared clip/timer source contracts.
+Production TypeScript/Vite/game-host build and lint passed. Final canonical
+validation and post-gate browser checks remain the publication gate.
+
+Pre-gate log hashes (raw files are disposable task scratch):
+- `browser-baseline.txt`: `9148acb2001e8a7e353e7dbd3f4a2dfdd8081aaa4d04bb684ffad7633097a8ca`.
+- `browser-candidate.txt`: `7d6c695543ae7e8c5fd58e501f79a9c5f7cefe4c1f4e0a563d04c86307e998af`.
+- `browser-full.txt`: `f43ae81038d515a66d0a1d6220be7e22cef81ec629acdcba093225a3d0e542b7`.
+- `browser-touch.txt`: `2d128afa3d46507d7337da435f8dab4cec4dd6ba76630c4efaeb99c5eb20ebdc`.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: Sacks collected from chests appear not to function,

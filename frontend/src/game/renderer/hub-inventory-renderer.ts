@@ -250,13 +250,24 @@ export async function createHubInventoryRenderer(
         inventorySackPages.transition.startedAtMs,
         nowMs,
       )
-      inventorySackPages.incoming.x = offsets.incomingX
-      inventorySackPages.outgoing.x = offsets.outgoingX
+      inventorySackPages.incoming.position.set(0, offsets.incomingY)
+      inventorySackPages.outgoing.position.set(0, offsets.outgoingY)
       canvas.dataset.nativeSackPageState = offsets.settled ? 'settled' : 'moving'
       canvas.dataset.nativeSackPageTicks = `${offsets.ticks}`
+      canvas.dataset.nativeSackIncomingX = `${inventorySackPages.incoming.x}`
+      canvas.dataset.nativeSackOutgoingX = `${inventorySackPages.outgoing.x}`
+      canvas.dataset.nativeSackIncomingY = `${inventorySackPages.incoming.y}`
+      canvas.dataset.nativeSackOutgoingY = `${inventorySackPages.outgoing.y}`
+      const clip = inventorySackPages.clip.getLocalBounds()
+      canvas.dataset.nativeSackClip = `${clip.x},${clip.y},${clip.width},${clip.height}`
     } else {
       delete canvas.dataset.nativeSackPageState
       delete canvas.dataset.nativeSackPageTicks
+      delete canvas.dataset.nativeSackIncomingX
+      delete canvas.dataset.nativeSackOutgoingX
+      delete canvas.dataset.nativeSackIncomingY
+      delete canvas.dataset.nativeSackOutgoingY
+      delete canvas.dataset.nativeSackClip
     }
   }
 

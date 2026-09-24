@@ -1,5 +1,11 @@
 # 2026-08-27 — Inventory Sack pages, heterogeneous BeltButton items, and Teleport activation audit
 
+> **2026-09-24 report 22:** [entry 252's native page-motion reopening](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-24--report-22-native-vertical-sack-page-transition)
+> supersedes this entry's 160-tick horizontal/full-stage-width claims. Native
+> Sack pages move vertically across the grid's height: 365 pixels and 37
+> updates on the fixed 900-high stage. The belt, root contents, item activation
+> and Teleport contracts are unchanged.
+
 ## Reported smell and parity question
 
 - Player reports: Teleport appears not to trigger; toolbar entries cannot be

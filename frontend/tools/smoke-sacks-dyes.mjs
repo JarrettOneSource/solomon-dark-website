@@ -38,6 +38,8 @@ const screenshotRoot = process.env.SDR_SACKS_DYES_SCREENSHOT_ROOT
 const hasTouch = booleanEnvironment('SDR_SACKS_DYES_HAS_TOUCH', false)
 const returnControlOnly = booleanEnvironment('SDR_SACKS_DYES_RETURN_ONLY', false)
 const reportedParityOnly = booleanEnvironment('SDR_SACKS_DYES_REPORTED_PARITY_ONLY', false)
+const expectedSackTransitionMs = process.env.SDR_SACKS_DYES_EXPECT_TRANSITION_MS
+  ? positiveIntegerEnvironment('SDR_SACKS_DYES_EXPECT_TRANSITION_MS', 370) : null
 assert.equal(returnControlOnly && reportedParityOnly, false)
 const viewport = Object.freeze({
   height: positiveIntegerEnvironment('SDR_SACKS_DYES_VIEWPORT_HEIGHT', 900),
@@ -103,6 +105,7 @@ page.on('response', (response) => {
   }
 })
 await page.addInitScript(installGameAudioSmokeProbe)
+await page.addInitScript(installSackNavigationProbe)
 await page.addInitScript(bypassStartupAudioPreload)
 await page.addInitScript(({ gameCredential, gameUrl }) => {
   window.solomonDarkRuntime = {
@@ -201,6 +204,7 @@ try {
       consoleErrors,
       failedResponses,
       pageErrors,
+      sackNavigation: await sackNavigationReceipt(page),
       screenshots: [
         overviewScreenshot,
         attributesScreenshot,
@@ -234,6 +238,7 @@ try {
       failedResponses,
       hasTouch,
       pageErrors,
+      sackNavigation: await sackNavigationReceipt(page),
       resumeControls: resumeControlReceipts,
       screenshots: [
         `${screenshotRoot}-empty-sack.png`,
@@ -814,6 +819,7 @@ try {
     parentHolder: parentHolderReceipt,
     resumeControls: resumeControlReceipts,
     sackAudio,
+    sackNavigation: await sackNavigationReceipt(page),
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
       `${screenshotRoot}-hub-equipment-level-rejection.png`,
@@ -1092,13 +1098,95 @@ async function dragToPoint(targetPage, source, point) {
 async function doubleActivate(targetPage, target) {
   const box = await target.boundingBox()
   assert.ok(box, 'Sack/Dye activation target has no browser geometry')
+  if (hasTouch) {
+    await targetPage.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+    await targetPage.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+    return
+  }
   await targetPage.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
+}
+
+function installSackNavigationProbe() {
+  const receipts = []
+  window.__sdrSackNavigation = receipts
+  let active = null
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      const owner = mutation.target
+      const direction = owner.getAttribute('data-native-sack-transition')
+      if (direction) {
+        if (active) continue
+        const started = performance.now()
+        const receipt = { direction, path: owner.getAttribute('data-native-sack-path'),
+          startedAtMs: started, endedAtMs: null, durationMs: null, samples: [] }
+        active = receipt
+        receipts.push(receipt)
+        const sample = () => {
+          if (active !== receipt) return
+          const canvas = owner.querySelector('.hub-inventory-native-canvas')
+          if (canvas?.dataset.nativeSackPageState === 'moving') {
+            const data = canvas.dataset
+            receipt.samples.push({ atMs: performance.now() - started,
+              ticks: Number(data.nativeSackPageTicks),
+              incomingX: Number(data.nativeSackIncomingX), outgoingX: Number(data.nativeSackOutgoingX),
+              incomingY: Number(data.nativeSackIncomingY), outgoingY: Number(data.nativeSackOutgoingY),
+              clip: data.nativeSackClip ?? null })
+          }
+          requestAnimationFrame(sample)
+        }
+        requestAnimationFrame(sample)
+      } else if (active) {
+        active.endedAtMs = performance.now()
+        active.durationMs = active.endedAtMs - active.startedAtMs
+        active = null
+      }
+    }
+  })
+  observer.observe(document, { subtree: true, attributes: true,
+    attributeFilter: ['data-native-sack-transition'] })
+}
+
+async function sackNavigationReceipt(targetPage) {
+  const receipts = await targetPage.evaluate(() => window.__sdrSackNavigation)
+  if (expectedSackTransitionMs !== null) {
+    assert.ok(receipts.length >= 2, 'expected completed Sack entry and return transitions')
+    for (const receipt of receipts) {
+      assert.ok(receipt.durationMs >= expectedSackTransitionMs - 60
+        && receipt.durationMs <= expectedSackTransitionMs + 250,
+      `Sack ${receipt.direction} duration ${receipt.durationMs}ms, expected ${expectedSackTransitionMs}ms`)
+      assert.ok(receipt.samples.length > 0, 'Sack must present intermediate moving frames')
+      if (expectedSackTransitionMs === 370) {
+        assert.equal(receipt.ignoredGameBack, true, 'the transition must ignore an extra game-back edge')
+        for (const sample of receipt.samples) {
+          const sign = receipt.direction === 'open' ? 1 : -1
+          assert.equal(sample.incomingX, 0)
+          assert.equal(sample.outgoingX, 0)
+          assert.equal(sample.incomingY, sign * (365 - sample.ticks * 10))
+          assert.equal(sample.outgoingY, -sign * sample.ticks * 10 || 0)
+          assert.equal(sample.clip, '0,492,1600,305')
+          assert.ok(sample.ticks >= 0 && sample.ticks < 37)
+        }
+      }
+    }
+  }
+  return receipts
 }
 
 async function openSack(targetPage, inventory, target, sackId, parentPath = []) {
   await doubleActivate(targetPage, target)
   const path = [...parentPath, sackId].join('/')
   await inventory.locator(`xpath=self::*[@data-native-sack-path="${path}"]`).waitFor()
+  if (expectedSackTransitionMs === 370) {
+    await assertSackTransitionLock(targetPage, inventory, path)
+    if (sackId === IDS.sourceSack) {
+      await targetPage.waitForFunction(() => {
+        const canvas = document.querySelector('.hub-inventory-native-canvas')
+        const tick = Number(canvas?.dataset.nativeSackPageTicks ?? -1)
+        return tick >= 12 && tick < 30
+      })
+      await targetPage.screenshot({ path: `${screenshotRoot}-sack-vertical-motion.png` })
+    }
+  }
   await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({
     timeout: 5_000,
   })
@@ -1108,6 +1196,7 @@ async function openSack(targetPage, inventory, target, sackId, parentPath = []) 
 async function returnFromSack(inventory, path) {
   await inventory.locator('[data-inventory-resume="true"]').click()
   await inventory.locator(`xpath=self::*[@data-native-sack-path="${path}"]`).waitFor()
+  if (expectedSackTransitionMs === 370) await assertSackTransitionLock(page, inventory, path)
   await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({
     timeout: 5_000,
   })
@@ -1116,6 +1205,15 @@ async function returnFromSack(inventory, path) {
   } else {
     assert.equal(path, '', 'Only a companion service root may omit the inventory return control')
   }
+}
+
+async function assertSackTransitionLock(targetPage, inventory, path) {
+  assert.ok(await inventory.getAttribute('data-native-sack-transition'), 'transition lock was not observed')
+  await targetPage.keyboard.press('KeyI')
+  await targetPage.evaluate(() => new Promise(resolve => requestAnimationFrame(() => resolve())))
+  assert.equal(await inventory.getAttribute('data-native-sack-path'), path,
+    'repeated game-back during page motion skipped a root or closed inventory')
+  await targetPage.evaluate(() => { window.__sdrSackNavigation.at(-1).ignoredGameBack = true })
 }
 
 async function inventoryResumeControlReceipt(inventory, path) {

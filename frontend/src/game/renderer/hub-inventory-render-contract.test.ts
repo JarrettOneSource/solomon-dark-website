@@ -76,6 +76,8 @@ import {
   HUB_PRIMARY_SPELL_PANE,
   HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SACK_PAGE_TRANSITION,
+  HUB_SACK_PAGE_CLIP,
+  nativeInventorySackPageHeight,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_STOREGRID_SELECTED_RECORDS,
@@ -222,49 +224,90 @@ test('nested InventoryGrid reserves its painted quarter-alpha parent holder at c
   assert.equal(hubInventoryRootSlot(HUB_INVENTORY_PARENT_HOLDER.visibleSlot, true), null)
 })
 
-test('Item_Sack pages traverse the fixed stage in exact discrete native ticks', () => {
+test('Sack navigation completes at the native grid-height boundary, not full screen width', () => {
+  assert.equal(hubSackPageOffsets('open', 1000, 1369).settled, false)
+  assert.equal(hubSackPageOffsets('open', 1000, 1370).settled, true)
+})
+
+test('native Sack page height follows all authored screen-height branches', () => {
+  for (const [height, expected] of [
+    [1, 295], [320, 295], [320.5, 220], [321, 220], [600, 220],
+    [600.5, 295], [601, 295], [768, 295], [800, 295], [800.5, 365], [900, 365],
+  ] as const) assert.equal(nativeInventorySackPageHeight(height), expected)
+  for (const height of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => nativeInventorySackPageHeight(height), /positive and finite/)
+  }
+  assert.deepEqual(HUB_SACK_PAGE_CLIP, { x: 0, y: 492, width: 1600, height: 305 })
+})
+
+test('Item_Sack pages traverse grid height vertically in exact discrete native ticks', () => {
   assert.deepEqual(HUB_SACK_PAGE_TRANSITION, {
     nativeTickMs: 10,
+    pageHeight: 365,
     pixelsPerTick: 10,
-    stageWidth: 1600,
-    ticks: 160,
+    ticks: 37,
   })
   assert.deepEqual(hubSackPageOffsets('open', 1_000, 1_000), {
-    incomingX: 1_600,
-    outgoingX: 0,
+    incomingY: 365,
+    outgoingY: 0,
     settled: false,
     ticks: 0,
   })
   assert.deepEqual(hubSackPageOffsets('open', 1_000, 1_010), {
-    incomingX: 1_590,
-    outgoingX: -10,
+    incomingY: 355,
+    outgoingY: -10,
     settled: false,
     ticks: 1,
   })
-  assert.deepEqual(hubSackPageOffsets('open', 1_000, 2_599), {
-    incomingX: 10,
-    outgoingX: -1_590,
+  assert.deepEqual(hubSackPageOffsets('open', 1_000, 1_369), {
+    incomingY: 5,
+    outgoingY: -360,
     settled: false,
-    ticks: 159,
+    ticks: 36,
   })
-  assert.deepEqual(hubSackPageOffsets('open', 1_000, 2_600), {
-    incomingX: 0,
-    outgoingX: -1_600,
+  assert.deepEqual(hubSackPageOffsets('open', 1_000, 1_370), {
+    incomingY: 0,
+    outgoingY: -370,
     settled: true,
-    ticks: 160,
+    ticks: 37,
   })
   assert.deepEqual(hubSackPageOffsets('back', 1_000, 1_010), {
-    incomingX: -1_590,
-    outgoingX: 10,
+    incomingY: -355,
+    outgoingY: 10,
     settled: false,
     ticks: 1,
   })
-  assert.deepEqual(hubSackPageOffsets('back', 1_000, 2_600), {
-    incomingX: 0,
-    outgoingX: 1_600,
+  assert.deepEqual(hubSackPageOffsets('back', 1_000, 1_370), {
+    incomingY: 0,
+    outgoingY: 370,
     settled: true,
-    ticks: 160,
+    ticks: 37,
   })
+  for (const direction of ['open', 'back'] as const) {
+    for (let elapsed = -10; elapsed <= 400; elapsed += 1) {
+      const tick = Math.max(0, Math.min(37, Math.floor(elapsed / 10)))
+      const sign = direction === 'open' ? 1 : -1
+      const sample = hubSackPageOffsets(direction, 1000, 1000 + elapsed)
+      assert.equal(sample.ticks, tick)
+      assert.equal(sample.incomingY, tick === 37 ? 0 : sign * (365 - tick * 10))
+      assert.equal(sample.outgoingY, -sign * tick * 10 || 0)
+      assert.equal(sample.settled, tick === 37)
+    }
+  }
+})
+
+test('Sack grids have a stationary clip outside moving contents and the modal HUD', () => {
+  const pages = readFileSync(new URL('./hub-inventory/pages.ts', import.meta.url), 'utf8')
+  const renderer = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
+  const ui = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
+  assert.match(pages, /viewport\.mask = clip/)
+  assert.match(pages, /layer\.addChild\(viewport, clip\)/)
+  assert.match(pages, /viewport\.addChild\(outgoing, incoming\)/)
+  assert.match(pages, /viewport\.addChild\(page\)/)
+  assert.match(renderer, /incoming\.position\.set\(0, offsets\.incomingY\)/)
+  assert.match(renderer, /outgoing\.position\.set\(0, offsets\.outgoingY\)/)
+  assert.match(ui, /HUB_SACK_PAGE_TRANSITION\.ticks \* HUB_SACK_PAGE_TRANSITION\.nativeTickMs/)
+  assert.match(ui, /current\?\.startedAtMs === inventorySackTransition\.startedAtMs/)
 })
 
 test('InventoryScreen paints the Game-owned backpack return control at every Sack depth', () => {

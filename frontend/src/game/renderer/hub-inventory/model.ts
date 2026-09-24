@@ -179,6 +179,7 @@ export interface InventoryBuildState {
 }
 
 export interface InventorySackPages {
+  readonly clip: Container
   readonly incoming: Container
   readonly outgoing: Container
   readonly transition: HubInventorySackTransitionModel
