@@ -215,6 +215,43 @@ Disposable evidence SHA-256 receipts (not retention instructions):
 - Complete cached-radius writer sweep: `f35f13e305474106595c77290958dba8b590f7ad63722704cd9e421801ed0b5a`.
 
 
+### Final canonical M2 acceptance — 2026-09-24
+
+The clean runtime candidate `e9bbebeb29b67a68269b7b6c2f33c49edbeaf9a3`
+completed `/opt/homebrew/bin/bash ./scripts/validate.sh` on the M2. The gate
+built/formatted the backend, passed all 24 Website/backend integration tests
+and 3,767 frontend/desktop tests, checked lint/types/boundaries, built production
+assets, and passed the production media and full renderer quality/mutation gates.
+The renderer report contains no failures; its measured coverage is 100 percent
+for the explicitly scoped renderer owners. No gate was removed or weakened.
+
+The Fleet SSH transport disconnected while the original M2 gate continued.
+Its original shell exit code is unavailable; a zero shell exit is not claimed.
+Completion was recovered from the original `set -euo pipefail` gate reaching
+its final guarded full renderer report, all passing suite summaries, matching
+report timestamp, clean candidate identity, and a fresh strict source-hash
+verification of that report (exit zero). Full-gate log SHA-256:
+`559b21abc6783e48303c4b440244362d6bf7e7fe63a95e100c00a53ba7a20cb1`.
+
+After the gate, the maintained browser journey was rerun against its production
+build and exited zero. The original private continuation had no obsolete Aura
+actors or whiteout over 15 seconds at 60.00 FPS. Fresh maximum-rank Water held
+23 Aura actors at 59.50 mean FPS (p95 16.8 ms; maximum frame 50.1 ms), and drained
+them all within 134 observed simulation ticks after release. Shared College
+remained combat-sealed at 60.00 FPS. All six error arrays were empty in every
+journey; maximum snapshot gaps were 191.8, 155.6, and 277.3 ms respectively.
+The before/after saved-scene screenshots and final held-casting frame were
+visually inspected. This reconfirms the repaired obstruction without claiming
+an M2 FPS speedup: the faulty baseline also rendered at 60 FPS.
+
+Post-gate browser receipt SHA-256:
+`dd54c8a6e4fdf6112bd38ab7593161d97b5f64a666582d16e4f386812c568d08`. This receipt-only documentation follow-up changes no
+runtime, test, asset, or build-input bytes from the validated runtime candidate.
+Publication, Discord reaction and task-cleanup outcomes remain in the private
+archive status/release receipt; no production deployment or live rollout is
+claimed by these local checks.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: player skill/stat books and the level-up picker retain
