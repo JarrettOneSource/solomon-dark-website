@@ -1031,12 +1031,12 @@ adjustment or renderer cap.
 Boundary: authored Hail rank -> native chance cache -> its visual and direct
 contact consumers, including restoration and presentation of actors they own.
 
-| Member | Disposition before implementation | Proof / required result |
+| Member | Final disposition | Proof / required result |
 | --- | --- | --- |
-| Rank zero and every authored rank, including equipment-effective ranks | recovered-pending-port | unscaled float32-to-integer cache; zero remains no-trial/no-draw |
-| Substituted fractional/short stat arrays | recovered-pending-port | float32 store, truncation and terminal-row lookup |
-| Paid Normal Water visual allocation in both shared simulation callers | recovered-pending-port | exact `< threshold` boundary in 250 cells; constructor RNG only on success |
-| Water gameplay contact | recovered-pending-port | same corrected cache in 3,000 cells; damage RNG only on success |
+| Rank zero and every authored rank, including equipment-effective ranks | exact-ported | unscaled float32-to-integer cache; zero remains no-trial/no-draw |
+| Substituted fractional/short stat arrays | exact-ported | float32 store, truncation and terminal-row lookup |
+| Paid Normal Water visual allocation in both shared simulation callers | exact-ported | exact `< threshold` boundary in 250 cells; constructor RNG only on success |
+| Water gameplay contact | exact-ported | same corrected cache in 3,000 cells; damage RNG only on success |
 | Over/underpowered Water, released input and rank removal | verified-already-at-parity | existing branch owners suppress new Hail; old actors keep native retirement |
 | Enhanced Effects and Cone of Ice loop variants | verified-already-at-parity | existing native loop formula and authored tables; no quality change |
 | Anim_Bouncer / Anim_Hail construction, airborne/bounce/settled/fade/draw | verified-already-at-parity | fresh functions 453060/454030/458D80/4540B0, unchanged nine-word constructor and 134-tick life |
@@ -1099,5 +1099,75 @@ errors occurred. The first probe attempt failed solely because its private rank
 reset omitted learned-skill ordering; that fixture was repaired by restoring the
 complete valid pre-grant component store, without changing production code.
 
-Final integrated canonical validation and post-gate browser receipt follow
-below when completed. No published completion is claimed by this checkpoint.
+The final integrated canonical validation and post-gate browser receipt are
+recorded below. Publication remains a separately verified action.
+
+
+### Final exact-tree M2 and browser acceptance
+
+Candidate `220a7475755ce9cbe21011343c855b70f7b99a3b` contains the production fix
+and explicit TypeScript annotations for the new regression fixtures. The first
+full gate caught those three missing test-local annotations; after correction,
+the focused 87 tests and test TypeScript check passed again. No production
+behavior was changed after the original threshold correction.
+
+The complete canonical `/opt/homebrew/bin/bash ./scripts/validate.sh` exited
+zero on M2 at 2026-09-24T16:35:01Z. Its original process survived a disconnected
+wait and was reused, not replaced or abbreviated. All 24 Website/backend tests,
+3,799 frontend/desktop tests before the renderer phase, production builds,
+formatting/lint/type/boundary checks, media policy, bundle budget and the full
+renderer-quality gate passed. Renderer mutation results: 441 killed, one timeout,
+142 compile errors and 23 predeclared equivalent/ignored mutations; there are
+no survivors, uncovered mutations, or reported quality failures. The runtime
+and toolchain were Node 22.17.0 / Darwin arm64.
+
+All 7,189 tracked source files still matched the frozen candidate after the
+canonical gate and final browser acceptance. This subsequent ledger update
+records evidence only; runtime, tests, assets, browser harness and build inputs
+remain byte-identical to that accepted tree.
+
+Final command, from `frontend` against the production build:
+
+```sh
+SDR_HAIL_OUTPUT=/tmp/solomon-report26-w89cedgq/browser-final npm run test:hail-browser
+```
+
+Chrome `153.0.8010.53` completed the real College -> new Water wizard ->
+Boneyard -> authentic Solomon opening journey. The shared College still rejected
+held combat input. Boneyard acceptance used maximum Cone of Ice, Frost rank
+eight, Hail ranks 0/1/2/3/10, maximum player level and private health/mana
+replenishment so every five-second measurement stayed in continuous play.
+Each phase reseeded the authority to 42. These are controlled loadout samples,
+not the reporter's unavailable save or an identical-arena historical replay.
+
+| Hail rank | Before mean live actors | Corrected mean live actors | Corrected sampled peak | Corrected mean FPS | Release drain ticks |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0.00 | 0.00 | 0 | 59.60 | 1 |
+| 1 | 623.80 | 37.34 | 46 | 60.00 | 133 |
+| 2 | 973.08 | 57.32 | 70 | 60.00 | 132 |
+| 3 | 1004.70 | 65.62 | 78 | 60.00 | 128 |
+| 10 | 1020.72 | 115.92 | 131 | 60.00 | 135 |
+
+The corrected maximum-rank mean population is 88.64% lower in these samples.
+Every sampled actor kept the native scale and age envelope; each release drained
+to zero authoritative Hail actors and zero Hail mesh members. The last actor's
+134-tick lifetime remains unchanged; the release measurement includes input
+transport, hence the observed maximum of 135 ticks. Baseline and final held
+and final released screenshots were visually inspected. No stale Hail remained.
+Page, console, response, request, wire, host and actor-contract error arrays
+are all empty. The receipt's aggregate snapshot-gap statistic spans navigation
+and scene loading; it is not an active-gameplay latency measurement.
+
+Both baseline and corrected positive-rank samples already sustained about
+60 FPS on this M2. The repair demonstrably removes excessive simulation and
+renderer population and overly frequent bonus-damage trials, but does not claim
+to reproduce the reporter's severe hardware lag or measure an FPS speedup.
+No fresh clean-stock runtime capture, physical-phone measurement, quality
+reduction, particle cap, new schema or browser-specific approximation is claimed.
+The original 118 archived report/evidence files remain byte-identical.
+
+Receipt hashes (task captures/logs are disposable after publication):
+
+- Full canonical gate: `4e306e8347c1a9d1b87f8df1623a80475aa26c9bcd55f864b3f6ec91483caf35`.
+- Post-gate browser log: `ae79e759eced5e42ca161280af56bbc22cfef6de5ed536370c79806ac83b0f24`.
+- Browser structured receipt: `a0cdcba77cc7e7da8cac983906bdfa57922d436e2c2473c27aad81bf18d6b1ac`.
