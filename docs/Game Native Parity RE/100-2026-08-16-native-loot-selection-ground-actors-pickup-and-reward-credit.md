@@ -1,5 +1,161 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-09-24 — Report 21: Item Charm probability investigation
+
+### Report and recovered cause
+
+Report `1552393115346665573` asks whether Item Charm is broken after two runs
+without items; follow-up `1552393156924936284` explicitly allows bad luck.
+Neither message supplies a save, kill count, wave history, or recorded RNG.
+This investigation must not turn that anecdote into an inferred drop-table
+regression or change stock balance to guarantee items.
+
+Fresh retail instruction recovery agrees with the existing loot implementation:
+Item Charm really writes a 0.75 multiplier to the Item **roll bound**, but the
+native integer generator is not uniform. Its mask/remainder mapping makes the
+charm much weaker than a naive reciprocal-bound calculation suggests. In the
+ordinary wave-five-and-later branches, the isolated candidate probability is
+unchanged under uniform masked input words; which particular seeds win changes.
+That is inherited stock behavior, not a newly invented browser restriction.
+
+### Evidence and system boundary
+
+The retail 0.72.5 executable is 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Fresh M2 read-only Ghidra replicas ran through the existing
+`/Users/jarrett/.local/bin/sdr-ghidra-headless` wrapper (SHA-256
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`).
+Complete decompiles/instruction listings for `0047C070`, `0067C360`, `00463380`,
+`00401170`, and `0046A360`, raw constant bytes, complete direct xrefs, and an
+instruction census of displacement `+80C` are retained only in task scratch.
+No native runtime recording or replay of the reporter's actual runs is claimed.
+
+Boundary: purchased Item Charm selector 3 from player-owned economy/finalized
+modifier, through attributed hostile-death candidate selection and ordinary
+Item materialization, replicated carrier pickup, persistence and removal.
+The existing full loot ledger below remains authoritative for unchanged
+factories, item tables, carrier presentation, audio and native RNG ownership.
+
+| Member | Recovered source | Disposition and evidence |
+| --- | --- | --- |
+| Selector 3 absent/present; duplicate ownership; removal/restoration | Hagatha catalog row 3; Skills reset `0065F5B0`, finalize `0067C360`, serialize `0065EE80` | verified-already-at-parity; economic purchase, continuation/profile persistence, College inventory removal |
+| Other purchased modifiers 4/9/23 and all 16 combinations | finalize `+808/+804/+810/+814`, existing native modifier catalog | verified-already-at-parity; full modifier combination and duplicate-ownership matrix |
+| Item policies 0/1/2/3/4/5 | `0047C54D..0047C640` | verified-already-at-parity; all ordinary/reduced/increased/forced/disabled/default branches |
+| Waves below five and five onward; same/different last Item wave | `00463380`, state `+8FF0/+9064` | verified-already-at-parity; full 4-way multiplier table and successful-Item history update |
+| Source with/without valid participant slot, host/guest attribution | `0047C5E2..0047C615`, existing world reward adapter | verified-already-at-parity; credited guest modifier controls the live drop, not host ownership |
+| Native Integer bound/mask/target residue and RNG consumption | `00401170`; `0047C61B..0047C629` | verified-already-at-parity; complete masked-word enumeration, candidate ordering and exact draw count |
+| Disable mask, special suppression, emergency Potion, category competition | `0047C070`, existing complete six-category ledger | verified-already-at-parity; negative and normal-policy regressions plus existing six-category contracts |
+| Item identity, rarity, owned-recipe exclusion, successful placement/history | `0046A360`, existing fully extracted recipe/random-equipment tables | verified-already-at-parity; real selected equipment reaches a Sack, both clients, and the credited guest inventory |
+| Carrier replication, visible ground art, pickup/notification/retirement | existing Loot/Sack owner, both browsers, inventory | verified-already-at-parity; native Item identity, visible carrier, pickup, and both-client retirement |
+| Full/profile persistence and only explicit charm removal | existing player economy/save ownership | verified-already-at-parity; purchased Item Charm persists in full continuation and retired profile; College removal clears it without refund |
+| Goodie/script guaranteed items, keys, boss-specific recipe override | separate materializers and user-authorized identity extension | out-of-system for charm probability; not retuned |
+| Other RNG callers and unrelated +80C stack/UI/skill-row offsets | full xref/census, CheckBox constructors and instruction types | out-of-system; no shared RNG implementation change |
+
+The `+80C` float reset is `0065F758`; finalization reads/writes at
+`0067C64E/0067C65A`, and the single drop-bound consumer is `0047C60A`.
+The serializer addresses the field at `0065F3C5`. Stack storage at `005080EC`
+and CheckBox/UI offsets are not additional charm modifiers. The raw-offset
+census is a discovery aid, not a claim that equal offsets mean equal objects.
+
+### Exact probability contract
+
+The three Item policy bases are 30/60/15; the selector multiplies each by the
+double 12 at `007DE9D8`, producing 360/720/180. Arena `00463380` multiplies
+by 200 below wave five, always by 2, and by 2 again when the current wave
+is not the last successful Item wave. Selector 3 multiplies the bound by the
+double 0.75 at `007848B0`, with its finalized float32 store. The positive final
+integer bound is passed to `Integer(bound)==1`. Forced policy bypasses this
+eligibility roll; disabled/masked/suppressed Item never becomes a candidate.
+
+`0040118B..00401199` chooses the smallest power of two M >= bound (minimum 2).
+`004011C1..004011CA` shifts the generated word by six, masks with M-1, and
+uses signed remainder; the source is nonnegative. For bounds in this task,
+residues 1 and bound+1 win. These are candidate probabilities under uniform
+masked words, before category competition, emergency preemption, recipe/scene
+filters, placement and changing in-run seed history:
+
+| Ordinary Item policy | Bound without / with charm | M without / with | Isolated probability without / with |
+| --- | --- | --- | --- |
+| Wave <5, no Item yet this wave | 288000 / 216000 | 524288 / 262144 | 1/262144 / 1/131072 |
+| Wave <5, successful Item this wave | 144000 / 108000 | 262144 / 131072 | 1/131072 / 1/65536 |
+| Wave >=5, no Item yet this wave | 1440 / 1080 | 2048 / 2048 | 1/1024 / 1/1024 |
+| Wave >=5, successful Item this wave | 720 / 540 | 1024 / 1024 | 1/512 / 1/512 |
+
+Reduced policy doubles these bounds; increased policy halves them, preserving
+the same early-versus-later conclusion. Policy 5 uses the ordinary Item base.
+A reduced bound must not be described as a guaranteed 33-percent drop increase.
+The charm does not upgrade rarity, guarantee an item per run, or make Gold,
+Potions and Orbs into equipment. Charms changing other candidate categories can
+also change which candidate wins; an isolated odds table is not a per-kill or
+per-run guarantee.
+
+An unchanged-source conditional sweep of actor seeds 0..99999 at wave 10,
+player level 12, last Item wave -1 and no eligible key produced 93/95 isolated
+Item selections without/with the charm. With all ordinary candidate policies
+it produced 85/88. These deterministic finite seed samples are not independent
+run trials or a confidence interval. They confirm a live code path and changing
+winning seeds, not a material drop-rate improvement or the reporter's cause.
+
+### Implementation and validation plan
+
+No gameplay, item table, RNG, rarity, save schema or charm description change
+is justified by this evidence. Add regression assertions for the native mask
+plateau, all Item-bound branches and RNG consumption, plus a maintained
+production-browser journey through charmed/uncharmed attributed deaths,
+replication/pickup, College removal and Boneyard inspection-only controls. Retain existing recovery and
+cross-owner coverage. Run the full canonical M2 gate and then the exact built
+browser journey. Preserve uncertainty about the two historical runs.
+
+
+### Maintained acceptance and evidence limits
+
+The investigation adds assertions to the existing native selector and save
+version suites, and an `--item-charm-only` mode to the existing two-browser loot
+harness. It changes no gameplay, RNG, item table, asset, save schema or public
+charm description. The current focused run passed 301 loot/economy/simulation/
+save tests; canonical final-tree acceptance is recorded below after completion.
+
+Production-client browser command from `frontend` after building:
+
+```sh
+SDR_LOOT_BUILT=1 SDR_LOOT_SCREENSHOT_ROOT=/tmp/item-charm-acceptance \
+  node --experimental-strip-types tools/smoke-loot-drops.mjs --item-charm-only
+```
+
+Both real browsers enter College and Boneyard; the host triggers Solomon's
+ordinary speaking and opening-wave transition. A private fixture then fixes
+wave ten, player level 75, a non-spawning director, and actor/shared RNG seeds.
+It does not force Item policy or alter the production selector. With ordinary
+policies and hostile seed 2535, giving the host a charm does not award an item
+to an uncharmed guest kill; the guest's own charm produces one Elemental Robe.
+Both clients receive the Sack, the guest collects it exactly once, the host's
+inventory stays unchanged, and both clients retire the ground actor. Seed zero
+still produces no item while charmed; removing the charm from the controlled
+fixture restores seed 2535's miss. These are deterministic boundary witnesses,
+not a random endurance run or a measured per-run drop probability.
+
+The College journey purchases through the existing economy API, then removes
+the charm through the actual inventory control while preserving gold and the
+backpack. Boneyard inventory correctly exposes inspection only. Independent
+save assertions cover purchase cost, no duplicate purchase, continuation and
+profile retirement retaining the charm, explicit removal without a refund,
+and a second restoration retaining the removal. No claim is made that an
+in-run removal control should exist.
+
+Initial browser fixtures violated existing ownership/lifecycle contracts:
+removing Solomon/entrance while keeping waves disconnected both clients;
+retaining the old director admitted unrelated scripted births; a ground Item
+ID is not its newly assigned inventory ID; and Boneyard disallows charm removal.
+The fixture was corrected to honor each existing contract. Protocol checks,
+item identity allocation and scene permissions were not weakened or changed.
+
+This report supplies no historical save or kill/wave sequence. The test and
+native proof establish correct current execution and inherited RNG behavior;
+they cannot identify the exact cause of the two reported zero-drop runs.
+There are no new platform-limited implementation members. Native evidence is
+static instruction/data recovery, not a new clean-stock runtime capture.
+
+
 ## 2026-09-22 — Report 06: approved Dire faculty item pools
 
 ### Contract and evidence recorded before implementation

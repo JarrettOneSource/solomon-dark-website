@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { ALL_DISABLED, input } from '../../../tools/native-loot-test-fixture.ts'
-import { createNativeRng } from './native-rng.ts'
+import { createNativeRng, drawNativeInteger } from './native-rng.ts'
+import { selectNativeLootCandidate } from './native-loot-selection.ts'
 import { createNativeLootItemIds } from './native-loot-items.ts'
 import {
   NATIVE_LOOT_DEFAULT_MODIFIERS, advanceNativeKeyDropLevel,
@@ -432,6 +433,121 @@ test('nonpositive candidate bounds append every affected category without an eli
       })
       assert.equal(result.selectedCategory, category, `${category}, multiplier ${multiplier}`)
       assert.ok(result.drops.length > 0)
+    }
+  }
+})
+
+
+test('Item Charm retains the stock masked-word probability plateau instead of uniform odds', () => {
+  // Retail 0040118B..004011CA: mask to a power of two, then remainder.
+  // Enumerate the complete larger mask. Early-wave bounds cross a mask boundary;
+  // later-wave bounds do not. This is candidate probability, not per-run odds.
+  for (const [bareBound, charmBound, maskSize, expectedBare, expectedCharm] of [
+    [1440, 1080, 2048, 2, 2],
+    [720, 540, 1024, 2, 2],
+    [2880, 2160, 4096, 2, 2],
+    [360, 270, 512, 2, 2],
+    [288000, 216000, 524288, 2, 4],
+  ] as const) {
+    const words = new Array<number>(55).fill(0)
+    const source = { indexA: 0, indexB: 31, words }
+    let bareWins = 0, charmWins = 0, changedOutcomes = 0
+    for (let maskedWord = 0; maskedWord < maskSize; maskedWord += 1) {
+      words[0] = maskedWord * 64
+      const bare = drawNativeInteger(source, bareBound).value === 1
+      const charm = drawNativeInteger(source, charmBound).value === 1
+      bareWins += Number(bare)
+      charmWins += Number(charm)
+      changedOutcomes += Number(bare !== charm)
+    }
+    assert.equal(bareWins, expectedBare, `unmodified bound ${bareBound}`)
+    assert.equal(charmWins, expectedCharm, `Item Charm bound ${charmBound}`)
+    assert.ok(changedOutcomes > 0, 'equal probabilities must not imply identical winning seeds')
+  }
+})
+
+test('Item Charm reaches every native Item policy/wave/history bound and preserves private draw order', () => {
+  const seeds = [
+    ...Array.from({ length: 512 }, (_, index) => index),
+    647, 871, 883, 1758, 3243, 4243, 53458, 74923, 86300, 129845, 173390, 247445,
+  ]
+  for (const [wave, lastWave, ordinaryBound] of [
+    [0, -1, 288000], [4, -1, 288000], [4, 4, 144000],
+    [5, -1, 1440], [5, 5, 720], [10, -1, 1440], [10, 10, 720],
+  ] as const) {
+    for (const policy of [0, 1, 2, 5] as const) {
+      for (const charm of [false, true]) {
+        const bound = ordinaryBound * (policy === 1 ? 2 : policy === 2 ? 0.5 : 1)
+          * (charm ? 0.75 : 1)
+        for (const actorSeed of seeds) {
+          const source = input({ actorSeed, policies: { ...ALL_DISABLED, item: policy } })
+          const roll = drawNativeInteger(createNativeRng(actorSeed), bound)
+          const expected = roll.value === 1 ? 'item' : null
+          const selected = selectNativeLootCandidate({
+            ...source,
+            arena: { ...source.arena, level: wave, lastSuccessfulItemLevel: lastWave },
+            participant: { ...source.participant, modifiers: nativeLootModifiers(charm ? [3] : []) },
+          })
+          assert.equal(selected.category, expected, `wave ${wave}, previous ${lastWave}, policy ${policy}, charm ${charm}, seed ${actorSeed}`)
+          assert.deepEqual(selected.privateRng, expected === null ? roll.state : drawNativeInteger(roll.state, 1).state)
+        }
+      }
+    }
+  }
+})
+
+test('Item Charm remains participant-owned and does not stack or override forced/disabled Item gates', () => {
+  for (let combination = 0; combination < 16; combination += 1) {
+    const owned = [3, 4, 9, 23].filter((_, bit) => (combination & (1 << bit)) !== 0)
+    const actual = nativeLootModifiers(owned)
+    assert.equal(actual.itemChance, (combination & 1) !== 0 ? 0.75 : 1)
+    assert.equal(actual.goldChance, (combination & 2) !== 0 ? 0.75 : 1)
+    assert.equal(actual.orbChance, (combination & 4) !== 0 ? 0.5 : 1)
+    assert.equal(actual.powerupChance, (combination & 8) !== 0 ? Math.fround(0.8) : 1)
+    assert.deepEqual(nativeLootModifiers([...owned, ...owned]), actual)
+  }
+  for (const charm of [false, true]) {
+    for (const policy of [3, 4] as const) {
+      for (const masked of [false, true]) {
+        for (const suppressed of [false, true]) {
+          const source = input({ policies: { ...ALL_DISABLED, item: policy } })
+          const selected = selectNativeLootCandidate({
+            ...source,
+            arena: { ...source.arena, disableMask: masked ? 32 : 0, specialSuppression: suppressed },
+            participant: { ...source.participant, modifiers: nativeLootModifiers(charm ? [3] : []) },
+          })
+          const forced = policy === 3 && !masked && !suppressed
+          assert.equal(selected.category, forced ? 'item' : null)
+          const rng = createNativeRng(source.actorSeed)
+          assert.deepEqual(selected.privateRng, forced ? drawNativeInteger(rng, 1).state : rng)
+        }
+      }
+    }
+  }
+})
+
+test('ordinary Item Charm winners materialize equipment while preserving misses and competing categories', () => {
+  for (const [actorSeed, bareCategory, charmCategory] of [
+    [0, null, null], [110, 'item', 'item'], [2535, null, 'item'], [6203, 'item', 'orb'],
+  ] as const) {
+    for (const charm of [false, true]) {
+      const source = input({ actorSeed, policies: { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 } })
+      const result = rollNativeEnemyLoot({
+        ...source,
+        participant: { ...source.participant, modifiers: nativeLootModifiers(charm ? [3] : []) },
+      })
+      const category = charm ? charmCategory : bareCategory
+      assert.equal(result.emergencyPotionAttempted, false)
+      assert.equal(result.selectedCategory, category)
+      if (category === 'item') {
+        assert.equal(result.drops.length, 1)
+        assert.equal(result.drops[0]!.kind, 'sack')
+        assert.equal(result.drops[0]!.item?.kind, 'equipment')
+        assert.equal(result.lastSuccessfulItemLevel, source.arena.level)
+      } else {
+        assert.ok(result.drops.every(drop => drop.item?.kind !== 'equipment'))
+        assert.equal(result.lastSuccessfulItemLevel, source.arena.lastSuccessfulItemLevel)
+      }
     }
   }
 })

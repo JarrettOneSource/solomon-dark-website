@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,6 +13,7 @@ import {
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { observeGoldPlacementWire, proveGoldPlacement } from './smoke-loot-gold-placement.mjs'
 import { proveKeyDrops } from './smoke-loot-key-drops.mjs'
+import { proveItemCharm, proveItemCharmCollege } from './smoke-item-charm.mjs'
 import { proveDireBossDrops } from './smoke-dire-boss-loot.mjs'
 import {
   NATIVE_LOOT_DEFAULT_MODIFIERS,
@@ -61,6 +62,7 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
 const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
+const itemCharmOnly = process.argv.includes('--item-charm-only')
 const charmOwnerOnly = process.argv.includes('--charm-owner-only')
 const goldPlacementOnly = process.argv.includes('--gold-placement-only')
 const keyDropsOnly = process.argv.includes('--key-drops-only')
@@ -97,10 +99,12 @@ if (!viteAddress || typeof viteAddress === 'string') {
   throw new Error('Vite did not expose its loot-drop smoke port')
 }
 const baseUrl = `http://127.0.0.1:${viteAddress.port}`
+const hostErrors = []
 const host = await startGameHost({
+  log: entry => { if (entry.level === 'error') hostErrors.push(entry) },
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  ...(goldPlacementOnly || keyDropsOnly || direBossDropsOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
+  ...(goldPlacementOnly || keyDropsOnly || direBossDropsOnly || itemCharmOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -119,7 +123,7 @@ const [hostPage, guestPage] = await Promise.all([
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
-const goldWires = goldPlacementOnly || keyDropsOnly || direBossDropsOnly
+const goldWires = goldPlacementOnly || keyDropsOnly || direBossDropsOnly || itemCharmOnly
   ? [hostPage, guestPage].map((page) => observeGoldPlacementWire(page, host.address.url))
   : []
 
@@ -169,6 +173,9 @@ try {
     waitForPlayers(hostPage, 2),
     waitForPlayers(guestPage, 2),
   ])
+  const itemCharmCollege = itemCharmOnly ? await proveItemCharmCollege({
+    host, page: hostPage, playerId: host.hostPlayerId(), waitUntil, screenshotRoot,
+  }) : null
   await hostPage.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await Promise.all([
     waitForBoneyard(hostPage, 2),
@@ -241,6 +248,25 @@ try {
     process.stdout.write(`${JSON.stringify({
       keyDrops, consoleErrors, failedResponses, pageErrors, useBuiltFrontend,
     }, null, 2)}\n`)
+    break smoke
+  }
+
+  if (itemCharmOnly) {
+    const itemCharm = await proveItemCharm({
+      host, hostPage, guestPage, hostPlayerId: playerId, guestPlayerId,
+      position: arenaCenter(host.state().world.bounds),
+      movePlayer, waitUntil, screenshotRoot, wires: goldWires,
+    })
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
+      consoleErrors: [], failedResponses: [], pageErrors: [],
+    })
+    assert.deepEqual(hostErrors, [])
+    const receipt = {
+      itemCharm, itemCharmCollege, hostErrors, consoleErrors, failedResponses, pageErrors,
+      wireErrors: goldWires.map(wire => wire.errors), browser: browser.version(), useBuiltFrontend,
+    }
+    await writeFile(join(screenshotRoot, 'item-charm-receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`)
+    process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`)
     break smoke
   }
 
@@ -562,6 +588,13 @@ try {
     useBuiltFrontend,
   }, null, 2)}\n`)
   }
+} catch (error) {
+  if (itemCharmOnly) console.error(JSON.stringify({ hostErrors, pageErrors, consoleErrors, failedResponses,
+    wireErrors: goldWires.map(wire => wire.errors),
+    players: host.state().playerEntities.identities.map(row => row.playerId),
+    world: host.state().world.kind, tick: host.state().tick,
+  }))
+  throw error
 } finally {
   await Promise.all([
     hostContext.close(),
