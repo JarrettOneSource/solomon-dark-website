@@ -62,6 +62,11 @@ try {
         assert.ok(sample.retainedBuffer)
         assert.equal(sample.retainedAttributeUpdates, 0, 'unchanged drawable color mode must reuse retained GPU attributes: ' + JSON.stringify(sample))
       }
+      if (sample.retainedColorBuffer !== undefined) {
+        assert.equal(sample.retainedColorBuffer, true, 'gradient re-registration must reuse its GPU color buffer')
+        assert.equal(sample.retainedBufferCount, true, 'gradient re-registration must not accumulate GPU buffers')
+        assert.equal(sample.colorBufferDestroyed, true, 'retiring a gradient must destroy its owned color buffer')
+      }
       const expected = expectedPixel(sample)
       if (sample.pixel.some((value, index) => Math.abs(value - expected[index]) > 2)) {
         failures.push({ ...sample, expected })

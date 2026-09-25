@@ -95,12 +95,19 @@ export async function renderNativeMaterialSamples() {
               mesh.blendMode = blend
               mesh.alpha = gradient.groupAlpha ?? 1
               if (!surface) setColors(mesh, colors)
-              samples.push({
+              const colorBuffer = mesh.geometry.getBuffer('aColor')
+              const bufferCount = mesh.geometry.buffers.length
+              if (!surface) setColors(mesh, colors.slice())
+              const sample = {
                 ...gradient, blend, kind, mode, premultiplied,
+                retainedColorBuffer: mesh.geometry.getBuffer('aColor') === colorBuffer,
+                retainedBufferCount: mesh.geometry.buffers.length === bufferCount,
                 pixel: drawSample(app, target, mesh),
-              })
+              }
+              samples.push(sample)
               if (surface) surface.destroy()
               else { mesh.geometry.destroy(true); mesh.destroy() }
+              sample.colorBufferDestroyed = colorBuffer.destroyed
             }
           }
         }
