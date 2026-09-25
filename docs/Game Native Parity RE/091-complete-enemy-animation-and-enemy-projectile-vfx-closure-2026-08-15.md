@@ -2792,3 +2792,81 @@ M2 archive `STATUS.md` and report-29 completion receipt after publication.
 Original report wording and source messages are preserved. The supported
 conclusion is stock-intended damage plus two repaired contact-parity bugs,
 not a reduction in Spider damage or a verified production deployment.
+
+## 2026-09-25 — Report 30: Silk and Arrow gradient material reopening
+
+### Evidence and causal boundary (before implementation)
+
+Report `1552463552491687956` alleges an excessively bright Spider trail and
+possibly Arrow trails. Its archived screenshot also contains a white Webbed
+player silhouette; that intentional, independently owned silhouette is not
+proof about trail brightness. The suggested 50% opacity is not an acceptance
+constant. Website investigation base is `02054b99`.
+
+The recovered system is native line-gradient delivery: independent endpoint
+RGB/alpha, interpolation, native blend selection, and analytic lighting, through
+both batched and standalone meshes. Existing projectile flight, damage, Shield,
+Webbed, Cocoon, RNG authority, and scene/lifetime contracts remain unchanged.
+
+The retail 0.72.5 image was rehashed on M2: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Read-only `SolomonDark/SolomonDark.exe` analysis used M2's
+`sdr-ghidra-headless` replica wrapper, SHA-256
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`.
+Complete decompiles cover `0x00606A10`, `0x0060F590`, `0x005F05D0`,
+`0x005F0790`, `0x005F8B50`, `0x0045AC40`, `0x005E4510`, `0x00455840`,
+`0x0040F9E0`, and `0x0041FB90`; raw draw instructions, scalar bytes, and all
+line-helper references were independently read. No native process was injected
+and no clean-stock gameplay capture is claimed for this pass. Entries 258/287
+retain the stock shader/blend and clean visual evidence; this pass verifies
+instruction-derived pixel contracts against real M2 Chrome WebGL output.
+
+- Silk render `0x00606A10` selects additive blend (`renderer +0x3F1=1`).
+  Its width-two strip has RGB `(.949999988079071,1,1)` scaled by the two
+  native lighting endpoints, a transparent head, and half-opacity fading
+  vertices. The 16-unit retained spline and one-pixel sparkles remain native.
+  `0x005E4510` has exactly one caller, Silk at `0x00606FA9`.
+- Arrow render `0x0060F590` retains the streak while height is at most `-20`,
+  with age capped at 35, near endpoint five velocity steps back, width two,
+  constant RGB `(.5,.5,.5)`, and near alpha `light * .5 * (.8 + Float(.2))`.
+  Light is an **alpha** operand, not a substitute gray RGB tint. Both endpoint
+  colors are independently truncated into bytes: native `.5` gray is 127.
+  All three payloads share this branch; shaft and elemental overlays do not.
+- FadeLine `0x0045AC40` keeps its two white endpoint gradients and ordinary
+  blend; it does not inherit Silk's additive state or manufacture an Arrow.
+- All ten references to `0x00455840` match entry 175's complete seven-owner
+  census: weather rain, Player/PlayerTarget Seeker, Hall separators,
+  Hailstones, Anim_Line, Arrow/Silk, and FadeLine. Their native state machines
+  are separate; the endpoint multiplication/quad helper is shared.
+
+The pre-fix GPU regression ran 557 samples with no console, page, or HTTP
+errors and **104 incorrect pixel rows**. The 96 fixed/Arena standalone or
+capacity-grown rows ignored registered vertex colors and drew opaque white.
+Eight premultiplied Arena surface rows ignored the required source-alpha
+factor in RGB. For example a dense Arena gradient returned `(255,255,255,255)`
+instead of approximately `(57,63,16,72)`. This falsifies the earlier claim that
+registering colors with the batcher alone preserves all gradient meshes.
+
+### Membership and implementation plan
+
+All rows below are recovered-pending-port/verification at this checkpoint.
+The final receipt replaces these provisional states with tested dispositions.
+
+| Member | Required correction or preserved contract |
+| --- | --- |
+| Silk short, capacity-grown, fading and reused meshes; sparkles | Real vertex-color buffer in both shader paths; additive native blend; unchanged spline/RNG |
+| Detached FadeLine fragments | Same buffer delivery, ordinary blend, unchanged endpoint fade and teardown |
+| Normal, fire, poison Arrow streaks; airborne/descending/grounded; hit redraw | Premultiplied white texture handled correctly; raw light in alpha, constant native gray, shared live geometry |
+| NativeBossSpellMesh UltraBanish and mouth-beam segment | Shared registered colors remain correct without changing authored geometry or additive recipe |
+| NativeEnemyUnderlayView per-quad light/shadow layers | Existing four-vertex path preserved; same registered-color contract |
+| Enchant Staff aura | Existing four-vertex gradient and borrowed art lifetime preserved |
+| Secondary Ether plane mesh and secondary gradients | Shared registered-color contract, including large geometry and mutable color arrays |
+| Ground, road, building base/roof custom surfaces and diffuse redraws | Select correct shader for straight versus premultiplied texture; native straight-alpha pages unchanged |
+| Fixed/Hub and Arena, uniform and colored meshes, all four texture/diffuse modes | Uniform paths unchanged; native packed channels survive either mesh delivery path |
+| Weather/Seeker/Hail/Anim_Line native siblings and Hall separators | Already use independent, alpha-correct owners; validate shared material controls and retain their prior contracts |
+| White Webbed player silhouette, Shield/Deflect and projectile mechanics | Out of this material correction; preserve native presentation and the report-29 mechanics |
+
+No browser limitation requires an approximation. Validation will include an
+independent GPU blend/interpolation oracle, real Silk and all Arrow payload
+views, resize/reuse/color mutation/context restoration and disposal, the
+canonical M2 Website gate, and built `/game` Spider/Arrow journeys.

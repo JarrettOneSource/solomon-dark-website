@@ -25,6 +25,7 @@ import {
   installNativeBatchMaterial,
   nativeTextureMode,
   requireNativeWebGlRenderer,
+  updateNativeMeshVertexColors,
 } from './native-material-batch.ts'
 
 export const NATIVE_ARENA_SATURATION = 0.65
@@ -70,7 +71,7 @@ export const NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL = {
   },
 }
 
-const NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL = {
+export const NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL = {
   // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-arena-premultiplied-saturation',
   fragment: {
@@ -96,7 +97,7 @@ export function installNativeArenaRenderPipeline(
   let graphicsShader = createNativeArenaGraphicsShader(
     nativeRenderer.limits.maxBatchableTextures,
   )
-  const meshShaders = [0, 1, 2, 3].map(createNativeArenaMeshShader)
+  const meshShaders = [0, 1, 2, 3, 4, 5, 6, 7].map(createNativeArenaMeshShader)
   const originalGraphicsShader = graphicsAdaptor.shader
   const originalGraphicsContextChange = graphicsAdaptor.contextChange
   graphicsAdaptor.shader = graphicsShader
@@ -113,7 +114,8 @@ export function installNativeArenaRenderPipeline(
     meshPipe: MeshPipe,
     mesh: Mesh,
   ): void {
-    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh)]!
+    const vertexMode = updateNativeMeshVertexColors(mesh) ? 4 : 0
+    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh) + vertexMode]!
     // Arena replaces the application's fixed-function shader selection.
     GlMeshAdaptor.prototype.execute.call(this, meshPipe, mesh)
   }
@@ -194,14 +196,14 @@ function createNativeArenaMeshShader(mode: number): Shader {
       name: `native-arena-mesh-${mode}`,
       bits: [
         localUniformBitGl,
-        NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
+        mode < 4 ? NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL : NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
         textureBitGl,
         roundPixelsBitGl,
         {
           ...NATIVE_ARENA_SATURATION_BIT_GL,
           fragment: {
             header: NATIVE_TEXTURE_COLOR_HEADER,
-            end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(/nativeTextureModeValue/g, `${mode}.0`),
+            end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(/nativeTextureModeValue/g, `${mode % 4}.0`),
           },
         },
       ],

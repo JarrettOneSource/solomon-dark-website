@@ -71,6 +71,23 @@ try {
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     assert.deepEqual(failures, [], 'GPU output must match independent native RGBA interpolation and blending')
     assert.deepEqual(contexts, [{ previousShaderDestroyed: true, previousProgramDestroyed: true }])
+    const trails = await page.evaluate(async () => {
+      const { inspectNativeProjectileTrails } = await import('/tools/native-projectile-trail-probe.mjs')
+      return inspectNativeProjectileTrails()
+    })
+    console.log(JSON.stringify({ trails }))
+    for (const row of trails.silk) {
+      assert.equal(row.differentChannels, 0, `actual ${row.name} must match native small-quad delivery`)
+      assert.equal(row.blend, row.name === 'fragment' ? 'normal' : 'add')
+      if (['short', 'grown', 'reused-short', 'faded-grown'].includes(row.name)) assert.ok(row.visiblePixels > 0)
+      if (['new', 'invisible'].includes(row.name)) assert.equal(row.visiblePixels, 0)
+    }
+    assert.ok(trails.silk.find(row => row.name === 'grown').capacity > 100)
+    assert.equal(trails.arrows.length, 36)
+    for (const row of trails.arrows) for (const sample of row.samples) {
+      assert.ok(sample.pixel.every((value, i) => Math.abs(value - sample.expected[i]) <= 2), JSON.stringify(row))
+    }
+    assert.ok(trails.retiredWebs && trails.retiredArrows)
     const puppetHits = await page.evaluate(async () => {
       const { inspectNativePuppetHits } = await import('/tools/native-puppet-hit-probe.mjs')
       return inspectNativePuppetHits()

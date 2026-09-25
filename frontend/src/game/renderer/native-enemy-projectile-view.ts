@@ -1,11 +1,12 @@
 import { Container, Sprite, Texture } from 'pixi.js'
+import { nativeBoneyardLightTint } from '../core-kernels/native-boneyard-light-model.ts'
 
 import type { BoneyardEnemyProjectileEffectSnapshot, BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
 import { nativePuppetHitAlpha, nativePuppetHitTimer, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import { multiplyNativeTints, nativePuppetHitTint, setNativeDiffuseColor } from './native-texture-color.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
-import { nativeEnemyProjectileLifetimeAlpha, nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
+import { nativeArrowStreakColors, nativeEnemyProjectileLifetimeAlpha, nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 import type { NativeEnemyProjectileStreak, NativeEnemyProjectileLayer } from './native-enemy-projectile-presentation.ts'
 import { createNativeSurfaceMesh, createNativeSurfaceRedraw, type NativeStaticSurfaceMesh } from './boneyard-building-surface-view.ts'
 
@@ -53,8 +54,8 @@ export class NativeEnemyProjectileViews {
     this.views.get(id)?.setDepth(depth)
   }
 
-  setTint(id: number, tint: number): void {
-    this.views.get(id)?.setTint(tint)
+  setLightScalar(id: number, scalar: number): void {
+    this.views.get(id)?.setLightScalar(scalar)
   }
 
   setRenderable(renderable: boolean): void {
@@ -90,6 +91,8 @@ class NativeEnemyProjectileView {
   private kind: BoneyardEnemyProjectileSnapshot['kind'] = 'arrow'
   private payload: BoneyardEnemyProjectileSnapshot['payload'] = 'normal'
   private worldTint = 0xffffff
+  private worldLightScalar = 1
+  private streakAlpha = 0
   private streak: NativeStaticSurfaceMesh | null = null
   private readonly textures: BoneyardWorldTextures
 
@@ -170,12 +173,7 @@ class NativeEnemyProjectileView {
       plan.end.x + normalX, plan.end.y + normalY,
     ])
     positions.update()
-    const alpha = Math.round(plan.alpha * 255)
-    this.streak.colors.set([
-      128, 128, 128, alpha, 128, 128, 128, alpha,
-      128, 128, 128, 0, 128, 128, 128, 0,
-    ])
-    geometry.getBuffer('aColor').update()
+    this.streakAlpha = plan.alpha
     this.streak.mesh.visible = true
   }
 
@@ -183,8 +181,9 @@ class NativeEnemyProjectileView {
     this.container.zIndex = depth
   }
 
-  setTint(tint: number): void {
-    this.worldTint = tint
+  setLightScalar(scalar: number): void {
+    this.worldLightScalar = scalar
+    this.worldTint = nativeBoneyardLightTint(scalar)
     this.applyTint()
   }
 
@@ -195,8 +194,10 @@ class NativeEnemyProjectileView {
     )
     this.mainLayers.forEach((layer, index) => { this.sprites[index]!.tint = tint(layer, index) })
     this.hitLayers.forEach((layer, index) => { this.hitSprites[index]!.tint = tint(layer, index) })
-    if (this.streak) this.streak.mesh.tint = this.worldTint
-    if (this.hitStreak) this.hitStreak.mesh.tint = this.worldTint
+    if (this.streak) {
+      this.streak.colors.set(nativeArrowStreakColors(this.streakAlpha, this.worldLightScalar))
+      this.streak.mesh.geometry.getBuffer('aColor').update()
+    }
   }
 
   setRenderable(renderable: boolean): void {

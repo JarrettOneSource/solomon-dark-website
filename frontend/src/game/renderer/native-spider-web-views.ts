@@ -32,10 +32,10 @@ export class NativeSpiderWebViews {
     this.liveIds.clear()
     for (const silk of silks) {
       const plan = nativeSilkMesh(silk.state, lightAt, createNativeRng(silk.id ^ Math.trunc(presentationFrame)))
-      this.updateMesh(`silk:${silk.id}`, this.root, plan)
+      this.updateMesh(`silk:${silk.id}`, this.root, plan, 'add')
     }
     for (const fragment of fragments) {
-      this.updateMesh(`silk-fragment:${fragment.id}`, this.root, fadeLineMesh(fragment.state))
+      this.updateMesh(`silk-fragment:${fragment.id}`, this.root, fadeLineMesh(fragment.state), 'normal')
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
@@ -59,13 +59,14 @@ export class NativeSpiderWebViews {
     this.liveIds.clear()
   }
 
-  private updateMesh(id: string, root: Container, plan: GradientMeshPlan): void {
+  private updateMesh(id: string, root: Container, plan: GradientMeshPlan, blendMode: 'add' | 'normal'): void {
     this.liveIds.add(id)
     let view = this.views.get(id)
     if (!view) {
       view = new GradientMeshView(root, id)
       this.views.set(id, view)
     }
+    view.mesh.blendMode = blendMode
     view.update(plan)
   }
 }

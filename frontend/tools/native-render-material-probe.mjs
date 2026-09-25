@@ -12,7 +12,7 @@ import {
 import { setNativeVertexColors } from '../src/game/renderer/native-material-batch.ts'
 import { renderNativeDiffuseMask, setNativeDiffuseColor } from '../src/game/renderer/native-texture-color.ts'
 
-import { createNativeLitSurfaceGrid } from '../src/game/renderer/boneyard-building-surface-view.ts'
+import { createNativeLitSurfaceGrid, createNativeSurfaceMesh } from '../src/game/renderer/boneyard-building-surface-view.ts'
 
 const size = 16
 const vertices = new Float32Array([0, 0, size, 0, size, size, 0, size])
@@ -80,17 +80,28 @@ export async function renderNativeMaterialSamples() {
           for (const gradient of gradients) {
             const texture = textureFromPixel([255, 255, 255, 255], premultiplied)
             retainedTextures.push(texture)
-            const mesh = new MeshSimple({ indices, texture, uvs, vertices })
-            mesh.blendMode = blend
-            mesh.alpha = gradient.groupAlpha ?? 1
-            setColors(mesh, new Uint32Array([
-              pack(gradient.top), pack(gradient.top), pack(gradient.bottom), pack(gradient.bottom),
-            ]))
-            samples.push({
-              ...gradient, blend, mode, premultiplied,
-              pixel: drawSample(app, target, mesh),
-            })
-            mesh.destroy()
+            for (const kind of ['batched', 'standalone', 'grown', ...(mode === 'arena' ? ['surface'] : [])]) {
+              const positions = kind === 'grown' ? new Float32Array(256) : vertices.slice()
+              const meshUvs = kind === 'grown' ? new Float32Array(256) : uvs.slice()
+              positions.set(vertices)
+              meshUvs.set(uvs)
+              const colors = new Uint32Array(positions.length / 2)
+              colors.set([pack(gradient.top), pack(gradient.top), pack(gradient.bottom), pack(gradient.bottom)])
+              const surface = kind === 'surface' ? createNativeSurfaceMesh(texture, {
+                positions, uvs: meshUvs, indices: indices.slice(), colors: new Uint8Array(colors.buffer),
+              }) : null
+              const mesh = surface?.mesh ?? new MeshSimple({ indices: indices.slice(), texture, uvs: meshUvs, vertices: positions })
+              if (kind === 'standalone') mesh.geometry.batchMode = 'no-batch'
+              mesh.blendMode = blend
+              mesh.alpha = gradient.groupAlpha ?? 1
+              if (!surface) setColors(mesh, colors)
+              samples.push({
+                ...gradient, blend, kind, mode, premultiplied,
+                pixel: drawSample(app, target, mesh),
+              })
+              if (surface) surface.destroy()
+              else { mesh.geometry.destroy(true); mesh.destroy() }
+            }
           }
         }
       }

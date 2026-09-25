@@ -434,9 +434,9 @@ export class BoneyardDynamicScene {
       )
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
-      this.enemyProjectiles.setTint(
+      this.enemyProjectiles.setLightScalar(
         projectile.id,
-        nativeBoneyardLightTint(worldLightScalar(projectile.position)),
+        worldLightScalar(projectile.position),
       )
     }
     for (const effect of snapshot.world.enemyProjectileEffects) {

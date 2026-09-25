@@ -1,5 +1,5 @@
 import {
-  BatchGeometry, Batcher, BatcherPipe, DefaultBatcher, Shader,
+  BatchGeometry, Batcher, BatcherPipe, Buffer, BufferUsage, DefaultBatcher, Shader,
   compileHighShaderGlProgram, generateTextureBatchBitGl, getBatchSamplersUniformGroup,
   roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type BatchableSprite,
   type GlBatchAdaptor, type Mesh, type Renderer, type Texture, type WebGLRenderer,
@@ -195,6 +195,19 @@ export function setNativeVertexColors(
   colors: Uint32Array,
 ): void {
   nativeVertexColors.set(renderable, colors)
+  const buffer = renderable.geometry.attributes.aColor?.buffer
+  if (buffer) buffer.data = colors
+  else renderable.geometry.addAttribute('aColor', {
+    buffer: new Buffer({ data: colors, usage: BufferUsage.VERTEX | BufferUsage.COPY_DST }),
+    format: 'unorm8x4', offset: 0, stride: 4,
+  })
+}
+
+/** Registered arrays are mutable; standalone draws must upload their current channels too. */
+export function updateNativeMeshVertexColors(renderable: Mesh): boolean {
+  if (!nativeVertexColors.has(renderable)) return false
+  renderable.geometry.getBuffer('aColor').update()
+  return true
 }
 
 function multiplyNativePackedColors(vertex: number, group: number): number {

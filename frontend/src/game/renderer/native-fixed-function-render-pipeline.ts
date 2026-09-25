@@ -16,7 +16,8 @@ import {
 import { NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 import {
-  NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL, installNativeBatchMaterial, nativeTextureMode, requireNativeWebGlRenderer,
+  NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL, NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL, installNativeBatchMaterial,
+  nativeTextureMode, requireNativeWebGlRenderer, updateNativeMeshVertexColors,
 } from './native-material-batch.ts'
 
 const NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS = Object.freeze({
@@ -84,7 +85,7 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
 
   const meshAdaptor = nativeRenderer.renderPipes.mesh?.['_adaptor'] as GlMeshAdaptor | undefined
   if (!meshAdaptor) return
-  const meshShaders = [0, 1, 2, 3].map(createNativeFixedFunctionMeshShader)
+  const meshShaders = [0, 1, 2, 3, 4, 5, 6, 7].map(createNativeFixedFunctionMeshShader)
   const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
   const originalMeshDestroy = meshAdaptor.destroy
@@ -94,7 +95,8 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
     meshPipe: MeshPipe,
     mesh: Mesh,
   ): void {
-    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh)]!
+    const vertexMode = updateNativeMeshVertexColors(mesh) ? 4 : 0
+    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh) + vertexMode]!
     originalMeshExecute.call(this, meshPipe, mesh)
   }
   meshAdaptor.destroy = function destroyNativeFixedFunctionMeshAdaptor(): void {
@@ -111,7 +113,7 @@ function createNativeFixedFunctionMeshShader(mode: number): Shader {
       header: NATIVE_TEXTURE_COLOR_HEADER,
       end: NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE.replace(
         /nativeTextureModeValue/g,
-        `${mode}.0`,
+        `${mode % 4}.0`,
       ),
     },
   }
@@ -123,7 +125,7 @@ function createNativeFixedFunctionMeshShader(mode: number): Shader {
         localUniformBitGl,
         textureBitGl,
         roundPixelsBitGl,
-        NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
+        mode < 4 ? NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL : NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
         nativeColorBit,
       ],
     }),

@@ -4,7 +4,7 @@ import test from 'node:test'
 
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
-import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
+import { nativeArrowStreakColors, nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 
 const manifests = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
@@ -257,3 +257,25 @@ function projectile(
 function manifest(relativePath: string): AtlasManifest {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8')) as AtlasManifest
 }
+
+
+test('all Arrow streak payloads retain native gray while lighting scales only alpha', () => {
+  for (const payload of ['normal', 'fire', 'poison'] as const) {
+    const source = projectile('arrow', 0x7da, {
+      ageTicks: 40, headingDeg: 90, payload, speed: 6, verticalOffset: -20,
+    })
+    const streak = nativeEnemyProjectilePlan(source, 20).streak!
+    assert.deepEqual(streak.start, { x: -30, y: -20 })
+    assert.deepEqual(streak.end, { x: -210, y: -20 })
+    for (const light of [0, 0.25, 0.5, 1]) {
+      const alpha = Math.trunc(Math.fround(streak.alpha * light) * 255)
+      assert.deepEqual([...nativeArrowStreakColors(streak.alpha, light)], [
+        127, 127, 127, alpha, 127, 127, 127, alpha,
+        127, 127, 127, 0, 127, 127, 127, 0,
+      ])
+    }
+    for (const height of [-19.99, 0]) {
+      assert.equal(nativeEnemyProjectilePlan({ ...source, verticalOffset: height }, 20).streak, null)
+    }
+  }
+})

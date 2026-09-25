@@ -20,6 +20,7 @@ import {
 } from './boneyard-static-surface-lighting.ts'
 import {
   NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
+  NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL,
 } from './native-arena-render-pipeline.ts'
 
 export interface NativeStaticSurfaceMesh {
@@ -29,17 +30,20 @@ export interface NativeStaticSurfaceMesh {
   update(scalars: ArrayLike<number>): void
 }
 
-const NATIVE_STATIC_SURFACE_PROGRAM = compileHighShaderGlProgram({
+const NATIVE_STATIC_SURFACE_PROGRAMS = [
+  NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
+  NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL,
+].map(saturation => compileHighShaderGlProgram({
   bits: [
     NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
     localUniformBitGl,
     textureBitGl,
     roundPixelsBitGl,
-    NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
+    saturation,
   ],
   // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
   name: 'native-static-surface',
-})
+}))
 
 interface NativeSurfaceGeometry {
   readonly colors: Uint8Array
@@ -115,7 +119,7 @@ export function createNativeSurfaceRedraw(source: NativeStaticSurfaceMesh, diffu
 
 function createNativeSurfaceShader(texture: Texture, diffuse = false): Shader {
   return new Shader({
-    glProgram: NATIVE_STATIC_SURFACE_PROGRAM,
+    glProgram: NATIVE_STATIC_SURFACE_PROGRAMS[texture.source.alphaMode === 'no-premultiply-alpha' ? 0 : 1]!,
     resources: {
       nativeTextureColor: diffuse ? NATIVE_DIFFUSE_TEXTURE_COLOR_UNIFORMS : NATIVE_TEXTURE_COLOR_UNIFORMS,
       textureUniforms: {

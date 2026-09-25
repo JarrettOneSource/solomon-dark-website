@@ -1,3 +1,4 @@
+import { nativeLineColor } from '../core-kernels/native-line.ts'
 import {
   nativePoisonPoolAlpha,
 } from '../core-kernels/native-poison-pool.ts'
@@ -217,11 +218,18 @@ function arrowStreak(projectile: BoneyardEnemyProjectileSnapshot, tick: number):
   const y = -Math.cos(radians) * projectile.speed
   const age = Math.min(projectile.ageTicks, 35)
   return {
-    alpha: 0.5 * (0.8 + deterministicUnit(projectile.id, tick, 2) * 0.2),
+    alpha: 0.5 * (Math.fround(0.8) + deterministicUnit(projectile.id, tick, 2) * Math.fround(1 - Math.fround(0.8))),
     start: { x: Math.fround(-5 * x), y: Math.fround(projectile.verticalOffset - 5 * y) },
     end: { x: Math.fround(-age * x), y: Math.fround(projectile.verticalOffset - age * y) },
     width: 2,
   }
+}
+
+/** Arrow::Render 0x0060F590: constant gray RGB; the actor light scales alpha. */
+export function nativeArrowStreakColors(alpha: number, lightScalar: number): Uint8Array {
+  const near = nativeLineColor(0.5, 0.5, 0.5, alpha * lightScalar)
+  const far = nativeLineColor(0.5, 0.5, 0.5, 0)
+  return new Uint8Array(new Uint32Array([near, near, far, far]).buffer)
 }
 
 export function nativeEnemyProjectileLayer(
