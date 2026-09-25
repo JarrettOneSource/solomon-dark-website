@@ -36,6 +36,7 @@ import {
   findBoneyardEnemyRoute,
 } from '../src/game/core-server/boneyard-enemy-navigation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { NATIVE_GENERATED_BONEYARDS } from '../src/game/host/native-generated-boneyards.ts'
 import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { EntityReplicationReconstructor, REPLICATED_ENTITY_TYPES } from '../src/game/protocol/entity-replication.ts'
@@ -57,8 +58,15 @@ const deathEffectsOnly = process.argv.includes('--death-effects-only')
 const spiderOnly = process.argv.includes('--spider-only')
 const zombieGasOnly = process.argv.includes('--zombie-gas-only')
 const groundEffectsOnly = process.argv.includes('--ground-effects-only')
+const spawnReachabilityOnly = process.argv.includes('--spawn-reachability-only')
 const deterministicSeedBytes = Buffer.alloc(16)
 if (portalOnly) deterministicSeedBytes.writeUInt32BE(1)
+if (spawnReachabilityOnly) {
+  const templateIndex = NATIVE_GENERATED_BONEYARDS.findIndex(row => row.sourceSha256 ===
+    '624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123')
+  assert.ok(templateIndex >= 0)
+  deterministicSeedBytes.writeUInt32BE(templateIndex)
+}
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const productionFrontend = process.env.SDR_GAME_WAVES_SMOKE_PRODUCTION === '1'
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
@@ -103,12 +111,16 @@ if (!viteAddress || typeof viteAddress === 'string') {
   throw new Error('Vite did not expose its local smoke-test port')
 }
 const baseUrl = `http://127.0.0.1:${viteAddress.port}`
+const hostErrors = []
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
   createBoneyardSeedBytes: () => Buffer.from(deterministicSeedBytes),
   resetWhenEmpty: true,
   snapshotRate: 20,
+  log: entry => {
+    if (entry.level === 'error') hostErrors.push(entry)
+  },
 })
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -144,7 +156,16 @@ await page.addInitScript((runtime) => {
 await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
-  if (groundEffectsOnly) {
+  if (spawnReachabilityOnly) {
+    await enterBoneyard(page)
+    const { acceptSpawnReachability } = await import('./spawn-reachability-smoke-acceptance.mjs')
+    const spawns = await acceptSpawnReachability({ host, page, wire, screenshotPath })
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    assert.deepEqual(hostErrors, [])
+    process.stdout.write(`${JSON.stringify({ status: 'ok', productionFrontend, spawns, errors, failedResponses, hostErrors })}\n`)
+  } else if (groundEffectsOnly) {
     await enterBoneyard(page)
     const { acceptGroundEffects } = await import('./ground-effects-smoke-acceptance.mjs')
     const groundEffects = await acceptGroundEffects({ host, page, wire, screenshotPath })

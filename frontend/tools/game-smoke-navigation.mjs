@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import { resolveBoneyardSpawnPosition } from '../src/game/core-server/boneyard-collision.ts'
 
 export async function enterElementHub(page, baseUrl, element) {
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
@@ -63,10 +65,12 @@ export async function openBoneyardCombat(host, playerId) {
 
 function setHostPlayerPosition(host, index, position) {
   const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
   const locomotions = [...state.playerEntities.locomotions]
   locomotions[index] = {
     ...locomotions[index],
-    position: { ...position },
+    position: resolveBoneyardSpawnPosition(position, state.world.bounds,
+      state.world.collision, PLAYER_CHARACTER_RADIUS),
     velocity: { x: 0, y: 0 },
   }
   Object.assign(state, {

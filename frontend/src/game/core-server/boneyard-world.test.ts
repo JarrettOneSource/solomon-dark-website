@@ -1316,7 +1316,7 @@ test('direct spawn materialization escapes the captured object-213 grave with a 
   ))
 })
 
-test('spawn materialization rejects a locally mobile root disconnected from every player', () => {
+test('spawn materialization rejects a genuinely partitioned root without misclassifying native scenery', () => {
   const template = NATIVE_GENERATED_BONEYARDS[9]!
   const loaded: LoadedBoneyard = {
     choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
@@ -1327,16 +1327,29 @@ test('spawn materialization rejects a locally mobile root disconnected from ever
     sourceSha256: template.sourceSha256,
   }
   const created = createBoneyardWorld(loaded)
-  const world = { ...created, encounter: null, waves: null }
+  const disconnectedRoot = { x: 2205, y: 41.25 }
+  const playerPosition = { x: 1686.970947265625, y: 982.4320068359375 }
+  assert.ok(findBoneyardEnemyRoute({
+    start: disconnectedRoot, end: playerPosition, bodyRadius: 25,
+    bounds: created.bounds, world: created.collision, clearance: 25,
+  }), 'native scenery is connected once rejected edges cannot corrupt the graph')
+  const world = { ...created, encounter: null, waves: null, collision: {
+    ...created.collision,
+    polygons: [...created.collision.polygons, { points: [
+      { x: created.bounds.x, y: 200 },
+      { x: created.bounds.x + created.bounds.w, y: 200 },
+      { x: created.bounds.x + created.bounds.w, y: 220 },
+      { x: created.bounds.x, y: 220 },
+    ] }],
+  } }
   const player = {
     ...spawnPlayerCharacterInBoneyard({
       discipline: 'arcane',
       displayName: 'Connected Spawn Target',
       element: 'fire',
     }, world),
-    position: { x: 1686.970947265625, y: 982.4320068359375 },
+    position: playerPosition,
   }
-  const disconnectedRoot = { x: 2205, y: 41.25 }
   const result = stepWorld(world, { player }, {}, 0, [{
     enemyToken: 'IMP',
     flags: [],

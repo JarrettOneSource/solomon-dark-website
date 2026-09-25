@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 
 import {
   firstBoneyardPathBlockProgress,
+  canPlaceBoneyardBody,
+  createBoneyardCollisionWorld,
+  resolveNativeBoneyardSpawnPosition,
   type BoneyardCollisionCircle,
   type BoneyardCollisionPolygon,
   type BoneyardCollisionSegment,
@@ -21,6 +27,76 @@ import {
 } from './boneyard-enemy-navigation.ts'
 
 const BOUNDS = { h: 200, w: 200, x: 0, y: 0 }
+
+test('every published generated navigation edge is reciprocal and clearance-safe', () => {
+  for (const template of NATIVE_GENERATED_BONEYARDS) {
+    const collision = createBoneyardCollisionWorld(template.scene)
+    const world = {
+      circles: collision.circles.filter(row => ((row.nativeLineMask ?? 0) & 0x80) === 0),
+      polygons: collision.polygons.filter(row => ((row.nativeLineMask ?? 0) & 0x80) === 0),
+      segments: collision.segments.filter(row => ((row.nativeLineMask ?? 0) & 0x80) === 0),
+    }
+    const transition = createBoneyardArenaTransition(template.scene.bounds, template.scene.spawn)
+    for (const bounds of [transition.fullBounds, transition.combatBounds]) {
+      for (const radius of [25, 50]) {
+        const mesh = buildPreparedBoneyardNavigationMesh(bounds, collision, radius).mesh
+        for (const triangle of mesh.triangles) {
+          const label = `${template.sourceSha256}/${bounds.y}/${radius}/${triangle.id}`
+          assert.equal(new Set(triangle.neighbors).size, triangle.neighbors.length, label)
+          for (const id of triangle.neighbors) {
+            const neighbor = mesh.triangles[id]!
+            assert.notEqual(id, triangle.id, label)
+            assert.ok(neighbor.neighbors.includes(triangle.id), `${label} -> ${id} must be reciprocal`)
+            assert.equal(world.polygons.some(row => navigationPolygonBlocks(row, triangle.center, neighbor.center, radius)), false, label)
+            assert.equal(world.circles.some(row => navigationCircleBlocks(row, triangle.center, neighbor.center, radius)), false, label)
+            assert.equal(world.segments.some(row => navigationSegmentBlocks(row, triangle.center, neighbor.center, radius)), false, label)
+          }
+        }
+      }
+    }
+  }
+})
+
+test('a legal scenery-pocket target cannot turn a valid spawn into the report31 exception', () => {
+  const template = NATIVE_GENERATED_BONEYARDS.find(row => row.sourceSha256 ===
+    '624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123')!
+  const world = createBoneyardCollisionWorld(template.scene)
+  const bounds = createBoneyardArenaTransition(template.scene.bounds, template.scene.spawn).combatBounds
+  const origin = { x: 2515.25634765625, y: 1162.121337890625 }
+  const radius = 19.15580878406763
+  assert.ok(canPlaceBoneyardBody(origin, bounds, world, radius))
+  const rng = createNativeRng(31)
+  for (const target of [
+    { x: 1677.5550758053128, y: 1662.4328215429884 },
+    { x: 1889.337238244112, y: 2017.5395967006748 },
+    { x: 1892.5419160366123, y: 2014.3349189081746 },
+    { x: 1896.25439403125, y: 2011.7354138308917 },
+    { x: 1900.3618704627625, y: 2009.8200661151864 },
+    { x: 1904.7395417382616, y: 2008.6470726321872 },
+    { x: 1083.281494140625, y: 3095.406251 },
+  ]) {
+    assert.ok(canPlaceBoneyardBody(target, bounds, world, 25))
+    const acceptsDomain = (start: Readonly<{ x: number; y: number }>) => findBoneyardEnemyRoute({
+      start, end: target, bodyRadius: radius, endBodyRadius: 25, clearance: 25, bounds, world,
+    }) !== null
+    for (const policy of ['dark', 'light', 'direct', 'offscreen', 'edge'] as const) {
+      const placed = resolveNativeBoneyardSpawnPosition(origin, bounds, world, radius, policy, rng, {
+        acceptsDomain, lightAt: () => policy === 'light' ? 1 : 0,
+        isOffscreen: () => true, isOutsidePolicyBounds: () => true,
+      })
+      assert.deepEqual(placed.position, origin, policy)
+      assert.deepEqual(placed.rngState, rng, 'a legal raw point consumes no retry randomness')
+    }
+    const reverse = findBoneyardEnemyRoute({ start: target,
+      end: { x: 1397.4065004768256, y: 2598.6181652552896 },
+      bodyRadius: 25, clearance: 25, bounds, world })
+    assert.ok(reverse, 'the connector must support leaving the pocket as well as spawning')
+    for (let index = 1; index < reverse.length; index += 1) {
+      assert.equal(firstBoneyardPathBlockProgress(reverse[index - 1]!, reverse[index]!, bounds, world, 25), null,
+        'a successful connector must retain its collision-safe bends')
+    }
+  }
+})
 
 test('spawn reachability can use the smaller destination footprint beside collision', () => {
   const request = {

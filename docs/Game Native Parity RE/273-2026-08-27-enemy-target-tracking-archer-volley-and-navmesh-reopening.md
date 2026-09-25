@@ -1,5 +1,146 @@
 # 2026-08-27 — enemy target tracking, Archer volley, and NavMesh reopening
 
+## 2026-09-25 — report 31: reciprocal clearance-checked navigation adjacency
+
+Status: recovered; regression and implementation acceptance pending. Fleet
+`4y1h7sum`, `/root`, owns this pass. Private diagnostic archives remain outside
+Git; this entry retains conclusions, not private player state.
+
+### Cause and evidence
+
+The reported browser code 1006 was caused by a server exception, not established
+network loss. The submitted diagnostic and the matching production journal
+identify the same session: at 2026-09-23 23:36:54.813 UTC, tick 617028 threw
+`Boneyard has no dark collision-safe spawn placement`, then the supervisor's
+uncaught-exception path exited. The requested radius was
+`19.15580878406763`, from `(2515.25634765625, 1162.121337890625)`.
+
+The original failing state was not retained. A later segment of the same run
+contains a checkpoint at tick 616608 and identifies existing stock template
+`624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123`.
+Replaying its captured idle input does not reproduce the historical tick.
+Controlled collision-boundary probes on that exact geometry do reproduce the
+same exception: legal player roots beside scenery can be rejected by every
+spawn candidate's route-domain query. For example,
+`(1677.5550758053128, 1662.4328215429884)` is a legal radius-25 root;
+the reported raw spawn and radius fail with that target. The broader probe
+found 17 route failures among 14,256 legal boundary samples. These positions
+are controlled falsifiers, not a claim about the reporter's precise movement.
+
+`connectTriangles` published one directed neighbor before checking the
+center-to-center clearance and published its reciprocal only after success.
+The component-repair union then treated even rejected one-way edges as valid
+undirected connectivity. This both admitted blocked links and suppressed the
+safe links needed to reach apparently connected scenery pockets. The mistake
+dates to `c59c27af2`, not the later static-query optimization. Earlier graph
+acceptance did not assert reciprocal, clearance-checked edges over the complete
+generated corpus; its claimed adjacency closure is reopened here.
+
+Retail 0.72.5 and the analyzed Ghidra program independently match SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, base
+`0x00400000`. Fresh read-only recovery follows `005DFF90 -> 005DE720`:
+triangle pairs are visited in both orders, shared-edge test `00405D30` admits
+neighbors and their portal records, and `005DFC90` searches those neighbors.
+Endpoint lookup is `005DDDD0`, wrapper `005DFF20`. The Website's additional
+exact-clearance link filter and local component repair are its already-declared
+collision-representation adapter; they must publish each accepted undirected
+edge atomically. This does not claim stock uses the Website's union algorithm.
+
+Native spawn policy/geometry was rechecked through `00463BE0`, `00463D30`,
+`00466200`, `0057E9C0` and `0057EEE0`. Raw x87 instructions at
+`00463E3D..00463E71` confirm the existing ring-count expression; Ghidra's
+abbreviated `FMUL ST1` must not be mistaken for a write to ST0. LLVM's independent
+retail disassembly shows the destination operand. No ring count, random draw,
+350-unit LIGHT-to-DIRECT transition, bounds policy or light threshold is being
+tuned to mask the graph error. The separately documented native point-preparation
+differences are not established as this report's cause.
+
+### System boundary and membership
+
+The in-scope system is shared navigation graph publication and consumption of
+its connected components, not all browser disconnects or all enemy AI.
+
+| Member | Current disposition | Required acceptance |
+| --- | --- | --- |
+| Shared-edge admission and reciprocal publication | recovered-pending-port | Neither direction exists for a blocked link; both exist for a legal link |
+| Existing local component-repair links | recovered-pending-port | Union consumes only accepted edges; repaired links remain symmetric and clearance-safe |
+| All 12 generated templates, full/active bounds, clearances 25 and 50 | recovered-pending-port | Complete edge census, both directions, no duplicates or self-links |
+| Ordinary and Demon route selection, prepared mesh/cache paths | recovered-pending-port | Existing lifecycle and disconnected-domain tests plus affected-pocket queries |
+| DARK/LIGHT/DIRECT/OFFSCREEN/EDGE spawn consumers | recovered-pending-port | Correct graph reachability, unchanged policy and RNG admission rules |
+| Generated/custom/tutorial scenes and source-mask exclusions | recovered-pending-port | Same graph builder and its existing scene/domain constraints |
+| Wave, scripted, boss, portal and death-child materialization | recovered-pending-port | Shared placement remains collision-safe; normal authoritative delivery and retirement |
+| Native draw/audio/AI clocks, save and wire schemas | verified-already-at-parity | Unchanged by this graph-only correction |
+| Truly impossible or disconnected authored geometry | verified-already-at-parity | Still rejected; no invalid placement or swallowed invariant failure |
+| Native upstream light/offscreen point preparation | out-of-system | Separate recorded differences; not used to justify or disguise this graph correction |
+| Transport retries and supervisor architecture | out-of-system | Diagnostic correlation establishes the spawn exception; no protocol retry patch |
+
+Final acceptance requires failing-before/passing-after graph and spawn
+regressions, the complete unchanged M2 validation gate, real built-client
+gameplay through affected placement and movement, and publication/cleanup.
+No fresh clean-stock gameplay capture or platform-required visual compromise
+is claimed.
+
+### Endpoint membership expansion before implementation
+
+Atomic edge admission repairs 11 of the 17 controlled boundary failures. The
+other six cannot see a triangle center along one straight clearance segment,
+although the player can leave those pockets through ordinary collision-safe
+movement. Independent quarter-unit collision floods escape both remaining
+pocket families, and an existing-movement-solver probe supplies fully checked
+piecewise paths of about 132.67 and 32.16 units to retained triangle centers.
+Representative roots are `(1889.337238244112, 2017.5395967006748)` and
+`(1083.281494140625, 3095.406251)`. Treating a failed straight connector as
+proof of disconnected space is therefore also false.
+
+The Website's existing collision-representation adapter needs a bounded
+piecewise endpoint connector only after every original straight connector
+fails. It follows the existing collision solver toward ranked, local triangle
+centers, using the already-established half-unit movement probe and at most
+one native 500-unit lattice span. Every produced segment must pass the exact
+clearance predicate; failure, no progress, or exhaustion remains failure. The
+accepted path must be retained in route construction, not used merely as a
+boolean license to jump through scenery. This is a geometric adapter for
+the Website's rounded/capsule collision representation, not a claim that
+retail runs these additional probes. Existing successful endpoint choice,
+route tie order, native clocks and gameplay RNG stay unchanged.
+
+The old generated-map test labelled root `(2205, 41.25)` disconnected solely
+because the defective graph rejected it. Correct reciprocal edges reveal a
+safe path. Preserve that finding as a positive regression, and prove actual
+disconnected rejection with an explicit solid partition rather than retaining
+an assertion that encodes the bug.
+
+| Added member | Current disposition | Required acceptance |
+| --- | --- | --- |
+| Six curved-contact endpoint cases | recovered-pending-port | Both directions return collision-safe retained paths, not false disconnects |
+| Local connector limits, no progress, outside bounds and real walls | recovered-pending-port | Bounded work and unchanged rejection of genuinely impossible geometry |
+| Normal direct/triangle endpoint paths | verified-already-at-parity | Original selection is tried first; connector adds no draws or scene exception |
+
+### Focused implementation checkpoint
+
+The reciprocal-edge correction and retained endpoint connectors now pass all
+81 navigation/collision/world tests. The complete 48-mesh edge census covers
+all twelve generated templates, both full and combat bounds, and ordinary/
+Demon clearances. Seven affected endpoint samples each pass all five spawn
+policies and reverse-route segment checks. The extended original-map boundary
+probe now resolves all 14,256 collision-safe samples with zero rejected
+targets. Strict test TypeScript checking passes.
+
+The development-client journey passes actual College/Boneyard entry, native
+Solomon combat admission, Skeleton/Archer/Zombie/Demon materialization at the
+affected roots, continued authoritative snapshots, pause, leave and Last Game
+restoration, followed by another Demon spawn. Browser, HTTP and host error
+arrays are empty. This is not yet the final built-client or canonical-gate
+receipt.
+
+The first browser attempt exposed an invalid test setup: the generic combat
+helper placed its test wizard at `(829.48681640625, 1085.0280151367188)`, inside
+`scenery:object-105`, by adding 250 to Solomon's Y without checking collision.
+That impossible injected root correctly has no route. The helper now uses the
+existing body-safe placement resolver for its test positions, retaining the
+authentic encounter. No production collision, spawn predicate or exceptional
+failure behavior was weakened to accept the invalid fixture.
+
 ## 2026-09-23 — report 17 interleaved static-query investigation
 
 Status: implementation, native-model checks, final canonical Mac validation and

@@ -3,6 +3,8 @@ import {
   boneyardCollisionCandidatesInBounds,
   boneyardCollisionGeometryIdentity,
   canPlaceBoneyardBody,
+  NATIVE_BONEYARD_SPAWN_PLACEMENT,
+  resolveBoneyardMovement,
   type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
 
@@ -130,7 +132,7 @@ export function findBoneyardEnemyRoute(
   }
 
   const mesh = nativeNavMesh(bounds, world, clearance)
-  const startTriangle = resolveEndpointTriangle(
+  const startAttachment = resolveEndpointAttachment(
     mesh,
     start,
     bounds,
@@ -138,7 +140,7 @@ export function findBoneyardEnemyRoute(
     bodyRadius,
     ignoredSourceIds,
   )
-  const endTriangle = resolveEndpointTriangle(
+  const endAttachment = resolveEndpointAttachment(
     mesh,
     end,
     bounds,
@@ -146,12 +148,12 @@ export function findBoneyardEnemyRoute(
     endBodyRadius,
     ignoredSourceIds,
   )
-  if (startTriangle === null || endTriangle === null) return null
-  const trianglePath = findTrianglePath(mesh, startTriangle, endTriangle)
+  if (startAttachment === null || endAttachment === null) return null
+  const trianglePath = findTrianglePath(mesh, startAttachment.triangleId, endAttachment.triangleId)
   if (trianglePath === null) return null
 
-  const route: Readonly<BoneyardPoint>[] = [Object.freeze({ ...start })]
-  appendDistinctRoutePoint(route, mesh.triangles[startTriangle]!.center)
+  const route: Readonly<BoneyardPoint>[] = []
+  for (const point of startAttachment.points) appendDistinctRoutePoint(route, point)
   for (let index = 1; index < trianglePath.length; index += 1) {
     const previous = mesh.triangles[trianglePath[index - 1]!]
     const next = mesh.triangles[trianglePath[index]!]
@@ -170,7 +172,9 @@ export function findBoneyardEnemyRoute(
     }
     appendDistinctRoutePoint(route, next.center)
   }
-  route.push(Object.freeze({ ...end }))
+  for (let index = endAttachment.points.length - 1; index >= 0; index -= 1) {
+    appendDistinctRoutePoint(route, endAttachment.points[index]!)
+  }
   return Object.freeze(simplifyNativeRoutePrefix(
     route,
     bounds,
@@ -621,7 +625,6 @@ function connectTriangles(
         ownerByEdge.set(key, triangle.id)
         continue
       }
-      triangle.neighbors.push(owner)
       const ownerTriangle = retained[owner]!
       if (!pathIsClear(
         triangle.center,
@@ -630,7 +633,9 @@ function connectTriangles(
         world,
         clearance,
       )) continue
-      retained[owner]!.neighbors.push(triangle.id)
+      // Component repair treats these links as undirected connectivity.
+      triangle.neighbors.push(owner)
+      ownerTriangle.neighbors.push(triangle.id)
     }
   }
   connectVisibleTriangleCenters(retained, bounds, world, clearance)
@@ -742,6 +747,11 @@ interface EndpointTriangleCandidate {
   readonly id: number
 }
 
+interface EndpointAttachment {
+  readonly triangleId: number
+  readonly points: readonly Readonly<BoneyardPoint>[]
+}
+
 function byEndpointDistanceThenId(
   left: EndpointTriangleCandidate,
   right: EndpointTriangleCandidate,
@@ -757,14 +767,14 @@ function byEndpointDistanceThenId(
  * remaining triangles are ranked exactly as before only when none of the
  * containing triangles is reachable.
  */
-function resolveEndpointTriangle(
+function resolveEndpointAttachment(
   mesh: BoneyardNavigationMeshData,
   point: Readonly<BoneyardPoint>,
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   radius: number,
   ignoredSourceIds?: ReadonlySet<string>,
-): number | null {
+): EndpointAttachment | null {
   // Every candidate check starts with pathIsClear(point, ...), which rejects a
   // start point outside the navigation bounds before looking at geometry.
   if (!pointInsideNavigationBounds(point, bounds, radius)) return null
@@ -778,7 +788,7 @@ function resolveEndpointTriangle(
   containing.sort(byEndpointDistanceThenId)
   for (const { id } of containing) {
     if (endpointTriangleReachable(mesh, id, point, bounds, world, radius, ignoredSourceIds)) {
-      return id
+      return { triangleId: id, points: [point, mesh.triangles[id]!.center] }
     }
   }
   const containingIds = new Set(containing.map(({ id }) => id))
@@ -796,8 +806,51 @@ function resolveEndpointTriangle(
   remaining.sort(byEndpointDistanceThenId)
   for (const { id } of remaining) {
     if (endpointTriangleReachable(mesh, id, point, bounds, world, radius, ignoredSourceIds)) {
-      return id
+      return { triangleId: id, points: [point, mesh.triangles[id]!.center] }
     }
+  }
+  if (!canPlaceBoneyardBody(point, bounds, world, radius, ignoredSourceIds)) return null
+  for (const { id } of [...containing, ...remaining]) {
+    const center = mesh.triangles[id]!.center
+    if (squaredDistance(point, center) > NATIVE_NAVMESH_LATTICE_STEP ** 2) continue
+    const points = traceEndpointConnector(point, center, bounds, world, radius, ignoredSourceIds)
+    if (points !== null) return { triangleId: id, points }
+  }
+  return null
+}
+
+/** Rounded collision can require a bend before an endpoint sees a triangle center. */
+function traceEndpointConnector(
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): readonly Readonly<BoneyardPoint>[] | null {
+  const step = NATIVE_BONEYARD_SPAWN_PLACEMENT.movementProbe
+  const points: Readonly<BoneyardPoint>[] = [start]
+  let current = start
+  let distance = Math.sqrt(squaredDistance(current, end))
+  let travelled = 0
+  const maximumSteps = Math.ceil(NATIVE_NAVMESH_LATTICE_STEP / step)
+  for (let index = 0; index < maximumSteps; index += 1) {
+    if (travelled + distance > NATIVE_NAVMESH_LATTICE_STEP) return null
+    if (pathIsClear(current, end, bounds, world, radius, ignoredSourceIds)) {
+      points.push(end)
+      return points
+    }
+    const magnitude = Math.min(step, distance)
+    const next = resolveBoneyardMovement(current, {
+      x: current.x + (end.x - current.x) / distance * magnitude,
+      y: current.y + (end.y - current.y) / distance * magnitude,
+    }, bounds, world, radius, ignoredSourceIds)
+    const nextDistance = Math.sqrt(squaredDistance(next, end))
+    if (nextDistance >= distance || !pathIsClear(current, next, bounds, world, radius, ignoredSourceIds)) return null
+    travelled += Math.sqrt(squaredDistance(current, next))
+    points.push(next)
+    current = next
+    distance = nextDistance
   }
   return null
 }
