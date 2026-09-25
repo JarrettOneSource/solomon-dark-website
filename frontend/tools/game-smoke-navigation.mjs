@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict'
-import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
-import { resolveBoneyardSpawnPosition } from '../src/game/core-server/boneyard-collision.ts'
 
 export async function enterElementHub(page, baseUrl, element) {
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
@@ -49,12 +47,12 @@ export async function openBoneyardCombat(host, playerId) {
   assert.notEqual(index, -1)
   const solomon = state.world.encounter?.position
   assert.ok(solomon, 'Combat acceptance requires the authentic Solomon encounter')
-  setHostPlayerPosition(host, index, solomon)
+  await setHostPlayerPosition(host, index, solomon)
   await waitUntil(() => {
     const current = host.state()
     return current.world.kind === 'boneyard' && current.world.encounter?.phase === 'speaking'
   }, 'Solomon did not enter the speaking phase', 10_000)
-  setHostPlayerPosition(host, index, { x: solomon.x, y: solomon.y + 250 })
+  await setHostPlayerPosition(host, index, { x: solomon.x, y: solomon.y + 250 })
   await waitUntil(() => {
     const current = host.state()
     return current.world.kind === 'boneyard'
@@ -63,7 +61,10 @@ export async function openBoneyardCombat(host, playerId) {
   }, 'Solomon did not release the opening combat wave', 30_000)
 }
 
-function setHostPlayerPosition(host, index, position) {
+async function setHostPlayerPosition(host, index, position) {
+  // Pure browser journeys do not load the TypeScript host fixture modules.
+  const { PLAYER_CHARACTER_RADIUS } = await import('../src/game/core-kernels/player-character.ts')
+  const { resolveBoneyardSpawnPosition } = await import('../src/game/core-server/boneyard-collision.ts')
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
   const locomotions = [...state.playerEntities.locomotions]
