@@ -2212,3 +2212,22 @@ The complete Mac `./scripts/validate.sh` gate passed on 2026-09-06 at
 07:45:48 UTC, including the native record suite and the configured coverage
 and mutation gates. Production continuation remains the outstanding
 performance acceptance check for this lifecycle correction.
+
+### 2026-09-25: report 30 standalone gradient and texture-alpha closure
+
+The report-30 reopening in
+[ledger 091](091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md#2026-09-25--report-30-silk-and-arrow-gradient-material-reopening)
+owns the native evidence, complete shared-consumer census and final M2
+qualification for standalone vertex colors and custom-surface alpha handling.
+Registering packed colors with the batcher alone was insufficient: a Silk mesh
+retaining 128 vertices took the standalone path and lost its endpoint colors
+and alpha. Custom surfaces also need the premultiplied shader when their input
+is a premultiplied texture such as Arrow's white streak texture. Both transport
+paths are corrected without changing the native blend equations above.
+
+The follow-up covers fixed/Hub and Arena, batch/standalone/grown meshes, buffer
+reuse/destruction, actual WebGL context recovery, all three Arrow payloads and
+native additive Silk versus ordinary FadeLine fragments. The complete M2 gate
+passed at 21:52:34 UTC on `abda5c261f2f7d3bfb412877378a030745f68e35`, with 100%
+renderer coverage and mutation score. See ledger 091 for precise membership,
+negative controls, acceptance results and the preserved Webbed/RNG boundaries.

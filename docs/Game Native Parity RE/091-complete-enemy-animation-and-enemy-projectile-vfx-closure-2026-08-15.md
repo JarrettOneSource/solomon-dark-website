@@ -2870,3 +2870,68 @@ No browser limitation requires an approximation. Validation will include an
 independent GPU blend/interpolation oracle, real Silk and all Arrow payload
 views, resize/reuse/color mutation/context restoration and disposal, the
 canonical M2 Website gate, and built `/game` Spider/Arrow journeys.
+
+### Final disposition and M2 qualification
+
+The provisional membership table above is superseded by this completed
+2026-09-25 qualification. Runtime implementation is `2f0a0d84`; the frozen
+qualification candidate, including the final lifetime regression, is
+`abda5c261f2f7d3bfb412877378a030745f68e35`. The receipt/index follow-up changes
+only documentation, not these runtime, test, dependency, or gate inputs.
+
+| Member | Final disposition and evidence |
+| --- | --- |
+| Silk new/short/grown/reused/fading/invisible meshes | `exact-ported` shared color delivery and additive blend. Actual view output matches independent small-quad delivery in all six phases, including retained capacity 128. Native spline, pulse, sparkles and existing visual RNG ownership are preserved. |
+| Detached FadeLine fragments | `exact-ported` shared color delivery; ordinary blend retained. Actual fragment output has zero differing channels, and retirement destroys its owned color buffer. |
+| Normal, fire and poison Arrow streaks | `exact-ported` gray-byte truncation, light-in-alpha and premultiplied white-texture handling. All 36 payload/light/height combinations match the native blend oracle; age cap and disappearance above -20 remain intact. |
+| Arrow body, elemental overlays and hit redraw | Existing body/overlay recipes are preserved; the shared streak geometry carries light once in alpha rather than a second RGB tint. Existing puppet-hit/material regressions and the built Archer journey pass. |
+| Boss spell meshes, enemy underlay quads, Enchant Staff aura and secondary Ether/gradient meshes | `exact-ported` shared vertex-color transport in either batching path. Existing owner recipes remain unchanged; generic native RGB/alpha, Staff, hit-material and lifecycle regressions pass. |
+| Ground, road, building base/roof and diffuse surface redraws | `verified-already-at-parity` straight texture-page behavior, with correct premultiplied shader selection added for that input class. Existing native surface, lighting, tint and lifetime checks pass. |
+| Fixed/Hub and Arena; uniform and colored meshes | All texture/diffuse mode combinations retain their recovered equations. Batched, explicitly standalone and capacity-grown gradients are exercised independently. |
+| GPU buffer re-registration, mutation, context recovery and destruction | Owned buffers remain stable across array replacement, do not accumulate, upload changed channels and retire with their geometry. An additional 64-case M2 WebGL matrix covers actual context loss/restoration, both pipelines, both alpha representations and both color modes. |
+| Rain, Seeker, Hail, Anim_Line and Hall separator native siblings | Their separate state/presentation owners and the previously recovered seven-owner line-helper census are preserved. No global line-width or opacity multiplier was introduced. |
+| Webbed character silhouette, Shield/Deflect, Cocoon, flight/damage and authoritative RNG | Preserved native boundaries, not newly tuned effects. Real built-game Shield, web severity, Cocoon/save/resume, flight and retirement checks pass. The intentional white Webbed character overlay is not dimmed. |
+
+No newly introduced approximation or platform blocker remains in this material
+correction. This is not a new clean-stock gameplay capture or a reopening of
+game-wide RNG sequencing; the native static evidence and prior material
+receipts establish the equations, while the current browser runs establish
+Website delivery and behavior.
+
+The unchanged complete command `/opt/homebrew/bin/bash ./scripts/validate.sh`
+passed on M2 at **2026-09-25 21:52:34 UTC**, Fleet job
+`job_20260925T210446Z_5e5a0439e0`, exit 0, on the frozen qualification candidate.
+It included pinned dependency restoration, backend build/contracts/integration
+and formatting, frontend lint/tests, desktop tests, production build/media
+policy, and every configured renderer quality gate. The measured renderer
+scope has **391/391 statements, 128/128 branches, 74/74 functions and 362/362
+lines covered**, with no quality failures. Mutation score is **100%**:
+468 detected by tests, one deliberate nonterminating-loop mutant timed out,
+147 compile errors and 23 existing documented equivalent exclusions; zero
+survivors and zero uncovered mutants. Scope, thresholds and concurrency were
+not weakened.
+
+The first full run correctly failed at 99.79%: replacing `if (buffer)` with
+`if (false)` recreated a GPU buffer while leaving the sampled pixels correct.
+The final regression asserts retained buffer identity, unchanged buffer count
+and owned destruction. That exact former survivor, mutation 343, is now
+`Killed`. No production behavior was changed to satisfy the quality gate.
+
+Focused acceptance also passed: 11 Silk/Arrow tests and typed-test compilation;
+557 independent material pixel rows (104 failed before the fix, zero after);
+seven actual Silk/fragment cases with zero differing channels; 36 actual Arrow
+view cases with three independent pixel samples each; and the additional
+64-case context/color-mode matrix with zero errors or mismatches. Built
+`/game` Spider and Archer journeys passed on both the implementation and the
+qualification revision, with zero browser errors or failed HTTP responses.
+The final built revision was explicitly checked against Git HEAD before each
+journey. Spider acceptance included rank-1/rank-3 Shields, severities 1/2/3,
+pause/save/resume, Cocoon release and death. Archer acceptance included real
+rendered flight samples and authoritative projectile retirement.
+
+Original report evidence remains unchanged: all 118 dated archive files were
+verified against their pre-work SHA-256 manifest. The three task-owned
+read-only Ghidra replicas were confirmed removed. Final publication identity,
+release-build recheck and task cleanup are recorded in the archive's
+`STATUS.md`; no manual production deployment, unrelated checkout cleanup or
+canonical native-project modification is part of this task.

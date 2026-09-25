@@ -332,3 +332,4 @@ entry only when the evidence belongs to a genuinely separate system.
 
 - [2026-09-05 — Lantern collision and secondary cursor placement reopening](<300-2026-09-05-lantern-collision-and-secondary-cursor-placement.md>)
 - [2026-09-05 — Spider survival encounters, Silk, Webbed, Cocoon, and DeadSpider](<091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md#2026-09-05--spider-survival-encounters-and-target-owned-web-restraint-reopening>)
+- [2026-09-25 — Report 30: Silk and Arrow gradients, standalone vertex colors and texture alpha](<091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md#2026-09-25--report-30-silk-and-arrow-gradient-material-reopening>)
