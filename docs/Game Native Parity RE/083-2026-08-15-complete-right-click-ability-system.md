@@ -2048,3 +2048,80 @@ retirement, and immobilizing Mage disruption. The complete correction and
 instruction-level facts are in [ledger 301](301-2026-09-05-generated-survival-boss-encounter-closure.md#dampen-caster-and-canceled-projectile-reopening). Earlier exact-port
 claims for those paths are superseded pending this candidate's Mac/browser proof.
 The explicitly accepted caster-pulse crash repair remains unchanged.
+
+## 2026-09-26 — report 36: pre-Dire secondary-spell lag save audit
+
+The reporter supplied one private save and suggested casting several secondary
+spells before the Dire fights to expose lag. The archive ZIP is 1,555,903 bytes,
+SHA-256 `a5bd9a47e3a74af277d212885235171706b3533b5f81c4df89f8984d39abbdfb`.
+Its `browser-game-save.json` member is schema 39, 1,526,863 bytes, SHA-256
+`6449d98d409d608239d6e3d961ce1fef7bda62a27681a3240d880dcfd7eebfb4`.
+The original ZIP and source messages remain in the private report archive;
+only a bounded working copy was restored on the M2. This is a distinct scene
+from report 37's Dire Aliss death save; a shared cause is not assumed.
+
+### Saved-state and membership evidence
+
+The saved authoritative run is active at tick 1,071,755, wave 30, with one
+level-31 wizard. It contains 124 enemies and 345 independent enemy death
+bouncers. Its secondary store has two Magic Storm clouds, 132 Storm drops,
+two Leviathans, eight appendages, eight motes and two Ether fades (154 actors
+total). The hotbar carries Storm `27`, Leviathan `11` and Magic Shield `54`;
+Storm and Leviathan are already running in the supplied state. The existing
+complete native ability programs in this entry explain 66 Storm drops per
+cloud and the authored Leviathan child population. These counts identify a
+heavy valid workload; they do not by themselves prove a performance defect.
+
+| Member | Investigation disposition |
+| --- | --- |
+| Magic Storm `27` cloud, 66-drop child/strike program, fade and audio | Existing native actor program and tests retained; no extra or permanently leaked Storm family established by this save. |
+| Call Leviathan `11`, appendages, motes and Ether fade | Existing native lifetime/quantity ownership retained; no new parity difference established. |
+| Enemy and death-effect population | Separate wave, enemy and effect owners; present in the save but not attributed to secondary spells without a controlled cause. |
+| Schema-39 restore into current save schema | Current decoder restored the exact continuation; no source state was edited or published. |
+| Renderer and game-host delivery | Measured on the exact saved workload in Mac Chrome and direct simulation; no current-version severe lag reproduced at the saved character's scale. |
+| Dire Aliss death | Separate report 37 and save; excluded from this occurrence. |
+
+### Reproduction and performance boundary
+
+`restoreGameSaveDocument` accepted the original member in 36.5 ms. A direct
+300-tick no-input M2 replay stayed active, with 1.55 ms median and 3.30 ms p95
+simulation cost. Its first cold step took 443.6 ms in that direct stepping
+harness; this is not a measured repeated spell-cast stall or a browser frame.
+The production-client Mac Chrome restore held approximately 60 FPS during the
+first five seconds with empty page, console, HTTP, request, wire and host error
+arrays. The unmodified wizard died in the crowded scene before a sustained
+15-second cast comparison, so later Game Over frames are excluded from active
+combat acceptance.
+
+A task-only controlled journey retained the same saved run and native actor
+programs while refilling mana/health and bounding the diagnostic wizard's
+maximum health at 500. It admitted a real Magic Storm hotbar cast and then a
+real Call Leviathan hotbar cast, taking active parents from one of each to two
+of each; the secondary population peaked at 386. The built Chrome client held
+60.0 FPS in both the five-second pre-cast and ten-second post-cast windows,
+with p95 frame intervals of 16.7 ms and empty error arrays. The run remained
+active. A separate successful stock-health-refill attempt likewise held about
+60 FPS before and after the two casts. Browser log SHA-256 for the bounded
+500-health journey:
+`02b68cf2a8e1e6a443938659480e946066571e8a3086b8cde0c2f28ce1c65db1`.
+These are M2 observations, not measurements of the reporter's PC.
+
+An exploratory one-million-health fixture produced 27–43 FPS and a long
+snapshot gap. That value is outside this wizard's saved 79 maximum health,
+and smaller bounded fixtures did not repeat the slowdown. Its result is
+excluded from the report's performance claim; changing native spell visuals
+or gameplay rules on that proxy would be unjustified. Repeated projection of
+the saved state produced about 260 KB keyframes with sub-millisecond median
+snapshot/projection/encoding phases on M2, also not a sustained cast-stall
+signal. The controlled browser receipts, performance logs and extracted private
+save copies are task scratch, not repository evidence.
+
+No current gameplay defect or native data mismatch was established for this
+specific save and cast sequence. The historical severity on the reporter's PC
+remains unverified without that machine's timing/capture state; this
+investigation does not claim a universal FPS speedup or that every secondary
+combination is lag-free. No runtime, renderer, schema, protocol or asset change
+is justified. The current runtime had already passed the complete canonical
+M2 Website gate for report 35; this report adds documentation only, with
+focused Storm/Leviathan tests and a real built-client save journey. There is no
+browser-platform blocked member.
