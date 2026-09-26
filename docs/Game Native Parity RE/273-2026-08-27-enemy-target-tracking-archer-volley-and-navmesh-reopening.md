@@ -2,9 +2,9 @@
 
 ## 2026-09-25 — report 31: reciprocal clearance-checked navigation adjacency
 
-Status: recovered; regression and implementation acceptance pending. Fleet
-`4y1h7sum`, `/root`, owns this pass. Private diagnostic archives remain outside
-Git; this entry retains conclusions, not private player state.
+Status: recovered, implemented and accepted on the M2. Publication and task
+cleanup are recorded in the private report archive. Fleet `4y1h7sum`, `/root`,
+owns this pass. This entry retains conclusions, not private player state.
 
 ### Cause and evidence
 
@@ -62,13 +62,13 @@ its connected components, not all browser disconnects or all enemy AI.
 
 | Member | Current disposition | Required acceptance |
 | --- | --- | --- |
-| Shared-edge admission and reciprocal publication | recovered-pending-port | Neither direction exists for a blocked link; both exist for a legal link |
-| Existing local component-repair links | recovered-pending-port | Union consumes only accepted edges; repaired links remain symmetric and clearance-safe |
-| All 12 generated templates, full/active bounds, clearances 25 and 50 | recovered-pending-port | Complete edge census, both directions, no duplicates or self-links |
-| Ordinary and Demon route selection, prepared mesh/cache paths | recovered-pending-port | Existing lifecycle and disconnected-domain tests plus affected-pocket queries |
-| DARK/LIGHT/DIRECT/OFFSCREEN/EDGE spawn consumers | recovered-pending-port | Correct graph reachability, unchanged policy and RNG admission rules |
-| Generated/custom/tutorial scenes and source-mask exclusions | recovered-pending-port | Same graph builder and its existing scene/domain constraints |
-| Wave, scripted, boss, portal and death-child materialization | recovered-pending-port | Shared placement remains collision-safe; normal authoritative delivery and retirement |
+| Shared-edge admission and reciprocal publication | exact-ported | Neither direction exists for a blocked link; both exist for a legal link |
+| Existing local component-repair links | verified Website collision adapter | Union consumes only accepted edges; repaired links remain symmetric and clearance-safe |
+| All 12 generated templates, full/active bounds, clearances 25 and 50 | verified Website graph adapter on full corpus | Complete edge census, both directions, no duplicates or self-links |
+| Ordinary and Demon route selection, prepared mesh/cache paths | verified-at-parity after corrected shared attachment | Existing lifecycle and disconnected-domain tests plus affected-pocket queries |
+| DARK/LIGHT/DIRECT/OFFSCREEN/EDGE spawn consumers | verified-already-at-parity after corrected shared graph | Correct graph reachability, unchanged policy and RNG admission rules |
+| Generated/custom/tutorial scenes and source-mask exclusions | verified-already-at-parity through shared builder | Same graph builder and its existing scene/domain constraints |
+| Wave, scripted, boss, portal and death-child materialization | verified-already-at-parity through shared placement | Shared placement remains collision-safe; normal authoritative delivery and retirement |
 | Native draw/audio/AI clocks, save and wire schemas | verified-already-at-parity | Unchanged by this graph-only correction |
 | Truly impossible or disconnected authored geometry | verified-already-at-parity | Still rejected; no invalid placement or swallowed invariant failure |
 | Native upstream light/offscreen point preparation | out-of-system | Separate recorded differences; not used to justify or disguise this graph correction |
@@ -112,8 +112,8 @@ an assertion that encodes the bug.
 
 | Added member | Current disposition | Required acceptance |
 | --- | --- | --- |
-| Six curved-contact endpoint cases | recovered-pending-port | Both directions return collision-safe retained paths, not false disconnects |
-| Local connector limits, no progress, outside bounds and real walls | recovered-pending-port | Bounded work and unchanged rejection of genuinely impossible geometry |
+| Six curved-contact endpoint cases | verified Website collision adapter | Both directions return collision-safe retained paths, not false disconnects |
+| Local connector limits, no progress, outside bounds and real walls | verified Website collision adapter | Bounded work and unchanged rejection of genuinely impossible geometry |
 | Normal direct/triangle endpoint paths | verified-already-at-parity | Original selection is tried first; connector adds no draws or scene exception |
 
 ### Focused implementation checkpoint
@@ -140,6 +140,42 @@ That impossible injected root correctly has no route. The helper now uses the
 existing body-safe placement resolver for its test positions, retaining the
 authentic encounter. No production collision, spawn predicate or exceptional
 failure behavior was weakened to accept the invalid fixture.
+
+### Final report 31 acceptance on the rebased M2 candidate
+
+The code candidate `f813c6ad13feb7e238ccaef9d95c58b9ba4e90be` rebases the
+focused repair onto remote main `f7219df70e56d9f34faf05357be3240948442114`.
+Its exact 7,202 tracked files matched the pre-gate manifest after the complete
+unchanged `/opt/homebrew/bin/bash ./scripts/validate.sh` run exited zero.
+Backend and frontend tests, builds, lint/type/media checks and renderer quality
+completed with no failures; the renderer mutation score was 100%. Full-gate log
+SHA-256: `6590fe784cff6b915aa0db909e91783504885f4686a10a101fda54c43d69d997`.
+
+The built production-client Mac Chrome journey on that same commit exited zero.
+It entered real College/Boneyard play, admitted eight controlled Skeleton,
+Archer, Zombie and Demon spawns at affected legal roots, continued authoritative
+ticks, paused, left and restored Last Game before a final Demon spawn. The
+client, wire, HTTP and host error arrays were empty. First and last pocket
+frames were visually inspected. Browser log SHA-256:
+`f3c109566b403e6b8ea942d26a4f12f80056e28c4d75f0266d428aa30dad1cf5`.
+An initial browser command omitted Node's repository-required type-stripping
+flag and stopped before the game loaded; rerunning the supported command passed
+without a Website source change.
+
+The seven original pending membership rows above now have final dispositions.
+Reciprocal edge publication is exact for the verified retail adjacency rule;
+the bounded, fully checked endpoint bend remains an explicit Website collision
+representation adapter and is not attributed to native execution. Previously
+accepted spawn policies, scenes, materialization consumers and unrelated
+clocks/schema are unchanged. No member is blocked by the browser platform.
+The exact historical player input at tick 617028 remains unavailable; the
+controlled boundary failures and production diagnostic establish the repaired
+exception path without claiming every possible 1006 disconnect is fixed.
+
+This receipt is documentation-only after the complete gate and browser run.
+Runtime, tests, assets and build inputs remain byte-identical to the tested
+commit. Publication, deployment and task cleanup are recorded separately after
+verification.
 
 ## 2026-09-23 — report 17 interleaved static-query investigation
 
