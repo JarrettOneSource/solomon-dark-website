@@ -55,22 +55,70 @@ Existing native catalog rows/assets are reused in full, not re-authored.
 
 | Member | Native source | Disposition / acceptance required |
 | --- | --- | --- |
-| All public skill rows 8–79, every authored rank and boosted/item-granted titles | existing complete catalog; `0066B990` | recovered-pending-port: exhaustive layout checks |
-| All fourteen concentration bonus families, including Meditation 58 | `0065DEF0`, `0066EDDC` | recovered-pending-port: 400-pixel line-add wrapping and unchanged text |
-| Current-rank stats, scalar/vector formatting, explicit newlines | `0065D7F0`, shared line-add | recovered-pending-port: line measurement and frame containment |
-| Description preliminary wrapping | `0066BE48`, `0043D230`, 380 float | recovered-pending-port: reuse native in-place wrapper for plain catalog descriptions |
-| Title/category/boost/level/spacer lines and ExactText directives | `0043C870`, shared line-add | recovered-pending-port: no width clamp independent of rendered strings |
-| All ten exposed Welding detail identities | existing row52/1000–1009 projection | recovered-pending-port: same width and extent owner |
-| SkillScreen Hub/Boneyard and LevelupScreen desktop/touch details | two callers of `drawNativeSkillHoverBox` | recovered-pending-port: built-client journeys, silent read-only details, dismissal |
-| Empty details, left/right edges, above/below flip and viewport clamp | `005AB060`, existing fixed-stage projection | recovered-pending-port: focused layout boundaries |
+| All public skill rows 8–79, every authored rank and boosted/item-granted titles | existing complete catalog; `0066B990` | exact-ported: exhaustive layout checks |
+| All fourteen concentration bonus families, including Meditation 58 | `0065DEF0`, `0066EDDC` | exact-ported: 400-pixel line-add wrapping and unchanged text |
+| Current-rank stats, scalar/vector formatting, explicit newlines | `0065D7F0`, shared line-add | exact-ported: line measurement and frame containment |
+| Description preliminary wrapping | `0066BE48`, `0043D230`, 380 float | exact-ported: reuse native in-place wrapper for plain catalog descriptions |
+| Title/category/boost/level/spacer lines and ExactText directives | `0043C870`, shared line-add | exact-ported: no width clamp independent of rendered strings |
+| All ten exposed Welding detail identities | existing row52/1000–1009 projection | exact-ported: same width and extent owner |
+| SkillScreen Hub/Boneyard and LevelupScreen desktop/touch details | two callers of `drawNativeSkillHoverBox` | exact-ported: built-client journeys, silent read-only details, dismissal |
+| Empty details, left/right edges, above/below flip and viewport clamp | `005AB060`, existing fixed-stage projection | exact-ported: focused layout boundaries |
 | Inventory/item/shop/MsgBox builders | other enumerated HoverBox/line-add callers | out-of-system: separate text producers/compositors; existing native MsgBox wrapper is reused without changing it |
 | Progression, combat, network/save state, hotbar model | independent authoritative owners | out-of-system: no mutation needed for tooltip width |
 | Root selectors 0–7 and internal Plane Orb/Reserved rows 80/81 | complete catalog boundary | out-of-system: roots are page headings; rows80/81 have no category or authored tooltip config |
 
-No browser constraint requires a visible approximation. Final per-member
-dispositions and exact candidate validation/browser receipts follow after
-implementation. Original report text, screenshot and source metadata remain
+No browser constraint requires a visible approximation. The per-member checks and built-client results below establish the implemented
+width contract. The final integrated release remains gated on canonical Mac validation. Original report text, screenshot and source metadata remain
 in the named archive; execution probes and captures are task scratch.
+
+### Implemented width contract and per-member checks
+
+Single-fix candidate `cd93627843d7f3442b8b6a5dd8fa6c595697c9c8` passed 31 focused
+skill-book/typography contracts, strict test TypeScript checking, lint, and a
+production build. The new red regression first demonstrated the 424-pixel
+Meditation line against the old 380-pixel content cap. The corrected generic
+line-add split is `   Concentrate: Can Meditate while walking (lesser` followed
+by `effect)`. A separate 381-pixel row stays unwrapped and sizes its own frame;
+the description-specific 380-pixel boundary is not applied to other kinds.
+
+The actual native bitmap renderer exercised 422 cases and 59,116 glyphs with
+no ink outside the painted frame. Coverage includes every public skill, native
+maximum and boosted/granted titles, all ten exposed Welding identities,
+left/right placement, above/below placement, empty details, and disposal.
+Every public description was checked to contain no native inline directives;
+reusing the existing plain native wrapper therefore loses no authored control.
+Pure layout tests additionally enumerate every authored rank plus four bonus
+ranks, permanent versus item-granted sources, all semantic line kinds,
+explicit line breaks, inline rank commands, and empty content.
+
+The untouched production client reproduced the reported right-border overrun.
+The corrected built client completed eight real journeys: desktop 1600x900 and
+Chrome touch-emulated 844x390, each with SkillPicker in College and Boneyard,
+and learned SkillBook in both scenes. Meditation rank-one and rank-two previews,
+mouse/keyboard focus/tap, sibling replacement, real selection, dismissal, and
+reopening passed. Detail inspection did not grant a rank or play acquisition
+audio; the real selection granted exactly once and played once. Browser,
+HTTP, and wire error arrays were empty. Before/after desktop and compact-touch
+frames were visually inspected. Physical-mobile and fresh clean-stock runtime
+capture are not claimed.
+
+The maintained smoke tools are `frontend/tools/smoke-skill-tooltip.mjs` and
+`frontend/tools/smoke-skill-tooltip-render.mjs`. The first uses a private
+standalone test host and deterministic native offers. Like the existing
+SkillPicker smoke, it supplies a new input edge after preparing the barrier;
+waiting for paused ticks cannot publish a manually prepared fixture. No
+production timing workaround or host modification was added.
+
+The final integrated candidate includes the separately owned report32 commit.
+Its complete canonical gate, exact-source manifest, repeated post-build
+browser/render checks, publication, and cleanup are recorded in the canonical
+M2 archive receipt `_source/20260926-report33-9dfnkrb2-release.json` and STATUS.md.
+That receipt starts explicitly pending and is completed only after those
+steps succeed. Keeping release bookkeeping there leaves the fully qualified
+Website source tree unchanged. All in-system membership above uses the same
+measured/wrapped compositor; no extractable width fact or platform-blocked
+member remains. Original source/media evidence is preserved separately from
+disposable execution logs and captures.
 
 ## Reported smell and parity question
 
