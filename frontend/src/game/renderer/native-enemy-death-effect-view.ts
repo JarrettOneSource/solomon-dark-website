@@ -2,9 +2,11 @@ import { Color, Container, FillGradient, Graphics, Sprite, type ICanvas, type Te
 
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
+import type { PositionedNativeRegionPainterLayer } from '../region-painter-order.ts'
 import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import { NativeDeathEffectMeshRuns } from './native-death-effect-mesh-runs.ts'
 import {
   nativeEnemyDeathEffectIsBanish,
   nativeEnemyDeathEffectVerticalScale,
@@ -19,16 +21,20 @@ const MIN_BATCH_RETIREMENT = 512
 
 export class NativeEnemyDeathEffectViews {
   private readonly liveIds = new Set<number>()
+  private readonly meshRuns: NativeDeathEffectMeshRuns
   private readonly root: Container
   private readonly preWorldRoot: Container
   private readonly textures: BoneyardWorldTextures
   private readonly views = new Map<number, NativeEnemyDeathEffectView>()
+  private readonly worldViews = new Map<string, NativeEnemyDeathEffectView>()
+  private readonly worldSprites: Sprite[] = []
   private visibleCount = 0
 
   constructor(root: Container, textures: BoneyardWorldTextures, preWorldRoot: Container) {
     this.root = root
     this.preWorldRoot = preWorldRoot
     this.textures = textures
+    this.meshRuns = new NativeDeathEffectMeshRuns(root)
   }
 
   update(
@@ -48,6 +54,9 @@ export class NativeEnemyDeathEffectViews {
           effect,
         )
         this.views.set(effect.id, view)
+        if (effect.presentationOwner === 'world-sorted') {
+          this.worldViews.set(`enemy-death-effect:${effect.id}`, view)
+        }
       }
       if (view.update(effect, visibleBounds, viewHeight)) this.visibleCount += 1
     }
@@ -56,6 +65,7 @@ export class NativeEnemyDeathEffectViews {
       if (this.liveIds.has(id)) continue
       retired.push(view)
       this.views.delete(id)
+      this.worldViews.delete(`enemy-death-effect:${id}`)
     }
     this.destroyViews(retired)
   }
@@ -64,12 +74,24 @@ export class NativeEnemyDeathEffectViews {
     this.views.get(id)?.setDepth(depth)
   }
 
+  applyWorldPainterDepths(layers: readonly PositionedNativeRegionPainterLayer[]): void {
+    this.worldSprites.length = 0
+    for (const layer of layers) {
+      const view = this.worldViews.get(layer.id)
+      if (!view?.visible) continue
+      view.setDepth(layer.zIndex)
+      if (view.worldSprite) this.worldSprites.push(view.worldSprite)
+    }
+    this.meshRuns.update(this.worldSprites)
+  }
+
   isVisible(id: number): boolean {
     return this.views.get(id)?.visible ?? false
   }
 
   setRenderable(renderable: boolean): void {
     for (const view of this.views.values()) view.setRenderable(renderable)
+    this.meshRuns.setRenderable(renderable)
   }
 
   get size(): number {
@@ -82,7 +104,10 @@ export class NativeEnemyDeathEffectViews {
 
   destroy(): void {
     this.destroyViews([...this.views.values()])
+    this.meshRuns.destroy()
     this.views.clear()
+    this.worldViews.clear()
+    this.worldSprites.length = 0
     this.liveIds.clear()
     this.visibleCount = 0
   }
@@ -91,11 +116,12 @@ export class NativeEnemyDeathEffectViews {
     if (views.length >= MIN_BATCH_RETIREMENT) {
       const byRoot = new Map<Container, Set<Container>>()
       for (const view of views) {
-        const root = view.container.parent
-        if (!root) continue
+        const container = view.container
+        const root = container?.parent
+        if (!container || !root) continue
         let retired = byRoot.get(root)
         if (!retired) { retired = new Set(); byRoot.set(root, retired) }
-        retired.add(view.container)
+        retired.add(container)
       }
       for (const [root, retired] of byRoot) {
         if (retired.size < MIN_BATCH_RETIREMENT) continue
@@ -111,6 +137,7 @@ export class NativeEnemyDeathEffectViews {
 }
 
 class NativeEnemyDeathEffectView {
+  private readonly batched: boolean
   private banishGraphics: Graphics | null = null
   private banishSprites: readonly Sprite[] = []
   private bounds: BoneyardBounds | null = null
@@ -121,11 +148,12 @@ class NativeEnemyDeathEffectView {
   private boundsRotation = Number.NaN
   private boundsScale = Number.NaN
   private boundsScaleY = Number.NaN
-  readonly container: Container
+  container: Container | null
   private effect: Sprite | null = null
   private gradientIndex = 0
   private readonly gradients: FillGradient[] = []
   private readonly kind: BoneyardEnemyDeathEffectSnapshot['kind']
+  private readonly label: string
   private readonly directSprite: boolean
   private resourcesCreated = false
   private shadow: Sprite | null = null
@@ -142,23 +170,39 @@ class NativeEnemyDeathEffectView {
     this.kind = initial.kind
     this.shadowed = !nativeEnemyDeathEffectIsBanish(initial.kind) && initial.shadow
     this.directSprite = !this.shadowed && !nativeEnemyDeathEffectIsBanish(initial.kind)
+    this.batched = this.directSprite && initial.presentationOwner === 'world-sorted'
     // Keep native painter insertion order even for equal-depth background
     // effects that enter the camera in a different order than their birth.
-    const label = `enemy-death-effect:${initial.kind}:${initial.id}`
-    if (this.directSprite) {
-      const sprite = new Sprite({ label })
+    this.label = `enemy-death-effect:${initial.kind}:${initial.id}`
+    if (this.batched) {
+      // World singles have planner-owned order, so unseen effects need no Pixi node.
+      this.container = null
+    } else if (this.directSprite) {
+      const sprite = new Sprite({ label: this.label })
       this.container = sprite
       this.effect = sprite
       this.resourcesCreated = true
     } else {
-      this.container = new Container({ label })
+      this.container = new Container({ label: this.label })
     }
-    this.container.eventMode = 'none'
-    root.addChild(this.container)
+    if (this.container) {
+      this.container.eventMode = 'none'
+      root.addChild(this.container)
+    }
+  }
+
+  get worldSprite(): Sprite | null {
+    return this.batched ? this.effect : null
   }
 
   private ensureResources(): Container {
-    if (this.resourcesCreated) return this.container
+    if (this.batched && !this.effect) {
+      this.effect = new Sprite({ label: this.label })
+      this.effect.eventMode = 'none'
+      this.container = this.effect
+      this.resourcesCreated = true
+    }
+    if (this.resourcesCreated) return this.container!
     const resources = nativeEnemyDeathEffectViewResourcePlan({ kind: this.kind, shadow: this.shadowed })
     this.banishGraphics = resources.banishGraphics
       ? new Graphics({ label: 'enemy-banish-gradients' })
@@ -169,17 +213,17 @@ class NativeEnemyDeathEffectView {
     )
     this.effect = resources.effectSprite ? new Sprite() : null
     this.shadow = resources.shadowSprite ? new Sprite() : null
-    this.container.eventMode = 'none'
+    const container = this.container!
     if (this.effect) this.effect.eventMode = 'none'
     if (this.shadow) this.shadow.eventMode = 'none'
     if (this.banishGraphics) this.banishGraphics.eventMode = 'none'
     for (const sprite of this.banishSprites) sprite.eventMode = 'none'
-    if (this.shadow) this.container.addChild(this.shadow)
-    if (this.effect) this.container.addChild(this.effect)
-    if (this.banishGraphics) this.container.addChild(this.banishGraphics)
-    if (this.banishSprites.length > 0) this.container.addChild(...this.banishSprites)
+    if (this.shadow) container.addChild(this.shadow)
+    if (this.effect) container.addChild(this.effect)
+    if (this.banishGraphics) container.addChild(this.banishGraphics)
+    if (this.banishSprites.length > 0) container.addChild(...this.banishSprites)
     this.resourcesCreated = true
-    return this.container
+    return container
   }
 
   update(
@@ -195,7 +239,7 @@ class NativeEnemyDeathEffectView {
       visibleBounds,
     )
     this.visible = visible
-    this.container.renderable = visible
+    if (this.container) this.container.renderable = visible
     if (!visible) return false
     const container = this.ensureResources()
     if (nativeEnemyDeathEffectIsBanish(effect.kind)) {
@@ -233,16 +277,16 @@ class NativeEnemyDeathEffectView {
   }
 
   setDepth(depth: number): void {
-    this.container.zIndex = depth
+    if (this.container) this.container.zIndex = depth
   }
 
   setRenderable(renderable: boolean): void {
-    this.container.renderable = renderable
+    if (this.container) this.container.renderable = renderable
   }
 
   destroy(): void {
     this.clearGradients()
-    this.container.destroy({ children: true })
+    this.container?.destroy({ children: true })
   }
 
   private updateBanish(effect: BoneyardEnemyDeathEffectSnapshot, viewHeight: number): void {

@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { Container, Sprite, Texture } from 'pixi.js'
+import { Container, Matrix, Mesh, Sprite, Texture } from 'pixi.js'
 import { createServer } from 'vite'
 
 const [output, baseline = 'bfa35bd3'] = process.argv.slice(2)
@@ -43,23 +43,25 @@ try {
     if (compareVisible) {
       effects.forEach(effect => views.setDepth(effect.id, effect.id + 0.25))
       views.update(effects, inside, 900)
-      visible = world.children.map(row => ({ label: row.label, z: row.zIndex,
-        draws: (row instanceof Sprite ? [row] : row.children).map(sprite => ({
-          x: row === sprite ? sprite.x : row.x + sprite.x,
-          y: row === sprite ? sprite.y : row.y + sprite.y,
-          scale: [sprite.scale.x, sprite.scale.y], anchor: [sprite.anchor.x, sprite.anchor.y],
-          rotation: sprite.rotation, alpha: sprite.alpha, tint: sprite.tint,
-          blendMode: sprite.blendMode, texture: sprite.texture.uid })) }))
+      views.applyWorldPainterDepths?.(effects.map(effect => ({
+        id: `enemy-death-effect:${effect.id}`, row: 0, zIndex: effect.id + 0.25,
+      })))
+      world.sortChildren()
+      visible = world.children.flatMap(row => row instanceof Mesh
+        ? meshDraws(row)
+        : (row instanceof Sprite ? [row] : row.children).map(spriteDraw))
     }
     views.update([], outside, 900)
+    views.applyWorldPainterDepths?.([])
+    views.destroy()
     assert.equal(world.children.length + preWorld.children.length, 0)
-    views.destroy(); world.destroy(); preWorld.destroy()
+    world.destroy(); preWorld.destroy()
     return { counts, visible }
   }
   const referenceProof = workload(reference, true), candidateProof = workload(candidate, true)
   assert.deepEqual(candidateProof.visible, referenceProof.visible, 'visible output after entry must match')
   assert.equal(candidateProof.counts.logicalEffects, referenceProof.counts.logicalEffects)
-  assert.equal(candidateProof.counts.containers, referenceProof.counts.containers)
+  assert.ok(candidateProof.counts.containers <= referenceProof.counts.containers)
   assert.equal(candidateProof.counts.sprites, 0)
   const samples = []
   for (let warm = 0; warm < 3; warm++) { workload(reference); workload(candidate) }
@@ -83,3 +85,33 @@ try {
   await writeFile(output, JSON.stringify(receipt, null, 2) + '\n')
   console.log(JSON.stringify({ ...receipt, samples: undefined }))
 } finally { await server.close() }
+
+function spriteDraw(sprite) {
+  const transform = sprite.getGlobalTransform(new Matrix())
+  const { minX, minY, maxX, maxY } = sprite.bounds
+  const positions = [minX, minY, maxX, minY, maxX, maxY, minX, maxY]
+  for (let index = 0; index < positions.length; index += 2) {
+    const x = positions[index], y = positions[index + 1]
+    positions[index] = Math.fround(transform.a * x + transform.c * y + transform.tx)
+    positions[index + 1] = Math.fround(transform.d * y + transform.b * x + transform.ty)
+  }
+  const tint = sprite.tint
+  const color = ((tint >> 16 | tint & 0xff00 | (tint & 255) << 16)
+    + (Math.trunc(sprite.alpha * 255) << 24)) >>> 0
+  return { positions, color, blendMode: sprite.blendMode, texture: sprite.texture.uid }
+}
+
+function meshDraws(mesh) {
+  const draws = []
+  const { geometry } = mesh
+  const indices = geometry.indexBuffer.data
+  const positions = geometry.getBuffer('aPosition').data
+  const colors = geometry.getBuffer('aColor').data
+  for (let index = 0; index < indices.length; index += 6) {
+    if (indices[index] === indices[index + 1]) continue
+    const vertex = indices[index]
+    draws.push({ positions: [...positions.slice(vertex * 2, vertex * 2 + 8)],
+      color: colors[vertex], blendMode: mesh.blendMode, texture: mesh.texture.uid })
+  }
+  return draws
+}

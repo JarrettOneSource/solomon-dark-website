@@ -755,6 +755,7 @@ export class BoneyardDynamicScene {
     for (const effect of snapshot.world.deathEffects) {
       if (!this.enemyDeathEffects.isVisible(effect.id)) continue
       const lane = nativeEnemyDeathEffectPainterLane(effect)
+      if (lane === 'world-sorted') continue
       this.enemyDeathEffects.setDepth(
         effect.id,
         lane === 'background'
@@ -763,11 +764,10 @@ export class BoneyardDynamicScene {
           ? order.foregroundZIndex + 1
           : lane === 'pre-world-queue'
           ? 0.5
-          : lane === 'post-world-queue'
-            ? order.foregroundZIndex + 0.25
-            : positionedDynamics.get(`enemy-death-effect:${effect.id}`)?.zIndex ?? 1,
+          : order.foregroundZIndex + 0.25,
       )
     }
+    this.enemyDeathEffects.applyWorldPainterDepths(order.dynamicLayers)
     for (const projectile of snapshot.world.enemyProjectiles) {
       this.enemyProjectiles.setDepth(
         projectile.id,

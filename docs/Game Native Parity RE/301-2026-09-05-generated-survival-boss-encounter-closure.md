@@ -1942,7 +1942,7 @@ remain smaller than the observed browser-frame loss. In a controlled browser
 sample, 8,380 effects are retained and 4,358 visible at the peak. A Chrome
 main-thread profile of the first five seconds attributes time to scene update,
 Pixi renderable collection and sorting, garbage collection, and individual
-`removeChild` calls. The current `NativeEnemyDeathEffectView` wraps every
+`removeChild` calls. The baseline `NativeEnemyDeathEffectView` wraps every
 unshadowed one-sprite effect in a Pixi `Container`, so each of thousands of
 visible smoke sprites contributes an extra retained traversal node. This is
 the leading representation bottleneck to test; the profiler by itself does
@@ -1952,7 +1952,7 @@ not establish a speedup from changing that representation.
 | --- | --- |
 | All native Faculty smoke, bones, scrap and finale births | Preserve exact counts, clocks, opacity, positions, painter registrations and retirement; no arbitrary cap. |
 | Gold, sacks, boss rewards and shared boss-count gate | Preserve the existing loot/authority owner; do not attribute all cost to Gold without a measured differential. |
-| Unshadowed one-sprite death effects | Replace the redundant wrapper/view pair with one retained drawable while preserving absolute transform, atlas, alpha, tint, blend and depth. |
+| Unshadowed one-sprite death effects | Keep one Sprite visual sample; world-sorted samples share meshes only across consecutive painter positions with the same texture/blend, and other lanes retain their direct drawable. Unseen world samples defer Pixi allocation. |
 | Shadowed effects and Banish multi-layer composites | Keep their existing grouped resources and internal order. |
 | Pre-world/background/world/overlay lanes and equal-depth ties | Preserve original root membership and birth insertion order during culling, re-entry and retirement. |
 | Replication, save/restore and full three-Faculty population envelope | Keep identity, every sample and finite protocol capacity unchanged. |
@@ -1977,11 +1977,9 @@ Live saved-death journeys varied in their peak visible population and therefore
 cannot be used as paired FPS comparisons: the unmodified renderer measured
 44–47 FPS for the first five seconds, while flat-sprite runs ranged from
 41–49 FPS with different visible-effect peaks. Both recovered to 60 FPS as
-the finite death effects retired. The remaining transient dip is a real limit
-of rendering thousands of native smoke draws in this browser pipeline; the
-effect count, lifetime, painter order, replication, and loot are preserved.
-Any larger batching or painter-plan change needs a separately measured and
-visually exact implementation, rather than reducing the authored death.
+the finite death effects retired. This remaining dip motivated the ordered
+mesh work below. The effect count, lifetime, painter order, replication, and
+loot are preserved throughout these representation experiments.
 
 The offscreen-detachment experiment did not help. On the saved-death journey
 it fell to 38.6 FPS with a 50 ms p95 frame interval. Visibility churn
@@ -1989,3 +1987,82 @@ repeatedly removed and reinserted thousands of drawables while preserving
 painter depth. That attempt was removed from the source and tests; it is not
 part of the candidate. The full canonical M2 gate, final built-client death
 journey, publication, and cleanup remain to be recorded below.
+
+The flat-sprite candidate `7d190638` passed the complete M2 gate (3,888 Node
+test executions, no failures; renderer mutation score 100%, 468 killed, one
+timeout, 147 compile errors, and no survivors). Its post-gate production-browser
+death replay remained active with all error arrays empty, retired the complete
+death population, and retained 301 loot actors. It still averaged 32.8 FPS in
+the first five seconds at 5,440 visible effects, recovering to 59.6 FPS.
+Unrelated build/emulator workloads were active on the M2, so this absolute FPS
+cannot be paired with earlier runs. The report remains open: passing functional
+checks and a small representation improvement do not establish resolution of
+the reported lag.
+
+A fixed-camera diagnostic centers the same private peak snapshot on the smoke
+cloud, making 7,825 of 8,488 effects visible. Over 180 frames the median costs
+are 23.7 ms total, 12.3 ms scene update, 2.4 ms death-effect updates, 3.9 ms
+Region painter planning, and 10.9 ms Pixi submission (nested phase costs are
+not additive). CPU samples show per-drawable collection, batch construction,
+and sorting as material costs. The snapshot contains 8,194 same-texture,
+normal-blend world-sorted smoke fades. This supports testing ordered mesh runs
+for adjacent unshadowed single-sprite effects, using the existing native mesh
+material and geometry lifetime code. Each run must break at any intervening
+painter, texture, or blend change; shadowed effects, Banish composites and
+non-world lanes retain their owners. This is a proposed representation change
+only. Exact pixels, dynamic retirement/culling, painter interleaving and a
+matched performance gain remain unverified before implementation acceptance.
+
+The disposable ordered-mesh experiment preserves all 1,440,000 pixels of the
+centered 1600x900 fixed-clock comparison. It replaces 7,642 eligible world
+sprites with 359 contiguous texture/blend/depth runs. A warmed single Chrome
+page alternated sprite and mesh modes for three 120-frame samples each after
+60 warm-up frames per window: sprite medians 28.0/25.5/25.0 ms, mesh medians
+26.1/20.6/18.8 ms. Median-of-medians falls from 25.5 to 20.6 ms (19.2%).
+The first experiment allocated per-quad arrays and re-sorted all sprites;
+using the existing ordered painter map and retained buffers removed those
+costs. The production implementation will keep the existing Sprite sampling
+as CPU visual state and make the mesh-run owner solely responsible for GPU
+resources, with exact painter gaps, texture/blend boundaries, and complete
+geometry teardown. No new shader or gameplay rule is needed.
+
+The integrated implementation compares against original main `64fbb0f7` in one
+Chrome page with separate renderers using the exact same snapshot and clock.
+Three alternating 120-frame samples after 60 warm-up frames per window give
+reference medians 27.0/25.3/24.9 ms and candidate medians 17.3/18.2/16.8 ms.
+Both report 7,825 visible effects and empty browser errors. Median-of-medians
+falls 31.6%, from 25.3 to 17.3 ms; final 1600x900 captures are pixel-identical.
+This is a renderer measurement, not a whole-game or reporter-PC FPS promise.
+
+The retained world Sprite is now created only when the effect first becomes
+visible. The 2,000-effect offscreen admission/retirement comparison keeps all
+logical effects, reduces attached containers from 2,000 to 1,000 (the remaining
+half are shadowed), and reduces median time from 2.83 to 1.82 ms. Normalized
+visible quad/color/material output matches the reference after camera entry.
+Type checking and 98 focused tests pass. New tests cover an intervening painter,
+texture and blend boundaries, culling/re-entry, shrinking/regrowing index data,
+retirement, and GPU geometry unload on replacement and final destruction.
+Full validation and built-client acceptance for this final implementation are
+pending; the earlier flat-sprite gate does not qualify this new source.
+
+The full built-client mesh journey preserves the complete 8,597-effect peak,
+301 loot actors, active run and empty error arrays; its first five seconds
+average 41.5 FPS before returning to 60.0. Disabling the test controller's
+duplicate WebSocket decoding still yields 40.9 FPS, so observation overhead
+does not explain the remaining whole-game dip. The next live profile shows
+126 of 2,812 samples in death-effect depth lookup, including repeated painter-ID
+parsing and a second depth pass. A retained painter-ID index can remove that
+work while leaving the planner and native order intact. The renderer gain is
+established; residual whole-game timing and the unavailable reporter PC must
+remain explicit in the final disposition.
+
+The final retained painter-ID index removes per-frame parsing and assigns
+world effect depths once, including the existing shadow/Banish composites.
+The final source comparison again produces identical pixels at 7,825 visible
+effects. In one alternating warmed Chrome session, reference medians are
+20.2/19.5/18.9 ms and candidate medians are 15.0/14.2/14.3 ms; the final
+median-of-medians reduction is 26.7%. Median p95 falls from 22.0 to 16.7 ms.
+Absolute timings vary with other M2 activity, so only within-session paired
+results establish the speedup. The updated painter/texture/blend and lifetime
+regressions pass. The final full M2 gate and dependent built-client replay
+must complete before publication; no completion reaction has been added.
