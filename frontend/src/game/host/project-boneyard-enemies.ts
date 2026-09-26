@@ -24,8 +24,7 @@ export function projectBoneyardEnemyDeathEffect(
   effect: BoneyardEnemyDeathEffect,
 ): BoneyardEnemyDeathEffectSnapshot {
   if (effect.kind === 'black-smoky-bouncer') throw new Error('a smoke emitter has no native draw')
-  return {
-    ...(effect.painterSortBias === undefined ? {} : { painterSortBias: effect.painterSortBias }),
+  const snapshot: BoneyardEnemyDeathEffectSnapshot = {
     ageTicks: effect.ageTicks,
     alpha: effect.alpha,
     atlas: effect.atlas,
@@ -45,6 +44,8 @@ export function projectBoneyardEnemyDeathEffect(
     spawnTick: effect.spawnTick,
     tint: effect.tint,
   }
+  return effect.painterSortBias === undefined ? snapshot
+    : { painterSortBias: effect.painterSortBias, ...snapshot }
 }
 
 export function projectBoneyardEnemies(

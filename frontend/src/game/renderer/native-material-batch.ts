@@ -211,6 +211,10 @@ export function updateNativeMeshVertexColors(renderable: Mesh): boolean {
 }
 
 function multiplyNativePackedColors(vertex: number, group: number): number {
+  switch (group) {
+    // Stryker disable next-line ConditionalExpression: Equivalent: omitting the white identity case performs the same channel multiplication below.
+    case 0xffffffff: return vertex
+  }
   const red = (vertex & 0xff) * (group & 0xff) / 0xff | 0
   const green = (vertex >> 8 & 0xff) * (group >> 8 & 0xff) / 0xff | 0
   const blue = (vertex >> 16 & 0xff) * (group >> 16 & 0xff) / 0xff | 0

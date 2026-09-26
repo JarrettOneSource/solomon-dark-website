@@ -11,40 +11,48 @@ function interpolateEnemyDeathEffects(
   older: readonly BoneyardEnemyDeathEffectSnapshot[],
   newer: readonly BoneyardEnemyDeathEffectSnapshot[],
   blend: number,
+  olderIds: ReadonlySet<number>,
+  newerById: ReadonlyMap<number, BoneyardEnemyDeathEffectSnapshot>,
 ): BoneyardEnemyDeathEffectSnapshot[] {
-  const newerById = new Map(newer.map((effect) => [effect.id, effect]))
-  const effects = older.map((olderEffect) => {
+  const effects: BoneyardEnemyDeathEffectSnapshot[] = []
+  for (const olderEffect of older) {
     const newerEffect = newerById.get(olderEffect.id)
-    if (!newerEffect) return copyEnemyDeathEffect(olderEffect)
+    if (!newerEffect) {
+      if (blend < 1) effects.push(copyEnemyDeathEffect(olderEffect))
+      continue
+    }
     const discrete = blend < 1 ? olderEffect : newerEffect
-    return {
-      ...discrete,
-      painterRegistration: discrete.painterRegistration === null
-        ? null
-        : { ...discrete.painterRegistration },
+    const effect: BoneyardEnemyDeathEffectSnapshot = {
       ageTicks: lerp(olderEffect.ageTicks, newerEffect.ageTicks, blend),
       alpha: lerp(olderEffect.alpha, newerEffect.alpha, blend),
+      atlas: discrete.atlas,
+      blendMode: discrete.blendMode,
+      entry: discrete.entry,
       height: lerp(olderEffect.height, newerEffect.height, blend),
+      id: discrete.id,
+      kind: discrete.kind,
+      ownerActorId: discrete.ownerActorId,
+      painterRegistration: discrete.painterRegistration === null
+        ? null : { ...discrete.painterRegistration },
+      presentationOwner: discrete.presentationOwner,
       position: {
         x: lerp(olderEffect.position.x, newerEffect.position.x, blend),
         y: lerp(olderEffect.position.y, newerEffect.position.y, blend),
       },
-      rotationRadians: lerpCycle(
-        olderEffect.rotationRadians,
-        newerEffect.rotationRadians,
-        blend,
-        Math.PI * 2,
-      ),
+      rotationRadians: lerpCycle(olderEffect.rotationRadians, newerEffect.rotationRadians, blend, Math.PI * 2),
       scale: lerp(olderEffect.scale, newerEffect.scale, blend),
       scaleY: lerp(olderEffect.scaleY, newerEffect.scaleY, blend),
+      shadow: discrete.shadow,
+      spawnTick: discrete.spawnTick,
+      tint: discrete.tint,
     }
-  })
+    if (discrete.painterSortBias !== undefined) effect.painterSortBias = discrete.painterSortBias
+    effects.push(effect)
+  }
   if (blend >= 1) {
-    const knownIds = new Set(effects.map((effect) => effect.id))
     for (const effect of newer) {
-      if (!knownIds.has(effect.id)) effects.push(copyEnemyDeathEffect(effect))
+      if (!olderIds.has(effect.id)) effects.push(copyEnemyDeathEffect(effect))
     }
-    return effects.filter((effect) => newerById.has(effect.id))
   }
   return effects
 }
@@ -544,36 +552,57 @@ type EnemySamples = Pick<BoneyardWorldSnapshot,
   | 'spiderSilks' | 'spiderRemains' | 'silkFragments' | 'webbedPlayers'
 >
 
-export function interpolateBoneyardEnemySamples(older: EnemySamples, newer: EnemySamples, blend: number, targetTick: number): EnemySamples {
-  return {
-    ...interpolateSpiderSamples(older, newer, blend),
-    deathEffects: interpolateEnemyDeathEffects(
+/** One timeline owns these indexes; each sampled output remains independent. */
+export class BoneyardEnemySampleInterpolator {
+  private olderDeathEffects: EnemySamples['deathEffects'] | null = null
+  private newerDeathEffects: EnemySamples['deathEffects'] | null = null
+  private readonly olderDeathEffectIds = new Set<number>()
+  private readonly newerDeathEffectsById = new Map<number, BoneyardEnemyDeathEffectSnapshot>()
+
+  interpolate(older: EnemySamples, newer: EnemySamples, blend: number, targetTick: number): EnemySamples {
+    // Admitted snapshot arrays are immutable; same-tick replacements have new arrays.
+    if (older.deathEffects !== this.olderDeathEffects) {
+      this.olderDeathEffectIds.clear()
+      for (const effect of older.deathEffects) this.olderDeathEffectIds.add(effect.id)
+      this.olderDeathEffects = older.deathEffects
+    }
+    if (newer.deathEffects !== this.newerDeathEffects) {
+      this.newerDeathEffectsById.clear()
+      for (const effect of newer.deathEffects) this.newerDeathEffectsById.set(effect.id, effect)
+      this.newerDeathEffects = newer.deathEffects
+    }
+    return {
+      ...interpolateSpiderSamples(older, newer, blend),
+      deathEffects: interpolateEnemyDeathEffects(
         older.deathEffects,
         newer.deathEffects,
         blend,
+        this.olderDeathEffectIds,
+        this.newerDeathEffectsById,
       ),
-    enemies: interpolateEnemies(older.enemies, newer.enemies, blend),
-    enemyEvents: (blend < 1 ? older.enemyEvents : newer.enemyEvents)
+      enemies: interpolateEnemies(older.enemies, newer.enemies, blend),
+      enemyEvents: (blend < 1 ? older.enemyEvents : newer.enemyEvents)
         .map(copyEnemyEvent),
-    enemyWorldFeedback: {
+      enemyWorldFeedback: {
         ...(blend < 1 ? older : newer).enemyWorldFeedback,
       },
-    enemyProjectileEffects: interpolateEnemyProjectileEffects(
+      enemyProjectileEffects: interpolateEnemyProjectileEffects(
         older.enemyProjectileEffects,
         newer.enemyProjectileEffects,
         blend,
       ),
-    enemyProjectiles: interpolateEnemyProjectiles(
+      enemyProjectiles: interpolateEnemyProjectiles(
         older.enemyProjectiles,
         newer.enemyProjectiles,
         blend,
       ),
-    mageLightningPulses: mergeMageLightningPulses(
+      mageLightningPulses: mergeMageLightningPulses(
         older.mageLightningPulses,
         newer.mageLightningPulses,
         targetTick,
       ),
-    maggots: interpolateMaggots(older.maggots, newer.maggots, blend),
+      maggots: interpolateMaggots(older.maggots, newer.maggots, blend),
+    }
   }
 }
 

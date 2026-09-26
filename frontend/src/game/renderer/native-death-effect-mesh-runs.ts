@@ -1,7 +1,15 @@
-import { MeshSimple, type Container, type MeshGeometry, type Sprite, type Texture } from 'pixi.js'
+import { MeshSimple, type Container, type MeshGeometry, type Texture } from 'pixi.js'
 
 import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
-import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
+import { setNativeVertexColors } from './native-material-batch.ts'
+
+export interface NativeDeathEffectMeshSample {
+  blendMode: 'add' | 'normal'
+  color: number
+  texture: Texture
+  readonly vertices: Float32Array
+  zIndex: number
+}
 
 interface DeathEffectMeshRun {
   activeQuads: number
@@ -13,7 +21,7 @@ interface DeathEffectMeshRun {
   readonly vertices: Float32Array
 }
 
-/** World-local Sprite samples arrive in the Region planner's final draw order. */
+/** World-local quads arrive in the Region planner's final draw order. */
 export class NativeDeathEffectMeshRuns {
   private activeRunCount = 0
   private readonly root: Container
@@ -22,11 +30,11 @@ export class NativeDeathEffectMeshRuns {
 
   constructor(root: Container) { this.root = root }
 
-  update(sprites: readonly Sprite[]): void {
+  update(samples: readonly NativeDeathEffectMeshSample[]): void {
     this.starts.length = 0
-    for (let index = 0; index < sprites.length; index += 1) {
-      const current = sprites[index]!
-      const previous = sprites[index - 1]
+    for (let index = 0; index < samples.length; index += 1) {
+      const current = samples[index]!
+      const previous = samples[index - 1]
       // A depth gap belongs to another painter, including static bands/proxies.
       if (!previous || current.zIndex !== previous.zIndex + 1
         || current.texture !== previous.texture || current.blendMode !== previous.blendMode) {
@@ -35,14 +43,14 @@ export class NativeDeathEffectMeshRuns {
     }
     for (let index = 0; index < this.starts.length; index += 1) {
       const start = this.starts[index]!
-      const end = this.starts[index + 1] ?? sprites.length
-      const first = sprites[start]!
+      const end = this.starts[index + 1] ?? samples.length
+      const first = samples[start]!
       const run = this.ensureRun(index, end - start, first.texture)
       run.mesh.texture = first.texture
       run.mesh.blendMode = first.blendMode
       run.mesh.zIndex = first.zIndex
-      for (let spriteIndex = start; spriteIndex < end; spriteIndex += 1) {
-        writeSprite(run, spriteIndex - start, sprites[spriteIndex]!)
+      for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+        writeSample(run, sampleIndex - start, samples[sampleIndex]!)
       }
       updateActiveQuads(run, end - start)
       run.geometry.getBuffer('aPosition').update()
@@ -87,6 +95,8 @@ export class NativeDeathEffectMeshRuns {
       uvs.set([0, 0, 1, 0, 1, 1, 0, 1], quad * 8)
     }
     const mesh = new MeshSimple({ texture, vertices, uvs, indices, topology: 'triangle-list' })
+    // These runs use the native batch material even after exceeding Pixi's 100-vertex auto limit.
+    mesh.geometry.batchMode = 'batch'
     mesh.label = `enemy-death-effect-mesh-run:${index}`
     mesh.eventMode = 'none'
     mesh.autoUpdate = false
@@ -98,21 +108,9 @@ export class NativeDeathEffectMeshRuns {
   }
 }
 
-function writeSprite(run: DeathEffectMeshRun, quad: number, sprite: Sprite): void {
-  sprite.updateLocalTransform()
-  const { a, b, c, d, tx, ty } = sprite.localTransform
-  const { minX, minY, maxX, maxY } = sprite.bounds
-  const offset = quad * 8
-  // Match the native material's Sprite packing and triangle diagonal exactly.
-  run.vertices[offset] = a * minX + c * minY + tx
-  run.vertices[offset + 1] = d * minY + b * minX + ty
-  run.vertices[offset + 2] = a * maxX + c * minY + tx
-  run.vertices[offset + 3] = d * minY + b * maxX + ty
-  run.vertices[offset + 4] = a * maxX + c * maxY + tx
-  run.vertices[offset + 5] = d * maxY + b * maxX + ty
-  run.vertices[offset + 6] = a * minX + c * maxY + tx
-  run.vertices[offset + 7] = d * maxY + b * minX + ty
-  const color = nativePackedColor(sprite.tint, sprite.alpha)
+function writeSample(run: DeathEffectMeshRun, quad: number, sample: NativeDeathEffectMeshSample): void {
+  run.vertices.set(sample.vertices, quad * 8)
+  const color = sample.color
   const colorOffset = quad * 4
   run.colors[colorOffset] = color
   run.colors[colorOffset + 1] = color

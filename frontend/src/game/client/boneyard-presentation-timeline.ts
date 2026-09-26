@@ -9,7 +9,7 @@ import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import type { BoneyardGoodieSnapshot, BoneyardLootEventSnapshot, BoneyardLootSnapshot, BoneyardSolomonSnapshot, BoneyardWaveSnapshot, BoneyardWorldSnapshot, GameClientSnapshot, GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
 import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
-import { copyBoneyardEnemySamples, copyLightRegistration, interpolateBoneyardEnemySamples } from './boneyard-enemy-samples.ts'
+import { BoneyardEnemySampleInterpolator, copyBoneyardEnemySamples, copyLightRegistration } from './boneyard-enemy-samples.ts'
 import { lerpCycle } from './hub-presentation-timeline.ts'
 import { copyNativeSecondaryState, interpolateNativeSecondaryState } from './native-secondary-presentation.ts'
 import { FULL_CIRCLE, clamp, lerp } from './presentation-math.ts'
@@ -75,6 +75,7 @@ export function createBoneyardPresentationTimeline(
     snapshot: clientBoneyardSnapshot(options.initialSnapshot),
   }]
   const primarySpellPresentation = createRetainedBoneyardPrimarySpellPresentation()
+  const enemyPresentation = new BoneyardEnemySampleInterpolator()
 
   return {
     latest: () => history.at(-1)!.snapshot,
@@ -121,6 +122,7 @@ export function createBoneyardPresentationTimeline(
         blend,
         targetTick,
         primarySpellPresentation,
+        enemyPresentation,
       )
     },
   }
@@ -166,6 +168,7 @@ function interpolateSnapshot(
   blend: number,
   targetTick: number,
   primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
+  enemyPresentation: BoneyardEnemySampleInterpolator,
 ): BoneyardPresentationFrame {
   const players: Record<string, ProtocolPlayerState> = {}
   for (const [playerId, olderPlayer] of Object.entries(older.players)) {
@@ -201,7 +204,7 @@ function interpolateSnapshot(
     run: interpolateGameRunLifecycle(older.run, newer.run, blend, targetTick, newer.tick),
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
-      ...interpolateBoneyardEnemySamples(older.world, newer.world, blend,
+      ...enemyPresentation.interpolate(older.world, newer.world, blend,
         Math.min(targetTick, gameRunWorldTick(newer.tick, newer.run))),
       featuredBossId: blend >= 1 ? newer.world.featuredBossId : older.world.featuredBossId,
       bossNarration: blend >= 1 ? newer.world.bossNarration : older.world.bossNarration,

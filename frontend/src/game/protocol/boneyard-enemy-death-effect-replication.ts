@@ -112,8 +112,7 @@ export function materializeBoneyardEnemyDeathEffect(
     throw new Error('Boneyard enemy death-effect alpha exceeds its native shape')
   }
   const height = dequantize(sample[10], POSITION_SCALE)
-  return {
-    ...(descriptor[10] === 0 ? {} : { painterSortBias: dequantize(descriptor[10], POSITION_SCALE) }),
+  const effect: BoneyardEnemyDeathEffectSnapshot = {
     ageTicks: sample[9],
     alpha,
     atlas: ATLASES[descriptor[4]]!,
@@ -138,6 +137,8 @@ export function materializeBoneyardEnemyDeathEffect(
     spawnTick: descriptor[6],
     tint: sample[8],
   }
+  return descriptor[10] === 0 ? effect
+    : { painterSortBias: dequantize(descriptor[10], POSITION_SCALE), ...effect }
 }
 
 export function boneyardEnemyDeathEffectMaximumAlpha(

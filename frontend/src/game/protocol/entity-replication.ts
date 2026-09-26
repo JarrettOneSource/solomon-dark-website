@@ -95,7 +95,7 @@ const STUDENT_DESCRIPTOR_HEADER = 6
 const STUDENT_SAMPLE_LENGTH = 7
 
 export interface ReplicatedEntityBaseline {
-  readonly descriptors: ReadonlyMap<string, ReplicatedEntityDescriptor>
+  readonly descriptors: ReadonlyMap<number, ReadonlyMap<number, ReplicatedEntityDescriptor>>
   readonly playerEconomyRevisions: ReadonlyMap<string, number>
   readonly worldIdentity: string
 }
@@ -296,13 +296,13 @@ export function createGameSnapshotFrame(
     || baseline.worldIdentity !== projection.baseline.worldIdentity
   const spawned: ReplicatedEntityDescriptor[] = []
   const retired: ReplicatedEntityKey[] = []
-  for (const [key, descriptor] of currentDescriptors) {
-    const previous = baseline?.descriptors.get(key)
+  for (const descriptor of descriptorValues(currentDescriptors)) {
+    const previous = baseline?.descriptors.get(descriptor[0])?.get(descriptor[1])
     if (keyframe || !previous || !sameNumbers(previous, descriptor)) spawned.push(descriptor)
   }
   if (!keyframe && baseline) {
-    for (const [key, descriptor] of baseline.descriptors) {
-      if (!currentDescriptors.has(key)) retired.push([descriptor[0], descriptor[1]])
+    for (const descriptor of descriptorValues(baseline.descriptors)) {
+      if (!currentDescriptors.get(descriptor[0])?.has(descriptor[1])) retired.push([descriptor[0], descriptor[1]])
     }
   }
   const entities: ReplicatedEntityFrame = {
@@ -406,7 +406,7 @@ function materializePlayerSnapshotFrames(
 }
 
 export class EntityReplicationReconstructor {
-  private readonly descriptors = new Map<string, ReplicatedEntityDescriptor>()
+  private readonly descriptors = new Map<number, Map<number, ReplicatedEntityDescriptor>>()
   private readonly playerEconomies = new Map<string, ProtocolPlayerEconomy>()
   private lastSequence = 0
   private worldIdentity: string | null = null
@@ -414,8 +414,8 @@ export class EntityReplicationReconstructor {
   reset(snapshot: GameSnapshot | GameClientSnapshot, sequence: number): void {
     this.descriptors.clear()
     this.playerEconomies.clear()
-    for (const descriptor of descriptorMap(snapshot).values()) {
-      this.descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    for (const descriptor of descriptorValues(descriptorMap(snapshot))) {
+      setDescriptor(this.descriptors, descriptor)
     }
     for (const [playerId, player] of Object.entries(snapshot.players)) {
       this.playerEconomies.set(playerId, player.economy)
@@ -440,13 +440,13 @@ export class EntityReplicationReconstructor {
       this.descriptors.clear()
       this.playerEconomies.clear()
     }
-    for (const key of entities.retired) this.descriptors.delete(entityKey(key[0], key[1]))
+    for (const key of entities.retired) this.descriptors.get(key[0])?.delete(key[1])
     for (const descriptor of entities.spawned) {
       const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(descriptor[0])
       if (!registration?.descriptorIsValid(descriptor)) {
         throw new EntityReplicationGapError('entity descriptor shape is invalid')
       }
-      this.descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(this.descriptors, descriptor)
     }
     const students: ProtocolStudentState[] = []
     const enemies: BoneyardEnemySnapshot[] = []
@@ -458,7 +458,7 @@ export class EntityReplicationReconstructor {
     const goodies: BoneyardGoodieSnapshot[] = []
     for (const sample of entities.samples) {
       const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(sample[0])
-      const descriptor = this.descriptors.get(entityKey(sample[0], sample[1]))
+      const descriptor = this.descriptors.get(sample[0])?.get(sample[1])
       if (!registration?.sampleIsValid(sample) || !descriptor) {
         throw new EntityReplicationGapError('entity sample is missing its descriptor')
       }
@@ -590,41 +590,41 @@ export class EntityReplicationGapError extends Error {
 
 function descriptorMap(
   snapshot: GameSnapshot | GameClientSnapshot,
-): Map<string, ReplicatedEntityDescriptor> {
-  const descriptors = new Map<string, ReplicatedEntityDescriptor>()
+): Map<number, Map<number, ReplicatedEntityDescriptor>> {
+  const descriptors = new Map<number, Map<number, ReplicatedEntityDescriptor>>()
   if (snapshot.world.kind === 'hub') {
     for (const student of snapshot.world.students) {
       const descriptor = studentCodec.descriptor(student)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
   } else {
     for (const effect of snapshot.world.deathEffects) {
       const descriptor = boneyardEnemyDeathEffectDescriptor(effect)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
     for (const enemy of snapshot.world.enemies) {
       const descriptor = boneyardEnemyDescriptor(enemy)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
       const descriptor = boneyardEnemyProjectileDescriptor(projectile)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
     for (const effect of snapshot.world.enemyProjectileEffects) {
       const descriptor = boneyardEnemyProjectileEffectDescriptor(effect)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
     for (const maggot of snapshot.world.maggots) {
       const descriptor = boneyardMaggotDescriptor(maggot)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
     for (const loot of snapshot.world.loot) {
       const descriptor = boneyardLootDescriptor(loot)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
     for (const goodie of snapshot.world.goodies) {
       const descriptor = boneyardGoodieDescriptor(goodie)
-      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+      setDescriptor(descriptors, descriptor)
     }
   }
   return descriptors
@@ -642,8 +642,22 @@ function replicatedFrameWorldIdentity(frame: GameSnapshotFrame): string {
     : `boneyard:${frame.world.runId}`
 }
 
-function entityKey(typeId: number, entityId: number): string {
-  return `${typeId}:${entityId}`
+function setDescriptor(
+  index: Map<number, Map<number, ReplicatedEntityDescriptor>>,
+  descriptor: ReplicatedEntityDescriptor,
+): void {
+  let family = index.get(descriptor[0])
+  if (!family) {
+    family = new Map()
+    index.set(descriptor[0], family)
+  }
+  family.set(descriptor[1], descriptor)
+}
+
+function* descriptorValues(
+  index: ReplicatedEntityBaseline['descriptors'],
+): IterableIterator<ReplicatedEntityDescriptor> {
+  for (const family of index.values()) yield* family.values()
 }
 
 function sameNumbers(first: readonly number[], second: readonly number[]): boolean {

@@ -46,7 +46,6 @@ import { NativeBossSpellViews } from './native-boss-spell-view.ts'
 import { NativeCompactMaskView } from './native-compact-mask-view.ts'
 import { BoneyardEnvironmentLightView } from './boneyard-environment-light.ts'
 import { NativeDeadSpiderViews } from './native-dead-spider-views.ts'
-import { nativeEnemyDeathEffectPainterLane, nativeEnemyDeathEffectPainterLayer } from './native-enemy-death-effect-presentation.ts'
 import { NativeEnemyDeathEffectViews } from './native-enemy-death-effect-view.ts'
 import { nativeEnemyPainterLayer } from './native-enemy-presentation.ts'
 import { nativeEnemyProjectileEffectPainterLayer } from './native-enemy-projectile-effect-presentation.ts'
@@ -540,11 +539,7 @@ export class BoneyardDynamicScene {
     for (const goodie of snapshot.world.goodies) {
       dynamicLayers.push(nativeGoodiePainterLayer(goodie))
     }
-    for (const effect of snapshot.world.deathEffects) {
-      if (!this.enemyDeathEffects.isVisible(effect.id)) continue
-      if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') continue
-      dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect))
-    }
+    for (const layer of this.enemyDeathEffects.painterLayers()) dynamicLayers.push(layer)
     for (const silk of snapshot.world.spiderSilks) {
       dynamicLayers.push({
         id: `silk:${silk.id}`, queueFamily: 'ordinary-dynamic',
@@ -655,7 +650,8 @@ export class BoneyardDynamicScene {
     positionedDynamics.clear()
     let maxDynamicZIndex = 0
     for (const layer of order.dynamicLayers) {
-      positionedDynamics.set(layer.id, layer)
+      // Death views already retain their painter-ID index and consume the full order below.
+      if (!layer.id.startsWith('enemy-death-effect:')) positionedDynamics.set(layer.id, layer)
       maxDynamicZIndex = Math.max(maxDynamicZIndex, layer.zIndex)
       if (layer.id.startsWith('mage-lightning:')) {
         this.mageLightningPulses.setDepth(layer.id, layer.zIndex)
@@ -752,22 +748,7 @@ export class BoneyardDynamicScene {
         positionedDynamics.get(`goodie:${goodie.id}`)?.zIndex ?? 1,
       )
     }
-    for (const effect of snapshot.world.deathEffects) {
-      if (!this.enemyDeathEffects.isVisible(effect.id)) continue
-      const lane = nativeEnemyDeathEffectPainterLane(effect)
-      if (lane === 'world-sorted') continue
-      this.enemyDeathEffects.setDepth(
-        effect.id,
-        lane === 'background'
-          ? 0
-          : lane === 'late-world-overlay'
-          ? order.foregroundZIndex + 1
-          : lane === 'pre-world-queue'
-          ? 0.5
-          : order.foregroundZIndex + 0.25,
-      )
-    }
-    this.enemyDeathEffects.applyWorldPainterDepths(order.dynamicLayers)
+    this.enemyDeathEffects.applyPainterDepths(order.dynamicLayers, order.foregroundZIndex)
     for (const projectile of snapshot.world.enemyProjectiles) {
       this.enemyProjectiles.setDepth(
         projectile.id,

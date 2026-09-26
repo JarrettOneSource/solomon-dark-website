@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test, { mock } from 'node:test'
 import {
-  BatchableSprite, BatcherPipe, DOMAdapter, InstructionSet, Matrix, Rectangle,
+  BatchableMesh, BatchableSprite, BatcherPipe, DOMAdapter, InstructionSet, Matrix, MeshSimple, Rectangle,
   Sprite, Texture, TextureSource, type Batcher, type WebGLRenderer,
 } from 'pixi.js'
-import { installNativeBatchMaterial, nativePackedColor } from './native-material-batch.ts'
+import { installNativeBatchMaterial, nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
 import { setNativeDiffuseColor } from './native-texture-color.ts'
 
 test('native diffuse packing preserves RGB while clamping and truncating alpha', () => {
@@ -31,6 +31,9 @@ test('native quad packing preserves every attribute bit and untouched buffer slo
   const source = new TextureSource({ width: 16, height: 16 })
   const texture = new Texture({ source, frame: new Rectangle(2, 3, 5, 7) })
   const renderable = new Sprite(texture)
+  const mesh = new MeshSimple({ texture,
+    vertices: new Float32Array([0, 0, 1, 1]), uvs: new Float32Array([0, 0, 1, 1]), indices: new Uint32Array([0, 1]) })
+  const meshGeometry = mesh.geometry
   try {
     pipe.buildStart(instructionSet)
     const batchers = pipe['_batchersByInstructionSet'] as Record<number, Record<string, Batcher>>
@@ -78,10 +81,30 @@ test('native quad packing preserves every attribute bit and untouched buffer slo
         }
       }
     }
+    const element = new BatchableMesh()
+    element.renderable = mesh
+    element.geometry = mesh.geometry
+    element.setTexture(texture)
+    element.transform = new Matrix()
+    const colors = new Uint32Array([0x7f563412, 0xffc08040])
+    setNativeVertexColors(mesh, colors)
+    // White must preserve all channels; tinted/transparent groups still multiply them.
+    for (const [group, expected] of [
+      [0xffffffff, [0x7f563412, 0xffc08040]],
+      [0x80402010, [0x3f150601, 0x80301004]],
+      [0x00000000, [0, 0]],
+    ] as const) {
+      mesh.groupColorAlpha = group
+      const packed = new Uint32Array(14)
+      batcher.packAttributes(element, new Float32Array(packed.buffer), packed, 0, 0)
+      assert.deepEqual([packed[4], packed[11]], expected)
+    }
   } finally {
     restoreMaterial()
     createCanvas.mock.restore()
     renderable.destroy()
+    mesh.destroy()
+    meshGeometry.destroy()
     texture.destroy(true)
   }
 })

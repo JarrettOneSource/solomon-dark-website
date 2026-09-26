@@ -12,11 +12,20 @@ assert.match(baseline, /^[a-f0-9]{7,40}$/)
 const root = fileURLToPath(new URL('../', import.meta.url))
 const path = 'src/game/renderer/native-enemy-death-effect-view.ts'
 const oldSource = execFileSync('git', ['show', `${baseline}:frontend/${path}`], { cwd: root, encoding: 'utf8' })
+const meshPath = 'src/game/renderer/native-death-effect-mesh-runs.ts'
+const oldMeshSource = oldSource.includes("'./native-death-effect-mesh-runs.ts'")
+  ? execFileSync('git', ['show', `${baseline}:frontend/${meshPath}`], { cwd: root, encoding: 'utf8' })
+  : null
 const candidateSource = await readFile(new URL('../' + path, import.meta.url), 'utf8')
 const hash = value => createHash('sha256').update(value).digest('hex')
 const server = await createServer({ root, appType: 'custom', logLevel: 'silent',
   server: { middlewareMode: true }, plugins: [{ name: 'matched-death-allocation-baseline', enforce: 'pre',
-    load(id) { return id.endsWith('?allocation-baseline') ? oldSource : undefined },
+    load(id) {
+      if (id.endsWith(path + '?allocation-baseline')) {
+        return oldSource.replace("'./native-death-effect-mesh-runs.ts'", "'./native-death-effect-mesh-runs.ts?allocation-baseline'")
+      }
+      if (id.endsWith(meshPath + '?allocation-baseline')) return oldMeshSource
+    },
   }] })
 try {
   const reference = await server.ssrLoadModule('/' + path + '?allocation-baseline')
@@ -36,6 +45,7 @@ try {
   function workload(module, compareVisible = false) {
     const world = new Container(), preWorld = new Container()
     const views = new module.NativeEnemyDeathEffectViews(world, textures, preWorld)
+    const applyDepths = views.applyPainterDepths ?? views.applyWorldPainterDepths
     views.update(effects, outside, 900)
     const counts = { logicalEffects: views.size, visibleEffects: views.visibleSize,
       containers: world.children.length, sprites: world.children.reduce((sum, row) => sum + row.children.length, 0) }
@@ -43,16 +53,16 @@ try {
     if (compareVisible) {
       effects.forEach(effect => views.setDepth(effect.id, effect.id + 0.25))
       views.update(effects, inside, 900)
-      views.applyWorldPainterDepths?.(effects.map(effect => ({
+      applyDepths?.call(views, effects.map(effect => ({
         id: `enemy-death-effect:${effect.id}`, row: 0, zIndex: effect.id + 0.25,
-      })))
+      })), effects.length + 1)
       world.sortChildren()
       visible = world.children.flatMap(row => row instanceof Mesh
         ? meshDraws(row)
         : (row instanceof Sprite ? [row] : row.children).map(spriteDraw))
     }
     views.update([], outside, 900)
-    views.applyWorldPainterDepths?.([])
+    applyDepths?.call(views, [], effects.length + 1)
     views.destroy()
     assert.equal(world.children.length + preWorld.children.length, 0)
     world.destroy(); preWorld.destroy()

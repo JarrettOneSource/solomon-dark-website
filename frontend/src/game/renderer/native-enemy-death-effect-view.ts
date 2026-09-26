@@ -1,14 +1,18 @@
-import { Color, Container, FillGradient, Graphics, Sprite, type ICanvas, type Texture } from 'pixi.js'
+import { Color, Container, FillGradient, Graphics, Matrix, Sprite, type ICanvas, type Texture } from 'pixi.js'
 
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
+import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
 import type { PositionedNativeRegionPainterLayer } from '../region-painter-order.ts'
 import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
-import { NativeDeathEffectMeshRuns } from './native-death-effect-mesh-runs.ts'
+import { NativeDeathEffectMeshRuns, type NativeDeathEffectMeshSample } from './native-death-effect-mesh-runs.ts'
+import { nativePackedColor } from './native-material-batch.ts'
 import {
   nativeEnemyDeathEffectIsBanish,
+  nativeEnemyDeathEffectPainterLane,
+  nativeEnemyDeathEffectPainterLayer,
   nativeEnemyDeathEffectVerticalScale,
   nativeEnemyDeathEffectViewResourcePlan,
   nativeEnemyDeathEffectVisualBounds,
@@ -19,15 +23,20 @@ import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 // avoid rebuilding an otherwise unchanged parent's child list.
 const MIN_BATCH_RETIREMENT = 512
 
+// Used synchronously while packing one retained mesh quad.
+const deathEffectMeshTransform = new Matrix()
+
 export class NativeEnemyDeathEffectViews {
-  private readonly liveIds = new Set<number>()
+  private readonly directViews: NativeEnemyDeathEffectView[] = []
+  private updateMark = false
   private readonly meshRuns: NativeDeathEffectMeshRuns
   private readonly root: Container
   private readonly preWorldRoot: Container
   private readonly textures: BoneyardWorldTextures
   private readonly views = new Map<number, NativeEnemyDeathEffectView>()
+  private readonly visibleWorldLayers: DynamicPainterLayer[] = []
   private readonly worldViews = new Map<string, NativeEnemyDeathEffectView>()
-  private readonly worldSprites: Sprite[] = []
+  private readonly worldSamples: NativeDeathEffectMeshSample[] = []
   private visibleCount = 0
 
   constructor(root: Container, textures: BoneyardWorldTextures, preWorldRoot: Container) {
@@ -42,10 +51,11 @@ export class NativeEnemyDeathEffectViews {
     visibleBounds: Readonly<BoneyardBounds>,
     viewHeight: number,
   ): void {
-    this.liveIds.clear()
+    this.updateMark = !this.updateMark
+    this.directViews.length = 0
+    this.visibleWorldLayers.length = 0
     this.visibleCount = 0
     for (const effect of effects) {
-      this.liveIds.add(effect.id)
       let view = this.views.get(effect.id)
       if (!view) {
         view = new NativeEnemyDeathEffectView(
@@ -58,14 +68,19 @@ export class NativeEnemyDeathEffectViews {
           this.worldViews.set(`enemy-death-effect:${effect.id}`, view)
         }
       }
-      if (view.update(effect, visibleBounds, viewHeight)) this.visibleCount += 1
+      view.updateMark = this.updateMark
+      if (view.update(effect, visibleBounds, viewHeight)) {
+        this.visibleCount += 1
+        if (view.worldPainterLayer) this.visibleWorldLayers.push(view.worldPainterLayer)
+        else this.directViews.push(view)
+      }
     }
     const retired: NativeEnemyDeathEffectView[] = []
-    for (const [id, view] of this.views) {
-      if (this.liveIds.has(id)) continue
+    for (const view of this.views.values()) {
+      if (view.updateMark === this.updateMark) continue
       retired.push(view)
-      this.views.delete(id)
-      this.worldViews.delete(`enemy-death-effect:${id}`)
+      this.views.delete(view.id)
+      this.worldViews.delete(`enemy-death-effect:${view.id}`)
     }
     this.destroyViews(retired)
   }
@@ -74,15 +89,26 @@ export class NativeEnemyDeathEffectViews {
     this.views.get(id)?.setDepth(depth)
   }
 
-  applyWorldPainterDepths(layers: readonly PositionedNativeRegionPainterLayer[]): void {
-    this.worldSprites.length = 0
+  /** Retained records consumed synchronously before the next update. */
+  painterLayers(): readonly DynamicPainterLayer[] {
+    return this.visibleWorldLayers
+  }
+
+  applyPainterDepths(layers: readonly PositionedNativeRegionPainterLayer[], foregroundZIndex: number): void {
+    this.worldSamples.length = 0
     for (const layer of layers) {
       const view = this.worldViews.get(layer.id)
       if (!view?.visible) continue
       view.setDepth(layer.zIndex)
-      if (view.worldSprite) this.worldSprites.push(view.worldSprite)
+      if (view.meshSample) this.worldSamples.push(view.meshSample)
     }
-    this.meshRuns.update(this.worldSprites)
+    for (const view of this.directViews) {
+      view.setDepth(view.painterLane === 'background' ? 0
+        : view.painterLane === 'pre-world-queue' ? .5
+        : view.painterLane === 'late-world-overlay' ? foregroundZIndex + 1
+        : foregroundZIndex + .25)
+    }
+    this.meshRuns.update(this.worldSamples)
   }
 
   isVisible(id: number): boolean {
@@ -106,9 +132,10 @@ export class NativeEnemyDeathEffectViews {
     this.destroyViews([...this.views.values()])
     this.meshRuns.destroy()
     this.views.clear()
+    this.directViews.length = 0
+    this.visibleWorldLayers.length = 0
     this.worldViews.clear()
-    this.worldSprites.length = 0
-    this.liveIds.clear()
+    this.worldSamples.length = 0
     this.visibleCount = 0
   }
 
@@ -153,12 +180,17 @@ class NativeEnemyDeathEffectView {
   private gradientIndex = 0
   private readonly gradients: FillGradient[] = []
   private readonly kind: BoneyardEnemyDeathEffectSnapshot['kind']
-  private readonly label: string
   private readonly directSprite: boolean
+  private meshTransformDirty = true
   private resourcesCreated = false
   private shadow: Sprite | null = null
   private readonly shadowed: boolean
   private readonly textures: BoneyardWorldTextures
+  readonly id: number
+  meshSample: NativeDeathEffectMeshSample | null = null
+  readonly painterLane: ReturnType<typeof nativeEnemyDeathEffectPainterLane>
+  updateMark = false
+  worldPainterLayer: DynamicPainterLayer | null = null
   visible = false
 
   constructor(
@@ -167,23 +199,25 @@ class NativeEnemyDeathEffectView {
     initial: BoneyardEnemyDeathEffectSnapshot,
   ) {
     this.textures = textures
+    this.id = initial.id
+    this.painterLane = nativeEnemyDeathEffectPainterLane(initial)
     this.kind = initial.kind
     this.shadowed = !nativeEnemyDeathEffectIsBanish(initial.kind) && initial.shadow
     this.directSprite = !this.shadowed && !nativeEnemyDeathEffectIsBanish(initial.kind)
     this.batched = this.directSprite && initial.presentationOwner === 'world-sorted'
     // Keep native painter insertion order even for equal-depth background
     // effects that enter the camera in a different order than their birth.
-    this.label = `enemy-death-effect:${initial.kind}:${initial.id}`
+    const label = `enemy-death-effect:${initial.kind}:${initial.id}`
     if (this.batched) {
       // World singles have planner-owned order, so unseen effects need no Pixi node.
       this.container = null
     } else if (this.directSprite) {
-      const sprite = new Sprite({ label: this.label })
+      const sprite = new Sprite({ label })
       this.container = sprite
       this.effect = sprite
       this.resourcesCreated = true
     } else {
-      this.container = new Container({ label: this.label })
+      this.container = new Container({ label })
     }
     if (this.container) {
       this.container.eventMode = 'none'
@@ -191,17 +225,7 @@ class NativeEnemyDeathEffectView {
     }
   }
 
-  get worldSprite(): Sprite | null {
-    return this.batched ? this.effect : null
-  }
-
   private ensureResources(): Container {
-    if (this.batched && !this.effect) {
-      this.effect = new Sprite({ label: this.label })
-      this.effect.eventMode = 'none'
-      this.container = this.effect
-      this.resourcesCreated = true
-    }
     if (this.resourcesCreated) return this.container!
     const resources = nativeEnemyDeathEffectViewResourcePlan({ kind: this.kind, shadow: this.shadowed })
     this.banishGraphics = resources.banishGraphics
@@ -241,6 +265,21 @@ class NativeEnemyDeathEffectView {
     this.visible = visible
     if (this.container) this.container.renderable = visible
     if (!visible) return false
+    if (this.painterLane === 'world-sorted') {
+      if (this.worldPainterLayer === null) this.worldPainterLayer = nativeEnemyDeathEffectPainterLayer(effect)
+      else {
+        if (effect.painterRegistration === null) {
+          throw new Error('world-sorted death effect lost its painter registration')
+        }
+        this.worldPainterLayer.registration = effect.painterRegistration
+        this.worldPainterLayer.sortBias = effect.painterSortBias ?? 0
+        this.worldPainterLayer.worldY = effect.position.y
+      }
+    }
+    if (this.batched) {
+      this.updateMeshSample(effect)
+      return true
+    }
     const container = this.ensureResources()
     if (nativeEnemyDeathEffectIsBanish(effect.kind)) {
       this.updateBanish(effect, viewHeight)
@@ -264,6 +303,7 @@ class NativeEnemyDeathEffectView {
       && this.boundsScale === effect.scale
       && this.boundsScaleY === effect.scaleY
     ) return this.bounds
+    this.meshTransformDirty = true
     const bounds = nativeEnemyDeathEffectVisualBounds(effect, deathEffectArtRecord, viewHeight)
     this.bounds = bounds
     this.boundsEntry = effect.entry
@@ -278,6 +318,7 @@ class NativeEnemyDeathEffectView {
 
   setDepth(depth: number): void {
     if (this.container) this.container.zIndex = depth
+    if (this.meshSample) this.meshSample.zIndex = depth
   }
 
   setRenderable(renderable: boolean): void {
@@ -287,6 +328,39 @@ class NativeEnemyDeathEffectView {
   destroy(): void {
     this.clearGradients()
     this.container?.destroy({ children: true })
+    this.meshSample = null
+  }
+
+  private updateMeshSample(effect: BoneyardEnemyDeathEffectSnapshot): void {
+    let sample = this.meshSample
+    if (this.meshTransformDirty || sample === null) {
+      const art = deathEffectArtRecord(effect.atlas, effect.entry)
+      const texture = requiredTexture(this.textures, art.source)
+      sample = this.meshSample ??= {
+        blendMode: effect.blendMode, color: 0, texture, vertices: new Float32Array(8), zIndex: 0,
+      }
+      sample.texture = texture
+      deathEffectMeshTransform.setTransform(effect.position.x, effect.position.y + effect.height,
+        0, 0, effect.scale, nativeEnemyDeathEffectVerticalScale(effect), effect.rotationRadians, 0, 0)
+      const { a, b, c, d, tx, ty } = deathEffectMeshTransform
+      // Match Sprite bounds and native vertex packing, including fractional anchors.
+      const { width, height } = texture.orig
+      const minX = -(art.anchorX / art.width) * width
+      const minY = -(art.anchorY / art.height) * height
+      const maxX = minX + width, maxY = minY + height
+      const vertices = sample.vertices
+      vertices[0] = a * minX + c * minY + tx
+      vertices[1] = d * minY + b * minX + ty
+      vertices[2] = a * maxX + c * minY + tx
+      vertices[3] = d * minY + b * maxX + ty
+      vertices[4] = a * maxX + c * maxY + tx
+      vertices[5] = d * maxY + b * maxX + ty
+      vertices[6] = a * minX + c * maxY + tx
+      vertices[7] = d * maxY + b * minX + ty
+      this.meshTransformDirty = false
+    }
+    sample.blendMode = effect.blendMode
+    sample.color = nativePackedColor(effect.tint, effect.alpha)
   }
 
   private updateBanish(effect: BoneyardEnemyDeathEffectSnapshot, viewHeight: number): void {
@@ -433,15 +507,7 @@ function applyLayer(
   shadow = false,
   absolutePosition = false,
 ): void {
-  const record = effect.atlas === 'BadGuys'
-    && (
-      effect.entry === 15
-      || effect.entry === 52
-      || effect.entry === 83
-      || (effect.entry >= 377 && effect.entry <= 380)
-    )
-    ? nativeLootSpriteRecord('BadGuys', effect.entry)
-    : nativeEnemySpriteRecord(effect.atlas, effect.entry)
+  const record = deathEffectArtRecord(effect.atlas, effect.entry)
   if (!absolutePosition) sprite.label = `${effect.atlas}:${effect.entry}`
   sprite.texture = requiredTexture(textures, record.source)
   sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)

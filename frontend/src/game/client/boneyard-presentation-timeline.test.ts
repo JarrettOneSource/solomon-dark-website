@@ -33,7 +33,7 @@ import {
   createBoneyardPresentationTimeline,
   type BoneyardGameSnapshot,
 } from './boneyard-presentation-timeline.ts'
-import { interpolateBoneyardEnemySamples } from './boneyard-enemy-samples.ts'
+import { BoneyardEnemySampleInterpolator } from './boneyard-enemy-samples.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -740,7 +740,7 @@ test('Mage pulse creator ownership crosses both spawn and retirement interpolati
   }]
   afterSpawn.world.mageLightningPulses = [spawnedPulse]
 
-  const spawning = interpolateBoneyardEnemySamples(
+  const spawning = new BoneyardEnemySampleInterpolator().interpolate(
     beforeSpawn.world,
     afterSpawn.world,
     0.6,
@@ -777,7 +777,7 @@ test('Mage pulse creator ownership crosses both spawn and retirement interpolati
   afterRetirement.world.enemies = []
   afterRetirement.world.mageLightningPulses = []
 
-  const retiring = interpolateBoneyardEnemySamples(
+  const retiring = new BoneyardEnemySampleInterpolator().interpolate(
     beforeRetirement.world,
     afterRetirement.world,
     1,
@@ -1006,6 +1006,31 @@ test('interpolates independent death-effect transforms without rerolling art ide
   assert.notEqual(end[0]!.painterRegistration, newer.world.deathEffects[0]!.painterRegistration)
   assert.equal(end[1]!.painterRegistration, null)
   assert.notEqual(end[1]!.position, newer.world.deathEffects[1]!.position)
+
+  // A frozen tick may be replaced without changing time. Membership and values
+  // come from that new snapshot, including reordered survivors and reused IDs.
+  const replacement = snapshotAt(105, 20, 120)
+  replacement.world.deathEffects = [
+    { ...newer.world.deathEffects[1]!, painterSortBias: 27 },
+    { ...newer.world.deathEffects[0]!, position: { x: 120, y: 240 } },
+    { ...newer.world.deathEffects[0]!, id: 12 },
+  ]
+  timeline.push(replacement, 100)
+  const replaced = timeline.sample(100).world.deathEffects
+  assert.deepEqual(replaced.map(({ id }) => id), [9, 11, 12])
+  assert.deepEqual(replaced[0]!.position, { x: 120, y: 240 })
+  assert.equal(replaced[1]!.painterSortBias, 27)
+  assert.equal(Object.hasOwn(replaced[0]!, 'painterSortBias'), false)
+  assert.deepEqual(end[0]!.position, { x: 110, y: 220 })
+  assert.deepEqual(timeline.sample(50).world.deathEffects.map(({ id }) => id), [9, 10])
+  assert.deepEqual(timeline.sample(100).world.deathEffects, replaced)
+  const empty = snapshotAt(110, 20, 120)
+  timeline.push(empty, 150)
+  assert.deepEqual(timeline.sample(200).world.deathEffects, [])
+  const reused = snapshotAt(115, 20, 120)
+  reused.world.deathEffects = [{ ...older.world.deathEffects[0]!, position: { x: -50, y: -60 } }]
+  timeline.push(reused, 200)
+  assert.deepEqual(timeline.sample(250).world.deathEffects[0]!.position, { x: -50, y: -60 })
 })
 
 test('interpolates projectile-owned effects after their projectile has retired', () => {

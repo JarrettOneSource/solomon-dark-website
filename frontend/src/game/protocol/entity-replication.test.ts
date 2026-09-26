@@ -1526,6 +1526,34 @@ test('impossible death-effect scales and discrete components retain safe-integer
   }
 })
 
+test('replicated families preserve colliding and large IDs through decode and independent retirement', () => {
+  for (const id of [7, Number.MAX_SAFE_INTEGER]) {
+    const source = boneyardSnapshot('colliding-entity-ids')
+    if (source.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    source.world.enemies = [{ ...enemySnapshot(), id }]
+    source.world.deathEffects = [{ ...enemyDeathEffectSnapshot(), id }]
+    const keyframe = createGameSnapshotFrame(source, 0, undefined, true)
+    const message = decodeServerGameMessage(encodeGameMessage({
+      type: 'server-snapshot', acknowledgedInputSequence: 0, frame: keyframe, sequence: 1,
+    }))
+    if (message.type !== 'server-snapshot') throw new Error('expected snapshot message')
+    const reconstructor = new EntityReplicationReconstructor()
+    const restored = reconstructor.apply(message.frame, 1)
+    if (restored.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.deepEqual(restored.world.enemies.map(enemy => enemy.id), [id])
+    assert.deepEqual(restored.world.deathEffects.map(effect => effect.id), [id])
+    const next = cloneSnapshot(source)
+    if (next.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    next.world.deathEffects = []
+    const delta = createGameSnapshotFrame(next, 1, createReplicatedEntityBaseline(source))
+    assert.deepEqual(delta.world.entities.retired, [[REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect, id]])
+    const final = reconstructor.apply(gameSnapshotFrame(JSON.parse(JSON.stringify(delta))), 2)
+    if (final.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.deepEqual(final.world.enemies.map(enemy => enemy.id), [id])
+    assert.deepEqual(final.world.deathEffects, [])
+  }
+})
+
 test('loot and Goodies replicate compact state, ordered events, and retirement', () => {
   const initial = boneyardSnapshot('loot-run')
   if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')

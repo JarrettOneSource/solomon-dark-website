@@ -598,42 +598,51 @@ function uniqueEntityEntries(
 ): readonly number[][] {
   const entries = limitedArray(value, field, MAX_REPLICATED_ENTITIES)
   const result: number[][] = []
-  const keys = new Set<string>()
+  const keys = new Map<number, Set<number>>()
   for (let index = 0; index < entries.length; index += 1) {
-    const entryField = `${field}[${index}]`
-    const raw = limitedArray(entries[index], entryField, MAX_REPLICATED_COMPONENTS)
+    const entry = entries[index]
+    const raw: readonly unknown[] = Array.isArray(entry) && entry.length <= MAX_REPLICATED_COMPONENTS
+      ? entry : limitedArray(entry, `${field}[${index}]`, MAX_REPLICATED_COMPONENTS)
     if (raw.length < 2 || (kind === 'key' && raw.length !== 2)) {
-      throw new GameProtocolError(`${entryField} has an invalid component count`)
+      throw new GameProtocolError(`${field}[${index}] has an invalid component count`)
     }
-    const typeId = nonnegativeInteger(raw[0], `${entryField}[0]`)
-    const entityId = nonnegativeInteger(raw[1], `${entryField}[1]`)
+    // Successful rows need no diagnostic strings; preserve the existing validators on errors.
+    const typeId = typeof raw[0] === 'number' && Number.isInteger(raw[0]) && raw[0] >= 0
+      ? raw[0] : nonnegativeInteger(raw[0], `${field}[${index}][0]`)
+    const entityId = typeof raw[1] === 'number' && Number.isInteger(raw[1]) && raw[1] >= 0
+      ? raw[1] : nonnegativeInteger(raw[1], `${field}[${index}][1]`)
     const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(typeId)
     if (!registration) {
-      throw new GameProtocolError(`${entryField} uses an unknown entity type`)
+      throw new GameProtocolError(`${field}[${index}] uses an unknown entity type`)
     }
-    const key = `${typeId}:${entityId}`
-    if (keys.has(key)) throw new GameProtocolError(`${entryField} duplicates ${key}`)
-    keys.add(key)
-    let decoded: [number, number, ...number[]] = [typeId, entityId]
-    for (let componentIndex = 2; componentIndex < raw.length; componentIndex += 1) {
-      const component = raw[componentIndex]
-      if (typeof component !== 'number' || !Number.isFinite(component)) {
-        // Keep the original diagnostics and sparse-row handling on the error path.
-        decoded = [typeId, entityId, ...raw.slice(2).map((value, offset) => finite(
+    let family = keys.get(typeId)
+    if (!family) { family = new Set(); keys.set(typeId, family) }
+    if (family.has(entityId)) throw new GameProtocolError(`${field}[${index}] duplicates ${typeId}:${entityId}`)
+    family.add(entityId)
+    const copied = raw.slice()
+    // Keep ownership independent; slice copies the complete row without growing an array per component.
+    const decoded: [number, number, ...number[]] = isFiniteEntityRow(copied)
+      ? copied
+      // Keep the original diagnostics and sparse-row handling on the error path.
+      : [typeId, entityId, ...raw.slice(2).map((value, offset) => finite(
           value,
-          `${entryField}[${offset + 2}]`,
+          `${field}[${index}][${offset + 2}]`,
         ))]
-        break
-      }
-      decoded.push(component)
-    }
     if (
       (kind === 'descriptor' && !registration.descriptorIsValid(decoded))
       || (kind === 'sample' && !registration.sampleIsValid(decoded))
-    ) throw new GameProtocolError(`${entryField} has an invalid registered ${kind} shape`)
+    ) throw new GameProtocolError(`${field}[${index}] has an invalid registered ${kind} shape`)
     result.push(decoded)
   }
   return result
+}
+
+function isFiniteEntityRow(row: unknown[]): row is [number, number, ...number[]] {
+  if (row.length < 2) return false
+  for (let index = 0; index < row.length; index += 1) {
+    if (typeof row[index] !== 'number' || !Number.isFinite(row[index])) return false
+  }
+  return true
 }
 
 function boneyardGateLeafSnapshot(

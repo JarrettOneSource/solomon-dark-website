@@ -2099,3 +2099,102 @@ draw output but measures 1.84 ms reference versus 2.02 ms candidate after the
 retained painter-ID index was added; the accepted speedup concerns sustained
 rendering, not every allocation workload. This acceptance receipt is the only
 post-gate source edit.
+
+## 2026-09-26 — report 37 reopened: resolve the remaining full-client FPS dip
+
+The user rejected stopping at the published renderer mitigation. The earlier
+51.4 FPS first-five-second result still showed the reported slowdown. That
+completion disposition is superseded; the optimization remains valid partial
+work. The agent's own completion reaction was removed and verified absent.
+
+The acceptance target is the complete saved Faculty-death browser workload at
+normal graphics settings and a 1600x900 viewport: at least 58 mean FPS, p95
+frame interval at most 20 ms, at least 480 presented ticks per five seconds,
+no authority tick-lag warning, unchanged native effect/loot populations, exact
+visual/painter output and finite teardown. A renderer-only speedup cannot replace
+this result. The save is after Aliss's lethal tick; surviving Lucritius exercises
+the same recovered death owner. The original reporter PC remains unavailable.
+
+### Evidence and final implementation boundary
+
+A real production-client harness applies the controlled lethal hit at the exact
+saved tick 1,086,824 while resume grace holds the run. It preserves 2,433 existing
+effects and 232 loot actors. A second case waits exactly 100 authority ticks,
+placing substantially more smoke in view. Chrome 153 runs the unchanged graphics
+settings; the actual Node game host runs in its own process, separate from Vite
+and the browser controller. No duplicate WebSocket decoding or screenshots run
+inside measurement windows. Assertions cover input readiness, native population,
+301 final loot actors, zero surviving Faculty/effects, active run and empty
+page/console/request/HTTP/wire/host error lists.
+
+The original quiet replay averages 50.8 FPS with a 33.4 ms p95 interval. Incoming
+message handlers average 6.4 ms; retained painter records alone improve mean FPS
+to 55.0. Numeric identity indexes and independent bulk row copies reduce message
+work to 3.2 ms while retaining every validation and diagnostic. Source-mapped
+CPU and phase profiles identify further per-frame interpolation allocation,
+death-view bookkeeping and detached Sprite-to-mesh copies.
+
+The final code changes only representation and traversal:
+
+| Owner/membership | Change and preserved contract |
+| --- | --- |
+| All replicated entity families, keyframes, deltas and retirements | Per-type numeric maps replace formatted identity strings, preserving cross-family IDs, the full safe-integer range, wire row order and protocol version. Row copies remain independently owned; malformed numeric/shape/identity/alpha checks and error text remain intact. Diagnostic paths are formatted on errors. |
+| Every Boneyard death-effect interpolation family | Snapshot-array identity indexes are retained between samples. Output records, positions and registrations remain independent; discrete art, cyclic interpolation, older-survivor/new-birth order, same-tick replacement and retirement remain unchanged. |
+| All 17 unshadowed single-sprite world death families | Retained float32 quad/material samples replace detached CPU Sprites. Installed Pixi Matrix math, texture original bounds, native packed color, triangle order and final painter depth remain exact. Geometry changes while culled stay dirty through re-entry. |
+| Shadowed composites, Banish/black Banish, background/pre-world/direct-post-world/late overlay lanes | Existing native Sprite/composite ownership stays intact. The death-view owner collects visible world painter records and assigns every lane's depth in its existing traversal. |
+| All ordered death mesh runs | Consecutive-depth, texture and blend boundaries stay intact. Explicit Pixi batch mode keeps runs in the native material batch beyond Pixi's automatic 100-vertex threshold. Retirement, buffer growth and GPU teardown retain their owners. |
+| Opaque-white native mesh group color | Return the unchanged packed vertex color; tinted/transparent groups use the original channel multiplication. Pixel-equivalent dense-frame comparison measures 7.2 ms versus 6.7 ms median-of-medians with the same 435 draws. |
+
+The one-case color dispatch has a reviewed equivalent mutation: omitting its
+white case falls through to exactly identical channel multiplication. The
+Stryker comment excludes only that case-removal mutation. White, tinted and
+transparent mesh group outputs remain asserted; no configured threshold changes.
+The scene also stops building a second death-painter ID map after the death-view
+owner has consumed that responsibility. The canonical Region planner is retained.
+No authored births, lifetimes, RNG draws, painter registrations, graphic settings,
+loot rules, simulation clocks or wire schema change.
+
+### Comparisons and rejected experiments
+
+A deterministic 1,000-tick authority comparison produces 201 byte-identical
+snapshots/wire frames and 603 value-identical interpolated frames against
+published `c848c1d3`. Its wire SHA-256 is
+`e5a1a88032090ae55841eeb17a2443a2778cca32ad7fcc42418aa03eac51dca2`.
+The peak contains 8,546 effects; final effects are zero and loot is 301.
+
+Fixed-clock framebuffer comparisons are identical at 1600x900 for both the
+saved camera (2,812 visible effects; SHA-256
+`6a64181ae0678c3f46831ea7cdebff7b253df0ea3720de27ebff718ffa69dd95`)
+and centered cloud (7,777 visible; SHA-256
+`cd4f6c0cda55232b48e1b09d85a411f7945938936d4a52e93c17606131757efe`).
+Explicit batching reduces draw calls from 533 to 446 and from 754 to 435,
+respectively. The large-run regression fails under Pixi's automatic mode and
+passes with explicit batching. Other regressions cover every eligible kind,
+four rotations, negative/zero/positive scales, lane ordering, culling/re-entry,
+retirement, geometry unloading, copied protocol rows and mixed-family IDs.
+
+The user-requested Fable consultation resolved to `claude-fable-5-1`, session
+`dbb34878-0f16-4b14-8cda-efed26275964`, with Read/Grep/Glob only. Its correctness
+reviews found no blocker; Codex checked the material claims and retained
+implementation/acceptance ownership. Its row-borrowing suggestion was rejected
+because the public decoder explicitly owns copied rows. Its texture-trim concern
+is not a regression: the former mesh path packed Sprite.bounds, whose installed
+Pixi implementation also uses texture.orig; death textures have no authored trim.
+
+Two more experiments were removed completely. Reusing sampled death records
+through a separate render API measured 2.30 ms versus 1.98 ms for independent
+samples in alternating warmed Chrome trials, so the scene/session/observer API
+was reverted. Whole-plan input-signature caching found only 175 hits versus 413
+rebuilds in a live ten-second replay; its additional scan is not justified by
+the stationary microbenchmark gain. Its source and added tests were removed.
+
+Quiet built-client preflight with explicit batching and the white color identity
+meets both targets: saved+100-tick death 58.4 FPS, saved-start death 59.8 FPS,
+both with 16.8 ms p95, normal tick progress, no warnings/errors and complete
+retirement. This preflight still included the subsequently removed whole-plan
+cache. Removing the color identity caused a 57.6 FPS result, prompting the
+isolated matched proof above and its restoration. The final cache-free replay
+then overlapped unrelated Chromium at 300% CPU, two compiler jobs near 100%
+each and emulator startup; that run is not an acceptance receipt. The final
+candidate must pass the complete canonical Mac gate and both dependent built
+browser replays before publication or any completion reaction.

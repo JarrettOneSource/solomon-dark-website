@@ -232,7 +232,7 @@ test('world death-effect batches preserve intervening painters, textures, and bl
   }))
   try {
     views.update(effects, inside, 900)
-    views.applyWorldPainterDepths([
+    views.applyPainterDepths([
       { id: 'enemy-death-effect:1', row: 0, zIndex: 1 },
       { id: 'other-world-painter', row: 0, zIndex: 2 },
       { id: 'enemy-death-effect:2', row: 0, zIndex: 3 },
@@ -240,7 +240,7 @@ test('world death-effect batches preserve intervening painters, textures, and bl
       { id: 'enemy-death-effect:4', row: 0, zIndex: 5 },
       { id: 'enemy-death-effect:5', row: 0, zIndex: 6 },
       { id: 'enemy-death-effect:6', row: 0, zIndex: 7 },
-    ])
+    ], 100)
     root.sortChildren()
     const meshes = root.children.filter(child => child instanceof Mesh)
     assert.equal(views.size, 6)
@@ -258,6 +258,65 @@ test('world death-effect batches preserve intervening painters, textures, and bl
   } finally { views.destroy(); root.destroy({ children: true }); preWorld.destroy() }
 })
 
+test('large death runs stay in the ordered native material batch beyond Pixi automatic limits', () => {
+  const root = new Container(), preWorld = new Container()
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const effects = Array.from({ length: 129 }, (_, index) => ({
+    ...fixture('fade', false, 'world-sorted'), id: index + 1,
+  }))
+  try {
+    views.update(effects, inside, 900)
+    views.applyPainterDepths(effects.map(({ id }) => ({ id: `enemy-death-effect:${id}`, row: 0, zIndex: id })), 200)
+    const mesh = root.children.find(child => child instanceof Mesh)
+    assert.ok(mesh instanceof Mesh)
+    assert.ok(mesh.geometry.positions.length / 2 > 100)
+    assert.equal(mesh.batched, true)
+    assert.equal(visibleTriangleCount(mesh), effects.length * 2)
+  } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+})
+
+test('every unshadowed world family packs the same quad as its native Sprite plan', () => {
+  for (const kind of Object.keys(kinds) as BoneyardEnemyDeathEffectSnapshot['kind'][]) {
+    if (nativeEnemyDeathEffectIsBanish(kind)) continue
+    const root = new Container(), preWorld = new Container()
+    const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+    const sprite = new Sprite({ texture: Texture.EMPTY })
+    try {
+      for (const rotationRadians of [-Math.PI * 3, 0, .5, Math.PI]) {
+        for (const scale of [-2, 0, 1.2]) {
+          const effect = { ...fixture(kind, false, 'world-sorted'), rotationRadians, scale,
+            scaleY: 2.3, alpha: .4, tint: 0x112233, position: { x: 10.25, y: 20.75 } }
+          const art = nativeEnemySpriteRecord(effect.atlas, effect.entry)
+          const plan = nativeEnemyDeathEffectPlan(effect)
+          sprite.anchor.set(art.anchorX / art.width, art.anchorY / art.height)
+          sprite.position.set(plan.position.x, plan.position.y + plan.effect.offset.y)
+          sprite.scale.set(plan.effect.scale.x, plan.effect.scale.y)
+          sprite.rotation = plan.effect.rotationRadians
+          sprite.updateLocalTransform()
+          const { minX, minY, maxX, maxY } = sprite.bounds
+          const expected = new Float32Array(8)
+          // Keep the source corners at full precision until the final GPU cast.
+          const corners = [{ x: minX, y: minY }, { x: maxX, y: minY },
+            { x: maxX, y: maxY }, { x: minX, y: maxY }]
+          corners.forEach((point, index) => {
+            const projected = sprite.localTransform.apply(point)
+            expected[index * 2] = projected.x
+            expected[index * 2 + 1] = projected.y
+          })
+          views.update([effect], inside, 900)
+          views.applyPainterDepths([{ id: 'enemy-death-effect:1', row: 0, zIndex: 9 }], 100)
+          const mesh = root.children.find(child => child instanceof Mesh)
+          assert.ok(mesh instanceof Mesh)
+          assert.deepEqual(mesh.geometry.getBuffer('aPosition').data, expected, `${kind}: exact quad`)
+          assert.deepEqual([...mesh.geometry.getBuffer('aColor').data], [0x66332211, 0x66332211, 0x66332211, 0x66332211])
+          assert.equal(mesh.zIndex, 9)
+          assert.equal(mesh.blendMode, effect.blendMode)
+        }
+      }
+    } finally { sprite.destroy(); views.destroy(); root.destroy(); preWorld.destroy() }
+  }
+})
+
 function visibleTriangleCount(mesh: Mesh): number {
   const indices = mesh.geometry.indexBuffer!.data
   let triangles = 0
@@ -267,6 +326,43 @@ function visibleTriangleCount(mesh: Mesh): number {
   }
   return triangles
 }
+
+test('death views retain visible world painter records and own every direct lane depth', () => {
+  const root = new Container({ sortableChildren: true }), preWorld = new Container({ sortableChildren: true })
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const world = fixture('fade', false, 'world-sorted')
+  const direct = (['background', 'pre-world-queue', 'direct-post-world', 'late-world-overlay'] as const).map((owner, index) => ({
+    ...fixture('fade', false, owner), id: index + 2,
+  }))
+  try {
+    views.update([world, ...direct], inside, 900)
+    const first = views.painterLayers()[0]!
+    assert.equal(views.painterLayers().length, 1)
+    assert.equal(first.id, 'enemy-death-effect:1')
+    assert.equal(first.worldY, world.position.y)
+    const moved = { ...world, position: { x: 30, y: 45 }, painterSortBias: 3,
+      painterRegistration: { managerLane: 'transient' as const, registrationOrdinal: 77 } }
+    views.update([moved, ...direct], inside, 900)
+    assert.equal(views.painterLayers()[0], first, 'the frame must reuse its retained painter record')
+    assert.equal(first.worldY, 45)
+    assert.equal(first.sortBias, 3)
+    assert.deepEqual(first.registration, moved.painterRegistration)
+    assert.equal(world.position.y, 20, 'render sampling never mutates the source snapshot')
+    views.applyPainterDepths([{ id: first.id, row: 0, zIndex: 7 }], 100)
+    root.sortChildren(); preWorld.sortChildren()
+    assert.deepEqual(root.children.map(child => child.zIndex), [7, 100.25, 101])
+    assert.deepEqual(preWorld.children.map(child => child.zIndex), [0, .5])
+    views.update([moved, ...direct], outside, 900)
+    assert.equal(views.painterLayers().length, 0)
+    views.applyPainterDepths([], 100)
+    assert.ok(root.children.every(child => !child.renderable))
+    assert.ok(preWorld.children.every(child => !child.renderable))
+    views.update([moved, ...direct], inside, 900)
+    assert.equal(views.painterLayers()[0], first)
+    views.update([], inside, 900)
+    assert.equal(views.painterLayers().length, 0)
+  } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+})
 
 test('world batches cull, regrow, retire, and unload every owned geometry', () => {
   const root = new Container(), preWorld = new Container()
@@ -287,24 +383,24 @@ test('world batches cull, regrow, retire, and unload every owned geometry', () =
   }
   try {
     views.update(effects.slice(0, 1), inside, 900)
-    views.applyWorldPainterDepths(order.slice(0, 1))
+    views.applyPainterDepths(order.slice(0, 1), 100)
     assert.equal(visibleTriangleCount(recordGeometry()), 2)
     views.update(effects, inside, 900)
-    views.applyWorldPainterDepths(order)
+    views.applyPainterDepths(order, 100)
     const mesh = recordGeometry()
     assert.equal(visibleTriangleCount(mesh), 6)
     assert.equal(unloaded.size, 1, 'growing a run unloads its replaced GPU geometry')
     views.update(effects.slice(0, 1), inside, 900)
-    views.applyWorldPainterDepths(order.slice(0, 1))
+    views.applyPainterDepths(order.slice(0, 1), 100)
     assert.equal(recordGeometry(), mesh)
     assert.equal(visibleTriangleCount(mesh), 2, 'retired triangles cannot remain in the draw')
     views.update(effects, outside, 900)
-    views.applyWorldPainterDepths([])
+    views.applyPainterDepths([], 100)
     assert.equal(views.size, 3)
     assert.equal(views.visibleSize, 0)
     assert.equal(mesh.renderable, false)
     views.update(effects, inside, 900)
-    views.applyWorldPainterDepths(order)
+    views.applyPainterDepths(order, 100)
     assert.equal(recordGeometry(), mesh)
     assert.equal(visibleTriangleCount(mesh), 6)
     assert.equal(mesh.renderable, true)
@@ -313,12 +409,37 @@ test('world batches cull, regrow, retire, and unload every owned geometry', () =
     views.setRenderable(true)
     assert.equal(mesh.renderable, true)
     views.update([], inside, 900)
-    views.applyWorldPainterDepths([])
+    views.applyPainterDepths([], 100)
     assert.equal(views.size, 0)
     assert.equal(mesh.renderable, false)
     views.destroy()
     assert.equal(root.children.length, 0)
     assert.deepEqual(unloaded, geometries)
     assert.ok([...geometries].every(geometry => geometry.buffers === null))
+  } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+})
+
+test('a culled world quad retains transform changes until re-entry and still updates opacity', () => {
+  const root = new Container(), preWorld = new Container()
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const effect = fixture('fade', false, 'world-sorted')
+  const order = [{ id: 'enemy-death-effect:1', row: 0, zIndex: 1 }]
+  try {
+    views.update([effect], inside, 900)
+    views.applyPainterDepths(order, 100)
+    const mesh = root.children.find(child => child instanceof Mesh)
+    assert.ok(mesh instanceof Mesh)
+    const before = [...mesh.geometry.getBuffer('aPosition').data]
+    const moved = { ...effect, position: { x: effect.position.x + 100, y: effect.position.y + 50 } }
+    views.update([moved], outside, 900)
+    views.applyPainterDepths([], 100)
+    views.update([moved], inside, 900)
+    views.applyPainterDepths(order, 100)
+    const after = [...mesh.geometry.getBuffer('aPosition').data]
+    after.forEach((value, index) => assert.ok(Math.abs(value - before[index]! - (index % 2 === 0 ? 100 : 50)) < .0001))
+    views.update([{ ...moved, alpha: .5, tint: 0x112233 }], inside, 900)
+    views.applyPainterDepths(order, 100)
+    assert.deepEqual([...mesh.geometry.getBuffer('aPosition').data], after)
+    assert.deepEqual([...mesh.geometry.getBuffer('aColor').data], [0x7f332211, 0x7f332211, 0x7f332211, 0x7f332211])
   } finally { views.destroy(); root.destroy(); preWorld.destroy() }
 })
