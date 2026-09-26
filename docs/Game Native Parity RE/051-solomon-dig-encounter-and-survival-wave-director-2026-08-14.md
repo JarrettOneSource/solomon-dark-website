@@ -1047,3 +1047,82 @@ Automated checks and the canonical gate run only on the exact Mac candidate.
   remain possible; the next native owning tick restores the settled anchor.
   No browser approximation, blocked member, or production deployment is
   introduced by this change.
+
+## 2026-09-26 — report 35: preventive Deep Portal combat-bound audit
+
+The reporter recalls native Deep Portals appearing outside the playable Arena
+in some runs, but explicitly has not observed an exterior Portal in the web
+version. Their screenshot shows bright combat near a visible corner without
+world coordinates or evidence of an unreachable objective. The 2026-08-30
+Portal reopening above already implemented the relevant Website safety
+contract. Stock `IN THE DARK` placement can accept a raw root outside the
+retired entrance/combat target; the Website intentionally requires every new
+Portal and direct child to remain in the active combat bounds and to have a
+player-connected route. This is a named prevention of stock's softlock class,
+not an attempt to reproduce the native exterior-root error.
+
+The current Website still passes `arenaTransition.combatBounds` to the shared
+spawn resolver after waves start, including later dark Portal phases.
+`resolveNativeBoneyardSpawnPosition` accepts the raw point only if its body,
+policy and route domain are valid; otherwise it searches bounded candidates
+and throws rather than publishing an invalid fallback. Portal-ejected Imps
+consume the same resolver after their exact native raw root is constructed.
+Portal phase 1's boss-count hold and later phases 2..7 remain the authored
+script owners. The 12-template, 80-recipe corpus and the previous
+2,201,112-root geometry matrix remain the native/data baseline, not a claim
+that the reporter screenshot identifies a specific source or root.
+
+| Member | Current disposition and evidence |
+| --- | --- |
+| Portal 45-unit admission and active radius 5 | Existing shared materializer and Portal actor program; verified-already-at-parity with the combat-bound safety policy. |
+| Portal child Imp roots, radii and connectivity | Native ejection geometry followed by shared combat-bound/route admission; verified-already-at-parity. |
+| Optional phase 1 and later dark phases 2..7 | Existing source-keyed wave program; phase 1 holds on boss count, later phases run concurrently; verified-already-at-parity. |
+| All 12 generated templates and 80 Portal recipe rows | Existing complete authored catalog and geometry checks; no report-specific row is invented. |
+| Web exterior-objective prevention | Deliberate Website safety correction to the documented stock placement omission; unchanged. |
+| Frozen Portal push/snap-back in later report 08 evidence | Separate actor-movement question; not dispositioned by this spawn-bounds audit. |
+
+A new built-client acceptance attempt on the current published runtime passed
+75 focused Portal/director/world tests, then exposed a test-harness mistake
+before its final later-phase screenshot. The harness moved one settled Portal's
+`position` for visibility without moving its `brain.anchorPosition`. The
+ordinary `stepPortal` tick correctly restored the old anchor, and the harness
+waited for a position the game no longer had. During that failed wait the wire
+reported zero outside-combat enemy samples, with no page, console or response
+errors; it was not a reproduced exterior spawn. The corrected fixture
+relocates position and stored anchor together without altering Portal runtime
+behavior. A second run reached the boss-count polling edge
+and exposed an independent harness timing assumption: after forcing the counter
+to one, the native director resets it to 200 on the next tick, but the
+wall-clock wait can return after an additional tick has already reduced it to
+199. The assertion now uses the observed tick delta, preserving the exact
+native countdown contract without depending on browser scheduling.
+
+### Final report 35 acceptance
+
+The exact 7,202-file candidate passed the complete unchanged M2
+`/opt/homebrew/bin/bash ./scripts/validate.sh` gate with no failures; renderer
+mutation score remained 100%. Gate log SHA-256:
+`208aa7d2bd03cf7217aa50e759e6a7ed6942ea25bbe226031e82901976f76f07`.
+The post-gate source manifest matched every tracked file. Before the full gate,
+75 focused Portal, director and world tests and the production frontend build
+passed on the same runtime and harness code.
+
+The subsequent built-client Mac Chrome `/game` journey exited zero. The
+source-authored optional first phase produced three Portal births 25 ticks
+apart, held its boss-count barrier, emitted a separately replicated and
+route-valid Imp, played the expected Portal/ejection/hurt/death cues, and
+released after the three bosses died. The later `Deep Portal 2` phase produced
+all six authored Portals without pausing the ordinary timeline. Wire diagnostics
+reported zero exterior-combat enemy samples; browser, HTTP and wire errors were
+empty. The final Portal frame was visually reviewed. Browser log SHA-256:
+`9b60ae34221d4e2942be3703d4f645dc3dbfb1a0a60ff23ddfb654f0646a9f7d`.
+This controlled current-code journey and the existing all-source geometry
+matrix cover the preventive request; the reporter's image itself cannot
+establish a world root or exact original-game reproduction.
+
+Only the maintained browser harness changed at runtime: its visible fixture
+now moves a Portal's stored anchor with its rendered position, and the
+boss-count poll assertion compares against elapsed authoritative ticks. The
+product Portal placement, movement, authored phase tables and save/wire
+contract are unchanged. No platform member is blocked. Publication and
+cleanup are recorded separately in the private report archive.

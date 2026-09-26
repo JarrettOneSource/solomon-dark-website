@@ -965,14 +965,15 @@ async function provePortalBrowser(page, screenshotPath, wire) {
     config.enemyToken === 'PORTAL'
   )).length, 2)
   assert.equal(state.world.waves?.portalTimelinePaused, true)
+  const pollStartTick = state.tick
   state.world = {
     ...state.world,
     waves: { ...state.world.waves, portalTicksRemaining: 1 },
   }
-  await waitForHostTick(page, state.tick + 1)
+  await waitForHostTick(page, pollStartTick + 1)
   state = host.state()
   assert.equal(state.world.kind, 'boneyard')
-  assert.equal(state.world.waves?.portalTicksRemaining, 200)
+  assert.equal(state.world.waves?.portalTicksRemaining, 201 - (state.tick - pollStartTick))
 
   let enemies = state.world.enemies
   for (const actor of enemies.actors.filter(({ config }) => config.enemyToken === 'PORTAL')) {
@@ -1044,7 +1045,14 @@ async function provePortalBrowser(page, screenshotPath, wire) {
       actors: laterPortals.map((actor) => ({
         ...actor,
         brain: actor.brain.family === 'portal'
-          ? { ...actor.brain, ticksUntilEjection: Number.MAX_SAFE_INTEGER }
+          ? {
+              ...actor.brain,
+              ticksUntilEjection: Number.MAX_SAFE_INTEGER,
+              // A settled Portal restores this anchor on its next native tick.
+              anchorPosition: actor.id === displayedPortal.id
+                ? displayedPosition
+                : actor.brain.anchorPosition,
+            }
           : actor.brain,
         position: actor.id === displayedPortal.id
           ? displayedPosition
