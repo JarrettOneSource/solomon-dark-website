@@ -2066,3 +2066,36 @@ Absolute timings vary with other M2 activity, so only within-session paired
 results establish the speedup. The updated painter/texture/blend and lifetime
 regressions pass. The final full M2 gate and dependent built-client replay
 must complete before publication; no completion reaction has been added.
+
+### Final acceptance — 2026-09-26
+
+Candidate `ac67a209cc212f77e11c27bff2a4931363d4cfaf` passed the complete
+`/opt/homebrew/bin/bash ./scripts/validate.sh` M2 gate. It reports 3,890 Node
+test executions and no failures, successful backend/integration and production
+client/host builds, and all configured renderer quality checks. The configured
+renderer coverage is 100%; mutation score is 100% with 468 killed, one timeout,
+147 compile errors, no survivors and no uncovered mutations. The gate log
+SHA-256 is `d7958190c0fbfbc256014da9f07bd1145ba1adefd5f4309d4d9aa18b70aab6c6`.
+The tracked source remained unchanged through validation and browser acceptance.
+
+The dependent production Chrome 153 journey restores the original continuation,
+triggers the surviving Faculty's shared death program, and reaches 8,509 death
+effects (4,641 visible in the sampled peak) and 301 loot actors. The first
+five-second window averages 51.4 FPS with a 33.4 ms p95 interval; the next
+averages 60.0 FPS. All death effects retire, no Faculty remains, and the run
+stays active. Page, console, HTTP, request, wire and host error arrays are empty.
+The final death frame was visually reviewed. Browser log SHA-256 is
+`5967f1475d8ed9a0179856e38993d821083c75aa974ca6cffeba23fe1bf58a1f`.
+
+The accepted result is a measured renderer mitigation: contiguous native draws
+share GPU resources, unseen world effects defer allocation, and painter depths
+use retained IDs. Native births, timing, rewards, visual samples and painter
+order remain intact. The matched final render comparison establishes the 26.7%
+speedup and identical pixels. A brief whole-game dip remains during the full
+burst; this is not a claim of universal 60 FPS or reproduction on the reporter's
+PC. Further whole-game performance work is separate from the verified renderer
+change. The final 2,000-effect allocation-only recheck preserves normalized
+draw output but measures 1.84 ms reference versus 2.02 ms candidate after the
+retained painter-ID index was added; the accepted speedup concerns sustained
+rendering, not every allocation workload. This acceptance receipt is the only
+post-gate source edit.
