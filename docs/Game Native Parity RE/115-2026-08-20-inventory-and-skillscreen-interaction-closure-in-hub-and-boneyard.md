@@ -372,3 +372,142 @@ No member is blocked by the browser platform.
 - No member is browser-blocked and no protocol, simulation, save, audio, or
   multiplayer-authority path changed. Publication and deployment were not
   requested and were not performed.
+
+## 2026-09-25 — Report 32: live shared belt across optional-book lifetimes
+
+### Report, evidence and reopened boundary
+
+Discord message `1552478061587468424` reports stale hotbar slots when switching
+Inventory and Magic. The original 15.388789-second attachment is retained in
+`2026-09-23/32-hotbar-layout-stale-between-menus`; SHA-256
+`42dd5809aad121f4e07ab1d870f600ddc410b1c7f118b38a967257665995a1a3`.
+Review of the complete clip shows different potion positions/counts and Ring of
+Fire appearing in some views. It establishes the symptom, not a local
+reproduction or a complete input trace. This reopens the earlier screen-switch
+receipt: that receipt proved overlap, not freshness of the common belt when a
+new screen is constructed.
+
+Fresh static recovery on M2 used `sdr-ghidra-headless decompile_targets.py`
+against a disposable read-only replica of `SolomonDark/SolomonDark.exe`, Ghidra
+12.0.3, functions `0x005C7090`, `0x005D50E0`, `0x005C6F10`, `0x005CA640`.
+The stock image was re-hashed as 4,723,200 bytes,
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. No native process was injected or observed
+in this pass. The prior clean-stock captures and complete asset/class tables
+in this entry and entries 246, 255 and 293 remain the visual/data evidence.
+
+| Evidence | Recovered fact | Confidence |
+| --- | --- | --- |
+| Assignment `0x005C7090` | Eight Game-owned records, starting at `+0x5EC`, stride `0xEC`, share one destination router. It writes only the winning slot; skill type `0x1B67`, Health/Mana aliases `0x1B65/0x1B66`, or item type plus UID. | high, fresh static control/data flow |
+| Refresh `0x005D50E0` | The same eight records refresh from the live skill/inventory owners, including recursive potion counts and exact-item lookup. Menus do not own saved copies of this state. | high, fresh static plus complete entry 255 corpus |
+| Reciprocal openers `0x005C6F10/0x005CA640` | Inventory `Game+0x15A0` and Skills `+0x1664` are presentation siblings. Opening one retires the other, without restoring a belt or inventory snapshot. | high, fresh static |
+| Website base `a13fe08c` | `sameRuntimeScene` deliberately retains a scene-level snapshot across economy/belt changes. SkillBook initializes from that old snapshot, while `onSnapshot` subscribes only to future events. Inventory instead retains a live scene subscription. | high, source trace plus failing baseline / passing candidate browser |
+| SkillBook GPU publication | The presentation object contains belt and element, but its effect's dependency list omits both. Independent semantic updates therefore need not publish to the GPU. | high, source trace plus complete-presentation regression |
+
+### System membership and closure
+
+Boundary: the read-only actor model consumed by SkillScreen, InventoryScreen
+and the gameplay belt, across receipt, initial mount, reciprocal overlap,
+reopening, asynchronous renderer readiness and teardown. Inventory contents,
+skill acquisition, native geometry, activation, authoritative mutation,
+replication/save format and native timing are unchanged.
+
+| Member | Recovered contract / proof | Final disposition |
+| --- | --- | --- |
+| All eight addressed slots; empty, duplicate, replace, clear | Same actor-owned belt; per-slot model tests and pointer browser journeys | exact-ported |
+| Category-1/2 skill IDs and explicit category-3 Website extension | Full catalog membership from entries 246/255; table-driven model invalidation | exact-ported |
+| Health/Mana aliases, including zero and nested counts | Economy and belt adopted from the same current snapshot; count/pixel regression | exact-ported |
+| Exact-item native type/UID, every reserved item discriminator | Shared semantic equality; independent type/UID changes and inventory-revision tests | exact-ported |
+| Initial open, close/reopen, both reciprocal directions | Read the current session immediately, even without a subsequent network event | exact-ported |
+| Model change between render and listener attachment | Catch up without requiring another snapshot; external-store consistency test | exact-ported |
+| Live changes while settled and while renderer initializes | Publish every changed presentation input, not only progression/economy | exact-ported |
+| College and Boneyard, paused or running | Same actor model; built-client browser checks in both scenes | exact-ported |
+| Session/player replacement, missing actor, unmount | No previous actor's data or leaked listener; lifecycle model tests | exact-ported |
+| Inventory, four service companions and gameplay HUD | Existing live subscriptions and whole-model publication retained; sibling regression checks | verified-already-at-parity; existing production-client sibling journey passes 45 checks |
+| Unchanged snapshot ticks | Stable model identity; no 100-Hz reconstruction of skill-page GPU nodes | exact-ported |
+| Item activation, skill cast balance, stock input/40-tick geometry/audio, save/wire schema | Separate unchanged authority and layout owners; existing canonical suites | out-of-system for this read-only freshness change |
+
+### Implementation and validation plan
+
+Replace SkillBook's event-only local copy with a cached, actor-scoped read-only
+external-store projection of the current session snapshot. Keep belt, economy,
+progression and element atomic; retain semantic identity when nothing relevant
+changed. Subscribe with React's external-store consistency contract so a
+render-to-subscribe race cannot leave stale state. Publish the complete memoized
+renderer presentation as one dependency. Remove the obsolete scene-snapshot
+props and duplicate belt-equality implementation rather than refreshing the
+entire MainMenuScene every game tick.
+
+Before changing runtime code, reproduce the stale mount with a real built-client
+Inventory-to-Skills journey while withholding only subsequent server messages
+(after the accepted edit already reached the client). Compare semantic slots
+and visible belt pixels before/after fresh delivery. Green acceptance must work
+without the extra message. Cover all slot/entry variants, reopen/overlap and
+both scenes, including a compact touch viewport, with empty browser error
+arrays. Run focused contracts and the full supported M2 Website gate on the
+final rebased candidate. Completion/publication receipts follow below.
+
+
+### Implementation and observed red/green results
+
+The plan above is implemented in `skill-book-model-store.ts`, `SkillBook.tsx`
+and the reduced `MainMenuScene` call site. The cached projection reads the live
+session during initial render and React external-store consistency checks. It
+reuses the shared heterogeneous-belt equality function and publishes the entire
+memoized GPU presentation in a layout effect. There is no fallback to old scene
+props, no duplicated equality function, no authority/schema change and no new
+per-tick parent-scene rendering. The runtime architecture handoff and ledger
+index point to this reopening.
+
+The fresh stock-query output hash is
+`55a7ef2bcfdd7e855affaa50e30aae45be9c99436cf0823393a61c6a8184e924`;
+the read-only replica wrapper hash is
+`26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`.
+Those transient logs and their replica are not permanent evidence artifacts.
+
+- **Untouched baseline red:** on built `a13fe08c`, a real Inventory pointer
+  pull-off removed the Health alias from slot 4 and the browser acknowledged
+  it. Holding only subsequent server delivery and opening Skills restored
+  `Belt 4, Health Potion`; releasing another snapshot made it empty again.
+  The screenshot pair has 2,869 differing RGB channels above tolerance 8 in
+  the slot's three-native-pixel-inset foreground (brightness at least 80).
+  Page, console, failed-response and failed-request arrays were all empty.
+- **Candidate green:** the identical journey shows an empty slot immediately,
+  before any further server message. Desktop production-client acceptance
+  passes all eight slot replacements/duplicates, both reciprocal directions,
+  complete close/reopen, recursive Mana counts, exact Ring/Sack shortcuts and
+  College/Boneyard scenes. The maintained harness records 27 receipts,
+  including 26 before/after-delivery pixel comparisons.
+- **Model coverage:** 15 passing model/store tests cover all eight slots across
+  43 valid skill IDs, both potion aliases and all ten reserved item type IDs;
+  exact-UID changes, duplicate/clear, independent economy/element/progression
+  fields, 100 unchanged decoded movement snapshots, missing/replacement actors,
+  subscription cleanup and render-to-subscribe catch-up. Nested potion totals
+  and alias retention at zero are asserted. The suite is included in the
+  canonical `test:boneyard` command.
+- **Sibling coverage:** the existing built-client Inventory drop/handoff
+  journey passes 45 checks across standalone College/Boneyard Inventory and
+  all four service companions; its page, console and response error arrays
+  are empty. Source review confirms the gameplay and inventory consumers
+  already retain live actor state and publish their complete models.
+- **Test controls:** the public game host, built client, IndexedDB save path,
+  pointer events and accepted server mutations are real. Only future server
+  delivery is held after the current state has been observed. Private-run
+  pause intentionally stops periodic snapshots; quantity fixtures therefore
+  resume/reopen before waiting for acknowledgement. PNG bytes are decoded
+  locally without weakening production CSP. Pixel comparison excludes gaps,
+  book buttons and dim animated seal backgrounds, but compares visible slot
+  content; the same mask rejects the original stale potion.
+
+No member is blocked by platform. The current pass reuses the previously
+qualified stock visual captures and refreshes static native ownership, rather
+than claiming a new Windows retail execution. Native animation, geometry,
+audio, item effects and protocol/save compatibility remain governed by their
+unchanged owners and existing canonical suites.
+
+Before publication, the exact candidate must additionally pass the complete
+M2 `./scripts/validate.sh` gate and the maintained production-client browser
+journey on both 1600×900 mouse and 844×390 touch viewports. Source manifests,
+full-gate exit/counts, final browser receipts, verified main SHA, Discord
+completion reaction and task cleanup are recorded in report 32's archive
+status/implementation receipt, outside the immutable original report files.

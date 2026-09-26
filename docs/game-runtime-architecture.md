@@ -9,6 +9,22 @@ It does not replace the [native parity RE ledger](<Game Native Parity RE/README.
 the native game remains the visual and behavioral oracle, while this document
 defines where recovered behavior lives in the clean rebuild.
 
+## Optional-book actor presentation
+
+Inventory, Skills and the gameplay hotbar consume one actor-owned heterogeneous
+belt; opening a book must never restore a scene-era snapshot. `MainMenuScene`'s
+`runtimeSnapshot` deliberately tracks scene boundaries, not every inventory or
+belt change. `SkillBook` therefore reads a cached, actor-scoped external-store
+projection directly from the current session, including belt, economy, element
+and progression as one model. Its subscribe/read consistency check covers a
+snapshot arriving during mount; absent actors produce no stale fallback.
+Unchanged movement snapshots preserve model identity, and the renderer receives
+the complete memoized presentation whenever a relevant input changes.
+
+The authoritative belt, saves, replication, item actions and native screen
+geometry remain unchanged. The recovered ownership, failing baseline and
+regressions are recorded in [entry 115, report 32](<Game Native Parity RE/115-2026-08-20-inventory-and-skillscreen-interaction-closure-in-hub-and-boneyard.md#2026-09-25--report-32-live-shared-belt-across-optional-book-lifetimes>).
+
 ## Product topology
 
 Completed Boneyard runs and retired run segments have a separate, private

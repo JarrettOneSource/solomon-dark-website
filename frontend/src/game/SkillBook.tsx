@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -12,11 +13,9 @@ import {
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
 import {
   nativeBeltEntryItem,
-  type NativeBeltEntry,
   type PlayerBeltComponent,
 } from './core-kernels/native-belt.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
-import type { WizardElement } from './core-kernels/player-character.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import {
   NATIVE_HUD_BACKBUFFER,
@@ -29,13 +28,8 @@ import {
   nativeOptionalBookHudProgress,
   nativeOptionalBookKeyAction,
 } from './native-optional-book.ts'
-import type {
-  ProtocolPlayerEconomy,
-  ProtocolPlayerProgression,
-} from './protocol/game-state.ts'
-import type {
-  GameSnapshot,
-} from './protocol/game-state.ts'
+import type { ProtocolPlayerEconomy } from './protocol/game-state.ts'
+import { createSkillBookModelStore, type SkillBookModel } from './skill-book-model-store.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import ModSkillBook from './mod-ui/ModSkillBook.tsx'
@@ -56,9 +50,6 @@ import './skill-book.css'
 
 interface SkillBookProps {
   audio: GameAudioDirector
-  belt: PlayerBeltComponent
-  economy: ProtocolPlayerEconomy
-  element: WizardElement
   inputSuspended: boolean
   inventoryKeyCode: string
   inventoryScreenOpen: boolean
@@ -70,12 +61,9 @@ interface SkillBookProps {
   onOpenInventory: () => void
   onSelectConcentration: (skillId: number) => void
   onSelectPrimarySkill: (skillId: number) => void
-  playerId: string
-  progression: ProtocolPlayerProgression
   session: GameClientSession
   skillsKeyCode: string
   style: CSSProperties
-  subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   topMost: boolean
 }
 
@@ -89,11 +77,17 @@ interface SkillBookPullOffBurstState {
   readonly slot: number
 }
 
-export default function SkillBook({
+export default function SkillBook(props: SkillBookProps) {
+  const store = useMemo(() => createSkillBookModelStore(
+    props.session, props.session.playerId,
+  ), [props.session])
+  const model = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+  return model ? <SkillBookSurface key={props.session.playerId} {...props} model={model} /> : null
+}
+
+function SkillBookSurface({
   audio,
-  belt: initialBelt,
-  economy: initialEconomy,
-  element,
+  model: { belt: beltEntries, economy, element, progression },
   inputSuspended,
   inventoryKeyCode,
   inventoryScreenOpen,
@@ -105,19 +99,11 @@ export default function SkillBook({
   onSelectConcentration,
   onSelectPrimarySkill,
   onUnassignQuickbarSkill,
-  playerId,
-  progression: initialProgression,
   session,
   skillsKeyCode,
   style,
-  subscribeSnapshot,
   topMost,
-}: SkillBookProps) {
-  const [{ beltEntries, economy, progression }, setModel] = useState(() => ({
-    beltEntries: initialBelt,
-    economy: initialEconomy,
-    progression: initialProgression,
-  }))
+}: SkillBookProps & { model: SkillBookModel }) {
   const pages = useMemo(() => nativeSkillBookPages(progression), [progression])
   const placements = useMemo(() => nativeSkillBookPagePlacements(pages), [pages])
   const [targetQuickbarSlot, setTargetQuickbarSlot] = useState<number | null>(null)
@@ -136,7 +122,7 @@ export default function SkillBook({
   const closeStartedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
   const hudProgress = nativeOptionalBookHudProgress(openProgress, inventoryScreenOpen)
-  const presentationRef = useRef<SkillBookRendererPresentation>({
+  const presentation = useMemo((): SkillBookRendererPresentation => ({
     belt: beltEntries,
     dragPosition: drag?.position ?? null,
     draggedSkillId: drag?.skillId ?? null,
@@ -148,41 +134,14 @@ export default function SkillBook({
     placements,
     progression,
     targetQuickbarSlot,
-  })
-  presentationRef.current = {
-    belt: beltEntries,
-    dragPosition: drag?.position ?? null,
-    draggedSkillId: drag?.skillId ?? null,
-    economy,
-    element,
-    hoveredSkillId,
-    hudProgress,
-    openProgress,
-    placements,
-    progression,
-    targetQuickbarSlot,
-  }
+  }), [beltEntries, drag, economy, element, hoveredSkillId, hudProgress,
+    openProgress, placements, progression, targetQuickbarSlot])
+  const presentationRef = useRef(presentation)
+  presentationRef.current = presentation
 
   useLayoutEffect(() => {
     setNativeModalSlideProgress('skills', 0)
   }, [])
-
-  useEffect(() => subscribeSnapshot((snapshot) => {
-    const player = snapshot.players[playerId]
-    if (!player) return
-    setModel((current) => sameSkillBookModel(
-      current.beltEntries,
-      current.economy,
-      current.progression,
-      player.belt,
-      player.economy,
-      player.progression,
-    ) ? current : {
-      beltEntries: player.belt,
-      economy: player.economy,
-      progression: player.progression,
-    })
-  }), [playerId, subscribeSnapshot])
 
   useEffect(() => subscribeGamePresentationFrames((nowMs) => {
     rendererRef.current?.render(nowMs)
@@ -233,19 +192,9 @@ export default function SkillBook({
     return renderer.mount(host)
   }, [rendererState])
 
-  useEffect(() => {
-    rendererRef.current?.setPresentation(presentationRef.current)
-  }, [
-    drag,
-    economy,
-    hoveredSkillId,
-    hudProgress,
-    openProgress,
-    placements,
-    progression,
-    rendererState,
-    targetQuickbarSlot,
-  ])
+  useLayoutEffect(() => {
+    rendererRef.current?.setPresentation(presentation)
+  }, [presentation, rendererState])
 
   const assign = (skillId: number, slot: number) => {
     onAssignQuickbarSkill(skillId, slot)
@@ -453,36 +402,6 @@ export default function SkillBook({
       </div>
     </div>
   )
-}
-
-function sameSkillBookModel(
-  currentBelt: PlayerBeltComponent,
-  currentEconomy: ProtocolPlayerEconomy,
-  currentProgression: ProtocolPlayerProgression,
-  nextBelt: PlayerBeltComponent,
-  nextEconomy: ProtocolPlayerEconomy,
-  nextProgression: ProtocolPlayerProgression,
-): boolean {
-  return currentEconomy.revision === nextEconomy.revision
-    && currentBelt.every((entry, index) => beltEntriesEqual(entry, nextBelt[index] ?? null))
-    && currentProgression.revision === nextProgression.revision
-    && currentProgression.selectedPrimarySkillId === nextProgression.selectedPrimarySkillId
-    && currentProgression.weldBuildId === nextProgression.weldBuildId
-    && currentProgression.mindChugTicksRemaining === nextProgression.mindChugTicksRemaining
-    && currentProgression.splitMind === nextProgression.splitMind
-    && currentProgression.concentrationSkillIds.every((skillId, index) => (
-      skillId === nextProgression.concentrationSkillIds[index]
-    ))
-}
-
-function beltEntriesEqual(left: NativeBeltEntry | null, right: NativeBeltEntry | null): boolean {
-  if (left === null || right === null) return left === right
-  if (left.kind !== right.kind) return false
-  if (left.kind === 'skill' && right.kind === 'skill') return left.skillId === right.skillId
-  if (left.kind === 'item' && right.kind === 'item') {
-    return left.itemId === right.itemId && left.nativeTypeId === right.nativeTypeId
-  }
-  return true
 }
 
 function SkillBookEntry({

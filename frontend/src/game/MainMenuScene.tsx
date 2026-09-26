@@ -2310,9 +2310,6 @@ function MainMenuContent({
           <Suspense fallback={null}>
             <SkillBook
               audio={audio}
-              belt={runtimeSnapshot!.players[session.playerId]!.belt}
-              economy={runtimeSnapshot!.players[session.playerId]!.economy}
-              element={runtimeSnapshot!.players[session.playerId]!.config.element}
               inputSuspended={chatOpen || socialModalOpen}
               inventoryKeyCode={gameSettings.controls.openInventory}
               inventoryScreenOpen={inventoryScreenOpen}
@@ -2333,12 +2330,9 @@ function MainMenuContent({
               onSelectConcentration={session.selectConcentration}
               onSelectPrimarySkill={session.selectPrimarySkill}
               onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
-              playerId={session.playerId}
-              progression={runtimeProgression}
               session={session}
               skillsKeyCode={gameSettings.controls.openSkills}
               style={nativeStageStyle}
-              subscribeSnapshot={session.onSnapshot}
               topMost
             />
           </Suspense>

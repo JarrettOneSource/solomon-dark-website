@@ -21,6 +21,14 @@ Recover the stock ownership, state, timing, geometry, painter/collision order,
 and lifecycle before changing behavior. Correct the shared model so the visible
 fix emerges from the same rules as stock; do not add symptom-specific patches.
 
+## Report 32 — shared belt freshness
+
+[Inventory and Skills entry 115](<115-2026-08-20-inventory-and-skillscreen-interaction-closure-in-hub-and-boneyard.md#2026-09-25--report-32-live-shared-belt-across-optional-book-lifetimes>)
+reopens cross-menu acceptance at the actor-model boundary: both books read the
+same current Game-owned belt, not the snapshot that originally created the
+scene. Native geometry, item activation and save/replication contracts are
+unchanged.
+
 ## Ledger index
 
 Current boss investigation: [Generated survival boss encounters](<301-2026-09-05-generated-survival-boss-encounter-closure.md>).
