@@ -2935,3 +2935,73 @@ read-only Ghidra replicas were confirmed removed. Final publication identity,
 release-build recheck and task cleanup are recorded in the archive's
 `STATUS.md`; no manual production deployment, unrelated checkout cleanup or
 canonical native-project modification is part of this task.
+
+## 2026-09-26 — report 34: poison Mage missile art compared with frost
+
+The reporter's two screenshots show white/green star-shaped poison projectiles
+and round white-blue frost projectiles in the Website. The suggested remedy is
+to make poison look like green frost. These are Website screenshots and an
+expected appearance, not a clean-stock capture or an authored requirement.
+The system reopened for this question is the Mage's cold/poison GuidedMissile
+body, shared aura and impact, with its charge-in-hand and Firebolt/lightning
+siblings checked at the boundary.
+
+### Stock and web evidence
+
+- Retail `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  was re-hashed on the M2. Ghidra 12.0.3 read the existing analyzed project
+  through `sdr-ghidra-headless`'s disposable read-only replica. Wrapper
+  SHA-256: `26015c74981f7bc23556808b42eed2801e09c554357b8da57c8480c2aa2f9da3`.
+  The existing Mod Loader scripts were invoked read-only at revision
+  `3f8cacc4a377db5f2e5d9797a422b4f916d05662`; decompiler script SHA-256
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+  instruction dumper SHA-256
+  `273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef`.
+- Fresh decompilation of Mage dispatch `0x0047FDE0` confirms frost and poison
+  select the same GuidedMissile factory `0x7EC` with separate element data.
+  Guided draw `0x00612960` reads variant index `+0x180`, uses that index to
+  select the main sprite, and sets its main color to white. Raw instructions
+  `0x00612AB3..0x00612B00` confirm variant-indexed selection and draw; the
+  second selection at `0x00612C1A` is the independent aura pass. The complete
+  established catalog maps cold/poison main records to BadGuys `110/111` and
+  their shared aura to `112`. The poison main is not record `110` recolored.
+- The extracted BadGuys records make that distinction visible: `110` is a
+  round white core, `111` a four-point white star, and `112` a three-ray aura.
+  Records `381/382` are blue/green round charge effects attached to a Mage's
+  casting hands, not the missile's flight core. The stock impact compositor
+  `Anim_FadeGM` retains the selected main record; its complete draw contract
+  is already recovered above in this entry.
+- The current `nativeEnemyProjectilePlan` selects `110` for cold and `111` for
+  poison, with a blue/green tint only on the common `112` aura. The existing
+  renderer contract test asserts both selectors. No newer runtime commit since
+  the complete M2 gate changed the projectile code or asset bytes.
+
+| Visual member | Stock contract and current disposition |
+| --- | --- |
+| Cold GuidedMissile body | Round BadGuys `110`, white core; verified-already-at-parity. |
+| Poison GuidedMissile body | Star BadGuys `111`, white core; verified-already-at-parity. Recoloring `110` green would contradict stock. |
+| Shared `112` aura | Independent blue/cold or green/poison tint and native phase/alpha; verified-already-at-parity. |
+| Cold/poison `Anim_FadeGM` impact | Retains the selected main and independent aura after projectile retirement; verified-already-at-parity under the existing effect tests. |
+| Frost/poison hand charge | Separate authored records `381/382` at Mage cast points; verified-already-at-parity under the prior complete Mage charge inventory. |
+| Firebolt and direct Mage lightning | Separate element dispatch/presentation owners; verified-already-at-parity and unaffected by the suggested recolor. |
+| Proposed green recolor of cold round core | Out-of-system product change, not a native parity correction. |
+
+### Acceptance and limit
+
+The exact runtime tree beneath published `8248c585` matches the code candidate
+that passed the complete M2 validation gate for report 31: only that commit's
+ledger 273 changed after its 100%-mutation, zero-failure full gate. On the M2,
+this report's production frontend build exited zero. Eight focused renderer
+contract tests passed. A real built-client Mac Chrome Boneyard journey then
+exercised fire, lightning, frost and poison Mage contacts, including frost and
+poison with both Harden and Shield: six receipts, empty page/console/HTTP/
+request/wire error arrays, and visible blue versus green contact frames. The
+frost/poison frames were visually reviewed. Browser log SHA-256:
+`5ebfb72ad5f21ec8ab9cc3fc99b1e00087b57c34f468f28f1223a6277bebd524`.
+This is controlled web-side acceptance, not a new clean-stock playfield video
+or exact pixel comparison at the reporter's timestamp.
+
+The reported shape difference matches stock selection. No runtime, atlas,
+authority, save or protocol change is warranted; the report is resolved as an
+intended native visual distinction. No platform member is blocked.
