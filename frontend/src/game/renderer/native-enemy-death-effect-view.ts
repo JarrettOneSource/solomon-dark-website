@@ -126,6 +126,7 @@ class NativeEnemyDeathEffectView {
   private gradientIndex = 0
   private readonly gradients: FillGradient[] = []
   private readonly kind: BoneyardEnemyDeathEffectSnapshot['kind']
+  private readonly directSprite: boolean
   private resourcesCreated = false
   private shadow: Sprite | null = null
   private readonly shadowed: boolean
@@ -140,9 +141,18 @@ class NativeEnemyDeathEffectView {
     this.textures = textures
     this.kind = initial.kind
     this.shadowed = !nativeEnemyDeathEffectIsBanish(initial.kind) && initial.shadow
+    this.directSprite = !this.shadowed && !nativeEnemyDeathEffectIsBanish(initial.kind)
     // Keep native painter insertion order even for equal-depth background
     // effects that enter the camera in a different order than their birth.
-    this.container = new Container({ label: `enemy-death-effect:${initial.kind}:${initial.id}` })
+    const label = `enemy-death-effect:${initial.kind}:${initial.id}`
+    if (this.directSprite) {
+      const sprite = new Sprite({ label })
+      this.container = sprite
+      this.effect = sprite
+      this.resourcesCreated = true
+    } else {
+      this.container = new Container({ label })
+    }
     this.container.eventMode = 'none'
     root.addChild(this.container)
   }
@@ -191,10 +201,10 @@ class NativeEnemyDeathEffectView {
     if (nativeEnemyDeathEffectIsBanish(effect.kind)) {
       this.updateBanish(effect, viewHeight)
     } else {
-      applyLayer(this.effect!, effect, this.textures)
+      applyLayer(this.effect!, effect, this.textures, false, this.directSprite)
       if (this.shadow) applyLayer(this.shadow, effect, this.textures, true)
     }
-    container.position.set(effect.position.x, effect.position.y)
+    if (!this.directSprite) container.position.set(effect.position.x, effect.position.y)
     return true
   }
 
@@ -377,6 +387,7 @@ function applyLayer(
   effect: BoneyardEnemyDeathEffectSnapshot,
   textures: BoneyardWorldTextures,
   shadow = false,
+  absolutePosition = false,
 ): void {
   const record = effect.atlas === 'BadGuys'
     && (
@@ -387,10 +398,13 @@ function applyLayer(
     )
     ? nativeLootSpriteRecord('BadGuys', effect.entry)
     : nativeEnemySpriteRecord(effect.atlas, effect.entry)
-  sprite.label = `${effect.atlas}:${effect.entry}`
+  if (!absolutePosition) sprite.label = `${effect.atlas}:${effect.entry}`
   sprite.texture = requiredTexture(textures, record.source)
   sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
-  sprite.position.set(0, shadow ? 2 : effect.height)
+  sprite.position.set(
+    absolutePosition ? effect.position.x : 0,
+    absolutePosition ? effect.position.y + effect.height : shadow ? 2 : effect.height,
+  )
   sprite.scale.set(effect.scale, nativeEnemyDeathEffectVerticalScale(effect, shadow))
   sprite.rotation = effect.rotationRadians
   sprite.alpha = effect.alpha

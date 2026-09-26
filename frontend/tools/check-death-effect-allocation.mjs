@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { Container, Texture } from 'pixi.js'
+import { Container, Sprite, Texture } from 'pixi.js'
 import { createServer } from 'vite'
 
 const [output, baseline = 'bfa35bd3'] = process.argv.slice(2)
@@ -43,8 +43,10 @@ try {
     if (compareVisible) {
       effects.forEach(effect => views.setDepth(effect.id, effect.id + 0.25))
       views.update(effects, inside, 900)
-      visible = world.children.map(row => ({ label: row.label, x: row.x, y: row.y, z: row.zIndex,
-        children: row.children.map(sprite => ({ label: sprite.label, x: sprite.x, y: sprite.y,
+      visible = world.children.map(row => ({ label: row.label, z: row.zIndex,
+        draws: (row instanceof Sprite ? [row] : row.children).map(sprite => ({
+          x: row === sprite ? sprite.x : row.x + sprite.x,
+          y: row === sprite ? sprite.y : row.y + sprite.y,
           scale: [sprite.scale.x, sprite.scale.y], anchor: [sprite.anchor.x, sprite.anchor.y],
           rotation: sprite.rotation, alpha: sprite.alpha, tint: sprite.tint,
           blendMode: sprite.blendMode, texture: sprite.texture.uid })) }))

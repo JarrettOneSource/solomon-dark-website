@@ -1901,3 +1901,91 @@ The complete validation log SHA-256 is
 `ede2881d9b4126adc511b4a1c795172af772f2d0c5ea9839fd628e673c4d1325`.
 This final receipt is a documentation-only follow-up to the tested
 implementation. Earlier intermediate receipts are superseded by these results.
+
+## 2026-09-26 — report 37: Faculty death population and renderer traversal
+
+The reporter associates a large lag spike with Dire Aliss dying and the
+resulting coins and animation. The private archive ZIP is 3,170,690 bytes,
+SHA-256 `1e10bdf08f92f5c3a3b6c6a4d3b285d4a06df16b7fe80166ab3c451c0d61906f`.
+Its schema-39 browser continuation is 3,141,650 bytes, SHA-256
+`6a38ba74541d45b31c5425a7a06467f5831414f483b0976ffa5f04ee37d10672`.
+The saved run is at tick 1,086,824, wave 31, after Aliss and Sirmin died;
+Dire Lucritius is the sole living Faculty. It retains 2,433 death effects,
+including 2,143 `faculty-dying-bone:smoke` fades owned by the two retired
+Faculty, and 232 loot actors, 228 of them Gold. Coins and smoke are real
+population members, but the ZIP does not contain the exact Aliss lethal tick.
+
+### Causal question and measured baseline
+
+The already recovered retail `0x00456E40` black-smoky Bouncer emits one child
+per airborne tick, and the Website's complete Faculty death program preserves
+that authored emission and finite lifetime. Protocol 128's death-population
+envelope above was added after an earlier valid three-Faculty transport failure;
+no evidence here supports reducing native births or clipping a boss death.
+
+On the current M2 Website, restoring the exact save and allowing effects to
+retire yields 60 FPS with empty browser errors. A controlled lethal hit to the
+remaining Lucritius on that restored state exercises the same shared Faculty
+death owner while the two earlier deaths are still present. It reaches 8,607
+death effects and 301 loot actors in a direct replay; the 300-plus-tick
+simulation stays at 4.78 ms p95 per tick. In a built Mac Chrome journey, the
+first five seconds after the shared death fall to 45–47 FPS (p95 frame interval
+33–50 ms), then return to 60 FPS as effects retire. The run remains active
+with no page/console/HTTP/wire/host errors. This is a confirmed current
+performance dip in the shared Faculty death population, not an exact replay of
+Aliss's fatal hit or proof that coin creation alone is expensive.
+
+At 8,573 death effects, a full keyframe has 8,792 replicated entity rows and
+906,338 bytes. Repeated same-state snapshot, projection and JSON encoding
+costs are about 3.9, 3.6 and 2.6 ms mean on M2; they grow with population but
+remain smaller than the observed browser-frame loss. In a controlled browser
+sample, 8,380 effects are retained and 4,358 visible at the peak. A Chrome
+main-thread profile of the first five seconds attributes time to scene update,
+Pixi renderable collection and sorting, garbage collection, and individual
+`removeChild` calls. The current `NativeEnemyDeathEffectView` wraps every
+unshadowed one-sprite effect in a Pixi `Container`, so each of thousands of
+visible smoke sprites contributes an extra retained traversal node. This is
+the leading representation bottleneck to test; the profiler by itself does
+not establish a speedup from changing that representation.
+
+| Member | Required disposition in this pass |
+| --- | --- |
+| All native Faculty smoke, bones, scrap and finale births | Preserve exact counts, clocks, opacity, positions, painter registrations and retirement; no arbitrary cap. |
+| Gold, sacks, boss rewards and shared boss-count gate | Preserve the existing loot/authority owner; do not attribute all cost to Gold without a measured differential. |
+| Unshadowed one-sprite death effects | Replace the redundant wrapper/view pair with one retained drawable while preserving absolute transform, atlas, alpha, tint, blend and depth. |
+| Shadowed effects and Banish multi-layer composites | Keep their existing grouped resources and internal order. |
+| Pre-world/background/world/overlay lanes and equal-depth ties | Preserve original root membership and birth insertion order during culling, re-entry and retirement. |
+| Replication, save/restore and full three-Faculty population envelope | Keep identity, every sample and finite protocol capacity unchanged. |
+| Reporter-specific Aliss lethal frame | Unavailable from the supplied save; stress the same shared death program with surviving Lucritius and disclose the limit. |
+
+The retained-view change removes one Pixi wrapper per unshadowed single-sprite
+effect. Focused per-kind tests verify resource ownership, exact transforms,
+identity across culling, and equal-depth painter order. The existing
+2,000-effect allocation comparison preserves normalized visible draw output
+and reduces median admission-plus-retirement time by 13.5% on M2. A browser
+comparison uses one deterministic 270-tick continuation of the supplied save,
+after the controlled remaining-Faculty hit, with 8,488 effects and 2,745
+visible in a fixed camera. Three alternating 90-frame Chrome render samples
+give a median-of-medians of 14.7 ms for the untouched renderer and 14.2 ms
+for flat sprites; median p95s are 19.3 and 19.0 ms. Screenshots rendered from
+that exact snapshot at a fixed presentation clock are pixel-identical across
+all 1600x900 pixels. Both versions report empty page, console, and HTTP error
+arrays. These matched measurements support a small representation speedup,
+not a claim that the whole live frame now holds 60 FPS.
+
+Live saved-death journeys varied in their peak visible population and therefore
+cannot be used as paired FPS comparisons: the unmodified renderer measured
+44–47 FPS for the first five seconds, while flat-sprite runs ranged from
+41–49 FPS with different visible-effect peaks. Both recovered to 60 FPS as
+the finite death effects retired. The remaining transient dip is a real limit
+of rendering thousands of native smoke draws in this browser pipeline; the
+effect count, lifetime, painter order, replication, and loot are preserved.
+Any larger batching or painter-plan change needs a separately measured and
+visually exact implementation, rather than reducing the authored death.
+
+The offscreen-detachment experiment did not help. On the saved-death journey
+it fell to 38.6 FPS with a 50 ms p95 frame interval. Visibility churn
+repeatedly removed and reinserted thousands of drawables while preserving
+painter depth. That attempt was removed from the source and tests; it is not
+part of the candidate. The full canonical M2 gate, final built-client death
+journey, publication, and cleanup remain to be recorded below.

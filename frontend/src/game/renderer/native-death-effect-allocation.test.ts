@@ -65,12 +65,13 @@ test('every death-effect family retains painter order but defers unseen Pixi chi
           assert.equal(container, initialContainer)
           const children = [...container.children]
           assert.equal(children.length, nativeEnemyDeathEffectViewResourcePlan(later).childCount)
+          const direct = !shadow && !nativeEnemyDeathEffectIsBanish(kind)
           assert.equal(container.zIndex, 17.25)
           assert.equal(container.x, later.position.x)
-          assert.equal(container.y, later.position.y)
+          assert.equal(container.y, later.position.y + (direct ? later.height : 0))
           assert.equal(container.renderable, true)
           if (!nativeEnemyDeathEffectIsBanish(kind)) {
-            const sprite = container.children[shadow ? 1 : 0]
+            const sprite = direct ? container : container.children[shadow ? 1 : 0]
             assert.ok(sprite instanceof Sprite)
             assert.equal(sprite.alpha, 0.4, 'first visible sample uses current alpha, not birth')
             assert.equal(sprite.rotation, 0.5)
@@ -78,10 +79,10 @@ test('every death-effect family retains painter order but defers unseen Pixi chi
             if (kind === 'fade-scale') assert.equal(plan.effect.scale.y, later.scale)
             if (kind === 'fade-scale-perspective') assert.equal(plan.effect.scale.y, later.scaleY * .75)
             for (const [index, layer] of (shadow ? [plan.shadow!, plan.effect] : [plan.effect]).entries()) {
-              const child = container.children[index]
+              const child = direct ? container : container.children[index]
               assert.ok(child instanceof Sprite)
-              assert.equal(child.x, layer.offset.x)
-              assert.equal(child.y, layer.offset.y)
+              assert.equal(child.x, layer.offset.x + (direct ? later.position.x : 0))
+              assert.equal(child.y, layer.offset.y + (direct ? later.position.y : 0))
               assert.equal(child.scale.x, layer.scale.x)
               assert.equal(child.scale.y, layer.scale.y)
               assert.equal(child.alpha, layer.alpha)
@@ -126,12 +127,12 @@ test('equal-depth background painters keep birth insertion order across deferred
   try {
     views.update([first, second], inside, 900)
     const originalOrder = [...preWorld.children]
-    assert.deepEqual(originalOrder.map(row => row.children.length), [0, 1])
+    assert.ok(originalOrder.every(row => row instanceof Sprite && row.children.length === 0))
     views.setDepth(1, 0); views.setDepth(2, 0)
     views.update([{ ...first, position: second.position }, second], inside, 900)
     preWorld.sortChildren()
     assert.deepEqual(preWorld.children, originalOrder)
-    assert.deepEqual(preWorld.children.map(row => row.children.length), [1, 1])
+    assert.ok(preWorld.children.every(row => row instanceof Sprite && row.children.length === 0))
   } finally { views.destroy(); root.destroy(); preWorld.destroy() }
 })
 
@@ -184,3 +185,31 @@ function fixture(kind: BoneyardEnemyDeathEffectSnapshot['kind'], shadow: boolean
     presentationOwner, position: { x: 10, y: 20 }, rotationRadians: 0,
     scale: 1, scaleY: 1, shadow, spawnTick: 100, tint: 0xffffff }
 }
+
+test('unshadowed Faculty smoke has one retained drawable with exact placement and painter order', () => {
+  const root = new Container(), preWorld = new Container({ sortableChildren: true })
+  const views = new module.NativeEnemyDeathEffectViews(root, textures, preWorld)
+  const first = { ...fixture('fade', false, 'pre-world-queue'), position: { x: 40, y: 50 } }
+  const second = { ...first, id: 2, position: { x: 70, y: 80 } }
+  try {
+    views.update([first, second], inside, 900)
+    views.setDepth(1, 7); views.setDepth(2, 7)
+    preWorld.sortChildren()
+    const originalOrder = [...preWorld.children]
+    assert.equal(root.children.length, 0)
+    assert.equal(originalOrder.length, 2)
+    assert.ok(originalOrder.every(child => child instanceof Sprite && child.children.length === 0))
+    assert.deepEqual(originalOrder.map(child => ({ x: child.x, y: child.y })), [
+      { x: 40, y: 55 }, { x: 70, y: 85 },
+    ])
+    views.update([{ ...first, position: { x: 10000, y: 10000 } }, second], inside, 900)
+    assert.equal(originalOrder[0]!.renderable, false)
+    views.update([first, second], inside, 900)
+    preWorld.sortChildren()
+    assert.deepEqual(preWorld.children, originalOrder)
+    assert.equal(originalOrder[0]!.renderable, true)
+    assert.equal(originalOrder[0]!.alpha, first.alpha)
+    assert.equal(originalOrder[0]!.tint, first.tint)
+    assert.equal(originalOrder[0]!.blendMode, first.blendMode)
+  } finally { views.destroy(); root.destroy(); preWorld.destroy() }
+})

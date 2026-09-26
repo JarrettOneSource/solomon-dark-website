@@ -1787,7 +1787,7 @@ test('retained death-effect views own only their actual variant resources', () =
       : {
           banishGraphics: false,
           banishSprites: 0,
-          childCount: shadow ? 2 : 1,
+          childCount: shadow ? 2 : 0,
           effectSprite: true,
           shadowSprite: shadow,
         }, kind)

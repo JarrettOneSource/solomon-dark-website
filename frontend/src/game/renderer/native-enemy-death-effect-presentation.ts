@@ -52,7 +52,7 @@ const SHADOWED_SPRITE_VIEW_RESOURCES: NativeEnemyDeathEffectViewResourcePlan = O
 const UNSHADOWED_SPRITE_VIEW_RESOURCES: NativeEnemyDeathEffectViewResourcePlan = Object.freeze({
   banishGraphics: false,
   banishSprites: 0,
-  childCount: 1,
+  childCount: 0,
   effectSprite: true,
   shadowSprite: false,
 })
