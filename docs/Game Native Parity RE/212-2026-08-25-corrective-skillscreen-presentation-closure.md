@@ -1,5 +1,77 @@
 # 2026-08-25 — Corrective SkillScreen presentation closure
 
+## 2026-09-26 — Report 33: shared skill HoverBox text-width ownership
+
+The Meditation concentration bonus overruns the right border in the reported
+LevelupScreen screenshot. The earlier closure checked authored text presence
+but did not exercise the native line-add width boundary. Its 380-pixel maximum
+was applied to the whole box while only descriptions were wrapped. That
+assumption is superseded here for both SkillScreen and the requested
+LevelupScreen detail projection; changing Meditation's copy or shrinking its
+font is not the native fix.
+
+### Native evidence and causal trace
+
+The retail image and canonical Ghidra program are SolomonDark.exe 0.72.5,
+preferred base `00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Fresh read-only M2 replica queries recovered the complete skill detail builder,
+stat/bonus formatters, line insertion, measurement, wrapping, positioning and
+render owners. The canonical project and Mod Loader are unchanged. This is
+instruction/data evidence, not a fresh clean-stock gameplay recording.
+
+- `0066B990`, reached through Skills_Wizard vtable cell `007A0D78`, first
+  wraps the description through `0043D230` at float `0078E934 = 380`.
+- Every resulting title/category/description/stat/bonus line goes through
+  `Dialog_AddLine 005BCCB0`. It measures ExactText via `0043C870`, compares
+  against **double** `0078E600 = 400`, and wraps an over-width line through
+  `0043D030` before storing it. The generic limit is distinct from the
+  description's narrower preparatory wrap.
+- The line-add tail updates HoverBox `+80` to the maximum measured stored
+  line width. It does not clamp the box independently of the rendered text.
+  `005AB060` adds the requested margins; the SkillScreen opener `00656CE0`
+  supplies source gap 50 and margin 25.
+- `005C3A60` consumes those stored strings with ExactText; indentation, explicit
+  breaks and inline rank/scale commands must not be replaced by CSS wrapping.
+- The complete public-row/rank scan of the existing extracted catalog finds
+  Meditation's bonus at 424 logical pixels. Its current box allocates only
+  380 content pixels. No other non-description authored row in that scan
+  exceeds 380; the correction nevertheless belongs to all semantic line kinds.
+
+The full xref sweep found only `0066B990` and `004FD6A0` using the specialized
+description wrapper `0043D230`. HoverBox constructor callers are `004A98E0`,
+`00553B80`, `0055E2C0`, `0056FC90`, and `0066B990`. All line-add callers were
+enumerated; the skill builder's own calls, including both current/next-rank
+branches and all Welding cases, share the same width owner. Other item,
+message, and shop builders do not use the Website skill tooltip compositor.
+
+### Boundary and membership before implementation
+
+This correction owns the shared **skill-detail text-to-box width pipeline**,
+from authored semantic lines through wrapped text and measured extents to
+the existing fixed-stage HoverBox placement. It does not change progression,
+offered ranks, copy, fonts, colors, line gaps, interaction, audio or gameplay.
+Existing native catalog rows/assets are reused in full, not re-authored.
+
+| Member | Native source | Disposition / acceptance required |
+| --- | --- | --- |
+| All public skill rows 8–79, every authored rank and boosted/item-granted titles | existing complete catalog; `0066B990` | recovered-pending-port: exhaustive layout checks |
+| All fourteen concentration bonus families, including Meditation 58 | `0065DEF0`, `0066EDDC` | recovered-pending-port: 400-pixel line-add wrapping and unchanged text |
+| Current-rank stats, scalar/vector formatting, explicit newlines | `0065D7F0`, shared line-add | recovered-pending-port: line measurement and frame containment |
+| Description preliminary wrapping | `0066BE48`, `0043D230`, 380 float | recovered-pending-port: reuse native in-place wrapper for plain catalog descriptions |
+| Title/category/boost/level/spacer lines and ExactText directives | `0043C870`, shared line-add | recovered-pending-port: no width clamp independent of rendered strings |
+| All ten exposed Welding detail identities | existing row52/1000–1009 projection | recovered-pending-port: same width and extent owner |
+| SkillScreen Hub/Boneyard and LevelupScreen desktop/touch details | two callers of `drawNativeSkillHoverBox` | recovered-pending-port: built-client journeys, silent read-only details, dismissal |
+| Empty details, left/right edges, above/below flip and viewport clamp | `005AB060`, existing fixed-stage projection | recovered-pending-port: focused layout boundaries |
+| Inventory/item/shop/MsgBox builders | other enumerated HoverBox/line-add callers | out-of-system: separate text producers/compositors; existing native MsgBox wrapper is reused without changing it |
+| Progression, combat, network/save state, hotbar model | independent authoritative owners | out-of-system: no mutation needed for tooltip width |
+| Root selectors 0–7 and internal Plane Orb/Reserved rows 80/81 | complete catalog boundary | out-of-system: roots are page headings; rows80/81 have no category or authored tooltip config |
+
+No browser constraint requires a visible approximation. Final per-member
+dispositions and exact candidate validation/browser receipts follow after
+implementation. Original report text, screenshot and source metadata remain
+in the named archive; execution probes and captures are task scratch.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the Skill Book “looks goofy.” The settled web frame

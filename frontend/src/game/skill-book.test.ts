@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { nativeSkillHoverBoxLayout } from './renderer/native-skill-hover-box-layout.ts'
+import { measureNativeSkillExactText } from './renderer/skill-book-render-contract.ts'
+import { nativeUiFont, wrapNativeUiMsgBoxText } from './native-ui/core.ts'
 
 import {
   NATIVE_SKILL_CATALOG,
@@ -263,7 +266,8 @@ test('pins the omitted native root and page-wide render contract', () => {
   assert.equal(nativeSkillPageTint(1), 0x998077)
   assert.deepEqual(NATIVE_SKILL_HOVER_BOX, {
     contentMargin: 25,
-    contentMaxWidth: 380,
+    descriptionWrapWidth: 380,
+    lineWrapWidth: 400,
     lineGap: 10,
     sourceGap: 50,
     viewportMargin: 25,
@@ -363,6 +367,89 @@ test('drains every public SkillScreen tooltip row without unresolved stat tokens
       false,
       `skill ${skillId} retained an unresolved native stat token`,
     )
+  }
+})
+
+test('Meditation bonus uses native line-add wrapping rather than overrunning the box', () => {
+  const lines = nativeSkillBookTooltipLines(catalogRow(58))
+  const layout = nativeSkillHoverBoxLayout(lines, 600, 382.5)
+  const bonus = layout.rendered.find(({ kind }) => kind === 'bonus')!
+  const original = lines.find(({ kind }) => kind === 'bonus')!.text
+  assert.equal(measureNativeSkillExactText(original), 424)
+  assert.deepEqual(bonus.sources, [
+    '   Concentrate: Can Meditate while walking (lesser',
+    'effect)',
+  ])
+  assert.deepEqual(bonus.sources, wrapNativeUiMsgBoxText(original, 'body', 400))
+  assert.equal(bonus.sources.length, 2)
+  assert.equal(bonus.sources.join(' '), original)
+  for (const { sources } of layout.rendered) {
+    for (const line of sources) assert.ok(measureNativeSkillExactText(line) <= layout.contentWidth)
+  }
+})
+
+test('skill HoverBox shares its 400-pixel admission rule across line kinds without clamping short rows', () => {
+  const kinds = ['title', 'category', 'boost', 'level', 'stat', 'bonus', 'spacer'] as const
+  const long = '   Concentrate: Can Meditate while walking (lesser effect)'
+  const betweenLimits = '   Concentrate: Can Meditate while walking (lesser e'
+  const middleWidth = measureNativeSkillExactText(betweenLimits)
+  assert.ok(middleWidth > 380 && middleWidth <= 400)
+  for (const kind of kinds) {
+    const short = nativeSkillHoverBoxLayout([{ kind, text: betweenLimits }], 800, 450)
+    assert.deepEqual(short.rendered[0]!.sources, [betweenLimits])
+    assert.equal(short.contentWidth, middleWidth)
+    const wrapped = nativeSkillHoverBoxLayout([{ kind, text: long }], 800, 450)
+    assert.deepEqual(wrapped.rendered[0]!.sources, [
+      '   Concentrate: Can Meditate while walking (lesser', 'effect)',
+    ])
+  }
+})
+
+test('skill HoverBox preserves native description wrapping, line breaks, rank commands and placement', () => {
+  const description = 'Recover mana more quickly when standing still (and not firing).'
+  const title = 'MEDITATION _s(.7)_o(0,1)1/3'
+  const lines = [
+    { kind: 'title' as const, text: title },
+    { kind: 'description' as const, text: description },
+    { kind: 'stat' as const, text: '   A\n   B' },
+    { kind: 'spacer' as const, text: '' },
+  ]
+  const layout = nativeSkillHoverBoxLayout(lines, 800, 800)
+  assert.deepEqual(layout.rendered.map(({ sources }) => sources), [
+    [title], wrapNativeUiMsgBoxText(description, 'body', 380), ['   A', '   B'], [''],
+  ])
+  assert.equal(layout.x, 800 - layout.width / 2)
+  assert.equal(layout.y, 800 - 50 - layout.height)
+  assert.equal(nativeSkillHoverBoxLayout(lines, 0, 25).x, 25)
+  assert.equal(nativeSkillHoverBoxLayout(lines, 0, 25).y, 75)
+  const right = nativeSkillHoverBoxLayout(lines, 1600, 450)
+  assert.equal(right.x + right.width, 1575)
+  const empty = nativeSkillHoverBoxLayout([], 800, 450)
+  assert.equal(empty.contentWidth, 0)
+  assert.deepEqual(empty.rendered, [])
+})
+
+test('shared skill tooltip sizes every authored rank, bonus, grant and Welding identity from its rendered lines', () => {
+  for (let id = 8; id <= 79; id += 1) {
+    const skill = NATIVE_SKILL_CATALOG[id]!
+    const maximum = Number(skill.config?.mMaxLevel ?? 1)
+    for (let rank = 1; rank <= maximum + 4; rank += 1) {
+      for (const permanentRank of [0, rank]) {
+        const base = { ...catalogRow(id), effectiveRank: rank, permanentRank }
+        const rows = id === 52 ? NATIVE_WELD_BUILDS.map(build => ({
+          ...base, name: build.syntheticName, weldBuildId: build.id,
+        })) : [base]
+        for (const row of rows) {
+          const lines = nativeSkillBookTooltipLines(row)
+          const layout = nativeSkillHoverBoxLayout(lines, 800, 450)
+          const widths = layout.rendered.flatMap(({ sources }) => sources.map(measureNativeSkillExactText))
+          assert.equal(layout.contentWidth, Math.max(0, ...widths), `${id}/${rank}: unclamped extent`)
+          assert.equal(layout.width, layout.contentWidth + 50)
+          assert.ok(layout.width < 1550 && layout.height < 850, `${id}/${rank}: viewport fit`)
+          assert.equal(layout.lineHeight, nativeUiFont('body').metrics[0])
+        }
+      }
+    }
   }
 })
 

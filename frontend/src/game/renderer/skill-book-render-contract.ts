@@ -76,7 +76,8 @@ export const NATIVE_SKILL_ROW_PRESENTATION = Object.freeze({
 
 export const NATIVE_SKILL_HOVER_BOX = Object.freeze({
   contentMargin: 25,
-  contentMaxWidth: 380,
+  descriptionWrapWidth: 380,
+  lineWrapWidth: 400,
   lineGap: 10,
   sourceGap: 50,
   viewportMargin: 25,

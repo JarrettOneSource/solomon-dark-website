@@ -2,11 +2,7 @@ import { Container, Graphics } from 'pixi.js'
 
 import { nativeSkillRoot } from '../core-kernels/player-progression.ts'
 import { nativeUiPixiFor } from '../native-ui/pixi.ts'
-import {
-  measureNativeUiText,
-  nativeUiFont,
-  wrapNativeUiText,
-} from '../native-ui/core.ts'
+import { measureNativeUiText } from '../native-ui/core.ts'
 import {
   nativeSkillBookTooltipLines,
   type NativeSkillBookRow,
@@ -16,11 +12,10 @@ import {
 import type { GameTextureMap } from './game-webgl.ts'
 import {
   NATIVE_SKILL_HOVER_BOX,
-  NATIVE_SKILL_SCREEN_SIZE,
-  measureNativeSkillExactText,
   nativeSkillExactTextRuns,
   nativeSkillPageTint,
 } from './skill-book-render-contract.ts'
+import { nativeSkillHoverBoxLayout } from './native-skill-hover-box-layout.ts'
 
 export interface NativeSkillHoverBoxPresentation {
   readonly lines?: readonly NativeSkillBookTooltipLine[]
@@ -36,35 +31,9 @@ export function drawNativeSkillHoverBox(
 ): Container | null {
   const semanticLines = presentation.lines ?? nativeSkillBookTooltipLines(presentation.row)
   if (semanticLines.length === 0) return null
-  const rendered = semanticLines.map((line) => {
-    const sources = line.kind === 'description'
-      ? wrapNativeUiText(line.text, 'body', NATIVE_SKILL_HOVER_BOX.contentMaxWidth)
-      : line.text.split('\n')
-    return { kind: line.kind, sources }
-  })
-  const contentWidth = Math.min(
-    NATIVE_SKILL_HOVER_BOX.contentMaxWidth,
-    Math.max(0, ...rendered.flatMap(({ sources }) => sources.map(measureNativeSkillExactText))),
+  const { rendered, width, height, x, y, lineHeight } = nativeSkillHoverBoxLayout(
+    semanticLines, presentation.sourceX, presentation.sourceY,
   )
-  const lineHeight = nativeUiFont('body').metrics[0]
-  const contentHeight = rendered.reduce((height, { sources }, index) => (
-    height
-    + sources.length * lineHeight
-    + (index === rendered.length - 1 ? 0 : NATIVE_SKILL_HOVER_BOX.lineGap)
-  ), 0)
-  const width = contentWidth + NATIVE_SKILL_HOVER_BOX.contentMargin * 2
-  const height = contentHeight + NATIVE_SKILL_HOVER_BOX.contentMargin * 2
-  const margin = NATIVE_SKILL_HOVER_BOX.viewportMargin
-  const x = Math.max(
-    margin,
-    Math.min(
-      NATIVE_SKILL_SCREEN_SIZE.width - margin - width,
-      presentation.sourceX - width / 2,
-    ),
-  )
-  let y = presentation.sourceY - NATIVE_SKILL_HOVER_BOX.sourceGap - height
-  if (y < margin) y = presentation.sourceY + NATIVE_SKILL_HOVER_BOX.sourceGap
-  y = Math.max(margin, Math.min(NATIVE_SKILL_SCREEN_SIZE.height - margin - height, y))
 
   const info = new Container()
   info.label = 'native-skill-hover-box'
