@@ -449,6 +449,7 @@ try {
     physicalSide: canvas.__sdrBoneyardFrame.regionLightPhysicalSide,
   }))
   assert.equal(lowQualityRegionTarget.physicalSide, 128)
+  const pausedRedraw = mobile ? null : await assertPausedWorldRedraw(boneyardCanvas)
   await page.screenshot({ path: screenshots.boneyard })
   await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
   await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
@@ -468,6 +469,7 @@ try {
       ),
       lightQuality: Number(await boneyardCanvas.getAttribute('data-light-quality')),
       lowQualityRegionTarget,
+      pausedRedraw,
       multipleShadows: await boneyardCanvas.getAttribute('data-multiple-shadows'),
       screenFlash: boneyardScreenFlash,
       zoomEffects: await boneyardCanvas.getAttribute('data-zoom-effects'),
@@ -542,6 +544,66 @@ async function setRange(locator, value) {
   }
   await locator.fill(`${value}`)
   assert.equal(Number(await locator.inputValue()), value)
+}
+
+async function assertPausedWorldRedraw(canvas) {
+  const viewport = page.viewportSize()
+  assert.ok(viewport)
+  const frozen = await canvas.evaluate(node => ({
+    frameCount: node.__sdrBoneyardFrame.frameCount,
+    tick: node.__sdrBoneyardFrame.tick,
+  }))
+  const before = await pausedWorldPixels(canvas)
+  await page.setViewportSize({ width: viewport.width + 160, height: viewport.height + 90 })
+  await nextPaint(page)
+  const resized = await pausedWorldPixels(canvas)
+  await page.setViewportSize(viewport)
+  await nextPaint(page)
+  const restored = await pausedWorldPixels(canvas)
+  assert.equal(restored.rgbaSha256, before.rgbaSha256, 'paused resize advanced the retained world image')
+  assert.deepEqual(await canvas.evaluate(node => ({
+    frameCount: node.__sdrBoneyardFrame.frameCount,
+    tick: node.__sdrBoneyardFrame.tick,
+  })), frozen, 'local graphics repaint advanced the frozen presentation')
+  return { before, resized, restored, ...frozen }
+}
+
+async function pausedWorldPixels(canvas) {
+  const style = await page.addStyleTag({ content:
+    '.game-settings-backdrop, .gameplay-pause-stage { visibility: hidden !important; }',
+  })
+  try {
+    const box = await canvas.boundingBox()
+    assert.ok(box)
+    const focus = await canvas.evaluate(node => {
+      const frame = node.__sdrBoneyardFrame
+      const width = Number(node.dataset.viewportWidth), height = Number(node.dataset.viewportHeight)
+      return { x: .5 + (frame.playerX - frame.cameraX) * frame.cameraZoom / width,
+        y: .5 + (frame.playerY - frame.cameraY) * frame.cameraZoom / height }
+    })
+    const png = await page.screenshot({ clip: {
+      x: Math.max(box.x, Math.min(box.x + box.width - 160, box.x + box.width * focus.x - 80)),
+      y: Math.max(box.y, Math.min(box.y + box.height - 160, box.y + box.height * focus.y - 80)),
+      width: 160, height: 160,
+    } })
+    const pixels = await page.evaluate(async data => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob())
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width; canvas.height = bitmap.height
+      const context = canvas.getContext('2d')
+      context.drawImage(bitmap, 0, 0); bitmap.close()
+      const rgba = context.getImageData(0, 0, canvas.width, canvas.height).data
+      let nonblack = 0
+      for (let index = 0; index < rgba.length; index += 4) {
+        if (Math.max(rgba[index], rgba[index + 1], rgba[index + 2]) > 8) nonblack += 1
+      }
+      const digest = await crypto.subtle.digest('SHA-256', rgba)
+      return { nonblack, rgbaSha256: [...new Uint8Array(digest)]
+        .map(value => value.toString(16).padStart(2, '0')).join('') }
+    }, png.toString('base64'))
+    assert.ok(pixels.nonblack > 32, 'paused graphics change cleared the world canvas')
+    return pixels
+  } finally { await style.evaluate(node => node.remove()) }
 }
 
 async function exercisePublicSiteAudio(page, baseUrl) {

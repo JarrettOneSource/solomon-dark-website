@@ -837,3 +837,68 @@ constraint and is unchanged by this visual reopening.
   arrays.
 - No presentation member is browser-blocked. Commit, push, deployment, and
   production restart were not requested or performed.
+
+## 2026-09-26 — report 38: Enhanced Effects feasibility and paused graphics settings
+
+The report asks whether the fixed Enhanced Effects row can be switched off;
+its follow-up describes smoother play after lowering Light Quality from 100%
+to 85%. The archived 955x417 screenshot explicitly shows Enhanced Effects,
+separately from Camera Shake. These are distinct native owners.
+
+| Member | Evidence and current owner | Disposition for this pass |
+| --- | --- | --- |
+| Native Enhanced Effects setting | `0x00B3BCAD`, persisted as `Game.FastCPU`; native settings report and this entry's original recovery | The existing fixed-On multiplayer policy remains. A native Off preference is a deferred feature, not an implemented local control. |
+| Spider movement cadence | BadGuy tick `0x004835F0`; entry091 and `nativeSpiderMovementClock` use UID-phased 2 ticks On, 5 Off, 10 unlit, 15 outside view; `stepSpider` consumes that cadence in authoritative movement and actions | A peer-local graphics preference cannot select different shared Spider updates. Do not wire a browser Boolean into this authority owner. |
+| Primary/secondary effect births and retained state | Frost Jet count divisor 10/20; Fire/death/Arrow lifetime and child branches; authority seeds enhanced Plane Orb, Leviathan, Storm, Freeze Wave, Earthquake, Acid Rain, Ether Drain and Comet state | Keep the existing shared births, RNG, save and replication contract. A complete native Off mode requires an explicit shared-mode policy or a full separation of optional presentation actors. |
+| Local visual-only Enhanced Effects consumers | Weather 10/20 drops; Building 2x2/3x3 grids; Air/Weld split geometry and enhanced shadow copies | Changing only these leaves a partial native switch. No such toggle is presented as a complete Off implementation. |
+| Light Quality | `0x00B3BCA4`; local `GameSettings.lightQualityPercent`, `gameLightQuality`, `BoneyardRegionLightField`; no client setting enters authoritative state | Verify persistence, actual target dimensions and unchanged paused world/effects at 100/85/75/24%. No guaranteed FPS gain is inferred from a slider value. |
+| Paused resize and graphics changes | `BoneyardScene` deliberately skips its presentation loop while paused; renderer `resize` clears the canvas and `setSettings` reallocates light targets without repainting | Confirmed lifecycle defect: repaint the last snapshot at its last presentation time, without advancing actors, weather, flicker, speech or the presentation counter. |
+| Resume and destruction | Existing authoritative pause owner and renderer lifetime | Keep pause ownership and resume behavior; discard retained frame references on destruction and ignore redraw after teardown. |
+
+The built Mac browser preserves 85% through title reload and applies every
+quality value under gameplay Settings without changing the paused world or
+effect stores. At DPR 1, the real light target at 1600x900 is 512 squared for
+100/85/75% and 128 squared at 24%. At 2400x1350 it changes from 1024 squared
+at 100% to 512 squared at 85/75% and 256 squared at 24%. This confirms a
+resolution-dependent reduction in allocated/rasterized light work, not the
+reporter's exact late-wave FPS claim. The shared saved world is the separate
+report37 continuation, retained only as a private test fixture.
+
+The first browser run incorrectly treated audio requests cancelled by its
+intentional page navigations as failures. The corrected harness records those
+navigation-only cancellations separately. Semantic checks pass with no page,
+console, HTTP, unexpected request, or host errors. However, visual review of
+the resized paused frame found a black world behind the still-visible Settings
+and HUD. Current source explains it: no new `renderer.render` call occurs
+while `presentationPausedRef` is true, even after the renderer surface is
+resized. The repair belongs to renderer invalidation, not the authority clock
+or the pause owner's input/audio loop. Final visual regression and full M2
+acceptance remain pending.
+
+### Paused redraw implementation and focused proof
+
+The renderer retains its last rendered snapshot and presentation timestamp.
+`resize` and `setSettings` now reuse the existing complete paint path with
+that snapshot/time and without incrementing the presentation counter. Normal
+frames still sample the current clock and advance once. Teardown clears the
+retained snapshot and existing destroyed-state guards prevent later redraws.
+The frame body is otherwise unchanged; no pause/input/audio or authoritative
+simulation owner moved.
+
+A built-client regression failed on the original source with zero nonblack
+pixels in a 160x160 world sample after a paused graphics change. The repaired
+journey keeps all 25,600 sampled pixels nonblack through 100/85/75/24% quality
+and both 1600x900 and 2400x1350 viewports. Restoring 85% and 1600x900 reproduces
+the exact original RGBA hash while retaining the same frame counter and paused
+world/effect state. The final Settings frame was visually reviewed with its
+world underlay present, and the run resumes normally after Done.
+
+The maintained Settings smoke now includes the frozen-frame resize regression:
+it verifies visible world pixels, unchanged tick/frame count, and exact image
+restoration after returning to the original viewport. Its complete desktop
+journey passed title persistence/fullscreen, controls, Dark Cloud return, Hub
+input, Boneyard settings and the new redraw checks with empty browser/HTTP
+error arrays. Type checking, lint, the production build, and 78 focused
+settings/frame-loop/light/render-contract tests passed. The earlier 62-test
+settings/Spider/weather/lighting audit also passed. The full exact-candidate
+M2 gate and post-gate production-browser regression remain pending.

@@ -268,6 +268,8 @@ export async function createBoneyardWorldRenderer(
 
   let destroyed = false
   let frameCount = 0
+  let lastRenderedSnapshot: GameSnapshot | null = null
+  let lastRenderedAt = 0
   let currentWorldDisplacement: Readonly<{ x: number; y: number }> = { x: 0, y: 0 }
   let worldSpeeches: readonly GameWorldSpeech[] = []
   let armedLevelUpPresentationId: number | null = null
@@ -394,6 +396,222 @@ export async function createBoneyardWorldRenderer(
     )
   }
 
+  const renderFrame = (snapshot: GameSnapshot, advanceFrame: boolean): void => {
+    if (destroyed) return
+    const currentStaticWorld = staticWorld
+    if (currentStaticWorld === null) return
+    requireBoneyardSnapshot(snapshot, options.boneyard.runId)
+    const player = snapshot.players[options.playerId]
+    if (!player) return
+    if (advanceFrame) frameCount += 1
+    const cameraFocus = cameraFocusFor(snapshot)
+    const tutorialCameraBounds = snapshot.world.tutorial === null
+      ? null
+      : nativeTutorialCameraBounds(snapshot.world.tutorial)
+    const camera = boneyardCamera(
+      cameraFocus.position,
+      tutorialCameraBounds
+        ?? snapshot.world.arenaTransition?.cameraBounds
+        ?? options.boneyard.scene.bounds,
+      viewport,
+      cameraZoom,
+    )
+    if (
+      snapshot.world.arenaTransition?.phase === 'sealed'
+      || (
+        snapshot.world.tutorial?.cameraLockTriggered === true
+        && snapshot.world.tutorial.cameraLockTicksRemaining === 0
+      )
+    ) {
+      currentStaticWorld.applyOffCameraCleanup()
+    }
+    const visibleWorld = boneyardVisibleWorldBounds(camera, viewport, 0)
+    visibility.update(camera, viewport)
+    const frameAt = advanceFrame ? now() : lastRenderedAt
+    lastRenderedSnapshot = snapshot
+    lastRenderedAt = frameAt
+    if (
+      armedLevelUpPresentationId !== null
+      && levelUpPresentationStartedAt === null
+    ) levelUpPresentationStartedAt = frameAt
+    const levelUpPresentationElapsedMs = levelUpPresentationStartedAt === null
+      ? 0
+      : frameAt - levelUpPresentationStartedAt
+    if (
+      armedLevelUpPresentationId !== null
+      && levelUpPresentationElapsedMs >= NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS
+    ) {
+      armedLevelUpPresentationId = null
+      levelUpPresentationStartedAt = null
+      canvas.dataset.levelUpPresentationId = 'none'
+    }
+    const worldPresentationFrame = skillPickerWorldPresentationFrame(
+      gameRunWorldTick(snapshot.tick, snapshot.run),
+      frameCount,
+      snapshot.levelUpBarrier !== null || snapshot.run.phase === 'game-over',
+    )
+    const painter = scene.update(
+      snapshot,
+      options.playerId,
+      worldPresentationFrame,
+      visibility.visibleMainResidents,
+      armedLevelUpPresentationId === null
+        ? null
+        : {
+            elapsedMs: levelUpPresentationElapsedMs,
+            playerScreenY: player.position.y - (
+              camera.y - viewport.height / (2 * camera.zoom)
+            ),
+            presentationId: armedLevelUpPresentationId,
+          },
+      camera,
+      viewport,
+      settings,
+      frameAt,
+    )
+    regionLightField.setCompositeZIndex(
+      painter.weatherLightingOrder.lightCompositeZIndex,
+    )
+    displacementCover.zIndex = painter.weatherLightingOrder.lightCompositeZIndex
+    regionLightField.render(
+      application.renderer,
+      scene.lights.index.acceptedSources,
+      camera,
+      viewport,
+    )
+    for (const event of pendingEnemyScreenEvents.splice(0)) {
+      secondaryScreenFeedback.consumeEnemy(event, { cameraCenter: { x: camera.x, y: camera.y },
+        localPlayerAlternate: player.progression.lifeState !== 'alive', visibleWorldWidth: visibleWorld.w })
+    }
+    for (const event of snapshot.secondaryAbilities.events) {
+      secondaryScreenFeedback.consume(event, {
+        cameraCenter: { x: camera.x, y: camera.y },
+        localPlayerAlternate: player.progression.lifeState !== 'alive',
+        visibleWorldWidth: visibleWorld.w,
+      })
+    }
+    for (const effect of snapshot.primarySpells.transients) {
+      if (effect.kind === 'ether-blast') {
+        secondaryScreenFeedback.consumePrimaryEtherBlast(effect, {
+          cameraCenter: { x: camera.x, y: camera.y },
+          localPlayerAlternate: player.progression.lifeState !== 'alive',
+          visibleWorldWidth: visibleWorld.w,
+        })
+        continue
+      }
+      if (effect.kind === 'weld-meteor') {
+        if (effect.phase !== 'impact' || effect.cameraDisplacement === null) continue
+        secondaryScreenFeedback.consumePrimaryCameraDisplacement({
+          displacement: effect.cameraDisplacement,
+          eventId: effect.id,
+          tick: snapshot.tick - effect.impactAgeTicks,
+          worldKey: effect.worldKey,
+        })
+        continue
+      }
+      if (
+        effect.kind === 'weld-persistent'
+        && effect.buildId === 1008
+        && effect.phase === 'flight'
+        && effect.releaseAgeTicks !== null
+      ) secondaryScreenFeedback.consumePrimaryCameraMagnitude({
+        eventId: effect.id,
+        magnitude: Math.fround(0.1),
+        tick: snapshot.tick - effect.releaseAgeTicks,
+        worldKey: effect.worldKey,
+      })
+    }
+    const sampledFeedback = worldFeedback.sample(snapshot.tick)
+    const sampledSecondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
+      snapshot.tick,
+    )
+    const sampledSecondaryCameraDisplacement = secondaryScreenFeedback.sampleCameraDisplacement(
+      snapshot.tick,
+    )
+    const feedbackMagnitude = settings.zoomEffects ? sampledFeedback.magnitude : 0
+    const secondaryCameraMagnitude = settings.zoomEffects
+      ? sampledSecondaryCameraMagnitude
+      : 0
+    const secondaryCameraDisplacement = settings.zoomEffects
+      ? sampledSecondaryCameraDisplacement
+      : { x: 0, y: 0 }
+    currentWorldDisplacement = settings.zoomEffects
+      ? nativeSecondaryWorldShake(
+          snapshot.secondaryAbilities.actors,
+          `boneyard:${snapshot.world.runId}`,
+          secondaryCameraDisplacement,
+        )
+      : { x: 0, y: 0 }
+    const worldTransform = nativeEnemyWorldFeedbackTransform(
+      camera,
+      viewport,
+      player.position,
+      Math.max(feedbackMagnitude, secondaryCameraMagnitude),
+    )
+    world.scale.set(worldTransform.scale)
+    world.position.set(
+      worldTransform.position.x + currentWorldDisplacement.x,
+      worldTransform.position.y + currentWorldDisplacement.y,
+    )
+    drawArenaDisplacementCover(
+      displacementCover,
+      canvas,
+      currentWorldDisplacement,
+      viewport,
+      settings.complexLighting,
+      { position: world.position, scale: world.scale.x },
+    )
+    const worldScreenTransform = {
+      position: { x: world.position.x, y: world.position.y },
+      scale: worldTransform.scale,
+    }
+    const visiblePlayers = visibleBoneyardPlayers(snapshot)
+    worldNameplates.update(
+      visiblePlayers,
+      options.playerId,
+      (point) => projectNativeWorldPoint(
+        point,
+        worldScreenTransform,
+        viewport,
+      ),
+      { renderable: true },
+    )
+    const worldSpeechDiagnostics = worldSpeech.update(
+      worldSpeeches,
+      visiblePlayers,
+      frameAt,
+      (point) => projectNativeWorldPoint(point, worldScreenTransform, viewport),
+      { renderable: true },
+    )
+    canvas.dataset.worldSpeechActiveCount = `${worldSpeechDiagnostics.activeCount}`
+    canvas.dataset.worldSpeechAlphas = worldSpeechDiagnostics.alphas.join(',')
+    canvas.dataset.worldSpeechCount = `${worldSpeechDiagnostics.visibleCount}`
+    canvas.dataset.worldSpeechMaximumAlpha = `${worldSpeechDiagnostics.maximumAlpha}`
+    canvas.dataset.worldSpeechPlayerIds = worldSpeechDiagnostics.playerIds.join(',')
+    canvas.dataset.worldSpeechSequences = worldSpeechDiagnostics.sequences.join(',')
+    const screenOverlay = presentNativeSecondaryScreenOverlay(
+      secondaryScreenFeedback.sample(snapshot.tick),
+      settings.reducedScreenFlashes,
+    )
+    secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
+    secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
+    secondaryScreenFlash.visible = screenOverlay !== null
+    crowBlindness.update(snapshot.players[options.playerId]!.lighting.blindnessTicksRemaining,
+      frameAt, viewport)
+    application.render()
+    updateBoneyardRendererDiagnostics({
+      frameDiagnostics, canvas, cameraFocus, camera, frameCount, painter, snapshot,
+      scene, visibility, localPlayerId: options.playerId, viewport, currentStaticWorld,
+      spectatorCamera, feedbackMagnitude, secondaryCameraMagnitude, regionLightField,
+      currentWorldDisplacement, screenOverlay,
+    })
+  }
+
+  const redrawLastFrame = (): void => {
+    // Local graphics changes must repaint a paused canvas without ticking its presentation.
+    if (lastRenderedSnapshot !== null) renderFrame(lastRenderedSnapshot, false)
+  }
+
   const renderer: BoneyardWorldRenderer = {
     canvas,
     camera: cameraFor,
@@ -414,212 +632,7 @@ export async function createBoneyardWorldRenderer(
       return active
     },
     render(snapshot) {
-      if (destroyed) return
-      const currentStaticWorld = staticWorld
-      if (currentStaticWorld === null) return
-      requireBoneyardSnapshot(snapshot, options.boneyard.runId)
-      const player = snapshot.players[options.playerId]
-      if (!player) return
-      frameCount += 1
-      const cameraFocus = cameraFocusFor(snapshot)
-      const tutorialCameraBounds = snapshot.world.tutorial === null
-        ? null
-        : nativeTutorialCameraBounds(snapshot.world.tutorial)
-      const camera = boneyardCamera(
-        cameraFocus.position,
-        tutorialCameraBounds
-          ?? snapshot.world.arenaTransition?.cameraBounds
-          ?? options.boneyard.scene.bounds,
-        viewport,
-        cameraZoom,
-      )
-      if (
-        snapshot.world.arenaTransition?.phase === 'sealed'
-        || (
-          snapshot.world.tutorial?.cameraLockTriggered === true
-          && snapshot.world.tutorial.cameraLockTicksRemaining === 0
-        )
-      ) {
-        currentStaticWorld.applyOffCameraCleanup()
-      }
-      const visibleWorld = boneyardVisibleWorldBounds(camera, viewport, 0)
-      visibility.update(camera, viewport)
-      const frameAt = now()
-      if (
-        armedLevelUpPresentationId !== null
-        && levelUpPresentationStartedAt === null
-      ) levelUpPresentationStartedAt = frameAt
-      const levelUpPresentationElapsedMs = levelUpPresentationStartedAt === null
-        ? 0
-        : frameAt - levelUpPresentationStartedAt
-      if (
-        armedLevelUpPresentationId !== null
-        && levelUpPresentationElapsedMs >= NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS
-      ) {
-        armedLevelUpPresentationId = null
-        levelUpPresentationStartedAt = null
-        canvas.dataset.levelUpPresentationId = 'none'
-      }
-      const worldPresentationFrame = skillPickerWorldPresentationFrame(
-        gameRunWorldTick(snapshot.tick, snapshot.run),
-        frameCount,
-        snapshot.levelUpBarrier !== null || snapshot.run.phase === 'game-over',
-      )
-      const painter = scene.update(
-        snapshot,
-        options.playerId,
-        worldPresentationFrame,
-        visibility.visibleMainResidents,
-        armedLevelUpPresentationId === null
-          ? null
-          : {
-              elapsedMs: levelUpPresentationElapsedMs,
-              playerScreenY: player.position.y - (
-                camera.y - viewport.height / (2 * camera.zoom)
-              ),
-              presentationId: armedLevelUpPresentationId,
-            },
-        camera,
-        viewport,
-        settings,
-        frameAt,
-      )
-      regionLightField.setCompositeZIndex(
-        painter.weatherLightingOrder.lightCompositeZIndex,
-      )
-      displacementCover.zIndex = painter.weatherLightingOrder.lightCompositeZIndex
-      regionLightField.render(
-        application.renderer,
-        scene.lights.index.acceptedSources,
-        camera,
-        viewport,
-      )
-      for (const event of pendingEnemyScreenEvents.splice(0)) {
-        secondaryScreenFeedback.consumeEnemy(event, { cameraCenter: { x: camera.x, y: camera.y },
-          localPlayerAlternate: player.progression.lifeState !== 'alive', visibleWorldWidth: visibleWorld.w })
-      }
-      for (const event of snapshot.secondaryAbilities.events) {
-        secondaryScreenFeedback.consume(event, {
-          cameraCenter: { x: camera.x, y: camera.y },
-          localPlayerAlternate: player.progression.lifeState !== 'alive',
-          visibleWorldWidth: visibleWorld.w,
-        })
-      }
-      for (const effect of snapshot.primarySpells.transients) {
-        if (effect.kind === 'ether-blast') {
-          secondaryScreenFeedback.consumePrimaryEtherBlast(effect, {
-            cameraCenter: { x: camera.x, y: camera.y },
-            localPlayerAlternate: player.progression.lifeState !== 'alive',
-            visibleWorldWidth: visibleWorld.w,
-          })
-          continue
-        }
-        if (effect.kind === 'weld-meteor') {
-          if (effect.phase !== 'impact' || effect.cameraDisplacement === null) continue
-          secondaryScreenFeedback.consumePrimaryCameraDisplacement({
-            displacement: effect.cameraDisplacement,
-            eventId: effect.id,
-            tick: snapshot.tick - effect.impactAgeTicks,
-            worldKey: effect.worldKey,
-          })
-          continue
-        }
-        if (
-          effect.kind === 'weld-persistent'
-          && effect.buildId === 1008
-          && effect.phase === 'flight'
-          && effect.releaseAgeTicks !== null
-        ) secondaryScreenFeedback.consumePrimaryCameraMagnitude({
-          eventId: effect.id,
-          magnitude: Math.fround(0.1),
-          tick: snapshot.tick - effect.releaseAgeTicks,
-          worldKey: effect.worldKey,
-        })
-      }
-      const sampledFeedback = worldFeedback.sample(snapshot.tick)
-      const sampledSecondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
-        snapshot.tick,
-      )
-      const sampledSecondaryCameraDisplacement = secondaryScreenFeedback.sampleCameraDisplacement(
-        snapshot.tick,
-      )
-      const feedbackMagnitude = settings.zoomEffects ? sampledFeedback.magnitude : 0
-      const secondaryCameraMagnitude = settings.zoomEffects
-        ? sampledSecondaryCameraMagnitude
-        : 0
-      const secondaryCameraDisplacement = settings.zoomEffects
-        ? sampledSecondaryCameraDisplacement
-        : { x: 0, y: 0 }
-      currentWorldDisplacement = settings.zoomEffects
-        ? nativeSecondaryWorldShake(
-            snapshot.secondaryAbilities.actors,
-            `boneyard:${snapshot.world.runId}`,
-            secondaryCameraDisplacement,
-          )
-        : { x: 0, y: 0 }
-      const worldTransform = nativeEnemyWorldFeedbackTransform(
-        camera,
-        viewport,
-        player.position,
-        Math.max(feedbackMagnitude, secondaryCameraMagnitude),
-      )
-      world.scale.set(worldTransform.scale)
-      world.position.set(
-        worldTransform.position.x + currentWorldDisplacement.x,
-        worldTransform.position.y + currentWorldDisplacement.y,
-      )
-      drawArenaDisplacementCover(
-        displacementCover,
-        canvas,
-        currentWorldDisplacement,
-        viewport,
-        settings.complexLighting,
-        { position: world.position, scale: world.scale.x },
-      )
-      const worldScreenTransform = {
-        position: { x: world.position.x, y: world.position.y },
-        scale: worldTransform.scale,
-      }
-      const visiblePlayers = visibleBoneyardPlayers(snapshot)
-      worldNameplates.update(
-        visiblePlayers,
-        options.playerId,
-        (point) => projectNativeWorldPoint(
-          point,
-          worldScreenTransform,
-          viewport,
-        ),
-        { renderable: true },
-      )
-      const worldSpeechDiagnostics = worldSpeech.update(
-        worldSpeeches,
-        visiblePlayers,
-        frameAt,
-        (point) => projectNativeWorldPoint(point, worldScreenTransform, viewport),
-        { renderable: true },
-      )
-      canvas.dataset.worldSpeechActiveCount = `${worldSpeechDiagnostics.activeCount}`
-      canvas.dataset.worldSpeechAlphas = worldSpeechDiagnostics.alphas.join(',')
-      canvas.dataset.worldSpeechCount = `${worldSpeechDiagnostics.visibleCount}`
-      canvas.dataset.worldSpeechMaximumAlpha = `${worldSpeechDiagnostics.maximumAlpha}`
-      canvas.dataset.worldSpeechPlayerIds = worldSpeechDiagnostics.playerIds.join(',')
-      canvas.dataset.worldSpeechSequences = worldSpeechDiagnostics.sequences.join(',')
-      const screenOverlay = presentNativeSecondaryScreenOverlay(
-        secondaryScreenFeedback.sample(snapshot.tick),
-        settings.reducedScreenFlashes,
-      )
-      secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
-      secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
-      secondaryScreenFlash.visible = screenOverlay !== null
-      crowBlindness.update(snapshot.players[options.playerId]!.lighting.blindnessTicksRemaining,
-        frameAt, viewport)
-      application.render()
-      updateBoneyardRendererDiagnostics({
-        frameDiagnostics, canvas, cameraFocus, camera, frameCount, painter, snapshot,
-        scene, visibility, localPlayerId: options.playerId, viewport, currentStaticWorld,
-        spectatorCamera, feedbackMagnitude, secondaryCameraMagnitude, regionLightField,
-        currentWorldDisplacement, screenOverlay,
-      })
+      renderFrame(snapshot, true)
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -660,6 +673,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.viewportWidth = `${viewport.width}`
       canvas.style.width = `${viewport.width}px`
       canvas.style.height = `${viewport.height}px`
+      redrawLastFrame()
     },
     setLevelUpPresentation(presentationId) {
       if (destroyed) return
@@ -707,6 +721,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.multipleShadows = `${settings.multipleShadows}`
       canvas.dataset.reducedScreenFlashes = `${settings.reducedScreenFlashes}`
       canvas.dataset.zoomEffects = `${settings.zoomEffects}`
+      redrawLastFrame()
     },
     setWorldSpeeches(speeches) {
       if (destroyed || speeches === worldSpeeches) return
@@ -715,6 +730,7 @@ export async function createBoneyardWorldRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
+      lastRenderedSnapshot = null
       spectatorCamera = INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
       application.stage.removeChild(world, worldNameplates.container, worldSpeech.container)
       worldNameplates.destroy()
