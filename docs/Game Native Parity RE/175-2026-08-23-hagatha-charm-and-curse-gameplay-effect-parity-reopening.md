@@ -1510,11 +1510,11 @@ and the Wand's melee action are separate owners.
 | Member | Investigation disposition |
 | --- | --- |
 | Cosmofluxic Wand's Magic Circle/Dampen grant and set membership | `verified-already-at-parity`: authored recipe/effect rows and selector-6 ordering remain unchanged |
-| Dampen effective rank two and Phasing short-row lookup | `recovered-pending-port`: accept the legitimate Dampen selector floor and final-row value; preserve Phasing's reachable rank-one behavior |
+| Dampen effective rank two and Phasing short-row lookup | `exact-ported`: the shared reader admits Revelation's rank-two floor and uses the terminal authored property row; rank three and nonpositive ranks still fail, while ordinary Phasing rank one remains unchanged |
 | Other secondaries, all authored rank arrays and ordinary caps | `verified-already-at-parity`: no rank-table, damage, cost or cooldown change |
-| Shared secondary mana/cast, ML and quickbar consumers | `recovered-pending-port`: use the corrected common rank reader, not item-specific exception paths |
-| Equip, unequip, owner isolation and save/restore | `recovered-pending-port`: prove the real Wand equips without host failure and rank reverts or persists at the correct boundaries |
-| Strict snapshot protocol, Hub/Boneyard and browser observer | `recovered-pending-port`: valid rank-two state must replicate without weakening malformed input rejection |
+| Shared secondary mana/cast, ML and quickbar consumers | `exact-ported`: the corrected common rank reader supplies Dampen rank-two mana cost 90, including the actual Wand cast and snapshot/quickbar projections |
+| Equip, unequip, owner isolation and save/restore | `exact-ported`: authentic Revelation purchase and recipe-2 Wand equip retain rank two through snapshot and save/restore, then unequip returns rank zero without changing the other owner |
+| Strict snapshot protocol, Hub/Boneyard and browser observer | `exact-ported`: the built browser journey equips the Wand in Hub, enters Boneyard, sees authoritative cost 90 on both sides, and unequips without console, page, response or host errors; rank-three rejection remains |
 | Historical retail crash and Wand melee | `out-of-system`: do not reproduce an incidental stock crash or invent a Wand Staff action |
 
 The falsifying test is an actual recipe-2 equip with Revelation active:
@@ -1523,3 +1523,18 @@ the corrected snapshot, stat lookup, save/restore, and Boneyard browser
 journey must preserve Dampen cost and rank without affecting another player.
 Keep the original item screenshot and production log private; publish only
 this sanitized causal receipt.
+
+Acceptance receipt: before the correction, WSL unit and equip-to-snapshot
+integration tests failed with the same `RangeError` seen in production. After
+the one shared-reader correction, 286 focused tests, lint and build passed.
+The exact runtime candidate passed the WSL canonical gate: 3,943 Node tests,
+24 Python tests and the renderer mutation quality gate at 100 percent with
+zero failures (gate log SHA-256
+`eed359fc452bacc1f8a7368df525e2916f9251d9c30f5cfdb78337f36d39e135`).
+The built Hub-to-Boneyard Wand journey passed under Chromium 150, with
+authoritative `[51, 90]` costs in both rooms, rank two equipped and rank zero
+after unequip, and empty browser and host error lists (browser log SHA-256
+`af9c64829a91450db849166fe9eabc54ed1f8b54d7bb42790c8393005693aec4`).
+This is a controlled reconstruction of the proven failure path; the original
+private save was unavailable, and the reporter's remembered retail crash was
+not independently reproduced.
