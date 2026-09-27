@@ -948,3 +948,42 @@ waited for positive alpha, then fetched it in a second browser RPC after the
 native flash had expired. Capture the observed alpha/color/mode together inside
 the successful poll. The native lifetime, product code and expected alpha bound
 remain unchanged; this makes the existing transient observation deterministic.
+
+### Touch acceptance observer corrections
+
+Candidate `333b3f42` passes the complete WSL gate and both development and
+built desktop Settings journeys. The built touch journey reaches Sound Vol
+0% but times out in its live audio-master assertion. A diagnostic capture
+confirms the ordinary click path is source -> per-cue gain -> sound-mix gain
+-> sound-master gain -> destination. The mix gain remains one while the
+actual master is zero, as required. The shared smoke probe currently records
+only the immediate parent of the per-cue gain and therefore mistakes the mix
+gain for the master. Its observed click-master value is one despite the
+correct live master value of zero.
+
+The probe must follow the connected GainNode chain to its terminal master
+for both live master-volume queries and per-play event receipts. This retains
+the existing zero/fractional-volume assertions and also covers streams whose
+per-cue gain connects directly to the master. The correction belongs only to
+the shared browser observer; the runtime audio graph and gain ownership are
+already correct. Repeat touch acceptance and validate both real Web Audio
+connection paths before publication.
+
+The corrected audio checks pass zero and 65% master gain, allowing the touch
+journey to reach its next stale desktop assumption. At 896x414 CSS pixels,
+the logical courtyard viewport is 1947.826 pixels wide. The existing bounded
+camera contract must fit the 2000-unit courtyard, giving zoom 0.973913 rather
+than the desktop-only 0.96 expectation at 125% FOV. The captured scene reports
+exactly that bounded value and preserves the requested FOV setting. Use the
+existing bounded-viewport contract and authored courtyard dimensions for this
+browser integration assertion, retaining the desktop 0.96 case.
+
+The corrected built touch journey passes with empty page/console/HTTP error
+arrays. It applies sound 65%, music 40%, FOV 125%, UI scale 150% and Light
+Quality 24%; the sound master is 0.649999976 and the music output is
+0.400000006 while raw media volume stays one under the iOS volume model.
+A focused real-Chrome audio graph check also verifies buffered sound through
+the mix lane, live master mute/restoration, direct-to-master streams and
+independent authored per-cue gain. Extend the existing paused resize/image
+regression to the touch journey as well, so the shared redraw repair is
+measured on both viewport families.

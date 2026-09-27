@@ -12,6 +12,8 @@ import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { emitNativePlayerScreenFlash } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
+import { HUB_REGION_DEFINITIONS } from '../src/game/core-kernels/hub-regions.ts'
+import { boundedGameViewportLayout } from '../src/game/renderer/game-viewport.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
@@ -356,7 +358,14 @@ try {
     '.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
   )
   await hubScene.waitFor({ timeout: 90_000 })
-  assert.equal(await hubScene.getAttribute('data-camera-zoom'), '0.96')
+  const hubViewport = await hubScene.evaluate(node => ({
+    height: node.clientHeight,
+    width: node.clientWidth,
+  }))
+  const hubWorldZoom = boundedGameViewportLayout(
+    hubViewport.width, hubViewport.height, HUB_REGION_DEFINITIONS.courtyard, 0.96,
+  ).worldZoom
+  assert.equal(Number(await hubScene.getAttribute('data-camera-zoom')), 0.96 * hubWorldZoom)
   assert.equal(await hubScene.getAttribute('data-ui-scale'), '1.5')
   assert.equal(await page.locator('.hub-hud').getAttribute('data-ui-scale'), '1.5')
   await page.locator('.hub-hud-quickbar-slot[data-entry-kind="health-potion"][data-binding-code="KeyH"]').waitFor()
@@ -453,7 +462,7 @@ try {
     physicalSide: canvas.__sdrBoneyardFrame.regionLightPhysicalSide,
   }))
   assert.equal(lowQualityRegionTarget.physicalSide, 128)
-  const pausedRedraw = mobile ? null : await assertPausedWorldRedraw(boneyardCanvas)
+  const pausedRedraw = await assertPausedWorldRedraw(boneyardCanvas)
   // The module-level ownership probe uses Vite imports; the full UI journey also runs built.
   const retainedHailRedraw = mobile || built ? null : await assertRetainedHailRedraw()
   await page.screenshot({ path: screenshots.boneyard })

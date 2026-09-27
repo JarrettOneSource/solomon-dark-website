@@ -137,7 +137,10 @@ export function installGameAudioSmokeProbe({
     }
     node.start = function (...args) {
       const src = decodedSources.get(node.buffer) ?? ''
-      const master = gain ? gainDestinations.get(gain) : null
+      let master = gain ? gainDestinations.get(gain) : null
+      while (master instanceof GainNode && gainDestinations.get(master) instanceof GainNode) {
+        master = gainDestinations.get(master)
+      }
       if (master instanceof GainNode) bufferMasters.push({ gain: master, src })
       events.push({
         at: performance.now(),
