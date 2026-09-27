@@ -938,12 +938,12 @@ witness consistent with the recovered native branch, not a claimed retail roll.
 
 | Member | Current disposition / acceptance |
 | --- | --- |
-| All six equipment classes, four Brutal tiers, prefix/suffix, FX operators 0/1/2 and all seven equipped sinks | `recovered-pending-port` consumer validation; generation/application already present. Test complete operator and source-slot coverage, preserve RNG. |
-| Eight named and six generated Wands; Staff positive control; equip/unequip | `recovered-pending-port` verification; retain Staff-only admission. |
-| Base range, all authored Enchant Staff ranks, effective equipment grants, concentration, FX flat/multiply/percent, X4, Glass Cannon, Brute | `recovered-pending-port`; replace the display literal with authoritative resolved endpoints. |
-| Ordinary Staff contact, Siege Mage, Serendipity, critical and concentrated Flailing | `recovered-pending-port`; remove the incorrect melee-only factor from the actual contact resolver and preserve ordinary offensive factors. |
-| Inventory page 0 in Hub, Boneyard, Fomentius, Luthacus and Shlorio companion; desktop/touch; retained UI invalidation | `recovered-pending-port`; one shared formatter and painter, fixed one decimal and native small italic unit. |
-| Strict snapshot codec and protocol version, per-player ownership, save restoration | `recovered-pending-port`; derived values travel in inventoryStats and are not new persistent save fields. |
+| All six equipment classes, four Brutal tiers, prefix/suffix, FX operators 0/1/2 and all seven equipped sinks | `exact-ported`: retained native generation and FX application; the new shared display consumer passes all three FX operators across seven sinks and both weapon classes, with deterministic Brutal generation and unchanged RNG. |
+| Eight named and six generated Wands; Staff positive control; equip/unequip | `verified-already-at-parity`: existing Staff-only admission and seven-sink equip/unequip rules hold for all 8 named plus 6 generated Wands; the built Wand contact journey admitted no Staff actions or damage. |
+| Base range, all authored Enchant Staff ranks, effective equipment grants, concentration, FX flat/multiply/percent, X4, Glass Cannon, Brute | `exact-ported`: authoritative `.5/1 + Enchant Staff`, melee multiplier and flat lanes replace the display literal; ranks 0..15, granted-rank tail, concentration, X4, Glass, Brute and FX operations are covered. |
+| Ordinary Staff contact, Siege Mage, Serendipity, critical and concentrated Flailing | `exact-ported`: Staff contact resolves the ordinary offensive factor, crit and concentrated Flailing remain in their established lanes; neutral and Brute built journeys each deal two four-point hits while Wand cannot attack. |
+| Inventory page 0 in Hub, Boneyard, Fomentius, Luthacus and Shlorio companion; desktop/touch; retained UI invalidation | `exact-ported`: one shared formatter/painter with fixed one decimal and the native small italic `/ whack` unit passes all five scenes in development and built desktop/touch browsers, with visible equip/remove changes. |
+| Strict snapshot codec and protocol version, per-player ownership, save restoration | `exact-ported`: strict protocol 138 and retained progression invalidate immediately on stat changes; two-owner, paused unequip, malformed input and save-restoration regressions pass without adding persisted fields. |
 | Hagatha replacement pane | `out-of-system`: it hides the ordinary stats pane; its modifiers remain in the recovered producer. |
 | New Wand melee, dual wield/off-hand/shields, author's intent and claimed item percentages | `out-of-system`: unsupported feature/design theories, not native contracts. |
 | Existing Wand casting animations and attachments | `verified-already-at-parity` through the existing recovered selector/pose bank; no missing animation inferred. |
@@ -1043,3 +1043,40 @@ produced two observed actions, two target contacts and two four-point HP losses.
 Both showed native attachment/robe poses 2 and 3 and replicated reduced enemy
 health. Browser page, failed-response, protocol and host error arrays were
 empty. Canonical validation and the built candidate journeys remain pending.
+
+### Final acceptance and publication boundary
+
+Exact runtime candidate `52ee2e0ea28046d3c03690eff70ce76b184fdc75` passed
+the canonical Windows/WSL Website gate with Node 22.17.0 and .NET 10.0.302:
+3,933 Node test executions, zero failures, 24 Python repository tests,
+production builds and the configured renderer quality gate. Renderer mutation
+score is 100%; 476 mutations were killed, one timed out, 147 could not
+compile and 24 reviewed equivalents were ignored. There were no survivors or
+quality failures. The canonical gate log SHA-256 is
+`27698d7b3d6db0e8823c59637b0a4b7fd6d5750438622be67425f377e635443c`.
+
+Built Chrome 150 completed 20 desktop and 20 touch inventory cases across Hub,
+Fomentius, Luthacus, Shlorio and Boneyard. Both changed the displayed range
+from `0.5 - 1.0 / whack` to `5.5 - 6.0 / whack` for the Brutal Wand and Staff,
+then restored the prior value on removal. Browser page, console and failed
+response arrays were empty. Log SHA-256 values are
+`530b3212df6d5753be2edcf4b676a8f0fedf6c4f6092074216747c7eea12feca`
+for desktop and
+`578072b9cfcd6cc70b53f1398a007a86d0abc0b223be05c4686cc97343e605a3`
+for touch.
+
+The independent built Boneyard journey used real keyboard movement and
+collision. Brutal Wand produced four hostile-contact samples over 187 ticks,
+no Staff action and no target-health loss. Brutal Staff with and without
+Brute each produced two actions, two contacts and two four-point hits, with
+rendered attachment/robe poses 2 and 3 and reduced enemy health in the browser.
+Browser, wire and host errors were empty. The contact log SHA-256 is
+`4743273058294047955671b90f9e05d9e825a41f22f572eb11df763db4171f8f`.
+
+No system member is blocked by the browser platform. WSL Chrome reports
+ANGLE SwiftShader, so these browser journeys establish functionality rather
+than physical-GPU frame rates. The screenshot and native executable support
+the item behavior and mechanics; they cannot establish author intent or a
+historical PC-specific implementation plan. No separate off-hand or Wand
+melee feature is inferred. Acceptance is complete; normal publication,
+completion reaction and task cleanup are recorded by the archive receipt.
