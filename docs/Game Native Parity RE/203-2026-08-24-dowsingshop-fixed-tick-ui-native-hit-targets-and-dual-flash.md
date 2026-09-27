@@ -54,7 +54,7 @@ fixed-tick controls from entry through accepted/rejected action and teardown.
 | one-button MsgBox idle/pressed copy and exact HotRect | `0x005AB5C0`, `0x005C60F0`; `UI.101/102` | exact-ported for Dowsing and Hat/Robe sibling consumers | action `(702,397.5,196,69)`, outside-art rejection, pressed frame |
 | Done, active-offer discard, reopen, range/Region/fade teardown | `0x0055EF40`, `0x00558890`, `0x00505010` | verified-already-at-parity | existing kernel/full browser branches |
 | participant economy and two-player isolation | profile inventory owner; web player entity | verified-already-at-parity | host `350`, guest `500`, zero browser errors in current baseline |
-| targeted Dowsing | inventory drop slot `+0xC8 -> 0x00568080`, target `+0x344` | recovered-pending-port; prior unreachable claim superseded | September 27 raw instruction and virtual-dispatch trace below |
+| targeted Dowsing | inventory drop slot `+0xC8 -> 0x00568080`, target `+0x344` | exact-ported; prior unreachable claim superseded | September 27 native trace, regressions and built desktop/touch acceptance below |
 
 No member is blocked by the browser platform.
 
@@ -251,7 +251,7 @@ a read-only instrument; these Website ledgers supersede its older conclusions.
   `0x0056FC0B/0x005705D5`. Rebuilding a service must preserve that foreground
   order instead of burying newly selected details under its panel.
 
-### Boundary and pending membership
+### Boundary and final membership
 
 The work owns Dowsing reference selection, target-dependent offer generation,
 their participant/authority boundary and lifecycle, plus companion ItemInfo
@@ -261,20 +261,20 @@ their established owners.
 
 | Member | Evidence / owner | Current disposition and required proof |
 | --- | --- | --- |
-| Pre-roll reference hit, replacement, source return and rejection after roll | `0x00568080`, shared drop `0x0056DE50` | recovered-pending-port; pointer journey and source identity |
-| Root/nested backpack and existing equipment drag sources | InventoryDragger/InventoryScreen | recovered-pending-port; preserve current source and mandatory-clothing rules |
-| All 47 recipes, seven sets, six equipment classes; setless and non-equipment references | existing complete catalog, `0x00554AF0/0x00554CE0` | recovered-pending-port; per-family pools, no invented fallback |
-| Targeted two-set plus three/four-type draws; untargeted retries; pricing | raw helper/caller tails | recovered-pending-port; exact RNG sequence, duplicate/ownership exclusions and exhaustion |
-| Empty result, insufficient funds, purchase, Done/reopen and interruption | phase byte `+0x28C`, existing transaction/close owners | recovery in progress; explicit lifecycle and atomicity checks |
-| Local reference display and authoritative owned-item validation | native borrowed pointer, Website player economy | design pending recovered lifecycle; no client-owned gold/RNG |
-| Companion ItemInfo for Hagatha, Fomentius, Luthacus, Dowsing pre/results | common `buildService`, HoverBox owner | recovered-pending-port; visible full tooltip through real pixel checks |
-| Ordinary InventoryScreen, StoreGrid HoverBox, owned-perk help, dragger/flyby, dye and notices | existing shared renderer/input owners | preserve and verify affected ordering/lifetime siblings |
+| Pre-roll reference hit, replacement, source return and rejection after roll | `0x00568080`, shared drop `0x0056DE50` | exact-ported; built desktop/touch drop, replacement, source identity and post-roll rejection |
+| Root/nested backpack and existing equipment drag sources | InventoryDragger/InventoryScreen | exact-ported through existing drag owner; equipped/root/nested browser sources and inventory regressions |
+| All 47 recipes, seven sets, six equipment classes; setless and non-equipment references | existing complete catalog, `0x00554AF0/0x00554CE0` | exact-ported; all 47 reference families and setless/non-equipment behavior tested |
+| Targeted two-set plus three/four-type draws; untargeted retries; pricing | raw helper/caller tails | exact-ported; instruction-derived seeded oracle, ownership/duplicate exclusions and hundredth-attempt boundary |
+| Empty result, insufficient funds, purchase, Done/reopen and interruption | phase byte `+0x28C`, existing transaction/close owners | exact-ported; explicit rolled phase, browser transactions and existing close/teardown regressions |
+| Local reference display and authoritative owned-item validation | native borrowed pointer, Website player economy | exact-ported; local borrowed ID, host resolution, atomic rejection and two-participant isolation |
+| Companion ItemInfo for Hagatha, Fomentius, Luthacus, Dowsing pre/results | common `buildService`, HoverBox owner | exact-ported; all four service pixel checks and visual review on built desktop/touch |
+| Ordinary InventoryScreen, StoreGrid HoverBox, owned-perk help, dragger/flyby, dye and notices | existing shared renderer/input owners | verified-already-at-parity; shared painter order reviewed, existing renderer/input and canonical regressions pass |
 
-The table records the pre-implementation investigation; the completed native
-trace and implementation evidence below supersede its open questions. Final
-acceptance runs on Windows/WSL per the user's current instruction and includes
-the canonical Website gate, built desktop/touch interaction, both report
-conditions and task cleanup after verified publication.
+The table records final dispositions. No member is unknown or blocked by the
+browser platform. Acceptance ran on Windows/WSL per the user's current
+instruction and covers the canonical Website gate, built desktop/touch
+interaction and both report conditions. Publication and task cleanup have
+separate receipts in the report archive.
 
 ### Recovered transaction details and implementation boundary
 
@@ -339,7 +339,7 @@ cleared when the item is no longer carried, and released with the service.
 The host resolves the optional `referenceItemId`, owns pool selection, prices,
 gold and RNG, and rejects unowned IDs atomically. The economy now carries the
 explicit `dowsingRolled` phase through empty results and purchase until Done.
-Protocol137 admits up to six offers and the reference action; save schema43
+Protocol 137 admits up to six offers and the reference action; save schema 43
 preserves the phase and migrates older saves from their existing offer array.
 No reference pointer or client-chosen recipe is serialized as authority.
 The service painter places companion ItemInfo after the panel and before
@@ -350,7 +350,7 @@ after the repair. Their coverage includes the exact Cloudcover trace, all 47
 recipe references, ownership rejection, empty result and purchase lifecycle.
 Additional checks cover nested sacks/storage/equipment exclusions, insufficient
 funds, retry exhaustion including a valid hundredth draw, two-player authority
-isolation, six-offer wire validation and schema42 migration. The initial
+isolation, six-offer wire validation and schema 42 migration. The initial
 focused economy/protocol/save group passed 102 tests; application/test type
 checking and frontend lint also passed. The native float32 pitch endpoint
 separately reproduced a protocol rejection before its bound correction.
@@ -372,6 +372,34 @@ awaiting acknowledgements. Separate Playwright tap calls arrived 2.7 seconds
 apart; the compound gesture's pointer handlers arrive 12.8 ms apart and open
 the sack within the existing 500 ms rule. Product input timing is unchanged.
 The final 14 targeted economy/authority/protocol/save checks pass, including
-the native float32 pitch ceiling and retry exhaustion. Final canonical and
-post-gate production-browser acceptance remain pending; provisional membership
-rows are not final acceptance claims.
+the native float32 pitch ceiling and retry exhaustion. Final acceptance is recorded below.
+
+
+### September 27 final Windows/WSL acceptance
+
+Exact implementation candidate `1fa6c5d8df846923f6877206520b4adeff955b48`
+passed `bash ./scripts/validate.sh` on `home-wsl` with Node 22.17.0 and
+.NET SDK 10.0.302. All 3,908 Node test executions and 24 Python backend/contract
+tests passed; production builds and the configured renderer quality gate
+passed. The measured renderer slice has 100% statement/branch/function/line
+coverage, 468 killed mutations, one timeout, 147 compile errors, 24 reviewed
+equivalents and no survivors or quality failures. Gate log SHA-256:
+`1990f4d8e460373634857c9cf2791d2fe970411fdf3598a3cdb39fed3672805f`.
+
+Dependent production desktop and touch journeys both passed in Chrome
+150.0.7871.124. Each of Hagatha, Fomentius, Luthacus and Shlorio had every
+sampled tooltip-padding pixel opaque black: 416/416 desktop, 276/276 touch.
+Visual inspection confirms the full Cloudcover Hood details above the panel
+and its image in the reference well on both layouts. Both receipts preserve
+the source item and verify reference replacement, equipped/root/nested
+sources, targeted and setless offers, post-roll rejection, purchase followed
+by required reopen, an empty result charged once, and unchanged state after
+insufficient funds. Page, console and failed-response arrays are empty.
+
+The final job `job_20260927T055425Z_855991bf77` completed at
+2026-09-27T06:43:02Z with gate, desktop and touch exit codes zero. This
+acceptance uses the built application and a private diagnostic inventory;
+it does not claim a fresh clean-stock GUI roll, a physical touch-device run,
+or independently verified production deployment. Native selection and
+lifecycle parity derive from the raw instructions and catalog recorded above.
+Only this documentation receipt changes after the tested implementation.
