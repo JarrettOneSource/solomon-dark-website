@@ -585,3 +585,11 @@ function roundToNearestEven(value: number): number {
   if (fraction > 0.5) return floor + 1
   return floor % 2 === 0 ? floor : floor + 1
 }
+
+/** BadGuy::Tick 0x004835F0 keeps the four movement clocks on the actor UID phase. */
+export function nativeEnemyMovementClock(
+  actorId: number, tick: number, visible: boolean, illuminated: boolean, enhanced = true,
+): Readonly<{ due: boolean; cadence: number; full: boolean }> {
+  const cadence = !visible ? 15 : !illuminated ? 10 : enhanced ? 2 : 5
+  return { due: actorId % cadence === tick % cadence, cadence, full: visible && illuminated }
+}

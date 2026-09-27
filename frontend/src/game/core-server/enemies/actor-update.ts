@@ -79,6 +79,8 @@ export function stepLivingActor(
   if (actor.brain.family === 'heartmonger') return stepEnemyLighting(stepHeartmonger(work, actor, actor.brain, context))
   if (actor.brain.family === 'demon-skull') return stepEnemyLighting(stepDemonSkull(work, actor, actor.brain, context, source.config.attackSpeed))
   if (actor.brain.family === 'faculty') return stepEnemyLighting(stepFaculty(work, actor, actor.brain, context))
+  // Wraith clocks and contact surround the common movement gates in stock.
+  if (actor.brain.family === 'wraith') return stepEnemyLighting(stepWraith(work, actor, actor.brain, context))
   if ((effect?.disruptedTicks ?? 0) > 0) {
     const interrupted = clearSkeletonFamilyHeadFacing(
       interruptNativeSecondaryAction(actor),

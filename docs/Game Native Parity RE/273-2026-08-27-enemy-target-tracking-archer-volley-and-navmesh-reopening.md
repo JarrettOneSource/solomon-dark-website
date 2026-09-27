@@ -1594,10 +1594,10 @@ superseded by this section.
 | --- | --- | --- | --- |
 | Player report | original stock and Website comparison, 2026-08-31 | Stock Wraiths fly quickly in a circular screen pattern and slow the player on collision; Website Wraiths appear to walk and contact is unclear. | high direct comparative observation |
 | Retail image | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same retail 0.72.5 image as the accepted enemy ledger. | high |
-| Factory/constructor instructions | factory `0x005B7080`; `Wraith::Wraith 0x00474470`; recipe apply `0x00462790`; post-config init `0x00486BB0` | Type `1007` allocates `0x234` bytes and installs vtable `0x00785FAC`. After recipe chase is applied, `baseFlybySpeed = chase * 0.8`; retained low speed is `base * Float(10)`; initial speed is `base * 25 * (1 + Float(2))`. The inherited body radius is exact `15 * recipeScale`, not the web bound 20. | high instruction-derived |
+| Factory/constructor instructions | factory `0x005B7080`; `Wraith::Wraith 0x00474470`; recipe apply `0x00462790`; post-config init `0x00486BB0` | Type `1007` allocates `0x234` bytes and installs vtable `0x00785FAC`. After recipe chase is applied, `baseFlybySpeed = chase * 0.8`; retained cruise speed is `base * (20 + Float(10))` (constructor addend corrected September27); initial speed is `base * 25 * (1 + Float(2))`. The inherited body radius is exact `15 * recipeScale`, not the web bound 20. | high instruction-derived |
 | Tick instructions | `Wraith::Tick 0x00486C30`, raw `0x00486C30..0x004871E7` | The tick owns bearing, flight/countdown decay, strict contact, damage/Dazzle, flyby reset, wisp emission, and body visibility. Contact is squared center distance `< 1600`; eligible contact creates `Mod_Dazzle 0x1B6E` with duration 50, while every overlapping tick resets the flight clocks. | high instruction-derived |
 | Movement instructions and vtable | special vector `0x00478EA0`; Wraith vtable `+0x6C = 0x00478EA0`, `+0x70 = 0x00476B90`, `+0x74 = 0x00483D40`; common motion `0x004835F0`; movement wrapper `0x00475FE0`; executor `0x00525800` | Each normal motion epoch builds two special vectors. While flyby time remains, the goal is `target + unit(actor-to-target bearing) * 300`; otherwise it is the target. The special vector does not invoke the inherited NavMesh slot. It advances heading by `pathTurnFactor * currentTurnGain * status * signedHeadingDelta`, then returns `unit(heading) * pathSpeedFactor * currentSpeed * status * 0.25`. Wraith tick clears Arena `+0x498/+0x499`; those are movement-controller `+0x120/+0x121` through the embedded `+0x378` owner, selecting `0x00525800`'s direct-position branch instead of static/dynamic collision. | high instruction-derived |
-| Constants | `.rdata` values at `0x00784818=.8`, `0x007DE960=25`, `0x007858F8=300`, `0x00786968=1600`, `0x007847C8=50`, `0x00784D08=2`, `0x007847B0=.025`, `0x007DE860=1.5`, `0x007852D0=7`, `0x007DE970=5` | Every material speed, geometry, cooldown, and turn value is directly extractable. | high bytes/instructions |
+| Constants | `.rdata` values at `0x00784818=.8`, `0x007DE960=25`, `0x007858F8=300`, `0x00786968=1600`, `0x007847C8=50`, `0x00784D08=float32(.01)` read as a double (corrected September27), `0x007847B0=.025`, `0x007DE860=1.5`, `0x007852D0=7`, `0x007DE970=5` | Every material speed, geometry, cooldown, and turn value is directly extractable. | high bytes/instructions |
 | Modifier instructions and current web consumer | `Mod_Dazzle 0x00623490`, reset/apply `0x00625680`; `boneyard-enemy-modifiers.ts`, `player-combat.ts` | Dazzle recovers from `1/50` to one across 50 ticks and multiplies the fresh player movement scalar. The existing player-side recovery formula is already exact; the defect is Wraith contact timing/production. | high |
 | Current Website trace | base `41e15254`; `boneyard-enemy-store.ts`, `boneyard-enemy-config.ts`, `project-boneyard-enemies.ts` | Web uses collision radius 20, ordinary speed one, generic routed steering, a 52-unit reach, 200..800 ticks of slow tangent motion before a fabricated drain marker, and only then damage/Dazzle. It cannot produce stock initial displacement or immediate contact. | high |
 
@@ -1621,15 +1621,15 @@ also reach the shared Fast/Slow/Burning chase transforms.
 | Member / branch | Native source | Disposition | Proof contract |
 | --- | --- | --- | --- |
 | Factory, constructor, recipe chase, inherited radius | `0x005B7080`, `0x00474470`, `0x00462790`, base `0x006287D0` | `exact-ported` | type/size, radius 15, recipe-scale and chase variants |
-| Post-config initial speed/turn/random state | `0x00486BB0` | `exact-ported` | draw order and endpoint tests for retained speed `base*[0,10)`, initial speed `base*[25,75)`, initial 200..800 flyby ticks |
-| No-target flight | `0x00478EA0` | `exact-ported` | deterministic far goal at actor tick/id heading times 225, 10,000-unit projection, state retained through target loss |
+| Post-config initial speed/turn/random state | `0x00486BB0` | `exact-ported` | draw order and endpoint tests for retained speed `base*[20,30)` (September27 correction), initial speed `base*[25,75)`, initial 200..800 flyby ticks |
+| No-target flight | `0x00478EA0` | `exact-ported` | deterministic far goal at stable actor UID heading times 225, 10,000-unit projection, state retained through target loss |
 | Direct-target approach after flyby expiry | `0x00478EA0` | `exact-ported` | two sequential heading/vector substeps and exact speed/turn factors |
 | 300-unit cross-target flyby | `0x00478EA0`, target bearing writer in `0x00486C30` | `exact-ported` | stationary/moving target traces form a curved pass and do not use tangent walk |
-| Flyby, cooldown, speed, and turn decay | `0x00486D14..0x00486E08` | `exact-ported` | strict order for 50 cooldown, 200..800 flight, `-1`, `-.025`, `+/-2`, floor 1.5 |
+| Flyby, cooldown, speed, and turn decay | `0x00486D14..0x00486E08` | `exact-ported` | strict order for 50 cooldown, 200..800 flight, `-1`, `-.025`, consecutive `+/-.01`, floor1.5; September27 corrects operand width |
 | Strict contact and repeat-overlap reset | `0x00486E3A..0x0048704C` | `exact-ported` | 39.999 accepted, 40 rejected; damage once per eligible cooldown; every overlap resets speed/flyby/turn |
 | Four damage plus 50-tick player Dazzle ramp | `0x00486EC9..0x00486FE9`, `0x00623490`, `0x00625680` | Wraith producer `exact-ported`; player consumer `verified-already-at-parity` | immediate semantic damage, first movement scale `1/50`, complete recovery, no re-hit before cooldown |
 | Burning and cooldown Soul wisps; opaque facing body | `0x00487052..0x00487177`, renderer `0x00496220`, BadGuys 21 and 2070..2087 | `exact-ported` | one-in-four idle emission or every cooldown tick; body remains opaque and frame-free |
-| Inherited route vslot | vtable `+0x74 = 0x00483D40`; special `+0x6C = 0x00478EA0` | `out-of-system` for the Wraith special vector: the override does not call the route slot | blocked-goal test proves neither LOS nor NavMesh is consulted |
+| Inherited route vslot | vtable `+0x74 = 0x00483D40`; special `+0x6C = 0x00478EA0` | recovered-pending-port for inherited degraded movement; full special vector still bypasses it | September27 traces `+0x70` caller and both movement branches |
 | Collision-gated direct flight and actor registration | Wraith `0x00486E08..0x00486E34`; wrapper `0x00475FE0`; executor `0x00525800` direct branch | `exact-ported` | no static/player/enemy collision callback; direct summed delta; radius 15 remains query/body metadata; cell binding still follows final root |
 | Target loss/reacquisition, temporary control, pause | `0x00483480`, `0x00625680`, Arena tick ownership | `exact-ported` | no fabricated phase reset; status scales special vector; paused tick holds all clocks/RNG |
 | Death, reward, fragments, audio, retirement | `0x00495600` and previously closed Wraith terminal rows | `verified-already-at-parity` | existing terminal actor/audio/lifetime suites remain unchanged |
@@ -1668,7 +1668,7 @@ not entered by native Wraith flight.
   to one, and target turn to `7+Float(5)`. This forces continued flight instead
   of parking on the player.
 - While cooling down, Dazzle is not reapplied. The player modifier recovers its
-  movement multiplier by `1/50` per tick. Burning Wraiths emit record-21 wisps
+  movement multiplier by `1/50` per tick. Admitted Wraiths emit record-21 wisps (entry091 corrects the old Burning-only claim)
   on the ordinary one-in-four roll and every cooldown tick; the body remains
   the same opaque 18-facing record.
 - Target loss selects the deterministic no-target far goal without destroying
@@ -1815,3 +1815,168 @@ that program from the first flight tick. Entry
 now owns the causal evidence, full sibling inventory, corrected contract, and
 validation receipt. Exact Archer aim/fan/range/birth RNG recovery remains the
 input to that system; it does not prove downstream flight correctness.
+
+
+## 2026-09-27 — Report 40: stationary Wraiths after flight decay
+
+### Reopened evidence and root cause
+
+The report's seven-second video shows pale Wraiths remaining near scenery
+while the player moves; it does not establish that native enemies never pause.
+Original attachment SHA-256 is
+`ad650780df1c7b668b8652c003b592d4eae75f71ff3133b82147dc02e0e6d08f`.
+A 3,000-tick WSL replay of twelve unmodified Website Wraiths at published
+`3c62781f` reproduces the cause independently of rendering: actor 2 moves only
+0.11 world units over its final 500 ticks; all 250 movement epochs travel less
+than 0.01. Its retained speed is 0.268, current speed about 0.001 and current
+turn gain 5455.5. Other actors continue contacting the player and resetting.
+
+The August 31 reopening missed a constructor addend and read the low 32 bits
+of a double as a float. Its endpoint tests repeated those wrong constants,
+and its short initial-flight browser receipt never reached long-term decay.
+The affected constant, initial-state and clock dispositions are superseded.
+
+Fresh Windows Ghidra 12.0.3 read-only slot 01 recovery uses the same verified
+retail 0.72.5 image, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+4,723,200 bytes, preferred base `0x00400000`. The existing wrapper and
+decompiler hashes remain `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`
+and `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+No Mod Loader files or canonical project changed.
+
+| Instruction-derived fact | Exact evidence | Consequence |
+| --- | --- | --- |
+| Retained cruise multiplier is `20 + Float(10)` | constructor `0x00474512..0x00474547`: float operand `0x007DE984=10`, `FADD double [0x007DE920]=20`, float store to `+0x220`; post-config `0x00486BB0` multiplies by float32 `chase*.8` | Normal chase1 retains speed 16..24, not0..8; no invented minimum-speed clamp |
+| Turn adjustment is float32 .01 represented as a double | `0x00486D3B FLD double [0x00784D08]` reads `0.009999999776482582`; the low four bytes misleadingly decode as float2 | Correct current/target gain drift, 200 times slower than the old port |
+| Turn corrections are consecutive comparisons | raw `0x00486D2B..0x00486D77` reloads current gain after an upward float store before the downward check | Preserve overshoot behavior; `else if` is wrong |
+| Flyby countdown decrements only while admitted | `0x00486D0B..0x00486D25`, byte `+0xD4` | Visibility affects flight countdown, independently of speed/turn/cooldown clocks |
+| No-target heading is instance-based | `0x00478EA0` consumes integer`+0xC`, multiplied by double225 | Investigate stable identity and degraded-motion consumers; do not substitute elapsed age |
+| Common movement is nested inside the Wraith tick | `0x00486E08..0x00486E34` disables collision, calls`0x004835F0`, restores collision, then contacts | Control/visibility movement exits cannot bypass the outer flight/contact clock |
+
+### Boundary and investigation membership
+
+This reopening owns Wraith type 1007 construction, retained flight state,
+normal/degraded movement, contact and control/visibility branches through
+save/replication/presentation and retirement. It reuses the complete five
+retail schedule entries, existing Fast/Slow/Burning recipe transforms,
+18-facing body catalog and already recovered shared contact/death resources.
+Other families keep their existing owners; shared native movement findings
+are recorded without inventing changes to unrelated enemy behavior.
+
+| Member | Investigation disposition | Required proof |
+| --- | --- | --- |
+| Five stock schedule rows and Fast/Slow/Burning/scale variants | recovered-pending-port | Native constructor endpoints and long-term movement per chase transform |
+| Retained speed and float32 turn clocks | recovered-pending-port | Independent raw operands, long-lived baseline, overshoot and countdown boundaries |
+| Visible, non-admitted and no-target vectors | recovered; focused integration passed, final gate pending | Selected virtual slots, cadence/goal ownership and visibility transitions |
+| Control suppression, reorientation and contact while movement is suppressed | recovered; focused integration passed, final gate pending | Trace common movement return versus outer Wraith tick; preserve native damage cooldown |
+| Strict 40 contact, fifty-tick Dazzle, repeated overlap | existing evidence retained; verify after correction | Store and player regressions plus built browser contact/recovery |
+| Wisps, opaque 18-facing body, lighting, death/rewards/retirement | existing evidence retained; verify affected outputs | Existing renderer/effect suites and browser movement/wisp receipt |
+| Save schema 26..43 retained wrong speeds and turn gains | implemented; focused migration passed, final gate pending | Repair stale state without consuming gameplay RNG or resetting damage cooldown; preserve current-schema state |
+| Authority, replication, pause/rejoin and teardown | existing ownership retained; verify | Host owns steering; browser receives moving actors; pause/save resumes without hidden reset |
+
+### Acceptance
+
+First obtain failing constructor/clock and long-run store regressions on WSL.
+Then repair the native owner and affected saves; do not add a movement floor or
+random kick. Repeat the same long-lived replay, exercise real built desktop
+and touch Boneyard movement/contact/pause/resume with clean error arrays, and
+run the complete canonical Website gate on Windows/WSL. Each provisional
+member needs a final evidence-backed disposition before publication.
+
+
+### Inherited movement closure before integration
+
+Raw common tick `0x0048368C..0x00483710` chooses actor-UID-phased cadences
+2/5/10/15 for enhanced/ordinary/unlit/outside-view movement. The existing
+Spider implementation already recovers that shared clock and its camera
+rectangle convention. `0x0048394B..0x004839B5` chooses repeated special
+`+0x6C` vectors only when admitted and in view. The other branch calls inherited
+`+0x70=0x00476B90` once with the cadence. That inherited vector DOES consult
+route slot `+0x74`, turns by `currentTurnGain*status*cadence` without the special
+path-turn multiplier, clamps a crossed desired heading, and moves by
+`pathSpeed*currentSpeed*status*cadence*.25`. It pursues the target directly;
+without a target it projects the UID*225 direction by that travel distance,
+clips to Arena bounds and routes the goal. Thus the older blanket claim that
+Wraiths never use navigation was too broad: only full special flight bypasses
+it. Both branches remain inside Wraith's disabled movement-collision interval.
+
+Native UID maps to the existing semantic actor ID as in Spider; elapsed actor
+age is not a heading seed. The common clock and route helper will have one
+shared owner for both consumers. Enhanced Effects remains the existing
+authority setting (true in product); this does not implement report38's Off UI.
+
+Wraith clocks run before the common movement call, and contact follows it even
+when movement returns for a zero status scalar or disruption. Ordinary pause
+still freezes the whole world. The shared reorientation path likewise cannot
+freeze the outer Wraith clocks. Turn Undead's native producer `0x00647EF0`
+filters types 1001/1002/1003/1006; Wraith 1007 is outside that flee producer.
+Its hypothetical injected flee patch is not a retail Wraith member.
+
+For schema 26..43, the saved random cruise component can be recovered from
+`oldRestingSpeed / oldBaseSpeed`. Add the native 20 term and retain source
+position, identity, flyby and contact cooldown plus RNG state. The invalid
+accumulated turn history cannot reconstruct a correct past trajectory; reset
+current/target gains to native constructor 1.5/3 and lift an already stalled
+current speed to the recovered cruise. This one-time schema 44 repair is an
+explicit legacy-state migration, not a per-tick speed clamp. Current-schema
+flight values round-trip unchanged; pre-26 saves continue using the existing
+full factory migration with corrected constants.
+
+The movement status cutoff is inclusive: `0x00483675..0x00483686` returns at
+`status <= 0.00009999999747378752`, the double operand at `0x00786C78`. A
+boundary regression fails with the prior strict-less guard and is corrected.
+The save migration rejects nonpositive legacy base speeds before division.
+
+
+### Implementation and focused acceptance
+
+The existing flight kernel now reads the recovered float widths and addend,
+executes both turn comparisons, gates only flyby countdown by admission, and
+uses a stable semantic actor ID for targetless flight. The Wraith store owns
+its outer clocks/contact around inherited movement suppression. Existing
+Spider UID-clock and route code moved to common owners without changing
+Spider behavior; `nativeMovementView` names their existing shared context.
+Full movement runs two/five special vectors, degraded movement routes once
+and makes the native clamped turn for ten/fifteen ticks. Both commit direct
+collision-free motion and retain shared cell registration/recovery.
+
+Save schema 44 repairs the old flight state once on restore. Current-schema
+state remains exact. Five initial regressions reproduced constructor, clock,
+visibility and long-run failures; two further store regressions reproduced
+Frozen clock and degraded-movement omissions. The legacy-save regression
+reproduced persistence of the bad speed and gain. Final focused Wraith/Spider
+checks pass 31 tests, including the exact status cutoff, invalid legacy base
+speed, all four cadence branches and inherited turn clamping. The preceding
+full affected test set passed 211 tests plus both TypeScript projects and
+frontend lint. No automated Website check ran on the M2.
+
+In the matched twelve-Wraith replay, the formerly stationary actor 2 increases
+from 0.11 to 4,018.04 units in the final 500 ticks, with zero near-zero epochs.
+Its corrected retained cruise is 16.2682. These are authoritative simulation
+measurements, not an FPS benchmark or the reporter's unavailable saved world.
+
+The maintained `smoke:game:wraith` journey restores a private schema 43 stalled
+Wraith into the real Boneyard client with default player health, watches
+renderer body/position samples, forces one diagnostic contact, observes actual
+damage/Dazzle recovery, and pauses/resumes the flight. Desktop development
+acceptance passes with empty page/console/HTTP/wire/host errors. The first
+two observers made one controller round trip per sample and captured only
+eight rendered states in six seconds despite visible movement. Sampling
+inside requestAnimationFrame resolves that harness limitation without altering
+product behavior or its acceptance thresholds. Built desktop/touch and the
+complete exact-candidate canonical gate remain pending.
+
+The desktop development replay measured 4,584.90 units across 604.42 renderer
+ticks (46 samples) and 4,994.31 across 605 ticks after resume (48 samples).
+Contact changed health 38.567 to 34.568 and recorded 50 Dazzle ticks; recovery
+completed and the player remained alive. Both desktop and touch development
+journeys now pass with empty error arrays. These are behavior receipts; the
+headless WSL renderer is not an accepted FPS benchmark.
+
+Touch development acceptance also passes: 4,820.03 units across 604.25
+renderer ticks before pause and 5,115.02 across 600.00 after resume. The
+receipt records the exact current values separately; no frame-rate claim is
+made. Four additional Wraith simulation/projection checks pass, including
+Dazzle integration and contact presentation. Final publication requires the
+canonical gate and dependent built desktop/touch journeys on the committed
+candidate, followed by the authorized Discord completion reaction and cleanup.

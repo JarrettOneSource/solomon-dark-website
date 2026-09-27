@@ -8,6 +8,7 @@ import {
   createNativeWraithFlightState,
   nativeWraithContactActionProgress,
   nativeWraithContactContains,
+  nativeWraithDegradedMovement,
   nativeWraithMovement,
   resetNativeWraithFlightAfterContact,
   stepNativeWraithFlightClock,
@@ -20,7 +21,7 @@ test('Wraith construction derives native retained and initial speed endpoints fr
     currentSpeed: 20,
     currentTurnGain: 1.5,
     flybyTicksRemaining: NATIVE_WRAITH_FLYBY_TICKS.minimum,
-    restingSpeed: 0,
+    restingSpeed: 16,
     targetTurnGain: 3,
   })
   const maximum = createNativeWraithFlightState(
@@ -30,15 +31,15 @@ test('Wraith construction derives native retained and initial speed endpoints fr
     NATIVE_WRAITH_FLYBY_TICKS.randomCount - 1,
   )
   assert.equal(maximum.baseFlybySpeed, Math.fround(1.2))
-  assert.ok(maximum.restingSpeed <= 12)
-  assert.ok(maximum.currentSpeed <= 90)
+  assert.ok(maximum.restingSpeed >= 24 && maximum.restingSpeed <= 36)
+  assert.equal(maximum.currentSpeed, 90.00000762939453)
   assert.equal(maximum.flybyTicksRemaining, 800)
 })
 
 test('Wraith flight advances two sequential high-speed turn vectors', () => {
   const state = createNativeWraithFlightState(1, 0, 0, 0)
   const movement = nativeWraithMovement({
-    actorAgeTicks: 2,
+    actorId: 2,
     actorHeadingDeg: 0,
     actorPosition: { x: 0, y: 0 },
     pathSpeedFactor: 1,
@@ -61,10 +62,10 @@ test('Wraith flight advances two sequential high-speed turn vectors', () => {
   assert.ok(Math.hypot(movement.delta.x, movement.delta.y) > 9.9)
 })
 
-test('Wraith target loss keeps flight state and follows the native rotating far goal', () => {
+test('Wraith target loss keeps flight state and follows the native instance-directed far goal', () => {
   const state = createNativeWraithFlightState(1, 0, 0, 0)
   const movement = nativeWraithMovement({
-    actorAgeTicks: 1,
+    actorId: 1,
     actorHeadingDeg: 0,
     actorPosition: { x: 50, y: 75 },
     pathSpeedFactor: 1,
@@ -82,7 +83,7 @@ test('Wraith clock preserves cooldown order then decays flyby speed and turn', (
   const source = {
     ...createNativeWraithFlightState(1, 0.5, 0.5, 100),
     contactCooldownTicks: 50,
-    currentSpeed: 40,
+    currentSpeed: 60,
     currentTurnGain: 1,
     targetTurnGain: 10,
   }
@@ -90,14 +91,14 @@ test('Wraith clock preserves cooldown order then decays flyby speed and turn', (
   assert.deepEqual(cooling, {
     ...source,
     contactCooldownTicks: 49,
-    currentSpeed: Math.fround(40 - 0.025),
-    currentTurnGain: 3,
+    currentSpeed: Math.fround(60 - Math.fround(0.025)),
+    currentTurnGain: Math.fround(1.01),
     flybyTicksRemaining: source.flybyTicksRemaining - 1,
   })
   const decaying = stepNativeWraithFlightClock({ ...cooling, contactCooldownTicks: 0 })
   assert.equal(decaying.currentSpeed, Math.fround(cooling.currentSpeed - 1 - 0.025))
-  assert.equal(decaying.currentTurnGain, 5)
-  assert.equal(decaying.targetTurnGain, 8)
+  assert.equal(decaying.currentTurnGain, Math.fround(Math.fround(1.01) + Math.fround(0.01)))
+  assert.equal(decaying.targetTurnGain, Math.fround(10 - Math.fround(0.01)))
 })
 
 test('Wraith strict contact resets flight on every overlap but arms damage only after cooldown', () => {
@@ -116,4 +117,32 @@ test('Wraith strict contact resets flight on every overlap but arms damage only 
   assert.equal(nativeWraithContactActionProgress(49), 1)
   assert.equal(nativeWraithContactActionProgress(1), 49)
   assert.equal(nativeWraithContactActionProgress(0), 0)
+})
+
+
+test('Wraith turn recovery reevaluates after an upward overshoot', () => {
+  const source = { ...createNativeWraithFlightState(1, 0, 0, 0),
+    currentTurnGain: 1.5, targetTurnGain: Math.fround(1.505) }
+  assert.equal(stepNativeWraithFlightClock(source).currentTurnGain, 1.5)
+})
+
+test('Wraith flyby visibility gate holds only its countdown', () => {
+  const source = { ...createNativeWraithFlightState(1, .5, .5, 0),
+    contactCooldownTicks: 10, currentSpeed: 40 }
+  const hidden = stepNativeWraithFlightClock(source, false)
+  assert.equal(hidden.flybyTicksRemaining, 200)
+  assert.equal(hidden.contactCooldownTicks, 9)
+  assert.ok(hidden.currentSpeed < source.currentSpeed)
+  assert.ok(hidden.currentTurnGain > source.currentTurnGain)
+})
+
+
+test('Wraith inherited vector clamps a crossed heading and emits one full cadence displacement', () => {
+  const movement = nativeWraithDegradedMovement({
+    actorHeadingDeg: 30, actorPosition: { x: 0, y: 0 }, goalPosition: { x: 100, y: -100 },
+    cadenceTicks: 10, pathSpeedFactor: 1, statusFactor: 1,
+    state: { ...createNativeWraithFlightState(1, 0, 0, 0), currentTurnGain: 3 },
+  })
+  assert.equal(movement.headingDeg, 45)
+  assert.deepEqual(movement.delta, { x: 35.35533905029297, y: -35.35533905029297 })
 })

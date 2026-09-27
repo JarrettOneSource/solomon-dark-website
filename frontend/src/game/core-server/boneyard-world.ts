@@ -391,7 +391,7 @@ export function stepBoneyardWorldTick(
       enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
     },
     lightAt: worldLight.scalarAt,
-    spiderMovementView: {
+    nativeMovementView: {
       arenaBounds: activeBounds, enhancedEffects: true,
       cameras: worldLight.cameras,
     },

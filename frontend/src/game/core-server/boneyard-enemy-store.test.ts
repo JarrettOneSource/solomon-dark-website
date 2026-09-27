@@ -1112,7 +1112,7 @@ test('Wraith special flight bypasses inherited route and collision owners', () =
     players,
     resolveMovement: () => assert.fail('Wraith special vector bypasses movement collision'),
     resolveSpawnIntents: () => [],
-    tick: 2,
+    tick: 3,
   })
   assert.notDeepEqual(result.store.actors[0]!.position, { x: 0, y: 0 })
   assert.equal(result.store.actors[0]!.config.collisionRadius, 15)
@@ -2515,12 +2515,16 @@ test('Wraith contact is strict at 40 units and repeated overlap resets flight wi
     { x: 0, y: 0 },
     boundaryPlayers,
   )
-  boundary = step(boundary.store, 1, boundaryPlayers)
+  boundary = stepWithEffects(boundary.store, 1, boundaryPlayers, {
+    1: targetEffect(1, { frozenTicks: 10, frozenTimeScale: 0 }),
+  })
   assert.deepEqual(boundary.playerDamage, [])
 
   const insidePlayers = { player: livingTarget(39.999, 0) }
   let inside = spawnOne('wraith-contact-inside', 'WRAITH', { x: 0, y: 0 }, insidePlayers)
-  inside = step(inside.store, 1, insidePlayers)
+  inside = stepWithEffects(inside.store, 1, insidePlayers, {
+    1: targetEffect(1, { frozenTicks: 10, frozenTimeScale: 0 }),
+  })
   assert.equal(inside.playerDamage.length, 1)
   const contacted = inside.store.actors[0]!.brain
   assert.equal(contacted.family, 'wraith')
@@ -2528,16 +2532,6 @@ test('Wraith contact is strict at 40 units and repeated overlap resets flight wi
   assert.equal(contacted.contactCooldownTicks, 50)
   assert.equal(contacted.currentSpeed, Math.fround(contacted.baseFlybySpeed * 50))
 
-  inside = {
-    ...inside,
-    store: {
-      ...inside.store,
-      actors: inside.store.actors.map(actor => ({
-        ...actor,
-        nextMovementTick: Number.MAX_SAFE_INTEGER,
-      })),
-    },
-  }
   inside = stepBoneyardEnemyStore(inside.store, {
     projectileWorldBlocked: NO_WORLD_CONTACT,
     players: insidePlayers,
@@ -2562,7 +2556,7 @@ test('Wraith initial flight uses its native high-speed vector instead of ordinar
     players,
     resolveMovement: () => assert.fail('Wraith flight bypasses movement collision'),
     resolveSpawnIntents: () => [],
-    tick: 2,
+    tick: 3,
   })
 
   const requestedDistance = Math.hypot(
@@ -2591,6 +2585,8 @@ test('Wraith native flight derives from every shared authored chase transform', 
     assert.equal(actor.brain.family, 'wraith')
     if (actor.brain.family !== 'wraith') throw new Error('expected Wraith brain')
     assert.equal(actor.brain.baseFlybySpeed, Math.fround(expectedChaseSpeed * 0.8))
+    assert.ok(actor.brain.restingSpeed >= 16 * expectedChaseSpeed
+      && actor.brain.restingSpeed <= 24 * expectedChaseSpeed)
   }
 })
 
@@ -4384,8 +4380,10 @@ test('admitted Wraith wisps remain world-owned and emit without the flaming flag
   assert.equal(actor.brain.family, 'wraith')
   if (actor.brain.family !== 'wraith') throw new Error('expected Wraith brain')
   const active = { ...spawned.store, actors: [{ ...actor, headingDeg: 90,
-    nextMovementTick: 1000, brain: { ...actor.brain, contactCooldownTicks: 20 } }] }
-  const result = step(active, 1, {})
+    brain: { ...actor.brain, contactCooldownTicks: 20 } }] }
+  const result = stepWithEffects(active, 1, {}, {
+    [actor.id]: targetEffect(actor.id, { frozenTicks: 10, frozenTimeScale: 0 }),
+  })
   const wisp = result.store.deathEffects.find(effect => effect.role === 'wraith-soul-wisp')
   assert.ok(wisp)
   assert.deepEqual(wisp.position, { x: -10, y: 25 })
@@ -5769,3 +5767,98 @@ test('Maggot periodic contacts retain zero and fractional native hit strengths',
     assert.equal(nativePuppetHitAlpha(damaged.hitFeedback, source.lastStepTick), hitStrength)
   }
 })
+
+
+test('Wraith cruise remains moving after thirty seconds without repeated contact resets', () => {
+  const players = { player: livingTarget(500, 0) }
+  const context = { projectileWorldBlocked: NO_WORLD_CONTACT, players,
+    resolveMovement: DIRECT_MOVEMENT, resolveSpawnIntents: () => [] }
+  let store = stepBoneyardEnemyStore(createBoneyardEnemyStore('report40-flight'), {
+    ...context, tick: 0, resolveSpawnIntents: () => Array.from({ length: 12 }, (_, index) =>
+      intent('WRAITH', index + 1, { x: -1000 + index * 100, y: -500 })),
+  }).store
+  const distances = store.actors.map(() => 0)
+  for (let tick = 1; tick <= 3000; tick++) {
+    const before = store
+    store = stepBoneyardEnemyStore(store, { ...context, tick }).store
+    if (tick <= 2500) continue
+    for (const [index, actor] of store.actors.entries()) {
+      const prior = before.actors[index]!
+      distances[index]! += Math.hypot(actor.position.x - prior.position.x, actor.position.y - prior.position.y)
+    }
+  }
+  assert.ok(distances.every(distance => distance > 1800),
+    `every ghost retains native cruise movement over the final five seconds: ${distances}`)
+})
+
+
+test('Wraith outer clocks continue while Frozen suppresses movement', () => {
+  const players = { player: livingTarget(500, 0) }
+  const source = spawnOne('wraith-frozen-clock', 'WRAITH', { x: 0, y: 0 }, players).store
+  const before = source.actors[0]!
+  assert.ok(before.brain.family === 'wraith')
+  const result = stepWithEffects(source, 1, players, {
+    [before.id]: targetEffect(before.id, { frozenTicks: 100, frozenTimeScale: 0 }),
+  }).store.actors[0]!
+  assert.ok(result.brain.family === 'wraith')
+  assert.deepEqual(result.position, before.position)
+  assert.equal(result.brain.flybyTicksRemaining, before.brain.flybyTicksRemaining - 1)
+  assert.ok(result.brain.currentTurnGain > before.brain.currentTurnGain)
+})
+
+test('Wraith darkness holds flyby time and uses its inherited routed movement on the UID cadence', () => {
+  const players = { player: livingTarget(500, 0) }
+  let source = spawnOne('wraith-dark-flight', 'WRAITH', { x: 0, y: 0 }, players).store
+  const first = source.actors[0]!
+  assert.ok(first.brain.family === 'wraith')
+  source = { ...source, actors: [{ ...first, headingDeg: 90 }] }
+  let routes = 0
+  const context = { players, projectileWorldBlocked: NO_WORLD_CONTACT,
+    nativeVisibility: () => ({ admitted: false, intensity: 0 }), lightAt: () => 0,
+    nativeMovementView: { arenaBounds: { x: -2000, y: -2000, w: 4000, h: 4000 },
+      cameras: [{ x: -2000, y: -2000, w: 4000, h: 4000 }], enhancedEffects: true },
+    navigation: { isPathClear: () => false, findRoute: () => {
+      routes++; return [{ x: 0, y: 0 }, { x: 0, y: -500 }, { x: 500, y: 0 }]
+    } },
+    resolveMovement: () => assert.fail('Wraith still bypasses collision while unlit'),
+    resolveSpawnIntents: () => [] }
+  const waiting = stepBoneyardEnemyStore(source, { ...context, tick: 2 }).store
+  assert.deepEqual(waiting.actors[0]!.position, first.position)
+  const moved = stepBoneyardEnemyStore(waiting, { ...context, tick: 11 }).store.actors[0]!
+  assert.ok(moved.brain.family === 'wraith')
+  assert.equal(moved.brain.flybyTicksRemaining, first.brain.flybyTicksRemaining)
+  assert.ok(routes > 0)
+  assert.ok(moved.position.y < -1, 'the inherited route changes the actual flight direction')
+  assert.equal(moved.nextMovementTick, 21)
+})
+
+
+test('Wraith common movement suppresses the exact native status cutoff', () => {
+  const players = { player: livingTarget(500, 0) }
+  const source = spawnOne('wraith-status-cutoff', 'WRAITH', { x: 0, y: 0 }, players).store
+  const stopped = { ...source, actors: source.actors.map(actor => ({ ...actor,
+    staffMovementFactor: Math.fround(.0001) })) }
+  assert.deepEqual(step(stopped, 1, players).store.actors[0]!.position, { x: 0, y: 0 })
+  const moving = { ...source, actors: source.actors.map(actor => ({ ...actor,
+    staffMovementFactor: 0.00010000000474974513 })) }
+  assert.notDeepEqual(step(moving, 1, players).store.actors[0]!.position, { x: 0, y: 0 })
+})
+
+for (const [visible, admitted, enhanced, cadence] of [
+  [true, true, false, 5], [true, false, true, 10], [false, false, true, 15],
+] as const) {
+  test(`Wraith ${cadence}-tick movement uses the inherited UID phase`, () => {
+    const players = { player: livingTarget(500, 0) }
+    const source = spawnOne(`wraith-cadence-${cadence}`, 'WRAITH', { x: 0, y: 0 }, players).store
+    const context = { players, projectileWorldBlocked: NO_WORLD_CONTACT,
+      resolveMovement: () => assert.fail('all Wraith branches bypass movement collision'),
+      resolveSpawnIntents: () => [], nativeVisibility: () => ({ admitted, intensity: Number(admitted) }),
+      nativeMovementView: { arenaBounds: { x: -2000, y: -2000, w: 4000, h: 4000 },
+        cameras: [{ x: visible ? -2000 : 50000, y: -2000, w: 4000, h: 4000 }], enhancedEffects: enhanced } }
+    const waiting = stepBoneyardEnemyStore(source, { ...context, tick: 2 }).store
+    assert.deepEqual(waiting.actors[0]!.position, source.actors[0]!.position)
+    const moved = stepBoneyardEnemyStore(waiting, { ...context, tick: cadence + 1 }).store.actors[0]!
+    assert.notDeepEqual(moved.position, source.actors[0]!.position)
+    assert.equal(moved.nextMovementTick, 2 * cadence + 1)
+  })
+}

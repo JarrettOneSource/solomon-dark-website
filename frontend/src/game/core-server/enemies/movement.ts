@@ -1,11 +1,12 @@
 import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
 import { NATIVE_BADGUY_GAIT_PHASE_DIVISOR, NATIVE_BADGUY_GAIT_PHASE_PERIOD, NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR, NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD, advanceNativeEnemyLocomotionPhase, advanceNativeEnemyStridePhase, nativeSkeletonBodyGaitPose } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
+import { lineBoundsExitObstruction } from '../../core-kernels/line-obstruction.ts'
 import { buildNativeEnemySteering, clearNativeEnemyRoute, nativeEnemySteeringGoal, nativeEnemyTargetRefreshTicks, resolveNativeEnemyPathGoal, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
 import { resetDemon } from './demon.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
-import { validatePoint } from './model.ts'
+import { boneyardEnemyCollisionRadius, validatePoint } from './model.ts'
 import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS } from './programs.ts'
 import { resetArcher, resetMage, resetSkeleton } from './skeleton-family.ts'
 import { enemyNavigationClearance } from './targeting.ts'
@@ -249,4 +250,31 @@ export function interruptNativeSecondaryAction(
 
 export function positiveModulo(value: number, period: number): number {
   return ((value % period) + period) % period
+}
+
+export function routeNativeEnemyGoal(
+  actor: BoneyardEnemyActor,
+  rawGoal: Readonly<BoneyardPoint>,
+  targetPosition: Readonly<BoneyardPoint> | null,
+  context: BoneyardEnemyStoreStepContext,
+  cadence: number,
+): Readonly<{ turnAround: boolean; actor: BoneyardEnemyActor; goal: Readonly<BoneyardPoint> }> {
+  const navigation = context.navigation
+  const bounds = context.nativeMovementView?.arenaBounds
+  const goal = targetPosition === null && bounds !== undefined
+    ? lineBoundsExitObstruction(actor.position, rawGoal, bounds)?.point ?? rawGoal : rawGoal
+  if (!navigation) return { actor, goal, turnAround: false }
+  const radius = boneyardEnemyCollisionRadius(actor)
+  const routed = resolveNativeEnemyPathGoal(actor.path, {
+    actorPosition: actor.position, bodyRadius: radius, cadenceTicks: cadence,
+    navigationClearance: 25, rawGoal: goal, targetPosition,
+    targetRefreshTicks: nativeEnemyTargetRefreshTicks(actor.config.pathfindingMode),
+    directPathClear: (start, end) => navigation.isPathClear({
+      actorId: actor.id, bodyRadius: radius, start, end, navigationClearance: 25, radius: 0,
+    }),
+    findRoute: (start, end, clearance, bodyRadius) => navigation.findRoute({
+      actorId: actor.id, bodyRadius, start, end, navigationClearance: clearance, radius: clearance,
+    }),
+  })
+  return { actor: { ...actor, path: routed.state }, goal: routed.goal, turnAround: routed.turnAround }
 }

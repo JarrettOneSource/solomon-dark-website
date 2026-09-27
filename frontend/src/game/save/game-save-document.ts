@@ -2063,6 +2063,20 @@ function normalizeWorld(
         }
       }
       const savedBrain = record(brain, `game save Boneyard enemy brain ${index}`)
+      if (sourceSchemaVersion >= 26 && sourceSchemaVersion < 44 && savedBrain.family === 'wraith') {
+        const baseSpeed = finiteNumber(savedBrain.baseFlybySpeed, 'legacy Wraith base speed')
+        if (baseSpeed <= 0) throw new Error('legacy Wraith base speed must be positive')
+        const oldCruise = finiteNumber(savedBrain.restingSpeed, 'legacy Wraith cruise speed')
+        if (oldCruise < 0) throw new Error('legacy Wraith cruise speed must be non-negative')
+        const restingSpeed = finiteNumber(Math.fround(baseSpeed * Math.fround(20 + oldCruise / baseSpeed)),
+          'repaired Wraith cruise speed')
+        savedBrain.restingSpeed = restingSpeed
+        savedBrain.currentSpeed = Math.max(restingSpeed,
+          finiteNumber(savedBrain.currentSpeed, 'legacy Wraith current speed'))
+        // The old +2 recurrence cannot recover the correct past turn history.
+        savedBrain.currentTurnGain = 1.5
+        savedBrain.targetTurnGain = 3
+      }
       let normalizedBrain: Record<string, unknown> = savedBrain.family === 'demon'
         ? {
             ...savedBrain,

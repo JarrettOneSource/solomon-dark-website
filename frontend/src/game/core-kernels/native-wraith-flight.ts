@@ -10,18 +10,18 @@ export const NATIVE_WRAITH_FLYBY_TICKS = Object.freeze({
 })
 export const NATIVE_WRAITH_MOVEMENT_SUBSTEPS = 2
 
-const BASE_SPEED_FACTOR = 0.8
+const BASE_SPEED_FACTOR = Math.fround(0.8)
 const INITIAL_SPEED_MULTIPLIER = 25
 const CONTACT_SPEED_MULTIPLIER = 50
 const MOVEMENT_FACTOR = 0.25
 const NO_TARGET_DISTANCE = 10_000
-const NO_TARGET_HEADING_PER_TICK = 225
-const TURN_CHANGE_PER_TICK = 2
+const NO_TARGET_HEADING_PER_ID = 225
+const TURN_CHANGE_PER_TICK = Math.fround(0.01)
 const MINIMUM_TURN_GAIN = 1.5
 const CONTACT_TURN_GAIN_MINIMUM = 7
 const CONTACT_TURN_GAIN_RANGE = 5
 const FAST_SPEED_LOSS_PER_TICK = 1
-const SLOW_SPEED_LOSS_PER_TICK = 0.025
+const SLOW_SPEED_LOSS_PER_TICK = Math.fround(0.025)
 
 export interface NativeWraithFlightState {
   readonly baseFlybySpeed: number
@@ -34,11 +34,12 @@ export interface NativeWraithFlightState {
 }
 
 export interface NativeWraithMovementRequest {
-  readonly actorAgeTicks: number
+  readonly actorId: number
   readonly actorHeadingDeg: number
   readonly actorPosition: Readonly<BoneyardPoint>
   readonly pathSpeedFactor: number
   readonly pathTurnFactor: number
+  readonly cadenceTicks?: number
   readonly state: NativeWraithFlightState
   readonly statusFactor: number
   readonly targetPosition: Readonly<BoneyardPoint> | null
@@ -69,23 +70,26 @@ export function createNativeWraithFlightState(
     baseFlybySpeed,
     contactCooldownTicks: 0,
     currentSpeed: Math.fround(
-      baseFlybySpeed * INITIAL_SPEED_MULTIPLIER * (1 + initialSpeedUnit * 2),
+      Math.fround(baseFlybySpeed * INITIAL_SPEED_MULTIPLIER)
+        * Math.fround(1 + Math.fround(initialSpeedUnit * 2)),
     ),
     currentTurnGain: 1.5,
     flybyTicksRemaining: NATIVE_WRAITH_FLYBY_TICKS.minimum + flybyTickOffset,
-    restingSpeed: Math.fround(baseFlybySpeed * restingSpeedUnit * 10),
+    restingSpeed: Math.fround(baseFlybySpeed * Math.fround(20 + Math.fround(restingSpeedUnit * 10))),
     targetTurnGain: 3,
   })
 }
 
 export function stepNativeWraithFlightClock(
   source: NativeWraithFlightState,
+  admitted = true,
 ): NativeWraithFlightState {
-  const flybyTicksRemaining = Math.max(0, source.flybyTicksRemaining - 1)
+  const flybyTicksRemaining = Math.max(0, source.flybyTicksRemaining - Number(admitted))
   let currentTurnGain = source.currentTurnGain
   if (currentTurnGain < source.targetTurnGain) {
     currentTurnGain = Math.fround(currentTurnGain + TURN_CHANGE_PER_TICK)
-  } else if (source.targetTurnGain < currentTurnGain) {
+  }
+  if (source.targetTurnGain < currentTurnGain) {
     currentTurnGain = Math.fround(currentTurnGain - TURN_CHANGE_PER_TICK)
   }
 
@@ -137,7 +141,7 @@ export function resetNativeWraithFlightAfterContact(
     currentTurnGain: 1,
     flybyTicksRemaining: NATIVE_WRAITH_FLYBY_TICKS.minimum + flybyTickOffset,
     targetTurnGain: Math.fround(
-      CONTACT_TURN_GAIN_MINIMUM + turnGainUnit * CONTACT_TURN_GAIN_RANGE,
+      CONTACT_TURN_GAIN_MINIMUM + Math.fround(turnGainUnit * CONTACT_TURN_GAIN_RANGE),
     ),
   })
 }
@@ -145,7 +149,7 @@ export function resetNativeWraithFlightAfterContact(
 export function nativeWraithMovement(
   request: NativeWraithMovementRequest,
 ): NativeWraithMovementResult {
-  requireIntegerRange(request.actorAgeTicks, 0, Number.MAX_SAFE_INTEGER, 'Wraith age')
+  requireIntegerRange(request.actorId, 0, Number.MAX_SAFE_INTEGER, 'Wraith ID')
   requirePositive(request.pathSpeedFactor, 'Wraith path speed factor')
   requirePositive(request.pathTurnFactor, 'Wraith path turn factor')
   requirePositive(request.statusFactor, 'Wraith status factor')
@@ -156,7 +160,7 @@ export function nativeWraithMovement(
   const goal = request.targetPosition === null
     ? offsetPoint(
         request.actorPosition,
-        request.actorAgeTicks * NO_TARGET_HEADING_PER_TICK,
+        request.actorId * NO_TARGET_HEADING_PER_ID,
         NO_TARGET_DISTANCE,
       )
     : request.state.flybyTicksRemaining > 0
@@ -177,7 +181,9 @@ export function nativeWraithMovement(
   let headingDeg = request.actorHeadingDeg
   let x = 0
   let y = 0
-  for (let step = 0; step < NATIVE_WRAITH_MOVEMENT_SUBSTEPS; step += 1) {
+  const cadence = request.cadenceTicks ?? NATIVE_WRAITH_MOVEMENT_SUBSTEPS
+  requireIntegerRange(cadence, 1, 15, 'Wraith movement cadence')
+  for (let step = 0; step < cadence; step += 1) {
     headingDeg = turnTowardHeading(headingDeg, desiredHeadingDeg, turnStep)
     const radians = headingDeg * Math.PI / 180
     x = Math.fround(x + Math.fround(Math.sin(radians) * movement))
@@ -187,6 +193,28 @@ export function nativeWraithMovement(
     delta: Object.freeze({ x, y }),
     headingDeg,
   })
+}
+
+/** Inherited +0x70 makes one clamped turn and vector for the whole cadence. */
+export function nativeWraithDegradedMovement(
+  request: Pick<NativeWraithMovementRequest,
+    'actorPosition' | 'actorHeadingDeg' | 'pathSpeedFactor' | 'state' | 'statusFactor'> & {
+      readonly cadenceTicks: number
+      readonly goalPosition: Readonly<BoneyardPoint>
+    },
+): NativeWraithMovementResult {
+  const desired = headingTo(request.actorPosition, request.goalPosition, request.actorHeadingDeg)
+  const direction = headingTurnDirection(request.actorHeadingDeg, desired)
+  let headingDeg = turnTowardHeading(request.actorHeadingDeg, desired,
+    request.state.currentTurnGain * request.statusFactor * request.cadenceTicks)
+  if (direction !== headingTurnDirection(headingDeg, desired)) headingDeg = desired
+  const movement = request.pathSpeedFactor * request.state.currentSpeed
+    * request.statusFactor * request.cadenceTicks * MOVEMENT_FACTOR
+  const radians = headingDeg * Math.PI / 180
+  return { headingDeg, delta: {
+    x: Math.fround(Math.sin(radians) * movement),
+    y: Math.fround(-Math.cos(radians) * movement),
+  } }
 }
 
 export function nativeWraithContactContains(
@@ -237,14 +265,17 @@ function headingTo(
 }
 
 function turnTowardHeading(current: number, target: number, step: number): number {
+  return positiveModulo(Math.fround(current + headingTurnDirection(current, target) * step), 360)
+}
+
+function headingTurnDirection(current: number, target: number): -1 | 0 | 1 {
   const normalizedCurrent = positiveModulo(current, 360)
   const normalizedTarget = positiveModulo(target, 360)
   const separation = Math.abs(normalizedCurrent - normalizedTarget)
-  if (separation < 1 || separation >= 359) return normalizedCurrent
-  const direction = normalizedTarget <= normalizedCurrent
+  if (separation < 1 || separation >= 359) return 0
+  return normalizedTarget <= normalizedCurrent
     ? normalizedCurrent - normalizedTarget <= 180 ? -1 : 1
     : normalizedTarget - normalizedCurrent > 180 ? -1 : 1
-  return positiveModulo(Math.fround(normalizedCurrent + direction * step), 360)
 }
 
 function positiveModulo(value: number, period: number): number {

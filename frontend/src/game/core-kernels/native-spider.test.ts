@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { nativeEnemyMovementClock } from './native-enemy-pathfinding.ts'
 import { createNativeRng } from './native-rng.ts'
 import {
-  createNativeSpiderState, moveNativeSpider, reactNativeSpiderToDamage, nativeSpiderMovementClock,
+  createNativeSpiderState, moveNativeSpider, reactNativeSpiderToDamage,
   type NativeSpiderMovement, type NativeSpiderState,
 } from './native-spider.ts'
 
@@ -22,8 +23,8 @@ test('the Spider movement owner preserves enhanced, ordinary, unlit and off-came
     [true, true, true, 2, true], [true, true, false, 5, true],
     [true, false, true, 10, false], [false, true, true, 15, false],
   ] as const) {
-    assert.deepEqual(nativeSpiderMovementClock(7, 7 + cadence, visible, lit, enhanced), { cadence, full, due: true })
-    assert.equal(nativeSpiderMovementClock(7, 8 + cadence, visible, lit, enhanced).due, false)
+    assert.deepEqual(nativeEnemyMovementClock(7, 7 + cadence, visible, lit, enhanced), { cadence, full, due: true })
+    assert.equal(nativeEnemyMovementClock(7, 8 + cadence, visible, lit, enhanced).due, false)
   }
 })
 

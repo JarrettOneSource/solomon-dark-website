@@ -151,14 +151,6 @@ export function moveNativeSpider(
   return work
 }
 
-/** BadGuy::Tick 0x004835F0 keeps the four movement clocks on the actor UID phase. */
-export function nativeSpiderMovementClock(
-  actorId: number, tick: number, visible: boolean, illuminated: boolean, enhanced = true,
-): Readonly<{ due: boolean; cadence: number; full: boolean }> {
-  const cadence = !visible ? 15 : !illuminated ? 10 : enhanced ? 2 : 5
-  return { due: actorId % cadence === tick % cadence, cadence, full: visible && illuminated }
-}
-
 export function reactNativeSpiderToDamage(
   source: NativeSpiderState,
   magic: boolean,

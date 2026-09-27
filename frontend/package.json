@@ -107,6 +107,7 @@
     "smoke:game:pause": "node --experimental-strip-types tools/smoke-game-pause.mjs",
     "smoke:game:settings": "node --experimental-strip-types tools/smoke-game-settings.mjs",
     "smoke:game:dowsing": "node --experimental-strip-types tools/smoke-dowsing-reference.mjs",
+    "smoke:game:wraith": "node --experimental-strip-types tools/smoke-wraith-flight.mjs",
     "smoke:game:typography": "node tools/smoke-game-typography.mjs",
     "smoke:game:typography-built": "node --experimental-strip-types tools/smoke-built-game-typography.mjs",
     "smoke:game:native-ui": "node tools/smoke-native-ui-workbench.mjs",

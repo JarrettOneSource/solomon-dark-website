@@ -807,7 +807,7 @@ test('schema 25 active Wraiths migrate from the fabricated phase brain to native
   assert.equal(brain.phase, 'flight')
   assert.equal(brain.baseFlybySpeed, Math.fround(0.8))
   assert.ok(brain.currentSpeed >= 20 && brain.currentSpeed < 60)
-  assert.ok(brain.restingSpeed >= 0 && brain.restingSpeed < 8)
+  assert.ok(brain.restingSpeed >= 16 && brain.restingSpeed <= 24)
   assert.ok(brain.flybyTicksRemaining >= 200 && brain.flybyTicksRemaining <= 800)
 })
 
@@ -3415,4 +3415,45 @@ test('saved Leviathans recover raw cast-rank damage without changing clocks or R
   assert.deepEqual(resumed.secondaryAbilities.actors, state.secondaryAbilities.actors)
   assert.deepEqual(resumed.secondaryAbilities.rng, state.secondaryAbilities.rng)
   assert.deepEqual(resumed.playerEntities.skillBooks, state.playerEntities.skillBooks)
+})
+
+
+test('schema 43 repairs stalled Wraith flight without changing identity, cooldown or RNG', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 91))
+  assert.ok(loadedBoneyard)
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  assert.ok(state.world.kind === 'boneyard')
+  const enemies = stepBoneyardEnemyStore(state.world.enemies, {
+    projectileWorldBlocked: () => false, players: {},
+    resolveMovement: request => request.requestedPosition, tick: state.tick,
+    resolveSpawnIntents: () => [{ enemyToken: 'WRAITH', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const document = createGameSaveDocument({ integrity: 'global-clean', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state: { ...state, world: { ...state.world, enemies } } })
+  const unchanged = restoreGameSaveDocument(document).state
+  assert.ok(unchanged.world.kind === 'boneyard')
+  assert.deepEqual(unchanged.world.enemies.actors[0]!.brain, enemies.actors[0]!.brain)
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 43
+  const actor = legacy.continuation.simulation.world.enemies.actors[0]
+  actor.brain = { ...actor.brain, restingSpeed: 2, currentSpeed: .001,
+    currentTurnGain: 5455.5, targetTurnGain: 5457.5, flybyTicksRemaining: 0, contactCooldownTicks: 17 }
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.ok(restored.world.kind === 'boneyard')
+  const repaired = restored.world.enemies.actors[0]!
+  assert.ok(repaired.brain.family === 'wraith')
+  assert.equal(repaired.brain.restingSpeed, 18)
+  assert.equal(repaired.brain.currentSpeed, 18)
+  assert.equal(repaired.brain.currentTurnGain, 1.5)
+  assert.equal(repaired.brain.targetTurnGain, 3)
+  assert.equal(repaired.brain.flybyTicksRemaining, 0)
+  assert.equal(repaired.brain.contactCooldownTicks, 17)
+  assert.equal(repaired.id, actor.id)
+  assert.deepEqual(repaired.position, actor.position)
+  assert.equal(restored.world.enemies.rngState, enemies.rngState)
+  assert.deepEqual(restored.world.enemies.steeringRngState, enemies.steeringRngState)
+  actor.brain.baseFlybySpeed = 0
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /legacy Wraith base speed/)
 })

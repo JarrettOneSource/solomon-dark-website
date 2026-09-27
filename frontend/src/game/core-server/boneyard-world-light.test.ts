@@ -49,7 +49,7 @@ test('a primary spell outside player light enables full Spider movement and expi
   for (const [light, expectedTicks] of [[dark, 10], [lit, 8]] as const) {
     const moved = stepBoneyardEnemyStore(held, {
       ...context, tick: 1, resolveSpawnIntents: () => [], lightAt: light.scalarAt,
-      spiderMovementView: { arenaBounds: world.bounds, cameras: light.cameras, enhancedEffects: true },
+      nativeMovementView: { arenaBounds: world.bounds, cameras: light.cameras, enhancedEffects: true },
     }).store.actors[0]!
     if (moved.brain.family !== 'spider') throw new Error('Expected Spider')
     assert.equal(moved.brain.actionTicksRemaining, expectedTicks)

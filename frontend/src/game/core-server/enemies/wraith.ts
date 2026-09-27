@@ -1,7 +1,8 @@
-import { clearNativeEnemyRoute, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
+import { clearNativeEnemyRoute, nativeEnemyMovementClock, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
 import {
   NATIVE_WRAITH_FLYBY_TICKS,
   nativeWraithContactContains,
+  nativeWraithDegradedMovement,
   nativeWraithMovement,
   resetNativeWraithFlightAfterContact,
   stepNativeWraithFlightClock,
@@ -9,9 +10,9 @@ import {
 import { attackMarker, directPlayerDamage } from './combat.ts'
 import { spawnSimpleDeathEffect } from './death-effects.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardWraithBrain, WorkingStep } from './model.ts'
-import { NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS } from './programs.ts'
+import { routeNativeEnemyGoal } from './movement.ts'
 import { drawEnemyFloat, drawEnemyInteger, drawInteger, drawUnit, radialVector } from './random.ts'
-import { targetEligible } from './targeting.ts'
+import { reorientEnemyTowardTarget, targetEligible } from './targeting.ts'
 
 export function spawnWraithWisp(work: WorkingStep, actor: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext): void {
@@ -37,12 +38,13 @@ export function stepWraith(
   brain: BoneyardWraithBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
+  const admitted = context.nativeVisibility?.(actor.position).admitted ?? true
   const clockedBrain: BoneyardWraithBrain = {
-    ...stepNativeWraithFlightClock(brain),
+    ...stepNativeWraithFlightClock(brain, admitted),
     family: 'wraith',
     phase: 'flight',
   }
-  const moved = moveWraith(work, { ...actor, brain: clockedBrain }, clockedBrain, context)
+  const moved = moveWraith(work, { ...actor, brain: clockedBrain }, clockedBrain, context, admitted)
   const target = moved.targetPlayerId === null
     ? null
     : context.players[moved.targetPlayerId] ?? null
@@ -79,37 +81,60 @@ function moveWraith(
   actor: BoneyardEnemyActor,
   brain: BoneyardWraithBrain,
   context: BoneyardEnemyStoreStepContext,
+  admitted: boolean,
 ): BoneyardEnemyActor {
-  if (context.tick < actor.nextMovementTick) return actor
   const statusFactor = work.pathStatusFactors.get(actor.id) ?? 1
+  if (statusFactor <= Math.fround(0.0001)) return actor
+  const view = context.nativeMovementView
+  const visible = view === undefined || view.cameras.some(camera => (
+    actor.position.x + 100 >= camera.x && actor.position.x - 100 <= camera.x + camera.w
+    && actor.position.y + 100 >= camera.y && actor.position.y - 100 <= camera.y + camera.h
+  ))
+  const clock = nativeEnemyMovementClock(actor.id, context.tick, visible, admitted, view?.enhancedEffects ?? true)
+  if (!clock.due || (context.abilityEffects?.[actor.id]?.disruptedTicks ?? 0) > 0) return actor
+  if (actor.path.reorientationTicksRemaining > 0) return reorientEnemyTowardTarget(actor, context.players)
   const target = actor.targetPlayerId === null
     ? null
     : context.players[actor.targetPlayerId] ?? null
-  const movement = nativeWraithMovement({
-    actorAgeTicks: Math.max(0, context.tick - actor.spawnTick),
+  const targetPosition = target && targetEligible(target) ? target.position : null
+  const request = {
+    actorId: actor.id,
     actorHeadingDeg: actor.headingDeg,
     actorPosition: actor.position,
     pathSpeedFactor: actor.path.speedFactor,
     pathTurnFactor: actor.path.turnFactor,
+    cadenceTicks: clock.cadence,
     state: brain,
     statusFactor,
-    targetPosition: target && targetEligible(target) ? target.position : null,
-  })
+    targetPosition,
+  }
+  let path = clearNativeEnemyRoute(actor.path)
+  let movement
+  if (clock.full) {
+    movement = nativeWraithMovement(request)
+  } else {
+    const wander = radialVector(actor.id * 225,
+      actor.path.speedFactor * brain.currentSpeed * statusFactor * clock.cadence * .25)
+    const rawGoal = targetPosition ?? { x: actor.position.x + wander.x, y: actor.position.y + wander.y }
+    const routed = routeNativeEnemyGoal(actor, rawGoal, targetPosition, context, clock.cadence)
+    path = routed.actor.path
+    movement = nativeWraithDegradedMovement({ ...request, goalPosition: routed.goal,
+      actorHeadingDeg: actor.headingDeg + (routed.turnAround ? 180 : 0) })
+  }
   const requestedPosition = Object.freeze({
-    x: actor.position.x + movement.delta.x,
-    y: actor.position.y + movement.delta.y,
+    x: Math.fround(actor.position.x + movement.delta.x),
+    y: Math.fround(actor.position.y + movement.delta.y),
   })
   const traveled = Math.hypot(movement.delta.x, movement.delta.y)
-  const pathWithoutRoute = clearNativeEnemyRoute(actor.path)
-  const pathAfterSubsteps = pathWithoutRoute.flankTicksRemaining > 0
+  const pathAfterSubsteps = path.flankTicksRemaining > 0
     ? Object.freeze({
-        ...pathWithoutRoute,
+        ...path,
         flankTicksRemaining: Math.max(
           0,
-          pathWithoutRoute.flankTicksRemaining - NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+          path.flankTicksRemaining - clock.cadence,
         ),
       })
-    : pathWithoutRoute
+    : path
   const recovery = stepNativeEnemyPathRecovery(
     pathAfterSubsteps,
     work.steeringRngState,
@@ -127,7 +152,7 @@ function moveWraith(
     brain,
     headingDeg: movement.headingDeg,
     lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
-    nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    nextMovementTick: context.tick + clock.cadence,
     path: recovery.state,
     position: requestedPosition,
   }

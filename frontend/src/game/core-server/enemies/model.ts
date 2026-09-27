@@ -847,7 +847,7 @@ export interface BoneyardEnemyRetirementObserver {
 }
 
 export interface BoneyardEnemyStoreStepContext {
-  readonly spiderMovementView?: {
+  readonly nativeMovementView?: {
     readonly arenaBounds: Readonly<BoneyardBounds>
     readonly cameras: readonly Readonly<BoneyardBounds>[]
     readonly enhancedEffects: boolean

@@ -1,13 +1,11 @@
 import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
-import { lineBoundsExitObstruction } from '../../core-kernels/line-obstruction.ts'
 import {
-  nativeEnemyTargetRefreshTicks,
-  resolveNativeEnemyPathGoal,
+  nativeEnemyMovementClock,
   stepNativeEnemyPathRecovery,
 } from '../../core-kernels/native-enemy-pathfinding.ts'
 import { stepNativeSilk } from '../../core-kernels/native-silk.ts'
-import { moveNativeSpider, nativeSpiderMovementClock } from '../../core-kernels/native-spider.ts'
+import { moveNativeSpider } from '../../core-kernels/native-spider.ts'
 import { nativeCocoonPosition, stepNativeWebbed } from '../../core-kernels/native-webbed.ts'
 import { directionFromHeading } from '../../core-kernels/primary-spell-targeting.ts'
 import { attackMarker, directPlayerDamage } from './combat.ts'
@@ -15,7 +13,7 @@ import { spawnBouncer, spawnSimpleDeathEffect } from './death-effects.ts'
 import { emitEvent } from './events.ts'
 import { boneyardEnemyCollisionRadius } from './model.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyStoreStepContext, BoneyardSpiderBrain, WorkingStep } from './model.ts'
-import { positiveModulo } from './movement.ts'
+import { positiveModulo, routeNativeEnemyGoal } from './movement.ts'
 import { drawUnit } from './random.ts'
 import { nativePrimaryCellChanged } from './registration.ts'
 
@@ -27,12 +25,12 @@ export function stepSpider(
 ): BoneyardEnemyActor {
   if (source.config.enemyToken !== 'SPIDER') throw new Error('Spider brain requires Spider config')
   if (!context.lightAt) throw new Error('Spider movement requires the native light sampler')
-  const view = context.spiderMovementView
+  const view = context.nativeMovementView
   const visible = view === undefined || view.cameras.some(camera => (
     source.position.x + 100 >= camera.x && source.position.x - 100 <= camera.x + camera.w
     && source.position.y + 100 >= camera.y && source.position.y - 100 <= camera.y + camera.h
   ))
-  const clock = nativeSpiderMovementClock(source.id, context.tick, visible,
+  const clock = nativeEnemyMovementClock(source.id, context.tick, visible,
     view === undefined || context.lightAt(source.position) > 0, view?.enhancedEffects ?? true)
   if (!clock.due) return source
   if (!clock.full) return stepDegradedSpider(source, context, work.pathStatusFactors.get(source.id) ?? 1, clock.cadence)
@@ -59,7 +57,7 @@ export function stepSpider(
       light: context.lightAt(actor.position), target: targetState,
       wanderHeadingDeg: actor.path.wanderHeadingDeg,
       routeGoal: goal => {
-        const routed = routeGoal(actor, goal, target?.position ?? null, context, clock.cadence)
+        const routed = routeNativeEnemyGoal(actor, goal, target?.position ?? null, context, clock.cadence)
         actor = routed.actor
         return { goal: routed.goal, followingRoute: actor.path.routeTicksRemaining > 0, turnAround: routed.turnAround }
       },
@@ -125,33 +123,6 @@ export function stepSpider(
     ...actor, brain, bodyPose: brain.frame, position, path: recovery.state,
     nextMovementTick: context.tick + clock.cadence, lastMovementTick: context.tick,
   }
-}
-
-function routeGoal(
-  actor: BoneyardEnemyActor,
-  rawGoal: Readonly<BoneyardPoint>,
-  targetPosition: Readonly<BoneyardPoint> | null,
-  context: BoneyardEnemyStoreStepContext,
-  cadence: number,
-): Readonly<{ turnAround: boolean; actor: BoneyardEnemyActor; goal: Readonly<BoneyardPoint> }> {
-  const navigation = context.navigation
-  const bounds = context.spiderMovementView?.arenaBounds
-  const goal = targetPosition === null && bounds !== undefined
-    ? lineBoundsExitObstruction(actor.position, rawGoal, bounds)?.point ?? rawGoal : rawGoal
-  if (!navigation) return { actor, goal, turnAround: false }
-  const radius = boneyardEnemyCollisionRadius(actor)
-  const routed = resolveNativeEnemyPathGoal(actor.path, {
-    actorPosition: actor.position, bodyRadius: radius, cadenceTicks: cadence,
-    navigationClearance: 25, rawGoal: goal, targetPosition,
-    targetRefreshTicks: nativeEnemyTargetRefreshTicks(actor.config.pathfindingMode),
-    directPathClear: (start, end) => navigation.isPathClear({
-      actorId: actor.id, bodyRadius: radius, start, end, navigationClearance: 25, radius: 0,
-    }),
-    findRoute: (start, end, clearance, bodyRadius) => navigation.findRoute({
-      actorId: actor.id, bodyRadius, start, end, navigationClearance: clearance, radius: clearance,
-    }),
-  })
-  return { actor: { ...actor, path: routed.state }, goal: routed.goal, turnAround: routed.turnAround }
 }
 
 export function stepSpiderWebs(work: WorkingStep, context: BoneyardEnemyStoreStepContext): void {
@@ -258,7 +229,7 @@ function stepDegradedSpider(
   const rawGoal = target?.position ?? {
     x: actor.position.x + direction.x * speed, y: actor.position.y + direction.y * speed,
   }
-  const routed = routeGoal(actor, rawGoal, target?.position ?? null, context, cadence)
+  const routed = routeNativeEnemyGoal(actor, rawGoal, target?.position ?? null, context, cadence)
   const heading = actorHeadingFromVector(routed.goal.x - actor.position.x, routed.goal.y - actor.position.y)
   const facing = directionFromHeading(heading)
   const delta = { x: Math.fround(facing.x * speed), y: Math.fround(facing.y * speed) }
