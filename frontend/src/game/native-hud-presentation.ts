@@ -61,6 +61,10 @@ export interface NativeHudSkillBindingPresentation {
   readonly skillId: number
 }
 
+export function nativeHudMeterOffset(bindings: readonly NativeHudSkillBindingPresentation[]): number {
+  return bindings.some(({ binding }) => binding === 20) ? 70 : 50
+}
+
 export interface NativeTutorialSelectedHudLayout {
   readonly firstLine: Readonly<{ x: number; y: number }>
   readonly pointer: Readonly<{

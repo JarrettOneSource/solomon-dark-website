@@ -30,6 +30,7 @@ import {
   nativeHealthHudLayers,
   nativeHealthHudPresentation,
   nativeHudLeftOriginClipPath,
+  nativeHudMeterOffset,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
   type NativeHudSkillBinding,
@@ -247,6 +248,7 @@ export default function GameHud({
       data-ui-scale={uiScale}
       style={{
         '--game-ui-scale': uiScale,
+        '--native-hud-meter-offset': `${nativeHudMeterOffset(skillBindings)}px`,
         height: viewport.height / uiScale,
         inset: 'auto',
         left: viewport.width / 2,

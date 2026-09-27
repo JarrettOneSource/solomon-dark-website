@@ -35,8 +35,11 @@ manaTrack = manaCore + 10
 manaVisible = manaCore * clamp(currentMana / maximumMana, 0, 1)
 ```
 
-Health keeps track/core right edges at native `750/745` and grows left. Mana
-keeps track/core left edges at `850/855` and grows right. Rank-one 100 HP and
+With concentration B empty, Health keeps track/core right edges at native
+`750/745` and grows left; Mana keeps track/core left edges at `850/855` and
+grows right. Occupied B shifts both tracks outward by 20, to Health `730/725`
+and Mana `870/875`; the September 27 report 41 reopening below corrects the
+previous unconditional-anchor claim. Rank-one 100 HP and
 200 MP each produce core 125 / track 135. Authored maximum ranks produce HP
 core 425 / track 435 and MP core 412.5 / track 422.5; stock applies no authored-
 rank width cap. Reserve uses the dynamic mana core and its right edge. Magic
@@ -167,3 +170,108 @@ Linux and the Mac mini. Native Windows additionally passes the six derived-HUD
 contracts, all 491 static contracts, and the complete Release build with zero
 warnings/errors. The x86 loader build is correctly Windows-only; no Mac binary
 build is claimed. No member remains blocked by the browser platform.
+
+
+## 2026-09-27 — Report 41: Split Mind concentration and meter overlap
+
+### Evidence and causal model
+
+Two archived screenshots show selected concentration art crossing the mana
+track's left edge. Their SHA-256 values are
+`ac297257628b9c90d1815746825e8b50555e0a8352a19524557341ddf2ba3444`
+and `88953fc8b2b8d35fc3b6a006f968cef61b2f16f92a0c0dc6ecbbb12bd6cee1b7`.
+The reporter suggests grouping icons closer. Native instructions establish
+that the missing behavior belongs to the meter anchors instead.
+
+Fresh read-only Ghidra 12.0.3 slot 01 recovery verifies retail 0.72.5,
+4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`. Existing Mod Loader wrapper/scripts and canonical
+project remain unchanged. `0x005D50E0` still lays out primary/B/A centers at
+`760/800/840` (single concentration `780/820`); `0x005D367A..0x005D399F`
+paints their exact centers with float `.75` scale/alpha. Those values and
+40 x 65 click rectangles are already correct.
+
+The previous closure missed two binding-dependent translation branches inside
+`Game::RenderHUD 0x005D2520`. Mana pushes binding 20 at `0x005D2CA9`, resolves
+it through `0x0046B140` at `0x005D2D18`, compares against -1 and adds double 20
+(`0x007DE920`) to X at `0x005D2D2F`. Health pushes the same binding at
+`0x005D2F3C` and subtracts double 20 at `0x005D2FBF` after the same occupied
+check. Thus the common meter inset from viewport center is 50 with B empty,
+70 with B occupied, independently of the A slot. Width/fill/shield/reserve
+geometry travels with its owning meter. Fixed web inset 50 omits this native
+branch. For Enchant Staff record 92 at center 840, its 41px logical width at
+.75 scale reaches 855.375, crossing the old mana edge 850 by 5.375 pixels.
+The native occupied-B mana edge 870 clears that art by 14.625 pixels.
+
+### Boundary and membership
+
+The owning system is binding-dependent selected-HUD/meter placement in the
+shared Hub/Boneyard GameHud. It includes zero/A-only/B-only/A+B layouts, all
+five pure primaries, ten authored Weld icons, Plane Orb, all fourteen valid
+concentration records, HUD click rectangles and all child meter layers.
+Skill acquisition, concentration mechanics, vital-value writers, dynamic
+meter-width calculations and custom mobile repositioning remain separate
+owners. Native viewport width-cap branches exist in the surrounding renderer
+(`0x005D2C64..0x005D2C93`, `0x005D3042..0x005D3071`); they are separate
+from the inward anchor and cannot explain this overlap. No width or fill
+formula is changed by this correction.
+
+| Member | Investigation disposition | Proof required |
+| --- | --- | --- |
+| Empty/A-only binding cluster and default meter inset | existing native model retained | Default geometry and return after clearing B |
+| B-only and A+B meter insets | recovered-pending-port | Exact 70 inset for both meters; no dependence on A or a merely owned charm |
+| All primary/Weld/Plane Orb and 14 concentration art records | existing icon resolver retained | Full catalog bounds stay between correct inward edges |
+| Native icon centers, 40 x 65 hit rectangles and selector input | existing native model retained | Centers/hits unchanged; real A/B selector activation after reposition |
+| Track, fill, poison, Magic Shield and reserve layers | shared meter parent owns placement | All shift together; widths and fill ratios remain unchanged |
+| Hub/Boneyard, viewport/UI scaling, touch and lifecycle | shared GameHud owner | Real desktop/touch scenes and live selection changes with clean errors |
+| Vital-value mechanics, dynamic widths, arbitrary custom mobile placement | out-of-system; independent owners | Preserve existing contracts and regression suites |
+
+### Implementation and acceptance plan
+
+Reproduce the overlap through the current real GameHud before edits. Add the
+native occupied-B offset to the existing HUD presentation model and feed
+both meter CSS anchors from that one value. Do not shrink icons or alter
+click targets to conceal the missing branch. Test the binding cases and all
+art families; verify live default/Split Mind transitions, selector clicks,
+Hub/Boneyard and responsive views. Run all Website checks and built browser
+acceptance on Windows/WSL, then publish and clean task paths before report 42.
+
+
+### Reproduction and initial implementation
+
+The unmodified WSL browser reproduces the submitted layout in a private
+profile with Lightning, Enchant Staff A and Rush B. Track inward edges are
+-50/+50 relative to center; Enchant Staff reaches +55.375, a 5.375-pixel overlap.
+The regression fails on the missing native 70 inset with empty browser/host
+error arrays. The baseline screenshot visibly matches the reported overlap.
+
+The repair adds one binding-derived meter offset to the existing presentation
+model. GameHud publishes that value to both CSS anchors; every meter layer
+moves with its parent. Icon spacing, art, input rectangles, gameplay state and
+wire/save formats are unchanged. All 13 focused HUD tests pass, including all
+16 primary/Weld/Plane Orb variants across the binding layouts and all 14
+concentration records, checking both bitmap and click bounds against the
+correct native meter edges. The existing derived-HUD smoke also gains exact
+Split Mind anchor assertions. Live complete browser acceptance is in progress.
+
+
+### Completed preflight before canonical acceptance
+
+The maintained desktop journey passes 24 layout samples, including widths
+1280, 1600 and the submitted 2409-pixel aspect, zero/A-only/B-only/full slots,
+all 14 concentrations, real addressed A/B selection and Hub-to-Boneyard entry.
+Touch at 896x414, DPR2 and 150% UI scale passes 22 samples through the same
+selection/lifecycle paths. Both use Chrome 150.0.7871.124 on WSL and have empty
+page, console, failed-response and host error arrays. The initial repaired
+layout keeps all icon centers and widths identical while moving each meter
+20 pixels outward. Both repaired screenshots were visually reviewed.
+Application/test TypeScript checks and frontend lint also pass. The full
+canonical gate and post-build desktop/touch journeys remain required.
+
+Verified read-only tooling hashes: wrapper
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`,
+`decompile_targets.py`
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+`dump_function_instructions.py`
+`273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef`.

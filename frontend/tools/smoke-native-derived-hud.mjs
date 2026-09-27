@@ -288,6 +288,8 @@ try {
     timeout: 10_000,
   })
   const splitMindHud = await measureHud(page)
+  assert.equal(splitMindHud.health.right, 730)
+  assert.equal(splitMindHud.mana.left, 870)
   assert.deepEqual(splitMindHud.bindings, [
     { binding: 12, centerX: 760, record: 67 },
     { binding: 16, centerX: 840, record: 84 },

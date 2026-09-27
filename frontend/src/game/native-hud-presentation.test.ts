@@ -2,16 +2,47 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { NATIVE_WELD_BUILDS } from './core-kernels/player-progression.ts'
+import { CONCENTRATABLE_SKILL_IDS } from './core-kernels/player-skill-runtime.ts'
+import { nativeUiRecord } from './native-ui/native-ui-catalog.ts'
 import {
   nativeHealthHudLayers,
   nativeHealthHudPresentation,
   nativeHudSkillActionRect,
   nativeHudLeftOriginClipPath,
+  nativeHudMeterOffset,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
   nativeTutorialSelectedHudLayout,
   nativeTutorialSelectedHudLayoutFromCenters,
 } from './native-hud-presentation.ts'
+
+test('occupied concentration B opens the native meter gap for every authored selected icon', () => {
+  const primaries = [
+    ...[8, 16, 24, 32, 40].map(selectedPrimarySkillId => ({ selectedPrimarySkillId, weldBuildId: null, planewalkerActive: false })),
+    ...NATIVE_WELD_BUILDS.map(build => ({ selectedPrimarySkillId: 52, weldBuildId: build.id, planewalkerActive: false })),
+    { selectedPrimarySkillId: 8, weldBuildId: null, planewalkerActive: true },
+  ]
+  const layouts: readonly (readonly [readonly [number | null, number | null], number, number])[] = [
+    [[null, null], 750, 850], [[65, null], 750, 850], [[null, 67], 730, 870],
+    ...CONCENTRATABLE_SKILL_IDS.map(skillId => [[skillId, skillId === 67 ? 65 : 67], 730, 870] as const),
+  ]
+  for (const primary of primaries) {
+    for (const [concentrationSkillIds, healthRight, manaLeft] of layouts) {
+      const bindings = nativeHudSkillBindings({ ...primary, concentrationSkillIds })
+      const inset = nativeHudMeterOffset(bindings)
+      assert.equal(800 - inset, healthRight)
+      assert.equal(800 + inset, manaLeft)
+      for (const binding of bindings) {
+        const halfWidth = nativeUiRecord('Skills', binding.record).logicalSize[0] * .75 / 2
+        const center = 800 + binding.centerOffset
+        assert.ok(center - halfWidth >= healthRight && center + halfWidth <= manaLeft,
+          `Skills.${binding.record} must clear the inward meter edges`)
+        const action = nativeHudSkillActionRect(binding.centerOffset)
+        assert.ok(action.left >= healthRight && action.left + action.width <= manaLeft)
+      }
+    }
+  }
+})
 
 test('orders additive life and Magic Shield strips across the first-hit crossover', () => {
   assert.deepEqual(nativeHealthHudLayers(0.5184, 0), [

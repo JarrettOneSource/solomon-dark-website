@@ -295,11 +295,11 @@
 }
 
 .hub-hud-meter-health {
-  right: calc(50% + 50px);
+  right: calc(50% + var(--native-hud-meter-offset));
 }
 
 .hub-hud-meter-mana {
-  left: calc(50% + 50px);
+  left: calc(50% + var(--native-hud-meter-offset));
 }
 
 .hub-hud-meter-frame {
