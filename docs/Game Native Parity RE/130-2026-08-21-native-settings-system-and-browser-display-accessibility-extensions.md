@@ -987,3 +987,42 @@ the mix lane, live master mute/restoration, direct-to-master streams and
 independent authored per-cue gain. Extend the existing paused resize/image
 regression to the touch journey as well, so the shared redraw repair is
 measured on both viewport families.
+
+### Final report38 acceptance — September 27, 2026
+
+Exact candidate `aae80b3d16ec4d123fff4599fa5d85dc3e5d0609`, based on published
+`1447e297`, passes `bash ./scripts/validate.sh` on the user-directed WSL host
+with Node 22.17.0 and .NET SDK 10.0.302. The gate includes 3,895 Node test
+executions and 24 backend/contract tests with zero failures, production builds,
+and the configured renderer quality checks: 100% measured coverage and mutation
+score, 468 killed mutations, one timeout, 147 compile errors, 24 previously
+reviewed equivalents and no survivors. Gate-log SHA-256:
+`09a62e137aae5466efe08e5caccae2ac58f0c7c10702cc4cc0d8e33c751f6e32`.
+
+The dependent Chrome 150.0.7871.124 development, production desktop and
+production touch Settings journeys all pass with empty page/console error
+and failed-response arrays. Title persistence, controls, Dark Cloud return,
+Hub movement/settings and Boneyard graphics changes pass. Both production
+viewport families preserve visible paused world pixels and restore the exact
+pre-resize image without advancing its tick or presentation counter:
+
+| Journey | Frozen frame | Frozen tick | Before/restored RGBA SHA-256 |
+| --- | --- | --- | --- |
+| Built desktop, 1600x900 | 19 | 7670.08 | `fc28e66de2e52673949c225445d1324288fd2db6a22abd3de7651ec360a5774e` |
+| Built touch, 896x414 at DPR 2 | 18 | 10710.11 | `714100ca48fba237f860c794aed32c0ab87514239c1bb9e04604a9852107aad4` |
+
+The development-only ownership regression retains all 16 Hail actors at tick
+8,453/frame 2 after later sampling and full source retirement; all three image
+hashes are `2f81506ad0a56b927e09abde850a5aa02e897da5f64142cdc1e85c7c4e57a56d`.
+The final desktop/touch Settings captures were visually reviewed. The touch
+journey also verifies effective sound/music gain under the iOS media-volume
+model; it is Chrome touch emulation, not a physical Safari-device receipt.
+
+The accepted implementation repairs paused redraw and retained Hail ownership.
+The Enhanced Effects Off feature remains explicitly deferred: its stock
+movement/effect simulation consumers cannot be represented by a peer-local
+renderer toggle. Light Quality remains independently usable, with the earlier
+resolution-dependent target-size findings preserved. These Settings checks do
+not claim a particular late-wave FPS gain or reopen report37's separate
+accepted performance result. Only this acceptance documentation changes after
+the final gate; publication and cleanup receipts belong to the report archive.
