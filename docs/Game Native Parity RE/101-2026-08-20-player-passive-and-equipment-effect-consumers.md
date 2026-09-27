@@ -1004,3 +1004,42 @@ acceptance journey already addresses this headless-renderer round-trip delay
 by enqueueing the four ordered CDP touch start/end commands together. The
 inventory journey reuses that sequence; game input timing is unchanged. The
 probe is disposable test instrumentation, not a runtime behavior change.
+
+### Contact acceptance scope and timing evidence
+
+The complete desktop and touch inventory matrices both passed 20 cases. The
+first contact run then failed an existing broader Staff test's moving-clock
+freshness check. A focused trace recorded 16 browser reads taking
+601.95–670.74 ms each. Every rendered tick was at least 30.04 ticks newer than
+the host state when the read began, yet comparison with the host clock after
+the round trip reported 26.95–32.96 ticks of apparent lag against a ten-tick
+limit. The renderer identified itself as ANGLE Vulkan SwiftShader. This is
+functional browser evidence, not a hardware FPS receipt.
+
+A fixed committed-tick barrier passed. The broader test also requires reversing
+movement during one short Staff action, which retired during the CDP round trip;
+an earlier diagnostic stopped at an unrelated Solomon rising-pose sample. These
+animation timing checks do not establish the melee-equipment contract. The
+existing `--staff-melee-only` journey remains separate. Report 42 now uses
+`--staff-equipment-only`, reusing the same real host, browser, Boneyard admission,
+collision-safe target staging and keyboard driver. A continuous host observer
+records action admission, target contact and HP loss throughout the input calls;
+a browser RAF observer records actual Staff attachment/robe poses 1..6. Logical
+Staff actions are intentionally excluded from the spell-sprite renderer, so its
+spell-kind list is not the correct visual observation point.
+
+The focused fixture grants rank-one Enchant Staff through the existing public
+entity-store operation, keeps Fortunate Flailing at zero, stages a harmless
+hostile, and leaves player health unchanged. It tests a +5 Brutal Wand with no
+attack or target-health change, then a +5 Brutal Staff with and without Brute.
+Both Staff cases must admit contacts, deal exactly four damage per hit and show
+the corresponding rendered pose and reduced enemy health. No runtime behavior,
+input window, quality analyzer or FPS threshold is changed by this test work.
+
+The focused development contact journey passed. Wand input produced three
+hostile-contact samples over 151 simulation ticks, zero Staff actions and no
+target HP loss. The neutral Brutal Staff and Brute-equipped Brutal Staff each
+produced two observed actions, two target contacts and two four-point HP losses.
+Both showed native attachment/robe poses 2 and 3 and replicated reduced enemy
+health. Browser page, failed-response, protocol and host error arrays were
+empty. Canonical validation and the built candidate journeys remain pending.

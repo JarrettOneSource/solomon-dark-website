@@ -37,11 +37,12 @@ import {
 } from '../src/game/core-server/boneyard-enemy-navigation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../src/game/host/native-generated-boneyards.ts'
-import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression, getPlayerSkillBook } from '../src/game/core-server/game-simulation.ts'
+import { grantPlayerEntitySkillRanks, replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { EntityReplicationReconstructor, REPLICATED_ENTITY_TYPES } from '../src/game/protocol/entity-replication.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
@@ -54,6 +55,7 @@ const openingOnly = process.argv.includes('--opening-only')
 const portalOnly = process.argv.includes('--portal-only')
 const slumpgutOnly = process.argv.includes('--slumpgut-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
+const staffEquipmentOnly = process.argv.includes('--staff-equipment-only')
 const deathEffectsOnly = process.argv.includes('--death-effects-only')
 const spiderOnly = process.argv.includes('--spider-only')
 const zombieGasOnly = process.argv.includes('--zombie-gas-only')
@@ -156,7 +158,23 @@ await page.addInitScript((runtime) => {
 await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
-  if (spawnReachabilityOnly) {
+  if (staffEquipmentOnly) {
+    await enterBoneyard(page)
+    const playerId = host.hostPlayerId()
+    assert.ok(playerId)
+    await openBoneyardCombat(host, playerId)
+    const loaded = await waitForWireValue(page, wire, receipt => receipt.loadedBoneyard, 15_000, 'contact Boneyard')
+    const equipmentContact = await proveStaffEquipmentContact(page, playerId, {
+      bounds: loaded.scene.bounds,
+      collision: createBoneyardCollisionWorld(loaded.scene),
+      scene: loaded.scene,
+    })
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    assert.deepEqual(hostErrors, [])
+    process.stdout.write(`${JSON.stringify({ status: 'ok', productionFrontend, equipmentContact, errors, failedResponses, hostErrors })}\n`)
+  } else if (spawnReachabilityOnly) {
     await enterBoneyard(page)
     const { acceptSpawnReachability } = await import('./spawn-reachability-smoke-acceptance.mjs')
     const spawns = await acceptSpawnReachability({ host, page, wire, screenshotPath })
@@ -2641,7 +2659,6 @@ async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {
   setCombatTrialVitals(initialState, playerId)
   const stagedTargetId = stageStaffMovementTarget(initialState, playerId, navigation)
   stabilizeStaffMeleeEnemies(initialState, playerId, stagedTargetId)
-  const wand = await proveWandCannotMelee(page, playerId, stagedTargetId)
   await waitForStaffPresentationReady(page)
   initialState = host.state()
   const existingSmokeIds = new Set(initialState.primarySpells.transients
@@ -2825,11 +2842,109 @@ async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {
     repeatContactId: repeatContact.id,
     repeatDamage,
     smoke,
-    wand,
     targetId: targetAtAction.id,
     stagedTargetId,
     targetToken: targetAtAction.enemyToken,
   }
+}
+
+async function proveStaffEquipmentContact(page, playerId, navigation) {
+  const initial = host.state()
+  assert.equal(getPlayerSkillBook(initial, playerId).effectiveRanks[65], 0)
+  const learned = grantPlayerEntitySkillRanks(initial.playerEntities, playerId, 65, 1, initial.gameRng)
+  Object.assign(initial, { playerEntities: learned.store, gameRng: learned.rng })
+  assert.equal(getPlayerSkillBook(initial, playerId).effectiveRanks[65], 1)
+  assert.equal(getPlayerSkillBook(initial, playerId).effectiveRanks[71], 0)
+  const targetId = stageStaffMovementTarget(initial, playerId, navigation)
+  stabilizeStaffMeleeEnemies(initial, playerId, targetId)
+  const wand = await proveWandCannotMelee(page, playerId, targetId)
+  const trials = []
+  for (const brute of [false, true]) {
+    await waitUntil(() => !host.state().primarySpells.transients.some(actor => actor.ownerId === playerId
+      && (actor.kind === 'player-staff-melee' || actor.kind === 'player-staff-spin')),
+    'previous Staff action did not retire', 10_000)
+    const current = host.state()
+    const economy = getPlayerEconomy(current, playerId)
+    current.playerEntities = replacePlayerEconomy(current.playerEntities, playerId, {
+      ...economy,
+      nextItemId: economy.nextItemId + 1,
+      ownedPerkSelectors: [...economy.ownedPerkSelectors.filter(selector => selector !== 26), ...(brute ? [26] : [])],
+      equipment: { ...economy.equipment, weapon: {
+        id: economy.nextItemId, kind: 'equipment', equipmentType: 'staff',
+        generatedLevel: 1, iconRecords: [72], name: 'Brutal Staff',
+        nativeEffects: [{ kind: 3, magnitude: 5, operator: 0, target: 0 }],
+        nativeSelector: 0, nativeSubtype: null, nativeTypeId: 7004,
+        quantity: 1, rarity: null, recipeIndex: null,
+      } },
+    })
+    // Synchronize to an already committed state; a post-CDP comparison with
+    // a moving host clock includes the browser round trip in its apparent lag.
+    const checkpointTick = current.tick
+    await page.waitForFunction(tick => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      return frame?.arenaTransitionPhase === 'sealed' && frame.tick > tick
+    }, checkpointTick, { timeout: 15_000 })
+    await page.evaluate(() => {
+      window.__staffEquipmentRenderedPoses = []
+      const sample = () => {
+        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+        const pose = frame?.playerAttachmentPose
+        if (pose >= 1 && pose <= 6 && frame.playerRobeFixedPose === pose
+          && !window.__staffEquipmentRenderedPoses.includes(pose)) {
+          window.__staffEquipmentRenderedPoses.push(pose)
+        }
+        window.__staffEquipmentFrameProbe = requestAnimationFrame(sample)
+      }
+      window.__staffEquipmentFrameProbe = requestAnimationFrame(sample)
+    })
+    const beforeHealth = host.state().world.enemies.actors.find(actor => actor.id === targetId).currentHealth
+    let previousHealth = beforeHealth
+    const damage = []
+    const actionIds = new Set()
+    const contactIds = new Set()
+    const sampleAuthority = () => {
+      const state = host.state()
+      const target = state.world.enemies.actors.find(actor => actor.id === targetId)
+      if (target.currentHealth < previousHealth) damage.push(previousHealth - target.currentHealth)
+      previousHealth = target.currentHealth
+      for (const actor of state.primarySpells.transients) {
+        if (actor.ownerId !== playerId) continue
+        if (actor.kind === 'player-staff-melee' || actor.kind === 'player-staff-spin') actionIds.add(actor.id)
+        if (actor.kind === 'player-staff-contact' && actor.targetIds.includes(`enemy:${targetId}`)) contactIds.add(actor.id)
+      }
+    }
+    // Observe the host throughout real keyboard gestures so a short action
+    // cannot disappear while Playwright is waiting for the browser to respond.
+    const observer = setInterval(sampleAuthority, 1)
+    let renderedPoses = []
+    try {
+      const deadline = Date.now() + 20_000
+      while (Date.now() < deadline && (damage.length === 0 || renderedPoses.length === 0)) {
+        const direction = stagedStaffTargetDirection(host.state(), playerId, targetId)
+        assert.ok(direction)
+        await pulseMovement(page, movementKeys(direction), 80)
+        sampleAuthority()
+        renderedPoses = await page.evaluate(() => [...window.__staffEquipmentRenderedPoses])
+      }
+      assert.ok(actionIds.size > 0, 'Staff input never admitted an attack')
+      assert.ok(contactIds.size > 0, 'Staff never contacted the staged hostile')
+      assert.ok(damage.length > 0, 'Staff contact did not reduce hostile health')
+      assert.ok(damage.every(value => value === 4), `native row-65 damage with Brute=${brute}: ${damage}`)
+      assert.ok(renderedPoses.length > 0, 'Staff attachment and robe never displayed a melee pose')
+      await page.waitForFunction(({ targetId, beforeHealth }) => (
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.enemySamples
+          .some(actor => actor.id === targetId && actor.currentHealth < beforeHealth)
+      ), { targetId, beforeHealth }, { timeout: 10_000 })
+      await page.screenshot({ path: screenshotPath.replace(/(\.[^.]+)?$/, `-staff-brute-${brute}$1`) })
+    } finally {
+      clearInterval(observer)
+      await page.evaluate(() => cancelAnimationFrame(window.__staffEquipmentFrameProbe))
+    }
+    trials.push({ brute, beforeHealth, afterHealth: previousHealth, damage, actionCount: actionIds.size,
+      contactCount: contactIds.size, renderedPoses, checkpointTick })
+    console.log(JSON.stringify({ staffEquipmentTrial: trials.at(-1) }))
+  }
+  return { fixture: 'Rank-one Enchant Staff, no Flailing, Brutal +5 weapons, staged harmless hostile; unchanged player health.', wand, trials }
 }
 
 async function proveWandCannotMelee(page, playerId, targetId) {
@@ -2850,6 +2965,7 @@ async function proveWandCannotMelee(page, playerId, targetId) {
   let contactSamples = 0
   let samples = 0
   const startTick = initial.tick
+  const targetHealth = initial.world.enemies.actors.find(actor => actor.id === targetId).currentHealth
   const deadline = Date.now() + 15_000
   while (Date.now() < deadline && host.state().tick - startTick < 150) {
     const current = host.state()
@@ -2859,6 +2975,7 @@ async function proveWandCannotMelee(page, playerId, targetId) {
     const state = host.state()
     const target = state.world.enemies.actors.find(actor => actor.id === targetId)
     assert.ok(target)
+    assert.equal(target.currentHealth, targetHealth, 'Wand contact changed hostile health')
     const player = getPlayerCharacter(state, playerId)
     const distance = Math.hypot(target.position.x - player.position.x, target.position.y - player.position.y)
     if (distance <= PLAYER_CHARACTER_RADIUS + boneyardEnemyCollisionRadius(target) + NATIVE_ACTOR_SEPARATION_EPSILON + 2) contactSamples += 1
@@ -3872,7 +3989,7 @@ async function enterBoneyard(page) {
   await page.getByRole('button', { name: chillArrowOnly ? /water/i : /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]')
     .waitFor({ timeout: 30_000 })
-  await page.locator('.create-menu-discipline-arcane').click()
+  await page.locator(staffEquipmentOnly ? '.create-menu-discipline-body' : '.create-menu-discipline-arcane').click()
   await page.getByLabel(/College courtyard/).waitFor({ timeout: 90_000 })
   await page.locator('.match-loading-screen').waitFor({
     state: 'detached',
