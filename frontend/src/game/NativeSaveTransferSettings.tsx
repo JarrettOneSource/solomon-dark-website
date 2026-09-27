@@ -116,7 +116,7 @@ export default function NativeSaveTransferSettings({
             onClick={() => { void exportCurrent() }}
           />
         {!controller.canExport ? (
-          <p className="native-save-transfer-note">Create or import a wizard before exporting.</p>
+          <p className="native-save-transfer-note">Start a new game or import an active save before exporting.</p>
         ) : null}
       </NativeUiSettingsGroup>
       {pendingImport ? (

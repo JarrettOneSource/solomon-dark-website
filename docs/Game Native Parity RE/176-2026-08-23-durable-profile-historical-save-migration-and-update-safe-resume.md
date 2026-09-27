@@ -266,3 +266,35 @@ resulting structure; compatible future-version payloads are admitted. Invalid
 version values and structurally incompatible/corrupt state still reject without
 overwriting the existing row. The backend no longer maintains a separate
 current-version ceiling.
+
+## 2026-09-27 — Report 45: export after terminal profile checkpoint
+
+The reporter saw an error described as “no-continuation state” while trying to
+export after the frozen late run. The original production authority did reach
+Game Over; source `publishSharedProfileCheckpoint` and this ledger's Game Over
+contract intentionally replace the active run with a profile-only document.
+That document retains durable economy/Hagatha state but no wizard skill book,
+world or run, so an exact active-run/stock-wizard export cannot be built from
+it. The original browser save bytes are unavailable; the exact moment its
+owner document changed is not measured.
+
+Current `Game.tsx` offers DOWNLOAD SAVE ARCHIVE whenever any `profileSave`
+exists. `exportWebGameSaveToNativeArchive`, however, first calls
+`restoreGameSaveDocument`, which correctly rejects a null continuation with
+`game save has no resumable continuation`. This is a confirmed UI admission
+defect independent of why snapshots stopped: it advertises a run export for a
+record that has no run. The game-over retirement itself is already at parity
+and must not be rolled back to revive a defeated party.
+
+| Save/export member | Investigation disposition |
+| --- | --- |
+| Active Hub/Boneyard continuation and current wizard export | `verified-already-at-parity`; preserve the complete stock ZIP plus browser support document |
+| Game Over terminal profile-only record | `verified-already-at-parity`; no retired world or dead wizard may reappear as playable continuation |
+| Export availability/copy for profile-only record | `recovered-pending-port`; disable or clearly reject unavailable export before entering the stock converter |
+| New wizard after terminal profile | `verified-already-at-parity`; current continuation makes export available again |
+| Unknown original checkpoint bytes | `out-of-system`; not inferable from the post-run diagnostic archive |
+
+An observable regression must start from a profile-only Game Over record and
+show that export is unavailable with accurate copy, while a live continuation
+still exports the same archive. The frozen Boneyard/pause explanation is
+tracked separately in entry 205.

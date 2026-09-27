@@ -80,7 +80,7 @@ export function failureFromTransportClose(
   if (transport.code === GAME_CONNECTION_TIMEOUT_CLOSE_CODE) {
     return new GameConnectionFailure({
       code: 'connection-timeout',
-      explanation: 'The server stopped receiving responses from this client. The network connection likely stalled long enough to time out.',
+      explanation: 'The game connection stopped responding long enough to time out. Return to the main menu to reconnect.',
       technicalDetail,
       transport,
     })

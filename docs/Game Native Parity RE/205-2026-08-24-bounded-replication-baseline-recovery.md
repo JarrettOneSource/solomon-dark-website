@@ -369,3 +369,64 @@ snapshots as authoritative presentation samples rather than simulation steps.
 - The same exact source passed the canonical Mac gate described in entry 154,
   including `2601/2601` Node tests and the production builds. No protocol or
   save schema changed, and no production push or deployment was performed.
+
+## 2026-09-27 — Report 45: open sockets with minutes of snapshot silence
+
+The wave-47 report describes a frozen Boneyard with local inventory/skill
+menus still usable, no pause response, and an export error. A Boulder and
+third Deep Portal are reported context, not an established transport cause.
+The read-only production run archive and journal establish a stronger
+boundary: the two-player authority reached wave ordinal 51, third Portal
+phase, and Game Over at tick 385260. One player became a spectator around
+tick 365780 while the other continued. The archive's worst-tick state carried
+a held Gargantuan Earth projectile; it does not show that projectile causing
+the later snapshot silence. The incident revision is
+`02054b997ad9d542b4b1fef0afbb27cee25182e6`, protocol 136. Current
+recovery/export source is unchanged from it.
+
+Production client diagnostic rows 236/237 each retain 60 consecutive
+one-second samples with zero snapshots and last presented server tick
+382330. Their longest observed snapshot gaps reached about 130 and 197
+seconds while browser frames continued; sockets closed later with code 1001.
+The host advanced another 2,930 ticks and recorded a normal game-over
+archive, not a process crash. Journal flow-control episodes for both peers
+had recovered by 06:03:08 UTC; none was active at the frozen interval, and
+no `simulation.tick_failed` or `replication.baseline_missing` was logged.
+The archive is sampled state, not a continuous wire recording, and contains
+no peer recovery field at the missing-snapshot edge.
+
+The remaining source gate capable of silently skipping every snapshot for
+an otherwise open peer is `replicationRecovery.keyframeSequence !== null` in
+`broadcastSnapshot`. It waits for one exact ACK with no liveness deadline,
+retry, diagnostic or close. A client-requested keyframe is not logged at
+entry, so the original peer state cannot be proved from historical logs.
+This is a falsifiable leading explanation, not a claim that the original
+Boulder triggered it. A focused test must first reproduce the indefinite
+silence while the authority and healthy peer advance; the fix must bound a
+stalled player and observer lane without weakening ordinary ACKs, flow
+control, or valid recovery. Browser acceptance must exercise the frozen-lane
+recovery/closure and active-world presentation, including pause availability.
+
+The pre-fix WSL host regression has now reproduced that exact open-socket
+liveness defect: one client requests a recovery keyframe and withholds its
+ACK, another client continues receiving frames, and the first receives no
+more snapshots or timeout event for five seconds. The browser's historical
+recovery state remains unrecorded, so this test proves the source failure
+mode and its symptom shape rather than retroactively proving the trigger.
+
+| Recovery member | Investigation disposition |
+| --- | --- |
+| Ordinary retained ACK and healthy peer | `verified-already-at-parity`; preserve strict monotonic baseline and unaffected peer |
+| Player and observer client-request/evicted-baseline recovery | `recovered-pending-port`; prove stalled keyframe-ACK branch and bound it |
+| Initial recovery keyframe and stale ACKs | `verified-already-at-parity`; preserve one finite prefix and exact ACK completion |
+| Unacknowledged recovery-keyframe liveness | `recovered-pending-port`; no current timeout, retry, log or terminal outcome |
+| High/low-water ordinary flow control | `verified-already-at-parity`; production episode pairs recovered before the observed silence |
+| Host Game Over and socket teardown | `verified-already-at-parity` for authority; client must not remain indefinitely on a stale active frame |
+| Browser timeout surface and menu return | `recovered-pending-port`; a timed-out client needs a visible route back to its saved-game menu |
+| Stock executable | `out-of-system`; this is Website-only compact replication and browser transport |
+
+The export/profile-only consequence belongs to entry 176. The missing
+frame-level recording prevents identifying the exact historical recovery
+request, and the reporter's wave number cannot override the authoritative
+wave-51 archive. If the controlled reproduction fails to match the live
+silence, return to the source gates before modifying transport policy.

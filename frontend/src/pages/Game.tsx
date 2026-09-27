@@ -396,6 +396,9 @@ export default function Game() {
   const exportCurrentNativeSave = useCallback(async () => {
     const current = saveCoordinator.current?.current()
     if (!current) throw new Error('Create or import a wizard before exporting.')
+    if (parseGameSaveDocument(current.document).continuation === null) {
+      throw new Error('This run has ended. Start a new game before exporting a save.')
+    }
     const { exportWebGameSaveToNativeArchive } = await import(
       '../game/save/game-save-portability.ts'
     )
@@ -404,14 +407,14 @@ export default function Game() {
   }, [])
 
   const nativeSaveTransfer = useMemo<NativeSaveTransferController>(() => Object.freeze({
-    canExport: profileSave !== null,
+    canExport: resumeSave !== null,
     exportCurrent: exportCurrentNativeSave,
     inspectImport: inspectNativeSaveImport,
     replaceWithImport: replaceWithNativeSaveImport,
   }), [
     exportCurrentNativeSave,
     inspectNativeSaveImport,
-    profileSave,
+    resumeSave,
     replaceWithNativeSaveImport,
   ])
 

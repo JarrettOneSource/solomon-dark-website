@@ -22,7 +22,7 @@ import { createGameSnapshotFrame, createGameSnapshotProjection, createReplicated
 import type { GameChatActivity, GameChatChannel, GameOnlinePreferences, GamePlayerCardProfile } from '../protocol/game-chat.ts'
 import { gameChatActivityText } from '../protocol/game-chat.ts'
 import type { GameContentManifest, GameSessionKind, GameplayPauseState, GameplayResumeGraceReason, GameplayResumeGraceState } from '../protocol/game-protocol-contract.ts'
-import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_DURATION_MS, GAME_HOST_ENDED_SESSION_CLOSE_CODE, GAME_PROTOCOL_VERSION, GAME_SESSION_REPLACED_CLOSE_CODE, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from '../protocol/game-protocol-contract.ts'
+import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_DURATION_MS, GAME_CONNECTION_TIMEOUT_CLOSE_CODE, GAME_HOST_ENDED_SESSION_CLOSE_CODE, GAME_PROTOCOL_VERSION, GAME_SESSION_REPLACED_CLOSE_CODE, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from '../protocol/game-protocol-contract.ts'
 import { decodeClientGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import type { PartyAction, PartyActionRejection as ProtocolPartyActionRejection, ServerDisconnectMessage } from '../protocol/game-server-messages.ts'
 import { PARTY_ACTION_REJECTIONS } from '../protocol/game-server-messages.ts'
@@ -364,6 +364,7 @@ interface ReplicationRecoveryState {
   readonly cause: 'baseline-missing' | 'client-request'
   readonly firstAcknowledgedSequence: number
   keyframeSequence: number | null
+  keyframeSentAtMs: number | null
   lastStaleAcknowledgedSequence: number
   readonly requestedAtMs: number
   staleAcknowledgementCount: number
@@ -4156,6 +4157,40 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const snapshotSequence = nextSnapshotSequence
     nextSnapshotSequence += 1
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
+    const recoveryKeyframePending = (
+      peer: ReplicationPeer & { readonly socket: WebSocket },
+      connectionRole: 'observer' | 'player',
+      identity: Readonly<Record<string, unknown>>,
+    ): boolean => {
+      const recovery = peer.replicationRecovery
+      if (!recovery || recovery.keyframeSequence === null) return false
+      const elapsedMs = recovery.keyframeSentAtMs === null
+        ? 0
+        : performance.now() - recovery.keyframeSentAtMs
+      if (elapsedMs >= Math.max(200, heartbeatIntervalMs * 4)) {
+        const reason = 'game state updates timed out'
+        disconnectCauses.set(peer.socket, {
+          reason,
+          source: 'replication-recovery-timeout',
+        })
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          'warning',
+          'replication.recovery_timeout',
+          'A replication peer did not acknowledge its recovery keyframe.',
+          logDetails({
+            connectionRole,
+            elapsedMs: Math.round(elapsedMs),
+            ...identity,
+            recoveryKeyframeSequence: recovery.keyframeSequence,
+            staleAcknowledgementCount: recovery.staleAcknowledgementCount,
+          }),
+        )
+        peer.socket.close(GAME_CONNECTION_TIMEOUT_CLOSE_CODE, reason)
+      }
+      return true
+    }
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
       if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
@@ -4166,10 +4201,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.socket.close(1000, 'active party run ended')
         continue
       }
-      if (
-        client.replicationRecovery
-        && client.replicationRecovery.keyframeSequence !== null
-      ) continue
+      if (recoveryKeyframePending(client, 'player', { playerId: client.playerId })) continue
       if (pauseReplicationAtHighWater(
         options.log,
         logDetails,
@@ -4234,15 +4266,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       if (recoveryKeyframe && client.replicationRecovery) {
         client.replicationRecovery.keyframeSequence = snapshotSequence
+        client.replicationRecovery.keyframeSentAtMs = performance.now()
       }
       pruneReplicationBaselines(client)
     }
     for (const observer of observers.values()) {
       if (observer.socket.readyState !== WebSocket.OPEN) continue
-      if (
-        observer.replicationRecovery
-        && observer.replicationRecovery.keyframeSequence !== null
-      ) continue
+      if (recoveryKeyframePending(observer, 'observer', { observerId: observer.observerId })) continue
       const observed = observationWorld(observer.runId)
       if (!observed) {
         disconnectCauses.set(observer.socket, {
@@ -4297,6 +4327,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       observer.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       if (recoveryKeyframe && observer.replicationRecovery) {
         observer.replicationRecovery.keyframeSequence = snapshotSequence
+        observer.replicationRecovery.keyframeSentAtMs = performance.now()
       }
       pruneReplicationBaselines(observer)
     }
@@ -7601,6 +7632,7 @@ function acknowledgeReplicationSnapshot(
       && sequence >= recovery.keyframeSequence
     ) {
       recovery.keyframeSequence = null
+      recovery.keyframeSentAtMs = null
     }
     return { cause: recovery.cause, kind: 'recovery-pending', started: false }
   }
@@ -7626,6 +7658,7 @@ function createReplicationRecovery(
     cause,
     firstAcknowledgedSequence: sequence,
     keyframeSequence: null,
+    keyframeSentAtMs: null,
     lastStaleAcknowledgedSequence: sequence,
     requestedAtMs: performance.now(),
     staleAcknowledgementCount: 0,

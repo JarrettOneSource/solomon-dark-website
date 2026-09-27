@@ -36,6 +36,7 @@ import type {
   PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
+  GAME_CONNECTION_TIMEOUT_CLOSE_CODE,
   GAME_PROTOCOL_VERSION,
   GAME_SESSION_REPLACED_CLOSE_CODE,
 } from '../protocol/game-protocol-contract.ts'
@@ -378,6 +379,7 @@ test('developer observer watches one private run without joining or mutating par
           ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
           : null,
     },
+    heartbeatIntervalMs: 50,
     log: entry => logs.push(entry),
     runtimeEvents: entry => runtimeEvents.push({
       ...entry,
@@ -551,6 +553,29 @@ test('developer observer watches one private run without joining or mutating par
   assert.ok(Number(observerFlowRecovered?.details?.skippedSnapshotCount) > 0)
   assert.equal(host.capacityParticipantCount(), 2)
   assert.equal(host.presence().length, 2)
+  const observerClosed = new Promise<{ code: number; reason: string }>(resolve => {
+    stalledObserver.once('close', (code, reason) => resolve({ code, reason: reason.toString() }))
+  })
+  const beforeRecovery = stalledSnapshots.length
+  stalledObserver.send(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: true,
+    sequence: observerAcknowledged.sequence,
+  }))
+  await waitFor(() => stalledSnapshots.slice(beforeRecovery).some(frame => (
+    frame.frame.world.kind === 'boneyard' && frame.frame.world.entities.keyframe
+  )))
+  await waitFor(() => logs.some(entry => (
+    entry.event === 'replication.recovery_timeout'
+    && entry.details?.observerId === stalledObserverId
+  )))
+  assert.deepEqual(await observerClosed, {
+    code: GAME_CONNECTION_TIMEOUT_CLOSE_CODE,
+    reason: 'game state updates timed out',
+  })
+  assert.equal(host.capacityParticipantCount(), 2)
+  assert.equal(leader.socket.readyState, WebSocket.OPEN)
+  assert.equal(guest.socket.readyState, WebSocket.OPEN)
   leader.socket.off('message', countPlayerFacingCue)
   guest.socket.off('message', countPlayerFacingCue)
 })
@@ -3315,6 +3340,57 @@ test('game host sends a complete keyframe when a client requests recovery', asyn
     recovered.frame.world.entities.spawned.length,
     recovered.snapshot.world.kind === 'hub' ? recovered.snapshot.world.students.length : -1,
   )
+})
+
+test('game host closes an unacknowledged recovery without freezing a healthy peer', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    heartbeatIntervalMs: 50,
+    log: entry => logs.push(entry),
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const stalled = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const healthy = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => closeSocket(stalled.socket))
+  context.after(() => closeSocket(healthy.socket))
+  stalled.stopSnapshotAcknowledgements()
+
+  const stalledFrames: ServerSnapshotMessage[] = []
+  const healthyFrames: ServerSnapshotMessage[] = []
+  stalled.socket.on('message', data => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-snapshot') stalledFrames.push(message)
+  })
+  healthy.socket.on('message', data => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-snapshot') healthyFrames.push(message)
+  })
+  await waitFor(() => stalledFrames.length > 0 && healthyFrames.length > 0)
+  const firstSequence = stalledFrames[0]!.sequence
+  const closed = new Promise<{ code: number; reason: string }>(resolve => {
+    stalled.socket.once('close', (code, reason) => resolve({ code, reason: reason.toString() }))
+  })
+  stalled.socket.send(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: true,
+    sequence: firstSequence,
+  }))
+  await waitFor(() => stalledFrames.some(frame => (
+    frame.sequence > firstSequence
+    && frame.frame.world.kind === 'hub'
+    && frame.frame.world.entities.keyframe
+  )))
+  const healthyBeforeTimeout = healthyFrames.length
+  await waitFor(() => logs.some(entry => entry.event === 'replication.recovery_timeout'))
+  assert.deepEqual(await closed, {
+    code: GAME_CONNECTION_TIMEOUT_CLOSE_CODE,
+    reason: 'game state updates timed out',
+  })
+  assert.ok(healthyFrames.length > healthyBeforeTimeout)
+  assert.equal(healthy.socket.readyState, WebSocket.OPEN)
+  assert.equal(logs.filter(entry => entry.event === 'replication.recovery_timeout').length, 1)
 })
 
 test('game host bounds a slow player before baseline eviction while healthy peers continue', async (context) => {
