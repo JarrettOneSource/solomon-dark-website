@@ -1980,3 +1980,17 @@ made. Four additional Wraith simulation/projection checks pass, including
 Dazzle integration and contact presentation. Final publication requires the
 canonical gate and dependent built desktop/touch journeys on the committed
 candidate, followed by the authorized Discord completion reaction and cleanup.
+
+
+### First canonical gate: contact-fixture correction
+
+Candidate `c16c276e` reached the 2,662-case Boneyard/runtime suite with one
+failure: the shared movement-contact fixture kept every enemy stationary by
+setting `nextMovementTick` to the maximum integer. Wraiths now correctly use
+the native UID cadence and moved away before this contact-only test reached
+them. The fixture now holds its Wraith through the native movement scalar.
+All 42 Boneyard world integration tests pass, including the original failing
+case and every sibling in its contact matrix. Runtime code is unchanged from
+the desktop/touch preflights; the full gate and built journeys must still pass
+on the corrected committed test tree. Failed gate log SHA-256:
+`56c78eef1b269ae19315cff371aa6fddda060aca71a2414e009eaa404b27a075`.

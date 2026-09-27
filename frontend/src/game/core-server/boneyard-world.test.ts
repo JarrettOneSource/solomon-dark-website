@@ -736,6 +736,8 @@ test('movement contact follows the Coffin hidden-to-rising hostile edge', () => 
           ...configuredActor,
           brain: contactBrain,
           nextMovementTick: Number.MAX_SAFE_INTEGER,
+          // Wraith movement uses the UID phase, so its native scalar owns the hold.
+          staffMovementFactor: token === 'WRAITH' ? 0 : configuredActor.staffMovementFactor,
           position: contactPosition,
         }],
       },
