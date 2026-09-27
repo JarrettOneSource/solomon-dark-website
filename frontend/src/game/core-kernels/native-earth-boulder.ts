@@ -60,12 +60,12 @@ export function consumeNativeEarthBoulderContact(
     ? damage
     : damage / (2 * input.toughness))
   const remainingPool = Math.max(0, Math.fround(input.remainingPool - consumed))
-  const charge = Math.fround(Math.min(
+  const charge = Math.min(input.releaseCharge, Math.fround(Math.min(
     input.releaseCharge,
     input.releaseCharge * (
       1 - (1 - remainingPool / input.releaseBaseDamage) * 0.35
     ),
-  ))
+  )))
   return Object.freeze({
     charge,
     continueTraversal: remainingPool > NATIVE_EARTH_BOULDER_TRAVERSAL_POOL_THRESHOLD,

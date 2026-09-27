@@ -341,7 +341,7 @@ export function nativePrimarySkillProfile(
         ...common,
         growthFactor: 1 + rankedOr(statBook, 42, 'mSpeedUp', hastenRank, 0) / 100,
         kind: 'earth',
-        maximumCharge: 1 + rankedOr(statBook, 47, 'mSize', gargantuanRank, 0) / 100,
+        maximumCharge: Math.fround(1 + rankedOr(statBook, 47, 'mSize', gargantuanRank, 0) / 100),
         rockSurgeChance: rankedOr(statBook, 44, 'mChance', surgeRank, 0),
         rockSurgeManaCost: rankedOr(statBook, 44, 'mManaCost', surgeRank, 0)
           * factors.manaCost,

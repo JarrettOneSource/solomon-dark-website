@@ -780,7 +780,7 @@ test('Hasten, Bind, and Gargantuan are captured by the authoritative Boulder act
   assert.ok(boulder?.kind === 'earth')
   assert.equal(born.manaSpent, primarySkill.manaCost / 100)
   assert.equal(boulder.charge, advanceNativeEarthBoulderCharge(0.18, 2, 2.2))
-  assert.equal(boulder.maximumCharge, 2.2)
+  assert.equal(boulder.maximumCharge, Math.fround(2.2))
   assert.equal(boulder.toughness, 5)
 
   const releasable = {

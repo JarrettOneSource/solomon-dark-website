@@ -76,6 +76,20 @@ test('Boulder contact separates payload, pool spend, shrink, traversal, and reti
   })
 })
 
+test('a surviving rank-two Gargantuan Boulder never exceeds its released ceiling', () => {
+  const maximumCharge = 2.2
+  const contact = consumeNativeEarthBoulderContact({
+    releaseBaseDamage: 10,
+    releaseCharge: maximumCharge,
+    remainingPool: nativeEarthBoulderReleasedDamage(10, maximumCharge),
+    targetHealth: 1,
+    toughness: 1,
+  })
+  assert.equal(contact.continueTraversal, true)
+  assert.equal(contact.remainingPool, 12)
+  assert.ok(contact.charge <= maximumCharge)
+})
+
 test('Boulder same-tick threshold is distinct from its zero-pool retirement edge', () => {
   const result = consumeNativeEarthBoulderContact({
     releaseBaseDamage: 10,
@@ -87,7 +101,7 @@ test('Boulder same-tick threshold is distinct from its zero-pool retirement edge
   assert.deepEqual(result, {
     charge: 0.6500315070152283,
     continueTraversal: false,
-    damage: 0.001,
+    damage: Math.fround(0.001),
     depleted: false,
     remainingPool: 0.0008999999845400453,
   })

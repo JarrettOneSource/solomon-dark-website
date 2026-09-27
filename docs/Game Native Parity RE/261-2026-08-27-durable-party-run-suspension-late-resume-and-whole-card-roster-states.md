@@ -107,6 +107,45 @@ document after the process has stopped. Cross-revision recovery without an
 announced target remains rejected because protocol/save compatibility is not
 inferable from a stale client document.
 
+## 2026-09-27 — Report 43: later-player checkpoint clock after rollback
+
+The original production journal records the Report 43 client protocol exits
+and subsequent recovery. On the reconnect path, checkpoint attempts failed at
+both connection and skill-picker close with `game save player 0 hit feedback
+update tick is in the future`. This is confirmed host evidence, separate from
+the reporter's approximate post-reconnect wave numbers. The earlier pass
+established that a later owner imports private player state without replaying
+their browser world, but did not reconcile transient player timestamps when
+the first-returner's checkpoint seeded an older authority clock.
+
+System boundary: signed per-owner checkpoints → first-returner world election
+→ later-member actor/progression import → current-world hit feedback and damage
+history → checkpoint normalization, protocol presentation, and following save.
+Permanent skill ranks, equipment, and economy remain owner-private; world tick,
+run, wave, and enemy state remain first-returner authority. The `hitFeedback`
+and `lastDamageTick` fields are absolute tick-local transients, not portable
+progression. `normalizeSavedPuppetHit` correctly rejects a hit update ahead of
+the saved world clock. `importPlayerEntity` currently copies those transients
+unchanged when `rejoinGameSimulationPlayer` imports the later member.
+
+| Member | Source | Investigation disposition |
+| --- | --- | --- |
+| First-returner signed save/world election and ordered party | recovery host/supervisor, original row 261 | `verified-already-at-parity`: bounded last-accepted document wins; no newer state is invented |
+| Later former member and detached catch-up | `rejoinGameSimulationPlayer`, `importPlayerEntity` | `recovered-pending-port`: retain permanent owner state, rebase/clear only transient clocks that exceed the live world tick |
+| Player hit display and recent-damage consumer | puppet hit state and ML observation | `recovered-pending-port`: do not carry a future clock into presentation or bot history |
+| Save normalization and subsequent checkpoints | `normalizeSavedPuppetHit`, host checkpoint scheduler/sender | `recovered-pending-port`: keep strict save validation and prove post-rejoin save succeeds |
+| Enemy clocks, projectile clocks, wave and run state | first-returner world | `out-of-system`: later member's browser world does not replace these |
+| Terminal/Game Over, roster/capacity and unrelated pause owners | original row 261 | `verified-already-at-parity`: no rejoin-clock change |
+
+The observed original wave rollback is consistent with bounded checkpoints
+followed by both browser exits, but the exact checkpoint bytes from that moment
+are unavailable; it is not evidence for an arbitrary wave reset. A deterministic
+test must import a later member whose hit tick exceeds a current Boneyard tick,
+preserve their permanent skills, and save/restore the resulting world. A real
+browser rejoin/checkpoint journey must then confirm the authority continues
+without protocol or checkpoint errors. The separate Boulder wire failure is
+recorded in entry 048.
+
 ## Ownership thread and recovered behavioral contract
 
 - Party/run authority owns the ordered roster, original leader, recovery ID,

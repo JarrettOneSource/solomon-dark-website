@@ -28,6 +28,7 @@ import type { NativeLootItem } from '../core-kernels/native-loot-items.ts'
 import { NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS, nativeLootModifiers } from '../core-kernels/native-loot.ts'
 import { resolveNativeSkillDamageValue } from '../core-kernels/native-offensive-resolution.ts'
 import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
+import { createNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { NativeSecondarySimulationState, NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
@@ -512,9 +513,23 @@ export function rejoinGameSimulationPlayer(
 
   const worldManagerOrder = createNativeWorldManagerOrder(target.worldManagerOrder)
   const lightRegistration = worldManagerOrder.register('actor')
+  const futureHit = detachedProgression.hitFeedback.tick > target.tick
+  const futureDamage = detachedProgression.lastDamageTick !== null
+    && detachedProgression.lastDamageTick > target.tick
+  const importedProgression = futureHit || futureDamage
+    ? {
+        ...detachedProgression,
+        hitFeedback: futureHit
+          ? createNativePuppetHit(target.tick)
+          : detachedProgression.hitFeedback,
+        lastDamageTick: futureDamage
+          ? null
+          : detachedProgression.lastDamageTick,
+      }
+    : detachedProgression
   let playerEntities = importPlayerEntity(
     target.playerEntities,
-    detached.playerEntities,
+    { ...detached.playerEntities, progressions: [importedProgression] },
     playerId,
     playerId,
     lightRegistration,

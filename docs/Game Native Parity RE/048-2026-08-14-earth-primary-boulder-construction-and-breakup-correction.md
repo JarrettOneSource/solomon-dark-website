@@ -436,3 +436,53 @@ Protocol 106 must accept finite Earth-impact charge throughout the authored
 evaluating the fragment recurrence. The regression owns both a representative
 rank-2 charge `2.2` and the hard upper bound. No renderer fallback or visual
 normalization is permitted.
+
+## 2026-09-27 — Report 43: Gargantuan contact crosses the wire ceiling
+
+### Reopened boundary and evidence
+
+Report 43 describes a mid-run disconnect followed by a checkpoint rollback.
+The original private production run archive and journal, inspected read-only
+on 2026-09-27, give a narrower cause than the reported “crash”: both browsers
+closed with protocol code `4008` and
+`frame.primarySpells.projectiles[0].charge exceeds its native Earth maximum`.
+The authoritative host then closed because its party was empty. Its final
+alive frame was Boneyard wave ordinal 21 and carried a surviving rank-2
+Gargantuan Boulder with `charge=2.200000047683716` and
+`maximumCharge=2.2`; the saved damage pool remained positive. The private
+archive and account identifiers stay outside this public repository.
+
+The existing native evidence in this entry and row 134 establishes the system
+boundary: authored Gargantuan rank/size rows → native float32 Boulder ceiling
+field `+0x1FC` and held charge `+0x74` → release ceiling → ordinary/EBoulder
+actor-contact pool and charge writer `0x006212E5..0x00621321` → surviving
+shell/charge state → strict replicated projectile and terminal impact. All
+rank 0–8 Gargantuan rows share this owner; Hasten, Bind Rocks, Rock Surge and
+low-mana releases feed it through existing branches. Hailstones bypasses the
+whole-carrier charge writer as row 134 records. Hub free flight, Boneyard
+contact, multiplayer observers, save/restore, owner removal, and world teardown
+are the applicable lifetime/consumer paths. The previously closed pass used a
+JavaScript double (`1 + mSize / 100`) for the float32 native ceiling. That
+skipped the producer representation while separately porting the float32
+contact writer; the two numeric domains can disagree.
+
+| Member | Native/web source | Investigation disposition |
+| --- | --- | --- |
+| Gargantuan ranks 0–8, ordinary and low-mana held/released Boulder | authored row 47, `+0x1FC`, profile and charge producer | `recovered-pending-port`: native field is float32; prove every rank ceiling and partial/full release |
+| Hasten, Bind Rocks, Rock Surge | rows 42–44; shared contact inputs | `verified-already-at-parity`: existing rank and release branches; rerun shared regression |
+| Ordinary and EBoulder weak-target survivor, same-tick/later-target traversal | `0x00620B60`, `0x00621450`, row 134 | `recovered-pending-port`: emitted charge and shell must remain at or below released float32 ceiling |
+| Terminal actor/terrain contact, breakup and audio | `0x0060B700`, `0x0060BED0` | `verified-already-at-parity`: retains pre-contact released charge; cover regression |
+| Hub, Boneyard, observers and strict protocol | world/host/codec | `recovered-pending-port`: reject invalid authority output without weakening validation |
+| Save/restore and older checkpoint input | save document and recovery host | `recovered-pending-port`: test whether saved double ceilings can reenter this path |
+| Hailstones inherited contact slot | `0x005FBDE0`, row 134 | `out-of-system`: per-rock path bypasses whole-carrier shrink |
+| Renderer and owner/world teardown | Boulder painter and primary-spell cleanup | `verified-already-at-parity`: consume semantic state and registration; no new visual behavior |
+
+Static falsifier: `Math.fround(Math.min(2.2, 2.2 * (...) ))` can produce
+`2.200000047683716` while the separately stored double ceiling remains `2.2`.
+The archived exact values match this path; a focused pre-fix regression must
+confirm it and cover the strict wire boundary. The checkpoint age, exact wave
+shown to either browser after recovery, and whether the post-disconnect save
+captured this projectile cannot be reconstructed from the retained archive.
+The linked later-member checkpoint failure belongs to the party-rejoin ledger
+261. The fix belongs at the float32 producer/contact seam; relaxing protocol
+validation would admit an impossible native field relationship.

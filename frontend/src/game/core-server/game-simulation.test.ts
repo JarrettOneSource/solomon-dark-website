@@ -12,7 +12,7 @@ import { createModBoastSelection, selectBoast } from '../core-kernels/boast.ts'
 import type { BoastDefinition, BoastResolver } from '../core-kernels/boast.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
 import type { NativeSecondaryAbilityId } from '../core-kernels/native-secondary-ability-contract.ts'
-import { NATIVE_DAMAGE_X4_BONUS_TICKS, NATIVE_WELD_BUILDS } from '../core-kernels/player-progression.ts'
+import { NATIVE_DAMAGE_X4_BONUS_TICKS, NATIVE_WELD_BUILDS, grantPlayerSkillRanks } from '../core-kernels/player-progression.ts'
 import type { NativeBeltSkillId } from '../core-kernels/player-progression.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
@@ -63,6 +63,7 @@ import {
   createNativeSecondaryPlayerState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
@@ -2391,6 +2392,42 @@ test('active-run rejoin imports one durable actor and queues every missed person
   assert.equal(choices, 3)
   assert.equal(together.levelUpBarrier, null)
   assert.equal(stepGameSimulationTick(together, {}).tick, tickBefore + 1)
+})
+
+test('later-member rejoin checkpoints private skills on the current world clock', () => {
+  const first = { discipline: 'arcane', displayName: 'First', element: 'ether' } as const
+  const second = { discipline: 'mind', displayName: 'Second', element: 'water' } as const
+  const loaded = combatBoneyard('rejoin-older-world-clock')
+  let live = enterBoneyardWorld(createGameSimulation({ first, second }), loaded)
+  const detached = detachGameSimulationPlayer(live, 'second')
+  live = removePlayerCharacter(live, 'second')
+  const laterTick = live.tick + 50
+  const laterProgression = {
+    ...detached.playerEntities.progressions[0]!,
+    hitFeedback: { strength: 1, tick: laterTick, timer: 1 },
+    lastDamageTick: laterTick,
+  }
+  const laterMember = {
+    ...detached,
+    playerEntities: {
+      ...detached.playerEntities,
+      progressions: [laterProgression],
+      skillBooks: [grantPlayerSkillRanks(detached.playerEntities.skillBooks[0]!, 34, 1)],
+    },
+  }
+  const retainedSkills = laterMember.playerEntities.skillBooks[0]
+  assert.equal(retainedSkills.permanentRanks[34], 1)
+  const rejoined = rejoinGameSimulationPlayer(live, laterMember, 'second', null)
+  assert.deepEqual(getPlayerSkillBook(rejoined, 'second'), retainedSkills)
+  assert.ok(getPlayerProgression(rejoined, 'second').hitFeedback.tick <= rejoined.tick)
+  assert.ok((getPlayerProgression(rejoined, 'second').lastDamageTick ?? 0) <= rejoined.tick)
+  const checkpoint = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: loaded, mods: [], modState: {},
+    playerId: 'second', state: rejoined,
+  })
+  const restored = restoreGameSaveDocument(checkpoint)
+  assert.equal(restored.state.tick, live.tick)
+  assert.deepEqual(getPlayerSkillBook(restored.state, 'second'), retainedSkills)
 })
 
 test('active-run rejoin re-registers a detached death weapon in destination painter order', () => {

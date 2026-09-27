@@ -335,13 +335,27 @@ test('resolves Earth growth, toughness, surge, and Gargantuan ceiling', () => {
     growthFactor: 2,
     kind: 'earth',
     manaCost: (14 + 0.2 + 0.2 + 0.2) * 0.75,
-    maximumCharge: 2.2,
+    maximumCharge: Math.fround(2.2),
     rank: 3,
     rockSurgeChance: 25,
     rockSurgeManaCost: 90 * 0.75,
     skillId: 40,
     toughness: 5,
   })
+})
+
+test('every authored Gargantuan ceiling uses the native float32 field domain', () => {
+  const sizes = [0, 100, 120, 140, 160, 170, 180, 190, 200]
+  for (let rank = 0; rank < sizes.length; rank += 1) {
+    const profile = nativePrimarySkillProfile(
+      book('earth', { 40: 1, 47: rank }),
+      playerStatBook(),
+      { damage: 1, manaCost: 1 },
+    )
+    assert.equal(profile.kind, 'earth')
+    if (profile.kind !== 'earth') throw new Error('expected Earth profile')
+    assert.equal(profile.maximumCharge, Math.fround(1 + sizes[rank]! / 100), `rank ${rank}`)
+  }
 })
 
 test('resolves the selected welded build ahead of the elemental primary', () => {

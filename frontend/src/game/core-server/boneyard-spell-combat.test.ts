@@ -2,6 +2,7 @@ import { createNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { primarySpellProjectile } from '../protocol/codecs/primary-projectiles.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import { drawNativeSpellDamage } from '../core-kernels/air-water-spell-actors.ts'
@@ -1301,6 +1302,35 @@ test('Earth gathers strict roots once, shrinks, and sheds one independent contac
   assert.deepEqual(repeated.spells.projectiles, first.spells.projectiles)
   assert.equal(repeated.spells.transients[0]?.kind, 'earth-boulder-bit')
   assert.equal(repeated.spells.transients[0]?.ageTicks, 0)
+})
+
+test('rank-two Boulder survives a weak target with a wire-valid float32 charge', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+  ])
+  for (const releasedCharge of [2.2, Math.fround(2.2)]) {
+    const result = resolveBoneyardSpellCombat(
+      enemies,
+      spellState({ projectiles: [projectile({
+        charge: releasedCharge,
+        damage: 10,
+        id: 43,
+        kind: 'earth',
+        remainingDamage: 12.5,
+      })] }),
+      [], 1, WORLD_KEY, COMBAT_RNG,
+    )
+    const survivor = result.spells.projectiles[0]
+    assert.ok(survivor?.kind === 'earth')
+    assert.equal(result.hits.length, 1)
+    assert.ok(survivor.remainingDamage > 0)
+    assert.ok(survivor.charge <= survivor.maximumCharge)
+    assert.equal(survivor.shellCharge, survivor.charge)
+    assert.doesNotThrow(() => primarySpellProjectile({
+      ...survivor,
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 43 }],
+    }, 'frame.primarySpells.projectiles[0]'))
+  }
 })
 
 test('Earth contact rocks consume the shared actor registrar instead of the spell id', () => {
