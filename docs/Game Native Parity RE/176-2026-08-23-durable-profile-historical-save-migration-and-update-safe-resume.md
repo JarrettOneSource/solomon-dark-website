@@ -286,11 +286,11 @@ defect independent of why snapshots stopped: it advertises a run export for a
 record that has no run. The game-over retirement itself is already at parity
 and must not be rolled back to revive a defeated party.
 
-| Save/export member | Investigation disposition |
+| Save/export member | Final disposition |
 | --- | --- |
 | Active Hub/Boneyard continuation and current wizard export | `verified-already-at-parity`; preserve the complete stock ZIP plus browser support document |
 | Game Over terminal profile-only record | `verified-already-at-parity`; no retired world or dead wizard may reappear as playable continuation |
-| Export availability/copy for profile-only record | `recovered-pending-port`; disable or clearly reject unavailable export before entering the stock converter |
+| Export availability/copy for profile-only record | `exact-ported` to the established terminal contract; Download is disabled with active-save guidance, and a stale caller gets a clear terminal error |
 | New wizard after terminal profile | `verified-already-at-parity`; current continuation makes export available again |
 | Unknown original checkpoint bytes | `out-of-system`; not inferable from the post-run diagnostic archive |
 
@@ -298,3 +298,14 @@ An observable regression must start from a profile-only Game Over record and
 show that export is unavailable with accurate copy, while a live continuation
 still exports the same archive. The frozen Boneyard/pause explanation is
 tracked separately in entry 205.
+
+The built WSL browser red journey loaded a valid profile-only save and found
+DOWNLOAD SAVE ARCHIVE incorrectly enabled. The corrected journey disables it
+with “Start a new game or import an active save before exporting,” then loads
+a live Hub continuation and downloads its ZIP. Page, console, and failed
+response arrays were empty. `Game.tsx` now derives export admission from its
+already-validated resumable save rather than mere profile presence, and the
+callable export path checks the current document again in case the record
+changed before click. The native stock converter and Game Over profile-only
+persistence remain unchanged. Entry 205 records the exact candidate's WSL
+canonical gate and the original snapshot-silence evidence.

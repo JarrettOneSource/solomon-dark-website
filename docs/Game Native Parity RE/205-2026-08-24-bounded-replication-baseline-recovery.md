@@ -414,15 +414,15 @@ more snapshots or timeout event for five seconds. The browser's historical
 recovery state remains unrecorded, so this test proves the source failure
 mode and its symptom shape rather than retroactively proving the trigger.
 
-| Recovery member | Investigation disposition |
+| Recovery member | Final disposition |
 | --- | --- |
 | Ordinary retained ACK and healthy peer | `verified-already-at-parity`; preserve strict monotonic baseline and unaffected peer |
-| Player and observer client-request/evicted-baseline recovery | `recovered-pending-port`; prove stalled keyframe-ACK branch and bound it |
+| Player and observer client-request/evicted-baseline recovery | `exact-ported`; both roles share the same bounded keyframe-ACK wait and timeout result |
 | Initial recovery keyframe and stale ACKs | `verified-already-at-parity`; preserve one finite prefix and exact ACK completion |
-| Unacknowledged recovery-keyframe liveness | `recovered-pending-port`; no current timeout, retry, log or terminal outcome |
+| Unacknowledged recovery-keyframe liveness | `exact-ported`; four heartbeat intervals after sending, one timeout log and code-4000 close replace indefinite silence |
 | High/low-water ordinary flow control | `verified-already-at-parity`; production episode pairs recovered before the observed silence |
 | Host Game Over and socket teardown | `verified-already-at-parity` for authority; client must not remain indefinitely on a stale active frame |
-| Browser timeout surface and menu return | `recovered-pending-port`; a timed-out client needs a visible route back to its saved-game menu |
+| Browser timeout surface and menu return | `exact-ported`; disconnected error shows the timeout and offers Main menu reload |
 | Stock executable | `out-of-system`; this is Website-only compact replication and browser transport |
 
 The export/profile-only consequence belongs to entry 176. The missing
@@ -430,3 +430,35 @@ frame-level recording prevents identifying the exact historical recovery
 request, and the reporter's wave number cannot override the authoritative
 wave-51 archive. If the controlled reproduction fails to match the live
 silence, return to the source gates before modifying transport policy.
+
+### Validation and historical limit
+
+The WSL red host test kept an unacknowledged player recovery socket open and
+silent beyond five seconds while its healthy peer advanced. The corrected
+player and observer tests receive one recovery keyframe, withhold only its
+ACK, and prove one warning, code-4000 close, and unaffected peer admission.
+The bound uses the existing five-second production heartbeat interval, so
+the normal deadline is 20 seconds after the keyframe send; the browser
+diagnostic used a 500-ms heartbeat to exercise the same path in two seconds.
+No arbitrary retry is queued behind an unacknowledged frame on an ordered
+WebSocket. Ordinary successful recovery, stale-ACK accounting, flow control,
+and all other peers retain their prior tests.
+
+Built Chrome 150 on WSL entered the Boneyard, deliberately withheld a
+recovery-keyframe ACK, observed the keyframe and server timeout, then showed
+the disconnected panel and returned to the title through Main menu. Page and
+failed-response arrays were empty; the one console error was the expected
+connection-failure diagnostic. A client with a stale active snapshot can
+still open local inventory/skill surfaces, while `game-host.ts` rejects a
+pause request after the authority reaches Game Over. That is the supported
+explanation for the reported menu asymmetry, inferred from the observed
+snapshot silence and the authoritative terminal state.
+
+Exact runtime candidate `4d9194c7e6ed26a2879cc67b5cf5ffde7cb10902`
+(tree `afad6df93b5c023750f6c88981402ae43aee8b94`) passed the WSL
+canonical gate: 3,938 Node tests, 24 Python tests, zero failures and 100%
+renderer mutation score. Gate-log SHA-256 is
+`fe03ac9296656a461d70e5131866433ae9c36f500e06102c05dec5c26e696614`.
+The original peer recovery state and exact reason its first keyframe lacked
+an ACK were not logged, so this receipt proves the previously unbounded
+failure mode and its bounded resolution, not the exact historical trigger.
