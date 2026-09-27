@@ -10,6 +10,7 @@ import {
   type PlayerCombatComponent,
 } from './player-combat.ts'
 import {
+  NATIVE_HAGATHA_REVELATION_MINIMUM_RANK,
   createNativeHagathaRuntimeState,
   nativeHagathaRevelationRank,
   type NativeHagathaRuntimeState,
@@ -384,7 +385,12 @@ export function nativeSecondaryAbilityRankStats(
     throw new RangeError(`skill ${skillId} is not a native secondary`)
   }
   const entry = SHARED_STAT_BOOK.entries[skillId]
-  if (!entry || !Number.isInteger(rank) || rank < 1 || rank > entry.maximumLevel) {
+  if (
+    !entry
+    || !Number.isInteger(rank)
+    || rank < 1
+    || rank > Math.max(entry.maximumLevel, NATIVE_HAGATHA_REVELATION_MINIMUM_RANK)
+  ) {
     throw new RangeError(`secondary skill ${skillId} has invalid effective rank ${rank}`)
   }
   const values: Record<string, number> = {}

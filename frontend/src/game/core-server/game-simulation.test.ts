@@ -1196,6 +1196,72 @@ test('every stateful NPC and trader keeps authenticated player state isolated in
   )
 })
 
+test('Cosmofluxic Wand with Revelation equips, snapshots, saves, and unequips Dampen', () => {
+  const owner = { discipline: 'arcane', displayName: 'Owner', element: 'ether' } as const
+  const peer = { discipline: 'mind', displayName: 'Peer', element: 'water' } as const
+  let state = createGameSimulation({ owner, peer })
+  const initialEconomy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      replacePlayerEconomy(state.playerEntities, 'owner', {
+        ...initialEconomy,
+        gold: 100_000,
+        revision: initialEconomy.revision + 1,
+      }),
+      'owner',
+      { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
+    ),
+  }
+  const revelation = applyGameSimulationHubAction(state, 'owner', {
+    type: 'buy-hagatha', selector: 6,
+  })
+  assert.equal(revelation.accepted, true)
+  state = revelation.state
+  const economy = getPlayerEconomy(state, 'owner')
+  const wand = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2]!, economy.nextItemId)
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      backpack: [...economy.backpack, wand],
+      nextItemId: economy.nextItemId + 1,
+      revision: economy.revision + 1,
+    }),
+  }
+  const equipped = applyGameSimulationHubAction(state, 'owner', {
+    itemId: wand.id, slot: 'weapon', type: 'equip',
+  })
+  assert.equal(equipped.accepted, true)
+  state = equipped.state
+  assert.equal(getPlayerEconomy(state, 'owner').equipment.weapon?.name, 'Cosmofluxic Wand')
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[51], 0)
+  assert.equal(getPlayerSkillBook(state, 'owner').effectiveRanks[51], 2)
+  assert.equal(getPlayerSkillBook(state, 'owner').effectiveRanks[49], 2)
+  assert.equal(getPlayerSkillBook(state, 'peer').effectiveRanks[51], 0)
+
+  const snapshot = createGameSnapshot(state, 'owner')
+  assert.deepEqual(
+    snapshot.players.owner!.progression.secondaryManaCosts.find(([id]) => id === 51),
+    [51, 90],
+  )
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {},
+    playerId: 'owner', state,
+  })).state
+  assert.equal(getPlayerSkillBook(restored, 'owner').effectiveRanks[51], 2)
+  assert.deepEqual(
+    createGameSnapshot(restored, 'owner').players.owner!.progression.secondaryManaCosts
+      .find(([id]) => id === 51),
+    [51, 90],
+  )
+  const unequipped = applyGameSimulationHubAction(state, 'owner', {
+    slot: 'weapon', type: 'unequip',
+  })
+  assert.equal(unequipped.accepted, true)
+  assert.equal(getPlayerSkillBook(unequipped.state, 'owner').effectiveRanks[51], 0)
+})
+
 test('locked Goodies require an explicit nearest-facing interaction and consume one recursive Wizard Key', () => {
   let state = enterBoneyardWorld(createGameSimulation(), emptyBoneyard())
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')

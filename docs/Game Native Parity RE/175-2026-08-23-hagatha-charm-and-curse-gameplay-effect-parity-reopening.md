@@ -1471,3 +1471,55 @@ which instead consumes the offensive factor, including Serendipity. Glass
 Cannon affects both lanes. The independent Brute push multiplier remains two.
 The correction preserves this native display/contact discrepancy and does not
 add a Wand melee action. Report 42 owns the implementation and acceptance receipt.
+
+## 2026-09-27 — Report 46: Cosmofluxic Wand and Dampen effective rank two
+
+The edited Discord report and its tooltip identify recipe 2, Cosmofluxic
+Wand: Magic Circle +1, Dampen +1, and the Arcanus Spectrum Paraclosm set.
+The reporter's memory of a retail Dampen crash does not by itself establish
+the Website cause. Read-only production journal evidence does: at
+2026-09-25 06:21:23 UTC, the incident game-session supervisor terminated
+with `RangeError: secondary skill 51 has invalid effective rank 2`.
+The stack enters `nativeSecondaryAbilityManaCost` through
+`protocolPlayerState`; two browser diagnostics submitted seconds later
+record connection loss. No original save or equip-frame capture was supplied,
+so the exact private inventory and selector state are not reconstructed here.
+
+This ledger's prior native instruction trace already established the
+producer: equipment kind 7 first caps the requested row at its authored
+maximum, then Hagatha selector 6 (Revelation) floors the effective result
+to two. Dampen 51 has authored maximum one, and recipe 2 is its only authored
+equipment grant. The same Wand also grants Magic Circle 49 and may contribute
+its set effect, but neither explains a row-51 rank error. The current Website
+producer correctly retains effective Dampen rank two. Its downstream
+`nativeSecondaryAbilityRankStats` rejects `rank > maximumLevel` before
+reading values, despite already selecting the final authored property-array
+entry with `min(rank, lastIndex)`. Snapshot mana-cost projection invokes it
+for every available secondary, so merely equipping the Wand can terminate
+the shared authority without a Dampen cast.
+
+System boundary: all authored effective secondary ranks from permanent
+learning, Hagatha, equipment kinds 4–8 and completed sets; their secondary
+stat reader, mana/cooldown/cast consumers, player snapshot/replication,
+save/restore, equip/unequip and teardown. The short-row siblings are Dampen
+51 and Phasing 15 (both authored maximum one); only Dampen has a current
+authored equipment grant that can cross that maximum. Higher-rank secondary
+rows retain their full authored tables. Primary/Weld rank readers
+and the Wand's melee action are separate owners.
+
+| Member | Investigation disposition |
+| --- | --- |
+| Cosmofluxic Wand's Magic Circle/Dampen grant and set membership | `verified-already-at-parity`: authored recipe/effect rows and selector-6 ordering remain unchanged |
+| Dampen effective rank two and Phasing short-row lookup | `recovered-pending-port`: accept the legitimate Dampen selector floor and final-row value; preserve Phasing's reachable rank-one behavior |
+| Other secondaries, all authored rank arrays and ordinary caps | `verified-already-at-parity`: no rank-table, damage, cost or cooldown change |
+| Shared secondary mana/cast, ML and quickbar consumers | `recovered-pending-port`: use the corrected common rank reader, not item-specific exception paths |
+| Equip, unequip, owner isolation and save/restore | `recovered-pending-port`: prove the real Wand equips without host failure and rank reverts or persists at the correct boundaries |
+| Strict snapshot protocol, Hub/Boneyard and browser observer | `recovered-pending-port`: valid rank-two state must replicate without weakening malformed input rejection |
+| Historical retail crash and Wand melee | `out-of-system`: do not reproduce an incidental stock crash or invent a Wand Staff action |
+
+The falsifying test is an actual recipe-2 equip with Revelation active:
+pre-fix snapshot projection must fail with the production exception, then
+the corrected snapshot, stat lookup, save/restore, and Boneyard browser
+journey must preserve Dampen cost and rank without affecting another player.
+Keep the original item screenshot and production log private; publish only
+this sanitized causal receipt.

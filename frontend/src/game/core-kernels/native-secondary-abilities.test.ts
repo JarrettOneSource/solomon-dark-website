@@ -1217,6 +1217,27 @@ test('Dampen appends weapon-selected Cast2 alongside CastSpin and emits its open
   }
 })
 
+test('Wand-granted rank-two Dampen still casts with its terminal authored cost', () => {
+  const base = context(51, 1, 0)
+  const player = base.players.player!
+  const effectiveRanks = [...player.skillBook.effectiveRanks]
+  effectiveRanks[51] = 2
+  const result = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...base,
+    players: {
+      player: {
+        ...player,
+        weaponKind: 'wand',
+        skillBook: { ...player.skillBook, effectiveRanks: Object.freeze(effectiveRanks) },
+      },
+    },
+  })
+  assert.equal(result.manaSpent.player, 90)
+  assert.equal(result.state.players.player?.castSpinTicksRemaining, 73)
+  assert.deepEqual(result.state.players.player?.castAction, { weaponKind: 'wand', progress: 0 })
+  assert.ok(result.state.events.some(event => event.cue === 'dampen'))
+})
+
 test('native RNG sign and bulk advance preserve the retail word stream', () => {
   const source = createNativeRng(123)
   const sign = drawNativeSign(source, 2)

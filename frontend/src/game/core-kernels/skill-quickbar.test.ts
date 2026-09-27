@@ -271,6 +271,24 @@ test('secondary rank resolution uses effective rank and clamps authored terminal
   assert.throws(() => effectiveSecondaryAbilityRankStats(book, 48), /rank 0/)
 })
 
+test('Dampen accepts Revelation rank two while retaining its terminal mana row', () => {
+  const book = createPlayerSkillBook(ETHER_ARCANE)
+  const effectiveRanks = [...book.effectiveRanks]
+  effectiveRanks[51] = 2
+  const equipped = { ...book, effectiveRanks: Object.freeze(effectiveRanks) }
+  assert.deepEqual(effectiveSecondaryAbilityRankStats(equipped, 51), {
+    rank: 2,
+    skillId: 51,
+    values: Object.freeze({ mManaCost: 90 }),
+  })
+  const invalidRanks = [...book.effectiveRanks]
+  invalidRanks[51] = 3
+  assert.throws(() => effectiveSecondaryAbilityRankStats({
+    ...book,
+    effectiveRanks: invalidRanks,
+  }, 51), /invalid effective rank 3/)
+})
+
 function choose(
   skillBook: PlayerSkillBookComponent,
   skillId: number,
