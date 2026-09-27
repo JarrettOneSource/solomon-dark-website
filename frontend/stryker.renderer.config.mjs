@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os'
 import { rendererFiles } from './tools/quality/scope.mjs'
 
 export default {
@@ -8,7 +9,8 @@ export default {
   typescriptChecker: { prioritizePerformanceOverAccuracy: false },
   commandRunner: { command: 'node tools/quality/mutation-tests.mjs' },
   coverageAnalysis: 'off',
-  concurrency: 2,
+  // Four workers cut the WSL mutation run from 546 to 349 seconds; smaller hosts retain two.
+  concurrency: availableParallelism() >= 16 ? 4 : 2,
   timeoutMS: 10000,
   timeoutFactor: 2,
   reporters: ['clear-text', 'progress', 'json', 'html'],
