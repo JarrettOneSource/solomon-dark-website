@@ -7,6 +7,7 @@ import { NATIVE_TUTORIAL_CAMERA_TARGET, nativeTutorialCameraBounds } from '../co
 import { cameraZoomForFov, DEFAULT_GAME_SETTINGS, gameLightQuality, NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
 import type { BoneyardEnemyEventSnapshot, GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
+import { copyPrimarySpellTransient } from '../client/primary-spell-transient-copy.ts'
 import { BoneyardDynamicScene } from './boneyard-dynamic-scene.ts'
 import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeArenaDisplacementCoverPlan } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
@@ -428,7 +429,15 @@ export async function createBoneyardWorldRenderer(
     const visibleWorld = boneyardVisibleWorldBounds(camera, viewport, 0)
     visibility.update(camera, viewport)
     const frameAt = advanceFrame ? now() : lastRenderedAt
-    lastRenderedSnapshot = snapshot
+    lastRenderedSnapshot = advanceFrame ? {
+      ...snapshot,
+      primarySpells: {
+        ...snapshot.primarySpells,
+        // The timeline reuses this array and its Hail records on every sample.
+        transients: snapshot.primarySpells.transients.map(effect => effect.kind === 'water-hail'
+          ? copyPrimarySpellTransient(effect) : effect),
+      },
+    } : snapshot
     lastRenderedAt = frameAt
     if (
       armedLevelUpPresentationId !== null

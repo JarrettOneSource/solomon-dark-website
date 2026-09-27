@@ -902,3 +902,43 @@ error arrays. Type checking, lint, the production build, and 78 focused
 settings/frame-loop/light/render-contract tests passed. The earlier 62-test
 settings/Spider/weather/lighting audit also passed. The full exact-candidate
 M2 gate and post-gate production-browser regression remain pending.
+
+### Rebased acceptance and retained frame ownership — September 27, 2026
+
+The original `fb89c6b8` candidate completed its Mac gate and dependent browser
+journey before report37 was reopened. It is now rebased onto published
+`1447e297`. The user explicitly directs future heavy validation to Windows/WSL;
+that instruction supersedes the earlier Mac-only workflow for this continuation.
+Use the isolated WSL checkout, pinned Node 22.17.0/.NET 10.0.302 and real Chrome
+acceptance, preserving both machines' shared checkouts and other processes.
+
+Review identifies one retained-input lifetime requiring a regression before
+publication: `createRetainedBoneyardPrimarySpellPresentation` owns its transient
+array and mutable Hail objects only until the next sample. The proposed renderer
+stores the complete input snapshot by reference for later paused redraw. A later
+input/audio sample can therefore change or retire Hail in the supposedly frozen
+image. Ordinary death-effect samples remain independently owned after report37.
+The renderer must own a copied transient array and independent Hail records
+while retaining the other immutable snapshot data. Reuse the existing native
+transient copier rather than duplicating Hail fields. A real-renderer regression
+will resample the actual Hail presentation owner between paints, then resize and
+restore the viewport; pixels and tick/frame/Hail counts must remain unchanged.
+
+The WSL Chrome 150 regression reproduces the defect through the real retained
+Hail owner and real renderer: resampling changes the frozen image SHA-256 from
+`fd405f608051b48db1d8e740d005a0e0e7211021540db17e7b3069ea47d027a9`
+to `962a7a00968d297ce43987e4b41e43e42268a05196d36c4b453a22a1b17e1806`
+after resize/restoration, despite no normal render call. The renderer now copies
+that array and only its mutable Hail entries when accepting a normal frame,
+using `copyPrimarySpellTransient`; other immutable entries stay shared. Redraw
+reuses the owned snapshot without another copy or advancing presentation time.
+
+The repaired full WSL Settings journey passes with empty page/console/HTTP
+errors. Its retained-frame probe preserves all 16 Hail actors, tick 9,810 and
+frame counter 2 after both resampling and complete retirement in the source
+presentation owner. All three framebuffer hashes are
+`c043f4a98c4f67c03179441460bb88c14e6f369c2565cd3748b65b5b8549f171`.
+The ordinary paused resize regression also preserves its image and clock.
+The maintained smoke supports a production-preview mode for the complete UI
+journey; the module-level borrowed-frame regression runs through Vite imports.
+Exact final WSL canonical validation and built-client acceptance remain pending.

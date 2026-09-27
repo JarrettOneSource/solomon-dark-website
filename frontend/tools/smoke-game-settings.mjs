@@ -3,10 +3,11 @@ import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
-import { createServer as createViteServer } from 'vite'
+import { createServer as createViteServer, preview } from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { emitNativePlayerScreenFlash } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
@@ -15,6 +16,7 @@ import { replacePlayerCharacter } from '../src/game/core-server/player-entity-st
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
 const mobile = process.env.SDR_GAME_SETTINGS_MOBILE === '1'
+const built = process.env.SDR_GAME_SETTINGS_BUILT === '1'
 const screenshots = {
   boneyard: process.env.SDR_GAME_SETTINGS_BONEYARD_SCREENSHOT
     || '/tmp/solomon-dark-settings-boneyard.png',
@@ -30,13 +32,17 @@ let mobileAudio = null
 let settingsPresentation = null
 const rangeTouches = {}
 
-const vite = await createViteServer({
+const vite = built ? await preview({
+  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+  logLevel: 'error', root: frontendRoot,
+  preview: { host: '127.0.0.1', port: 0 },
+}) : await createViteServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
   logLevel: 'error',
   root: frontendRoot,
   server: { host: '127.0.0.1', port: 0 },
 })
-await vite.listen()
+if (!built) await vite.listen()
 const viteAddress = vite.httpServer?.address()
 if (!viteAddress || typeof viteAddress === 'string') {
   await vite.close()
@@ -450,6 +456,8 @@ try {
   }))
   assert.equal(lowQualityRegionTarget.physicalSide, 128)
   const pausedRedraw = mobile ? null : await assertPausedWorldRedraw(boneyardCanvas)
+  // The module-level ownership probe uses Vite imports; the full UI journey also runs built.
+  const retainedHailRedraw = mobile || built ? null : await assertRetainedHailRedraw()
   await page.screenshot({ path: screenshots.boneyard })
   await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
   await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
@@ -470,6 +478,7 @@ try {
       lightQuality: Number(await boneyardCanvas.getAttribute('data-light-quality')),
       lowQualityRegionTarget,
       pausedRedraw,
+      retainedHailRedraw,
       multipleShadows: await boneyardCanvas.getAttribute('data-multiple-shadows'),
       screenFlash: boneyardScreenFlash,
       zoomEffects: await boneyardCanvas.getAttribute('data-zoom-effects'),
@@ -604,6 +613,64 @@ async function pausedWorldPixels(canvas) {
     assert.ok(pixels.nonblack > 32, 'paused graphics change cleared the world canvas')
     return pixels
   } finally { await style.evaluate(node => node.remove()) }
+}
+
+async function assertRetainedHailRedraw() {
+  const playerId = host.hostPlayerId()
+  const boneyard = host.loadedBoneyard()
+  assert.ok(playerId && boneyard)
+  const receipt = await page.evaluate(async ({ snapshot, boneyard, playerId }) => {
+    const { createBoneyardWorldRenderer } = await import('/src/game/renderer/boneyard-world-renderer.ts')
+    const { createRetainedBoneyardPrimarySpellPresentation } = await import('/src/game/client/primary-spell-retained-hail-presentation.ts')
+    const { createPrimarySpellSimulationFrame } = await import('/src/game/protocol/primary-spell-hail-replication.ts')
+    const player = snapshot.players[playerId]
+    const hail = Array.from({ length: 16 }, (_, index) => ({
+      ageTicks: 20, birthTick: snapshot.tick - 20, bounceProgress: Math.fround(.4),
+      bounceSoundIndex: null, bounceSoundPitch: null, bounceSoundSequence: 0,
+      height: -24, horizontalVelocity: { x: 2, y: -1 }, id: 900000 + index,
+      kind: 'water-hail', life: Math.fround(1.7), ownerId: playerId,
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 900000 + index }],
+      position: { x: Math.fround(player.position.x + 50 + index % 4 * 12),
+        y: Math.fround(player.position.y + 30 + Math.floor(index / 4) * 12) },
+      rotationDegrees: index * 15, rotationStepDegrees: 2, savedBounceVelocity: -3,
+      scale: Math.fround(.15), verticalVelocity: 1, worldKey: `boneyard:${boneyard.runId}`,
+    }))
+    const presentation = createRetainedBoneyardPrimarySpellPresentation()
+    const frame = transients => createPrimarySpellSimulationFrame({ nextId: 900017, projectiles: [], transients })
+    snapshot.primarySpells = presentation.copyFrame(frame(hail), snapshot.tick)
+    const viewport = { width: 1600, height: 900, displayScale: 1 }
+    const renderer = await createBoneyardWorldRenderer({
+      boneyard, playerId, initialSnapshot: snapshot, viewport, devicePixelRatio: 1,
+      modAssets: [], modCatalog: [], now: () => 100000,
+    })
+    const read = async () => {
+      const gl = renderer.canvas.getContext('webgl2')
+      const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4)
+      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      const diagnostics = renderer.canvas.__sdrBoneyardFrame
+      const digest = await crypto.subtle.digest('SHA-256', pixels)
+      return { frame: diagnostics.frameCount, tick: diagnostics.tick, hail: diagnostics.primaryHailMeshCount,
+        rgbaSha256: [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('') }
+    }
+    try {
+      renderer.render(snapshot)
+      const before = await read()
+      presentation.copyFrame(frame(hail.map(effect => ({ ...effect,
+        position: { x: Math.fround(effect.position.x + 200), y: Math.fround(effect.position.y + 100) }, height: -4,
+      }))), snapshot.tick + 5)
+      renderer.resize({ ...viewport, width: 1760, height: 990 }, 1)
+      renderer.resize(viewport, 1)
+      const afterResample = await read()
+      presentation.copyFrame(frame([]), snapshot.tick + 10)
+      renderer.resize({ ...viewport, width: 1760, height: 990 }, 1)
+      renderer.resize(viewport, 1)
+      return { before, afterResample, afterRetirement: await read() }
+    } finally { renderer.destroy() }
+  }, { boneyard, playerId, snapshot: createGameSnapshot(host.state(), playerId) })
+  assert.equal(receipt.before.hail, 16)
+  assert.deepEqual(receipt.afterResample, receipt.before, 'later Hail sampling changed the frozen renderer frame')
+  assert.deepEqual(receipt.afterRetirement, receipt.before, 'Hail retirement changed the frozen renderer frame')
+  return receipt
 }
 
 async function exercisePublicSiteAudio(page, baseUrl) {
