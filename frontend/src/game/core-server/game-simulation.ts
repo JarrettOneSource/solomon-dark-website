@@ -1336,7 +1336,7 @@ function applyGameSimulationHubActionTransaction(
         action.layer,
         action.swatchRows,
       )
-      case 'dowse': return dowse(economy, getPlayerProgression(state, playerId).level)
+      case 'dowse': return dowse(economy, action.referenceItemId)
       case 'equip': return equipInventoryItem(economy, action.itemId, action.slot, {
         creativityRank:
           skillBook.permanentRanks[NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID] ?? 0,

@@ -103,8 +103,9 @@ export function buildService(
   const overlay = new Container()
   overlay.label = 'native-service-overlay'
   layer.addChild(overlay)
+  if (inventory.itemInfo) layer.addChild(inventory.itemInfo)
   const { width } = HUB_SHOP_PANEL
-  addShopPanel(context, overlay, model.trader === 'shlorio' && model.economy.dowsingOffers.length > 0)
+  addShopPanel(context, overlay, model.trader === 'shlorio' && model.economy.dowsingRolled)
   const dialogue = HUB_TRADER_DIALOGUES[model.trader]
   const titleFont: FontName = measureNativeUiText(dialogue.title, 'menu') > width - 55
     ? 'medium'
@@ -113,11 +114,17 @@ export function buildService(
     tint: HUB_SHOP_TEXT.goldTint,
   })
 
-  if (model.trader === 'shlorio' && model.economy.dowsingOffers.length === 0) {
+  if (model.trader === 'shlorio' && !model.economy.dowsingRolled) {
     addCenteredAtlasSprite(context, overlay, 'UI', 15, 800, 75)
     overlay.addChild(new Graphics()
       .rect(...HUB_DOWSING_PREROLL.referenceDropRect)
       .fill({ color: 0x000000 }))
+    if (model.dowsingReferenceItem) {
+      const [left, top, width, height] = HUB_DOWSING_PREROLL.referenceDropRect
+      addClippedItemIcon(context, overlay, model.dowsingReferenceItem,
+        left + width / 2, top + height / 2, model.config.element,
+        HUB_DOWSING_PREROLL.referenceDropRect)
+    }
     addDowsingButton(
       context,
       overlay,

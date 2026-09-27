@@ -9,6 +9,7 @@ import {
   type HubInventoryAction,
   type HubShopItem,
   MAX_NATIVE_DYE_SELECTIONS,
+  NATIVE_DOWSING_MAX_OFFERS,
   NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   NATIVE_UNFORGE_OUTCOME_KINDS,
@@ -114,10 +115,16 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type', 'boastId'])
     return { type, boastId: boastSelection(source.boastId, 'action.boastId') }
   }
+  if (type === 'dowse') {
+    onlyKeys(source, 'action', ['type', 'referenceItemId'])
+    return source.referenceItemId === undefined ? { type } : {
+      type,
+      referenceItemId: positiveInteger(source.referenceItemId, 'action.referenceItemId'),
+    }
+  }
   if (
     type === 'close-dowsing'
     || type === 'close-hagatha'
-    || type === 'dowse'
     || type === 'interact-goodie'
   ) {
     onlyKeys(source, 'action', ['type'])
@@ -265,6 +272,7 @@ export function playerEconomy(value: unknown, field: string): ProtocolPlayerEcon
     'collegeIntroPending',
     'dowsingFee',
     'dowsingOffers',
+    'dowsingRolled',
     'equipment',
     'fomentiusStock',
     'gold',
@@ -309,8 +317,12 @@ export function playerEconomy(value: unknown, field: string): ProtocolPlayerEcon
   const dowsingOffers = limitedArray(
     source.dowsingOffers,
     `${field}.dowsingOffers`,
-    4,
+    NATIVE_DOWSING_MAX_OFFERS,
   ).map((offer, index) => dowsingOffer(offer, `${field}.dowsingOffers[${index}]`))
+  const dowsingRolled = boolean(source.dowsingRolled, `${field}.dowsingRolled`)
+  if (!dowsingRolled && dowsingOffers.length > 0) {
+    throw new GameProtocolError(`${field}.dowsingOffers requires a completed roll`)
+  }
   if (
     new Set(dowsingOffers.map(({ id }) => id)).size !== dowsingOffers.length
     || new Set(dowsingOffers.map(({ recipeIndex }) => recipeIndex)).size
@@ -355,6 +367,7 @@ export function playerEconomy(value: unknown, field: string): ProtocolPlayerEcon
     ),
     dowsingFee: boundedInteger(source.dowsingFee, `${field}.dowsingFee`, 500, 950),
     dowsingOffers,
+    dowsingRolled,
     equipment,
     fomentiusStock,
     gold: boundedInteger(source.gold, `${field}.gold`, 0, 10_000_000),
@@ -485,7 +498,7 @@ export function hubActionFeedback(
     : finite(source.dowsingPitch, `${field}.dowsingPitch`)
   const ownsDowsingPitch = accepted && (action === 'dowse' || action === 'buy-dowsing')
   if (ownsDowsingPitch !== (dowsingPitch !== null)
-    || (dowsingPitch !== null && (dowsingPitch < 0.8 || dowsingPitch > 1.1))) {
+    || (dowsingPitch !== null && (dowsingPitch < 0.8 || dowsingPitch > Math.fround(1.1)))) {
     throw new GameProtocolError(`${field}.dowsingPitch does not match action`)
   }
   const unforgeOutcome = source.unforgeOutcome === null

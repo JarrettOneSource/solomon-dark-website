@@ -31,12 +31,14 @@ import type { HubInventoryUiNotice } from './hub-inventory-notices.ts'
 export function ServiceActions({
   beltRects,
   economy,
+  dowsingReferenceItemId,
   inventorySelection,
   onAction,
   onBeltBind,
   onClose,
   onDragChange,
   onDragMove,
+  onDowsingReference,
   onInsufficientGold,
   onInventoryAction,
   onInventorySelect,
@@ -57,12 +59,14 @@ export function ServiceActions({
 }: {
   beltRects: readonly NativeHudRect[]
   economy: ProtocolPlayerEconomy
+  dowsingReferenceItemId: number | null
   inventorySelection: HubInventorySelectionModel | null
   onAction: InventoryActionHandler
   onBeltBind: (itemId: number, slot: number) => void
   onClose: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
+  onDowsingReference: (itemId: number) => void
   onInsufficientGold: () => void
   onInventoryAction: InventoryActionHandler
   onInventorySelect: (selection: HubInventorySelectionModel | null) => void
@@ -97,6 +101,10 @@ export function ServiceActions({
       economy={economy}
       selection={inventorySelection}
       storageDropRect={trader === 'luthacus' ? storageDropRect : null}
+      referenceDropTarget={trader === 'shlorio' && !economy.dowsingRolled ? {
+        rect: HUB_DOWSING_PREROLL.referenceDropRect,
+        select: onDowsingReference,
+      } : null}
       onAction={onInventoryAction}
       onBeltBind={onBeltBind}
       onDragChange={onDragChange}
@@ -129,7 +137,7 @@ export function ServiceActions({
         onSelect={onSelect}
       />
     )
-  } else if (trader === 'shlorio' && economy.dowsingOffers.length === 0) {
+  } else if (trader === 'shlorio' && !economy.dowsingRolled) {
     serviceActions = (
       <>
         <NativeAction
@@ -138,7 +146,9 @@ export function ServiceActions({
           onClick={() => {
             onPressedControl(null)
             if (economy.gold < economy.dowsingFee) onInsufficientGold()
-            else onAction({ type: 'dowse' })
+            else onAction(dowsingReferenceItemId === null
+              ? { type: 'dowse' }
+              : { type: 'dowse', referenceItemId: dowsingReferenceItemId })
           }}
           onPressedChange={(pressed) => onPressedControl(pressed ? 'dowsing' : null)}
         />

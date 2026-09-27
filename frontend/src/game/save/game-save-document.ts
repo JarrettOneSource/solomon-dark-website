@@ -158,6 +158,7 @@ const ECONOMY_KEYS = [
   'collegeIntroPending',
   'dowsingFee',
   'dowsingOffers',
+  'dowsingRolled',
   'equipment',
   'firstMixedSelectors',
   'fomentiusStock',
@@ -1795,6 +1796,13 @@ function normalizeEconomy(
 ): HubEconomyState {
   const source = record(value, 'game save player economy')
   rejectUnexpectedKeys(source, 'game save player economy', ECONOMY_KEYS)
+  const dowsingRolled = sourceSchemaVersion < 43
+    ? Array.isArray(source.dowsingOffers) && source.dowsingOffers.length > 0
+    : source.dowsingRolled
+  if (typeof dowsingRolled !== 'boolean'
+    || (!dowsingRolled && Array.isArray(source.dowsingOffers) && source.dowsingOffers.length > 0)) {
+    throw new Error('game save player economy Dowsing phase is invalid')
+  }
   if (sourceSchemaVersion >= 13 && typeof source.collegeIntroPending !== 'boolean') {
     throw new Error('game save player economy College intro state is invalid')
   }
@@ -1841,6 +1849,7 @@ function normalizeEconomy(
     ...source,
     actionFeedback: feedback,
     collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
+    dowsingRolled,
     hagathaBundleSelectors: bundleRepair.outcomes,
     npc: normalizeNativeHubNpcState(source.npc, sourceSchemaVersion >= 11),
     ownedPerkSelectors: outcomeRepair.outcomes,

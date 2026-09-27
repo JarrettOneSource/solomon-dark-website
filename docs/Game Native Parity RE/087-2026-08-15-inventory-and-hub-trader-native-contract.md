@@ -144,7 +144,7 @@ transactions.
 | Shlorio common animation strip | `0x0050a4c0`, `0x00501610`; Library 21..24 | exact-ported | four-frame private-room test |
 | Range/fade/region interruption and modal/input teardown | `0x00505010`, `0x00514a20` | exact-ported | authority and UI lifecycle tests |
 | `Outfit me Randomly` / `!RANDOMEQUIP` | dormant scavenger data row, absent executable literal/dispatcher branch | out-of-system (not wired by retail builder) | builder and full literal/xref sweep |
-| Targeted dowsing | `DowsingShop+0x344`; constructor/xrefs and set/type helpers | out-of-system (no retail hub producer) | constructor/xref/writer sweep |
+| Targeted dowsing | `DowsingShop+0x344`; drop virtual slot `+0xC8 -> 0x00568080` | recovered-pending-port; earlier unreachable disposition superseded by report39 | September 27 correction in ledger203 |
 | Item use, ground loot, archival and account persistence | separate inventory/save consumers | out-of-system (separate gameplay/save systems) | ownership boundary trace |
 | 86 equipment FX declarations and Clothes attachments | item catalog and downstream consumers | out-of-system (separate combat/stat/render systems) | complete catalog retained |
 | Annalist, Librarian, Arch Chancellor, Painting animator siblings | remaining common-animator xrefs | out-of-system (non-trader actors/props) | complete shared-function xref sweep |
@@ -371,10 +371,14 @@ three or four unique offers from the recovered 47-equipment recipe catalog.
 Offer prices are 5000..5700 in 50-gold increments. Buying one uses the common
 atomic purchase path, clears all remaining offers, and rolls the next fee in
 500..950. Closing a paid result loses those offers without refund. The dormant
-targeted branch would deterministically union every eligible same-set and
-same-type recipe, but the constructor writes its target pointer null and both
-retail hub constructor call sites leave it null. It is omitted because no
-retail hub producer reaches it, not because its cardinality is unknown.
+targeted branch is reachable through the inventory drop dispatcher and
+`DowsingShop` virtual slot `+0xC8 -> 0x00568080`, which writes `+0x344` after
+the reference-well hit test. The earlier constructor-only reachability claim
+was wrong. Raw instructions also contradict the claimed deterministic union:
+each same-set/same-type helper builds an eligible pool and chooses one random
+member. The caller requests two same-set choices followed by three or four
+same-type choices, then prices the completed offer list. Ledger203's September
+27 reopening owns the full correction and its pending implementation.
 
 All purchases are buy-only. There is no sale, refund, or buyback action. The
 seven-column common shop and three-column dowsing layouts display replicated
@@ -398,6 +402,6 @@ MsgBox without mutation, equip and unequip the purchased item, and show that a
 second participant's 10,000-gold ledger and starter inventory are unchanged.
 `frontend/tools/smoke-hub-traders.mjs` owns that complete browser receipt and
 fails on any browser-console/page error. Native-equipment
-combat effects, dormant random outfitting, unreachable targeted dowsing,
+combat effects, dormant random outfitting,
 selling, and persistent account storage are not silently invented by this
 milestone.

@@ -5,7 +5,7 @@ import { createGameSimulation, getPlayerEconomy } from '../core-server/game-simu
 import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { drawNativeInteger } from '../core-kernels/native-rng.ts'
-import { buyHagathaPerk, hagathaOffers, removeHagathaPerk } from '../core-kernels/hub-economy.ts'
+import { buyHagathaPerk, dowse, hagathaOffers, removeHagathaPerk } from '../core-kernels/hub-economy.ts'
 import { nativeLootModifiers } from '../core-kernels/native-loot.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import { readGameSaveFileSelection } from './game-save-files.ts'
@@ -44,6 +44,39 @@ test('compatible future saves resume and retire without losing the profile', asy
   assert.throws(() => restoreGameSaveDocument(JSON.stringify({
     ...JSON.parse(future), continuation: { simulation: {} },
   })), /game save/)
+})
+
+test('schema 43 preserves paid empty Dowsing results and migrates older offer phases', () => {
+  const source = createGameSimulation({
+    owner: { discipline: 'arcane', displayName: 'Dowsing recovery', element: 'water' },
+  })
+  const economy = { ...getPlayerEconomy(source, 'owner'), gold: 20_000 }
+  const potion = economy.backpack.find(item => item.kind === 'health-potion')!
+  for (const rolled of [dowse(economy, potion.id).state, dowse(economy).state]) {
+    const state = { ...source,
+      playerEntities: replacePlayerEconomy(source.playerEntities, 'owner', rolled) }
+    const document = createGameSaveDocument({
+      integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner', state,
+    })
+    const restored = restoreGameSaveDocument(document)
+    const current = getPlayerEconomy(restored.state, restored.playerId)
+    assert.equal(current.dowsingRolled, true)
+    assert.deepEqual(current.dowsingOffers, rolled.dowsingOffers)
+    assert.equal(current.gold, rolled.gold)
+    assert.deepEqual(current.rng, rolled.rng)
+    const legacy = JSON.parse(document)
+    legacy.schemaVersion = 42
+    delete legacy.profile.economy.dowsingRolled
+    delete legacy.continuation.simulation.playerEntities.economies[0].dowsingRolled
+    const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+    const previous = getPlayerEconomy(migrated.state, migrated.playerId)
+    assert.equal(previous.dowsingRolled, rolled.dowsingOffers.length > 0)
+    assert.deepEqual(previous.dowsingOffers, rolled.dowsingOffers)
+    assert.equal(previous.gold, rolled.gold)
+    const malformed = JSON.parse(document)
+    delete malformed.continuation.simulation.playerEntities.economies[0].dowsingRolled
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /Dowsing phase/)
+  }
 })
 
 test('schema 39 retires only obsolete Cold Aura actors without rewinding saved gameplay or RNG', () => {

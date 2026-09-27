@@ -20,7 +20,7 @@ import {
   type HubInventoryAction,
   type HubTraderId,
 } from './core-kernels/hub-economy.ts'
-import type { PlayerBeltComponent } from './core-kernels/native-belt.ts'
+import { nativeBeltOwnedItem, type PlayerBeltComponent } from './core-kernels/native-belt.ts'
 import { NATIVE_SELECTOR_ACCEPT_TICKS } from './core-kernels/native-hub-npc.ts'
 import type { ModBoastSelection } from './core-kernels/boast.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
@@ -187,6 +187,9 @@ export function NativeHubSurface({
   const [pendingNpcSelection, setPendingNpcSelection] =
     useState<PendingHubNpcSelection | null>(null)
   const [serviceSelection, setServiceSelection] = useState<HubServiceSelection | null>(null)
+  const [dowsingReferenceItemId, setDowsingReferenceItemId] = useState<number | null>(null)
+  const dowsingReferenceItem = dowsingReferenceItemId === null ? null
+    : nativeBeltOwnedItem(economy, dowsingReferenceItemId)
   const [serviceHoverInspection, setServiceHoverInspection] = useState<HubServiceInspectionModel | null>(null)
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
@@ -500,6 +503,7 @@ export function NativeHubSurface({
       inspection: serviceHoverInspection ?? serviceFocusInspection,
       inventorySelection,
       kind: 'service',
+      dowsingReferenceItem,
       notice,
       pressedControl,
       progression,
@@ -515,6 +519,7 @@ export function NativeHubSurface({
     chat,
     config,
     economy,
+    dowsingReferenceItem,
     dyeModal,
     displayedInventoryDrag,
     inventoryFlybys,
@@ -576,6 +581,9 @@ export function NativeHubSurface({
       }
     }
     if (surface.kind !== 'service') return
+    if (dowsingReferenceItemId !== null && dowsingReferenceItem === null) {
+      setDowsingReferenceItemId(null)
+    }
     if (!serviceSelection) return
     const present = surface.trader === 'luthacus'
       ? serviceSelection.owner === 'storage'
@@ -586,7 +594,7 @@ export function NativeHubSurface({
           ? economy.hagathaOffers.some(({ selector }) => selector === serviceSelection.id)
           : economy.dowsingOffers.some(({ id }) => id === serviceSelection.id)
     if (!present) setServiceSelection(null)
-  }, [economy, inventorySelection, sackPath, serviceSelection, surface])
+  }, [dowsingReferenceItem, dowsingReferenceItemId, economy, inventorySelection, sackPath, serviceSelection, surface])
 
   const click = (action: () => void) => {
     audio.playSound('click')
@@ -635,6 +643,7 @@ export function NativeHubSurface({
         aria-modal="true"
         aria-label={label}
         data-renderer-state={rendererState}
+        data-native-dowsing-reference={dowsingReferenceItem?.id ?? ''}
         {...hubInventorySurfaceDiagnostics({
           chat, dyeModal, inventoryDrag: displayedInventoryDrag, inventorySelection, notice, pressedControl,
           sackPath, sackTransition, semanticTooltip, statsPage, surface,
@@ -753,6 +762,7 @@ export function NativeHubSurface({
             <ServiceActions
               beltRects={inventoryBeltRects}
               economy={economy}
+              dowsingReferenceItemId={dowsingReferenceItem?.id ?? null}
               inventorySelection={inventorySelection}
               selection={serviceSelection}
               trader={surface.trader}
@@ -777,6 +787,11 @@ export function NativeHubSurface({
               }}
               onDragChange={setInventoryDrag}
               onDragMove={(point) => rendererRef.current?.moveDrag(point)}
+              onDowsingReference={(itemId) => {
+                setDowsingReferenceItemId(itemId)
+                audio.playSound('backpack-open')
+                audio.playSound('backpack-close')
+              }}
               onInsufficientGold={() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD)}
               onInventorySelect={(next) => {
                 audio.playSound('click')

@@ -1055,6 +1055,39 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
   }).reason, 'service-unavailable')
 })
 
+test('Shlorio reference rolls resolve only the authenticated player inventory', () => {
+  const character = { discipline: 'arcane', displayName: 'Dowsing', element: 'water' } as const
+  let state = createGameSimulation({ first: character, second: character })
+  const reference = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[16]!, 90_039)
+  state = { ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'first', {
+      ...getPlayerEconomy(state, 'first'), backpack: [reference], gold: 20_000,
+    }) }
+  state = { ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'second', {
+      ...getPlayerEconomy(state, 'second'), gold: 20_000,
+    }) }
+  const firstBefore = getPlayerEconomy(state, 'first')
+  const secondBefore = getPlayerEconomy(state, 'second')
+  const denied = applyGameSimulationHubAction(state, 'second', { type: 'dowse', referenceItemId: reference.id })
+  assert.equal(denied.accepted, false)
+  assert.equal(denied.reason, 'item-not-found')
+  const secondAfter = getPlayerEconomy(denied.state, 'second')
+  assert.equal(secondAfter.gold, secondBefore.gold)
+  assert.deepEqual(secondAfter.rng, secondBefore.rng)
+  assert.deepEqual(secondAfter.backpack, secondBefore.backpack)
+  assert.equal(secondAfter.dowsingRolled, false)
+  assert.strictEqual(getPlayerEconomy(denied.state, 'first'), firstBefore)
+  const accepted = applyGameSimulationHubAction(denied.state, 'first', { type: 'dowse', referenceItemId: reference.id })
+  assert.equal(accepted.accepted, true)
+  const firstAfter = getPlayerEconomy(accepted.state, 'first')
+  assert.equal(firstAfter.dowsingRolled, true)
+  assert.equal(firstAfter.gold, 19_350)
+  assert.ok(firstAfter.dowsingOffers.length >= 5)
+  assert.ok(findInventoryItem(firstAfter.backpack, reference.id))
+  assert.strictEqual(getPlayerEconomy(accepted.state, 'second'), secondAfter)
+})
+
 test('every stateful NPC and trader keeps authenticated player state isolated in the shared Hub', () => {
   const first = {
     discipline: 'arcane',

@@ -476,6 +476,12 @@ try {
   const dowse = shlorio.getByRole('button', { name: /DOWSE\s+650 gold/ })
   const beforeDowsing = await dialogGold(shlorio)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-preroll.png` })
+  // Native Dowsing can offer gear above the wizard's level. A starter-hat
+  // reference guarantees level-zero choices for this journey's equip checks.
+  const referenceHat = shlorio.locator('[data-equipment-slot="hat"]').first()
+  const referenceHatId = await referenceHat.getAttribute('data-inventory-item-id')
+  await dragInventoryPointer(hostPage, shlorio, referenceHat, { x: 800, y: 175.5 })
+  assert.equal(await shlorio.getAttribute('data-native-dowsing-reference'), referenceHatId)
   const flashCanvas = shlorio.locator('.hub-inventory-native-canvas')
   const dowseBox = await dowse.boundingBox()
   assertBoxNear(dowseBox, { height: 69, width: 250, x: 675, y: 265.5 })
@@ -499,8 +505,16 @@ try {
   )
   await shlorio.locator('.hub-inventory-native-canvas[data-dowsing-flash="idle"]').waitFor({ state: 'attached', timeout: 5_000 })
   await waitForDialogGold(shlorio, beforeDowsing - 650)
-  const dowsingCell = shlorio.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
-  await dowsingCell.waitFor()
+  const dowsingCells = shlorio.getByRole('button', { name: /^Buy .* for \d+ gold$/ })
+  await dowsingCells.first().waitFor()
+  const dowsingLabels = await dowsingCells.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
+  const dowsingRecipes = dowsingLabels.map(label => DOWSING_EQUIPMENT_RECIPES.find(
+    recipe => recipe.name === parsePurchaseLabel(label).name,
+  ))
+  assert.ok(dowsingRecipes.every(recipe => recipe?.type === 'hat'))
+  const wearableIndex = dowsingRecipes.findIndex(recipe => recipe.level === 0)
+  assert.ok(wearableIndex >= 0)
+  const dowsingCell = dowsingCells.nth(wearableIndex)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-results.png` })
   const dowsingItem = parsePurchaseLabel(await dowsingCell.getAttribute('aria-label'))
   await dowsingCell.hover()
@@ -520,7 +534,7 @@ try {
   )
   await shlorio.locator('.hub-inventory-native-canvas[data-dowsing-flash="idle"]').waitFor({ state: 'attached', timeout: 5_000 })
   await waitForDialogGold(shlorio, beforeDowsing - 650 - dowsingItem.price)
-  await shlorio.getByRole('button', { name: /DOWSE\s+\d+ gold/ }).waitFor()
+  assert.equal(await shlorio.getByRole('button', { name: /^DOWSE/ }).count(), 0)
   const equipmentSlot = equipmentSlotForDowsingItem(dowsingItem.name)
   const shlorioPurchasedItem = shlorio.getByLabel('Backpack').getByRole('button', {
     exact: true,
@@ -553,6 +567,14 @@ try {
   await shlorioPurchasedItem.waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-purchased.png` })
   step('Shlorio purchase remained selectable, inspectable, draggable, and equippable in place')
+  await shlorio.getByRole('button', { name: 'Done' }).click()
+  await shlorio.waitFor({ state: 'hidden' })
+  await openNearbyTrader(hostPage, 'shlorio')
+  await shlorioDialogue.waitFor()
+  await advanceDialogue(shlorioDialogue)
+  await shlorioDialogue.locator('[data-service-trader="shlorio"]').click()
+  await shlorio.waitFor()
+  await waitForNativeSurfaceSettled(shlorio)
   let finalHostGold = beforeDowsing - 650 - dowsingItem.price
   let insufficientFee = 0
   for (let cycle = 0; cycle < 10; cycle += 1) {

@@ -168,7 +168,7 @@ export default function HubInventoryUi({
       onAction({ type: 'acknowledge-college-intro-dialogue' })
     }
     if (surface?.kind === 'service' && surface.trader === 'shlorio'
-      && economy.dowsingOffers.length > 0) {
+      && economy.dowsingRolled) {
       onAction({ type: 'close-dowsing' })
     }
     if (surface?.kind === 'service' && surface.trader === 'hagatha'
@@ -180,7 +180,7 @@ export default function HubInventoryUi({
     setInventorySackTransition(null)
     setInventoryCloseTarget(null)
     onSurfaceChange(null)
-  }, [economy.dowsingOffers.length, onAction, onSurfaceChange, surface])
+  }, [economy.dowsingRolled, onAction, onSurfaceChange, surface])
 
   useEffect(() => () => rendererOwner.destroy(), [rendererOwner])
 

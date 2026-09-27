@@ -39,6 +39,7 @@ export const HUB_SACK_REPLICATION_DEPTH_LIMIT = 32
 /** Bounded wire representation for one DyeClothing mixing transaction. */
 export const MAX_NATIVE_DYE_SELECTIONS = 256
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
+export const NATIVE_DOWSING_MAX_OFFERS = 6
 export const NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY = 9
 export const NATIVE_RETAINED_SACK_SUFFIXES = [
   'Earthly Possessions',
@@ -123,7 +124,7 @@ export type HubInventoryAction =
       readonly swatchRows: readonly number[]
       readonly targetItemId: number
     }
-  | { readonly type: 'dowse' }
+  | { readonly type: 'dowse'; readonly referenceItemId?: number }
   | { readonly type: 'equip'; readonly itemId: number; readonly slot: EquipmentSlot }
   | { readonly type: 'interact-goodie' }
   | {
@@ -380,6 +381,7 @@ export interface HubEconomyState {
   readonly collegeIntroPending: boolean
   readonly dowsingFee: number
   readonly dowsingOffers: readonly DowsingOffer[]
+  readonly dowsingRolled: boolean
   readonly equipment: HubEquipmentState
   readonly firstMixedSelectors: readonly number[]
   readonly fomentiusStock: readonly HubShopItem[]
@@ -755,6 +757,7 @@ export function createHubEconomy(
     collegeIntroPending: true,
     dowsingFee: SHLORIO_INITIAL_DOWSING_FEE,
     dowsingOffers: [],
+    dowsingRolled: false,
     equipment: starters.equipment,
     firstMixedSelectors: [],
     fomentiusStock: stock.items,
@@ -849,6 +852,7 @@ export function archiveCompletedRunEconomy(
     actionFeedback: null,
     backpack: starters.backpack,
     dowsingOffers: [],
+    dowsingRolled: false,
     equipment: starters.equipment,
     fomentiusStock: stock.items,
     gold: Math.max(0, source.gold + archive.groundGold),
@@ -1728,48 +1732,77 @@ export function unforgeInventoryItem(
   }, null, outcome)
 }
 
-export function dowse(source: HubEconomyState, playerLevel: number): HubEconomyResult {
-  if (source.dowsingOffers.length > 0) return rejected(source, 'offers-active')
+export function dowse(source: HubEconomyState, referenceItemId: number | null = null): HubEconomyResult {
+  if (source.dowsingRolled) return rejected(source, 'offers-active')
+  const reference = referenceItemId === null ? null
+    : findInventoryItem(source.backpack, referenceItemId)
+      ?? equippedItems(source.equipment).find(item => item.id === referenceItemId)
+      ?? null
+  if (referenceItemId !== null && reference === null) return rejected(source, 'item-not-found')
   if (source.gold < source.dowsingFee) return rejected(source, 'insufficient-gold')
+  const ownedRecipes = new Set([
+    ...projectInventoryItems(source.backpack).map(({ item }) => item.recipeIndex),
+    ...projectInventoryItems(source.storage).map(({ item }) => item.recipeIndex),
+    ...equippedItems(source.equipment).map(item => item.recipeIndex),
+  ])
   let rng = source.rng
   const pitchDraw = drawNativeFloat(rng, 0.1)
   rng = pitchDraw.state
   const countDraw = drawNativeInteger(rng, 2)
   rng = countDraw.state
   const requestedCount = countDraw.value + 3
-  const offers: DowsingOffer[] = []
-  let nextOfferId = source.nextOfferId
-  for (let slot = 0; slot < requestedCount; slot += 1) {
-    let acceptedRecipe: EquipmentRecipe | undefined
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const recipeDraw = drawNativeInteger(rng, DOWSING_EQUIPMENT_RECIPES.length)
-      rng = recipeDraw.state
-      const recipe = DOWSING_EQUIPMENT_RECIPES[recipeDraw.value]!
-      if (
-        recipe.level <= playerLevel
-        && !offers.some(({ recipeIndex }) => recipeIndex === recipe.sourceIndex)
-      ) {
-        acceptedRecipe = recipe
+  const selected: EquipmentRecipe[] = []
+  // All authored recipes are Rare/Epic; stock excludes those already owned.
+  const eligible = (recipe: EquipmentRecipe): boolean => (
+    !ownedRecipes.has(recipe.sourceIndex) && !selected.includes(recipe)
+  )
+  if (reference === null) {
+    for (let slot = 0; slot < requestedCount; slot += 1) {
+      for (let attempt = 1; attempt <= 100; attempt += 1) {
+        const recipeDraw = drawNativeInteger(rng, DOWSING_EQUIPMENT_RECIPES.length)
+        rng = recipeDraw.state
+        const recipe = DOWSING_EQUIPMENT_RECIPES[recipeDraw.value]!
+        if (!eligible(recipe)) continue
+        // Retail rejects even a successful draw on the hundredth attempt.
+        if (attempt < 100) selected.push(recipe)
         break
       }
     }
-    if (!acceptedRecipe) continue
+  } else {
+    const setName = reference.recipeIndex === null ? null
+      : DOWSING_EQUIPMENT_RECIPES[reference.recipeIndex]!.setName
+    for (let slot = 0; slot < requestedCount + 2; slot += 1) {
+      const candidates = DOWSING_EQUIPMENT_RECIPES.filter(recipe => (
+        eligible(recipe) && (slot < 2
+          ? setName !== null && recipe.setName === setName
+          : recipe.nativeTypeId === reference.nativeTypeId)
+      ))
+      if (candidates.length === 0) continue
+      const choice = drawNativeInteger(rng, candidates.length)
+      rng = choice.state
+      selected.push(candidates[choice.value]!)
+    }
+  }
+  let nextOfferId = source.nextOfferId
+  const offers = selected.map((recipe): DowsingOffer => {
     const priceDraw = drawNativeInteger(rng, 15)
     rng = priceDraw.state
-    offers.push({
+    const offer = {
       id: nextOfferId,
       price: (priceDraw.value + 100) * 50,
-      recipeIndex: acceptedRecipe.sourceIndex,
-    })
+      recipeIndex: recipe.sourceIndex,
+    }
     nextOfferId += 1
-  }
+    return offer
+  })
   return accepted({
     ...source,
     dowsingOffers: offers,
+    dowsingRolled: true,
     gold: source.gold - source.dowsingFee,
     nextOfferId,
     rng,
-  }, Math.fround(0.8) + pitchDraw.value)
+  }, Math.fround(0.8 + pitchDraw.value))
 }
 
 export function buyDowsingOffer(
@@ -1794,13 +1827,13 @@ export function buyDowsingOffer(
     gold: source.gold - offer.price,
     nextItemId: source.nextItemId + 1,
     rng: pitchDraw.state,
-  }, 1 + pitchDraw.value)
+  }, Math.fround(1 + pitchDraw.value))
 }
 
 export function closeDowsingOffers(source: HubEconomyState): HubEconomyState {
-  return source.dowsingOffers.length === 0
+  return !source.dowsingRolled
     ? source
-    : { ...source, dowsingOffers: [], revision: source.revision + 1 }
+    : { ...source, dowsingOffers: [], dowsingRolled: false, revision: source.revision + 1 }
 }
 
 export function creditLootGold(

@@ -53,6 +53,11 @@ import {
   HUB_UNFORGE_CONFIRMATION_NOTICE,
 } from './hub-inventory-notices.ts'
 
+interface InventoryReferenceDropTarget {
+  readonly rect: readonly [number, number, number, number]
+  readonly select: (itemId: number) => void
+}
+
 export function InventoryActions({
   beltRects,
   companion = false,
@@ -68,6 +73,7 @@ export function InventoryActions({
   onOpenSack,
   onSelect,
   selection,
+  referenceDropTarget = null,
   sackPath,
   storageDropRect = null,
   transitionLocked,
@@ -89,6 +95,7 @@ export function InventoryActions({
   onOpenSack: (sackId: number) => void
   onSelect: (selection: HubInventorySelectionModel | null) => void
   selection: HubInventorySelectionModel | null
+  referenceDropTarget?: InventoryReferenceDropTarget | null
   sackPath: readonly number[]
   storageDropRect?: readonly [number, number, number, number] | null
   transitionLocked: boolean
@@ -302,6 +309,7 @@ export function InventoryActions({
         sackPath,
         beltRects,
         storageDropRect,
+        referenceDropTarget,
       )
       return
     }
@@ -537,6 +545,7 @@ function dropInventorySource(
   sackPath: readonly number[],
   beltRects: readonly NativeHudRect[],
   storageDropRect: readonly [number, number, number, number] | null,
+  referenceDropTarget: InventoryReferenceDropTarget | null,
 ): void {
   if (source.owner === 'backpack') {
     const projected = projectInventoryItems(economy.backpack)
@@ -581,6 +590,11 @@ function dropInventorySource(
       }
       if (storageDropRect && pointInRect(point, storageDropRect)) {
         onAction({ type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: item.id })
+        return true
+      }
+      if (referenceDropTarget && pointInRect(point, referenceDropTarget.rect)) {
+        referenceDropTarget.select(item.id)
+        restore()
         return true
       }
       const slot = equipmentSlotsForItem(item, thirdRingUnlocked).find((candidate) => (
@@ -668,6 +682,10 @@ function dropInventorySource(
   }
   if (source.equipmentSlot !== null) {
     const item = itemAtEquipmentSlot(economy, source.equipmentSlot)
+    if (item && referenceDropTarget && pointInRect(point, referenceDropTarget.rect)) {
+      referenceDropTarget.select(item.id)
+      return
+    }
     if (item && nativeInventoryItemCanBindToBelt(item)) {
       const beltSlot = nativeSkillQuickbarDropSlot(point, beltRects)
       if (beltSlot !== null) {

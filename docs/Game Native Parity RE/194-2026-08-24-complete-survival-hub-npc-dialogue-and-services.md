@@ -47,7 +47,8 @@ is summarized in the implementation receipt below.
 | Students / StoreRoom | no-op action / no actor | out-of-system (native noninteractive/no producer) | existing census |
 | Solomon Dig / recipe `GameNPC` | separate Arena prelude / Boneyard scripting | out-of-system (separate systems) | existing reports |
 | story Polisher/Annalist2/Arch variants | alternate builder `0x00513BE0` | out-of-system (Website survival mode) | static census |
-| `ANNAL_Q`, `!RANDOMEQUIP`, targeted Dowsing | dormant data with no normal producer | out-of-system (unreachable retail behavior) | caller/dispatcher sweep |
+| `ANNAL_Q`, `!RANDOMEQUIP` | dormant data with no normal producer | out-of-system (unreachable retail behavior) | caller/dispatcher sweep |
+| Targeted Dowsing | inventory drop virtual dispatch to `0x00568080` | recovered-pending-port; earlier unreachable claim superseded | ledger203 September 27 correction |
 
 No member is browser-blocked.
 

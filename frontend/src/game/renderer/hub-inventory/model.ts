@@ -144,6 +144,7 @@ export type HubInventoryRendererModel =
       readonly economy: ProtocolPlayerEconomy
       readonly flybys: readonly HubInventoryFlybyModel[]
       readonly kind: 'service'
+      readonly dowsingReferenceItem: HubInventoryItem | null
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl
       readonly progression: ProtocolPlayerProgression

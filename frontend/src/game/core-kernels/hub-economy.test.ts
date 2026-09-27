@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createNativeRng } from './native-rng.ts'
+import { advanceNativeRngWords, createNativeRng } from './native-rng.ts'
 import { rollNativeStarterEquipmentAppearance } from './native-starter-equipment.ts'
 
 import {
@@ -708,14 +708,14 @@ test('Shlorio consumes the fee, offers unique complete-catalog recipes, and clea
     .every(({ iconTints }) => iconTints[0] === null && iconTints[1] === null))
 
   const initial = { ...createHubEconomy(1), gold: 10_000 }
-  const rolled = dowse(initial, 75)
+  const rolled = dowse(initial)
   assert.equal(rolled.accepted, true)
-  assert.equal(rolled.dowsingPitch, 0.8968220129609108)
+  assert.equal(rolled.dowsingPitch, 0.8968219757080078)
   assert.equal(rolled.state.gold, 9_350)
   assert.deepEqual(rolled.state.dowsingOffers, [
-    { id: 1, price: 5_550, recipeIndex: 40 },
-    { id: 2, price: 5_000, recipeIndex: 3 },
-    { id: 3, price: 5_050, recipeIndex: 34 },
+    { id: 1, price: 5_000, recipeIndex: 40 },
+    { id: 2, price: 5_100, recipeIndex: 27 },
+    { id: 3, price: 5_050, recipeIndex: 3 },
   ])
   assert.ok(rolled.state.dowsingOffers.length === 3 || rolled.state.dowsingOffers.length === 4)
   assert.equal(new Set(rolled.state.dowsingOffers.map(({ recipeIndex }) => recipeIndex)).size,
@@ -725,14 +725,152 @@ test('Shlorio consumes the fee, offers unique complete-catalog recipes, and clea
   const offer = rolled.state.dowsingOffers[0]!
   const bought = buyDowsingOffer(rolled.state, offer.id)
   assert.equal(bought.accepted, true)
-  assert.equal(bought.dowsingPitch, 1.0525179989635944)
+  assert.equal(bought.dowsingPitch, 1.0525180101394653)
   assert.equal(bought.state.dowsingOffers.length, 0)
   assert.ok(bought.state.backpack.some(({ recipeIndex }) => recipeIndex === offer.recipeIndex))
   assert.equal(bought.state.dowsingFee, 700)
 
-  const closed = closeDowsingOffers(dowse({ ...createHubEconomy(1), gold: 10_000 }, 75).state)
+  const closed = closeDowsingOffers(dowse({ ...createHubEconomy(1), gold: 10_000 }).state)
   assert.equal(closed.dowsingOffers.length, 0)
   assert.equal(closed.gold, 9_350)
+})
+
+test('Shlorio reference draws two set members then same-type items before pricing', () => {
+  const hood = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[16]!, 90_039)
+  const initial = { ...createHubEconomy(1), backpack: [hood], gold: 20_000, rng: createNativeRng(1) }
+  const rolled = dowse(initial, hood.id)
+  assert.equal(rolled.accepted, true)
+  assert.deepEqual(rolled.state.dowsingOffers, [
+    { id: 1, recipeIndex: 17, price: 5_550 },
+    { id: 2, recipeIndex: 19, price: 5_300 },
+    { id: 3, recipeIndex: 6, price: 5_100 },
+    { id: 4, recipeIndex: 20, price: 5_400 },
+    { id: 5, recipeIndex: 5, price: 5_550 },
+    { id: 6, recipeIndex: 11, price: 5_150 },
+  ])
+  assert.deepEqual(rolled.state.rng, advanceNativeRngWords(initial.rng, 14))
+  assert.deepEqual(rolled.state.backpack, [hood])
+  assert.equal(rolled.state.gold, 19_350)
+  assert.equal(rolled.state.dowsingRolled, true)
+})
+
+test('Shlorio reference excludes recipes in nested sacks, storage and equipment', () => {
+  const base = createHubEconomy(1)
+  const items = DOWSING_EQUIPMENT_RECIPES.map(recipe => createEquipmentInventoryItem(recipe, 91_000 + recipe.sourceIndex))
+  const source = {
+    ...base,
+    backpack: [items[16]!, {
+      ...base.fomentiusStock.find(item => item.kind === 'sack')!,
+      id: 99_000,
+      quantity: 1,
+      contents: items.filter(item => ![5, 16, 17, 19].includes(item.recipeIndex!)),
+    }],
+    equipment: { ...base.equipment, hat: items[5]! },
+    gold: 20_000,
+    rng: createNativeRng(1),
+    storage: [items[19]!],
+  }
+  const result = dowse(source, items[16]!.id)
+  assert.equal(result.accepted, true)
+  assert.deepEqual(result.state.dowsingOffers.map(offer => offer.recipeIndex), [17])
+  assert.deepEqual(result.state.rng, advanceNativeRngWords(source.rng, 4))
+  assert.deepEqual(result.state.backpack, source.backpack)
+  assert.deepEqual(result.state.storage, source.storage)
+  assert.deepEqual(result.state.equipment, source.equipment)
+})
+
+test('Shlorio reference insufficient funds leaves the complete economy unchanged', () => {
+  const base = createHubEconomy(1)
+  const source = { ...base, gold: base.dowsingFee - 1 }
+  const result = dowse(source, source.backpack[0]!.id)
+  assert.equal(result.accepted, false)
+  assert.equal(result.reason, 'insufficient-gold')
+  assert.equal(result.state, source)
+})
+
+test('Shlorio untargeted exhaustion keeps the native hundredth-attempt rejection', () => {
+  const source = {
+    ...createHubEconomy(1), gold: 20_000, rng: createNativeRng(1394),
+    backpack: DOWSING_EQUIPMENT_RECIPES.filter(recipe => recipe.sourceIndex !== 37)
+      .map(recipe => createEquipmentInventoryItem(recipe, 92_000 + recipe.sourceIndex)),
+  }
+  // The only available recipe first appears on attempt100, then on attempt98
+  // of the next slot. Native skips the first hit and prices after all four slots.
+  const rolled = dowse(source)
+  assert.equal(rolled.accepted, true)
+  assert.deepEqual(rolled.state.dowsingOffers.map(offer => offer.recipeIndex), [37])
+  assert.deepEqual(rolled.state.rng, advanceNativeRngWords(source.rng, 401))
+  assert.equal(rolled.state.dowsingRolled, true)
+})
+
+test('Shlorio untargeted exhausted catalog consumes bounded retries and charges only once', () => {
+  const source = {
+    ...createHubEconomy(1), gold: 20_000, rng: createNativeRng(1),
+    backpack: DOWSING_EQUIPMENT_RECIPES.map(recipe => createEquipmentInventoryItem(recipe, 93_000 + recipe.sourceIndex)),
+  }
+  const rolled = dowse(source)
+  assert.equal(rolled.accepted, true)
+  assert.deepEqual(rolled.state.dowsingOffers, [])
+  assert.deepEqual(rolled.state.rng, advanceNativeRngWords(source.rng, 402))
+  assert.equal(rolled.state.gold, 19_350)
+  assert.equal(dowse(rolled.state).reason, 'offers-active')
+})
+
+test('Shlorio reference covers every authored set and equipment class without offering the owned reference', () => {
+  for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+    const item = createEquipmentInventoryItem(recipe, 90_000 + recipe.sourceIndex)
+    const source = { ...createHubEconomy(1), backpack: [item], gold: 20_000, rng: createNativeRng(1) }
+    const rolled = dowse(source, item.id)
+    assert.equal(rolled.accepted, true, recipe.name)
+    const offers = rolled.state.dowsingOffers.map(offer => DOWSING_EQUIPMENT_RECIPES[offer.recipeIndex]!)
+    const setChoices = recipe.setName === null ? 0 : Math.min(2,
+      DOWSING_EQUIPMENT_RECIPES.filter(row => row.setName === recipe.setName && row !== recipe).length)
+    assert.ok(offers.slice(0, setChoices).every(row => row.setName === recipe.setName), recipe.name)
+    assert.ok(offers.slice(setChoices).every(row => row.nativeTypeId === recipe.nativeTypeId), recipe.name)
+    assert.ok(offers.length > 0 && offers.length <= 6, recipe.name)
+    assert.ok(offers.every(row => row.sourceIndex !== recipe.sourceIndex), recipe.name)
+    assert.equal(new Set(offers).size, offers.length, recipe.name)
+  }
+})
+
+test('Shlorio reference rejects an unowned item without charging or advancing RNG', () => {
+  const source = { ...createHubEconomy(1), gold: 20_000 }
+  const result = dowse(source, 999_999)
+  assert.equal(result.accepted, false)
+  assert.equal(result.reason, 'item-not-found')
+  assert.equal(result.state, source)
+})
+
+test('Shlorio reference with no matching recipes produces one paid empty result until close', () => {
+  const source = { ...createHubEconomy(1), gold: 20_000, rng: createNativeRng(1) }
+  const potion = source.backpack.find(item => item.kind === 'health-potion')!
+  const rolled = dowse(source, potion.id)
+  assert.equal(rolled.accepted, true)
+  assert.deepEqual(rolled.state.dowsingOffers, [])
+  assert.equal(rolled.state.dowsingRolled, true)
+  assert.equal(rolled.state.gold, 19_350)
+  assert.deepEqual(rolled.state.rng, advanceNativeRngWords(source.rng, 2))
+  const repeated = dowse(rolled.state, potion.id)
+  assert.equal(repeated.accepted, false)
+  assert.equal(repeated.reason, 'offers-active')
+  assert.equal(repeated.state, rolled.state)
+  const closed = closeDowsingOffers(rolled.state)
+  assert.equal(closed.dowsingRolled, false)
+  assert.equal(closed.gold, rolled.state.gold)
+  assert.deepEqual(closed.backpack, source.backpack)
+})
+
+test('Shlorio reference purchase keeps the service rolled until Done and preserves the reference item', () => {
+  const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[16]!, 90_039)
+  const source = { ...createHubEconomy(1), backpack: [item], gold: 20_000, rng: createNativeRng(1) }
+  const rolled = dowse(source, item.id)
+  const bought = buyDowsingOffer(rolled.state, rolled.state.dowsingOffers[0]!.id)
+  assert.equal(bought.accepted, true)
+  assert.equal(bought.state.dowsingRolled, true)
+  assert.deepEqual(bought.state.dowsingOffers, [])
+  assert.ok(findInventoryItem(bought.state.backpack, item.id))
+  assert.equal(dowse(bought.state, item.id).reason, 'offers-active')
+  assert.equal(closeDowsingOffers(bought.state).dowsingRolled, false)
 })
 
 test('all six equipment classes route through the seven sinks and third ring is perk-gated', () => {

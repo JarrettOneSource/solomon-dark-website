@@ -28,6 +28,7 @@ import { coldSlowPlayerEntity, dazzlePlayerEntity } from '../core-server/player-
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { GameProtocolError } from './codecs/values.ts'
+import { hubActionFeedback, playerEconomy } from './codecs/economy.ts'
 import { createGameSnapshotFrame, createGameSnapshotProjection } from './entity-replication.ts'
 import { GAME_CHAT_MAX_TEXT_CODE_UNITS } from './game-chat.ts'
 import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_REASONS, GAME_PROTOCOL_VERSION } from './game-protocol-contract.ts'
@@ -603,6 +604,7 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'consume', itemId: 5 },
     { type: 'dye', dyeItemId: 7, layer: 'cloth', swatchRows: [1, 9, 5], targetItemId: 8 },
     { type: 'dowse' },
+    { type: 'dowse', referenceItemId: 42 },
     { type: 'equip', itemId: 3, slot: 'ring-2' },
     { type: 'interact-goodie' },
     { type: 'move-inventory-item', destinationSackId: 10, destinationSlot: null, itemId: 9 },
@@ -647,6 +649,9 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
     { type: 'transfer', direction: 'to-storage', gesture: 'double-activation', itemId: 1 },
     { type: 'dowse', offerId: 1 },
+    { type: 'dowse', referenceItemId: 0 },
+    { type: 'dowse', referenceItemId: -1 },
+    { type: 'dowse', referenceItemId: '42' },
     { type: 'sell-fomentius', itemId: 1 },
   ]) {
     assert.throws(() => decodeClientGameMessage(JSON.stringify({
@@ -654,6 +659,32 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
       action,
     })), GameProtocolError)
   }
+})
+
+test('protocol v137 carries six Dowsing offers and preserves a paid empty result', () => {
+  const economy = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+    .players['player-1']!.economy
+  const offers = Array.from({ length: 6 }, (_, index) => ({ id: index + 1, recipeIndex: index, price: 5_000 }))
+  const rolled = { ...economy, dowsingOffers: offers, dowsingRolled: true }
+  assert.deepEqual(playerEconomy(JSON.parse(JSON.stringify(rolled)), 'economy'), rolled)
+  const empty = { ...rolled, dowsingOffers: [] }
+  assert.deepEqual(playerEconomy(JSON.parse(JSON.stringify(empty)), 'economy'), empty)
+  assert.throws(() => playerEconomy({ ...rolled, dowsingRolled: false }, 'economy'), /completed roll/)
+  assert.throws(() => playerEconomy({ ...rolled, dowsingRolled: undefined }, 'economy'), /dowsingRolled/)
+  assert.throws(() => playerEconomy({ ...rolled,
+    dowsingOffers: [...offers, { id: 7, recipeIndex: 6, price: 5_000 }],
+  }, 'economy'), /dowsingOffers/)
+})
+
+test('Dowsing feedback accepts the native single-precision maximum pitch', () => {
+  const feedback = {
+    accepted: true, action: 'buy-dowsing', sequence: 1,
+    dowsingPitch: Math.fround(1.1), reason: null,
+    transferDirection: null, transferGesture: null,
+    skillBookOutcome: null, unforgeOutcome: null,
+  }
+  assert.deepEqual(hubActionFeedback(feedback, 'feedback'), feedback)
+  assert.throws(() => hubActionFeedback({ ...feedback, dowsingPitch: 1.1001 }, 'feedback'), /dowsingPitch/)
 })
 
 test('protocol v80 carries authoritative present Skorcha population and animation state', () => {

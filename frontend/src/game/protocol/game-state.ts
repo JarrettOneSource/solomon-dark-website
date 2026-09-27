@@ -71,6 +71,7 @@ export interface ProtocolPlayerEconomy {
   collegeIntroPending: boolean
   dowsingFee: number
   dowsingOffers: readonly DowsingOffer[]
+  dowsingRolled: boolean
   equipment: HubEquipmentState
   fomentiusStock: readonly HubShopItem[]
   gold: number
