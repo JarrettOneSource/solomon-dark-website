@@ -1629,7 +1629,7 @@ also reach the shared Fast/Slow/Burning chase transforms.
 | Strict contact and repeat-overlap reset | `0x00486E3A..0x0048704C` | `exact-ported` | 39.999 accepted, 40 rejected; damage once per eligible cooldown; every overlap resets speed/flyby/turn |
 | Four damage plus 50-tick player Dazzle ramp | `0x00486EC9..0x00486FE9`, `0x00623490`, `0x00625680` | Wraith producer `exact-ported`; player consumer `verified-already-at-parity` | immediate semantic damage, first movement scale `1/50`, complete recovery, no re-hit before cooldown |
 | Burning and cooldown Soul wisps; opaque facing body | `0x00487052..0x00487177`, renderer `0x00496220`, BadGuys 21 and 2070..2087 | `exact-ported` | one-in-four idle emission or every cooldown tick; body remains opaque and frame-free |
-| Inherited route vslot | vtable `+0x74 = 0x00483D40`; special `+0x6C = 0x00478EA0` | recovered-pending-port for inherited degraded movement; full special vector still bypasses it | September27 traces `+0x70` caller and both movement branches |
+| Inherited route vslot | vtable `+0x74 = 0x00483D40`; special `+0x6C = 0x00478EA0` | exact-ported for inherited degraded movement; full special vector still bypasses it | September27 traces `+0x70` caller and both movement branches |
 | Collision-gated direct flight and actor registration | Wraith `0x00486E08..0x00486E34`; wrapper `0x00475FE0`; executor `0x00525800` direct branch | `exact-ported` | no static/player/enemy collision callback; direct summed delta; radius 15 remains query/body metadata; cell binding still follows final root |
 | Target loss/reacquisition, temporary control, pause | `0x00483480`, `0x00625680`, Arena tick ownership | `exact-ported` | no fabricated phase reset; status scales special vector; paused tick holds all clocks/RNG |
 | Death, reward, fragments, audio, retirement | `0x00495600` and previously closed Wraith terminal rows | `verified-already-at-parity` | existing terminal actor/audio/lifetime suites remain unchanged |
@@ -1853,26 +1853,29 @@ No Mod Loader files or canonical project changed.
 | No-target heading is instance-based | `0x00478EA0` consumes integer`+0xC`, multiplied by double225 | Investigate stable identity and degraded-motion consumers; do not substitute elapsed age |
 | Common movement is nested inside the Wraith tick | `0x00486E08..0x00486E34` disables collision, calls`0x004835F0`, restores collision, then contacts | Control/visibility movement exits cannot bypass the outer flight/contact clock |
 
-### Boundary and investigation membership
+### Boundary and final membership
 
 This reopening owns Wraith type 1007 construction, retained flight state,
 normal/degraded movement, contact and control/visibility branches through
-save/replication/presentation and retirement. It reuses the complete five
-retail schedule entries, existing Fast/Slow/Burning recipe transforms,
-18-facing body catalog and already recovered shared contact/death resources.
-Other families keep their existing owners; shared native movement findings
-are recorded without inventing changes to unrelated enemy behavior.
+save/replication/presentation and retirement. It reuses all five stock schedule
+entries, the existing Fast/Slow/Burning recipe transforms and scale consumers,
+the complete 18-facing body catalog and shared contact/death resources.
 
-| Member | Investigation disposition | Required proof |
+| Member | Final disposition | Evidence |
 | --- | --- | --- |
-| Five stock schedule rows and Fast/Slow/Burning/scale variants | recovered-pending-port | Native constructor endpoints and long-term movement per chase transform |
-| Retained speed and float32 turn clocks | recovered-pending-port | Independent raw operands, long-lived baseline, overshoot and countdown boundaries |
-| Visible, non-admitted and no-target vectors | recovered; focused integration passed, final gate pending | Selected virtual slots, cadence/goal ownership and visibility transitions |
-| Control suppression, reorientation and contact while movement is suppressed | recovered; focused integration passed, final gate pending | Trace common movement return versus outer Wraith tick; preserve native damage cooldown |
-| Strict 40 contact, fifty-tick Dazzle, repeated overlap | existing evidence retained; verify after correction | Store and player regressions plus built browser contact/recovery |
-| Wisps, opaque 18-facing body, lighting, death/rewards/retirement | existing evidence retained; verify affected outputs | Existing renderer/effect suites and browser movement/wisp receipt |
-| Save schema 26..43 retained wrong speeds and turn gains | implemented; focused migration passed, final gate pending | Repair stale state without consuming gameplay RNG or resetting damage cooldown; preserve current-schema state |
-| Authority, replication, pause/rejoin and teardown | existing ownership retained; verify | Host owns steering; browser receives moving actors; pause/save resumes without hidden reset |
+| Five stock schedule rows and Fast/Slow/Burning/scale variants | exact-ported | Complete catalog census, constructor endpoints and chase-transform tests; existing scale/body consumers preserved |
+| Retained speed and float32 turn clocks | exact-ported | Raw operand widths, matched long-lived replay, overshoot and countdown regressions |
+| Visible, non-admitted and no-target vectors | exact-ported | Both selected virtual slots, all four UID cadences, routing/turn-clamp and visibility tests |
+| Control suppression and contact while movement is suppressed | exact-ported | Outer Wraith clocks/contact surround the common movement gates; Frozen and exact status-cutoff regressions |
+| Collision-stall reorientation producer | out-of-system for native Wraith flight | Both Wraith movement branches disable collision; requested and committed movement are identical, so the shared stall-recovery producer is not reached |
+| Strict 40 contact, fifty-tick Dazzle and repeated overlap | verified-already-at-parity through corrected movement | Store/player regressions and built desktop/touch damage, Dazzle and recovery |
+| Wisps, opaque 18-facing body, lighting, death/rewards/retirement | verified-already-at-parity | Existing renderer/effect/retirement suites pass; browser body records and wisp presentation reviewed |
+| Save schema 26..43 flight repair and current-schema round trip | exact-ported for the Website save adapter | Legacy invalid speed/turn repair preserves identity, position, cooldown and RNG; current schema remains unchanged |
+| Authority, replication, pause/rejoin and teardown | verified-already-at-parity through corrected authority | Built 20 Hz snapshot/renderer journeys, paused-state equality, resume and existing save/session suites |
+
+No member is blocked by the browser platform. The legacy migration cannot
+reconstruct a trajectory already simulated with the old invalid constants;
+its explicit one-time repair is documented below.
 
 ### Acceptance
 
@@ -1994,3 +1997,35 @@ case and every sibling in its contact matrix. Runtime code is unchanged from
 the desktop/touch preflights; the full gate and built journeys must still pass
 on the corrected committed test tree. Failed gate log SHA-256:
 `56c78eef1b269ae19315cff371aa6fddda060aca71a2414e009eaa404b27a075`.
+
+
+### September 27 final Windows/WSL acceptance
+
+Exact candidate `c9eef1785741890556e303c977812e93a3a894de` passed
+`bash ./scripts/validate.sh` on `home-wsl`, using Node 22.17.0 and .NET SDK
+10.0.302. All 3,919 Node test executions and 24 Python backend/contract tests
+passed, along with production builds and the configured renderer quality gate.
+The renderer slice retains 100% statement/branch/function/line coverage,
+468 killed mutations, one timeout, 147 compile errors, 24 reviewed equivalents
+and no survivors or quality failures. Gate SHA-256:
+`8fc374053f6d6449eedda5bbf62623d72bc814d79fef95190f18f51712f14c2b`.
+
+Dependent built Chrome 150.0.7871.124 desktop and touch journeys both pass.
+Desktop flight covers 4,572.15 units over 604.42 renderer ticks (65 samples),
+then 5,108.28 over 609.95 ticks after resume (66 samples). Touch covers
+4,456.98 over 609.40 ticks (58 samples), then 4,922.42 over 609.99 ticks
+(59 samples). Both restore the stale schema43 actor to valid cruise, render
+its native facing body, record a four-point contact hit with 50 Dazzle ticks,
+observe recovery, preserve the complete paused flight state and resume motion.
+Page, console, HTTP, wire and host error arrays are empty. Production contact
+captures were visually reviewed for both layouts.
+
+The browser reports Vulkan SwiftShader, so these are behavior receipts and
+not a physical-GPU FPS benchmark. Touch uses browser emulation, and the fixture
+is a private constructed legacy save with default player health and one
+diagnostic contact placement. The original reporter's save and a fresh native
+trajectory capture were not available; native movement rules are established
+by the instructions above. Production deployment is a separate, unverified
+boundary. Final job `job_20260927T074805Z_aadc3375b5` completed at
+2026-09-27T08:30:39Z with gate and both browser exit codes zero. Only this
+documentation receipt changes after the accepted candidate.
