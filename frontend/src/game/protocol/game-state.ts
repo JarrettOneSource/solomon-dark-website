@@ -111,6 +111,8 @@ export interface ProtocolPlayerInventoryStats {
   castSpeedPercent: number
   magicResistancePercent: number
   manaRecoveryPerSecond: number
+  meleeDamageMaximum: number
+  meleeDamageMinimum: number
   painResistancePercent: number
   poisonResistancePercent: number
   primarySpell: ProtocolPlayerPrimarySpellStats

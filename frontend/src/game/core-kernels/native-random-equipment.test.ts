@@ -10,6 +10,16 @@ import { createNativeRng } from './native-rng.ts'
 
 const TYPES: readonly EquipmentType[] = ['hat', 'robe', 'staff', 'wand', 'ring', 'amulet']
 
+test('native Brutal affix remains eligible on every equipment class including the reported Wand', () => {
+  for (const equipmentType of TYPES) {
+    const generated = generateNativeRandomEquipmentEffects(createNativeRng(252), equipmentType, 1, {
+      advancedUnlocks: new Array<boolean>(8).fill(false),
+    })
+    assert.match(generated.name, /^Brutal /)
+    assert.deepEqual(generated.effects, [{ kind: 3, magnitude: 5, operator: 0, target: 0 }])
+  }
+})
+
 test('random equipment synthesizes one or two complete native FX records and a native affix name', () => {
   let observedDouble = false
   const observedKinds = new Set<number>()

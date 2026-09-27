@@ -615,6 +615,17 @@ materializes. A missing owner uses neutral loot inputs instead of inheriting the
 first connected participant. Resulting ground actors remain shared and retain
 first-valid pickup contention; shared pickup does not transfer charm ownership.
 
+Protocol 138 adds authoritative `meleeDamageMinimum` and `meleeDamageMaximum`
+to each participant's inventory stats. The shared InventoryScreen formats them
+with one decimal and the native small italic `/ whack` continuation. The range
+uses `.5/1 + Enchant Staff`, then the separate melee multiplier and flat lane;
+retained progression equality includes both endpoints so paused equipment
+changes repaint immediately. Native Staff contact separately resolves row 65
+through ordinary offensive damage, including Serendipity; Brute changes the
+displayed melee range and push strength but does not multiply Staff contact.
+Wands retain the native Staff-only contact exclusion even when they carry a
+Brutal affix. These endpoints are derived on save restore, not persisted fields.
+
 Each host owns its safe public-party projection. A bearer-protected supervisor
 control-plane read aggregates every nonclosing host and exposes that bounded
 projection to the Website backend;

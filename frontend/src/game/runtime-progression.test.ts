@@ -6,8 +6,41 @@ import { createGameSnapshot } from './host/game-snapshot.ts'
 import type { HubInventoryItem } from './core-kernels/hub-economy.ts'
 import type { ProtocolPlayerInventoryStats, ProtocolPlayerProgression } from './protocol/game-state.ts'
 import { sameRuntimeProgression } from './runtime-progression.ts'
+import { createGameSaveDocument, restoreGameSaveDocument } from './save/game-save-document.ts'
 
 const baseline = createGameSnapshot(createGameSimulation(), 'local-player').players['local-player']!.progression
+
+test('melee display remains owner-local and refreshes on save restoration and paused unequip', () => {
+  const config = { discipline: 'arcane', displayName: 'Melee', element: 'ether' } as const
+  const initial = createGameSimulation({ owner: config, peer: { ...config, displayName: 'Peer' } })
+  const economy = getPlayerEconomy(initial, 'owner')!
+  const wand: HubInventoryItem = {
+    equipmentType: 'wand', generatedLevel: 1, iconRecords: [78], id: 40_002,
+    kind: 'equipment', name: 'Brutal Wand', nativeEffects: [{ kind: 3, magnitude: 5, operator: 0, target: 0 }],
+    nativeSelector: 0, nativeSubtype: null, nativeTypeId: 7011,
+    quantity: 1, rarity: null, recipeIndex: null,
+  }
+  const equipped = { ...initial, playerEntities: replacePlayerEconomy(initial.playerEntities, 'owner', {
+    ...economy, equipment: { ...economy.equipment, weapon: wand }, nextItemId: 40_003,
+  }) }
+  const snapshot = createGameSnapshot(equipped, 'owner')
+  const before = snapshot.players.owner!.progression
+  assert.equal(before.inventoryStats.meleeDamageMinimum, 5.5)
+  assert.equal(before.inventoryStats.meleeDamageMaximum, 6)
+  assert.equal(snapshot.players.peer!.progression.inventoryStats.meleeDamageMinimum, 0.5)
+  const save = createGameSaveDocument({ state: equipped, playerId: 'owner', integrity: 'local-only',
+    loadedBoneyard: null, mods: [], modState: {} })
+  const restored = restoreGameSaveDocument(save)
+  assert.deepEqual(createGameSnapshot(restored.state, 'owner').players.owner!.progression.inventoryStats, before.inventoryStats)
+  const removed = applyGameSimulationHubAction(equipped, 'owner', { type: 'unequip', slot: 'weapon' })
+  assert.equal(removed.accepted, true)
+  assert.equal(removed.state.tick, equipped.tick)
+  const after = createGameSnapshot(removed.state, 'owner').players.owner!.progression
+  assert.equal(after.inventoryStats.meleeDamageMinimum, 0.5)
+  assert.equal(after.inventoryStats.meleeDamageMaximum, 1)
+  assert.equal(before.revision, after.revision)
+  assert.equal(sameRuntimeProgression(before, after), false)
+})
 
 test('removing a mana-recovery ring invalidates the displayed stats at unchanged HP, MP, and revision', () => {
   const playerId = 'local-player'
@@ -44,6 +77,8 @@ test('every inventory stat change invalidates retained progression in both direc
     castSpeedPercent: [{ castSpeedPercent: 120 }],
     magicResistancePercent: [{ magicResistancePercent: 20 }],
     manaRecoveryPerSecond: [{ manaRecoveryPerSecond: 11 }],
+    meleeDamageMaximum: [{ meleeDamageMaximum: 6 }],
+    meleeDamageMinimum: [{ meleeDamageMinimum: 5.5 }],
     painResistancePercent: [{ painResistancePercent: 25 }],
     poisonResistancePercent: [{ poisonResistancePercent: 40 }],
     primarySpell: [

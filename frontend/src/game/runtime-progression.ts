@@ -37,6 +37,8 @@ function sameInventoryStats(
     && current.painResistancePercent === next.painResistancePercent
     && current.poisonResistancePercent === next.poisonResistancePercent
     && current.manaRecoveryPerSecond === next.manaRecoveryPerSecond
+    && current.meleeDamageMinimum === next.meleeDamageMinimum
+    && current.meleeDamageMaximum === next.meleeDamageMaximum
     && current.primarySpell.damageMinimum === next.primarySpell.damageMinimum
     && current.primarySpell.damageMaximum === next.primarySpell.damageMaximum
     && current.primarySpell.manaCost === next.primarySpell.manaCost

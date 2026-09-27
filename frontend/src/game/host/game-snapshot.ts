@@ -391,6 +391,8 @@ function protocolPlayerState(
         castSpeedPercent: Math.fround(derived.castProgressFactor * 100),
         magicResistancePercent: Math.fround(derived.magicResistance * 100),
         manaRecoveryPerSecond: derived.manaRecoveryPerSecond,
+        meleeDamageMaximum: derived.meleeDamageMaximum,
+        meleeDamageMinimum: derived.meleeDamageMinimum,
         painResistancePercent: Math.fround(derived.damageResistance * 100),
         poisonResistancePercent: Math.fround(derived.poisonResistance * 100),
         primarySpell,

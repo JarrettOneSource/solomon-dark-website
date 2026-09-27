@@ -5,6 +5,9 @@ import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
+import { createServer } from 'vite'
+import { generateNativeRandomEquipmentEffects } from '../src/game/core-kernels/native-random-equipment.ts'
+import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { createGameSimulation, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
@@ -18,8 +21,22 @@ const screenshotRoot = process.env.SDR_INVENTORY_STATS_SCREENSHOT_ROOT
   || await mkdtemp(join(tmpdir(), 'solomon-inventory-stats-'))
 await mkdir(screenshotRoot, { recursive: true })
 const receipts = []
+const mobile = process.env.SDR_INVENTORY_STATS_MOBILE === '1'
 const playerId = 'inventory-stats-owner'
 const ringId = 40_001
+const weapons = ['wand', 'staff'].map((type, index) => {
+  const generated = generateNativeRandomEquipmentEffects(createNativeRng(252), type, 1, {
+    advancedUnlocks: new Array(8).fill(false),
+  })
+  assert.deepEqual(generated.effects, [{ kind: 3, magnitude: 5, operator: 0, target: 0 }])
+  return {
+    id: 40_002 + index, kind: 'equipment', equipmentType: type,
+    generatedLevel: generated.itemLevel, iconRecords: [type === 'wand' ? 78 : 72],
+    name: generated.name, nativeEffects: generated.effects, nativeSelector: 0,
+    nativeSubtype: null, nativeTypeId: type === 'wand' ? 7011 : 7004,
+    quantity: 1, rarity: null, recipeIndex: null,
+  }
+})
 const character = { discipline: 'arcane', displayName: 'Stats', element: 'ether' }
 const initial = createGameSimulation({ [playerId]: character })
 const economy = getPlayerEconomy(initial, playerId)
@@ -49,25 +66,27 @@ const document = createGameSaveDocument({
       ))),
     },
     playerEntities: replacePlayerEconomy(initial.playerEntities, playerId, {
-      ...economy, backpack: [], collegeIntroPending: false, tutorialPending: false,
+      ...economy, backpack: weapons, collegeIntroPending: false, tutorialPending: false,
       equipment: { ...economy.equipment, rings: [ring, null, null] },
       nextItemId: 50_000,
     }),
   },
 })
-const server = await startStaticClientServer({
-  root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
-})
+const server = await startClientServer()
 const credential = 'inventory-stats-browser-acceptance'
 const host = await startGameHost({
   allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20,
+  createBoneyardSeedBytes: () => Buffer.alloc(16),
 })
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: true,
   args: ['--autoplay-policy=no-user-gesture-required'],
 })
-const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+const page = await browser.newPage(mobile
+  ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  : { viewport: { width: 1600, height: 900 } })
+const touchSession = mobile ? await page.context().newCDPSession(page) : null
 page.setDefaultTimeout(15_000)
 const errors = { console: [], page: [], responses: [] }
 page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
@@ -77,7 +96,9 @@ await page.addInitScript(({ credential: gameCredential, url }) => {
   window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', credential: gameCredential, url } }
 }, { credential, url: host.address.url })
 try {
-  await page.goto(server.origin)
+  await page.route('**/__inventory_seed', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Inventory fixture</title>' }))
+  await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+  await page.goto(`${server.origin}/__inventory_seed`)
   await page.evaluate(record => new Promise((resolve, reject) => {
     const open = indexedDB.open('solomon-dark-game-saves', 1)
     open.onupgradeneeded = () => open.result.createObjectStore('slots', { keyPath: 'slot' })
@@ -117,7 +138,7 @@ try {
   await exerciseInventory(inventory, 'boneyard')
   await closeInventory(inventory)
   assert.deepEqual(errors, { console: [], page: [], responses: [] })
-  console.log(JSON.stringify({ receipts, errors, screenshotRoot, status: 'ok' }))
+  console.log(JSON.stringify({ receipts, errors, screenshotRoot, status: 'ok', mobile, browser: browser.version() }))
 } catch (error) {
   console.log(JSON.stringify({ body: await page.locator('body').innerText(), errors }))
   await page.screenshot({ path: join(screenshotRoot, 'failure.png') })
@@ -137,7 +158,7 @@ async function exerciseInventory(inventory, scene) {
   for (const gesture of ['double-activation', 'drag']) {
     await equippedRing.waitFor()
     const equippedPixels = await captureRecovery(canvas, scene, `${scene}-${gesture}-equipped`)
-    if (gesture === 'double-activation') await equippedRing.dblclick()
+    if (gesture === 'double-activation') await doubleActivate(equippedRing)
     else {
       const stage = await inventory.boundingBox()
       const cell = hubInventorySlotPosition(5)
@@ -163,11 +184,35 @@ async function exerciseInventory(inventory, scene) {
     await waitForRecovery(canvas, 11)
     receipts.push({ scene, gesture, equippedRecovery: 11, removedRecovery: 10, reequippedRecovery: 11 })
   }
+  for (const weapon of weapons) {
+    const backpackWeapon = inventory.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${weapon.id}"]`)
+    const equippedWeapon = inventory.locator(`[data-inventory-owner="equipment"][data-inventory-item-id="${weapon.id}"]`).first()
+    await waitForMelee(canvas, 0.5, 1)
+    const before = await captureRecovery(canvas, scene, `${scene}-${weapon.equipmentType}-before`, true)
+    if (mobile) await backpackWeapon.tap(); else await backpackWeapon.click()
+    await backpackWeapon.locator('xpath=self::*[@data-selected="true"]').waitFor()
+    await inventory.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]').waitFor()
+    await canvas.screenshot({ path: join(screenshotRoot, `${scene}-${weapon.equipmentType}-item-info.png`) })
+    await doubleActivate(backpackWeapon)
+    await equippedWeapon.waitFor()
+    await waitForMelee(canvas, 5.5, 6)
+    const equipped = await captureRecovery(canvas, scene, `${scene}-${weapon.equipmentType}-equipped`, true)
+    assert.notEqual(equipped, before, `${scene}: the rendered melee range must change`)
+    const id = host.hostPlayerId()
+    const stats = createGameSnapshot(host.state(), id).players[id].progression.inventoryStats
+    assert.equal(stats.meleeDamageMinimum, 5.5)
+    assert.equal(stats.meleeDamageMaximum, 6)
+    await doubleActivate(equippedWeapon)
+    await backpackWeapon.waitFor()
+    await waitForMelee(canvas, 0.5, 1)
+    receipts.push({ scene, weapon: weapon.name, equippedMelee: [5.5, 6], removedMelee: [0.5, 1] })
+    console.log(`${scene}: ${weapon.name} displayed, equipped and removed`)
+  }
 }
 
-async function captureRecovery(canvas, scene, name) {
+async function captureRecovery(canvas, scene, name, melee = false) {
   const image = await canvas.screenshot({ path: join(screenshotRoot, `${name}.png`) })
-  const [left, top, width, height] = HUB_PRIMARY_SPELL_PANE.bodyRect
+  const [left, top, width, height] = melee ? HUB_PRIMARY_SPELL_PANE.meleeBodyRect : HUB_PRIMARY_SPELL_PANE.bodyRect
   const pixels = await page.evaluate(async ({ encoded, rect }) => {
     const image = new Image()
     image.src = `data:image/png;base64,${encoded}`
@@ -177,7 +222,12 @@ async function captureRecovery(canvas, scene, name) {
     decoded.height = image.height
     const context = decoded.getContext('2d')
     context.drawImage(image, 0, 0)
-    return Array.from(context.getImageData(...rect).data)
+    const scaleX = image.width / 1600
+    const scaleY = image.height / 900
+    return Array.from(context.getImageData(
+      Math.round(rect[0] * scaleX), Math.round(rect[1] * scaleY),
+      Math.round(rect[2] * scaleX), Math.round(rect[3] * scaleY),
+    ).data)
   }, {
     encoded: image.toString('base64'),
     rect: [left + (scene === 'hub' || scene === 'boneyard' ? 0 : HUB_PRIMARY_SPELL_PANE.companionShift), top, width / 2, height],
@@ -201,10 +251,48 @@ async function dragTo(source, point) {
   const box = await source.boundingBox()
   assert.ok(box)
   await source.locator('xpath=self::*[not(@disabled)]').waitFor()
+  if (touchSession) {
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    await touchSession.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] })
+    for (let step = 1; step <= 12; step += 1) {
+      await touchSession.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{
+        x: start.x + (point.x - start.x) * step / 12,
+        y: start.y + (point.y - start.y) * step / 12,
+      }] })
+    }
+    await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    return
+  }
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.down()
   await page.mouse.move(point.x, point.y, { steps: 12 })
   await page.mouse.up()
+}
+
+async function doubleActivate(target) {
+  if (!mobile) return target.dblclick()
+  await target.tap()
+  await page.waitForTimeout(75)
+  await target.tap()
+}
+
+async function waitForMelee(canvas, minimum, maximum) {
+  const expected = { text: `${minimum.toFixed(1)} - ${maximum.toFixed(1)}`, unit: ' / whack' }
+  await page.waitForFunction(expected => {
+    const value = document.querySelector('.hub-inventory-native-canvas[data-native-reveal="settled"]')?.dataset.nativeMeleeDamageLine
+    return value === JSON.stringify(expected)
+  }, expected)
+  assert.deepEqual(JSON.parse(await canvas.getAttribute('data-native-melee-damage-line')), expected)
+}
+
+async function startClientServer() {
+  if (process.env.SDR_INVENTORY_STATS_DEV !== '1') return startStaticClientServer({
+    root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+  })
+  const vite = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error',
+    server: { host: '127.0.0.1', port: 0 } })
+  await vite.listen()
+  return { origin: `http://127.0.0.1:${vite.httpServer.address().port}`, close: () => vite.close() }
 }
 
 async function closeInventory(inventory) {

@@ -37,6 +37,7 @@ import {
   hubDyeModalOpacity,
   hubDyeSelectedPulse,
   hubInventoryFlybyFrame,
+  hubInventoryMeleeDamageLine,
   hubInventoryPrimarySpellLines,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
@@ -396,6 +397,7 @@ export async function createHubInventoryRenderer(
       delete canvas.dataset.nativePrimarySpellBuild
       delete canvas.dataset.nativePrimarySpellId
       delete canvas.dataset.nativePrimarySpellLines
+      delete canvas.dataset.nativeMeleeDamageLine
     } else {
       canvas.dataset.nativePrimarySpellBuild = model.progression.weldBuildId === null
         ? ''
@@ -404,6 +406,7 @@ export async function createHubInventoryRenderer(
       canvas.dataset.nativePrimarySpellLines = JSON.stringify(
         hubInventoryPrimarySpellLines(model.progression),
       )
+      canvas.dataset.nativeMeleeDamageLine = JSON.stringify(hubInventoryMeleeDamageLine(model.progression))
     }
     if (model.kind === 'dialogue'
         && model.content.kind === 'selector'

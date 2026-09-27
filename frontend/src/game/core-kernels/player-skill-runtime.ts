@@ -98,7 +98,8 @@ export interface PlayerSkillDerivedStats {
   readonly meditationConcentrated: boolean
   readonly meditationIdleDelayTicks: number
   readonly meditationRecoveryMultiplier: number
-  readonly meleeDamageFactor: number
+  readonly meleeDamageMaximum: number
+  readonly meleeDamageMinimum: number
   readonly movementFactor: number
   readonly offensiveDamageFactor: number
   readonly offensiveDamageFlat: number
@@ -399,6 +400,16 @@ export function playerSkillDerivedStats(
       * (1 + channelMana / 100)
       * (selected(57) ? 1 + value(57, 'mConcentration') / 100 : 1),
   )
+  // Native MELEEDAMAGE formats +0xC4/+0xC8 through 0x006565E0.
+  // Staff contact instead resolves row 65 through 0x0065FFF0 below.
+  const meleeMultiplier = Math.fround(
+    modifiers.meleeDamageMultiplier
+      * (progression.damageX4TicksRemaining > 0 ? 4 : 1)
+      * hagatha.meleeDamageFactor,
+  )
+  const meleeDamage = (base: number): number => Math.max(0, Math.fround(
+    Math.fround(base + staffDamage) * meleeMultiplier + modifiers.meleeDamageFlat,
+  ))
   return Object.freeze({
     castProgressFactor,
     damageResistance: clampUnit(modifiers.damageResistance),
@@ -435,7 +446,8 @@ export function playerSkillDerivedStats(
     meditationConcentrated: selected(58),
     meditationIdleDelayTicks: meditationIdleDelayTicks(skillBook, statBook),
     meditationRecoveryMultiplier: rank(skillBook, 58) > 0 ? value(58, 'mValue') : 1,
-    meleeDamageFactor: baseOffensiveDamageFactor * hagatha.meleeDamageFactor,
+    meleeDamageMaximum: meleeDamage(1),
+    meleeDamageMinimum: meleeDamage(0.5),
     movementFactor: multiplyNativeHagathaFactor(
       applyNativeEquipmentTransform(
         modifiers.walkSpeed,
@@ -528,7 +540,7 @@ export function playerStaffDamage(
     65,
     derived.staffDamagePrimary,
     {
-      damage: derived.meleeDamageFactor,
+      damage: derived.offensiveDamageFactor,
       equipment: runtime.equipmentModifiers,
       globalFlatDamage: derived.offensiveDamageFlat,
       globalManaReduction: derived.offensiveManaCostReduction,

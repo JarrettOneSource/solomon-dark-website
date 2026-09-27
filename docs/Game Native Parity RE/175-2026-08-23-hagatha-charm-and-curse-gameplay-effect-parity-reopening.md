@@ -1459,3 +1459,15 @@ No member is blocked by the browser platform.
   approximation, protocol field, save-schema change, or material unknown
   remains. Commit is local and focused; push, deployment, and production
   restart were not requested or performed.
+
+## 2026-09-27 report 42 — melee display and Staff consumer correction
+
+The earlier claim that Brute multiplies actual Staff contact by three is
+superseded by the fresh instruction trace in
+[ledger 101](101-2026-08-20-player-passive-and-equipment-effect-consumers.md#2026-09-27-report-42--wand-melee-bonuses-and-the-inventory-melee-range).
+Brute writes the separate melee accumulator used by InventoryScreen's
+`MELEEDAMAGE` range. Staff contact calls the ordinary row-65 damage resolver,
+which instead consumes the offensive factor, including Serendipity. Glass
+Cannon affects both lanes. The independent Brute push multiplier remains two.
+The correction preserves this native display/contact discrepancy and does not
+add a Wand melee action. Report 42 owns the implementation and acceptance receipt.

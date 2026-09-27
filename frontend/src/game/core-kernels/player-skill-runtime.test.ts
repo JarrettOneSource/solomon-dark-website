@@ -6,6 +6,7 @@ import {
   createHubEconomy,
   DOWSING_EQUIPMENT_RECIPES,
   type HubEconomyState,
+  type HubInventoryItem,
 } from './hub-economy.ts'
 import {
   createNativeRng,
@@ -797,4 +798,101 @@ test('Staff contact resolves row 65 at marker time and composes only proc multip
   assert.ok(Math.abs(
     playerStaffDamage(state.runtime, derived, progression(), 'critical-hit') - 14.4,
   ) < 1e-12)
+})
+
+test('inventory melee range includes all Enchant Staff ranks without changing its contact formula', () => {
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  const damages = statBook.entries[65]!.numericProperties.mDamage
+  assert.ok(Array.isArray(damages))
+  for (let rank = 0; rank <= statBook.entries[65]!.maximumLevel; rank += 1) {
+    const damage = damages[Math.min(rank, damages.length - 1)]!
+    const created = createPlayerSkillRuntime(rankedBook({ 65: rank }), statBook, economy)
+    const derived = playerSkillDerivedStats(created.runtime, created.skillBook, statBook, progression(), economy)
+    assert.equal(derived.meleeDamageMinimum, Math.fround(0.5 + damage), `rank ${rank} minimum`)
+    assert.equal(derived.meleeDamageMaximum, Math.fround(1 + damage), `rank ${rank} maximum`)
+    assert.equal(playerStaffDamage(created.runtime, derived, progression(), 'normal'), Math.max(1, damage))
+  }
+})
+
+test('native Staff contact uses offensive factors while the inventory uses the separate melee lane', () => {
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const book = rankedBook({ 65: 1 })
+  for (const [selectors, serendipity, displayMinimum, displayMaximum, damage] of [
+    [[26], false, 13.5, 15, 4],
+    [[], false, 4.5, 5, 4],
+    [[16], false, 9, 10, 8],
+    [[16, 26], false, 27, 30, 8],
+    [[], true, 4.5, 5, 12],
+    [[16, 26], true, 27, 30, 24],
+  ] as const) {
+    const economy = { ...base, ownedPerkSelectors: selectors }
+    const source = { ...progression(), hagathaRuntime: { ...progression().hagathaRuntime, serendipityActive: serendipity } }
+    const created = createPlayerSkillRuntime(book, statBook, economy)
+    const derived = playerSkillDerivedStats(created.runtime, created.skillBook, statBook, source, economy)
+    assert.equal(playerStaffDamage(created.runtime, derived, source, 'normal'), damage, `selectors ${selectors}, serendipity ${serendipity}`)
+    assert.equal(derived.meleeDamageMinimum, displayMinimum)
+    assert.equal(derived.meleeDamageMaximum, displayMaximum)
+  }
+})
+
+test('every equipped sink applies all melee FX operators only to the native displayed range', () => {
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const book = rankedBook({})
+  for (const [slot, type] of [
+    ['hat', 'hat'], ['robe', 'robe'], ['amulet', 'amulet'],
+    ['ring-0', 'ring'], ['ring-1', 'ring'], ['ring-2', 'ring'],
+    ['weapon', 'staff'], ['weapon', 'wand'],
+  ] as const) {
+    const recipe = DOWSING_EQUIPMENT_RECIPES.find(row => row.type === type)!
+    const item = {
+      ...createEquipmentInventoryItem(recipe, 90_001),
+      recipeIndex: null,
+      nativeEffects: [
+        { kind: 3, magnitude: 5, operator: 0, target: 0 },
+        { kind: 3, magnitude: 2, operator: 1, target: 0 },
+        { kind: 3, magnitude: 50, operator: 2, target: 0 },
+        { kind: 1, magnitude: 100, operator: 0, target: 0 },
+        { kind: 2, magnitude: 50, operator: 0, target: 5 },
+      ] as const,
+    }
+    const rings: [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null] = [...base.equipment.rings]
+    const equipment = { ...base.equipment, rings }
+    if (slot === 'ring-0' || slot === 'ring-1' || slot === 'ring-2') {
+      equipment.rings[Number(slot.at(-1))] = item
+    } else equipment[slot] = item
+    const economy = { ...base, equipment }
+    const created = createPlayerSkillRuntime(book, statBook, economy)
+    const derived = playerSkillDerivedStats(created.runtime, created.skillBook, statBook, progression(), economy)
+    assert.equal(derived.meleeDamageMinimum, 6.5, `${slot} ${type}`)
+    assert.equal(derived.meleeDamageMaximum, 8, `${slot} ${type}`)
+    assert.equal(playerStaffDamage(created.runtime, derived, progression(), 'normal'), 150)
+  }
+})
+
+test('melee display responds to effective ranks, damage X4 and removal, but not Siege Mage or concentration', () => {
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const item = {
+    ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, 90_002),
+    recipeIndex: null,
+    nativeEffects: [{ kind: 4, magnitude: 1, operator: 0, target: 65 }] as const,
+  }
+  const economy: HubEconomyState = { ...base, equipment: { ...base.equipment, rings: [item, null, null] } }
+  const created = createPlayerSkillRuntime(rankedBook({ 61: 1 }), statBook, economy)
+  const concentrated = setPlayerConcentration(created.runtime, created.skillBook, statBook, economy, 65)
+  for (const damageX4TicksRemaining of [0, 1]) {
+    const source = progression({ damageX4TicksRemaining })
+    const derived = playerSkillDerivedStats(concentrated.runtime, concentrated.skillBook, statBook, source, economy)
+    assert.equal(derived.meleeDamageMinimum, damageX4TicksRemaining ? 18 : 4.5)
+    assert.equal(derived.meleeDamageMaximum, damageX4TicksRemaining ? 20 : 5)
+    assert.equal(derived.staffActionTimingFactor, 1.75)
+    assert.equal(created.skillBook.permanentRanks[65], 0)
+  }
+  const removed = refreshPlayerSkillRuntime(created.runtime, created.skillBook, statBook, base)
+  const derived = playerSkillDerivedStats(removed.runtime, removed.skillBook, statBook, progression(), base)
+  assert.equal(derived.meleeDamageMinimum, 0.5)
+  assert.equal(derived.meleeDamageMaximum, 1)
 })

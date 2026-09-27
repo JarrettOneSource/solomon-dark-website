@@ -1304,6 +1304,8 @@ test('server welcome round-trips content, kernel, character, and world ownership
       castSpeedPercent: 100,
       magicResistancePercent: 0,
       manaRecoveryPerSecond: 10,
+      meleeDamageMaximum: 1,
+      meleeDamageMinimum: 0.5,
       painResistancePercent: 0,
       poisonResistancePercent: 0,
       primarySpell: {
@@ -2875,6 +2877,18 @@ test('protocol validates active primary and concentration selections against eff
     () => decodeServerGameMessage(JSON.stringify(message(invertedPrimaryStats))),
     /primarySpell damage range is inverted/,
   )
+
+  for (const [minimum, maximum, pattern] of [
+    [2, 1, /melee damage range is inverted/],
+    [-1, 1, /meleeDamageMinimum/],
+    [0.5, null, /meleeDamageMaximum/],
+  ] as const) {
+    const invalid = JSON.parse(JSON.stringify(baseFrame))
+    Object.assign(invalid.players['player-1'].progression.inventoryStats, {
+      meleeDamageMinimum: minimum, meleeDamageMaximum: maximum,
+    })
+    assert.throws(() => decodeServerGameMessage(JSON.stringify(message(invalid))), pattern)
+  }
 
   const effectiveOnlyQuickbar = JSON.parse(JSON.stringify(baseFrame))
   effectiveOnlyQuickbar.players['player-1'].progression.learnedSkills.push([15, 0, 1])

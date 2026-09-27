@@ -333,6 +333,8 @@ function playerInventoryStats(
     'castSpeedPercent',
     'magicResistancePercent',
     'manaRecoveryPerSecond',
+    'meleeDamageMaximum',
+    'meleeDamageMinimum',
     'painResistancePercent',
     'poisonResistancePercent',
     'primarySpell',
@@ -360,6 +362,11 @@ function playerInventoryStats(
   if (damageMaximum < damageMinimum) {
     throw new GameProtocolError(`${field}.primarySpell damage range is inverted`)
   }
+  const meleeDamageMinimum = nonnegativeFinite(source.meleeDamageMinimum, `${field}.meleeDamageMinimum`)
+  const meleeDamageMaximum = nonnegativeFinite(source.meleeDamageMaximum, `${field}.meleeDamageMaximum`)
+  if (meleeDamageMaximum < meleeDamageMinimum) {
+    throw new GameProtocolError(`${field} melee damage range is inverted`)
+  }
   return {
     castSpeedPercent: nonnegativeFinite(source.castSpeedPercent, `${field}.castSpeedPercent`),
     magicResistancePercent: resistance('magicResistancePercent'),
@@ -367,6 +374,8 @@ function playerInventoryStats(
       source.manaRecoveryPerSecond,
       `${field}.manaRecoveryPerSecond`,
     ),
+    meleeDamageMaximum,
+    meleeDamageMinimum,
     painResistancePercent: resistance('painResistancePercent'),
     poisonResistancePercent: resistance('poisonResistancePercent'),
     primarySpell: {

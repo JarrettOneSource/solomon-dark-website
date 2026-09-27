@@ -100,6 +100,7 @@ import {
   hubHagathaPerkSlotAlpha,
   hubHagathaTonicPromptCenter,
   hubInventoryPrimarySpellLines,
+  hubInventoryMeleeDamageLine,
   hubInventoryPrimarySpellTint,
   hubInventoryWizardIdentityText,
   hubInventoryStatsArrowRect,
@@ -824,6 +825,8 @@ function primarySpell(
   return {
     inventoryStats: {
       manaRecoveryPerSecond,
+      meleeDamageMaximum: 1,
+      meleeDamageMinimum: 0.5,
       primarySpell: { damageMaximum, damageMinimum, manaCost },
     },
     selectedPrimarySkillId,
@@ -1376,4 +1379,12 @@ test('each native selector row family retains its renderer-owned art and afforda
   for (const record of [99, 100, 101, 102, 103, 104, 105, 106]) {
     assert.ok(nativeAssetsJson.atlases.Skills.records[`${record}`])
   }
+})
+
+test('native melee range keeps one decimal and the authored small italic unit', () => {
+  const source = primarySpell(8, null, 1, 2, 6)
+  assert.deepEqual(hubInventoryMeleeDamageLine(source), { text: '0.5 - 1.0', unit: ' / whack' })
+  assert.deepEqual(hubInventoryMeleeDamageLine({ ...source, inventoryStats: {
+    ...source.inventoryStats, meleeDamageMinimum: 5.5, meleeDamageMaximum: 6,
+  } }), { text: '5.5 - 6.0', unit: ' / whack' })
 })

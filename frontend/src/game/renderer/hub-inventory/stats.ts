@@ -8,6 +8,7 @@ import {
   HUB_INVENTORY_IDENTITY_PAGE,
   HUB_INVENTORY_STATS_PAGES,
   HUB_PRIMARY_SPELL_PANE,
+  hubInventoryMeleeDamageLine,
   hubInventoryPrimarySpellLines,
   hubInventoryPrimarySpellTint,
   hubInventoryWizardIdentityText,
@@ -171,17 +172,25 @@ export function addStats(
     HUB_PRIMARY_SPELL_PANE.meleeHeadingTextBaselineY,
     { align: 'left', tint: HUB_PRIMARY_SPELL_PANE.headingTint },
   )
-  addBitmapText(
+  const meleeLine = hubInventoryMeleeDamageLine(model.progression)
+  addBitmapTextRuns(
     context,
     content,
-    '0.5 - 1 / WHACK',
+    [
+      { text: meleeLine.text, advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale },
+      {
+        text: meleeLine.unit,
+        advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale * HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
+        italic: HUB_PRIMARY_SPELL_PANE.inlineUnit.italic,
+        offsetX: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[0],
+        offsetY: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[1],
+        scale: HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
+      },
+    ],
     HUB_PRIMARY_SPELL_PANE.contentFont,
     HUB_PRIMARY_SPELL_PANE.textLeft + contentShift,
     HUB_PRIMARY_SPELL_PANE.meleeValueTextBaselineY,
-    {
-      align: 'left',
-      tint: primaryTextTint,
-    },
+    primaryTextTint,
   )
 
   const primarySpellLines = hubInventoryPrimarySpellLines(model.progression)

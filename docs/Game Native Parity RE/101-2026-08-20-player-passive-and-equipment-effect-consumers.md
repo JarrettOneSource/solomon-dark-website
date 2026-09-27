@@ -891,3 +891,103 @@ Receipt SHA-256 values (raw execution logs and screenshots are disposable):
 - Accepted complete Chrome journey: `88f5f04086fdc13886e3f5fbb2b8eec6327d8a251fbf70a20de672d39d30642c`
 - Removed-primary browser failure: `37eb11575ae8d3dbe004b240385ecdc4b3cc1cb936d0bb70359f5ead6a448e0d`
 - Separate unseeded arena failure: `bc317bb50dd65c95da8c4e1e7c81b155f09bf9a4f69008c6dbbac18e7df4fcbc`
+
+## 2026-09-27 report 42 — Wand melee bonuses and the inventory melee range
+
+### Reopening and boundary
+
+The report asks why a `Brutal Wand` can advertise `Melee Damage +5.0` even
+though a Wand cannot melee. It is an investigation request, not evidence of a
+missing Wand attack. The screenshot alone does not establish the original
+item's generation history or the author's future design intentions.
+
+The recovered system is the complete FX_MELEEDAMAGE lane: generated admission,
+equipment application, native displayed range, actual Staff contact consumer,
+and shared InventoryScreen refresh/presentation. The earlier inventory closure
+left a literal `0.5 - 1 / WHACK` and failed to trace this sibling of the primary
+spell formatter. The earlier Hagatha closure also assumed that the melee-only
+factor feeds Staff contact. Fresh native instructions falsify both assumptions.
+
+### Evidence recovered before implementation
+
+Retail 0.72.5 is 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`. Fresh read-only Ghidra recovery used the existing
+Windows canonical project, replica pool and Mod Loader wrapper. Mod Loader was
+not modified. These are instruction/data observations, not a fresh clean-stock
+GUI capture; the report screenshot is the visual evidence for the item label.
+
+| Owner / evidence | Recovered contract |
+| --- | --- |
+| Random generator `0x0057A000`, selector 7 | `Brutal` / `of Brutality` writes FX kind 3, operator 0, target 0. All six equipment classes admit it, including Wand; wearable exclusions and halving do not apply. Four tiers draw `Integer(2)+1`, `Integer(3)+4`, `Integer(4)+8`, `Integer(6)+15`. Existing 25-selector generator and 47 named-recipe census remain authoritative. No named recipe or completed-set recipe has kind 3. |
+| Native equip admission `0x00570CD0` and Staff admission `0x00537AA0` | Staff 7004 and Wand 7011 share the weapon sink. Staff action requires type 7004 explicitly. Eight named Wands and six generated Wand selectors share the exclusion. The seven equipment sinks do not include an off-hand weapon or shield. |
+| FX apply `0x00576AA0`, case 3 | Flat values add to Skills `+0x6F8`; multiply/percent operators multiply `+0x6F4`. These are separate from spell/global damage lanes. |
+| Reset `0x0065F5B0`, `0x0065F712..0x0065F780`; passives `0x00661530` | Base range is float `.5` at `0x007DE870` and `1`; effective Enchant Staff row 65 `mDamage` adds to both endpoints. Damage-X4 initializes `+0x6F4` to float `4` from `0x007849F8`. |
+| Hagatha `0x0067C360`, `0x0067C459..0x0067C526` | Glass Cannon multiplies both `+0xF8` and `+0x6F4` by 2. Brute multiplies only `+0x6F4` by 3, besides its independent push effect. Serendipity multiplies only `+0xF8` by 3. Siege Mage also belongs to the ordinary offensive lane, not this display multiplier. |
+| Melee scalar `0x006565E0` | `max(0, (base * Skills[6F4] + Skills[6F8]) * Skills[6FC + class*4] + Skills[71C + class*4])`. Inventory supplies class 5; its class lanes reset to 1 and 0. Do not substitute the similarly numbered offsets in Game or skill-row tables. |
+| Complete direct xrefs to `0x006565E0` | Exactly two calls, `0x006650C2` and `0x00665100`, both in formatter `0x00663B30`. They resolve Skills `+0xC4/+0xC8`, class 5. Dispatch string at `0x007947B8` is `MELEEDAMAGE`; number format `0x007A00E0` is `%.1F`; range `0x007A02C8` is `%s - %s`; unit `0x007A01C8` is `_s(.7)_o(0,1)_i / whack`. |
+| Inventory refresh `0x00553EC0`, `0x005541DA..0x00554238` | Calls formatter vtable slot `+0x84` with `MELEEDAMAGE` and units enabled, stores the result at InventoryScreen `+0x4E8`; common page-0 painter consumes it. |
+| Staff contact `0x0053B9F0` → `0x0065FFF0` | Resolves row 65 `mDamage` through the ordinary damage lanes, floors at 1, then critical ×3 and concentrated non-normal Flailing ×1.2. It does not call `0x006565E0` or read the melee-only accumulators. Preserve this native discrepancy between the displayed range and actual contact damage. |
+| Wand cast/action selectors `0x005297D0`, `0x0044F5F0` | Existing Wand cast 1 / cast 2 / constant modes 9/10/11, fixed body poses 14..16 and attachment painter already exist; see ledger 260. The screenshot does not prove missing Wand casting animations. |
+
+Unchanged web generator seed 252, level 1, Wand, all advanced unlocks false,
+reproduces `Brutal Wand` with exactly kind 3 / +5. This is a deterministic web
+witness consistent with the recovered native branch, not a claimed retail roll.
+
+### Membership and planned cutover
+
+| Member | Current disposition / acceptance |
+| --- | --- |
+| All six equipment classes, four Brutal tiers, prefix/suffix, FX operators 0/1/2 and all seven equipped sinks | `recovered-pending-port` consumer validation; generation/application already present. Test complete operator and source-slot coverage, preserve RNG. |
+| Eight named and six generated Wands; Staff positive control; equip/unequip | `recovered-pending-port` verification; retain Staff-only admission. |
+| Base range, all authored Enchant Staff ranks, effective equipment grants, concentration, FX flat/multiply/percent, X4, Glass Cannon, Brute | `recovered-pending-port`; replace the display literal with authoritative resolved endpoints. |
+| Ordinary Staff contact, Siege Mage, Serendipity, critical and concentrated Flailing | `recovered-pending-port`; remove the incorrect melee-only factor from the actual contact resolver and preserve ordinary offensive factors. |
+| Inventory page 0 in Hub, Boneyard, Fomentius, Luthacus and Shlorio companion; desktop/touch; retained UI invalidation | `recovered-pending-port`; one shared formatter and painter, fixed one decimal and native small italic unit. |
+| Strict snapshot codec and protocol version, per-player ownership, save restoration | `recovered-pending-port`; derived values travel in inventoryStats and are not new persistent save fields. |
+| Hagatha replacement pane | `out-of-system`: it hides the ordinary stats pane; its modifiers remain in the recovered producer. |
+| New Wand melee, dual wield/off-hand/shields, author's intent and claimed item percentages | `out-of-system`: unsupported feature/design theories, not native contracts. |
+| Existing Wand casting animations and attachments | `verified-already-at-parity` through the existing recovered selector/pose bank; no missing animation inferred. |
+
+Implementation stays in the existing skill-derived stats, snapshot/codec,
+retained progression comparison and InventoryScreen formatter/painter. No new
+combat system or equipment slot is introduced. Acceptance runs entirely on
+Windows/WSL at the user's explicit direction, overriding the skill's Mac gate
+location. Required sequence: failing focused regression, corrected targeted
+suite, exact candidate canonical gate and real built desktop/touch browser
+journeys, then authorized publication and per-device cleanup.
+
+### Implementation review before final acceptance
+
+The authoritative derived stats now carry both endpoints through protocol 138,
+and the retained progression comparison tracks both values. InventoryScreen
+uses the existing fixed-decimal formatter and inline ExactText runs. Full save
+restoration rebuilds these derived values without a new persisted field. Staff
+contact uses the existing ordinary offensive factor; the obsolete derived
+melee-contact factor was removed from every caller.
+
+The WSL focused suite passes 123 tests. The original missing range and Brute
+contact regressions failed before the fix. The rank matrix covers 0..15,
+including native vector tail clamping at rank 15; the source matrix covers all
+seven sinks and both weapon types. Save round-trip, owner isolation, strict
+codec rejection and paused unequip pass. Runtime progression tests are now
+registered in the canonical hub-UI suite rather than only run ad hoc.
+
+Desktop development browser inspection already shows the reported tooltip
+`Brutal Wand / Melee Damage +5.0`, with the native formatted range changing
+from `0.5 - 1.0 / whack` to `5.5 - 6.0 / whack` on equip, then reverting on
+removal. Both Wand and Staff pass this flow in Hub and Fomentius so far. This
+is an interim observation; the remaining scenes, touch, canonical gate and
+built browser journeys are still required before final acceptance.
+
+Native recovery log digests (disposable raw outputs; addresses and findings are
+retained above):
+- `native-melee-class-fields.log`: `defd6f47724357745c275520fff3ac5450e35291fb7d67e3cf4894c3de30af05`
+- `native-melee-format-instructions.log`: `6d622e1ac5cc53784a78fbc7f6e02c3c6b4579f27df66d050c09d1fb40cb823a`
+- `native-melee-readers.log`: `c102f08010609698875a1766ef309413776698ef5fb5b333d120ea843b5c22f1`
+- `native-wand-fx.log`: `4fcbef1e54d9418ecdc735db078613737898538a3d401f670a3b5d843d1c7bda`
+- `native-melee-class-owners.log`: `20a8c25dc8bcb1cdad7e8e3ed2ae26e1f3ade615897c34e90841623631598761`
+- `native-melee-producers-instructions.log`: `d5374a211b7288453948622821cef5ed500cff0900c975bc9732d13204facd75`
+- `native-melee-field-xrefs.log`: `d44fa6e08e09d23e44e1a7aa8ea3f69a67f2f7ad49fba75389904b4de369c2a7`
+- `native-wand.log`: `c6c0ddb6846078226bbb131be6173b38084fa4a96612b588f6cbde555cdb76c7`
+- `native-wand-consumers.log`: `3cd80199d84f8c2eaba92f426d6e05629d66f81d45986f899ac639ed2a99f590`
+- `native-melee-resolver-refs.log`: `31bc0b7109f8f3011182653b448c378639a2396e10017e43431860842e4ba5e9`

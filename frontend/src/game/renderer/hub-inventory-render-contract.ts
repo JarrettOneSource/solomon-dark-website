@@ -955,23 +955,33 @@ export function hubInventoryPrimarySpellLines(
   )
   const { primarySpell, manaRecoveryPerSecond } = source.inventoryStats
   const damage = descriptor.damageRange
-    ? `${nativePrimaryStatNumber(primarySpell.damageMinimum)} - ${nativePrimaryStatNumber(primarySpell.damageMaximum)}`
-    : nativePrimaryStatNumber(primarySpell.damageMaximum)
+    ? `${nativeInventoryStatNumber(primarySpell.damageMinimum)} - ${nativeInventoryStatNumber(primarySpell.damageMaximum)}`
+    : nativeInventoryStatNumber(primarySpell.damageMaximum)
   return [
     { text: descriptor.name, unit: null },
     { text: `damage: ${damage}`, unit: ` / ${descriptor.damageUnit}` },
     {
-      text: `mana cost: ${nativePrimaryStatNumber(primarySpell.manaCost)}`,
+      text: `mana cost: ${nativeInventoryStatNumber(primarySpell.manaCost)}`,
       unit: ` / ${descriptor.manaUnit}`,
     },
     {
-      text: `mana heal: ${nativePrimaryStatNumber(manaRecoveryPerSecond)}`,
+      text: `mana heal: ${nativeInventoryStatNumber(manaRecoveryPerSecond)}`,
       unit: ' / sec',
     },
   ]
 }
 
-function nativePrimaryStatNumber(value: number): string {
-  if (!Number.isFinite(value)) throw new RangeError('native primary stat value must be finite')
+export function hubInventoryMeleeDamageLine(
+  source: Pick<ProtocolPlayerProgression, 'inventoryStats'>,
+): { readonly text: string; readonly unit: ' / whack' } {
+  const { meleeDamageMinimum, meleeDamageMaximum } = source.inventoryStats
+  return {
+    text: `${nativeInventoryStatNumber(meleeDamageMinimum)} - ${nativeInventoryStatNumber(meleeDamageMaximum)}`,
+    unit: ' / whack',
+  }
+}
+
+function nativeInventoryStatNumber(value: number): string {
+  if (!Number.isFinite(value)) throw new RangeError('native inventory stat value must be finite')
   return value.toFixed(1)
 }

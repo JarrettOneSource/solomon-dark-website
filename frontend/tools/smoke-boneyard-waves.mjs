@@ -2641,6 +2641,7 @@ async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {
   setCombatTrialVitals(initialState, playerId)
   const stagedTargetId = stageStaffMovementTarget(initialState, playerId, navigation)
   stabilizeStaffMeleeEnemies(initialState, playerId, stagedTargetId)
+  const wand = await proveWandCannotMelee(page, playerId, stagedTargetId)
   await waitForStaffPresentationReady(page)
   initialState = host.state()
   const existingSmokeIds = new Set(initialState.primarySpells.transients
@@ -2824,10 +2825,55 @@ async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {
     repeatContactId: repeatContact.id,
     repeatDamage,
     smoke,
+    wand,
     targetId: targetAtAction.id,
     stagedTargetId,
     targetToken: targetAtAction.enemyToken,
   }
+}
+
+async function proveWandCannotMelee(page, playerId, targetId) {
+  const initial = host.state()
+  const originalWeapon = getPlayerEconomy(initial, playerId).equipment.weapon
+  assert.equal(originalWeapon?.equipmentType, 'staff')
+  const economy = getPlayerEconomy(initial, playerId)
+  const wand = {
+    id: economy.nextItemId, kind: 'equipment', equipmentType: 'wand',
+    generatedLevel: 1, iconRecords: [78], name: 'Brutal Wand',
+    nativeEffects: [{ kind: 3, magnitude: 5, operator: 0, target: 0 }],
+    nativeSelector: 0, nativeSubtype: null, nativeTypeId: 7011,
+    quantity: 1, rarity: null, recipeIndex: null,
+  }
+  initial.playerEntities = replacePlayerEconomy(initial.playerEntities, playerId, {
+    ...economy, nextItemId: economy.nextItemId + 1, equipment: { ...economy.equipment, weapon: wand },
+  })
+  let contactSamples = 0
+  let samples = 0
+  const startTick = initial.tick
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline && host.state().tick - startTick < 150) {
+    const current = host.state()
+    const direction = stagedStaffTargetDirection(current, playerId, targetId)
+    assert.ok(direction, 'Wand trial lost its living contact target')
+    await pulseMovement(page, movementKeys(direction), 80)
+    const state = host.state()
+    const target = state.world.enemies.actors.find(actor => actor.id === targetId)
+    assert.ok(target)
+    const player = getPlayerCharacter(state, playerId)
+    const distance = Math.hypot(target.position.x - player.position.x, target.position.y - player.position.y)
+    if (distance <= PLAYER_CHARACTER_RADIUS + boneyardEnemyCollisionRadius(target) + NATIVE_ACTOR_SEPARATION_EPSILON + 2) contactSamples += 1
+    assert.equal(state.primarySpells.transients.some(actor => actor.ownerId === playerId
+      && ['player-staff-melee', 'player-staff-spin', 'player-staff-contact'].includes(actor.kind)), false)
+    samples += 1
+  }
+  assert.ok(host.state().tick - startTick >= 150, 'Wand trial did not advance 150 simulation ticks')
+  assert.ok(contactSamples > 0, 'Wand trial never reached hostile contact')
+  const current = host.state()
+  const restoredEconomy = getPlayerEconomy(current, playerId)
+  current.playerEntities = replacePlayerEconomy(current.playerEntities, playerId, {
+    ...restoredEconomy, equipment: { ...restoredEconomy.equipment, weapon: originalWeapon },
+  })
+  return { name: wand.name, samples, contactSamples, ticks: current.tick - startTick, staffActions: 0 }
 }
 
 async function proveMovementDuringStaffAction(page, playerId, action, actionState) {
