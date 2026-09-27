@@ -1,5 +1,79 @@
 # 2026-08-26 — Native save progression, unlock persistence, and stock/web portability
 
+## 2026-09-27 — Report 48: advanced-spell purchase across wizard retirement
+
+The reporter bought Mindstar on two runs, could not select it, and then saw it
+for sale again. The screenshot proves only the last shop state: Mindstar 78 is
+offered for 5300 with 15165 gold. Renaming was suggested by the reporter, not
+established as the cause. A Teacher purchase unlocks a **future level-up
+offer**, not an immediate learned rank or selectable quickbar action; rank zero
+after purchase is therefore expected until that offer is chosen.
+
+### Evidence and causal trace
+
+| Evidence class | Source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Reporter image and edited text | retained `2026-09-25/48-mindstar-purchase-does-not-persist` archive, image SHA-256 `21fdc35e19ba8460dae4573a7896123db729d38d9561430f4162af65af3b0e81` | Mindstar is offered for 5300 and visible gold is 15165. Earlier transactions cannot be read from this image. | high for present UI |
+| Read-only production archive and journal | NFO 2026-09-25 run ending 17:00:29 UTC, protocol 136, deployed revision prefix `02054b99`, private archive SHA-256 `75f63a130aa9b2b07d4377af0ea8b68be82c35f49fb00fa4909eaabda37154b9`; journal window SHA-256 `03f547254a47e610ed18effa9bb45f672580584f541e8261cfebb6f8e1fb90f0` | Last living and terminal states both have Mindstar unlock true, permanent rank zero, level 34, and 15165 gold. Game Over retired the run; a new session connected at 17:02:00 with the same player identity and a different wizard name. The screenshot's gold matches the archived terminal state. No individual purchase request or earlier-run capture was logged. | high for archive state/identity, medium for screenshot correlation |
+| Fresh native xref sweep | unmodified retail 0.72.5 `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`; read-only replica `refs_in_range.py` over `0x00B3BDD8..DF` and `decompile_targets.py 0x004F90C0` | Forty direct references comprise eight reads in each of four consumers and eight writes in the Teacher handler. `0x004F911E..0x004F9156` sets the selected ID 72..79 byte to literal `1`. There is no direct clear on new wizard, Game Over, or profile write. The globals therefore last for the retail process, although purchased-only state has no disk representation, as the earlier serializer census proved. | high, instruction-derived |
+| Current Website source | `game-simulation.ts`, `player-progression.ts`, `game-save-document.ts`, `game-save-contract.ts`, `WebGameSaveInspector.cs` at base `059cd81c` | An accepted purchase atomically debits gold and sets the owner's `advancedUnlocks[skillId-72]`. Active continuation and snapshots keep it, but all three profile producers save only economy/Hagatha state; `hydrateGameSaveProfile` gives a new wizard default-false unlocks. Gold survives and the shop row returns. Strict frontend/backend profile field lists reject a third member. | high, static; controlled red pending |
+
+The Ghidra wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+the read-only range/decompile scripts are
+`b09be3473fc803f7c91c1fe3429d03b59cc0c41b8b9af2294961fb3b67925a63`
+and `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+The canonical project and Mod Loader were not changed. Private identifiers,
+save bytes and raw traces remain task scratch, not Website-tracked evidence.
+
+System boundary: all eight Teacher purchases and their unlearned unlock flags,
+gold and shop admission, future skill offers, owner projection into active and
+profile-only saves, Game Over/New Game, schema migration, browser cloud/local
+validation, native import/export limitation and multiplayer account isolation.
+Native process globals have a different lifetime from browser per-run hosts;
+the user-requested web continuity requires carrying purchased flags through
+the durable participant profile. This intentionally survives a browser restart
+where an unmodified retail restart would lose purchased-but-unlearned flags.
+The stock export warning for that unrepresentable state remains required.
+
+| Member | Investigation disposition | Falsifying check |
+| --- | --- | --- |
+| Eight authored Teacher IDs/prices and atomic owner gold debit | `verified-already-at-parity` | Existing purchase/rejection and owner-isolation tests retain exact rows and amounts. |
+| Active wizard flag, shop omission and future level-up eligibility | `verified-already-at-parity` | Buying Mindstar sets flag 6 and removes the offer; rank/binding remain zero until learned. |
+| Active continuation, checkpoints and same-wizard resume | `verified-already-at-parity` | Flag remains on the wizard and is not confused with the non-durable Mindstar *toggle*. |
+| Game Over/profile-only and active-save New Game retirement | `recovered-pending-port` | Both paths carry all eight purchase flags while discarding the old wizard's rank and selections. |
+| Fresh-wizard profile hydration, account/anonymous owners and a different wizard name | `recovered-pending-port` | Same owner retains purchases and gold; another account receives defaults; naming does not address unlock identity. |
+| Versioned frontend/backend profile codec and legacy profiles | `recovered-pending-port` | New documents require eight booleans; older valid profiles migrate to false, active older continuations retain their actual flags on retirement, and malformed shapes fail closed. |
+| Learned rank/cast state and native stock import/export | `out-of-system` for purchased-only stock disk representation | Learned rows remain ordinary wizard progression; native export continues to warn that unlearned purchases cannot be encoded. |
+| Other profile economy, Hagatha, inventory, Hall and run state | `verified-already-at-parity` | Existing profile authority and save checks remain unchanged. |
+
+Before implementation, a WSL regression must reproduce purchase -> profile
+retirement -> new wizard -> offered Mindstar with preserved gold and lost flag.
+The correction belongs to the shared profile boundary, not a Teacher-only
+shop exception or a name-dependent key. A built browser journey must then
+buy Mindstar, confirm rank zero and shop omission, create a new wizard from
+the profile and verify offer eligibility, while retaining account isolation
+and strict save validation.
+
+Preflight implementation uses one owner-profile producer for active,
+terminal-profile and deliberate New Game retirement documents. Save schema 45
+adds eight strictly validated flags to that profile; schema 44 and older
+profile-only documents default to false, while an older *active* continuation
+retains its owned flags when retired under the new code. Hydration uses the
+existing advanced-skill unlock owner and never grants a rank. The WSL red test
+reproduced retained gold and a false new-wizard Mindstar flag before the
+correction. Afterward, 169 focused save/host tests, strict test types, lint,
+the production build and the backend cloud-save profile contract passed.
+The built WSL browser reconstructed a purchased rank-zero Mindstar in a
+profile-only save, created a differently named wizard, confirmed the owner
+flag and gold, observed Mindstar absent from Machinimbus's real selector,
+and read a new active local checkpoint with the same flag. Browser page,
+console and response error lists were empty. Full exact-candidate validation
+and final dispositions remain pending. Already-retired schema-44 profiles
+cannot reconstruct previously discarded purchases from their bytes alone;
+the private production archive is evidence for one affected run, not an
+automatic migration source or permission to mutate a live account.
+
 ## Reported smell and parity question
 
 - Reported behavior: inspect the complete stock save system, ensure every

@@ -5,7 +5,7 @@ import { WIZARD_DISCIPLINES, WIZARD_ELEMENTS } from '../core-kernels/player-char
 import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
 import type { GameContentIdentity } from '../protocol/game-protocol-contract.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 44
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 45
 export const WEB_GAME_SAVE_SLOT = 0
 // Three complete Faculty death populations, including their invisible emitters,
 // fit within 96,679,129 bytes / 2,641,996 JSON values after retaining the former
@@ -47,6 +47,7 @@ export interface ResumableGameSave extends GameProfileSave {
 export type GameSaveIntegrity = 'global-clean' | 'local-only'
 
 export interface ParsedGameSaveProfile {
+  readonly advancedUnlocks?: readonly boolean[]
   readonly economy: unknown
   readonly hagathaRuntime: unknown
 }
@@ -119,7 +120,7 @@ function parseCurrentDocument(
     'profile',
     'schemaVersion',
   ])
-  const profile = parseProfile(root.profile)
+  const profile = parseProfile(root.profile, schemaVersion)
   return {
     continuation: root.continuation === null
       ? null
@@ -155,7 +156,7 @@ function parseLegacyEnvelope(root: Record<string, unknown>): ParsedGameSaveDocum
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
     nativeSource: null,
-    profile: parseProfile(root.profile),
+    profile: parseProfile(root.profile, 5),
     sourceSchemaVersion: 5,
   }
 }
@@ -270,12 +271,25 @@ function boundedBase64(value: string): boolean {
     && /^[A-Za-z0-9+/]*={0,2}$/.test(value)
 }
 
-function parseProfile(value: unknown): ParsedGameSaveProfile {
+function parseProfile(value: unknown, schemaVersion: number): ParsedGameSaveProfile {
   const profile = record(value, 'game save profile')
-  onlyKeys(profile, 'game save profile', ['economy', 'hagathaRuntime'])
+  onlyKeys(profile, 'game save profile', [
+    ...(schemaVersion >= 45 ? ['advancedUnlocks'] : []),
+    'economy', 'hagathaRuntime',
+  ])
+  let advancedUnlocks: readonly boolean[] | undefined
+  if (schemaVersion >= 45) {
+    if (!Array.isArray(profile.advancedUnlocks) || profile.advancedUnlocks.length !== 8) {
+      throw new Error('game save profile advanced unlocks must contain eight flags')
+    }
+    advancedUnlocks = profile.advancedUnlocks.map((value, index) => (
+      boolean(value, `game save profile advanced unlocks[${index}]`)
+    ))
+  }
   record(profile.economy, 'game save profile economy')
   record(profile.hagathaRuntime, 'game save profile Hagatha runtime')
   return {
+    advancedUnlocks,
     economy: profile.economy,
     hagathaRuntime: profile.hagathaRuntime,
   }

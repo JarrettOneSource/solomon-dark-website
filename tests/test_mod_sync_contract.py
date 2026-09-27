@@ -954,15 +954,18 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, existing = self.request("GET", "/api/game/saves/0", headers=auth)
         self.assertEqual(status, 200, existing)
         revision = existing["save"]["revision"] if existing["save"] else 0
-        for version in (29, 999):
+        for version in (29, 44, 45, 999):
             with self.subTest(version=version):
+                profile = {"economy": {}, "hagathaRuntime": {}}
+                if version >= 45:
+                    profile["advancedUnlocks"] = [index == 6 for index in range(8)]
                 document = json.dumps({
                     "schemaVersion": version,
                     "integrity": "global-clean",
                     "mods": [],
                     "modState": {},
                     "nativeSource": None,
-                    "profile": {"economy": {}, "hagathaRuntime": {}},
+                    "profile": profile,
                     "continuation": None,
                 })
                 status, saved = self.request(
@@ -979,6 +982,15 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             {**json.loads(document), "schemaVersion": "29"},
             {**json.loads(document), "continuation": {"simulation": {}}},
             {**json.loads(document), "profile": None},
+            {**json.loads(document), "schemaVersion": 44},
+            {**json.loads(document), "profile": {"economy": {}, "hagathaRuntime": {}}},
+            {**json.loads(document), "profile": {
+                **json.loads(document)["profile"], "advancedUnlocks": [False] * 7,
+            }},
+            {**json.loads(document), "profile": {
+                **json.loads(document)["profile"],
+                "advancedUnlocks": [False] * 6 + ["true", False],
+            }},
         ):
             status, rejected = self.request(
                 "PUT", "/api/game/saves/0", headers=auth,

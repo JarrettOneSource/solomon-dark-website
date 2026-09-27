@@ -84,8 +84,21 @@ public static class WebGameSaveInspector
                 RequireExactProperties(
                     profile,
                     "browser game save profile",
-                    "economy",
-                    "hagathaRuntime");
+                    version >= 45
+                        ? ["advancedUnlocks", "economy", "hagathaRuntime"]
+                        : ["economy", "hagathaRuntime"]);
+                if (version >= 45)
+                {
+                    var advancedUnlocks = profile.GetProperty("advancedUnlocks");
+                    if (advancedUnlocks.ValueKind != JsonValueKind.Array ||
+                        advancedUnlocks.GetArrayLength() != 8 ||
+                        advancedUnlocks.EnumerateArray().Any(value =>
+                            value.ValueKind is not JsonValueKind.True and not JsonValueKind.False))
+                    {
+                        throw new InvalidDataException(
+                            "The browser game save profile advanced unlocks are invalid.");
+                    }
+                }
                 RequireObject(profile.GetProperty("economy"), "browser game save profile economy");
                 RequireObject(
                     profile.GetProperty("hagathaRuntime"),

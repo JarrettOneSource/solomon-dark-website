@@ -6,7 +6,7 @@ import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-dir
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
-import { NATIVE_WELD_COMPONENT_SKILL_IDS } from '../core-kernels/player-progression.ts'
+import { NATIVE_WELD_COMPONENT_SKILL_IDS, nativeSkillPassesOfferEligibility } from '../core-kernels/player-progression.ts'
 import { nativeEquipmentTooltipSets } from '../core-kernels/native-equipment-effects.ts'
 import type { EquipmentSlot, HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createEquipmentInventoryItem, insertLootInventoryItem } from '../core-kernels/hub-economy.ts'
@@ -25,7 +25,7 @@ import { emitPlayerStatusBurst } from '../core-server/boneyard-player-status.ts'
 import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
 import { dampenBoneyardCasters } from '../core-server/enemies/dampen.ts'
 import type { BoneyardEnemyDeathEffect, BoneyardEnemyStoreStepContext, BoneyardMageLightningPulse } from '../core-server/enemies/model.ts'
-import { applyGameSimulationHubAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, getPlayerBelt, getPlayerEconomy, getPlayerProgression, stepGameSimulationTick } from '../core-server/game-simulation.ts'
+import { applyGameSimulationHubAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, getPlayerBelt, getPlayerEconomy, getPlayerProgression, getPlayerSkillBook, stepGameSimulationTick } from '../core-server/game-simulation.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { HubWorldRuntime, createHubWorld } from '../core-server/hub-world.ts'
@@ -127,7 +127,7 @@ test('legacy growing fades recover native ring clocks and retire already expired
         scale: 10508004392577.607, opacityTimer: .7 },
     ] } } } })
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 38
+  downgradeSaveSchema(legacy, 38)
   const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state.world
   if (restored.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(restored.enemies.deathEffects.length, 1)
@@ -175,7 +175,7 @@ test('legacy Wraith and Tragic fades restore recovered constructors without cons
   const document = JSON.parse(createGameSaveDocument({ ...options, state: { ...options.state,
     worldManagerOrder: order.state(), world: { ...world, enemies: { ...world.enemies,
       deathEffects: effects, nextDeathEffectId: world.enemies.nextDeathEffectId + effects.length } } } }))
-  document.schemaVersion = 38
+  downgradeSaveSchema(document, 38)
   const restored = restoreGameSaveDocument(JSON.stringify(document)).state.world
   if (restored.kind !== 'boneyard') throw new Error('expected Boneyard')
   restored.enemies.deathEffects.forEach((effect, index) => {
@@ -366,7 +366,7 @@ test('Mage pulse saves preserve creator ownership and migrate schema 36 only fro
   )
 
   const legacy = JSON.parse(current)
-  legacy.schemaVersion = 36
+  downgradeSaveSchema(legacy, 36)
   delete legacy.continuation.simulation.world.enemies
     .mageLightningPulses[0].lightRegistration
   const restoredLegacy = restoreGameSaveDocument(JSON.stringify(legacy)).state
@@ -470,7 +470,7 @@ test('Hail and Aura save cutovers retire obsolete particles while preserving cur
   assert.deepEqual(current.primarySpells.transients, transients)
   for (const schemaVersion of [28, 29, 39]) {
     const previous = JSON.parse(document)
-    previous.schemaVersion = schemaVersion
+    downgradeSaveSchema(previous, schemaVersion)
     if (schemaVersion === 28) previous.continuation.simulation.primarySpells.transients[1].scale = 1.5
     const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
     assert.deepEqual(migrated.primarySpells, {
@@ -509,7 +509,7 @@ test('Harden saves retain current coating and migrate the former armor-only cach
   assert.deepEqual(restored.playerEntities.skillRuntimes[0]!.harden, { armor: 12, coating: 0.5 })
   for (const schemaVersion of [28, 29]) {
     const previous = JSON.parse(document)
-    previous.schemaVersion = schemaVersion
+    downgradeSaveSchema(previous, schemaVersion)
     const runtime = previous.continuation.simulation.playerEntities.skillRuntimes[0]
     delete runtime.harden
     runtime.hardenArmor = 12
@@ -603,7 +603,7 @@ test('checkpoints retain pending offers and schema 27 repairs the erased offer o
   assert.equal(currentMessage.type, 'server-snapshot')
 
   const legacy = structuredClone(current)
-  legacy.schemaVersion = 27
+  downgradeSaveSchema(legacy, 27)
   legacy.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
   const legacyMessage = decodeCheckpoint(JSON.stringify(legacy))
   assert.equal(legacyMessage.type, 'server-snapshot')
@@ -612,7 +612,7 @@ test('checkpoints retain pending offers and schema 27 repairs the erased offer o
 
   for (const schemaVersion of [28, WEB_GAME_SAVE_SCHEMA_VERSION]) {
     const malformed = structuredClone(current)
-    malformed.schemaVersion = schemaVersion
+    downgradeSaveSchema(malformed, schemaVersion)
     malformed.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
     assert.throws(
       () => restoreGameSaveDocument(JSON.stringify(malformed)),
@@ -661,7 +661,7 @@ test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix
   }
   document.continuation.simulation = downgradeRegistration(simulation)
   document.continuation.simulation.worldManagerOrder.nextRegistrationOrdinal.actor -= fixedDelta
-  document.schemaVersion = 21
+  downgradeSaveSchema(document, 21)
 
   const restored = restoreGameSaveDocument(JSON.stringify(document)).state
   assert.equal(restored.world.kind, 'hub')
@@ -685,7 +685,7 @@ test('schema 19 compact inventory roots migrate to schema 27 addressed slots', (
     playerId: 'owner',
     state,
   }))
-  legacy.schemaVersion = 19
+  downgradeSaveSchema(legacy, 19)
   const legacyBackpack = legacy.continuation.simulation.playerEntities.economies[0].backpack
   for (const item of legacyBackpack) delete item.inventorySlot
 
@@ -731,7 +731,7 @@ test('schema 41 preserves independent hit reaction and legacy migration retires 
   if (current.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
   assert.equal(current.world.enemies.actors[0]!.hitReactionTimer, 1)
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 40
+  downgradeSaveSchema(legacy, 40)
   delete legacy.continuation.simulation.world.enemies.actors[0].hitReactionTimer
   const recovered = restoreGameSaveDocument(JSON.stringify(legacy)).state
   assert.deepEqual(recovered, { ...current, world: { ...current.world,
@@ -788,7 +788,7 @@ test('schema 25 active Wraiths migrate from the fabricated phase brain to native
     playerId: 'owner',
     state,
   }))
-  legacy.schemaVersion = 25
+  downgradeSaveSchema(legacy, 25)
   legacy.continuation.simulation.world.enemies.actors[0].brain = {
     actionTick: 0,
     contactTargetPlayerId: null,
@@ -862,7 +862,7 @@ test('schema 26 reconstructs missing Demon articulation while schema 27 requires
   assert.ok(currentBrain.articulation)
 
   const legacy = structuredClone(current)
-  legacy.schemaVersion = 26
+  downgradeSaveSchema(legacy, 26)
   delete legacy.continuation.simulation.world.enemies.actors[0].brain.articulation
   const restored = restoreGameSaveDocument(JSON.stringify(legacy))
   assert.equal(restored.state.world.kind, 'boneyard')
@@ -1092,7 +1092,7 @@ test('schema 22 retires obsolete Water painters and restores every native death-
     playerId: 'owner',
     state,
   }))
-  legacy.schemaVersion = 22
+  downgradeSaveSchema(legacy, 22)
   for (const transient of legacy.continuation.simulation.primarySpells.transients) {
     delete transient.painterRegistrations
   }
@@ -1255,7 +1255,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     .state.secondaryAbilities.players.owner!
   assert.equal(oldActionRestored.castAction, null)
   assert.equal('staffCastTicksRemaining' in oldActionRestored, false)
-  schemaSeventeen.schemaVersion = 17
+  downgradeSaveSchema(schemaSeventeen, 17)
   downgradePlayerBeltsToLegacyQuickbar(
     schemaSeventeen.continuation.simulation.playerEntities,
   )
@@ -1265,7 +1265,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
   )
 
   const schemaTwelve = JSON.parse(document)
-  schemaTwelve.schemaVersion = 12
+  downgradeSaveSchema(schemaTwelve, 12)
   delete schemaTwelve.nativeSource
   downgradePlayerBeltsToLegacyQuickbar(
     schemaTwelve.continuation.simulation.playerEntities,
@@ -1281,7 +1281,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     migratedContinuation.state.playerEntities.economies[0]?.collegeIntroPending,
     false,
   )
-  schemaTwelve.schemaVersion = 13
+  downgradeSaveSchema(schemaTwelve, 13)
   assert.throws(
     () => restoreGameSaveProfile(JSON.stringify(schemaTwelve)),
     /College intro state is invalid/,
@@ -1712,7 +1712,7 @@ test('native NPC help rows persist after acknowledgement and pre-v11 saves migra
   )
 
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 10
+  downgradeSaveSchema(legacy, 10)
   delete legacy.nativeSource
   downgradePlayerBeltsToLegacyQuickbar(
     legacy.continuation.simulation.playerEntities,
@@ -1728,7 +1728,7 @@ test('native NPC help rows persist after acknowledgement and pre-v11 saves migra
     Array<boolean>(10).fill(false),
   )
 
-  legacy.schemaVersion = 12
+  downgradeSaveSchema(legacy, 12)
   assert.throws(
     () => restoreGameSaveDocument(JSON.stringify(legacy)),
     /Hub NPC help flags are missing/,
@@ -2021,7 +2021,7 @@ test('active-party capability is strict, active-run-only, and absent from old sc
 
   for (const schemaVersion of [11, 10]) {
     const previous = structuredClone(current)
-    previous.schemaVersion = schemaVersion
+    downgradeSaveSchema(previous, schemaVersion)
     delete previous.nativeSource
     previous.continuation.summary.partyRejoinToken = 'A'.repeat(43)
     assert.equal(
@@ -2032,7 +2032,7 @@ test('active-party capability is strict, active-run-only, and absent from old sc
 
   for (const schemaVersion of [9, 8, 7, 6]) {
     const previous = structuredClone(current)
-    previous.schemaVersion = schemaVersion
+    downgradeSaveSchema(previous, schemaVersion)
     delete previous.nativeSource
     delete previous.continuation.summary.partyRejoinToken
     assert.equal(
@@ -2238,7 +2238,7 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
   const missingTurn = structuredClone(document)
   delete missingTurn.continuation.simulation.world.enemies.projectiles[0].turnSpeed
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(missingTurn)), /turn speed/)
-  missingTurn.schemaVersion = 31
+  downgradeSaveSchema(missingTurn, 31)
   const oldArrow = restoreGameSaveDocument(JSON.stringify(missingTurn)).state.world
   assert.ok(oldArrow.kind === 'boneyard')
   assert.equal(oldArrow.enemies.projectiles[0]?.turnSpeed, 0)
@@ -2256,7 +2256,7 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
   assert.equal(guided.lifetimeTicks, 1300)
 
   const legacy = structuredClone(document)
-  legacy.schemaVersion = 18
+  downgradeSaveSchema(legacy, 18)
   delete legacy.continuation.simulation.primarySpells.transients[0].painterRegistrations
   delete legacy.continuation.simulation.primarySpells.transients[0].speed
   delete legacy.continuation.simulation.world.enemies.projectiles[0].chillTumbleAccumulator
@@ -2296,7 +2296,7 @@ test('saves preserve projectile channels, Chill accumulation and status order wi
   delete missingContactFields.continuation.simulation.playerEntities.progressions[0].poisonBeforeCold
   delete missingContactFields.continuation.simulation.world.enemies.projectiles[0].secondaryDamage
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(missingContactFields)), /poison\/cold order/)
-  missingContactFields.schemaVersion = 30
+  downgradeSaveSchema(missingContactFields, 30)
   const precedingSchema = restoreGameSaveDocument(JSON.stringify(missingContactFields))
   assert.equal(precedingSchema.state.playerEntities.progressions[0]?.poisonBeforeCold, false)
   if (precedingSchema.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
@@ -2394,7 +2394,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   )
 
   const legacy = structuredClone(encoded)
-  legacy.schemaVersion = 8
+  downgradeSaveSchema(legacy, 8)
   delete legacy.nativeSource
   downgradePlayerBeltsToLegacyQuickbar(
     legacy.continuation.simulation.playerEntities,
@@ -2447,7 +2447,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   )
 
   const priorSchemaFifteen = structuredClone(encoded)
-  priorSchemaFifteen.schemaVersion = 15
+  downgradeSaveSchema(priorSchemaFifteen, 15)
   delete priorSchemaFifteen.nativeSource
   downgradePlayerBeltsToLegacyQuickbar(
     priorSchemaFifteen.continuation.simulation.playerEntities,
@@ -2463,7 +2463,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   )
 
   const priorSchemaSeven = structuredClone(encoded)
-  priorSchemaSeven.schemaVersion = 7
+  downgradeSaveSchema(priorSchemaSeven, 7)
   delete priorSchemaSeven.nativeSource
   downgradePlayerBeltsToLegacyQuickbar(
     priorSchemaSeven.continuation.simulation.playerEntities,
@@ -2497,7 +2497,7 @@ test('schema 7 and 6 saves migrate absent NPC state as acknowledged without arch
   }
   for (const schemaVersion of [7, 6]) {
     const previous = JSON.parse(current)
-    previous.schemaVersion = schemaVersion
+    downgradeSaveSchema(previous, schemaVersion)
     delete previous.nativeSource
     downgradePlayerBeltsToLegacyQuickbar(
       previous.continuation.simulation.playerEntities,
@@ -2615,7 +2615,7 @@ test('schema 17 carries bounded native provenance through resume, profile archiv
     /retained file/,
   )
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 16
+  downgradeSaveSchema(legacy, 16)
   downgradePlayerBeltsToLegacyQuickbar(
     legacy.continuation.simulation.playerEntities,
   )
@@ -2663,7 +2663,7 @@ test('schema-18 retains ordered Hagatha outcomes and schema 16 materializes Toni
   )
 
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 16
+  downgradeSaveSchema(legacy, 16)
   downgradePlayerBeltsToLegacyQuickbar(
     legacy.continuation.simulation.playerEntities,
   )
@@ -2710,7 +2710,7 @@ test('schema 23 repairs Tonic-inclusive overflow while schema 27 rejects it', ()
     reverieActive: true,
     serendipityActive: true,
   }
-  document.schemaVersion = 23
+  downgradeSaveSchema(document, 23)
 
   const legacy = JSON.stringify(document)
   const restored = restoreGameSaveDocument(legacy)
@@ -2737,7 +2737,7 @@ test('schema 23 repairs Tonic-inclusive overflow while schema 27 rejects it', ()
     [0, 1, 2, 3, 4, 5, 6, 27, 27],
   )
 
-  document.schemaVersion = 24
+  downgradeSaveSchema(document, 24)
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(document)), /Hagatha|inventory/)
   assert.throws(() => restoreGameSaveProfile(JSON.stringify(document)), /Hagatha|inventory/)
 })
@@ -2882,12 +2882,118 @@ test('killing the current wizard scavenges carried items and removes only the co
   assert.throws(() => restoreGameSaveDocument(retiredDocument), /no resumable continuation/)
 })
 
+test('a purchased Mindstar survives wizard retirement without granting an immediate rank', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      gold: 20_465,
+      revision: economy.revision + 1,
+    }),
+  }
+  const purchased = applyGameSimulationHubAction(state, 'owner', {
+    skillId: 78,
+    type: 'buy-teacher-spell',
+  })
+  assert.equal(purchased.accepted, true)
+  state = purchased.state
+  assert.equal(getPlayerEconomy(state, 'owner').gold, 15_165)
+  assert.equal(getPlayerSkillBook(state, 'owner').advancedUnlocks[6], true)
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[78], 0)
+
+  const options = { integrity: 'global-clean' as const, mods: MODS, modState: MOD_STATE,
+    playerId: 'owner', state }
+  const continuation = createGameSaveDocument({ ...options, loadedBoneyard: null })
+  const encoded = JSON.parse(continuation)
+  assert.equal(encoded.schemaVersion, WEB_GAME_SAVE_SCHEMA_VERSION)
+  assert.deepEqual(encoded.profile.advancedUnlocks,
+    [false, false, false, false, false, false, true, false])
+  const profiles = [
+    restoreGameSaveProfile(continuation),
+    restoreGameSaveProfile(retireGameSaveWizard(continuation)),
+    restoreGameSaveProfile(createGameProfileSaveDocument(options)),
+  ]
+  for (const profile of profiles) {
+    const next = createGameSimulation({ owner: { ...OWNER, displayName: 'New Wizard' } })
+    const hydrated = hydrateGameSaveProfile(next, 'owner', profile)
+    assert.equal(getPlayerEconomy(hydrated, 'owner').gold, 15_165)
+    assert.equal(getPlayerSkillBook(hydrated, 'owner').advancedUnlocks[6], true)
+    assert.equal(getPlayerSkillBook(hydrated, 'owner').permanentRanks[78], 0)
+    assert.equal(nativeSkillPassesOfferEligibility(78, 10, getPlayerSkillBook(hydrated, 'owner')), true)
+    assert.equal(applyGameSimulationHubAction(hydrated, 'owner', {
+      skillId: 78,
+      type: 'buy-teacher-spell',
+    }).reason, 'invalid-offer')
+  }
+
+  const legacyProfile = structuredClone(encoded)
+  downgradeSaveSchema(legacyProfile, 44)
+  const migratedProfile = restoreGameSaveProfile(JSON.stringify(legacyProfile))
+  assert.deepEqual(migratedProfile.advancedUnlocks, Array<boolean>(8).fill(false))
+  const retiredLegacy = restoreGameSaveProfile(retireGameSaveWizard(JSON.stringify(legacyProfile)))
+  assert.equal(retiredLegacy.advancedUnlocks[6], true,
+    'a schema-44 active wizard still owns its purchased spell')
+  for (const value of [undefined, [true], [...Array<boolean>(7).fill(false), 'true']]) {
+    const malformed = structuredClone(encoded)
+    if (value === undefined) delete malformed.profile.advancedUnlocks
+    else malformed.profile.advancedUnlocks = value
+    assert.throws(() => restoreGameSaveProfile(JSON.stringify(malformed)), /advanced.*unlocks/i)
+  }
+})
+
+test('all eight Teacher purchases project only to their owner profile', () => {
+  const peer = { ...OWNER, displayName: 'Peer', element: 'water' as const }
+  let state = createGameSimulation({ owner: OWNER, peer })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      gold: 100_000,
+      revision: economy.revision + 1,
+    }),
+  }
+  for (let skillId = 72; skillId <= 79; skillId += 1) {
+    const purchase = applyGameSimulationHubAction(state, 'owner', {
+      skillId,
+      type: 'buy-teacher-spell',
+    })
+    assert.equal(purchase.accepted, true, `Teacher skill ${skillId} was rejected`)
+    state = purchase.state
+  }
+  const options = { integrity: 'global-clean' as const, mods: MODS, modState: MOD_STATE,
+    state }
+  const owner = restoreGameSaveProfile(createGameProfileSaveDocument({
+    ...options, playerId: 'owner',
+  }))
+  const other = restoreGameSaveProfile(createGameProfileSaveDocument({
+    ...options, playerId: 'peer',
+  }))
+  assert.deepEqual(owner.advancedUnlocks, Array<boolean>(8).fill(true))
+  assert.deepEqual(other.advancedUnlocks, Array<boolean>(8).fill(false))
+  const next = hydrateGameSaveProfile(
+    createGameSimulation({ next: { ...OWNER, displayName: 'Another Wizard' } }),
+    'next',
+    owner,
+  )
+  assert.deepEqual(getPlayerSkillBook(next, 'next').advancedUnlocks, Array<boolean>(8).fill(true))
+  assert.ok(getPlayerSkillBook(next, 'next').permanentRanks.slice(72, 80).every(rank => rank === 0))
+  for (let skillId = 72; skillId <= 79; skillId += 1) {
+    assert.equal(applyGameSimulationHubAction(next, 'next', {
+      skillId,
+      type: 'buy-teacher-spell',
+    }).reason, 'invalid-offer')
+  }
+})
+
 function downgradeWorldPainterDocumentToSchema20(
   document: Record<string, unknown>,
 ): Record<string, unknown> {
   const continuation = document.continuation as Record<string, unknown>
   const simulation = continuation.simulation as Record<string, unknown>
-  document.schemaVersion = 20
+  downgradeSaveSchema(document, 20)
   simulation.lightProviderOrder = simulation.worldManagerOrder
   delete simulation.worldManagerOrder
   removeSchema21WorldPainterFields(simulation)
@@ -2909,6 +3015,14 @@ function removeSchema21WorldPainterFields(value: unknown): void {
     'solomonPainterRegistration',
   ]) delete source[key]
   for (const entry of Object.values(source)) removeSchema21WorldPainterFields(entry)
+}
+
+function downgradeSaveSchema(
+  document: { schemaVersion: number; profile?: { advancedUnlocks?: unknown } },
+  schemaVersion: number,
+): void {
+  document.schemaVersion = schemaVersion
+  if (schemaVersion < 45 && document.profile) delete document.profile.advancedUnlocks
 }
 
 function legacyDocument(document: string, schemaVersion: number): string {
@@ -2971,7 +3085,7 @@ function legacyDocument(document: string, schemaVersion: number): string {
 
 function legacySchema5Document(document: string): string {
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 5
+  downgradeSaveSchema(legacy, 5)
   delete legacy.nativeSource
   downgradePlayerBeltsToLegacyQuickbar(
     legacy.continuation.simulation.playerEntities,
@@ -3074,7 +3188,7 @@ test('Pike attachment and recoil survive saves and both enemy wire formats', () 
   assert.throws(() => materializeBoneyardEnemy(boneyardEnemyDescriptor(snapshot), invalidSample), /sample shape/)
   assert.throws(() => boneyardEnemySnapshot({ ...snapshot, weapon: 'claw' }, 'enemy'), /active Pike/)
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 34
+  downgradeSaveSchema(legacy, 34)
   delete legacy.continuation.simulation.world.enemies.actors[0].brain.pike
   delete legacy.continuation.simulation.world.enemies.actors[0].brain.verticalOffset
   delete legacy.continuation.simulation.world.enemies.actors[0].brain.verticalVelocity
@@ -3107,7 +3221,7 @@ test('legacy stock Faculty saves recover their palette from the native recipe in
   const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
     state: { ...initial, world: { ...initial.world, enemies } } })
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 34
+  downgradeSaveSchema(legacy, 34)
   const family = legacy.continuation.simulation.world.enemies.actors[0].config.family
   family.bodyColor = nativeDesaturateColor(recipe.family.bodyColor, 1 - Math.fround(.7))
   family.headColor = nativeDesaturateColor(recipe.family.headColor, 1 - Math.fround(.7))
@@ -3151,7 +3265,7 @@ test('featured boss identity survives continuation saves, raw snapshots and incr
       assert.equal(decoded.frame.world.featuredBossId, featuredBossId)
     }
     const legacy = JSON.parse(document)
-    legacy.schemaVersion = 32
+    downgradeSaveSchema(legacy, 32)
     delete legacy.continuation.simulation.world.enemies.featuredBossId
     const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
     if (migrated.state.world.kind !== 'boneyard') throw new Error('expected migrated Boneyard')
@@ -3239,7 +3353,7 @@ test('Golem CircleSlow continues through a save and old saves default to an unmo
   assert.deepEqual(resumed.secondaryAbilities.actors.find(actor => actor.id === golem.id),
     next.secondaryAbilities.actors.find(actor => actor.id === golem.id))
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 32
+  downgradeSaveSchema(legacy, 32)
   delete legacy.continuation.simulation.secondaryAbilities.actors.find((actor: { id: number }) => actor.id === golem.id).golem.circleSlowTicks
   assert.equal(restoreGameSaveDocument(JSON.stringify(legacy)).state.secondaryAbilities.actors
     .find(actor => actor.id === golem.id)!.golem!.circleSlowTicks, 0)
@@ -3272,7 +3386,7 @@ test('lethal magic provenance survives continuation before the death effect is b
   const next = stepBoneyardEnemyStore(restored.state.world.enemies, { ...context, tick: state.tick + 1 })
   assert.equal(next.store.deathEffects.find(effect => effect.kind === 'unbind')?.alpha, 1.25)
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 32
+  downgradeSaveSchema(legacy, 32)
   delete legacy.continuation.simulation.world.enemies.actors[0].lethalMagicDamage
   const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
   if (migrated.state.world.kind !== 'boneyard') throw new Error('expected legacy Boneyard')
@@ -3308,7 +3422,7 @@ test('Dampen caster delay survives saves and legacy Mages initialize it explicit
     .animation.mageChargeSuppressed, true)
   assert.equal(restored.state.world.enemies.deathEffects.length, 73)
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 32
+  downgradeSaveSchema(legacy, 32)
   delete legacy.continuation.simulation.world.enemies.actors[0].brain.disabledPrimaryTicks
   const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
   if (migrated.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
@@ -3436,7 +3550,7 @@ test('schema 43 repairs stalled Wraith flight without changing identity, cooldow
   assert.ok(unchanged.world.kind === 'boneyard')
   assert.deepEqual(unchanged.world.enemies.actors[0]!.brain, enemies.actors[0]!.brain)
   const legacy = JSON.parse(document)
-  legacy.schemaVersion = 43
+  downgradeSaveSchema(legacy, 43)
   const actor = legacy.continuation.simulation.world.enemies.actors[0]
   actor.brain = { ...actor.brain, restingSpeed: 2, currentSpeed: .001,
     currentTurnGain: 5455.5, targetTurnGain: 5457.5, flybyTicksRemaining: 0, contactCooldownTicks: 17 }

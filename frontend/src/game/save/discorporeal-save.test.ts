@@ -120,6 +120,7 @@ test('legacy query caches gain native Fenceposts and discard obsolete Goodie sce
   const state = fixture('scream')
   const document = JSON.parse(save(state))
   document.schemaVersion = 33
+  delete document.profile.advancedUnlocks
   const world = document.continuation.simulation.world
   world.primarySceneryTargets = world.primarySceneryTargets.filter((target: { id: string }) => !target.id.startsWith('fencepost:'))
   world.primarySceneryTargets.push({ ...state.world.primarySceneryTargets[0], id: 'scenery:obsolete-goodie', actorFlags: 4, bodyRadius: 20 })

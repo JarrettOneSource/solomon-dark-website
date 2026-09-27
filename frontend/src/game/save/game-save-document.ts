@@ -54,7 +54,7 @@ import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
 import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
 import type { HubWorldState } from '../core-server/hub-world.ts'
 import { createHubWorld } from '../core-server/hub-world.ts'
-import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, replacePlayerCharacter, replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, replacePlayerCharacter, replacePlayerEconomy, unlockPlayerEntityAdvancedSkill } from '../core-server/player-entity-store.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
@@ -86,6 +86,7 @@ export interface CreateGameProfileSaveDocumentOptions {
 }
 
 export interface RestoredGameSaveProfile {
+  readonly advancedUnlocks: readonly boolean[]
   readonly continuation: ParsedGameSaveContinuation | null
   readonly economy: HubEconomyState
   readonly hagathaRuntime: NativeHagathaRuntimeState
@@ -244,12 +245,13 @@ export function createGameSaveDocument(
     mods: options.mods,
     modState: options.modState,
     nativeSource: options.nativeSource ?? null,
-    profile: {
-      economy: normalizeHubEconomyInventorySlots(
+    profile: savedOwnerProfile(
+      ownerState,
+      ownerIndex,
+      normalizeHubEconomyInventorySlots(
         gameSimulationRetiredWizardEconomy(ownerState, options.playerId),
       ),
-      hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
-    },
+    ),
   })
 }
 
@@ -277,10 +279,9 @@ export function createGameProfileSaveDocument(
     mods: options.mods,
     modState: options.modState,
     nativeSource: options.nativeSource ?? null,
-    profile: {
-      economy: gameSimulationDurableProfileEconomy(ownerState, options.playerId),
-      hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
-    },
+    profile: savedOwnerProfile(
+      ownerState, ownerIndex, gameSimulationDurableProfileEconomy(ownerState, options.playerId),
+    ),
   })
 }
 
@@ -300,14 +301,27 @@ export function retireGameSaveWizard(document: string): string {
     mods: restored.mods,
     modState: restored.modState,
     nativeSource: restored.nativeSource,
-    profile: {
-      economy: restored.state.world.kind === 'boneyard'
+    profile: savedOwnerProfile(
+      restored.state,
+      ownerIndex,
+      restored.state.world.kind === 'boneyard'
         && restored.state.world.tutorial !== null
         ? { ...retiredEconomy, tutorialPending: false }
         : retiredEconomy,
-      hagathaRuntime: restored.state.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
-    },
+    ),
   })
+}
+
+function savedOwnerProfile(
+  state: GameSimulationState,
+  ownerIndex: number,
+  economy: HubEconomyState,
+) {
+  return {
+    advancedUnlocks: [...state.playerEntities.skillBooks[ownerIndex]!.advancedUnlocks],
+    economy,
+    hagathaRuntime: state.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
+  }
 }
 
 function encodeDocument(document: Omit<Record<string, unknown>, 'schemaVersion'>): string {
@@ -683,6 +697,7 @@ export function restoreGameSaveProfile(document: string): RestoredGameSaveProfil
     0,
   )
   return {
+    advancedUnlocks: Object.freeze(parsed.profile.advancedUnlocks ?? new Array<boolean>(8).fill(false)),
     continuation: parsed.continuation,
     economy,
     hagathaRuntime,
@@ -698,19 +713,27 @@ export function hydrateGameSaveProfile(
   playerId: string,
   profile: RestoredGameSaveProfile,
 ): GameSimulationState {
-  let economyStore = replacePlayerEconomy(state.playerEntities, playerId, profile.economy)
+  const economyStore = replacePlayerEconomy(state.playerEntities, playerId, profile.economy)
   if (economyStore === state.playerEntities) {
     throw new Error('game save profile owner is absent from the fresh game')
   }
-  economyStore = migratePlayerStarterEquipmentAppearance(economyStore, playerId)
-  const ownerIndex = economyStore.identities.findIndex(identity => identity.playerId === playerId)
-  const progressions = [...economyStore.progressions]
+  let playerEntities = migratePlayerStarterEquipmentAppearance(economyStore, playerId)
+  for (let offset = 0; offset < profile.advancedUnlocks.length; offset += 1) {
+    if (!profile.advancedUnlocks[offset]) continue
+    const unlocked = unlockPlayerEntityAdvancedSkill(playerEntities, playerId, 72 + offset)
+    if (unlocked === null) throw new Error('game save advanced unlock could not hydrate')
+    playerEntities = unlocked
+  }
+  const ownerIndex = playerEntities.identities.findIndex(identity => identity.playerId === playerId)
+  const progressions = [...playerEntities.progressions]
   progressions[ownerIndex] = {
     ...progressions[ownerIndex]!,
     hagathaRuntime: profile.hagathaRuntime,
   }
-  const playerEntities = { ...economyStore, progressions: Object.freeze(progressions) }
-  const hydrated = { ...state, playerEntities }
+  const hydrated = {
+    ...state,
+    playerEntities: { ...playerEntities, progressions: Object.freeze(progressions) },
+  }
   createGameSnapshot(hydrated, playerId)
   return hydrated
 }

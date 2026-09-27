@@ -30,6 +30,7 @@ test('Zombie ground stains retain background ownership and migrate the former so
   const current = JSON.parse(document)
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 35
+  delete legacy.profile.advancedUnlocks
   legacy.continuation.simulation.world.enemies.deathEffects[0].presentationOwner = 'world-sorted'
   legacy.continuation.simulation.world.enemies.deathEffects[0].painterRegistration = order.register('transient')
   legacy.continuation.simulation.worldManagerOrder = order.state()

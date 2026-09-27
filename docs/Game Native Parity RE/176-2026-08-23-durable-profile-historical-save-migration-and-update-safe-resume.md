@@ -6,6 +6,21 @@
 > as equivalent to invalidating Last Game. The reported failure demonstrates
 > why the native profile/run lifetime split was not optional.
 
+## 2026-09-27 — Report 48 advanced-spell profile boundary reopening
+
+The prior durable-profile inventory omitted the eight Machinimbus purchase
+flags. Retail keeps them in process globals `0x00B3BDD8..DF`, not in
+`darkdata.cfg`; the only direct writer sets the selected byte to one. A
+browser-host session ends with each completed run, so a profile-only save must
+carry the purchased flags to the next wizard if the purchase is to remain
+usable. The 2026-09-25 production run archive has Mindstar purchased but
+unlearned immediately before Game Over; gold survived into the next session
+while the offer returned. [Entry 249](<249-2026-08-26-native-save-progression-unlock-persistence-and-stock-web-portability.md#2026-09-27--report-48-advanced-spell-purchase-across-wizard-retirement>)
+owns the detailed evidence, all-eight membership, versioned codec and final
+validation receipt. Carrying the flags in the browser profile intentionally
+outlives a retail process restart, as requested for Website purchases; stock
+export still cannot encode an unlearned advanced purchase.
+
 ## Reported smell and parity question
 
 - Reported web behavior: after the game updated and reloaded, Last Game appeared

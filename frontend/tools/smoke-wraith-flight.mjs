@@ -53,6 +53,7 @@ const saved = JSON.parse(createGameSaveDocument({ integrity: 'local-only', loade
     world: { ...state.world, arenaTransition: null, encounter: null, waves: null, enemies },
   } }))
 saved.schemaVersion = 43
+delete saved.profile.advancedUnlocks
 const oldActor = saved.continuation.simulation.world.enemies.actors[0]
 oldActor.brain = { ...oldActor.brain, restingSpeed: .26820915937423706, currentSpeed: .001,
   currentTurnGain: 5455.5, targetTurnGain: 5457.5, flybyTicksRemaining: 0, contactCooldownTicks: 0 }
