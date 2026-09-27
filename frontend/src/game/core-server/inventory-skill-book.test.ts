@@ -61,6 +61,7 @@ test('book result survives current saves; old feedback retirement preserves the 
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /skillBookOutcome/)
   const old = JSON.parse(text)
   old.schemaVersion = 41
+  delete old.profile.advancedUnlocks
   delete old.continuation.simulation.playerEntities.economies[0].actionFeedback.skillBookOutcome
   const restored = restoreGameSaveDocument(JSON.stringify(old))
   assert.equal(getPlayerEconomy(restored.state, restored.playerId).actionFeedback, null)
