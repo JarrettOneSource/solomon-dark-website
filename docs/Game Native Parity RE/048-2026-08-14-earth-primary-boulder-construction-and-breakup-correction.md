@@ -468,12 +468,12 @@ contact writer; the two numeric domains can disagree.
 
 | Member | Native/web source | Investigation disposition |
 | --- | --- | --- |
-| Gargantuan ranks 0–8, ordinary and low-mana held/released Boulder | authored row 47, `+0x1FC`, profile and charge producer | `recovered-pending-port`: native field is float32; prove every rank ceiling and partial/full release |
+| Gargantuan ranks 0–8, ordinary and low-mana held/released Boulder | authored row 47, `+0x1FC`, profile and charge producer | `exact-ported`: all authored ceilings now enter the float32 field domain; profile and release tests cover the ranks and branches |
 | Hasten, Bind Rocks, Rock Surge | rows 42–44; shared contact inputs | `verified-already-at-parity`: existing rank and release branches; rerun shared regression |
-| Ordinary and EBoulder weak-target survivor, same-tick/later-target traversal | `0x00620B60`, `0x00621450`, row 134 | `recovered-pending-port`: emitted charge and shell must remain at or below released float32 ceiling |
+| Ordinary and EBoulder weak-target survivor, same-tick/later-target traversal | `0x00620B60`, `0x00621450`, row 134 | `exact-ported`: shared contact result clips after rounding against the released ceiling; ordinary, EBoulder and legacy-double tests cover survivor and terminal branches |
 | Terminal actor/terrain contact, breakup and audio | `0x0060B700`, `0x0060BED0` | `verified-already-at-parity`: retains pre-contact released charge; cover regression |
-| Hub, Boneyard, observers and strict protocol | world/host/codec | `recovered-pending-port`: reject invalid authority output without weakening validation |
-| Save/restore and older checkpoint input | save document and recovery host | `recovered-pending-port`: test whether saved double ceilings can reenter this path |
+| Hub, Boneyard, observers and strict protocol | world/host/codec | `exact-ported`: built browser/authority rank-two contact agree at `2.200000047683716`; strict codec remains unchanged |
+| Save/restore and older double-ceiling checkpoint input | save document, contact kernel and recovery host | `verified-already-at-parity`: valid older `2.2` ceiling inputs remain accepted and the shared contact clip prevents a new invalid snapshot; no evidence establishes a persisted invalid original checkpoint |
 | Hailstones inherited contact slot | `0x005FBDE0`, row 134 | `out-of-system`: per-rock path bypasses whole-carrier shrink |
 | Renderer and owner/world teardown | Boulder painter and primary-spell cleanup | `verified-already-at-parity`: consume semantic state and registration; no new visual behavior |
 
@@ -486,3 +486,27 @@ captured this projectile cannot be reconstructed from the retained archive.
 The linked later-member checkpoint failure belongs to the party-rejoin ledger
 261. The fix belongs at the float32 producer/contact seam; relaxing protocol
 validation would admit an impossible native field relationship.
+
+### Validation and remaining boundary
+
+The pre-fix WSL test produced the archived over-ceiling value; the corrected
+rank-0–8 profile, shared contact kernel, Boneyard survivor and strict codec
+tests pass. The same kernel serves ordinary Earth and EBoulder, including
+older valid checkpoints whose released ceiling was serialized as a double.
+The exact runtime candidate `9dfccc37ea82a30390349926ec6864446dce9058`
+(tree `3b59357b3accbf54267f2ad59a333c364ffac5bf`) passed the WSL canonical
+gate: 3,937 Node tests, 24 Python tests, zero failures and 100% renderer
+mutation score. Gate log SHA-256 is
+`c0534a163224a423720d332cb24a1ea0ecff893b789b8d76b001a73e6`.
+
+Built Chrome 150 on WSL completed ordinary and rank-two Boneyard contact
+journeys. In the rank-two replay the authoritative and browser residual
+projectiles both held charge and maximum `2.200000047683716`, positive pool
+`12`, the same target ID, a visible contact BoulderBit, and a later terminal
+Earth impact. The browser error list was empty and the strict wire admitted
+the residual frame; the contact and
+terminal frames were visually inspected. WSL SwiftShader frames establish
+functional presentation, not physical-GPU FPS. The original report's exact
+post-recovery checkpoint bytes are unavailable. A hypothetical checkpoint
+already persisted with an invalid projectile is not claimed repaired; its
+existence in this incident has not been established.

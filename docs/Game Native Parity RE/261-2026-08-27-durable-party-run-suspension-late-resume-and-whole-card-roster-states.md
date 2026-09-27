@@ -131,9 +131,9 @@ unchanged when `rejoinGameSimulationPlayer` imports the later member.
 | Member | Source | Investigation disposition |
 | --- | --- | --- |
 | First-returner signed save/world election and ordered party | recovery host/supervisor, original row 261 | `verified-already-at-parity`: bounded last-accepted document wins; no newer state is invented |
-| Later former member and detached catch-up | `rejoinGameSimulationPlayer`, `importPlayerEntity` | `recovered-pending-port`: retain permanent owner state, rebase/clear only transient clocks that exceed the live world tick |
-| Player hit display and recent-damage consumer | puppet hit state and ML observation | `recovered-pending-port`: do not carry a future clock into presentation or bot history |
-| Save normalization and subsequent checkpoints | `normalizeSavedPuppetHit`, host checkpoint scheduler/sender | `recovered-pending-port`: keep strict save validation and prove post-rejoin save succeeds |
+| Later former member and detached catch-up | `rejoinGameSimulationPlayer`, `importPlayerEntity` | `exact-ported`: later private skill ranks remain while only future hit and damage ticks are reset to the elected world clock |
+| Player hit display and recent-damage consumer | puppet hit state and ML observation | `exact-ported`: imported hit feedback cannot point ahead of the live world; recent-damage history becomes absent when its tick is future |
+| Save normalization and subsequent checkpoints | `normalizeSavedPuppetHit`, host checkpoint scheduler/sender | `exact-ported`: strict validation stays in place; a later-member save/restore round trip now succeeds after rejoin |
 | Enemy clocks, projectile clocks, wave and run state | first-returner world | `out-of-system`: later member's browser world does not replace these |
 | Terminal/Game Over, roster/capacity and unrelated pause owners | original row 261 | `verified-already-at-parity`: no rejoin-clock change |
 
@@ -145,6 +145,21 @@ preserve their permanent skills, and save/restore the resulting world. A real
 browser rejoin/checkpoint journey must then confirm the authority continues
 without protocol or checkpoint errors. The separate Boulder wire failure is
 recorded in entry 048.
+
+The deterministic pre-fix WSL regression reproduced the future hit tick and
+failed. The corrected simulation retained an independently granted Water skill,
+reset the two future transient clocks, then created and restored the later
+member's owner checkpoint. The exact runtime candidate and canonical-gate
+receipt are recorded in entry 048. Built Chrome 150 on WSL exercised the
+shared-party Boneyard detach/rejoin, eight later skill choices, pause hold and
+save rotation from revision 2 to 6; the world resumed from held tick 3481 to
+3508. Page, console, failed request/response and host error arrays were empty.
+The browser fixture's static server acknowledged unrelated performance
+telemetry; no production endpoint behavior is inferred from that stub. The
+original wave rollback age and any lost uncheckpointed progress remain
+unmeasurable without the incident's checkpoint documents. A process ending
+before its next browser checkpoint is stored can still lose that interval,
+as the original bounded-checkpoint policy records.
 
 ## Ownership thread and recovered behavioral contract
 
