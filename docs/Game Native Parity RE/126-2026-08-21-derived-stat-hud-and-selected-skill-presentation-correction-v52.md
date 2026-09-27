@@ -217,14 +217,14 @@ owners. Native viewport width-cap branches exist in the surrounding renderer
 from the inward anchor and cannot explain this overlap. No width or fill
 formula is changed by this correction.
 
-| Member | Investigation disposition | Proof required |
+| Member | Final disposition | Evidence |
 | --- | --- | --- |
-| Empty/A-only binding cluster and default meter inset | existing native model retained | Default geometry and return after clearing B |
-| B-only and A+B meter insets | recovered-pending-port | Exact 70 inset for both meters; no dependence on A or a merely owned charm |
-| All primary/Weld/Plane Orb and 14 concentration art records | existing icon resolver retained | Full catalog bounds stay between correct inward edges |
-| Native icon centers, 40 x 65 hit rectangles and selector input | existing native model retained | Centers/hits unchanged; real A/B selector activation after reposition |
-| Track, fill, poison, Magic Shield and reserve layers | shared meter parent owns placement | All shift together; widths and fill ratios remain unchanged |
-| Hub/Boneyard, viewport/UI scaling, touch and lifecycle | shared GameHud owner | Real desktop/touch scenes and live selection changes with clean errors |
+| Empty/A-only binding cluster and default meter inset | verified-already-at-parity | Default geometry and return after clearing B |
+| B-only and A+B meter insets | exact-ported | Exact 70 inset for both meters; no dependence on A or a merely owned charm |
+| All primary/Weld/Plane Orb and 14 concentration art records | verified-already-at-parity | Full catalog bounds stay between correct inward edges |
+| Native icon centers, 40 x 65 hit rectangles and selector input | verified-already-at-parity | Centers/hits unchanged; real A/B selector activation after reposition |
+| Track, fill, poison, Magic Shield and reserve layers | exact-ported through the shared meter parent | All shift together; widths and fill ratios remain unchanged |
+| Hub/Boneyard, viewport/UI scaling, touch and lifecycle | exact-ported through the shared GameHud owner | Real desktop/touch scenes and live selection changes with clean errors |
 | Vital-value mechanics, dynamic widths, arbitrary custom mobile placement | out-of-system; independent owners | Preserve existing contracts and regression suites |
 
 ### Implementation and acceptance plan
@@ -275,3 +275,33 @@ Verified read-only tooling hashes: wrapper
 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
 `dump_function_instructions.py`
 `273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef`.
+
+
+### September 27 final Windows/WSL acceptance
+
+Exact candidate `38b5d1d6bdf756b91bed9f2009126d0dced6c272` passes
+`bash ./scripts/validate.sh` on `home-wsl` with Node 22.17.0 and .NET 10.0.302:
+3,920 Node executions, 24 Python backend/contract tests, zero failures, production
+builds and the configured renderer quality gate. The measured renderer slice
+retains 100% statement/branch/function/line coverage, 468 killed mutations,
+one timeout, 147 compile errors, 24 reviewed equivalents and no survivors or
+quality failures. Gate SHA-256:
+`bf55f497ecb413d82b6491eb5c0eaae46071333b89d4fbfcdd91511b4e503cb9`.
+
+Dependent production Chrome 150.0.7871.124 journeys pass 24 desktop and 22
+touch layout samples. Desktop tests UI scale 100% at 1280/1600/2409 widths;
+touch tests 896x414, DPR2 at 150%. All 14 concentrations stay between the inward
+meter edges. Empty/A-only layouts use 50; B-only/full layouts use 70. Both
+addressed selector clicks succeed, Boneyard entry retains the correct gap,
+and clearing B restores 50. On desktop, Enchant Staff ends at +55.375 while
+mana begins at +70, leaving 14.625 pixels of separation instead of the baseline
+5.375-pixel overlap. Both built screenshots were visually reviewed. Page,
+console, failed-response and host error arrays are empty.
+
+No in-scope member remains unknown or browser-blocked. These receipts use a
+private learned-skill profile and browser-emulated touch; they do not claim
+a physical touch device, an FPS benchmark or independently verified production
+deployment. Native placement is instruction-derived. Final job
+`job_20260927T091551Z_3cfdfa405f` completed at 2026-09-27T10:00:44Z with all
+three exit codes zero. Only this documentation receipt changes after the
+accepted candidate. Publication and task cleanup have separate archive receipts.
