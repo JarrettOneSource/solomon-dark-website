@@ -1126,3 +1126,53 @@ boss-count poll assertion compares against elapsed authoritative ticks. The
 product Portal placement, movement, authored phase tables and save/wire
 contract are unchanged. No platform member is blocked. Publication and
 cleanup are recorded separately in the private report archive.
+
+## 2026-09-27 — Report 44: five Coffins in one late-wave burst
+
+The three-message September 25 report says five Coffins spawned
+“simultaneously” and asks whether that was intended. It has no screenshot or
+save attachment. This is a count and timing question in the existing retail
+TimeLine/Spawner owner, not evidence for the separate Coffin/Maggot performance
+report.
+
+The original private production run diagnostic archive was inspected read-only
+on WSL, with its compressed bytes checked against the server's SHA-256
+summary. It ended at 06:04:12 UTC, after the 06:01 report. The captured
+worst-tick world was on wave ordinal 51 and schedule index 34. That run's
+compiled section has a Coffin burst at index 3 with `count=5`,
+`spreadTicks=25`, `afterDelayTicks=100`, followed later by an index-16
+Coffin burst with `count=7`, `spreadTicks=50`. At captured tick 364168,
+the director was still on burst 15; one living Coffin from wave 51 had
+spawned at tick 362653. The archive retains selected states rather than a
+full tick-by-tick recording, so it cannot prove which five visual frames the
+reporter saw. Raw run/account identifiers and archive bytes are not part of
+the public ledger.
+
+The previously recovered retail generator (`0x006388B0`, TimeLine/Spawner
+`0x0046E390/0x0046D000`) and authored `wave.txt` are the stock source of
+these bursts. `compileBoneyardWaveSection` preserves the Coffin-specific
+wave-ordinal count cap, 25 spread ticks per consumed group member, near-player
+light placement and post-burst 100-tick delay. The host's
+`stepSpawnerGraph` emits one actor, then resets a positive interval while
+spread remains. For the captured five-count/25-tick burst, it emits at
+relative ticks `0, 7, 13, 19, 25` under the steady interval rule: five births
+over a quarter-second, not five births on one simulation tick. The Coffin
+actor's separately recovered hidden/rise phases can make nearby births appear
+together. There is no global live-Coffin cap in the native TimeLine, and
+living Coffins may persist into later groups.
+
+| Member | Disposition | Evidence |
+| --- | --- | --- |
+| Default retail schedule and wave-51 group selection | `verified-already-at-parity` | checked-in authored `wave.txt` and original-run compiled section 34 |
+| Five-Coffin group count, spread and delay | `verified-already-at-parity` | captured burst index 3: five over 25 ticks plus 100-tick delay; recovered compiler |
+| Later seven-Coffin group and retained earlier Coffins | `verified-already-at-parity` | captured burst index 16 and living wave-51 Coffin before it |
+| Authoritative per-tick spawning, placement and replication | `verified-already-at-parity` | `stepSpawnerGraph` positive intervals and existing host-owned actor path; no browser-owned births |
+| Coffin hidden/rise/open and Maggot children | `verified-already-at-parity` | entry 254 owns those already-ported phases; no count or lifetime change follows from this observation |
+| Custom mod-authored TimeLines | `out-of-system` | report concerns the default retail run, not a mod script |
+
+The supported conclusion is **intended late-wave group behavior; no Website
+code change**. Literal same-tick births would contradict the current director,
+but the report lacks frame/tick evidence establishing them. No new native
+constant, VFX change, Coffin cap or performance claim follows from this
+count-only report. If a later capture demonstrates same-tick births, it will
+reopen the Spawner stepper with that exact tick evidence.
