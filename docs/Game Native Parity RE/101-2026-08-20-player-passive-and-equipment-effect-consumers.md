@@ -991,3 +991,16 @@ retained above):
 - `native-wand.log`: `c6c0ddb6846078226bbb131be6173b38084fa4a96612b588f6cbde555cdb76c7`
 - `native-wand-consumers.log`: `3cd80199d84f8c2eaba92f426d6e05629d66f81d45986f899ac639ed2a99f590`
 - `native-melee-resolver-refs.log`: `31bc0b7109f8f3011182653b448c378639a2396e10017e43431860842e4ba5e9`
+
+### Touch acceptance gesture correction
+
+Candidate `ba2cbcef` completed all 20 desktop development cases across Hub,
+Fomentius, Luthacus, Shlorio and Boneyard with empty browser error arrays. Its
+touch run then stopped before the canonical gate: the test ring remained
+selected after the intended double tap. An input trace measured pointer-down
+handlers at 30,916.7 and 33,554.1 ms, a 2,637.4-ms separation despite the test's
+75-ms pause. The native/web admission window is 500 ms. The existing Dowsing
+acceptance journey already addresses this headless-renderer round-trip delay
+by enqueueing the four ordered CDP touch start/end commands together. The
+inventory journey reuses that sequence; game input timing is unchanged. The
+probe is disposable test instrumentation, not a runtime behavior change.

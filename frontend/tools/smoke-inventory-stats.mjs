@@ -271,9 +271,19 @@ async function dragTo(source, point) {
 
 async function doubleActivate(target) {
   if (!mobile) return target.dblclick()
-  await target.tap()
-  await page.waitForTimeout(75)
-  await target.tap()
+  const box = await target.boundingBox()
+  assert.ok(box)
+  // Match the Dowsing journey: separate Playwright tap round trips can miss
+  // the native 500-ms window while the first selection is being rendered.
+  const acknowledgements = []
+  for (const type of ['touchStart', 'touchEnd', 'touchStart', 'touchEnd']) {
+    acknowledgements.push(touchSession.send('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{
+        x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1,
+      }],
+    }))
+  }
+  await Promise.all(acknowledgements)
 }
 
 async function waitForMelee(canvas, minimum, maximum) {
