@@ -36,14 +36,14 @@ the durable participant profile. This intentionally survives a browser restart
 where an unmodified retail restart would lose purchased-but-unlearned flags.
 The stock export warning for that unrepresentable state remains required.
 
-| Member | Investigation disposition | Falsifying check |
+| Member | Final disposition | Evidence |
 | --- | --- | --- |
 | Eight authored Teacher IDs/prices and atomic owner gold debit | `verified-already-at-parity` | Existing purchase/rejection and owner-isolation tests retain exact rows and amounts. |
 | Active wizard flag, shop omission and future level-up eligibility | `verified-already-at-parity` | Buying Mindstar sets flag 6 and removes the offer; rank/binding remain zero until learned. |
 | Active continuation, checkpoints and same-wizard resume | `verified-already-at-parity` | Flag remains on the wizard and is not confused with the non-durable Mindstar *toggle*. |
-| Game Over/profile-only and active-save New Game retirement | `recovered-pending-port` | Both paths carry all eight purchase flags while discarding the old wizard's rank and selections. |
-| Fresh-wizard profile hydration, account/anonymous owners and a different wizard name | `recovered-pending-port` | Same owner retains purchases and gold; another account receives defaults; naming does not address unlock identity. |
-| Versioned frontend/backend profile codec and legacy profiles | `recovered-pending-port` | New documents require eight booleans; older valid profiles migrate to false, active older continuations retain their actual flags on retirement, and malformed shapes fail closed. |
+| Game Over/profile-only and active-save New Game retirement | `exact-ported` for Website profile continuity | One owner-profile producer carries all eight purchase flags on active, terminal and deliberate-retirement documents; old wizard ranks and selections remain separate. |
+| Fresh-wizard profile hydration, account/anonymous owners and a different wizard name | `exact-ported` for Website profile continuity | All-eight owner-isolation tests and the built new-wizard browser journey preserve the flag and gold; another owner's profile keeps defaults. |
+| Versioned frontend/backend profile codec and legacy profiles | `exact-ported` for the browser save boundary | Schema 45 requires eight booleans at both trust boundaries; earlier profile-only saves default false and earlier active saves project their owned flags on retirement; malformed shapes fail closed. |
 | Learned rank/cast state and native stock import/export | `out-of-system` for purchased-only stock disk representation | Learned rows remain ordinary wizard progression; native export continues to warn that unlearned purchases cannot be encoded. |
 | Other profile economy, Hagatha, inventory, Hall and run state | `verified-already-at-parity` | Existing profile authority and save checks remain unchanged. |
 
@@ -55,7 +55,7 @@ buy Mindstar, confirm rank zero and shop omission, create a new wizard from
 the profile and verify offer eligibility, while retaining account isolation
 and strict save validation.
 
-Preflight implementation uses one owner-profile producer for active,
+Implementation uses one owner-profile producer for active,
 terminal-profile and deliberate New Game retirement documents. Save schema 45
 adds eight strictly validated flags to that profile; schema 44 and older
 profile-only documents default to false, while an older *active* continuation
@@ -68,11 +68,25 @@ The built WSL browser reconstructed a purchased rank-zero Mindstar in a
 profile-only save, created a differently named wizard, confirmed the owner
 flag and gold, observed Mindstar absent from Machinimbus's real selector,
 and read a new active local checkpoint with the same flag. Browser page,
-console and response error lists were empty. Full exact-candidate validation
-and final dispositions remain pending. Already-retired schema-44 profiles
+console and response error lists were empty. Already-retired schema-44 profiles
 cannot reconstruct previously discarded purchases from their bytes alone;
 the private production archive is evidence for one affected run, not an
 automatic migration source or permission to mutate a live account.
+
+The exact runtime candidate `6c3e8b92e86159ee52597033ac0530e4ad2d1462`
+passed the WSL canonical gate: 3,945 Node tests, 24 Python tests, no failures
+or skips, and 100 percent renderer quality coverage with no quality failures
+(gate log SHA-256
+`8ebd3b6b0f5391af49a229c72061798c35eda0aa5216ff0c2626f6477caad937`).
+The exact built Chromium 150 journey returned a purchased Mindstar flag after
+creating a differently named wizard, kept rank zero and 15165 gold, omitted
+the Mindstar Teacher row, and wrote active local checkpoint revision two;
+all browser error arrays were empty (log SHA-256
+`0b12b907c32de11b294746b4206be22b5a4be9d083aa403a2d807fe126e438dc`).
+The initial gate found two test fixtures that mislabeled current envelopes as
+schemas 41/37 without removing the schema-45 field. Only those fixtures were
+corrected; 94 focused cases and the complete gate then passed. SwiftShader
+browser acceptance is functional evidence, not a hardware FPS measurement.
 
 ## Reported smell and parity question
 

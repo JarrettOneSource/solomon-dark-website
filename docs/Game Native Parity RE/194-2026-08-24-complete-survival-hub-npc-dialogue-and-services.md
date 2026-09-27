@@ -44,7 +44,7 @@ is summarized in the implementation receipt below.
 | Archchancellor intro/question/dismissal | `ARCH_INTRO/ARCH_Q/ARCH_DISMISS` | exact-ported | graph tests and Mac room journey |
 | all five Boast failures, automatic choice, Wave-30 1.1 award | `0x005CB110`, `0x005CB810`, `0x00577760`, `0x0054CC50`, `0x0052B150`, `0x0066F920`, `0x005BC400` | exact-ported | kernel/integration tests and Mac automatic-choice receipt |
 | Lace one-shot | profile `+0x105` | exact-ported | save/protocol/action tests and Mac mutation receipts |
-| Teacher unlocks 72..79 | process globals `0x00B3BDD8..DF`; no retail disk field | exact-ported purchase/shop; Website profile continuity reopened in Report 48 | native reader/writer census, all-eight owner/save regression and built Teacher journey in entry 249 |
+| Teacher unlocks 72..79 | process globals `0x00B3BDD8..DF`; no retail disk field | exact-ported purchase/shop; Website profile continuity completed in Report 48 | native reader/writer census, all-eight owner/save regression and built Teacher journey in entry 249 |
 | Students / StoreRoom | no-op action / no actor | out-of-system (native noninteractive/no producer) | existing census |
 | Solomon Dig / recipe `GameNPC` | separate Arena prelude / Boneyard scripting | out-of-system (separate systems) | existing reports |
 | story Polisher/Annalist2/Arch variants | alternate builder `0x00513BE0` | out-of-system (Website survival mode) | static census |
