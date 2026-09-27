@@ -1,5 +1,66 @@
 # 2026-08-25 — Corrective SkillScreen presentation closure
 
+## 2026-09-27 — Report 47: inline skill-stat unit typography reopening
+
+The edited report identifies the damage and mana-cost `/ second` suffixes in
+Frost Jet's level-up detail box. Its preserved 861-by-805 screenshot shows
+the small units drawn across the `5.5` and `18.50` values. This is a separate
+failure from Report 33's outer HoverBox width: the box contains the ink, but
+two runs within each stat line overlap.
+
+### Evidence and causal trace
+
+| Evidence class | Source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Reporter image | `2026-09-25/47-level-up-stat-text-misaligned/attachments/1553073787686355174__image.png`, SHA-256 `3980bb9d5956b77c01f81b42db6d8a9a8a08ee033a7ebd663782b4c710f782e1` in the retained report archive | Frost Jet rank three has overlapping damage and mana-cost suffix ink. | high, visual |
+| Authored data | tracked `native-skill-catalog.json`, Frost Jet row 32 and complete public-row sweep | Both strings append `_s(.7)_o(0,1)_i / second`; 19 catalog rows contain 25 stat/bonus lines with this same inline command family. Multi-rank titles use the same scale/offset parser. | high, static |
+| Retail instructions already recovered | 0.72.5 `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; entry 287 `ExactText_Render 0x0043AFC0 -> Glyph_Draw 0x004143D0`; entry 212 HoverBox `0x005C3A60` | The shared native pen advances glyph by glyph and applies italic to glyph geometry; skill detail uses this ExactText owner. No fresh stock runtime recording is claimed. | high, instruction-derived |
+| Current Website reconstruction | published base `8ecf4f8b`; Chromium 150 WebGL probe on WSL at 1600 by 900; task-only Frost Jet rank-three render probe | Damage suffix starts 29.68 pixels before the value's ink ends; mana suffix starts 32.54 pixels before it ends. `native-skill-hover-box.ts` measures a logical run advance, then skews the entire suffix container around its stage origin; its child glyphs have no italic skew. The large local Y coordinate shifts the whole suffix left. Baseline image SHA-256 `696b9f6ec21ca79d12120e56d3adbfacedde0e08a723fce3b022cd3187a8b933`. | high, live/static |
+
+The earlier presentation pass ported the shared HoverBox and text commands but
+skipped the final glyph-transform ownership: a Pixi container skew is not a
+native per-glyph italic. Report 33's frame-containment probe could pass while
+two runs on one line still collided. The existing `nativeUiPixiFor(...).textRuns`
+already implements the recovered continuous pen, run scale/offset, and
+per-glyph italic; the skill painter hand-rolls those operations instead.
+
+System boundary: the shared SkillScreen/LevelupScreen skill-detail ExactText
+painting path from catalog semantic lines through command runs to glyph ink.
+The same box painter serves Hub and Boneyard SkillScreen hover and the
+LevelupScreen's read-only desktop/touch detail extension. It owns painted
+line layout and teardown, not skill progression, offered choices or authority.
+
+| Member | Disposition before correction | Required proof |
+| --- | --- | --- |
+| Frost Jet's two rank-three stat suffixes | `recovered-pending-port` | Both small italic units start after their numeric ink and remain inside the box. |
+| All 19 authored styled stat rows (25 lines), including other per-second units | `recovered-pending-port` | One shared painter applies the same native glyph rule without item-specific offsets. |
+| Multi-rank title suffixes and other command runs | `recovered-pending-port` | Existing rank/offset syntax, color and order remain stable. |
+| HoverBox semantic line builder, 380/400 wrapping and box geometry | `verified-already-at-parity` | Report 33's width and overflow checks remain green. |
+| Hub/Boneyard SkillScreen, LevelupScreen detail, desktop/touch and teardown | `recovered-pending-port` | Shared renderer and live UI journeys show no stale or overlapping glyphs. |
+| Other native UI text consumers, item/shop/dialogue boxes and gameplay authority | `out-of-system` | Different text producers/painters; no catalog or simulation mutation. |
+
+The falsifying acceptance is a real Frost Jet rank-three render with positive
+suffix-to-value ink gaps on both lines, followed by the complete styled-row
+render sweep, the mandatory picker and optional book journeys, and the WSL
+canonical Website gate. A change to generic glyph metrics or a Frost-only
+spacing constant would contradict the recovered ownership.
+
+Implementation preflight: the skill painter now submits each parsed line to
+the existing shared `textRuns` glyph path instead of skewing each suffix
+container. The WSL browser render check failed before that change on all 148
+styled cases; afterward it painted 422 public-row/build cases and 59,116 glyphs
+with zero frame overflows, zero inline failures, and no retained children.
+Thirty-nine focused typography/skill tests, lint, and production build passed.
+The built Hub LevelupScreen displayed rank-three Frost Jet on desktop and
+touch; both screenshots were inspected, the detail remained read-only and
+silent, and page/console/response errors were empty. The shared SkillScreen
+painter also reached a real Hub Call Leviathan tooltip in a separate browser
+journey. That broader book smoke later timed out in its two-second belt
+pull-off effect wait, after the relevant tooltip capture; this is not recorded
+as a complete book-journey pass. Earlier Report 33 acceptance already covered
+Hub/Boneyard optional-book and level-up detail call sites. Final dispositions
+remain provisional until the exact candidate's canonical gate passes.
+
 ## 2026-09-26 — Report 33: shared skill HoverBox text-width ownership
 
 The Meditation concentration bonus overruns the right border in the reported

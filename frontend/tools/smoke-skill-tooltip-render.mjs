@@ -32,6 +32,8 @@ try {
   delete result.image
   console.log(JSON.stringify({ ...result, errors }))
   assert.deepEqual(result.failures, [], 'actual bitmap text must fit inside the painted HoverBox')
+  assert.ok(result.checkedInline >= 25, 'authored inline stat membership was not exercised')
+  assert.deepEqual(result.inlineOverlaps, [], 'inline stat units must follow the numeric glyphs')
   assert.deepEqual(result.descriptionDirectives, [], 'plain description wrapper membership changed')
   assert.equal(result.retiredChildren, 0)
   assert.ok(result.cases >= 400)

@@ -3,7 +3,11 @@ import {
 } from '../src/game/core-kernels/player-progression.ts'
 import { createGameWebGlApplication, loadGameTextureMap } from '../src/game/renderer/game-webgl.ts'
 import { drawNativeSkillHoverBox } from '../src/game/renderer/native-skill-hover-box.ts'
+import { nativeSkillExactTextRuns } from '../src/game/renderer/skill-book-render-contract.ts'
+import { nativeSkillHoverBoxLayout } from '../src/game/renderer/native-skill-hover-box-layout.ts'
+import { nativeSkillBookTooltipLines } from '../src/game/skill-book-model.ts'
 import { nativeUiAtlasSource } from '../src/game/native-ui/native-ui-assets.ts'
+import { layoutNativeUiTextRuns, nativeUiFont, nativeUiGlyphInkBounds } from '../src/game/native-ui/core.ts'
 import { destroyNativeUiPixiFor } from '../src/game/native-ui/pixi.ts'
 
 export async function inspectSkillTooltipRendering() {
@@ -17,6 +21,8 @@ export async function inspectSkillTooltipRendering() {
   let cases = 0
   let glyphs = 0
   const descriptionDirectives = []
+  const inlineOverlaps = []
+  let checkedInline = 0
   const draw = (row, sourceX, sourceY) => {
     const box = drawNativeSkillHoverBox(app.stage, textures, { row, sourceX, sourceY })
     if (!box) throw new Error(`No tooltip for native skill ${row.id}`)
@@ -31,6 +37,33 @@ export async function inspectSkillTooltipRendering() {
         || ink.minY < bounds.top || ink.maxY > bounds.bottom) {
         failures.push({ id: row.id, rank: row.effectiveRank, text: line.label, bounds,
           ink: { left: ink.minX, top: ink.minY, right: ink.maxX, bottom: ink.maxY } })
+      }
+    }
+    const { rendered } = nativeSkillHoverBoxLayout(nativeSkillBookTooltipLines(row), sourceX, sourceY)
+    for (const source of rendered.flatMap(line => line.sources)) {
+      if (!source.includes('_s(') || !source.includes('_i')) continue
+      checkedInline += 1
+      const runs = nativeSkillExactTextRuns(source)
+      const visibleText = runs.map(run => run.text).join('')
+      const line = box.children.find(child => child.label === visibleText)
+      if (!line || runs.length !== 2) {
+        inlineOverlaps.push({ id: row.id, rank: row.effectiveRank, source, reason: 'inline text lost its continuous native pen' })
+        continue
+      }
+      const font = nativeUiFont('body')
+      const prefixGlyphs = [...runs[0].text].filter(character => (
+        character !== ' ' && font.glyphs[`${character.codePointAt(0)}`]
+      )).length
+      const valueGlyph = line.children[prefixGlyphs - 1]
+      const unitGlyph = line.children[prefixGlyphs]
+      if (!valueGlyph || !unitGlyph) throw new Error(`Missing inline glyph in ${source}`)
+      const nativeGlyphs = layoutNativeUiTextRuns({ font: 'body', runs, x: 0, y: 0 }).glyphs
+      const valueInk = nativeUiGlyphInkBounds(nativeGlyphs[prefixGlyphs - 1])
+      const unitInk = nativeUiGlyphInkBounds(nativeGlyphs[prefixGlyphs])
+      const inkGap = unitInk.left - valueInk.left - valueInk.width
+      if (inkGap <= 0 || line.skew.x !== 0 || unitGlyph.skew.x === 0
+        || unitGlyph.position.x <= valueGlyph.position.x) {
+        inlineOverlaps.push({ id: row.id, rank: row.effectiveRank, source, inkGap })
       }
     }
     cases += 1
@@ -67,7 +100,8 @@ export async function inspectSkillTooltipRendering() {
       row: { id: 58 }, lines: [], sourceX: 800, sourceY: 450,
     })
     if (empty !== null || app.stage.children.length) throw new Error('Empty detail created a tooltip')
-    return { cases, glyphs, failures, records, descriptionDirectives, retiredChildren: app.stage.children.length, image }
+    return { cases, glyphs, failures, records, descriptionDirectives,
+      checkedInline, inlineOverlaps, retiredChildren: app.stage.children.length, image }
   } finally {
     app.destroy(true, { children: true })
     destroyNativeUiPixiFor(textures)

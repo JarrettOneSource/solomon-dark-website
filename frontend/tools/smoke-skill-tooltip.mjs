@@ -15,6 +15,7 @@ import { EntityReplicationReconstructor } from '../src/game/protocol/entity-repl
 
 const evidence = process.env.SDR_TOOLTIP_EVIDENCE || '/tmp/solomon-skill-tooltip'
 const baseline = process.argv.includes('--baseline')
+const inlineOnly = process.argv.includes('--inline-only')
 await mkdir(evidence, { recursive: true })
 const server = await startStaticClientServer({
   root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
@@ -79,7 +80,7 @@ try {
     const playerId = host.hostPlayerId()
     assert.equal(wire.playerId, playerId)
     await acceptPicker(page, scenario, playerId, 'hub', 1)
-    if (!baseline) {
+    if (!baseline && !inlineOnly) {
       await acceptBook(page, scenario, 'hub', 1)
       await enterBoneyard(page)
       await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor({ timeout: 20000 })
@@ -114,7 +115,8 @@ async function acceptPicker(page, scenario, playerId, scene, targetRank) {
   const progressions = [...next.playerEntities.progressions]
   progressions[index] = { ...progression, pendingOffer: {
     ...progression.pendingOffer,
-    options: [{ skillId: 58, targetRank }, { skillId: 57, targetRank: 1 }, { skillId: 53, targetRank: 1 }],
+    options: [{ skillId: 58, targetRank }, { skillId: 57, targetRank: 1 },
+      { skillId: inlineOnly ? 32 : 53, targetRank: inlineOnly ? 3 : 1 }],
   } }
   // A private deterministic offer fixture; normal replication, details and selection remain active.
   Object.assign(host.state(), { ...next, playerEntities: { ...next.playerEntities, progressions } })
@@ -139,6 +141,20 @@ async function acceptPicker(page, scenario, playerId, scene, targetRank) {
   const sequence = getPlayerProgression(host.state(), playerId).pendingOffer.sequence
   const rank = getPlayerSkillBook(host.state(), playerId).permanentRanks[58]
   const sounds = await pickSounds(page)
+  if (inlineOnly) {
+    const frostRank = getPlayerSkillBook(host.state(), playerId).permanentRanks[32]
+    const frostIcon = stage.locator('.skill-picker-info-action[data-skill-id="32"]')
+    if (scenario.touch) await frostIcon.tap()
+    else await frostIcon.hover()
+    await page.locator('.skill-picker-stage[data-detail-skill-id="32"]').waitFor()
+    await page.screenshot({ path: `${evidence}/${scenario.name}-${scene}-frost-jet-rank3.png` })
+    assert.equal(getPlayerProgression(host.state(), playerId).pendingOffer.sequence, sequence)
+    assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[32], frostRank)
+    assert.equal(await pickSounds(page), sounds)
+    receipts.push({ scenario: scenario.name, scene, menu: 'picker', detailSkill: 'Frost Jet',
+      targetRank: 3, detailReadOnly: true, silent: true })
+    return
+  }
   const icon = stage.locator('.skill-picker-info-action[data-skill-id="58"]')
   if (scenario.touch) await icon.tap()
   else await icon.hover()

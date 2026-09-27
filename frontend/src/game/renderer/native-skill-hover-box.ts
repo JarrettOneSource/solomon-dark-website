@@ -2,7 +2,6 @@ import { Container, Graphics } from 'pixi.js'
 
 import { nativeSkillRoot } from '../core-kernels/player-progression.ts'
 import { nativeUiPixiFor } from '../native-ui/pixi.ts'
-import { measureNativeUiText } from '../native-ui/core.ts'
 import {
   nativeSkillBookTooltipLines,
   type NativeSkillBookRow,
@@ -87,19 +86,11 @@ function addNativeExactTextLine(
   y: number,
   tint: number,
 ): void {
-  let cursor = x
-  for (const run of nativeSkillExactTextRuns(source)) {
-    const text = nativeUiPixiFor(textures).text({
-      align: 'left',
-      font: 'body',
-      scale: run.scale,
-      text: run.text,
-      tint,
-      x: cursor + run.offsetX,
-      y: y + run.offsetY,
-    })
-    if (run.italic) text.skew.x = -Math.atan(0.125)
-    layer.addChild(text)
-    cursor += measureNativeUiText(run.text, 'body', run.scale)
-  }
+  layer.addChild(nativeUiPixiFor(textures).textRuns({
+    font: 'body',
+    runs: nativeSkillExactTextRuns(source),
+    tint,
+    x,
+    y,
+  }))
 }
