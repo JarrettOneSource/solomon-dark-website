@@ -30,13 +30,13 @@ The same box painter serves Hub and Boneyard SkillScreen hover and the
 LevelupScreen's read-only desktop/touch detail extension. It owns painted
 line layout and teardown, not skill progression, offered choices or authority.
 
-| Member | Disposition before correction | Required proof |
+| Member | Final disposition | Proof |
 | --- | --- | --- |
-| Frost Jet's two rank-three stat suffixes | `recovered-pending-port` | Both small italic units start after their numeric ink and remain inside the box. |
-| All 19 authored styled stat rows (25 lines), including other per-second units | `recovered-pending-port` | One shared painter applies the same native glyph rule without item-specific offsets. |
-| Multi-rank title suffixes and other command runs | `recovered-pending-port` | Existing rank/offset syntax, color and order remain stable. |
+| Frost Jet's two rank-three stat suffixes | `exact-ported` | Exact built desktop/touch browser captures show the small italic units following their values; the browser render probe finds positive native ink gaps. |
+| All 19 authored styled stat rows (25 lines), including other per-second units | `exact-ported` | One shared painter and 148 rank/row inline browser cases have zero failures; no item-specific offsets remain. |
+| Multi-rank title suffixes and other command runs | `exact-ported` | The same continuous pen preserves parsed scale/offset commands; 422 rendered cases retain title/rank order with zero frame overflow. |
 | HoverBox semantic line builder, 380/400 wrapping and box geometry | `verified-already-at-parity` | Report 33's width and overflow checks remain green. |
-| Hub/Boneyard SkillScreen, LevelupScreen detail, desktop/touch and teardown | `recovered-pending-port` | Shared renderer and live UI journeys show no stale or overlapping glyphs. |
+| Hub/Boneyard SkillScreen, LevelupScreen detail, desktop/touch and teardown | `exact-ported` | Both scenes and menus call the same corrected painter; exact built desktop/touch LevelupScreen journeys, a current Hub SkillScreen capture, the 422-case render/retirement sweep, and Report 33's earlier Boneyard book acceptance cover the scene/lifecycle membership. |
 | Other native UI text consumers, item/shop/dialogue boxes and gameplay authority | `out-of-system` | Different text producers/painters; no catalog or simulation mutation. |
 
 The falsifying acceptance is a real Frost Jet rank-three render with positive
@@ -58,8 +58,22 @@ painter also reached a real Hub Call Leviathan tooltip in a separate browser
 journey. That broader book smoke later timed out in its two-second belt
 pull-off effect wait, after the relevant tooltip capture; this is not recorded
 as a complete book-journey pass. Earlier Report 33 acceptance already covered
-Hub/Boneyard optional-book and level-up detail call sites. Final dispositions
-remain provisional until the exact candidate's canonical gate passes.
+Hub/Boneyard optional-book and level-up detail call sites.
+
+The exact source candidate `79fd695e3213626fb0ceb6d8b9bc73c5aa2d9de9`
+passed the WSL canonical gate: 3,943 Node tests and 24 Python tests with no
+failures or skips, 100 percent renderer quality coverage and no quality
+failures (gate log SHA-256
+`b95279515d1840d6611e76089ce4183577c181f2376c6d84ca03d3231c0a0059`).
+The same exact tree repeated the 422-case/59,116-glyph browser render sweep,
+including 148 inline checks and zero errors (log SHA-256
+`dc6b4d6a2dc6014497460bc3581e2c05bea71cffcf173328f58fe118b3b726a5`),
+and the built desktop/touch Frost Jet journeys with read-only/silent detail
+and empty browser error lists (log SHA-256
+`9de02a547d3781436dcd6de11ac9f31ab25acd6503c4fffd703295c4782a68b1`).
+No browser platform approximation or catalog/rank change is involved. The
+separate full optional-book smoke's later belt-effect timeout remains a limit
+of that broader journey, not a pass claim for it.
 
 ## 2026-09-26 — Report 33: shared skill HoverBox text-width ownership
 
