@@ -2198,3 +2198,46 @@ then overlapped unrelated Chromium at 300% CPU, two compiler jobs near 100%
 each and emulator startup; that run is not an acceptance receipt. The final
 candidate must pass the complete canonical Mac gate and both dependent built
 browser replays before publication or any completion reaction.
+
+### Final full-client acceptance — September 27, 2026
+
+Candidate `0fa35f6f07e5babc62e7975890ffc3720be8b7c6` passes the complete M2
+`/opt/homebrew/bin/bash ./scripts/validate.sh` with pinned Node 22.17.0 and
+.NET 10.0.302: 3,895 Node test executions, zero failures, successful backend
+integration and production builds, and all configured renderer quality checks.
+Coverage and mutation score are 100%; mutation results are 462 killed, seven
+timeouts, 147 compile errors, 24 documented equivalents and no survivors.
+Gate log SHA-256:
+`cea2a1de6748334a5a88bcbf3769a876e5a0381a2caa900f48867deddeff7d80`.
+An additional Node 22.23.2 gate passed earlier, but the pinned run owns acceptance.
+
+Both dependent production Chrome 153 replays pass the unchanged frame-time and
+authority-progress thresholds. The saved+100-tick death reaches 8,688 sampled
+effects / 5,189 visible and averages 58.2 FPS in the first five seconds, then
+60.0 FPS. The saved-start death reaches 8,540 / 2,812 and averages 60.0 FPS in
+both windows. All four p95 frame intervals are 16.8 ms. Each window advances
+493–499 presented authority ticks. Both runs retain 301 loot actors, retire all
+death effects and Faculty, remain active and have empty error/warning lists.
+The final rendered scene was visually reviewed. Browser log SHA-256 values:
+`9d0ec61ca093234860f894c7ac0c6ecf7bd595661d09154d5d37cbac451de0e1`
+(+100 ticks) and
+`ba4188507d4d8a35c86ac866de0a049eb4d8f6f582508c07b3b55868161f441b`
+(saved start).
+
+The user's other M2 programs remained running and untouched. Performance runs
+waited for a natural lull after the gate; observed background CPU totals were
+187.4% and 99.3% across eight logical cores. Earlier loaded runs and their failed
+thresholds remain diagnostic evidence, not passes. This establishes resolution
+of the reproduced shared Faculty-death slowdown under the measured conditions,
+not a universal 60 FPS guarantee under arbitrary concurrent load.
+
+| Final membership | Disposition |
+| --- | --- |
+| All 17 mesh-eligible death families, retained interpolation and ordered mesh representation | `exact-ported`: native samples and order preserved; per-kind, lifecycle, pixel and full-client checks pass. |
+| Shadowed composites, both Banish variants and all five painter lanes | `exact-ported`: depth ownership is consolidated without changing native roots, visual values or lifetime. |
+| Native births/RNG/clocks, loot/rewards and finite retirement | `verified-already-at-parity`: unchanged authority/wire comparison and both full replays preserve the complete population and 301 loot actors. |
+| All replicated entity families and validation/error branches | `exact-ported`: numeric identity indexes retain independent decoded ownership, cross-family IDs, ordering and the existing protocol contract. |
+| Reporter PC and Aliss's unavailable lethal frame | `out-of-system`: this receipt covers the attached continuation and the same shared Faculty death owner; it does not claim unavailable hardware/frame reproduction. |
+
+Only this acceptance receipt follows the validated code commit. Publication and
+task cleanup are recorded separately in the archive release receipt.
