@@ -942,3 +942,9 @@ The ordinary paused resize regression also preserves its image and clock.
 The maintained smoke supports a production-preview mode for the complete UI
 journey; the module-level borrowed-frame regression runs through Vite imports.
 Exact final WSL canonical validation and built-client acceptance remain pending.
+
+The first built UI run exposed a smoke-observer race: the reduced-flash check
+waited for positive alpha, then fetched it in a second browser RPC after the
+native flash had expired. Capture the observed alpha/color/mode together inside
+the successful poll. The native lifetime, product code and expected alpha bound
+remain unchanged; this makes the existing transient observation deterministic.

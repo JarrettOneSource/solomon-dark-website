@@ -365,7 +365,6 @@ try {
   const hubCanvas = page.locator('.hub-world-canvas')
   const hubScreenFlash = await captureReducedScreenFlash(
     page,
-    hubCanvas,
     host,
     '.hub-world-canvas',
   )
@@ -410,7 +409,6 @@ try {
   const boneyardCanvas = page.locator('.boneyard-world-canvas')
   const boneyardScreenFlash = await captureReducedScreenFlash(
     page,
-    boneyardCanvas,
     host,
     '.boneyard-world-canvas',
   )
@@ -843,7 +841,7 @@ async function storedSettings(page) {
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key)), GAME_SETTINGS_STORAGE_KEY)
 }
 
-async function captureReducedScreenFlash(page, canvas, host, selector) {
+async function captureReducedScreenFlash(page, host, selector) {
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
   const state = host.state()
@@ -865,19 +863,19 @@ async function captureReducedScreenFlash(page, canvas, host, selector) {
     tick: state.tick,
     worldKey,
   })
-  await page.waitForFunction((selector) => {
+  const observed = await page.waitForFunction((selector) => {
     const node = document.querySelector(selector)
     const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
-    return (frame?.secondaryScreenFlashAlpha ?? 0) > 0
-  }, selector)
-  const receipt = await canvas.evaluate((node) => {
-    const frame = node.__sdrHubFrame ?? node.__sdrBoneyardFrame
+    if ((frame?.secondaryScreenFlashAlpha ?? 0) <= 0) return null
+    // Capture the observed frame atomically; the native flash can expire before another RPC.
     return {
       alpha: frame.secondaryScreenFlashAlpha,
       color: frame.secondaryScreenFlashColor,
       mode: node.dataset.reducedScreenFlashes,
     }
-  })
+  }, selector)
+  const receipt = await observed.jsonValue()
+  await observed.dispose()
   assert.equal(receipt.mode, 'true')
   assert.equal(receipt.color, 0xffffff)
   assert.ok(receipt.alpha > 0 && receipt.alpha <= 0.2, JSON.stringify(receipt))
