@@ -31,7 +31,7 @@ test('transport timeouts, restarts, and abnormal losses have distinct explanatio
     wasClean: true,
   })
   assert.equal(timeout.code, 'connection-timeout')
-  assert.match(timeout.message, /stopped receiving responses/i)
+  assert.match(timeout.message, /connection stopped responding.*main menu to reconnect/i)
 
   const restart = failureFromTransportClose({
     code: 1012,
