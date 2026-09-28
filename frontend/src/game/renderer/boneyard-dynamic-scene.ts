@@ -48,7 +48,7 @@ import { BoneyardEnvironmentLightView } from './boneyard-environment-light.ts'
 import { NativeDeadSpiderViews } from './native-dead-spider-views.ts'
 import { NativeEnemyDeathEffectViews } from './native-enemy-death-effect-view.ts'
 import { nativeEnemyPainterLayer } from './native-enemy-presentation.ts'
-import { nativeEnemyProjectileEffectPainterLayer } from './native-enemy-projectile-effect-presentation.ts'
+import { nativeEnemyProjectileEffectDepth, nativeEnemyProjectileEffectPainterLayer } from './native-enemy-projectile-effect-presentation.ts'
 import { NativeEnemyProjectileEffectViews } from './native-enemy-projectile-effect-view.ts'
 import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
 import { NATIVE_ENEMY_DIRECTIONAL_SHADOW_FAMILIES } from './native-enemy-underlay.ts'
@@ -758,9 +758,11 @@ export class BoneyardDynamicScene {
     for (const effect of snapshot.world.enemyProjectileEffects) {
       this.enemyProjectileEffects.setDepth(
         effect.id,
-        effect.kind === 'demon-explosion-core' ? order.foregroundZIndex + 0.25
-          : effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble' ? 0.5
-            : positionedDynamics.get(`enemy-projectile-effect:${effect.id}`)?.zIndex ?? 1,
+        nativeEnemyProjectileEffectDepth(
+          effect,
+          order.foregroundZIndex,
+          positionedDynamics.get(`enemy-projectile-effect:${effect.id}`)?.zIndex ?? 1,
+        ),
       )
     }
     for (const maggot of visibleMaggots) {

@@ -9,6 +9,7 @@ import type {
 } from '../protocol/game-state.ts'
 import {
   nativeEnemyProjectileEffectBypassesWorldTint,
+  nativeEnemyProjectileEffectDepth,
   nativeEnemyProjectileEffectPainterLayer,
   nativeEnemyProjectileEffectPlan,
 } from './native-enemy-projectile-effect-presentation.ts'
@@ -79,6 +80,15 @@ test('FireBurst owns both render passes and one native depth bias', () => {
   assert.equal(nativeEnemyProjectileEffectPainterLayer(source)?.sortBias, 50)
   assert.equal(nativeEnemyProjectileEffectBypassesWorldTint(source), true)
   assert.equal(nativeEnemyProjectileEffectBypassesWorldTint(effect('poison-bubble', 'BadGuys', 57)), false)
+})
+
+test('Chill Arrow SpinAway uses the late Region manager after held Frost', () => {
+  const arrow = effect('arrow-tumble', 'BadGuys', 2)
+  assert.equal(nativeEnemyProjectileEffectPainterLayer(arrow), null)
+  assert.equal(nativeEnemyProjectileEffectDepth(arrow, 12, 5), 13)
+  assert.equal(nativeEnemyProjectileEffectBypassesWorldTint(arrow), true)
+  assert.equal(nativeEnemyProjectileEffectDepth(effect('poison-bubble', 'BadGuys', 57), 12, 5), 0.5)
+  assert.equal(nativeEnemyProjectileEffectDepth(effect('guided-impact', 'BadGuys', 110), 12, 5), 5)
 })
 
 test('Demon Fire mirrors around the scaled native origin and draws its ground glow independently', () => {

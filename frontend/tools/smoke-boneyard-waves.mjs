@@ -207,6 +207,27 @@ try {
     assert.deepEqual(errors, [])
     assert.deepEqual(failedResponses, [])
     process.stdout.write(`${JSON.stringify({ status: 'ok', productionFrontend, spiders, errors, failedResponses })}\n`)
+  } else if (arrowTumbleOnly) {
+    await enterBoneyard(page)
+    const playerId = host.hostPlayerId()
+    assert.ok(playerId)
+    setCombatTrialVitals(host.state(), playerId)
+    await openBoneyardCombat(host, playerId)
+    await waitUntil(() => {
+      const current = host.state()
+      return current.world.kind === 'boneyard'
+        && current.world.enemies.actors.some((actor) => (
+          (boneyardEnemyActorFlags(actor) & 0x2) !== 0
+        ))
+    }, 'opening combat had no Cold Aura target', 30_000)
+    const chillArrow = await proveChillWindArrowTumble(page, wire, chillArrowScreenshotPath)
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    assert.deepEqual(hostErrors, [])
+    process.stdout.write(`${JSON.stringify({
+      status: 'ok', productionFrontend, chillArrow, errors, failedResponses, hostErrors,
+    })}\n`)
   } else if (portalOnly) {
     const portal = await provePortalBrowser(page, portalScreenshotPath, wire)
     assert.deepEqual(wire.errors, [])
@@ -2200,7 +2221,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
       if (hostEffect === null) await page.waitForTimeout(1)
     }
   } finally {
-    await page.mouse.up({ button: 'left' })
+    if (!arrowTumbleOnly) await page.mouse.up({ button: 'left' })
   }
   assert.ok(hostEffect, 'learned Chill Wind did not tumble the hostile Arrow')
   assert.ok(firstAccumulatorTick !== null, 'Chill Wind never accumulated Arrow tumble force')
@@ -2220,12 +2241,25 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     5_000,
     'the replicated native Arrow SpinAway',
   )
-  await page.waitForFunction((id) => (
-    document.querySelector('.boneyard-world-canvas')
-      ?.__sdrBoneyardFrame?.enemyProjectileEffectIds?.includes(id)
-  ), effectId, { timeout: 5_000 })
-  const renderedFrame = await boneyardFrame(page)
+  const renderedHandle = await page.waitForFunction(({ id, requireWater }) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.enemyProjectileEffectIds?.includes(id)
+      && (!requireWater || frame.primarySpellKinds.includes('water'))
+      ? {
+          enemyProjectileEffectIds: [...frame.enemyProjectileEffectIds],
+          foregroundZIndex: frame.foregroundZIndex,
+          painterIds: frame.painterOrder.map(({ id }) => id),
+          primarySpellKinds: [...frame.primarySpellKinds],
+        }
+      : null
+  }, { id: effectId, requireWater: arrowTumbleOnly }, { timeout: 5_000 })
   await page.screenshot({ path: screenshotPath })
+  const renderedFrame = await renderedHandle.jsonValue()
+  if (arrowTumbleOnly) {
+    assert.equal(renderedFrame.painterIds.includes(`enemy-projectile-effect:${effectId}`), false)
+    assert.ok(renderedFrame.foregroundZIndex > 1)
+  }
+  if (arrowTumbleOnly) await page.mouse.up({ button: 'left' })
 
   const retirementDeadline = Date.now() + 5_000
   while (Date.now() < retirementDeadline) {
@@ -2256,6 +2290,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     initialAlpha: wireEffect.alpha,
     maximumAccumulator,
     renderedEffectIds: renderedFrame.enemyProjectileEffectIds,
+    waterActiveAtCapture: renderedFrame.primarySpellKinds.includes('water'),
     retirementTick: finalState.tick,
     tumbleTick: hostEffect.spawnTick,
   }

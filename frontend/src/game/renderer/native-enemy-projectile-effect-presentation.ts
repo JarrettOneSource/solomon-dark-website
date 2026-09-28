@@ -86,7 +86,7 @@ function sinDegrees(value: number): number { return Math.sin(value * Math.PI / 1
 export function nativeEnemyProjectileEffectPainterLayer(
   effect: BoneyardEnemyProjectileEffectSnapshot,
 ): DynamicPainterLayer | null {
-  if (effect.kind === 'firebolt-trail' || effect.kind === 'demon-explosion-core' || effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble') return null
+  if (effect.kind === 'firebolt-trail' || effect.kind === 'arrow-tumble' || effect.kind === 'demon-explosion-core' || effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble') return null
   const wrapped = effect.kind === 'fire-burst' || effect.kind === 'guided-impact'
     || effect.kind === 'demon-explosion-lit-array'
   return {
@@ -98,6 +98,17 @@ export function nativeEnemyProjectileEffectPainterLayer(
   }
 }
 
+export function nativeEnemyProjectileEffectDepth(
+  effect: BoneyardEnemyProjectileEffectSnapshot,
+  foregroundZIndex: number,
+  worldSortedZIndex: number,
+): number {
+  if (effect.kind === 'arrow-tumble') return foregroundZIndex + 1
+  if (effect.kind === 'demon-explosion-core') return foregroundZIndex + 0.25
+  if (effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble') return 0.5
+  return worldSortedZIndex
+}
+
 export function nativeEnemyProjectileEffectBypassesWorldTint(effect: BoneyardEnemyProjectileEffectSnapshot): boolean {
-  return effect.kind === 'fire-burst' || effect.kind === 'guided-impact' || effect.kind.startsWith('demon-')
+  return effect.kind === 'arrow-tumble' || effect.kind === 'fire-burst' || effect.kind === 'guided-impact' || effect.kind.startsWith('demon-')
 }

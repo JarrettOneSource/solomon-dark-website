@@ -1,5 +1,13 @@
 # 2026-08-26 — Production projectile-effect wire crash and save-schema closure
 
+> **Later native correction:** the Arrow `Anim_SpinAway` recipe in this
+> historical incident record has a superseded alpha-six claim. Fresh Arrow
+> vslot recovery in entry 091 establishes initial alpha **4**, fade `0.1`,
+> and 41 fixed-tick lifetime; alpha six belongs to a separate sibling caller.
+> Report 49 in entry 091 also corrects the Arrow child's late direct painter
+> owner. The type-6 rejection and cross-stack save-schema incident documented
+> here remain valid.
+
 ## Reported smell and parity question
 
 - Reported behavior: inspect the newest production crashes and fix them. Two

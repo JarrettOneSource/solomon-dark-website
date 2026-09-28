@@ -1,5 +1,102 @@
 # Complete enemy animation and enemy-projectile VFX closure — 2026-08-15
 
+## 2026-09-27 — Report 49: Chill Wind Arrow SpinAway painter reopening
+
+### Reported smell and baseline evidence
+
+The archived report says Arrow deflection under Chill Wind has no visible
+animation. Its complete 15.947-second video is retained at
+`solomon-darker-bug-reports/2026-09-26/49-chill-wind-arrow-deflection-animation/attachments/1553280985867620382__Missing_Deflection.mp4`
+(SHA-256 `3ade422215813757f44f28ec071f10c3118f4d6f68df3793be798692b4c33540`).
+The video shows arrows crossing an active Frost cone, but does not expose the
+authoritative tumble event or prove a particular missed draw. The earlier
+`--arrow-tumble-only` acceptance released the cast before its final screenshot;
+it therefore did not check the reported overlap.
+
+A focused built-client WSL Chrome replay of the currently published
+`e6e55fcb31a64194326e26c821894d63b7729c47` held Water throughout
+capture. The real host transferred Arrow 1 to `arrow-tumble` 1 at tick 1971;
+the wire sample had BadGuys record 2, alpha 3.099609375, and the renderer frame
+contained effect 1 while Water remained active. Host and wire retired the
+effect normally; page, response, host, and wire error arrays were empty.
+Software-rendered WSL ran at only four FPS during the screenshot, so this
+single screenshot is not a reliable pixel-level absence proof. It does prove
+the effect was born and replicated while the cone was held.
+
+Fresh read-only Ghidra 12.0.3 decompilation of retail 0.72.5 Arrow vslot
+`0x005E5EC0` (canonical project replica, `decompile_targets.py`, log SHA-256
+`e4d5628657f9244678b91d324d119b7e550de8ae141554ecb667765af5d27b04`)
+confirms that the strict force handoff allocates `Anim_SpinAway::vftable`,
+assigns the record-2 child, then calls manager vslot `+0x10` at
+`Region+0x1E0`. The independent Arena render trace in entries 090, 077, 297,
+and 301 places that direct manager **after** the complete row-sorted world
+queue, player-attached effects, and other late managers. Normal Frost belongs
+to the shared ZAnim queue; Over Frost is a separate child of the same late
+direct manager. The audited Website base gave the Arrow child an actor-manager
+registration, inserts it into the row queue, and multiplies it by world tint.
+The painter owner is therefore wrong even though the effect's simulation and
+wire presence are correct. A fresh vtable read at `0x0079D530` resolves the
+child draw slot to `0x00455A20`. That callback clamps its own alpha, installs
+its own transform, and submits record `+0x28` through `0x00415020` without a
+Region light-scalar lookup. As a child of the post-multiply direct manager,
+it bypasses the Website's actor-local world tint. Its update slot
+`0x00453B70` independently reduces alpha and advances position/rotation,
+matching the current authority state. These facts narrow the correction to
+painter depth and inbound tint, while preserving the animation clock.
+
+### System boundary and final membership
+
+The reopened system is **hostile Arrow force handoff and its independent
+SpinAway presentation**, from a real Frost contact through Arrow retirement,
+child allocation, native manager submission, replication, draw, and teardown.
+These are the reachable members and adjacent ownership boundaries; no new
+Frost sprite or projectile trail is implied.
+
+| Member or branch | Native owner | Final disposition and check |
+| --- | --- | --- |
+| Normal, fire, and poison hostile Arrows | shared Arrow vslot `0x005E5EC0` | `exact-ported` for the common child painter owner; payload does not select a different force vslot. The effect-kind renderer test covers their shared result. |
+| Strict force threshold, child recipe, velocity, fade, 41-tick life | `0x00543860 -> 0x005E5EC0`, `Anim_SpinAway` | `verified-already-at-parity` in current focused combat/replication tests; alpha starts at 4, not the older report 234's superseded 6. |
+| Late direct draw while Frost is held | `Region+0x1E0`, Arena `0x0046FFB7..0x0046FFBD`; draw `0x00455A20` | `exact-ported` for the post-queue interval and self-lit material. The client excludes Arrow SpinAway from the shared queue, places it at the established late-overlay depth, and bypasses actor-local light multiplication. |
+| Normal Frost, Over Frost, and other `+0x1E0` neighbors | entries 077, 090, 297, 301 | `out-of-system` for Arrow construction; Normal Frost remains row-sorted, while the existing separate Water/ambient owners retain their direct lanes. Their cross-family insertion order is owned by those entries, not inferred from this one Arrow capture. |
+| `Anim_SpinAway` sibling caller `0x005EBE20` | TragicCircle/story effect, entry 083 | `out-of-system`: no maintained survival producer; its alpha-6 recipe must not replace Arrow's alpha-4 recipe. |
+| Non-Chill Frost, low-mana Water, enemy actor push, Firebolt and GuidedMissile | entries 091 and 279 | `verified-already-at-parity` under their existing independent producers; no Arrow SpinAway handoff. |
+| Every generated Arena's Arrow painter | shared Boneyard dynamic scene | `exact-ported` by the common effect-kind depth and tint rule; no map-specific path remains. |
+| Remote clients, save/resume, parent retirement and run reset | shared enemy store and type-6 effect lane | `verified-already-at-parity`; the unchanged type-6 effect state and independent lifetime feed the corrected renderer on each client. |
+
+### Implementation and acceptance
+
+`nativeEnemyProjectileEffectPainterLayer` no longer admits `arrow-tumble` to
+the row queue. The shared projectile-effect depth selector assigns the
+established late world-overlay interval; its world material bypasses the
+actor-local tint. The old actor-registration ordinal remains in the type-6
+descriptor for save/wire compatibility, but no longer acts as the tumble's
+painter owner or changes the order of other registered roots. Cast admission,
+damage, the strict threshold, effect construction, 41-tick clock, normal
+retirement, and other projectile effect depths are unchanged.
+
+The renderer regression failed on the published base because `arrow-tumble`
+was still a queue layer, then passed with the new depth/tint rule. The exact
+WSL tree passed `bash ./scripts/validate.sh`: 3,946 Node tests, 24 Python
+tests, lint, backend and production builds, media policy, and renderer quality
+with zero gate failures. A built Chrome journey entered a real generated
+Boneyard, learned Chill Wind, held Water, and transferred Arrow 1 into
+record-2 SpinAway 1 at tick 1434 after force 0.9920001029968262; the client
+received alpha 3.900390625 and rendered effect 1 while Water was still active.
+The effect was absent from the row queue and retired on host and client by tick
+1595. Page, response, host, and wire error arrays were empty.
+
+WSL uses software WebGL and the normal 41-tick animation can occupy only a few
+slow frames, so a still from that journey alone cannot settle subjective
+visibility. A separate task-only diagnostic held the *already-created* effect
+at alpha 4 and extended its lifetime solely through one screenshot, without
+changing the built browser renderer. That screenshot visibly shows the angled
+Arrow shaft over the held cyan Frost cone (PNG SHA-256
+`c4aa3ec33f515351a1bce315f34ed8d0ce3d8fc57e7cd1974e1a6b47a4a28ad7`).
+The temporary authority modification was restored byte-for-byte before
+publication; the normal-lifetime journey above is the gameplay acceptance.
+No distinct Chill sprite, unverified content change, or browser-only parity
+approximation was introduced.
+
 ## 2026-09-22 — Mage factory retirement and terminal clock
 
 Report 10 reopens the Mage world/attached factory lifecycle through Game Over.
