@@ -63,6 +63,12 @@ export function stepLivingActor(
   let actor = affected.brain.family === 'portal'
     ? affected
     : refreshTarget(affected, context)
+  if (actor.brain.family === 'coffin') {
+    const anchor = actor.brain.anchorPosition
+    if (actor.position.x !== anchor.x || actor.position.y !== anchor.y) {
+      actor = { ...actor, position: anchor }
+    }
+  }
   if (actor.brain.family === 'skeleton' && actor.brain.pike !== null) {
     const held = stepLatchedSkeleton(work, rollSkeletonFamilyHeadFacing(work, actor), context)
     return stepEnemyLighting(effect?.timeScale === 0 ? held : stepSkeletonRecoil(held))
@@ -73,7 +79,9 @@ export function stepLivingActor(
   if (actor.brain.family === 'demon') actor = snapDemonRootToExtremities(actor)
   if (actor.brain.family === 'portal') {
     return (effect?.timeScale ?? 1) === 0
-      ? stepEnemyLighting(actor)
+      ? stepEnemyLighting(actor.brain.anchorPosition === null
+        ? actor
+        : { ...actor, position: actor.brain.anchorPosition })
       : stepEnemyLighting(stepPortal(work, actor, actor.brain, context))
   }
   if (actor.brain.family === 'heartmonger') return stepEnemyLighting(stepHeartmonger(work, actor, actor.brain, context))

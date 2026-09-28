@@ -1176,3 +1176,74 @@ but the report lacks frame/tick evidence establishing them. No new native
 constant, VFX change, Coffin cap or performance claim follows from this
 count-only report. If a later capture demonstrates same-tick births, it will
 reopen the Spawner stepper with that exact tick evidence.
+
+## 2026-09-28 — Report 08 frozen stationary-root reopening
+
+The September 26 follow-up video (SHA-256
+`27e6fef18b67a41077da1d3f79549df922dd1ba2909421d866318fcdb487c995`)
+shows a Deep Portal 2 amid Ring of Ice effects. The reporter observes that its
+root can move while frozen and snaps back after thaw. Camera motion and the
+large ice sprites prevent an unambiguous world-position trace from video
+pixels alone. The original Report 08 repair already gave Portals their stock
+anchor and body resistance, but its test matrix did not combine an external
+impulse with the zero-time-scale status branch.
+
+System boundary: **stationary enemy root restoration through status-gated
+ticks**. This includes Portal materialization/anchor capture and all seven
+Deep Portal row families, Coffin's captured root and five living phases,
+Cocoon's player-owned placement, external impulses, active/frozen/disrupted
+status paths, animation/ejection clocks, save/replication, and mobile-enemy
+controls. The full 80 Portal recipe rows and their authored data remain the
+complete source census from the earlier reopening; this follow-up adds no
+recipe or art row.
+
+| Member | Final disposition | Evidence |
+| --- | --- | --- |
+| Opened Portal root during zero time scale, all 80 recipes | exact-ported | Retail `Portal::Tick 0x00489CC0` restores anchor `+0x218/+0x21C` after its Puppet tick. The Website now restores an opened Portal's anchor at the frozen early return without advancing phase/ejection; every authored recipe has a frozen-impulse assertion and Deep Portal 2 has host/browser proof. |
+| Unopened Portal materialization and opening edge | verified-already-at-parity | No anchor exists before the native age-nine capture; the frozen regression retains null and holds the opening clock. |
+| Coffin hidden/rising/holding/opening/open root under freeze or disruption | exact-ported | Retail `Coffin::Tick 0x004A2760` restores captured `+0x23C/+0x240` before phase work. The Website now restores that root before either status return; each of the five phases has frozen and disrupted assertions with no Maggot birth or clock advance. |
+| Cocoon target-owned placement | verified-already-at-parity | Its owner runs before the common status gate; it is not a Portal/Coffin anchor. |
+| Ordinary mobile Badguys and Maggots | verified-already-at-parity | Their frozen time-scale action/movement hold remains the control; no blanket unfreeze is authorized. |
+| Portal/Coffin damage, body resistance, Hurricane exclusion, transient external force | verified-already-at-parity | Existing Report 08 system tests remain applicable. Correcting the following tick must not reject the transient force at its point of application. |
+| Save/restore, replication, phase/audio/child events | verified-already-at-parity | The existing anchor schema and protocol remain unchanged; the built client received the restored root through normal snapshots, the frozen age held, and thaw resumed it without a jump. |
+| Room-transition and navigation portals | out-of-system | They do not use hostile actor anchors or this status gate. |
+
+The causal defect was a skipped owner-specific anchor restoration, not reduced
+body resistance or a missing Portal recipe. Before the fix, the focused WSL
+suite failed exactly two new tests: frozen Portal and Coffin roots stayed at
+the displaced `(125,30)` instead of anchor `(100,0)`. `stepLivingActor` now
+restores Coffin roots before status early returns and restores an opened
+Portal's root in its zero-time-scale return. The ordinary Portal tick still
+owns ejection and its transient-current-root rule; neither that tick nor
+Coffin phase/Maggot work advances during freeze. The focused suite then passed
+`90/90`, including all 80 Portal recipes, five Coffin phases, pre-anchor
+materialization, thaw, and mobile controls.
+
+Built WSL Chrome 150 entered Deep Portal 2, received an authoritative
+diagnostic Ring-of-Ice-style frozen target status, and applied an external
+impulse from `(980,2120)` to `(1005,2105)`. During 136 subsequent frozen
+ticks, ten rendered enemy-root samples and the host root stayed at the anchor.
+The Portal age remained 339 until thaw, then advanced to 360 without a root
+jump. Browser page, console, response and request errors were empty. The
+browser log SHA-256 is
+`ff027dd1c5f3aae71e3e523e61c76df5e51e2809e489699f482d982a6cddd8d3`;
+the inspected frozen frame is
+`126f4afe9b70f8d9cbcd126de65b7351b3639d0e5ef546b0f13d3fef0b6c3222`.
+This acceptance injects the same authoritative freeze status that Ring of Ice
+publishes; it does not claim a new keyboard-cast receipt. The unchanged Ring
+cast path previously passed built-browser acceptance for report 51. Two
+optional broader Ring smoke attempts on WSL software Chrome stopped before
+the relevant action, on an unrelated Frost Jet target-retirement assertion
+and then WebGL-canvas readiness, respectively; neither is claimed as passing.
+
+The exact runtime/browser-harness candidate passed the full WSL Website gate:
+3,960 Node test executions, 24 Python tests, zero test failures, production
+build and lint, 100% configured renderer coverage and mutation score, zero
+mutation survivors, and renderer quality failures `[]`. The mutation run
+killed 476, timed out one, and could not compile 147 mutations. Canonical log
+SHA-256:
+`7577967fb2f291011fe628f54144e571f4f6311b261f9041e14d0d43fa804f1a`.
+Only this ledger closeout changed after the gate; runtime, tests and browser
+harness bytes remained identical. No member is blocked by the browser
+platform. Publication, new completion reaction and cleanup are recorded in
+the private archive receipt.

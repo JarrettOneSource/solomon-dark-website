@@ -8,7 +8,7 @@ import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import { createNativeFacultyAction } from '../src/game/core-kernels/native-faculty-actions.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
-import { createNativeSecondaryPlayerState } from '../src/game/core-kernels/native-secondary-abilities.ts'
+import { applyNativeSecondaryTargetEffect, createNativeSecondaryPlayerState } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../src/game/core-kernels/native-survival-boss-catalog.ts'
 import { nativeDiscorporealRecipe } from '../src/game/core-kernels/native-survival-discorporeal.ts'
 import { nativeFacultyRecipe } from '../src/game/core-kernels/native-survival-faculty.ts'
@@ -18,7 +18,7 @@ import { nativeSkeletonBossRecipe } from '../src/game/core-kernels/native-surviv
 import { nativeSlumpgutRecipe } from '../src/game/core-kernels/native-survival-slumpgut.ts'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { canPlaceBoneyardBody, firstBoneyardPathBlockProgress } from '../src/game/core-server/boneyard-collision.ts'
-import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { positionBoneyardEnemy, stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import { createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords } from '../src/game/core-server/game-simulation.ts'
 import { grantPlayerEntitySkillRanks, replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
@@ -33,13 +33,17 @@ const frontend = fileURLToPath(new URL('../', import.meta.url))
 const output = process.env.SDR_BOSS_PROOF_OUTPUT || '/tmp/solomon-native-bosses'
 const selectedCases = process.argv.filter(argument => argument.startsWith('--case=')).map(argument => argument.slice(7))
 const fromCase = process.argv.find(argument => argument.startsWith('--from='))?.slice(7)
-const portalRoots = process.argv.includes('--portal-roots')
+const frozenPortalRoot = process.argv.includes('--portal-frozen-root')
+const portalRoots = process.argv.includes('--portal-roots') || frozenPortalRoot
 const character = { discipline: 'arcane', element: portalRoots ? 'air' : 'fire', displayName: 'Boss acceptance' }
 const catalog = createBoneyardCatalog()
 const loaded = materializeBoneyard(catalog, 'default-random', Buffer.alloc(16, 42))
 assert.ok(loaded)
 const portalPhases = nativePortalProgram('9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9').phases
-const cases = portalRoots ? [
+const cases = frozenPortalRoot ? [
+  { id: 'portal-frozen-root-2', token: 'PORTAL', portalPhase: portalPhases[1],
+    rootProof: true, frozenRoot: true },
+] : portalRoots ? [
   ...portalPhases.map((phase, index) => ({ id: `portal-root-${index + 1}`, token: 'PORTAL',
     portalPhase: phase, rootProof: true, fireAtBoss: true, milliseconds: 11000 })),
   { id: 'portal-root-death', token: 'PORTAL', portalPhase: portalPhases[0], death: true, milliseconds: 6500 },
@@ -281,6 +285,10 @@ async function acceptBoss(row) {
       assert.ok(barBounds && Math.abs(barBounds.y - 791) <= 1 && Math.abs(barBounds.height - 11) <= 1)
     }
     await page.screenshot({ path: resolve(output, `${row.id}-start.png`) })
+    if (row.frozenRoot) {
+      const frozen = await acceptFrozenPortalRoot(page, host, row, errors)
+      return { id: row.id, name: seeded.name, position: seeded.position, frozen, errors }
+    }
     const aimAtBoss = async () => {
       const aim = await page.evaluate(() => {
         const canvas = document.querySelector('.boneyard-world-canvas')
@@ -411,4 +419,61 @@ async function acceptBoss(row) {
     await context.close()
     await host.close()
   }
+}
+
+async function acceptFrozenPortalRoot(page, host, row, errors) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const portal = state.world.enemies.actors.find(actor => actor.id === 1)
+  assert.ok(portal?.brain.family === 'portal' && portal.brain.anchorPosition !== null)
+  const anchor = portal.brain.anchorPosition
+  const age = portal.brain.ageTicks
+  const displaced = { x: anchor.x + 25, y: anchor.y - 15 }
+  const moved = positionBoneyardEnemy(state.world.enemies, portal.id, displaced)
+  assert.equal(moved.accepted, true)
+  const worldKey = `boneyard:${state.world.runId}`
+  Object.assign(state, {
+    secondaryAbilities: applyNativeSecondaryTargetEffect(
+      state.secondaryAbilities, worldKey, portal.id,
+      { frozenTicks: 1_000, frozenTimeScale: 0 },
+    ),
+    world: { ...state.world, enemies: moved.store },
+  })
+  const startTick = state.tick
+  await page.waitForTimeout(200)
+  const sampleStart = await page.evaluate(() => window.__bossFrames.length)
+  await page.waitForFunction(start => window.__bossFrames.slice(start)
+    .flatMap(frame => frame.enemies.filter(enemy => enemy.id === 1)).length >= 10,
+  sampleStart, { timeout: 4_000 })
+  const held = host.state()
+  const heldPortal = held.world.enemies.actors.find(actor => actor.id === 1)
+  assert.ok(heldPortal?.brain.family === 'portal')
+  assert.deepEqual(heldPortal.position, anchor)
+  assert.equal(heldPortal.brain.ageTicks, age)
+  assert.ok(held.tick >= startTick + 50)
+  assert.ok(held.secondaryAbilities.targetEffects.some(effect => (
+    effect.targetId === portal.id && effect.frozenTicks > 0 && effect.timeScale === 0
+  )))
+  const rendered = await page.evaluate(start => window.__bossFrames.slice(start)
+    .flatMap(frame => frame.enemies.filter(enemy => enemy.id === 1).map(enemy => ({ x: enemy.x, y: enemy.y }))),
+  sampleStart)
+  assert.ok(rendered.length >= 10, `${row.id}: frozen Portal was not rendered`)
+  assert.ok(rendered.every(position => Math.hypot(position.x - anchor.x, position.y - anchor.y) < .1),
+    `${row.id}: frozen Portal appeared away from its anchor`)
+  await page.screenshot({ path: resolve(output, `${row.id}-frozen.png`) })
+  const thawState = host.state()
+  Object.assign(thawState, { secondaryAbilities: {
+    ...thawState.secondaryAbilities,
+    targetEffects: thawState.secondaryAbilities.targetEffects.filter(effect => (
+      effect.targetId !== portal.id || effect.worldKey !== worldKey
+    )),
+  } })
+  await page.waitForTimeout(200)
+  const thawed = host.state().world.enemies.actors.find(actor => actor.id === 1)
+  assert.ok(thawed?.brain.family === 'portal')
+  assert.deepEqual(thawed.position, anchor)
+  assert.ok(thawed.brain.ageTicks > age)
+  assert.deepEqual(errors, { page: [], console: [], responses: [], requests: [] })
+  return { anchor, displaced, frozenTickSpan: held.tick - startTick,
+    frozenAge: age, renderedSamples: rendered.length, thawedAge: thawed.brain.ageTicks }
 }

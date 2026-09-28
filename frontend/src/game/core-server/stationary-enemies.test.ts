@@ -5,6 +5,7 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_PORTAL_PROGRAM_BY_SOURCE_SHA256, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
@@ -33,6 +34,19 @@ function advance(store: BoneyardEnemyStore, tick: number): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(store, { ...context, tick }).store
 }
 
+function withStatus(
+  store: BoneyardEnemyStore,
+  tick: number,
+  patch: Parameters<typeof applyNativeSecondaryTargetEffect>[3],
+): BoneyardEnemyStore {
+  const status = applyNativeSecondaryTargetEffect(
+    createNativeSecondarySimulation(), 'stationary-hostiles', 1, patch,
+  ).targetEffects[0]!
+  return stepBoneyardEnemyStore(store, {
+    ...context, abilityEffects: { 1: status }, tick,
+  }).store
+}
+
 function intent(enemyToken: BoneyardEnemySpawnIntent['enemyToken']): BoneyardEnemySpawnIntent {
   return { enemyToken, nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken], flags: [],
     id: 1, locationPolicy: 'anywhere', position, spawnTick: 0, waveOrdinal: 40 }
@@ -59,6 +73,12 @@ for (const [sha, program] of Object.entries(NATIVE_PORTAL_PROGRAM_BY_SOURCE_SHA2
       assert.equal(result.enemies.actors[0]!.currentHealth, phase.maximumHealth)
       assert.deepEqual(result.hits, [])
       assert.deepEqual(result.rng, createNativeRng(2900))
+      const settled = store.actors[0]!
+      assert.ok(settled.brain.family === 'portal' && settled.brain.anchorPosition !== null)
+      const displaced = positionBoneyardEnemy(store, 1, { x: 125, y: 30 }).store
+      const frozen = withStatus(displaced, 11, { frozenTicks: 10, frozenTimeScale: 0 })
+      assert.deepEqual(frozen.actors[0]!.position, settled.brain.anchorPosition)
+      assert.deepEqual(frozen.actors[0]!.brain, settled.brain)
     })
   }
 }
@@ -95,6 +115,34 @@ test('Portal captures its settled materialization root and restores it after an 
   }
 })
 
+test('a frozen Portal restores its settled root without advancing its own clock', () => {
+  const phase = Object.values(NATIVE_PORTAL_PROGRAM_BY_SOURCE_SHA256)[0]!.phases[0]!
+  let store = spawn({ ...intent('PORTAL'), authoredRecipe: nativePortalRecipe(phase) })
+  for (let tick = 1; tick <= 10; tick++) store = advance(store, tick)
+  const actor = store.actors[0]!
+  assert.ok(actor.brain.family === 'portal' && actor.brain.anchorPosition !== null)
+  const before = actor.brain
+  const displaced = positionBoneyardEnemy(store, 1, { x: 125, y: 30 }).store
+  const frozen = withStatus(displaced, 11, { frozenTicks: 10, frozenTimeScale: 0 })
+  assert.deepEqual(frozen.actors[0]!.position, before.anchorPosition)
+  assert.deepEqual(frozen.actors[0]!.brain, before, 'freeze must hold the Portal phase and ejection clock')
+  assert.equal(frozen.actors.length, store.actors.length, 'freeze must not eject an Imp')
+  const thawed = advance(frozen, 12)
+  assert.deepEqual(thawed.actors[0]!.position, before.anchorPosition)
+  assert.ok(thawed.actors[0]!.brain.family === 'portal')
+  assert.equal(thawed.actors[0]!.brain.ageTicks, before.ageTicks + 1)
+})
+
+test('freeze before Portal materialization does not invent an anchor or advance opening', () => {
+  const phase = Object.values(NATIVE_PORTAL_PROGRAM_BY_SOURCE_SHA256)[0]!.phases[0]!
+  const store = spawn({ ...intent('PORTAL'), authoredRecipe: nativePortalRecipe(phase) })
+  const before = store.actors[0]!.brain
+  assert.ok(before.family === 'portal' && before.anchorPosition === null)
+  const frozen = withStatus(store, 1, { frozenTicks: 10, frozenTimeScale: 0 })
+  assert.deepEqual(frozen.actors[0]!.brain, before)
+  assert.deepEqual(frozen.actors[0]!.position, position)
+})
+
 test('Coffin restores its initialized root through every living phase after external impulses', () => {
   let source = spawn(intent('COFFIN'))
   assert.equal(boneyardEnemyBodies(source).length, 0, 'hidden Coffin is not a contact body')
@@ -105,6 +153,26 @@ test('Coffin restores its initialized root through every living phase after exte
     if (phase !== 'hidden') assert.equal(boneyardEnemyBodies(source)[0]!.pushResistance, 1)
     const moved = positionBoneyardEnemy(source, 1, { x: 125, y: 30 }).store
     assert.deepEqual(advance(moved, 1).actors[0]!.position, position)
+  }
+})
+
+test('a frozen or disrupted Coffin retains its root without advancing phases or Maggots', () => {
+  const initial = spawn(intent('COFFIN'))
+  const actor = initial.actors[0]!
+  assert.ok(actor.brain.family === 'coffin')
+  for (const phase of ['hidden', 'rising', 'holding', 'opening', 'open'] as const) {
+    for (const patch of [
+      { frozenTicks: 10, frozenTimeScale: 0 },
+      { disruptedTicks: 10 },
+    ]) {
+      const brain = { ...actor.brain, phase, phaseTick: 5, phaseTicksRemaining: 10 }
+      const store = { ...initial, actors: [{ ...actor, brain }] }
+      const displaced = positionBoneyardEnemy(store, 1, { x: 125, y: 30 }).store
+      const held = withStatus(displaced, 1, patch)
+      assert.deepEqual(held.actors[0]!.position, brain.anchorPosition, `${phase} root`)
+      assert.deepEqual(held.actors[0]!.brain, brain, `${phase} clock`)
+      assert.equal(held.maggots.length, 0, `${phase} must not emit a child`)
+    }
   }
 })
 
