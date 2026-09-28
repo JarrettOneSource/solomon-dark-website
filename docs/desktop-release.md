@@ -116,6 +116,11 @@ reported zero page errors. The tests use native Mac graphics; Linux CI uses
 SwiftShader and frame-driven assertions rather than a fixed input sleep.
 
 Evidence is emitted to `frontend/reports/desktop/` and CI artifact uploads.
+The Mac hosted-runner same-VM peer fixture uses numeric local ICE candidates:
+its mDNS-only candidates failed to form a pair in that VM. This test-only
+launch option does not alter installed-app candidate privacy, enable a relay,
+or stand in for residential NAT qualification. The ordinary M2 test retains
+default mDNS behavior and also verifies admission while the host is minimized.
 This is local two-app evidence, not residential NAT/SEA qualification. Public
 installer signing, an actual old-to-new installed update, all-platform CI, and
 live website/invitation deployment must be reported separately from these checks.

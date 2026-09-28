@@ -27,12 +27,19 @@ try {
   await code.waitFor({ timeout: 15_000 })
   const invitation = await code.inputValue()
   assert.match(invitation, /^[A-Za-z0-9_-]{32}$/)
+  await host.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize())
+  console.log('Desktop peer smoke: host minimized before guest admission')
 
   await guest.page.getByRole('button', { name: 'Play with friends', exact: true }).click()
   await guest.page.getByLabel('Join a friend', { exact: true }).fill(invitation)
   await guest.page.getByRole('button', { name: 'Join friend', exact: true }).click()
   await guest.page.getByText('Connected to your friend.', { exact: false }).waitFor({ timeout: 45_000 })
   await host.page.getByText('1 friend(s) connected.', { exact: false }).waitFor({ timeout: 15_000 })
+  await host.app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0]
+    window.restore()
+    window.show()
+  })
   console.log('Desktop peer smoke: encrypted channel connected')
   await host.page.getByRole('button', { name: 'Done', exact: true }).click()
   await guest.page.getByRole('button', { name: 'Done', exact: true }).click()
@@ -71,7 +78,7 @@ try {
   await guest.page.waitForFunction(() => !document.querySelector('.hub-world-canvas'), { timeout: 20_000 })
   const receipt = { status: 'ok', protocol: 'shared game protocol', peers: 2,
     sharedAuthority: true, guestMovementSeenByHost: true, signalingIndependentGameplay: true,
-    hostCloseDisconnectsGuest: true, pageErrors: [] }
+    hostCloseDisconnectsGuest: true, minimizedHostAdmission: true, pageErrors: [] }
   await writeFile(join(evidence, 'peer-smoke.json'), `${JSON.stringify(receipt, null, 2)}\n`)
   console.log(JSON.stringify(receipt))
 } catch (error) {
@@ -95,8 +102,15 @@ async function launch(name) {
   const userData = await mkdtemp(join(tmpdir(), `solomon-peer-${name}-`))
   const app = await electron.launch({
     executablePath,
-    args: process.platform === 'linux'
-      ? ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--use-gl=angle'] : [],
+    args: [
+      ...(process.platform === 'linux'
+        ? ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--use-gl=angle'] : []),
+      // Hosted Mac VMs gathered only mDNS host candidates and never formed an
+      // ICE pair. This isolated same-VM fixture has no STUN/TURN or multicast
+      // dependency. Production app launches retain Chromium's privacy default.
+      ...(process.env.SDR_DESKTOP_TEST_NUMERIC_ICE === '1'
+        ? ['--disable-features=WebRtcHideLocalIpsWithMdns'] : []),
+    ],
     env: { ...process.env, SDR_DESKTOP_SKIP_UPDATE_CHECK: '1', SDR_DESKTOP_USER_DATA: userData,
       SDR_DESKTOP_SIGNALING_URL: server.url },
   })
