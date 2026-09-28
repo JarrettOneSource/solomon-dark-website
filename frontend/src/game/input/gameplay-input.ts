@@ -43,6 +43,7 @@ export type GameplayMouseCastLane = 'primary' | 'secondary'
 export interface BrowserGameplayInput {
   destroy(): void
   sample(): BrowserGameplayInputSample
+  secondaryAim(pointer?: Vector2 | null): Vector2 | null
   setBlocked(blocked: boolean): void
   setControls(controls: GameControlBindings): void
   setTouch(movement: Vector2): void
@@ -351,6 +352,12 @@ export function createBrowserGameplayInput({
       movement.destroy()
     },
     sample,
+    secondaryAim(pointer = null) {
+      const currentPointer = pointer ?? capturedPointer
+      return secondaryAtPointer() && currentPointer !== null
+        ? projectPointer(currentPointer)
+        : projectSecondaryAim()
+    },
     setBlocked(nextBlocked) {
       if (blocked === nextBlocked) return
       blocked = nextBlocked

@@ -588,7 +588,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v80 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol accepts authoritative inventory and NPC actions and rejects malformed variants', () => {
   const actions = [
     { type: 'acknowledge-college-intro-dialogue' },
     { type: 'acknowledge-npc-hint', interactionId: 'annalist' },
@@ -600,6 +600,9 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'close-hagatha' },
     { type: 'remove-hagatha', selector: 8 },
     { type: 'buy-teacher-spell', skillId: 72 },
+    { type: 'activate-belt-slot', slot: 7 },
+    { type: 'activate-belt-slot', slot: 6, aim: { x: 350, y: 250 } },
+    { type: 'activate-belt-slot', slot: 5, aim: null },
     { type: 'close-dowsing' },
     { type: 'consume', itemId: 5 },
     { type: 'dye', dyeItemId: 7, layer: 'cloth', swatchRows: [1, 9, 5], targetItemId: 8 },
@@ -638,6 +641,10 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'acknowledge-npc-hint', interactionId: 'painting-0' },
     { type: 'buy-hagatha', selector: 8 },
     { type: 'buy-teacher-spell', skillId: 71 },
+    { type: 'activate-belt-slot', slot: 8 },
+    { type: 'activate-belt-slot', slot: 0, aim: { x: Infinity, y: 1 } },
+    { type: 'activate-belt-slot', slot: 0, aim: { x: 1 } },
+    { type: 'activate-belt-slot', slot: 0, aim: { x: 1, y: 2, z: 3 } },
     { type: 'dye', dyeItemId: 1, layer: 'lining', swatchRows: [1], targetItemId: 2 },
     { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [], targetItemId: 2 },
     { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [18], targetItemId: 2 },

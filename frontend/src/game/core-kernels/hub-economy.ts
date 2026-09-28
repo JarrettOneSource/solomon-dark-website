@@ -5,6 +5,7 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import type { WizardElement } from './player-character.ts'
+import type { Vector2 } from './vector.ts'
 import {
   rollNativeStarterEquipmentAppearance,
   type NativeStarterEquipmentAppearance,
@@ -114,7 +115,7 @@ export type HubInventoryAction =
   | { readonly type: 'remove-hagatha'; readonly selector: number }
   | { readonly type: 'buy-teacher-spell'; readonly skillId: number }
   | { readonly type: 'bind-belt-item'; readonly itemId: number; readonly slot: number }
-  | { readonly type: 'activate-belt-slot'; readonly slot: number }
+  | { readonly type: 'activate-belt-slot'; readonly slot: number; readonly aim?: Vector2 | null }
   | { readonly type: 'close-dowsing' }
   | { readonly type: 'consume'; readonly itemId: number }
   | {

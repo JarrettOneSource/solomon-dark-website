@@ -54,6 +54,8 @@ import type {
   HubInventoryRendererModel,
   InventoryFlybyView,
   InventorySackPages,
+  NativeModalBeltAvailability,
+  NativeModalHudView,
   RenderContext,
 } from './hub-inventory/model.ts'
 import { buildNotice } from './hub-inventory/notices.ts'
@@ -86,6 +88,7 @@ import {
 export interface HubInventoryRenderer extends NativeUiCanvas {
   moveDrag(pointer: { readonly x: number; readonly y: number }): void
   render(nowMs: number, reveal: number, hudProgress?: number): { readonly chatComplete: boolean }
+  setBeltAvailability(value: NativeModalBeltAvailability): void
   setModel(model: HubInventoryRendererModel): void
 }
 
@@ -152,7 +155,8 @@ export async function createHubInventoryRenderer(
   let inventoryFlybys: readonly InventoryFlybyView[] = []
   let inventoryItemInfo: Container | null = null
   let inventorySackPages: InventorySackPages | null = null
-  let modalHud: Container | null = null
+  let modalHud: NativeModalHudView | null = null
+  let beltAvailability: NativeModalBeltAvailability | null = null
   let unforgeTarget: Sprite | null = null
   let previousNoticeTitle: string | null = null
   let currentModel: HubInventoryRendererModel | null = null
@@ -503,6 +507,7 @@ export async function createHubInventoryRenderer(
         model.kind === 'dialogue' ? null : model.pressedControl,
       )
     }
+    if (modalHud && beltAvailability) modalHud.updateAvailability(beltAvailability)
     renderSackPages(performance.now())
   }
 
@@ -535,7 +540,7 @@ export async function createHubInventoryRenderer(
       dimmer.alpha = curtainAlpha * clampedReveal
       surface.alpha = clampedReveal
       surface.y = 0
-      if (modalHud) modalHud.position.y = nativeHudModalSlideOffset(clampedHudProgress)
+      if (modalHud) modalHud.layer.position.y = nativeHudModalSlideOffset(clampedHudProgress)
       if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
         ? hubShopSlideOffset(clampedReveal)
         : 0
@@ -558,6 +563,11 @@ export async function createHubInventoryRenderer(
       writeModelDiagnostics(model)
       rebuildSurface(model, nextNotice)
       application.renderer.render(application.stage)
+    },
+    setBeltAvailability(value) {
+      beltAvailability = value
+      if (!modalHud) return
+      modalHud.updateAvailability(value)
     },
   }
 }

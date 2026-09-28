@@ -65,6 +65,7 @@ import {
   type HubServiceInspectionModel,
   type InventoryFlybyView,
   type InventorySackPages,
+  type NativeModalHudView,
   type RenderContext,
 } from './model.ts'
 import { buildInventory } from './pages.ts'
@@ -81,7 +82,7 @@ export function buildService(
   readonly dragger: Container | null
   readonly flybys: readonly InventoryFlybyView[]
   readonly itemInfo: Container | null
-  readonly modalHud: Container
+  readonly modalHud: NativeModalHudView
   readonly overlay: Container
   readonly sackPages: InventorySackPages | null
 } {

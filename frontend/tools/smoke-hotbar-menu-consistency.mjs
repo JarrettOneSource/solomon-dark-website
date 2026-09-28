@@ -127,7 +127,7 @@ try {
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
-  const slot = inventory.getByRole('button', { name: 'Remove belt slot 4', exact: true })
+  const slot = inventory.getByRole('button', { name: 'Activate belt slot 4; drag to remove', exact: true })
   const bounds = await slot.boundingBox()
   assert.ok(bounds)
   await drag({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 },

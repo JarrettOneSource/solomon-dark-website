@@ -31,9 +31,10 @@ import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-
 import { createNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
-import type { NativeSecondarySimulationState, NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
-import { applyNativeSecondaryDazzle, applyNativeSecondaryEtherBurn, applyNativeSecondaryFireBurn, applyNativeSecondaryTargetEffect, applyNativeUnforgeCooldownRejuvenation, createNativeSecondarySimulation, emitNativePlayerScreenFlash, enrollNativeSecondaryPainterOwners, materializeNativePlayerFlashResponse, nativeSecondaryManaCeiling, nativeSecondaryManaReserve, nativeSecondaryTargetEffect, removeNativeSecondaryOwner, resetNativeSecondaryWorld, spawnNativeScriptFires, stepNativeMindblastPresentation, stepNativeSecondaryAbilities, triggerNativePlayerMindblast } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondarySimulationState, NativeSecondaryTargetEffectState, NativeSecondaryTickContext, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
+import { activateNativeSecondaryBeltSkill, applyNativeSecondaryDazzle, applyNativeSecondaryEtherBurn, applyNativeSecondaryFireBurn, applyNativeSecondaryTargetEffect, applyNativeUnforgeCooldownRejuvenation, createNativeSecondarySimulation, emitNativePlayerScreenFlash, enrollNativeSecondaryPainterOwners, materializeNativePlayerFlashResponse, nativeSecondaryManaCeiling, nativeSecondaryManaReserve, nativeSecondaryTargetEffect, removeNativeSecondaryOwner, resetNativeSecondaryWorld, spawnNativeScriptFires, stepNativeMindblastPresentation, stepNativeSecondaryAbilities, triggerNativePlayerMindblast } from '../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_GOLEM_PLACEMENT_RADIUS, NATIVE_GOLEM_RADIUS } from '../core-kernels/native-secondary-golem.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS, type NativeSecondaryAbilityId } from '../core-kernels/native-secondary-ability-contract.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
 import { NATIVE_TUTORIAL_FIRES, acknowledgeNativeTutorialMovementInstruction, applyNativeTutorialSurfaceAction, nativeTutorialCameraBounds, nativeTutorialCameraLockSafetyClear, nativeTutorialForcedVelocity, nativeTutorialHostileScenePaused, nativeTutorialHudAccess, stepNativeTutorial } from '../core-kernels/native-tutorial.ts'
@@ -1246,7 +1247,7 @@ function applyGameSimulationHubActionTransaction(
       : { accepted: true, modConsumption: null, reason: null, state: bound }
   }
   if (action.type === 'activate-belt-slot') {
-    return activateGameSimulationBeltSlot(state, playerId, action.slot, extensions)
+    return activateGameSimulationBeltSlot(state, playerId, action.slot, action.aim ?? null, extensions)
   }
   if (action.type === 'acknowledge-college-intro-dialogue') {
     if (state.world.kind !== 'hub') {
@@ -2691,310 +2692,17 @@ function finishGameSimulationTick(
   const secondaryResult = stepNativeSecondaryAbilities({
     ...secondaryAbilities,
     actors: secondaryAbilities.actors.filter(({ id }) => !unsteppedSecondaryActorIds.has(id)),
-  }, {
-    dampenCandidates: (worldKey, origin) => (
-      world.kind === 'boneyard'
-      && worldKey === `boneyard:${world.runId}`
-        ? boneyardNativeSecondaryDampenCandidates(world.enemies, origin)
-        : { casterTargetIds: [], projectiles: [], shieldTargetIds: [] }
-    ),
-    effectVisible: (worldKey, position, margin) => world.kind === 'boneyard'
-      && worldKey === `boneyard:${world.runId}`
-      && secondaryProjectileVisible !== null
-      && secondaryProjectileVisible(position, margin),
-    effectPositionBlocked: (worldKey, position) => {
-      if (
-        world.kind === 'boneyard'
-        && worldKey === `boneyard:${world.runId}`
-      ) {
-        return !canPlaceBoneyardBody(
-          position,
-          world.bounds,
-          boneyardCollision!,
-          0,
-        )
-      }
-      if (world.kind !== 'hub') return false
-      const region = Object.values(world.participants)
-        .find((participant) => `hub:${participant.region}` === worldKey)?.region
-      return region === undefined || !isHubRegionTraversable(region, position, 0)
-    },
-    golemFootPlacement: (playerId, worldKey, currentPosition, requestedPosition) => {
-      if (
-        world.kind === 'boneyard'
-        && worldKey === `boneyard:${world.runId}`
-      ) {
-        return resolveBoneyardMovement(
-          currentPosition,
-          requestedPosition,
-          world.bounds,
-          boneyardCollision!,
-          0,
-        )
-      }
-      if (world.kind !== 'hub') return currentPosition
-      const region = world.participants[playerId]?.region
-      return region !== undefined && isHubRegionTraversable(region, requestedPosition, 0)
-        ? requestedPosition
-        : currentPosition
-    },
-    golemMovement: (playerId, worldKey, origin, requestedPosition, radius) => {
-      if (
-        world.kind === 'boneyard'
-        && worldKey === `boneyard:${world.runId}`
-      ) {
-        return resolveBoneyardMovement(
-          origin,
-          requestedPosition,
-          world.bounds,
-          boneyardCollision!,
-          radius,
-        )
-      }
-      if (world.kind !== 'hub') return origin
-      const region = world.participants[playerId]?.region
-      return region !== undefined && isHubRegionTraversable(
-        region,
-        requestedPosition,
-        radius,
-      ) ? requestedPosition : origin
-    },
-    golemPlacement: (playerId, worldKey, requestedPosition, rng) => {
-      if (
-        world.kind === 'boneyard'
-        && worldKey === `boneyard:${world.runId}`
-      ) {
-        const boneyardWorld = world
-        return resolveNativeCollisionAdjustedPosition(
-          rng,
-          requestedPosition,
-          NATIVE_GOLEM_PLACEMENT_RADIUS,
-          (position) => canPlaceBoneyardBody(
-            position,
-            boneyardWorld.bounds,
-            boneyardCollision!,
-            NATIVE_GOLEM_PLACEMENT_RADIUS,
-          ),
-        )
-      }
-      if (world.kind !== 'hub') {
-        return { position: requestedPosition, rng }
-      }
-      const region = world.participants[playerId]?.region
-      if (region === undefined || worldKey !== `hub:${region}`) {
-        return { position: requestedPosition, rng }
-      }
-      return resolveNativeCollisionAdjustedPosition(
-        rng,
-        requestedPosition,
-        NATIVE_GOLEM_PLACEMENT_RADIUS,
-        (position) => isHubRegionTraversable(
-          region,
-          position,
-          NATIVE_GOLEM_PLACEMENT_RADIUS,
-        ),
-      )
-    },
-    phasingDestination: (playerId, origin, direction) => {
-      for (let distance = 80; distance <= 270; distance += 10) {
-        const candidate = {
-          x: origin.x + direction.x * distance,
-          y: origin.y + direction.y * distance,
-        }
-        if (world.kind === 'boneyard') {
-          if (canPlaceBoneyardBody(
-            candidate,
-            world.bounds,
-            boneyardCollision!,
-            PLAYER_CHARACTER_RADIUS,
-          )) return candidate
-          continue
-        }
-        const region = world.participants[playerId]?.region
-        if (region !== undefined && isHubRegionTraversable(
-          region,
-          candidate,
-          PLAYER_CHARACTER_RADIUS,
-        )) return candidate
-      }
-      return null
-    },
-    lineObstruction: (worldKey, start, end) => (
-      world.kind === 'boneyard'
-      && worldKey === `boneyard:${world.runId}`
-      && firstBoneyardLineObstruction(
-        start,
-        end,
-        world.bounds,
-        boneyardCollision!,
-      ) !== null
-    ),
-    players: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
-      const character = resolvedPlayers[playerId]
-      const weaponType = playerEntities.economies[index]!.equipment.weapon?.equipmentType
-      const progression = playerEntities.progressions[index]!
-      const skillBook = playerEntities.skillBooks[index]!
-      const statBook = playerEntities.statBooks[index]!
-      const runtime = playerEntities.skillRuntimes[index]!
-      const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
-      if (!character) throw new Error(`secondary authority lost player ${playerId}`)
-      if (derived === null) throw new Error(`secondary authority lost skill state ${playerId}`)
-      const offensiveFactors = {
-        damage: derived.offensiveDamageFactor,
-        equipment: runtime.equipmentModifiers,
-        globalFlatDamage: derived.offensiveDamageFlat,
-        globalManaReduction: derived.offensiveManaCostReduction,
-        manaCost: derived.offensiveManaCostFactor,
-      }
-      return [playerId, {
-        weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
-        belt: playerEntities.belts[index]!,
-        character,
-        coldSlowFactor: Math.fround(Math.max(0, 0.5 / (
-          1 + effectiveSkillNumericValue(skillBook, statBook, 39, 'mSlowdown') / 100
-        ))),
-        currentMana: progression.currentMana,
-        eligible: playerEntityCanCast(playerEntities, playerId)
-          && progression.pendingOffer === null,
-        enhancedEffects: true,
-        explosiveShieldDamage: effectiveSkillNumericValue(
-          skillBook,
-          statBook,
-          54,
-          'mAbsorb',
-        ) * effectiveSkillNumericValue(skillBook, statBook, 55, 'mDamage') / 100,
-        explosiveShieldRawManaCost: rankedSkillNumericValue(
-          skillBook,
-          statBook,
-          55,
-          'mManaCost',
-        ),
-        fireBurnDamage: resolveNativeSkillDamageValue(
-          22,
-          effectiveSkillNumericValue(skillBook, statBook, 22, 'mDamage'),
-          offensiveFactors,
-        ),
-        focusInstantRechargeChancePercent: derived.focusInstantRechargeChancePercent,
-        freezeDurationMultiplier: 1 + effectiveSkillNumericValue(
-          skillBook,
-          statBook,
-          39,
-          'mSlowdown',
-        ) / 100,
-        golemIron: (skillBook.effectiveRanks[75] ?? 0) > 0,
-        golemRawManaCost: rankedSkillNumericValue(
-          skillBook,
-          statBook,
-          75,
-          'mManaCost',
-        ),
-        golemReflectFactor: effectiveSkillNumericValue(skillBook, statBook, 75, 'mReflect') / 100,
-        input: postStaffInputs[playerId] ?? createIdlePlayerCharacterInput(),
-        maximumMana: progression.maximumMana,
-        magicStormDurationBonusTicks: Math.trunc(effectiveSkillNumericValue(
-          skillBook,
-          statBook,
-          28,
-          'mDuration',
-        ) * 100),
-        magicStormFrequencyFactor: 1 + effectiveSkillNumericValue(
-          skillBook,
-          statBook,
-          28,
-          'mSpeed',
-        ) / 100,
-        magicStormRawManaCost: rankedSkillNumericValue(
-          skillBook,
-          statBook,
-          28,
-          'mManaCost',
-        ),
-        maximumGolem: nativeEquipmentHasFeature(runtime.equipmentModifiers, 'maximumGolem'),
-        maximumLeviathan: nativeEquipmentHasFeature(
-          runtime.equipmentModifiers,
-          'maximumLeviathan',
-        ),
-        maximumMagicStorm: nativeEquipmentHasFeature(
-          runtime.equipmentModifiers,
-          'maximumMagicStorm',
-        ),
-        maximumRingOfFire: nativeEquipmentHasFeature(
-          runtime.equipmentModifiers,
-          'maximumRingOfFire',
-        ),
-        maximumRingOfIce: nativeEquipmentHasFeature(
-          runtime.equipmentModifiers,
-          'maximumRingOfIce',
-        ),
-        manaRecoveryPerTick: derived.manaRecoveryPerTick,
-        offensiveFactors,
-        secondaryRechargeFactor: derived.secondaryRechargeFactor,
-        skillBook,
-        worldKey: gameWorldKey(world, playerId),
-      }]
-    })),
-    registerWorldPainter: worldManagerOrder.register,
-    sceneryTargets: (worldKey, center, radius) => (
-      world.kind === 'boneyard'
-      && worldKey === `boneyard:${world.runId}`
-        ? world.earthquakeSceneryTargets.filter((target) => {
-            const x = target.position.x - center.x
-            const y = target.position.y - center.y
-            return x * x + y * y < radius * radius
-          })
-        : []
-    ),
-    teleportDestination: (_playerId, rng) => {
-      if (world.kind === 'boneyard') {
-        const boneyardWorld = world
-        const worldKey = `boneyard:${boneyardWorld.runId}`
-        const bodies = [
-          ...Object.values(resolvedPlayers).map(({ position }) => ({
-            position,
-            radius: PLAYER_CHARACTER_RADIUS,
-          })),
-          ...boneyardWorld.enemies.actors.flatMap((actor) => (
-            boneyardEnemyActorFlags(actor) !== 0
-              ? [{
-                  position: actor.position,
-                  radius: boneyardEnemyCollisionRadius(actor),
-                }]
-              : []
-          )),
-          ...boneyardWorld.enemies.maggots.flatMap((actor) => (
-            actor.lifeState === 'alive'
-              ? [{ position: actor.position, radius: actor.collisionRadius }]
-              : []
-          )),
-          ...secondaryAbilities.actors.flatMap((actor) => (
-            actor.kind === 'golem'
-            && actor.worldKey === worldKey
-              ? [{ position: actor.position, radius: actor.radius }]
-              : []
-          )),
-        ]
-        return resolveBoneyardNativeTeleport(rng, {
-          bodies,
-          bounds: boneyardWorld.bounds,
-          collision: boneyardCollision!,
-        })
-      }
-      return { position: { x: 0, y: 0 }, rng }
-    },
-    target: (worldKey, targetId) => (
-      world.kind === 'boneyard'
-      && worldKey === `boneyard:${world.runId}`
-        ? boneyardNativeSecondaryTarget(world.enemies, targetId)
-        : null
-    ),
-    targets: (worldKey, center, radius) => (
-      world.kind === 'boneyard'
-      && worldKey === `boneyard:${world.runId}`
-        ? boneyardNativeSecondaryTargets(world.enemies, center, radius)
-        : []
-    ),
+  }, createNativeSecondaryTickContext(
+    world,
+    boneyardCollision,
+    resolvedPlayers,
+    playerEntities,
+    postStaffInputs,
+    secondaryAbilities,
+    worldManagerOrder,
+    secondaryProjectileVisible,
     tick,
-  })
+  ))
   secondaryAbilities = unsteppedSecondaryActors.length === 0
     ? secondaryResult.state
     : {
@@ -3004,81 +2712,18 @@ function finishGameSimulationTick(
           ...unsteppedSecondaryActors,
         ].sort((left, right) => left.id - right.id)),
       }
-  const secondaryPlayers: Record<PlayerId, PlayerCharacterState> = {
-    ...resolvedPlayers,
-  }
-  for (const [playerId, position] of Object.entries(secondaryResult.relocatedPlayers)) {
-    const character = secondaryPlayers[playerId]
-    if (!character) continue
-    secondaryPlayers[playerId] = { ...character, position: { ...position } }
-    playerEntities = replacePlayerCharacter(
-      playerEntities,
-      playerId,
-      secondaryPlayers[playerId],
-    )
-  }
-  for (const [playerId, headingIndex] of Object.entries(
-    secondaryResult.facingHeadingIndexes,
-  )) {
-    const character = secondaryPlayers[playerId]
-    if (!character) continue
-    secondaryPlayers[playerId] = { ...character, headingIndex }
-    playerEntities = replacePlayerCharacter(
-      playerEntities,
-      playerId,
-      secondaryPlayers[playerId],
-    )
-  }
-  for (const [playerId, amount] of Object.entries(secondaryResult.manaRecovered)) {
-    playerEntities = restorePlayerEntityMana(playerEntities, playerId, amount)
-  }
-  for (const [playerId, amount] of Object.entries(secondaryResult.healthRecovered)) {
-    playerEntities = restorePlayerEntityHealth(playerEntities, playerId, amount)
-  }
-  for (const [playerId, cost] of Object.entries(secondaryResult.manaSpent)) {
-    if (cost <= 0) continue
-    playerEntities = applyFilteredManaDelta(
-      playerEntities,
-      playerId,
-      -cost,
-      'secondary-cast',
-      tick,
-      extensions,
-      `secondary ability mana authority diverged for ${playerId}`,
-    )
-  }
-  for (const playerId of secondaryResult.manaUnderflowPlayerIds) {
-    playerEntities = failPlayerEntityBoast(
-      playerEntities,
-      playerId,
-      'mana-underflow',
-      extensions,
-    )
-  }
-  for (const playerId of secondaryResult.overloadedPlayerIds) {
-    const progression = playerProgressionAt(playerEntities, playerId)
-    if (progression) {
-      playerEntities = applyFilteredManaDelta(
-        playerEntities,
-        playerId,
-        -progression.currentMana,
-        'overload',
-        tick,
-        extensions,
-      )
-    }
-  }
-  for (const { playerId } of playerEntities.identities) {
-    const wasActive = previous.secondaryAbilities.players[playerId]?.mindstar ?? false
-    const isActive = secondaryAbilities.players[playerId]?.mindstar ?? false
-    if (wasActive !== isActive) {
-      playerEntities = setPlayerEntityMindstar(playerEntities, playerId, isActive)
-    }
-  }
-  secondaryAbilities = reconcileNativeSecondaryManaReserves(
-    secondaryAbilities,
+  const secondaryOutcomes = applySecondaryPlayerOutcomes(
     playerEntities,
+    resolvedPlayers,
+    secondaryAbilities,
+    previous.secondaryAbilities,
+    secondaryResult,
+    tick,
+    extensions,
   )
+  playerEntities = secondaryOutcomes.playerEntities
+  secondaryAbilities = secondaryOutcomes.secondaryAbilities
+  const secondaryPlayers = secondaryOutcomes.secondaryPlayers
   const primaryOverridePlayerIds = new Set(secondaryResult.primaryOverridePlayerIds)
   const primaryInputs = Object.fromEntries(Object.entries(postStaffInputs).map(([playerId, input]) => [
     playerId,
@@ -3852,6 +3497,414 @@ function playerCombatMutations(
   }
 }
 
+function applySecondaryPlayerOutcomes(
+  playerEntities: PlayerEntityStore,
+  resolvedPlayers: Readonly<Record<PlayerId, PlayerCharacterState>>,
+  secondaryAbilities: NativeSecondarySimulationState,
+  previousSecondaryAbilities: NativeSecondarySimulationState,
+  secondaryResult: NativeSecondaryTickResult,
+  tick: number,
+  extensions?: GameSimulationExtensions,
+): {
+  readonly playerEntities: PlayerEntityStore
+  readonly secondaryAbilities: NativeSecondarySimulationState
+  readonly secondaryPlayers: Readonly<Record<PlayerId, PlayerCharacterState>>
+} {
+  const secondaryPlayers: Record<PlayerId, PlayerCharacterState> = {
+    ...resolvedPlayers,
+  }
+  for (const [playerId, position] of Object.entries(secondaryResult.relocatedPlayers)) {
+    const character = secondaryPlayers[playerId]
+    if (!character) continue
+    secondaryPlayers[playerId] = { ...character, position: { ...position } }
+    playerEntities = replacePlayerCharacter(
+      playerEntities,
+      playerId,
+      secondaryPlayers[playerId],
+    )
+  }
+  for (const [playerId, headingIndex] of Object.entries(
+    secondaryResult.facingHeadingIndexes,
+  )) {
+    const character = secondaryPlayers[playerId]
+    if (!character) continue
+    secondaryPlayers[playerId] = { ...character, headingIndex }
+    playerEntities = replacePlayerCharacter(
+      playerEntities,
+      playerId,
+      secondaryPlayers[playerId],
+    )
+  }
+  for (const [playerId, amount] of Object.entries(secondaryResult.manaRecovered)) {
+    playerEntities = restorePlayerEntityMana(playerEntities, playerId, amount)
+  }
+  for (const [playerId, amount] of Object.entries(secondaryResult.healthRecovered)) {
+    playerEntities = restorePlayerEntityHealth(playerEntities, playerId, amount)
+  }
+  for (const [playerId, cost] of Object.entries(secondaryResult.manaSpent)) {
+    if (cost <= 0) continue
+    playerEntities = applyFilteredManaDelta(
+      playerEntities,
+      playerId,
+      -cost,
+      'secondary-cast',
+      tick,
+      extensions,
+      `secondary ability mana authority diverged for ${playerId}`,
+    )
+  }
+  for (const playerId of secondaryResult.manaUnderflowPlayerIds) {
+    playerEntities = failPlayerEntityBoast(
+      playerEntities,
+      playerId,
+      'mana-underflow',
+      extensions,
+    )
+  }
+  for (const playerId of secondaryResult.overloadedPlayerIds) {
+    const progression = playerProgressionAt(playerEntities, playerId)
+    if (progression) {
+      playerEntities = applyFilteredManaDelta(
+        playerEntities,
+        playerId,
+        -progression.currentMana,
+        'overload',
+        tick,
+        extensions,
+      )
+    }
+  }
+  for (const { playerId } of playerEntities.identities) {
+    const wasActive = previousSecondaryAbilities.players[playerId]?.mindstar ?? false
+    const isActive = secondaryAbilities.players[playerId]?.mindstar ?? false
+    if (wasActive !== isActive) {
+      playerEntities = setPlayerEntityMindstar(playerEntities, playerId, isActive)
+    }
+  }
+  secondaryAbilities = reconcileNativeSecondaryManaReserves(
+    secondaryAbilities,
+    playerEntities,
+  )
+  return { playerEntities, secondaryAbilities, secondaryPlayers }
+}
+
+function createNativeSecondaryTickContext(
+  world: GameWorldState,
+  boneyardCollision: ReturnType<typeof withBoneyardGateCollision> | null,
+  resolvedPlayers: Readonly<Record<PlayerId, PlayerCharacterState>>,
+  playerEntities: PlayerEntityStore,
+  postStaffInputs: PlayerCharacterInputs,
+  secondaryAbilities: NativeSecondarySimulationState,
+  worldManagerOrder: NativeWorldManagerOrder,
+  secondaryProjectileVisible: ReturnType<typeof createBoneyardProjectileVisibility> | null,
+  tick: number,
+): NativeSecondaryTickContext {
+  return {
+    dampenCandidates: (worldKey, origin) => (
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? boneyardNativeSecondaryDampenCandidates(world.enemies, origin)
+        : { casterTargetIds: [], projectiles: [], shieldTargetIds: [] }
+    ),
+    effectVisible: (worldKey, position, margin) => world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+      && secondaryProjectileVisible !== null
+      && secondaryProjectileVisible(position, margin),
+    effectPositionBlocked: (worldKey, position) => {
+      if (
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
+      ) {
+        return !canPlaceBoneyardBody(
+          position,
+          world.bounds,
+          boneyardCollision!,
+          0,
+        )
+      }
+      if (world.kind !== 'hub') return false
+      const region = Object.values(world.participants)
+        .find((participant) => `hub:${participant.region}` === worldKey)?.region
+      return region === undefined || !isHubRegionTraversable(region, position, 0)
+    },
+    golemFootPlacement: (playerId, worldKey, currentPosition, requestedPosition) => {
+      if (
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
+      ) {
+        return resolveBoneyardMovement(
+          currentPosition,
+          requestedPosition,
+          world.bounds,
+          boneyardCollision!,
+          0,
+        )
+      }
+      if (world.kind !== 'hub') return currentPosition
+      const region = world.participants[playerId]?.region
+      return region !== undefined && isHubRegionTraversable(region, requestedPosition, 0)
+        ? requestedPosition
+        : currentPosition
+    },
+    golemMovement: (playerId, worldKey, origin, requestedPosition, radius) => {
+      if (
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
+      ) {
+        return resolveBoneyardMovement(
+          origin,
+          requestedPosition,
+          world.bounds,
+          boneyardCollision!,
+          radius,
+        )
+      }
+      if (world.kind !== 'hub') return origin
+      const region = world.participants[playerId]?.region
+      return region !== undefined && isHubRegionTraversable(
+        region,
+        requestedPosition,
+        radius,
+      ) ? requestedPosition : origin
+    },
+    golemPlacement: (playerId, worldKey, requestedPosition, rng) => {
+      if (
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
+      ) {
+        const boneyardWorld = world
+        return resolveNativeCollisionAdjustedPosition(
+          rng,
+          requestedPosition,
+          NATIVE_GOLEM_PLACEMENT_RADIUS,
+          (position) => canPlaceBoneyardBody(
+            position,
+            boneyardWorld.bounds,
+            boneyardCollision!,
+            NATIVE_GOLEM_PLACEMENT_RADIUS,
+          ),
+        )
+      }
+      if (world.kind !== 'hub') {
+        return { position: requestedPosition, rng }
+      }
+      const region = world.participants[playerId]?.region
+      if (region === undefined || worldKey !== `hub:${region}`) {
+        return { position: requestedPosition, rng }
+      }
+      return resolveNativeCollisionAdjustedPosition(
+        rng,
+        requestedPosition,
+        NATIVE_GOLEM_PLACEMENT_RADIUS,
+        (position) => isHubRegionTraversable(
+          region,
+          position,
+          NATIVE_GOLEM_PLACEMENT_RADIUS,
+        ),
+      )
+    },
+    phasingDestination: (playerId, origin, direction) => {
+      for (let distance = 80; distance <= 270; distance += 10) {
+        const candidate = {
+          x: origin.x + direction.x * distance,
+          y: origin.y + direction.y * distance,
+        }
+        if (world.kind === 'boneyard') {
+          if (canPlaceBoneyardBody(
+            candidate,
+            world.bounds,
+            boneyardCollision!,
+            PLAYER_CHARACTER_RADIUS,
+          )) return candidate
+          continue
+        }
+        const region = world.participants[playerId]?.region
+        if (region !== undefined && isHubRegionTraversable(
+          region,
+          candidate,
+          PLAYER_CHARACTER_RADIUS,
+        )) return candidate
+      }
+      return null
+    },
+    lineObstruction: (worldKey, start, end) => (
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+      && firstBoneyardLineObstruction(
+        start,
+        end,
+        world.bounds,
+        boneyardCollision!,
+      ) !== null
+    ),
+    players: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
+      const character = resolvedPlayers[playerId]
+      const weaponType = playerEntities.economies[index]!.equipment.weapon?.equipmentType
+      const progression = playerEntities.progressions[index]!
+      const skillBook = playerEntities.skillBooks[index]!
+      const statBook = playerEntities.statBooks[index]!
+      const runtime = playerEntities.skillRuntimes[index]!
+      const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
+      if (!character) throw new Error(`secondary authority lost player ${playerId}`)
+      if (derived === null) throw new Error(`secondary authority lost skill state ${playerId}`)
+      const offensiveFactors = {
+        damage: derived.offensiveDamageFactor,
+        equipment: runtime.equipmentModifiers,
+        globalFlatDamage: derived.offensiveDamageFlat,
+        globalManaReduction: derived.offensiveManaCostReduction,
+        manaCost: derived.offensiveManaCostFactor,
+      }
+      return [playerId, {
+        weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
+        belt: playerEntities.belts[index]!,
+        character,
+        coldSlowFactor: Math.fround(Math.max(0, 0.5 / (
+          1 + effectiveSkillNumericValue(skillBook, statBook, 39, 'mSlowdown') / 100
+        ))),
+        currentMana: progression.currentMana,
+        eligible: playerEntityCanCast(playerEntities, playerId)
+          && progression.pendingOffer === null,
+        enhancedEffects: true,
+        explosiveShieldDamage: effectiveSkillNumericValue(
+          skillBook,
+          statBook,
+          54,
+          'mAbsorb',
+        ) * effectiveSkillNumericValue(skillBook, statBook, 55, 'mDamage') / 100,
+        explosiveShieldRawManaCost: rankedSkillNumericValue(
+          skillBook,
+          statBook,
+          55,
+          'mManaCost',
+        ),
+        fireBurnDamage: resolveNativeSkillDamageValue(
+          22,
+          effectiveSkillNumericValue(skillBook, statBook, 22, 'mDamage'),
+          offensiveFactors,
+        ),
+        focusInstantRechargeChancePercent: derived.focusInstantRechargeChancePercent,
+        freezeDurationMultiplier: 1 + effectiveSkillNumericValue(
+          skillBook,
+          statBook,
+          39,
+          'mSlowdown',
+        ) / 100,
+        golemIron: (skillBook.effectiveRanks[75] ?? 0) > 0,
+        golemRawManaCost: rankedSkillNumericValue(
+          skillBook,
+          statBook,
+          75,
+          'mManaCost',
+        ),
+        golemReflectFactor: effectiveSkillNumericValue(skillBook, statBook, 75, 'mReflect') / 100,
+        input: postStaffInputs[playerId] ?? createIdlePlayerCharacterInput(),
+        maximumMana: progression.maximumMana,
+        magicStormDurationBonusTicks: Math.trunc(effectiveSkillNumericValue(
+          skillBook,
+          statBook,
+          28,
+          'mDuration',
+        ) * 100),
+        magicStormFrequencyFactor: 1 + effectiveSkillNumericValue(
+          skillBook,
+          statBook,
+          28,
+          'mSpeed',
+        ) / 100,
+        magicStormRawManaCost: rankedSkillNumericValue(
+          skillBook,
+          statBook,
+          28,
+          'mManaCost',
+        ),
+        maximumGolem: nativeEquipmentHasFeature(runtime.equipmentModifiers, 'maximumGolem'),
+        maximumLeviathan: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumLeviathan',
+        ),
+        maximumMagicStorm: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumMagicStorm',
+        ),
+        maximumRingOfFire: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumRingOfFire',
+        ),
+        maximumRingOfIce: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumRingOfIce',
+        ),
+        manaRecoveryPerTick: derived.manaRecoveryPerTick,
+        offensiveFactors,
+        secondaryRechargeFactor: derived.secondaryRechargeFactor,
+        skillBook,
+        worldKey: gameWorldKey(world, playerId),
+      }]
+    })),
+    registerWorldPainter: worldManagerOrder.register,
+    sceneryTargets: (worldKey, center, radius) => (
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? world.earthquakeSceneryTargets.filter((target) => {
+            const x = target.position.x - center.x
+            const y = target.position.y - center.y
+            return x * x + y * y < radius * radius
+          })
+        : []
+    ),
+    teleportDestination: (_playerId, rng) => {
+      if (world.kind === 'boneyard') {
+        const boneyardWorld = world
+        const worldKey = `boneyard:${boneyardWorld.runId}`
+        const bodies = [
+          ...Object.values(resolvedPlayers).map(({ position }) => ({
+            position,
+            radius: PLAYER_CHARACTER_RADIUS,
+          })),
+          ...boneyardWorld.enemies.actors.flatMap((actor) => (
+            boneyardEnemyActorFlags(actor) !== 0
+              ? [{
+                  position: actor.position,
+                  radius: boneyardEnemyCollisionRadius(actor),
+                }]
+              : []
+          )),
+          ...boneyardWorld.enemies.maggots.flatMap((actor) => (
+            actor.lifeState === 'alive'
+              ? [{ position: actor.position, radius: actor.collisionRadius }]
+              : []
+          )),
+          ...secondaryAbilities.actors.flatMap((actor) => (
+            actor.kind === 'golem'
+            && actor.worldKey === worldKey
+              ? [{ position: actor.position, radius: actor.radius }]
+              : []
+          )),
+        ]
+        return resolveBoneyardNativeTeleport(rng, {
+          bodies,
+          bounds: boneyardWorld.bounds,
+          collision: boneyardCollision!,
+        })
+      }
+      return { position: { x: 0, y: 0 }, rng }
+    },
+    target: (worldKey, targetId) => (
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? boneyardNativeSecondaryTarget(world.enemies, targetId)
+        : null
+    ),
+    targets: (worldKey, center, radius) => (
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? boneyardNativeSecondaryTargets(world.enemies, center, radius)
+        : []
+    ),
+    tick,
+  }
+}
+
 function reconcileNativeSecondaryManaReserves(
   source: NativeSecondarySimulationState,
   playerEntities: PlayerEntityStore,
@@ -3972,6 +4025,7 @@ function activateGameSimulationBeltSlot(
   state: GameSimulationState,
   playerId: PlayerId,
   slot: number,
+  aim: Vector2 | null,
   extensions?: GameSimulationExtensions,
 ): GameSimulationInventoryActionResult {
   if (!Number.isInteger(slot) || slot < 0 || slot >= 8
@@ -3981,8 +4035,41 @@ function activateGameSimulationBeltSlot(
   const belt = playerBeltAt(state.playerEntities, playerId)
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const entry = belt?.[slot] ?? null
-  if (!belt || !economy || entry === null || entry.kind === 'skill') {
+  if (!belt || !economy || entry === null) {
     return { accepted: false, modConsumption: null, reason: 'ineligible-item', state }
+  }
+  if (entry.kind === 'skill') {
+    const skillBook = playerSkillBookAt(state.playerEntities, playerId)
+    if (!skillBook || (skillBook.effectiveRanks[entry.skillId] ?? 0) < 1) {
+      return { accepted: false, modConsumption: null, reason: 'ineligible-item', state }
+    }
+    const category = nativeSkillCategory(entry.skillId)
+    if (category === 1) {
+      const selected = selectGameSimulationPlayerPrimarySkill(state, playerId, entry.skillId)
+      return selected === null
+        ? { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+        : { accepted: true, modConsumption: null, reason: null, state: selected }
+    }
+    if (category === 3) {
+      const selected = selectGameSimulationPlayerConcentration(state, playerId, entry.skillId)
+      return selected === null
+        ? { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+        : { accepted: true, modConsumption: null, reason: null, state: selected }
+    }
+    if (
+      category !== 2
+      || !isNativeSecondaryAbilityId(entry.skillId)
+      || state.run.phase !== 'active'
+      || state.world.kind !== 'boneyard'
+    ) return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+    return activateGameSimulationBeltSkill(
+      state,
+      playerId,
+      entry.skillId,
+      slot,
+      aim,
+      extensions,
+    )
   }
   const item = nativeBeltEntryItem(entry, economy)
   if (!item) return { accepted: false, modConsumption: null, reason: 'item-not-found', state }
@@ -4050,6 +4137,88 @@ function activateGameSimulationBeltSlot(
     return { accepted: true, modConsumption: null, reason: null, state }
   }
   return { accepted: false, modConsumption: null, reason: 'ineligible-item', state }
+}
+
+function isNativeSecondaryAbilityId(skillId: number): skillId is NativeSecondaryAbilityId {
+  return NATIVE_SECONDARY_ABILITY_IDS.some((id) => id === skillId)
+}
+
+function activateGameSimulationBeltSkill(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  skillId: NativeSecondaryAbilityId,
+  slot: number,
+  aim: Vector2 | null,
+  extensions?: GameSimulationExtensions,
+): GameSimulationInventoryActionResult {
+  const playerEntities = failPlayerEntityBoast(
+    state.playerEntities,
+    playerId,
+    'secondary-cast',
+    extensions,
+  )
+  const resolvedPlayers = playerCharacterRecords(playerEntities)
+  const world = state.world
+  if (world.kind !== 'boneyard') {
+    return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+  }
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const input = { ...createIdlePlayerCharacterInput(), aim }
+  const secondaryResult = activateNativeSecondaryBeltSkill(
+    state.secondaryAbilities,
+    playerId,
+    skillId,
+    slot,
+    createNativeSecondaryTickContext(
+      world,
+      withBoneyardGateCollision(world.collision, world.gateLeaves),
+      resolvedPlayers,
+      playerEntities,
+      { [playerId]: input },
+      state.secondaryAbilities,
+      worldManagerOrder,
+      null,
+      state.tick,
+    ),
+  )
+  const outcomes = applySecondaryPlayerOutcomes(
+    playerEntities,
+    resolvedPlayers,
+    secondaryResult.state,
+    state.secondaryAbilities,
+    secondaryResult,
+    state.tick,
+    extensions,
+  )
+  const affectsEnemies = secondaryResult.dampenedCasterTargetIds.length > 0
+    || secondaryResult.dispelledShieldTargetIds.length > 0
+    || secondaryResult.removedProjectileIds.length > 0
+  const combat = affectsEnemies
+    ? resolveBoneyardNativeSecondaryCombat(
+        world.enemies,
+        secondaryResult,
+        state.tick,
+        undefined,
+        undefined,
+        worldManagerOrder.register,
+      )
+    : null
+  return {
+    accepted: true,
+    modConsumption: null,
+    reason: null,
+    state: {
+      ...state,
+      playerEntities: outcomes.playerEntities,
+      secondaryAbilities: outcomes.secondaryAbilities,
+      worldManagerOrder: worldManagerOrder.state(),
+      world: combat === null ? world : {
+        ...world,
+        enemies: combat.enemies,
+        enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents, combat.events, state.tick),
+      },
+    },
+  }
 }
 
 function equipmentAt(economy: HubEconomyState, slot: EquipmentSlot): HubInventoryItem | null {

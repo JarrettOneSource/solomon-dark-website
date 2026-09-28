@@ -822,6 +822,33 @@ test('keyboard secondary uses the same non-pointer fallback as a mouse secondary
   input.destroy()
 })
 
+test('Inventory reads fresh secondary aim while gameplay input remains blocked', () => {
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  let cameraX = 100
+  let atPointer = true
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [], mouseTarget: new EventTarget(), target,
+    visibilityTarget: new FakeVisibilityTarget(), onInput: (state) => published.push(state),
+    projectDirection: (direction) => direction,
+    projectPointer: ({ x, y }) => ({ x: cameraX + x, y }),
+    projectSecondaryAim: () => ({ x: 20, y: 30 }),
+    secondaryAtPointer: () => atPointer,
+  })
+  input.setBlocked(true)
+  const publishedAtPause = published.length
+  target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 40, 50))
+  assert.deepEqual(input.secondaryAim(), { x: 140, y: 50 })
+  cameraX = 200
+  assert.deepEqual(input.secondaryAim(), { x: 240, y: 50 })
+  assert.deepEqual(input.secondaryAim({ x: 80, y: 90 }), { x: 280, y: 90 })
+  atPointer = false
+  assert.deepEqual(input.secondaryAim(), { x: 20, y: 30 })
+  assert.deepEqual(input.sample().input, expectedInput(null, false, null))
+  assert.equal(published.length, publishedAtPause)
+  input.destroy()
+})
+
 for (const interruption of ['blur', 'blocked'] as const) {
   test(`a fresh keyboard cast samples the retained cursor after ${interruption} without retaining held input`, () => {
     const target = new EventTarget()

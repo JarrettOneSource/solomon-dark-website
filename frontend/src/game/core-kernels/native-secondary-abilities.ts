@@ -3870,6 +3870,75 @@ interface CastResult {
   readonly state: NativeSecondarySimulationState
 }
 
+export function activateNativeSecondaryBeltSkill(
+  source: NativeSecondarySimulationState,
+  playerId: string,
+  skillId: NativeSecondaryAbilityId,
+  slot: number,
+  context: NativeSecondaryTickContext,
+): NativeSecondaryTickResult {
+  const authority = context.players[playerId]
+  if (!authority) throw new Error(`secondary authority lost player ${playerId}`)
+  let player = recalculateReserve(
+    source.players[playerId] ?? createNativeSecondaryPlayerState(),
+    authority,
+  )
+  let state = source
+  const overloadedPlayerIds: string[] = []
+  if (!authority.eligible || player.reservedMana > authority.maximumMana) {
+    const overloaded = player.firewalker || player.mindstar || player.regenerate
+    player = clearPlayerToggles(player)
+    if (overloaded && authority.eligible) {
+      overloadedPlayerIds.push(playerId)
+      state = emitNativeSecondaryEvent(state, {
+        actorId: null,
+        cue: 'fizzle',
+        kind: 'overload',
+        ownerId: playerId,
+        pitch: 1,
+        position: authority.character.position,
+        skillId: player.lastSkillId ?? 78,
+        tick: context.tick,
+        worldKey: authority.worldKey,
+      })
+    }
+  }
+  const cast = castAbility(state, player, playerId, skillId, authority, context)
+  player = recalculateReserve(cast.player, authority)
+  state = {
+    ...cast.state,
+    players: {
+      ...cast.state.players,
+      [playerId]: { ...player, heldSlot: slot },
+    },
+    events: cast.state.events.length <= EVENT_CAPACITY
+      ? cast.state.events
+      : cast.state.events.slice(-EVENT_CAPACITY),
+  }
+  state = enrollNativeSecondaryLightOwners(state, context)
+  return {
+    damage: [],
+    dampenedCasterTargetIds: cast.dampenedCasterTargetIds,
+    dispelledShieldTargetIds: cast.dispelledShieldTargetIds,
+    disruptedTargetIds: [],
+    facingHeadingIndexes: cast.facingHeadingIndex === null
+      ? {} : { [playerId]: cast.facingHeadingIndex },
+    headingPerturbations: [],
+    healthRecovered: {},
+    knockbacks: [],
+    manaRecovered: cast.manaRecovered > 0 ? { [playerId]: cast.manaRecovered } : {},
+    manaUnderflowPlayerIds: cast.manaUnderflow ? [playerId] : [],
+    manaSpent: cast.manaSpent > 0 ? { [playerId]: cast.manaSpent } : {},
+    overloadedPlayerIds,
+    primaryOverridePlayerIds: player.planewalkerTicksRemaining > 0 ? [playerId] : [],
+    relocatedPlayers: cast.relocated === null ? {} : { [playerId]: cast.relocated },
+    removedProjectileIds: cast.removedProjectileIds,
+    staffCastPulsePlayerIds: [],
+    state,
+    steamedPulses: [],
+  }
+}
+
 function resolvedSecondaryAbilityRankStats(
   authority: Pick<NativeSecondaryPlayerAuthority, 'offensiveFactors' | 'skillBook'>,
   skillId: NativeSecondaryAbilityId,

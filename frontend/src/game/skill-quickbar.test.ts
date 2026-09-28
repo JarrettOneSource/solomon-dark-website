@@ -1,10 +1,13 @@
 import { nativeUiGlyphInkBounds } from './native-ui/core.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createNativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
 
 import {
   layoutNativeQuickbarBinding,
+  nativeBeltSkillAvailability,
   nativeCooldownSectorPath,
+  nativeCooldownSectorPoints,
   nativeSkillQuickbarIconAlpha,
   nativeSkillQuickbarCooldownPresentation,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
@@ -50,6 +53,38 @@ test('BeltButton uses distinct ready, cooldown, and unavailable icon alpha', () 
   assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: true, unavailable: false }), 0.25)
   assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: false, unavailable: true }), 0.375)
   assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: true, unavailable: true }), 0.25)
+})
+
+test('HUD and Inventory can read the same live BeltButton cooldown and mana state', () => {
+  const base = createNativeSecondaryPlayerState()
+  const cooldownTicksBySkill = [...base.cooldownTicksBySkill]
+  const cooldownMaximumTicksBySkill = [...base.cooldownMaximumTicksBySkill]
+  cooldownTicksBySkill[35] = 6_000
+  cooldownMaximumTicksBySkill[35] = 6_000
+  const playerState = { ...base, cooldownTicksBySkill, cooldownMaximumTicksBySkill }
+  const shared = {
+    currentMana: 100,
+    mode: 'run' as const,
+    playerState,
+    secondaryManaCosts: [[35, 20]] as const,
+    skillId: 35,
+  }
+  assert.deepEqual(
+    (({ capacity, iconAlpha, remaining }) => ({ capacity, iconAlpha, remaining }))(
+      nativeBeltSkillAvailability(shared),
+    ),
+    { capacity: 6_000, iconAlpha: 0.25, remaining: 6_000 },
+  )
+  assert.equal(nativeBeltSkillAvailability({ ...shared,
+    playerState: base,
+  }).iconAlpha, 0.75)
+  assert.equal(nativeBeltSkillAvailability({ ...shared,
+    currentMana: 0, playerState: base,
+  }).iconAlpha, 0.375)
+  assert.equal(nativeBeltSkillAvailability({ ...shared,
+    mode: 'hub', playerState: base,
+  }).iconAlpha, 0.375)
+  assert.deepEqual(nativeCooldownSectorPoints(25, 100)[0], { x: 26.5, y: 26.5 })
 })
 
 test('item belt lays out native group-8 key labels over 13 px plaques', () => {

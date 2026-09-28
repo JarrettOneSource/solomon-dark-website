@@ -1,5 +1,7 @@
 import { layoutNativeUiText, measureNativeUiText, type NativeUiTextLayout } from './native-ui/core.ts'
 import { NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS } from './core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
+import { nativeSkillCategory } from './core-kernels/player-progression.ts'
 
 export interface NativeBeltBindingLayout {
   advance: number
@@ -52,6 +54,46 @@ export function nativeSkillQuickbarCooldownPresentation(
   }
 }
 
+export function nativeBeltSkillAvailability({
+  skillId,
+  mode,
+  currentMana,
+  secondaryManaCosts,
+  playerState,
+}: {
+  readonly skillId: number | null
+  readonly mode: 'hub' | 'run'
+  readonly currentMana: number
+  readonly secondaryManaCosts: readonly (readonly [number, number])[]
+  readonly playerState: NativeSecondaryPlayerState | undefined
+}) {
+  const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
+  const combatDisabled = mode === 'hub' && secondary
+  const manaCost = secondary
+    ? secondaryManaCosts.find(([candidate]) => candidate === skillId)?.[1] ?? 0
+    : 0
+  const insufficientMana = secondary && currentMana < manaCost
+  const { capacity, remaining } = secondary
+    ? nativeSkillQuickbarCooldownPresentation(
+        playerState?.cooldownTicksBySkill[skillId] ?? 0,
+        playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
+        playerState?.globalCooldownTicks ?? 0,
+      )
+    : { capacity: 0, remaining: 0 }
+  return {
+    capacity,
+    combatDisabled,
+    iconAlpha: nativeSkillQuickbarIconAlpha({
+      cooldown: remaining > 0,
+      unavailable: combatDisabled || insufficientMana,
+    }),
+    insufficientMana,
+    manaCost,
+    remaining,
+    secondary,
+  }
+}
+
 export function layoutNativeQuickbarBinding(text: string): NativeBeltBindingLayout {
   const advance = measureNativeUiText(text, 'belt')
   const backingWidth = advance + 6
@@ -64,7 +106,21 @@ export function layoutNativeQuickbarBinding(text: string): NativeBeltBindingLayo
 }
 
 export function nativeCooldownSectorPath(remaining: number, capacity: number): string {
-  if (!(remaining > 0) || !(capacity > 0)) return ''
+  const points = nativeCooldownSectorPoints(remaining, capacity)
+  if (points.length === 0) return ''
+  return [
+    ...points.map(({ x, y }, index) => (
+      `${index === 0 ? 'M' : 'L'} ${formatCoordinate(x)} ${formatCoordinate(y)}`
+    )),
+    'Z',
+  ].join(' ')
+}
+
+export function nativeCooldownSectorPoints(
+  remaining: number,
+  capacity: number,
+): readonly { readonly x: number; readonly y: number }[] {
+  if (!(remaining > 0) || !(capacity > 0)) return []
   const ratio = Math.min(1, remaining / capacity)
   const startDegrees = 360 * (1 - ratio)
   const perimeter = [squareRayPoint(startDegrees)]
@@ -75,11 +131,7 @@ export function nativeCooldownSectorPath(remaining: number, capacity: number): s
   ) {
     perimeter.push(squareRayPoint(boundary))
   }
-  return [
-    `M ${formatCoordinate(SECTOR_CENTER)} ${formatCoordinate(SECTOR_CENTER)}`,
-    ...perimeter.map(({ x, y }) => `L ${formatCoordinate(x)} ${formatCoordinate(y)}`),
-    'Z',
-  ].join(' ')
+  return [{ x: SECTOR_CENTER, y: SECTOR_CENTER }, ...perimeter]
 }
 
 function squareRayPoint(degrees: number): { x: number; y: number } {

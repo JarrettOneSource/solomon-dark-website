@@ -1842,6 +1842,35 @@ test('native item belt binds shortcuts without moving ownership and activates ex
   assert.equal(getPlayerBelt(rejected.state)[7], null)
 })
 
+test('Inventory belt Ring of Ice commits a cast while the Boneyard tick stays frozen', () => {
+  const learned = withPlayerSkillRank(createGameSimulation(), 'local-player', 35, 1)
+  const bound = bindGameSimulationPlayerSkillQuickbar(learned, 'local-player', 35, 7)
+  assert.ok(bound)
+  const loaded = emptyBoneyard()
+  const paused = enterBoneyardWorld(bound, loaded)
+  const manaBefore = getPlayerProgression(paused).currentMana
+  const result = applyGameSimulationHubAction(paused, 'local-player', {
+    slot: 7,
+    type: 'activate-belt-slot',
+  })
+
+  assert.equal(result.accepted, true)
+  assert.equal(result.state.tick, paused.tick)
+  assert.strictEqual(result.state.world, paused.world)
+  assert.equal(result.state.secondaryAbilities.players['local-player']?.castSequence, 1)
+  assert.ok(result.state.secondaryAbilities.actors.some(({ kind }) => kind === 'freeze-wave'))
+  assert.ok((result.state.secondaryAbilities.players['local-player']?.cooldownTicksBySkill[35] ?? 0) > 0)
+  assert.ok(getPlayerProgression(result.state).currentMana < manaBefore)
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: loaded, mods: [], modState: {},
+    playerId: 'local-player', state: result.state,
+  })).state
+  assert.equal(restored.secondaryAbilities.players['local-player']?.castSequence, 1)
+  assert.equal(restored.secondaryAbilities.players['local-player']?.cooldownTicksBySkill[35],
+    result.state.secondaryAbilities.players['local-player']?.cooldownTicksBySkill[35])
+  assert.ok(restored.secondaryAbilities.actors.some(({ kind }) => kind === 'freeze-wave'))
+})
+
 test('simulation owns recursive sack moves, Fabric Dye commits, and nested potion effects', () => {
   const first = {
     discipline: 'arcane',
@@ -3592,6 +3621,69 @@ test('every secondary reaches its native action branch during damaged Staff mele
   }
 })
 
+test('every secondary Inventory belt action commits without stepping the frozen Boneyard', () => {
+  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+    const paused = staffSecondaryState(skillId, 'player-staff-melee')
+    const result = applyGameSimulationHubAction(paused, 'caster', {
+      aim: { x: 350, y: 250 },
+      slot: 0,
+      type: 'activate-belt-slot',
+    })
+    assert.equal(result.accepted, true, `${skillId} accepted`)
+    assert.equal(result.state.tick, paused.tick, `${skillId} tick`)
+    assert.deepEqual(result.state.gameRng, paused.gameRng, `${skillId} world RNG`)
+    assert.equal(result.state.secondaryAbilities.players.caster?.castSequence, 1, `${skillId} cast`)
+    assert.equal(result.state.secondaryAbilities.players.caster?.lastSkillId, skillId, `${skillId} identity`)
+    assert.equal(result.state.primarySpells.transients.some(({ id }) => id === 900), true, `${skillId} Staff action`)
+    for (const actor of paused.secondaryAbilities.actors) {
+      const retained = result.state.secondaryAbilities.actors.find(({ id }) => id === actor.id)
+      assert.equal(retained?.ageTicks, actor.ageTicks, `${skillId} existing actor age`)
+    }
+  }
+})
+
+test('Inventory belt preserves aimed placement and Teleport relocation without a world step', () => {
+  const target = { x: 350, y: 250 }
+  const circle = staffSecondaryState(49, 'player-staff-melee')
+  const castCircle = applyGameSimulationHubAction(circle, 'caster', {
+    aim: target, slot: 0, type: 'activate-belt-slot',
+  })
+  assert.equal(castCircle.accepted, true)
+  assert.deepEqual(castCircle.state.secondaryAbilities.actors.find(({ kind }) => (
+    kind === 'magic-circle'
+  ))?.position, target)
+  assert.equal(castCircle.state.tick, circle.tick)
+
+  const teleport = staffSecondaryState(48, 'player-staff-melee')
+  const position = getPlayerCharacter(teleport, 'caster').position
+  const castTeleport = applyGameSimulationHubAction(teleport, 'caster', {
+    aim: target, slot: 0, type: 'activate-belt-slot',
+  })
+  assert.equal(castTeleport.accepted, true)
+  assert.notDeepEqual(getPlayerCharacter(castTeleport.state, 'caster').position, position)
+  assert.equal(castTeleport.state.tick, teleport.tick)
+})
+
+test('Inventory belt rejection does not advance cooldowns or debit mana', () => {
+  const ready = staffSecondaryState(35, 'player-staff-melee')
+  const player = ready.secondaryAbilities.players.caster!
+  const cooling = {
+    ...ready,
+    secondaryAbilities: { ...ready.secondaryAbilities, players: { caster: {
+      ...player, globalCooldownTicks: 50,
+    } } },
+  }
+  const ignored = applyGameSimulationHubAction(cooling, 'caster', {
+    slot: 0, type: 'activate-belt-slot',
+  })
+  assert.equal(ignored.accepted, true)
+  assert.equal(ignored.state.tick, cooling.tick)
+  assert.equal(ignored.state.secondaryAbilities.players.caster?.castSequence, 0)
+  assert.equal(ignored.state.secondaryAbilities.players.caster?.globalCooldownTicks, 50)
+  assert.equal(getPlayerProgression(ignored.state, 'caster').currentMana,
+    getPlayerProgression(cooling, 'caster').currentMana)
+})
+
 test('secondary toggle-off branches preserve Staff and only Planewalker adds a cast action', () => {
   for (const [skillId, active, replaces] of [
     [12, { planewalkerTicksRemaining: 500 }, true],
@@ -5250,6 +5342,30 @@ test('a primary quickbar edge selects the learned primary before cast authority 
   assert.equal(getPlayerSkillBook(state).primarySkillId, 16)
   assert.deepEqual(getPlayerBelt(state)[7], { kind: 'skill', skillId: 16 })
   assert.equal(getPlayerCharacter(state).primaryCast.selectedPrimaryId, 16)
+})
+
+test('Inventory belt selects primary and concentration bindings without advancing College', () => {
+  let state = withPlayerSkillRank(createGameSimulation(), 'local-player', 16, 1)
+  state = withPlayerSkillRank(state, 'local-player', 57, 1)
+  const primary = bindGameSimulationPlayerSkillQuickbar(state, 'local-player', 16, 6)
+  assert.ok(primary)
+  const concentration = bindGameSimulationPlayerSkillQuickbar(primary, 'local-player', 57, 7)
+  assert.ok(concentration)
+
+  const selectedPrimary = applyGameSimulationHubAction(concentration, 'local-player', {
+    slot: 6, type: 'activate-belt-slot',
+  })
+  assert.equal(selectedPrimary.accepted, true)
+  assert.equal(selectedPrimary.state.tick, concentration.tick)
+  assert.equal(getPlayerSkillBook(selectedPrimary.state).primarySkillId, 16)
+  assert.equal(getPlayerCharacter(selectedPrimary.state).primaryCast.selectedPrimaryId, 16)
+
+  const selectedConcentration = applyGameSimulationHubAction(selectedPrimary.state, 'local-player', {
+    slot: 7, type: 'activate-belt-slot',
+  })
+  assert.equal(selectedConcentration.accepted, true)
+  assert.equal(selectedConcentration.state.tick, concentration.tick)
+  assert.deepEqual(selectedConcentrations(selectedConcentration.state), [57, null, 'a'])
 })
 
 test('a primary quickbar edge keeps the selection reset through the authoritative snapshot', () => {

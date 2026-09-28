@@ -16,7 +16,9 @@ import {
   DOWSING_EQUIPMENT_RECIPES,
   createEquipmentInventoryItem,
 } from '../core-kernels/hub-economy.ts'
+import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import {
+  applyGameSimulationHubAction,
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationPlayerRecords,
@@ -2132,7 +2134,7 @@ test('multiplayer compact skill selector resumes directly after teardown', async
   assert.ok(host.state().tick - heldTick <= 15, 'selector release must not replay held wall time')
 })
 
-test('solo Inventory admits item belt bind and pull-off before resume progress', async (context) => {
+test('solo Inventory admits belt item and spell activation before resume progress', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
     snapshotRate: 100,
@@ -2187,6 +2189,56 @@ test('solo Inventory admits item belt bind and pull-off before resume progress',
     kind: 'item',
     nativeTypeId: 7002,
   })
+  const equipped = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].economy.equipment.rings[0]?.id === ring.id
+  ))
+  client.socket.send(encodeGameMessage({
+    action: { slot: 2, type: 'activate-belt-slot' },
+    type: 'client-hub-action',
+  }))
+  await equipped
+  assert.equal(host.state().tick, heldTick)
+
+  const activeState = host.state()
+  const index = activeState.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const sourceBook = activeState.playerEntities.skillBooks[index]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  const learnedSkillOrder = [...sourceBook.learnedSkillOrder]
+  if ((permanentRanks[35] ?? 0) === 0 && !learnedSkillOrder.includes(35)) {
+    learnedSkillOrder.push(35)
+  }
+  permanentRanks[35] = 1
+  effectiveRanks[35] = 1
+  const skillBooks = [...activeState.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder,
+    permanentRanks,
+  }
+  const belts = [...activeState.playerEntities.belts]
+  belts[index] = freezeNativeBelt(belts[index]!.map((entry, slot) => (
+    slot === 7 ? { kind: 'skill' as const, skillId: 35 } : entry
+  )))
+  activeState.playerEntities = replacePlayerEconomy({
+    ...activeState.playerEntities,
+    belts,
+    skillBooks,
+  }, playerId, activeState.playerEntities.economies[index]!)
+  const cast = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.secondaryAbilities.players[playerId]?.castSequence === 1
+  ))
+  client.socket.send(encodeGameMessage({
+    action: { aim: null, slot: 7, type: 'activate-belt-slot' },
+    type: 'client-hub-action',
+  }))
+  await cast
+  assert.equal(host.state().tick, heldTick)
+  assert.ok((host.state().secondaryAbilities.players[playerId]?.cooldownTicksBySkill[35] ?? 0) > 0)
   const cleared = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.players[playerId].belt[2] === null
@@ -2228,6 +2280,61 @@ test('solo Inventory admits item belt bind and pull-off before resume progress',
   await completed
   await waitFor(() => host.state().tick > heldTick)
   assert.ok(host.state().tick - heldTick <= 10, 'solo Inventory must not replay held time')
+})
+
+test('an Inventory pause excludes another player from its belt actions', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const owner = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const guest = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => owner.socket.close())
+  context.after(() => guest.socket.close())
+  const loadedOwner = nextMessage(owner.socket, message => message.type === 'server-boneyard-loaded')
+  const loadedGuest = nextMessage(guest.socket, message => message.type === 'server-boneyard-loaded')
+  const ready = completeInitialGameplayReadiness([owner.socket, guest.socket])
+  owner.socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId: 'default-random' }))
+  await Promise.all([loadedOwner, loadedGuest, ready])
+
+  const state = host.state()
+  const playerId = guest.welcome.playerId
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const economy = getPlayerEconomy(state, playerId)
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const ring = {
+    ...createEquipmentInventoryItem(recipe, economy.nextItemId),
+    inventorySlot: 30,
+  }
+  assert.equal(ring.nativeTypeId, 7002)
+  const belts = [...state.playerEntities.belts]
+  belts[index] = freezeNativeBelt(belts[index]!.map((entry, slot) => (
+    slot === 7 ? { kind: 'item' as const, itemId: ring.id, nativeTypeId: 7002 as const } : entry
+  )))
+  state.playerEntities = replacePlayerEconomy({ ...state.playerEntities, belts }, playerId, {
+    ...economy,
+    backpack: [...economy.backpack, ring],
+    nextItemId: ring.id + 1,
+  })
+  assert.equal(applyGameSimulationHubAction(state, playerId, {
+    slot: 7, type: 'activate-belt-slot',
+  }).accepted, true, 'guest fixture must be actionable without the pause')
+
+  const paused = nextMessage(owner.socket, message => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  ))
+  owner.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause', paused: true, source: 'inventory',
+  }))
+  await paused
+  const heldTick = host.state().tick
+  guest.socket.send(encodeGameMessage({
+    action: { slot: 7, type: 'activate-belt-slot' },
+    type: 'client-hub-action',
+  }))
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(host.state().tick, heldTick)
+  assert.equal(getPlayerEconomy(host.state(), playerId).equipment.rings[0], null)
+  assert.ok(getPlayerEconomy(host.state(), playerId).backpack.some(({ id }) => id === ring.id))
 })
 
 test('solo Pause and full Skill Screen release through resume progress', async (context) => {

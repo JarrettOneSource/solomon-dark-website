@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { HAGATHA_PERKS } from './core-kernels/hub-economy.ts'
 import type { PlayerBeltComponent } from './core-kernels/native-belt.ts'
+import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import type { NativeHudRect } from './native-hud-layout.ts'
 import type { ProtocolPlayerEconomy } from './protocol/game-state.ts'
@@ -188,12 +189,14 @@ export function InventoryBeltActions({
   audio,
   belt,
   disabled,
+  onActivate,
   onPullOff,
   rects,
 }: {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
   disabled: boolean
+  onActivate: (slot: number, pointer: Vector2) => void
   onPullOff: (slot: number) => void
   rects: readonly NativeHudRect[]
 }) {
@@ -203,11 +206,15 @@ export function InventoryBeltActions({
     readonly slot: number
   } | null>(null)
   const [burst, setBurst] = useState<{ readonly sequence: number; readonly slot: number } | null>(null)
-  const finish = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (pressRef.current?.pointerId !== event.pointerId) return
+  const finish = (event: ReactPointerEvent<HTMLButtonElement>, activate = false) => {
+    const press = pressRef.current
+    if (press?.pointerId !== event.pointerId) return
     pressRef.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    if (activate && !disabled) {
+      onActivate(press.slot, { x: event.clientX, y: event.clientY })
     }
   }
   return (
@@ -217,7 +224,7 @@ export function InventoryBeltActions({
           data={{ 'data-native-belt-slot': slot, 'data-native-belt-populated': 'true' }}
           disabled={disabled}
           key={slot}
-          label={`Remove belt slot ${slot + 1}`}
+          label={`Activate belt slot ${slot + 1}; drag to remove`}
           rect={[
             rects[slot]!.x,
             rects[slot]!.y,
@@ -249,7 +256,7 @@ export function InventoryBeltActions({
             setBurst((current) => ({ sequence: (current?.sequence ?? 0) + 1, slot }))
             onPullOff(slot)
           }}
-          onPointerUp={finish}
+          onPointerUp={(event) => finish(event, true)}
         />
       )])}
       {burst ? (

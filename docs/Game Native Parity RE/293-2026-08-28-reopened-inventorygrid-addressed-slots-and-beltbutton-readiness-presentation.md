@@ -1,5 +1,158 @@
 # 2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation
 
+## 2026-09-28 — Report 51: live BeltButtons inside InventoryScreen
+
+### Report, causal trace, and limits before implementation
+
+The September 26 report has no media. It says BeltButtons in Inventory cannot
+activate spells and show ready icons instead of live cooldowns. Its suggested
+Resume cause is a hypothesis, not a verified native mechanism. This reopens
+the earlier BeltButton completion: entry 255 carried the eight heterogeneous
+bindings into the Inventory painter, and this entry recovered ready/cooldown
+colour states, but neither crossed Inventory's **action** or **live cooldown**
+producer. The previous icon-only Inventory witness therefore did not prove
+the action/cooldown contract.
+
+Fresh read-only retail 0.72.5 Ghidra replica evidence, from the unchanged
+4,723,200-byte image with SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+establishes the owner path. `Game` owns eight `BeltButton` records. The
+InventoryScreen tick `0x00551A10` calls shared modal-HUD writer `0x005C7200`
+to place the **same** buttons; it does not make a second belt. Game keyboard
+sampler `0x005CB360`, when the belt gate at `Game+0x1AC2` is enabled, loops all
+eight bindings at `0x00B3BCD0..0x00B3BCEF` and calls Game's action virtual
+`+0x10` with each live button pointer. Game action `0x005D8120` also matches
+all eight button pointers and dispatches skill entries (`0x1B67`) to
+`0x005D5600`; potion aliases (`0x1B65/0x1B66`) and exact item entries take
+their existing direct item paths. `0x005D5600` selects a primary or
+concentration, or invokes a category-two skill through the actor/skill virtual
+methods after eligibility, mana and cooldown checks. This action path does
+not call the region fixed-step dispatcher. The pause helper `0x005CBD40`
+instead holds the region at delay `-1` while UI input/rendering continues.
+Thus a successful Inventory cast must change its authoritative spell/cooldown
+state while the surrounding world clock remains frozen. The reporter's
+subjective “one frame” appearance is not independently measured by these
+instructions; the stock ordering and frozen region are instruction-derived.
+
+The shared `BeltButton::Present` `0x005D3E10` reads the skill's private
+cooldown at `+0x64`, global cooldown and capacity, then paints the red square
+fan beneath a dim `.25` icon or the ready `.75` icon; its mana/disable branch
+can give `.375`. The full colour/sector constants and branch membership are
+already recovered below. The existing Website `SkillQuickbar` consumes the
+current secondary player state and uses that rule, but
+`renderer/hub-inventory/equipment.ts::addBelt` paints bare skill sprites from
+only belt/economy/progression. `InventoryBeltActions` routes pointer movement
+solely to pull-off, never activation. The Boneyard host rejects ordinary
+`client-input` during Inventory pause and its inventory-action allowlist omits
+`activate-belt-slot`; that action itself currently handles only non-skill
+entries. These independent omissions explain both reported symptoms without
+blaming Resume grace.
+
+The existing [secondary cursor-placement entry](<300-2026-09-05-lantern-collision-and-secondary-cursor-placement.md>)
+already closes the 23-row aimed/aim-derived/self/special placement inventory
+for dispatcher `0x0054CC50` and cursor setting `0x00B3BCF4`. Its Website input
+owner retains idle screen coordinates for a fresh desktop belt press. The
+Inventory path must reuse that projection while input is blocked, without
+turning the pointer sample into a gameplay move/cast; Phasing and special
+placement rows keep their existing heading or world callback owner.
+
+The Ghidra source was accessed only through the Mod Loader replica wrapper
+at tool revision `08bfba9ef367f7b863848030d0a289dc31e33192`, with wrapper
+SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`
+and `decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+Task-local decompile logs have SHA-256
+`099e40d2609dcf439d980fd4c4866c8c87c57143767b552b7e8e8f8dd2b486c1`,
+`9bbd5ed838f8af9bc804f5d7b5a11363e7acca8fb9b0546896f2668a01948446`,
+`502bd8df54cd446d0175d96995b14cd682396c8c9ee061e17d8b2f1cb3d0bff8`,
+and `c9632e8ae8271dcffb78b10b0477f5d2e8207ced09c7dabf5bf80133a0e2d172`.
+The Mod Loader checkout and analyzed source project were not edited.
+
+### System boundary and final membership
+
+Native system: Game-owned BeltButton action and presentation while an
+InventoryScreen or its companion surface is open, from pointer/key admission
+through immediate skill/item effect, cooldown/cost state, frozen-world
+projection, and menu/world teardown. The same eight records and skill state
+must serve gameplay HUD, SkillScreen and Inventory; there is no independent
+Inventory cooldown timer.
+
+| Member or branch | Native source | Final disposition and proof |
+| --- | --- | --- |
+| Eight live button records, duplicate bindings and empty slots | `Game+0x5EC`, stride `0xEC`; `0x005D8120` | `verified-already-at-parity`: entry 255's identity/assignment matrix remains intact; the shared modal presenter reads the same belt and its eight slots. |
+| Pointer click/tap versus >50-unit pull-off | `0x005D8120`, `0x005C7DF0` | `exact-ported`: built desktop and touch Hub/Fomentius/Boneyard short presses activate; the existing touch pull-off journey clears an entry without a release action, and pointer cancel/capture use the same owner. |
+| All eight keyboard bindings while Inventory is open | `0x005CB360`, `0x00B3BCD0..0x00B3BCEF` | `exact-ported`: the common settings binding lookup routes key edges to the same action; built Boneyard `Digit6` cast, fresh blocked-pointer aim regression and existing rebind tests cover the producer. |
+| Category-one primary and category-three concentration entries | `0x005D5600` | `exact-ported`: authority-owned Inventory actions select each learned row without advancing College or synthesizing a secondary projectile. |
+| All learned category-two secondary entries, including Ring of Fire/Ice | `0x005D5600`, actor/skill virtuals | `exact-ported`: one direct cast entry reuses the full existing `castAbility` body; a 23-ID matrix holds world tick, unrelated actor age and world RNG, with focused Magic Circle aim, Teleport relocation, cooldown refusal and Ring of Ice save assertions. |
+| Health/Mana aliases, equipment, Sack and other exact-UID item entries | `0x005D8120 -> 0x005529A0/0x00552B70/0x0056D1B0` | `exact-ported` under Inventory pause by admitting the established heterogeneous item transaction; built Hub and Fomentius ring shortcuts plus the existing potion/Sack simulation matrix prove the shared path. |
+| Ready, private/global cooldown, mana-unavailable, Hub-disabled and empty painter states | `0x005D3E10`; complete constants below | `exact-ported`: HUD and modal use one availability rule and square-fan points; built desktop/touch Ring of Ice crops change from no red to the live cooldown sector, while ready/mana/Hub alpha cases retain unit checks. Unchanged sectors do not rebuild on snapshots. |
+| College, Boneyard and Fomentius Inventory companions | shared InventoryScreen/BeltButton owner | `exact-ported`: real built Hub, Fomentius and Boneyard pointer paths pass across mount and scene transfer. |
+| Hagatha, Luthacus and Shlorio companions | same `NativeHubSurface`/footer owner | `verified-already-at-parity` for common mounting and belt membership from earlier companion receipts; they have no separate BeltButton action, painter or cooldown implementation. |
+| Inventory pause, Resume, world effects and cooldown expiry | `0x005CBD40`, region `+0x68`, UI scheduler | `exact-ported`: both built viewports hold tick through cast; the spawned FreezeWave advances to age 15/20 after close, while ordinary cooldown ticks later expire. |
+| Host/guest, snapshots, save/restore, disconnect and menu teardown | one Game-owned belt and skill state | `exact-ported`: owner item/skill pause actions and guest denial pass host tests; strict protocol 140 carries aim, Ring of Ice cooldown/actor survive save restore, and close/owner loss drops local held input. |
+| Report 32 cross-menu belt freshness | actor-model snapshot owner, ledger 115 | `verified-already-at-parity`: this change leaves one live belt identity and the prior reciprocal-book acceptance intact. |
+
+No authored skill/cooldown row is newly inferred: category membership, costs,
+private/global timers and eight belt bindings already belong to the complete
+stock catalogs and Website kernels. There is no browser-blocked member or
+new client-only cooldown timer. The original report has no stock footage, so
+its subjective one-frame visibility cannot be given a measured pixel duration;
+the recovered direct action and frozen region ordering is the stronger
+instruction-derived contract.
+
+### Website implementation and acceptance
+
+The base failed a WSL red Ring of Ice test at `accepted: false` because
+`activate-belt-slot` classified every skill as an ineligible item. The
+Inventory hit layer also had no short-press handler, and its Pixi painter had
+no secondary cooldown input. Protocol 140 now accepts an optional finite
+world aim on that action; blocked gameplay input can sample the current
+secondary pointer without publishing a gameplay command. The host admits only
+the Inventory pause owner, leaves normal paused `client-input` closed, and
+does not schedule a per-cast save checkpoint. The shared simulation context,
+player-outcome applier and unchanged secondary cast body commit mana,
+cooldowns, toggles, RNG, actors, relocation, Dampen and painter registrations
+without stepping other objects. The modal BeltButton handles a short press or
+key, preserves the strict pull-off threshold, and updates the shared HUD
+availability/sector shape without rebuilding unchanged Pixi graphics.
+
+The implementation candidate passed WSL `./scripts/validate.sh` with exit zero:
+3,957 Node tests, 24 Python tests, 100% measured renderer statement/branch/
+function/line coverage, no mutation survivors and `"failures": []` in the
+quality report. The full gate log SHA-256 is
+`c77503771f2706fb015b381fb2f00b01df9a594782ff1dde438623ec23fd53f2`.
+The task's 27 changed files were byte-identical between Mac and WSL before
+that gate (manifest SHA-256
+`93288f1e8c8bcabddeaf0e54ac2bb89dfd2db1370e7e5f861c97e8b8b3159415`).
+Only these documentation closeout notes were appended after the gate; runtime,
+tests and browser-harness bytes were unchanged.
+The final built WSL desktop and 844×390 touch journeys pass the same real
+Hub item shortcut, Fomentius companion shortcut, Boneyard Ring of Ice
+pointer/tap cast, Ring of Fire keyboard cast and ring unequip. Both hold the
+Boneyard tick during Inventory and show the red cooldown fan; the desktop
+crop gains 2,756 red pixels and the touch crop 529, with zero beforehand.
+FreezeWave resumes aging on close (15/20 ticks in the sampled frames).
+Page, console, response and request error arrays are empty. Browser log
+SHA-256 values are respectively
+`f5774dc68c66ea619d5709371d66c6a74a47d52c796ff0673c833af21b9bf447`
+and `4918445e2a394949ec2d621763f7f20eb25be008f2f8159360f5886e8017391b`.
+Screenshots and raw task logs are disposable scratch, not retained source evidence.
+
+An optional older touch SkillBook belt-consistency journey verified its
+initial >50-unit Inventory pull-off, reciprocal-book freshness and six later
+slot deliveries, then failed its strict zero-channel pixel comparison at
+the seventh reopened slot. Two runs found respectively five channels over
+the eight-level threshold (maximum difference 11) and one (maximum 9), with
+identical belt labels and empty browser error arrays. The captured belt
+crops appear unchanged; the complete long smoke is **not** claimed as
+passing, and the exact cause of that subpixel drift remains a final
+supplemental-review item. Its logs have SHA-256
+`097f50dafd8e90a85e9d88f76d9349fec5b47647ecec2029c11fa2b3df93f967`
+and `3740dde4759c3e1a43e3f68169763645d10a8bb5e2706f04cf23b8dd7b3eb20d`.
+The report's changed Inventory action, frozen-world cast and cooldown painter
+have separate passing desktop/touch journeys and the complete canonical gate;
+no product workaround or weakened pixel assertion was introduced.
+
 ## 2026-09-27 — Report 50: equipment drops into an addressed Sack cell
 
 ### Report and causal evidence before implementation

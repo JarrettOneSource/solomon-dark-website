@@ -5,6 +5,7 @@ import { nativeOptionalBookHudProgress } from './native-optional-book.ts'
 import type { HubInventoryRenderer } from './renderer/hub-inventory-renderer.ts'
 import type {
   HubInventoryRendererModel,
+  NativeModalBeltAvailability,
 } from './renderer/hub-inventory/model.ts'
 import type { RetainedRendererOwner } from './renderer/retained-renderer-owner.ts'
 import {
@@ -16,6 +17,7 @@ import {
 interface HubInventoryRendererBinding {
   readonly rendererOwner: RetainedRendererOwner<HubInventoryRenderer>
   readonly model: HubInventoryRendererModel
+  readonly beltAvailability: NativeModalBeltAvailability
   readonly closing: boolean
   readonly forceModalHudSettled: boolean
   readonly onInventoryCloseComplete: () => void
@@ -24,7 +26,7 @@ interface HubInventoryRendererBinding {
 }
 
 export function useHubInventoryRenderer({
-  rendererOwner, model, closing, forceModalHudSettled, onInventoryCloseComplete,
+  rendererOwner, model, beltAvailability, closing, forceModalHudSettled, onInventoryCloseComplete,
   chatCompletionHandledRef, advanceChatRef,
 }: HubInventoryRendererBinding) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -32,6 +34,8 @@ export function useHubInventoryRenderer({
   const rendererRef = useRef<HubInventoryRenderer | null>(null)
 
   const modelRef = useRef<HubInventoryRendererModel | null>(null)
+  const beltAvailabilityRef = useRef(beltAvailability)
+  beltAvailabilityRef.current = beltAvailability
 
   const revealStartedAtRef = useRef<number | null>(null)
 
@@ -72,6 +76,11 @@ export function useHubInventoryRenderer({
     rendererRef.current?.setModel(model)
   }, [model])
 
+  const { mode, playerState, progression } = beltAvailability
+  useLayoutEffect(() => {
+    rendererRef.current?.setBeltAvailability({ mode, playerState, progression })
+  }, [mode, playerState, progression])
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -82,6 +91,7 @@ export function useHubInventoryRenderer({
       if (disposed) return
       renderer = created
       rendererRef.current = created
+      created.setBeltAvailability(beltAvailabilityRef.current)
       created.setModel(modelRef.current!)
       detachCanvas = created.mount(host)
       revealStartedAtRef.current = null

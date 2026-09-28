@@ -6,6 +6,12 @@
 > updates on the fixed 900-high stage. The belt, root contents, item activation
 > and Teleport contracts are unchanged.
 
+> **2026-09-28 report 51:** [entry 293's InventoryScreen BeltButton reopening](293-2026-08-28-reopened-inventorygrid-addressed-slots-and-beltbutton-readiness-presentation.md#2026-09-28--report-51-live-beltbuttons-inside-inventoryscreen)
+> corrects this entry's scope: the eight-slot owner and gameplay HUD activation
+> were recovered here, but the Website Inventory surface still omitted live
+> short-press/key activation and cooldown presentation. The shared owner now
+> covers those modal consumers without changing the item/skill catalog.
+
 ## Reported smell and parity question
 
 - Player reports: Teleport appears not to trigger; toolbar entries cannot be

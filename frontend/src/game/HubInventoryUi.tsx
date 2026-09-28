@@ -15,10 +15,12 @@ import {
 } from './core-kernels/hub-economy.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import type { PlayerBeltComponent } from './core-kernels/native-belt.ts'
+import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
 import type { HubMemorialState } from './core-kernels/hub-memorial.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
+import type { GameControlBindings } from './game-settings.ts'
 import { nativeOptionalBookKeyAction } from './native-optional-book.ts'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import {
@@ -63,6 +65,7 @@ function hubNativeSurfaceOwnerKey(surface: Exclude<HubUiSurface, null>): string 
 interface HubInventoryUiProps {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
+  beltBindings: GameControlBindings
   config: PlayerCharacterConfig
   disabled: boolean
   economy: ProtocolPlayerEconomy
@@ -71,9 +74,11 @@ interface HubInventoryUiProps {
   inventoryEnabled?: boolean
   inventoryKeyCode: string
   menuKeyCode: string
+  mode: 'hub' | 'run'
   memorial?: HubMemorialState | null
   nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
+  onBeltActivate: (slot: number, pointer: Vector2 | null) => void
   onOpenSkills: () => void
   onUnassignBeltEntry?: (slot: number) => void
   modAssets: readonly GameModAsset[]
@@ -83,6 +88,7 @@ interface HubInventoryUiProps {
   playerPosition: Vector2
   progression: ProtocolPlayerProgression
   region: HubRegionId
+  secondaryPlayerState: NativeSecondaryPlayerState | undefined
   skillsKeyCode: string
   surface: HubUiSurface
   skorchaDismissalIndex?: number
@@ -95,6 +101,7 @@ interface HubInventoryUiProps {
 export default function HubInventoryUi({
   audio,
   belt,
+  beltBindings,
   config,
   disabled,
   economy,
@@ -103,9 +110,11 @@ export default function HubInventoryUi({
   inventoryEnabled = true,
   inventoryKeyCode,
   menuKeyCode,
+  mode,
   memorial = null,
   nativeUiStageStyle,
   onAction,
+  onBeltActivate,
   onOpenSkills,
   onUnassignBeltEntry,
   modAssets,
@@ -113,6 +122,7 @@ export default function HubInventoryUi({
   onSurfaceChange,
   overlayRoot,
   playerPosition,
+  secondaryPlayerState,
   progression,
   region,
   skillsKeyCode,
@@ -392,16 +402,19 @@ export default function HubInventoryUi({
       key={hubNativeSurfaceOwnerKey(surface)}
       audio={audio}
       belt={belt}
+      beltBindings={beltBindings}
       closing={inventoryCloseTarget !== null}
       config={config}
       dialogueHistory={dialogueHistoryRef.current}
       economy={economy}
       forceModalHudSettled={forceModalHudSettled}
-      inputSuspended={inputSuspended}
+      inputSuspended={inputSuspended || disabled}
       menuKeyCode={menuKeyCode}
+      mode={mode}
       memorial={memorial}
       modContent={modContent}
       onAction={onAction}
+      onBeltActivate={onBeltActivate}
       onClose={closeSurface}
       onInventoryCloseComplete={() => {
         if (inventoryCloseTarget !== null) closeSurface()
@@ -414,6 +427,7 @@ export default function HubInventoryUi({
       onUnassignBeltEntry={onUnassignBeltEntry}
       perkRemovalEnabled={interactionsEnabled}
       progression={progression}
+      secondaryPlayerState={secondaryPlayerState}
       replacementTarget={inventoryCloseTarget}
       rendererOwner={rendererOwner}
       sackPath={inventorySackPath}

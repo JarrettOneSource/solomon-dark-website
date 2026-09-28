@@ -5,6 +5,7 @@ import {
   type HubTraderId,
 } from '../../core-kernels/hub-economy.ts'
 import { type PlayerBeltComponent } from '../../core-kernels/native-belt.ts'
+import type { NativeSecondaryPlayerState } from '../../core-kernels/native-secondary-abilities.ts'
 import { type PlayerCharacterConfig } from '../../core-kernels/player-character.ts'
 import { type HubInteractionId } from '../../hub-inventory-presentation.ts'
 import {
@@ -174,9 +175,20 @@ export interface InventoryBuildState {
   readonly dragger: Container | null
   readonly flybys: readonly InventoryFlybyView[]
   readonly itemInfo: Container | null
-  readonly modalHud: Container
+  readonly modalHud: NativeModalHudView
   readonly playerPreview: NativeElementVfxView | null
   readonly sackPages: InventorySackPages | null
+}
+
+export interface NativeModalBeltAvailability {
+  readonly mode: 'hub' | 'run'
+  readonly playerState: NativeSecondaryPlayerState | undefined
+  readonly progression: ProtocolPlayerProgression
+}
+
+export interface NativeModalHudView {
+  readonly layer: Container
+  updateAvailability(value: NativeModalBeltAvailability): void
 }
 
 export interface InventorySackPages {

@@ -25,6 +25,7 @@ import {
 import { isNativeBeltSkill } from '../../core-kernels/player-progression.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../game-state.ts'
 import { nativeHubNpcState } from './hub.ts'
+import { vector } from './native-state.ts'
 import {
   equipmentSlot,
   equippedItems,
@@ -96,8 +97,14 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     return { type, skillId: integerWithin(source.skillId, 'action.skillId', 72, 79) }
   }
   if (type === 'activate-belt-slot') {
-    onlyKeys(source, 'action', ['type', 'slot'])
-    return { type, slot: integerWithin(source.slot, 'action.slot', 0, 7) }
+    onlyKeys(source, 'action', ['type', 'slot', 'aim'])
+    return {
+      type,
+      slot: integerWithin(source.slot, 'action.slot', 0, 7),
+      ...(Object.hasOwn(source, 'aim')
+        ? { aim: source.aim === null ? null : vector(source.aim, 'action.aim') }
+        : {}),
+    }
   }
   if (type === 'bind-belt-item') {
     onlyKeys(source, 'action', ['type', 'itemId', 'slot'])

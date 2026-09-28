@@ -21,11 +21,14 @@ import {
   type HubTraderId,
 } from './core-kernels/hub-economy.ts'
 import { nativeBeltOwnedItem, type PlayerBeltComponent } from './core-kernels/native-belt.ts'
+import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
+import type { Vector2 } from './core-kernels/vector.ts'
 import { NATIVE_SELECTOR_ACCEPT_TICKS } from './core-kernels/native-hub-npc.ts'
 import type { ModBoastSelection } from './core-kernels/boast.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
 import type { HubMemorialState } from './core-kernels/hub-memorial.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
+import { quickbarSlotForBinding, type GameControlBindings } from './game-settings.ts'
 import { NATIVE_HUD_BACKBUFFER, nativeHudModalSlideLayout } from './native-hud-layout.ts'
 import {
   initialNativeModalSlideProgressSnapshot,
@@ -91,6 +94,7 @@ import { type HubInventoryUiNotice, unforgeResultNotice } from './hub-inventory-
 export function NativeHubSurface({
   audio,
   belt,
+  beltBindings,
   closing,
   config,
   dialogueHistory,
@@ -98,9 +102,11 @@ export function NativeHubSurface({
   forceModalHudSettled,
   inputSuspended,
   menuKeyCode,
+  mode,
   memorial,
   modContent,
   onAction,
+  onBeltActivate,
   onClose,
   onInventoryCloseComplete,
   onInventoryBack,
@@ -111,6 +117,7 @@ export function NativeHubSurface({
   onUnassignBeltEntry,
   perkRemovalEnabled,
   progression,
+  secondaryPlayerState,
   replacementTarget,
   rendererOwner,
   sackPath,
@@ -122,6 +129,7 @@ export function NativeHubSurface({
 }: {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
+  beltBindings: GameControlBindings
   closing: boolean
   config: PlayerCharacterConfig
   dialogueHistory: Set<string>
@@ -129,9 +137,11 @@ export function NativeHubSurface({
   forceModalHudSettled: boolean
   inputSuspended: boolean
   menuKeyCode: string
+  mode: 'hub' | 'run'
   memorial: HubMemorialState | null
   modContent: ModContentProjection | null
   onAction: (action: HubInventoryAction) => void
+  onBeltActivate: (slot: number, pointer: Vector2 | null) => void
   onClose: () => void
   onInventoryCloseComplete: () => void
   onInventoryBack: () => void
@@ -142,6 +152,7 @@ export function NativeHubSurface({
   onUnassignBeltEntry?: (slot: number) => void
   perkRemovalEnabled: boolean
   progression: ProtocolPlayerProgression
+  secondaryPlayerState: NativeSecondaryPlayerState | undefined
   replacementTarget: 'closed' | 'skills' | null
   rendererOwner: RetainedRendererOwner<HubInventoryRenderer>
   sackPath: readonly number[]
@@ -462,6 +473,25 @@ export function NativeHubSurface({
     return () => window.removeEventListener('keydown', back, { capture: true })
   }, [audio, beginChatContent, chat.content, dismissOrCloseChat, inputSuspended, menuKeyCode, surface.kind])
 
+  useEffect(() => {
+    if (surface.kind === 'dialogue' || inputSuspended || closing) return
+    const activate = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey
+        || inventoryTransitionLocked || notice !== null || dyeModal !== null
+        || !onUnassignBeltEntry) return
+      const slot = quickbarSlotForBinding(beltBindings, event.code)
+      if (slot === null || belt[slot] === null) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onBeltActivate(slot, null)
+    }
+    window.addEventListener('keydown', activate, { capture: true })
+    return () => window.removeEventListener('keydown', activate, { capture: true })
+  }, [
+    belt, beltBindings, closing, dyeModal, inputSuspended, inventoryTransitionLocked,
+    notice, onBeltActivate, onUnassignBeltEntry, surface.kind,
+  ])
+
   const model = useMemo((): HubInventoryRendererModel => {
     if (surface.kind === 'inventory') return {
       belt,
@@ -543,6 +573,7 @@ export function NativeHubSurface({
   const { hostRef, rendererRef, rendererState } = useHubInventoryRenderer({
     rendererOwner, model, closing, forceModalHudSettled, onInventoryCloseComplete,
     chatCompletionHandledRef, advanceChatRef,
+    beltAvailability: { mode, progression, playerState: secondaryPlayerState },
   })
 
   useEffect(() => {
@@ -863,6 +894,7 @@ export function NativeHubSurface({
             belt={{
               audio, belt,
               disabled: inventoryTransitionLocked || !onUnassignBeltEntry,
+              onActivate: onBeltActivate,
               onPullOff: (slot) => onUnassignBeltEntry?.(slot),
               rects: inventoryBeltRects,
             }}

@@ -318,6 +318,9 @@ export default function HubScene({
     hubInitialSnapshot.players[playerId]!.economy
   ))
   const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
+  const [secondaryPlayerState, setSecondaryPlayerState] = useState(() => (
+    hubInitialSnapshot.secondaryAbilities.players[playerId]
+  ))
   const economyRef = useRef(economy)
   economyRef.current = economy
   const [playerPosition, setPlayerPosition] = useState(() => ({
@@ -559,6 +562,7 @@ export default function HubScene({
       }
       const player = snapshot.players[playerId]
       if (player) {
+        setSecondaryPlayerState(snapshot.secondaryAbilities.players[playerId])
         setLiveBelt((current) => nativePlayerBeltsEqual(current, player.belt)
           ? current
           : player.belt)
@@ -1021,6 +1025,7 @@ export default function HubScene({
         <HubInventoryUi
           audio={audio}
           belt={liveBelt}
+          beltBindings={settings.controls}
           config={hubInitialSnapshot.players[playerId]!.config}
           disabled={(modalDisabled && !optionalBookOverlap) || pickerOpen}
           economy={economy}
@@ -1029,17 +1034,26 @@ export default function HubScene({
           forceModalHudSettled={optionalBookOverlap}
           inventoryEnabled={!gameplayHudHidden}
           menuKeyCode={settings.controls.openMenu}
+          mode="hub"
           memorial={memorial}
           modAssets={modAssets}
           modContent={modContent}
           nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
+          onBeltActivate={(slot, pointer) => {
+            onHubAction({
+              aim: inputRef.current?.secondaryAim(pointer) ?? null,
+              slot,
+              type: 'activate-belt-slot',
+            })
+          }}
           onOpenSkills={onOpenSkills}
           onSurfaceChange={setHubUiSurface}
           onUnassignBeltEntry={onUnassignQuickbarSkill}
           overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
+          secondaryPlayerState={secondaryPlayerState}
           skillsKeyCode={settings.controls.openSkills}
           region={currentRegion}
           skorchaDismissalIndex={skorchaInteraction?.dismissalIndex ?? 0}

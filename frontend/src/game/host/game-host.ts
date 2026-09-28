@@ -12,7 +12,7 @@ import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS } from '../core-kernels/native
 import type { PlayerCharacterConfig, PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { PLAYER_CHARACTER_INPUT_ACCELERATION, PLAYER_CHARACTER_MOVEMENT_LANE_CAP, PLAYER_CHARACTER_MOVEMENT_RETENTION, PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import type { DetachedGameSimulationPlayer, GameSimulationState, PlayerId } from '../core-server/game-simulation.ts'
-import { GAME_FIXED_TICK_SECONDS, GAME_TICK_RATE, addPlayerCharacter, applyGameSimulationHubAction, applyGameSimulationTutorialAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, completedGameSimulationCollegeIntroPlayerIds, confirmGameSimulationLoadout, continueGameSimulationOver, createGameSimulation, declineGameSimulationTutorial, detachGameSimulationPlayer, enterBoneyardWorld, getPlayerCharacter, getPlayerEconomy, getPlayerProgression, grantGameSimulationPlayerExperience, projectDetachedGameSimulationPlayer, reconcileGameSimulationPlayerModPackages, rejoinGameSimulationPlayer, removePlayerCharacter, rerollDetachedGameSimulationPlayerSkill, rerollGameSimulationPlayerSkill, returnGameSimulationToHub, saveDetachedGameSimulationPlayerSkill, saveGameSimulationPlayerSkill, selectDetachedGameSimulationPlayerSkill, selectGameSimulationPlayerConcentration, selectGameSimulationPlayerConcentrationSlot, selectGameSimulationPlayerPrimarySkill, selectGameSimulationPlayerSkill, stepGameSimulationTick, synchronizeDetachedGameSimulationPlayer } from '../core-server/game-simulation.ts'
+import { GAME_FIXED_TICK_SECONDS, GAME_TICK_RATE, addPlayerCharacter, applyGameSimulationHubAction, applyGameSimulationTutorialAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, completedGameSimulationCollegeIntroPlayerIds, confirmGameSimulationLoadout, continueGameSimulationOver, createGameSimulation, declineGameSimulationTutorial, detachGameSimulationPlayer, enterBoneyardWorld, getPlayerBelt, getPlayerCharacter, getPlayerEconomy, getPlayerProgression, grantGameSimulationPlayerExperience, projectDetachedGameSimulationPlayer, reconcileGameSimulationPlayerModPackages, rejoinGameSimulationPlayer, removePlayerCharacter, rerollDetachedGameSimulationPlayerSkill, rerollGameSimulationPlayerSkill, returnGameSimulationToHub, saveDetachedGameSimulationPlayerSkill, saveGameSimulationPlayerSkill, selectDetachedGameSimulationPlayerSkill, selectGameSimulationPlayerConcentration, selectGameSimulationPlayerConcentrationSlot, selectGameSimulationPlayerPrimarySkill, selectGameSimulationPlayerSkill, stepGameSimulationTick, synchronizeDetachedGameSimulationPlayer } from '../core-server/game-simulation.ts'
 import { gameplayResumeGraceReasonForPauseSource } from '../gameplay-resume-grace.ts'
 import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
 import type { LuaConsoleObject } from '../protocol/codecs/lua.ts'
@@ -2436,6 +2436,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const modScope = modRuntimeScopeForPlayer(client.playerId)
         const modHost = modScope?.runtime ?? privateModHost
         const stateBeforeAction = stateForPlayer(client.playerId)
+        const beltSkillActivation = message.action.type === 'activate-belt-slot'
+          && getPlayerBelt(stateBeforeAction, client.playerId)[message.action.slot]?.kind === 'skill'
         const applied = applyGameSimulationHubAction(
           stateBeforeAction,
           client.playerId,
@@ -2461,7 +2463,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        if (accepted) scheduleSaveCheckpointForClient(client, 'hub-action')
+        if (accepted && !beltSkillActivation) scheduleSaveCheckpointForClient(client, 'hub-action')
         return
       }
       if (message.type === 'client-player-card-request') {
@@ -7951,7 +7953,8 @@ function pauseAllowsInventoryAction(
   return pause.ownerPlayerId === playerId
     && pause.source === 'inventory'
     && (
-      action.type === 'consume'
+      action.type === 'activate-belt-slot'
+      || action.type === 'consume'
       || action.type === 'bind-belt-item'
       || action.type === 'dye'
       || action.type === 'equip'

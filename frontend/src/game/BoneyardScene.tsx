@@ -253,6 +253,9 @@ export default function BoneyardScene({
     boneyardInitialSnapshot.players[playerId]!.economy,
   )
   const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
+  const [secondaryPlayerState, setSecondaryPlayerState] = useState(() => (
+    boneyardInitialSnapshot.secondaryAbilities.players[playerId]
+  ))
   const economyRef = useRef(economy)
   economyRef.current = economy
   const initialPlayerPosition = boneyardInitialSnapshot.players[playerId]!.position
@@ -504,6 +507,7 @@ export default function BoneyardScene({
       synchronizer.update(snapshot)
       const player = snapshot.players[playerId]
       if (player) {
+        setSecondaryPlayerState(snapshot.secondaryAbilities.players[playerId])
         setLiveBelt((current) => nativePlayerBeltsEqual(current, player.belt)
           ? current
           : player.belt)
@@ -1154,6 +1158,7 @@ export default function BoneyardScene({
             <HubInventoryUi
               audio={audio}
               belt={liveBelt}
+              beltBindings={settings.controls}
               config={boneyardInitialSnapshot.players[playerId]!.config}
               disabled={(modalDisabled && !optionalBookOverlap)
                 || tutorialAccess?.inventory === false
@@ -1163,15 +1168,24 @@ export default function BoneyardScene({
               inventoryKeyCode={settings.controls.openInventory}
               forceModalHudSettled={optionalBookOverlap}
               menuKeyCode={settings.controls.openMenu}
+              mode="run"
               modAssets={modAssets}
               nativeUiStageStyle={nativeUiStageStyle}
               onAction={onHubAction}
+              onBeltActivate={(slot, pointer) => {
+                onHubAction({
+                  aim: inputRef.current?.secondaryAim(pointer) ?? null,
+                  slot,
+                  type: 'activate-belt-slot',
+                })
+              }}
               onOpenSkills={onOpenSkills}
               onSurfaceChange={setInventorySurface}
               onUnassignBeltEntry={onUnassignQuickbarSkill}
               overlayRoot={sceneRef}
               playerPosition={inventoryPlayerPosition}
               progression={progression}
+              secondaryPlayerState={secondaryPlayerState}
               skillsKeyCode={settings.controls.openSkills}
               region="courtyard"
               surface={inventorySurface}

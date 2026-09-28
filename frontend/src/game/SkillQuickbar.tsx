@@ -30,8 +30,8 @@ import {
 import {
   layoutNativeQuickbarBinding,
   nativeCooldownSectorPath,
+  nativeBeltSkillAvailability,
   nativeSkillQuickbarIconAlpha,
-  nativeSkillQuickbarCooldownPresentation,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
 import { mobileQuickbarBankLayout, mobileQuickbarSlotPlacement } from './mobile-quickbar-layout.ts'
@@ -203,25 +203,15 @@ function SkillQuickbarSlot({
   const item = entry === null || entry.kind === 'skill'
     ? null
     : potion?.item ?? nativeBeltEntryItem(entry, economy)
-  const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
   const concentration = skillId !== null && nativeSkillCategory(skillId) === 3
-  const combatDisabled = mode === 'hub' && secondary
-  const manaCost = secondary && skillId !== null
-    ? secondaryManaCosts.find(([candidate]) => candidate === skillId)?.[1] ?? 0
-    : 0
-  const insufficientMana = secondary
-    && currentMana < manaCost
-  const unavailable = combatDisabled || insufficientMana
-  const { capacity, remaining } = !secondary
-    ? { capacity: 0, remaining: 0 }
-    : nativeSkillQuickbarCooldownPresentation(
-        playerState?.cooldownTicksBySkill[skillId] ?? 0,
-        playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
-        playerState?.globalCooldownTicks ?? 0,
-      )
-  const iconAlpha = nativeSkillQuickbarIconAlpha({
-    cooldown: remaining > 0,
-    unavailable,
+  const {
+    capacity, combatDisabled, iconAlpha, insufficientMana, manaCost, remaining, secondary,
+  } = nativeBeltSkillAvailability({
+    currentMana,
+    mode,
+    playerState,
+    secondaryManaCosts,
+    skillId,
   })
   const bindingLabel = gameBindingLabel(bindingCode)
   const input = bindingCode.startsWith('Mouse')
@@ -275,7 +265,7 @@ function SkillQuickbarSlot({
       data-active={active}
       data-icon-alpha={skill === undefined ? undefined : iconAlpha}
       data-mana-cost={secondary ? manaCost : undefined}
-      data-unavailable={unavailable || undefined}
+      data-unavailable={combatDisabled || insufficientMana || undefined}
       data-controller-selected={controllerSelected || undefined}
       data-mobile-ui-custom={mobileUi.customized || undefined}
       data-mobile-ui-element={mobileUiId}
