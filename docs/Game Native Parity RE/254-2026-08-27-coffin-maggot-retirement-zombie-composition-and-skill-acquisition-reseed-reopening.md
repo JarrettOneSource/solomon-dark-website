@@ -965,3 +965,221 @@ Publication requires the current rebased candidate's complete Mac
 while holding the campaign publication lock. The campaign outcome records the
 final commit/gate/cleanup receipt separately; this pre-publication measurement
 does not claim deployment.
+
+## 2026-09-28 — Report 09 later Coffin crowd and engagement reopening
+
+The September 23 “Laggy Save after Coffins” attachment is byte-identical to
+the separately archived Cold Aura save (SHA-256
+`d39a80ccae1d5844d4db483368f547b18e78b1c51cf9001d20fb24e35b506e2b`);
+it adds a description, not a new saved state. The September 26 follow-up is
+distinct: ZIP SHA-256
+`150f045c74e9237b7c0fdca7c2703ca3101ed4cb71639e75281dd098a184b3a4`,
+schema-42 browser continuation SHA-256
+`a9e0760fa197fe11d91f99449faa540d716ae8cfffebe79302a6a51d04b9e546`.
+It restores at tick 368047, level 36, wave ordinal 44, with 223 ordinary
+enemies (six Coffins, 142 Skeletons, 37 Zombies, 31 Mages, six Imps and one
+Portal), 304 Maggots and 129 death effects. The reporter describes many Mice
+and crashes mostly when engaging the horde; this save does not capture an
+actual crash frame. It is also the related but nonidentical evidence used in
+Report 53's Pike audit.
+
+On the unchanged runtime preceding this reopening, low-load Windows Chrome
+153 with Intel Direct3D11 rendered this save at 42.0 FPS for 20 seconds while
+the private host advanced at approximately 100 ticks/s; moving only the
+player/camera far from the crowd still gave 44.3 FPS with zero visible
+Maggots. A diagnostic copy with all live enemy/Maggot/effect actors removed
+and the wave director stopped held 60.0 FPS and 100 ticks/s. With unrelated
+WSL processes active, the same original/forced-37-Pike-latch cases measured
+24.2/25.6 FPS; a low-load 37-latch held-cast case measured 39.1 FPS. Those
+journeys had empty page, console, request, response, wire and host error
+arrays and no crash. The hardware measurements establish a population-related
+browser frame deficit, but deleting all actors removed host and client work
+together; it does not by itself assign a single owner. The prior September
+21/22 Coffin terminal-burst closure and the historical delayed-snapshot
+question remain separate evidence, not an automatic regression claim.
+
+System boundary for this investigation: **complete crowded Boneyard authority
+and browser presentation at native population**, from Coffin construction and
+Maggot birth/admission/retirement through ordinary enemies, projectile/death
+children, snapshot transport/interpolation, retained enemy/Maggot views,
+Region lights, painter submission, viewport entry/exit, pause, save/rejoin,
+run replacement and teardown. The already extracted native Coffin/Maggot
+rules and authored visual banks above remain authoritative; no count cap,
+combat-cadence change or invisible-child retirement is permitted.
+
+| Member / branch | Investigation disposition | Discriminating evidence needed |
+| --- | --- | --- |
+| Coffin phases and four Maggot styles; emerging/inactive/active/dying children | verified-already-at-parity provisionally | Prior exact lifecycle tests and the restored 304-child save; any performance change must preserve counts, RNG, death and parent invalidation. |
+| Host 100-Hz simulation, collision/grid, navigation and snapshot projection | unresolved causal owner | Pure tick profile distributes CPU among Maggots, grid, collision, targeting and navigation; compare a frozen host with identical browser state before a host optimization. |
+| Retained Maggot view and full-art visibility gate | verified-already-at-parity provisionally | Existing cull retains every snapshot; zero visible Maggots in the far-camera run still leaves the FPS deficit, so culling only these children is not an evidenced fix. |
+| Ordinary enemy bodies, underlays, attachments and auxiliary effects | unresolved causal owner | `NativeEnemyViews.update` builds/updates every retained view with no per-enemy visibility gate. A same-state render-submission toggle must measure its cost before changing ownership. |
+| Death effects, projectiles, world lights, painter rows and static scenery | unresolved causal owner | Existing per-family/painter contracts must be separated from ordinary-enemy submission and retained update work. |
+| Complete wire samples, interpolation, save/rejoin, pause and run teardown | verified-already-at-parity provisionally | Browser replay and prior lifecycle tests remain clean; diagnostic controls must not reduce replicated population. |
+| Report 53 Pike constraint and unrelated skill/tooltips | out-of-system | Forced 37 latches did not create the crowd deficit or crash; separate owners retain their own contracts. |
+
+The first causal pass is an A/B/A browser probe on the same level-36 save:
+retain all host actors, Maggots and snapshots while temporarily suppressing
+only `NativeEnemyViews`/`NativeMaggotViews` Pixi submission, then restore it.
+If FPS recovers, inspect complete transformed enemy/underlay bounds before a
+real visibility change; if it does not, isolate per-frame view updates and
+then freeze authority with the same client state. Diagnostic toggles and
+extracted saves remain task-private and will be removed. No product code or
+new completion reaction is justified at this checkpoint.
+
+### Same-state browser probe before a product edit
+
+A task-only WSL build exposed a browser switch that left the authority,
+snapshots, retained views, lighting and painter updates live while suppressing
+enemy or Maggot Pixi draw submission. On Windows Chrome 153 / Intel UHD 750
+Direct3D11, one continuous far-camera replay under unrelated WSL load near
+nine measured 26.62 FPS with normal drawing, 34.89 with ordinary-enemy draw
+hidden, 29.70 with only Maggot draw hidden, 35.68 with both hidden, and 27.51
+after restoration. All five stages retained roughly 224–228 ordinary enemies
+and 332–449 Maggots; visible Maggots remained zero, and browser/wire/host
+error arrays were empty. A separately restored empty, non-spawning control
+under the same load held 100 host ticks/s and 51.63 FPS. Thus shared load
+depresses the platform baseline, but ordinary-enemy draw submission has a
+measurable additional cost. The result does not yet quantify view-update,
+lighting/painter, or transport cost.
+
+A second task-only build used the installed PixiJS 8.19.0 `Culler.shared.cull`
+with transformed bounds for enemy bodies, separate underlays and Heartmonger
+tendrils; it left Maggot views under their existing complete-art gate. In an
+A/B/A far-camera replay, Pixi culled 213/225 then 180/228 enemy body views.
+The high-load stages measured 24.92 FPS normal, 30.30 with culling, 39.07
+with all enemy draw hidden, 30.89 restored, and 30.99 with culling again;
+errors were empty. Official PixiJS v8 [culling documentation](https://pixijs.com/8.x/guides/migrations/v8)
+says `cullable` alone is not automatic, and the installed API probe confirmed
+that calling `Culler.shared.cull` changes a moved container's `culled` state.
+This experiment proves that complete transformed bounds can suppress many
+off-camera views, but culling alone did not recover the full draw-suppressed
+frame rate under this load. It remains disposable instrumentation, not a
+published implementation or a blanket visibility rule.
+
+The next task-only upper-bound probe skipped `NativeEnemyView.update` for views
+that Pixi had already culled, while keeping the actors and snapshots live.
+This is deliberately **not** a shippable rule: it can leave event-origin,
+underlay, animation and diagnostic state stale until re-entry. In a low-load
+far-camera Windows run with host progress near 100 Hz, the active-stage FPS
+sequence was 43.2 normal, 50.4 with culling alone, 56.9 with culling plus
+the unsafe update skip, and 48.9 after restoring updates. Enemy plan calls
+fell from roughly 223 to 26 per frame and `NativeEnemyViews.update` fell from
+3.11 to 0.47 ms/frame; page, wire and host errors were empty. This proves
+off-camera plan/sprite mutation is another real cost, not that stale-view
+skipping preserves native presentation.
+
+The reporter's engagement condition requires a near-crowd control. A
+diagnostic copy of the same save increased only the existing Magic Shield
+capacity/absorb amount to keep the player alive; actor populations, wave
+program, equipment, movement input and spell authoring were unchanged. In
+the built Windows browser, all five stages stayed active with 224–230
+ordinary enemies and 359–484 Maggots. Normal, Pixi-cull, cull-plus-unsafe-skip,
+cull-restored and normal-restored measured 36.2, 37.0, 37.1, 35.3 and 33.4
+FPS. Only 57 then 45 enemy views were culled in the first two treated stages,
+while visible Maggots rose from zero to 19; host progression stayed near
+95–102 Hz. Errors were empty. The far-camera optimization therefore cannot
+by itself resolve the **visible** engagement slowdown or the unobserved
+historical crash. No permanent culler or skip path is authorized by these
+results alone. The investigation now turns to visible actor composition,
+Pixi/GPU work, population growth and browser/host memory over a longer
+engagement replay.
+
+### September 28: reproduced authority crash and Pike-to-spawn chain
+
+The longer Windows Chrome 153 / Intel UHD 750 Direct3D11 engagement replay
+reproduced a real GameHost exit. A Portal-ejected Imp reached
+`resolveNativeBoneyardSpawnPosition`, exhausted every DIRECT candidate and
+threw; the browser then received WebSocket 1011. This was neither a browser
+process crash nor an out-of-memory event. A second, instrumented replay
+reproduced it at tick 369550 with Imp radius `9.19254409847781` and raw
+point `(3098.316162109375, 2105.708740234375)`. The unmodified Portal
+parent was at `(3140.933349609375, 2097.578857421875)`.
+
+Task-private diagnostic logging found the causal predecessor: the living
+player became collision-invalid at tick 369313 and stayed invalid for more
+than 200 ticks. Its final root `(1208.54052734375, 768.6746215820312)`
+overlaps `scenery:object-82` at the required 25-unit body radius. A Pike
+Skeleton's retained pin root exactly equals that invalid player root. The
+stock-derived `stepLatchedSkeleton` writes its 103-unit target root straight
+to `work.playerPositions`; `stepBoneyardWorldTick` commits this after the
+ordinary collision solver without a world check. That move can embed the
+player inside scenery. The spawn-domain route correctly rejects the invalid
+destination for *every* otherwise safe Imp candidate, so finite spawn
+placement throws and the host exits. At the captured fatal state the Imp raw
+point is itself collision-valid; a route to the combat-bounds center and to
+a player root projected 21.03 units back into free space both exist. The
+Portal child and ring policy are not the primary defect.
+
+The earlier Report 53 forced-latch runs proved that a Pike latch alone does
+not always crash; they did not exercise a pin against scenery. This replay
+establishes the missing conjunction without reclassifying the reporter's
+exact spear occurrence as captured. Native `0x00484B90` writes the retained
+Pike root without collision; the Website's authoritative player and spawn
+safety contract requires collision-valid roots. Preserve the native target
+calculation in open space, then use the existing swept Boneyard movement
+resolver only when the Pike proposal is obstructed. The store must publish
+the accepted root consistently to player targets, the world-position handoff
+and the Pike latch presentation. The shared Portal/spawn policy, enemy count,
+damage, timings and RNG remain unchanged.
+
+| Member | Disposition for this correction | Acceptance |
+| --- | --- | --- |
+| Native Pike marker, 103-scale distance, latch/release | verified-already-at-parity | Open-space roots and marker/damage cadence stay exact. |
+| Pike target root to world placement | Website safety correction | Obstructed target clips at scenery; no player root overlaps static collision. |
+| Store target, handoff and retained Pike point | coordinated correction | All three observe the same accepted point and survive subsequent ticks. |
+| Player movement and knockback solvers | verified-already-at-parity provisionally | Existing collision and contact tests remain unchanged. |
+| Portal Imp ejection and shared spawn reachability | verified-already-at-parity provisionally | Original child geometry remains; an engaged save no longer poisons route admission. |
+| Crowded renderer/host FPS | unresolved separate owner | Re-profile native population after the crash repair; no actor capping or unsafe view skip. |
+
+Implementation boundary: `enemies/model.ts` declares one optional world-owned
+Pike placement callback, `enemies/skeleton-body.ts` applies it before all
+three state writes, and `boneyard-world.ts` supplies the existing world
+movement resolver. The world also repairs a living, static-collision-invalid
+root before enemy spawn admission, so an already affected saved state can
+continue. It does not alter valid player roots or dead/spectator presentation.
+A focused world regression must fail before the change
+with a Pike pull into a rectangle and pass after it; pure Pike/golden tests
+must retain their open-space roots. Then replay the submitted save on Windows,
+check collision-valid player roots, the Portal child, zero host/browser
+errors and unchanged actor populations. The crowd FPS deficit needs its own
+measured resolution before this supplemental report is complete.
+
+### Crowded render-cost boundary after the fatal fix
+
+The task-only Windows browser measurements separate the acute spawn failure
+from a steady render budget. With the same level-36 save and the existing
+Magic Shield amount raised only to keep the actor active, headed Chrome 153
+at 1600×900/full quality measured about 36 FPS on Intel UHD 750/D3D11 and
+48–49 FPS on AMD RX 9070 XT/Vulkan. Both used the same built Website, native
+actor population and 100-Hz host. The `Digit2` control in this save is the
+third belt slot (Stoneskin); the earlier diagnostic notes calling it Ring of
+Fire were incorrect. The submitted save and product rules were not edited.
+
+A reversible browser draw-submission A/B/A on AMD held the authority and
+retained actor views live: about 490 WebGL draws/frame and 49 FPS normally,
+about 171 draws/frame and 57 FPS with ordinary enemy bodies and underlays
+hidden, then about 505 draws/frame and 49 FPS restored. Splitting the two
+families found roughly 487 draws/frame with only underlays hidden versus
+185 draws/frame with only enemy bodies hidden. The pinned Pixi batch shader
+handled almost all draws, but the actual blend state changed about 472 times
+per frame among straight-alpha normal, straight-alpha additive and
+premultiplied normal. That sequence reflects per-actor stock art/painter
+membership; hiding, regrouping, or flattening those passes would visibly
+change overlapping actors and cannot be called a parity repair on these
+measurements alone. Off-camera Pixi culling recovered FPS in the far-camera
+control, but only about one FPS with the engaged near camera. An update skip
+for previously culled views raised far-camera FPS further but leaves event
+origins and re-entry state stale, so it remains discarded.
+
+Chrome tracing via the [official DevTools Tracing and IO APIs](https://chromedevtools.github.io/devtools-protocol/tot/Tracing/)
+measured a 9.6-ms-per-frame GPU readback/commit in the Intel run; the same
+headed mode retained the deficit, so it is not a headless-only effect.
+Reducing internal resolution to 75%/50% raised the Intel baseline only to
+about 41/45 FPS. The existing quality controls gave 39.2 FPS with complex
+shadows off and 39.8 with all lighting/shadow reductions together, compared
+with 35.8 FPS at full quality. Switching Chrome's ANGLE backend from the
+default Intel D3D11 device to AMD Vulkan needed no game change and measured
+the faster 48–49 FPS, still below 60. No safe visual/parity change from this
+probe has met a 60-FPS target; the remaining steady GPU-limited throughput is
+an explicit unresolved boundary. Product acceptance, publication and Discord
+completion reactions must not imply it was fixed.

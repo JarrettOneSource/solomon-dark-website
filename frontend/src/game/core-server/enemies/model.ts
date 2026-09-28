@@ -867,6 +867,11 @@ export interface BoneyardEnemyStoreStepContext {
   readonly retirementObserver?: BoneyardEnemyRetirementObserver
   readonly rollLootSeed?: (bound: NativeEnemyLootSeedBound) => number
   readonly resolveMovement: ResolveBoneyardEnemyMovement
+  readonly resolvePikePlayerPosition?: (
+    playerId: string,
+    currentPosition: Readonly<BoneyardPoint>,
+    requestedPosition: Readonly<BoneyardPoint>,
+  ) => Readonly<BoneyardPoint>
   readonly resolveSpawnPlacement?: ResolveBoneyardEnemySpawnPlacement
   readonly resolveSpawnIntents: (
     liveEnemyCount: number,

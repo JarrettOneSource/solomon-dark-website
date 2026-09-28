@@ -110,6 +110,75 @@ test('world commits sequential Pike constraints to the authoritative player root
   assert.ok(stepped.world.enemies.actors.every(actor => actor.brain.family === 'skeleton' && actor.brain.pike !== null))
 })
 
+test('Pike pull keeps the player and retained pin outside blocked scenery', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = []
+  let world = {
+    ...createBoneyardWorld(loaded),
+    arenaTransition: null, encounter: null, waves: null, lanternPosition: null,
+    collision: { circles: [], segments: [], polygons: [{ points: [
+      { x: 300, y: 300 }, { x: 350, y: 300 },
+      { x: 350, y: 350 }, { x: 300, y: 350 },
+    ] }] },
+  }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Pinned target',
+      element: 'fire' }, world),
+    position: { x: 400, y: 310 },
+  }
+  const spawned = stepBoneyardEnemyStore(world.enemies, {
+    tick: 0, players: {}, projectileWorldBlocked: () => false,
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETON', flags: ['FLAG_PIKE'], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1001,
+      position: { x: 250, y: 310 }, spawnTick: 0, waveOrdinal: 1,
+    }],
+  }).store
+  world = { ...world, enemies: { ...spawned, actors: spawned.actors.map(actor => {
+    if (actor.brain.family !== 'skeleton') throw new Error('expected Skeleton')
+    return { ...actor, targetPlayerId: 'player', nextMovementTick: 1000,
+      brain: { ...actor.brain, action: 'pike', phase: 'attack', markerEmitted: true,
+        pike: { playerId: 'player', position: player.position, distance: 103 } } }
+  }) } }
+
+  const stepped = stepWorld(world, { player }, {}, 1)
+  const pinned = stepped.players.player!.position
+  const skeleton = stepped.world.enemies.actors[0]!
+  if (skeleton.brain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.equal(canPlaceBoneyardBody(pinned, world.bounds, world.collision, PLAYER_CHARACTER_RADIUS), true)
+  assert.ok(pinned.x < player.position.x, 'the Pike still pulls toward its target')
+  assert.deepEqual(skeleton.brain.pike?.position, pinned)
+})
+
+test('an existing collision-invalid player root recovers before enemy spawn reachability', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = []
+  const world = {
+    ...createBoneyardWorld(loaded),
+    arenaTransition: null, encounter: null, waves: null, lanternPosition: null,
+    collision: { circles: [{ center: { x: 300, y: 300 }, radius: 20 }],
+      polygons: [], segments: [] },
+  }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Restored target',
+      element: 'fire' }, world),
+    position: { x: 343, y: 300 },
+  }
+  assert.equal(canPlaceBoneyardBody(player.position, world.bounds, world.collision, PLAYER_CHARACTER_RADIUS), false)
+
+  const stepped = stepWorld(world, { player }, {}, 1, [{
+    enemyToken: 'IMP', flags: [], id: 1, locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
+    position: { x: 100, y: 100 }, positionPolicy: 'direct',
+    spawnTick: 1, waveOrdinal: 1,
+  }])
+  assert.equal(canPlaceBoneyardBody(
+    stepped.players.player!.position, world.bounds, world.collision, PLAYER_CHARACTER_RADIUS,
+  ), true)
+  assert.equal(stepped.world.enemies.actors.length, 1)
+})
+
 test('emergency Potion admission counts the population after the source death', () => {
   // Native seed 2 hits the first precheck; seed 3 misses first and hits second.
   for (const [population, deaths, sharedSeed, expectedPotions] of [

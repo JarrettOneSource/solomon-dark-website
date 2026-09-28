@@ -57,10 +57,13 @@ export function stepLatchedSkeleton(
   if (distance >= Math.fround(pike.distance * 1.5)) return detachSkeletonPike(actor)
   // 0x00484B90 writes the retained target root without a collision query.
   const factor = distance === 0 ? 0 : Math.fround(pike.distance / distance)
-  const position = distance === pike.distance ? target.position : {
+  const requestedPosition = distance === pike.distance ? target.position : {
     x: Math.fround(actor.position.x + Math.fround(dx * factor)),
     y: Math.fround(actor.position.y + Math.fround(dy * factor)),
   }
+  const position = context.resolvePikePlayerPosition?.(
+    pike.playerId, target.position, requestedPosition,
+  ) ?? requestedPosition
   work.playerTargets[pike.playerId] = { ...target, position }
   work.playerPositions[pike.playerId] = position
   return { ...actor, brain: { ...brain, pike: { ...pike, position } } }

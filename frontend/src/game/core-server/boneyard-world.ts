@@ -17,7 +17,7 @@ import { nativeWebbedMovementScale } from '../core-kernels/native-webbed.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
 import { commitPlayerCharacterTick, createIdlePlayerCharacterInput, planPlayerCharacterTick, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_PHYSICS, PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
-import { boneyardSpawnPositionIsOffscreen, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, resolveBoneyardSpawnPosition, resolveNativeBoneyardSpawnPosition, touchingBoneyardGateLeaves, withBoneyardGateCollision } from './boneyard-collision.ts'
+import { boneyardBodyCollides, boneyardSpawnPositionIsOffscreen, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, resolveBoneyardSpawnPosition, resolveNativeBoneyardSpawnPosition, touchingBoneyardGateLeaves, withBoneyardGateCollision } from './boneyard-collision.ts'
 import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
@@ -173,6 +173,17 @@ export function stepBoneyardWorldTick(
       commitPlayerCharacterTick(player, plan, position),
     ]
   }))
+  for (const [playerId, player] of Object.entries(nextPlayers)) {
+    if (playerCombat[playerId]?.alive !== true
+      || playerCombat[playerId]?.collisionEnabled === false
+      || !boneyardBodyCollides(player.position, collision, PLAYER_CHARACTER_RADIUS)) continue
+    nextPlayers[playerId] = {
+      ...player,
+      position: resolveBoneyardSpawnPosition(
+        player.position, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      ),
+    }
+  }
   const collisionResolvedEnemies = hostileScenePaused
     ? world.enemies
     : commitBoneyardEnemyCollisionPositions(world.enemies, resolvedPositions)
@@ -452,6 +463,19 @@ export function stepBoneyardWorldTick(
       )
       enemyMotionGrid.update(moverIndex, dynamicBodies)
       return mover.position
+    },
+    resolvePikePlayerPosition: (_playerId, currentPosition, requestedPosition) => {
+      if (canPlaceBoneyardBody(
+        requestedPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      )) return requestedPosition
+      const safeStart = canPlaceBoneyardBody(
+        currentPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      ) ? currentPosition : resolveBoneyardSpawnPosition(
+        currentPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      )
+      return resolveBoneyardMovement(
+        safeStart, requestedPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      )
     },
     resolveSpawnPlacement: ({
       actorId: _actorId,
