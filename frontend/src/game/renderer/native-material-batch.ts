@@ -1,13 +1,15 @@
 import {
-  BatchGeometry, Batcher, BatcherPipe, Buffer, BufferUsage, DefaultBatcher, Shader,
-  compileHighShaderGlProgram, generateTextureBatchBitGl, getBatchSamplersUniformGroup,
+  Batch, BatchGeometry, Batcher, BatcherPipe, Buffer, BufferUsage, DefaultBatcher, Shader,
+  compileHighShaderGlProgram, generateTextureBatchBitGl, getAdjustedBlendModeBlend, getBatchSamplersUniformGroup,
   roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type BatchableSprite,
-  type GlBatchAdaptor, type Mesh, type Renderer, type Texture, type WebGLRenderer,
+  type BatchableElement, type Container, type GlBatchAdaptor, type InstructionSet,
+  type Mesh, type Renderer, type RenderOptions, type Texture, type WebGLRenderer,
 } from 'pixi.js'
 import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_UNIFORMS, usesNativeDiffuseColor } from './native-texture-color.ts'
 
 type NativeBatchMeshElement = Parameters<DefaultBatcher['packAttributes']>[0]
 type NativeBatchQuadElement = Parameters<DefaultBatcher['packQuadAttributes']>[0]
+type NativeBatchElement = NativeBatchMeshElement | NativeBatchQuadElement
 type NativeBatchOptions = ConstructorParameters<typeof DefaultBatcher>[0]
 export interface NativeBatchMaterial {
   readonly name: string
@@ -117,7 +119,7 @@ class NativeMaterialBatcher extends Batcher {
     const drawable = (element as BatchableMesh | BatchableGraphics).renderable
     const vertexColors = nativeVertexColors.get(drawable)
     const end = element.attributeOffset + element.attributeSize
-    const nativeTextureModeValue = nativeTextureMode(element.texture, drawable)
+    const nativeTextureModeValue = nativeTextureMode(element.texture, drawable) + this.blendFlag(element)
     for (let vertex = element.attributeOffset; vertex < end; vertex += 1) {
       const coordinate = vertex * 2
       const x = positions[coordinate]!
@@ -149,6 +151,7 @@ class NativeMaterialBatcher extends Batcher {
     const uvs = texture.uvs
     const textureIdAndRound = textureId << 16 | element.roundPixels & 0xffff
     const nativeTextureModeValue = nativeTextureMode(texture, (element as BatchableSprite | BatchableGraphics).renderable)
+      + this.blendFlag(element)
     float32View[index++] = transform.a * bounds.minX + transform.c * bounds.minY + transform.tx
     float32View[index++] = transform.d * bounds.minY + transform.b * bounds.minX + transform.ty
     float32View[index++] = uvs.x0
@@ -179,9 +182,150 @@ class NativeMaterialBatcher extends Batcher {
     float32View[index] = nativeTextureModeValue
   }
 
+  protected blendFlag(_element: BatchableElement): number { return 0 }
+
   override destroy(): void {
     this.shader?.destroy(true)
     super.destroy({ shader: true })
+  }
+}
+
+/** Opaque screen RGB is observable; alpha in every intermediate target still is. */
+class NativeOpaquePass {
+  enabled = false
+  readonly root: Container
+  private readonly renderer: WebGLRenderer
+
+  constructor(renderer: WebGLRenderer, root: Container) {
+    this.renderer = renderer
+    this.root = root
+  }
+
+  prerender({ container, target }: RenderOptions): void {
+    let belongsToRender = false
+    let alphaConsumer = false
+    for (let node: Container | null = this.root; node; node = node.parent) {
+      belongsToRender ||= node === container
+      alphaConsumer ||= consumesNativeAlpha(node)
+    }
+    if (!belongsToRender) return
+    const enabled = !alphaConsumer && target === this.renderer.view.renderTarget
+      && this.renderer.gl.getContextAttributes()?.alpha === false
+    if (enabled === this.enabled) return
+    this.enabled = enabled
+    if (this.root.renderGroup) this.root.renderGroup.structureDidChange = true
+  }
+
+  accepts(element: NativeBatchElement): boolean {
+    if (!this.enabled || !supportsNativeOpaqueBlend(element)) return false
+    let node: Container | null = (element as BatchableMesh | BatchableSprite | BatchableGraphics).renderable
+    while (node) {
+      if (consumesNativeAlpha(node)) return false
+      if (node === this.root) return true
+      node = node.parent
+    }
+    return false
+  }
+}
+
+function consumesNativeAlpha(node: Container): boolean {
+  return (node.effects?.length ?? 0) > 0 || node.renderGroup?.isCachedAsTexture === true
+}
+
+function supportsNativeOpaqueBlend(element: NativeBatchElement): boolean {
+  if (element.topology !== 'triangle-list') return false
+  const mode = element.blendMode
+  if (mode === 'normal' || mode === 'add') return true
+  // Explicit NPM factors on a PMA source apply alpha twice in the old draw.
+  // Keep that equation and strip/line primitive boundaries outside H1.
+  return element.texture.source.alphaMode === 'no-premultiply-alpha'
+    && (mode === 'normal-npm' || mode === 'add-npm')
+}
+
+class NativeOpaqueBatch extends Batch {
+  declare opaque: boolean
+}
+
+/** Own the batch records; never alter Pixi's global pool or a drawable's blend mode. */
+class NativeOpaqueMaterialBatcher extends NativeMaterialBatcher {
+  readonly pass: NativeOpaquePass
+  private readonly pending: NativeBatchElement[] = []
+
+  constructor(options: NativeBatchOptions, material: NativeBatchMaterial, pass: NativeOpaquePass) {
+    super(options, material)
+    this.pass = pass
+  }
+
+  override begin(): void {
+    for (const batch of this.batches) {
+      batch.textures.clear()
+      batch.elements.length = 0
+    }
+    this.indexSize = this.attributeSize = this.batchIndex = 0
+    this.pending.length = 0
+  }
+
+  override add(element: BatchableElement): void {
+    this.pending.push(element as NativeBatchElement)
+    element._indexStart = this.indexSize
+    element._attributeStart = this.attributeSize
+    element._batcher = this
+    this.indexSize += element.indexSize
+    this.attributeSize += element.attributeSize * this.vertexSize
+  }
+
+  override break(instructionSet: InstructionSet): void {
+    this.ensureAttributeBuffer(this.attributeSize)
+    this.ensureIndexBuffer(this.indexSize)
+    let batch: NativeOpaqueBatch | null = null
+    for (const element of this.pending) {
+      const source = element.texture.source
+      const opaque = this.pass.accepts(element)
+      const blendMode: Batch['blendMode'] = opaque ? 'normal' : getAdjustedBlendModeBlend(element.blendMode, source)
+      if (!batch || batch.blendMode !== blendMode || batch.opaque !== opaque
+        || batch.topology !== element.topology
+        || (batch.textures.ids[source.uid] == null && batch.textures.count >= this.maxTextures)) {
+        const action: Batch['action'] = batch ? 'renderBatch' : 'startBatch'
+        batch = (this.batches[this.batchIndex++] ??= new NativeOpaqueBatch()) as NativeOpaqueBatch
+        batch.action = action
+        batch.batcher = this
+        batch.blendMode = blendMode
+        batch.opaque = opaque
+        batch.topology = element.topology
+        batch.start = element._indexStart
+        batch.size = 0
+        batch.elements ??= []
+        instructionSet.add(batch)
+      }
+      let textureId = batch.textures.ids[source.uid]
+      if (textureId == null) {
+        textureId = batch.textures.count++
+        batch.textures.ids[source.uid] = textureId
+        batch.textures.textures[textureId] = source
+      }
+      element._textureId = textureId
+      element._batch = batch
+      batch.elements.push(element)
+      batch.size += element.indexSize
+      this.updateElement(element)
+      const vertexStart = element._attributeStart / this.vertexSize
+      if (element.packAsQuad) this.packQuadIndex(this.indexBuffer, element._indexStart, vertexStart)
+      else this.packIndex(element, this.indexBuffer, element._indexStart, vertexStart)
+    }
+    this.pending.length = 0
+  }
+
+  protected override blendFlag(element: BatchableElement): number {
+    if (!(element._batch as NativeOpaqueBatch).opaque) return 0
+    return element.blendMode === 'add' || element.blendMode === 'add-npm' ? 8 : 4
+  }
+
+  override destroy(): void {
+    if (!this.batches) return
+    for (const batch of this.batches) batch.destroy()
+    this.batchIndex = 0
+    this.pending.length = 0
+    super.destroy()
   }
 }
 
@@ -227,10 +371,14 @@ export function nativeTextureMode(texture: Texture, drawable: object): number {
   return (texture.source.alphaMode === 'no-premultiply-alpha' ? 0 : 1) + (usesNativeDiffuseColor(drawable) ? 2 : 0)
 }
 
-export function installNativeBatchMaterial(renderer: WebGLRenderer, material: NativeBatchMaterial): () => void {
+export function installNativeBatchMaterial(
+  renderer: WebGLRenderer, material: NativeBatchMaterial, opaqueRoot?: Container,
+): () => void {
   const pipe = renderer.renderPipes.batch
   const batchersByInstructionSet = pipe['_batchersByInstructionSet'] as Record<number, Record<string, Batcher>>
   const previous = pipe.buildStart
+  const opaquePass = opaqueRoot ? new NativeOpaquePass(renderer, opaqueRoot) : null
+  if (opaquePass) renderer.runners.prerender.add(opaquePass)
   for (const batchers of Object.values(batchersByInstructionSet)) {
     invalidateBatchRenderGroups(batchers.default)
   }
@@ -238,14 +386,19 @@ export function installNativeBatchMaterial(renderer: WebGLRenderer, material: Na
   pipe.buildStart = function buildNativeMaterialBatch(instructionSet): void {
     const batchers = batchersByInstructionSet[instructionSet.uid] ??= {}
     const current = batchers.default
-    if (!(current instanceof NativeMaterialBatcher) || current.material !== material) {
+    const pass = opaquePass?.root.renderGroup?.instructionSet === instructionSet ? opaquePass : null
+    const currentPass = current instanceof NativeOpaqueMaterialBatcher ? current.pass : null
+    if (!(current instanceof NativeMaterialBatcher) || current.material !== material || currentPass !== pass) {
       current?.destroy()
-      batchers.default = new NativeMaterialBatcher({ maxTextures: renderer.limits.maxBatchableTextures }, material)
+      const options = { maxTextures: renderer.limits.maxBatchableTextures }
+      batchers.default = pass ? new NativeOpaqueMaterialBatcher(options, material, pass)
+        : new NativeMaterialBatcher(options, material)
     }
     BatcherPipe.prototype.buildStart.call(this, instructionSet)
   }
   const lifetime = {
     destroy(): void {
+      if (opaquePass) renderer.runners.prerender.remove(opaquePass)
       for (const [uid, batchers] of Object.entries(batchersByInstructionSet)) {
         const current = batchers.default
         if (!(current instanceof NativeMaterialBatcher) || current.material !== material) continue

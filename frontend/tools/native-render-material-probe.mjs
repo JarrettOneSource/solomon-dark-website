@@ -335,7 +335,7 @@ function particleBlendSamples(app, target, retainedTextures) {
   return samples
 }
 
-async function restoreContext(app) {
+export async function restoreContext(app) {
   const extension = app.renderer.gl.getExtension('WEBGL_lose_context')
   if (!extension) throw new Error('WebGL context-loss test extension is unavailable')
   const lost = contextEvent(app.canvas, 'webglcontextlost')

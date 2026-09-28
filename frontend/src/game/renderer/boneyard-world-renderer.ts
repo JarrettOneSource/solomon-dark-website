@@ -130,10 +130,12 @@ export async function createBoneyardWorldRenderer(
     throw error
   }
   application.stop()
+  const world = new Container({ isRenderGroup: true, label: 'boneyard-world' })
   let arenaRenderPipeline: NativeArenaRenderPipeline
   try {
-    arenaRenderPipeline = installNativeArenaRenderPipeline(application.renderer)
+    arenaRenderPipeline = installNativeArenaRenderPipeline(application.renderer, world)
   } catch (error) {
+    world.destroy()
     application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)
     modTextures.destroy()
@@ -141,7 +143,6 @@ export async function createBoneyardWorldRenderer(
   }
 
   const document = editorDocument(options.boneyard)
-  const world = new Container({ isRenderGroup: true, label: 'boneyard-world' })
   world.sortableChildren = true
   application.stage.addChild(world)
   const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)

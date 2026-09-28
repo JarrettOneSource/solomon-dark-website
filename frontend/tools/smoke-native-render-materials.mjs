@@ -223,6 +223,85 @@ try {
         assert.deepEqual(row.pixel, row.phase === 'arena' ? [128, 86, 170, 255] : [128, 64, 192, 255])
       }
     }
+    const opaque = await page.evaluate(async () => {
+      const { inspectNativeOpaqueBatches } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueBatches()
+    })
+    console.log(JSON.stringify({ opaque }))
+    for (const name of ['first', 'updated', 'roundTrip']) {
+      assert.equal(opaque[name].candidateDraws, 1, `${name}: ordered normal/add NPM/PMA draws must share one opaque batch`)
+      assert.equal(opaque[name].candidateIndices, opaque[name].baselineIndices)
+      assert.ok(opaque[name].maximumDelta <= 2, JSON.stringify(opaque[name]))
+    }
+    assert.equal(opaque.target.changedChannels, 0, 'render-texture RGBA must remain byte-identical')
+    assert.equal(opaque.target.candidateDraws, opaque.target.baselineDraws)
+    const opaqueBoundaries = await page.evaluate(async () => {
+      const { inspectNativeOpaqueBoundaries } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueBoundaries()
+    })
+    console.log(JSON.stringify({ opaqueBoundaries }))
+    for (const row of opaqueBoundaries) {
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+      if (['transparent', 'child-cache', 'no-group', 'outside-root', 'foreign-layer'].includes(row.role)
+        || ['changed', 'retained'].includes(row.phase) && row.role !== 'context') {
+        assert.equal(row.changedChannels, 0, JSON.stringify(row))
+        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
+      } else assert.equal(row.candidateDraws, 1, JSON.stringify(row))
+    }
+    const opaqueTransport = await page.evaluate(async () => {
+      const { inspectNativeOpaqueTransport } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueTransport()
+    })
+    console.log(JSON.stringify({ opaqueTransport }))
+    for (const row of opaqueTransport) {
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+      if (row.role === 'texture-capacity') assert.equal(row.candidateDraws, Math.ceil(40 / row.maxTextures))
+      if (row.role === 'gradient' || row.role === 'diffuse') assert.equal(row.candidateDraws, 1)
+      if (row.role === 'empty') assert.equal(row.candidateDraws, 0)
+      if (row.role === 'topology' || row.role === 'mixed-topology' || row.role === 'explicit-npm-pma') {
+        assert.equal(row.changedChannels, 0, JSON.stringify(row))
+        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
+      }
+    }
+    const opaqueRebuilds = await page.evaluate(async () => {
+      const { inspectNativeOpaqueRebuilds } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueRebuilds()
+    })
+    console.log(JSON.stringify({ opaqueRebuilds }))
+    for (const [phase, row] of Object.entries(opaqueRebuilds)) {
+      assert.equal(row.candidateDraws, 1, `${phase}: existing texture slots must remain usable at capacity`)
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.equal(row.memberCount * 6, row.candidateIndices, `${phase}: retained records must not keep retired drawables`)
+      assert.equal(row.onlyLiveMembers, true, JSON.stringify(row))
+      assert.equal(row.maximumTextures, row.expectedTextures, JSON.stringify(row))
+      assert.ok(row.maximumTextures <= row.limit, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+    }
+    const opaqueOwnership = await page.evaluate(async () => {
+      const { inspectNativeOpaqueInstructionOwnership } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueInstructionOwnership()
+    })
+    console.log(JSON.stringify({ opaqueOwnership }))
+    assert.equal(opaqueOwnership.candidateDraws, 3, 'foreign normal-PMA elements retain a separate ordinary batch')
+    assert.equal(opaqueOwnership.candidateIndices, opaqueOwnership.baselineIndices)
+    assert.deepEqual(opaqueOwnership.eligibility, [true, false, true])
+    assert.equal(opaqueOwnership.originalRetired, true, 'reinstallation retires the old material owner')
+    assert.equal(opaqueOwnership.rebuilds, 0, 'unchanged and unrelated renders must preserve cached instructions')
+    assert.equal(opaqueOwnership.retained.changedChannels, 0)
+    assert.equal(opaqueOwnership.afterUnrelated.changedChannels, 0)
+    assert.ok(opaqueOwnership.maximumDelta <= 2)
+    const opaqueRetirement = await page.evaluate(async () => {
+      const { inspectNativeOpaqueRetirement } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueRetirement()
+    })
+    assert.deepEqual(opaqueRetirement, {
+      activeDraws: 1, afterRootDraws: 0, afterRetirementDraws: 0,
+      textureAlive: true, batcherRetired: true, hookRemoved: true,
+      changedPixels: 0, changedChannels: 0, maximumDelta: 0,
+    })
+    console.log(JSON.stringify({ opaqueRetirement }))
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
   }
   if (collectCoverage) {

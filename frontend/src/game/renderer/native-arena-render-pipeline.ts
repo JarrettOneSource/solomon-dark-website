@@ -12,6 +12,7 @@ import {
   localUniformBitGl,
   roundPixelsBitGl,
   textureBitGl,
+  type Container,
   type GlGraphicsAdaptor,
   type Mesh,
   type MeshPipe,
@@ -31,13 +32,15 @@ import {
 export const NATIVE_ARENA_SATURATION = 0.65
 
 const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
+  float nativeMaterialTextureMode = nativeTextureModeValue > 3.5
+    ? mod(floor(nativeTextureModeValue + 0.5), 4.0) : nativeTextureModeValue;
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
-  vec3 sampledTextureColor = mod(nativeTextureModeValue, 2.0) > 0.5 && textureAlpha > 0.0
+  vec3 sampledTextureColor = mod(nativeMaterialTextureMode, 2.0) > 0.5 && textureAlpha > 0.0
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
   vec3 vertexColor = vColor.rgb;
-  vec3 textureColor = (uIgnoreTextureColor > 0.5 || nativeTextureModeValue > 1.5) ? vec3(1.0) : sampledTextureColor;
+  vec3 textureColor = (uIgnoreTextureColor > 0.5 || nativeMaterialTextureMode > 1.5) ? vec3(1.0) : sampledTextureColor;
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;
   float vertexGrey = (vertexColor.r + vertexColor.g + vertexColor.b) / 3.0;
   float grey = textureGrey * vertexGrey;
@@ -45,9 +48,12 @@ const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
   vec3 nativeColor = mix(vec3(grey), realColor, 0.65);
   float finalAlpha = textureAlpha * vertexAlpha;
   finalColor = vec4(
-    mod(nativeTextureModeValue, 2.0) > 0.5 ? nativeColor * finalAlpha : nativeColor,
+    mod(nativeMaterialTextureMode, 2.0) > 0.5 ? nativeColor * finalAlpha : nativeColor,
     finalAlpha
   );
+  if (nativeTextureModeValue > 3.5) {
+    finalColor = vec4(nativeColor * finalAlpha, nativeTextureModeValue > 7.5 ? 0.0 : finalAlpha);
+  }
 `
 
 const NATIVE_ARENA_SATURATION_BIT_GL = {
@@ -89,6 +95,7 @@ export interface NativeArenaRenderPipeline {
 
 export function installNativeArenaRenderPipeline(
   renderer: Renderer,
+  opaqueRoot?: Container,
 ): NativeArenaRenderPipeline {
   const nativeRenderer = requireNativeWebGlRenderer(renderer)
   const graphicsAdaptor = nativeRenderer.renderPipes.graphics['_adaptor'] as GlGraphicsAdaptor
@@ -120,7 +127,7 @@ export function installNativeArenaRenderPipeline(
     GlMeshAdaptor.prototype.execute.call(this, meshPipe, mesh)
   }
 
-  const restoreBatchMaterial = installNativeBatchMaterial(nativeRenderer, NATIVE_ARENA_SATURATION_BIT_GL)
+  const restoreBatchMaterial = installNativeBatchMaterial(nativeRenderer, NATIVE_ARENA_SATURATION_BIT_GL, opaqueRoot)
   const originalParticleExecute = particleAdaptor.execute
   particleAdaptor.execute = function executeNativeArenaParticles(pipe, container): void {
     if (container.shader) {

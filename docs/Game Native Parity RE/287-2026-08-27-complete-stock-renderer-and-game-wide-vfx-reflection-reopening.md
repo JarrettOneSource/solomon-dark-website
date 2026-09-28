@@ -2231,3 +2231,167 @@ native additive Silk versus ordinary FadeLine fragments. The complete M2 gate
 passed at 21:52:34 UTC on `abda5c261f2f7d3bfb412877378a030745f68e35`, with 100%
 renderer coverage and mutation score. See ledger 091 for precise membership,
 negative controls, acceptance results and the preserved Webbed/RNG boundaries.
+
+### 2026-09-28: Report09 opaque-crowd submission investigation
+
+This investigation resumes clean Website `9ed7c502af981a451a8652ba650580f11638c9fc`
+in Fleet task `ed47c78b`, session `vgbxobkd`. It does not close the crowd-FPS
+complaint or reuse the already-published Pike/Portal crash fix as FPS evidence.
+All new execution is M5 Pro SSD-only. Retained Windows observations remain
+historical evidence and are not a permitted execution route.
+
+The retained M5 Chrome153/Metal census at 1600x900, DPR1 and default visuals
+contains 538.27 draws/frame, 516.27 blend-caused breaks, and 520.27 Arena batches.
+Of these draws, 535.27 reach the opaque final framebuffer; three reach two
+intermediate targets. GPU time is 1.600-1.758 ms/frame. The capped baseline
+already reaches 60 FPS, while uncapped windows reach 110.38-113.62 FPS. These
+measurements justify investigating submission headroom, not claiming an FPS
+improvement or extrapolating to AMD/Intel. The long-lived crowd uses the original
+population and default settings with only the existing Magic Shield amount
+raised for survival, as disclosed in the retained probe. No native effect is hidden.
+
+#### Contract and pre-implementation dispositions
+
+Native reset `0x0043FB60` never enables separate-alpha blending. Selector zero
+computes RGB `Cs*As + Cd*(1-As)` and alpha `As*As + Ad*(1-As)`; selector one uses
+RGB `Cs*As + Cd` and alpha `As*As + Ad`. The existing PMA adapter preserves those
+RGB/alpha equations. H1 would emit premultiplied RGB and choose output alpha
+`As` for normal or zero for additive under one normal PMA RGB blend state.
+This is real-number RGB equivalence, not an established integer-pixel bound.
+Changing final alpha is acceptable only where alpha is genuinely unobserved.
+
+| Membership | Current disposition | Required proof before a product change |
+| --- | --- | --- |
+| Final opaque Boneyard normal/add sprites, quads and batchable meshes, NPM and PMA | Candidate only | Same-frame pixels, identical painter order and measured submission benefit |
+| Straight vertex colors, group opacity, diffuse-only texture mode, registered mesh colors | Preserve exactly | Existing low texture-mode bits and actual GPU gradient/overlap cases |
+| Region light target, compact masks, player diffuse capture and every render texture | Excluded | Existing native RGBA equations remain byte-identical |
+| Filters, alpha masks and cached render-group targets | Excluded | No cached instruction crosses an alpha-consuming target boundary |
+| Multiply and other non-normal/add states | Excluded | Original state transition and draw order remain intact |
+| Texture/sampler capacity, topology, standalone meshes, particles and custom surfaces | Preserve existing boundaries | No texture remapping, primitive order or shader-owner regression |
+| Hub, Hall, tutorial and CSS-composited UI renderers | Out of H1 scope | Existing material/alpha behavior unchanged |
+| Retained transforms, context restoration, install/uninstall and batch lifetime | Preserve exactly | Existing GPU lifecycle and complete quality gate |
+
+The first task-only falsifier changes blend arithmetic without merging draws,
+uses synchronous readback at an identical game tick, checks baseline stability,
+records differing pixels/channels and maximum deltas, and restores every changed
+buffer, shader and blend mode. Any claimed rounding bound must come from those
+measurements, including translucent overlap, rather than an assumed 1/255 limit.
+The counterfactual census estimate is not a measured merged-render result.
+No runtime implementation or acceptance is recorded at this checkpoint.
+
+The corrected same-tick R3/R4 falsifiers preserve retained vertex updates as
+well as integer flag decoding. R4 actually reduces final-stage GL draws from
+516 to 25, with the same 28,470 submitted indices/vertices. Its 497 eligible
+Arena batches become six; texture capacity, topology and painter-order breaks
+remain. Merging itself adds zero pixel differences. Against original arithmetic,
+three pixels/channels differ by one level at tick 370272.2799999982. Baseline
+stability and complete restoration are byte-identical. This is measured evidence
+for these frames, not a universal rounding bound. The existing independent native
+GPU equation tolerance of two levels is unchanged, as are exact-match controls.
+
+The synchronous retained-stage timing changes from 0.550-0.603 ms to 0.503 ms.
+It excludes live scene reconstruction and is not a frame-rate claim. The planned
+implementation therefore normalizes during owned batch construction, reusing
+Pixi's public geometry/index packing and retained update contracts, rather than
+constructing hundreds of batches and then compacting them. Only an explicitly
+registered opaque world render group may use the optimized builder. Target,
+filter, mask and cache transitions must invalidate its retained instructions and
+restore ordinary native RGBA blending. Dynamic performance and the complete
+unmodified Website gate remain outstanding.
+
+The first shared implementation is opt-in by an explicitly supplied Boneyard
+world render group. Its owned batch records retain public Pixi packing/update
+contracts without modifying the global batch pool, drawable modes or textures.
+The baseline GPU regression fails with eight draws; the implementation passes
+with one and byte-identical screen, retained-update and intermediate-target
+pixels. Forty additional filter, alpha-mask, cache, transparent-canvas and
+context-recovery phases preserve exact pixels and ordinary intermediate RGBA.
+
+Transport falsification establishes two further exclusions, not new visual
+tolerances: explicit NPM factors applied to a PMA texture multiply alpha twice
+in the original draw, and joining triangle strips can create connecting
+triangles. Both remain on original blend/topology boundaries. Ordinary triangle
+lists with normal/add, PMA/NPM textures, registered gradients and diffuse modes
+remain eligible. Forty distinct sources pack into three actual draws at the
+16-source limit with byte-identical pixels. These tests retain multiply breaks
+and conserve submitted indices. Built live crowd measurements and the exact-tree
+full quality/validation gate are still required before publication or closure.
+
+#### Production-path evidence, 2026-09-28 22:47 UTC
+
+The final scoped builder passes 100% statement, branch, function and line
+coverage without exemptions or threshold changes. GPU controls also cover a
+foreign RenderLayer, a root without an independent render group, an unrelated
+root, destroyed-root cleanup, retained texture ownership and idempotent teardown.
+All synthetic screen, filter, mask, cache, gradient, diffuse, topology, texture
+capacity, transparent-canvas and intermediate-target comparisons are byte-identical.
+
+The actual built Boneyard path was then compared synchronously with an ordinary
+native batcher and the exact `9ed7c502` Arena fragment, not the task-only merger.
+At game tick `370273.6599999994`, final-stage draws fall from 520 to 25 with all
+28,728 submitted indices/vertices retained. Two pixels/channels differ by one
+level across the 1600x900 image; no alpha differs. Independent baseline stability
+checks and restoration of the production path are exact. Both images and the
+completed full-game screenshot were inspected. No art, glow, weather, shadow,
+shield, trail, crowd member, native timing or default quality setting is removed.
+
+The independent live census reports 28 total draws/frame: 17 static-surface,
+10 Arena batches and one particle draw. Two multiply transitions remain. The
+three intermediate-target draws remain outside optimization. The retained
+baseline census was 538.27 total draws/frame and 516.27 blend-caused breaks.
+
+The built 60-second active level-36 crowd journey records six ten-second windows
+at 59.99-60.02 FPS, 100.19-100.40 host ticks/second, 487-495 Maggots and 232-247
+actors. Renderer means are 3.488-3.816 ms. Presentation p95 is 17.6-22.3 ms and
+the maximum interval is 25 ms; none of 3,602 intervals exceeds 33 ms. Thus this
+is sustained average 60 FPS, not a claim that every interval is 16.7 ms. Page,
+console, response, request, wire and host errors are empty, with no premature
+socket close or host tick-lag warning. Only the already-existing Magic Shield's
+absorb/maximum amount is raised for survival; populations and visuals are intact.
+
+Two isolated uncapped pairs use actual built baseline/candidate worktrees, the
+same portable toolchain, viewport, DPR, save and timing harness, with reversed
+order in the second pair. First-pair FPS is 120.55/113.70/113.69 versus baseline
+115.19/109.17/109.72; renderer means are 3.474/3.750/3.842 versus 3.701/3.968/4.069 ms.
+Reverse-pair FPS is 119.49/112.69/112.43 versus 118.88/112.19/111.29; renderer means
+are 3.511/3.787/3.901 versus 3.579/3.839/3.975 ms. The smaller reverse-order gain
+is retained, not discarded. M5 uncapped headroom improves by roughly 0.4-4.7%
+across these windows, not by the roughly 95% draw-count reduction. Baseline was
+already capped at 60 FPS. No AMD, Intel or Windows acceptance is inferred.
+
+Publication requires the complete unmodified `scripts/validate.sh` on this exact
+tree, including the unchanged mutation gate. Final gate, publication, reaction
+and cleanup identities belong to the campaign archive's
+`_source/20260928-report09-vgbxobkd-performance-release.json` and `REPORT-turn1b.md`.
+The separately published Pike/Portal crash repair is not substituted for this
+crowd-performance evidence. Reports54/38 and the43/44 reaction anomaly remain
+outside this change.
+
+#### Recovery and retained-instruction regression evidence, 2026-09-28 23:25 UTC
+
+The original full gate was recovered rather than restarted after a browser-client
+failure. All preceding stages passed, but renderer mutation rejected seventeen
+survivors in the new builder. The final candidate therefore adds actual GPU
+checks for unchanged-instruction reuse, unrelated offscreen renders, same-material
+reinstallation, mixed eligible/foreign draws, mixed primitive topology, texture
+replacement, painter reordering, capacity reuse and drawable retirement.
+
+The new source-reuse sequence submits 32 sprites with 16 distinct sources in one
+draw, then replaces all sources, reorders the painter list and retires half the
+sprites. Every phase preserves exact baseline pixels and submitted indices;
+retired drawables disappear from batch membership and duplicate sources consume
+one slot. Foreign normal-PMA draws remain separately ineligible even when their
+blend-state name matches an eligible neighbor. Repeated and unrelated renders
+cause zero world-instruction rebuilds. Reinstalling the same material retires
+the former ordinary batcher before enabling the opaque owner.
+
+Eleven replayed behavioral mutants now fail these GPU contracts, and two invalid
+batch-state literals fail checked TypeScript field types. Four other survivors
+were redundant writes: an overwritten opaque initializer, unused WebGL bind-group
+fields, inherited counters superseded by the owned pending list, and an extra
+dirty assignment before `updateElement` marks every actual attribute write.
+Those writes were removed; texture/member retirement and all eligibility guards
+remain. No new mutation exemption, threshold change or visual tolerance was added.
+The exact source was restored after every negative control. The complete
+unchanged gate must still pass on this final candidate; its result and publication
+identity are recorded in the release receipt named above.
