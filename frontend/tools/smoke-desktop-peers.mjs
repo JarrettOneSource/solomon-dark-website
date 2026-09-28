@@ -20,6 +20,7 @@ let signalingClosed = false
 try {
   const host = await launch('host')
   const guest = await launch('guest')
+  console.log('Desktop peer smoke: both title screens ready')
   await host.page.getByRole('button', { name: 'Play with friends', exact: true }).click()
   await host.page.getByRole('button', { name: 'Host friends', exact: true }).click()
   const code = host.page.getByLabel('Your invitation code', { exact: true })
@@ -32,10 +33,12 @@ try {
   await guest.page.getByRole('button', { name: 'Join friend', exact: true }).click()
   await guest.page.getByText('Connected to your friend.', { exact: false }).waitFor({ timeout: 45_000 })
   await host.page.getByText('1 friend(s) connected.', { exact: false }).waitFor({ timeout: 15_000 })
+  console.log('Desktop peer smoke: encrypted channel connected')
   await host.page.getByRole('button', { name: 'Done', exact: true }).click()
   await guest.page.getByRole('button', { name: 'Done', exact: true }).click()
   await enterCollege(host.page)
   await enterCollege(guest.page)
+  console.log('Desktop peer smoke: both players entered the College')
 
   for (const client of clients) {
     await client.page.waitForFunction(() => document.querySelector('.hub-world-canvas')?.__sdrHubFrame.playerCount === 2)
@@ -88,6 +91,7 @@ try {
 }
 
 async function launch(name) {
+  console.log(`Desktop peer smoke: launching ${name}`)
   const userData = await mkdtemp(join(tmpdir(), `solomon-peer-${name}-`))
   const app = await electron.launch({
     executablePath,
@@ -101,6 +105,9 @@ async function launch(name) {
   const client = { name, app, page, userData, pageErrors: [], closed: false }
   clients.push(client)
   page.on('pageerror', error => client.pageErrors.push(error.message))
+  page.on('console', message => {
+    if (message.text().startsWith('Desktop peer connectivity:')) console.error(`${name}: ${message.text()}`)
+  })
   await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
   await page.locator('[data-prompt-kind="tutorial"]').getByRole('button').last().click()
   return client

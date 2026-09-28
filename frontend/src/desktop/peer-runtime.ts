@@ -209,6 +209,19 @@ class DesktopPeerRuntime {
   private drop(id: string, reason: string): void {
     const link = this.links.get(id)
     if (!link) return
+    if (link.pc.connectionState !== 'connected' && link.pc.connectionState !== 'closed') {
+      // Connection failures need useful evidence without exposing SDP, network
+      // addresses, invitation codes, or the game's bootstrap credential.
+      console.warn(`Desktop peer connectivity: ${JSON.stringify({
+        role: this.state.mode,
+        connection: link.pc.connectionState,
+        ice: link.pc.iceConnectionState,
+        gathering: link.pc.iceGatheringState,
+        signaling: link.pc.signalingState,
+        localCandidates: candidateKinds(link.pc.localDescription?.sdp),
+        remoteCandidates: candidateKinds(link.pc.remoteDescription?.sdp),
+      })}`)
+    }
     this.links.delete(id)
     if (link.timeout) clearTimeout(link.timeout)
     link.cleanup?.()
@@ -232,6 +245,15 @@ class DesktopPeerRuntime {
 }
 
 let runtime: DesktopPeerRuntime | null = null
+function candidateKinds(sdp: string | undefined): string[] {
+  return (sdp?.match(/^a=candidate:.*$/gm) ?? []).map(line => {
+    const fields = line.trim().split(/\s+/)
+    const type = fields[fields.indexOf('typ') + 1]
+    const safeType = ['host', 'srflx', 'prflx', 'relay'].includes(type) ? type : 'unknown'
+    return `${safeType}/${fields[4]?.endsWith('.local') ? 'mdns' : 'address'}`
+  })
+}
+
 export function getDesktopPeerRuntime(): DesktopPeerRuntime {
   if (runtime) return runtime
   const injected = window.solomonDarkRuntime

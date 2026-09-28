@@ -16,6 +16,7 @@ const userData = await mkdtemp(join(tmpdir(), 'solomon-desktop-smoke-'))
 await mkdir('reports/desktop', { recursive: true })
 const pageErrors = []
 const consoleErrors = []
+console.log('Desktop solo smoke: launching packaged app')
 const application = await electron.launch({
   args: process.platform === 'linux' ? [
     '--enable-unsafe-swiftshader',
@@ -40,6 +41,7 @@ try {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
   await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
+  console.log('Desktop solo smoke: title screen ready')
   await page.locator('[data-prompt-kind="tutorial"]').getByRole('button').last().click()
   const runtime = await page.evaluate(() => ({
     endpoint: window.solomonDarkRuntime?.gameEndpoint,
@@ -56,6 +58,7 @@ try {
   assert.deepEqual(health, { status: 'ok' })
 
   const descendants = await processTable()
+  console.log('Desktop solo smoke: process table inspected')
   const host = descendants.find((process) => process.command.replaceAll('\\', '/').includes('game-host/game-host.mjs'))
   assert.ok(host, `expected a separate authoritative Node host:\n${JSON.stringify(descendants)}`)
   hostPid = host.pid
@@ -92,6 +95,7 @@ try {
       && !document.querySelector('.match-loading-screen')
   })
   await page.bringToFront()
+  console.log('Desktop solo smoke: College ready for movement')
   const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   await page.keyboard.down('d')
   try {
@@ -147,6 +151,7 @@ try {
     renderer: await canvas.getAttribute('data-renderer-name'),
   })}\n`)
 } finally {
+  console.log('Desktop solo smoke: closing first app')
   await application.close()
 }
 if (hostPid) {
@@ -156,6 +161,7 @@ if (hostPid) {
 const restarted = await electron.launch({ executablePath: executable, env: {
   ...process.env, SDR_DESKTOP_SKIP_UPDATE_CHECK: '1', SDR_DESKTOP_USER_DATA: userData,
 } })
+console.log('Desktop solo smoke: relaunched for save verification')
 try {
   const page = await restarted.firstWindow()
   await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
