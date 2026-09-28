@@ -51,6 +51,11 @@ export async function startStaticClientServer({ root, host = '127.0.0.1', port =
         return
       }
       const path = safePathname(request.url)
+      if (path?.startsWith('/api/')) {
+        response.writeHead(503, { ...securityHeaders(), 'content-type': 'application/json', 'cache-control': 'no-store' })
+        response.end(JSON.stringify({ error: 'This online feature is unavailable in the offline desktop app.' }))
+        return
+      }
       if (path === null) {
         response.writeHead(400, securityHeaders())
         response.end()
@@ -99,12 +104,18 @@ export async function startStaticClientServer({ root, host = '127.0.0.1', port =
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('Desktop client server did not bind TCP')
   expectedHost = `${host.includes(':') ? `[${host}]` : host}:${address.port}`
+  let closePromise
   return {
     origin: `http://${expectedHost}`,
     async close() {
-      await new Promise((resolveClose, reject) => {
+      if (closePromise) return closePromise
+      closePromise = new Promise((resolveClose, reject) => {
         server.close((error) => error ? reject(error) : resolveClose())
       })
+      // The renderer can retain a paused media response during app shutdown.
+      // Waiting for that reader before closing its window deadlocks quitting.
+      server.closeAllConnections()
+      return closePromise
     },
   }
 }

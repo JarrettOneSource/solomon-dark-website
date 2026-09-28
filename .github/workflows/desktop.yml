@@ -1,0 +1,148 @@
+name: Desktop
+
+on:
+  pull_request:
+  push:
+    branches: [main, feat/standalone-desktop-offline]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            frontend/desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm --prefix desktop ci --no-audit --no-fund
+      - run: npm run test:desktop
+      - name: Build platform installers
+        env:
+          CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || matrix.platform == 'win32' && secrets.WINDOWS_CSC_LINK) || '' }}
+          CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win32' && secrets.WINDOWS_CSC_KEY_PASSWORD) || '' }}
+          APPLE_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_TEAM_ID || '' }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          args=()
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then args+=(--release); fi
+          npm run package:desktop -- --platform "$TARGET_PLATFORM" --arch "$TARGET_ARCH" "${args[@]}"
+      - name: Packaged offline and peer acceptance
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            xvfb-run -a npm run smoke:desktop
+            xvfb-run -a npm run smoke:desktop:peers
+          else
+            npm run smoke:desktop
+            npm run smoke:desktop:peers
+          fi
+      - name: Installer checksums
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: node tools/desktop-artifact-checksums.mjs
+      - name: Website and game download entry acceptance
+        if: matrix.platform == 'linux'
+        run: npm run smoke:desktop:downloads
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-installers-${{ matrix.platform }}-${{ matrix.arch }}
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            frontend/dist-desktop/*.exe
+            frontend/dist-desktop/*.dmg
+            frontend/dist-desktop/*.zip
+            frontend/dist-desktop/*.AppImage
+            frontend/dist-desktop/*.blockmap
+            frontend/dist-desktop/latest*.yml
+            frontend/dist-desktop/SHA256SUMS-*.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-evidence-${{ matrix.platform }}-${{ matrix.arch }}
+          path: frontend/reports/desktop/
+          if-no-files-found: ignore
+
+  release-validation:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: ./scripts/validate.sh
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [installers, release-validation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: desktop-installers-*
+          path: installers
+          merge-multiple: true
+      - name: Publish only the complete validated release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          for name in Solomon-Darker-Setup-x64.exe Solomon-Darker-arm64.dmg Solomon-Darker-arm64.zip Solomon-Darker-x64.AppImage latest.yml latest-mac.yml latest-linux.yml; do
+            test -s "installers/$name"
+          done
+          (cd installers && sha256sum --check SHA256SUMS-*.txt)
+          if gh release view "$TAG" --json isDraft >/dev/null 2>&1; then
+            test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$TAG" --verify-tag --draft --title "Solomon Darker $TAG" --notes-file docs/desktop-release-notes.md
+          fi
+          gh release upload "$TAG" installers/* --clobber
+          gh release edit "$TAG" --draft=false --latest

@@ -1,5 +1,11 @@
 # NFO browser game runtime
 
+The optional desktop invitation service is installed separately using
+`solomon-dark-peer.service`. It exchanges connection introductions, not game
+traffic. Its `/desktop-signal` Caddy route, signing/release prerequisites, and
+optional regional TURN configuration are documented in
+[`docs/desktop-release.md`](../../docs/desktop-release.md#invitation-service-deployment).
+
 The production website and browser game sessions are separate supervised
 processes from the same release directory:
 

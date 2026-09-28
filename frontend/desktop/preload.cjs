@@ -9,7 +9,9 @@ if (!endpoint || (endpoint.kind !== 'localhost' && endpoint.kind !== 'remote')
 contextBridge.exposeInMainWorld('solomonDarkRuntime', Object.freeze({
   gameEndpoint: Object.freeze({
     kind: endpoint.kind,
+    sessionKind: endpoint.sessionKind,
     url: endpoint.url,
     credential: endpoint.credential,
   }),
+  desktop: Object.freeze(endpoint.desktop),
 }))

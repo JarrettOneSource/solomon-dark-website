@@ -12,6 +12,7 @@ await build({
   },
   bundle: true,
   entryPoints: {
+    'peer-signaling': 'tools/run-peer-signaling.mjs',
     'boneyard-navigation-worker': 'src/game/host/boneyard-navigation-worker.ts',
     'game-host': 'src/game/host/run-game-host.ts',
     'game-session-supervisor': 'src/game/host/run-game-session-supervisor.ts',

@@ -42,6 +42,7 @@ declare global {
   interface Window {
     solomonDarkRuntime?: {
       gameEndpoint?: GameEndpoint
+      desktop?: { version: string; signalingUrl: string }
     }
   }
 }

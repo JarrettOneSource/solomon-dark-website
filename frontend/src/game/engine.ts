@@ -32,6 +32,12 @@ import {
  */
 export type GameEndpoint =
   | {
+      kind: 'peer'
+      sessionKind: 'standalone'
+      url: string
+      credential: string
+    }
+  | {
       kind: 'localhost'
       sessionKind: 'standalone'
       url: string
@@ -88,6 +94,9 @@ export type GameConnectionStage =
 
 export async function bootGame(options: SessionOptions): Promise<GameSession> {
   validateEndpoint(options.endpoint)
+  if (options.endpoint.kind === 'peer' && !options.transportFactory) {
+    throw new Error('Peer sessions require the desktop encrypted transport.')
+  }
   options.diagnostics?.setEndpoint(options.endpoint.url)
   const createTransport = options.transportFactory
     ?? ((url: string) => connectWebSocketTransport(url, options.diagnostics))
@@ -149,6 +158,10 @@ export async function bootGameObserver(options: GameObserverOptions): Promise<Ga
 
 function validateEndpoint(endpoint: GameEndpoint | GameObserverEndpoint): void {
   const url = new URL(endpoint.url)
+  if (endpoint.kind === 'peer') {
+    if (url.protocol !== 'webrtc:' || url.hostname !== 'friend') throw new Error('Invalid desktop peer endpoint.')
+    return
+  }
   if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
     throw new Error('Game endpoints must use ws or wss.')
   }

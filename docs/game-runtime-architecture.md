@@ -1,8 +1,9 @@
 # Solomon Dark rebuilt runtime architecture
 
 Status: accepted; authoritative, GPU-client, shared-Hub party/chat,
-desktop-solo, headless-crowd, and compact-replication slices implemented,
-2026-08-24
+desktop-solo/peer transport, headless-crowd, and compact-replication slices implemented.
+Desktop distribution and peer acceptance added 2026-09-28; public release and
+regional NAT/relay qualification are separate operational gates.
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace the [native parity RE ledger](<Game Native Parity RE/README.md>):
@@ -908,19 +909,34 @@ trust mechanisms without changing game messages or authority:
 - desktop solo: `ws` over loopback plus an unguessable bootstrap credential;
 - provisioned web or remote dedicated: `wss` with ordinary public PKI, normally
   terminated by a gateway;
-- desktop peer host: an authenticated encrypted direct or platform transport;
-  pinned-certificate `wss`, Steam Networking Sockets, and an optional relay are
-  eligible adapters after connectivity evidence is gathered.
+- desktop peer host: WebRTC DTLS/SCTP with ordered reliable data channels. The
+  desktop-only adapter frames the existing text protocol into bounded fragments,
+  applies backpressure, and connects each admitted guest to an authenticated
+  loopback socket on the host. Browser website sessions do not use this adapter.
 
 The host binds only to loopback by default. Non-loopback binding is explicit
 host intent and the v0 Node listener permits it only behind an explicitly
-trusted TLS gateway with a nonempty origin allowlist. Direct desktop peer
-exposure remains deferred until the encrypted transport adapter is chosen. A
+trusted TLS gateway with a nonempty origin allowlist. Desktop peers do not
+expose that listener: only the selected WebRTC channel reaches the local bridge. A
 localhost listener still authenticates, validates `Host`, and
 rejects unapproved browser origins: arbitrary websites can initiate localhost
 WebSocket requests. Bootstrap secrets travel through an inherited private
 channel or environment, never a visible command-line argument in a packaged
 launcher.
+
+The desktop uses one stable, registered `sdr://desktop` origin for browser
+storage while HTTP and game sockets keep ephemeral loopback ports. Isolated
+preload configuration is supplied only to the trusted main frame. Local saves
+and settings therefore survive process restarts and package updates. Closing
+the last window closes the authority on every platform; shutdown also releases
+paused asset streams rather than waiting for a renderer that is closing.
+
+An optional standalone signaling service owns private 192-bit invitations,
+bounded room membership, exact revision/protocol admission, and SDP exchange.
+It never receives game credentials or game packets. Removing signaling does not
+end established peer channels. Closing the player-owned host does. TURN fallback
+uses optional operator-configured, expiring credentials; a functioning local
+peer test is not evidence of every residential NAT or regional relay route.
 
 A website-origin game client never connects to localhost, RFC1918, or another
 private-network address. Browser clients use provisioned remote instances. This
@@ -1458,8 +1474,8 @@ Node host. Stack changes require a failed measured gate, not preference.
 
 ## Explicit deferrals
 
-- peer NAT traversal beyond LAN/direct address and manual port forwarding;
-- first-party relay, UPnP, WebRTC/WebTransport, or Steam transport selection;
+- deployed regional TURN capacity and broad residential NAT qualification;
+- UPnP, WebTransport, or Steam transport integrations;
 - browser-to-residential-peer hosting, which is unsupported without a relay;
 - host migration;
 - automatic crash restart and seamless multiplayer rejoin;

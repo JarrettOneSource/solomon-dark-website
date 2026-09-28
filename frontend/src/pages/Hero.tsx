@@ -320,20 +320,23 @@ export default function Hero() {
               The columns keep their natural proportions at a fixed height,
               and the plaque stack is pinned to that same height, each plaque
               stretching an equal share so the stack's top and bottom edges
-              land exactly on the art's. Two plaques now: the Library and
-              Search Parties moved in-game, so the columns stand shorter. */}
+              land exactly on the art's. Browser play, offline download, and
+              community are the three primary actions. */}
           <div className="mt-10 flex items-center justify-center gap-4">
             <img
               src={art.flourishVert}
               alt=""
-              className="hidden h-40 w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+              className="hidden h-52 w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
-            <div className="flex w-full max-w-[320px] flex-col gap-3 sm:h-40">
+            <div className="flex w-full max-w-[320px] flex-col gap-3 sm:h-52">
               <Link
                 to="/game"
                 className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
                 Play
+              </Link>
+              <Link to="/download" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center">
+                Download Offline
               </Link>
               <a
                 href="https://discord.gg/HGHxZgyM2p"
@@ -347,7 +350,7 @@ export default function Hero() {
             <img
               src={art.flourishVert}
               alt=""
-              className="hidden h-40 w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+              className="hidden h-52 w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
           </div>
         </div>

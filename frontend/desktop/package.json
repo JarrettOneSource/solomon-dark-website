@@ -2,6 +2,12 @@
   "name": "solomon-dark-desktop",
   "private": true,
   "version": "0.1.0",
+  "description": "Solomon Darker offline game and friend-hosted multiplayer",
+  "author": "Solomon Darker",
+  "homepage": "https://solomondarker.com",
   "type": "module",
-  "main": "main.mjs"
+  "main": "main.mjs",
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  }
 }

@@ -262,6 +262,11 @@ export default function Game() {
   const prepareGame = useCallback(async (admission: BrowserGameAdmission): Promise<void> => {
     if (preparedEndpoint.current) return
     const configured = configuredGameEndpoint()
+    if (window.solomonDarkRuntime?.desktop) {
+      const { getDesktopPeerRuntime } = await import('../desktop/peer-runtime.ts')
+      const peer = getDesktopPeerRuntime().gameEndpoint()
+      if (peer) { preparedEndpoint.current = peer; return }
+    }
     if (configured) {
       preparedEndpoint.current = configured
       return
@@ -312,7 +317,10 @@ export default function Game() {
       const endpoint = preparedEndpoint.current
       if (!endpoint) throw new Error('The shared Hub admission was not prepared.')
       const { bootGame } = await import('../game/engine.ts')
+      const peer = endpoint.kind === 'peer'
+        ? (await import('../desktop/peer-runtime.ts')).getDesktopPeerRuntime() : null
       const session = await bootGame({
+        ...(peer ? { transportFactory: () => peer.connectTransport() } : {}),
         ...(allowModMismatch ? { allowModMismatch: true } : {}),
         ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
         character,
