@@ -1080,3 +1080,55 @@ the item behavior and mechanics; they cannot establish author intent or a
 historical PC-specific implementation plan. No separate off-hand or Wand
 melee feature is inferred. Acceptance is complete; normal publication,
 completion reaction and task cleanup are recorded by the archive receipt.
+
+## 2026-09-28 — Report 52 Mindblowing Ring level-up performance audit
+
+The reporter's preserved ZIP (`0641f09edec80ae8e06e3c61dd97935051c3734561e025f8938c5204d2d24349`)
+restores into the current Website at Boneyard tick 239596, level 28. It contains
+the equipped Mindblowing Ring and 42 Zombies, but no pending level-up choice or
+live Mindblast actor. It is a post-event save, so the original transient spike
+cannot be timed directly from it. The ring's only native effect is feature 36,
+Mindblast. A task-local diagnostic copy crossed the next XP threshold by
+980.5385246231144 and opened the level-29 choice; an otherwise identical copy
+unequipped that ring through the existing inventory action. The equipped copy
+created exactly one `mindblast-burst` and one `mindblast-shockwave`, while the
+control created neither. The XP/actor authority step had a median below
+0.5 ms and p95 below 0.7 ms in both variants.
+
+| Member | Disposition | Evidence |
+| --- | --- | --- |
+| Mindblowing Ring feature and level-up admission | verified-already-at-parity | Only the equipped copy created the two native Mindblast actors at the level crossing. |
+| Burst, Shockwave, particles, light and audio | verified-already-at-parity | The existing entry above and focused tests own their contract; the real browser replay showed the two transient actors and their retirement. |
+| Picker pause, close and Boneyard resume | verified-already-at-parity | Both hardware browser journeys remained at 60 FPS in the picker and closing window, then advanced through ten seconds of resumed play without page, console, response or request errors. |
+| Save restoration and replicated actor payload | verified-already-at-parity | The original schema-42 save restored; the equipped variant sent a maximum 1,001,369-byte host message without a long browser task. |
+| Ringless equipment/control path | verified-already-at-parity | Removing only the ring suppressed Mindblast while retaining the same save, level crossing and environment. |
+| Other equipment features and Faculty-death burst | out-of-system | The diagnostic changed no other equipment effect; the report-37 death path is separate. |
+
+The WSL Chrome 150 software-rendered trial initially appeared to reproduce
+about 5 FPS after the choice. That same approximately 5 FPS occurred with the
+ring removed, with the untouched save and no level-up, and in a fresh Boneyard
+with zero enemies. This falsified a Mindblast-specific attribution for that
+measurement. WSL had concurrent unrelated load; its SwiftShader frame rate is
+not a hardware performance receipt.
+
+On the **unmodified** `4cd90014826593d732c4a64066a234d2d0cd4c02` game
+build, Windows Chrome 153 rendered through Intel UHD 750 Direct3D11. The
+equipped trial measured 60.0 FPS in the picker, 60.0 while closing, 58.8 in
+the first five seconds after close, and 60.0 in the next five; p95 frame
+intervals were at most 16.8 ms and there were zero long tasks. The ringless
+control measured 60.0, 60.0, 59.4 and 59.2 FPS respectively, with one 87-ms
+long task in its second resumed window. Both had empty browser error arrays.
+The Windows Chrome launcher used `--disable-features=WebGPU`,
+`--ignore-gpu-blocklist` and `--enable-webgl` to expose the available Direct3D11
+WebGL path. The exact log hashes are
+`8b09ba6b290c3f08a10dd4d8349e14504376f1b291dc7bf1f942c6a48703c84b`
+(ring) and
+`08f0dc8c63d141de4519c13e296eb83bb798ede34f817c9df0ae02e33eca5ba5`
+(control).
+
+No runtime defect was reproduced on the current published build, and no
+product-code change is justified. The reporter's historical browser load,
+GPU configuration and exact transient frame were not captured by the save;
+this audit does not claim that the experienced spike did not occur. The
+canonical Website gate already passed on this exact runtime commit for Report
+51 (3,957 Node and 24 Python tests, renderer quality without failures).
