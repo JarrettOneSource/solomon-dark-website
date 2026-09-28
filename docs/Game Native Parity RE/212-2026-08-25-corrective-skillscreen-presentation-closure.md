@@ -75,6 +75,73 @@ No browser platform approximation or catalog/rank change is involved. The
 separate full optional-book smoke's later belt-effect timeout remains a limit
 of that broader journey, not a pass claim for it.
 
+### September 28 supplemental: optional-book smoke failures
+
+The published inline-text correction remains accepted. Two later, broader
+SkillBook journeys stopped outside that text owner: the long tooltip smoke
+could not retain a Hub Skills dialog immediately after selecting a level-up
+offer, and a separate full SkillBook smoke waited two seconds for the brief
+belt pull-off burst after a drag. These are tested as separate menu-lifecycle
+and transient-effect questions; neither invalidates the 422-case text sweep.
+
+On base `ab72d149`, the unchanged built WSL tooltip journey reproduced the
+first failure. A task-only browser trace shows the post-picker click setting
+`skillBookOpen=true` with resume grace `none`, Hub input blocked, a living
+level-two player and progression revision four in both host and replicated
+snapshot, but no Skills dialog or SkillBook component mount. The module's
+manual prefetch and its later React.lazy load both resolved without a page,
+console or failed-response error. A static-import control passed the same
+picker-to-book journey; keeping React.lazy and removing only the separate
+`void loadSkillBook()` prefetch also passed. The actionable boundary is the
+duplicate preload/lazy handoff in `MainMenuScene.tsx`, not player progression,
+native skill ranks, the shared text painter, or an ignored button click.
+The no-prefetch path needs full Hub/Boneyard and touch/browser acceptance before
+it is permanent.
+
+The belt burst is a smoke timing defect, not a missing game effect. On the
+unchanged WSL runtime, a browser `MutationObserver` armed before the gesture
+saw the burst mount with exactly 24 smoke and four move-fade members, then
+retire. The 16-step Playwright mouse move took 7,957 ms under software
+rendering; the burst existed for about 767 ms during that move, with a first
+member's CSS duration of 140 ms. The script began its RAF wait only after
+the entire move, so its two-second timeout could never observe the already
+removed node. The poof cue fired once, the UI showed Belt 2 empty, the host
+belt entry was `null`, and browser/network error arrays were empty. Arm the
+wait before pointer movement and capture the observed member counts while the
+node is mounted. Preserve the native 50-unit pull-off threshold, transient
+visual lifetime and strict 24-member contract; do not lengthen the product
+animation to satisfy a late test wait. The WSL screenshot taken after the
+long gesture did not capture the already-retired burst and is not claimed as
+a pixel receipt; the pre-armed DOM observation and game/audio state are the
+acceptance evidence for this transient edge.
+
+The independent dev-server SkillBook smoke also has a software-rendered stage
+readiness boundary before the gesture. At the original 30-second timeout the
+DOM contained a settled, visible, non-inert `.skill-book-stage` with exact
+`role="dialog"` and `aria-label="Skills"`, a ready WebGL canvas and all
+ancestors visible. A direct-selector control could likewise time out at 30
+seconds; giving that unchanged stage assertion 60 seconds measured its
+visibility at 30,133 ms and advanced through the verified pull-off receipt.
+That falsifies a role-query-only explanation and justifies increasing only
+the initial dev-server smoke readiness limit. No selector or gameplay/UI
+change is retained. The broad control later stopped at its separate Primary
+Attack selector wait, so it is not claimed as a complete journey pass.
+
+The exact no-prefetch candidate then passed the maintained long built-client
+tooltip journey on WSL: eight desktop/touch receipts covering Hub picker,
+Hub SkillBook, Boneyard SkillBook and Boneyard picker, with empty page,
+console and response errors (log SHA-256
+`3929554ac8dfb5facfa5e511f4ac47025fbe0b33db522a6f4dde98aad6ba154e`).
+With the initial dev-server smoke readiness limit measured and extended to
+60 seconds, the unmodified semantic role query reached the pull-off gesture.
+The pre-armed RAF wait captured the exact 24-smoke/three-or-four-fade burst;
+the smoke advanced through poof audio, saved empty Belt 2, subsequent
+concentration drags and Fireball drag. The broader journey then timed out at
+its later `Select Primary Attack` selector; this pass does not claim that
+unrelated tail succeeded. It does prove both supplemental stopping edges on
+the exact candidate. The remaining full gate, publication and cleanup are
+separate acceptance receipts.
+
 ## 2026-09-26 — Report 33: shared skill HoverBox text-width ownership
 
 The Meditation concentration bonus overruns the right border in the reported

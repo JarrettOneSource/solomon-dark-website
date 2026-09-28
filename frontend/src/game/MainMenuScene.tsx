@@ -923,7 +923,6 @@ function MainMenuContent({
   const runtimeConnected = runtimeSnapshot !== null
   useEffect(() => {
     if (runtimeConnected) {
-      void loadSkillBook()
       void loadHudSkillSelector()
       void loadGameplayResumeProgress()
       void loadGameplayPauseMenu()

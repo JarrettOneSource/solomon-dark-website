@@ -146,7 +146,7 @@ try {
   await page.getByRole('button', { name: 'Open skills' }).click()
   const book = page.getByRole('dialog', { name: 'Skills' })
   try {
-    await book.waitFor({ timeout: 30_000 })
+    await book.waitFor({ timeout: 60_000 })
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2_000),
@@ -224,7 +224,7 @@ try {
   }
   assert.equal(await book.getByRole('button', { name: /Belt [12], Call Leviathan/ }).count(), 2)
   const pullOffAudioStart = await audioEventCount(page)
-  const pullOff = await pullSkillOffBelt(page, book, book.getByRole('button', {
+  const pullOff = await pullSkillOffBelt(page, book.getByRole('button', {
     name: /Belt 2, Call Leviathan/,
   }))
   await book.getByRole('button', { name: /Belt 2, empty/ }).waitFor({ timeout: 5_000 })
@@ -820,28 +820,34 @@ async function sampleSkillBookSealMotion(page, book, sampleCount = 5) {
   return { first: samples[0], last: samples.at(-1) }
 }
 
-async function pullSkillOffBelt(page, book, slot) {
+async function pullSkillOffBelt(page, slot) {
   const bounds = await slot.boundingBox()
   assert.ok(bounds)
   const origin = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
   await page.mouse.move(origin.x, origin.y)
   await page.mouse.down()
+  let movement
   try {
-    await page.mouse.move(origin.x + 80, origin.y, { steps: 16 })
-    await page.waitForFunction(() => (
-      document.querySelector('.skill-book-pull-off-burst[data-smoke-count="24"]')
-    ), undefined, { polling: 'raf', timeout: 2_000 })
-    const burst = book.locator('.skill-book-pull-off-burst')
-    const receipt = {
-      moveFadeCount: Number(await burst.getAttribute('data-move-fade-count')),
-      smokeCount: Number(await burst.getAttribute('data-smoke-count')),
-    }
+    const observed = page.waitForFunction(() => {
+      const burst = document.querySelector('.skill-book-pull-off-burst[data-smoke-count="24"]')
+      return burst ? {
+        moveFadeCount: Number(burst.getAttribute('data-move-fade-count')),
+        smokeCount: Number(burst.getAttribute('data-smoke-count')),
+      } : null
+    }, undefined, { polling: 'raf', timeout: 15_000 })
+    movement = page.mouse.move(origin.x + 80, origin.y, { steps: 16 })
+    const receipt = await (await observed).jsonValue()
     assert.equal(receipt.smokeCount, 24)
     assert.ok(receipt.moveFadeCount === 3 || receipt.moveFadeCount === 4)
     await page.screenshot({ path: `${screenshotRoot}-pull-off.png` })
+    await movement
     return receipt
   } finally {
-    await page.mouse.up()
+    try {
+      if (movement) await movement
+    } finally {
+      await page.mouse.up()
+    }
   }
 }
 
