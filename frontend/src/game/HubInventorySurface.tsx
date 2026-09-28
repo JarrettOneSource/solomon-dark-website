@@ -209,15 +209,20 @@ export function NativeHubSurface({
     readonly action: HubInventoryAction['type']
     readonly drag: HubInventoryDragModel
     readonly feedbackSequence: number
+    readonly laterActionTypes: readonly HubInventoryAction['type'][]
     readonly sackPath: readonly number[]
   } | null>(null)
   // Source suppression and the dragger retire together with the host result,
   // including rejection. Clearing on pointer-up exposes the old snapshot.
+  const dropFeedback = economy.actionFeedback
+  const dropAcknowledged = releasedInventoryDrag !== null && dropFeedback !== null
+    && dropFeedback.sequence > releasedInventoryDrag.feedbackSequence
+    && (dropFeedback.action === releasedInventoryDrag.action
+      || (dropFeedback.sequence > releasedInventoryDrag.feedbackSequence + 1
+        && releasedInventoryDrag.laterActionTypes.some(type => type === dropFeedback.action)))
   const awaitingInventoryDrop = releasedInventoryDrag !== null
     && releasedInventoryDrag.sackPath === sackPath
-    && !(economy.actionFeedback
-      && economy.actionFeedback.sequence > releasedInventoryDrag.feedbackSequence
-      && economy.actionFeedback.action === releasedInventoryDrag.action)
+    && !dropAcknowledged
   const displayedInventoryDrag = inventoryDrag
     ?? (awaitingInventoryDrop ? releasedInventoryDrag.drag : null)
   useEffect(() => {
@@ -228,8 +233,14 @@ export function NativeHubSurface({
       action: action.type,
       drag,
       feedbackSequence: economy.actionFeedback?.sequence ?? 0,
+      laterActionTypes: [],
       sackPath,
     })
+    else setReleasedInventoryDrag(current => current !== null
+      && current.sackPath === sackPath
+      && !current.laterActionTypes.includes(action.type)
+      ? { ...current, laterActionTypes: [...current.laterActionTypes, action.type] }
+      : current)
     onAction(action)
   }
   const [statsPage, setStatsPage] = useState(0)

@@ -295,6 +295,45 @@ report. The complete validation log has SHA-256
 Task screenshots and raw logs are disposable scratch; their outcomes and
 hashes are recorded here.
 
+### September 28 supplemental: delayed feedback after a second service action
+
+The unchanged built WSL broad smoke reproduced the retained Fomentius stop
+twice after all 28 Hub receipts; the fresh Fomentius-only path still passed.
+The second full run instrumented only the failing wait. At blank Ring release,
+the host feedback sequence was 25. The host then processed the drop and a
+Fomentius purchase, leaving accepted `buy-fomentius` feedback at sequence 27.
+Seven held snapshots were delivered. Fifteen seconds later the browser still
+reported `backpack:40001` as the active drag and had 18 disabled item controls,
+despite an empty queued-message buffer and empty page, console and response
+error arrays. The unchanged broad log hashes to
+`219000b17ec7a3ee18b88666f47886785d6db272167c70002569590df19b368a`;
+the instrumented log hashes to
+`b9b3eadfd35698b5da0d71f376cabb03f05ae52fc2e8d83fc42f57abf13c4121`.
+
+The shared `HubInventorySurface` retains a released drag until the latest
+snapshot's feedback sequence advances **and** its action name equals the
+drop's action name. Economy feedback stores only the latest action. A later
+same-owner shop action can replace the drop receipt before delayed snapshots
+render, so that exact-name guard can remain false forever even though the
+ordered host has processed the drop. This is a browser pending-action lifetime
+defect, not a slow frame or a missing authoritative placement. The safe local
+acknowledgment rule is to keep exact-action matching and also recognize a
+feedback receipt for an action this same UI actually dispatched after the
+drop, with a sequence at least two beyond the captured baseline. One earlier
+unmatched receipt alone therefore cannot retire the pending source. The
+unchanged built broad journey was the red browser regression.
+
+The corrected exact build passed that full WSL journey: 45 receipts across Hub,
+Fomentius, Hagatha, Luthacus, Shlorio and Boneyard, including the formerly
+stuck blank drop, with zero old-source pixel differences for the Fomentius
+cases and empty page, console and response error arrays (log SHA-256
+`529910321167843db71444f666ff2d5f3c1d9db54b7f3d483b22d8816b86c03b`).
+The focused original Report 50 pointer journey separately passed all 12 Hub
+and Boneyard nested-Sack, occupied, parent-holder and equipment-source
+receipts with empty browser error arrays (log SHA-256
+`0e4039e90d8374fc0629c9bf1a9e1f08ff9fed8bb92861790b1913baa765fc63`).
+The canonical gate and publication are recorded separately.
+
 ## 2026-09-22 — Report 03: released-item ownership across host feedback
 
 ### Report, evidence, and reopened boundary
