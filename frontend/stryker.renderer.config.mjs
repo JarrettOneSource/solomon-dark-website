@@ -10,7 +10,8 @@ export default {
   commandRunner: { command: 'node tools/quality/mutation-tests.mjs' },
   coverageAnalysis: 'off',
   // Four workers cut the WSL mutation run from 546 to 349 seconds; smaller hosts retain two.
-  concurrency: availableParallelism() >= 16 ? 4 : 2,
+  // GitHub's four-core runner needs two checkers to finish inside the workflow limit.
+  concurrency: availableParallelism() >= 16 || process.env.GITHUB_ACTIONS === 'true' ? 4 : 2,
   timeoutMS: 10000,
   timeoutFactor: 2,
   reporters: ['clear-text', 'progress', 'json', 'html'],
