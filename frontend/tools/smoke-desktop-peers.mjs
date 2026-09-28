@@ -19,8 +19,6 @@ let signalingClosed = false
 
 try {
   const host = await launch('host')
-  const guest = await launch('guest')
-  console.log('Desktop peer smoke: both title screens ready')
   await activate(host.page)
   await host.page.getByRole('button', { name: 'Play with friends', exact: true }).click()
   await host.page.getByRole('button', { name: 'Host friends', exact: true }).click()
@@ -30,6 +28,8 @@ try {
   assert.match(invitation, /^[A-Za-z0-9_-]{32}$/)
   await host.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize())
   console.log('Desktop peer smoke: host minimized before guest admission')
+  const guest = await launch('guest')
+  console.log('Desktop peer smoke: both title screens ready')
 
   await activate(guest.page)
   await guest.page.getByRole('button', { name: 'Play with friends', exact: true }).click()
@@ -64,7 +64,7 @@ try {
   await moveGuest(guest.page)
   await activate(host.page)
   await host.page.waitForFunction(({ id, before }) =>
-    document.querySelector('.hub-world-canvas').__sdrHubFrame.playerPositions[id].x > before + 10,
+    document.querySelector('.hub-world-canvas').__sdrHubFrame.playerPositions[id].x < before - 10,
   { id: guestId, before })
 
   // Closing introductions cannot stop an already established peer data path.
@@ -74,7 +74,7 @@ try {
   await moveGuest(guest.page)
   await activate(host.page)
   await host.page.waitForFunction(({ id, before }) =>
-    document.querySelector('.hub-world-canvas').__sdrHubFrame.playerPositions[id].x > before + 10,
+    document.querySelector('.hub-world-canvas').__sdrHubFrame.playerPositions[id].x < before - 10,
   { id: guestId, before: afterSignalingClosed })
   await host.page.screenshot({ path: join(evidence, 'peer-host-college.png') })
   await activate(guest.page)
@@ -161,18 +161,29 @@ async function frame(page) {
 async function moveGuest(page) {
   await activate(page)
   const before = (await frame(page)).playerPositions[(await frame(page)).localPlayerId].x
-  await page.keyboard.down('d')
+  // Move toward the courtyard interior rather than its eastern Office doorway.
+  await page.keyboard.down('a')
   try {
-    await page.waitForFunction(before => document.querySelector('.hub-world-canvas')?.__sdrHubFrame.playerX > before + 10,
+    await page.waitForFunction(before => document.querySelector('.hub-world-canvas')?.__sdrHubFrame.playerX < before - 10,
       before, { timeout: 10_000 })
   } finally {
-    await page.keyboard.up('d')
+    await page.keyboard.up('a')
+    // Let the ordinary input loop transmit released keys before the fixture
+    // minimizes this window to inspect the other client's rendered state.
+    await page.waitForTimeout(250)
   }
 }
 
 async function activate(page) {
   const client = clients.find(client => client.page === page)
   if (!client) throw new Error('Unknown desktop test window')
+  // Two game windows overlap on the hosted Windows desktop. Keep the active
+  // test client visible and the other minimized; gameplay/RTC must keep running
+  // in that background host, as it would when a real player switches apps.
+  for (const other of clients) {
+    if (other === client || other.closed) continue
+    await other.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize())
+  }
   await client.app.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0]
     if (window.isMinimized()) window.restore()
