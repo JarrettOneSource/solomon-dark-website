@@ -19,6 +19,10 @@ import { nativeHudModalSlideLayout } from '../src/game/native-hud-layout.ts'
 const output = process.env.SDR_HOTBAR_SCREENSHOT_ROOT
   || await mkdtemp(join(tmpdir(), 'solomon-hotbar-'))
 await mkdir(output, { recursive: true })
+// Thirty held captures span the multi-second seal drift measured without
+// delivery; five delivered-state captures sample it again under a short hold.
+const ambientBeforeSamples = 30
+const ambientAfterSamples = 5
 const playerId = 'hotbar-owner'
 const initial = createGameSimulation({ [playerId]: {
   discipline: 'arcane', displayName: 'Hotbar', element: 'ether',
@@ -210,7 +214,7 @@ async function drag(from, to) {
 async function labels(skills) {
   return skills.locator('.skill-book-quickbar-actions button').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
 }
-async function beltPixels(skills, name) {
+async function beltPixels(skills, name = null) {
   await frames()
   const buttons = skills.locator('.skill-book-quickbar-actions button')
   const first = await buttons.first().boundingBox()
@@ -233,13 +237,18 @@ async function beltPixels(skills, name) {
     })
   }
   return {
-    encoded: (await page.screenshot({ clip, path: join(output, `${name}.png`) })).toString('base64'),
+    encoded: (await page.screenshot(name === null
+      ? { clip }
+      : { clip, path: join(output, `${name}.png`) })).toString('base64'),
     masks,
   }
 }
-async function assertPixels(before, after, name) {
+async function assertPixels(before, after, name, beforeControls, afterControls) {
   assert.deepEqual(before.masks, after.masks, 'settled belt slot rectangles are stable')
-  const difference = await page.evaluate(async ({ images, masks }) => {
+  for (const control of [...beforeControls, ...afterControls]) {
+    assert.deepEqual(before.masks, control.masks, 'settled belt control rectangles are stable')
+  }
+  const difference = await page.evaluate(async ({ images, masks, beforeControlCount }) => {
     const pixels = []
     let width = 0
     for (const encoded of images) {
@@ -254,10 +263,14 @@ async function assertPixels(before, after, name) {
       pixels.push(context.getImageData(0, 0, image.width, image.height).data)
       image.close()
     }
-    if (pixels[0].length !== pixels[1].length) throw new Error('Belt crop dimensions changed')
-    let channelsOver8 = 0
+    if (pixels.some(values => values.length !== pixels[0].length)) {
+      throw new Error('Belt crop dimensions changed')
+    }
+    let unexplainedChannels = 0
+    let ambientChannels = 0
     let maximumDifference = 0
     let foregroundPixels = 0
+    const afterControlStart = 2 + beforeControlCount
     for (let i = 0; i < pixels[0].length; i += 4) {
       const x = (i / 4) % width
       const y = Math.floor((i / 4) / width)
@@ -265,21 +278,47 @@ async function assertPixels(before, after, name) {
       // animated seal background is especially bright after compact scaling.
       if (!masks.some(mask => x >= mask.left && x < mask.right && y >= mask.top && y < mask.bottom)) continue
       // The native seals animate underneath the translucent belt. Compare
-      // legible foreground, not dim background motion; the red baseline still
-      // differs in 2,869 RGB channels under this same mask/tolerance.
+      // legible foreground, not dim background motion. With the original
+      // fixed reopened/delivered pair, the stale a13fe08c Belt 4 differed in
+      // 2,869 RGB channels over eight levels under this mask.
       if (Math.max(...pixels[0].subarray(i, i + 3), ...pixels[1].subarray(i, i + 3)) < 80) continue
       foregroundPixels += 1
       for (let channel = 0; channel < 3; channel += 1) {
         const difference = Math.abs(pixels[0][i + channel] - pixels[1][i + channel])
-        if (difference > 8) channelsOver8 += 1
+        if (difference > 8) {
+          let beforeMinimum = pixels[0][i + channel]
+          let beforeMaximum = beforeMinimum
+          for (let control = 2; control < afterControlStart; control += 1) {
+            const sample = pixels[control][i + channel]
+            beforeMinimum = Math.min(beforeMinimum, sample)
+            beforeMaximum = Math.max(beforeMaximum, sample)
+          }
+          let afterMinimum = pixels[1][i + channel]
+          let afterMaximum = afterMinimum
+          for (let control = afterControlStart; control < pixels.length; control += 1) {
+            const sample = pixels[control][i + channel]
+            afterMinimum = Math.min(afterMinimum, sample)
+            afterMaximum = Math.max(afterMaximum, sample)
+          }
+          // Only a gap between the two observed ranges is a belt-art change.
+          const gap = Math.max(0, beforeMinimum - afterMaximum, afterMinimum - beforeMaximum)
+          if (gap > 8) unexplainedChannels += 1
+          else ambientChannels += 1
+        }
         maximumDifference = Math.max(maximumDifference, difference)
       }
     }
-    return { channelsOver8, maximumDifference, foregroundPixels }
-  }, { images: [before.encoded, after.encoded], masks: before.masks })
+    return { unexplainedChannels, ambientChannels, maximumDifference, foregroundPixels }
+  }, {
+    images: [before.encoded, after.encoded,
+      ...beforeControls.map(control => control.encoded),
+      ...afterControls.map(control => control.encoded)],
+    masks: before.masks,
+    beforeControlCount: beforeControls.length,
+  })
   receipts.push({ name, ...difference })
   assert.ok(difference.foregroundPixels > 0, 'nonempty foreground pixel witness')
-  assert.equal(difference.channelsOver8, 0, `${name}: changed belt pixels after reopening`)
+  assert.equal(difference.unexplainedChannels, 0, `${name}: changed belt pixels after reopening`)
 }
 async function closeSkills(skills) {
   await skills.getByRole('button', { name: 'Close skills', exact: true }).click()
@@ -290,15 +329,35 @@ async function inventoryFromSkills(inventory, skills) {
   await skills.getByRole('button', { name: 'Open inventory', exact: true }).click()
   await inventoryReady(inventory)
 }
+async function ambientControls(skills, count) {
+  // The seals move beneath translucent belt art even while snapshots are held.
+  const controls = []
+  for (let sample = 0; sample < count; sample += 1) {
+    await page.waitForTimeout(50)
+    controls.push(await beltPixels(skills))
+  }
+  return controls
+}
+async function assertDeliveredBelt(skills, reopened, name, imageName, expected) {
+  const beforeControls = await ambientControls(skills, ambientBeforeSamples)
+  release()
+  await frames()
+  assert.deepEqual(await labels(skills), expected, name)
+  const delivered = await beltPixels(skills, imageName)
+  holding = true
+  const afterControls = await ambientControls(skills, ambientAfterSamples)
+  assert.deepEqual(await labels(skills), expected, name)
+  release()
+  await assertPixels(reopened, delivered, name, beforeControls, afterControls)
+}
 async function reopenWithoutSnapshot(inventory, skills, name, expected) {
   holding = true
   await inventory.getByRole('button', { name: 'Open skills', exact: true }).click()
   await skillsReady(skills)
   assert.deepEqual(await labels(skills), expected, name)
   const reopened = await beltPixels(skills, `${name}-reopened`)
-  release()
-  await frames()
-  await assertPixels(reopened, await beltPixels(skills, `${name}-after-delivery`), `${name}-delivery`)
+  await assertDeliveredBelt(skills, reopened, `${name}-delivery`,
+    `${name}-after-delivery`, expected)
 }
 async function exerciseSlots(inventory, skills, scene) {
   for (let slot = 0; slot < 8; slot += 1) {
@@ -324,9 +383,8 @@ async function exerciseSlots(inventory, skills, scene) {
   await skillsReady(skills)
   assert.deepEqual(await labels(skills), expected)
   const reopened = await beltPixels(skills, `${scene}-closed-reopened`)
-  release()
-  await frames()
-  await assertPixels(reopened, await beltPixels(skills, `${scene}-closed-after-delivery`), `${scene}-complete-close-reopen`)
+  await assertDeliveredBelt(skills, reopened, `${scene}-complete-close-reopen`,
+    `${scene}-closed-after-delivery`, expected)
 
 }
 async function exerciseCount(inventory, skills, scene) {
@@ -349,11 +407,10 @@ async function exerciseCount(inventory, skills, scene) {
   holding = true
   await inventory.getByRole('button', { name: 'Open skills', exact: true }).click()
   await skillsReady(skills)
+  const expected = await labels(skills)
   const before = await beltPixels(skills, `${scene}-count-before-delivery`)
-  release()
-  await frames()
-  const after = await beltPixels(skills, `${scene}-count-after-delivery`)
-  await assertPixels(before, after, `${scene}-current-recursive-potion-count`)
+  await assertDeliveredBelt(skills, before, `${scene}-current-recursive-potion-count`,
+    `${scene}-count-after-delivery`, expected)
 }
 async function exerciseItems(inventory, skills, scene) {
   await inventoryFromSkills(inventory, skills)

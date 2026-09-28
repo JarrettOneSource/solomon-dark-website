@@ -153,6 +153,65 @@ The report's changed Inventory action, frozen-world cast and cooldown painter
 have separate passing desktop/touch journeys and the complete canonical gate;
 no product workaround or weakened pixel assertion was introduced.
 
+### September 28 supplemental: touch belt screenshot sampling
+
+The optional touch smoke's five/one changed channels were a composite-image
+sampling defect. On the unchanged `ab3b7ae4` build, M5 Chrome 153 reproduced
+the same masked pixel drift **before releasing any held snapshot**. Thirty
+same-state captures produced over-threshold channels in 26 samples, with a
+maximum of nine channels and ten colour levels. The delivery comparison had
+five channels and the same ten-level maximum at the same empty Belt 4 pixels
+(including crop coordinates `82,13` and `82,14`). The first short control had
+already risen from three to eight levels without delivery. Belt labels and
+host binding IDs stayed fixed, and page, console, response and request error
+arrays were empty. The short and extended diagnostic logs hash to
+`a194675437b72beda0315f850b2e56f316d5991c13641d80d637d02460a978d6`
+and `af30ce0035d78ae6f953e7a560985ac55289c1fb8d1a2bb27317b3a0db350313`.
+
+This is consistent with the recovered painter: `SkillBookRenderer.render`
+advances additive ambient seals every presentation frame, and the belt backing
+is intentionally translucent (`.78`); skill icons draw at `.375`, while item
+icons are opaque. The failing pixels were in the empty fourth belt cell, where
+only that backing covers the seals, so seal light could cross its eight-level
+threshold while the belt itself stayed unchanged. The Website binding and
+painter contract does not need a gameplay or visual alteration. The maintained
+smoke should measure each channel's same-state motion while snapshots are held
+and after delivery, then require zero belt channels changed by more than eight
+levels **beyond that measured motion**. It keeps the exact labels, owner belt
+ID checks and nonempty foreground witness; a deliberate stale-art negative
+control validates the comparator outside the maintained smoke. Do not raise a
+global tolerance merely to make the smoke pass.
+
+The corrected comparator records each channel's colour range across the
+reopened frame and 30 held-snapshot controls, and across the delivered frame
+and five delivered-state controls. A channel fails only when the gap between
+those ranges exceeds the original eight-level limit, so the allowance is eight
+levels beyond the motion measured at that channel, not overlap alone. This
+keeps the reported regression detectable: a reopened belt that stays stale
+until another server snapshot cannot change while delivery is held, so its
+held and delivered ranges still separate, and exact labels are compared again
+after release and after the second hold. A change that completes during the
+hold, such as a stale first frame that corrects itself without a network
+message, is indistinguishable from motion and is outside that contract. A seal
+step between the last held capture and the delivered capture can still exceed
+the allowance; neither full journey hit it. The exact built M5 Chrome 153
+desktop and 844×390 touch journeys each passed 27 receipts and 26 pixel
+comparisons with zero unexplained channels and empty
+page/console/response/request errors. Raw maximum differences were 12/10
+levels, and 620/65 channels over eight levels were explained by same-state
+motion. Those counts include the several seconds of seal motion now sampled
+between the reopened and delivered captures; entry 115's fixed-pair desktop
+acceptance had none over eight. Their logs hash to
+`777faa8e6e011d4b03ce1cc2e53f901e71f844fbc9a3613be8c8c8184389ecee`
+and `a7db98e75d79247ddf4071b0742e94073039c0df2b7b8425a0036b72dd8839d1`.
+A task-only negative control, not part of the maintained smoke, whitened an
+8×8 patch inside the empty Belt 4 cell in the delivered frame and every
+delivered-state control of the hub recursive-potion-count comparison; the
+comparator rejected 192 unexplained channels (log SHA-256
+`278acf5c55fe80ff2b15f3c5c8e04aeac101eb9429e1eaa60e19ccedadc07416`).
+No gameplay or Pixi painter bytes changed. The repository gate, publication
+and task-storage cleanup are recorded separately.
+
 ## 2026-09-27 — Report 50: equipment drops into an addressed Sack cell
 
 ### Report and causal evidence before implementation
