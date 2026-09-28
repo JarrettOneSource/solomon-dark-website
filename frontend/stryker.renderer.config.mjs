@@ -11,7 +11,7 @@ export default {
   coverageAnalysis: 'off',
   // Four workers cut the WSL mutation run from 546 to 349 seconds; smaller hosts retain two.
   // GitHub's four-core runner needs two checkers to finish inside the workflow limit.
-  concurrency: availableParallelism() >= 16 || process.env.GITHUB_ACTIONS === 'true' ? 4 : 2,
+  concurrency: availableParallelism() >= 16 || process.env.GITHUB_ACTIONS === 'true' ? 6 : 2,
   timeoutMS: 10000,
   timeoutFactor: 2,
   reporters: ['clear-text', 'progress', 'json', 'html'],
