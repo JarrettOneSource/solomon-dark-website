@@ -3102,3 +3102,56 @@ or exact pixel comparison at the reporter's timestamp.
 The reported shape difference matches stock selection. No runtime, atlas,
 authority, save or protocol change is warranted; the report is resolved as an
 intended native visual distinction. No platform member is blocked.
+
+## 2026-09-28 — Report 53 crowded Pike-pin crash audit
+
+The reporter describes crashes while pinned on a spear-bearing Knight during a
+crowded Coffin/Deep Portal 2 phase, but supplied no error log or save from a
+pin. The related September 26 level-36 Coffin save is a different occurrence:
+ZIP SHA-256 `150f045c74e9237b7c0fdca7c2703ca3101ed4cb71639e75281dd098a184b3a4`.
+It restores at tick 368047 with 223 enemy actors, including 37 Pike Skeletons,
+304 Coffin Maggots and 129 death effects. None of its Pikes is latched at the
+saved instant. This investigation reuses the pinned retail 0.72.5 Pike
+authority above (`0x00477580` event 16, `0x00484B90` held-target constraint,
+`0x0048D130` armor/death detach) rather than inventing a Knight-specific
+actor class or changing the previously recovered rules.
+
+| Native member / branch | Disposition | Current evidence |
+| --- | --- | --- |
+| Pike event 16, target registration and direct damage | verified-already-at-parity | The existing action tests cover the event; diagnostic copies of the related save admitted 1, 8 and 37 simultaneous marker crossings in one authoritative tick without an exception. The 37-hit case entered ordinary Game Over. |
+| Multiple retained Pike handles and sequential player-root constraints | verified-already-at-parity | The existing two-Pike regression and a diagnostic 37-latch continuation held all 37 for 200 ticks, with no state error. |
+| Invalid/dead target, Dazzle, Knockback, disruption, distance, scene loss, armor and Pike-break detach | verified-already-at-parity | Existing complete Pike lifecycle tests in this entry remain applicable; this report supplied no contradictory release trace. |
+| Pike shaft records 54/56, stretched target endpoint, body/weapon painter order, recoil and sound | verified-already-at-parity | The prior authored-art and browser matrix remain the contract. Current built-browser 37-latch journeys rendered and retired without page, console, wire or host errors. |
+| Save restoration, host projection and browser replication | verified-already-at-parity | The original schema-42 save and diagnostic 37-latch copy entered the built Windows browser with 37 Pike actors; no protocol or host error occurred. |
+| Coffin/Maggot population and general crowded-scene frame rate | out-of-system for Pike | The same population measured below 60 FPS without any latch and is retained for report 09's separate performance review; a Pike-only fix would misattribute it. |
+| Browser WebGL context loss or renderer-process death | out-of-system for native Pike | No such event or crash artifact was captured. Empty page/host logs cannot prove that this historical failure mode did not occur. |
+
+The unmodified current game completed 1,000 authority ticks from the related
+save, reaching ordinary Game Over without an exception. The 37-latch diagnostic
+copy remained active for 200 ticks with all handles retained. On built Windows
+Chrome 153 with Intel UHD 750 Direct3D11 WebGL, a 20-second replay of the
+unaltered save and a forced-37-latch replay returned empty page, console,
+response, request, wire and host error arrays. Their first measurements were
+24.2 and 25.6 FPS under unrelated WSL load. With that load absent, the
+unaltered save advanced at the intended 100 simulation ticks per second but
+rendered at 42.0 FPS; the 37-latch copy with held Magic Missile input rendered
+at 39.1 FPS and again reached ordinary Game Over without a crash. Moving only
+the camera/player far from the crowd still gave 44.3 FPS. A task-local copy
+with the live enemy/effect population and wave director removed held 60.0 FPS
+and 100 simulation ticks per second. That control is diagnostic only, not a
+proposed game rule. The source and diagnostic variants remain private; result
+receipt hashes are `b186756956320ae45c80cacc4ba1a7c4a66ae3fe05876be0d1fd134396aaba57`
+(low-load original), `6ed5b9f414a1aba2ff801b075cc668c9c1c29844e429f11a79128343e9ed820f`
+(37 latches plus casting), `7de55ed9d1aa499de1815140e42bab727f0271e4b544d6fc2ae7915c8b07f300`
+(far camera), and `337f6304f3ed0534713e06a4e35d519dd724fd05d38f6d07fbda96a9b3e54431`
+(empty non-spawning control).
+
+These observations establish crowded-scene cost, not a Pike-specific crash or
+Pike-specific frame penalty. A read-only second opinion agreed with that
+boundary and identified off-camera view submission versus per-frame update as
+the next discriminating measurement for report 09. This report changes no
+runtime code. The original crash's exact frame, browser/GPU state and error
+remain unknown; completion here is an investigated non-reproduction, not a
+claim that no historical crash occurred. The identical runtime commit already
+passed the canonical WSL Website gate for report 51 (3,957 Node tests, 24
+Python tests, no renderer quality failures).
