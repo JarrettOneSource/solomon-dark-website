@@ -21,6 +21,7 @@ try {
   const host = await launch('host')
   const guest = await launch('guest')
   console.log('Desktop peer smoke: both title screens ready')
+  await activate(host.page)
   await host.page.getByRole('button', { name: 'Play with friends', exact: true }).click()
   await host.page.getByRole('button', { name: 'Host friends', exact: true }).click()
   const code = host.page.getByLabel('Your invitation code', { exact: true })
@@ -30,6 +31,7 @@ try {
   await host.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize())
   console.log('Desktop peer smoke: host minimized before guest admission')
 
+  await activate(guest.page)
   await guest.page.getByRole('button', { name: 'Play with friends', exact: true }).click()
   await guest.page.getByLabel('Join a friend', { exact: true }).fill(invitation)
   await guest.page.getByRole('button', { name: 'Join friend', exact: true }).click()
@@ -41,13 +43,16 @@ try {
     window.show()
   })
   console.log('Desktop peer smoke: encrypted channel connected')
+  await activate(host.page)
   await host.page.getByRole('button', { name: 'Done', exact: true }).click()
+  await activate(guest.page)
   await guest.page.getByRole('button', { name: 'Done', exact: true }).click()
   await enterCollege(host.page)
   await enterCollege(guest.page)
   console.log('Desktop peer smoke: both players entered the College')
 
   for (const client of clients) {
+    await activate(client.page)
     await client.page.waitForFunction(() => document.querySelector('.hub-world-canvas')?.__sdrHubFrame.playerCount === 2)
   }
   const hostFrame = await frame(host.page)
@@ -57,6 +62,7 @@ try {
   const guestId = guestFrame.localPlayerId
   const before = hostFrame.playerPositions[guestId].x
   await moveGuest(guest.page)
+  await activate(host.page)
   await host.page.waitForFunction(({ id, before }) =>
     document.querySelector('.hub-world-canvas').__sdrHubFrame.playerPositions[id].x > before + 10,
   { id: guestId, before })
@@ -66,10 +72,12 @@ try {
   signalingClosed = true
   const afterSignalingClosed = (await frame(host.page)).playerPositions[guestId].x
   await moveGuest(guest.page)
+  await activate(host.page)
   await host.page.waitForFunction(({ id, before }) =>
     document.querySelector('.hub-world-canvas').__sdrHubFrame.playerPositions[id].x > before + 10,
   { id: guestId, before: afterSignalingClosed })
   await host.page.screenshot({ path: join(evidence, 'peer-host-college.png') })
+  await activate(guest.page)
   await guest.page.screenshot({ path: join(evidence, 'peer-guest-college.png') })
   assert.deepEqual(clients.flatMap(client => client.pageErrors), [])
 
@@ -78,7 +86,8 @@ try {
   await guest.page.waitForFunction(() => !document.querySelector('.hub-world-canvas'), { timeout: 20_000 })
   const receipt = { status: 'ok', protocol: 'shared game protocol', peers: 2,
     sharedAuthority: true, guestMovementSeenByHost: true, signalingIndependentGameplay: true,
-    hostCloseDisconnectsGuest: true, minimizedHostAdmission: true, pageErrors: [] }
+    hostCloseDisconnectsGuest: true, minimizedHostAdmission: true,
+    numericIceFixture: process.env.SDR_DESKTOP_TEST_NUMERIC_ICE === '1', pageErrors: [] }
   await writeFile(join(evidence, 'peer-smoke.json'), `${JSON.stringify(receipt, null, 2)}\n`)
   console.log(JSON.stringify(receipt))
 } catch (error) {
@@ -128,6 +137,7 @@ async function launch(name) {
 }
 
 async function enterCollege(page) {
+  await activate(page)
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   await page.getByRole('button', { name: /^New game$/i }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor()
@@ -141,6 +151,7 @@ async function enterCollege(page) {
 }
 
 async function frame(page) {
+  await activate(page)
   return page.locator('.hub-world-canvas').evaluate(canvas => {
     const frame = canvas.__sdrHubFrame
     return { localPlayerId: frame.localPlayerId, playerCount: frame.playerCount, playerPositions: frame.playerPositions }
@@ -148,7 +159,7 @@ async function frame(page) {
 }
 
 async function moveGuest(page) {
-  await page.bringToFront()
+  await activate(page)
   const before = (await frame(page)).playerPositions[(await frame(page)).localPlayerId].x
   await page.keyboard.down('d')
   try {
@@ -157,4 +168,16 @@ async function moveGuest(page) {
   } finally {
     await page.keyboard.up('d')
   }
+}
+
+async function activate(page) {
+  const client = clients.find(client => client.page === page)
+  if (!client) throw new Error('Unknown desktop test window')
+  await client.app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0]
+    if (window.isMinimized()) window.restore()
+    window.show()
+    window.focus()
+  })
+  await page.bringToFront()
 }
