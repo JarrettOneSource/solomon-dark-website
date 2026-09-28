@@ -207,8 +207,27 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     }
   }
   if (type === 'unequip') {
-    onlyKeys(source, 'action', ['type', 'slot'])
-    return { type, slot: equipmentSlot(source.slot, 'action.slot') }
+    onlyKeys(source, 'action', ['type', 'slot', 'destinationSackId', 'destinationSlot'])
+    const hasSack = Object.hasOwn(source, 'destinationSackId')
+    const hasSlot = Object.hasOwn(source, 'destinationSlot')
+    if (hasSack !== hasSlot) {
+      throw new GameProtocolError('action.unequip destination requires both root and slot')
+    }
+    const slot = equipmentSlot(source.slot, 'action.slot')
+    if (!hasSack) return { type, slot }
+    return {
+      type,
+      slot,
+      destinationSackId: source.destinationSackId === null
+        ? null : positiveInteger(source.destinationSackId, 'action.destinationSackId'),
+      destinationSlot: source.destinationSlot === null
+        ? null : integerWithin(
+            source.destinationSlot,
+            'action.destinationSlot',
+            0,
+            HUB_INVENTORY_SLOT_CAPACITY - 1,
+          ),
+    }
   }
   throw new GameProtocolError('unknown hub inventory action')
 }

@@ -623,6 +623,8 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'transfer', direction: 'to-backpack', gesture: 'double-activation', itemId: 4 },
     { type: 'unforge', itemId: 6 },
     { type: 'unequip', slot: 'weapon' },
+    { type: 'unequip', slot: 'ring-0', destinationSackId: 40_011, destinationSlot: 12 },
+    { type: 'unequip', slot: 'ring-1', destinationSackId: null, destinationSlot: null },
   ] as const
   for (const action of actions) {
     assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
@@ -652,6 +654,11 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'dowse', referenceItemId: 0 },
     { type: 'dowse', referenceItemId: -1 },
     { type: 'dowse', referenceItemId: '42' },
+    { type: 'unequip', slot: 'ring-0', destinationSackId: 40_011 },
+    { type: 'unequip', slot: 'ring-0', destinationSlot: 12 },
+    { type: 'unequip', slot: 'ring-0', destinationSackId: -1, destinationSlot: 12 },
+    { type: 'unequip', slot: 'ring-0', destinationSackId: null, destinationSlot: -1 },
+    { type: 'unequip', slot: 'ring-0', destinationSackId: null, destinationSlot: 88 },
     { type: 'sell-fomentius', itemId: 1 },
   ]) {
     assert.throws(() => decodeClientGameMessage(JSON.stringify({

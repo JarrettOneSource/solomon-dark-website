@@ -35,6 +35,7 @@ import {
   NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   createEquipmentInventoryItem,
   findInventoryItem,
+  projectInventoryItems,
 } from '../core-kernels/hub-economy.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import {
@@ -1260,6 +1261,50 @@ test('Cosmofluxic Wand with Revelation equips, snapshots, saves, and unequips Da
   })
   assert.equal(unequipped.accepted, true)
   assert.equal(getPlayerSkillBook(unequipped.state, 'owner').effectiveRanks[51], 0)
+})
+
+test('addressed Ring unequip remains in its nested Sack through the host action and save', () => {
+  const owner = { discipline: 'arcane', displayName: 'Owner', element: 'ether' } as const
+  const base = createGameSimulation({ owner })
+  const economy = getPlayerEconomy(base, 'owner')
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === 'ring' && row.level === 0)!
+  const ring = createEquipmentInventoryItem(recipe, 41_001)
+  const inner: HubInventoryItem = {
+    ...economy.backpack[0]!, id: 41_002, kind: 'sack', nativeTypeId: 7008,
+    name: 'Inner Sack', nativeSubtype: 0, iconRecords: [70], inventorySlot: 0, contents: [],
+  }
+  const outer: HubInventoryItem = {
+    ...inner, id: 41_003, name: 'Outer Sack', inventorySlot: 2, contents: [inner],
+  }
+  const state = {
+    ...base,
+    playerEntities: replacePlayerEconomy(base.playerEntities, 'owner', {
+      ...economy,
+      backpack: [...economy.backpack, outer],
+      equipment: { ...economy.equipment, rings: [ring, null, null] as const },
+      nextItemId: 41_004,
+    }),
+  }
+  const dropped = applyGameSimulationHubAction(state, 'owner', {
+    type: 'unequip', slot: 'ring-0', destinationSackId: inner.id, destinationSlot: 12,
+  })
+  assert.equal(dropped.accepted, true)
+  assert.deepEqual(
+    projectInventoryItems(getPlayerEconomy(dropped.state, 'owner').backpack)
+      .filter(({ item }) => item.id === ring.id)
+      .map(({ depth, parentSackId, slot }) => [depth, parentSackId, slot]),
+    [[2, inner.id, 12]],
+  )
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {},
+    playerId: 'owner', state: dropped.state,
+  })).state
+  assert.deepEqual(
+    projectInventoryItems(getPlayerEconomy(restored, 'owner').backpack)
+      .filter(({ item }) => item.id === ring.id)
+      .map(({ depth, parentSackId, slot }) => [depth, parentSackId, slot]),
+    [[2, inner.id, 12]],
+  )
 })
 
 test('locked Goodies require an explicit nearest-facing interaction and consume one recursive Wizard Key', () => {

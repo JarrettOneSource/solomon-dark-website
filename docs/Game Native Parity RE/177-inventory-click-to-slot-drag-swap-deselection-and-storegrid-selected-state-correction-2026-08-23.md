@@ -1,5 +1,11 @@
 # Inventory click-to-slot, drag swap, deselection, and StoreGrid selected-state correction (2026-08-23)
 
+> **2026-09-27 Report 50 correction:** the historical "one `unequip`" row below
+> proved equipment-source removal but omitted the pointed destination holder
+> and active nested-Sack root. The [addressed InventoryGrid reopening](<293-2026-08-28-reopened-inventorygrid-addressed-slots-and-beltbutton-readiness-presentation.md#2026-09-27--report-50-equipment-drops-into-an-addressed-sack-cell>)
+> owns that missing native transfer and Website correction; the source-side
+> Hat/Robe rejection and equip admission here remain valid.
+
 ## Reopened claim and native causal thread
 
 The earlier inventory row is reopened. It covered same-object double activation

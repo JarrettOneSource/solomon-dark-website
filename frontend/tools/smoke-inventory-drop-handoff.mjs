@@ -11,8 +11,9 @@ import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { HUB_INVENTORY_GRID, HUB_SHOP_GRID, HUB_UNFORGE_TARGET, hubInventorySlotPosition } from '../src/game/renderer/hub-inventory-render-contract.ts'
-import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem, findInventoryItem } from '../src/game/core-kernels/hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem, findInventoryItem, projectInventoryItems } from '../src/game/core-kernels/hub-economy.ts'
 
+const report50Only = process.argv.includes('--report50-only')
 const screenshotRoot = process.env.SDR_INVENTORY_DROP_SCREENSHOT_ROOT
   || await mkdtemp(join(tmpdir(), 'solomon-inventory-drop-'))
 await mkdir(screenshotRoot, { recursive: true })
@@ -55,7 +56,9 @@ const backpack = [
   { ...ring, id: 40_007, inventorySlot: 6, generatedLevel: 50 },
   { ...potion, id: 40_008, inventorySlot: 7, quantity: 1 },
   { ...potion, id: 40_009, inventorySlot: 8, quantity: 1 },
-  makeSack(40_010, 9, [makeSack(40_011, 0)]),
+  makeSack(40_010, 9, [makeSack(40_011, 0, [
+    { ...potion, id: 40_014, inventorySlot: 20, quantity: 1 },
+  ])]),
   { ...ring, id: 40_012, inventorySlot: 10 },
   makeSack(40_013, 11),
 ]
@@ -132,29 +135,33 @@ try {
   await page.locator('.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 60_000 })
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
-  await exerciseInventory(inventory, 'hub')
-  await teardownHandoff(inventory)
-  await closeInventory(inventory)
-  for (const [trader, title] of [
-    ['Fomentius', "FOMENTIUS' USEFUL THYNGS"],
-    ['Hagatha', "HAGATHA'S CHARMS AND CURSES"],
-    ['Luthacus', "LUTHACUS' SCAVENGED GOODS"],
-    ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"],
-  ]) {
-    await page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }).click()
-    const service = page.getByRole('dialog', { name: title, exact: true })
-    await exerciseInventory(service, trader.toLowerCase())
-    await service.getByRole('button', { name: 'Done', exact: true }).click()
-    await service.waitFor({ state: 'hidden' })
-    await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+  if (report50Only) {
+    await exerciseReport50(inventory)
+    await closeInventory(inventory)
+    await openBoneyardInventory()
+    await exerciseReport50Boneyard(inventory)
+    await closeInventory(inventory)
+  } else {
+    await exerciseInventory(inventory, 'hub')
+    await teardownHandoff(inventory)
+    await closeInventory(inventory)
+    for (const [trader, title] of [
+      ['Fomentius', "FOMENTIUS' USEFUL THYNGS"],
+      ['Hagatha', "HAGATHA'S CHARMS AND CURSES"],
+      ['Luthacus', "LUTHACUS' SCAVENGED GOODS"],
+      ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"],
+    ]) {
+      await page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }).click()
+      const service = page.getByRole('dialog', { name: title, exact: true })
+      await exerciseInventory(service, trader.toLowerCase())
+      await service.getByRole('button', { name: 'Done', exact: true }).click()
+      await service.waitFor({ state: 'hidden' })
+      await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+    }
+    await openBoneyardInventory()
+    await exerciseInventory(inventory, 'boneyard')
+    await closeInventory(inventory)
   }
-  await page.getByRole('button', { name: 'Enter the Boneyard', exact: true }).click()
-  const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
-  if (await picker.count()) await picker.getByRole('button').first().click()
-  await page.locator('.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
-  await page.getByRole('button', { name: /Open inventory/ }).click()
-  await exerciseInventory(inventory, 'boneyard')
-  await closeInventory(inventory)
   assert.deepEqual(errors, { console: [], page: [], responses: [] })
   console.log(JSON.stringify({ receipts, errors, screenshotRoot, status: 'ok' }))
 } catch (error) {
@@ -225,6 +232,101 @@ async function exerciseInventory(inventory, scene) {
     await item(ringId).waitFor()
   }
   await page.screenshot({ path: join(screenshotRoot, `${scene}-inventory.png`) })
+}
+
+async function exerciseReport50(inventory) {
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const item = (id, owner = 'backpack') => inventory.locator(
+    `[data-inventory-owner="${owner}"][data-inventory-item-id="${id}"]`,
+  ).first()
+  const equipment = slot => inventory.locator(`[data-equipment-slot="${slot}"]`).first()
+  await releaseItem(inventory, item(ringId), await center(equipment('ring-0')), 'report50-equip')
+  await item(ringId, 'equipment').waitFor()
+  await openSack(inventory, item(40_010), '40010')
+  await openSack(inventory, item(40_011), '40010/40011')
+  await releaseItem(inventory, item(ringId, 'equipment'), await cellCenter(inventory, 13), 'report50-nested-blank')
+  await item(ringId).waitFor()
+  let placement = projectInventoryItems(currentEconomy().backpack)
+    .find(({ item }) => item.id === ringId)
+  assert.deepEqual(
+    [placement?.depth, placement?.parentSackId, placement?.slot],
+    [2, 40_011, 12],
+  )
+  assert.equal(currentEconomy().equipment.rings[0], null)
+  assert.equal(currentEconomy().backpack.some(({ id }) => id === ringId), false)
+  assert.equal(await item(ringId).getAttribute('data-inventory-slot'), '12')
+  await page.screenshot({ path: join(screenshotRoot, 'report50-nested-blank.png') })
+
+  await releaseItem(inventory, item(ringId), await center(equipment('ring-0')), 'report50-nested-re-equip')
+  await releaseItem(
+    inventory, item(ringId, 'equipment'), await cellCenter(inventory, 21),
+    'report50-nested-occupied', true, true,
+  )
+  placement = projectInventoryItems(currentEconomy().backpack)
+    .find(({ item }) => item.id === ringId)
+  const displaced = projectInventoryItems(currentEconomy().backpack)
+    .find(({ item }) => item.id === 40_014)
+  assert.deepEqual([placement?.parentSackId, placement?.slot], [40_011, 20])
+  assert.deepEqual([displaced?.parentSackId, displaced?.slot], [40_011, 0])
+
+  await releaseItem(inventory, item(ringId), await center(equipment('ring-0')), 'report50-occupied-re-equip')
+  await inventory.getByRole('button', { name: 'Return to parent inventory', exact: true }).click()
+  await waitForSack(inventory, '40010')
+  await releaseItem(inventory, item(ringId, 'equipment'), await center(item(40_011)), 'report50-sack-target')
+  placement = projectInventoryItems(currentEconomy().backpack)
+    .find(({ item }) => item.id === ringId)
+  assert.deepEqual([placement?.parentSackId, placement?.slot], [40_011, 1])
+  await openSack(inventory, item(40_011), '40010/40011')
+  await releaseItem(inventory, item(ringId), await center(equipment('ring-0')), 'report50-sack-re-equip')
+  await releaseItem(inventory, item(ringId, 'equipment'), await cellCenter(inventory, 0), 'report50-parent-holder')
+  placement = projectInventoryItems(currentEconomy().backpack)
+    .find(({ item }) => item.id === ringId)
+  assert.deepEqual(
+    [placement?.depth, placement?.parentSackId, placement?.slot],
+    [1, 40_010, 1],
+  )
+  assert.equal(currentEconomy().equipment.rings[0], null)
+  receipts.push({ name: 'report50-nested-and-parent-destinations', accepted: true })
+  await leaveNestedSacks(inventory)
+}
+
+async function exerciseReport50Boneyard(inventory) {
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const item = (id, owner = 'backpack') => inventory.locator(
+    `[data-inventory-owner="${owner}"][data-inventory-item-id="${id}"]`,
+  ).first()
+  const equipment = inventory.locator('[data-equipment-slot="ring-0"]').first()
+  await openSack(inventory, item(40_010), '40010')
+  await releaseItem(inventory, item(ringId), await center(equipment), 'report50-boneyard-equip')
+  await openSack(inventory, item(40_011), '40010/40011')
+  await releaseItem(inventory, item(ringId, 'equipment'), await cellCenter(inventory, 13), 'report50-boneyard-nested')
+  const placement = projectInventoryItems(currentEconomy().backpack)
+    .find(({ item }) => item.id === ringId)
+  assert.deepEqual(
+    [placement?.depth, placement?.parentSackId, placement?.slot],
+    [2, 40_011, 12],
+  )
+  assert.equal(currentEconomy().equipment.rings[0], null)
+  await page.screenshot({ path: join(screenshotRoot, 'report50-boneyard-nested.png') })
+  receipts.push({ name: 'report50-boneyard-nested-destination', accepted: true })
+  await leaveNestedSacks(inventory)
+}
+
+async function leaveNestedSacks(inventory) {
+  const parent = inventory.getByRole('button', { name: 'Return to parent inventory', exact: true })
+  await parent.click()
+  await waitForSack(inventory, '40010')
+  await parent.click()
+  await waitForSack(inventory, '')
+}
+
+async function openBoneyardInventory() {
+  await page.getByRole('button', { name: 'Enter the Boneyard', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
+  if (await picker.count()) await picker.getByRole('button').first().click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]')
+    .waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: /Open inventory/ }).click()
 }
 
 function currentEconomy() {

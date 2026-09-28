@@ -143,7 +143,12 @@ export type HubInventoryAction =
       readonly itemId: number
     }
   | { readonly type: 'unforge'; readonly itemId: number }
-  | { readonly type: 'unequip'; readonly slot: EquipmentSlot }
+  | {
+      readonly type: 'unequip'
+      readonly slot: EquipmentSlot
+      readonly destinationSackId?: number | null
+      readonly destinationSlot?: number | null
+    }
 export type HubItemKind =
   | 'antidote'
   | 'dye'
@@ -2088,6 +2093,8 @@ export function equipInventoryItem(
 export function unequipInventorySlot(
   source: HubEconomyState,
   slot: EquipmentSlot,
+  destinationSackId: number | null = null,
+  destinationSlot: number | null = null,
 ): HubEconomyResult {
   if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
   if (slot === 'ring-2' && !source.ownedPerkSelectors.includes(19)) {
@@ -2096,13 +2103,44 @@ export function unequipInventorySlot(
   if (slot === 'hat' || slot === 'robe') return rejected(source, 'required-clothing')
   const item = equippedAt(source.equipment, slot)
   if (!item) return rejected(source, 'slot-empty')
-  const backpack = insertItem(source.backpack, item, HUB_INVENTORY_SLOT_CAPACITY)
-  if (!backpack) return rejected(source, 'capacity-full')
-  return accepted({
+
+  const root = inventoryRootForParent(source.backpack, destinationSackId)
+  if (root === null) return rejected(source, 'invalid-target')
+  const capacity = destinationSackId === null
+    ? HUB_INVENTORY_SLOT_CAPACITY : HUB_SACK_CHILD_REPLICATION_LIMIT
+  const visibleCapacity = HUB_INVENTORY_SLOT_CAPACITY - (destinationSackId === null ? 0 : 1)
+  if (destinationSlot !== null && (
+    !Number.isSafeInteger(destinationSlot)
+    || destinationSlot < 0
+    || destinationSlot >= visibleCapacity
+  )) return rejected(source, 'invalid-target')
+
+  let placed = destinationSlot === null
+    ? null : insertItemAtSlot(root, item, destinationSlot, capacity)
+  if (placed === null) {
+    const inserted = insertItem(
+      root,
+      item,
+      destinationSlot === null ? capacity : visibleCapacity,
+    )
+    if (inserted === null) return rejected(source, 'capacity-full')
+    if (destinationSlot === null) placed = inserted
+    else {
+      const relocated = relocateInventoryRootItem(inserted, item.id, destinationSlot)
+      if (relocated.reason !== null) return rejected(source, relocated.reason)
+      placed = relocated.items
+    }
+  }
+  const backpack = replaceInventoryRoot(source.backpack, destinationSackId, placed)
+  if (backpack === null) return rejected(source, 'invalid-target')
+  const result = {
     ...source,
     backpack,
     equipment: withEquippedItem(source.equipment, slot, null),
-  })
+  }
+  return hubEconomyInventoryIsValid(result)
+    ? accepted(result)
+    : rejected(source, 'invalid-inventory')
 }
 
 export function createFomentiusInventoryItem(

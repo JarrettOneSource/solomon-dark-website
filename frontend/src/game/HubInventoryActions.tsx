@@ -694,7 +694,9 @@ function dropInventorySource(
       }
     }
   }
-  if (source.equipmentSlot === null || !pointInRect(point, [0, 490, 1600, 310])) return
+  if (source.equipmentSlot === null) return
+  const visibleSlot = inventoryVisibleSlotAtPoint(point)
+  if (visibleSlot === null) return
   if (source.equipmentSlot === 'hat') {
     onNotice(HUB_HAT_REMOVAL_MSGBOX)
     return
@@ -703,5 +705,66 @@ function dropInventorySource(
     onNotice(HUB_ROBE_REMOVAL_MSGBOX)
     return
   }
-  onAction({ type: 'unequip', slot: source.equipmentSlot })
+  const item = itemAtEquipmentSlot(economy, source.equipmentSlot)
+  if (!item) return
+  const hasParentRoot = sackPath.length > 0
+  if (hasParentRoot && visibleSlot === 0) {
+    onMoveSound('backpack-open', 1.25)
+    onAction({
+      type: 'unequip', slot: source.equipmentSlot,
+      destinationSackId: sackPath.at(-2) ?? null, destinationSlot: null,
+    })
+    return
+  }
+  const destinationSlot = hubInventoryRootSlot(visibleSlot, hasParentRoot)
+  if (destinationSlot === null) return
+  const activeRoot = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
+  const visibleItems = projectInventoryRootSlots(activeRoot)
+  const resident = visibleItems.find(({ slot }) => slot === destinationSlot)?.item ?? null
+  if (resident?.nativeTypeId === 7008) {
+    onMoveSound('backpack-open', 1.25)
+    onAction({
+      type: 'unequip', slot: source.equipmentSlot,
+      destinationSackId: resident.id, destinationSlot: null,
+    })
+    return
+  }
+  const action: HubInventoryAction = {
+    type: 'unequip', slot: source.equipmentSlot,
+    destinationSackId: sackPath.at(-1) ?? null, destinationSlot,
+  }
+  if (!resident) {
+    onAction(action)
+    return
+  }
+  const sourceRect = hubInventoryEquipmentSlotRects(source.equipmentSlot, companion)[0]!
+  const sourceCenter = {
+    x: sourceRect[0] + sourceRect[2] / 2,
+    y: sourceRect[1] + sourceRect[3] / 2,
+  }
+  const destinationPosition = hubInventorySlotPosition(visibleSlot)
+  const destinationCenter = {
+    x: destinationPosition.x + HUB_INVENTORY_GRID.cellSize / 2,
+    y: destinationPosition.y + HUB_INVENTORY_GRID.cellSize / 2,
+  }
+  const occupied = new Set(visibleItems.map(({ slot }) => slot))
+  let firstHole = 0
+  const capacity = HUB_INVENTORY_GRID.capacity - (hasParentRoot ? 1 : 0)
+  while (firstHole < capacity && occupied.has(firstHole)) firstHole += 1
+  if (firstHole >= capacity) {
+    onAction(action)
+    return
+  }
+  const holePosition = hubInventorySlotPosition(hubInventoryVisibleSlot(firstHole, hasParentRoot))
+  onMoveSound('click', 1.75)
+  onFlyby({
+    action,
+    lanes: [
+      { from: sourceCenter, item, to: destinationCenter },
+      { from: destinationCenter, item: resident, to: {
+        x: holePosition.x + HUB_INVENTORY_GRID.cellSize / 2,
+        y: holePosition.y + HUB_INVENTORY_GRID.cellSize / 2,
+      } },
+    ],
+  })
 }

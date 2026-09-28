@@ -901,6 +901,14 @@ test('all six equipment classes route through the seven sinks and third ring is 
     } else {
       assert.equal(unequipped.accepted, true, `${type} unequips from ${slot}`)
       assert.ok(unequipped.state.backpack.some(({ id }) => id === item.id))
+      const occupiedSlots = new Set(projectInventoryRootSlots(equipped.state.backpack)
+        .map(({ slot }) => slot))
+      let firstFree = 0
+      while (occupiedSlots.has(firstFree)) firstFree += 1
+      assert.equal(findInventoryItem(unequipped.state.backpack, item.id)?.inventorySlot, firstFree)
+      const addressed = unequipInventorySlot(equipped.state, slot, null, 25)
+      assert.equal(addressed.accepted, true, `${type} enters a selected backpack cell`)
+      assert.equal(findInventoryItem(addressed.state.backpack, item.id)?.inventorySlot, 25)
     }
   }
 
@@ -915,12 +923,18 @@ test('all six equipment classes route through the seven sinks and third ring is 
     UNRESTRICTED_EQUIPMENT_ADMISSION,
   ).reason, 'slot-locked')
   const unlocked = { ...ringState, ownedPerkSelectors: [19] }
-  assert.equal(equipInventoryItem(
+  const thirdRing = equipInventoryItem(
     unlocked,
     ring.id,
     'ring-2',
     UNRESTRICTED_EQUIPMENT_ADMISSION,
-  ).accepted, true)
+  )
+  assert.equal(thirdRing.accepted, true)
+  assert.equal(
+    findInventoryItem(unequipInventorySlot(thirdRing.state, 'ring-2', null, 25).state.backpack, ring.id)
+      ?.inventorySlot,
+    25,
+  )
 })
 
 test('all six equipment classes reject generated gear above the player level', () => {
@@ -1559,6 +1573,90 @@ function nativeTestSack(
     recipeIndex: null,
   }
 }
+
+test('unequipping into a selected cell keeps the Ring in the active nested Sack', () => {
+  const base = createHubEconomy(1)
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === 'ring' && row.level === 0)!
+  const ring = { ...createEquipmentInventoryItem(recipe, 42_001), inventorySlot: 0 }
+  const occupied = { ...base.backpack[0]!, inventorySlot: 0 }
+  const inner = { ...nativeTestSack(42_003, [occupied]), inventorySlot: 0 }
+  const outer = { ...nativeTestSack(42_002, [inner]), inventorySlot: 1 }
+  const source = { ...base, backpack: [ring, outer] }
+  const equipped = equipInventoryItem(source, ring.id, 'ring-0', UNRESTRICTED_EQUIPMENT_ADMISSION)
+  assert.equal(equipped.accepted, true)
+
+  const returned = unequipInventorySlot(equipped.state, 'ring-0', inner.id, 12)
+  assert.equal(returned.accepted, true)
+  assert.equal(returned.state.equipment.rings[0], null)
+  assert.deepEqual(projectInventoryItems(returned.state.backpack).find(({ item }) => (
+    item.id === ring.id
+  )), {
+    depth: 2, item: { ...ring, inventorySlot: 12 }, parentSackId: inner.id, slot: 12,
+  })
+  assert.equal(returned.state.backpack.some(({ id }) => id === ring.id), false)
+})
+
+test('equipment drops respect occupied cells, Sack and parent holders, and reject stale targets', () => {
+  const base = createHubEconomy(1)
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === 'ring' && row.level === 0)!
+  const ring = { ...createEquipmentInventoryItem(recipe, 42_010), inventorySlot: 0 }
+  const first = { ...base.backpack[0]!, id: 42_011, inventorySlot: 0 }
+  const resident = { ...base.backpack[1]!, id: 42_012, inventorySlot: 12 }
+  const inner = { ...nativeTestSack(42_013, [first, resident]), inventorySlot: 0 }
+  const outer = { ...nativeTestSack(42_014, [inner]), inventorySlot: 1 }
+  const equipped = equipInventoryItem(
+    { ...base, backpack: [ring, outer] }, ring.id, 'ring-0',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  )
+  assert.equal(equipped.accepted, true)
+
+  const occupied = unequipInventorySlot(equipped.state, 'ring-0', inner.id, 12)
+  assert.equal(occupied.accepted, true)
+  const occupiedItems = projectInventoryItems(occupied.state.backpack)
+  assert.deepEqual(occupiedItems.filter(({ item }) => item.id === ring.id || item.id === resident.id)
+    .map(({ item, parentSackId, slot }) => [item.id, parentSackId, slot]), [
+    [resident.id, inner.id, 1], [ring.id, inner.id, 12],
+  ])
+
+  const intoSack = unequipInventorySlot(equipped.state, 'ring-0', inner.id)
+  assert.equal(intoSack.accepted, true)
+  assert.deepEqual(projectInventoryItems(intoSack.state.backpack).find(({ item }) => item.id === ring.id)
+    ?.parentSackId, inner.id)
+  const parent = unequipInventorySlot(equipped.state, 'ring-0', outer.id)
+  assert.equal(parent.accepted, true)
+  assert.deepEqual(projectInventoryItems(parent.state.backpack).find(({ item }) => item.id === ring.id)
+    ?.parentSackId, outer.id)
+
+  for (const [sackId, slot] of [
+    [42_999, 12], [inner.id, -1],
+    [inner.id, HUB_INVENTORY_SLOT_CAPACITY - 1],
+  ]) {
+    const rejected = unequipInventorySlot(equipped.state, 'ring-0', sackId, slot)
+    assert.equal(rejected.reason, 'invalid-target')
+    assert.strictEqual(rejected.state, equipped.state)
+  }
+
+  const fullBackpack = Array.from({ length: HUB_INVENTORY_SLOT_CAPACITY }, (_, slot) => ({
+    ...base.backpack[0]!, id: 43_000 + slot, inventorySlot: slot,
+  }))
+  const fullState = { ...equipped.state, backpack: fullBackpack, nextItemId: 43_100 }
+  const full = unequipInventorySlot(fullState, 'ring-0', null, 12)
+  assert.equal(full.reason, 'capacity-full')
+  assert.strictEqual(full.state, fullState)
+
+  const fullChild = { ...nativeTestSack(44_100, Array.from(
+    { length: HUB_INVENTORY_SLOT_CAPACITY - 1 },
+    (_, slot) => ({ ...base.backpack[0]!, id: 44_000 + slot, inventorySlot: slot }),
+  )), inventorySlot: 0 }
+  const fullParent = { ...nativeTestSack(44_101, [fullChild]), inventorySlot: 0 }
+  const fullNestedState = {
+    ...equipped.state, backpack: [fullParent], nextItemId: 44_102,
+  }
+  assert.equal(hubEconomyInventoryIsValid(fullNestedState), true)
+  const fullNested = unequipInventorySlot(fullNestedState, 'ring-0', fullChild.id, 12)
+  assert.equal(fullNested.reason, 'capacity-full')
+  assert.strictEqual(fullNested.state, fullNestedState)
+})
 
 test('native inventory projection is depth-first and sack relinking preserves one live subtree', () => {
   const base = createHubEconomy(1)

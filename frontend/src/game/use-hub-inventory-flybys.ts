@@ -8,15 +8,17 @@ import type {
 import {
   HUB_INVENTORY_FLYBY,
 } from './renderer/hub-inventory-render-contract.ts'
-import type { InventoryMoveAction } from './hub-inventory-ui-model.ts'
+type InventoryFlybyAction = Extract<HubInventoryAction, {
+  readonly type: 'move-inventory-item' | 'unequip'
+}>
 
 export interface InventoryFlybyRequest {
-  readonly action: InventoryMoveAction | null
+  readonly action: InventoryFlybyAction | null
   readonly lanes: readonly HubInventoryFlybyLaneModel[]
 }
 
 interface InventoryFlybyState extends HubInventoryFlybyModel {
-  readonly action: InventoryMoveAction | null
+  readonly action: InventoryFlybyAction | null
   readonly actionDispatched: boolean
   readonly feedbackSequence: number
 }

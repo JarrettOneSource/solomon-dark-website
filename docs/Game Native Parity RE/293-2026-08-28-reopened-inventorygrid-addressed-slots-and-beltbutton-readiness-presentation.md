@@ -1,5 +1,147 @@
 # 2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation
 
+## 2026-09-27 — Report 50: equipment drops into an addressed Sack cell
+
+### Report and causal evidence before implementation
+
+The archived six-second `ring_bug.mp4` (SHA-256
+`cd75884140ce40932b3249fd73ce19c374633fb6f6fb8859187179d1127ca56b`)
+shows a ring dragged from each equipment sink toward an ordinary backpack
+cell. The faded Sack icon in visible cell zero identifies a nested Sack page,
+not the top-level backpack. Both equipment cells become empty; the intended
+cells remain empty. The clip does not expose the authoritative destination
+IDs, so the precise resulting top-level slots come from the Website source,
+not a visual guess about the recording.
+
+The current Website `HubInventoryActions.tsx` computes an addressed cell and
+active `sackPath` for backpack sources, but its equipment-source branch accepts
+any point in the broad backpack rectangle and emits only `{type:'unequip',slot}`.
+`game-simulation.ts` calls `unequipInventorySlot`, which inserts into
+`source.backpack` at its first free top-level slot. The selected child root and
+cell never cross the authority boundary. The previous inventory drag journey
+checked only that the equipped Ring returned to *some* backpack cell; it even
+dropped at visible cell 25 without asserting that cell or the active root.
+
+Fresh read-only retail 0.72.5 Ghidra replica evidence (preferred base
+`0x00400000`, executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`)
+closes the missing native handoff. InventoryScreen `0x0056FC90`, raw
+`0x0057032C..0x0057037A`, reads the equipped holder, calls
+`0x0056DD80` to create `InventoryDragger` and detach the source, then clears
+that source holder with `0x00575850(..., null)`. On release, `0x0056DE50`
+receives the pointed holder; raw `0x0056E643..0x0056E669` passes the held item
+to that **specific** holder's `0x00575850` and inserts it through the screen's
+current root at `+0x158`. Ordinary holders write item and tick directly;
+kind-7 cell zero instead returns to the parent root. The page builder
+`0x00560BB0` produces those addressed ordinary and parent holders, while the
+shared insertion owner `0x0055FF20` fills the first hole for automatic
+placement and displaced occupants; the pointed cell still receives the held
+item. Thus the Website's root-only auto-insert is
+not the native drag-release contract. Existing entry 177's "one unequip"
+assertion covered the source transition but omitted the destination member;
+entry 293's addressed-grid audit did not cross from an equipment source.
+
+The retail executable was re-hashed this pass. The canonical Ghidra 12.0.3
+source project was read only through the Mod Loader replica wrapper at tool
+revision `08bfba9ef367f7b863848030d0a289dc31e33192` (wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`).
+The task-local decompile and instruction logs are respectively SHA-256
+`59d14db8e9ae902382beb34d05cfc909f1dfbc015cc4c01a10bf941bf631010a`
+and `fb07b0be9eda84b91e13d24dfa9a6a01d9d27bfc73feb2541172c9755b45a8cb`.
+The latter establishes the exact `ECX` target-holder receiver and held-item
+argument at `0x0056E643..0x0056E650`, followed by current-root insertion at
+`0x0056E65A..0x0056E669`.
+
+### System boundary and final membership inventory
+
+Native system: an equipment item's InventoryDragger transfer into the current
+InventoryScreen root, from source-holder detachment through pointed-holder
+commit, inventory refresh, action feedback, replication/save, and teardown.
+The target is the complete reachable equipment-source and grid-target family,
+not only the two Rings shown in the video.
+
+| Member or branch | Native source | Final disposition and proof |
+| --- | --- | --- |
+| Ring 0/1/2, Amulet, Staff/Wand equipment sources | `0x0056FC90 -> 0x0056DD80` | `exact-ported`: one addressed action path; all removable classes and the third Ring have kernel assertions, and real Ring sources pass Hub/Boneyard pointer journeys. |
+| Hat and Robe source refusal | `0x0056FC90`, authored MsgBoxes | `verified-already-at-parity`: required clothing still rejects without mutation; kernel and the broad Hub browser prelude cover both notices. |
+| Blank addressed cell in top-level and nested Sack roots | `0x0056DE50 -> 0x00575850`; current root `+0x158` | `exact-ported`: the host receives the chosen owned root and slot; two-level Sack target at root slot 12 survives save/restore and appears in both Hub and Boneyard. |
+| Kind-7 parent holder on a nested page | `0x00575850` kind 7 | `exact-ported`: visible cell zero inserts into the immediate parent root; built Hub journey confirms depth one and its first free slot. |
+| Occupied ordinary cell and Sack destination | `0x0056DE50` occupied branch; `0x0055FF20` first-hole insertion; `0x00550A70` Flyby | `exact-ported`: occupied cell receives the dragged Ring, its prior resident takes the first visible hole, and the existing two-lane Flyby waits for host feedback. A Sack cell inserts into that Sack's first free child slot. |
+| Matching stack | `0x0056DE50` Potion/content branch | `out-of-system` for equipped sources: every removable equipment class is one non-stackable object; existing backpack stack handling is unchanged. |
+| Click/double activation without a pointed grid cell | `0x0056D920 -> 0x0056D1B0` | `verified-already-at-parity` as a distinct auto-placement path; the existing first-hole action and direct activation remain unchanged and have a regression assertion. |
+| Invalid/off-grid target, full root, stale Sack path, locked ring sink | InventoryScreen release and shared admission | `exact-ported`: invalid targets and full visible pages leave the equipped object unchanged, and addressed nested slots cannot hide a displaced item beyond the visible 87 cells. Off-grid restoration and the third-ring gate retain their existing tests. |
+| College and Boneyard InventoryScreens | shared screen/economy owner | `exact-ported`: the same real pointer-to-host action passed built journeys in both scenes. |
+| Fomentius, Hagatha, Luthacus and Shlorio companion InventoryScreens | shared InventoryActions stage | `verified-already-at-parity` for mounting and drag ownership: the new action is the common path; a focused Fomentius journey passed and previous all-four receipts remain in this ledger. The broader fresh all-service journey has a separate limit below. |
+| Remote clients and save/resume | protocol 139 and participant economy save owner | `exact-ported`: strict paired-action codec, host reducer, simulation integration and save/restore tests retain one Ring at its nested identity/slot. |
+| Report 03 release ghost, Report 22 navigation pacing, Report 32 live belt | separate presentation/interaction owners | `out-of-system`; shared menu proximity is not a causal link. |
+
+Implementation must reuse the existing cell hit test, active Sack path and
+slot-addressed inventory insertion. The authoritative action, strict protocol
+codec, reducer and tests will carry the chosen root/slot together; local drag
+art remains presentation-only. The red check is equipment Ring -> blank cell
+inside a two-level Sack, with exact item ID and slot, source vacancy, no
+top-level duplicate, and the same result after save/restore. Built WSL browser
+acceptance will exercise the real pointer gesture and host feedback, plus the
+other removable sinks, protected clothing, parent/occupied/invalid targets,
+and empty page/console/response errors.
+
+The WSL red test now exercises Ring 0 -> visible cell 13 (root slot 12) in a
+two-level Sack. On the published base, 59 economy tests passed and that new
+test failed: the returned Ring occupied top-level slot zero at depth zero
+instead of inner Sack slot 12 at depth two. That red test preceded product edits.
+
+### Website correction and focused acceptance
+
+The shared `unequip` action now optionally carries a paired destination Sack
+ID and root slot. Legacy activation without a pointed cell keeps the existing
+first-hole path. The strict protocol-139 decoder rejects partial, invalid and
+out-of-range destination pairs; the host passes a valid pair to the same
+economy reducer in every scene. The reducer resolves the owned root, places
+into an addressed blank cell, or uses the existing first-hole plus root-swap
+mechanism for an occupied ordinary cell. Dropping on a Sack targets its child
+root; kind-7 cell zero targets the immediate parent. Invalid/full targets
+reject atomically. Hat/Robe and the third-ring gate retain their existing
+admission rules. The pointer owner reuses the established cell geometry and
+Sack path, while the existing Flyby owner handles an occupied two-item move.
+No new item catalog, persistent field or renderer asset was introduced.
+
+The WSL red test changed from 59/60 to 60/60; the focused economy, simulation
+and strict-protocol matrix passes 212/212, including two-level Sack placement
+after save/restore, all removable gear classes, and full-grid rejection. Test
+TypeScript, frontend lint and production build pass.
+The final built WSL browser journey produced twelve receipts across Hub and Boneyard:
+blank selected child cell, occupied child cell and displaced first-hole item,
+Sack target, parent holder, and later scene continuity all have the correct
+authoritative item ID/root/slot. Every sampled old-source pixel difference
+through host feedback was zero; page, console and failed-response arrays were
+empty. The complete browser log has SHA-256
+`d175cb1b6b9d410941a2ad60fe37c03d938c50603fdfd3cefc62a71ebf43bafe`;
+reviewed Hub/Boneyard screenshots have SHA-256
+`3df78f9cacb5a06cf9aa67dd8b256af711a8c60e0126bbe1fed5ce89556d443f`
+and `19165c685e7e58fc8b1e21e7e37a888e3b6a6af5cc0224f23607a6127dfc59c1`.
+The remote test wrapper blocked while printing that long receipt, then was
+stopped after the finished browser process and log were independently checked;
+the log parser exited zero and verified all twelve receipts.
+
+The broader inventory smoke passed 28 Hub receipts but timed out in an older
+Fomentius delayed-snapshot blank-drop completion wait after a second shop
+action. Its page/console/response arrays were empty; a focused fresh Fomentius
+journey passed all three service receipts. The isolated timeout is not proof
+that this addressed equipment drop caused a shared feedback defect, and the
+broader full-service journey is not claimed as passing. It is retained in the
+archive's final supplemental review for a separate bounded diagnosis. The
+canonical WSL gate completed all configured stages: 3,949 Node tests and 24
+Python tests ran with zero reported test failures, and the final renderer
+quality report recorded `"failures": []`. The SSH wrapper lost the remote
+shell's numeric exit code after the run completed, so a separate exit-zero
+log audit checked every stage marker, all test summaries and the final quality
+report. The complete validation log has SHA-256
+`5a403101c236a088432216d31d191a69796089f3d3c734187f7aab8d0961f6f6`.
+Task screenshots and raw logs are disposable scratch; their outcomes and
+hashes are recorded here.
+
 ## 2026-09-22 — Report 03: released-item ownership across host feedback
 
 ### Report, evidence, and reopened boundary

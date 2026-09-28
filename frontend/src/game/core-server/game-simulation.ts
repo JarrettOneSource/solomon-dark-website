@@ -1376,7 +1376,12 @@ function applyGameSimulationHubActionTransaction(
         action.itemId,
         getPlayerProgression(state, playerId),
       )
-      case 'unequip': return unequipInventorySlot(economy, action.slot)
+      case 'unequip': return unequipInventorySlot(
+        economy,
+        action.slot,
+        action.destinationSackId ?? null,
+        action.destinationSlot ?? null,
+      )
     }
   })()
   const actionFeedback = {
