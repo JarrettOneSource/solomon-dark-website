@@ -222,6 +222,7 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
 
   const legacyUnsigned = structuredClone(final)
   legacyUnsigned.schemaVersion = 12
+  delete legacyUnsigned.continuation.simulation.enhancedEffects
   delete legacyUnsigned.profile.advancedUnlocks
   delete legacyUnsigned.nativeSource
   const legacyPlayerStore = legacyUnsigned.continuation.simulation.playerEntities
@@ -682,6 +683,7 @@ test('global Hub rejects modded and cheats-on admissions before player ownership
     const denied = nextMessage(socket, message => message.type === 'server-disconnect')
     socket.send(encodeGameMessage({
       type: 'client-hello',
+      enhancedEffects: true,
       onlinePreferences: ONLINE_PREFERENCES,
       profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
       cheatsEnabled,
@@ -837,6 +839,7 @@ test('a fresh Tutorial decline enters the ordinary Hub and persists both consume
   ))
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     character: FIRST_CHARACTER,
     cheatsEnabled: false,
@@ -1049,6 +1052,7 @@ test('reserved party transfer imports one durable profile into an existing priva
   ))
   unreservedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -1072,6 +1076,7 @@ test('reserved party transfer imports one durable profile into an existing priva
   ))
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -3602,6 +3607,7 @@ test('game host rejects arbitrary origins and invalid bootstrap credentials', as
   context.after(() => socket.close())
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -3928,6 +3934,7 @@ test('shared-Hub Tutorial College deployment checkpoint detaches the completed B
   context.after(() => resumedSocket.close())
   resumedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -4006,6 +4013,7 @@ test('shared Hub recovers legacy saved Road links before its first Boneyard payl
   const loadedMessage = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -4051,6 +4059,7 @@ test('solo active-run restart waits for renderer readiness before its countdown'
   context.after(() => socket.close())
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -4331,6 +4340,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   )
   firstSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4354,6 +4364,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   ))
   secondSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4420,6 +4431,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   ))
   rejectedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4444,6 +4456,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   ))
   replacementSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4505,6 +4518,7 @@ test('host starts a fresh character from the durable profile without reviving it
   const welcomed = nextMessage(socket, message => message.type === 'server-welcome')
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4550,6 +4564,7 @@ test('new-game intent retires an active wizard and scavenges carried equipment',
   const welcomed = nextMessage(socket, message => message.type === 'server-welcome')
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4734,6 +4749,7 @@ test('saved party member catches up detached while the live party run continues'
   ))
   returningSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -4889,6 +4905,7 @@ test('staged catch-up loses its capability when the final live peer disconnects'
   const returningWelcome = nextMessage(returningSocket, message => message.type === 'server-welcome')
   returningSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -5057,6 +5074,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   rejectedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -5080,6 +5098,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   continuedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     allowModMismatch: true,
@@ -5556,6 +5575,7 @@ test('host exposes and authoritatively loads a selected mod Boneyard', async (co
   const lateLoaded = nextMessage(lateSocket, (message) => message.type === 'server-boneyard-loaded')
   lateSocket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -5803,6 +5823,7 @@ async function join(
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     ...(declineTutorial ? { declineTutorial: true } : {}),
     onlinePreferences,
@@ -5860,6 +5881,59 @@ async function completeInitialGameplayReadiness(
   await Promise.all(completed)
 }
 
+test('Enhanced Effects is owner-controlled, replicated to peers, checkpointed and not replaced by hello preferences', async (context) => {
+  const host = await startGameHost({ authentication: { kind: 'shared', credential: 'quality-test' }, snapshotRate: 100 })
+  context.after(() => host.close())
+  const connect = async (enabled: boolean) => {
+    const socket = await openSocket(host.address.url)
+    context.after(() => socket.close())
+    const welcome = nextMessage(socket, message => message.type === 'server-welcome')
+    socket.send(encodeGameMessage({ type: 'client-hello', enhancedEffects: enabled,
+      onlinePreferences: ONLINE_PREFERENCES, profile: EMPTY_PLAYER_PROFILE,
+      cheatsEnabled: false, protocolVersion: GAME_PROTOCOL_VERSION,
+      credential: 'quality-test', character: FIRST_CHARACTER }))
+    const message = await welcome
+    assert.equal(message.type, 'server-welcome')
+    return { socket, message }
+  }
+  const owner = await connect(true)
+  const guest = await connect(false)
+  assert.equal(owner.message.snapshot.enhancedEffects, true)
+  assert.equal(guest.message.snapshot.enhancedEffects, true)
+  const modeSnapshot = (socket: WebSocket, enabled: boolean) => nextMessage(socket, message =>
+    message.type === 'server-snapshot' && message.snapshot.enhancedEffects === enabled)
+  const offOwner = modeSnapshot(owner.socket, false)
+  const offGuest = modeSnapshot(guest.socket, false)
+  const saved = nextMessage(owner.socket, message => message.type === 'server-save-checkpoint')
+  owner.socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: false }))
+  await Promise.all([offOwner, offGuest])
+  const checkpoint = await saved
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  assert.equal(restoreGameSaveDocument(checkpoint.save).state.enhancedEffects, false)
+  assert.equal(host.state().enhancedEffects, false)
+
+  const deniedOwner = modeSnapshot(owner.socket, false)
+  const deniedGuest = modeSnapshot(guest.socket, false)
+  guest.socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: true }))
+  await Promise.all([deniedOwner, deniedGuest])
+  assert.equal(host.state().enhancedEffects, false)
+  const late = await connect(true)
+  assert.equal(late.message.snapshot.enhancedEffects, false)
+
+  const onOwner = modeSnapshot(owner.socket, true)
+  const onGuest = modeSnapshot(guest.socket, true)
+  const onLate = modeSnapshot(late.socket, true)
+  owner.socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: true }))
+  await Promise.all([onOwner, onGuest, onLate])
+  assert.equal(host.state().enhancedEffects, true)
+
+  const resumed = await startGameHost({ authentication: { kind: 'shared', credential: 'quality-resume' }, snapshotRate: 100 })
+  context.after(() => resumed.close())
+  const restoredSocket = await openSavedRunSocket(resumed.address.url, 'quality-resume', checkpoint.save)
+  context.after(() => restoredSocket.close())
+  assert.equal(resumed.state().enhancedEffects, false, 'resume uses saved world mode despite the hello On preference')
+})
+
 async function openSavedRunSocket(
   url: string,
   credential: string,
@@ -5868,6 +5942,7 @@ async function openSavedRunSocket(
   const socket = await openSocket(url)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
@@ -5970,6 +6045,7 @@ async function completeLeaderboardScenario(
     const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
     socket.send(encodeGameMessage({
       type: 'client-hello',
+      enhancedEffects: true,
       onlinePreferences: {
         ...ONLINE_PREFERENCES,
         submitRuns: scenario.submitRuns !== false,

@@ -233,10 +233,12 @@ test('stationary roots survive save/resume and legacy roots migrate without inve
       const parsed = JSON.parse(document)
       if (legacy) {
         parsed.schemaVersion = 37
+        delete parsed.continuation.simulation.enhancedEffects
         delete parsed.profile.advancedUnlocks
         delete parsed.continuation.simulation.world.enemies.actors[0].brain.anchorPosition
       }
       const restored = restoreGameSaveDocument(JSON.stringify(parsed)).state
+      assert.equal(restored.enhancedEffects, true)
       assert.ok(restored.world.kind === 'boneyard')
       assert.deepEqual(advance(restored.world.enemies, 11).actors[0]!.position,
         legacy ? displaced : position)

@@ -1,3 +1,4 @@
+import { sameRuntimeScene } from './runtime-scene-identity.ts'
 import {
   Suspense,
   lazy,
@@ -655,6 +656,22 @@ function MainMenuContent({
     }
     updateGameSettings(settings)
   }, [cheatsEnabled, developerAccess, session, updateGameSettings])
+
+  const nextPartyMode = session?.sessionKind === 'global-hub'
+    && runtimeSnapshot?.world.kind === 'hub'
+  const enhancedEffectsAuthority = session && runtimeSnapshot ? {
+    enabled: nextPartyMode
+      ? partyState?.party.enhancedEffects ?? runtimeSnapshot.enhancedEffects
+      : runtimeSnapshot.enhancedEffects,
+    canChange: session.isHost
+      && !runtimeSnapshot.materializingPlayerIds.includes(session.playerId),
+    scope: nextPartyMode ? 'next-party-run' as const : 'game' as const,
+  } : undefined
+  const requestEnhancedEffectsChange = (enabled: boolean) => {
+    if (enhancedEffectsAuthority?.canChange === false) return
+    updateGameSettings({ ...gameSettings, enhancedEffects: enabled })
+    session?.setEnhancedEffects(enabled)
+  }
 
   const openDarkCloudMenu = useCallback(() => setDarkCloudMenuOpen(true), [])
 
@@ -2452,6 +2469,8 @@ function MainMenuContent({
             <GameSettingsDialog
               accountUsername={accountUsername}
               context="gameplay"
+              enhancedEffectsAuthority={enhancedEffectsAuthority}
+              onEnhancedEffectsChange={requestEnhancedEffectsChange}
               mobileUiPlayer={session.getSnapshot().players[session.playerId]}
               mobileUiInHub={runtimeSnapshot?.world.kind === 'hub'}
               mobileUiSecondary={session.getSnapshot().secondaryAbilities.players[session.playerId]}
@@ -2489,6 +2508,8 @@ function MainMenuContent({
           <GameSettingsDialog
             accountUsername={accountUsername}
             context={settingsContext}
+            enhancedEffectsAuthority={enhancedEffectsAuthority}
+            onEnhancedEffectsChange={requestEnhancedEffectsChange}
             onChange={requestGameSettingsUpdate}
             onClose={() => setSettingsContext(null)}
             saveTransfer={settingsContext === 'title' ? saveTransfer : undefined}
@@ -2722,47 +2743,4 @@ function partyActionErrorMessage(reason: PartyActionRejection | null): string {
     case 'party-missing':
     case null: return 'That party is no longer available.'
   }
-}
-
-function sameRuntimeScene(
-  current: GameClientSnapshot | null,
-  next: GameClientSnapshot,
-  playerId: string,
-): boolean {
-  if (
-    !current
-    || current.hostPlayerId !== next.hostPlayerId
-    || !sameLevelUpBarrier(current.levelUpBarrier, next.levelUpBarrier)
-    || current.run.phase !== next.run.phase
-    || current.world.kind !== next.world.kind
-  ) return false
-  if (current.world.kind === 'boneyard' && next.world.kind === 'boneyard') {
-    return current.world.runId === next.world.runId
-  }
-  if (current.world.kind !== 'hub' || next.world.kind !== 'hub') return false
-  const currentCollegeLoadout = current.world.participants[playerId]?.transition?.phase
-    === 'college-loadout'
-  const nextCollegeLoadout = next.world.participants[playerId]?.transition?.phase
-    === 'college-loadout'
-  return currentCollegeLoadout === nextCollegeLoadout
-}
-
-function sameLevelUpBarrier(
-  first: GameClientSnapshot['levelUpBarrier'],
-  second: GameClientSnapshot['levelUpBarrier'],
-): boolean {
-  if (first === null || second === null) return first === second
-  return first.barrierId === second.barrierId
-    && first.milestoneExperience === second.milestoneExperience
-    && first.milestoneLevel === second.milestoneLevel
-    && first.runId === second.runId
-    && first.sourcePlayerId === second.sourcePlayerId
-    && first.participantIds.length === second.participantIds.length
-    && first.participantIds.every((playerId, index) => (
-      playerId === second.participantIds[index]
-    ))
-    && first.pendingPlayerIds.length === second.pendingPlayerIds.length
-    && first.pendingPlayerIds.every((playerId, index) => (
-      playerId === second.pendingPlayerIds[index]
-    ))
 }

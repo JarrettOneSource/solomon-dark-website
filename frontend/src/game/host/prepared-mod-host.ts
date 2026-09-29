@@ -1407,6 +1407,7 @@ function applyDamage(
   if (source.world.kind !== 'boneyard') throw new Error('enemy damage requires an active Boneyard')
   const worldManagerOrder = createNativeWorldManagerOrder(source.worldManagerOrder)
   const damaged = damageBoneyardEnemy(source.world.enemies, {
+    enhancedEffects: source.enhancedEffects,
     actorId: descriptor.id,
     amount: outgoingAmount,
     registerWorldPainter: worldManagerOrder.register,

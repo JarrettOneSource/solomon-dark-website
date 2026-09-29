@@ -7,6 +7,7 @@ import { nativeDarkLightningBody } from './native-dark-lightning.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 
 const spell: Extract<NativeBossSpell, { kind: 'blightning' }> = {
+  enhancedEffects: true,
   ageTicks: 0, damage: 0, endpoint: { x: 600, y: 100 }, id: 7, kind: 'blightning',
   painterRegistration: { managerLane: 'transient', registrationOrdinal: 17 },
   midpoint: { x: 350, y: 100 }, ownerActorId: 1, position: { x: 100, y: 100 }, spawnTick: 31,

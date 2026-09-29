@@ -7,6 +7,7 @@ export type * from './native-secondary-presentation-types.ts'
 import type {
   NativeSecondaryActorState,
 } from '../core-kernels/native-secondary-abilities.ts'
+import { buildNativeAirCoronaPlan } from '../core-kernels/native-air-presentation.ts'
 import {
   nativeLeviathanAppendageLocalRoot,
   nativeLeviathanAppendageRecord,
@@ -80,8 +81,9 @@ export function nativeSecondaryPresentationPlan(
   actor: NativeSecondaryActorState,
   presentationFrame = actor.ageTicks,
   pointGain = 1,
+  enhancedEffects = actor.enhanced,
 ): NativeSecondaryPresentationPlan {
-  return buildNativeSecondaryPresentationPlan(actor, presentationFrame, pointGain, null)
+  return buildNativeSecondaryPresentationPlan(actor, presentationFrame, pointGain, null, enhancedEffects)
 }
 
 export function updateNativeSecondaryPresentationPlan(
@@ -89,6 +91,7 @@ export function updateNativeSecondaryPresentationPlan(
   actor: NativeSecondaryActorState,
   presentationFrame = actor.ageTicks,
   pointGain = 1,
+  enhancedEffects = actor.enhanced,
 ): NativeSecondaryPresentationPlan {
   scratch.reset()
   if (actor.kind === 'acid-drop' || actor.kind === 'acid-splash') {
@@ -97,7 +100,7 @@ export function updateNativeSecondaryPresentationPlan(
   if (actor.kind === 'storm-drop') {
     return scratch.writeStormDropPlan(actor as NativeStormDropActorState)
   }
-  return buildNativeSecondaryPresentationPlan(actor, presentationFrame, pointGain, scratch)
+  return buildNativeSecondaryPresentationPlan(actor, presentationFrame, pointGain, scratch, enhancedEffects)
 }
 
 export const EMPTY_SECONDARY_DRAWS: readonly NativeSecondarySpriteDraw[] = []
@@ -119,6 +122,7 @@ function buildNativeSecondaryPresentationPlan(
   presentationFrame: number,
   pointGain: number,
   scratch: NativeSecondaryPresentationScratch | null,
+  enhancedEffects: boolean,
 ): NativeSecondaryPresentationPlan {
   const root = actor.position
   const draw = (
@@ -273,7 +277,7 @@ function buildNativeSecondaryPresentationPlan(
           scaleX: -0.75 * actor.scale,
           scaleY: 0.6 * actor.scale,
         }),
-      ], 'zanim', 0, [], [], null, [planeOrbMesh(actor, presentationFrame)])
+      ], 'zanim', 0, [], [], null, [planeOrbMesh(actor, presentationFrame, enhancedEffects)])
     case 'plane-orb-particle':
       return plan([draw('BadGuys', actor.variant, {
         alpha: actor.alpha,
@@ -283,6 +287,29 @@ function buildNativeSecondaryPresentationPlan(
         scaleY: actor.scale * 0.8,
         tint: packNormalizedRgb(1, actor.quantity, 1),
       })])
+    case 'planewalker-mote':
+      return plan([draw('BadGuys', 11, { alpha: actor.alpha, blend: 'add',
+        role: 'planewalker-mote', rotationRadians: actor.rotationRadians, tint: 0x8080ff,
+        scaleX: actor.scale, scaleY: actor.scale * .75 })])
+    case 'stoneskin-chip': {
+      const draws = [
+        ...(actor.enhanced ? [draw('BadGuys', 77, { alpha: Math.min(1, actor.alpha),
+          role: 'stoneskin-hit-shadow', offset: { x: 0, y: 2 }, rotationRadians: actor.rotationRadians,
+          scaleX: 1, scaleY: .75, tint: 0 })] : []),
+        draw('BadGuys', 77, { alpha: Math.min(1, actor.alpha), role: 'stoneskin-hit-chip',
+          offset: { x: 0, y: actor.phase }, rotationRadians: actor.rotationRadians, scaleX: 1, scaleY: 1 }),
+      ]
+      return plan([], 'ordinary-dynamic', 0, [], [], null, [], [], root.y, draws)
+    }
+    case 'golem-assembly-debris':
+      return plan([
+        ...(actor.enhanced && actor.phase !== 0 ? [draw('BadGuys', actor.frame, {
+          alpha: Math.min(1, actor.alpha), role: 'golem-assembly-shadow', offset: { x: 0, y: 2 },
+          rotationRadians: actor.rotationRadians, scaleY: actor.scale * .75, tint: 0,
+        })] : []),
+        draw('BadGuys', actor.frame, { alpha: Math.min(1, actor.alpha), role: 'golem-assembly-rock',
+          offset: { x: 0, y: actor.phase }, rotationRadians: actor.rotationRadians, tint: 0xffffff }),
+      ], 'ordinary-dynamic', -15)
     case 'phase-burst':
       return plan([draw('BadGuys', 53, {
         alpha: Math.min(actor.alpha, 1),
@@ -328,7 +355,7 @@ function buildNativeSecondaryPresentationPlan(
       return {
         ...plan(
         [
-          ...stormCloudDraws(actor, presentationFrame, draw),
+          ...stormCloudDraws(actor, presentationFrame, draw, enhancedEffects),
           ...stormAuxiliaryDraws(actor, draw),
         ],
         'zanim',
@@ -350,6 +377,7 @@ function buildNativeSecondaryPresentationPlan(
             tint: 0xccffff,
           })])
     case 'storm-strike':
+    case 'electric-burn-arc':
       return plan([], 'ordinary-dynamic')
     case 'prismatic-wave':
       return plan(prismaticWaveDraws(actor, presentationFrame, draw))
@@ -560,6 +588,20 @@ function buildNativeSecondaryPresentationPlan(
       return plan(magicTrapBurstDraws(actor, draw))
     case 'electric-burn':
       return plan([])
+    case 'electric-burn-flare': {
+      const corona = buildNativeAirCoronaPlan({ alpha: actor.alpha, angle: actor.rotationRadians,
+        center: actor.position, scale: actor.scale, seed: actor.id, randomSalt: 0x46414445 ^ actor.ageTicks })
+      return plan([
+        ...corona.circles.map(circle => draw('BadGuys', circle.record, {
+          alpha: actor.alpha * circle.alpha, blend: 'add', scaleX: circle.scale, scaleY: circle.scale,
+          tint: circle.tint, role: 'electric-burn-corona',
+        })),
+        ...corona.forks.map(fork => draw('BadGuys', fork.record, {
+          alpha: actor.alpha * fork.alpha, blend: 'add', scaleX: fork.scale, scaleY: fork.scale,
+          rotationRadians: fork.rotation, tint: fork.tint, role: 'electric-burn-fork',
+        })),
+      ], 'zanim', 50)
+    }
     case 'dampen-wave':
       return plan(dampenDraws(actor, draw), 'zanim')
     case 'dampened-smoke':

@@ -7,12 +7,13 @@ import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
 
 export function createEnemyWork(
   source: BoneyardEnemyStore,
-  context: Pick<BoneyardEnemyStoreStepContext, 'tick' | 'registerWorldPainter' | 'registerProjectileWorldPainter'>,
+  context: Pick<BoneyardEnemyStoreStepContext, 'tick' | 'registerWorldPainter' | 'registerProjectileWorldPainter' | 'enhancedEffects'>,
   preserveExisting: boolean,
 ): WorkingStep {
   const registerWorldPainter = context.registerWorldPainter
     ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
   return {
+    enhancedEffects: context.enhancedEffects ?? true,
     demonSkullEncounter: source.demonSkullEncounter,
     featuredBossId: source.featuredBossId,
     bossNarration: source.bossNarration,

@@ -191,6 +191,8 @@ export class HubPrivateRoomScene {
         `hub:${region}`,
         presentationFrame,
         pointGainAt,
+        undefined,
+        snapshot.enhancedEffects,
       )
       this.primarySpells[region].promoteOwnerOverlays((ownerId) => (
         this.players.get(ownerId)?.container.zIndex
@@ -200,6 +202,7 @@ export class HubPrivateRoomScene {
         `hub:${region}`,
         presentationFrame,
         pointGainAt,
+        snapshot.enhancedEffects,
       )
     }
     this.updateRoomPresentation(
@@ -823,11 +826,14 @@ export class HubPrivateRoomScene {
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
         room.addChild(view.container)
+        room.addChild(view.enhancedHit.container)
+        view.enhancedHit.container.zIndex = HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH + .125
       } else if (view.container.parent !== room) {
         view.container.parent?.removeChild(view.container)
         room.addChild(view.container)
+        room.addChild(view.enhancedHit.container)
       }
-      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
+      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, undefined, snapshot.enhancedEffects, snapshot.secondaryAbilities.stoneskinWarp)
       view.update(
         player,
         snapshot.tick,

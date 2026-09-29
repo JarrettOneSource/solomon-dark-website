@@ -3,7 +3,7 @@ import { buildNativeAirRibbonLayer, type NativeAirLightningFactoryPlan } from '.
 
 /** Anim_DarkLightningBolt: native normal blend, red ribbon, and two independent meshes. */
 export function nativeDarkLightningBody(spell: Extract<NativeBossSpell, { kind: 'blightning' }>): NonNullable<NativeAirLightningFactoryPlan['body']> {
-  const common = { birthTick: spell.spawnTick, dark: true, id: spell.id,
+  const common = { birthTick: spell.spawnTick, dark: true, id: spell.id, enhancedEffects: spell.enhancedEffects,
     source: { x: 0, y: 0 },
     midpoint: { x: spell.midpoint.x - spell.position.x, y: spell.midpoint.y - spell.position.y },
     endpoint: { x: spell.endpoint.x - spell.position.x, y: spell.endpoint.y - spell.position.y },

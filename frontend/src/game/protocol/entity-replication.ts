@@ -313,6 +313,7 @@ export function createGameSnapshotFrame(
     spawned,
   }
   const common = {
+    enhancedEffects: snapshot.enhancedEffects,
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
     materializingPlayerIds: snapshot.materializingPlayerIds,
@@ -510,6 +511,7 @@ export class EntityReplicationReconstructor {
     this.lastSequence = sequence
     this.worldIdentity = nextWorldIdentity
     const common = {
+      enhancedEffects: frame.enhancedEffects,
       hostPlayerId: frame.hostPlayerId,
       levelUpBarrier: frame.levelUpBarrier,
       materializingPlayerIds: frame.materializingPlayerIds,

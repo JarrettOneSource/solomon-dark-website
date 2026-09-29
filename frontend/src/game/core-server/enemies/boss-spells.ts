@@ -226,7 +226,7 @@ function spawnBlightning(work: WorkingStep, actor: BoneyardEnemyActor, context: 
   if (obstructed) fade(endpoint)
   const halfDistance = Math.hypot(endpoint.x - line.start.x, endpoint.y - line.start.y) * .5
   work.bossSpells.push({ ...createBossSpellOwner(work, actor.id, context.tick, 0, 'blightning'), position: line.start,
-    midpoint: advance(line.start, heading, halfDistance), endpoint })
+    midpoint: advance(line.start, heading, halfDistance), endpoint, enhancedEffects: work.enhancedEffects })
   fade(line.start)
   spawnBlightningSmoke(work, actor, context.tick, line.start, endpoint)
 }
@@ -343,7 +343,7 @@ function stepFallingBone(work: WorkingStep, source: Extract<NativeBossSpell, { k
   const direction = vector(angle.value)
   const velocity = { x: Math.fround(direction.x * 1.5), y: direction.y }
   spawnBouncer(work, { id: source.ownerActorId, position: source.position }, context.tick, source.entry,
-    'acid-pain-bone-landed', { scale: 1.2000000476837158, velocity,
+    'acid-pain-bone-landed', { opacityTimer: 2, scale: 1.2000000476837158, velocity,
       position: { x: Math.fround(source.position.x + (15 + distance.value) * velocity.x + velocity.x * 2),
         y: Math.fround(source.position.y + (15 + distance.value) * velocity.y) } })
 }

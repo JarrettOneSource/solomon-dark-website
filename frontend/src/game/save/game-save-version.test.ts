@@ -66,6 +66,7 @@ test('schema 43 preserves paid empty Dowsing results and migrates older offer ph
     assert.deepEqual(current.rng, rolled.rng)
     const legacy = JSON.parse(document)
     legacy.schemaVersion = 42
+    delete legacy.continuation.simulation.enhancedEffects
     delete legacy.profile.advancedUnlocks
     delete legacy.profile.economy.dowsingRolled
     delete legacy.continuation.simulation.playerEntities.economies[0].dowsingRolled
@@ -107,6 +108,7 @@ test('schema 39 retires only obsolete Cold Aura actors without rewinding saved g
   assert.equal(current.state.primarySpells.transients.length, 2)
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 39
+  delete legacy.continuation.simulation.enhancedEffects
   delete legacy.profile.advancedUnlocks
   Object.assign(legacy.continuation.simulation.primarySpells.transients[0], {
     alphaDecay: Math.fround(0.15 / 840), durationTicks: 2_800, rotationStepDegrees: 0.4,

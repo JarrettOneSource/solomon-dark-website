@@ -88,6 +88,7 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 export interface GameSimulationState {
   accumulatorSeconds: number
   combatRng: NativeRngState
+  enhancedEffects: boolean
   hallOfFameClockStartedAtTick: number
   levelUpBarrier: PlayerLevelUpBarrierState | null
   worldManagerOrder: NativeWorldManagerOrderState
@@ -117,6 +118,7 @@ export interface DetachedGameSimulationPlayerTransaction {
 
 export interface GameSimulationOptions {
   combatRngSeed?: number
+  enhancedEffects?: boolean
   hubSkorchaHiddenTicks?: number
   hubSkorchaVisibleTicks?: number
   hubStudentPopulation?: HubStudentPopulationState
@@ -266,6 +268,7 @@ export function createGameSimulation(
   return {
     accumulatorSeconds: 0,
     combatRng: createNativeRng(options.combatRngSeed ?? 0),
+    enhancedEffects: options.enhancedEffects ?? true,
     hallOfFameClockStartedAtTick: 0,
     levelUpBarrier,
     worldManagerOrder: worldManagerOrder.state(),
@@ -1764,6 +1767,7 @@ export function grantGameSimulationPlayerExperience(
     level,
     next.tick,
     worldManagerOrder,
+    next.enhancedEffects,
   )
   next = {
     ...next,
@@ -1922,6 +1926,7 @@ export function stepGameSimulationTick(
         playerId,
         tick,
         worldManagerOrder,
+        state.enhancedEffects,
       )
       secondaryAbilities = triggered.secondaryAbilities
       world = triggered.world
@@ -2197,6 +2202,7 @@ export function stepGameSimulationTick(
         boneyardWorld.tutorial !== null
           && nativeTutorialHostileScenePaused(boneyardWorld.tutorial),
         { playerEntities: state.playerEntities, primarySpells: state.primarySpells, secondaryAbilities: state.secondaryAbilities },
+        state.enhancedEffects,
       )
       return finishGameSimulationTick(
         state,
@@ -2347,7 +2353,7 @@ function finishGameSimulationTick(
       }
     },
   }
-  const contacts = applyPlayerContacts({ world, playerEntities, secondaryAbilities },
+  const contacts = applyPlayerContacts({ world, playerEntities, secondaryAbilities, enhancedEffects: previous.enhancedEffects },
     resolvedPlayers, result.playerDamage ?? [], tick, extensions, worldManagerOrder.register)
   world = contacts.world
   playerEntities = contacts.playerEntities
@@ -2401,6 +2407,7 @@ function finishGameSimulationTick(
         level,
         tick,
         worldManagerOrder,
+        previous.enhancedEffects,
         lethalObserver,
       )
       secondaryAbilities = triggered.secondaryAbilities
@@ -2554,6 +2561,7 @@ function finishGameSimulationTick(
   let postStaffInputs = combatInputs
   if (world.kind === 'boneyard') {
     const staff = stepPlayerStaffCombatSystem({
+      enhancedEffects: previous.enhancedEffects,
       combatAdmissionEnabled,
       enemies: world.enemies,
       inputs: combatInputs,
@@ -2702,6 +2710,7 @@ function finishGameSimulationTick(
     worldManagerOrder,
     secondaryProjectileVisible,
     tick,
+    previous.enhancedEffects,
   ))
   secondaryAbilities = unsteppedSecondaryActors.length === 0
     ? secondaryResult.state
@@ -2759,6 +2768,7 @@ function finishGameSimulationTick(
     }),
   )
   const cast = stepPrimarySpells({
+    enhancedEffects: previous.enhancedEffects,
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
         return canPlaceBoneyardBody(
@@ -2981,6 +2991,7 @@ function finishGameSimulationTick(
     cast.rng,
     cast.channelEmissions,
     worldManagerOrder.register,
+    previous.enhancedEffects,
   )
   let primarySpells = hurricaneVisuals.spells
   let combatRng = hurricaneVisuals.rng
@@ -3017,6 +3028,7 @@ function finishGameSimulationTick(
     }
     for (const reflection of reflectedEnemyDamage) {
       const reflected = damageBoneyardEnemy(world.enemies, {
+        enhancedEffects: previous.enhancedEffects,
         actorId: reflection.actorId,
         amount: reflection.amount,
         lethalObserver,
@@ -3054,6 +3066,7 @@ function finishGameSimulationTick(
       secondaryAbilities.actors.filter((actor) => (
         actor.kind === 'ether-drain' && actor.worldKey === boneyardWorldKey
       )).map(({ position }) => position),
+      previous.enhancedEffects,
     )
     world = {
       ...world,
@@ -3153,6 +3166,7 @@ function finishGameSimulationTick(
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
       spiderLightAt,
       cast.frostMissileWorldContacts,
+      previous.enhancedEffects,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
@@ -3246,6 +3260,7 @@ function finishGameSimulationTick(
   playerEntities = combat.store
   secondaryAbilities = { ...secondaryAbilities, rng: combat.rng }
   const harden = synchronizePlayerHardenEffects({
+    enhancedEffects: previous.enhancedEffects,
     after: playerEntities,
     before: previous.playerEntities,
     chips: contacts.hardenChips,
@@ -3323,6 +3338,7 @@ function finishGameSimulationTick(
         playerId,
         tick,
         worldManagerOrder,
+        previous.enhancedEffects,
         lethalObserver,
       )
       secondaryAbilities = triggered.secondaryAbilities
@@ -3416,6 +3432,7 @@ function finishGameSimulationTick(
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
     combatRng,
+    enhancedEffects: previous.enhancedEffects,
     hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
     levelUpBarrier,
     worldManagerOrder: worldManagerOrder.state(),
@@ -3598,8 +3615,10 @@ function createNativeSecondaryTickContext(
   worldManagerOrder: NativeWorldManagerOrder,
   secondaryProjectileVisible: ReturnType<typeof createBoneyardProjectileVisibility> | null,
   tick: number,
+  enhancedEffects: boolean,
 ): NativeSecondaryTickContext {
   return {
+    enhancedEffects,
     dampenCandidates: (worldKey, origin) => (
       world.kind === 'boneyard'
       && worldKey === `boneyard:${world.runId}`
@@ -3764,7 +3783,7 @@ function createNativeSecondaryTickContext(
         currentMana: progression.currentMana,
         eligible: playerEntityCanCast(playerEntities, playerId)
           && progression.pendingOffer === null,
-        enhancedEffects: true,
+        enhancedEffects,
         explosiveShieldDamage: effectiveSkillNumericValue(
           skillBook,
           statBook,
@@ -4179,6 +4198,7 @@ function activateGameSimulationBeltSkill(
       worldManagerOrder,
       null,
       state.tick,
+      state.enhancedEffects,
     ),
   )
   const outcomes = applySecondaryPlayerOutcomes(
@@ -4201,6 +4221,8 @@ function activateGameSimulationBeltSkill(
         undefined,
         undefined,
         worldManagerOrder.register,
+        [],
+        state.enhancedEffects,
       )
     : null
   return {
@@ -4477,6 +4499,7 @@ function triggerHagathaLastWord(
   playerId: PlayerId,
   tick: number,
   worldManagerOrder: NativeWorldManagerOrder,
+  enhancedEffects: boolean,
   lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   secondaryAbilities: NativeSecondarySimulationState
@@ -4516,6 +4539,7 @@ function triggerHagathaLastWord(
         : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId)
     )
     const damaged = damageBoneyardEnemy(enemies, {
+      enhancedEffects,
       actorId: target.id,
       amount,
       hasMagicDamage: true,
@@ -4603,6 +4627,7 @@ function triggerMindblowingRing(
   level: number,
   tick: number,
   worldManagerOrder: NativeWorldManagerOrder,
+  enhancedEffects: boolean,
   lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   actorIds: readonly number[]
@@ -4642,6 +4667,7 @@ function triggerMindblowingRing(
     })
     for (const target of targets) {
       const damaged = damageBoneyardEnemy(world.enemies, {
+        enhancedEffects,
         actorId: target.id,
         amount: triggered.directDamage,
         hasMagicDamage: true,

@@ -228,6 +228,7 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
 
 function magePulse(tick: number): BoneyardMageLightningPulseSnapshot {
   return {
+    enhancedEffects: false,
     contact: {
       kind: 'world',
       position: { x: tick + 3, y: 27 },
@@ -250,6 +251,7 @@ function magePulse(tick: number): BoneyardMageLightningPulseSnapshot {
 
 function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGameSnapshot {
   return {
+    enhancedEffects: true,
     hostPlayerId: 'local',
     levelUpBarrier: null,
     materializingPlayerIds: [],
@@ -1448,6 +1450,8 @@ test('does not rewind a displayed Air lifetime for a sub-interval Boneyard snaps
       hurricaneCharge: 0,
       id: 1,
       kind: 'air',
+      chained: false,
+      enhancedEffects: true,
       lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
       midpoint: { x: 300, y: 150 },
       origin: { x: 100, y: 100 },

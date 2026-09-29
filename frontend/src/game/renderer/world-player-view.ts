@@ -34,6 +34,8 @@ import {
 import { PlayerDamageX4VfxView } from './player-damage-x4-vfx-view.ts'
 import { PlayerEnchantStaffView } from './player-enchant-staff-view.ts'
 import { PlayerHardenView } from './player-harden-view.ts'
+import { PlayerStoneskinView } from './player-stoneskin-view.ts'
+import { PlayerEnhancedHitView } from './player-enhanced-hit-view.ts'
 import type { NativeWebbedState } from '../core-kernels/native-webbed.ts'
 import { PlayerWebbedView } from './player-webbed-view.ts'
 import { type PlayerStatusMaterialState, nativePlayerMaterialTint } from './player-material.ts'
@@ -47,9 +49,14 @@ const DEATH_HAT_SECONDARY = 8
 const PLAYER_DEATH_LAYER_COUNT = 9
 
 export class PlayerWorldView {
+  readonly enhancedHit: PlayerEnhancedHitView
+  private enhancedEffects = true
+  private presentationTick = 0
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
   private readonly harden: PlayerHardenView
+  private readonly stoneskin: PlayerStoneskinView
+  private stoneskinWarp: readonly number[] | null = null
   private readonly webbed: PlayerWebbedView
   private webbedState: NativeWebbedState | undefined
   private readonly arena: boolean
@@ -121,7 +128,9 @@ export class PlayerWorldView {
     this.textures = textures
     this.modTextures = modTextures
     this.arena = arena
+    this.enhancedHit = new PlayerEnhancedHitView(renderer)
     this.harden = new PlayerHardenView(textures.secondary[nativeSecondarySpriteKey('Clothes', 1)]!, renderer)
+    this.stoneskin = new PlayerStoneskinView(textures.secondary[nativeSecondarySpriteKey('Clothes', 3)]!, renderer)
     this.webbed = new PlayerWebbedView(textures.webbedCocoon, renderer)
     const playerTextures = textures.players[element]
     this.container.sortableChildren = true
@@ -237,6 +246,7 @@ export class PlayerWorldView {
       this.hitOverlay,
       this.magicShield,
       this.harden.container,
+      this.stoneskin.container,
       this.webbed.container,
       this.damageX4HardenOverlay.container,
       this.orbHardenOverlay.container,
@@ -709,7 +719,12 @@ export class PlayerWorldView {
     state: NativeSecondaryPlayerState | undefined,
     tick: number,
     webbed?: NativeWebbedState,
+    enhancedEffects = true,
+    stoneskinWarp: readonly number[] | null = null,
   ): void {
+    this.stoneskinWarp = stoneskinWarp
+    this.enhancedEffects = enhancedEffects
+    this.presentationTick = tick
     this.secondaryState = state
     this.webbedState = webbed
     const plan = nativePlayerMagicShieldPlan(state, tick)
@@ -733,13 +748,18 @@ export class PlayerWorldView {
     const stoneskin = (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0
     const excluded = [
       this.shadow, this.harden.container, this.webbed.container,
+      this.stoneskin.container,
       this.orbHardenOverlay.container, this.damageX4HardenOverlay.container,
     ]
     this.harden.update(player, this.container, excluded, stoneskin)
+    this.stoneskin.update(player, this.container, [...excluded, this.hitOverlay], stoneskin,
+      this.stoneskinWarp, this.enhancedEffects)
     this.webbed.update(player, this.webbedState, this.container, excluded,
       stoneskin || player.progression.hardenCoating > 0
         || (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0,
     )
+    this.enhancedHit.update(player, this.presentationTick, this.container,
+      [...excluded, this.hitOverlay], this.enhancedEffects, stoneskin, this.complexLighting, this.worldTint)
   }
 
   private applyMaterialTint(): void {
@@ -773,7 +793,9 @@ export class PlayerWorldView {
   }
 
   destroy(): void {
+    this.enhancedHit.destroy()
     this.harden.destroy()
+    this.stoneskin.destroy()
     this.webbed.destroy()
     this.container.removeChild(this.enchantStaff.container)
     this.enchantStaff.destroy()

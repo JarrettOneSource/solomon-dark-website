@@ -56,6 +56,7 @@ export function synchronizeAirWaterPlayerVisualActors(
   sourceRng: NativeRngState,
   channelEmissions: readonly PrimarySpellChannelEmission[] = [],
   registerWorldPainter?: RegisterNativeWorldPainter,
+  enhancedEffects = true,
 ): AirWaterPlayerVisualResult {
   if (!Number.isSafeInteger(tick) || tick < 0) {
     throw new RangeError('Air/Water visual actor tick must be a non-negative safe integer')
@@ -130,6 +131,7 @@ export function synchronizeAirWaterPlayerVisualActors(
       rng = stepped.rng
       transients.push(Object.freeze({
           ...existing,
+          enhancedEffects,
           ageTicks: existing.ageTicks + 1,
           charge: owner.hurricaneCharge,
           contactCharge: owner.hurricaneContactCharge,
@@ -150,7 +152,7 @@ export function synchronizeAirWaterPlayerVisualActors(
       contactCharge: owner.hurricaneContactCharge,
       damageMaximum: owner.hurricaneDamageMaximum,
       damageMinimum: owner.hurricaneDamageMinimum,
-      enhancedEffects: true,
+      enhancedEffects,
       id: nextId++,
       kind: 'air-hurricane',
       lanes: created.program.lanes,

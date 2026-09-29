@@ -283,6 +283,22 @@ export function setPartyVisibility(
   }))
 }
 
+export function setPartyEnhancedEffects(
+  state: PartySystemState,
+  leaderPlayerId: string,
+  enhancedEffects: boolean,
+): PartyActionResult {
+  const party = partyForPlayer(state, leaderPlayerId)
+  if (!party) return rejected(state, 'party-missing')
+  if (party.leaderPlayerId !== leaderPlayerId) return rejected(state, 'not-leader')
+  if (party.enhancedEffects === enhancedEffects) return accepted(state)
+  return accepted(changed(state, {
+    parties: state.parties.map(candidate => candidate.id === party.id
+      ? { ...candidate, enhancedEffects }
+      : candidate),
+  }))
+}
+
 export function rotatePartyJoinCode(
   state: PartySystemState,
   leaderPlayerId: string,
@@ -416,6 +432,7 @@ export function projectPartyState(
 function membership(identity: PartyIdentity, playerId: string): PartyMembership {
   return {
     ...identity,
+    enhancedEffects: true,
     leaderPlayerId: playerId,
     memberPlayerIds: [playerId],
     visibility: 'public',

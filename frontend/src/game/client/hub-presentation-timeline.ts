@@ -270,6 +270,7 @@ function interpolateSnapshot(
   }
 
   return {
+    enhancedEffects: blend < 1 ? older.enhancedEffects : newer.enhancedEffects,
     hostPlayerId: blend < 1 ? older.hostPlayerId : newer.hostPlayerId,
     levelUpBarrier: blend < 1 ? older.levelUpBarrier : newer.levelUpBarrier,
     materializingPlayerIds: blend < 1
@@ -596,6 +597,7 @@ function presentationCopy(
   primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
 ): HubPresentationFrame {
   return {
+    enhancedEffects: snapshot.enhancedEffects,
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
     materializingPlayerIds: snapshot.materializingPlayerIds,

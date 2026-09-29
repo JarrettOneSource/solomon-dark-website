@@ -1,11 +1,10 @@
+import { nativeAirContactLifetimeTicks } from '../core-kernels/native-air-presentation.ts'
 import {
   NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { waterFrostJetLifetimeTicks } from '../core-kernels/primary-spell-water.ts'
 import {
-  PRIMARY_SPELL_AIR_LIFETIME_TICKS,
-  PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
   type PrimarySpellSimulationState,
@@ -116,9 +115,7 @@ function fixedTransientTiming(
   switch (effect.kind) {
     case 'air': return fixedTiming(
       effect.birthTick,
-      effect.underpowered
-        ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
-        : PRIMARY_SPELL_AIR_LIFETIME_TICKS,
+      nativeAirContactLifetimeTicks(effect),
     )
     case 'earth-impact': return fixedTiming(effect.birthTick, effect.lifetimeTicks)
     case 'ether-impact': return fixedTiming(
@@ -132,7 +129,7 @@ function fixedTransientTiming(
     case 'ether-pierce-streak': return fixedTiming(snapshotTick - effect.ageTicks, 10)
     case 'fire': return fixedTiming(
       snapshotTick - effect.ageTicks,
-      nativeFireParticleLifetimeTicks(effect.id),
+      nativeFireParticleLifetimeTicks(effect.id, effect.enhancedEffects),
     )
     case 'fire-explosion': return fixedTiming(
       snapshotTick - effect.ageTicks,

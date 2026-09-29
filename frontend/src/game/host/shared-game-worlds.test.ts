@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { setPartyEnhancedEffects } from './party-system.ts'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
@@ -196,6 +197,8 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
     4,
   ).state
 
+  worlds = { ...worlds, parties: setPartyEnhancedEffects(worlds.parties, 'player-a', false).state }
+  assert.equal(worlds.hub.enhancedEffects, true, 'a party preference cannot alter the public College')
   const started = startSharedPartyRun(
     worlds,
     'player-a',
@@ -207,6 +210,9 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
   assert.equal(sharedGameStateForPlayer(worlds, 'player-a')?.world.kind, 'boneyard')
   assert.equal(sharedGameStateForPlayer(worlds, 'player-b')?.world.kind, 'boneyard')
   assert.equal(sharedGameStateForPlayer(worlds, 'player-c')?.world.kind, 'hub')
+  assert.equal(sharedGameStateForPlayer(worlds, 'player-a')?.enhancedEffects, false)
+  assert.equal(sharedGameStateForPlayer(worlds, 'player-b')?.enhancedEffects, false)
+  assert.equal(sharedGameStateForPlayer(worlds, 'player-c')?.enhancedEffects, true)
   assert.deepEqual(
     worlds.hub.playerEntities.identities.map(({ playerId }) => playerId),
     ['player-c'],

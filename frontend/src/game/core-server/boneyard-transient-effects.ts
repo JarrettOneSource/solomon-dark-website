@@ -18,6 +18,8 @@ interface BoneyardTransientStepResult {
   readonly projectileEffects: BoneyardEnemyProjectileEffect[]
 }
 
+type NativeBoulderStep = (source: BoneyardEnemyDeathEffect, tick: number) => BoneyardEnemyDeathEffect | null
+
 export function stepBoneyardTransientEffects(
   deathEffects: readonly BoneyardEnemyDeathEffect[],
   projectileEffects: readonly BoneyardEnemyProjectileEffect[],
@@ -25,6 +27,7 @@ export function stepBoneyardTransientEffects(
   drawUnit: () => number,
   nextDeathEffectId: number,
   registerWorldPainter: RegisterNativeWorldPainter,
+  nativeBoulderStep?: NativeBoulderStep,
 ): BoneyardTransientStepResult {
   const death = stepDeathEffects(
     deathEffects,
@@ -32,6 +35,7 @@ export function stepBoneyardTransientEffects(
     drawUnit,
     nextDeathEffectId,
     registerWorldPainter,
+    nativeBoulderStep,
   )
   return {
     deathEffects: death.effects,
@@ -102,6 +106,7 @@ function stepDeathEffects(
   drawUnit: () => number,
   firstDeathEffectId: number,
   registerWorldPainter: RegisterNativeWorldPainter,
+  nativeBoulderStep?: NativeBoulderStep,
 ): DeathPopulationStep {
   if (source.length === 0) {
     return { effects: [], nextDeathEffectId: firstDeathEffectId }
@@ -117,7 +122,7 @@ function stepDeathEffects(
         retained.push(effect)
         continue
       }
-      const stepped = stepDeathEffect(effect, stepTick, drawUnit)
+      const stepped = stepDeathEffect(effect, stepTick, drawUnit, false, nativeBoulderStep)
       if (stepped === null) continue
       retained.push(stepped)
       if (
@@ -145,6 +150,7 @@ function stepDeathEffect(
   tick: number,
   drawUnit: () => number,
   updateAtBirth = false,
+  nativeBoulderStep?: NativeBoulderStep,
 ): BoneyardEnemyDeathEffect | null {
   if (tick < source.spawnTick || (tick === source.spawnTick && !updateAtBirth
     && source.presentationOwner !== 'pre-world-queue')) {
@@ -155,6 +161,11 @@ function stepDeathEffect(
   }
   const ageTicks = Math.max(0, tick - source.spawnTick)
   if (ageTicks >= source.lifetimeTicks) return null
+
+  if (source.kind === 'boulder-bit') {
+    if (!nativeBoulderStep) throw new Error('Coffin BoulderBit requires its authoritative native RNG owner')
+    return nativeBoulderStep(source, tick)
+  }
 
   if (source.kind === 'move-fade-sin') {
     const framePhase = Math.fround(source.framePhase + source.frameVelocity)
@@ -520,6 +531,10 @@ export function stepProjectileEffects(
           }
           break
 
+        case 'demon-bomb-particle':
+          for (let step = 0; step < elapsedTicks; step += 1) scale = Math.fround(scale * .95)
+          break
+
       }
       if (effect.velocity.x !== 0 || effect.velocity.y !== 0) {
         position = {
@@ -528,7 +543,7 @@ export function stepProjectileEffects(
         }
       }
     }
-    if (alpha <= 0) continue
+    if (alpha < 0 || (alpha === 0 && effect.kind !== 'demon-bomb-particle')) continue
     retained.push({
       ...effect,
       ageTicks,
@@ -539,6 +554,11 @@ export function stepProjectileEffects(
       rotationDeg,
       scale,
       velocity,
+      ...(effect.kind === 'demon-bomb-particle' ? {
+        tint: (Math.round(Math.max(0, Math.min(1, alpha)) * 255) << 16)
+          | (Math.round(Math.max(0, Math.min(1, alpha * 2 - 1)) * 255) << 8)
+          | Math.round(Math.max(0, Math.min(1, alpha * 2 - 1)) * 255),
+      } : {}),
     })
   }
   return retained

@@ -119,7 +119,7 @@ export function primarySpellWeldActor(
 
   if (source.kind === 'weld-channel') {
     onlyKeys(source, field, [
-      ...commonKeys, 'endpoint', 'midpoint', 'targetId', 'underpowered', 'variant',
+      ...commonKeys, 'enhancedEffects', 'endpoint', 'midpoint', 'targetId', 'underpowered', 'variant',
     ])
     if (buildId !== 1003 && buildId !== 1004) {
       throw new GameProtocolError(`${field}.buildId is not a welded channel build`)
@@ -143,6 +143,7 @@ export function primarySpellWeldActor(
       buildId,
       endpoint,
       kind: 'weld-channel',
+      enhancedEffects: boolean(source.enhancedEffects, `${field}.enhancedEffects`),
       lightRegistration: absentNativeActorLight(source, field),
       midpoint,
       targetId: source.targetId === null
@@ -300,16 +301,19 @@ export function primarySpellWeldActor(
     if (buildId !== 1003) throw new GameProtocolError(`${field}.buildId is not Flame Lash`)
     const alpha = positiveFinite(source.alpha, `${field}.alpha`)
     const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
-    if (alpha > 1 || alphaStep !== NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP
-      || common.ageTicks >= 6) {
+    const coarse = alphaStep === Math.fround(0.4)
+    const sourceFlare = source.variant === 'source'
+    if (alpha > (sourceFlare ? .5 : 1) || (!coarse && alphaStep !== (sourceFlare ? Math.fround(.1) : NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP))
+      || common.ageTicks >= (coarse ? 3 : 6)) {
       throw new GameProtocolError(`${field} exceeds the Flame Lash fade clock`)
     }
     const variant = source.variant
-    if (variant !== 'endpoint' && variant !== 'chain') {
+    if (variant !== 'endpoint' && variant !== 'chain' && variant !== 'source') {
       throw new GameProtocolError(`${field}.variant is not a Flame Lash fade branch`)
     }
     const baseScale = positiveFinite(source.baseScale, `${field}.baseScale`)
-    if ((variant === 'endpoint' && (baseScale < 0.5 || baseScale > 1))
+    if ((variant === 'source' && (baseScale < .75 || baseScale > 1.25))
+      || (variant === 'endpoint' && (baseScale < 0.5 || baseScale > 1))
       || (variant === 'chain' && (
         baseScale < Math.fround(0.05)
         || baseScale > Math.fround(0.1)
@@ -317,13 +321,19 @@ export function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.baseScale exceeds its Flame Lash branch`)
     }
     const colorGreen = unitInterval(source.colorGreen, `${field}.colorGreen`)
-    if ((variant === 'chain' && colorGreen !== Math.fround(0.75))
+    if ((variant === 'source' && colorGreen !== 1)
+      || (variant === 'chain' && colorGreen !== Math.fround(0.75))
       || (variant === 'endpoint' && (colorGreen < 0.5 || colorGreen > 1))) {
       throw new GameProtocolError(`${field}.colorGreen exceeds its Flame Lash branch`)
     }
     const wrapperScalar = positiveFinite(source.wrapperScalar, `${field}.wrapperScalar`)
     if (wrapperScalar < 0.75 || wrapperScalar > 1.5) {
       throw new GameProtocolError(`${field}.wrapperScalar exceeds the native range`)
+    }
+    if (sourceFlare) {
+      let expected = .5
+      for (let age = 0; age < common.ageTicks; age++) expected = Math.fround(expected - alphaStep)
+      if (alpha !== expected || wrapperScalar !== 1) throw new GameProtocolError(`${field} violates its native source flare`)
     }
     if (source.record !== 35) throw new GameProtocolError(`${field}.record is not BadGuys 35`)
     return {

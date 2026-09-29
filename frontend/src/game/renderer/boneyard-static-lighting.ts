@@ -13,7 +13,7 @@ import type {
   TreeResidents,
   WallResident,
 } from './boneyard-renderer-model.ts'
-import { writeNativeWallVertexScalars } from './boneyard-static-surface-lighting.ts'
+import { nativeBuildingMeshGrid, writeNativeWallVertexScalars } from './boneyard-static-surface-lighting.ts'
 import {
   BoneyardTreeOcclusionPresentation,
   type NativeTreeOcclusionInput,
@@ -84,6 +84,16 @@ export class BoneyardStaticLighting {
     let buildingVertexLightMinimum = 1
     let buildingVisibleCount = 0
     for (const building of this.buildingResidents.values()) {
+      if (building.enhancedEffects !== snapshot.enhancedEffects) {
+        building.enhancedEffects = snapshot.enhancedEffects
+        building.samplePoints = building.samplePointsForMode(snapshot.enhancedEffects)
+        building.scalars = new Float32Array(building.samplePoints.length)
+        for (const resident of [building.main, building.roof]) {
+          const grid = nativeBuildingMeshGrid(resident.w, resident.h, snapshot.enhancedEffects)
+          const colors = new Uint8Array(grid.positions.length * 2).fill(255)
+          resident.surfaceMesh.setGeometry({ ...grid, colors })
+        }
+      }
       if (!building.main.sprite.renderable) continue
       buildingVisibleCount += 1
       for (let index = 0; index < building.samplePoints.length; index += 1) {

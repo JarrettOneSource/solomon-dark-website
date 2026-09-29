@@ -78,6 +78,7 @@ interface SpellView {
     state: PrimarySpellProjectileState | PrimarySpellTransientState,
     presentationFrame?: number,
     pointGain?: number,
+    enhancedEffects?: boolean,
   ): void
 }
 
@@ -114,6 +115,7 @@ export class PrimarySpellWorldView {
     PrimarySpellProjectileState | PrimarySpellTransientState
   >()
   private waterMeshes: NativeWaterMeshRuns | null = null
+  private enhancedEffects = true
 
   static forBoneyard(
     root: Container,
@@ -148,7 +150,17 @@ export class PrimarySpellWorldView {
     presentationFrame?: number,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
     puppetHits?: ReadonlyMap<string, NativeWorldPuppetHit>,
+    enhancedEffects = true,
   ): void {
+    if (this.enhancedEffects !== enhancedEffects) {
+      this.enhancedEffects = enhancedEffects
+      for (const [id, view] of this.views) {
+        if (!(view instanceof AirPrimarySpellView) && !(view instanceof WeldPrimarySpellView)) continue
+        for (const container of view.containers) container.parent?.removeChild(container)
+        view.destroy()
+        this.views.delete(id)
+      }
+    }
     this.liveIds.clear()
     this.waterMeshes?.beginFrame()
     const projectileCount = spells.projectiles.length
@@ -175,7 +187,7 @@ export class PrimarySpellWorldView {
         if (state.kind === 'harden-shard' || state.kind === 'harden-burst') {
           view = new PlayerHardenEffectView(state, this.textures.secondary)
         } else if (isNativeWeldPresentationState(state)) {
-          view = new WeldPrimarySpellView(state, this.textures.primarySpells.weldActors)
+          view = new WeldPrimarySpellView(state, this.textures.primarySpells.weldActors, enhancedEffects)
         } else if (isNativeAirWaterActorState(state)) {
           view = new AirWaterActorSpellView(state, this.textures.primarySpells)
         } else if (state.kind === 'player-staff-pike-break') {
@@ -237,7 +249,7 @@ export class PrimarySpellWorldView {
             glint: this.textures.primarySpells.frost.over,
           })
         } else if (state.kind === 'air') {
-          view = new AirPrimarySpellView(state, this.textures.primarySpells.air)
+          view = new AirPrimarySpellView(state, this.textures.primarySpells.air, { enhancedEffects })
         } else if (state.kind === 'fire') {
           view = new FireParticleSpellView(state, this.textures.primarySpells.fire)
         } else {
@@ -252,7 +264,7 @@ export class PrimarySpellWorldView {
         }
       }
       if (view instanceof WeldPrimarySpellView) view.setPuppetHit(puppetHits?.has(`primary:${state.id}`) === true)
-      view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)))
+      view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)), enhancedEffects)
       for (const painterRoot of view.painterRoots()) {
         painterRoot.container.zIndex = painterRoot.lane === 'post-world-queue'
           && this.postWorldQueueDepth !== null

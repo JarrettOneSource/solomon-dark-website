@@ -166,6 +166,7 @@ function projectBoneyardMageLightningPulse(
   pulse: BoneyardMageLightningPulse,
 ): BoneyardMageLightningPulseSnapshot {
   return {
+    enhancedEffects: pulse.enhancedEffects,
     contact: pulse.contact.kind === 'world'
       ? { kind: 'world', position: { ...pulse.contact.position } }
       : {

@@ -20,6 +20,7 @@ const textures: PlayerWorldTextures['primarySpells']['weldActors'] = {
 
 function channel(buildId: 1003 | 1004): NativeWeldChannelActorState {
   return {
+    enhancedEffects: true,
     ageTicks: 0, birthTick: 1, buildId, direction: { x: 0, y: -1 },
     endpoint: { x: 100, y: -600 }, id: 1, kind: 'weld-channel', lightRegistration: null,
     midpoint: { x: 50, y: -310 }, origin: { x: 0, y: 0 }, ownerId: 'wizard',

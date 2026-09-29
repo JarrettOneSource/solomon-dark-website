@@ -115,6 +115,7 @@ test('client carries character config, publishes authority, and tears down', asy
   })
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
     type: 'client-hello',
+    enhancedEffects: true,
     beginCollegeIntro: false,
     onlinePreferences: {
       activityMessages: true,
@@ -193,6 +194,7 @@ test('client carries character config, publishes authority, and tears down', asy
       }],
       joinRequests: [],
       party: {
+        enhancedEffects: true,
         id: 'party-1',
         joinCode: 'ABCD-2345',
         leaderPlayerId: 'player-1',
@@ -539,6 +541,7 @@ test('client carries the fresh Tutorial-decline admission intent', async () => {
   })
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
     type: 'client-hello',
+    enhancedEffects: true,
     beginCollegeIntro: false,
     character: CHARACTER,
     cheatsEnabled: false,

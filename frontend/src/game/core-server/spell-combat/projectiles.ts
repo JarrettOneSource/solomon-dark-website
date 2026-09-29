@@ -67,6 +67,7 @@ export function resolveFrostMissileAreaContact(
   )) {
     queueFrostMissileCold(work, row.actor)
     const damaged = damageBoneyardEnemy(work.enemies, {
+      enhancedEffects: work.enhancedEffects,
       hasMagicDamage: true,
       magic: true,
       lethalObserver: work.lethalObserver,
@@ -208,6 +209,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
             work.damageMultiplier(actor.id, projectile.kind, projectile.ownerId),
           )
         const damaged = damageBoneyardEnemy(work.enemies, {
+          enhancedEffects: work.enhancedEffects,
           hasMagicDamage: true,
           magic: true,
           actorId: actor.id,
@@ -310,6 +312,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
           )
         : projectile.damage
       const damaged = damageBoneyardEnemy(work.enemies, {
+        enhancedEffects: work.enhancedEffects,
         suppressHitReaction: projectile.buildId === 1002,
         hasMagicDamage: true,
         magic: true,
@@ -385,6 +388,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
       const amount = nativeFireDirectDamage(projectile.damage, projectile.explodeDamage)
       if (amount > 0) {
         const damaged = damageBoneyardEnemy(work.enemies, {
+          enhancedEffects: work.enhancedEffects,
           hasMagicDamage: true,
           magic: true,
           lethalObserver: work.lethalObserver,
@@ -424,6 +428,7 @@ export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
         work.damageMultiplier(actor.id, projectile.kind, projectile.ownerId),
       )
     const damaged = damageBoneyardEnemy(work.enemies, {
+      enhancedEffects: work.enhancedEffects,
       hasMagicDamage: true,
       magic: true,
       actorId: actor.id,

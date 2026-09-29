@@ -135,6 +135,7 @@ test('Frost Missile uses its concrete helper, lane, and affine learned-overlay r
 
 test('channel and Steam plans use their concrete native classes', () => {
   const flame: Extract<NativeWeldWorldActor, { kind: 'weld-channel' }> = {
+    enhancedEffects: true,
     ageTicks: 0, birthTick: 1, buildId: 1003, direction: { x: 1, y: 0 },
     endpoint: { x: 100, y: 0 }, id: 1, kind: 'weld-channel', lightRegistration: null,
     midpoint: { x: 50, y: 10 }, origin: { x: 0, y: 0 }, ownerId: 'wizard',
@@ -145,6 +146,7 @@ test('channel and Steam plans use their concrete native classes', () => {
   const flamePlan = nativeWeldVisualPlan(flame)
   assert.deepEqual(flamePlan.meshes.map(({ record }) => record), [44])
   const nativeLayer = buildNativeAirRibbonLayer({
+    ribbonFamily: 'flame-lash',
     alpha: 1,
     basePhaseDegrees: -3,
     birthTick: 1,
@@ -157,6 +159,9 @@ test('channel and Steam plans use their concrete native classes', () => {
   })
   assert.deepEqual(flamePlan.meshes[0]!.vertices, Array.from(nativeLayer.vertices))
   assert.deepEqual(flamePlan.meshes[0]!.uvs, Array.from(nativeLayer.uvs))
+  const longFlame = { ...flame, midpoint: { x: 102.5, y: 0 }, endpoint: { x: 205, y: 0 } }
+  assert.equal(nativeWeldVisualPlan({ ...longFlame, enhancedEffects: true }).meshes[0]!.vertices.length, 60)
+  assert.equal(nativeWeldVisualPlan({ ...longFlame, enhancedEffects: false }).meshes[0]!.vertices.length, 16)
   const weakFlame = nativeWeldVisualPlan({ ...flame, underpowered: true })
   assert.equal(weakFlame.meshes[0]!.alpha, 0.5)
   assert.notDeepEqual(weakFlame.meshes[0]!.vertices, flamePlan.meshes[0]!.vertices)

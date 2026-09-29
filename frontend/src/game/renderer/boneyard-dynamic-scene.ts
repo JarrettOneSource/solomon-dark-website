@@ -209,7 +209,7 @@ export class BoneyardDynamicScene {
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     root.addChild(this.levelUp.container)
     this.weather = new NativeBoneyardWeather({
-      enhancedEffects: true,
+      enhancedEffects: initialSnapshot.enhancedEffects,
       initialTick: gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
       mode: boneyard.scene.environmentMode,
     })
@@ -257,8 +257,9 @@ export class BoneyardDynamicScene {
         view = new PlayerWorldView(player.config.element, this.textures, this.modTextures, this.renderer, true)
         this.players.set(playerId, view)
         this.root.addChild(view.container)
+        this.root.addChild(view.enhancedHit.container)
       }
-      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, snapshot.world.webbedPlayers[playerId])
+      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, snapshot.world.webbedPlayers[playerId], snapshot.enhancedEffects, snapshot.secondaryAbilities.stoneskinWarp)
       view.update(
         player,
         snapshot.tick,
@@ -290,6 +291,7 @@ export class BoneyardDynamicScene {
       this.collisionWorld,
       snapshot.world.gateLeaves,
     )
+    this.weather.setEnhancedEffects(snapshot.enhancedEffects)
     this.weather.advanceTo(
       worldTick,
       weatherBounds,
@@ -314,18 +316,20 @@ export class BoneyardDynamicScene {
       presentationFrame,
       pointGainAt,
       puppetHits,
+      snapshot.enhancedEffects,
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,
       `boneyard:${snapshot.world.runId}`,
       presentationFrame,
       pointGainAt,
+      snapshot.enhancedEffects,
     )
     this.gates.update(snapshot.world.gateLeaves)
     this.goodies.update(snapshot.world.goodies, worldTick, puppetHits, settings.complexLighting)
     this.enemies.update(enemySnapshots, worldTick, settings.complexLighting)
     this.spiderRemains.update(snapshot.world.spiderRemains)
-    this.bossSpells.update(snapshot.world.bossSpells, worldTick, viewport.height)
+    this.bossSpells.update(snapshot.world.bossSpells, worldTick, viewport.height, snapshot.enhancedEffects)
     const visibleWorldBounds = boneyardVisibleWorldBounds(camera, viewport)
     this.enemyDeathEffects.update(
       snapshot.world.deathEffects,
@@ -689,6 +693,7 @@ export class BoneyardDynamicScene {
       Object.keys(snapshot.players),
       order.foregroundZIndex,
     )
+    for (const view of this.players.values()) view.enhancedHit.container.zIndex = order.foregroundZIndex + .125
     for (const layer of mageLightningPainterLayers) {
       layer.container.zIndex = layer.lane === 'post-main-overlay'
         ? targetContactDepths.get(layer.id) ?? (

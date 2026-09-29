@@ -38,6 +38,7 @@ export function resolveFireContacts(work: BoneyardSpellCombatWork): void {
     for (const { actor } of rows) {
       work.queueBurn(actor.id, effect.ownerId, effect.burnDamage)
       const damaged = damageBoneyardEnemy(work.enemies, {
+        enhancedEffects: work.enhancedEffects,
         hasMagicDamage: true,
         magic: true,
         lethalObserver: work.lethalObserver,
@@ -85,6 +86,7 @@ export function resolveFireContacts(work: BoneyardSpellCombatWork): void {
         hitStrength = Math.fround(0.25 + response.value)
       }
       const damaged = damageBoneyardEnemy(work.enemies, {
+        enhancedEffects: work.enhancedEffects,
         hitStrength,
         suppressHitReaction: contact.kind === 'fire-patch',
         hasMagicDamage: true,

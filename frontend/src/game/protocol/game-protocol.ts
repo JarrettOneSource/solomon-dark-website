@@ -91,6 +91,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       'allowModMismatch',
       'beginCollegeIntro',
       'cheatsEnabled',
+      'enhancedEffects',
       'declineTutorial',
       'onlinePreferences',
       'protocolVersion',
@@ -107,6 +108,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return {
       type: 'client-hello',
       cheatsEnabled: boolean(value.cheatsEnabled, 'cheatsEnabled'),
+      enhancedEffects: boolean(value.enhancedEffects, 'enhancedEffects'),
       onlinePreferences: gameOnlinePreferences(value.onlinePreferences, 'onlinePreferences'),
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       credential: limitedString(value.credential, 'credential', 512),
@@ -423,6 +425,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type', 'enabled'])
     return {
       type: 'client-cheat-mode',
+      enabled: boolean(value.enabled, 'enabled'),
+    }
+  }
+  if (value.type === 'client-enhanced-effects') {
+    onlyKeys(value, 'message', ['type', 'enabled'])
+    return {
+      type: 'client-enhanced-effects',
       enabled: boolean(value.enabled, 'enabled'),
     }
   }

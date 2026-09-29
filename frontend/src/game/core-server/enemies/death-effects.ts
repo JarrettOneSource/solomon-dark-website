@@ -10,7 +10,7 @@ export interface DeathEffectOwner {
 }
 
 export type BoneyardDeathEffectWork = Pick<WorkingStep,
-  'deathEffects' | 'nextDeathEffectId' | 'registerWorldPainter' | 'rngState'>
+  'deathEffects' | 'nextDeathEffectId' | 'registerWorldPainter' | 'rngState' | 'enhancedEffects'>
 
 export function spawnRadialBouncer(
   work: WorkingStep,
@@ -60,7 +60,7 @@ export function spawnBouncer(
   const resolvedOptions = typeof options === 'function' ? options() : options
   const verticalVelocity = constructorVerticalVelocity
     * (resolvedOptions.bounceVelocityScale ?? 1)
-  const opacityTimer = resolvedOptions.opacityTimer ?? 10
+  const opacityTimer = resolvedOptions.opacityTimer ?? (work.enhancedEffects ? 10 : 2)
   const effect: BoneyardEnemyDeathEffect = Object.freeze({
     ageTicks: 0,
     alpha: 1,
@@ -93,7 +93,7 @@ export function spawnBouncer(
     scale: resolvedOptions.scale ?? 1,
     scaleY: resolvedOptions.scaleY ?? resolvedOptions.scale ?? 1,
     scaleMultiplier: 1,
-    shadow: true,
+    shadow: work.enhancedEffects,
     spawnTick: tick,
     tint: resolvedOptions.tint ?? 0xffffff,
     verticalVelocity,

@@ -75,8 +75,65 @@ export function nativeSecondaryActor(
         ? 53
       : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
   const mindblast = kind === 'mindblast-burst' || kind === 'mindblast-shockwave'
-  if (mindblast !== (skillId === null)) {
-    throw new GameProtocolError(`${field}.skillId must be null exactly for Mindblast actors`)
+  if (kind !== 'electric-burn-flare' && kind !== 'electric-burn-arc' && mindblast !== (skillId === null)) {
+    throw new GameProtocolError(`${field}.skillId must be null exactly for Mindblast or primary-origin ElectricBurn flares`)
+  }
+  if (kind === 'electric-burn-flare' || kind === 'electric-burn-arc') {
+    if (skillId !== null || source.damage !== 0 || source.freezeTicks !== 0 || source.golem !== null
+      || source.velocity === null || source.hitTargetIds === null) {
+      throw new GameProtocolError(`${field} must retain primary-origin ElectricBurn presentation ownership`)
+    }
+    if (kind === 'electric-burn-flare') {
+      const decay = Math.fround(boolean(source.enhanced, `${field}.enhanced`) ? .2 : .4)
+      const initial = finite(source.quantity, `${field}.quantity`)
+      if ((initial !== .5 && initial !== .75) || source.phase !== decay
+        || lifetimeTicks !== Math.ceil(initial / decay) || ageTicks >= lifetimeTicks) {
+        throw new GameProtocolError(`${field} violates its born ElectricBurn fade contract`)
+      }
+      let expectedAlpha = initial
+      for (let age = 0; age < ageTicks; age++) expectedAlpha = Math.fround(expectedAlpha - decay)
+      if (source.alpha !== expectedAlpha || typeof source.scale !== 'number' || source.scale < 1 || source.scale > 1.5
+        || typeof source.radius !== 'number' || source.radius < .75 || source.radius > 1.5) {
+        throw new GameProtocolError(`${field} violates final ElectricBurn corona values`)
+      }
+    } else if (lifetimeTicks !== 2 || ageTicks >= 2 || !Number.isSafeInteger(source.phase) || (source.phase as number) < 0) {
+      throw new GameProtocolError(`${field} violates its native ElectricBurn body lifetime`)
+    }
+  }
+  if (kind === 'planewalker-mote' || kind === 'stoneskin-chip') {
+    if (skillId !== (kind === 'planewalker-mote' ? 12 : 46) || source.damage !== 0
+      || source.freezeTicks !== 0 || source.golem !== null || lifetimeTicks !== 1000) {
+      throw new GameProtocolError(`${field} violates its native player presentation owner`)
+    }
+    const alpha = positiveFinite(source.alpha, `${field}.alpha`)
+    if (kind === 'stoneskin-chip') {
+      if (source.frame !== 77 || source.scale !== 1 || (source.variant !== 0 && source.variant !== 1)
+        || alpha > (source.variant === 1 && source.enhanced === true ? 10 : 2)) {
+        throw new GameProtocolError(`${field} violates its native Stoneskin fragment`)
+      }
+    } else {
+      const enhanced = boolean(source.enhanced, `${field}.enhanced`)
+      const low = Math.fround(Math.fround(.1) * Math.fround(enhanced ? .15 : .25))
+      const high = Math.fround(Math.fround(.1) * Math.fround(enhanced ? .3 : .45))
+      const decay = positiveFinite(source.phase, `${field}.phase`)
+      const scale = positiveFinite(source.scale, `${field}.scale`)
+      if (source.frame !== 11 || alpha > 1 || decay < low || decay > high || scale < .5 || scale > 1) {
+        throw new GameProtocolError(`${field} violates its born Planewalker fade`)
+      }
+    }
+  }
+  if (kind === 'golem-death' || kind === 'golem-assembly-debris') {
+    const enhanced = boolean(source.enhanced, `${field}.enhanced`)
+    const expectedLifetime = kind === 'golem-death' ? enhanced ? 667 : 134 : enhanced ? 400 : 80
+    if (skillId !== 45 || source.damage !== 0 || lifetimeTicks !== expectedLifetime || ageTicks >= lifetimeTicks) {
+      throw new GameProtocolError(`${field} violates the Golem born-quality lifetime`)
+    }
+    if (kind === 'golem-assembly-debris' && (
+      source.frame !== 2008 && source.frame !== 2009 && source.frame !== 2010
+      || positiveFinite(source.alpha, `${field}.alpha`) > (enhanced ? 10 : 2)
+      || positiveFinite(source.scale, `${field}.scale`) > .488
+      || !Number.isInteger(source.quantity) || (source.quantity as number) < 0 || (source.quantity as number) > 23
+    )) throw new GameProtocolError(`${field} violates the native Golem BoulderBit constructor`)
   }
   if (mindblast && variant > 4) {
     throw new GameProtocolError(`${field}.variant is not a native Wizard element`)

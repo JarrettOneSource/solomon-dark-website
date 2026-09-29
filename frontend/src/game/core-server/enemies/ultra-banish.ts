@@ -60,7 +60,7 @@ export function stepUltraBanishSpell(work: WorkingStep, source: UltraSpell,
   const remainingTicks = source.remainingTicks - 1
   const alpha = remainingTicks <= 100 ? Math.fround(source.alpha - Math.fround(.01)) : source.alpha
   if (alpha <= 0) return null
-  if (source.megaDeath && remainingTicks > 100) {
+  if (source.megaDeath && remainingTicks > 100 && (work.enhancedEffects || remainingTicks % 3 === 0)) {
     spawnBouncer(work, { id: source.ownerActorId, position: source.position }, context.tick,
       () => 1819 + drawEnemyInteger(work, 4), 'ultra-banish-bone', () => {
         const speed = Math.fround(2 + drawEnemyFloat(work, .25))

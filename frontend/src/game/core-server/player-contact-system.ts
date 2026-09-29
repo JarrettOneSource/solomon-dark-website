@@ -37,7 +37,8 @@ export interface PlayerContactStep {
 }
 
 export function applyPlayerContacts(
-  source: Pick<GameSimulationState, 'world' | 'playerEntities' | 'secondaryAbilities'>,
+  source: Pick<GameSimulationState, 'world' | 'playerEntities' | 'secondaryAbilities'>
+    & Partial<Pick<GameSimulationState, 'enhancedEffects'>>,
   players: Readonly<Record<PlayerId, PlayerCharacterState>>,
   playerDamage: readonly BoneyardEnemyPlayerDamage[],
   tick: number,
@@ -95,6 +96,7 @@ export function applyPlayerContacts(
         secondaryDamage: damage.magicDamage,
       },
       tick,
+      source.enhancedEffects ?? true,
     )
     secondaryAbilities = received.state
     if (received.reflectedDamage > 0 && received.ownerId !== null && damageSource?.reflectableActorId != null) {
@@ -141,6 +143,7 @@ export function applyPlayerContacts(
         ),
       secondaryAbilities.rng,
       character.position,
+      source.enhancedEffects ?? true,
     )
     secondaryAbilities = { ...secondaryAbilities, rng: contact.rng }
     if (contact.hardenChip !== null) hardenChips.push({
@@ -179,6 +182,7 @@ export function applyPlayerContacts(
       tick,
       character.position,
       gameWorldKey(world, damage.playerId),
+      { physical: damage.physicalDamage > 0 && damage.magicDamage <= 0, enhancedEffects: source.enhancedEffects ?? true },
     )
     secondaryAbilities = intercepted.state
     const physicalDamage = intercepted.absorbedDamage > 0 ? 0 : contact.physicalDamage

@@ -1,4 +1,5 @@
 import { stepBoneyardPuppetHits } from './enemies/puppet-hits.ts'
+import { stepCoffinEmergence } from './enemies/coffin-emergence.ts'
 import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import { createNativeBossNarration, enqueueNativeBossNarration, stepNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
@@ -181,6 +182,7 @@ export function stepBoneyardEnemyStore(
     () => drawUnit(work),
     work.nextDeathEffectId,
     work.registerWorldPainter,
+    (effect, tick) => stepCoffinEmergence(work, effect, tick),
   )
   work.deathEffects = transients.deathEffects
   work.nextDeathEffectId = transients.nextDeathEffectId

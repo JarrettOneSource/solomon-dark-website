@@ -119,6 +119,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
           disintegrate,
           work.registerWorldPainter,
           work.lethalObserver,
+          work.enhancedEffects,
         )
         work.enemies = contact.enemies
         work.events.push(...contact.events)
@@ -146,6 +147,8 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
             hurricaneCharge: 0,
             id: work.nextSpellId,
             kind: 'air',
+            chained: true,
+            enhancedEffects: work.enhancedEffects,
             lightRegistration: work.registerCombatPainter('transient'),
             midpoint: geometry.midpoint,
             origin: geometry.source,
@@ -200,6 +203,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(work.enemies, {
+              enhancedEffects: work.enhancedEffects,
               suppressHitReaction: true,
               hasMagicDamage: true,
               magic: true,
@@ -217,6 +221,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               const point = primarySpellTargetPoint(row.target)
               const fadeDirection = normalizedDifference(previousPoint, point)
               const fade = createNativeWeldFlameLashFade({
+                enhancedEffects: work.enhancedEffects,
                 direction: fadeDirection,
                 id: work.nextSpellId,
                 origin: point,
@@ -267,6 +272,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
                 birthTick: work.tick,
                 buildId: 1003,
                 direction,
+                enhancedEffects: work.enhancedEffects,
                 endpoint: geometry.endpoint,
                 id: work.nextSpellId,
                 kind: 'weld-channel',
@@ -280,6 +286,15 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
                 vector: Object.freeze([...profile.vector.values]),
                 worldKey: work.worldKey,
               }))
+              work.nextSpellId += 1
+            }
+            if (hop > 0) {
+              const sourceFade = createNativeWeldFlameLashFade({ enhancedEffects: work.enhancedEffects,
+                direction: normalizedDifference(previousPoint, currentPoint), id: work.nextSpellId,
+                origin: previousPoint, ownerId: emission.ownerId, rng: work.rng, tick: work.tick,
+                variant: 'source', vector: profile.vector.values, worldKey: work.worldKey })
+              work.rng = sourceFade.rng
+              work.ownedTransients.push(work.enrollCombatActor(sourceFade.actor))
               work.nextSpellId += 1
             }
             previousPoint = currentPoint
@@ -365,6 +380,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(work.enemies, {
+              enhancedEffects: work.enhancedEffects,
               suppressHitReaction: true,
               hasMagicDamage: true,
               magic: true,
@@ -446,6 +462,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
                 work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
               )
               const damaged = damageBoneyardEnemy(work.enemies, {
+                enhancedEffects: work.enhancedEffects,
                 suppressHitReaction: true,
                 hasMagicDamage: true,
                 magic: true,
@@ -551,6 +568,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
         work.damageMultiplier(row.actor.id, 'water', emission.ownerId),
       )
       const damaged = damageBoneyardEnemy(work.enemies, {
+        enhancedEffects: work.enhancedEffects,
         suppressHitReaction: true,
         hasMagicDamage: true,
         magic: true,
@@ -588,6 +606,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
               work.damageMultiplier(row.actor.id, 'water-hail', emission.ownerId),
             )
             const hailContact = damageBoneyardEnemy(work.enemies, {
+              enhancedEffects: work.enhancedEffects,
               hasMagicDamage: false,
               magic: true,
               lethalObserver: work.lethalObserver,

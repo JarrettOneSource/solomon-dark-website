@@ -93,6 +93,7 @@ export type ResolveBoneyardSpellEnemyMovement = (
 export type BoneyardSpellLightSampler = (position: Readonly<Vector2>) => number
 
 export interface BoneyardSpellCombatOptions {
+  readonly enhancedEffects?: boolean
   readonly lightAt: BoneyardSpellLightSampler | null
   readonly sourceEnemies: BoneyardEnemyStore
   readonly sourceSpells: PrimarySpellSimulationState

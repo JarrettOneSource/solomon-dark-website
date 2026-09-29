@@ -355,6 +355,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
   'banish-black',
   'scrap',
   'move-fade-sin',
+  'boulder-bit',
 ] as const
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS = [
@@ -399,6 +400,7 @@ export type BoneyardMageLightningContactSnapshot =
     }
 
 export interface BoneyardMageLightningPulseSnapshot {
+  enhancedEffects: boolean
   contact: BoneyardMageLightningContactSnapshot
   endpoint: Vector2
   id: number
@@ -430,6 +432,7 @@ export type BoneyardMageLightningPulseFrame = readonly [
   sourceRegistrationOrdinal: number,
   contactRegistrationOrdinal: number,
   lightRegistrationOrdinal: number,
+  enhancedEffects: boolean,
 ]
 
 export const BONEYARD_ENEMY_EVENT_TYPES = [
@@ -649,6 +652,7 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS = [
   'fire-burst',
   'guided-impact',
   'firebolt-trail',
+  'demon-bomb-particle',
 ] as const
 
 export type BoneyardEnemyProjectileEffectKind =
@@ -666,6 +670,7 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS: Readonly<
   'fire-burst': 0.5,
   'guided-impact': 2,
   'firebolt-trail': 1,
+  'demon-bomb-particle': 1,
 })
 
 export interface BoneyardEnemyProjectileEffectSnapshotBase {
@@ -945,6 +950,7 @@ export interface PrimarySpellSimulationFrameState {
 }
 
 export interface GameSnapshot {
+  enhancedEffects: boolean
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
   materializingPlayerIds: readonly string[]
@@ -962,6 +968,7 @@ export type GameClientSnapshot = Omit<GameSnapshot, 'primarySpells'> & {
 }
 
 export interface GameSnapshotFrame {
+  enhancedEffects: boolean
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
   materializingPlayerIds: readonly string[]

@@ -30,8 +30,8 @@ test('the stock right-click atlas membership is complete and every row is regist
       HUB_VISUAL_ATLAS_SOURCES: readonly string[]
     }
     const membership = module.NATIVE_SECONDARY_SPRITE_MEMBERSHIP
-    assert.deepEqual(membership.BadGuys.slice(0, 29), [
-      0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 78, 84, 85, 86,
+    assert.deepEqual(membership.BadGuys.slice(0, 30), [
+      0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 77, 78, 84, 85, 86,
     ])
     assert.equal(membership.BadGuys.includes(343), true)
     assert.equal(membership.BadGuys.includes(400), true)
@@ -40,7 +40,8 @@ test('the stock right-click atlas membership is complete and every row is regist
       Array.from({ length: 33 }, (_, index) => 401 + index),
     )
     assert.equal(membership.BadGuys.includes(2008), true)
-    assert.deepEqual(membership.Clothes, [1, 2])
+    assert.deepEqual(membership.Clothes, [1, 2, 3])
+    assert.deepEqual(membership.BadGuys.filter(entry => entry >= 1836 && entry <= 1839), [1836, 1837, 1838, 1839])
     assert.deepEqual(membership.BadGuys.filter((entry) => entry >= 446 && entry <= 450), [446, 447, 448, 449, 450])
     for (const entry of [15, 40, 45, 55, 88]) {
       assert.equal(membership.BadGuys.includes(entry), true, `missing Staff VFX record ${entry}`)
@@ -101,6 +102,7 @@ test('the stock right-click atlas membership is complete and every row is regist
     assert.deepEqual(module.NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES, [
       module.nativeSecondarySpriteRecord('Clothes', 1).source,
       module.nativeSecondarySpriteRecord('Clothes', 2).source,
+      module.nativeSecondarySpriteRecord('Clothes', 3).source,
     ])
     const hubSources = new Set(hubTextures.hubWorldAssetSources())
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES.length, 3)

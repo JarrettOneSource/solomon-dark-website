@@ -92,7 +92,7 @@ export interface NativeBoneyardWeatherOptions {
 
 export class NativeBoneyardWeather {
   private arenaAge = 0
-  private readonly enhancedEffects: boolean
+  private enhancedEffects: boolean
   private readonly drops: WeatherDropState[] = []
   private readonly mode: number
   private readonly splashes: WeatherSplashState[] = []
@@ -145,6 +145,10 @@ export class NativeBoneyardWeather {
       }
     }
     this.currentTick = targetTick
+  }
+
+  setEnhancedEffects(enabled: boolean): void {
+    this.enhancedEffects = enabled
   }
 
   plan(lightAt: (position: Readonly<BoneyardPoint>) => number = () => 1): NativeBoneyardWeatherPlan {

@@ -54,7 +54,7 @@ import { ML_BOT_CHARACTER, MlBotHostController } from './ml-bot-host-controller.
 import type { PartyRecoveryClaim, PartyRecoveryRosterMember } from './party-recovery-claim.ts'
 import { createPartyRecoveryClaim, decodePartyRecoveryClaim, verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
 import type { PartyIdentity, PartySystemState } from './party-system.ts'
-import { createPartySystem, decidePartyJoinRequest, joinPartyPlayer, partyByJoinCode, partyByListingId, partyForPlayer, projectPartyState, registerPartyPlayer, removePartyPlayer as removePrivatePartyPlayer, requestPartyJoin, restorePartyMembership, rotatePartyJoinCode, setPartyVisibility } from './party-system.ts'
+import { createPartySystem, decidePartyJoinRequest, joinPartyPlayer, partyByJoinCode, partyByListingId, partyForPlayer, projectPartyState, registerPartyPlayer, removePartyPlayer as removePrivatePartyPlayer, requestPartyJoin, restorePartyMembership, rotatePartyJoinCode, setPartyEnhancedEffects, setPartyVisibility } from './party-system.ts'
 import type { PreparedModHost } from './prepared-mod-host.ts'
 import { prepareModHost } from './prepared-mod-host.ts'
 import type { PreparedModSaveState } from './prepared-mod-save.ts'
@@ -1612,6 +1612,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             authenticated.content,
           )
         }
+        // A joining or resuming peer cannot replace the live world's mode.
+        // Public College remains shared; each party owns only its next-run choice.
+        if (!stagedPartyRejoin && !rejoinedParty && !replacedClient) {
+          if (!sharedWorlds && hostPlayerId === playerId && message.saveIntent !== 'resume') {
+            state = { ...state, enhancedEffects: message.enhancedEffects }
+          }
+          const parties = activePartySystem()
+          const party = parties ? partyForPlayer(parties, playerId) : null
+          if (parties && party?.leaderPlayerId === playerId) {
+            const world = stateForPlayer(playerId)
+            const enabled = sharedWorlds && world.world.kind === 'hub'
+              ? message.enhancedEffects
+              : world.enhancedEffects
+            const updated = setPartyEnhancedEffects(parties, playerId, enabled)
+            if (sharedWorlds) sharedWorlds = { ...sharedWorlds, parties: updated.state }
+            else privateParties = updated.state
+          }
+        }
         const playerState = stagedPartyRejoin
           ? partyRejoinStagingState(stagedPartyRejoin)
           : stateForPlayer(playerId)
@@ -2913,6 +2931,28 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           broadcastSnapshot()
         }
         sendPartyAction(client, 'kick', result)
+        return
+      }
+      if (message.type === 'client-enhanced-effects') {
+        if (client.playerId !== authorityForPlayer(client.playerId)) {
+          broadcastPartyState()
+          broadcastSnapshot()
+          return
+        }
+        const active = stateForPlayer(client.playerId)
+        const parties = activePartySystem()
+        if (parties) {
+          const updated = setPartyEnhancedEffects(parties, client.playerId, message.enabled)
+          if (!updated.accepted) return
+          if (sharedWorlds) sharedWorlds = { ...sharedWorlds, parties: updated.state }
+          else privateParties = updated.state
+        }
+        if (!sharedWorlds || active.world.kind !== 'hub') {
+          replaceStateForPlayer(client.playerId, { ...active, enhancedEffects: message.enabled })
+          scheduleSaveCheckpoint('enhanced-effects')
+        }
+        broadcastPartyState()
+        broadcastSnapshot()
         return
       }
       if (message.type === 'client-cheat-mode') {

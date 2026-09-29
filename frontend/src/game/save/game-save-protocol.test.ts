@@ -26,6 +26,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
   const document = JSON.stringify({ schemaVersion: 1 })
   assert.deepEqual(decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -36,6 +37,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
     saveIntent: 'resume',
   })), {
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -107,6 +109,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
 test('protocol rejects oversized and inconsistent save messages', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -130,6 +133,7 @@ test('protocol rejects oversized and inconsistent save messages', () => {
   })), /save/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -140,6 +144,7 @@ test('protocol rejects oversized and inconsistent save messages', () => {
   })), /saveIntent/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,

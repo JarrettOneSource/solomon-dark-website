@@ -9,12 +9,18 @@ export const SKELETON_BASE_FRAGMENT_ENTRIES = Object.freeze([
   121, 120, 119, 116, 117, 117, 117, 117, 117,
 ] as const)
 
+export function skeletonDeathFragmentEntries(enhancedEffects: boolean): readonly number[] {
+  return enhancedEffects ? SKELETON_BASE_FRAGMENT_ENTRIES : [
+    113, 115, 118, 121, 120, 119, 116, 117, 117,
+  ]
+}
+
 export function spawnSkeletonShatter(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   tick: number,
 ): void {
-  const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
+  const entries = [...skeletonDeathFragmentEntries(work.enhancedEffects)]
   shuffleBoneFragments(work, entries)
   let angleDeg = drawUnit(work) * 360
   for (const entry of entries) {
@@ -180,7 +186,7 @@ function spawnSkeletonFragmentBouncer(
     velocity.x *= 1.5
     const distance = Math.fround(minimumDistance + drawUnit(work) * distanceRange)
     return {
-      opacityTimer,
+      opacityTimer: !work.enhancedEffects && (opacityTimer === 10 || opacityTimer === 15) ? 2 : opacityTimer,
       position: {
         x: actor.position.x + velocity.x * (distance + 2),
         y: actor.position.y + velocity.y * distance,
@@ -206,10 +212,11 @@ function shuffleBoneFragments(work: Pick<WorkingStep, 'rngState'>, entries: numb
 
 
 export function spawnHeartmongerShatter(work: WorkingStep, actor: BoneyardEnemyActor, tick: number): void {
-  // 0x0049FB60; the browser's Enhanced Effects setting is fixed on.
-  const entries = [113, 113, 113, 113, 113, 115, 118,
+  // 0x0049FB60 adds the extra bone membership only while FastCPU is enabled.
+  const entries = work.enhancedEffects ? [113, 113, 113, 113, 113, 115, 118,
     121, 120, 119, 116, 121, 120, 119, 116, 121, 120, 119, 116,
-    ...Array<number>(11).fill(117)]
+    ...Array<number>(11).fill(117)] : [113, 113, 113, 115, 118,
+      121, 120, 119, 116, 121, 120, 119, 116, ...Array<number>(6).fill(117)]
   shuffleBoneFragments(work, entries)
   let angle = drawUnit(work) * 360
   for (const entry of entries) {
@@ -226,7 +233,7 @@ export function spawnHeartmongerShatter(work: WorkingStep, actor: BoneyardEnemyA
       () => drawUnit(work) * 360, 1.2000000476837158, 15, 5, 30)
   }
   spawnBouncer(work, actor, tick, () => 1819 + drawInteger(work, 4), 'heartmonger-skull',
-    { opacityTimer: 15, scale: 1.350000023841858, velocity: radialVector(angle, 2) })
+    { opacityTimer: work.enhancedEffects ? 15 : 2, scale: 1.350000023841858, velocity: radialVector(angle, 2) })
   spawnUnbind(work, actor, tick)
   spawnHeartmongerDeparture(work, actor, tick)
 }

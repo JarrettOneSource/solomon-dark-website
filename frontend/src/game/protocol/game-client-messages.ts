@@ -15,6 +15,7 @@ export interface ClientHelloMessage {
   allowModMismatch?: boolean
   beginCollegeIntro?: boolean
   cheatsEnabled: boolean
+  enhancedEffects: boolean
   declineTutorial?: boolean
   onlinePreferences: GameOnlinePreferences
   type: 'client-hello'
@@ -239,6 +240,11 @@ export interface ClientCheatModeMessage {
   enabled: boolean
 }
 
+export interface ClientEnhancedEffectsMessage {
+  type: 'client-enhanced-effects'
+  enabled: boolean
+}
+
 export interface ClientLuaExecuteMessage {
   type: 'client-lua-execute'
   code: string
@@ -277,6 +283,7 @@ export interface ClientModActionMessage {
 export type ClientGameMessage =
   | ClientChatMessage
   | ClientCheatModeMessage
+  | ClientEnhancedEffectsMessage
   | ClientCollegeInvitationDismissMessage
   | ClientCollegeInviteMessage
   | ClientConfirmLoadoutMessage

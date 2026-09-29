@@ -5,6 +5,7 @@ import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
 import playerMindblastRing from '../../assets/game/player-mindblast-ring.png'
 import playerHardenIce from '../../assets/game/player-harden-ice.png'
+import playerStoneskin from '../../assets/game/player-stoneskin.png'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
 
 export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'Clothes', 'DeadHawg', 'Golem'] as const
@@ -24,15 +25,15 @@ export const NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES = Object.freeze({
 })
 
 const BADGUYS_ENTRIES = Object.freeze([
-  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 78, 84, 85, 86, 88, 90,
+  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 77, 78, 84, 85, 86, 88, 90,
   ...range(110, 112), ...range(158, 167), ...range(238, 250),
   ...range(251, 266), ...range(267, 270),
-  ...range(333, 433), ...range(446, 450), ...range(2008, 2010),
+  ...range(333, 433), ...range(446, 450), ...range(1836, 1839), ...range(2008, 2010),
 ])
 const DEADHAWG_ENTRIES = Object.freeze([
   2, 4, 5, 6, 16, 17, 18, ...range(46, 87), ...range(177, 179), ...range(200, 207),
 ])
-const CLOTHES_ENTRIES = Object.freeze([1, 2])
+const CLOTHES_ENTRIES = Object.freeze([1, 2, 3])
 const GOLEM_ENTRIES = Object.freeze(range(1, 208).filter((entry) => {
   const record = (golem as AtlasManifest).entries[entry]
   return record !== undefined && !record.empty && record.file !== null
@@ -84,6 +85,7 @@ export const NATIVE_SECONDARY_ASSET_SOURCES = Object.freeze([
 export const NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES = Object.freeze([
   playerHardenIce,
   playerMindblastRing,
+  playerStoneskin,
 ])
 
 export function nativeSecondarySpriteRecord(
@@ -101,10 +103,10 @@ export function nativeSecondarySpriteKey(atlas: NativeSecondaryAtlas, entry: num
 
 function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpriteRecord {
   if (atlas === 'Clothes') {
-    if (entry !== 1 && entry !== 2) {
+    if (entry !== 1 && entry !== 2 && entry !== 3) {
       throw new Error(`Native secondary Clothes record is missing: ${entry}`)
     }
-    const size = entry === 1 ? 130 : 81
+    const size = entry === 2 ? 81 : 130
     const anchor = nativeSpriteAnchor(size, size, { x: 0, y: 0 })
     return Object.freeze({
       anchorX: anchor.x,
@@ -112,7 +114,7 @@ function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpri
       atlas,
       entry,
       height: size,
-      source: entry === 1 ? playerHardenIce : playerMindblastRing,
+      source: entry === 1 ? playerHardenIce : entry === 2 ? playerMindblastRing : playerStoneskin,
       width: size,
     })
   }

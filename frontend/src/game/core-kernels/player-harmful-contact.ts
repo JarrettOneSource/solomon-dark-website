@@ -44,6 +44,7 @@ export function resolvePlayerHarmfulContact(
   reflectionSourceInRange: boolean,
   sourceRng: NativeRngState,
   position: Readonly<Vector2>,
+  enhancedEffects = true,
 ): PlayerHarmfulContactResult {
   if (!Number.isFinite(damage.physicalDamage) || damage.physicalDamage < 0
     || !Number.isFinite(damage.magicDamage) || damage.magicDamage < 0) {
@@ -71,7 +72,7 @@ export function resolvePlayerHarmfulContact(
   }
   let hardenChip: NativeHardenChip | null = null
   if (damage.physicalDamage > 0 && runtime.harden.coating > NATIVE_HARDEN_CHIP_THRESHOLD) {
-    const chipped = createNativeHardenChip(position, rng)
+    const chipped = createNativeHardenChip(position, rng, enhancedEffects)
     hardenChip = chipped.chip
     rng = chipped.rng
   }

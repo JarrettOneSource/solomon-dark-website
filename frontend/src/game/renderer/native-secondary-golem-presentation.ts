@@ -235,12 +235,16 @@ export function nativeGolemDeathPresentationPlan(
   if (actor.kind !== 'golem-death' || actor.presentationRng === null) {
     throw new TypeError('Native Golem death presentation requires its pre-consumption RNG state')
   }
-  const created = createGolemDeathParticles(actor.presentationRng)
+  const created = createGolemDeathParticles(actor.presentationRng, actor.enhanced)
   const stepped = stepGolemDeathParticles(created.particles, created.rng, actor.ageTicks)
   const tint = actor.variant === 1 ? GOLEM_IRON_TINT : WHITE
   const draws = stepped.particles.flatMap((particle, index) => {
     const alpha = Math.max(0, Math.min(1, particle.life))
-    return alpha <= 0 ? [] : [secondarySprite(
+    return alpha <= 0 ? [] : [
+      ...(actor.enhanced ? [secondarySprite(actor, 'DeadHawg', 78 + index % 10, `golem-death-shadow-${index}`, {
+        alpha, offset: { x: particle.position.x, y: particle.position.y + 2 },
+        rotationRadians: degreesToRadians(particle.rotation), scaleX: actor.scale, scaleY: actor.scale * .75, tint: 0,
+      })] : []), secondarySprite(
       actor,
       'DeadHawg',
       78 + index % 10,
@@ -460,7 +464,7 @@ interface GolemDeathParticle {
   verticalVelocity: number
 }
 
-function createGolemDeathParticles(sourceRng: NativeRngState): Readonly<{
+function createGolemDeathParticles(sourceRng: NativeRngState, enhanced: boolean): Readonly<{
   particles: readonly GolemDeathParticle[]
   rng: NativeRngState
   starRotation: number
@@ -495,7 +499,7 @@ function createGolemDeathParticles(sourceRng: NativeRngState): Readonly<{
       bounceProgress: 0,
       bounceVelocity: -(fall.value + 2),
       height: -height.value,
-      life: 2,
+      life: enhanced ? 10 : 2,
       position: {
         x: velocity.x * positionFactor,
         y: velocity.y * positionFactor,

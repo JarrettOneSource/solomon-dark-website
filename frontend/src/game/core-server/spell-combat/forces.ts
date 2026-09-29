@@ -75,6 +75,7 @@ export function resolveHurricaneContacts(work: BoneyardSpellCombatWork): void {
       )
       if (amount > 0) {
         const damaged = damageBoneyardEnemy(work.enemies, {
+          enhancedEffects: work.enhancedEffects,
           hasMagicDamage: true,
           magic: true,
           actorId: row.actor.id,
@@ -159,6 +160,7 @@ export function resolveTransientForces(work: BoneyardSpellCombatWork): void {
     )) {
       const amount = nativeEtherBlastDamage(effect.charges, row.actor.currentHealth)
       const contact = damageBoneyardEnemy(work.enemies, {
+        enhancedEffects: work.enhancedEffects,
         hasMagicDamage: true,
         magic: true,
         actorId: row.actor.id,

@@ -86,8 +86,8 @@ function bossSpell(value: unknown, field: string): NativeBossSpell {
       return { ...base, kind, lifePhaseDeg: nonnegativeFinite(source.lifePhaseDeg, `${field}.lifePhaseDeg`),
         bobPhaseDeg: finite(source.bobPhaseDeg, `${field}.bobPhaseDeg`) }
     case 'blightning':
-      onlyKeys(source, field, [...COMMON_KEYS, 'endpoint', 'midpoint'])
-      return { ...base, kind, endpoint: boneyardPoint(source.endpoint, `${field}.endpoint`),
+      onlyKeys(source, field, [...COMMON_KEYS, 'enhancedEffects', 'endpoint', 'midpoint'])
+      return { ...base, kind, enhancedEffects: boolean(source.enhancedEffects, `${field}.enhancedEffects`), endpoint: boneyardPoint(source.endpoint, `${field}.endpoint`),
         midpoint: boneyardPoint(source.midpoint, `${field}.midpoint`) }
     case 'death-magic': {
       onlyKeys(source, field, [...COMMON_KEYS, 'scale', 'alpha', 'alphaLossPerTick', 'painterSortBias', 'light'])

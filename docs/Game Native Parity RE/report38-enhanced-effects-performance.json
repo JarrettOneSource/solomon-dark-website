@@ -1,0 +1,348 @@
+{
+  "experiment": "Report38 controlled original level-36 workload",
+  "rawResultSha256": "77a5b15ab5b8e5de449c4045847ea1d9f2a2edcaf94ae941c27856f348e95668",
+  "source": {
+    "saveSha256": "a9e0760fa197fe11d91f99449faa540d716ae8cfffebe79302a6a51d04b9e546",
+    "sourcePopulation": {
+      "actors": 223,
+      "maggots": 304,
+      "projectiles": 5,
+      "deathEffects": 129,
+      "secondaryActors": 0,
+      "primaryActors": 13
+    },
+    "measuredAtUtc": "2026-09-29T11:33:32.068Z",
+    "device": "mac-mini-m5",
+    "node": "v22.17.0",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "browser": "153.0.8010.12",
+    "sourceManifestSha256": "bb3035e2c3f180f1dbc7be04c208cd9b64e5fc2e9d1123df5c051fb7d23800cc",
+    "builtFilesSha256": "446998c1f1f45002bf7abd90b85430bb4278c9b01843dc4fd514cf015372859b",
+    "initialTick": 368047,
+    "worldRng": "e9018a93ae81e25e06516f2a4240e3774ce0582eadb546f5b3d66d9291f0ae30",
+    "survivalGuard": "Only existing native Magic Shield absorb and maximum extended to 1e9, identically in both modes. No enemy, weather, cadence, skill, targeting or damage filter.",
+    "sharedSettings": {
+      "cameraFovPercent": 100,
+      "castSecondariesAtMouse": true,
+      "complexLighting": true,
+      "complexShadows": true,
+      "controls": {
+        "belt1": "Mouse2",
+        "belt2": "Digit1",
+        "belt3": "Digit2",
+        "belt4": "Digit3",
+        "belt5": "Digit4",
+        "belt6": "Digit5",
+        "belt7": "Digit6",
+        "belt8": "Digit7",
+        "moveDown": "KeyS",
+        "moveLeft": "KeyA",
+        "moveRight": "KeyD",
+        "moveUp": "KeyW",
+        "openInventory": "KeyI",
+        "openMenu": "Escape",
+        "openSkills": "KeyK",
+        "openChat": "KeyT",
+        "openCheats": "Backquote"
+      },
+      "enableActivityMessages": true,
+      "enableCheats": false,
+      "enableGlobalChat": true,
+      "enableOnlineFeatures": true,
+      "enableSharedHub": true,
+      "enhancedEffects": true,
+      "lightQualityPercent": 100,
+      "musicVolumePercent": 0,
+      "multipleShadows": true,
+      "reducedScreenFlashes": false,
+      "soundVolumePercent": 0,
+      "submitRunsToServer": true,
+      "uiScalePercent": 100,
+      "zoomEffects": true
+    },
+    "viewport": {
+      "width": 1600,
+      "height": 900
+    },
+    "order": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "blocks": [
+    {
+      "index": 0,
+      "enhancedEffects": true,
+      "modeSaveSha256": "13485ad6ba68a80ac9b0b0373d40596b32c0bc4e2ccc895d54b69520fc531122",
+      "startedAt": 369247,
+      "endedAt": 370447,
+      "actualStartTick": 369247,
+      "actualEndTick": 370449,
+      "wallMs": 12019.244083000001,
+      "startPopulation": {
+        "actors": 227,
+        "maggots": 435,
+        "projectiles": 15,
+        "deathEffects": 55,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "endPopulation": {
+        "actors": 230,
+        "maggots": 479,
+        "projectiles": 21,
+        "deathEffects": 84,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "rendererIdentity": {
+        "rendererName": "webgl",
+        "resolution": "1",
+        "backingWidth": 1600,
+        "backingHeight": 900,
+        "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)",
+        "unmaskedVendor": "Google Inc. (Apple)"
+      },
+      "measurementWireBytes": 414123771,
+      "measurementWireMessages": 1236,
+      "metrics": {
+        "frames": 719,
+        "medianFrameMs": 16.700000000000728,
+        "p95FrameMs": 16.700000000000728,
+        "p99FrameMs": 16.80000000000291,
+        "maximumFrameMs": 16.80000000000291,
+        "hostTicksPerSecond": 100.00628922247338,
+        "controllerHostCpuMsPerTick": 9.882957570715474,
+        "browserTaskMsPerFrame": 12.012591098748262,
+        "browserTaskFraction": 0.7186020136005252,
+        "heapBytes": 236816676,
+        "peakVisibleEffects": 98,
+        "peakActiveEffects": 116
+      },
+      "errors": {
+        "page": [],
+        "console": [],
+        "http": [],
+        "request": [],
+        "wire": [],
+        "host": []
+      },
+      "warningEvents": [
+        "replication.flow_control_started",
+        "player.disconnected"
+      ]
+    },
+    {
+      "index": 1,
+      "enhancedEffects": false,
+      "modeSaveSha256": "c3a1e1c530b3ba223c1e13309edf15a9d25e9a4930a53e6f857cdc2054015548",
+      "startedAt": 369247,
+      "endedAt": 370447,
+      "actualStartTick": 369247,
+      "actualEndTick": 370449,
+      "wallMs": 12023.109875000002,
+      "startPopulation": {
+        "actors": 227,
+        "maggots": 435,
+        "projectiles": 15,
+        "deathEffects": 55,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "endPopulation": {
+        "actors": 230,
+        "maggots": 479,
+        "projectiles": 22,
+        "deathEffects": 87,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "rendererIdentity": {
+        "rendererName": "webgl",
+        "resolution": "1",
+        "backingWidth": 1600,
+        "backingHeight": 900,
+        "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)",
+        "unmaskedVendor": "Google Inc. (Apple)"
+      },
+      "measurementWireBytes": 413405719,
+      "measurementWireMessages": 1234,
+      "metrics": {
+        "frames": 719,
+        "medianFrameMs": 16.69999999999709,
+        "p95FrameMs": 16.700000000000728,
+        "p99FrameMs": 16.799999999999272,
+        "maximumFrameMs": 16.80000000000291,
+        "hostTicksPerSecond": 99.97413418797355,
+        "controllerHostCpuMsPerTick": 9.006080698835273,
+        "browserTaskMsPerFrame": 11.22280945757997,
+        "browserTaskFraction": 0.6711408349331082,
+        "heapBytes": 278315604,
+        "peakVisibleEffects": 99,
+        "peakActiveEffects": 117
+      },
+      "errors": {
+        "page": [],
+        "console": [],
+        "http": [],
+        "request": [],
+        "wire": [],
+        "host": []
+      },
+      "warningEvents": [
+        "replication.flow_control_started",
+        "player.disconnected"
+      ]
+    },
+    {
+      "index": 2,
+      "enhancedEffects": false,
+      "modeSaveSha256": "c3a1e1c530b3ba223c1e13309edf15a9d25e9a4930a53e6f857cdc2054015548",
+      "startedAt": 369247,
+      "endedAt": 370447,
+      "actualStartTick": 369247,
+      "actualEndTick": 370451,
+      "wallMs": 12039.046082999994,
+      "startPopulation": {
+        "actors": 227,
+        "maggots": 435,
+        "projectiles": 15,
+        "deathEffects": 55,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "endPopulation": {
+        "actors": 230,
+        "maggots": 480,
+        "projectiles": 22,
+        "deathEffects": 85,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "rendererIdentity": {
+        "rendererName": "webgl",
+        "resolution": "1",
+        "backingWidth": 1600,
+        "backingHeight": 900,
+        "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)",
+        "unmaskedVendor": "Google Inc. (Apple)"
+      },
+      "measurementWireBytes": 413408333,
+      "measurementWireMessages": 1234,
+      "metrics": {
+        "frames": 719,
+        "medianFrameMs": 16.700000000000728,
+        "p95FrameMs": 16.700000000000728,
+        "p99FrameMs": 16.80000000000291,
+        "maximumFrameMs": 16.80000000000291,
+        "hostTicksPerSecond": 100.00792352644412,
+        "controllerHostCpuMsPerTick": 8.873722591362126,
+        "browserTaskMsPerFrame": 11.374865090403338,
+        "browserTaskFraction": 0.6793335571286395,
+        "heapBytes": 208167468,
+        "peakVisibleEffects": 98,
+        "peakActiveEffects": 116
+      },
+      "errors": {
+        "page": [],
+        "console": [],
+        "http": [],
+        "request": [],
+        "wire": [],
+        "host": []
+      },
+      "warningEvents": [
+        "player.disconnected"
+      ]
+    },
+    {
+      "index": 3,
+      "enhancedEffects": true,
+      "modeSaveSha256": "13485ad6ba68a80ac9b0b0373d40596b32c0bc4e2ccc895d54b69520fc531122",
+      "startedAt": 369247,
+      "endedAt": 370447,
+      "actualStartTick": 369247,
+      "actualEndTick": 370452,
+      "wallMs": 12049.571582999997,
+      "startPopulation": {
+        "actors": 227,
+        "maggots": 435,
+        "projectiles": 15,
+        "deathEffects": 55,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "endPopulation": {
+        "actors": 230,
+        "maggots": 479,
+        "projectiles": 21,
+        "deathEffects": 84,
+        "secondaryActors": 0,
+        "primaryActors": 1
+      },
+      "rendererIdentity": {
+        "rendererName": "webgl",
+        "resolution": "1",
+        "backingWidth": 1600,
+        "backingHeight": 900,
+        "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)",
+        "unmaskedVendor": "Google Inc. (Apple)"
+      },
+      "measurementWireBytes": 414430242,
+      "measurementWireMessages": 1237,
+      "metrics": {
+        "frames": 720,
+        "medianFrameMs": 16.700000000000728,
+        "p95FrameMs": 16.700000000000728,
+        "p99FrameMs": 16.799999999999272,
+        "maximumFrameMs": 16.80000000000291,
+        "hostTicksPerSecond": 100.00355545420891,
+        "controllerHostCpuMsPerTick": 8.856436514522821,
+        "browserTaskMsPerFrame": 12.00815694444444,
+        "browserTaskFraction": 0.7175253444029438,
+        "heapBytes": 133257504,
+        "peakVisibleEffects": 99,
+        "peakActiveEffects": 116
+      },
+      "errors": {
+        "page": [],
+        "console": [],
+        "http": [],
+        "request": [],
+        "wire": [],
+        "host": []
+      },
+      "warningEvents": [
+        "replication.flow_control_started",
+        "player.disconnected"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "onBlock": 0,
+      "offBlock": 1,
+      "browserTaskTimeReductionPercent": 6.574615207293522,
+      "controllerHostCpuReductionPercent": 8.87261597154383,
+      "frameP95DifferenceMs": 0
+    },
+    {
+      "onBlock": 3,
+      "offBlock": 2,
+      "browserTaskTimeReductionPercent": 5.273847243761198,
+      "controllerHostCpuReductionPercent": -0.19518094903021588,
+      "frameP95DifferenceMs": 0
+    }
+  ],
+  "interpretation": "All frames come from the real built gameplay client. RAF is VSync limited; CPU headroom and host cadence are distinct from FPS. M5 evidence is not an RX7900XT performance claim.",
+  "limits": [
+    "Four approximately 12-second measured windows after 1200-tick warmups; not a long-run confidence estimate.",
+    "No FPS improvement was observed: both modes remained VSync-capped near 60.",
+    "Browser task duration is main-thread work, not GPU time.",
+    "Controller process CPU includes the test driver and game host; its pair results are inconsistent.",
+    "M5/ANGLE Metal results are not Windows, AMD, Intel or physical-touch-device results."
+  ]
+}

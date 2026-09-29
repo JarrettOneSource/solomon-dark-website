@@ -28,6 +28,7 @@ export interface NativeStaticSurfaceMesh {
   readonly mesh: Mesh<MeshGeometry, Shader>
   destroy(): void
   update(scalars: ArrayLike<number>): void
+  setGeometry(plan: NativeSurfaceGeometry): void
 }
 
 const NATIVE_STATIC_SURFACE_PROGRAMS = [
@@ -65,7 +66,7 @@ export function createNativeLitSurfaceGrid(
 }
 
 export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeometry): NativeStaticSurfaceMesh {
-  const colors = plan.colors
+  let colors = plan.colors
   const colorBuffer = new Buffer({
     data: colors,
     // Stryker disable next-line StringLiteral: Equivalent: buffer labels only name GPU diagnostics.
@@ -92,8 +93,19 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
   mesh.eventMode = 'none'
 
   return {
-    colors,
+    get colors() { return colors },
     mesh,
+    setGeometry(next) {
+      colors = next.colors
+      colorBuffer.data = colors
+      geometry.getBuffer('aPosition').data = next.positions
+      geometry.getBuffer('aUV').data = next.uvs
+      geometry.getIndex().data = next.indices
+      geometry.getBuffer('aPosition').update()
+      geometry.getBuffer('aUV').update()
+      geometry.getIndex().update()
+      colorBuffer.update()
+    },
     destroy() {
       mesh.destroy()
       shader.destroy()

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { actorHeadingVector } from './actor-heading.ts'
+import { buildNativeAirPathLightSources } from './native-air-presentation.ts'
+import { nativeSecondaryActor } from '../protocol/codecs/secondary-actors.ts'
+import { nativeSecondaryProviderLightSource } from './native-boneyard-light-model.ts'
 import { nativeEquipmentRecipeEffects, resolveNativeEquipmentEffects } from './native-equipment-effects.ts'
 import {
   bindNativeBeltSkill,
@@ -2202,7 +2205,7 @@ test('Plane Orb damage sums only the seven native Ether-line ranks', () => {
   assert.equal(state.actors.find(({ kind }) => kind === 'plane-orb-shot')?.damage, 0.56)
 })
 
-test('Plane Orb birth owns its 181-word constructor/burst, exact audio, flash, and perspective children', () => {
+test('Plane Orb owns its 181-word constructor/burst after the six-word active Planewalker mote', () => {
   const enabled = cast(12).state
   const initialRng = enabled.rng
   const planeContext = context(12, 2, null)
@@ -2220,8 +2223,8 @@ test('Plane Orb birth owns its 181-word constructor/burst, exact audio, flash, a
     },
   }).state
 
-  const maximumScale = drawNativeFloat(initialRng, 1.5)
-  assert.deepEqual(born.rng, advanceNativeRngWords(initialRng, 181))
+  const maximumScale = drawNativeFloat(advanceNativeRngWords(initialRng, 6), 1.5)
+  assert.deepEqual(born.rng, advanceNativeRngWords(initialRng, 187))
   const orb = born.actors.find(({ kind }) => kind === 'plane-orb-shot')!
   assert.deepEqual({
     enhanced: orb.enhanced,
@@ -2349,7 +2352,8 @@ test('Plane Orb uses the exact sixth-update contact center, enhanced five-word m
     enabled,
     withPrimary(context(12, 3, null), true),
   ).state
-  assert.deepEqual(enhancedStep.rng, advanceNativeRngWords(beforeMoteRng, 5))
+  assert.deepEqual(enhancedStep.rng, advanceNativeRngWords(beforeMoteRng, 11),
+    'the existing Orb mote owns five words and the separately active player owns six')
   const parent = enhancedStep.actors.find(({ kind }) => kind === 'plane-orb-shot')!
   const mote = enhancedStep.actors.find(({ kind, id }) => (
     kind === 'plane-orb-particle' && !particleIds.has(id)
@@ -3492,6 +3496,17 @@ test('Golem terminal damage owns the exact four-cue death sequence', () => {
   assert.equal(result.killed, true)
   assert.equal(result.state.actors.some(({ id }) => id === golem.id), false)
   assert.equal(result.state.actors.some(({ kind }) => kind === 'golem-death'), true)
+  const death = result.state.actors.find(({ kind }) => kind === 'golem-death')!
+  const off = applyNativeSecondaryGolemDamage(state, golem.id, {
+    primaryDamage: 10_000, reflectablePhysicalSourceInRange: false, secondaryDamage: 0,
+  }, 2, false)
+  const coarse = off.state.actors.find(({ kind }) => kind === 'golem-death')!
+  assert.equal(death.enhanced, true)
+  assert.equal(death.lifetimeTicks, 667)
+  assert.equal(coarse.enhanced, false)
+  assert.equal(coarse.lifetimeTicks, 134)
+  assert.equal(coarse.variant, death.variant)
+  assert.deepEqual(off.state.rng, result.state.rng)
   assert.deepEqual(
     result.state.events.flatMap(({ cue }) => cue === null ? [] : [cue]).slice(-4),
     ['stone-break', 'flame-lash-start', 'golem-die', 'rock-hit'],
@@ -3521,6 +3536,24 @@ test('Golem assembly layers its crack stream with the native rise and impact poi
   assert.equal(state.events.some(({ cue, tick }) => (
     tick === 103 && (cue === 'quake-crack-small' || cue === 'rock-hit')
   )), false)
+})
+
+test('Golem assembly exposes twenty-four independent born-mode actors at each actual milestone, not between them', () => {
+  const source = cast(45).state
+  for (const enhancedEffects of [false, true]) {
+    const first = stepNativeSecondaryAbilities(source, { ...context(45, 2, null), enhancedEffects }).state
+    const debris = first.actors.filter(actor => actor.kind === 'golem-assembly-debris')
+    assert.equal(debris.length, 24)
+    assert.equal(new Set(debris.map(actor => actor.painterRegistrations?.[0]?.registrationOrdinal)).size, 24)
+    for (const child of debris) {
+      assert.equal(child.enhanced, enhancedEffects)
+      assert.equal(child.alpha, enhancedEffects ? 10 : 2)
+      assert.deepEqual(nativeSecondaryActor(child, 'debris', { player: {} } as never), child)
+    }
+    const next = stepNativeSecondaryAbilities(first, { ...context(45, 3, null), enhancedEffects: !enhancedEffects }).state
+    assert.equal(next.actors.filter(actor => actor.kind === 'golem-assembly-debris').length, 24)
+    for (const child of next.actors.filter(actor => actor.kind === 'golem-assembly-debris')) assert.equal(child.enhanced, enhancedEffects)
+  }
 })
 
 test('Firewalker emits immediately, then while stationary, preserving its seven-word births and global geometry cycle', () => {
@@ -4101,6 +4134,18 @@ test('Firewalker toggle-off keeps the Region write but owns no ignite request', 
 
 test('Stoneskin requests apply, refresh, and exactly one natural-removal callback', () => {
   let state = cast(46).state
+  const bornWarp = state.stoneskinWarp
+  const burst = state.actors.filter(actor => actor.kind === 'stoneskin-chip' && actor.variant === 1)
+  assert.equal(burst.length, 18)
+  assert.ok(burst.every(actor => actor.alpha === 2 && !actor.enhanced))
+  assert.equal(bornWarp?.length, 200)
+  const offContext = context(46, 1, 0)
+  const off = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...offContext, enhancedEffects: false,
+    players: { player: { ...offContext.players.player!, enhancedEffects: false } },
+  }).state
+  assert.deepEqual(off.stoneskinWarp, bornWarp)
+  assert.deepEqual(off.rng, state.rng)
   assert.deepEqual(
     state.events.filter(({ tick }) => tick === 1).map(({ cue }) => cue),
     ['stoneskin-on', 'stoneskin', null],
@@ -4108,7 +4153,10 @@ test('Stoneskin requests apply, refresh, and exactly one natural-removal callbac
   assert.equal(state.players.player?.stoneskinTicksRemaining, 600)
 
   state = stepNativeSecondaryAbilities(state, context(46, 2, null)).state
+  assert.strictEqual(state.stoneskinWarp, bornWarp)
   state = stepNativeSecondaryAbilities(finishCommonCastGate(state), context(46, 3, 0)).state
+  assert.notDeepEqual(state.stoneskinWarp, bornWarp)
+  const refreshedWarp = state.stoneskinWarp
   assert.deepEqual(
     state.events.filter(({ tick }) => tick === 3).map(({ cue }) => cue),
     ['stoneskin-on', 'stoneskin', null],
@@ -4121,6 +4169,7 @@ test('Stoneskin requests apply, refresh, and exactly one natural-removal callbac
   assert.equal(state.players.player?.stoneskinTicksRemaining, 1)
   state = stepNativeSecondaryAbilities(state, context(46, 603, null)).state
   assert.equal(state.players.player?.stoneskinTicksRemaining, 0)
+  assert.strictEqual(state.stoneskinWarp, refreshedWarp)
   assert.deepEqual(
     state.events.filter(({ tick }) => tick === 603).map(({ cue, kind }) => ({ cue, kind })),
     [{ cue: 'stoneskin', kind: 'pulse' }],
@@ -4252,6 +4301,61 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
     explosiveBreak.events.find(({ cue }) => cue === 'magic-shield-explode')?.cameraMagnitude,
     1.25,
   )
+})
+
+test('Stoneskin physical hit fragments keep native life two and born shadow through live setting changes', () => {
+  const source = cast(46).state
+  const hit = (physical: boolean, enhancedEffects: boolean) => applyNativeSecondaryPlayerDamage(
+    source, 'player', 12, 2, { x: 50, y: 80 }, 'boneyard:test', { physical, enhancedEffects })
+  assert.strictEqual(hit(false, true).state, source)
+  const on = hit(true, true)
+  const off = hit(true, false)
+  assert.equal(on.healthDamage, 0)
+  assert.equal(off.absorbedDamage, 12)
+  assert.deepEqual(on.state.rng, off.state.rng)
+  const born = on.state.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)!
+  const coarse = off.state.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)!
+  assert.equal(born.alpha, 2)
+  assert.equal(coarse.alpha, 2)
+  assert.deepEqual({ ...coarse, enhanced: true }, born)
+  assert.equal(coarse.frame, 77)
+  assert.equal(coarse.skillId, 46)
+  let current = on.state
+  for (let tick = 3; tick <= 260; tick++) {
+    current = stepNativeSecondaryAbilities(current, { ...context(46, tick, null), enhancedEffects: false }).state
+    const retained = current.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)
+    if (retained) {
+      assert.equal(retained.enhanced, true)
+      assert.deepEqual(nativeSecondaryActor(retained, 'stone', { player: {} } as never), retained)
+    }
+  }
+  assert.equal(current.actors.some(actor => actor.kind === 'stoneskin-chip'), false)
+})
+
+test('Planewalker quality is sampled at each mote birth while old motes retain their fade and native stream count', () => {
+  const source = { ...createNativeSecondarySimulation(42),
+    players: { player: { ...createNativeSecondaryPlayerState(), planewalkerTicksRemaining: 3 } } }
+  const enabled = stepNativeSecondaryAbilities(source, { ...context(12, 1, null), enhancedEffects: true }).state
+  const disabled = stepNativeSecondaryAbilities(source, { ...context(12, 1, null), enhancedEffects: false }).state
+  const on = enabled.actors.find(actor => actor.kind === 'planewalker-mote')!
+  const off = disabled.actors.find(actor => actor.kind === 'planewalker-mote')!
+  assert.ok(on && off)
+  assert.deepEqual(enabled.rng, disabled.rng)
+  assert.deepEqual(on.position, off.position)
+  assert.deepEqual(on.velocity, off.velocity)
+  assert.equal(on.frame, 11)
+  assert.ok(on.phase < off.phase)
+  assert.deepEqual(nativeSecondaryActor(on, 'mote', { player: {} } as never), on)
+  assert.deepEqual(nativeSecondaryActor(off, 'mote', { player: {} } as never), off)
+  const switched = stepNativeSecondaryAbilities(enabled, { ...context(12, 2, null), enhancedEffects: false }).state
+  const motes = switched.actors.filter(actor => actor.kind === 'planewalker-mote')
+  assert.equal(motes.length, 2)
+  assert.equal(motes[0]!.enhanced, true)
+  assert.equal(motes[0]!.phase, on.phase)
+  assert.equal(motes[1]!.enhanced, false)
+  let expired: NativeSecondarySimulationState = { ...switched, players: { player: createNativeSecondaryPlayerState() } }
+  for (let tick = 3; tick < 100; tick++) expired = stepNativeSecondaryAbilities(expired, context(12, tick, null)).state
+  assert.equal(expired.actors.length, 0)
 })
 
 test('Ether Drain and Leviathan preserve their recovered phase boundaries', () => {
@@ -5377,6 +5481,59 @@ test('ElectricBurn source has two no-flash branches while each chained target ha
     assert.deepEqual(result.state.rng, chain.state)
   }
   assert.deepEqual([...gates].sort(), [0, 1, 2])
+})
+
+test('ElectricBurn native source and arc coronas require positive arc capacity and latch their final constructor values', () => {
+  const target = { family: 'ZOMBIE', id: 17, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 40, y: 60 }, radius: 10, scale: 1, shieldHealth: 0 }
+  for (const enhancedEffects of [false, true]) {
+    for (const arcCount of [0, 1]) {
+      const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(3), 'boneyard:test', target.id, {
+        electricBurn: { damagePerTick: .01, arcCount, stunFactor: 1, ownerId: 'player', sourceActorId: 123, ticks: 2 },
+      })
+      const result = stepNativeSecondaryAbilities(source, { ...context(35, 1, null), enhancedEffects,
+        target: () => target, targets: () => [target, { ...target, id: 18, position: { x: 60, y: 60 } }] })
+      const flares = result.state.actors.filter(actor => actor.kind === 'electric-burn-flare')
+      const arcs = result.state.actors.filter(actor => actor.kind === 'electric-burn-arc')
+      assert.equal(flares.length, arcCount === 0 ? 0 : 2)
+      assert.equal(arcs.length, arcCount)
+      assert.deepEqual(flares.map(actor => actor.quantity), arcCount === 0 ? [] : [.5, .75])
+      for (const flare of flares) {
+        assert.equal(flare.skillId, null, 'primary projectile identity is not a secondary skill')
+        assert.ok(flare.scale >= 1 && flare.scale <= 1.5, 'native final scale overwrites the earlier .2 multiplication')
+        assert.equal(flare.phase, Math.fround(enhancedEffects ? .2 : .4))
+        assert.equal(flare.enhanced, enhancedEffects)
+        assert.equal(flare.lightRegistration?.managerLane, 'transient')
+        assert.ok(flare.radius >= .75 && flare.radius <= 1.5)
+        assert.deepEqual(nativeSecondaryActor(flare, 'flare', { player: {} } as never), flare)
+        for (const invalid of [{ phase: .3 }, { quantity: 1 }, { scale: .2 }, { radius: 0 },
+          { alpha: .99 }, { damage: 1 }, { skillId: 50 }, { enhanced: !enhancedEffects }, { lifetimeTicks: 99 }]) {
+          assert.throws(() => nativeSecondaryActor({ ...flare, ...invalid }, 'flare', { player: {} } as never), /ElectricBurn/)
+        }
+        assert.equal(nativeSecondaryProviderLightSource(flare, 1)?.castsDirectionalShadow, false)
+        assert.equal(nativeSecondaryProviderLightSource(flare, 1)?.intensity, 1)
+        let current: NativeSecondarySimulationState = { ...result.state, targetEffects: [], actors: [flare] }
+        for (let age = 1; age <= flare.lifetimeTicks; age++) {
+          current = stepNativeSecondaryAbilities(current, { ...context(35, age + 1, null), enhancedEffects: !enhancedEffects }).state
+          if (age === flare.lifetimeTicks) assert.equal(current.actors.length, 0)
+          else {
+            const retained = current.actors[0]!
+            assert.equal(retained.enhanced, enhancedEffects)
+            assert.equal(retained.phase, flare.phase)
+            assert.equal(retained.scale, flare.scale)
+            assert.deepEqual(nativeSecondaryActor(retained, 'flare', { player: {} } as never), retained)
+          }
+        }
+      }
+      for (const arc of arcs) {
+        assert.equal(arc.lifetimeTicks, 2)
+        assert.deepEqual(nativeSecondaryActor(arc, 'arc', { player: {} } as never), arc)
+        assert.throws(() => nativeSecondaryActor({ ...arc, lifetimeTicks: 3 }, 'arc', { player: {} } as never), /body lifetime/)
+        assert.equal(buildNativeAirPathLightSources({ id: arc.id, birthTick: arc.phase,
+          origin: arc.position, midpoint: arc.midpoint, endpoint: arc.endpoint }).length, 0)
+      }
+    }
+  }
 })
 
 

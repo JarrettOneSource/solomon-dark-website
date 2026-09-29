@@ -61,6 +61,7 @@ function assertCombatPainterMembership(
 }
 
 export class BoneyardSpellCombatWork {
+  readonly enhancedEffects: boolean
   readonly lightAt: BoneyardSpellLightSampler | null
   readonly activeKnockbackTargetIds: Set<string>
   readonly sourceSpells: PrimarySpellSimulationState
@@ -92,6 +93,7 @@ export class BoneyardSpellCombatWork {
   nextSpellId: number
   readonly registerCombatPainter: RegisterNativeWorldPainter
   constructor(options: BoneyardSpellCombatOptions) {
+    this.enhancedEffects = options.enhancedEffects ?? true
     this.lightAt = options.lightAt
     this.sourceSpells = options.sourceSpells
     this.channelEmissions = options.channelEmissions
@@ -182,6 +184,7 @@ export class BoneyardSpellCombatWork {
       this.tick,
       this.rng,
       this.registerWorldPainter,
+      this.enhancedEffects,
     )
     this.rng = impactProgram.rng
     const impact = impactProgram.impact
@@ -201,7 +204,7 @@ export class BoneyardSpellCombatWork {
     if (!Number.isFinite(charge)) return
     this.impactTransients.push(this.enrollCombatActor(createPrimarySpellEarthBoulderBit({
       debris: program.debris[0]!,
-      enhancedEffects: true,
+      enhancedEffects: this.enhancedEffects,
       id,
       origin: projectile.position,
       ownerId: projectile.ownerId,

@@ -49,6 +49,7 @@ import type { PlayerWorldTextures } from './world-player-textures.ts'
 import { nativePuppetHitAlpha, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import { multiplyNativeTints, nativePuppetHitTint, renderNativeDiffuseMask, setNativeDiffuseColor } from './native-texture-color.ts'
 import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
+import { NativeElectricBurnArcView } from './native-electric-burn-arc-view.ts'
 
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
@@ -173,6 +174,7 @@ class NativeSecondaryActorView {
   private readonly sprites: Sprite[] = []
   private state: NativeSecondaryActorState
   private readonly stormLightning: AirPrimarySpellView | null
+  private readonly electricArc: NativeElectricBurnArcView | null
   private stormWeather: NativeStormWeatherView | null = null
   private readonly textures: PlayerWorldTextures['secondary']
   private readonly specialTextures: PlayerWorldTextures['secondarySpecial']
@@ -187,6 +189,7 @@ class NativeSecondaryActorView {
     renderer: Renderer,
     root: Container,
     pointGain = 1,
+    enhancedEffects = state.enhanced,
   ) {
     this.state = state
     this.birthPointGain = pointGain
@@ -228,12 +231,15 @@ class NativeSecondaryActorView {
     if (this.stormLightning) {
       this.container.addChild(...this.stormLightning.containers)
     }
-    this.update(state)
+    this.electricArc = state.kind === 'electric-burn-arc'
+      ? new NativeElectricBurnArcView(state, root, textures.primarySpells.air, enhancedEffects) : null
+    this.update(state, state.ageTicks, enhancedEffects)
   }
 
   update(
     state: NativeSecondarySimulationState['actors'][number],
     presentationFrame = state.ageTicks,
+    enhancedEffects = state.enhanced,
   ): void {
     this.state = state
     if (this.currentKind !== state.kind) {
@@ -248,6 +254,7 @@ class NativeSecondaryActorView {
       state,
       presentationFrame,
       state.kind === 'ring-fire-explosion' ? this.birthPointGain : 1,
+      enhancedEffects,
     )
     this.regionLightPoint = state.kind === 'earthquake-debris'
       ? { ...state.position }
@@ -270,6 +277,7 @@ class NativeSecondaryActorView {
     if (state.kind === 'storm-strike') {
       this.stormLightning?.update(stormStrikeTransient(state))
     }
+    this.electricArc?.update(state, enhancedEffects)
     if (this.plan.stormComposite) {
       if (!this.stormWeather) {
         this.stormWeather = new NativeStormWeatherView(this.textures)
@@ -437,6 +445,10 @@ class NativeSecondaryActorView {
   painterLayers(id: number, sourceOrder: number): NativeSecondaryPainterLayer[] {
     const layers = this.cachedPainterLayers
     layers.length = 0
+    if (this.electricArc) {
+      layers.push(...this.electricArc.painterLayers(sourceOrder))
+      return layers
+    }
     if (this.plan.backgroundDraws.length > 0) {
       const layer = this.backgroundPainterLayer ??= {
         id: `secondary-background:${id}`, lane: 'background', queueFamily: null,
@@ -553,10 +565,14 @@ class NativeSecondaryActorView {
 
   setTint(tint: number): void {
     this.container.tint = tint
+    this.electricArc?.setTint(tint)
   }
+
+  setArcDepth(suffix: string, depth: number): void { this.electricArc?.setDepth(suffix, depth) }
 
   setRenderable(renderable: boolean): void {
     this.renderable = renderable
+    this.electricArc?.setRenderable(renderable)
     this.container.renderable = renderable
     if (this.underlayContainer) this.underlayContainer.renderable = renderable
     if (this.backgroundContainer) this.backgroundContainer.renderable = renderable
@@ -588,6 +604,7 @@ class NativeSecondaryActorView {
       + this.plan.backgroundDraws.length
       + Number(this.plan.stormComposite !== null)
       + Number(this.stormLightning !== null)
+      + (this.electricArc?.primitiveCount ?? 0)
   }
 
   get sampledPointGain(): number {
@@ -595,6 +612,7 @@ class NativeSecondaryActorView {
   }
 
   destroy(): void {
+    this.electricArc?.destroy()
     if (this.stormWeather) {
       this.container.removeChild(this.stormWeather.composite)
       this.stormWeather.destroy()
@@ -1088,6 +1106,7 @@ export class NativeSecondaryWorldView {
     worldKey: string,
     presentationFrame?: number,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
+    enhancedEffects = true,
   ): void {
     this.liveIds.clear()
     for (const actor of state.actors) {
@@ -1105,6 +1124,7 @@ export class NativeSecondaryWorldView {
           this.renderer,
           this.root,
           birthPointGain,
+          enhancedEffects,
         )
         this.views.set(actor.id, view)
         this.addKind(view.kind)
@@ -1116,7 +1136,7 @@ export class NativeSecondaryWorldView {
       }
       const previousKind = view.kind
       const previousPrimitiveCount = view.primitiveCount
-      view.update(actor, presentationFrame)
+      view.update(actor, presentationFrame, enhancedEffects)
       this.totalPrimitiveCount += view.primitiveCount - previousPrimitiveCount
       if (view.kind !== previousKind) {
         this.removeKind(previousKind)
@@ -1177,6 +1197,11 @@ export class NativeSecondaryWorldView {
   }
 
   setDepth(id: string, depth: number): void {
+    const arc = /^secondary:(\d+):(body(?:-band-\d+)?)$/.exec(id)
+    if (arc) {
+      this.views.get(Number(arc[1]))?.setArcDepth(arc[2]!, depth)
+      return
+    }
     if (id.startsWith('secondary-background:')) {
       this.views.get(Number(id.slice('secondary-background:'.length)))?.setBackgroundDepth(depth)
       return
@@ -1194,6 +1219,8 @@ export class NativeSecondaryWorldView {
   }
 
   setTint(id: string, tint: number): void {
+    const arc = /^secondary:(\d+):body(?:-band-\d+)?$/.exec(id)
+    if (arc) { this.views.get(Number(arc[1]))?.setTint(tint); return }
     if (id.startsWith('secondary-underlay:') || id.startsWith('secondary-background:')) return
     const requestedId = Number(id.slice('secondary:'.length))
     const ownerId = this.compositeOwnerByActorId.get(requestedId) ?? requestedId
@@ -1358,6 +1385,8 @@ function stormStrikeTransient(
     hurricaneCharge: 0,
     id: actor.id,
     kind: 'air',
+    chained: false,
+    enhancedEffects: actor.enhanced,
     midpoint,
     origin: { x: 0, y: 0 },
     ownerId: actor.ownerId,

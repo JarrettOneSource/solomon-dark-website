@@ -79,6 +79,37 @@ test('physical hit chipping has both native chance outcomes without damaging ret
   assert.deepEqual([...outcomes].sort(), [false, true])
 })
 
+test('Enhanced Effects latches Harden chip and breakup lifetimes without changing their native RNG or art', () => {
+  const seed = createNativeRng(42)
+  const on = createNativeHardenBreakup(1, { x: 15, y: 25 }, 'water', 'boneyard:test', 10, 1, seed, true)
+  const off = createNativeHardenBreakup(1, { x: 15, y: 25 }, 'water', 'boneyard:test', 10, 1, seed, false)
+  assert.deepEqual(on.rng, off.rng)
+  assert.equal(on.effects.length, off.effects.length)
+  for (const [index, effect] of off.effects.entries()) {
+    if (effect.kind === 'harden-burst') {
+      assert.deepEqual(effect, on.effects[index])
+      continue
+    }
+    assert.equal(effect.life, 2)
+    assert.equal(effect.enhancedShadow, false)
+    assert.deepEqual({ ...effect, enhancedShadow: true, life: 10 }, on.effects[index])
+    const first = stepNativeHardenEffect(effect, 11, off.rng, () => true).effect!
+    assert.equal(first.life, Math.fround(2 - Math.fround(.015)))
+  }
+  for (let value = 1; value <= 10; value++) {
+    const rng = createNativeRng(value)
+    const enhanced = createNativeHardenChip({ x: 10, y: 20 }, rng, true)
+    const coarse = createNativeHardenChip({ x: 10, y: 20 }, rng, false)
+    assert.deepEqual(enhanced.rng, coarse.rng)
+    if (coarse.chip === null) assert.equal(enhanced.chip, null)
+    else {
+      assert.equal(coarse.chip.shard.life, 2)
+      assert.equal(coarse.chip.shard.enhancedShadow, false)
+      assert.deepEqual({ ...coarse.chip.shard, enhancedShadow: true, life: 10 }, enhanced.chip?.shard)
+    }
+  }
+})
+
 test('Harden fragments follow native Bouncer motion, skip ticks, settle, and retire', () => {
   const seed = createNativeRng(1)
   const born = createNativeHardenBreakup(1, { x: 0, y: 0 }, 'water', 'boneyard:test', 0, 1, seed)

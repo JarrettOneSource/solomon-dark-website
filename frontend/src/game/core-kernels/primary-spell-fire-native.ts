@@ -7,18 +7,17 @@ import {
 export const NATIVE_FIRE_PARTICLE_FRAME_COUNT = 4
 export const NATIVE_FIRE_IMPACT_LIFETIME_TICKS = 16
 export const NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS = 37
-export const NATIVE_FIRE_ENHANCED_EFFECTS = true
 export const NATIVE_FIRE_PARTICLE_BASE_FADE_MIN = 0.05
 export const NATIVE_FIRE_PARTICLE_BASE_FADE_RANGE = 0.05
 
-export function nativeFireParticleFadeStep(id: number): number {
+export function nativeFireParticleFadeStep(id: number, enhancedEffects = true): number {
   const base = NATIVE_FIRE_PARTICLE_BASE_FADE_MIN
     + nativeFirePresentationRandom(id, 0, 5, NATIVE_FIRE_PARTICLE_BASE_FADE_RANGE)
-  return NATIVE_FIRE_ENHANCED_EFFECTS ? base * 0.5 : base
+  return enhancedEffects ? base * 0.5 : base
 }
 
-export function nativeFireParticleLifetimeTicks(id: number): number {
-  return Math.floor(1 / nativeFireParticleFadeStep(id)) + 1
+export function nativeFireParticleLifetimeTicks(id: number, enhancedEffects = true): number {
+  return Math.floor(1 / nativeFireParticleFadeStep(id, enhancedEffects)) + 1
 }
 
 export function nativeFireParticleVariant(id: number): number {

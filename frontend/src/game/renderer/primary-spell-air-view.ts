@@ -12,7 +12,6 @@ import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
-import { NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
 import {
   buildNativeZAnimSplitBands,
   type NativeZAnimSplitBand,
@@ -59,10 +58,12 @@ export class AirPrimarySpellView {
   constructor(
     state: NativeAirLightningViewState,
     textures: NativeAirVfxTextures,
-    options: { split?: boolean } = {},
+    options: { split?: boolean; enhancedEffects?: boolean } = {},
   ) {
     this.state = state
     const construction = buildNativeAirLightningPlan({
+      chained: state.chained,
+      enhancedEffects: state.enhancedEffects,
       ageTicks: state.ageTicks,
       birthTick: state.birthTick,
       ...localAirGeometry(state),
@@ -76,6 +77,7 @@ export class AirPrimarySpellView {
           construction.body,
           textures,
           options.split ?? true,
+          options.enhancedEffects ?? true,
         )
       : null
     this.sourceCorona = construction.sourceCorona
@@ -112,6 +114,8 @@ export class AirPrimarySpellView {
     if (!('origin' in state) || state.kind !== 'air') return
     this.state = state
     const plan = buildNativeAirLightningPlanFromFactory({
+      chained: state.chained,
+      enhancedEffects: state.enhancedEffects,
       ageTicks: state.ageTicks,
       id: state.id,
       underpowered: state.underpowered,
@@ -262,6 +266,7 @@ export class NativeAirLightningBodyView {
     body: NativeAirLightningFactoryPlan['body'],
     textures: Pick<NativeAirVfxTextures, 'ribbon' | 'branches'>,
     split = true,
+    enhancedEffects = true,
   ) {
     this.container = new Container({ label })
     this.container.eventMode = 'none'
@@ -271,7 +276,7 @@ export class NativeAirLightningBodyView {
       ? buildNativeZAnimSplitBands(
           label,
           bounds,
-          NATIVE_BROWSER_ENHANCED_EFFECTS,
+          enhancedEffects,
         )
       : Object.freeze([])
     this.painterInsertions = Object.freeze(this.bands.map((band, index) => ({

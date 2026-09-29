@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { spawnUnholyEyeTrail } from './enemies/demon-skull-effects.ts'
 import { createNativeDemonSkullAction, type NativeDemonSkullAction } from '../core-kernels/native-demon-skull.ts'
 import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
 import { nativeDiscorporealRecipe } from '../core-kernels/native-survival-discorporeal.ts'
@@ -151,6 +152,21 @@ test('the ordered action list preserves overlapping Bite and Eye dispatch and re
   assert.ok(removed.family === 'demon-skull' && removed.actions.length === 0)
 })
 
+test('EyeLaser trails latch the native quality fade without changing birth draws or other fields', () => {
+  const source = spawned()
+  const owner = source.actors[0]!
+  const on = createEnemyWork(source, { ...context, enhancedEffects: true }, true)
+  const off = createEnemyWork(source, { ...context, enhancedEffects: false }, true)
+  spawnUnholyEyeTrail(on, owner, 5, 90)
+  spawnUnholyEyeTrail(off, owner, 5, 90)
+  const slow = on.deathEffects.find(effect => effect.role === 'eye-laser-trail')!
+  const fast = off.deathEffects.find(effect => effect.role === 'eye-laser-trail')!
+  assert.ok(slow && fast)
+  assert.equal(slow.alphaLossPerTick, Math.fround(fast.alphaLossPerTick * .5))
+  assert.deepEqual(slow, { ...fast, alphaLossPerTick: slow.alphaLossPerTick })
+  assert.deepEqual(on.rngState, off.rngState)
+})
+
 test('Mouth hits friendly enemies during its turn, excludes itself, creates target fire and expires into recovery', () => {
   let store = spawned()
   store = step(store, { resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', nativeTypeId: 1001, flags: [], id: 2,
@@ -264,6 +280,22 @@ test('mega UltraBanish uses background Bouncers with the native long fade and se
   assert.ok(bones[0]!.lifetimeTicks > 1300)
   assert.ok(bones[0]!.bounceVelocity < bones[0]!.verticalVelocity * 3)
   assert.ok(bones[0]!.entry >= 1819 && bones[0]!.entry <= 1822)
+  for (const remainingTicks of [1998, 1999, 2000]) {
+    const source = { ...base, actors: [], bossSpells: [{ ...bossSpells[0]!, remainingTicks }], nextProjectileId: 11 }
+    const on = step(source, { enhancedEffects: true }).store
+    const off = step(source, { enhancedEffects: false }).store
+    const onBone = on.deathEffects.filter(effect => effect.role === 'ultra-banish-bone')
+    const offBone = off.deathEffects.filter(effect => effect.role === 'ultra-banish-bone')
+    assert.equal(onBone.length, 1)
+    assert.equal(offBone.length, (remainingTicks - 1) % 3 === 0 ? 1 : 0)
+    if (offBone.length > 0) {
+      assert.deepEqual(offBone[0], { ...onBone[0]!, shadow: false })
+      assert.equal(offBone[0]!.opacityTimer, 20 - offBone[0]!.alphaLossPerTick)
+    }
+    const switched = step(on, { enhancedEffects: false }).store
+    const retained = switched.deathEffects.find(effect => effect.id === onBone[0]!.id)
+    assert.equal(retained?.shadow, true, 'live mode never rewrites a retained child shadow latch')
+  }
 })
 
 test('every Discorporeal and UltraBanish ring uses the inherited quarter-loss through complete wire-safe retirement', () => {

@@ -4,6 +4,7 @@ import type { Vector2 } from './vector.ts'
 
 export interface NativeHardenShardBody {
   readonly bounceVelocity: number
+  readonly enhancedShadow: boolean
   readonly height: number
   readonly life: number
   readonly position: Vector2
@@ -43,12 +44,13 @@ export interface NativeHardenChip {
 export function createNativeHardenChip(
   position: Vector2,
   sourceRng: NativeRngState,
+  enhancedEffects = true,
 ): { chip: NativeHardenChip | null; rng: NativeRngState } {
   const chance = drawNativeInteger(sourceRng, 3)
   if (chance.value !== 1) return { chip: null, rng: chance.state }
   const pitch = drawNativeFloat(chance.state, Math.fround(0.1))
   const heading = drawNativeFloat(pitch.state, 360)
-  const shard = createNativeHardenShardBody(position, heading.value, heading.state)
+  const shard = createNativeHardenShardBody(position, heading.value, heading.state, enhancedEffects)
   return {
     chip: { pitch: Math.fround(1 + pitch.value), shard: shard.body },
     rng: shard.rng,
@@ -63,6 +65,7 @@ export function createNativeHardenBreakup(
   tick: number,
   firstId: number,
   sourceRng: NativeRngState,
+  enhancedEffects = true,
 ): { effects: NativeHardenEffect[]; nextId: number; pitch: number; rng: NativeRngState } {
   const pitch = drawNativeFloat(sourceRng, Math.fround(0.1), true)
   let rng = pitch.state
@@ -71,7 +74,7 @@ export function createNativeHardenBreakup(
   const angleStep = nativeHardenBreakAngleStep(coating)
   if (angleStep !== null) {
     for (let heading = 0; heading < 360; heading += angleStep) {
-      const shard = createNativeHardenShardBody(position, heading, rng)
+      const shard = createNativeHardenShardBody(position, heading, rng, enhancedEffects)
       rng = shard.rng
       effects.push({
         ...shard.body, ageTicks: 0, birthTick: tick, id: nextId++,
@@ -90,6 +93,7 @@ function createNativeHardenShardBody(
   origin: Vector2,
   headingDegrees: number,
   sourceRng: NativeRngState,
+  enhancedEffects: boolean,
 ): { body: NativeHardenShardBody; rng: NativeRngState } {
   const bounce = drawNativeFloat(sourceRng, 3)
   const height = drawNativeFloat(bounce.state, 20)
@@ -115,8 +119,9 @@ function createNativeHardenShardBody(
   return {
     body: {
       bounceVelocity,
+      enhancedShadow: enhancedEffects,
       height: Math.fround(-height.value),
-      life: 10,
+      life: enhancedEffects ? 10 : 2,
       position,
       record: 446 + record.value,
       rotationDegrees: rotation.value,

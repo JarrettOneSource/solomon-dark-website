@@ -38,6 +38,36 @@ const STRAIGHT_BOLT = {
   midpoint: { x: 102.5, y: 0 },
 } as const
 
+test('Enhanced Effects Off selects native coarse Air geometry without losing either ribbon', () => {
+  const on = buildNativeAirLightningPlan({ ageTicks: 0, id: 19, ...STRAIGHT_BOLT, enhancedEffects: true })
+  const off = buildNativeAirLightningPlan({ ageTicks: 0, id: 19, ...STRAIGHT_BOLT, enhancedEffects: false })
+  assert.ok(on.body && off.body)
+  assert.deepEqual(on.body.layers.map(layer => layer.parameterSamples.length), [7, 7])
+  assert.deepEqual(off.body.layers.map(layer => [...layer.parameterSamples]), [[0, .5, 1, 2], [0, .5, 1, 2]])
+  assert.deepEqual(off.body.layers.map(({ tint, alpha, width, textureRecord }) => ({ tint, alpha, width, textureRecord })),
+    on.body.layers.map(({ tint, alpha, width, textureRecord }) => ({ tint, alpha, width, textureRecord })))
+})
+
+test('Air quality changes chain contact lifetime but not the ungated first or weak contact', () => {
+  const alphas = (enhancedEffects: boolean, chained: boolean, underpowered = false) =>
+    Array.from({ length: 6 }, (_, ageTicks) => buildNativeAirLightningPlan({
+      ...STRAIGHT_BOLT, ageTicks, id: 41, enhancedEffects, chained, underpowered,
+    }))
+  assert.deepEqual(alphas(false, false).map(plan => plan.contactCorona.alpha), [1, .8, .6, .4, .2, 0])
+  assert.deepEqual(alphas(false, false, true).map(plan => plan.contactCorona.alpha), [.5, .3, .1, 0, 0, 0])
+  assert.deepEqual(alphas(true, true).map(plan => plan.contactCorona.alpha), [1, .8, .6, .4, .2, 0])
+  assert.deepEqual(alphas(false, true).map(plan => plan.contactCorona.alpha), [1, .6, .2, 0, 0, 0])
+  assert.deepEqual(alphas(false, true).map(plan => plan.contactLight !== null), [true, true, true, false, false, false])
+})
+
+test('Air path lights retain every birth sample while Off removes only their directional shadows', () => {
+  const input = { birthTick: 12, id: 11, origin: { x: 0, y: 0 }, midpoint: { x: 300, y: 0 }, endpoint: { x: 600, y: 0 } }
+  const on = buildNativeAirPathLightSources({ ...input, enhancedEffects: true })
+  const off = buildNativeAirPathLightSources({ ...input, enhancedEffects: false })
+  assert.ok(on.length > 0)
+  assert.deepEqual(off, on.map(source => ({ ...source, castsDirectionalShadow: false })))
+})
+
 test('native Air separates the two-tick body from the five-tick contact fade', () => {
   assert.equal(AIR_LIGHTNING_BODY_LIFETIME_TICKS, 2)
   assert.equal(AIR_LIGHTNING_CONTACT_LIFETIME_TICKS, 5)
@@ -383,6 +413,8 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
     hurricaneCharge: 0,
     id: 31,
     kind: 'air',
+    chained: false,
+    enhancedEffects: true,
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 30 },
     midpoint: { x: 152.5, y: 70 },
     origin: { x: 50, y: 70 },
@@ -450,6 +482,8 @@ test('Air contact bias paints after struck enemies and Gravestones but stays in 
     hurricaneCharge: 0,
     id: 31,
     kind: 'air',
+    chained: false,
+    enhancedEffects: true,
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 30 },
     midpoint: { x: 150, y: 90 },
     origin: { x: 50, y: 100 },
@@ -641,6 +675,8 @@ function airViewState(ageTicks: number, id: number): PrimarySpellAirTransientSta
     hurricaneCharge: 0,
     id,
     kind: 'air',
+    chained: false,
+    enhancedEffects: true,
     lightRegistration: { managerLane: 'transient', registrationOrdinal: id },
     midpoint: { x: 300, y: 150 },
     origin: { x: 100, y: 100 },

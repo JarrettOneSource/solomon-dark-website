@@ -21,8 +21,9 @@ export function stormCloudDraws(
     entry: number,
     options?: Partial<Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>>,
   ) => NativeSecondarySpriteDraw,
+  enhancedEffects = actor.enhanced,
 ): NativeSecondarySpriteDraw[] {
-  if (actor.variant !== 1 || !actor.enhanced || actor.presentationRng === null) return []
+  if (actor.variant !== 1 || !enhancedEffects || actor.presentationRng === null) return []
   let rng = actor.presentationRng
   const visualPhase = drawNativeFloat(rng, 1, true)
   rng = visualPhase.state

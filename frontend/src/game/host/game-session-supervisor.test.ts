@@ -792,6 +792,7 @@ test('shared Hub refuses a modded admission before it creates party membership',
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -1012,6 +1013,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const replayMessages = messageQueue(replay)
   replay.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -1029,6 +1031,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const lateMessages = messageQueue(late)
   late.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -1945,6 +1948,7 @@ async function join(
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: options.onlinePreferences
       ?? { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
@@ -1969,6 +1973,7 @@ async function joinSaved(
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,

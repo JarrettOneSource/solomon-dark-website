@@ -16,6 +16,7 @@ import { standaloneEnemyWorldManagerOrderState } from './registration.ts'
 import { detachSkeletonPike } from './skeleton-body.ts'
 import { spawnSkeletonArmorBreak } from './skeleton-death.ts'
 interface DamagePresentationWork {
+  enhancedEffects: boolean
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
   nextDeathEffectId: number
@@ -47,6 +48,7 @@ export function damageBoneyardEnemy(
   if (actor.brain.family === 'cocoon') return damageCocoon(source, actor, request)
 
   const work: DamagePresentationWork = {
+    enhancedEffects: request.enhancedEffects ?? true,
     deathEffects: [...source.deathEffects],
     events: [],
     nextDeathEffectId: source.nextDeathEffectId,
@@ -206,7 +208,7 @@ export function damageBoneyardEnemy(
 /** Damage from an enemy action updates the shared list before later actors take their turns. */
 export function damageWorkingBoneyardEnemy(work: WorkingStep, request: DamageBoneyardEnemyRequest): void {
   const result = damageBoneyardEnemy({ ...work, lastStepTick: request.tick }, {
-    ...request, registerWorldPainter: work.registerWorldPainter,
+    ...request, enhancedEffects: work.enhancedEffects, registerWorldPainter: work.registerWorldPainter,
   })
   if (!result.accepted) return
   work.actors = [...result.store.actors]

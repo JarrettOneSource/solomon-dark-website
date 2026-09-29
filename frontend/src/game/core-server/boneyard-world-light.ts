@@ -177,6 +177,7 @@ export function boneyardWorldLightQuery(
       case 'fire-impact': source = nativeFireImpactLightSource(effect); break
       case 'air': {
         source = buildNativeAirContactLightSource({
+          chained: effect.chained, enhancedEffects: effect.enhancedEffects,
           ageTicks: effect.ageTicks, endpoint: { x: effect.endpoint.x - effect.origin.x, y: effect.endpoint.y - effect.origin.y },
           id: effect.id, origin: effect.origin, underpowered: effect.underpowered,
         })
@@ -216,7 +217,7 @@ export function boneyardWorldLightQuery(
     ), 0)
     misc.push({
       birthTick: pulse.tick, id: pulse.id, ordinal, registration: pulse.lightRegistration,
-      sources: buildNativeAirPathLightSources({ birthTick: pulse.tick, id: pulse.seed, origin: pulse.source, midpoint: pulse.midpoint, endpoint: pulse.endpoint }),
+      sources: buildNativeAirPathLightSources({ birthTick: pulse.tick, id: pulse.seed, origin: pulse.source, midpoint: pulse.midpoint, endpoint: pulse.endpoint, enhancedEffects: pulse.enhancedEffects }),
     })
   }
   if (world.lanternPosition !== null) append(nativeLanternLightSource(world.lanternPosition, tick), world.lanternLightRegistration)

@@ -135,6 +135,26 @@ export function stepNativeWeldBoulderDebrisParticle(
   particle: NativeWeldBoulderDebrisParticleState | null
   rng: NativeRngState
 }> {
+  return stepNativeBoulderDebrisMotion(particle, globalTick, sourceRng)
+}
+
+export interface NativeBoulderDebrisMotion {
+  readonly alpha: number
+  readonly bounceVelocity: number
+  readonly height: number
+  readonly position: Readonly<{ x: number; y: number }>
+  readonly rotationDegrees: number
+  readonly rotationStepDegrees: number
+  readonly velocity: Readonly<{ x: number; y: number }>
+  readonly verticalVelocity: number
+}
+
+/** Anim_BoulderBit recurrence is shared by three art registrations. */
+export function stepNativeBoulderDebrisMotion<T extends NativeBoulderDebrisMotion>(
+  particle: T,
+  globalTick: number,
+  sourceRng: NativeRngState,
+): Readonly<{ particle: T | null; rng: NativeRngState }> {
   if (particle.height !== 0 && globalTick % 3 === 0) {
     const alpha = Math.fround(particle.alpha - NATIVE_WELD_BOULDER_DEBRIS_ALPHA_STEP)
     return Object.freeze({

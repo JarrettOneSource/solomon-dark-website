@@ -43,6 +43,7 @@ export function applyDamageWithDisintegrate(
   disintegrate: boolean,
   registerWorldPainter: RegisterNativeWorldPainter | undefined,
   lethalObserver: BoneyardEnemyLethalObserver | undefined,
+  enhancedEffects = true,
 ): {
   readonly accepted: boolean
   readonly amount: number
@@ -51,6 +52,7 @@ export function applyDamageWithDisintegrate(
   readonly killed: boolean
 } {
   const ordinary = damageBoneyardEnemy(source, {
+    enhancedEffects,
     suppressHitReaction: true,
     hasMagicDamage: true,
     magic: true,
@@ -91,6 +93,7 @@ export function applyDamageWithDisintegrate(
     }
   }
   const executed = damageBoneyardEnemy(ordinary.store, {
+    enhancedEffects,
     suppressHitReaction: true,
     hasMagicDamage: true,
     magic: true,

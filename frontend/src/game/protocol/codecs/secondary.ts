@@ -26,6 +26,7 @@ import { nativeSecondaryActor, nativeSecondarySkillId } from './secondary-actors
 import {
   GameProtocolError,
   boolean,
+  finite,
   limitedArray,
   limitedString,
   memberString,
@@ -46,8 +47,22 @@ export function nativeSecondaryState(
 ): ProtocolNativeSecondarySnapshotState {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'actors', 'events', 'nextActorId', 'nextEventId', 'players', 'targetEffects',
+    'actors', 'events', 'nextActorId', 'nextEventId', 'players', 'targetEffects', 'stoneskinWarp',
   ])
+  const stoneskinWarp = source.stoneskinWarp === null ? null
+    : limitedArray(source.stoneskinWarp, `${field}.stoneskinWarp`, 200).map((value, index) => {
+        const component = finite(value, `${field}.stoneskinWarp[${index}]`)
+        const column = Math.floor(index / 20)
+        const row = Math.floor(index / 2) % 10
+        const base = Math.fround(Math.fround((index % 2 === 0 ? column : row) * Math.fround(12.8)) - 64)
+        if (Math.abs(component - base) > 4.00001 || Math.fround(component) !== component) {
+          throw new GameProtocolError(`${field}.stoneskinWarp exceeds its native displacement`)
+        }
+        return component
+      })
+  if (stoneskinWarp !== null && stoneskinWarp.length !== 200) {
+    throw new GameProtocolError(`${field}.stoneskinWarp must contain 200 native float components`)
+  }
   const actors = limitedArray(source.actors, `${field}.actors`, MAX_SECONDARY_ACTORS)
     .map((actor, index) => nativeSecondaryActor(actor, `${field}.actors[${index}]`, players))
   uniqueAscendingIds(actors, `${field}.actors`)
@@ -103,6 +118,7 @@ export function nativeSecondaryState(
     throw new GameProtocolError(`${field}.nextEventId is not ahead of retained events`)
   }
   return {
+    stoneskinWarp,
     actors,
     events,
     nextActorId,

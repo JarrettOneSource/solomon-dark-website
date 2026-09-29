@@ -379,6 +379,9 @@ export default function BoneyardScene({
   const digPosition = dig?.position
 
   useEffect(() => subscribe((snapshot) => {
+    if (snapshot.world.kind === 'boneyard' && snapshot.world.runId === loaded.runId) {
+      rendererRef.current?.setEnhancedEffects(snapshot.enhancedEffects)
+    }
     lootEventSynchronizer.consume(snapshot, (event) => {
       const scene = sceneRef.current
       if (scene) {
@@ -445,7 +448,7 @@ export default function BoneyardScene({
       audio.playStream(cue)
     }
     previousAudioRunRef.current = snapshot.run
-  }), [audio, bookFeedbackCursor, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
+  }), [audio, bookFeedbackCursor, loaded.runId, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
 
   useEffect(() => subscribeEnemyEvent((event) => {
     if (event.runId !== loaded.runId) return

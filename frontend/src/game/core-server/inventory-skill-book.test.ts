@@ -61,9 +61,11 @@ test('book result survives current saves; old feedback retirement preserves the 
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /skillBookOutcome/)
   const old = JSON.parse(text)
   old.schemaVersion = 41
+  delete old.continuation.simulation.enhancedEffects
   delete old.profile.advancedUnlocks
   delete old.continuation.simulation.playerEntities.economies[0].actionFeedback.skillBookOutcome
   const restored = restoreGameSaveDocument(JSON.stringify(old))
+  assert.equal(restored.state.enhancedEffects, true)
   assert.equal(getPlayerEconomy(restored.state, restored.playerId).actionFeedback, null)
   assert.deepEqual(getPlayerSkillBook(restored.state, restored.playerId), getPlayerSkillBook(current.state, current.playerId))
   assert.deepEqual(restored.state.gameRng, current.state.gameRng)

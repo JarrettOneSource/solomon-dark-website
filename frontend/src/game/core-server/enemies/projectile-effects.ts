@@ -1,4 +1,5 @@
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
+import { nativeFirePresentationRandom, nativeFirePresentationRandomInt } from '../../core-kernels/primary-spell-fire-native.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
 import { drawNativeFloat, drawNativeSign } from '../../core-kernels/native-rng.ts'
 import type {
@@ -182,6 +183,26 @@ export function createProjectileEffect<Kind extends BoneyardEnemyProjectileEffec
     tint: options.tint ?? 0xffffff,
     velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),
   })
+}
+
+/** Native 0x60413B gates these retained FireParticle children, not bomb motion. */
+export function spawnDemonBombParticle(work: WorkingStep, projectile: BoneyardEnemyProjectile, tick: number): void {
+  if (!work.enhancedEffects) return
+  const id = work.nextProjectileEffectId
+  const scale = Math.fround(Math.fround(nativeFirePresentationRandom(id, 0, 4) + .5) * 1.25)
+  const fade = Math.fround(Math.fround(Math.fround(nativeFirePresentationRandom(id, 0, 5, .1) + .1) * .5)
+    * Math.fround(.4))
+  const radius = nativeFirePresentationRandom(id, 0, 1, projectile.visualScale * 10)
+  const heading = nativeFirePresentationRandom(id, 0, 2, 360) * Math.PI / 180
+  work.projectileEffects.push(createProjectileEffect(work, projectile, tick, {
+    x: Math.fround(projectile.position.x + Math.fround(Math.sin(heading) * radius)),
+    y: Math.fround(projectile.position.y + projectile.verticalOffset - Math.fround(Math.cos(heading) * radius)),
+  }, 'demon-bomb-particle', {
+    alphaLossPerTick: fade, angularVelocityDeg: 1, blendMode: 'add',
+    entry: 267 + nativeFirePresentationRandomInt(id, 0, 6, 4),
+    lifetimeTicks: Math.floor(1 / fade) + 2, rotationDeg: nativeFirePresentationRandom(id, 0, 3, 360), scale,
+    painterRegistration: work.registerProjectileWorldPainter('transient'),
+  }))
 }
 
 export function spawnProjectileTrails(

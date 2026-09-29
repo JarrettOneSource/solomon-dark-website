@@ -12,7 +12,6 @@ import {
   nativeBoneyardProxyLayers,
 } from '../../editor/render.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
 import {
   createNativeLitSurfaceGrid,
 } from './boneyard-building-surface-view.ts'
@@ -89,6 +88,7 @@ export async function buildStaticWorld(
   root: Container,
   surfaceTextures: NativeBoneyardSurfaceTextures,
   cleanupBounds: Readonly<BoneyardBounds> | null,
+  enhancedEffects = true,
 ): Promise<StaticWorldBuild> {
   const base = new Container({ label: 'boneyard-base' })
   base.zIndex = 0
@@ -99,6 +99,7 @@ export async function buildStaticWorld(
   const buildingMainResidents = new Map<string, {
     resident: BuildingResidents['main']
     samplePoints: readonly Vec2[]
+    samplePointsForMode(enabled: boolean): readonly Vec2[]
   }>()
   const buildingResidents = new Map<string, BuildingResidents>()
   const mainResidents = new Map<number, ResidentTexture>()
@@ -173,7 +174,7 @@ export async function buildStaticWorld(
     for (let layerIndex = 0; layerIndex < mainLayers.length; layerIndex += 1) {
       const layer = mainLayers[layerIndex]
       if (isMovingGateBody(layer)) continue
-      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch)
+      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch, enhancedEffects)
       staticPaintCount += 1
       if (resident) {
         resident.cleanupSourceKey = layer.kind === 'object'
@@ -202,7 +203,13 @@ export async function buildStaticWorld(
           buildingMainResidents.set(layer.object.eid, {
             resident: resident as BuildingResidents['main'],
             samplePoints: nativeBuildingLightGrid({
-              enhancedEffects: NATIVE_BROWSER_ENHANCED_EFFECTS,
+              enhancedEffects,
+              position: layer.object.pos,
+              sprite,
+              variant: layer.object.variant ?? 0,
+            }),
+            samplePointsForMode: enabled => nativeBuildingLightGrid({
+              enhancedEffects: enabled,
               position: layer.object.pos,
               sprite,
               variant: layer.object.variant ?? 0,
@@ -221,6 +228,7 @@ export async function buildStaticWorld(
         layer,
         layerIndex,
         residentScratch,
+        enhancedEffects,
       )
       staticPaintCount += 1
       if (resident) {
@@ -256,6 +264,8 @@ export async function buildStaticWorld(
             throw new Error(`Building ${layer.object.eid} roof art is not a surface mesh.`)
           }
           buildingResidents.set(layer.object.eid, {
+            enhancedEffects,
+            samplePointsForMode: main.samplePointsForMode,
             main: main.resident,
             roof: resident as BuildingResidents['roof'],
             samplePoints: main.samplePoints,
@@ -447,6 +457,7 @@ function buildMainLayerResident(
   layer: MainLayer,
   layerIndex: number,
   canvas: HTMLCanvasElement,
+  enhancedEffects: boolean,
 ): ResidentTexture | null {
   const bounds = mainLayerCaptureBounds(layer)
   resizeCanvas(canvas, bounds.w, bounds.h)
@@ -469,7 +480,7 @@ function buildMainLayerResident(
   const x = bounds.x + pixels.x
   const y = bounds.y + pixels.y
   const resident = isBuildingLayer(layer)
-    ? buildingSurfaceResidentTexture(pixels, x, y, layerIndex)
+    ? buildingSurfaceResidentTexture(pixels, x, y, layerIndex, enhancedEffects)
     : residentTexture(pixels, x, y, layerIndex)
   resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(
     document,
@@ -522,6 +533,7 @@ function buildProxyLayerResident(
   layer: ObjectSpriteLayer,
   layerIndex: number,
   canvas: HTMLCanvasElement,
+  enhancedEffects: boolean,
 ): ResidentTexture | null {
   const bounds = objectLayerCaptureBounds(layer)
   resizeCanvas(canvas, bounds.w, bounds.h)
@@ -546,6 +558,8 @@ function buildProxyLayerResident(
         pixels,
         bounds.x + pixels.x,
         bounds.y + pixels.y,
+        null,
+        enhancedEffects,
       )
     : residentTexture(pixels, bounds.x + pixels.x, bounds.y + pixels.y)
 }
@@ -647,14 +661,15 @@ function buildingSurfaceResidentTexture(
   source: BoneyardStaticPixelRegion,
   x: number,
   y: number,
-  mainLayerIndex: number | null = null,
+  mainLayerIndex: number | null,
+  enhancedEffects: boolean,
 ): ResidentTexture {
   const texture = residentPixelTexture(source)
   const surfaceMesh = createNativeLitSurfaceGrid(
     texture,
     source.width,
     source.height,
-    NATIVE_BROWSER_ENHANCED_EFFECTS,
+    enhancedEffects,
   )
   surfaceMesh.mesh.position.set(x, y)
   surfaceMesh.mesh.label = mainLayerIndex === null

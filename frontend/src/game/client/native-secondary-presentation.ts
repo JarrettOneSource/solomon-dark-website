@@ -14,6 +14,7 @@ function copyNativeSecondaryMembers(
   source: NativeSecondarySnapshotState,
 ): Omit<NativeSecondarySnapshotState, 'actors'> {
   return {
+    stoneskinWarp: source.stoneskinWarp === null ? null : [...source.stoneskinWarp],
     events: source.events.map((event) => ({
       ...event,
       cameraDisplacement: event.cameraDisplacement === null

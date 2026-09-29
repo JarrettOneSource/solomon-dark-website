@@ -204,7 +204,8 @@ export class EarthCalledRockView {
     this.update(state)
   }
 
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState,
+    _presentationFrame?: number, _pointGain = 1, enhancedEffects = true): void {
     if (state.kind !== 'earth-called-rock') return
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
@@ -212,7 +213,7 @@ export class EarthCalledRockView {
     this.baseRock.position.set(0, 0)
     this.baseRock.rotation = 0
     this.baseRock.scale.set(state.scale * 0.75)
-    this.baseRock.renderable = state.height < 0
+    this.baseRock.renderable = enhancedEffects && state.height < 0
     this.rock.texture = this.textures.litRocks[state.variant]
     this.rock.position.set(0, state.height)
     this.rock.rotation = state.rotation * Math.PI / 180

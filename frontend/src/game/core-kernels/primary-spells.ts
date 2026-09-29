@@ -1,3 +1,4 @@
+import { nativeAirContactLifetimeTicks } from './native-air-presentation.ts'
 import {
   playerHandSpellEmitterOffset,
   playerStaffAttachmentOffset,
@@ -242,6 +243,8 @@ interface PrimarySpellChannelTransientBase extends NativeWorldPainterOwner {
 }
 
 export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransientBase {
+  chained: boolean
+  enhancedEffects: boolean
   birthTick: number
   endpoint: Vector2
   hurricaneCharge: number
@@ -361,6 +364,7 @@ export interface PrimarySpellWaterHailState extends PrimarySpellOwnedTransientBa
 }
 
 export interface PrimarySpellEarthImpactState extends NativeWorldPainterOwner {
+  enhancedEffects: boolean
   ageTicks: number
   birthTick: number
   charge: number
@@ -408,6 +412,7 @@ export interface PrimarySpellEarthCalledRockState extends NativeWorldPainterOwne
 }
 
 export interface PrimarySpellFireParticleState extends NativeWorldPainterOwner {
+  enhancedEffects: boolean
   ageTicks: number
   direction: Vector2
   id: number
@@ -526,6 +531,7 @@ export interface PrimarySpellCastAuthority {
 }
 
 export interface PrimarySpellTickContext {
+  enhancedEffects?: boolean
   canPlaceProjectile: (
     spell: Pick<PrimarySpellProjectileState, 'ownerId'>,
     position: Vector2,
@@ -837,6 +843,7 @@ export function primarySpellEmitterOffset(
 }
 
 export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpellTickResult {
+  const enhancedEffects = context.enhancedEffects ?? true
   const registerWorldPainter = context.registerWorldPainter
     ?? createNativeWorldManagerOrder(standalonePrimaryWorldManagerOrderState(context.spells)).register
   let nextId = context.spells.nextId
@@ -920,7 +927,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         ) !== null) {
           const impact = createNativeWeldHailTerrainImpact({
             actor: effect,
-            enhancedEffects: true,
+            enhancedEffects,
             firstId: nextId,
             rng,
             tick: context.tick,
@@ -1181,7 +1188,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     ) {
       transients = [
         ...transients,
-        earthImpact(nextId, advanced, context.tick, registerWorldPainter),
+        earthImpact(nextId, advanced, context.tick, registerWorldPainter, enhancedEffects),
       ]
       nextId += 1
       continue
@@ -1199,6 +1206,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       nextId,
       spell,
       registerWorldPainter,
+      enhancedEffects,
     )]
     nextId += 1
   }
@@ -1565,6 +1573,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               nextId,
               spell,
               registerWorldPainter,
+              enhancedEffects,
             )]
             nextId += 1
           } else {
@@ -1644,6 +1653,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 nextId,
                 spell,
                 registerWorldPainter,
+                enhancedEffects,
               )]
               nextId += 1
             }
@@ -1793,6 +1803,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                     y: Math.fround((emitter.y + endpoint.y) * 0.5),
                   })
               const channel = createNativeWeldChannelActor({
+                enhancedEffects,
                 buildId,
                 direction: aimDirection,
                 endpoint,
@@ -1810,6 +1821,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               nextId += 1
               if (buildId === 1003 && endpoint !== null) {
                 const fade = createNativeWeldFlameLashFade({
+                  enhancedEffects,
                   direction: aimDirection,
                   id: nextId,
                   origin: endpoint,
@@ -1822,6 +1834,14 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 })
                 rng = fade.rng
                 transients = [...transients, fade.actor]
+                nextId += 1
+                const sourceFade = createNativeWeldFlameLashFade({
+                  enhancedEffects, direction: aimDirection, id: nextId, origin: emitter,
+                  ownerId: playerId, rng, tick: context.tick, variant: 'source',
+                  vector: authority.primarySkill.vector.values, worldKey,
+                })
+                rng = sourceFade.rng
+                transients.push(sourceFade.actor)
                 nextId += 1
               } else if (buildId === 1004) {
                 const glows = createNativeWeldBlizzardSourceGlows({
@@ -1898,7 +1918,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 rng,
                 {
                   castProgressFactor: authority.castProgressFactor,
-                  enhancedEffects: true,
+                  enhancedEffects,
                   underpowered,
                 },
               )
@@ -2098,6 +2118,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             hurricaneCharge: 0,
             id: nextId,
             kind: 'air',
+            chained: false,
+            enhancedEffects,
             lightRegistration: registerWorldPainter('transient'),
             midpoint: air.midpoint,
             origin: emitter,
@@ -2146,7 +2168,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             : authority.primarySkill.widenHalfDegrees
           const particleCount = underpowered
             ? WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK
-            : waterFrostJetParticleCount(widenHalfDegrees)
+            : waterFrostJetParticleCount(widenHalfDegrees, enhancedEffects)
           const speed = waterFrostJetSpeed(widenHalfDegrees)
           const emitted = Array.from(
             { length: particleCount },
@@ -2306,6 +2328,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           context.tick,
           nextId,
           registerWorldPainter,
+          enhancedEffects,
         )
         projectiles = released.projectiles
         transients = [...transients, ...released.impacts]
@@ -2439,6 +2462,7 @@ function releaseHeldEarthProjectiles(
   tick: number,
   sourceNextId: number,
   registerWorldPainter: RegisterNativeWorldPainter,
+  enhancedEffects: boolean,
 ): {
   impacts: readonly PrimarySpellEarthImpactState[]
   nextId: number
@@ -2494,7 +2518,7 @@ function releaseHeldEarthProjectiles(
     )) {
       releasedProjectiles.push(releasedSpell)
     } else {
-      impacts.push(earthImpact(nextId, releasedSpell, tick, registerWorldPainter))
+      impacts.push(earthImpact(nextId, releasedSpell, tick, registerWorldPainter, enhancedEffects))
       nextId += 1
     }
   }
@@ -2867,14 +2891,12 @@ type TimedPrimarySpellTransient = Extract<
 
 function transientLifetime(effect: TimedPrimarySpellTransient): number {
   switch (effect.kind) {
-    case 'air': return effect.underpowered
-      ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
-      : PRIMARY_SPELL_AIR_LIFETIME_TICKS
+    case 'air': return nativeAirContactLifetimeTicks(effect)
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
     case 'ether-blast': return NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS
     case 'ether-pierce-streak': return 10
-    case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
+    case 'fire': return nativeFireParticleLifetimeTicks(effect.id, effect.enhancedEffects)
     case 'fire-explosion': return NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
@@ -3205,8 +3227,10 @@ function earthImpact(
   spell: PrimarySpellEarthProjectileState,
   birthTick: number,
   registerWorldPainter: RegisterNativeWorldPainter,
+  enhancedEffects = true,
 ): PrimarySpellEarthImpactState {
   const seed = {
+    enhancedEffects,
     ageTicks: 0,
     birthTick,
     charge: spell.charge,
@@ -3366,6 +3390,7 @@ export function createPrimarySpellContactImpact(
     managerLane,
     registrationOrdinal: id,
   }),
+  enhancedEffects = true,
 ): Readonly<{
   impact: PrimarySpellEarthImpactState | PrimarySpellEtherImpactState
     | PrimarySpellFireImpactState | Extract<NativeWeldWorldActor, { kind: 'weld-impact' }> | null
@@ -3374,7 +3399,7 @@ export function createPrimarySpellContactImpact(
   const contactSpell = { ...spell, position: { ...origin } }
   if (contactSpell.kind === 'earth') {
     return {
-      impact: earthImpact(id, contactSpell, birthTick, registerWorldPainter),
+      impact: earthImpact(id, contactSpell, birthTick, registerWorldPainter, enhancedEffects),
       rng: sourceRng,
     }
   }
@@ -3501,8 +3526,10 @@ function createFireParticle(
   id: number,
   fireball: PrimarySpellProjectileState,
   registerWorldPainter: RegisterNativeWorldPainter,
+  enhancedEffects = true,
 ): PrimarySpellFireParticleState {
   return {
+    enhancedEffects,
     ageTicks: 0,
     direction: { ...fireball.direction },
     id,

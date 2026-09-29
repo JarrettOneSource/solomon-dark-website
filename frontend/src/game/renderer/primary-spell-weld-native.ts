@@ -346,6 +346,8 @@ function channelPlan(state: NativeWeldChannelActorState): NativeWeldVisualPlan {
       }
   if (state.buildId === 1003) {
     const layer = buildNativeAirRibbonLayer({
+      enhancedEffects: state.enhancedEffects,
+      ribbonFamily: 'flame-lash',
       alpha: state.underpowered ? 0.5 : 1,
       basePhaseDegrees: -3 * state.birthTick,
       birthTick: state.birthTick,
@@ -886,8 +888,8 @@ function flameLashFadePlan(
     scaleY: scale,
     tint: packRgb(1, state.colorGreen, 0),
   })], {
-    regionLightPoint: state.position,
-    sortBias: state.variant === 'endpoint' ? 100 : 50,
+    regionLightPoint: state.variant === 'source' ? null : state.position,
+    sortBias: state.variant === 'chain' ? 50 : 100,
   })
 }
 

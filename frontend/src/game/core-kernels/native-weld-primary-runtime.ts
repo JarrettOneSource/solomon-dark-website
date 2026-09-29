@@ -165,6 +165,7 @@ interface NativeWeldOwnedActorBase {
 }
 
 export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
+  readonly enhancedEffects: boolean
   readonly buildId: NativeWeldBeamBuildId
   readonly endpoint: Vector2 | null
   readonly kind: 'weld-channel'
@@ -817,6 +818,7 @@ export function stepNativeWeldProjectile(
 }
 
 export function createNativeWeldChannelActor(input: {
+  readonly enhancedEffects?: boolean
   readonly buildId: NativeWeldBeamBuildId
   readonly direction: Vector2
   readonly endpoint?: Vector2 | null
@@ -838,6 +840,7 @@ export function createNativeWeldChannelActor(input: {
     endpoint: input.endpoint ? Object.freeze({ ...input.endpoint }) : null,
     id: input.id,
     kind: 'weld-channel',
+    enhancedEffects: input.enhancedEffects ?? true,
     lightRegistration: null,
     midpoint: input.midpoint ? Object.freeze({ ...input.midpoint }) : null,
     origin: Object.freeze({ ...input.origin }),

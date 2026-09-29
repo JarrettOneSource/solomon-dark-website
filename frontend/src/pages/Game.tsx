@@ -323,6 +323,7 @@ export default function Game() {
         onFatal: setFatal,
         onDeploymentRestart: saveForDeployment,
         onlinePreferences: gameOnlinePreferences(readGameSettings()),
+        enhancedEffects: readGameSettings().enhancedEffects,
         onProgress,
         profile: {
           accountUsername,

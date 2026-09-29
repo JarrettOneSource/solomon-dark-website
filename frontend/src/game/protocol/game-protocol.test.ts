@@ -170,6 +170,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     beginCollegeIntro: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
@@ -180,6 +181,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     resumeToken: 'reserved-token',
   })), {
     type: 'client-hello',
+    enhancedEffects: true,
     beginCollegeIntro: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
@@ -191,6 +193,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     character: CHARACTER,
     cheatsEnabled: false,
     credential: 'fresh-secret',
@@ -200,6 +203,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     protocolVersion: GAME_PROTOCOL_VERSION,
   })), {
     type: 'client-hello',
+    enhancedEffects: true,
     character: CHARACTER,
     cheatsEnabled: false,
     credential: 'fresh-secret',
@@ -1525,6 +1529,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     spawnTick: 0,
   }]
   snapshot.world.mageLightningPulses = [{
+    enhancedEffects: false,
     contact: {
       kind: 'target-attached',
       localOffset: { x: -4, y: 6 },
@@ -2524,6 +2529,7 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
   if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.ok(snapshot.world.enemyEvents.every((event) => event.runId === runId))
   snapshot.world.mageLightningPulses = [{
+    enhancedEffects: true,
     contact: {
       kind: 'target-attached',
       localOffset: { x: -5, y: 7 },
@@ -3002,6 +3008,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   assert.throws(() => decodeClientGameMessage('{'), GameProtocolError)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     character: CHARACTER,
     cheatsEnabled: false,
     credential: 'spawn-secret',
@@ -3018,6 +3025,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /activityMessages requires globalChat/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3026,6 +3034,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /displayName|character/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -3035,6 +3044,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /element/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     cheatsEnabled: false,
     onlinePreferences: ONLINE_PREFERENCES,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3043,6 +3053,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /profile/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: 0, totalPlaytimeMs: null },
     cheatsEnabled: false,
@@ -3257,6 +3268,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     worldKey: missile.worldKey,
   }
   const earthImpactSeed = {
+    enhancedEffects: true,
     ageTicks: 3,
     birthTick: 40,
     charge: 0.5,
@@ -3421,6 +3433,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     },
   }), /charges/)
   const fireParticle = {
+    enhancedEffects: true,
     ageTicks: 7,
     direction: { x: 0, y: -1 },
     id: 1,
@@ -3580,6 +3593,8 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     hurricaneCharge: 0,
     id: 1,
     kind: 'air',
+    enhancedEffects: true,
+    chained: false,
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     midpoint: { x: 800, y: 290 },
     origin: { x: 800, y: 400 },
@@ -3710,6 +3725,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     headingDegrees: 180,
     id: 9,
     kind: 'player-staff-pike-break',
+    enhancedShadow: true,
     ownerId: 'player-1',
     painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 40 }],
     position: { x: 800, y: 400 },
@@ -5278,7 +5294,7 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   )
 })
 
-test('protocol strictly reserves nullable skill ownership for the two Mindblast actors', () => {
+test('protocol strictly reserves Mindblast null ownership and rejects an ordinary null skill', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -5331,14 +5347,14 @@ test('protocol strictly reserves nullable skill ownership for the two Mindblast 
   ownedMindblast.frame.secondaryAbilities.actors[0]!.skillId = 11
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(ownedMindblast)),
-    /skillId must be null exactly for Mindblast actors/,
+    /skillId must be null exactly for Mindblast or primary-origin ElectricBurn/,
   )
 
   const nullOrdinary = JSON.parse(JSON.stringify(message))
   nullOrdinary.frame.secondaryAbilities.actors[0]!.kind = 'phase-burst'
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(nullOrdinary)),
-    /skillId must be null exactly for Mindblast actors/,
+    /skillId must be null exactly for Mindblast or primary-origin ElectricBurn/,
   )
 
   const missingRng = JSON.parse(JSON.stringify(message))
@@ -6281,6 +6297,7 @@ test('party protocol strictly round-trips membership, access settings, requests,
       }],
       party: {
         id: 'party-2',
+        enhancedEffects: true,
         joinCode: 'ABCD-2345',
         leaderPlayerId: 'player-2',
         listingId: 'listing-2',
@@ -6399,6 +6416,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     buildId: 1003,
     endpoint: { x: 800, y: 200 },
     kind: 'weld-channel',
+    enhancedEffects: false,
     lightRegistration: null,
     midpoint: { x: 800, y: 300 },
     targetId: null,

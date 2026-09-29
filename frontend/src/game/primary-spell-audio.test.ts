@@ -391,6 +391,7 @@ test('plays ordinary and Ethereal Boulder terminal sound pairs from saved charge
         charge: 1,
         id: 60,
         kind: 'earth-impact' as const,
+        enhancedEffects: true,
         lightRegistration: null,
         lifetimeTicks: 100,
         origin: position,

@@ -1,4 +1,5 @@
 import { createNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
+import { spawnCoffinEmergence } from './coffin-emergence.ts'
 import { randomBoneyardWaveInteger } from '../../core-kernels/boneyard-wave-timeline.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import {
@@ -66,14 +67,17 @@ export function stepCoffin(
     }
   }
   switch (brain.phase) {
-    case 'hidden': return {
-      ...actor,
-      brain: {
-        ...brain,
-        phase: 'rising',
-        phaseTick: 0,
-        phaseTicksRemaining: NATIVE_COFFIN_RISE_TICKS,
-      },
+    case 'hidden': {
+      spawnCoffinEmergence(work, actor, tick)
+      return {
+        ...actor,
+        brain: {
+          ...brain,
+          phase: 'rising',
+          phaseTick: 0,
+          phaseTicksRemaining: NATIVE_COFFIN_RISE_TICKS,
+        },
+      }
     }
     case 'rising': {
       const hold = randomBoneyardWaveInteger(work.rngState, NATIVE_COFFIN_HOLD_RANDOM_COUNT)

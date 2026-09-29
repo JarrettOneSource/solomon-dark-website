@@ -12,6 +12,7 @@ import { NativeAirLightningBodyView } from './primary-spell-air-view.ts'
 type BossSpellView = { mesh: NativeBossSpellMesh | null; root: Container; sprites: Sprite[]; body: NativeAirLightningBodyView | null; rain: NativeRainCloud | null }
 
 export class NativeBossSpellViews {
+  private enhancedEffects = true
   private readonly views = new Map<number, BossSpellView>()
   private readonly root: Container
   private readonly textures: Pick<BoneyardWorldTextures, 'base' | 'greenPlasma'>
@@ -21,7 +22,17 @@ export class NativeBossSpellViews {
     this.textures = textures
   }
 
-  update(spells: readonly NativeBossSpell[], tick: number, viewHeight = 900): void {
+  update(spells: readonly NativeBossSpell[], tick: number, viewHeight = 900, enhancedEffects = true): void {
+    if (this.enhancedEffects !== enhancedEffects) {
+      this.enhancedEffects = enhancedEffects
+      // Only the split wrappers consume the live mode. The reconstructed mesh
+      // still uses the immutable native factory mode retained on each bolt.
+      for (const [id, view] of this.views) {
+        if (view.body === null) continue
+        view.body.destroy()
+        this.views.delete(id)
+      }
+    }
     const live = new Set<number>()
     for (const spell of spells) {
       live.add(spell.id)
@@ -31,7 +42,7 @@ export class NativeBossSpellViews {
           const texture = (entry: number) => this.textures.base[nativeEnemySpriteRecord('BadGuys', entry).source]!
           const body = new NativeAirLightningBodyView(`boss-spell:${spell.id}`, nativeDarkLightningBody(spell), {
             ribbon: texture(64), branches: [texture(373), texture(374)],
-          })
+          }, true, enhancedEffects)
           view = { mesh: null, root: body.container, sprites: [], body, rain: null }
           this.root.addChild(...body.containers)
         } else {

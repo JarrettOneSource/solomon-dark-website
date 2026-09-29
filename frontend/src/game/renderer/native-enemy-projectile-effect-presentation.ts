@@ -88,12 +88,13 @@ export function nativeEnemyProjectileEffectPainterLayer(
 ): DynamicPainterLayer | null {
   if (effect.kind === 'firebolt-trail' || effect.kind === 'arrow-tumble' || effect.kind === 'demon-explosion-core' || effect.kind === 'demon-explosion-array' || effect.kind === 'poison-bubble') return null
   const wrapped = effect.kind === 'fire-burst' || effect.kind === 'guided-impact'
+    || effect.kind === 'demon-bomb-particle'
     || effect.kind === 'demon-explosion-lit-array'
   return {
     id: `enemy-projectile-effect:${effect.id}`,
     queueFamily: wrapped ? 'zanim' : 'ordinary-dynamic',
     registration: effect.painterRegistration,
-    sortBias: effect.kind === 'fire-burst' ? 50 : effect.kind === 'guided-impact' ? 100 : 0,
+    sortBias: effect.kind === 'fire-burst' ? 50 : effect.kind === 'guided-impact' ? 100 : effect.kind === 'demon-bomb-particle' ? 30 : 0,
     worldY: effect.position.y,
   }
 }

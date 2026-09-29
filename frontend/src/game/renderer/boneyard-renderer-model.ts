@@ -26,6 +26,7 @@ export interface BoneyardWorldRenderer {
   cycleSpectatorTarget(snapshot: GameSnapshot): boolean
   destroy(): void
   render(snapshot: GameSnapshot): void
+  setEnhancedEffects(enabled: boolean): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
   setLevelUpPresentation(presentationId: number | null): void
   setSettings(settings: BoneyardWorldPresentationSettings): void
@@ -67,6 +68,8 @@ export interface ResidentTexture extends BoneyardBounds {
 }
 
 export interface BuildingResidents {
+  enhancedEffects: boolean
+  samplePointsForMode(enabled: boolean): readonly Vec2[]
   main: ResidentTexture & { surfaceMesh: NativeStaticSurfaceMesh }
   roof: ResidentTexture & { surfaceMesh: NativeStaticSurfaceMesh }
   samplePoints: readonly Vec2[]

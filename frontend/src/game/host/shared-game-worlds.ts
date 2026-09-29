@@ -384,7 +384,10 @@ export function startSharedPartyRun(
 
   const partition = partitionGameSimulationPlayers(state.hub, party.memberPlayerIds)
   if (partition.selected.levelUpBarrier !== null) return rejected(state, 'run-unavailable')
-  const runState = enterBoneyardWorld(partition.selected, loadedBoneyard)
+  const runState = enterBoneyardWorld({
+    ...partition.selected,
+    enhancedEffects: party.enhancedEffects,
+  }, loadedBoneyard)
   return accepted({
     hub: partition.remaining,
     parties: clearPartyInvitations(state.parties, party.id),

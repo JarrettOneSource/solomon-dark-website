@@ -309,6 +309,7 @@ export type BoneyardEnemyProjectile = BoneyardEnemyProjectileBase & (
 
 export type BoneyardEnemyProjectileEffectKind =
   | 'arrow-tumble'
+  | 'demon-bomb-particle'
   | 'demon-fire'
   | 'demon-explosion-core'
   | 'demon-explosion-array'
@@ -398,6 +399,7 @@ export interface BoneyardMaggotActor {
 }
 
 export type BoneyardEnemyDeathEffectKind =
+  | 'boulder-bit'
   | 'banish'
   | 'bouncer'
   | 'smoky-bouncer'
@@ -472,6 +474,7 @@ export interface BoneyardMageLightningTargetContact {
 }
 
 export interface BoneyardMageLightningPulse {
+  readonly enhancedEffects: boolean
   readonly contact: BoneyardMageLightningTargetContact | BoneyardMageLightningWorldContact
   readonly endpoint: Readonly<BoneyardPoint>
   readonly id: BoneyardMageLightningPulseId
@@ -847,6 +850,7 @@ export interface BoneyardEnemyRetirementObserver {
 }
 
 export interface BoneyardEnemyStoreStepContext {
+  readonly enhancedEffects?: boolean
   readonly nativeMovementView?: {
     readonly arenaBounds: Readonly<BoneyardBounds>
     readonly cameras: readonly Readonly<BoneyardBounds>[]
@@ -901,6 +905,7 @@ export interface BoneyardEnemyStoreStepResult {
 }
 
 export interface DamageBoneyardEnemyRequest {
+  readonly enhancedEffects?: boolean
   readonly hitStrength?: number
   /** Native contact flag 8 clears movement reaction, not the visual feedback. */
   readonly suppressHitReaction?: boolean
@@ -963,6 +968,7 @@ export interface TumbleBoneyardArrowResult {
 }
 
 export interface WorkingStep {
+  readonly enhancedEffects: boolean
   puppetHits: NativeWorldPuppetHit[]
   silkFragments: NativeFadeLineActor[]
   spiderRemains: BoneyardSpiderRemains[]

@@ -185,6 +185,7 @@ export interface BoneyardLootEvent {
 }
 
 export interface BoneyardLootStoreStepContext {
+  readonly enhancedEffects?: boolean
   readonly participants: readonly BoneyardLootParticipant[]
   readonly placement: NativeLootPlacement
   readonly registerWorldPainter?: RegisterNativeWorldPainter
@@ -235,6 +236,7 @@ export interface BoneyardEnemyLootMaterializationInput {
 }
 
 interface WorkingLootStep {
+  enhancedEffects: boolean
   actors: BoneyardLootActor[]
   effects: BoneyardEnemyDeathEffect[]
   events: BoneyardLootEvent[]
@@ -530,7 +532,7 @@ export function stepBoneyardLootStore(
     throw new RangeError('loot store ticks must advance monotonically')
   }
   validateParticipants(context.participants)
-  const work = working(source, context.registerWorldPainter)
+  const work = working(source, context.registerWorldPainter, context.enhancedEffects ?? true)
   const firstTick = source.lastStepTick < 0 ? context.tick : source.lastStepTick + 1
   for (let tick = firstTick; tick <= context.tick; tick += 1) {
     stepLootEffects(work, context.placement, tick)
@@ -993,7 +995,7 @@ function createGoodieBouncer(
     scale: 1,
     scaleY: 1,
     scaleMultiplier: 1,
-    shadow: true,
+    shadow: work.enhancedEffects,
     spawnTick: tick,
     tint: 0xffffff,
     verticalVelocity: bounceVelocity,
@@ -1352,6 +1354,7 @@ function emit(
 function working(
   source: BoneyardLootStore,
   registerWorldPainter?: RegisterNativeWorldPainter,
+  enhancedEffects = true,
 ): WorkingLootStep {
   const standaloneOrder = createNativeWorldManagerOrder({
     nextRegistrationOrdinal: {
@@ -1364,6 +1367,7 @@ function working(
   })
   return {
     actors: [...source.actors],
+    enhancedEffects,
     effects: [...source.effects],
     events: [],
     goodies: [...source.goodies],

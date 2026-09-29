@@ -30,6 +30,7 @@ import { nativeSecondaryState } from './secondary.ts'
 import {
   GameProtocolError,
   array,
+  boolean,
   finite,
   limitedArray,
   limitedString,
@@ -155,6 +156,7 @@ export function validatedMaterializingPlayerIds(
 export function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
+    'enhancedEffects',
     'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
     'primarySpells', 'run', 'secondaryAbilities', 'tick', 'world',
   ])
@@ -209,6 +211,7 @@ export function gameSnapshot(value: unknown): GameSnapshot {
     validateHallOfFameRunOwners(world.hallOfFameRuns, players, 'snapshot')
   }
   return {
+    enhancedEffects: boolean(source.enhancedEffects, 'snapshot.enhancedEffects'),
     hostPlayerId,
     levelUpBarrier,
     materializingPlayerIds,
@@ -225,6 +228,7 @@ export function gameSnapshot(value: unknown): GameSnapshot {
 export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
+    'enhancedEffects',
     'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
     'primarySpells', 'run', 'secondaryAbilities', 'tick', 'world',
   ])
@@ -271,6 +275,7 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     validateHallOfFameRunOwners(world.hallOfFameRuns, players, 'frame')
   }
   return {
+    enhancedEffects: boolean(source.enhancedEffects, 'frame.enhancedEffects'),
     hostPlayerId,
     levelUpBarrier,
     materializingPlayerIds,

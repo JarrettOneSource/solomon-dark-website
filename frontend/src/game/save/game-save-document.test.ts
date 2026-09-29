@@ -76,6 +76,35 @@ const MOD_STATE = {
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
+test('Enhanced Effects continuation preserves the world mode and old saves default On without RNG changes', () => {
+  const options = { gameRngSeed: 123, enhancedEffects: false }
+  const state = createGameSimulation({ owner: OWNER }, options)
+  assert.equal(state.enhancedEffects, false)
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner', state,
+  })
+  const restored = restoreGameSaveDocument(document).state
+  assert.equal(restored.enhancedEffects, false)
+  const onDocument = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner',
+    state: { ...state, enhancedEffects: true },
+  })
+  const on = restoreGameSaveDocument(onDocument).state
+  assert.deepEqual(restored.gameRng, on.gameRng)
+  assert.deepEqual(restored.combatRng, on.combatRng)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 45)
+  delete legacy.continuation.simulation.enhancedEffects
+  const old = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.equal(old.enhancedEffects, true)
+  assert.deepEqual(old.gameRng, on.gameRng)
+  for (const invalid of [undefined, 'false', 0, null]) {
+    const corrupt = JSON.parse(document)
+    corrupt.continuation.simulation.enhancedEffects = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(corrupt)), /enhancedEffects/)
+  }
+})
+
 test('native Faculty death peaks survive owner checkpoints and exact continuation restore', () => {
   for (const members of [1, 3] as const) {
     const options = createNativeFacultyDeathSaveFixture(members)
@@ -3018,10 +3047,14 @@ function removeSchema21WorldPainterFields(value: unknown): void {
 }
 
 function downgradeSaveSchema(
-  document: { schemaVersion: number; profile?: { advancedUnlocks?: unknown } },
+  document: { schemaVersion: number; profile?: { advancedUnlocks?: unknown };
+    continuation?: { simulation?: { enhancedEffects?: boolean } } },
   schemaVersion: number,
 ): void {
   document.schemaVersion = schemaVersion
+  if (schemaVersion < 46 && document.continuation?.simulation) {
+    delete document.continuation.simulation.enhancedEffects
+  }
   if (schemaVersion < 45 && document.profile) delete document.profile.advancedUnlocks
 }
 
@@ -3031,6 +3064,7 @@ function legacyDocument(document: string, schemaVersion: number): string {
   const simulation = continuation.simulation
   const playerStore = simulation.playerEntities
   const run = simulation.run
+  delete simulation.enhancedEffects
 
   downgradePlayerBeltsToLegacyQuickbar(playerStore)
 

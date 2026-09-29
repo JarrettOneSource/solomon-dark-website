@@ -1,3 +1,4 @@
+import { nativeAirContactLifetimeTicks } from '../../core-kernels/native-air-presentation.ts'
 import {
   NATIVE_HAIL_INITIAL_LIFE,
   NATIVE_HAIL_MAXIMUM_BOUNCE_PITCH,
@@ -30,8 +31,6 @@ import {
   waterFrostJetLifetimeTicks,
 } from '../../core-kernels/primary-spell-water.ts'
 import {
-  PRIMARY_SPELL_AIR_LIFETIME_TICKS,
-  PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   type PrimarySpellEarthBoulderBitState,
   type PrimarySpellTransientState,
@@ -110,14 +109,15 @@ function primarySpellTransientPayload(
   }
   if (source.kind === 'harden-shard') {
     onlyKeys(source, field, [
-      'ageTicks', 'birthTick', 'bounceVelocity', 'height', 'id', 'kind', 'life',
+      'ageTicks', 'birthTick', 'bounceVelocity', 'enhancedShadow', 'height', 'id', 'kind', 'life',
       'ownerId', 'position', 'record', 'rotationDegrees', 'rotationStepDegrees',
       'velocity', 'verticalVelocity', 'worldKey',
     ])
     const shardRecord = integer(source.record, `${field}.record`)
     if (shardRecord < 446 || shardRecord > 450) throw new GameProtocolError(`${field}.record is not Harden art`)
     const life = positiveFinite(source.life, `${field}.life`)
-    if (life > 10) throw new GameProtocolError(`${field}.life exceeds the native Harden fragment timer`)
+    const enhancedShadow = boolean(source.enhancedShadow, `${field}.enhancedShadow`)
+    if (life > (enhancedShadow ? 10 : 2)) throw new GameProtocolError(`${field}.life exceeds the native Harden fragment timer`)
     return {
       ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
@@ -125,6 +125,7 @@ function primarySpellTransientPayload(
       height: finite(source.height, `${field}.height`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'harden-shard',
+      enhancedShadow,
       life,
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       position: vector(source.position, `${field}.position`),
@@ -420,6 +421,7 @@ function primarySpellTransientPayload(
   }
   if (source.kind === 'earth-impact') {
     onlyKeys(source, field, [
+      'enhancedEffects',
       'ageTicks', 'birthTick', 'charge', 'id', 'kind', 'origin', 'ownerId',
       'lightRegistration', 'lifetimeTicks', 'worldKey',
     ])
@@ -432,7 +434,8 @@ function primarySpellTransientPayload(
     const birthTick = nonnegativeInteger(source.birthTick, `${field}.birthTick`)
     const id = positiveInteger(source.id, `${field}.id`)
     const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
-    const expectedLifetime = earthImpactLifetimeTicks({ birthTick, charge, id })
+    const enhancedEffects = boolean(source.enhancedEffects, `${field}.enhancedEffects`)
+    const expectedLifetime = earthImpactLifetimeTicks({ birthTick, charge, id, enhancedEffects })
     if (lifetimeTicks !== expectedLifetime) {
       throw new GameProtocolError(`${field}.lifetimeTicks does not match the native recurrence`)
     }
@@ -446,6 +449,7 @@ function primarySpellTransientPayload(
       charge,
       id,
       kind: 'earth-impact',
+      enhancedEffects,
       lightRegistration: absentNativeActorLight(source, field),
       lifetimeTicks,
       origin: vector(source.origin, `${field}.origin`),
@@ -836,13 +840,15 @@ function primarySpellTransientPayload(
         ? [
             ...transientKeys,
             'birthTick',
+            'chained',
+            'enhancedEffects',
             'endpoint',
             'hurricaneCharge',
             'midpoint',
             'targetId',
             'underpowered',
           ]
-      : transientKeys,
+      : [...transientKeys, 'enhancedEffects'],
   )
   if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
     throw new GameProtocolError(`${field}.kind is not a transient primary`)
@@ -857,7 +863,7 @@ function primarySpellTransientPayload(
     if (variant !== nativeFireParticleVariant(id)) {
       throw new GameProtocolError(`${field}.variant does not match its Fire particle id`)
     }
-    if (ageTicks >= nativeFireParticleLifetimeTicks(id)) {
+    if (ageTicks >= nativeFireParticleLifetimeTicks(id, boolean(source.enhancedEffects, `${field}.enhancedEffects`))) {
       throw new GameProtocolError(`${field}.ageTicks exceeds its Fire particle lifetime`)
     }
   }
@@ -911,9 +917,10 @@ function primarySpellTransientPayload(
   }
   if (source.kind === 'air') {
     const underpowered = boolean(source.underpowered, `${field}.underpowered`)
-    const lifetimeTicks = underpowered
-      ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
-      : PRIMARY_SPELL_AIR_LIFETIME_TICKS
+    const enhancedEffects = boolean(source.enhancedEffects, `${field}.enhancedEffects`)
+    const chained = boolean(source.chained, `${field}.chained`)
+    if (chained && underpowered) throw new GameProtocolError(`${field}: weak Air cannot chain`)
+    const lifetimeTicks = nativeAirContactLifetimeTicks({ underpowered, chained, enhancedEffects })
     if (ageTicks >= lifetimeTicks) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the Air contact lifetime`)
     }
@@ -927,6 +934,8 @@ function primarySpellTransientPayload(
       endpoint: vector(source.endpoint, `${field}.endpoint`),
       hurricaneCharge,
       kind: 'air',
+      chained,
+      enhancedEffects,
       lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
@@ -942,6 +951,7 @@ function primarySpellTransientPayload(
   return {
     ...common,
     kind: source.kind,
+    enhancedEffects: boolean(source.enhancedEffects, `${field}.enhancedEffects`),
     lightRegistration: absentNativeActorLight(source, field),
   }
 }

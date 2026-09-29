@@ -41,7 +41,7 @@ export type NativeBossSpell = NativeBossSpellOwner & (
       startAlpha: number; endAlpha: number }>
   | Readonly<{ kind: 'heartmonger-flicker'; phaseDeg: number }>
   | Readonly<{ kind: 'heartmonger-soul'; lifePhaseDeg: number; bobPhaseDeg: number }>
-  | Readonly<{ kind: 'blightning'; endpoint: Readonly<BoneyardPoint>; midpoint: Readonly<BoneyardPoint> }>
+  | Readonly<{ kind: 'blightning'; enhancedEffects: boolean; endpoint: Readonly<BoneyardPoint>; midpoint: Readonly<BoneyardPoint> }>
   | Readonly<{ kind: 'death-magic'; scale: number; alpha: number; alphaLossPerTick: number; painterSortBias: number;
       light: Readonly<{ radius: number; intensity: number; lossPerTick: number }> | null }>
   | Readonly<{ kind: 'falling-bone'; entry: number; height: number; colorRamp: number; rotationDeg: number }>

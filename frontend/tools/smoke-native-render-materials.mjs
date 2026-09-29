@@ -148,6 +148,16 @@ try {
       assert.equal(grid.removed && grid.meshDestroyed && grid.geometryDestroyed && grid.shaderDestroyed, true)
       assert.equal(grid.borrowedTextureAlive, true)
     }
+    assert.equal(contracts.liveGrids.length, 4)
+    for (const grid of contracts.liveGrids) {
+      assert.equal(grid.geometryRetained && grid.buffersRetained, true)
+      assert.equal(grid.positionsDelivered && grid.uvsDelivered && grid.indicesDelivered && grid.colorsDelivered, true)
+      assert.equal(grid.vertexCount, grid.enhanced ? 9 : 4)
+      assert.equal(grid.indexCount, grid.enhanced ? 24 : 6)
+      assert.equal(grid.colors.length, grid.vertexCount * 4)
+      assert.ok(grid.colors.every((value, index) => value === (index % 4 === 3 ? 255 : 127)))
+      assert.deepEqual(grid.pixel, [127, 127, 127, 255], 'live mode change must update the real GPU buffer shared by redraws')
+    }
     assert.deepEqual(contracts.roads, {
       countBefore: 5, countAfter: 3, countAfterEmpty: 3,
       vertices: 40, indices: 90, meshes: 5, pixel: [128, 128, 128, 255], childrenAfterDestroy: 0,

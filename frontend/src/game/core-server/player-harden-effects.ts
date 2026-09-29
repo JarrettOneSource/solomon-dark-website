@@ -26,6 +26,7 @@ export interface PendingPlayerHardenChip {
 }
 
 export function synchronizePlayerHardenEffects(input: {
+  readonly enhancedEffects?: boolean
   readonly before: PlayerEntityStore
   readonly after: PlayerEntityStore
   readonly chips: readonly PendingPlayerHardenChip[]
@@ -85,7 +86,7 @@ export function synchronizePlayerHardenEffects(input: {
     }
     if (before.coating > 0 && after.coating === 0) {
       const broken = createNativeHardenBreakup(
-        before.coating, position, playerId, worldKey, input.tick, nextId, rng,
+        before.coating, position, playerId, worldKey, input.tick, nextId, rng, input.enhancedEffects ?? true,
       )
       rng = broken.rng
       nextId = broken.nextId

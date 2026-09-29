@@ -46,9 +46,11 @@ export function resolveBoneyardSpellCombat(
   fireballHostileCorridorLength: (ownerId: string) => number = () => 1_600,
   lightAt: BoneyardSpellLightSampler | null = null,
   frostMissileWorldContacts: readonly Extract<PrimarySpellProjectileState, { kind: 'weld' }>[] = [],
+  enhancedEffects = true,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   const work = new BoneyardSpellCombatWork({
+    enhancedEffects,
     lightAt, sourceEnemies, sourceSpells, channelEmissions, tick, worldKey, sourceRng, firstWorldContact, registerWorldPainter, damageMultiplier, primarySceneryTargets, lethalObserver, fireActorContacts, resolveEnemyMovement, steamedPulses, fireballHostileCorridorLength,
   })
   resolveHurricaneContacts(work)

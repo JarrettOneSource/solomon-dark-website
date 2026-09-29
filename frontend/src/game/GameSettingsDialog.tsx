@@ -63,6 +63,12 @@ const NativeSaveTransferSettings = lazy(() => import('./NativeSaveTransferSettin
 interface GameSettingsDialogProps {
   accountUsername: string | null
   context: GameSettingsContext
+  enhancedEffectsAuthority?: Readonly<{
+    enabled: boolean
+    canChange: boolean
+    scope: 'game' | 'next-party-run'
+  }>
+  onEnhancedEffectsChange?: (enabled: boolean) => void
   mobileUiPlayer?: ProtocolPlayerState
   mobileUiInHub?: boolean
   mobileUiSecondary?: NativeSecondaryPlayerState
@@ -105,6 +111,8 @@ const BINDING_GROUPS = Object.freeze([
 export default function GameSettingsDialog({
   accountUsername,
   context,
+  enhancedEffectsAuthority,
+  onEnhancedEffectsChange,
   mobileUiPlayer,
   mobileUiInHub,
   mobileUiSecondary,
@@ -306,7 +314,12 @@ export default function GameSettingsDialog({
       ) : page === 'mobile-ui' ? (
             mobileUiEditor
       ) : page === 'performance' ? (
-            <PerformanceSettings onChange={onChange} settings={settings} />
+            <PerformanceSettings
+              authority={enhancedEffectsAuthority}
+              onEnhancedEffectsChange={onEnhancedEffectsChange}
+              onChange={onChange}
+              settings={settings}
+            />
       ) : saveTransfer ? (
             <Suspense fallback={<p className="game-settings-context-note" role="status">Opening save transfer…</p>}>
               <NativeSaveTransferSettings controller={saveTransfer} />
@@ -508,9 +521,13 @@ function ControlsSettings({
 }
 
 function PerformanceSettings({
+  authority,
+  onEnhancedEffectsChange,
   onChange,
   settings,
 }: {
+  authority?: GameSettingsDialogProps['enhancedEffectsAuthority']
+  onEnhancedEffectsChange?: (enabled: boolean) => void
   onChange: (settings: GameSettings) => void
   settings: GameSettings
 }) {
@@ -561,10 +578,20 @@ function PerformanceSettings({
           label="CAMERA SHAKE"
           onChange={(zoomEffects) => onChange({ ...settings, zoomEffects })}
         />
-        <NativeUiSettingsStaticRow
-          detail="Fixed for synchronized multiplayer presentation."
-          label="ENHANCED EFFECTS: ON"
+        <NativeUiSettingsToggle
+          checked={authority?.enabled ?? settings.enhancedEffects}
+          disabled={authority?.canChange === false}
+          label="ENHANCED EFFECTS"
+          onChange={(enhancedEffects) => onEnhancedEffectsChange
+            ? onEnhancedEffectsChange(enhancedEffects)
+            : onChange({ ...settings, enhancedEffects })}
         />
+        {authority ? <p className="game-settings-context-note" role="status">
+          {authority.scope === 'next-party-run'
+            ? 'Applies to this party’s next game. The shared College is unchanged.'
+            : 'Shared game setting. Existing effects keep their native birth state.'}
+          {!authority.canChange ? ' Only the game owner can change it.' : ''}
+        </p> : null}
       </NativeUiSettingsGroup>
     </>
   )

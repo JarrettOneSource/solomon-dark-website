@@ -1,0 +1,2180 @@
+{
+  "native_image_sha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
+  "reference_index_sha256": "5d288f704109cc6b3aae99e2808f534706636aec7495920d9c91dec1e092ef5e",
+  "direct_instruction_count": 118,
+  "scope": "Recovered direct Game.FastCPU byte readers and writers; nearest-catalog labels corrected by surrounding instructions/callers.",
+  "qualification": "Static native contract plus exact Website behavioral tests. Not a retail runtime or native multiplayer protocol claim. Final source acceptance recorded separately.",
+  "rows": [
+    {
+      "reference": 1,
+      "instruction_va": "0x456ddb",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 1,
+      "recovered_owner": "FallBouncer landing",
+      "sampling": "birth",
+      "behavior": "On enables its born shadow; Off omits it. Both retain the explicit life 2 override, not the ordinary enhanced corpse life 10.",
+      "source_files": [
+        "core-server/enemies/boss-spells.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/discorporeal-encounter.test.ts",
+        "core-server/faculty-encounter.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 2,
+      "instruction_va": "0x45e445",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 2,
+      "recovered_owner": "Anim_CalledRock draw",
+      "sampling": "live draw",
+      "behavior": "Only the airborne base copy is conditional on the current flag. The main rock, motion, identity and lifetime remain intact; grounded base remains absent.",
+      "source_files": [
+        "renderer/earth-boulder-view.ts",
+        "renderer/primary-spell-world-view.ts"
+      ],
+      "test_files": [
+        "renderer/earth-boulder-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 3,
+      "instruction_va": "0x460f21",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 3,
+      "recovered_owner": "UltraBanish mega-death bones",
+      "sampling": "live birth cadence and birth shadow",
+      "behavior": "On births every eligible update; Off only on the native third-update cadence. Explicit life 20 remains in both modes, with independently latched shadow.",
+      "source_files": [
+        "core-server/enemies/ultra-banish.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/discorporeal-encounter.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 4,
+      "instruction_va": "0x461061",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 3,
+      "recovered_owner": "UltraBanish mega-death bones",
+      "sampling": "live birth cadence and birth shadow",
+      "behavior": "On births every eligible update; Off only on the native third-update cadence. Explicit life 20 remains in both modes, with independently latched shadow.",
+      "source_files": [
+        "core-server/enemies/ultra-banish.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/discorporeal-encounter.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 5,
+      "instruction_va": "0x468f0b",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 4,
+      "recovered_owner": "Arena weather",
+      "sampling": "live update",
+      "behavior": "Storm mode uses 20 or 10 new drops for On or Off. Ordinary rain remains 3. Existing drops/splashes retain their clocks and rainfall audio ownership.",
+      "source_files": [
+        "core-kernels/native-boneyard-weather.ts",
+        "renderer/boneyard-world-renderer.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-boneyard-weather.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 6,
+      "instruction_va": "0x46fdca",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 5,
+      "recovered_owner": "Arena and College post-main player hit capture",
+      "sampling": "live draw",
+      "behavior": "On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting.",
+      "source_files": [
+        "renderer/player-enhanced-hit-view.ts",
+        "renderer/world-player-view.ts",
+        "renderer/boneyard-dynamic-scene.ts",
+        "renderer/hub-world-scene.ts",
+        "renderer/hub-private-room-scene.ts"
+      ],
+      "test_files": [
+        "renderer/player-enhanced-hit-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 7,
+      "instruction_va": "0x47b630",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 6,
+      "recovered_owner": "Spider, Wraith and web/cocoon breakup bouncers",
+      "sampling": "birth",
+      "behavior": "The born shadow follows the flag. Explicit short-life overrides, including the shared 2*.75 life, take precedence over generic enhanced-fragment defaults; existing children survive mode changes.",
+      "source_files": [
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/spider.ts",
+        "core-server/enemies/cocoon.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts",
+        "core-kernels/native-spider.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 8,
+      "instruction_va": "0x47fd39",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 6,
+      "recovered_owner": "Spider, Wraith and web/cocoon breakup bouncers",
+      "sampling": "birth",
+      "behavior": "The born shadow follows the flag. Explicit short-life overrides, including the shared 2*.75 life, take precedence over generic enhanced-fragment defaults; existing children survive mode changes.",
+      "source_files": [
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/spider.ts",
+        "core-server/enemies/cocoon.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts",
+        "core-kernels/native-spider.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 9,
+      "instruction_va": "0x483698",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 7,
+      "recovered_owner": "Badguy movement update clock",
+      "sampling": "live update",
+      "behavior": "The illuminated visible native clock is 2 On or 5 Off; the existing offscreen 15 and dark 10 clocks remain distinct. Shared authority chooses one world mode, not a per-peer movement clock.",
+      "source_files": [
+        "core-kernels/native-enemy-pathfinding.ts",
+        "core-server/enemies/wraith.ts",
+        "core-server/enemies/spider.ts",
+        "core-server/boneyard-world.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-spider.test.ts",
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 10,
+      "instruction_va": "0x485168",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 6,
+      "recovered_owner": "Spider, Wraith and web/cocoon breakup bouncers",
+      "sampling": "birth",
+      "behavior": "The born shadow follows the flag. Explicit short-life overrides, including the shared 2*.75 life, take precedence over generic enhanced-fragment defaults; existing children survive mode changes.",
+      "source_files": [
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/spider.ts",
+        "core-server/enemies/cocoon.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts",
+        "core-kernels/native-spider.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 11,
+      "instruction_va": "0x48c2a5",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 6,
+      "recovered_owner": "Spider, Wraith and web/cocoon breakup bouncers",
+      "sampling": "birth",
+      "behavior": "The born shadow follows the flag. Explicit short-life overrides, including the shared 2*.75 life, take precedence over generic enhanced-fragment defaults; existing children survive mode changes.",
+      "source_files": [
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/spider.ts",
+        "core-server/enemies/cocoon.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts",
+        "core-kernels/native-spider.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 12,
+      "instruction_va": "0x48cff9",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 13,
+      "instruction_va": "0x48d3d3",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 14,
+      "instruction_va": "0x48d591",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 15,
+      "instruction_va": "0x48d6e7",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 16,
+      "instruction_va": "0x48d8e3",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 17,
+      "instruction_va": "0x48dab3",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 18,
+      "instruction_va": "0x48dc4f",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 19,
+      "instruction_va": "0x48dd65",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 8,
+      "recovered_owner": "Skeleton/Archer/Mage death and equipment fragments",
+      "sampling": "birth",
+      "behavior": "Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts",
+        "core-server/enemies/deaths.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 20,
+      "instruction_va": "0x494cfb",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 9,
+      "recovered_owner": "Zombie death fragments and corpse fade",
+      "sampling": "birth",
+      "behavior": "Native optional fragment membership, shadow and life choices use the world mode. The corpse fade selects the actual On/Off decrement rather than deleting the whole corpse or suppressing its rewards.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 21,
+      "instruction_va": "0x495213",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 9,
+      "recovered_owner": "Zombie death fragments and corpse fade",
+      "sampling": "birth",
+      "behavior": "Native optional fragment membership, shadow and life choices use the world mode. The corpse fade selects the actual On/Off decrement rather than deleting the whole corpse or suppressing its rewards.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 22,
+      "instruction_va": "0x495385",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 9,
+      "recovered_owner": "Zombie death fragments and corpse fade",
+      "sampling": "birth",
+      "behavior": "Native optional fragment membership, shadow and life choices use the world mode. The corpse fade selects the actual On/Off decrement rather than deleting the whole corpse or suppressing its rewards.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 23,
+      "instruction_va": "0x4955a6",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 9,
+      "recovered_owner": "Zombie death fragments and corpse fade",
+      "sampling": "birth",
+      "behavior": "Native optional fragment membership, shadow and life choices use the world mode. The corpse fade selects the actual On/Off decrement rather than deleting the whole corpse or suppressing its rewards.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 24,
+      "instruction_va": "0x4956ce",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 25,
+      "instruction_va": "0x49588c",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 26,
+      "instruction_va": "0x4959e2",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 27,
+      "instruction_va": "0x495aae",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], bl",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 28,
+      "instruction_va": "0x495c02",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 29,
+      "instruction_va": "0x495dc2",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 30,
+      "instruction_va": "0x495f59",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 10,
+      "recovered_owner": "Wraith death children",
+      "sampling": "birth",
+      "behavior": "The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 31,
+      "instruction_va": "0x49ac18",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 11,
+      "recovered_owner": "Coffin emergence",
+      "sampling": "birth",
+      "behavior": "Twenty independent BoulderBits use the recovered real RNG draw program, BadGuys1834/1835, life10/shadow On or life2/no-shadow Off. Both modes retain all twenty births, velocities and independent manager registrations.",
+      "source_files": [
+        "core-kernels/native-coffin-emergence.ts",
+        "core-server/enemies/coffin-emergence.ts",
+        "core-server/enemies/coffin.ts",
+        "core-server/boneyard-transient-effects.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-coffin-emergence.test.ts",
+        "core-server/boneyard-enemy-store.test.ts",
+        "renderer/native-death-effect-allocation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 32,
+      "instruction_va": "0x49b5b8",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 33,
+      "instruction_va": "0x49b776",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 34,
+      "instruction_va": "0x49b8cc",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 35,
+      "instruction_va": "0x49bab7",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 36,
+      "instruction_va": "0x49bcd3",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 37,
+      "instruction_va": "0x49becd",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 38,
+      "instruction_va": "0x49c012",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 12,
+      "recovered_owner": "Coffin terminal airborne fragments",
+      "sampling": "birth",
+      "behavior": "The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 39,
+      "instruction_va": "0x49cb42",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 13,
+      "recovered_owner": "Maggot terminal root and offset fragments",
+      "sampling": "birth",
+      "behavior": "The root and each authored offset use native life10/shadow On or constructor life2/no-shadow Off. FadePerspective companions and immediate Maggot retirement remain separately owned.",
+      "source_files": [
+        "core-server/enemies/maggots.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 40,
+      "instruction_va": "0x49d00c",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 13,
+      "recovered_owner": "Maggot terminal root and offset fragments",
+      "sampling": "birth",
+      "behavior": "The root and each authored offset use native life10/shadow On or constructor life2/no-shadow Off. FadePerspective companions and immediate Maggot retirement remain separately owned.",
+      "source_files": [
+        "core-server/enemies/maggots.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 41,
+      "instruction_va": "0x49d665",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 14,
+      "recovered_owner": "Faculty dying and terminal fragments",
+      "sampling": "birth",
+      "behavior": "Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate.",
+      "source_files": [
+        "core-server/enemies/faculty-death.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 42,
+      "instruction_va": "0x49ea1f",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 14,
+      "recovered_owner": "Faculty dying and terminal fragments",
+      "sampling": "birth",
+      "behavior": "Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate.",
+      "source_files": [
+        "core-server/enemies/faculty-death.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 43,
+      "instruction_va": "0x49ebdd",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 14,
+      "recovered_owner": "Faculty dying and terminal fragments",
+      "sampling": "birth",
+      "behavior": "Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate.",
+      "source_files": [
+        "core-server/enemies/faculty-death.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 44,
+      "instruction_va": "0x49ed33",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 14,
+      "recovered_owner": "Faculty dying and terminal fragments",
+      "sampling": "birth",
+      "behavior": "Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate.",
+      "source_files": [
+        "core-server/enemies/faculty-death.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 45,
+      "instruction_va": "0x49ef63",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 14,
+      "recovered_owner": "Faculty dying and terminal fragments",
+      "sampling": "birth",
+      "behavior": "Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate.",
+      "source_files": [
+        "core-server/enemies/faculty-death.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 46,
+      "instruction_va": "0x49f0ef",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 14,
+      "recovered_owner": "Faculty dying and terminal fragments",
+      "sampling": "birth",
+      "behavior": "Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate.",
+      "source_files": [
+        "core-server/enemies/faculty-death.ts",
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 47,
+      "instruction_va": "0x49fe30",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 48,
+      "instruction_va": "0x4a00c9",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 49,
+      "instruction_va": "0x4a02fb",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 50,
+      "instruction_va": "0x4a05a3",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 51,
+      "instruction_va": "0x4a075d",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 52,
+      "instruction_va": "0x4a08a6",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 53,
+      "instruction_va": "0x4a0a01",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 15,
+      "recovered_owner": "Heartmonger terminal fragments",
+      "sampling": "birth",
+      "behavior": "The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects.",
+      "source_files": [
+        "core-server/enemies/skeleton-death.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 54,
+      "instruction_va": "0x4a2287",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 16,
+      "recovered_owner": "Portal terminal black-smoky bouncers",
+      "sampling": "birth",
+      "behavior": "On/Off selects shadow. The explicit native life1.5 overrides the general On10/Off2 constructor policy in both cases.",
+      "source_files": [
+        "core-server/enemies/deaths.ts",
+        "core-server/enemies/death-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 55,
+      "instruction_va": "0x50f15a",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 5,
+      "recovered_owner": "Arena and College post-main player hit capture",
+      "sampling": "live draw",
+      "behavior": "On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting.",
+      "source_files": [
+        "renderer/player-enhanced-hit-view.ts",
+        "renderer/world-player-view.ts",
+        "renderer/boneyard-dynamic-scene.ts",
+        "renderer/hub-world-scene.ts",
+        "renderer/hub-private-room-scene.ts"
+      ],
+      "test_files": [
+        "renderer/player-enhanced-hit-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 56,
+      "instruction_va": "0x51198a",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 5,
+      "recovered_owner": "Arena and College post-main player hit capture",
+      "sampling": "live draw",
+      "behavior": "On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting.",
+      "source_files": [
+        "renderer/player-enhanced-hit-view.ts",
+        "renderer/world-player-view.ts",
+        "renderer/boneyard-dynamic-scene.ts",
+        "renderer/hub-world-scene.ts",
+        "renderer/hub-private-room-scene.ts"
+      ],
+      "test_files": [
+        "renderer/player-enhanced-hit-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 57,
+      "instruction_va": "0x5199bf",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 5,
+      "recovered_owner": "Arena and College post-main player hit capture",
+      "sampling": "live draw",
+      "behavior": "On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting.",
+      "source_files": [
+        "renderer/player-enhanced-hit-view.ts",
+        "renderer/world-player-view.ts",
+        "renderer/boneyard-dynamic-scene.ts",
+        "renderer/hub-world-scene.ts",
+        "renderer/hub-private-room-scene.ts"
+      ],
+      "test_files": [
+        "renderer/player-enhanced-hit-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 58,
+      "instruction_va": "0x51a4da",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 5,
+      "recovered_owner": "Arena and College post-main player hit capture",
+      "sampling": "live draw",
+      "behavior": "On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting.",
+      "source_files": [
+        "renderer/player-enhanced-hit-view.ts",
+        "renderer/world-player-view.ts",
+        "renderer/boneyard-dynamic-scene.ts",
+        "renderer/hub-world-scene.ts",
+        "renderer/hub-private-room-scene.ts"
+      ],
+      "test_files": [
+        "renderer/player-enhanced-hit-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 59,
+      "instruction_va": "0x51fd46",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 5,
+      "recovered_owner": "Arena and College post-main player hit capture",
+      "sampling": "live draw",
+      "behavior": "On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting.",
+      "source_files": [
+        "renderer/player-enhanced-hit-view.ts",
+        "renderer/world-player-view.ts",
+        "renderer/boneyard-dynamic-scene.ts",
+        "renderer/hub-world-scene.ts",
+        "renderer/hub-private-room-scene.ts"
+      ],
+      "test_files": [
+        "renderer/player-enhanced-hit-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 60,
+      "instruction_va": "0x52c40f",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 17,
+      "recovered_owner": "Player Hurricane painter",
+      "sampling": "live draw",
+      "behavior": "The same eight retained native lanes feed the high/low branches: On uses the full lane/copy program, Off the alternating lanes. Core, charge, field damage and lane state are not reset.",
+      "source_files": [
+        "renderer/primary-spell-air-water-native.ts",
+        "renderer/primary-spell-air-water-actor-view.ts"
+      ],
+      "test_files": [
+        "core-server/air-water-player-visual-system.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 61,
+      "instruction_va": "0x52e22a",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 18,
+      "recovered_owner": "Flame Lash ribbon constructor",
+      "sampling": "birth geometry",
+      "behavior": "Native sample spacing is7 On or30 Off. Its born geometry is not confused with the separately live ZAnimSplit bands.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "core-kernels/native-weld-flame-lash.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-flame-lash.test.ts",
+        "renderer/primary-spell-air-native.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 62,
+      "instruction_va": "0x52fbfa",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 19,
+      "recovered_owner": "Stoneskin physical player hit chip",
+      "sampling": "birth",
+      "behavior": "One normal-blend BadGuys77 Bouncer retains native life2 in both modes; only its born shadow follows quality. This is not the apply/refresh/removal burst.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "core-server/player-contact-system.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 63,
+      "instruction_va": "0x531ca2",
+      "instruction": "mov\tdl, byte ptr [0xb3bcad]",
+      "group": 20,
+      "recovered_owner": "Shared Air/Flame Lash path-light factory pairs",
+      "sampling": "birth light descriptor",
+      "behavior": "Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/primary-spell-air-view.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 64,
+      "instruction_va": "0x531dff",
+      "instruction": "mov\tcl, byte ptr [0xb3bcad]",
+      "group": 20,
+      "recovered_owner": "Shared Air/Flame Lash path-light factory pairs",
+      "sampling": "birth light descriptor",
+      "behavior": "Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/primary-spell-air-view.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 65,
+      "instruction_va": "0x532046",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 21,
+      "recovered_owner": "First-link optional Flame Lash source flare",
+      "sampling": "birth",
+      "behavior": "Only the caller requesting this source flare creates it. Alpha.5 and the final scale.75..1.25 are retained; decrement.1 On/.4 Off is distinct from the endpoint and chain contacts.",
+      "source_files": [
+        "core-kernels/native-weld-flame-lash.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 66,
+      "instruction_va": "0x53266c",
+      "instruction": "mov\tdl, byte ptr [0xb3bcad]",
+      "group": 20,
+      "recovered_owner": "Shared Air/Flame Lash path-light factory pairs",
+      "sampling": "birth light descriptor",
+      "behavior": "Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/primary-spell-air-view.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 67,
+      "instruction_va": "0x5327d2",
+      "instruction": "mov\tcl, byte ptr [0xb3bcad]",
+      "group": 20,
+      "recovered_owner": "Shared Air/Flame Lash path-light factory pairs",
+      "sampling": "birth light descriptor",
+      "behavior": "Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/primary-spell-air-view.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 68,
+      "instruction_va": "0x5330f7",
+      "instruction": "mov\tal, byte ptr [0xb3bcad]",
+      "group": 20,
+      "recovered_owner": "Shared Air/Flame Lash path-light factory pairs",
+      "sampling": "birth light descriptor",
+      "behavior": "Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/primary-spell-air-view.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 69,
+      "instruction_va": "0x53324e",
+      "instruction": "mov\tal, byte ptr [0xb3bcad]",
+      "group": 20,
+      "recovered_owner": "Shared Air/Flame Lash path-light factory pairs",
+      "sampling": "birth light descriptor",
+      "behavior": "Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/primary-spell-air-view.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 70,
+      "instruction_va": "0x5346e2",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 22,
+      "recovered_owner": "Shared Air and Dark Lightning ribbon constructor",
+      "sampling": "birth geometry",
+      "behavior": "Native high/low sample spacing15/30 applies through the common factory, including boss dark Lightning and ElectricBurn arcs, without adding nonexistent coronas to a body-only producer.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "renderer/native-dark-lightning.ts",
+        "renderer/native-electric-burn-arc-view.ts",
+        "renderer/primary-spell-air-view.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 71,
+      "instruction_va": "0x540603",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 23,
+      "recovered_owner": "Chained Air contact",
+      "sampling": "birth",
+      "behavior": "Only the chained contact chooses decrement.2 On/.4 Off. The first contact stays.2 in both modes, with independent weak-contact alpha/lifetime.",
+      "source_files": [
+        "core-kernels/native-air-presentation.ts",
+        "core-server/spell-combat/channels.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-air-native.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 72,
+      "instruction_va": "0x540f48",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 24,
+      "recovered_owner": "Flame Lash contact constructors",
+      "sampling": "birth",
+      "behavior": "The two contact sites use native born decrement.2/.4; they do not inherit the optional source flare decrement.1.",
+      "source_files": [
+        "core-kernels/native-weld-flame-lash.ts",
+        "core-kernels/native-weld-primary-runtime.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 73,
+      "instruction_va": "0x541543",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 24,
+      "recovered_owner": "Flame Lash contact constructors",
+      "sampling": "birth",
+      "behavior": "The two contact sites use native born decrement.2/.4; they do not inherit the optional source flare decrement.1.",
+      "source_files": [
+        "core-kernels/native-weld-flame-lash.ts",
+        "core-kernels/native-weld-primary-runtime.ts",
+        "renderer/primary-spell-weld-native.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-flame-lash.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 74,
+      "instruction_va": "0x542e1f",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 25,
+      "recovered_owner": "Water/Frost primary strip density",
+      "sampling": "birth program",
+      "behavior": "The native length-dependent strip density uses10 On or20 Off spacing. The canonical primary owner, not a renderer-only count cap, determines the emitted program.",
+      "source_files": [
+        "core-kernels/primary-spell-water.ts",
+        "core-kernels/primary-spells.ts",
+        "core-server/spell-combat/channels.ts"
+      ],
+      "test_files": [
+        "core-kernels/primary-spells.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 75,
+      "instruction_va": "0x543948",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 25,
+      "recovered_owner": "Water/Frost primary strip density",
+      "sampling": "birth program",
+      "behavior": "The native length-dependent strip density uses10 On or20 Off spacing. The canonical primary owner, not a renderer-only count cap, determines the emitted program.",
+      "source_files": [
+        "core-kernels/primary-spell-water.ts",
+        "core-kernels/primary-spells.ts",
+        "core-server/spell-combat/channels.ts"
+      ],
+      "test_files": [
+        "core-kernels/primary-spells.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 76,
+      "instruction_va": "0x545a79",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 77,
+      "instruction_va": "0x546d99",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], bl",
+      "group": 27,
+      "recovered_owner": "Stoneskin composite",
+      "sampling": "live draw with shared birth grid",
+      "behavior": "The full articulated body plus Clothes3 material is drawn twice, using the retained100-vertex warped grid On or full captured quad Off. Grid construction and shared RNG occur at activation/refresh even Off; toggling never rerolls it.",
+      "source_files": [
+        "core-kernels/native-stoneskin.ts",
+        "renderer/player-stoneskin-view.ts",
+        "renderer/world-player-view.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-stoneskin.test.ts",
+        "renderer/player-stoneskin-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 78,
+      "instruction_va": "0x548638",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 28,
+      "recovered_owner": "Harden chip and full AdditiveBouncer breakup",
+      "sampling": "birth",
+      "behavior": "Native life10 and additive black shadow On; constructor life2/no-shadow Off. The black shadow remains additive, not a fabricated darkening pass. Birth age and independent normal Fade are retained.",
+      "source_files": [
+        "core-kernels/native-harden-effects.ts",
+        "core-server/player-harden-effects.ts",
+        "renderer/player-harden-effect-view.ts"
+      ],
+      "test_files": [
+        "core-server/player-harden-effects.test.ts",
+        "renderer/player-harden-effect-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 79,
+      "instruction_va": "0x548f7c",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 29,
+      "recovered_owner": "Planewalker moving Fade",
+      "sampling": "birth",
+      "behavior": "Born loss.1*Range(.15,.3) On or.1*Range(.25,.45) Off; already-born motes keep their own loss and consume no extra RNG when the mode changes.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "core-server/air-water-player-visual-system.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 80,
+      "instruction_va": "0x5dad45",
+      "instruction": "push\t0xb3bcad",
+      "group": 30,
+      "recovered_owner": "Native Settings read/apply and Website authority adaptation",
+      "sampling": "setting writer",
+      "behavior": "Native process-global Game.FastCPU defaults On and applies live. Website local preference seeds a new owned world; existing owner commands, strict wire141 and save46 carry world authority. Guest/observer/reconnect preferences cannot overwrite it; public College keeps party-next-run choice separate.",
+      "source_files": [
+        "game-settings.ts",
+        "runtime-scene-identity.ts",
+        "protocol/game-protocol.ts",
+        "host/game-host.ts",
+        "host/party-system.ts",
+        "host/shared-game-worlds.ts",
+        "save/game-save-document.ts"
+      ],
+      "test_files": [
+        "game-settings.test.ts",
+        "runtime-scene-identity.test.ts",
+        "host/game-host.test.ts",
+        "host/party-system.test.ts",
+        "host/shared-game-worlds.test.ts",
+        "save/game-save-document.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 81,
+      "instruction_va": "0x5db5db",
+      "instruction": "push\t0xb3bcad",
+      "group": 30,
+      "recovered_owner": "Native Settings read/apply and Website authority adaptation",
+      "sampling": "setting writer",
+      "behavior": "Native process-global Game.FastCPU defaults On and applies live. Website local preference seeds a new owned world; existing owner commands, strict wire141 and save46 carry world authority. Guest/observer/reconnect preferences cannot overwrite it; public College keeps party-next-run choice separate.",
+      "source_files": [
+        "game-settings.ts",
+        "runtime-scene-identity.ts",
+        "protocol/game-protocol.ts",
+        "host/game-host.ts",
+        "host/party-system.ts",
+        "host/shared-game-worlds.ts",
+        "save/game-save-document.ts"
+      ],
+      "test_files": [
+        "game-settings.test.ts",
+        "runtime-scene-identity.test.ts",
+        "host/game-host.test.ts",
+        "host/party-system.test.ts",
+        "host/shared-game-worlds.test.ts",
+        "save/game-save-document.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 82,
+      "instruction_va": "0x5e0233",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 31,
+      "recovered_owner": "ZAnimSplit retained rendering",
+      "sampling": "live draw",
+      "behavior": "On/Off selects25/50-unit split bands while preserving actor clocks and born geometry. Replacement split resources release their owned buffers, not borrowed textures or gameplay actors.",
+      "source_files": [
+        "native-zanim-split.ts",
+        "renderer/primary-spell-world-view.ts",
+        "renderer/native-boss-spell-view.ts",
+        "renderer/native-electric-burn-arc-view.ts"
+      ],
+      "test_files": [
+        "renderer/native-secondary-presentation.test.ts",
+        "renderer/native-mesh-lifetime.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 83,
+      "instruction_va": "0x5e10ac",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], al",
+      "group": 32,
+      "recovered_owner": "Arrow initial opacity",
+      "sampling": "birth",
+      "behavior": "On retains the native enhanced initial opacity, Off the native5. Existing arrows retain their initial lifetime/opacity program after toggling.",
+      "source_files": [
+        "core-server/enemies/projectile-emission.ts",
+        "core-server/enemies/programs.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 84,
+      "instruction_va": "0x5e5a2e",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 33,
+      "recovered_owner": "Ember and EvilEmber optional visual passes",
+      "sampling": "live draw",
+      "behavior": "Enhanced ground-glow and extra additive body passes are conditional. The ordinary body, damage, contacts, position and retained age remain present Off.",
+      "source_files": [
+        "renderer/primary-spell-fire-native.ts",
+        "renderer/primary-spell-fire-view.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-fire-native.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 85,
+      "instruction_va": "0x5e89d2",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 34,
+      "recovered_owner": "StormCloud/AcidRain private cloud and drop producers",
+      "sampling": "live draw and live update",
+      "behavior": "Live high/low cloud composition and5/2 drop counts follow the world mode, with the native half-count variant retained. Old independently owned drops are not culled by a mode change.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-weather-presentation.ts",
+        "renderer/native-secondary-world-view.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 86,
+      "instruction_va": "0x5f3318",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 87,
+      "instruction_va": "0x5f9160",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 35,
+      "recovered_owner": "Silk fragment shadow",
+      "sampling": "birth",
+      "behavior": "Native shadow uses quality but explicit constructor life2*.75 is identical in both modes. The existing fragment geometry and shared breakup RNG remain unchanged.",
+      "source_files": [
+        "core-kernels/native-silk-force.ts",
+        "core-server/enemies/silk-force.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-silk-force.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 88,
+      "instruction_va": "0x5fb556",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 36,
+      "recovered_owner": "Plane Orb live motes and mesh",
+      "sampling": "live update/draw",
+      "behavior": "The native extra mote program is gated at the current update; live mesh segments15/7 switch without resetting the field, target contacts or retained motes.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-field-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 89,
+      "instruction_va": "0x5fb750",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 36,
+      "recovered_owner": "Plane Orb live motes and mesh",
+      "sampling": "live update/draw",
+      "behavior": "The native extra mote program is gated at the current update; live mesh segments15/7 switch without resetting the field, target contacts or retained motes.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-field-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 90,
+      "instruction_va": "0x5fc306",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 91,
+      "instruction_va": "0x5fe357",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 37,
+      "recovered_owner": "Fireball FireParticle customization",
+      "sampling": "birth",
+      "behavior": "On halves the native base fade; Off retains base fade. Existing particles keep their born decrement and color/retirement program.",
+      "source_files": [
+        "core-kernels/primary-spell-fire-native.ts",
+        "core-server/spell-combat/fire.ts",
+        "renderer/primary-spell-fire-native.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-fire-native.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 92,
+      "instruction_va": "0x601919",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 36,
+      "recovered_owner": "Plane Orb live motes and mesh",
+      "sampling": "live update/draw",
+      "behavior": "The native extra mote program is gated at the current update; live mesh segments15/7 switch without resetting the field, target contacts or retained motes.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-field-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 93,
+      "instruction_va": "0x602268",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 34,
+      "recovered_owner": "StormCloud/AcidRain private cloud and drop producers",
+      "sampling": "live draw and live update",
+      "behavior": "Live high/low cloud composition and5/2 drop counts follow the world mode, with the native half-count variant retained. Old independently owned drops are not culled by a mode change.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-weather-presentation.ts",
+        "renderer/native-secondary-world-view.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 94,
+      "instruction_va": "0x60413b",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 38,
+      "recovered_owner": "DemonBomb optional FireParticle tail",
+      "sampling": "live birth gate, born recurrence",
+      "behavior": "Only On and post-damping speed>=1 admit the tail. Native fade customization is base*.4, not Fireball*.5. Settled positive-fuse bombs emit no tail; old particles remain through normal retirement.",
+      "source_files": [
+        "core-server/enemies/projectiles.ts",
+        "core-server/enemies/projectile-effects.ts",
+        "core-server/boneyard-transient-effects.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-enemy-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 95,
+      "instruction_va": "0x604fb8",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 34,
+      "recovered_owner": "StormCloud/AcidRain private cloud and drop producers",
+      "sampling": "live draw and live update",
+      "behavior": "Live high/low cloud composition and5/2 drop counts follow the world mode, with the native half-count variant retained. Old independently owned drops are not culled by a mode change.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-weather-presentation.ts",
+        "renderer/native-secondary-world-view.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 96,
+      "instruction_va": "0x6058d3",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 39,
+      "recovered_owner": "EyeLaser trail fade",
+      "sampling": "birth",
+      "behavior": "On halves the final native randomized base fade; Off retains it. The same real birth draw sequence and non-quality fields are retained.",
+      "source_files": [
+        "core-server/enemies/demon-skull-effects.ts"
+      ],
+      "test_files": [
+        "core-server/discorporeal-encounter.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 97,
+      "instruction_va": "0x60a064",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 98,
+      "instruction_va": "0x60a506",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 99,
+      "instruction_va": "0x60aa98",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 100,
+      "instruction_va": "0x60ba66",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 101,
+      "instruction_va": "0x60be82",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 102,
+      "instruction_va": "0x60c396",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 26,
+      "recovered_owner": "Boulder, EBoulder and per-rock Hail debris callers",
+      "sampling": "birth",
+      "behavior": "Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement.",
+      "source_files": [
+        "core-kernels/primary-spell-earth.ts",
+        "core-kernels/native-weld-boulder-debris.ts",
+        "core-kernels/native-weld-hail-contact.ts",
+        "core-server/spell-combat/transients.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-weld-boulder-debris.test.ts",
+        "core-kernels/native-weld-hail-contact.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 103,
+      "instruction_va": "0x60dfff",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 33,
+      "recovered_owner": "Ember and EvilEmber optional visual passes",
+      "sampling": "live draw",
+      "behavior": "Enhanced ground-glow and extra additive body passes are conditional. The ordinary body, damage, contacts, position and retained age remain present Off.",
+      "source_files": [
+        "renderer/primary-spell-fire-native.ts",
+        "renderer/primary-spell-fire-view.ts"
+      ],
+      "test_files": [
+        "renderer/primary-spell-fire-native.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 104,
+      "instruction_va": "0x60e5b9",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 40,
+      "recovered_owner": "Building/Monument ground light grid",
+      "sampling": "live draw",
+      "behavior": "The shared native surface-light mesh selects the recovered high/low corner grid. This remains distinct from Light Quality target resolution and Complex Lighting enablement.",
+      "source_files": [
+        "renderer/boneyard-building-surface-view.ts",
+        "renderer/boneyard-static-surface-lighting.ts",
+        "renderer/boneyard-static-world.ts"
+      ],
+      "test_files": [
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 105,
+      "instruction_va": "0x6137fe",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 41,
+      "recovered_owner": "Earthquake dust and debris",
+      "sampling": "live birth gate and birth state",
+      "behavior": "Current quality gates the native dust program and latches debris life/shadow at construction; existing scenery wobble and independent gameplay pulses remain active.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 106,
+      "instruction_va": "0x613d59",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 41,
+      "recovered_owner": "Earthquake dust and debris",
+      "sampling": "live birth gate and birth state",
+      "behavior": "Current quality gates the native dust program and latches debris life/shadow at construction; existing scenery wobble and independent gameplay pulses remain active.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 107,
+      "instruction_va": "0x614f6a",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 42,
+      "recovered_owner": "Leviathan enhanced children",
+      "sampling": "live birth gate",
+      "behavior": "The current quality controls native extra mote/fade births. The shared parent field, appendage clocks, damage and existing independent children retain ownership.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-world-view.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 108,
+      "instruction_va": "0x61514f",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 42,
+      "recovered_owner": "Leviathan enhanced children",
+      "sampling": "live birth gate",
+      "behavior": "The current quality controls native extra mote/fade births. The shared parent field, appendage clocks, damage and existing independent children retain ownership.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-world-view.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 109,
+      "instruction_va": "0x6163d6",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 43,
+      "recovered_owner": "Golem assembly and terminal debris",
+      "sampling": "birth",
+      "behavior": "Assembly owns24 independent BoulderBits at0/50/100/200 milestones; terminal30-fragment lifetime/shadow follows quality independently of Iron Golem. Current saves/wire preserve the distinction; legacy data migrates explicitly.",
+      "source_files": [
+        "core-kernels/native-golem-debris.ts",
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-golem-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-golem-debris.test.ts",
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 110,
+      "instruction_va": "0x619aad",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 43,
+      "recovered_owner": "Golem assembly and terminal debris",
+      "sampling": "birth",
+      "behavior": "Assembly owns24 independent BoulderBits at0/50/100/200 milestones; terminal30-fragment lifetime/shadow follows quality independently of Iron Golem. Current saves/wire preserve the distinction; legacy data migrates explicitly.",
+      "source_files": [
+        "core-kernels/native-golem-debris.ts",
+        "core-kernels/native-secondary-abilities.ts",
+        "renderer/native-secondary-golem-presentation.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-golem-debris.test.ts",
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 111,
+      "instruction_va": "0x61d335",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 44,
+      "recovered_owner": "EtherDrain cloud cadence",
+      "sampling": "live update",
+      "behavior": "The native random bound is3 On or5 Off, with existing cloud lifetimes and authoritative damage/target ownership unchanged.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 112,
+      "instruction_va": "0x61f695",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 45,
+      "recovered_owner": "Goodie root and fragment Bouncers",
+      "sampling": "birth",
+      "behavior": "Both sites latch shadow from quality and keep the explicit life2 program in both modes. Reward RNG, all twenty fragment constructors and materialization phases remain shared.",
+      "source_files": [
+        "core-server/boneyard-loot-store.ts",
+        "core-server/boneyard-world.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-loot-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 113,
+      "instruction_va": "0x61f8f6",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 45,
+      "recovered_owner": "Goodie root and fragment Bouncers",
+      "sampling": "birth",
+      "behavior": "Both sites latch shadow from quality and keep the explicit life2 program in both modes. Reward RNG, all twenty fragment constructors and materialization phases remain shared.",
+      "source_files": [
+        "core-server/boneyard-loot-store.ts",
+        "core-server/boneyard-world.ts"
+      ],
+      "test_files": [
+        "core-server/boneyard-loot-store.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 114,
+      "instruction_va": "0x623ec7",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 46,
+      "recovered_owner": "Stoneskin apply/refresh/removal eighteen-piece burst",
+      "sampling": "birth",
+      "behavior": "Actual helper0x623D40, not nearest catalog CircleSlow. Its callers0x624490/0x6244C0/0x626A0B create18 BadGuys77 Bouncers with On life10/shadow or Off constructor2/no-shadow. Refresh/removal do not duplicate ordinary physical-hit chips.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 115,
+      "instruction_va": "0x629212",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 47,
+      "recovered_owner": "ElectricBurn source and arc coronas",
+      "sampling": "birth",
+      "behavior": "Positive arc capacity gates source/arc visuals. Source alpha.5 and chained.75 use decrement.2 On/.4 Off; final native scale1..1.5 overwrites earlier*.2. Body-only arcs and ZAnimLit coronas are separate; zero-arc Magic Trap remains without these children.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "core-kernels/native-boneyard-light-model.ts",
+        "renderer/native-electric-burn-arc-view.ts",
+        "renderer/native-secondary-world-view.ts",
+        "protocol/codecs/secondary-actors.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 116,
+      "instruction_va": "0x6295b9",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 47,
+      "recovered_owner": "ElectricBurn source and arc coronas",
+      "sampling": "birth",
+      "behavior": "Positive arc capacity gates source/arc visuals. Source alpha.5 and chained.75 use decrement.2 On/.4 Off; final native scale1..1.5 overwrites earlier*.2. Body-only arcs and ZAnimLit coronas are separate; zero-arc Magic Trap remains without these children.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts",
+        "core-kernels/native-boneyard-light-model.ts",
+        "renderer/native-electric-burn-arc-view.ts",
+        "renderer/native-secondary-world-view.ts",
+        "protocol/codecs/secondary-actors.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts",
+        "renderer/native-secondary-presentation.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 117,
+      "instruction_va": "0x64484d",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 48,
+      "recovered_owner": "FreezeWave Iceblast particle program",
+      "sampling": "birth",
+      "behavior": "Native200 On or100 Off child count flows through the shared constructor; damage, freeze ownership and existing child retirement remain independent.",
+      "source_files": [
+        "core-kernels/native-secondary-abilities.ts"
+      ],
+      "test_files": [
+        "core-kernels/native-secondary-abilities.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    },
+    {
+      "reference": 118,
+      "instruction_va": "0x654c51",
+      "instruction": "cmp\tbyte ptr [0xb3bcad], 0x0",
+      "group": 28,
+      "recovered_owner": "Harden chip and full AdditiveBouncer breakup",
+      "sampling": "birth",
+      "behavior": "Native life10 and additive black shadow On; constructor life2/no-shadow Off. The black shadow remains additive, not a fabricated darkening pass. Birth age and independent normal Fade are retained.",
+      "source_files": [
+        "core-kernels/native-harden-effects.ts",
+        "core-server/player-harden-effects.ts",
+        "renderer/player-harden-effect-view.ts"
+      ],
+      "test_files": [
+        "core-server/player-harden-effects.test.ts",
+        "renderer/player-harden-effect-view.test.ts"
+      ],
+      "disposition": "implemented; release receipt records final candidate gate"
+    }
+  ],
+  "release_receipt": "_source/20260929-report38-45b08656-acceptance.json in the retained report archive",
+  "final_caller_regression": {
+    "source": "renderer/hub-private-room-scene.ts",
+    "test": "tools/smoke-private-room-quality.mjs",
+    "scope": "All four private College rooms forward the same live world mode to primary and secondary views.",
+    "observed": "Real pre-fix red, then twelve On/Off/On WebGL rows; native birth flags, fixed tick and source actors retained."
+  }
+}

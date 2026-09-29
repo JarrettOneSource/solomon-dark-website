@@ -7,7 +7,6 @@ export const UI_SCALE_MAX_PERCENT = 150
 export const LIGHT_QUALITY_MIN_PERCENT = 24
 export const LIGHT_QUALITY_MAX_PERCENT = 100
 export const NATIVE_CAPABLE_LIGHT_QUALITY = 0.25
-export const NATIVE_BROWSER_ENHANCED_EFFECTS = true
 
 export const GAME_BINDING_ACTIONS = Object.freeze([
   'moveUp',
@@ -43,6 +42,7 @@ export interface GameSettings {
   readonly enableGlobalChat: boolean
   readonly enableOnlineFeatures: boolean
   readonly enableSharedHub: boolean
+  readonly enhancedEffects: boolean
   readonly lightQualityPercent: number
   readonly musicVolumePercent: number
   readonly multipleShadows: boolean
@@ -91,6 +91,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = Object.freeze({
   enableGlobalChat: true,
   enableOnlineFeatures: true,
   enableSharedHub: true,
+  enhancedEffects: true,
   lightQualityPercent: 100,
   musicVolumePercent: 100,
   multipleShadows: true,
@@ -112,6 +113,7 @@ const GAME_SETTINGS_KEYS = Object.freeze([
   'enableGlobalChat',
   'enableOnlineFeatures',
   'enableSharedHub',
+  'enhancedEffects',
   'lightQualityPercent',
   'musicVolumePercent',
   'multipleShadows',
@@ -275,16 +277,19 @@ function parseGameSettings(serialized: string | null): GameSettings {
         enableCheats: source.enableCheats === true,
       })
     }
-    const onlineMigrated = sameKeys(sourceKeys, PRE_ONLINE_GAME_SETTINGS_KEYS)
+    const qualityMigrated = Object.hasOwn(source, 'enhancedEffects')
+      ? source
+      : { ...source, enhancedEffects: true }
+    const onlineMigrated = sameKeys(Object.keys(qualityMigrated).sort(), PRE_ONLINE_GAME_SETTINGS_KEYS)
       ? {
-          ...source,
+          ...qualityMigrated,
           enableActivityMessages: true,
           enableGlobalChat: true,
           enableOnlineFeatures: true,
           enableSharedHub: true,
           submitRunsToServer: true,
         }
-      : source
+      : qualityMigrated
     const migrated = sameKeys(
       Object.keys(onlineMigrated).sort(),
       PRE_REDUCED_SCREEN_FLASH_SETTINGS_KEYS,
@@ -306,6 +311,7 @@ function parseGameSettings(serialized: string | null): GameSettings {
       || typeof complete.enableGlobalChat !== 'boolean'
       || typeof complete.enableOnlineFeatures !== 'boolean'
       || typeof complete.enableSharedHub !== 'boolean'
+      || typeof complete.enhancedEffects !== 'boolean'
       || typeof complete.multipleShadows !== 'boolean'
       || typeof complete.reducedScreenFlashes !== 'boolean'
       || typeof complete.submitRunsToServer !== 'boolean'
@@ -339,6 +345,7 @@ function normalizedGameSettings(settings: GameSettings): GameSettings {
     enableGlobalChat: settings.enableGlobalChat === true,
     enableOnlineFeatures: settings.enableOnlineFeatures === true,
     enableSharedHub: settings.enableSharedHub === true,
+    enhancedEffects: settings.enhancedEffects === true,
     lightQualityPercent: boundedInteger(
       settings.lightQualityPercent,
       LIGHT_QUALITY_MIN_PERCENT,

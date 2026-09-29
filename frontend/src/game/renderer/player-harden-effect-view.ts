@@ -7,6 +7,7 @@ export class PlayerHardenEffectView {
   readonly containers: readonly Container[]
   private readonly root: Container
   private readonly sprite: Sprite
+  private readonly shadow: Sprite | null
   private state: NativeHardenEffect
 
   constructor(state: NativeHardenEffect, textures: PlayerWorldTextures['secondary']) {
@@ -20,6 +21,18 @@ export class PlayerHardenEffectView {
     this.sprite.anchor.set(0.5)
     this.sprite.blendMode = state.kind === 'harden-burst' ? 'normal' : 'add'
     this.sprite.eventMode = 'none'
+    this.shadow = state.kind === 'harden-shard'
+      ? new Sprite({ texture: this.sprite.texture, label: 'harden-born-shadow', eventMode: 'none' }) : null
+    if (this.shadow) {
+      this.shadow.anchor.set(.5)
+      this.shadow.tint = 0
+      // AdditiveBouncer 0x00528D10 keeps additive blending around both
+      // inherited draws. Its black shadow must not darken the world.
+      this.shadow.blendMode = 'add'
+      this.shadow.position.y = 2
+      this.shadow.scale.y = .75
+      this.root.addChild(this.shadow)
+    }
     this.root.addChild(this.sprite)
     this.update(state)
   }
@@ -39,6 +52,11 @@ export class PlayerHardenEffectView {
       this.sprite.alpha = Math.min(1, state.life)
       this.sprite.position.y = state.height
       this.sprite.angle = state.rotationDegrees
+      if (this.shadow) {
+        this.shadow.visible = state.enhancedShadow
+        this.shadow.alpha = Math.min(1, state.life)
+        this.shadow.angle = state.rotationDegrees
+      }
     }
   }
 

@@ -60,6 +60,10 @@ export function boneyardEnemyDeathEffectSnapshot(
     throw new GameProtocolError(`${field}.presentationOwner is not supported`)
   }
   const entry = nonnegativeInteger(source.entry, `${field}.entry`)
+  if (kind === 'boulder-bit' && (atlas !== 'BadGuys' || (entry !== 1834 && entry !== 1835)
+    || blendMode !== 'normal' || presentationOwner !== 'world-sorted' || source.tint !== 0xffffff)) {
+    throw new GameProtocolError(`${field} violates the native Coffin emergence BoulderBit registration`)
+  }
   const maximumAlpha = boneyardEnemyDeathEffectMaximumAlpha(atlas, blendMode, entry, kind)
   if (alpha < 0 || alpha > maximumAlpha) {
     throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
@@ -378,6 +382,7 @@ export function boneyardMageLightningPulses(
     const source = record(pulse, pulseField)
     onlyKeys(source, pulseField, [
       'contact',
+      'enhancedEffects',
       'endpoint',
       'id',
       'lightRegistration',
@@ -436,6 +441,7 @@ export function boneyardMageLightningPulses(
     }
     return {
       contact,
+      enhancedEffects: boolean(source.enhancedEffects, `${pulseField}.enhancedEffects`),
       endpoint: vector(source.endpoint, `${pulseField}.endpoint`),
       id: positiveInteger(source.id, `${pulseField}.id`),
       lightRegistration,

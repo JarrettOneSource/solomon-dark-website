@@ -4,7 +4,6 @@ import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
-import { NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
 import {
   buildNativeZAnimSplitBands,
   type NativeZAnimSplitBand,
@@ -56,6 +55,7 @@ export class WeldPrimarySpellView {
   constructor(
     state: NativeWeldPresentationState,
     textures: PlayerWorldTextures['primarySpells']['weldActors'],
+    enhancedEffects = true,
   ) {
     this.state = state
     this.buildId = state.buildId
@@ -71,7 +71,7 @@ export class WeldPrimarySpellView {
       ? buildNativeZAnimSplitBands(
           `weld:${state.id}`,
           bounds,
-          NATIVE_BROWSER_ENHANCED_EFFECTS,
+          enhancedEffects,
         )
       : Object.freeze([])
     this.bandMasks = this.bands.map((band) => new Graphics()

@@ -47,6 +47,7 @@ export function stepBoneyardWorldTick(
   }>) => readonly HubInventoryItem[],
   hostileScenePaused = false,
   lightEnvironment: BoneyardLightEnvironment = {},
+  enhancedEffects = true,
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -210,6 +211,7 @@ export function stepBoneyardWorldTick(
     collision,
   )
   const lootStep = stepBoneyardLootStore(world.loot, {
+    enhancedEffects,
     participants: lootParticipants,
     placement: lootPlacement,
     registerWorldPainter,
@@ -354,6 +356,7 @@ export function stepBoneyardWorldTick(
     }
   })
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
+    enhancedEffects,
     puppetTargets: boneyardMouthWorldTargets({ ...world, loot }, lightEnvironment),
     dialogueBusy: (encounter?.voiceTicksRemaining ?? 0) > 0
       || world.tutorial?.narration.current != null || (world.tutorial?.narration.pending.length ?? 0) > 0,
@@ -403,7 +406,7 @@ export function stepBoneyardWorldTick(
     },
     lightAt: worldLight.scalarAt,
     nativeMovementView: {
-      arenaBounds: activeBounds, enhancedEffects: true,
+      arenaBounds: activeBounds, enhancedEffects,
       cameras: worldLight.cameras,
     },
     players: Object.fromEntries([

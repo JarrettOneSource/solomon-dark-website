@@ -1,10 +1,11 @@
 import { gameRunWorldTick } from '../core-kernels/game-run.ts'
+import { frozenWorldQuality } from '../client/frozen-world-quality.ts'
 import { Application, Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
 import 'pixi.js/unsafe-eval'
 import type { Camera } from '../../editor/render.ts'
 import { nativeBoneyardMainLayers } from '../../editor/render.ts'
 import { NATIVE_TUTORIAL_CAMERA_TARGET, nativeTutorialCameraBounds } from '../core-kernels/native-tutorial.ts'
-import { cameraZoomForFov, DEFAULT_GAME_SETTINGS, gameLightQuality, NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
+import { cameraZoomForFov, DEFAULT_GAME_SETTINGS, gameLightQuality } from '../game-settings.ts'
 import type { BoneyardEnemyEventSnapshot, GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { copyPrimarySpellTransient } from '../client/primary-spell-transient-copy.ts'
@@ -165,6 +166,7 @@ export async function createBoneyardWorldRenderer(
             ? null
             : NATIVE_TUTORIAL_CAMERA_TARGET)
         : null,
+      options.initialSnapshot.enhancedEffects,
     )
   } catch (error) {
     application.stage.removeChild(world, worldNameplates.container, worldSpeech.container)
@@ -235,7 +237,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.arenaBaseRenderer = 'retail-editor-field-capture+native-road-layout'
   canvas.dataset.arenaGroundRenderer = 'retail-editor-field-capture-web-override'
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
-  canvas.dataset.buildingLightingGrid = NATIVE_BROWSER_ENHANCED_EFFECTS ? '3x3' : '2x2'
+  canvas.dataset.buildingLightingGrid = options.initialSnapshot.enhancedEffects ? '3x3' : '2x2'
   canvas.dataset.wallLighting = 'native-endpoint-vertex-gradient'
   canvas.dataset.complexShadows = 'native-indexed-owner-mesh'
   canvas.dataset.treeComplexShadowOutline = 'native-main-variant-table'
@@ -460,6 +462,8 @@ export async function createBoneyardWorldRenderer(
       frameCount,
       snapshot.levelUpBarrier !== null || snapshot.run.phase === 'game-over',
     )
+    canvas.dataset.enhancedEffects = String(snapshot.enhancedEffects)
+    canvas.dataset.buildingLightingGrid = snapshot.enhancedEffects ? '3x3' : '2x2'
     const painter = scene.update(
       snapshot,
       options.playerId,
@@ -643,6 +647,11 @@ export async function createBoneyardWorldRenderer(
     },
     render(snapshot) {
       renderFrame(snapshot, true)
+    },
+    setEnhancedEffects(enabled) {
+      if (destroyed || lastRenderedSnapshot === null) return
+      const next = frozenWorldQuality(lastRenderedSnapshot, enabled)
+      if (next !== lastRenderedSnapshot) renderFrame(next, false)
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return

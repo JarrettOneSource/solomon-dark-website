@@ -216,7 +216,7 @@ export function nativeFireParticlePlan(
     x: state.origin.x + Math.cos(angle) * radius + state.direction.x * travel,
     y: state.origin.y - 10 + Math.sin(angle) * radius + state.direction.y * travel,
   }
-  const fadeStep = nativeFireParticleFadeStep(state.id)
+  const fadeStep = nativeFireParticleFadeStep(state.id, state.enhancedEffects)
   const red = clamp01(1 - fadeStep * ageTicks)
   const greenBlue = clamp01(1 - fadeStep * 2 * ageTicks)
   return {
@@ -359,6 +359,7 @@ export function nativeFireEmberPlan(
     'ageTicks' | 'height' | 'id' | 'life' | 'phase' | 'position'
   >,
   presentationSample = Math.floor(state.ageTicks),
+  enhancedEffects = true,
 ): NativeFireEmberPlan {
   const bodyAlpha = Math.min(state.life, 1)
   const frame = NATIVE_FIRE_EMBER_FRAME_FIRST + Math.floor(state.phase) % 4
@@ -392,8 +393,7 @@ export function nativeFireEmberPlan(
         offset: { x: 0, y: state.height },
         scale: 0.5,
       }),
-      additiveDraw(0),
-      additiveDraw(1),
+      ...(enhancedEffects ? [additiveDraw(0), additiveDraw(1)] : []),
       fireActorDraw('BadGuys', NATIVE_FIRE_EMBER_GLOW_RECORD, 'glow', {
         alpha: Math.min(state.life * 0.2, 1),
         blend: 'add',
@@ -402,7 +402,7 @@ export function nativeFireEmberPlan(
         tint: 0xff8000,
       }),
     ],
-    groundGlow: state.height < 0
+    groundGlow: enhancedEffects && state.height < 0
       ? {
           alpha: Math.fround((1 - state.height / -50 * 0.5) * 0.25),
           blend: 'normal',

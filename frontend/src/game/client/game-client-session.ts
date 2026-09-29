@@ -117,6 +117,7 @@ export interface GameClientSessionOptions {
   beginCollegeIntro?: boolean
   character: PlayerCharacterConfig
   cheatsEnabled?: boolean
+  enhancedEffects?: boolean
   credential: string
   diagnostics?: GameClientDiagnostics
   declineTutorial?: boolean
@@ -213,6 +214,7 @@ export interface GameClientSession {
   sendInput(input: PlayerCharacterInput): void
   sendTutorialAction(action: NativeTutorialSurfaceAction): void
   setCheatsEnabled(enabled: boolean): void
+  setEnhancedEffects(enabled: boolean): void
   setHubActivity(activity: HubPlayerActivity | null): void
   setOnlinePreferences(preferences: GameOnlinePreferences): void
   inviteToParty(playerId: string): void
@@ -1164,6 +1166,13 @@ export function connectGameClientSession(
           enabled,
         }))
       },
+      setEnhancedEffects(enabled) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-enhanced-effects',
+          enabled,
+        }))
+      },
       setHubActivity(activity) {
         if (
           !welcome
@@ -1461,6 +1470,7 @@ export function connectGameClientSession(
       ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
       beginCollegeIntro: options.beginCollegeIntro === true,
       cheatsEnabled: options.cheatsEnabled === true,
+      enhancedEffects: options.enhancedEffects ?? true,
       ...(options.declineTutorial ? { declineTutorial: true } : {}),
       onlinePreferences,
       protocolVersion: GAME_PROTOCOL_VERSION,

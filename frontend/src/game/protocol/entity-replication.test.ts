@@ -99,6 +99,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       loot: [],
       lootEvents: [],
       mageLightningPulses: [{
+        enhancedEffects: false,
         contact: {
           kind: 'target-attached',
           localOffset: { x: -3.5, y: 7.25 },
@@ -687,8 +688,9 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.ok(Math.abs(enemy.position.x - 123.45) <= 1 / 16)
   assert.ok(Math.abs(enemy.animation.gaitPose - 2.75) <= 1 / 1024)
   assert.deepEqual(reconstructed.world.enemyEvents, initial.world.enemyEvents)
-  assert.equal(frame.world.mageLightningPulses[0]?.length, 18)
+  assert.equal(frame.world.mageLightningPulses[0]?.length, 19)
   assert.equal(frame.world.mageLightningPulses[0]?.[17], 7)
+  assert.equal(frame.world.mageLightningPulses[0]?.[18], false)
   assert.deepEqual(
     reconstructed.world.mageLightningPulses,
     initial.world.mageLightningPulses,
@@ -1213,6 +1215,7 @@ test('enemy projectile-effect codecs cover every native alpha domain', () => {
     'fire-burst': { atlas: 'BadGuys', blendMode: 'add', entry: 251, lifetimeTicks: 16 },
     'guided-impact': { atlas: 'BadGuys', blendMode: 'add', entry: 110, lifetimeTicks: 20 },
     'firebolt-trail': { atlas: 'BadGuys', blendMode: 'normal', entry: 255, lifetimeTicks: 8 },
+    'demon-bomb-particle': { atlas: 'BadGuys', blendMode: 'add', entry: 267, lifetimeTicks: 40 },
   } as const satisfies Record<
     BoneyardEnemyProjectileEffectSnapshot['kind'],
     Readonly<Pick<

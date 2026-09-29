@@ -11,7 +11,7 @@ import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyStoreStepCont
 import { NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK, NATIVE_DEMON_RAW_FIRE_BURST_TICKS, NATIVE_IMP_CONSTRUCTION_MAXIMUM, NATIVE_IMP_SPLIT_CHILD_COUNT, NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM } from './programs.ts'
 import { spawnProjectile } from './projectile-emission.ts'
 import { drawInteger, drawUnit, radialVector, randomRadialDisplacement, signedUnit } from './random.ts'
-import { SKELETON_BASE_FRAGMENT_ENTRIES, spawnHeartmongerShatter, spawnSkeletonShatter } from './skeleton-death.ts'
+import { skeletonDeathFragmentEntries, spawnHeartmongerShatter, spawnSkeletonShatter } from './skeleton-death.ts'
 import { spawnSpiderRemains } from './spider-remains.ts'
 export function stepDyingActor(
   work: WorkingStep,
@@ -200,6 +200,7 @@ function spawnPortalTerminalEffects(
   for (let index = 0; index < 12; index += 1) {
     spawnBouncer(work, actor, tick, 27, 'portal-black-smoke', {
       kind: 'smoky-bouncer',
+      opacityTimer: 1.5,
       tint: 0,
       velocity: radialVector(index / 12 * 360, 1),
     })
@@ -249,7 +250,7 @@ function spawnZombieTerminalEffects(
 
   const entries = [
     ...ZOMBIE_BASE_FRAGMENT_ENTRIES,
-    ...ZOMBIE_ENHANCED_FRAGMENT_ENTRIES,
+    ...(work.enhancedEffects ? ZOMBIE_ENHANCED_FRAGMENT_ENTRIES : []),
     ...(actor.config.family.rotten ? ZOMBIE_FLYBLOWN_FRAGMENT_ENTRIES : []),
     2093,
     2093,
@@ -294,13 +295,13 @@ function spawnZombieTerminalEffects(
   const opacityTimer = 10
   spawnSimpleDeathEffect(work, actor, tick, {
     alpha: 0.6,
-    alphaLossPerTick: 0.01,
+    alphaLossPerTick: work.enhancedEffects ? 0.01 : 0.02,
     alphaMultiplier: 0.6,
     atlas: 'DeadHawg',
     blendMode: 'normal',
     entry: 30,
     kind: 'fade-perspective-clipped',
-    lifetimeTicks: 1_000,
+    lifetimeTicks: work.enhancedEffects ? 1_000 : 500,
     opacityTimer,
     presentationOwner: 'background',
     role: 'zombie-clipped-fade',
@@ -349,7 +350,7 @@ function spawnWraithTerminalEffects(
 ): void {
   spawnWraithDissolve(work, actor, tick)
 
-  const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
+  const entries = [...skeletonDeathFragmentEntries(work.enhancedEffects)]
   for (let index = 0; index < entries.length; index += 1) {
     const swap = drawInteger(work, entries.length)
     ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
@@ -361,7 +362,7 @@ function spawnWraithTerminalEffects(
       const velocity = { x: direction.x * 1.5, y: direction.y }
       const distance = 15 + drawUnit(work) * 30
       return {
-        kind: 'smoky-bouncer',
+        kind: work.enhancedEffects ? 'smoky-bouncer' : 'bouncer',
         position: {
           x: actor.position.x + velocity.x * (distance + 2),
           y: actor.position.y + velocity.y * distance,
@@ -461,7 +462,7 @@ function spawnCoffinTerminalEffects(
   actor: BoneyardEnemyActor,
   tick: number,
 ): void {
-  const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
+  const entries = [...skeletonDeathFragmentEntries(work.enhancedEffects)]
   for (let index = 0; index < entries.length; index += 1) {
     const swap = drawInteger(work, entries.length)
     ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]

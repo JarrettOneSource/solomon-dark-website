@@ -212,6 +212,7 @@ function spawnWebFragments(
       const radius = 15 + drawUnit(work) * 10
       heading += 72 + (drawUnit(work) * 2 - 1) * 10
       return {
+        opacityTimer: 1.5,
         scaleY: 0.75,
         position: { x: position.x + velocity.x * (radius + 2), y: position.y + velocity.y * radius },
         velocity,

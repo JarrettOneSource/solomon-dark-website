@@ -1,4 +1,5 @@
 import { hubActionFeedback } from '../protocol/codecs/economy.ts'
+import { createNativeStoneskinWarp } from '../core-kernels/native-stoneskin.ts'
 import { nativeWeldMeteorRootPosition } from '../core-kernels/native-weld-meteor.ts'
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { boneyardMouthWorldTargets } from '../core-server/boneyard-world-targets.ts'
@@ -109,6 +110,7 @@ export interface RestoredGameSaveDocument {
 const SIMULATION_KEYS = [
   'accumulatorSeconds',
   'combatRng',
+  'enhancedEffects',
   'gameRng',
   'hallOfFameClockStartedAtTick',
   'levelUpBarrier',
@@ -518,6 +520,9 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     throw new Error('game save state belongs to an inactive mod')
   }
   onlyKeys(rawState, 'game save simulation', SIMULATION_KEYS)
+  if (typeof rawState.enhancedEffects !== 'boolean') {
+    throw new Error('game save simulation enhancedEffects must be boolean')
+  }
   let playerEntities = validatePlayerStore(rawState.playerEntities, continuation.summary.playerId)
   for (const { playerId } of playerEntities.identities) {
     playerEntities = migratePlayerStarterEquipmentAppearance(playerEntities, playerId)
@@ -747,7 +752,7 @@ function normalizeSimulation(
   const source = record(value, 'game save simulation')
   const savedTick = integerWithin(source.tick, 'game save simulation tick', 0, Number.MAX_SAFE_INTEGER)
   rejectUnexpectedKeys(source, 'game save simulation', [
-    ...SIMULATION_KEYS,
+    ...SIMULATION_KEYS.filter(key => key !== 'enhancedEffects' || sourceSchemaVersion >= 46),
     ...(sourceSchemaVersion < 21 ? ['lightProviderOrder'] : []),
     'playerOfferRng',
   ])
@@ -756,6 +761,7 @@ function normalizeSimulation(
   const normalized = {
     accumulatorSeconds: source.accumulatorSeconds,
     combatRng: source.combatRng ?? createNativeRng(0),
+    enhancedEffects: sourceSchemaVersion < 46 ? true : source.enhancedEffects,
     gameRng,
     hallOfFameClockStartedAtTick: source.hallOfFameClockStartedAtTick ?? 0,
     levelUpBarrier: source.levelUpBarrier,
@@ -1199,6 +1205,7 @@ function normalizeSavedMageLightningPulses(
 
     return {
       ...pulse,
+      enhancedEffects: sourceSchemaVersion < 46 ? true : pulse.enhancedEffects,
       lightRegistration: { ...lightRegistration },
       painterRegistrations: painterRegistrations.map(registration => ({
         ...(registration as NativeWorldManagerRegistration),
@@ -1678,6 +1685,18 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   const transients = array(source.transients, 'game save primary spell transients').map(
     (value, index) => {
       const transient = record(value, `game save primary spell transient ${index}`)
+      if (sourceSchemaVersion < 46 && (transient.kind === 'harden-shard' || transient.kind === 'player-staff-pike-break')) {
+        return { ...transient, enhancedShadow: true }
+      }
+      if (sourceSchemaVersion < 46 && transient.kind === 'air') {
+        return { ...transient, enhancedEffects: true, chained: false }
+      }
+      if (sourceSchemaVersion < 46 && transient.kind === 'weld-channel') {
+        return { ...transient, enhancedEffects: true }
+      }
+      if (sourceSchemaVersion < 46 && (transient.kind === 'fire' || transient.kind === 'earth-impact')) {
+        return { ...transient, enhancedEffects: true }
+      }
       if (sourceSchemaVersion < 32 && transient.kind === 'fire-patch') {
         const fire = { ...transient }
         fire.horizontalSign = 1
@@ -1731,6 +1750,14 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): Ga
   let rng = parseNativeRng(source.rng, 'game save secondary RNG')
   const actors = array(source.actors, 'game save secondary actors').map((value, index) => {
     const actor = record(value, `game save secondary actor ${index}`)
+    if (sourceSchemaVersion < 46 && actor.kind === 'storm-strike') {
+      return { ...actor, enhanced: true }
+    }
+    if (sourceSchemaVersion < 46 && actor.kind === 'golem-death') {
+      // The old enhanced bit redundantly meant Iron; variant already preserves
+      // that material. Historical shipped quality was always On.
+      return { ...actor, enhanced: true, lifetimeTicks: 667 }
+    }
     if (actor.kind === 'leviathan' || actor.kind === 'leviathan-appendage') {
       // Older saves stored equipment-resolved damage; bolts now resolve the live caster once.
       const rank = finiteNumber(actor.rank, 'saved Leviathan rank')
@@ -1758,6 +1785,10 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): Ga
   })
   return {
     ...source, actors, rng,
+    stoneskinWarp: sourceSchemaVersion < 46
+      ? Object.values(players).some(value => Number(record(value, 'saved secondary player').stoneskinTicksRemaining) > 0)
+        ? createNativeStoneskinWarp(rng).positions : null
+      : source.stoneskinWarp,
     events: sourceSchemaVersion < 30
       ? array(source.events, 'game save secondary events').map(event => ({
           ...record(event, 'game save secondary event'), gain: 1,
@@ -2355,7 +2386,12 @@ function normalizeWorld(
       demonSkullEncounter: sourceSchemaVersion < 34 ? createNativeDemonSkullEncounter() : normalizeDemonSkullEncounter(enemies.demonSkullEncounter),
       bossNarration: sourceSchemaVersion < 34 ? createNativeBossNarration() : enemies.bossNarration,
       facultyVoiceController: sourceSchemaVersion < 34 ? null : enemies.facultyVoiceController,
-      bossSpells: sourceSchemaVersion < 34 ? [] : enemies.bossSpells,
+      bossSpells: sourceSchemaVersion < 34 ? [] : sourceSchemaVersion < 46
+        ? array(enemies.bossSpells, 'saved boss spells').map(value => {
+            const spell = record(value, 'saved boss spell')
+            return spell.kind === 'blightning' ? { ...spell, enhancedEffects: true } : spell
+          })
+        : enemies.bossSpells,
       puppetHits: sourceSchemaVersion < 34 ? [] : nativeWorldPuppetHits(enemies.puppetHits, 'saved Puppet hits', savedTick),
       detachedCrows: sourceSchemaVersion < 34 ? [] : enemies.detachedCrows,
       actors: enemyActors,

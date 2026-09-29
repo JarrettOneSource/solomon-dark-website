@@ -4992,6 +4992,7 @@ test('Game Over keeps every live Mage pulse age valid through wire, late join, a
         nextMageLightningPulseId: 2,
         mageLightningPulses: [{
           id: 1, ownerActorId: 1, tick: frozenTick - age, seed: 42,
+          enhancedEffects: false,
           source: { x: 200, y: 200 }, midpoint: { x: 250, y: 200 },
           endpoint: { x: 300, y: 200 },
           contact: contactKind === 'world'

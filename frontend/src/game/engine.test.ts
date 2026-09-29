@@ -205,6 +205,7 @@ function inertSession() {
     sendHubAction() {},
     sendInput() {},
     setCheatsEnabled() {},
+    setEnhancedEffects() {},
     setHubActivity() {},
     setOnlinePreferences() {},
     inviteToParty() {},

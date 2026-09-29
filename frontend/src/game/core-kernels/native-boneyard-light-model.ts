@@ -754,6 +754,12 @@ export function nativeSecondaryProviderLightSource(
       radius: Math.fround(2 * Math.max(0, pointGain)),
     }
   }
+  if (actor.kind === 'electric-burn-flare') {
+    let intensity = Math.fround(1)
+    for (let age = 0; age < Math.floor(actor.ageTicks); age++) intensity = Math.fround(intensity - Math.fround(.05))
+    return { castsDirectionalShadow: false, intensity: Math.max(0, intensity),
+      position: actor.position, radius: actor.radius }
+  }
   if (actor.kind === 'ring-fire-fragment') {
     return {
       castsDirectionalShadow: false,

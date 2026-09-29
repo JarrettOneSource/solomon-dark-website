@@ -17,7 +17,7 @@ import type {
   WorkingStep,
 } from './model.ts'
 import { NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS as PROGRAM } from './programs.ts'
-import { spawnProjectileImpactEffects, spawnProjectileTrails } from './projectile-effects.ts'
+import { spawnDemonBombParticle, spawnProjectileImpactEffects, spawnProjectileTrails } from './projectile-effects.ts'
 import {
   spawnDemonExplosion,
   spawnDemonFireHandoff,
@@ -266,7 +266,10 @@ function stepDemonBomb(
   const stepped = {
     ...moved, speed, verticalOffset, verticalVelocity, bounceVelocity, settledTicksRemaining,
   }
-  if (settledTicksRemaining > 0) return stepped
+  if (settledTicksRemaining > 0) {
+    if (speed >= 1) spawnDemonBombParticle(work, stepped, tick)
+    return stepped
+  }
   context.onProjectileExplosion?.(stepped.position)
   spawnDemonExplosion(work, stepped, tick)
   spawnDemonFireHandoff(work, stepped, tick, stepped.position)

@@ -94,8 +94,9 @@ export function nativePlayerMagicShieldPlan(
 export function planeOrbMesh(
   actor: NativeSecondaryActorState,
   presentationFrame: number,
+  enhancedEffects = actor.enhanced,
 ): NativeSecondaryMeshDraw {
-  const segmentCount = actor.enhanced ? 15 : 7
+  const segmentCount = enhancedEffects ? 15 : 7
   const vertices: number[] = [0, 0]
   const uvs: number[] = [actor.position.x / 192, actor.position.y / 192]
   const indices: number[] = []

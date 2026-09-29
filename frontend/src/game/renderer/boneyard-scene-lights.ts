@@ -312,6 +312,8 @@ export class BoneyardSceneLights {
         || effect.worldKey !== `boneyard:${snapshot.world.runId}`
       ) continue
       const contactLight = buildNativeAirContactLightSource({
+        chained: effect.chained,
+        enhancedEffects: effect.enhancedEffects,
         ageTicks: effect.ageTicks,
         endpoint: {
           x: effect.endpoint.x - effect.origin.x,
@@ -376,6 +378,7 @@ export class BoneyardSceneLights {
         || effect.worldKey !== `boneyard:${snapshot.world.runId}`
       ) continue
       const pathSources = buildNativeAirPathLightSources({
+        enhancedEffects: effect.enhancedEffects,
         birthTick: effect.birthTick,
         endpoint: effect.endpoint,
         id: effect.id,

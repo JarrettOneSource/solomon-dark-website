@@ -7,7 +7,8 @@ import {
   nativeStockTextureFromImage,
 } from '../src/game/renderer/native-fixed-function-render-pipeline.ts'
 import { installNativeArenaRenderPipeline } from '../src/game/renderer/native-arena-render-pipeline.ts'
-import { createNativeLitSurfaceGrid } from '../src/game/renderer/boneyard-building-surface-view.ts'
+import { createNativeLitSurfaceGrid, createNativeSurfaceRedraw } from '../src/game/renderer/boneyard-building-surface-view.ts'
+import { nativeBuildingMeshGrid } from '../src/game/renderer/boneyard-static-surface-lighting.ts'
 import { NativeBoneyardSurfaceView } from '../src/game/renderer/native-boneyard-surface-view.ts'
 
 export async function inspectNativeRenderContracts() {
@@ -32,7 +33,7 @@ export async function inspectNativeRenderContracts() {
   const arena = installNativeArenaRenderPipeline(app.renderer)
   const target = RenderTexture.create({ width: 64, height: 64, alphaMode: 'no-premultiply-alpha' })
   const texture = textures[0].texture
-  const result = { sources: [], grids: [], roads: {}, missingRoad: {}, detachedScene: {} }
+  const result = { sources: [], grids: [], liveGrids: [], roads: {}, missingRoad: {}, detachedScene: {} }
   try {
     for (const { name, texture } of textures) {
       const sprite = new Sprite({ texture, width: 64, height: 64 })
@@ -63,6 +64,28 @@ export async function inspectNativeRenderContracts() {
       const geometry = surface.mesh.geometry
       const buffers = [...geometry.buffers]
       const shader = surface.mesh.shader
+      const redraw = createNativeSurfaceRedraw(surface, false)
+      app.stage.addChild(redraw.mesh)
+      for (const nextMode of [!enhanced, enhanced]) {
+        const plan = nativeBuildingMeshGrid(64, 64, nextMode)
+        const nextColors = new Uint8Array(plan.positions.length * 2).fill(255)
+        surface.setGeometry({ ...plan, colors: nextColors })
+        surface.update(new Array(nextMode ? 9 : 4).fill(.5))
+        app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
+        result.liveGrids.push({
+          fromEnhanced: enhanced, enhanced: nextMode,
+          geometryRetained: surface.mesh.geometry === geometry && redraw.mesh.geometry === geometry,
+          buffersRetained: buffers.every((buffer, index) => geometry.buffers[index] === buffer),
+          positionsDelivered: geometry.getBuffer('aPosition').data === plan.positions,
+          uvsDelivered: geometry.getBuffer('aUV').data === plan.uvs,
+          indicesDelivered: geometry.getIndex().data === plan.indices,
+          colorsDelivered: surface.colors === nextColors && geometry.getBuffer('aColor').data === nextColors,
+          vertexCount: geometry.getBuffer('aPosition').data.length / 2,
+          indexCount: geometry.getIndex().data.length,
+          colors: Array.from(surface.colors), pixel: pixel(app, target, 32, 32),
+        })
+      }
+      redraw.destroy()
       surface.destroy()
       result.grids.push({
         enhanced, initial, before, after, colors,

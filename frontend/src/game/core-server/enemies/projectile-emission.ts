@@ -212,6 +212,7 @@ export function stepMageLightningPulse(
   const contactOffset = randomRadialDisplacement(work, 15)
   const seed = work.rngState >>> 0
   const pulse: BoneyardMageLightningPulse = Object.freeze({
+    enhancedEffects: work.enhancedEffects,
     contact: clearTarget
       ? Object.freeze({
           kind: 'target-attached' as const,
@@ -311,7 +312,7 @@ export function spawnProjectile(
       : 0
   )
   const visualScale = kind === 'arrow'
-    ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.arrowInitialOpacity
+    ? work.enhancedEffects ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.arrowInitialOpacity : 5
     : kind === 'guided-missile'
       ? Math.fround(0.8999999761581421 + drawEnemyFloat(work, 0.20000004768371582))
       : kind === 'poison-pool'

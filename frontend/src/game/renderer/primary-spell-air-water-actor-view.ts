@@ -76,13 +76,18 @@ export class AirWaterActorSpellView {
     return this.state.kind
   }
 
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+  update(
+    state: PrimarySpellProjectileState | PrimarySpellTransientState,
+    _presentationFrame?: number,
+    _pointGain?: number,
+    enhancedEffects?: boolean,
+  ): void {
     if (!isNativeAirWaterActorState(state) || state.kind !== this.state.kind) return
     this.state = state
     this.sprites.forEach(resetSprite)
     if (state.kind === 'air-hurricane') {
       this.container.position.set(state.position.x, state.position.y)
-      nativeHurricaneVisualPlan(state).forEach((plan, index) => this.showSprite(
+      nativeHurricaneVisualPlan({ ...state, enhancedEffects: enhancedEffects ?? state.enhancedEffects }).forEach((plan, index) => this.showSprite(
         index,
         plan.role === 'core'
           ? this.textures.airWaterActors.hurricaneCore

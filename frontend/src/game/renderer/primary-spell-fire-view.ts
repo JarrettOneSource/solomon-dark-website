@@ -89,6 +89,8 @@ export class FireActorSpellView {
   update(
     state: PrimarySpellProjectileState | PrimarySpellTransientState,
     presentationFrame = state.ageTicks,
+    _pointGain?: number,
+    enhancedEffects = true,
   ): void {
     if (
       state.kind !== 'fire-ember'
@@ -111,7 +113,7 @@ export class FireActorSpellView {
       this.underlayContainer.position.set(glow.position.x, glow.position.y)
     }
     const plan = state.kind === 'fire-ember'
-      ? nativeFireEmberPlan(state, presentationFrame)
+      ? nativeFireEmberPlan(state, presentationFrame, enhancedEffects)
       : state.kind === 'fire-good-imp'
         ? nativeFireGoodImpPlan(state)
         : (() => {

@@ -9,7 +9,7 @@ import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { nativeEnemyDeathEffectIsBanish, nativeEnemyDeathEffectPlan, nativeEnemyDeathEffectViewResourcePlan } from './native-enemy-death-effect-presentation.ts'
 
 const kinds: Record<BoneyardEnemyDeathEffectSnapshot['kind'], true> = {
-  banish: true, 'banish-black': true, bouncer: true, 'smoky-bouncer': true,
+  banish: true, 'banish-black': true, bouncer: true, 'smoky-bouncer': true, 'boulder-bit': true,
   crow: true, fade: true, 'fade-additive': true,
   'fade-perspective': true, 'fade-perspective-clipped': true,
   'fade-scale-perspective': true, 'fade-scale': true, 'fire-array': true,
@@ -22,7 +22,7 @@ const lanes: Record<BoneyardEnemyDeathEffectSnapshot['presentationOwner'], true>
 }
 const inside = { x: -1000, y: -1000, w: 2000, h: 2000 }
 const outside = { ...inside, x: 10000 }
-const textures = { base: Object.fromEntries([1, 15, 333, 334, 335, 336].map(entry => [
+const textures = { base: Object.fromEntries([1, 15, 333, 334, 335, 336, 1834].map(entry => [
   nativeEnemySpriteRecord('BadGuys', entry).source, Texture.EMPTY,
 ])) } as BoneyardWorldTextures
 let server: ViteDevServer
@@ -180,8 +180,8 @@ test('mixed retirement preserves unrelated painters and surviving resources in b
 
 function fixture(kind: BoneyardEnemyDeathEffectSnapshot['kind'], shadow: boolean,
   presentationOwner: BoneyardEnemyDeathEffectSnapshot['presentationOwner']): BoneyardEnemyDeathEffectSnapshot {
-  return { ageTicks: 0, alpha: 1, atlas: 'BadGuys', blendMode: 'add', entry: 1,
-    height: 5, id: 1, kind, ownerActorId: 1,
+  return { ageTicks: 0, alpha: 1, atlas: 'BadGuys', blendMode: 'add', entry: kind === 'boulder-bit' ? 1834 : 1,
+    height: kind === 'boulder-bit' ? -5 : 5, id: 1, kind, ownerActorId: 1,
     painterRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
     presentationOwner, position: { x: 10, y: 20 }, rotationRadians: 0,
     scale: 1, scaleY: 1, shadow, spawnTick: 100, tint: 0xffffff }

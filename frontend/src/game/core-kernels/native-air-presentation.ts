@@ -26,6 +26,8 @@ const AIR_LIGHTNING_RANDOM_ANGLE_DEGREES = 65
 const AIR_LIGHTNING_RANDOM_RADIUS = 30
 const CONTACT_ALPHA_LEVELS = [1, 0.8, 0.6, 0.4, 0.2] as const
 const UNDERPOWERED_CONTACT_ALPHA_LEVELS = [0.5, 0.3, 0.1] as const
+const COARSE_CHAIN_CONTACT_ALPHA_LEVELS = [1, 0.6, 0.2] as const
+const COARSE_WEAK_CHAIN_CONTACT_ALPHA_LEVELS = [0.5, 0.1] as const
 const CONTACT_OFFSET_RADIUS = 10
 const CORONA_ANGLE_STEP_RADIANS = Math.PI / 180
 const SPLINE_NORMAL_DELTA = 0.001
@@ -101,13 +103,14 @@ export interface NativeAirContactLightPlan {
 }
 
 export interface NativeAirPathLightPlan {
-  castsDirectionalShadow: true
+  castsDirectionalShadow: boolean
   intensity: number
   position: NativeAirPoint
   radius: number
 }
 
 export interface NativeAirPathLightInput {
+  enhancedEffects?: boolean
   birthTick: number
   endpoint: NativeAirPoint
   id: number
@@ -134,6 +137,8 @@ export type NativeAirLightningFactoryPlan = Pick<
 >
 
 export interface NativeAirLightningInput {
+  chained?: boolean
+  enhancedEffects?: boolean
   ageTicks: number
   birthTick: number
   endpoint: NativeAirPoint
@@ -143,6 +148,8 @@ export interface NativeAirLightningInput {
 }
 
 export interface NativeAirRibbonLayerInput {
+  readonly enhancedEffects?: boolean
+  readonly ribbonFamily?: 'air' | 'flame-lash'
   readonly dark?: boolean
   readonly taperScale?: number
   readonly alpha: number
@@ -167,6 +174,8 @@ export interface NativeAirCoronaInput {
 }
 
 export interface NativeAirContactLightSourceInput {
+  chained?: boolean
+  enhancedEffects?: boolean
   ageTicks: number
   endpoint: NativeAirPoint
   id: number
@@ -182,6 +191,8 @@ interface NativeAirPresentationRandomSource {
 type NativeAirRandomSource = NativeAirPresentationRandomSource | (() => number)
 
 export interface NativeAirContactLightInput {
+  chained?: boolean
+  enhancedEffects?: boolean
   ageTicks: number
   id: number
   position: NativeAirPoint
@@ -212,7 +223,7 @@ export function buildNativeAirLightningPlan(
 }
 
 export function buildNativeAirLightningPlanFromFactory(
-  input: Pick<NativeAirLightningInput, 'ageTicks' | 'id' | 'underpowered'>,
+  input: Pick<NativeAirLightningInput, 'ageTicks' | 'id' | 'underpowered' | 'chained' | 'enhancedEffects'>,
   factory: NativeAirLightningFactoryPlan,
 ): NativeAirLightningPlan {
   const nativeAge = Math.max(0, Math.floor(input.ageTicks))
@@ -231,9 +242,7 @@ export function buildNativeAirLightningPlanFromFactory(
   }
   const contactAngle = contactSamples.angle
     + nativeAge * CORONA_ANGLE_STEP_RADIANS
-  const contactAlpha = input.underpowered
-    ? UNDERPOWERED_CONTACT_ALPHA_LEVELS[nativeAge] ?? 0
-    : CONTACT_ALPHA_LEVELS[nativeAge] ?? 0
+  const contactAlpha = nativeAirContactAlphaLevels(input)[nativeAge] ?? 0
 
   return {
     ...factory,
@@ -247,6 +256,8 @@ export function buildNativeAirLightningPlanFromFactory(
       seed: input.id,
     }),
     contactLight: buildNativeAirContactLightPlan({
+      chained: input.chained,
+      enhancedEffects: input.enhancedEffects,
       ageTicks: nativeAge,
       id: input.id,
       position: contactCenter,
@@ -283,6 +294,9 @@ export function buildNativeAirLightningFactoryPlan(
               0,
               input.underpowered ? 0x80ffff : 0xffffff,
               input.underpowered ? 0.5 : 1,
+              false,
+              1,
+              input.enhancedEffects === false ? 30 : AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
             ),
             buildRibbon(
               points,
@@ -293,6 +307,9 @@ export function buildNativeAirLightningFactoryPlan(
               15,
               0x00ffff,
               input.underpowered ? 0.25 : 0.5,
+              false,
+              1,
+              input.enhancedEffects === false ? 30 : AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
             ),
           ],
         }
@@ -306,7 +323,7 @@ export function buildNativeAirLightningFactoryPlan(
   }
 }
 
-/** Shared native 0x0052E020 ribbon builder used by Lightning and Flame Lash. */
+/** Native 0x00534510 Air/Dark and 0x0052E020 Flame Lash sampling families. */
 export function buildNativeAirRibbonLayer(
   input: NativeAirRibbonLayerInput,
 ): NativeAirRibbonLayer {
@@ -321,7 +338,25 @@ export function buildNativeAirRibbonLayer(
     input.alpha,
     input.dark ?? false,
     input.taperScale ?? 1,
+    input.enhancedEffects === false ? 30 : input.ribbonFamily === 'flame-lash' ? 7 : AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
   )
+}
+
+function nativeAirContactAlphaLevels(
+  input: Pick<NativeAirLightningInput, 'underpowered' | 'chained' | 'enhancedEffects'>,
+): readonly number[] {
+  // The first contact at 0x0053FFC0 always retains .2 decay. Only the
+  // chained contact at 0x00540603 selects .4 when Enhanced Effects is Off.
+  if (input.chained && input.enhancedEffects === false) {
+    return input.underpowered ? COARSE_WEAK_CHAIN_CONTACT_ALPHA_LEVELS : COARSE_CHAIN_CONTACT_ALPHA_LEVELS
+  }
+  return input.underpowered ? UNDERPOWERED_CONTACT_ALPHA_LEVELS : CONTACT_ALPHA_LEVELS
+}
+
+export function nativeAirContactLifetimeTicks(
+  input: Pick<NativeAirLightningInput, 'underpowered' | 'chained' | 'enhancedEffects'>,
+): number {
+  return nativeAirContactAlphaLevels(input).length
 }
 
 export function buildNativeAirCoronaPlan(
@@ -345,9 +380,7 @@ export function buildNativeAirContactLightPlan(
   input: NativeAirContactLightInput,
 ): NativeAirContactLightPlan | null {
   const nativeAge = Math.max(0, Math.floor(input.ageTicks))
-  const lifetimeTicks = input.underpowered
-    ? UNDERPOWERED_CONTACT_ALPHA_LEVELS.length
-    : AIR_LIGHTNING_CONTACT_LIFETIME_TICKS
+  const lifetimeTicks = nativeAirContactLifetimeTicks(input)
   if (nativeAge >= lifetimeTicks) return null
 
   const maximumIntensity = input.underpowered
@@ -371,6 +404,8 @@ export function buildNativeAirContactLightSource(
 ): NativeAirContactLightPlan | null {
   const samples = nativeContactSamples(input.id)
   const light = buildNativeAirContactLightPlan({
+    chained: input.chained,
+    enhancedEffects: input.enhancedEffects,
     ageTicks: input.ageTicks,
     id: input.id,
     position: {
@@ -408,7 +443,7 @@ export function buildNativeAirPathLightSources(
     const distanceSquared = Math.fround(dx * dx + dy * dy)
     if (distanceSquared < AIR_LIGHTNING_PATH_MINIMUM_DISTANCE ** 2) return
     result.push({
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: input.enhancedEffects ?? true,
       intensity,
       position: {
         x: Math.fround(candidate.x),
@@ -459,8 +494,9 @@ function buildRibbon(
   alpha: number,
   dark = false,
   taperScale = 1,
+  sampleSpacing = AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
 ): NativeAirRibbonLayer {
-  const parameterSamples = nativeParameterSamples(points[0], points[1])
+  const parameterSamples = nativeParameterSamples(points[0], points[1], sampleSpacing)
   const pairCount = parameterSamples.length
   const segmentCount = pairCount - 1
   const vertices = new Float32Array(pairCount * 4)
@@ -618,6 +654,7 @@ export function buildNativeAirBranchPlan(
 function nativeParameterSamples(
   source: NativeAirPoint,
   midpoint: NativeAirPoint,
+  sampleSpacing: number,
 ): Float32Array {
   const deltaX = Math.fround(Math.fround(midpoint.x) - Math.fround(source.x))
   const deltaY = Math.fround(Math.fround(midpoint.y) - Math.fround(source.y))
@@ -625,7 +662,7 @@ function nativeParameterSamples(
   const inverseDistance = nativeFastInverseSquareRoot(squaredDistance)
   const firstLegDistance = Math.fround(1 / inverseDistance)
   const spacingRatio = Math.fround(
-    firstLegDistance / AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
+    firstLegDistance / sampleSpacing,
   )
   const rawStep = Math.fround(AIR_LIGHTNING_SPLINE_DURATION / spacingRatio)
   const step = Math.min(AIR_LIGHTNING_MAX_PARAMETER_STEP, rawStep)

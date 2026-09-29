@@ -10,6 +10,7 @@ import { MAX_PRIMARY_SPELL_HIT_TARGETS } from '../game-protocol-limits.ts'
 import { nativeRngState, vector } from './native-state.ts'
 import {
   GameProtocolError,
+  boolean,
   finite,
   limitedArray,
   limitedString,
@@ -242,7 +243,7 @@ export function nativePlayerStaffTransient(
   }
   if (kind === 'player-staff-pike-break') {
     onlyKeys(source, field, [
-      'ageTicks', 'headingDegrees', 'id', 'kind', 'ownerId', 'position',
+      'ageTicks', 'enhancedShadow', 'headingDegrees', 'id', 'kind', 'ownerId', 'position',
       'presentationRng', 'targetId', 'worldKey',
     ])
     if (common.ageTicks >= NATIVE_STAFF_PIKE_BREAK_LIFETIME_TICKS) {
@@ -251,6 +252,7 @@ export function nativePlayerStaffTransient(
     return {
       ...common,
       headingDegrees: staffHeading(source.headingDegrees, `${field}.headingDegrees`),
+      enhancedShadow: boolean(source.enhancedShadow, `${field}.enhancedShadow`),
       kind,
       position: vector(source.position, `${field}.position`),
       presentationRng: nativeRngState(source.presentationRng, `${field}.presentationRng`),

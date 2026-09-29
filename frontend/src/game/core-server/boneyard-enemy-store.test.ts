@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { boneyardEnemyDeathEffectSnapshot as decodeDeathEffect } from '../protocol/codecs/enemy-effects.ts'
+import { projectBoneyardEnemyDeathEffect } from '../host/project-boneyard-enemies.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { nativeDemonArticulationRoot } from '../core-kernels/boneyard-demon-articulation.ts'
 import { NATIVE_ARROW_POISON_DURATION_SECONDS, NATIVE_MAGE_COLD_SLOW_TICKS, NATIVE_WRAITH_DAZZLE_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
@@ -647,6 +649,34 @@ test('native hostile flags begin on the Coffin rising edge and end on death', ()
   })
   assert.equal(killed.killed, true)
   assert.equal(boneyardEnemyActorFlags(killed.store.actors[0]!), 0)
+})
+
+test('Coffin emergence produces twenty independently replicated born-quality BoulderBits and retires them without its creator', () => {
+  const initial = withCoffinRemaining(spawnOne('quality-coffin-emergence', 'COFFIN', { x: 0, y: 0 }, FAR_PLAYERS), 1).store
+  const advance = (source: BoneyardEnemyStore, tick: number, enhancedEffects: boolean) => stepBoneyardEnemyStore(source, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT, projectileWorldBlocked: NO_WORLD_CONTACT,
+    lightAt: () => 1, players: FAR_PLAYERS, resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [], tick, enhancedEffects,
+  }).store
+  const on = advance(initial, 1, true)
+  const off = advance(initial, 1, false)
+  assert.deepEqual(on.actors, off.actors)
+  assert.deepEqual(on.steeringRngState, off.steeringRngState)
+  assert.equal(on.deathEffects.length, 20)
+  assert.equal(new Set(on.deathEffects.map(effect => effect.painterRegistration?.registrationOrdinal)).size, 20)
+  for (const [i, child] of off.deathEffects.entries()) {
+    assert.equal(child.kind, 'boulder-bit')
+    assert.equal(child.opacityTimer, 2)
+    assert.equal(child.shadow, false)
+    assert.deepEqual({ ...child, opacityTimer: 10, lifetimeTicks: 400, shadow: true }, on.deathEffects[i])
+    const wire = projectBoneyardEnemyDeathEffect(child)
+    assert.deepEqual(decodeDeathEffect(wire, 'coffin'), wire)
+    assert.throws(() => decodeDeathEffect({ ...wire, entry: 2008 }, 'coffin'), /Coffin emergence/)
+  }
+  const changed = advance({ ...on, actors: [] }, 2, false)
+  assert.equal(changed.deathEffects.length, 20)
+  assert.ok(changed.deathEffects.every(effect => effect.shadow && effect.lifetimeTicks === 400))
+  assert.equal(advance(changed, 402, false).deathEffects.length, 0)
 })
 
 test('Mage lighting reads the pre-action pose and only exact native pose four pauses charge', () => {
@@ -2935,6 +2965,32 @@ test('DemonBomb contact clears its fuse and detonates in the contact tick', () =
   emitted = step(emitted.store, 1, players)
   const bomb = emitted.store.projectiles[0]!
   assert.ok(bomb.settledTicksRemaining >= 100)
+  const airborne: BoneyardEnemyStore = { ...emitted.store, actors: [] }
+  const qualityStep = (enabled: boolean, source: BoneyardEnemyStore = airborne, tick = 2) => stepBoneyardEnemyStore(source, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT, projectileWorldBlocked: NO_WORLD_CONTACT,
+    lightAt: () => 1, players: {}, resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [], tick, enhancedEffects: enabled,
+  })
+  const on = qualityStep(true)
+  const off = qualityStep(false)
+  const born = on.store.projectileEffects.filter(effect => effect.kind === 'demon-bomb-particle')
+  assert.equal(born.length, 1)
+  assert.equal(off.store.projectileEffects.some(effect => effect.kind === 'demon-bomb-particle'), false)
+  assert.deepEqual(on.store.projectiles, off.store.projectiles)
+  assert.deepEqual(on.store.steeringRngState, off.store.steeringRngState)
+  assert.deepEqual(on.playerDamage, off.playerDamage)
+  assert.ok(born[0]!.entry >= 267 && born[0]!.entry <= 270)
+  assert.ok(born[0]!.alphaLossPerTick >= .019999 && born[0]!.alphaLossPerTick <= .040001)
+  const settling: BoneyardEnemyStore = { ...airborne,
+    projectiles: [{ ...bomb, speed: .5, settledTicksRemaining: 10 }] }
+  assert.equal(qualityStep(true, settling).store.projectileEffects.some(effect => effect.kind === 'demon-bomb-particle'), false,
+    'the native trail branch excludes a slow bomb even while its fuse remains positive')
+  const retained = qualityStep(false, on.store, 3).store.projectileEffects.filter(effect => effect.kind === 'demon-bomb-particle')
+  assert.equal(retained.length, 1)
+  assert.equal(retained[0]!.id, born[0]!.id)
+  assert.equal(retained[0]!.alphaLossPerTick, born[0]!.alphaLossPerTick)
+  assert.equal(retained[0]!.scale, Math.fround(born[0]!.scale * .95))
+  assert.equal(qualityStep(false, { ...on.store, projectiles: [] }, 80).store.projectileEffects.some(effect => effect.kind === 'demon-bomb-particle'), false)
   const contacted = step({ ...emitted.store, actors: [] }, 2, {
     player: livingTarget(bomb.position.x, bomb.position.y),
     golem: { ...livingTarget(bomb.position.x + 10, bomb.position.y), summoned: true },

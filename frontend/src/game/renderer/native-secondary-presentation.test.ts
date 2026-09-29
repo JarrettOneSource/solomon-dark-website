@@ -47,6 +47,7 @@ import {
 } from './native-secondary-field-presentation.ts'
 import {
   nativeGolemFacing,
+  nativeGolemDeathPresentationPlan,
   nativeGolemPresentationPlan,
 } from './native-secondary-golem-presentation.ts'
 import {
@@ -64,9 +65,9 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'storm-drop', 'storm-strike', 'prismatic-wave', 'freeze-wave', 'freeze-wave-visual',
   'ice-blast', 'frost-burn-flare', 'earthquake', 'earthquake-scenery-wobble', 'earthquake-quake',
   'earthquake-dust', 'earthquake-debris',
-  'golem', 'golem-death', 'teleport-burst', 'magic-circle',
+  'golem', 'golem-death', 'golem-assembly-debris', 'teleport-burst', 'magic-circle',
   'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
-  'magic-trap-burst', 'electric-burn', 'flash-response-fade', 'flash-response-grow',
+  'magic-trap-burst', 'electric-burn', 'electric-burn-flare', 'electric-burn-arc', 'flash-response-fade', 'flash-response-grow', 'stoneskin-chip', 'planewalker-mote',
   'dampen-wave', 'dampened-projectile', 'dampened-smoke', 'shield-break',
   'shield-explosion', 'acid-rain', 'acid-drop', 'mindblast-burst',
   'mindblast-shockwave', 'ring-fire-explosion',
@@ -82,7 +83,7 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     damage: 1,
     enhanced: true,
     endpoint: { x: 140, y: 240 },
-    frame: kind === 'moving-fire' || kind === 'fire-patch' ? 46 : kind === 'dampened-smoke' ? 10 : 0,
+    frame: kind === 'moving-fire' || kind === 'fire-patch' ? 46 : kind === 'dampened-smoke' ? 10 : kind === 'golem-assembly-debris' ? 2008 : 0,
     freezeTicks: 0,
     golem: kind === 'golem' ? {
       ...nativeInitialGolemArticulation({ x: 100, y: 200 }, 0),
@@ -213,9 +214,9 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
     assert.ok(['ordinary-dynamic', 'zanim'].includes(plan.queueFamily), kind)
     if (![
       'shockwave', 'mindblast-shockwave', 'fire-burn', 'ether-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
-      'earthquake-scenery-wobble',
+      'earthquake-scenery-wobble', 'electric-burn-arc',
     ].includes(kind)) {
-      assert.ok(plan.draws.length + plan.underlayDraws.length > 0, `${kind} unexpectedly became invisible`)
+      assert.ok(plan.draws.length + plan.underlayDraws.length + plan.backgroundDraws.length > 0, `${kind} unexpectedly became invisible`)
     }
   }
 })
@@ -316,7 +317,7 @@ test('the complete secondary light census stays split between providers and Misc
     'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
     'ether-drain', 'comet', 'ring-fire-fragment',
   ])
-  const transientProviders = new Set<NativeSecondaryActorKind>(['ring-fire-explosion'])
+  const transientProviders = new Set<NativeSecondaryActorKind>(['ring-fire-explosion', 'electric-burn-flare'])
   const miscWriters = new Set<NativeSecondaryActorKind>([
     'magic-circle', 'fire-burn', 'ether-burn', 'electric-burn',
   ])
@@ -2507,6 +2508,7 @@ test('Golem death replays thirty rock records plus the short additive star', () 
   const birth = nativeSecondaryPresentationPlan({
     ...actor('golem-death'),
     ageTicks: 0,
+    enhanced: false,
     variant: 1,
   })
   assert.equal(birth.draws.length, 31)
@@ -2519,7 +2521,24 @@ test('Golem death replays thirty rock records plus the short additive star', () 
   assert.equal(nativeSecondaryPresentationPlan({
     ...actor('golem-death'),
     ageTicks: 15,
+    enhanced: false,
   }).draws.length, 30)
+})
+
+test('Golem death keeps Iron identity independent of born quality and retains enhanced shadows and long-lived debris', () => {
+  for (const variant of [0, 1]) {
+    const input = { ...actor('golem-death'), ageTicks: 0, variant, presentationRng: createNativeRng(123) }
+    const on = nativeGolemDeathPresentationPlan({ ...input, enhanced: true })
+    const off = nativeGolemDeathPresentationPlan({ ...input, enhanced: false })
+    assert.equal(on.draws.filter(draw => draw.role.startsWith('golem-death-shadow-')).length, 30)
+    assert.equal(off.draws.some(draw => draw.role.startsWith('golem-death-shadow-')), false)
+    assert.deepEqual(on.draws.filter(draw => !draw.role.startsWith('golem-death-shadow-')), off.draws)
+    const oldOn = nativeGolemDeathPresentationPlan({ ...input, enhanced: true, ageTicks: 150 })
+    const oldOff = nativeGolemDeathPresentationPlan({ ...input, enhanced: false, ageTicks: 150 })
+    assert.equal(oldOn.draws.filter(draw => draw.role.startsWith('golem-death-rock-')).length, 30)
+    assert.equal(oldOff.draws.length, 0)
+    assert.equal(nativeGolemDeathPresentationPlan({ ...input, enhanced: true, ageTicks: 667 }).draws.length, 0)
+  }
 })
 
 test('Earthquake uses the exact floor-copy thresholds and Region largest-vector reducer', () => {

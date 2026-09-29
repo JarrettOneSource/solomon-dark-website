@@ -61,6 +61,7 @@ import {
 import type { PlayerEntityStore } from './player-entity-store.ts'
 
 export interface PlayerStaffCombatSystemContext {
+  readonly enhancedEffects?: boolean
   readonly combatAdmissionEnabled: boolean
   readonly enemies: BoneyardEnemyStore
   readonly inputs: Readonly<Record<string, PlayerCharacterInput>>
@@ -280,6 +281,7 @@ export function stepPlayerStaffCombatSystem(
               target,
               impact.pikeBreakPresentationRng,
               target.headingDegrees,
+              context.enhancedEffects ?? true,
             ), registerWorldPainter))
             nextId += 1
           }
@@ -309,6 +311,7 @@ export function stepPlayerStaffCombatSystem(
         context.tick,
         registerWorldPainter,
         context.lethalObserver,
+        context.enhancedEffects ?? true,
       )
       enemies = contact.enemies
       events.push(...contact.events)
@@ -436,6 +439,7 @@ function applyStaffContact(
   tick: number,
   registerWorldPainter: RegisterNativeWorldPainter,
   lethalObserver?: BoneyardEnemyLethalObserver,
+  enhancedEffects = true,
 ): Readonly<{
   enemies: BoneyardEnemyStore
   events: readonly BoneyardEnemySemanticEvent[]
@@ -465,6 +469,7 @@ function applyStaffContact(
   const acceptedTargets: StaffCombatTarget[] = []
   for (const target of targets) {
     const damaged = damageBoneyardEnemy(enemies, {
+      enhancedEffects,
       actorId: target.actorId,
       amount: damage * nativeHagathaBossDamageFactor(
         ownedPerkSelectors,

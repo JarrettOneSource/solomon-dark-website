@@ -24,7 +24,7 @@ export function spawnDemonSkullWarmup(work: WorkingStep, actor: BoneyardDemonSku
 export function spawnUnholyEyeTrail(work: WorkingStep, owner: DeathEffectOwner, tick: number, headingDeg: number): void {
   const alpha = Math.fround(1 - drawEnemyFloat(work, Math.fround(.95)))
   const alphaLossPerTick = Math.fround(Math.fround(.025) + drawEnemyFloat(work, Math.fround(.035)))
-  spawnSimpleDeathEffect(work, owner, tick, { alpha, alphaLossPerTick: Math.fround(alphaLossPerTick * .5), atlas: 'Unholy', entry: 0,
+  spawnSimpleDeathEffect(work, owner, tick, { alpha, alphaLossPerTick: Math.fround(alphaLossPerTick * (work.enhancedEffects ? .5 : 1)), atlas: 'Unholy', entry: 0,
     blendMode: 'add', kind: 'fade-perspective', lifetimeTicks: 1000, role: 'eye-laser-trail',
     rotationDeg: headingDeg, scale: 1, tint: UNHOLY_GREEN })
 }

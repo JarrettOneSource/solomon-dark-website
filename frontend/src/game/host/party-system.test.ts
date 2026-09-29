@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { setPartyEnhancedEffects } from './party-system.ts'
 
 import {
   acceptPartyInvitation,
@@ -28,6 +29,7 @@ test('every connected player starts as leader of an opaque public singleton', ()
   let state = players('player-a', 'player-b')
   assert.deepEqual(partyForPlayer(state, 'player-a'), {
     ...identity('player-a'),
+    enhancedEffects: true,
     leaderPlayerId: 'player-a',
     memberPlayerIds: ['player-a'],
     visibility: 'public',
@@ -100,6 +102,7 @@ test('recovery restores the original ordered membership and leader independently
 
   assert.deepEqual(partyForPlayer(state, 'returning-member'), {
     ...identity('returning-member'),
+    enhancedEffects: true,
     leaderPlayerId: 'original-leader',
     memberPlayerIds: ['original-leader', 'returning-member', 'later-member'],
     visibility: 'invite-only',
@@ -243,6 +246,21 @@ test('party projection exposes member access and only leader join requests', () 
       playerId: 'player-b',
     }]]),
   ).joinRequests.length, 0)
+})
+
+test('only the party leader changes the retained mode and unrelated parties stay independent', () => {
+  const initial = players('leader', 'guest', 'other')
+  const joined = joinPartyPlayer(initial, 'guest', identity('leader').id, 3).state
+  const off = setPartyEnhancedEffects(joined, 'leader', false)
+  assert.equal(off.accepted, true)
+  assert.equal(partyForPlayer(off.state, 'guest')?.enhancedEffects, false)
+  assert.equal(partyForPlayer(off.state, 'other')?.enhancedEffects, true)
+  const denied = setPartyEnhancedEffects(off.state, 'guest', true)
+  assert.equal(denied.reason, 'not-leader')
+  assert.strictEqual(denied.state, off.state)
+  assert.strictEqual(setPartyEnhancedEffects(off.state, 'leader', false).state, off.state)
+  const on = setPartyEnhancedEffects(off.state, 'leader', true)
+  assert.equal(partyForPlayer(on.state, 'guest')?.enhancedEffects, true)
 })
 
 function players(...playerIds: string[]): PartySystemState {

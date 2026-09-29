@@ -86,6 +86,12 @@ export function nativePlayerStaffPikeBreakDraws(
   for (let index = 0; index < stepped.debris.length; index += 1) {
     const particle = stepped.debris[index]!
     if (particle.alpha <= 0) continue
+    if (state.enhancedShadow) draws.push(Object.freeze({
+      alpha: Math.min(1, particle.alpha), blendMode: 'normal', entry: 55,
+      offset: Object.freeze({ x: particle.position.x, y: particle.position.y + 2 }),
+      role: `pike-break-shadow-${index}`, rotationRadians: particle.rotationDegrees * Math.PI / 180,
+      scaleX: 1, scaleY: .75, tint: 0,
+    }))
     draws.push(Object.freeze({
       alpha: Math.min(1, particle.alpha),
       blendMode: 'normal',

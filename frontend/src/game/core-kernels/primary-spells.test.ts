@@ -1627,6 +1627,7 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
     direction: { x: 0, y: -1 },
     id: 2,
     kind: 'fire',
+    enhancedEffects: true,
     lightRegistration: null,
     origin: { ...fireball.position },
     ownerId: PLAYER_ID,
@@ -2665,6 +2666,7 @@ test('Earth tests the advanced-to-next native capsule and breaks at the advanced
     ageTicks: 0,
     birthTick: state.tick + 1,
     charge: released.charge,
+    enhancedEffects: true,
     id: impact.id,
     kind: 'earth-impact',
     lightRegistration: null,
@@ -2984,7 +2986,7 @@ test('Ethereal Boulder solid contact uses its advanced capsule and full terminal
   )).length, Math.floor(Math.max(8, 30 * boulder.scale)))
 })
 
-test('Flame Lash emission owns the independent six-word endpoint fade', () => {
+test('Flame Lash emission owns independent six-word endpoint and five-word source fades', () => {
   const profile = weldedProfile(1003, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3])
   const source = { ...directSpellHarness('earth'), primarySkill: profile }
   const result = stepSpellKernel(source, true, 100, true, () => true, profile).state
@@ -2992,7 +2994,10 @@ test('Flame Lash emission owns the independent six-word endpoint fade', () => {
   assert.ok(fade?.kind === 'weld-flame-lash-fade')
   assert.equal(fade.variant, 'endpoint')
   assert.equal(fade.record, 35)
-  assert.deepEqual(result.rng, advanceNativeRngWords(source.rng, 6))
+  const sourceFade = result.spells.transients.find(effect => effect.kind === 'weld-flame-lash-fade' && effect.variant === 'source')
+  assert.ok(sourceFade?.kind === 'weld-flame-lash-fade')
+  assert.equal(sourceFade.alpha, .5)
+  assert.deepEqual(result.rng, advanceNativeRngWords(source.rng, 11))
 })
 
 test('Blizzard emission owns its two-glow four-word program and no endpoint extras', () => {

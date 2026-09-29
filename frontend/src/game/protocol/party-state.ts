@@ -18,6 +18,7 @@ export interface PartyPlayerProfile extends PlayerSocialProfile {
 }
 
 export interface PartyMembership {
+  readonly enhancedEffects: boolean
   readonly id: string
   readonly joinCode: string
   readonly leaderPlayerId: string

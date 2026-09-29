@@ -285,6 +285,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   damageMultiplier: (targetId: number, ownerId: string) => number = () => 1,
   registerWorldPainter?: RegisterNativeWorldPainter,
   etherDrainFields: readonly Vector2[] = [],
+  enhancedEffects = true,
 ): BoneyardSecondaryCombatResult {
   const removedProjectileIds = new Set(result.removedProjectileIds)
   let enemies = removedProjectileIds.size === 0
@@ -301,6 +302,7 @@ export function resolveBoneyardNativeSecondaryCombat(
     const actor = enemies.actors.find(({ id }) => id === targetId)
     if (!actor || actor.shieldHealth <= 0) continue
     const damaged = damageBoneyardEnemy(enemies, {
+      enhancedEffects,
       actorId: actor.id,
       amount: actor.shieldHealth,
       lethalObserver,
@@ -321,6 +323,7 @@ export function resolveBoneyardNativeSecondaryCombat(
       damageMultiplier(contact.targetId, contact.ownerId),
       registerWorldPainter,
       etherDrainFields,
+      enhancedEffects,
     )
     enemies = damaged.enemies
     events.push(...damaged.events)
@@ -383,6 +386,7 @@ function applyContact(
   damageMultiplier = 1,
   registerWorldPainter?: RegisterNativeWorldPainter,
   etherDrainFields: readonly Vector2[] = [],
+  enhancedEffects = true,
 ): BoneyardSecondaryCombatResult {
   if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
     throw new RangeError('secondary damage multiplier must be finite and non-negative')
@@ -396,6 +400,7 @@ function applyContact(
     return dx * dx + dy * dy < 1600
   })
   const damaged = damageBoneyardEnemy(source, {
+    enhancedEffects,
     actorId: contact.targetId,
     etherDrainCapture,
     hitStrength: contact.hitStrength,

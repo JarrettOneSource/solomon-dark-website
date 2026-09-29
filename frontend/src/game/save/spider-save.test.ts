@@ -86,6 +86,7 @@ test('published schema 32 saves retain projectile state and initialize only upco
     integrity: 'local-only', loadedBoneyard: loaded, mods: [], modState: {}, playerId: 'owner', state: saved,
   }))
   legacy.schemaVersion = 32
+  delete legacy.continuation.simulation.enhancedEffects
   delete legacy.profile.advancedUnlocks
   const world = legacy.continuation.simulation.world
   for (const key of ['silks', 'silkFragments', 'spiderRemains', 'webbedPlayers', 'spiderSpitTicksRemaining']) {

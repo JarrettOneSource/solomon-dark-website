@@ -1949,6 +1949,7 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
       ageTicks: 0,
       birthTick: 1,
       buildId: 1003,
+      enhancedEffects: true,
       direction: { x: 1, y: 0 },
       endpoint: { x: 20, y: 0 },
       id: 10,
@@ -1980,12 +1981,21 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
   const flameFades = result.spells.transients.filter(({ kind }) => (
     kind === 'weld-flame-lash-fade'
   ))
-  assert.equal(flameFades.length, 2)
-  assert.ok(flameFades.every((effect) => (
+  assert.equal(flameFades.length, 3)
+  const chainFades = flameFades.filter(effect => effect.kind === 'weld-flame-lash-fade' && effect.variant === 'chain')
+  assert.equal(chainFades.length, 2)
+  assert.ok(chainFades.every((effect) => (
     effect.kind === 'weld-flame-lash-fade'
       && effect.variant === 'chain'
       && effect.record === 35
   )))
+  const sourceFades = flameFades.filter(effect => effect.kind === 'weld-flame-lash-fade' && effect.variant === 'source')
+  assert.equal(sourceFades.length, 1)
+  const sourceFade = sourceFades[0]!
+  assert.ok(sourceFade.kind === 'weld-flame-lash-fade')
+  assert.equal(sourceFade.record, 35)
+  assert.equal(sourceFade.alpha, .5)
+  assert.equal(sourceFade.alphaStep, Math.fround(.1))
   assert.equal(result.spells.transients.some((effect) => (
     effect.kind === 'weld-channel' && effect.id !== 10 && effect.targetId === 'enemy:2'
   )), true)
@@ -3090,6 +3100,8 @@ function transient(options: {
         endpoint: { x: 205, y: 0 },
         hurricaneCharge: 0,
         kind: 'air',
+        chained: false,
+        enhancedEffects: true,
         lightRegistration: {
           managerLane: 'transient',
           registrationOrdinal: options.id,

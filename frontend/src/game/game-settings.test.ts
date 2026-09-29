@@ -41,6 +41,22 @@ class MemoryStorage implements GameSettingsStorage {
   setItem(key: string, value: string) { this.values.set(key, value) }
 }
 
+test('Enhanced Effects persists Off and migrates old settings to On without losing other choices', () => {
+  const storage = new MemoryStorage()
+  assert.equal(readGameSettings(storage).enhancedEffects, true)
+  const off = { ...DEFAULT_GAME_SETTINGS, cameraFovPercent: 110, enhancedEffects: false }
+  assert.equal(setGameSettings(off, storage).enhancedEffects, false)
+  assert.deepEqual(readGameSettings(storage), off)
+  setGameSettings({ ...off, enhancedEffects: true }, storage)
+  assert.equal(readGameSettings(storage).enhancedEffects, true)
+  const legacy = { ...off } as Partial<typeof off>
+  delete legacy.enhancedEffects
+  storage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(legacy))
+  assert.deepEqual(readGameSettings(storage), { ...off, enhancedEffects: true })
+  storage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ ...off, enhancedEffects: 'false' }))
+  assert.equal(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
+})
+
 test('complete Settings defaults retain native presentation and enable online extensions', () => {
   resetGameSettingsListenersForTests()
   const storage = new MemoryStorage()
@@ -56,6 +72,7 @@ test('complete Settings defaults retain native presentation and enable online ex
     enableGlobalChat: true,
     enableOnlineFeatures: true,
     enableSharedHub: true,
+    enhancedEffects: true,
     lightQualityPercent: 100,
     musicVolumePercent: 100,
     multipleShadows: true,

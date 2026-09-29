@@ -115,6 +115,7 @@ export interface NativePlayerStaffContactKnockback {
 
 export interface NativePlayerStaffPikeBreakVfx {
   readonly ageTicks: number
+  readonly enhancedShadow: boolean
   readonly headingDegrees: number
   readonly id: number
   readonly kind: 'player-staff-pike-break'
@@ -671,9 +672,11 @@ export function createNativeStaffPikeBreakVfx(
   target: NativeStaffTarget,
   presentationRng: NativeRngState,
   headingDegrees: number,
+  enhancedShadow = true,
 ): NativePlayerStaffPikeBreakVfx {
   return Object.freeze({
     ageTicks: 0,
+    enhancedShadow,
     headingDegrees: normalizedDegrees(headingDegrees),
     id,
     kind: 'player-staff-pike-break',

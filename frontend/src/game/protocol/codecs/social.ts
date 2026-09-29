@@ -286,6 +286,7 @@ export function localPartyState(value: unknown): LocalPartyState {
   }
   const party = record(source.party, 'state.party')
   onlyKeys(party, 'state.party', [
+    'enhancedEffects',
     'id',
     'joinCode',
     'leaderPlayerId',
@@ -384,6 +385,7 @@ export function localPartyState(value: unknown): LocalPartyState {
     invitations,
     joinRequests,
     party: {
+      enhancedEffects: boolean(party.enhancedEffects, 'state.party.enhancedEffects'),
       id: partyIdentifier(party.id, 'state.party.id'),
       joinCode: partyJoinCode(party.joinCode, 'state.party.joinCode'),
       leaderPlayerId,

@@ -95,6 +95,7 @@ function releaseCocoon(work: WorkingStep, actor: BoneyardEnemyActor, tick: numbe
       const radius = 15 + drawUnit(work) * 10
       heading += 72 + (drawUnit(work) * 2 - 1) * 10
       return {
+        opacityTimer: 1.5,
         scaleY: 0.75,
         velocity,
         position: { x: actor.position.x + velocity.x * (radius + 2), y: actor.position.y + velocity.y * radius },

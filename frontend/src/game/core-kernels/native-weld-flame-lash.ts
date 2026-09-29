@@ -5,6 +5,7 @@ import {
 import type { Vector2 } from './vector.ts'
 
 export const NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP = Math.fround(0.2)
+export const NATIVE_WELD_FLAME_LASH_COARSE_FADE_ALPHA_STEP = Math.fround(0.4)
 export const NATIVE_WELD_FLAME_LASH_FADE_RECORD = 35
 
 export interface NativeWeldFlameLashFadeState {
@@ -24,7 +25,7 @@ export interface NativeWeldFlameLashFadeState {
   readonly position: Vector2
   readonly record: 35
   readonly rotationDegrees: number
-  readonly variant: 'chain' | 'endpoint'
+  readonly variant: 'chain' | 'endpoint' | 'source'
   readonly vector: readonly number[]
   readonly wrapperScalar: number
   readonly worldKey: string
@@ -32,6 +33,7 @@ export interface NativeWeldFlameLashFadeState {
 
 export function createNativeWeldFlameLashFade(input: {
   readonly alpha?: number
+  readonly enhancedEffects?: boolean
   readonly direction: Vector2
   readonly id: number
   readonly origin: Vector2
@@ -48,6 +50,22 @@ export function createNativeWeldFlameLashFade(input: {
   const overwrittenRotation = drawNativeFloat(input.rng, 360)
   const rotation = drawNativeFloat(overwrittenRotation.state, 360)
   let rng = rotation.state
+  if (input.variant === 'source') {
+    const radius = drawNativeFloat(rng, 15)
+    const heading = drawNativeFloat(radius.state, 360)
+    const scale = drawNativeFloat(heading.state, .5)
+    const radial = directionFromHeading(heading.value)
+    return { rng: scale.state, actor: {
+      ageTicks: 0, alpha: .5, alphaStep: Math.fround(input.enhancedEffects === false ? .4 : .1),
+      baseScale: Math.fround(.75 + scale.value), birthTick: input.tick, buildId: 1003,
+      colorGreen: 1, direction: { ...input.direction }, id: input.id, kind: 'weld-flame-lash-fade',
+      lightRegistration: null, origin: { ...input.origin }, ownerId: input.ownerId,
+      position: { x: Math.fround(input.origin.x + radial.x * radius.value),
+        y: Math.fround(input.origin.y + radial.y * radius.value) },
+      record: 35, rotationDegrees: rotation.value, variant: 'source', vector: [...input.vector],
+      wrapperScalar: 1, worldKey: input.worldKey,
+    } }
+  }
   let colorGreen = Math.fround(0.75)
   if (input.variant === 'endpoint') {
     const color = drawNativeFloat(rng, Math.fround(0.5))
@@ -65,7 +83,9 @@ export function createNativeWeldFlameLashFade(input: {
     actor: Object.freeze({
       ageTicks: 0,
       alpha: input.alpha ?? 1,
-      alphaStep: NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP,
+      alphaStep: input.enhancedEffects === false
+        ? NATIVE_WELD_FLAME_LASH_COARSE_FADE_ALPHA_STEP
+        : NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP,
       baseScale,
       birthTick: input.tick,
       buildId: 1003,

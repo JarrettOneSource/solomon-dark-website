@@ -190,7 +190,7 @@ export function nativeEnemyDeathEffectPlan(
   return Object.freeze({
     effect: main,
     position: Object.freeze({ ...effect.position }),
-    shadow: effect.shadow
+    shadow: effect.shadow && (effect.kind !== 'boulder-bit' || effect.height !== 0)
       ? Object.freeze({
           alpha: effect.alpha,
           atlas: effect.atlas,
@@ -216,7 +216,7 @@ export function nativeEnemyDeathEffectPainterLayer(
   }
   return {
     id: `enemy-death-effect:${effect.id}`,
-    queueFamily: 'zanim',
+    queueFamily: effect.kind === 'boulder-bit' ? 'ordinary-dynamic' : 'zanim',
     registration: effect.painterRegistration,
     sortBias: effect.painterSortBias ?? 0,
     worldY: effect.position.y,

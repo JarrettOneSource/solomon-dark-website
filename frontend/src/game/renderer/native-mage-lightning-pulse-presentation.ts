@@ -46,6 +46,7 @@ export type NativeMageLightningContact =
   | NativeMageLightningWorldContact
 
 export interface NativeMageLightningPulseInput {
+  readonly enhancedEffects?: boolean
   readonly contact: NativeMageLightningContact
   /** Independently sampled factory endpoint; it is not the contact center. */
   readonly endpoint: Readonly<Vector2>
@@ -108,6 +109,7 @@ export function nativeMageLightningPulsePlan(
   const localEndpoint = subtract(input.endpoint, input.source)
   const localMidpoint = subtract(input.midpoint, input.source)
   const factory = buildNativeAirLightningFactoryPlan({
+    enhancedEffects: input.enhancedEffects,
     ageTicks,
     birthTick: input.tick,
     endpoint: localEndpoint,
@@ -153,6 +155,7 @@ export function nativeMageLightningPulsePlan(
     midpoint: { ...input.midpoint },
     pathLights: ageTicks === 0
       ? buildNativeAirPathLightSources({
+          enhancedEffects: input.enhancedEffects,
           birthTick: input.tick,
           endpoint: input.endpoint,
           id: input.seed,

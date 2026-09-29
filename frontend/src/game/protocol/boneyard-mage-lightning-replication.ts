@@ -4,7 +4,7 @@ import type {
 } from './game-state.ts'
 
 const POSITION_SCALE = 16
-const FRAME_LENGTH = 18
+const FRAME_LENGTH = 19
 
 export function boneyardMageLightningPulseFrame(
   pulse: BoneyardMageLightningPulseSnapshot,
@@ -38,6 +38,7 @@ export function boneyardMageLightningPulseFrame(
     pulse.painterRegistrations[1]!.registrationOrdinal,
     pulse.painterRegistrations[2]?.registrationOrdinal ?? -1,
     pulse.lightRegistration.registrationOrdinal,
+    pulse.enhancedEffects,
   ]
   if (!boneyardMageLightningPulseFrameIsValid(frame)) {
     throw new Error('Boneyard Mage lightning pulse cannot be encoded')
@@ -73,6 +74,7 @@ export function boneyardMageLightningPulseFrameIsValid(
     && frame[17] !== frame[14]
     && frame[17] !== frame[15]
     && frame[17] !== frame[16]
+    && typeof frame[18] === 'boolean'
 }
 
 export function materializeBoneyardMageLightningPulse(
@@ -86,6 +88,7 @@ export function materializeBoneyardMageLightningPulse(
     y: dequantize(frame[12]),
   }
   return {
+    enhancedEffects: frame[18],
     contact: frame[10] === 0
       ? { kind: 'world', position: contactPoint }
       : {

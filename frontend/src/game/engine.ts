@@ -49,6 +49,7 @@ export interface SessionOptions {
   beginCollegeIntro?: boolean
   character: PlayerCharacterConfig
   cheatsEnabled?: boolean
+  enhancedEffects?: boolean
   diagnostics?: GameClientDiagnostics
   declineTutorial?: boolean
   endpoint: GameEndpoint
@@ -108,6 +109,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     ...(options.beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     character: options.character,
     cheatsEnabled: options.cheatsEnabled === true,
+    enhancedEffects: options.enhancedEffects ?? true,
     ...(options.declineTutorial ? { declineTutorial: true } : {}),
     onlinePreferences: options.onlinePreferences ?? DEFAULT_GAME_ONLINE_PREFERENCES,
     profile: options.profile,

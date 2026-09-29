@@ -16,7 +16,7 @@ import {
   signedUnit,
 } from './random.ts'
 import {
-  SKELETON_BASE_FRAGMENT_ENTRIES,
+  skeletonDeathFragmentEntries,
 } from './skeleton-death.ts'
 
 /** 0x0049D0D0 and 0x0049E8F0 share the smoke constructor with different authored parameters. */
@@ -65,7 +65,7 @@ export function spawnFacultyDyingEffects(work: WorkingStep, actor: BoneyardEnemy
 
 export function spawnFacultyFinale(work: WorkingStep, actor: BoneyardEnemyActor, tick: number): void {
   if (actor.config.enemyToken !== 'DIREFACULTY') throw new Error('Faculty finale requires Faculty config')
-  const entries: number[] = [...SKELETON_BASE_FRAGMENT_ENTRIES]
+  const entries: number[] = [...skeletonDeathFragmentEntries(work.enhancedEffects)]
   for (let index = 0; index < entries.length; index += 1) {
     const other = drawInteger(work, entries.length)
     ;[entries[index], entries[other]] = [entries[other]!, entries[index]!]

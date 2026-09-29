@@ -4,6 +4,7 @@ export const EARTH_FRAGMENT_SUBCLASS_ALPHA_STEP = Math.fround(0.025)
 export const EARTH_FRAGMENT_BASE_ALPHA_STEP = Math.fround(0.015)
 
 export interface EarthImpactSeed {
+  enhancedEffects?: boolean
   birthTick: number
   charge: number
   id: number
@@ -97,7 +98,7 @@ function createFragments(seed: EarthImpactSeed): MutableEarthFragment[] {
       : Math.fround(0.45)
     const fragment: MutableEarthFragment = {
       alive: true,
-      alpha: EARTH_FRAGMENT_ENHANCED_ALPHA,
+      alpha: seed.enhancedEffects === false ? 2 : EARTH_FRAGMENT_ENHANCED_ALPHA,
       bounceCount: 0,
       bounceSeed: verticalVelocity,
       height: Math.fround(-earthVisualUnitRandom(seed.id, lane(index, 5)) * 50 * q),

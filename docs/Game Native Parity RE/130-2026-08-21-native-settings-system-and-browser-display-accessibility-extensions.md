@@ -1026,3 +1026,234 @@ resolution-dependent target-size findings preserved. These Settings checks do
 not claim a particular late-wave FPS gain or reopen report37's separate
 accepted performance result. Only this acceptance documentation changes after
 the final gate; publication and cleanup receipts belong to the report archive.
+
+## Report38 reopening: complete Enhanced Effects mode, 2026-09-29
+
+The user now authorizes finishing Enhanced Effects Off. The earlier deferral
+above is historical, not a current acceptance boundary. This reopening begins
+from accepted `d91a3ea8576003c7f991c3e10d7e2a3640f54779` and preserves the
+paused redraw, retained Hail and Report09 opaque-world batching fixes.
+
+### Boundary and ownership before implementation
+
+The system is the complete native `Game.FastCPU`/`0x00B3BCAD` mode: its setting
+writers, constructor-latched state, live update branches and live drawing
+branches, including shared simulation and random draws. It is not Light
+Quality, camera shake, Multiple Shadows, a generic effect population cap or a
+request to disable all nonessential art. New profiles and old data without a
+mode retain the shipped On default.
+
+The retained native settings evidence establishes a process-global byte,
+loaded with the settings file and applied live by `0x005DAEF0`. It does not
+establish a retail gameplay multiplayer replication protocol. The retained
+March 27 multiplayer investigation found Dark Cloud content services and
+AI allies, but no verified live gameplay host/join path in this beta. The
+Website therefore needs an explicit multiplayer adaptation rather than an
+invented claim about a native peer's authority.
+
+The proposed cutover uses the Website's existing authoritative world and
+host/party-leader ownership. A saved browser preference seeds a newly owned
+game. An existing world's effective mode comes from the host, is included in
+snapshots and continuation saves, and is not overwritten by a joining peer's
+different preference. The existing owner can change it while paused or active;
+guests and observers cannot silently change another owner's simulation.
+In the public shared College, one party's next-game preference must not change
+the common world or other parties. That distinction must be visible in the
+Settings surface and verified at party creation, run entry and return.
+
+Current-mode reads must not be substituted for constructor latches. Existing
+particles retain their native birth state and age where stock latches the
+setting; future births use the new mode. Live geometry or movement readers
+observe the new mode without resetting tick, RNG, actors, damage or identity.
+The old fixed-On producer must disappear from all supported consumers rather
+than coexist with a second disconnected renderer-only switch.
+
+### Recovery status and validation contract
+
+Implementation has not begun at this checkpoint. Retained source identifies
+movement, Frost/Hail counts, secondary actor density, weather, projectile and
+death lifetimes/shadows, Air and split geometry, and Building lighting grids.
+The retained projectile catalog alone contains twenty flag-bearing methods;
+it is not an exhaustive census. The next required evidence is an exact-image
+instruction/relocation census, review of every direct and adjacent multi-byte
+reader, and classification of aliases and constructor-versus-live behavior.
+Every member must receive an evidence-backed disposition before acceptance.
+
+Validation must cover observable On/Off differences and unaffected controls,
+not merely the presence of the setting field: old-default migration, strict
+wire/save admission, complete kernel branches and RNG/retirement boundaries,
+owner/guest/observer commands, late join/reconnect/save-resume, actual built
+desktop/touch Settings and paused redraw, and paired controlled late-wave
+On/Off performance. No measurement has yet been made for this reopening and
+no Off implementation or performance improvement is claimed here.
+
+### Turn1c instruction reconciliation, September 29
+
+The implementation is now in progress. The preceding paragraph describes the
+initial checkpoint only. An instruction and relocation census of the exact
+retail image (`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`)
+finds 118 direct flag-bearing instructions. A nearest catalog function is only
+a navigation label, not a reliable function boundary. The remaining recovery
+is checked against complete surrounding branches, not isolated flag reads.
+
+* DemonBomb `0x00603CA0`, especially `0x00603EFE..0x00603F24`, enters its
+  optional FireParticle tail only while the post-damping speed is at least
+  one. A settled bomb with a positive fuse does not create that child. The
+  tail at `0x0060413B` is absent with Enhanced Effects Off. It multiplies
+  `Anim_FireParticle` scale by 1.25 and the constructor's base fade by
+  `0.4000000059604645`; the resulting fade range is .02 through .04. This is
+  not the ordinary Fireball tail's half-fade customization.
+* ElectricBurn `0x00629188` gates its source corona and all chained visuals
+  on a positive arc count. The source's damage and hit-flash path precedes
+  that gate. Thus the zero-arc Magic Trap modifier does not acquire a new
+  corona merely because it shares `Mod_ElectricBurn`. Both the source and
+  each chained contact use `Anim_FadeLightning` under `ZAnimLit`, with born
+  alpha .5/.75 and decrement .2 On or .4 Off. The apparent scale-times-.2
+  customization is overwritten by `1 + Float(.5)` at `0x006292B2..0x006292E4`
+  and `0x00629654..0x00629686`. Preserving the intermediate .2 scale would
+  reproduce neither final object. The chained ribbon calls the shared Air
+  factory at `0x0062953A`; it must remain separate from the contact corona.
+  Primary-origin modifier records have a projectile identity but no secondary
+  skill identity. Their presentation must not invent one from the numeric
+  projectile id.
+* Harden chip `0x00548638` and full breakup `0x00654C51` set both the
+  `Anim_AdditiveBouncer` shadow byte and life 10 only in the On branch.
+  Off retains constructor life 2 and no shadow. These are birth latches,
+  not permission to remove existing shards when the mode changes. Records
+  446 through 450 and the independent normal-blend breakup Fade are the
+  existing shared family documented in entry 121.
+* Silk's `0x005F9160` changes the fragment shadow byte, then multiplies the
+  unmodified constructor life 2 by .75 in both modes. The shared bouncer
+  default of 10 for other enhanced death fragments cannot be applied to
+  these explicit-life children.
+
+These rows are recovered-pending-validation. No final parity or performance
+disposition is implied by this checkpoint. Exact light-wrapper ownership,
+strict field admission, preserved live-instance clocks and retained buffers
+are included in the implementation and acceptance obligations.
+
+### Complete native reader disposition map
+
+The companion `report38-enhanced-effects-readers.json` enumerates all118 direct instructions exactly once, preserving their native addresses, recovered owners, sampling time, source and test files. Nearest catalog labels are not accepted as function boundaries. Each group below is implemented; final-candidate gate and browser/performance acceptance are recorded in the subsequent acceptance section, not implied by this inventory.
+
+| References | Recovered owner and sampling | Native On/Off contract |
+| --- | --- | --- |
+| `0x456ddb` | FallBouncer landing; birth | On enables its born shadow; Off omits it. Both retain the explicit life 2 override, not the ordinary enhanced corpse life 10. |
+| `0x45e445` | Anim_CalledRock draw; live draw | Only the airborne base copy is conditional on the current flag. The main rock, motion, identity and lifetime remain intact; grounded base remains absent. |
+| `0x460f21`, `0x461061` | UltraBanish mega-death bones; live birth cadence and birth shadow | On births every eligible update; Off only on the native third-update cadence. Explicit life 20 remains in both modes, with independently latched shadow. |
+| `0x468f0b` | Arena weather; live update | Storm mode uses 20 or 10 new drops for On or Off. Ordinary rain remains 3. Existing drops/splashes retain their clocks and rainfall audio ownership. |
+| `0x46fdca`, `0x50f15a`, `0x51198a`, `0x5199bf`, `0x51a4da`, `0x51fd46` | Arena and College post-main player hit capture; live draw | On adds the cached diffuse player hit composite after the native world pass; Off omits this extra pass without removing ordinary hit feedback. The cached timer cubing and .45 alpha factor remain independent of Complex Lighting. |
+| `0x47b630`, `0x47fd39`, `0x485168`, `0x48c2a5` | Spider, Wraith and web/cocoon breakup bouncers; birth | The born shadow follows the flag. Explicit short-life overrides, including the shared 2*.75 life, take precedence over generic enhanced-fragment defaults; existing children survive mode changes. |
+| `0x483698` | Badguy movement update clock; live update | The illuminated visible native clock is 2 On or 5 Off; the existing offscreen 15 and dark 10 clocks remain distinct. Shared authority chooses one world mode, not a per-peer movement clock. |
+| `0x48cff9`, `0x48d3d3`, `0x48d591`, `0x48d6e7`, `0x48d8e3`, `0x48dab3`, `0x48dc4f`, `0x48dd65` | Skeleton/Archer/Mage death and equipment fragments; birth | Native reduced fragment membership and constructor shadow/life choices are applied through the shared bouncer and per-weapon recipes. On-only life overrides of 10/15 become constructor life 2 Off; unrelated explicit overrides remain unchanged. |
+| `0x494cfb`, `0x495213`, `0x495385`, `0x4955a6` | Zombie death fragments and corpse fade; birth | Native optional fragment membership, shadow and life choices use the world mode. The corpse fade selects the actual On/Off decrement rather than deleting the whole corpse or suppressing its rewards. |
+| `0x4956ce`, `0x49588c`, `0x4959e2`, `0x495aae`, `0x495c02`, `0x495dc2`, `0x495f59` | Wraith death children; birth | The native reduced bone membership and smoky-versus-ordinary bouncer choice stay separate from inherited life/shadow selection. Existing independently owned children retain their born type and parameters. |
+| `0x49ac18` | Coffin emergence; birth | Twenty independent BoulderBits use the recovered real RNG draw program, BadGuys1834/1835, life10/shadow On or life2/no-shadow Off. Both modes retain all twenty births, velocities and independent manager registrations. |
+| `0x49b5b8`, `0x49b776`, `0x49b8cc`, `0x49bab7`, `0x49bcd3`, `0x49becd`, `0x49c012` | Coffin terminal airborne fragments; birth | The complete native airborne recipe is retained; quality changes born life and shadow, not the independently accepted ground-decoration batching system or reward/retirement behavior. |
+| `0x49cb42`, `0x49d00c` | Maggot terminal root and offset fragments; birth | The root and each authored offset use native life10/shadow On or constructor life2/no-shadow Off. FadePerspective companions and immediate Maggot retirement remain separately owned. |
+| `0x49d665`, `0x49ea1f`, `0x49ebdd`, `0x49ed33`, `0x49ef63`, `0x49f0ef` | Faculty dying and terminal fragments; birth | Shared bouncer shadow/life and native reduced skeleton membership flow into both dying and terminal producers. Faculty smoke, equipment and gameplay ownership remain separate. |
+| `0x49fe30`, `0x4a00c9`, `0x4a02fb`, `0x4a05a3`, `0x4a075d`, `0x4a08a6`, `0x4a0a01` | Heartmonger terminal fragments; birth | The native reduced fragment recipe and separate enhanced skull life15 versus2 are retained, including the actual born shadow field and unchanged terminal effects. |
+| `0x4a2287` | Portal terminal black-smoky bouncers; birth | On/Off selects shadow. The explicit native life1.5 overrides the general On10/Off2 constructor policy in both cases. |
+| `0x52c40f` | Player Hurricane painter; live draw | The same eight retained native lanes feed the high/low branches: On uses the full lane/copy program, Off the alternating lanes. Core, charge, field damage and lane state are not reset. |
+| `0x52e22a` | Flame Lash ribbon constructor; birth geometry | Native sample spacing is7 On or30 Off. Its born geometry is not confused with the separately live ZAnimSplit bands. |
+| `0x52fbfa` | Stoneskin physical player hit chip; birth | One normal-blend BadGuys77 Bouncer retains native life2 in both modes; only its born shadow follows quality. This is not the apply/refresh/removal burst. |
+| `0x531ca2`, `0x531dff`, `0x53266c`, `0x5327d2`, `0x5330f7`, `0x53324e` | Shared Air/Flame Lash path-light factory pairs; birth light descriptor | Every recovered path-light pair copies the flag into directional-shadow eligibility. Ordinary light membership, positions, intensity and radius retain their separate owners. |
+| `0x532046` | First-link optional Flame Lash source flare; birth | Only the caller requesting this source flare creates it. Alpha.5 and the final scale.75..1.25 are retained; decrement.1 On/.4 Off is distinct from the endpoint and chain contacts. |
+| `0x5346e2` | Shared Air and Dark Lightning ribbon constructor; birth geometry | Native high/low sample spacing15/30 applies through the common factory, including boss dark Lightning and ElectricBurn arcs, without adding nonexistent coronas to a body-only producer. |
+| `0x540603` | Chained Air contact; birth | Only the chained contact chooses decrement.2 On/.4 Off. The first contact stays.2 in both modes, with independent weak-contact alpha/lifetime. |
+| `0x540f48`, `0x541543` | Flame Lash contact constructors; birth | The two contact sites use native born decrement.2/.4; they do not inherit the optional source flare decrement.1. |
+| `0x542e1f`, `0x543948` | Water/Frost primary strip density; birth program | The native length-dependent strip density uses10 On or20 Off spacing. The canonical primary owner, not a renderer-only count cap, determines the emitted program. |
+| `0x545a79`, `0x5f3318`, `0x5fc306`, `0x60a064`, `0x60a506`, `0x60aa98`, `0x60ba66`, `0x60be82`, `0x60c396` | Boulder, EBoulder and per-rock Hail debris callers; birth | Per-caller born shadow/lifetime uses the existing exact BoulderBit/bouncer kernels. Hail explicit life2*.75 remains an override. Per-rock contacts never become whole-carrier Boulder retirement. |
+| `0x546d99` | Stoneskin composite; live draw with shared birth grid | The full articulated body plus Clothes3 material is drawn twice, using the retained100-vertex warped grid On or full captured quad Off. Grid construction and shared RNG occur at activation/refresh even Off; toggling never rerolls it. |
+| `0x548638`, `0x654c51` | Harden chip and full AdditiveBouncer breakup; birth | Native life10 and additive black shadow On; constructor life2/no-shadow Off. The black shadow remains additive, not a fabricated darkening pass. Birth age and independent normal Fade are retained. |
+| `0x548f7c` | Planewalker moving Fade; birth | Born loss.1*Range(.15,.3) On or.1*Range(.25,.45) Off; already-born motes keep their own loss and consume no extra RNG when the mode changes. |
+| `0x5dad45`, `0x5db5db` | Native Settings read/apply and Website authority adaptation; setting writer | Native process-global Game.FastCPU defaults On and applies live. Website local preference seeds a new owned world; existing owner commands, strict wire141 and save46 carry world authority. Guest/observer/reconnect preferences cannot overwrite it; public College keeps party-next-run choice separate. |
+| `0x5e0233` | ZAnimSplit retained rendering; live draw | On/Off selects25/50-unit split bands while preserving actor clocks and born geometry. Replacement split resources release their owned buffers, not borrowed textures or gameplay actors. |
+| `0x5e10ac` | Arrow initial opacity; birth | On retains the native enhanced initial opacity, Off the native5. Existing arrows retain their initial lifetime/opacity program after toggling. |
+| `0x5e5a2e`, `0x60dfff` | Ember and EvilEmber optional visual passes; live draw | Enhanced ground-glow and extra additive body passes are conditional. The ordinary body, damage, contacts, position and retained age remain present Off. |
+| `0x5e89d2`, `0x602268`, `0x604fb8` | StormCloud/AcidRain private cloud and drop producers; live draw and live update | Live high/low cloud composition and5/2 drop counts follow the world mode, with the native half-count variant retained. Old independently owned drops are not culled by a mode change. |
+| `0x5f9160` | Silk fragment shadow; birth | Native shadow uses quality but explicit constructor life2*.75 is identical in both modes. The existing fragment geometry and shared breakup RNG remain unchanged. |
+| `0x5fb556`, `0x5fb750`, `0x601919` | Plane Orb live motes and mesh; live update/draw | The native extra mote program is gated at the current update; live mesh segments15/7 switch without resetting the field, target contacts or retained motes. |
+| `0x5fe357` | Fireball FireParticle customization; birth | On halves the native base fade; Off retains base fade. Existing particles keep their born decrement and color/retirement program. |
+| `0x60413b` | DemonBomb optional FireParticle tail; live birth gate, born recurrence | Only On and post-damping speed>=1 admit the tail. Native fade customization is base*.4, not Fireball*.5. Settled positive-fuse bombs emit no tail; old particles remain through normal retirement. |
+| `0x6058d3` | EyeLaser trail fade; birth | On halves the final native randomized base fade; Off retains it. The same real birth draw sequence and non-quality fields are retained. |
+| `0x60e5b9` | Building/Monument ground light grid; live draw | The shared native surface-light mesh selects the recovered high/low corner grid. This remains distinct from Light Quality target resolution and Complex Lighting enablement. |
+| `0x6137fe`, `0x613d59` | Earthquake dust and debris; live birth gate and birth state | Current quality gates the native dust program and latches debris life/shadow at construction; existing scenery wobble and independent gameplay pulses remain active. |
+| `0x614f6a`, `0x61514f` | Leviathan enhanced children; live birth gate | The current quality controls native extra mote/fade births. The shared parent field, appendage clocks, damage and existing independent children retain ownership. |
+| `0x6163d6`, `0x619aad` | Golem assembly and terminal debris; birth | Assembly owns24 independent BoulderBits at0/50/100/200 milestones; terminal30-fragment lifetime/shadow follows quality independently of Iron Golem. Current saves/wire preserve the distinction; legacy data migrates explicitly. |
+| `0x61d335` | EtherDrain cloud cadence; live update | The native random bound is3 On or5 Off, with existing cloud lifetimes and authoritative damage/target ownership unchanged. |
+| `0x61f695`, `0x61f8f6` | Goodie root and fragment Bouncers; birth | Both sites latch shadow from quality and keep the explicit life2 program in both modes. Reward RNG, all twenty fragment constructors and materialization phases remain shared. |
+| `0x623ec7` | Stoneskin apply/refresh/removal eighteen-piece burst; birth | Actual helper0x623D40, not nearest catalog CircleSlow. Its callers0x624490/0x6244C0/0x626A0B create18 BadGuys77 Bouncers with On life10/shadow or Off constructor2/no-shadow. Refresh/removal do not duplicate ordinary physical-hit chips. |
+| `0x629212`, `0x6295b9` | ElectricBurn source and arc coronas; birth | Positive arc capacity gates source/arc visuals. Source alpha.5 and chained.75 use decrement.2 On/.4 Off; final native scale1..1.5 overwrites earlier*.2. Body-only arcs and ZAnimLit coronas are separate; zero-arc Magic Trap remains without these children. |
+| `0x64484d` | FreezeWave Iceblast particle program; birth | Native200 On or100 Off child count flows through the shared constructor; damage, freeze ownership and existing child retirement remain independent. |
+
+### Final caller review and controlled M5 measurement, 2026-09-29
+
+The final room-caller audit found that the four private College rooms forwarded
+the live mode to the player material but omitted it from primary and secondary
+effect-view updates. A real WebGL fixture using the actual room class, native
+assets, born-On Air and a strictly decoded Plane Orb reproduced that omission
+in all four rooms. Off incorrectly retained 25-unit split bands and the
+31-vertex, 135-index Orb mesh. The narrow caller correction now passes all
+12 On/Off/On rows: Off uses 50-unit bands and 15 vertices/63 indices, while
+born flags, actor input and tick 100 are unchanged. The fixture's first two
+attempts had an incorrect family label and registration lane; neither is
+counted as a product regression. `tools/smoke-private-room-quality.mjs` retains
+the actual renderer regression. The existing strict GPU material harness also
+now checks live surface-grid buffer replacement, shared redraw ownership,
+retained buffer identities, exact vertex/color/index delivery and GPU output.
+No coverage or mutation scope/threshold was reduced.
+
+Both TypeScript projects, production build and rebuilt desktop/touch Settings
+journeys passed on source manifest
+`bb3035e2c3f180f1dbc7be04c208cd9b64e5fc2e9d1123df5c051fb7d23800cc`.
+The built journeys exercise owner/guest commands, a conflicting late-join
+preference, persisted settings, actual paused On/Off/On pixels and resize.
+Touch is Chromium emulation, not a physical Safari claim. Public same-player
+save-token replacement and fresh saved-world Off restoration have separate
+successful transport evidence; unsupported standalone guest-resume admission
+was not loosened.
+
+The original level-36 crowd save is pinned by SHA-256
+`a9e0760fa197fe11d91f99449faa540d716ae8cfffebe79302a6a51d04b9e546`
+inside the unchanged archive
+`150f045c74e9237b7c0fdca7c2703ca3101ed4cb71639e75281dd098a184b3a4`.
+It starts with 223 actors, 304 Maggots, five projectiles and 129 death effects.
+The only survival aid extends an already-existing native Magic Shield's
+absorb and maximum to 1e9, identically in both modes. It does not remove enemies,
+change damage, lower Light Quality or suppress any additional art. Each fresh
+run starts from that same state and RNG. Native Off's own intentional update,
+geometry and birth differences remain enabled; trajectories are not asserted
+to be identical between modes.
+
+The four built-game blocks ran On, Off, Off, On on Apple M5 Pro through ANGLE
+Metal, Chromium 153.0.8010.12 and Node 22.17.0, at 1600x900/resolution 1.
+Ordinary lighting, shadows and Light Quality 100% remained enabled; audio was
+muted identically. Each block warmed up for 1,200 ticks and measured the same
+following 1,200-tick window. The host sustained 99.974--100.008 ticks/second.
+
+| Block | Mode | Observed frames | Browser task ms/frame | Median / p95 frame ms | Controller plus host CPU ms/tick |
+| --- | --- | --- | --- | --- | --- |
+| 0 | On | 719 | 12.0126 | 16.7 / 16.7 | 9.8830 |
+| 1 | Off | 719 | 11.2228 | 16.7 / 16.7 | 9.0061 |
+| 2 | Off | 719 | 11.3749 | 16.7 / 16.7 | 8.8737 |
+| 3 | On | 720 | 12.0082 | 16.7 / 16.7 | 8.8564 |
+
+Off reduced measured browser-main-thread task time by **6.57% and 5.27%** in
+the two order-controlled pairs. Both modes remained capped at approximately
+60 FPS; there is no measured FPS increase. Controller/host CPU changed by
+8.87% and -0.20%, so this sample does not establish a consistent host CPU
+improvement. CDP task duration is not a GPU-time counter, and the controller
+process measurement includes the host and the test driver. These short paired
+M5 measurements do not establish AMD/Intel results or a universal performance
+guarantee. The original Light Quality 85% observation remains uncontrolled
+historical evidence, not this experiment's result.
+
+All four performance blocks have empty page, console, HTTP, request, wire and
+host-error arrays. Three startup high-water flow-control warnings and the
+deliberate shutdown warnings are retained. The original benchmark attempt
+failed before measurement at native menu entry and is not included in these
+numbers. The built Settings journeys separately retain individually verified
+streaming-media cancellations rather than hiding them. Compact measured data
+is in `report38-enhanced-effects-performance.json`; the archive release
+receipt owns the final unchanged full-gate, publication and cleanup status.

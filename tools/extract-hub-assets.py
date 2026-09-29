@@ -457,6 +457,7 @@ def main() -> int:
     verify_player_staff_split(clothes, clothes_records)
     save(crop(clothes, clothes_records[1]), output_dir, "player-harden-ice")
     save(crop(clothes, clothes_records[2]), output_dir, "player-mindblast-ring")
+    save(crop(clothes, clothes_records[3]), output_dir, "player-stoneskin")
     for selector in range(6):
         save(
             build_player_staff_sheet(clothes, clothes_records, False, selector),

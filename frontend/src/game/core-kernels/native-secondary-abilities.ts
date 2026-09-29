@@ -2,6 +2,10 @@ import { actorHeadingIndex, actorHeadingVector } from './actor-heading.ts'
 import type { PlayerBeltComponent } from './native-belt.ts'
 import { createNativeDampenedSpell, stepNativeDampenedSpell } from './native-dampened-spell.ts'
 import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
+import { createNativeStoneskinWarp } from './native-stoneskin.ts'
+import { createNativeGolemAssemblyDebris } from './native-golem-debris.ts'
+import { stepNativeWeldBoulderDebrisParticle } from './native-weld-boulder-debris.ts'
+import { nativeAirPresentationRandom } from './native-air-presentation.ts'
 import {
   resolveNativeSkillDamageValue,
   resolveNativeSkillManaCostValue,
@@ -96,9 +100,10 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'earthquake', 'earthquake-scenery-wobble', 'earthquake-quake', 'earthquake-dust',
   'earthquake-debris', 'golem',
   'golem-death',
+  'golem-assembly-debris',
   'teleport-burst', 'magic-circle', 'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
-  'magic-trap-burst', 'electric-burn',
-  'flash-response-fade', 'flash-response-grow',
+  'magic-trap-burst', 'electric-burn', 'electric-burn-flare', 'electric-burn-arc',
+  'flash-response-fade', 'flash-response-grow', 'stoneskin-chip', 'planewalker-mote',
   'dampen-wave', 'dampened-projectile', 'dampened-smoke', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
   'mindblast-burst', 'mindblast-shockwave',
   'ring-fire-explosion', 'ring-fire-fragment',
@@ -313,6 +318,7 @@ export type NativeSecondaryTargetEffectPatch = Partial<Omit<
 >>
 
 export interface NativeSecondarySimulationState {
+  readonly stoneskinWarp: readonly number[] | null
   readonly actors: readonly NativeSecondaryActorState[]
   readonly events: readonly NativeSecondaryEventState[]
   readonly firewalkerGeometrySequence: number
@@ -392,6 +398,7 @@ export interface NativeSecondaryPositionResult {
 }
 
 export interface NativeSecondaryTickContext {
+  readonly enhancedEffects?: boolean
   readonly effectVisible?: (worldKey: string, position: Vector2, margin: number) => boolean
   readonly dampenCandidates: (
     worldKey: string,
@@ -880,6 +887,7 @@ function spawnFreezeWaveProgram(
 
 export function createNativeSecondarySimulation(seed = 0): NativeSecondarySimulationState {
   return {
+    stoneskinWarp: null,
     actors: [],
     events: [],
     firewalkerGeometrySequence: 0,
@@ -1122,6 +1130,7 @@ export function applyNativeSecondaryPlayerDamage(
   tick: number,
   position: Vector2,
   worldKey: string,
+  presentation: Readonly<{ physical: boolean; enhancedEffects: boolean }> = { physical: false, enhancedEffects: true },
 ): NativeSecondaryPlayerDamageResult {
   if (!Number.isFinite(amount) || amount < 0) {
     throw new RangeError('secondary player damage must be finite and non-negative')
@@ -1130,7 +1139,8 @@ export function applyNativeSecondaryPlayerDamage(
   if (!current || amount === 0) return { absorbedDamage: 0, healthDamage: amount, state: source }
   if (current.magicShieldAbsorb <= 0) {
     if (current.stoneskinTicksRemaining > 0) {
-      return { absorbedDamage: amount, healthDamage: 0, state: source }
+      return { absorbedDamage: amount, healthDamage: 0, state: presentation.physical
+        ? spawnStoneskinChip(source, playerId, position, worldKey, presentation.enhancedEffects) : source }
     }
     return { absorbedDamage: 0, healthDamage: amount, state: source }
   }
@@ -1253,6 +1263,7 @@ export function applyNativeSecondaryGolemDamage(
     secondaryDamage: number
   }>,
   tick: number,
+  enhancedEffects = true,
 ): NativeSecondaryGolemDamageResult {
   const actor = source.actors.find(({ id, kind }) => id === actorId && kind === 'golem')
   if (!actor || actor.golem === null) {
@@ -1304,9 +1315,9 @@ export function applyNativeSecondaryGolemDamage(
   }
   const deathId = state.nextActorId
   state = spawn(state, actorSeed({
-    enhanced: actor.golem.iron,
+    enhanced: enhancedEffects,
     kind: 'golem-death',
-    lifetimeTicks: NATIVE_GOLEM_DEATH_DURATION_TICKS,
+    lifetimeTicks: enhancedEffects ? 667 : NATIVE_GOLEM_DEATH_DURATION_TICKS,
     ownerId: actor.ownerId,
     position: actor.position,
     presentationRng,
@@ -1513,6 +1524,22 @@ export function stepNativeSecondaryAbilities(
             hitStrength = Math.fround(0.25 + flash.value)
           }
           const targetEffect = nativeSecondaryTargetEffect(state, effect.worldKey, target.id)
+          if (effect.electricBurn.arcCount > 0) {
+            const enhanced = context.enhancedEffects ?? context.players[effect.electricBurn.ownerId]?.enhancedEffects ?? true
+            if (target !== sourceTarget) {
+              state = spawn(state, actorSeed({
+                kind: 'electric-burn-arc', ownerId: effect.electricBurn.ownerId, worldKey: effect.worldKey,
+                skillId: null, enhanced, lifetimeTicks: 2, phase: context.tick,
+                position: { x: sourceTarget.position.x, y: sourceTarget.position.y - 10 },
+                midpoint: { x: Math.fround((sourceTarget.position.x + target.position.x) * .5),
+                  y: Math.fround((sourceTarget.position.y + target.position.y) * .5 - 10) },
+                endpoint: { x: target.position.x, y: target.position.y - 30 },
+                targetId: target.id,
+              }))
+            }
+            state = spawnElectricBurnFlare(state, effect.electricBurn.ownerId,
+              null, effect.worldKey, target, target === sourceTarget ? .5 : .75, enhanced)
+          }
           damage.push({
             amount: effect.electricBurn.damagePerTick
               * ((targetEffect?.prismaticTicks ?? 0) > 0 ? 2 : 1),
@@ -1614,6 +1641,7 @@ export function stepNativeSecondaryAbilities(
 
   for (const sourceActor of actorsAtStepStart) {
     const owner = context.players[sourceActor.ownerId]
+    const enhancedEffects = context.enhancedEffects ?? owner?.enhancedEffects ?? true
     if (!owner || owner.worldKey !== sourceActor.worldKey) continue
     let actor = advanceActor(sourceActor)
     let retain = actor.ageTicks < actor.lifetimeTicks
@@ -1774,7 +1802,7 @@ export function stepNativeSecondaryAbilities(
         if (
           parentId !== undefined
           && lastLeviathanAppendageIdByParent.get(parentId) === actor.id
-          && parent.enhanced
+          && enhancedEffects
         ) {
           const mote = spawnLeviathanEnhancedMote(
             state,
@@ -1849,7 +1877,7 @@ export function stepNativeSecondaryAbilities(
             radius: Math.fround(2 * scale),
             scale,
           }
-          if (actor.enhanced) {
+          if (enhancedEffects) {
             const mote = spawnPlaneOrbEnhancedMote(state, actor, rng)
             state = mote.state
             rng = mote.rng
@@ -2092,6 +2120,44 @@ export function stepNativeSecondaryAbilities(
       }
       case 'freeze-wave-visual':
         break
+      case 'electric-burn-flare': {
+        const alpha = Math.fround(sourceActor.alpha - sourceActor.phase)
+        actor = { ...actor, alpha: Math.max(0, alpha),
+          rotationRadians: sourceActor.rotationRadians + Math.PI / 180 }
+        retain = alpha >= 0
+        break
+      }
+      case 'electric-burn-arc':
+        break
+      case 'golem-assembly-debris': {
+        const stepped = stepNativeWeldBoulderDebrisParticle({
+          alpha: sourceActor.alpha, bounceVelocity: sourceActor.endpoint.x, colorGreen: 1,
+          enhancedShadow: sourceActor.enhanced, height: sourceActor.phase, index: sourceActor.quantity,
+          position: sourceActor.position, record: sourceActor.frame as 2008 | 2009 | 2010,
+          rotationDegrees: sourceActor.rotationRadians * 180 / Math.PI,
+          rotationStepDegrees: sourceActor.slowFactor * 180 / Math.PI, scale: sourceActor.scale,
+          velocity: sourceActor.velocity, verticalVelocity: sourceActor.endpoint.y,
+        }, context.tick, rng)
+        rng = stepped.rng
+        const particle = stepped.particle
+        retain = particle !== null
+        if (particle) actor = { ...actor, alpha: particle.alpha, phase: particle.height,
+          endpoint: { x: particle.bounceVelocity, y: particle.verticalVelocity },
+          position: particle.position, velocity: particle.velocity,
+          rotationRadians: particle.rotationDegrees * Math.PI / 180,
+          slowFactor: particle.rotationStepDegrees * Math.PI / 180 }
+        break
+      }
+      case 'planewalker-mote': {
+        const alpha = Math.fround(sourceActor.alpha - sourceActor.phase)
+        actor = { ...actor, alpha: Math.max(0, alpha),
+          position: { x: Math.fround(sourceActor.position.x + sourceActor.velocity.x),
+            y: Math.fround(sourceActor.position.y + sourceActor.velocity.y) },
+          velocity: { x: Math.fround(sourceActor.velocity.x * Math.fround(.95)),
+            y: Math.fround(sourceActor.velocity.y * Math.fround(.95)) } }
+        retain = alpha > 0
+        break
+      }
       case 'frost-burn-flare': {
         const alpha = Math.fround(sourceActor.alpha - FROST_BURN_FLARE_ALPHA_LOSS)
         actor = {
@@ -2244,7 +2310,7 @@ export function stepNativeSecondaryAbilities(
           actor = { ...actor, alpha }
           retain = alpha > 0
         } else {
-          const drops = Math.trunc((actor.enhanced ? 5 : 2) / (actor.variant === 1 ? 2 : 1))
+          const drops = Math.trunc((enhancedEffects ? 5 : 2) / (actor.variant === 1 ? 2 : 1))
           for (let index = 0; index < drops; index += 1) {
             const distance = drawNativeFloat(rng, 200)
             const direction = drawNativeUnitVector(distance.state)
@@ -2353,6 +2419,7 @@ export function stepNativeSecondaryAbilities(
               state = spawn(state, actorSeed({
                 endpoint,
                 kind: 'storm-strike',
+                enhanced: enhancedEffects,
                 lifetimeTicks: 1,
                 midpoint,
                 ownerId: actor.ownerId,
@@ -2535,7 +2602,7 @@ export function stepNativeSecondaryAbilities(
             earthquakeWobblePhases.set(sceneryActor.id, nextPhase)
             actor = { ...actor, frame: sceneryIndex + 1 }
 
-            if (actor.enhanced) {
+            if (enhancedEffects) {
               const dustGate = drawNativeInteger(rng, 30)
               rng = dustGate.state
               if (dustGate.value === 1) {
@@ -2711,6 +2778,16 @@ export function stepNativeSecondaryAbilities(
           targetId: stepped.actor.targetId,
         }
         if (stepped.assemblyMilestone !== null) {
+          const debris = createNativeGolemAssemblyDebris(rng, actor.scale, enhancedEffects)
+          rng = debris.rng
+          for (const particle of debris.particles) state = spawn(state, actorSeed({
+            kind: 'golem-assembly-debris', skillId: 45, ownerId: actor.ownerId, worldKey: actor.worldKey,
+            position: { x: Math.fround(actor.position.x + particle.position.x), y: Math.fround(actor.position.y + particle.position.y) },
+            enhanced: enhancedEffects, scale: particle.scale, alpha: particle.alpha, frame: particle.record,
+            phase: particle.height, quantity: particle.index, endpoint: { x: particle.bounceVelocity, y: particle.verticalVelocity },
+            rotationRadians: particle.rotationDegrees * Math.PI / 180, slowFactor: particle.rotationStepDegrees * Math.PI / 180,
+            velocity: particle.velocity, lifetimeTicks: enhancedEffects ? 400 : 80,
+          }))
           state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'quake-crack-small', 'pulse'))
           state = emitNativeSecondaryEvent(state, {
             ...eventSeed(
@@ -2963,6 +3040,7 @@ export function stepNativeSecondaryAbilities(
           ),
         }
         addDamage(actor, target, actor.damage, 'lightning')
+        // Zero-arc Magic Trap skips coronas and links at native 0x629188.
         break
       }
       case 'acid-rain': {
@@ -2981,7 +3059,7 @@ export function stepNativeSecondaryAbilities(
           break
         }
 
-        const drops = actor.enhanced ? 5 : 2
+        const drops = enhancedEffects ? 5 : 2
         for (let index = 0; index < drops; index += 1) {
           const distance = drawNativeFloat(rng, 200)
           const direction = drawNativeUnitVector(distance.state)
@@ -3192,7 +3270,7 @@ export function stepNativeSecondaryAbilities(
         }
 
         if (phaseAtEntry === 1 && activeCountdown > ETHER_DRAIN_GAMEPLAY_CUTOFF_TICKS) {
-          const cloudGate = drawNativeInteger(rng, actor.enhanced ? 3 : 5)
+          const cloudGate = drawNativeInteger(rng, enhancedEffects ? 3 : 5)
           rng = cloudGate.state
           if (cloudGate.value === 1) {
             const cloud = spawnEtherDrainCloud(state, actor, rng)
@@ -3373,7 +3451,7 @@ export function stepNativeSecondaryAbilities(
         if (remainingTicks <= 0) {
           for (const target of candidates(actor, 400)) addDamage(actor, target, actor.damage, 'ice')
           const freezeWave = spawnFreezeWaveProgram(state, rng, {
-            enhanced: actor.enhanced,
+            enhanced: enhancedEffects,
             freezeTicks: actor.freezeTicks,
             maximumRingOfIce: actor.quantity === 1,
             ownerId: actor.ownerId,
@@ -3476,6 +3554,7 @@ export function stepNativeSecondaryAbilities(
       }
       case 'comet-impact':
         break
+      case 'stoneskin-chip':
       case 'comet-debris': {
         if (sourceActor.phase !== 0 && context.tick % 3 === 0) break
         let position = sourceActor.position
@@ -3684,6 +3763,8 @@ export function stepNativeSecondaryAbilities(
       })
     }
     if (stoneskinWasActive && player.stoneskinTicksRemaining === 0) {
+      state = spawnStoneskinBurst(state, playerId, authority.character.position, authority.worldKey,
+        context.enhancedEffects ?? authority.enhancedEffects)
       state = emitNativeSecondaryEvent(state, {
         actorId: null,
         cue: 'stoneskin',
@@ -3718,6 +3799,8 @@ export function stepNativeSecondaryAbilities(
     if (player.regenerate && authority.eligible) healthRecovered[playerId] = 1.5 / 100
     if (player.planewalkerTicksRemaining > 0 && authority.eligible) {
       primaryOverridePlayerIds.add(playerId)
+      state = spawnPlanewalkerMote(state, playerId, authority.character.position, authority.worldKey,
+        context.enhancedEffects ?? authority.enhancedEffects)
       const rawPrimaryHeld = authority.input.cast.primary && authority.input.aim !== null
       if (rawPrimaryHeld && !player.planeOrbHeld) {
         const aim = authority.input.aim ?? authority.character.position
@@ -4497,7 +4580,11 @@ function castAbility(
       })
       break
     }
-    case 46:
+    case 46: {
+      const warp = createNativeStoneskinWarp(state.rng)
+      state = { ...state, stoneskinWarp: warp.positions, rng: warp.rng }
+      state = spawnStoneskinBurst(state, playerId, origin, authority.worldKey,
+        context.enhancedEffects ?? authority.enhancedEffects)
       nextPlayer = { ...nextPlayer, stoneskinTicksRemaining: Math.max(nextPlayer.stoneskinTicksRemaining, Math.round(v.mDuration * 100)) }
       state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'cast', 'stoneskin-on'),
@@ -4505,6 +4592,7 @@ function castAbility(
       })
       state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'stoneskin'))
       break
+    }
     case 48: {
       const sourceRotation = drawNativeFloat(state.rng, 360)
       state = { ...state, rng: sourceRotation.state }
@@ -5342,6 +5430,81 @@ function stepRingFireFragment(
   }
 }
 
+/** Player +0x138 bit 1: the normal Bouncer keeps life 2 in both modes. */
+function spawnStoneskinBurst(state: NativeSecondarySimulationState, ownerId: string, origin: Vector2,
+  worldKey: string, enhanced: boolean): NativeSecondarySimulationState {
+  for (let heading = 0; heading < 360; heading += 20) {
+    state = spawnStoneskinChip(state, ownerId, origin, worldKey, enhanced, heading)
+  }
+  return state
+}
+
+function spawnStoneskinChip(state: NativeSecondarySimulationState, ownerId: string, origin: Vector2,
+  worldKey: string, enhanced: boolean, burstHeading?: number): NativeSecondarySimulationState {
+  let rng = state.rng
+  const random = (maximum: number, signed = false) => {
+    const draw = drawNativeFloat(rng, maximum, signed); rng = draw.state; return draw.value
+  }
+  const heading = burstHeading ?? random(360)
+  const bounce = Math.fround(-(random(3) + 2))
+  const height = Math.fround(-random(20))
+  const rotationRadians = random(360) * Math.PI / 180
+  const slowFactor = Math.fround(1 + random(10)) * Math.PI / 180
+  const angle = Math.fround(heading + random(10, true)) * Math.PI / 180
+  const speed = Math.fround(.5 + random(.5))
+  const velocity = { x: Math.fround(Math.fround(Math.sin(angle) * 1.5) * speed),
+    y: Math.fround(-Math.cos(angle) * speed) }
+  const lead = Math.fround(15 + random(10))
+  const position = { x: Math.fround(origin.x + Math.fround(velocity.x * lead)),
+    y: Math.fround(origin.y + Math.fround(velocity.y * lead)) }
+  position.x = Math.fround(position.x + velocity.x * 2)
+  if (burstHeading === undefined) random(.2, true) // Separate physical-contact audio owner.
+  return spawn({ ...state, rng }, actorSeed({ kind: 'stoneskin-chip', ownerId, worldKey, skillId: 46,
+    enhanced, alpha: burstHeading !== undefined && enhanced ? 10 : 2,
+    variant: burstHeading === undefined ? 0 : 1, lifetimeTicks: 1000, phase: height, endpoint: { x: bounce, y: bounce },
+    position, velocity, rotationRadians, slowFactor, frame: 77 }))
+}
+
+/** PlayerWizard +0x138 bit 0x10 emits one ordinary-life FadeMove per active tick. */
+function spawnPlanewalkerMote(state: NativeSecondarySimulationState, ownerId: string, origin: Vector2,
+  worldKey: string, enhanced: boolean): NativeSecondarySimulationState {
+  const angle = drawNativeFloat(state.rng, 360)
+  const radius = drawNativeFloat(angle.state, 15)
+  const vertical = drawNativeFloat(radius.state, 5)
+  const scale = drawNativeFloatRange(vertical.state, .5, 1)
+  const speed = drawNativeFloat(scale.state, 3)
+  const multiplier = drawNativeFloatRange(speed.state, enhanced ? .15 : .25, enhanced ? .3 : .45)
+  const radians = angle.value * Math.PI / 180
+  return spawn({ ...state, rng: multiplier.state }, actorSeed({
+    kind: 'planewalker-mote', ownerId, worldKey, skillId: 12, enhanced, alpha: 1,
+    lifetimeTicks: 1000, phase: Math.fround(Math.fround(.1) * multiplier.value),
+    position: { x: Math.fround(origin.x + Math.fround(Math.sin(radians) * radius.value)),
+      y: Math.fround(Math.fround(origin.y - Math.fround(Math.cos(radians) * radius.value)) - vertical.value) },
+    velocity: { x: Math.fround(Math.sin(radians) * speed.value), y: Math.fround(-Math.cos(radians) * speed.value) },
+    rotationRadians: radius.value * Math.PI / 180, scale: scale.value, frame: 11,
+  }))
+}
+
+function spawnElectricBurnFlare(state: NativeSecondarySimulationState, ownerId: string,
+  skillId: NativeSecondaryActorState['skillId'], worldKey: string, target: NativeSecondaryTarget, alpha: .5 | .75,
+  enhancedEffects: boolean): NativeSecondarySimulationState {
+  // FadeLightning uses the established presentation random domain, separate
+  // from the modifier's damage/hit-flash stream. Retain its born values once.
+  const random = nativeAirPresentationRandom(state.nextActorId, 0x454c4543)
+  const scale = Math.fround(1 + random(.5))
+  const rotationRadians = random(Math.PI * 2)
+  const radius = random(10)
+  const heading = random(Math.PI * 2)
+  const lightRadius = Math.fround(.75 + random(.75))
+  const decay = Math.fround(enhancedEffects ? .2 : .4)
+  return spawn(state, actorSeed({ kind: 'electric-burn-flare', ownerId, skillId, worldKey,
+    alpha, enhanced: enhancedEffects, phase: decay, quantity: alpha,
+    lifetimeTicks: Math.ceil(alpha / decay), scale, rotationRadians, radius: lightRadius,
+    position: { x: Math.fround(target.position.x + Math.cos(heading) * radius),
+      y: Math.fround(target.position.y - 20 + Math.sin(heading) * radius) },
+  }))
+}
+
 function actorSeed(
   seed: Partial<NativeSecondaryActorState>
     & Pick<NativeSecondaryActorState, 'kind' | 'ownerId' | 'skillId' | 'worldKey'>,
@@ -5426,6 +5589,7 @@ export function nativeSecondaryLightDisposition(
     case 'comet':
       return 'actor-provider'
     case 'ring-fire-explosion':
+    case 'electric-burn-flare':
       return 'transient-provider'
     case 'ether-fade':
       return actor.variant === 1 ? 'transient-provider' : 'none'
@@ -5566,9 +5730,11 @@ export function nativeSecondaryPainterManagerLane(
     case 'fire-patch':
     case 'storm-cloud':
     case 'storm-strike':
+    case 'electric-burn-arc':
     case 'earthquake':
     case 'golem':
     case 'golem-death':
+    case 'golem-assembly-debris':
     case 'acid-rain':
     case 'comet':
       return 'actor'
@@ -6001,6 +6167,9 @@ function advanceActor(actor: NativeSecondaryActorState): NativeSecondaryActorSta
     && actor.kind !== 'ring-fire-fragment'
   const advancesAge = actor.kind !== 'golem'
   const advancesFrame = advancesAge
+    && actor.kind !== 'stoneskin-chip'
+    && actor.kind !== 'planewalker-mote'
+    && actor.kind !== 'golem-assembly-debris'
     && actor.kind !== 'leviathan-appendage'
     && actor.kind !== 'earthquake'
     && actor.kind !== 'earthquake-scenery-wobble'

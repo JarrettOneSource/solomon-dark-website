@@ -297,12 +297,15 @@ export class HubWorldScene {
       'hub:courtyard',
       presentationFrame,
       pointGainAt,
+      undefined,
+      snapshot.enhancedEffects,
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,
       'hub:courtyard',
       presentationFrame,
       pointGainAt,
+      snapshot.enhancedEffects,
     )
     this.applyPainterOrder(snapshot, localPlayerId)
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
@@ -834,8 +837,10 @@ export class HubWorldScene {
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
         this.world.addChild(view.container)
+        this.world.addChild(view.enhancedHit.container)
+        view.enhancedHit.container.zIndex = HUB_WORLD_DEPTH.courtyardForeground + .125
       }
-      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
+      view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, undefined, snapshot.enhancedEffects, snapshot.secondaryAbilities.stoneskinWarp)
       view.update(
         player,
         snapshot.tick,

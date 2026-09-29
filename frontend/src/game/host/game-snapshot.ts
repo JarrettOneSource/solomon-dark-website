@@ -29,6 +29,7 @@ export function createGameSnapshot(
   switch (state.world.kind) {
     case 'hub':
       return {
+        enhancedEffects: state.enhancedEffects,
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
         materializingPlayerIds: [],
@@ -78,6 +79,7 @@ export function createGameSnapshot(
         }]
       }))
       return {
+        enhancedEffects: state.enhancedEffects,
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
         materializingPlayerIds: [],
