@@ -144,6 +144,7 @@ const HUB_TOOLTIP_TINT = {
   epic: 0xffbf80,
   gold: 0xd9ba70,
   rare: 0xffff80,
+  setName: 0xffbf80,
   warning: 0xff8080,
   white: 0xffffff,
 } as const
@@ -251,7 +252,7 @@ export function hubItemTooltipLines(
   if (set) {
     lines.push(tooltipBody(''))
     lines.push(tooltipGold('Item Set:'))
-    lines.push({ font: 'body', text: set.name, tint: HUB_TOOLTIP_TINT.completeSet })
+    lines.push({ font: 'body', text: set.name, tint: HUB_TOOLTIP_TINT.setName })
     for (const memberRecipeIndex of set.memberRecipeIndices) {
       const member = DOWSING_EQUIPMENT_RECIPES[memberRecipeIndex]
       if (!member) throw new RangeError(`unknown native set member recipe ${memberRecipeIndex}`)

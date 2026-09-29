@@ -1,5 +1,56 @@
 # 2026-08-22 — StoreGrid, ItemInfo, and Hagatha HoverBox parity reopening
 
+## Report54: set-name presentation choice, 2026-09-29
+
+The user requests a visually distinct set name immediately after `Item Set:`.
+The archived Bug-Master example and current common builder both use green for
+that name and owned member items. The authorized presentation choice is the
+existing light orange `0xffbf80`, represented by a separate set-name palette
+role. This is not permission to recolor owned/missing members, item rarity or
+complete-set item titles, alter copy/wrapping, or change any set bonus.
+
+The bounded system is the set-name line in the existing common item content
+owner and its shared contextual compositor. Its complete authored membership is:
+
+| Set | Member recipe indices |
+| --- | --- |
+| The Arcanus Spectrum Paraclosm | 0, 1, 2, 3, 4, 5 |
+| Combinator's Coutrement | 6, 7, 8, 9, 10 |
+| Pandimensional Bug-Master's Outfit | 11, 12, 13, 14, 15 |
+| Tempest Kit | 16, 17, 18, 19 |
+| Burning Man | 20, 21 |
+| Frostburn Jewels | 22, 23, 24 |
+| Fete of Clay | 25, 26, 27, 28 |
+
+The same role reaches standalone College/Boneyard inventory, companion
+inventory, Luthacus storage and Shlorio offers. The existing compositor retains
+the line tint for every wrapped continuation. Non-set equipment, Fomentius
+consumables, Hagatha perks, ownership discovery and authority are outside the
+change. Public-output regression coverage exercises every one of the 29 member
+recipes with absent, partial and complete ownership, including unchanged member
+rows, bonus rows and full-set item-title color. Before the production change,
+the M5 regression failed solely on the old green set-name output while the other
+34 tests in the existing contract file passed.
+
+### Native disposition
+
+Bounded M5 static inspection used the unchanged 4,723,200-byte retail executable,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+No Windows process, Wine session or new native runtime capture was used.
+In `0x0057C4B0`, the set path constructs `(0.75, 1, 0.75, 1)` at
+`0x0057CBDA` using `0x0040F9E0`, then calls the luminance-mixing helper
+`0x0040FC60` with factor `0.5` at `0x0057CBE1`. The resulting green-tinted
+color is retained for the set name copied from the set object's `+0x18` field
+at `0x0057CCF5` and appended at `0x0057CD3E`. The immediately preceding
+`Item Set:` literal at `0x007971CC` is appended at `0x0057CCB2`.
+
+Thus the requested orange name is an intentional presentation difference from
+retail's green-tinted set name, not a native parity repair. This does not claim
+that the previous web `0x80ff80` was a byte-exact reproduction of retail's color
+construction, nor does it reopen unrelated historical header/member styling.
+The new `setName` role reuses the existing light orange value and changes no
+native membership, ownership, ordering, wrapping, input or bonus rule.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Hagatha's Charms and Curses does not expose the

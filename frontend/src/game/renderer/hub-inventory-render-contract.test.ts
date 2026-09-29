@@ -637,6 +637,38 @@ test('every Fomentius class and all 47 recipe rows build complete contextual det
   }
 })
 
+test('every set title is distinct while member ownership colors and bonus rows stay intact', () => {
+  for (const set of nativeEquipmentTooltipSets()) {
+    for (const recipeIndex of set.memberRecipeIndices) {
+      const recipe = DOWSING_EQUIPMENT_RECIPES[recipeIndex]!
+      const item = createEquipmentInventoryItem(recipe, recipeIndex + 100)
+      for (const ownedRecipeIndexes of [[], set.memberRecipeIndices.slice(0, 1), set.memberRecipeIndices]) {
+        const lines = hubItemTooltipLines(item, { ownedRecipeIndexes, playerLevel: 100 })
+        const setHeading = lines.findIndex(({ text }) => text === 'Item Set:')
+        assert.ok(setHeading > 0, recipe.name)
+        assert.deepEqual(lines[setHeading + 1], {
+          font: 'body', text: set.name, tint: 0xffbf80,
+        })
+        assert.deepEqual(lines.slice(setHeading + 2, setHeading + 2 + set.memberRecipeIndices.length),
+          set.memberRecipeIndices.map(member => ({
+            font: 'body',
+            text: `  ${DOWSING_EQUIPMENT_RECIPES[member]!.name}`,
+            tint: ownedRecipeIndexes.includes(member) ? 0x80ff80 : 0xbfbfbf,
+          })))
+        const bonusHeading = setHeading + 3 + set.memberRecipeIndices.length
+        assert.deepEqual(lines[bonusHeading], {
+          font: 'body', text: 'Complete Set Bonus:', tint: 0xd9ba70,
+        })
+        assert.deepEqual(lines.slice(bonusHeading + 1), set.effects.map(effect => ({
+          font: 'body', text: hubNativeEquipmentEffectText(effect), tint: 0xbfbfbf,
+        })))
+        const complete = set.memberRecipeIndices.every(member => ownedRecipeIndexes.includes(member))
+        assert.equal(lines[0]!.tint, complete ? 0x80ff80 : item.rarity === 'Epic' ? 0xffbf80 : 0xffff80)
+      }
+    }
+  }
+})
+
 test('equipment ItemInfo uses permanent Creativity for the native two-level reduction', () => {
   const ringwallRecipe = DOWSING_EQUIPMENT_RECIPES.find(
     ({ sourceIndex }) => sourceIndex === 35,
