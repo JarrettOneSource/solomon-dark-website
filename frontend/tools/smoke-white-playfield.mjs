@@ -1,3 +1,4 @@
+import { createNativeScreenFlashWriter } from '../src/game/core-kernels/native-screen-flash.ts'
 // Controlled report-11 checks; the reporter supplied no replay or freeze duration.
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -90,7 +91,11 @@ try {
         worldKey: `boneyard:${state.world.runId}`,
         screenFlash: { alpha: 1, blue: 1, green: 1, red: 1, decayPerTick: Math.fround(.005), pointAttenuated: false },
       }
-      // Exercise the native event lane, not a guessed replacement flash shader.
+      const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick)
+      flashes.write({ flash: event.screenFlash, onlyIfClear: false, position: event.position,
+        tick: event.tick, worldKey: event.worldKey })
+      state.screenFlashes = flashes.state()
+      // Exercise the shared native flash lane through its authoritative writer.
       Object.assign(state, { secondaryAbilities: { ...state.secondaryAbilities,
         events: [...state.secondaryAbilities.events, event], nextEventId: event.eventId + 1 } })
       await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas').__sdrBoneyardFrame.secondaryScreenFlashAlpha > .5)

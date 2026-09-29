@@ -493,6 +493,11 @@ export async function createBoneyardWorldRenderer(
       camera,
       viewport,
     )
+    secondaryScreenFeedback.consumeScreenFlashes(snapshot.screenFlashes, {
+      cameraCenter: { x: camera.x, y: camera.y },
+      localPlayerAlternate: player.progression.lifeState !== 'alive',
+      visibleWorldWidth: visibleWorld.w,
+    })
     for (const event of pendingEnemyScreenEvents.splice(0)) {
       secondaryScreenFeedback.consumeEnemy(event, { cameraCenter: { x: camera.x, y: camera.y },
         localPlayerAlternate: player.progression.lifeState !== 'alive', visibleWorldWidth: visibleWorld.w })

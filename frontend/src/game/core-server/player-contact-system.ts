@@ -1,3 +1,4 @@
+import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { failBoast } from '../core-kernels/boast.ts'
 import { nativeCrowBlindness } from '../core-kernels/native-crow-blindness.ts'
@@ -44,6 +45,7 @@ export function applyPlayerContacts(
   tick: number,
   extensions: GameSimulationExtensions | undefined,
   registerWorldPainter?: RegisterNativeWorldPainter,
+  writeScreenFlash?: WriteNativeScreenFlash,
 ): PlayerContactStep {
   const initialWorld = source.world
   let playerEntities = source.playerEntities
@@ -182,7 +184,7 @@ export function applyPlayerContacts(
       tick,
       character.position,
       gameWorldKey(world, damage.playerId),
-      { physical: damage.physicalDamage > 0 && damage.magicDamage <= 0, enhancedEffects: source.enhancedEffects ?? true },
+      { writeScreenFlash, physical: damage.physicalDamage > 0 && damage.magicDamage <= 0, enhancedEffects: source.enhancedEffects ?? true },
     )
     secondaryAbilities = intercepted.state
     const physicalDamage = intercepted.absorbedDamage > 0 ? 0 : contact.physicalDamage
@@ -397,6 +399,7 @@ export function applyPlayerContacts(
               tick,
               worldKey,
             },
+            writeScreenFlash,
           )
         }
       }

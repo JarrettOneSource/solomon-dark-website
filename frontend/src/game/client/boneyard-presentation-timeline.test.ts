@@ -14,6 +14,7 @@ import {
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../core-kernels/player-combat.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
+import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
@@ -43,6 +44,24 @@ const CHARACTER = {
 const DEFAULT_SNAPSHOT = createGameSnapshot(createGameSimulation(), null)
 const DEFAULT_PLAYER = DEFAULT_SNAPSHOT.players['local-player']!
 const LIGHTING = DEFAULT_PLAYER.lighting
+
+test('interpolation carries authoritative flash history while its sampled clock gates eligibility', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 100)
+  newer.screenFlashes = { epoch: 0, nextOrder: 2, writes: [{ order: 1, tick: 103,
+    worldKey: `boneyard:${newer.world.runId}`, position: { x: 0, y: 0 }, onlyIfClear: false,
+    flash: { alpha: 1, red: 0, green: 0, blue: 0, decayPerTick: Math.fround(.01), pointAttenuated: false } }] }
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(newer, 50)
+  const lane = new NativeSecondaryScreenFeedbackPresentation(100, `boneyard:${newer.world.runId}`)
+  const before = timeline.sample(79)
+  assert.equal(before.screenFlashes.writes.length, 1)
+  lane.consumeScreenFlashes(before.screenFlashes, { cameraCenter: { x: 0, y: 0 },
+    localPlayerAlternate: false, visibleWorldWidth: 1600 })
+  assert.equal(lane.sample(before.tick), null)
+  assert.deepEqual(lane.sample(timeline.sample(80).tick), { alpha: 1, color: 0 })
+})
 
 test('Puppet hit interpolation respects contact onset, owner clocks and retirement', () => {
   const older = snapshotAt(100, 10, 100)
@@ -252,6 +271,7 @@ function magePulse(tick: number): BoneyardMageLightningPulseSnapshot {
 function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGameSnapshot {
   return {
     enhancedEffects: true,
+    screenFlashes: { epoch: 0, nextOrder: 1, writes: [] },
     hostPlayerId: 'local',
     levelUpBarrier: null,
     materializingPlayerIds: [],

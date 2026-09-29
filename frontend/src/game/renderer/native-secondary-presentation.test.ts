@@ -180,6 +180,18 @@ test('native sprite affine order rotates before fixed-axis scale', () => {
   assert.deepEqual(matrix, { a: 1.5, b: 0, c: -0, d: 3, tx: 0, ty: -200 })
 })
 
+function consumeScreenEvent(
+  lane: NativeSecondaryScreenFeedbackPresentation,
+  event: NativeSecondaryEventState,
+  context: Parameters<NativeSecondaryScreenFeedbackPresentation['consume']>[1],
+): void {
+  lane.consume(event, context)
+  if (event.screenFlash) lane.consumeScreenFlashes({ epoch: 0, nextOrder: event.eventId + 1, writes: [{
+    order: event.eventId, tick: event.tick, worldKey: event.worldKey,
+    position: event.position, flash: event.screenFlash, onlyIfClear: false,
+  }] }, context)
+}
+
 function screenEvent(
   eventId: number,
   tick: number,
@@ -1924,16 +1936,16 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     red: 0.8,
   })
   const lane = new NativeSecondaryScreenFeedbackPresentation(10, earth.worldKey)
-  lane.consume(earth, context)
+  consumeScreenEvent(lane, earth, context)
   assert.deepEqual(lane.sample(10), { alpha: 1, color: 0xccffcc })
 
-  lane.consume({
+  consumeScreenEvent(lane, {
     ...earth,
     screenFlash: { ...earth.screenFlash!, red: 1 },
   }, context)
   assert.deepEqual(lane.sample(10), { alpha: 1, color: 0xccffcc })
 
-  lane.consume(screenEvent(2, 10, {
+  consumeScreenEvent(lane, screenEvent(2, 10, {
     alpha: 1,
     blue: 1,
     decayPerTick: 0.025,
@@ -1941,7 +1953,7 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     pointAttenuated: false,
     red: 1,
   }), context)
-  lane.consume(screenEvent(3, 10, {
+  consumeScreenEvent(lane, screenEvent(3, 10, {
     alpha: 1,
     blue: 1,
     decayPerTick: 0.025,
@@ -1952,7 +1964,7 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
   assert.deepEqual(lane.sample(10), { alpha: 0.5, color: 0xffffff })
 
   const comet = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:test')
-  comet.consume(screenEvent(1, 0, {
+  consumeScreenEvent(comet, screenEvent(1, 0, {
     alpha: 1,
     blue: 1,
     decayPerTick: Math.fround(0.005),
@@ -1964,7 +1976,7 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
   assert.equal(comet.sample(201), null)
 
   const late = new NativeSecondaryScreenFeedbackPresentation(100, 'boneyard:test')
-  late.consume(screenEvent(1, 95, {
+  consumeScreenEvent(late, screenEvent(1, 95, {
     alpha: 1,
     blue: 1,
     decayPerTick: Math.fround(0.05),
@@ -1979,7 +1991,7 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
   assert.equal(late.sample(100)?.alpha, expectedLateAlpha)
 
   const camera = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:test')
-  camera.consume({
+  consumeScreenEvent(camera, {
     ...screenEvent(1, 0, {
       alpha: 1,
       blue: 1,
@@ -1996,7 +2008,7 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     Math.fround(Math.fround(0.25) * Math.fround(0.94)),
   )
 
-  camera.consume({
+  consumeScreenEvent(camera, {
     ...screenEvent(2, 1, {
       alpha: 1,
       blue: 1,
@@ -2029,6 +2041,9 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     presentationRng: createNativeRng(14),
     worldKey: 'boneyard:test',
   }, context)
+  etherBlast.consumeScreenFlashes({ epoch: 0, nextOrder: 2, writes: [{ order: 1, tick: 20, worldKey: 'boneyard:test',
+    position: { x: 0, y: 0 }, onlyIfClear: false, flash: { alpha: 1, red: 1, green: .25, blue: 1,
+      decayPerTick: Math.fround(.025), pointAttenuated: true } }] }, context)
   assert.deepEqual(etherBlast.sample(20), { alpha: 1, color: 0xff40ff })
   assert.equal(etherBlast.sampleCameraMagnitude(20), Math.fround(0.4))
   assert.equal(etherBlast.sample(21)?.alpha, Math.fround(0.975))

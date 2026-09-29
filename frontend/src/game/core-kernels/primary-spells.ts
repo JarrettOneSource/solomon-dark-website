@@ -1,3 +1,4 @@
+import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
 import { nativeAirContactLifetimeTicks } from './native-air-presentation.ts'
 import {
   playerHandSpellEmitterOffset,
@@ -159,6 +160,8 @@ import {
   nativeEtherBlastPulseOrigin,
   nativeEtherBlastReleaseCharges,
   NATIVE_ETHER_BLAST_PARTICLE_COUNT,
+  NATIVE_ETHER_BLAST_SCREEN_GREEN,
+  NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY,
   NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
   NATIVE_ETHER_BLAST_WEAPON_PULSE,
   NATIVE_PLAYER_WEAPON_PULSE_DECAY,
@@ -559,6 +562,7 @@ export interface PrimarySpellTickContext {
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
   registerWorldPainter?: RegisterNativeWorldPainter
+  writeScreenFlash?: WriteNativeScreenFlash
   rng: NativeRngState
   spells: PrimarySpellSimulationState
   tick: number
@@ -1512,6 +1516,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               presentationRng,
               worldKey,
             }))
+            context.writeScreenFlash?.({
+              flash: { alpha: 1, red: 1, green: NATIVE_ETHER_BLAST_SCREEN_GREEN, blue: 1,
+                decayPerTick: NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY, pointAttenuated: true },
+              onlyIfClear: false, position: nativeEtherBlastPulseOrigin(nextPlayer.position, aimDirection),
+              tick: context.tick, worldKey,
+            })
             nextId += 1
           }
         }

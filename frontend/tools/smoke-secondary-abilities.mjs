@@ -1,3 +1,5 @@
+import { createNativeScreenFlashWriter } from '../src/game/core-kernels/native-screen-flash.ts'
+import { acceptSharedScreenFlashOrder } from './screen-flash-order-smoke-acceptance.mjs'
 import assert from 'node:assert/strict'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { mkdir } from 'node:fs/promises'
@@ -60,6 +62,7 @@ const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === 
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 const primaryOverlap = process.env.SDR_SECONDARY_PRIMARY_OVERLAP === '1'
 const staffOverlap = process.env.SDR_SECONDARY_STAFF_OVERLAP === '1'
+const screenFlashOrdering = process.env.SDR_SCREEN_FLASH_ORDER_ACCEPTANCE === '1'
 const phasingFrameCapture = process.env.SDR_PHASING_FRAME_CAPTURE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (comparisonCapture) assert.equal(retainNativeViewport, true)
@@ -67,6 +70,7 @@ if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
 if (expectBlocked) assert.equal(requestedScene, 'hub')
 if (primaryOverlap) assert.equal(requestedScene, 'boneyard')
 if (staffOverlap) assert.equal(requestedScene, 'boneyard')
+if (screenFlashOrdering) assert.equal(requestedScene, 'boneyard')
 
 const PROOFS = Object.freeze({
   11: { audio: 'leviathan-roar', flash: true, kinds: ['leviathan', 'leviathan-appendage'] },
@@ -168,6 +172,7 @@ try {
         wireSecondarySamples.push({
           kinds: state.secondaryAbilities.actors.map(({ kind }) => kind),
           tick: state.tick,
+          screenFlashes: state.screenFlashes,
         })
         if (wireSecondarySamples.length > 2_000) wireSecondarySamples.shift()
       } catch {
@@ -310,6 +315,10 @@ try {
     : null
   if (!retainNativeViewport) await page.setViewportSize({ width: 800, height: 450 })
   await page.waitForTimeout(250)
+
+  const screenFlashOrderingReceipt = screenFlashOrdering
+    ? await acceptSharedScreenFlashOrder({ page, canvas, host, playerId, armQuickbar, baseSkillBook, wireSamples: wireSecondarySamples })
+    : null
 
   const abilities = NATIVE_SECONDARY_ABILITY_IDS.map((skillId) => ({
     name: NATIVE_SKILL_CATALOG[skillId].name,
@@ -1050,6 +1059,7 @@ try {
     responseErrors,
     scene: requestedScene,
     staffOverlap: staffOverlapReceipt,
+    screenFlashOrdering: screenFlashOrderingReceipt,
     screenshotRoot,
     sharedIceblast,
     statusEffects,
@@ -3224,11 +3234,13 @@ async function captureMagicShieldLifecycle(page, host, playerId, worldKey) {
   assert.ok(absorbBefore > 1)
   const damage = (amount) => {
     const state = host.state()
+    const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick)
     const result = applyNativeSecondaryPlayerDamage(
       state.secondaryAbilities, playerId, amount, state.tick,
       getPlayerCharacter(state, playerId).position, worldKey,
+      { physical: false, enhancedEffects: state.enhancedEffects, writeScreenFlash: flashes.write },
     )
-    Object.assign(state, { secondaryAbilities: result.state })
+    Object.assign(state, { secondaryAbilities: result.state, screenFlashes: flashes.state() })
     return result
   }
   const hitTick = host.state().tick

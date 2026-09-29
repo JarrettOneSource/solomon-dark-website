@@ -1,7 +1,5 @@
-import {
-  NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY,
-  NATIVE_ETHER_BLAST_SCREEN_GREEN,
-} from '../core-kernels/native-ether-blast.ts'
+import type { NativeScreenFlashState } from '../core-kernels/native-screen-flash.ts'
+import { NativeScreenFlashPresentation } from './native-screen-flash.ts'
 import {
   nativeRegionHitPointGain,
   nativeRegionPointGain,
@@ -9,7 +7,6 @@ import {
 import type {
   NativeSecondaryActorState,
   NativeSecondaryEventState,
-  NativeSecondaryScreenFlashState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import type {
   PrimarySpellEtherBlastState,
@@ -21,8 +18,6 @@ import type {
   BoneyardEnemyEventSnapshot,
 } from '../protocol/game-state.ts'
 import {
-  packNormalizedRgb,
-  repeatedFloatDecay,
   repeatedFloatMultiply,
 } from './native-secondary-draws.ts'
 import type {
@@ -74,20 +69,16 @@ export function nativeSecondaryWorldShake(
 }
 
 export class NativeSecondaryScreenFeedbackPresentation {
-  private alpha = 0
-  private blue = 1
   private cameraDisplacementX = 0
   private cameraDisplacementY = 0
   private cameraMagnitude = 0
-  private green = 1
   private lastEnemyEventId = 0
   private lastEventId = 0
   private lastPrimaryImpactId = 0
   private lastPrimaryFeedbackId = 0
   private lastPrimaryMagnitudeId = 0
   private lastTick: number
-  private red = 1
-  private decayPerTick = 0
+  private readonly flashes: NativeScreenFlashPresentation
   private readonly worldKey: string
 
   constructor(
@@ -96,11 +87,12 @@ export class NativeSecondaryScreenFeedbackPresentation {
   ) {
     this.lastTick = Math.max(0, Math.trunc(initialTick))
     this.worldKey = worldKey
+    this.flashes = new NativeScreenFlashPresentation(initialTick, worldKey)
   }
 
   consume(
     event: NativeSecondaryEventState,
-    context: NativeSecondaryScreenFeedbackContext,
+    _context: NativeSecondaryScreenFeedbackContext,
   ): void {
     if (event.eventId <= this.lastEventId) return
     this.lastEventId = event.eventId
@@ -119,17 +111,6 @@ export class NativeSecondaryScreenFeedbackPresentation {
       }
     }
     if (event.cameraDisplacement !== null) this.writeCameraDisplacement(event.cameraDisplacement, eventTick)
-    const flash = event.screenFlash
-    if (flash === null) return
-    const pointGain = flash.pointAttenuated
-      ? nativeRegionPointGain(
-          event.position,
-          context.cameraCenter,
-          context.visibleWorldWidth,
-          context.localPlayerAlternate,
-        )
-      : 1
-    this.writeFlash(flash, pointGain, eventTick)
   }
 
   consumeEnemy(event: BoneyardEnemyEventSnapshot, context: NativeSecondaryScreenFeedbackContext): void {
@@ -147,28 +128,10 @@ export class NativeSecondaryScreenFeedbackPresentation {
       this.writeCameraDisplacement({ x: Math.fround(event.cameraShake.displacement.x * scale),
         y: Math.fround(event.cameraShake.displacement.y * scale) }, event.tick)
     }
-    if (!event.screenFlash || event.screenFlashOnlyIfClear && this.alpha > 0) return
-    if (event.screenFlash.pointAttenuated && event.sourcePosition === undefined) {
-      throw new Error('Point-attenuated boss flash requires its world position')
-    }
-    const gain = event.screenFlash.pointAttenuated ? nativeRegionPointGain(event.sourcePosition!,
-      context.cameraCenter, context.visibleWorldWidth, context.localPlayerAlternate) : 1
-    this.writeFlash(event.screenFlash, gain, event.tick)
   }
 
-  private writeFlash(flash: NativeSecondaryScreenFlashState, pointGain: number, eventTick: number): void {
-    this.alpha = Math.fround(flash.alpha * pointGain)
-    this.blue = flash.blue
-    this.decayPerTick = flash.decayPerTick
-    this.green = flash.green
-    this.red = flash.red
-    if (eventTick < this.lastTick) {
-      this.alpha = repeatedFloatDecay(
-        this.alpha,
-        this.decayPerTick,
-        this.lastTick - eventTick,
-      )
-    }
+  consumeScreenFlashes(state: NativeScreenFlashState, context: NativeSecondaryScreenFeedbackContext): void {
+    this.flashes.consume(state, context)
   }
 
   consumePrimaryCameraDisplacement(input: Readonly<{
@@ -202,7 +165,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
 
   consumePrimaryEtherBlast(
     effect: PrimarySpellEtherBlastState,
-    context: NativeSecondaryScreenFeedbackContext,
+    _context: NativeSecondaryScreenFeedbackContext,
   ): void {
     if (effect.id <= this.lastPrimaryFeedbackId) return
     this.lastPrimaryFeedbackId = effect.id
@@ -210,24 +173,9 @@ export class NativeSecondaryScreenFeedbackPresentation {
     const eventTick = Math.max(0, Math.trunc(effect.birthTick))
     if (eventTick > this.lastTick) this.advanceTo(eventTick)
     this.cameraMagnitude = Math.fround(effect.charges * Math.fround(0.1))
-    this.alpha = nativeRegionPointGain(
-      effect.origin,
-      context.cameraCenter,
-      context.visibleWorldWidth,
-      context.localPlayerAlternate,
-    )
-    this.blue = 1
-    this.decayPerTick = NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY
-    this.green = NATIVE_ETHER_BLAST_SCREEN_GREEN
-    this.red = 1
     if (eventTick < this.lastTick) {
-      const elapsed = this.lastTick - eventTick
-      this.alpha = repeatedFloatDecay(this.alpha, this.decayPerTick, elapsed)
-      this.cameraMagnitude = repeatedFloatMultiply(
-        this.cameraMagnitude,
-        MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
-        elapsed,
-      )
+      this.cameraMagnitude = repeatedFloatMultiply(this.cameraMagnitude,
+        MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY, this.lastTick - eventTick)
     }
   }
 
@@ -253,12 +201,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
   }
 
   sample(tick: number): NativeSecondaryScreenOverlay | null {
-    this.advanceTo(Math.max(0, Math.trunc(tick)))
-    if (this.alpha <= 0) return null
-    return {
-      alpha: this.alpha,
-      color: packNormalizedRgb(this.red, this.green, this.blue),
-    }
+    return this.flashes.sample(tick)
   }
 
   sampleCameraMagnitude(tick: number): number {
@@ -277,13 +220,6 @@ export class NativeSecondaryScreenFeedbackPresentation {
   private advanceTo(tick: number): void {
     if (tick <= this.lastTick) return
     const elapsedTicks = tick - this.lastTick
-    if (this.alpha > 0 && this.decayPerTick > 0) {
-      this.alpha = repeatedFloatDecay(
-        this.alpha,
-        this.decayPerTick,
-        elapsedTicks,
-      )
-    }
     this.cameraMagnitude = repeatedFloatMultiply(
       this.cameraMagnitude,
       MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,

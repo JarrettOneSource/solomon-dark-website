@@ -712,6 +712,11 @@ export async function createHubWorldRenderer(
         )
         secondaryScreenFeedback.set(participant.region, screenFeedback)
       }
+      screenFeedback.consumeScreenFlashes(snapshot.screenFlashes, {
+        cameraCenter: { x: camera.x + visibleWorldWidth / 2,
+          y: camera.y + viewport.height / baseCameraScale / 2 },
+        localPlayerAlternate: player.progression.lifeState !== 'alive', visibleWorldWidth,
+      })
       for (const event of snapshot.secondaryAbilities.events) {
         screenFeedback.consume(event, {
           cameraCenter: {

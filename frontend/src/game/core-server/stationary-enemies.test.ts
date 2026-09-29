@@ -234,6 +234,7 @@ test('stationary roots survive save/resume and legacy roots migrate without inve
       if (legacy) {
         parsed.schemaVersion = 37
         delete parsed.continuation.simulation.enhancedEffects
+        delete parsed.continuation.simulation.screenFlashes
         delete parsed.profile.advancedUnlocks
         delete parsed.continuation.simulation.world.enemies.actors[0].brain.anchorPosition
       }

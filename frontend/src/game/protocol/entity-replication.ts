@@ -321,6 +321,7 @@ export function createGameSnapshotFrame(
     players: playerSnapshotFrames(snapshot.players, baseline, keyframe),
     primarySpells: projection.primarySpells,
     secondaryAbilities: snapshot.secondaryAbilities,
+    screenFlashes: snapshot.screenFlashes,
     run: snapshot.run,
     tick: snapshot.tick,
   }
@@ -519,6 +520,7 @@ export class EntityReplicationReconstructor {
       players,
       primarySpells: frame.primarySpells,
       secondaryAbilities: frame.secondaryAbilities,
+      screenFlashes: frame.screenFlashes,
       run: frame.run,
       tick: frame.tick,
     }

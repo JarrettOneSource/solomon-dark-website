@@ -1,3 +1,5 @@
+import { nativeScreenFlashes } from '../protocol/codecs/screen-flash.ts'
+import { createNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { hubActionFeedback } from '../protocol/codecs/economy.ts'
 import { createNativeStoneskinWarp } from '../core-kernels/native-stoneskin.ts'
 import { nativeWeldMeteorRootPosition } from '../core-kernels/native-weld-meteor.ts'
@@ -122,6 +124,7 @@ const SIMULATION_KEYS = [
   'primarySpells',
   'run',
   'secondaryAbilities',
+  'screenFlashes',
   'tick',
   'world',
 ] as const
@@ -752,7 +755,8 @@ function normalizeSimulation(
   const source = record(value, 'game save simulation')
   const savedTick = integerWithin(source.tick, 'game save simulation tick', 0, Number.MAX_SAFE_INTEGER)
   rejectUnexpectedKeys(source, 'game save simulation', [
-    ...SIMULATION_KEYS.filter(key => key !== 'enhancedEffects' || sourceSchemaVersion >= 46),
+    ...SIMULATION_KEYS.filter(key => (key !== 'enhancedEffects' || sourceSchemaVersion >= 46)
+      && (key !== 'screenFlashes' || sourceSchemaVersion >= 47)),
     ...(sourceSchemaVersion < 21 ? ['lightProviderOrder'] : []),
     'playerOfferRng',
   ])
@@ -762,6 +766,7 @@ function normalizeSimulation(
     accumulatorSeconds: source.accumulatorSeconds,
     combatRng: source.combatRng ?? createNativeRng(0),
     enhancedEffects: sourceSchemaVersion < 46 ? true : source.enhancedEffects,
+    screenFlashes: sourceSchemaVersion < 47 ? createNativeScreenFlashes() : nativeScreenFlashes(source.screenFlashes, 'game save screenFlashes', savedTick),
     gameRng,
     hallOfFameClockStartedAtTick: source.hallOfFameClockStartedAtTick ?? 0,
     levelUpBarrier: source.levelUpBarrier,

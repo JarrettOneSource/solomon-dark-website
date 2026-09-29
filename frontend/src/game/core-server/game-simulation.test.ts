@@ -64,6 +64,8 @@ import {
   createNativeSecondaryPlayerState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
+import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
 import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
@@ -3643,6 +3645,10 @@ test('every secondary Inventory belt action commits without stepping the frozen 
     })
     assert.equal(result.accepted, true, `${skillId} accepted`)
     assert.equal(result.state.tick, paused.tick, `${skillId} tick`)
+    assert.deepEqual(result.state.screenFlashes.writes.map(write => write.flash),
+      result.state.secondaryAbilities.events.flatMap(event => event.screenFlash ? [event.screenFlash] : []),
+      `${skillId} actual secondary flash writer membership`)
+
     assert.deepEqual(result.state.gameRng, paused.gameRng, `${skillId} world RNG`)
     assert.equal(result.state.secondaryAbilities.players.caster?.castSequence, 1, `${skillId} cast`)
     assert.equal(result.state.secondaryAbilities.players.caster?.lastSkillId, skillId, `${skillId} identity`)
@@ -3818,6 +3824,78 @@ function staffSecondaryState(
     secondaryAbilities: { ...state.secondaryAbilities, players: { caster: createNativeSecondaryPlayerState() } },
   }
 }
+
+test('actual same-tick Faculty death then Ring cast preserves authority order through replication', () => {
+  let state = staffSecondaryState(35, 'player-staff-melee')
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('Boneyard required')
+  const managers = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const enemies = stepBoneyardEnemyStore(state.world.enemies, {
+    players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: managers.register,
+    resolveMovement: ({ position }) => position,
+    resolveSpawnIntents: () => [{ enemyToken: 'DIREFACULTY', flags: [], id: 1,
+      authoredRecipe: nativeFacultyRecipe('9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9', 'Dire Sirmin'),
+      locationPolicy: 'anywhere', nativeTypeId: 1010, pathfindingMode: 2,
+      position: { ...getPlayerCharacter(state, 'caster').position }, spawnTick: state.tick, waveOrdinal: 32 }],
+    tick: state.tick,
+  }).store
+  state = { ...state, worldManagerOrder: managers.state(), world: { ...state.world,
+    enemies: { ...enemies, featuredBossId: null, actors: enemies.actors.map(actor => ({ ...actor,
+      currentHealth: 0, lifeState: 'dying', deathStartedTick: state.tick, deathTick: 0 })) } } }
+  const before = state.screenFlashes
+  const next = stepGameSimulationTick(state, { caster: {
+    ...gameplayInput(0, 0), cast: { primary: false, quickbar: 0 },
+  } })
+  const writes = next.screenFlashes.writes
+  assert.deepEqual(writes.map(write => [write.order, write.tick, write.flash.red]), [[1, 1, 0], [2, 1, Math.fround(.9)]])
+  assert.deepEqual(state.screenFlashes, before, 'previous authoritative state stays immutable')
+  const wire = gameSnapshot(JSON.parse(JSON.stringify(createGameSnapshot(next, 'caster'))))
+  assert.deepEqual(wire.screenFlashes, next.screenFlashes)
+  const frame = createGameSnapshotFrame(wire, 0, undefined, true)
+  const decoded = decodeServerGameMessage(encodeGameMessage({ type: 'server-snapshot', sequence: 1,
+    acknowledgedInputSequence: 0, frame }))
+  assert.equal(decoded.type, 'server-snapshot')
+  if (decoded.type !== 'server-snapshot') throw new Error('Snapshot required')
+  const lane = new NativeSecondaryScreenFeedbackPresentation(0, writes[0]!.worldKey)
+  lane.consumeScreenFlashes(decoded.frame.screenFlashes, { cameraCenter: writes[0]!.position,
+    localPlayerAlternate: false, visibleWorldWidth: 1600 })
+  assert.deepEqual(lane.sample(1), { alpha: 1, color: 15073279 })
+  for (const invalidField of ['missing', 'duplicate', 'future', 'nextOrder']) {
+    const invalid = JSON.parse(encodeGameMessage(decoded))
+    const journal = invalid.frame.screenFlashes
+    if (invalidField === 'missing') delete invalid.frame.screenFlashes
+    if (invalidField === 'duplicate') journal.writes[1].order = journal.writes[0].order
+    if (invalidField === 'future') journal.writes[1].tick = invalid.frame.tick + 1
+    if (invalidField === 'nextOrder') journal.nextOrder = journal.writes[1].order
+    assert.throws(() => decodeServerGameMessage(JSON.stringify(invalid)), /screenFlashes/)
+  }
+})
+
+test('Ether Blast birth writes the same retained flash lane beyond the particle lifetime', () => {
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane', displayName: 'Ether flash', element: 'ether',
+  } }), combatBoneyard('ether-flash-order'))
+  state = withPlayerSkillRank(state, 'caster', 14, 1)
+  const character = getPlayerCharacter(state, 'caster')
+  state = { ...state, playerEntities: replacePlayerCharacter(state.playerEntities, 'caster', {
+    ...character, primaryCast: { ...character.primaryCast, etherBlastCharge: 4 },
+  }) }
+  for (let tick = 0; tick < 25 && state.screenFlashes.writes.length === 0; tick += 1) {
+    state = stepGameSimulationTick(state, { caster: {
+      ...gameplayInput(0, 0), cast: { primary: true, quickbar: null }, aim: { x: 500, y: 250 },
+    } })
+  }
+  const write = state.screenFlashes.writes[0]
+  assert.ok(write, 'Actual Ether Blast emission must write feedback')
+  assert.deepEqual(write.flash, { alpha: 1, red: 1, green: Math.fround(.25), blue: 1,
+    decayPerTick: Math.fround(.025), pointAttenuated: true })
+  assert.equal(write.tick, state.primarySpells.transients.find(actor => actor.kind === 'ether-blast')?.birthTick)
+  const lane = new NativeSecondaryScreenFeedbackPresentation(write.tick + 25, write.worldKey)
+  lane.consumeScreenFlashes(state.screenFlashes, { cameraCenter: write.position,
+    localPlayerAlternate: false, visibleWorldWidth: 1600 })
+  assert.ok(lane.sample(write.tick + 25)!.alpha > .37)
+})
 
 test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {
   const loaded = combatBoneyard('spell-ordering-run')

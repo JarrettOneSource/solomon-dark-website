@@ -1,3 +1,4 @@
+import type { NativeScreenFlashState } from '../core-kernels/native-screen-flash.ts'
 import type { NativePuppetHitState, NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { BoneyardSolomonDigEvent, BoneyardSolomonPhase, BoneyardSolomonVoiceEvent } from '../core-kernels/boneyard-encounter.ts'
@@ -958,6 +959,7 @@ export interface GameSnapshot {
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
   secondaryAbilities: NativeSecondarySnapshotState
+  screenFlashes: NativeScreenFlashState
   run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshot
@@ -976,6 +978,7 @@ export interface GameSnapshotFrame {
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>
   primarySpells: PrimarySpellSimulationFrameState
   secondaryAbilities: NativeSecondarySnapshotState
+  screenFlashes: NativeScreenFlashState
   run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshotFrame

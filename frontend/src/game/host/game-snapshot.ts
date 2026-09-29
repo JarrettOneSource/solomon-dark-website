@@ -37,6 +37,7 @@ export function createGameSnapshot(
         players,
         primarySpells: state.primarySpells,
         secondaryAbilities: protocolSecondaryAbilities(state.secondaryAbilities),
+        screenFlashes: state.screenFlashes,
         run: state.run,
         tick: state.tick,
         world: {
@@ -87,6 +88,7 @@ export function createGameSnapshot(
         players,
         primarySpells: state.primarySpells,
         secondaryAbilities: protocolSecondaryAbilities(state.secondaryAbilities),
+        screenFlashes: state.screenFlashes,
         run: state.run,
         tick: state.tick,
         world: {

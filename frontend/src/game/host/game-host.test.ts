@@ -223,6 +223,7 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
   const legacyUnsigned = structuredClone(final)
   legacyUnsigned.schemaVersion = 12
   delete legacyUnsigned.continuation.simulation.enhancedEffects
+  delete legacyUnsigned.continuation.simulation.screenFlashes
   delete legacyUnsigned.profile.advancedUnlocks
   delete legacyUnsigned.nativeSource
   const legacyPlayerStore = legacyUnsigned.continuation.simulation.playerEntities

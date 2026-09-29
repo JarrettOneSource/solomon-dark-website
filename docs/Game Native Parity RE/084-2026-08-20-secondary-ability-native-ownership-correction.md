@@ -1,5 +1,89 @@
 # 2026-08-20 — Secondary-ability native ownership correction
 
+## 2026-09-29 — Approved shared ordering remedy; Ring children unchanged
+
+Task `87f1ead8` repaired the independently proved shared flash ordering/timing
+cause after explicit user approval. The canonical authority/presentation owner,
+complete writer roster, reset/interpolation/save/wire contracts and qualified
+acceptance are recorded in ledger083's new approved-repair section and the task
+implementation report. Historical hold statements below describe the earlier
+phases and are superseded for this approved remedy.
+
+The supplied full clip and native/current membership comparison remain valid:
+three record-16 children and one record-17 ground child, with the existing
+float32 growth, loss, perspective, snow-quality and rank programs. No extra ring,
+new color or altered actor lifetime was introduced. Different current writer
+families now share actual authority order and presentation eligibility; Ring
+alone keeps its authored cyan input, while a later native black writer wins.
+The historical blackout's writer and sampled texture remain unidentified, so
+this is a scoped ordering repair rather than a claimed exact replay of that
+retail clip. Ether Drain is separately Report66 and stays outside this repair;
+the mixed follow-up stays unchecked.
+
+
+## 2026-09-29 — Report20 renewed comparison: user decision hold
+
+Task `87f1ead8` inspected the complete new reporter-supplied Ring clip from
+message `1554348964122202142`, attachment `1554348961785970690`. Its original
+2,443,397 served bytes are retained in the report archive with SHA-256
+`1fabfdae6b7f368523559834a86805a8e58ea68e440100f49957e967bf5d5e8e`.
+Native AVFoundation on the coordinated M5 SSD decoded all 90 frames at
+1584x900, duration 3.014 seconds. Only the final approximately 0.6 seconds
+shows Ring of Ice. The clip's executable build, rank, graphics flags and full
+combat state are unknown; this is supplied historical footage, not a new
+controlled clean-stock receipt.
+
+Bounded LLVM instruction decoding on M5 independently rechecked the retail
+executable identity recorded below, factory `00644460`, Iceblast tick `00452ED0`,
+Iceblast draw `00455B30` and vtable `00785514`. Factory construction confirms
+three immediate record-16 children, initial scale one/life 4.5, growth
+float32 `1.02/1.015/1.01`, loss float32 `.05/.05/.065`, direct Region `+278`.
+The draw's double at `00784818` is exactly the float32 `.8` value widened to
+double; the current perspective constant agrees. One record-17 ground child
+has scale 1.5, life 1.75, loss `.01`, direct Region `+2C4`. The branch at
+`0064484D` changes snow quantity 100/200 only. Rank and Frostburn feature
+state do not introduce more rings. Ring and Comet remain the two factory
+callers identified by the prior complete census; Frost Missile shares the
+edge asset through its distinct helper.
+
+Current tree `afa6d2e20308f02e343f2f1a92ed1c0a9cfd973a` passed its unchanged
+M5 production build and ordinary built-browser Ring/Comet/shared-Frost-Missile
+journey, with no browser page/console/response errors. A task-owned CDP
+observer captured 53 PNG frames around the cast in that actual built scene.
+Associated diagnostic samples have the three edge bindings, ground and snow,
+including three edges and 200 snow particles around observed authority age
+54. The PNGs, host ages and later browser queries are not atomic, so this is
+qualitative appearance evidence rather than exact frame/tick alignment. The source tree
+remained unchanged throughout build and browser work. Fourteen selected
+existing Ring/FreezeWave-related tests passed. This is an investigation
+receipt, not a new full canonical gate or a completed remedy.
+
+The supplied clip darkens the world at approximately 2.414 seconds and then
+reveals blue rings. The current built Ring instead presents a pale cyan
+screen wash during the early interval. This material visible difference is
+on hold under the user's explicit requirement to present discrepancies
+before implementing a remedy. It does **not** prove missing ring children or
+a Ring-specific flash bug: factory `00644460` writes RGB `(.9,1,1)` with point
+gain and `.01` alpha loss, agreeing with current source and entry 083's shared
+Region flash contract. Other combat producers can overwrite that lane; the
+clip does not identify which producer owns its blackout. No fabricated extra
+rings, black overlay, timing change or shared-flash fix has been implemented.
+
+The three-child render program is recovered and present in the tested
+rank-one Enhanced-On scene and Comet impact. Other ranks/Off birth membership
+remain supported by native instructions, existing tests and the prior
+accepted result; new real-browser variants and controlled flash comparison
+are not claimed. The new contrast allegation remains unresolved. Any remedy
+requires the user's target choice and a proved owning contract, including
+the shared flash producers if that lane is implicated. No browser-platform
+limitation justifies approximating the native art or inventing a dark flash.
+
+Private decision evidence and precise current checks are recorded in
+`/Users/jarrett/codex-runs/solomon-direct-report20-20260929/REPORT.md`.
+The same Discord message's Ether Drain clause is separate and unresolved;
+the whole message must remain unchecked. The original September24 acceptance
+and original completion reaction remain historical and are not erased.
+
 ## 2026-09-24 — Report 20: Ring of Ice artwork and child painter ownership
 
 Fleet `8g5zlwy0`, M2. The native recovery and focused implementation/browser

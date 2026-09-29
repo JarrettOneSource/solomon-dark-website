@@ -1,3 +1,4 @@
+import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import { boneyardMouthWorldTargets } from './boneyard-world-targets.ts'
 import { resolveActorMotion, resolveUnpushedMoverMotion } from '../core-kernels/actor-physics.ts'
 import { DynamicActorGrid } from '../core-kernels/dynamic-actor-grid.ts'
@@ -48,6 +49,7 @@ export function stepBoneyardWorldTick(
   hostileScenePaused = false,
   lightEnvironment: BoneyardLightEnvironment = {},
   enhancedEffects = true,
+  writeScreenFlash?: WriteNativeScreenFlash,
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -548,6 +550,8 @@ export function stepBoneyardWorldTick(
     },
     registerWorldPainter,
     registerProjectileWorldPainter,
+    writeScreenFlash,
+    screenFlashWorldKey: `boneyard:${world.runId}`,
     retirementObserver: {
       onTerminalOutput: (output, outputCount) => {
         for (const intensity of nativeEnemyWorldFeedbackImpulses(output, outputCount)) {

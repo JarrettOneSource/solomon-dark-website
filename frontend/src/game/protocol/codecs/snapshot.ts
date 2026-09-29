@@ -1,3 +1,4 @@
+import { nativeScreenFlashes } from './screen-flash.ts'
 import {
   gameRunWorldTick,
   GAME_OVER_AUTOMATIC_ACCEPT_TICK,
@@ -158,7 +159,7 @@ export function gameSnapshot(value: unknown): GameSnapshot {
   onlyKeys(source, 'snapshot', [
     'enhancedEffects',
     'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
-    'primarySpells', 'run', 'secondaryAbilities', 'tick', 'world',
+    'primarySpells', 'run', 'secondaryAbilities', 'screenFlashes', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -212,6 +213,7 @@ export function gameSnapshot(value: unknown): GameSnapshot {
   }
   return {
     enhancedEffects: boolean(source.enhancedEffects, 'snapshot.enhancedEffects'),
+    screenFlashes: nativeScreenFlashes(source.screenFlashes, 'snapshot.screenFlashes', tick),
     hostPlayerId,
     levelUpBarrier,
     materializingPlayerIds,
@@ -230,7 +232,7 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   onlyKeys(source, 'frame', [
     'enhancedEffects',
     'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
-    'primarySpells', 'run', 'secondaryAbilities', 'tick', 'world',
+    'primarySpells', 'run', 'secondaryAbilities', 'screenFlashes', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'frame.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -276,6 +278,7 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   }
   return {
     enhancedEffects: boolean(source.enhancedEffects, 'frame.enhancedEffects'),
+    screenFlashes: nativeScreenFlashes(source.screenFlashes, 'frame.screenFlashes', tick),
     hostPlayerId,
     levelUpBarrier,
     materializingPlayerIds,

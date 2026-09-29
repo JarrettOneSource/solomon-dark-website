@@ -166,6 +166,13 @@ export function emitEvent(
   actorId: BoneyardEnemyActorId,
   patch: Omit<Partial<BoneyardEnemySemanticEvent>, 'actorId' | 'eventId' | 'tick' | 'type'> = {},
 ): number {
+  if (patch.screenFlash) {
+    if (patch.screenFlash.pointAttenuated && patch.sourcePosition === undefined) {
+      throw new Error('Point-attenuated enemy flash requires its world position')
+    }
+    work.writeScreenFlash?.({ flash: patch.screenFlash, onlyIfClear: patch.screenFlashOnlyIfClear ?? false,
+      position: patch.sourcePosition ?? { x: 0, y: 0 }, tick, worldKey: work.screenFlashWorldKey })
+  }
   const eventId = work.nextEventId
   work.nextEventId += 1
   work.events.push(Object.freeze({

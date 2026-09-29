@@ -1,3 +1,4 @@
+import type { WriteNativeScreenFlash } from '../../core-kernels/native-screen-flash.ts'
 import type { NativePuppetHitState, NativeWorldPuppetHit, NativeWorldPuppetHitKind } from '../../core-kernels/native-puppet-hit.ts'
 import type { NativeDemonArticulationState } from '../../core-kernels/boneyard-demon-articulation.ts'
 import type { BoneyardEnemyArenaScalars, EvaluatedBoneyardEnemyConfig } from '../../core-kernels/boneyard-enemy-config-model.ts'
@@ -850,6 +851,8 @@ export interface BoneyardEnemyRetirementObserver {
 }
 
 export interface BoneyardEnemyStoreStepContext {
+  readonly screenFlashWorldKey?: string
+  readonly writeScreenFlash?: WriteNativeScreenFlash
   readonly enhancedEffects?: boolean
   readonly nativeMovementView?: {
     readonly arenaBounds: Readonly<BoneyardBounds>
@@ -968,6 +971,8 @@ export interface TumbleBoneyardArrowResult {
 }
 
 export interface WorkingStep {
+  screenFlashWorldKey: string
+  writeScreenFlash?: WriteNativeScreenFlash
   readonly enhancedEffects: boolean
   puppetHits: NativeWorldPuppetHit[]
   silkFragments: NativeFadeLineActor[]

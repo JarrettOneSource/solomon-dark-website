@@ -1,3 +1,4 @@
+import { copyNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { receiveNativePuppetHit, stepNativePuppetHit, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
@@ -184,6 +185,7 @@ function interpolateSnapshot(
   }
   return {
     enhancedEffects: blend < 1 ? older.enhancedEffects : newer.enhancedEffects,
+    screenFlashes: copyNativeScreenFlashes(newer.screenFlashes),
     hostPlayerId: blend < 1 ? older.hostPlayerId : newer.hostPlayerId,
     levelUpBarrier: blend < 1 ? older.levelUpBarrier : newer.levelUpBarrier,
     materializingPlayerIds: blend < 1
@@ -417,6 +419,7 @@ function presentationCopy(
 ): BoneyardPresentationFrame {
   return {
     enhancedEffects: snapshot.enhancedEffects,
+    screenFlashes: copyNativeScreenFlashes(snapshot.screenFlashes),
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
     materializingPlayerIds: snapshot.materializingPlayerIds,

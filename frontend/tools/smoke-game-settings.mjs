@@ -1,3 +1,4 @@
+import { createNativeScreenFlashWriter } from '../src/game/core-kernels/native-screen-flash.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -858,6 +859,7 @@ async function captureReducedScreenFlash(page, host, selector) {
   const worldKey = state.world.kind === 'hub'
     ? `hub:${state.world.participants[playerId]?.region ?? 'courtyard'}`
     : `boneyard:${state.world.runId}`
+  const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick)
   state.secondaryAbilities = emitNativePlayerScreenFlash(state.secondaryAbilities, {
     ownerId: playerId,
     position: player.position,
@@ -871,7 +873,8 @@ async function captureReducedScreenFlash(page, host, selector) {
     },
     tick: state.tick,
     worldKey,
-  })
+  }, flashes.write)
+  state.screenFlashes = flashes.state()
   const observed = await page.waitForFunction((selector) => {
     const node = document.querySelector(selector)
     const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame

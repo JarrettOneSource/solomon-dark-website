@@ -1,5 +1,124 @@
 # 2026-08-15 — Complete right-click ability system
 
+## 2026-09-29 — Approved shared flash authority and presentation repair
+
+The user approved the concrete ordering/timing remedy for task `87f1ead8`.
+`core-kernels/native-screen-flash.ts` now owns an immutable authority journal:
+reset epoch, next execution order, and ordered tick/world/position/RGBA/loss/
+conditional-write inputs. Actual writer execution allocates the order. This is
+independent of secondary event IDs, enemy event IDs, primary actor IDs, packet
+grouping and painter-registration order. No source-family precedence is inferred.
+
+Closed current writer membership:
+
+| Family | Actual write boundary and coverage |
+| --- | --- |
+| Secondary factories, cast/actor pulses and impacts | All 22 direct flash emissions call the canonical writer at `emitNativeSecondaryEvent`, through the existing tick/cast context. Includes fire, magic circle/trap, shield apply/explode, Mindstar, Planes/Planewalker/orb, both Rings, Stoneskin, both Teleport writes, Earthquake, Comet and Flash response. |
+| Player contacts and poison | Shield explosion, reflected/player Flash response and Pike break pass the same transaction writer. Harden and other camera/audio-only events do not write a screen flash. |
+| Enemy writes | `enemies/events.ts::emitEvent` admits Faculty death, Heartmonger Crow strike, boss spell impact, Demon Skull flash/death and conditional Ultra Banish in actual execution order. |
+| Primary | Ether Blast writes at its actual birth, preserving point gain and `.025` loss; its particle lifetime no longer owns flash retention. Meteor and weld-flight feedback remain camera-only. |
+
+`renderer/native-screen-flash.ts` consumes that one lane at the observer's
+presentation tick. Future writes wait; eligible writes replay in authority order,
+including the native only-if-clear predicate. A later overwrite, even with zero
+observer gain or an expired alpha, prevents an old delivery from resurrecting.
+Gain freezes on eligibility; aging uses the existing repeated float32 subtract
+and clamp. Authoritative history retains per-world unconditional anchors for
+conditional writes and interpolation; observer history drops superseded writes.
+World resets advance an epoch and clear old lane state. Boneyard, courtyard and
+all private Hub regions use this owner. Existing camera arbitration and final
+reduced-flash alpha scaling remain in their existing owners.
+
+Protocol `142` carries the journal through ordinary snapshot frames and entity
+materialization. Interpolation admits the newer journal but eligibility uses the
+sampled presentation clock. Save schema `47` preserves and validates epoch,
+execution order, snapshot time and authored input values. Older saves start with
+an empty transient flash lane because their independent IDs cannot recover
+cross-family execution history. They retain their gameplay and visible actors.
+
+Public regressions cover grouping/intake reversal, future/paused ticks,
+same-tick actual Faculty/Ring writes, duplicates, late-old expiration,
+conditional writes, zero gain, reset epochs, current/legacy save and wire trust,
+and Ether Blast's actual birth. The existing all-secondary Inventory journey
+asserts every flash-producing row's journal admission. Built acceptance uses
+actual Ring and Faculty emitters on normal host/WebSocket/materializer/timeline
+plumbing, with synchronous `readPixels` immediately after the actual render.
+Exact final gate/browser/publication/cleanup receipts belong to this task's
+implementation report; earlier membership and investigation receipts below
+remain historical.
+
+Ring's three edges, ground circle, snow branch, authored colors and lifetime
+programs are unchanged. This repair does not reproduce the historical clip,
+identify its exact blackout writer/sampler, force Ring black, or copy the native
+texture-state quirk. The separately archived Ether Drain Report66 remains open;
+bundled message `1554348964122202142` is not a whole-message completion target
+until that independent issue is resolved.
+
+
+## 2026-09-29 — Report20 shared flash consumer investigation, remedy pending
+
+Task `87f1ead8` rechecked the actual consumer rather than treating producer
+RGB as final screen color. Retail 0.72.5 SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `00400000`, was decoded on M5 through installed LLVM tools.
+The ordered trace is: four-float copy `0040F9E0`; shared overwrite helper
+`00448600` / inline writers into Region `+8E14..+8E24`; repeated alpha
+subtraction at `0063F255`; Arena positive-alpha branch `004701C5`; RGBA
+setter `0041FE50` called at `00470230`; filled rectangle `0041DD70` at
+`00470279`; white restoration at `0047029E`. The rectangle appends the
+current packed color through `0041C6A0`. This follows world/light/queue
+painting and precedes later player overlays and the HUD.
+
+The consumer has an additional material input. Graphics `+2AC` and current
+texture `+2A4` control whether the rectangle retains a valid texture and
+uses the UV center of its texture-object quad (`0041C460`), or uses the
+unbound/zero-UV path. The Arena sets saturation float32 `.65`; embedded
+shader at `007DDB38` samples sampler0, multiplies its RGB by vertex RGB and
+its alpha by vertex alpha. Blend dispatcher `004208A0` retains selectors
+zero `SRCALPHA/INVSRCALPHA`, one `SRCALPHA/ONE`, two `ZERO/SRCCOLOR`.
+Thus a cyan producer is not proof of cyan final pixels. Unbound ps2.0
+sampling is opaque black in Wine's native-compatibility
+`dlls/d3d9/tests/visual.c::unbound_sampler_test`; no Wine/Windows code was
+executed. The original clip's actual sampler, latest writer and complete
+render state are not identified, so a null/stale-texture explanation is
+conditional, not an established Ring-specific bug.
+
+The current web has a separately proved temporal defect. Boneyard renderer
+consumes queued enemy events, then secondary events, then primary feedback.
+`NativeSecondaryScreenFeedbackPresentation` deduplicates within each lane
+but lets an older write from another lane replace a newer write. A valid
+Ring write at tick100 and black enemy write at tick101 produce cyan at
+sample105 when received together; the identical inputs received in separate
+frames produce black. Native four-float chronological storage keeps the
+newer black write. The renderer also applies a queued future enemy write
+before the sampled presentation tick in the controlled probe.
+
+An M5 controlled WebGL2 diagnostic used the unchanged public feedback class,
+the exact installed fixed-function/Arena pipelines and current flash
+geometry. Synchronous `render` plus `readPixels` gave `[225,242,242,255]`
+for one-batch ordering and `[1,2,3,255]` for the separate/chronological state
+on the same background. Browser and GL error arrays were empty. This
+demonstrates a real shared presentation defect independently of the
+historical clip, not a replay of that clip or a fresh retail recording.
+
+The proposed remedy is one presentation-clock-ordered flash write path
+across secondary, enemy and primary writers, with actual authoritative
+ordering for same-tick ties. Older or future writes must not win by category
+or packet grouping. Preserve source RGB, trigger-time point gain, float32
+loss, world identity, ordered overwrite, reduced-flash adaptation and all
+Ring/Comet children/lifetimes. Do not fabricate more rings or force a black
+overlay. No product implementation, protocol change, full gate, publication
+or reaction occurred. User approval of the proved ordering remedy remains
+required under the Report20 discrepancy hold. Exact clip attribution and
+native sampler-state parity remain qualified open evidence.
+
+The literal alpha-offset census found39 stores plus10 direct calls to the
+common helper; the private receipt preserves preferred addresses/contexts.
+These are investigation findings, not a new blanket closure of every writer.
+All secondary writer rows below and enemy/primary/shared consumer paths are
+the affected membership if the remedy is approved. Shared display changes
+do not implement the separate Ether Drain gameplay allegations.
+
 > **2026-09-24 correction — report 20:** historical Ring/Comet/Frost Missile
 > Iceblast references to DeadHawg records 114/121 below are superseded by
 > [ledger 084](084-2026-08-20-secondary-ability-native-ownership-correction.md).

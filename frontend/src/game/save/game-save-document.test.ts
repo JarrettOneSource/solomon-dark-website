@@ -95,6 +95,7 @@ test('Enhanced Effects continuation preserves the world mode and old saves defau
   const legacy = JSON.parse(document)
   downgradeSaveSchema(legacy, 45)
   delete legacy.continuation.simulation.enhancedEffects
+  delete legacy.continuation.simulation.screenFlashes
   const old = restoreGameSaveDocument(JSON.stringify(legacy)).state
   assert.equal(old.enhancedEffects, true)
   assert.deepEqual(old.gameRng, on.gameRng)
@@ -3048,13 +3049,14 @@ function removeSchema21WorldPainterFields(value: unknown): void {
 
 function downgradeSaveSchema(
   document: { schemaVersion: number; profile?: { advancedUnlocks?: unknown };
-    continuation?: { simulation?: { enhancedEffects?: boolean } } },
+    continuation?: { simulation?: { enhancedEffects?: boolean; screenFlashes?: unknown } } },
   schemaVersion: number,
 ): void {
   document.schemaVersion = schemaVersion
   if (schemaVersion < 46 && document.continuation?.simulation) {
     delete document.continuation.simulation.enhancedEffects
   }
+  if (schemaVersion < 47 && document.continuation?.simulation) delete document.continuation.simulation.screenFlashes
   if (schemaVersion < 45 && document.profile) delete document.profile.advancedUnlocks
 }
 

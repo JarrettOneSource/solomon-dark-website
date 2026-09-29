@@ -1,3 +1,4 @@
+import { copyNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { clamp, lerp } from './presentation-math.ts'
 import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
 import type {
@@ -271,6 +272,7 @@ function interpolateSnapshot(
 
   return {
     enhancedEffects: blend < 1 ? older.enhancedEffects : newer.enhancedEffects,
+    screenFlashes: copyNativeScreenFlashes(newer.screenFlashes),
     hostPlayerId: blend < 1 ? older.hostPlayerId : newer.hostPlayerId,
     levelUpBarrier: blend < 1 ? older.levelUpBarrier : newer.levelUpBarrier,
     materializingPlayerIds: blend < 1
@@ -598,6 +600,7 @@ function presentationCopy(
 ): HubPresentationFrame {
   return {
     enhancedEffects: snapshot.enhancedEffects,
+    screenFlashes: copyNativeScreenFlashes(snapshot.screenFlashes),
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
     materializingPlayerIds: snapshot.materializingPlayerIds,

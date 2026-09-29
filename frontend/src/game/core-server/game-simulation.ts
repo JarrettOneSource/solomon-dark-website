@@ -1,3 +1,4 @@
+import { createNativeScreenFlashes, createNativeScreenFlashWriter, resetNativeScreenFlashes, type NativeScreenFlashState, type WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
 import { finalizeBoneyardPuppetQueries } from './enemies/puppet-hits.ts'
 import type { BoastDefinition, BoastResolver, BoastSelection } from '../core-kernels/boast.ts'
@@ -99,6 +100,7 @@ export interface GameSimulationState {
   gameRng: NativeRngState
   primarySpells: PrimarySpellSimulationState
   secondaryAbilities: NativeSecondarySimulationState
+  screenFlashes: NativeScreenFlashState
   run: GameRunLifecycleState
   tick: number
   world: GameWorldState
@@ -279,6 +281,7 @@ export function createGameSimulation(
     gameRng,
     primarySpells: createPrimarySpellSimulation(),
     secondaryAbilities: createNativeSecondarySimulation(),
+    screenFlashes: createNativeScreenFlashes(),
     run: createGameRunLifecycle(),
     tick: 0,
     world,
@@ -852,6 +855,7 @@ export function enterBoneyardWorld(
     modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
+    screenFlashes: resetNativeScreenFlashes(state.screenFlashes),
     secondaryAbilities,
     run: startGameRun(
       state.run,
@@ -901,6 +905,7 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
       playerLightRegistrations,
     )),
     primarySpells: createPrimarySpellSimulation(),
+    screenFlashes: resetNativeScreenFlashes(state.screenFlashes),
     secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
     run: createGameRunLifecycle(),
     world,
@@ -959,6 +964,7 @@ function enterPostRunLoadout(
     modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
+    screenFlashes: resetNativeScreenFlashes(state.screenFlashes),
     secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
     run,
     world,
@@ -1891,6 +1897,18 @@ export function stepGameSimulationTick(
   inputs: PlayerCharacterInputs,
   options: GameSimulationTickOptions = {},
 ): GameSimulationState {
+  const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick + 1)
+  const result = stepGameSimulationTickWithScreenFlashes(state, inputs, options, flashes.write)
+  return { ...result, screenFlashes: result.screenFlashes === state.screenFlashes
+    ? flashes.state() : result.screenFlashes }
+}
+
+function stepGameSimulationTickWithScreenFlashes(
+  state: GameSimulationState,
+  inputs: PlayerCharacterInputs,
+  options: GameSimulationTickOptions,
+  writeScreenFlash: WriteNativeScreenFlash,
+): GameSimulationState {
   const liveModEffects = state.modEffects.filter(effect => effect.expiresTick > state.tick)
   if (liveModEffects.length !== state.modEffects.length) {
     state = { ...state, modEffects: Object.freeze(liveModEffects) }
@@ -2071,6 +2089,7 @@ export function stepGameSimulationTick(
         null,
         options.extensions,
         options.attributionObserver,
+        writeScreenFlash,
       )
     }
     case 'boneyard': {
@@ -2203,6 +2222,7 @@ export function stepGameSimulationTick(
           && nativeTutorialHostileScenePaused(boneyardWorld.tutorial),
         { playerEntities: state.playerEntities, primarySpells: state.primarySpells, secondaryAbilities: state.secondaryAbilities },
         state.enhancedEffects,
+        writeScreenFlash,
       )
       return finishGameSimulationTick(
         state,
@@ -2212,6 +2232,7 @@ export function stepGameSimulationTick(
         deferredEnemyProjectileLightRegistrations,
         options.extensions,
         options.attributionObserver,
+        writeScreenFlash,
       )
     }
   }
@@ -2237,6 +2258,7 @@ function finishGameSimulationTick(
   deferredEnemyProjectileLightRegistrations: DeferredNativeWorldManagerRegistrations | null,
   extensions?: GameSimulationExtensions,
   attributionObserver?: BoneyardEnemyAttributionObserver,
+  writeScreenFlash?: WriteNativeScreenFlash,
 ): GameSimulationState {
   const tick = previous.tick + 1
   let resolvedPlayers = result.players
@@ -2354,7 +2376,7 @@ function finishGameSimulationTick(
     },
   }
   const contacts = applyPlayerContacts({ world, playerEntities, secondaryAbilities, enhancedEffects: previous.enhancedEffects },
-    resolvedPlayers, result.playerDamage ?? [], tick, extensions, worldManagerOrder.register)
+    resolvedPlayers, result.playerDamage ?? [], tick, extensions, worldManagerOrder.register, writeScreenFlash)
   world = contacts.world
   playerEntities = contacts.playerEntities
   secondaryAbilities = contacts.secondaryAbilities
@@ -2651,7 +2673,7 @@ function finishGameSimulationTick(
           red: 1,
         },
         tick,
-      })
+      }, writeScreenFlash)
     }
     postStaffInputs = Object.fromEntries(Object.entries(combatInputs).map(([playerId, input]) => [
       playerId,
@@ -2711,6 +2733,7 @@ function finishGameSimulationTick(
     secondaryProjectileVisible,
     tick,
     previous.enhancedEffects,
+    writeScreenFlash,
   ))
   secondaryAbilities = unsteppedSecondaryActors.length === 0
     ? secondaryResult.state
@@ -2768,6 +2791,7 @@ function finishGameSimulationTick(
     }),
   )
   const cast = stepPrimarySpells({
+    writeScreenFlash,
     enhancedEffects: previous.enhancedEffects,
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
@@ -3288,7 +3312,7 @@ function finishGameSimulationTick(
           : [],
         tick,
         worldKey: gameWorldKey(world, response.playerId),
-      })
+      }, writeScreenFlash)
     } else if (world.kind === 'boneyard') {
       const event: BoneyardEnemySemanticEvent = {
         actorId: 0,
@@ -3443,6 +3467,7 @@ function finishGameSimulationTick(
     gameRng,
     primarySpells,
     secondaryAbilities,
+    screenFlashes: previous.screenFlashes,
     run: stepGameRunLifecycle(previous.run, alivePlayerIds),
     tick,
     world,
@@ -3616,8 +3641,10 @@ function createNativeSecondaryTickContext(
   secondaryProjectileVisible: ReturnType<typeof createBoneyardProjectileVisibility> | null,
   tick: number,
   enhancedEffects: boolean,
+  writeScreenFlash?: WriteNativeScreenFlash,
 ): NativeSecondaryTickContext {
   return {
+    writeScreenFlash,
     enhancedEffects,
     dampenCandidates: (worldKey, origin) => (
       world.kind === 'boneyard'
@@ -4181,6 +4208,7 @@ function activateGameSimulationBeltSkill(
   if (world.kind !== 'boneyard') {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
+  const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick)
   const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
   const input = { ...createIdlePlayerCharacterInput(), aim }
   const secondaryResult = activateNativeSecondaryBeltSkill(
@@ -4199,6 +4227,7 @@ function activateGameSimulationBeltSkill(
       null,
       state.tick,
       state.enhancedEffects,
+      flashes.write,
     ),
   )
   const outcomes = applySecondaryPlayerOutcomes(
@@ -4233,6 +4262,7 @@ function activateGameSimulationBeltSkill(
       ...state,
       playerEntities: outcomes.playerEntities,
       secondaryAbilities: outcomes.secondaryAbilities,
+      screenFlashes: flashes.state(),
       worldManagerOrder: worldManagerOrder.state(),
       world: combat === null ? world : {
         ...world,

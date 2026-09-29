@@ -8,6 +8,7 @@ import { drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { buyHagathaPerk, dowse, hagathaOffers, removeHagathaPerk } from '../core-kernels/hub-economy.ts'
 import { nativeLootModifiers } from '../core-kernels/native-loot.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import { createNativeScreenFlashWriter } from '../core-kernels/native-screen-flash.ts'
 import { readGameSaveFileSelection } from './game-save-files.ts'
 import { parseGameSaveDocument } from './game-save-contract.ts'
 import {
@@ -16,6 +17,30 @@ import {
   restoreGameSaveProfile,
   retireGameSaveWizard,
 } from './game-save-document.ts'
+
+test('schema 47 preserves shared flash authority order and rejects invalid saved timing', () => {
+  const state = createGameSimulation({ owner: { discipline: 'arcane', displayName: 'Flash restore', element: 'ether' } })
+  const writer = createNativeScreenFlashWriter(state.screenFlashes, state.tick)
+  writer.write({ tick: state.tick, worldKey: 'hub:courtyard', position: { x: 0, y: 0 }, onlyIfClear: false,
+    flash: { alpha: 1, red: .9, green: 1, blue: 1, decayPerTick: Math.fround(.01), pointAttenuated: true } })
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state: { ...state, screenFlashes: writer.state() } })
+  assert.deepEqual(restoreGameSaveDocument(document).state.screenFlashes, writer.state())
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 46
+  delete legacy.continuation.simulation.screenFlashes
+  assert.deepEqual(restoreGameSaveDocument(JSON.stringify(legacy)).state.screenFlashes,
+    { epoch: 0, nextOrder: 1, writes: [] })
+  for (const invalidField of ['tick', 'nextOrder', 'epoch', 'alpha']) {
+    const invalid = JSON.parse(document)
+    const lane = invalid.continuation.simulation.screenFlashes
+    if (invalidField === 'tick') lane.writes[0].tick += 1
+    if (invalidField === 'nextOrder') lane.nextOrder = 1
+    if (invalidField === 'epoch') lane.epoch = -1
+    if (invalidField === 'alpha') lane.writes[0].flash.alpha = 2
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /screenFlashes/)
+  }
+})
 
 test('compatible future saves resume and retire without losing the profile', async () => {
   const document = createGameSaveDocument({
@@ -67,6 +92,7 @@ test('schema 43 preserves paid empty Dowsing results and migrates older offer ph
     const legacy = JSON.parse(document)
     legacy.schemaVersion = 42
     delete legacy.continuation.simulation.enhancedEffects
+    delete legacy.continuation.simulation.screenFlashes
     delete legacy.profile.advancedUnlocks
     delete legacy.profile.economy.dowsingRolled
     delete legacy.continuation.simulation.playerEntities.economies[0].dowsingRolled
@@ -109,6 +135,7 @@ test('schema 39 retires only obsolete Cold Aura actors without rewinding saved g
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 39
   delete legacy.continuation.simulation.enhancedEffects
+  delete legacy.continuation.simulation.screenFlashes
   delete legacy.profile.advancedUnlocks
   Object.assign(legacy.continuation.simulation.primarySpells.transients[0], {
     alphaDecay: Math.fround(0.15 / 840), durationTicks: 2_800, rotationStepDegrees: 0.4,
