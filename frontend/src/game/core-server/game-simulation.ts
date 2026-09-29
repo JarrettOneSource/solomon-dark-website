@@ -1899,6 +1899,7 @@ export function stepGameSimulationTick(
 ): GameSimulationState {
   const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick + 1)
   const result = stepGameSimulationTickWithScreenFlashes(state, inputs, options, flashes.write)
+  if (result === state) return state
   return { ...result, screenFlashes: result.screenFlashes === state.screenFlashes
     ? flashes.state() : result.screenFlashes }
 }

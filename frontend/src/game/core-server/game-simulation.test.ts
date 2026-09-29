@@ -139,6 +139,12 @@ function gameplayInput(x: number, y: number) {
   }
 }
 
+test('a level-up barrier preserves the unchanged authority and flash owner for snapshot caching', () => {
+  const state = createGameSimulation(undefined, { initialPlayerExperience: 1000 })
+  assert.ok(state.levelUpBarrier)
+  assert.equal(stepGameSimulationTick(state, {}), state)
+})
+
 function equipMindblowingRing(
   state: GameSimulationState,
   playerId: string,

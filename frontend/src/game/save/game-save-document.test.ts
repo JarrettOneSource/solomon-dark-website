@@ -764,7 +764,7 @@ test('schema 41 preserves independent hit reaction and legacy migration retires 
   downgradeSaveSchema(legacy, 40)
   delete legacy.continuation.simulation.world.enemies.actors[0].hitReactionTimer
   const recovered = restoreGameSaveDocument(JSON.stringify(legacy)).state
-  assert.deepEqual(recovered, { ...current, world: { ...current.world,
+  assert.deepEqual(recovered, { ...current, screenFlashes: { epoch: 0, nextOrder: 1, writes: [] }, world: { ...current.world,
     enemies: { ...current.world.enemies,
       actors: current.world.enemies.actors.map(actor => ({ ...actor, hitReactionTimer: 0 })) } } })
   for (const invalid of [undefined, null, -0.01, 1.01, '1']) {
@@ -3067,6 +3067,7 @@ function legacyDocument(document: string, schemaVersion: number): string {
   const playerStore = simulation.playerEntities
   const run = simulation.run
   delete simulation.enhancedEffects
+  delete simulation.screenFlashes
 
   downgradePlayerBeltsToLegacyQuickbar(playerStore)
 
