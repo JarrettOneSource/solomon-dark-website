@@ -866,7 +866,10 @@ export function replacePlayerLoadout(
       }
   const statBook = playerStatBook()
   const skillState = createPlayerSkillRuntime(
-    createPlayerSkillBook(character.config),
+    {
+      ...createPlayerSkillBook(character.config),
+      advancedUnlocks: source.skillBooks[index]!.advancedUnlocks,
+    },
     statBook,
     economy,
   )

@@ -12,12 +12,15 @@ import {
   getPlayerEconomy,
   getPlayerCharacter,
   getPlayerSkillBook,
+  getPlayerBelt,
+  getPlayerProgression,
+  stepGameSimulationTick,
 } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { damagePlayerEntity, replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { HUB_INTERACTION_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 import { createGameProfileSaveDocument } from '../src/game/save/game-save-document.ts'
-import { startElementHub } from './game-smoke-navigation.mjs'
+import { enterBoneyard, startElementHub, waitUntil } from './game-smoke-navigation.mjs'
 
 const evidence = process.env.SDR_TEACHER_UNLOCK_EVIDENCE || '/tmp/solomon-teacher-unlock'
 await mkdir(evidence, { recursive: true })
@@ -61,12 +64,13 @@ const browser = await chromium.launch({
   headless: true,
 })
 const errors = { console: [], page: [], responses: [] }
+let page
 try {
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
   await context.addInitScript(({ credential: key, url }) => {
     window.solomonDarkRuntime = { gameEndpoint: { credential: key, kind: 'localhost', url } }
   }, { credential, url: host.address.url })
-  const page = await context.newPage()
+  page = await context.newPage()
   page.on('console', message => {
     if (message.type() === 'error') errors.console.push(message.text())
   })
@@ -152,13 +156,107 @@ try {
   assert.equal(await dialog.locator('[data-native-selector-id="79"]').count(), 1)
   assert.equal(Number(await dialog.locator('[data-player-gold]').getAttribute('data-player-gold')), 15_165)
   await page.screenshot({ path: `${evidence}/new-wizard-teacher-shop.png` })
+
+  // Buy a sibling through the real selector, not by changing its unlock flag.
+  await dialog.locator('[data-native-selector-id="79"]').click()
+  await waitUntil(() => getPlayerSkillBook(host.state(), playerId).advancedUnlocks[7],
+    'real Teacher selector did not complete purchase 79', 10_000)
+  assert.equal(getPlayerEconomy(host.state(), playerId).gold, 10_065)
+  assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[79], 0)
+  await dialog.locator('[data-native-selector-id="79"]').waitFor({ state: 'detached', timeout: 10_000 })
+  assert.equal(await dialog.locator('[data-native-selector-id="79"]').count(), 0)
+  const purchaseExplanation = dialog.getByRole('button', { name: 'Skip', exact: true })
+  await purchaseExplanation.click()
+  await purchaseExplanation.waitFor({ state: 'hidden' })
+  if (await dialog.isVisible()) {
+    const done = dialog.getByRole('button', { name: 'Done', exact: true })
+    if (await done.isVisible()) await done.click()
+    else await page.keyboard.press('Escape')
+  }
+  await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+  console.log(JSON.stringify({ stage: 'real-purchase-and-dialogue-complete', skillId: 79,
+    gold: getPlayerEconomy(host.state(), playerId).gold }))
+
+  await enterBoneyard(page)
+  await page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
+  const active = host.state()
+  // Only the lethal hit is a fixture. Game Over, its exit, and Create are real.
+  const terminal = stepGameSimulationTick({ ...active, playerEntities: damagePlayerEntity(
+    active.playerEntities, playerId, 1000, active.tick,
+  ) }, {})
+  assert.equal(terminal.run.phase, 'game-over')
+  Object.assign(active, terminal)
+  await page.locator('.boneyard-game-over[data-input-ready="true"]').click({ timeout: 20_000 })
+  await waitUntil(() => host.state().run.phase === 'loadout', 'post-run Create did not open', 20_000)
+  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor()
+  await page.getByRole('button', { name: /Earth/i }).click()
+  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor()
+  await page.locator('.create-menu-discipline-arcane').click()
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
+  assertFreshPurchasedWizard(host, playerId, 'earth')
+  const postRunRevision = await waitForPurchasedCheckpoint(page, savedRevision)
+  await page.screenshot({ path: `${evidence}/post-run-purchases-retained.png` })
+
+  // Reload and deliberately retire the saved active wizard through the UI.
+  // This exercises the durable profile producer and Create again, not a fixture hydrate.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await startElementHub(page, 'Air')
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+  const reloadedPlayerId = host.hostPlayerId()
+  assert.ok(reloadedPlayerId)
+  assertFreshPurchasedWizard(host, reloadedPlayerId, 'air')
+  const reloadRevision = await waitForPurchasedCheckpoint(page, postRunRevision)
+  await page.screenshot({ path: `${evidence}/reload-purchases-retained.png` })
   assert.deepEqual(errors, { console: [], page: [], responses: [] })
   console.log(JSON.stringify({ status: 'ok', purchasedFlag: true, nextWizardFlag: book.advancedUnlocks[6],
     nextWizardRank: book.permanentRanks[78], gold: 15_165, mindstarOffered: false,
-    checkpointRevision: savedRevision, errors }))
+    checkpointRevision: savedRevision, realSelectorPurchase: 79, postRunGold: 10_065,
+    postRunRevision, reloadRevision, postRunAndReloadFlags: [78, 79],
+    fixtureLimits: ['initial profile has purchased Mindstar', 'authored Teacher placement', 'lethal hit'], errors }))
   await context.close()
+} catch (error) {
+  if (page && !page.isClosed()) await page.screenshot({ path: `${evidence}/failure.png` })
+  console.error(JSON.stringify({ errors, phase: host.state().run.phase }))
+  throw error
 } finally {
   await browser.close()
   await host.close()
   await server.close()
+}
+
+function assertFreshPurchasedWizard(host, playerId, element) {
+  const state = host.state()
+  assert.equal(state.run.phase, 'hub')
+  assert.equal(getPlayerCharacter(state, playerId).config.element, element)
+  assert.equal(getPlayerEconomy(state, playerId).gold, 10_065)
+  assert.equal(getPlayerProgression(state, playerId).level, 1)
+  for (const skillId of [78, 79]) {
+    assert.equal(getPlayerSkillBook(state, playerId).advancedUnlocks[skillId - 72], true)
+    assert.equal(getPlayerSkillBook(state, playerId).permanentRanks[skillId], 0)
+    assert.equal(getPlayerBelt(state, playerId).some(slot => slot?.kind === 'skill' && slot.skillId === skillId), false)
+  }
+}
+
+async function waitForPurchasedCheckpoint(page, previousRevision) {
+  let revision = null
+  for (let attempt = 0; attempt < 100 && revision === null; attempt += 1) {
+    const saved = await page.evaluate(() => new Promise((resolve, reject) => {
+      const open = indexedDB.open('solomon-dark-game-saves', 1)
+      open.onerror = () => reject(open.error)
+      open.onsuccess = () => {
+        const request = open.result.transaction('slots', 'readonly').objectStore('slots').get(0)
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => { resolve(request.result ?? null); open.result.close() }
+      }
+    }))
+    if (saved && saved.revision > previousRevision) {
+      const document = JSON.parse(saved.document)
+      if (document.continuation !== null && [6, 7].every(index => document.profile.advancedUnlocks[index])) {
+        revision = saved.revision
+      }
+    }
+    if (revision === null) await page.waitForTimeout(100)
+  }
+  assert.ok(revision !== null, 'new active checkpoint did not retain both purchases')
+  return revision
 }

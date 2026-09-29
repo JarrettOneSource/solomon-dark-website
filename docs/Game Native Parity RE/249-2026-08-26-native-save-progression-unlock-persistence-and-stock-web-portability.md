@@ -1,5 +1,87 @@
 # 2026-08-26 — Native save progression, unlock persistence, and stock/web portability
 
+## 2026-09-29 — Report 48 reopening: Create must retain purchased eligibility
+
+The September 28 follow-up reports purchases returning every run. Its image
+(SHA-256 `20a0ec4e099e887db19366aa538e70ae1af262a38486105a159463c2fc34d005`)
+shows present Teacher offers, not prior transactions or the executed session.
+Read-only deployment/profile evidence does not identify that image's exact
+session and does not justify another account backfill. The earlier repair
+covered profile serialization/hydration but missed the subsequent **Create
+confirmation** writer; its browser fixture did not exercise that writer with
+an owned purchase. This reopening closes that lifecycle gap across the family.
+
+Native authority is the retained retail 0.72.5 instruction/xref census below:
+`0x004F90C0` sets the eight globals `0x00B3BDD8..DF`; four consumers read them;
+no new-wizard clear or purchased-only disk representation was found. Retail
+identity remains SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+This pass reuses that evidence, not a new clean-stock runtime capture.
+On September 29 the user explicitly approved retaining purchases between runs
+and keeping the Website's existing durable profile across browser restarts;
+retail's purchased-only restart loss is **not** a behavior to copy. The native
+export warning remains unchanged. This is an approved web lifetime extension,
+not a claim of identical retail disk behavior.
+
+### Causal trace and complete boundary
+
+On baseline `8c46630927445c4f118929e26285b5b62d745e4f`, a Teacher purchase
+debits the owner's gold and sets its flag. Profile hydration restores that
+flag, but both College and post-run `confirmGameSimulationLoadout` call
+`replacePlayerLoadout`, which constructs a default-false skill book. Economy
+survives while eligibility disappears. `resetPlayerEntitiesForNewRun` already
+keeps the book. No schema, shop, price, account-key or new protocol is needed.
+
+The M5 SSD public pre-fix regression purchased each member through
+`applyGameSimulationHubAction`, then confirmed a different wizard through
+`confirmGameSimulationLoadout`. All eight failed at the retained-flag assertion
+(8 failures, 0 passes/skips, exit 1). M2/M5 source bytes and full-index patch
+matched; patch SHA-256
+`7eec1b628cbeaddc6ca2361be8e9aaa53c54e8f23cedc4fe6f354e95effd594f`.
+The fix belongs to the shared loadout owner: carry only its immutable purchase
+flags into the fresh book; rebuild ranks, selections, cast runtime and belt.
+
+| Member | Price | Disposition in this reopening | Required evidence |
+| --- | ---: | --- | --- |
+| Teacher 72 | 3000 | `exact-ported` | own purchase/new-wizard retention, no second debit |
+| Teacher 73 | 3500 | `exact-ported` | same public lifecycle |
+| Teacher 74 | 4200 | `exact-ported` | same public lifecycle |
+| Teacher 75 | 5000 | `exact-ported` | same public lifecycle |
+| Teacher 76 | 10000 | `exact-ported` | same public lifecycle |
+| Teacher 77 | 6100 | `exact-ported` | same public lifecycle |
+| Teacher 78 (Mindstar) | 5300 | `exact-ported` | same lifecycle and real built shop/new-run/reload |
+| Teacher 79 | 5100 | `exact-ported` | same public lifecycle |
+| College and post-run Create, owner/peer isolation | — | `exact-ported` | both callers, original generation unchanged |
+| Per-wizard learned ranks, selected roots, casts and belt | — | `exact-ported` | learned fixture resets without clearing purchase |
+| Active/profile-only save, hydration, strict schema 45 and owner projection | — | `verified-already-at-parity` | existing save/host regressions retained; browser reload must reconfirm |
+| Native purchased-only disk persistence | — | `out-of-system` | unrepresentable in retail; explicit approved web extension and existing export warning |
+| Hagatha, gold, inventory, progression, other profiles | — | `verified-already-at-parity` | unchanged owners and canonical checks; no live account writes |
+
+The corrected College fixture also failed at the post-confirmation flag before
+the repair. After the shared change, all 274 simulation/save/host tests passed
+with zero failures or skips on M5 SSD, including the eight purchase cases and
+the College learned-rank/belt reset. The initial College fixture-only failure
+was corrected before it was used as evidence. Full canonical and built-browser
+acceptance remain separate mandatory receipts, not claims made by this unit
+result. The complete canonical pass recorded 3,993 Node test executions and
+24 Python tests, no failed/skipped Node cases, and 100% measured renderer
+coverage. Mutation accounting was 603 killed, two timed out, 198 compile
+errors and 24 pre-classified equivalent exclusions; no surviving/NoCoverage
+mutant was reported. No mutation configuration or quality threshold changed.
+
+The maintained built-browser journey then passed a real Teacher 79 purchase
+(5,100 gold), its normal explanation dismissal, lethal-hit fixture followed by
+real Game Over/Create, and reload with deliberate New Game retirement. Both
+78/79 flags remained true; ranks and belt bindings stayed fresh, gold stayed
+10,065 after the one purchase, and active checkpoint revisions advanced
+2 → 5 → 7. Console, page and HTTP error collections were empty. The historical
+Mindstar profile, authored Teacher placement and lethal hit are explicit
+fixtures; the purchase, UI lifecycle and IndexedDB checkpoint/reload are real.
+The browser harness was corrected to await the replicated shop update and to
+finish the purchase explanation before moving; its two earlier harness
+failures are not additional gameplay defects. The final committed source is
+sealed separately by the exact-head canonical/browser publication receipts.
+
 ## 2026-09-27 — Report 48: advanced-spell purchase across wizard retirement
 
 The reporter bought Mindstar on two runs, could not select it, and then saw it

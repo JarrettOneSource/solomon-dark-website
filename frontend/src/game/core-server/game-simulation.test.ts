@@ -124,6 +124,7 @@ import {
   selectPlayerEntityConcentration,
   setPlayerDeathWeaponPainterRegistration,
   setPlayerEntityMana,
+  unlockPlayerEntityAdvancedSkill,
 } from './player-entity-store.ts'
 
 function gameplayInput(x: number, y: number) {
@@ -433,6 +434,14 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = armGameSimulationCollegeIntro(state, 'owner')
   assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
 
+  const purchased = unlockPlayerEntityAdvancedSkill(state.playerEntities, 'owner', 78)
+  assert.ok(purchased)
+  state = withPlayerSkillRank({ ...state, playerEntities: purchased }, 'owner', 78, 1)
+  const learned = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 78, 7)
+  assert.ok(learned)
+  state = learned
+  assert.equal(getPlayerSkillBook(state, 'owner').advancedUnlocks[6], true)
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[78], 1)
   const confirmed = confirmGameSimulationLoadout(state, 'owner', {
     discipline: 'body',
     displayName: 'Reborn',
@@ -442,6 +451,9 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
+  assert.equal(getPlayerSkillBook(state, 'owner').advancedUnlocks[6], true)
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[78], 0)
+  assert.equal(getPlayerBelt(state, 'owner').some(slot => slot?.kind === 'skill' && slot.skillId === 78), false)
   assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, 24)
   assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
   assert.deepEqual(
@@ -5984,6 +5996,63 @@ for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
       }), null, 'a completed Create is not an in-game rename action')
     })
   }
+}
+
+for (const [skillId, price] of [
+  [72, 3000], [73, 3500], [74, 4200], [75, 5000],
+  [79, 5100], [78, 5300], [77, 6100], [76, 10000],
+] as const) {
+  test(`Teacher purchase ${skillId} survives post-run Create without another debit or learned rank`, () => {
+    let state = createGameSimulation({
+      owner: DEFAULT_PLAYER_CHARACTER_CONFIG,
+      peer: { discipline: 'mind', displayName: 'Peer', element: 'water' },
+    })
+    state = {
+      ...state,
+      playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+        ...getPlayerEconomy(state, 'owner'),
+        gold: 50_000,
+      }),
+    }
+    const purchase = applyGameSimulationHubAction(state, 'owner', {
+      skillId,
+      type: 'buy-teacher-spell',
+    })
+    assert.equal(purchase.accepted, true)
+    const expectedUnlocks = Array.from({ length: 8 }, (_, index) => index === skillId - 72)
+    assert.deepEqual(getPlayerSkillBook(purchase.state, 'owner').advancedUnlocks, expectedUnlocks)
+    const loadout: GameSimulationState = {
+      ...purchase.state,
+      run: { ...purchase.state.run, eligiblePlayerIds: ['owner', 'peer'], phase: 'loadout' },
+    }
+    const ready = confirmGameSimulationLoadout(loadout, 'owner', {
+      discipline: 'body', displayName: 'Next Wizard', element: 'earth',
+    })
+    assert.ok(ready)
+    assert.equal(ready.run.phase, 'loadout', 'a peer still owns its unconfirmed Create')
+    assert.deepEqual(getPlayerSkillBook(ready, 'owner').advancedUnlocks, expectedUnlocks)
+    assert.deepEqual(getPlayerSkillBook(ready, 'peer').advancedUnlocks, Array<boolean>(8).fill(false))
+    assert.equal(getPlayerEconomy(ready, 'owner').gold, 50_000 - price)
+    assert.equal(getPlayerSkillBook(ready, 'owner').permanentRanks[skillId], 0)
+    assert.equal(getPlayerProgression(ready, 'owner').level, 1)
+    assert.equal(getPlayerProgression(ready, 'owner').experience, 0)
+    assert.equal(getPlayerBelt(ready, 'owner').some(slot => slot?.kind === 'skill' && slot.skillId === skillId), false)
+    const complete = confirmGameSimulationLoadout(ready, 'peer', {
+      discipline: 'arcane', displayName: 'Next Peer', element: 'fire',
+    })
+    assert.ok(complete)
+    assert.equal(complete.run.phase, 'hub')
+    assert.deepEqual(getPlayerSkillBook(complete, 'owner').advancedUnlocks, expectedUnlocks)
+    assert.deepEqual(getPlayerSkillBook(complete, 'peer').advancedUnlocks, Array<boolean>(8).fill(false))
+    const rejected = applyGameSimulationHubAction(complete, 'owner', {
+      skillId,
+      type: 'buy-teacher-spell',
+    })
+    assert.equal(rejected.reason, 'invalid-offer')
+    assert.equal(getPlayerEconomy(rejected.state, 'owner').gold, 50_000 - price)
+    assert.deepEqual(getPlayerSkillBook(loadout, 'owner').advancedUnlocks, expectedUnlocks,
+      'confirmation must not mutate its previous generation')
+  })
 }
 
 import './inventory-skill-book.test.ts'
