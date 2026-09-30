@@ -66,7 +66,7 @@ import {
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
 import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
-import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
+import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile } from '../save/game-save-document.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
@@ -450,6 +450,9 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = learned
   assert.equal(getPlayerSkillBook(state, 'owner').advancedUnlocks[6], true)
   assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[78], 1)
+  state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+    ...getPlayerEconomy(state, 'owner'), ownedPerkSelectors: [14],
+  }) }
   const confirmed = confirmGameSimulationLoadout(state, 'owner', {
     discipline: 'body',
     displayName: 'Reborn',
@@ -459,6 +462,7 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
+  assert.equal(NATIVE_SECONDARY_ABILITY_IDS.filter(id => getPlayerSkillBook(state, 'owner').permanentRanks[id]! > 0).length, 2)
   assert.equal(getPlayerSkillBook(state, 'owner').advancedUnlocks[6], true)
   assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[78], 0)
   assert.equal(getPlayerBelt(state, 'owner').some(slot => slot?.kind === 'skill' && slot.skillId === 78), false)
@@ -6140,3 +6144,65 @@ for (const [skillId, price] of [
 }
 
 import './inventory-skill-book.test.ts'
+
+
+for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
+  for (const discipline of ['arcane', 'body', 'mind'] as const) {
+    for (const revelation of [false, true]) {
+      test(`retained Hagatha skill effects initialize each new wizard: ${element}/${discipline}, Revelation=${revelation}`, () => {
+        const config = { discipline, displayName: 'Charm Owner', element }
+        let state = createGameSimulation({ owner: config, peer: { ...config, displayName: 'Peer' } })
+        state = {
+          ...state,
+          playerEntities: replacePlayerCharacter(
+            replacePlayerEconomy(state.playerEntities, 'owner', {
+              ...getPlayerEconomy(state, 'owner'), gold: 50_000,
+            }),
+            'owner', { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
+          ),
+        }
+        for (const selector of revelation ? [6, 14] : [14]) {
+          const purchase = applyGameSimulationHubAction(state, 'owner', { type: 'buy-hagatha', selector })
+          assert.equal(purchase.accepted, true)
+          state = purchase.state
+        }
+        const selectors = getPlayerEconomy(state, 'owner').ownedPerkSelectors
+        const gold = getPlayerEconomy(state, 'owner').gold
+        const peerBook = getPlayerSkillBook(state, 'peer')
+        const assertGrant = (candidate: GameSimulationState) => {
+          const book = getPlayerSkillBook(candidate, 'owner')
+          const secondaries = NATIVE_SECONDARY_ABILITY_IDS.filter(id => book.permanentRanks[id]! > 0)
+          assert.equal(secondaries.length, 2, 'retained Weird Caster grants a second secondary')
+          for (const id of secondaries) {
+            assert.equal(book.permanentRanks[id], Math.min(candidate.playerEntities.statBooks[0]!.entries[id]!.maximumLevel, revelation ? 2 : 1))
+            assert.ok(getPlayerBelt(candidate, 'owner').some(slot => slot?.kind === 'skill' && slot.skillId === id))
+          }
+          assert.equal(book.permanentRanks[book.primarySkillId], revelation ? 2 : 1)
+          assert.deepEqual(getPlayerEconomy(candidate, 'owner').ownedPerkSelectors, selectors)
+          assert.equal(getPlayerEconomy(candidate, 'owner').gold, gold)
+        }
+        assertGrant(state)
+        for (let generation = 0; generation < 2; generation += 1) {
+          const loadout: GameSimulationState = {
+            ...state, run: { ...state.run, eligiblePlayerIds: ['owner', 'peer'], loadoutReadyPlayerIds: [], phase: 'loadout' },
+          }
+          const ready = confirmGameSimulationLoadout(loadout, 'owner', { ...config, displayName: `Wizard ${generation}` })
+          assert.ok(ready)
+          assertGrant(ready)
+          assert.strictEqual(getPlayerSkillBook(ready, 'peer'), peerBook)
+          state = ready
+        }
+        const continuation = restoreGameSaveDocument(createGameSaveDocument({
+          integrity: 'local-only', mods: [], modState: {}, loadedBoneyard: null, playerId: 'owner', state,
+        }))
+        assert.deepEqual(getPlayerSkillBook(continuation.state, 'owner'), getPlayerSkillBook(state, 'owner'))
+        const profile = restoreGameSaveProfile(createGameProfileSaveDocument({
+          integrity: 'local-only', mods: [], modState: {}, playerId: 'owner', state,
+        }))
+        const hydrated = hydrateGameSaveProfile(createGameSimulation({ owner: config }), 'owner', profile)
+        assertGrant(hydrated)
+        assert.deepEqual(getPlayerProgression(hydrated, 'owner').hagathaRuntime, profile.hagathaRuntime)
+      })
+    }
+  }
+}

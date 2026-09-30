@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { bindNativeBeltSkill } from '../core-kernels/native-belt.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
@@ -54,6 +55,7 @@ import {
   replacePlayerCharacter,
   replacePlayerEconomy,
   replacePlayerLoadout,
+  refreshPlayerEntityHagathaSkillEffects,
   resetPlayerEntitiesForNewRun,
   respawnPlayerEntityAt,
   restorePlayerEntityHealth,
@@ -1166,4 +1168,38 @@ test('Last Word emits its native death and archive milestones only for its owner
   const archive = stepPlayerEntityCombatTick(store, createNativeRng(1))
   assert.deepEqual(archive.lastWordArchivePlayerIds, ['first'])
   assert.deepEqual(archive.completedDeathPresentationPlayerIds, ['first'])
+})
+
+
+test('owned Hagatha skill refresh covers every unlearned secondary without rearming spent effects', () => {
+  for (const revelation of [false, true]) {
+    let source = addPlayerEntity(createPlayerEntityStore(), 'first', FIRE,
+      createPlayerCharacter(FIRE, { x: 0, y: 0 }), 10)
+    source = replacePlayerEconomy(source, 'first', {
+      ...playerEconomyAt(source, 'first')!,
+      ownedPerkSelectors: revelation ? [6, 7, 14, 24, 25] : [7, 14, 24, 25],
+    })
+    const spent = { cheatDeathCharges: 0, reverieActive: false, serendipityActive: false }
+    source = { ...source, progressions: [{ ...source.progressions[0]!, hagathaRuntime: spent }] }
+    const original = playerSkillBookAt(source, 'first')!
+    const expected = NATIVE_SECONDARY_ABILITY_IDS.filter(id => original.permanentRanks[id] === 0)
+    const obtained = new Set<number>()
+    for (let seed = 0; seed < 512 && obtained.size < expected.length; seed += 1) {
+      const refreshed = refreshPlayerEntityHagathaSkillEffects(source, 'first', createNativeRng(seed))
+      assert.notEqual(refreshed.weirdCasterSkillId, null)
+      const id = refreshed.weirdCasterSkillId!
+      obtained.add(id)
+      const book = playerSkillBookAt(refreshed.store, 'first')!
+      assert.equal(book.permanentRanks[id], Math.min(playerStatBookAt(source, 'first')!.entries[id]!.maximumLevel, revelation ? 2 : 1))
+      assert.ok(refreshed.store.belts[0]!.some(slot => slot?.kind === 'skill' && slot.skillId === id))
+      assert.strictEqual(refreshed.store.progressions[0]!.hagathaRuntime, spent)
+      const again = refreshPlayerEntityHagathaSkillEffects(refreshed.store, 'first', refreshed.rng)
+      assert.equal(again.weirdCasterSkillId, null)
+      assert.deepEqual(again.rng, refreshed.rng)
+      assert.deepEqual(playerSkillBookAt(again.store, 'first'), book)
+      assert.strictEqual(again.store.progressions[0]!.hagathaRuntime, spent)
+    }
+    assert.deepEqual([...obtained].sort((a, b) => a - b), [...expected])
+    assert.strictEqual(playerSkillBookAt(source, 'first'), original)
+  }
 })

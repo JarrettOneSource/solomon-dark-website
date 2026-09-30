@@ -1538,3 +1538,93 @@ after unequip, and empty browser and host error lists (browser log SHA-256
 This is a controlled reconstruction of the proven failure path; the original
 private save was unavailable, and the reporter's remembered retail crash was
 not independently reproduced.
+
+
+## 2026-09-30 — Report73 retained-charm skill refresh reopening
+
+Report73 reports that retaining Weird Caster across runs keeps its icon but
+loses the secondary grant, while repurchasing works. Baseline `24d0b9bc`
+reproduces the missing grant in all ten M5 public Create regressions (five
+elements, with/without Revelation): purchase has two learned secondaries,
+Create has one. The initial suite stops at this assertion; profile and repeated
+Create branches still require separate execution. No historical screenshot
+runtime or clean-stock run is claimed by this reproduction.
+
+The earlier inventory called Weird Caster purchase-time behavior even though
+the retained retail `0x0067C360` refresh dump checks the owned `+0x7DA` flag,
+counts positive category-two ranks across all 82 rows, and grants an unlearned
+category-two row when that count is below two. The same refresh checks
+Revelation `+0x7D2` and floors the two creation starter IDs `+0x86C/+0x870`.
+This reuses the sealed retail identity and prior complete rank-writer, RNG,
+and category-two catalog recovery above. It corrects the earlier missed
+fresh-book lifecycle branch; it does not invent a second purchase or charge.
+
+Boundary: owned Hagatha skill effects whenever a fresh wizard book is
+constructed from a durable profile or a confirmed Create, and the existing
+purchase refresh. Authority consumes the existing game RNG, then refreshes
+runtime, belt/selection and pending offers. It must not replay purchase-only
+one-shot initialization or reset spent charges. Full continuations retain
+their saved book and RNG; no replay, migration or schema change is required.
+
+| Member/branch | Native or existing contract | Current disposition |
+| --- | --- | --- |
+| Weird Caster selector14, all category-two rows 11,12,15,21,23,27,30,35,41,45,46,48,49,50,51,54,72,73,74,76,77,78,79 | Existing exact random unlearned selection, threshold two, acquisition offer-seed draw | exact-ported |
+| Revelation selector6, all five element starter pairs | Existing exact minimum two for creation starters and Weird Caster grant; no whole-book sweep | exact-ported |
+| College Create and post-run Create, repeated generations | Fresh rank book plus retained purchased ownership | exact-ported |
+| Profile-only/new-game hydration | Fresh book plus durable economy and exact saved one-shot runtime | exact-ported |
+| Existing purchase, duplicate/no-grant threshold, participant isolation | Same authoritative refresh, no additional gold debit | verified-already-at-parity |
+| Full continuation, Hub/Boneyard transition, ordinary save/reload | Preserve existing skill book; no fresh-book replay | verified-already-at-parity |
+| Remaining Hagatha selectors0–5,7–13,15–27 | Existing derived/runtime/economy consumers; no new skill-book grant, do not rearm one-shots | out-of-system for the skill-grant repair; ownership and spent-runtime preservation passed regression |
+| Assets/audio/catalog/protocol | Existing skill, belt and spell presentation; no new data or wire shape | verified-already-at-parity, unchanged inputs |
+
+### Accepted implementation and verification
+
+The shared `refreshPlayerEntityHagathaSkillEffects` now reads owned selectors
+at both Create confirmations and durable-profile hydration, as well as purchase
+refresh. It reuses the existing grant/rank writers, gameplay RNG and acquisition
+seed ordering, then updates runtime, belt and selections. Purchase-only
+one-shot initialization remains separate: spent charges and until-hurt flags
+are not rearmed by a new book. Full continuations preserve their saved book.
+There is no schema/protocol change, second purchase, price change, account
+backfill or new native-data approximation.
+
+Focused M5 checks passed 240/240 tests after all 15 element/discipline loadouts
+were covered with/without Revelation. Coverage includes College Create,
+repeated post-run generations, profile hydration, continuation grant retention,
+all random unlearned category-two candidates, authored rank caps, belt binding,
+peer isolation, no second grant/RNG draw, and spent one-shot preservation.
+Test TypeScript and focused lint also passed. One initial green expectation
+incorrectly assumed every random row could reach rank two; the regression now
+honors the existing authored maximum. A proposed exact continuation-RNG
+assertion was removed because the existing continuation restoration performs
+its own unrelated draw; saved grants themselves are asserted unchanged.
+
+The task fast-forwarded onto accepted main `a6b5ef98` before qualification.
+All 7,235 candidate file hashes matched M2/M5 before and after the original
+canonical gate. That unchanged gate completed exit 0: 4,040 Node executions,
+zero failures/skips, 24 Python tests, 100% configured renderer coverage,
+603 killed mutations, two timeouts, 198 compile errors and 24 unchanged reviewed
+equivalents, with no surviving/NoCoverage failures. No threshold or gate was
+weakened. Gate log SHA-256:
+`06a4439ac244628d83ba12fa89df86e627ce3a88c695f7a19a942430638a8792`.
+A transport timeout while waiting did not stop the job; its original process
+was recovered, not duplicated.
+
+The maintained `tools/smoke-hagatha-retention.mjs` real built-browser journey
+passed on M5 Chromium: actual Revelation/Weird Caster purchases cost
+2,400/7,500 gold, then Game Over/Create and reload/New Game both retained two
+secondary ranks and quickbar bindings without another debit. Earth retained
+Ring of Fire 21 plus Raise Golem 45 at rank two; Air retained Magic Storm 27
+plus Magic Circle 49 at rank two. Gold stayed 90,100 and actual persisted
+checkpoint revisions advanced 4 → 7 → 9. Browser console/page/HTTP error
+arrays were empty. The initial funded profile, authored Hagatha placement and
+lethal hit are disclosed fixtures; purchases, dialogue, Game Over, Create,
+checkpoint writes and reload/retirement are real UI flows. Screenshots were
+visually inspected. This is local built Mac acceptance, not live deployment,
+physical-touch or reporter-hardware validation.
+
+No member is blocked by the browser platform. The original screenshot alone
+does not establish its historical run sequence. Native instruction evidence
+is reused, not a new retail runtime capture. NU1900 records unavailable remote
+vulnerability metadata; no live vulnerability audit is claimed. Publication,
+deployment and completion reaction remain separate pending authority.

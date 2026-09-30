@@ -57,7 +57,7 @@ import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
 import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
 import type { HubWorldState } from '../core-server/hub-world.ts'
 import { createHubWorld } from '../core-server/hub-world.ts'
-import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, replacePlayerCharacter, replacePlayerEconomy, unlockPlayerEntityAdvancedSkill } from '../core-server/player-entity-store.ts'
+import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, refreshPlayerEntityHagathaSkillEffects, replacePlayerCharacter, replacePlayerEconomy, unlockPlayerEntityAdvancedSkill } from '../core-server/player-entity-store.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
@@ -738,9 +738,15 @@ export function hydrateGameSaveProfile(
     ...progressions[ownerIndex]!,
     hagathaRuntime: profile.hagathaRuntime,
   }
+  const refreshed = refreshPlayerEntityHagathaSkillEffects(
+    { ...playerEntities, progressions: Object.freeze(progressions) },
+    playerId,
+    state.gameRng,
+  )
   const hydrated = {
     ...state,
-    playerEntities: { ...playerEntities, progressions: Object.freeze(progressions) },
+    gameRng: refreshed.rng,
+    playerEntities: refreshed.store,
   }
   createGameSnapshot(hydrated, playerId)
   return hydrated

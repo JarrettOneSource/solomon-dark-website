@@ -973,21 +973,34 @@ export function applyPlayerEntityHagathaPurchaseEffects(
 ): PlayerEntityHagathaPurchaseResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return { rng, store: source, weirdCasterSkillId: null }
-  const economy = source.economies[index]!
-  let progression = source.progressions[index]!
-  let skillBook = source.skillBooks[index]!
+  const progression = source.progressions[index]!
   const hagathaRuntime = applyNativeHagathaPurchaseRuntime(
     progression.hagathaRuntime,
     purchasedSelectors,
   )
-  if (hagathaRuntime !== progression.hagathaRuntime) {
-    progression = { ...progression, hagathaRuntime }
-  }
-  if (purchasedSelectors.includes(NATIVE_HAGATHA_SELECTORS.revelation)) {
+  const progressions = [...source.progressions]
+  progressions[index] = hagathaRuntime === progression.hagathaRuntime
+    ? progression
+    : { ...progression, hagathaRuntime }
+  return refreshPlayerEntityHagathaSkillEffects({ ...source, progressions }, playerId, rng)
+}
+
+/** Native skill refresh reads owned selectors; it does not replay purchase-only charges. */
+export function refreshPlayerEntityHagathaSkillEffects(
+  source: PlayerEntityStore,
+  playerId: string,
+  rng: NativeRngState,
+): PlayerEntityHagathaPurchaseResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { rng, store: source, weirdCasterSkillId: null }
+  const economy = source.economies[index]!
+  let progression = source.progressions[index]!
+  let skillBook = source.skillBooks[index]!
+  if (economy.ownedPerkSelectors.includes(NATIVE_HAGATHA_SELECTORS.revelation)) {
     skillBook = applyNativeRevelationToStartingSkills(skillBook, source.configs[index]!)
   }
   let weirdCasterSkillId: number | null = null
-  if (purchasedSelectors.includes(NATIVE_HAGATHA_SELECTORS.weirdCaster)) {
+  if (economy.ownedPerkSelectors.includes(NATIVE_HAGATHA_SELECTORS.weirdCaster)) {
     const granted = grantNativeWeirdCasterSkill(
       skillBook,
       rng,

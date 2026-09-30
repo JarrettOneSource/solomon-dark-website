@@ -1172,7 +1172,7 @@ export function increaseRandomLearnedSkill(
   }
 }
 
-/** Native Hagatha selector 14 purchase-time category-two grant. */
+/** Native Hagatha selector 14 owned-skill refresh category-two grant. */
 export function grantNativeWeirdCasterSkill(
   skillBook: PlayerSkillBookComponent,
   sourceRng: NativeRngState,

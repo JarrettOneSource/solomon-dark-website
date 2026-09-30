@@ -79,7 +79,7 @@ import { boneyardNativeSecondaryDampenCandidates, boneyardNativeSecondaryTarget,
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import { applyPlayerContacts, finiteModMutation, gameWorldKey } from './player-contact-system.ts'
 import type { PlayerEntityStore } from './player-entity-store.ts'
-import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, autofillPlayerEntitySkillSelections, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
+import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, autofillPlayerEntitySkillSelections, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, refreshPlayerEntityHagathaSkillEffects, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
 import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 export type PlayerId = string
@@ -1069,17 +1069,18 @@ export function confirmGameSimulationLoadout(
     const world = confirmHubCollegeIntroLoadout(state.world, playerId)
     if (world !== state.world) {
       const offerSeed = drawNativePlayerCreationOfferSeed(state.gameRng)
-      const selectedEntities = replacePlayerLoadout(
+      const selected = refreshPlayerEntityHagathaSkillEffects(replacePlayerLoadout(
         state.playerEntities,
         playerId,
         createPlayerCharacter(config, player.position),
         offerSeed.seed,
-      )
+      ), playerId, offerSeed.rng)
+      const selectedEntities = selected.store
       const selectedEconomy = playerEconomyAt(selectedEntities, playerId)
       if (!selectedEconomy) throw new Error(`College loadout lost profile owner ${playerId}`)
       return {
         ...state,
-        gameRng: offerSeed.rng,
+        gameRng: selected.rng,
         playerEntities: replacePlayerEconomy(
           selectedEntities,
           playerId,
@@ -1097,16 +1098,17 @@ export function confirmGameSimulationLoadout(
   const run = confirmPostRunLoadout(state.run, playerId)
   if (!run) return null
   const offerSeed = drawNativePlayerCreationOfferSeed(state.gameRng)
+  const selected = refreshPlayerEntityHagathaSkillEffects(replacePlayerLoadout(
+    state.playerEntities,
+    playerId,
+    createPlayerCharacter(config, player.position),
+    offerSeed.seed,
+    { starterAppearanceOwner: config.element },
+  ), playerId, offerSeed.rng)
   return {
     ...state,
-    gameRng: offerSeed.rng,
-    playerEntities: replacePlayerLoadout(
-      state.playerEntities,
-      playerId,
-      createPlayerCharacter(config, player.position),
-      offerSeed.seed,
-      { starterAppearanceOwner: config.element },
-    ),
+    gameRng: selected.rng,
+    playerEntities: selected.store,
     run,
   }
 }
