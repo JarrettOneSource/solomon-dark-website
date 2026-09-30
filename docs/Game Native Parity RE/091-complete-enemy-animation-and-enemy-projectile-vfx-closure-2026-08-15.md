@@ -3206,18 +3206,18 @@ launched under this Mac-only task contract.
 
 ### Membership and implementation contract
 
-| Member / branch | Disposition before implementation | Consequence and acceptance |
+| Member / branch | Current disposition after focused validation | Consequence and acceptance |
 | --- | --- | --- |
 | All authored Spider phases and flag-43 payload multipliers, Silk stacks and maximum payload | verified-already-at-parity | Retain the complete existing catalog and source-program tests. No balance/data change. |
 | Source-less Silk, Shield/Deflect/Stoneskin admission | verified-already-at-parity | Keep the 22 existing passing Spider/Cocoon regressions and real Shield journey. |
-| Partial severities, threshold, movement decay, stationary persistence | recovered-pending-port | Apply web factor to submitted displacement while keeping raw lane available to modifier decay. Public first/second-stack escape regressions must pass. |
-| Full root immobilization, movement attempt, automatic staff action | recovered-pending-port | Keep physical delta zero while admitting native attempted movement/staff contact. Public full-web movement escape and real built input must pass. |
+| Partial severities, threshold, movement decay, stationary persistence | exact-ported | Apply web factor to submitted displacement while keeping raw lane available to modifier decay. Public first/second-stack escape regressions passed. |
+| Full root immobilization, movement attempt, automatic staff action | exact-ported | Keep physical delta zero while admitting native attempted movement/staff contact. Public full-web movement escape and real built input passed. |
 | Direct player spell/staff damage and full release | verified-already-at-parity | Retain existing receiver/effect ownership and expand real input verification. |
-| In-step friendly Mouth damage: positive HP, hit pulse, lethal release | recovered-pending-port | Commit `webbedPlayers` with the changed actors/effects. Exercise the actual authored Mouth action through public enemy stepping. |
-| Full restraint with missing or retired matching Cocoon | recovered-pending-port | Mirror forced native target release; preserve stationary partial webs. Cover old orphan state recovery. |
+| In-step friendly Mouth damage: positive HP, hit pulse, lethal release | exact-ported | Commit `webbedPlayers` with the changed actors/effects. Actual authored Mouth action passed through public enemy stepping for nonlethal and lethal damage. |
+| Full restraint with missing or retired matching Cocoon | exact-ported | Mirror forced native target release; preserve stationary partial webs. Old orphan state recovery passed while the independent partial-web control persisted. |
 | Healthy Cocoon after applying Spider death/despawn | verified-already-at-parity | The six-second idle control retains severity 3 and native payload 10 after the source retires. Do not clear it on Spider death. |
-| Target death, disconnect, removal and world reset | verified-already-at-parity | Existing owner teardown remains; run lifecycle/save regressions on the final tree. |
-| Pause, save/restore, authority, wire admission and presentation | verified-already-at-parity | Keep strict codecs and target identity. Final built journey must retain pause/Last Game and actual root/web replication. |
+| Target death, disconnect, removal and world reset | verified-already-at-parity | Existing owner teardown remains; lifecycle/save members passed in the focused suite; final reconciled canonical gate remains pending. |
+| Pause, save/restore, authority, wire admission and presentation | verified-already-at-parity | Keep strict codecs and target identity. The bounded built journey retained pause/Last Game and actual root/web replication; repeat on the final reconciled tree. |
 | Other independent native movement and boss systems | out-of-system | Their existing algorithms remain. The Mouth callback is included only as an incoming Cocoon damage member. |
 
 ### Pre-fix signal and validation boundary
@@ -3242,7 +3242,8 @@ from acceptance evidence. It is not a reproduced product exception. Final
 acceptance requires focused green checks, the unchanged complete canonical
 Website gate, and a real built browser journey through actual transport/input,
 source death, full restraint, damage/release, pause/save/resume and continued
-movement. No publication, deployment or completion reaction is yet claimed.
+movement. The bounded green checks below now pass; the final reconciled
+canonical gate, publication, deployment and completion reaction remain pending.
 
 ### Focused input-journey correction
 
@@ -3265,3 +3266,44 @@ thirty-tick charges reduced ten HP to `5.462425351142883` in 500 ticks.
 The same real-input scenario passed at a 2,000-tick observation budget. The
 primary-member checks use that budget and stop as soon as the actual restraint
 releases; they do not raise charge, damage or mana to force an outcome.
+
+### Bounded green and built source-death control
+
+The repaired owners passed 103/103 focused public checks on M5: Spider/Cocoon,
+all five primary elements, native Webbed/Spider/Silk, Discorporeal, Boneyard
+movement and save members. Test TypeScript and frontend lint passed. The
+production build passed; the game entry remained 57,478 gzip / 180,559 raw
+bytes against the unchanged 134,144 / 524,288-byte budgets.
+
+The real built Spider journey spawned the native Small Spider Wave first
+cohort (actor IDs 9–12 at tick 855), retained the rank-1/rank-3 Shield checks,
+received real Silk stacks 1–3, paused, restored Last Game and released a first
+Cocoon with manual primary input. It then received three more live Spider
+spits and killed every applying Spider through the public damage receiver.
+The isolation fixture preserved the real arena/encounter/waves ownership while
+deferring reinforcements. An earlier invalid `waves=null` fixture was caught
+by the strict codec and was corrected at the producer; no admission guard
+changed. That failed setup run is excluded from accepted evidence.
+
+A full ten-HP Cocoon remained unchanged for 550 idle native ticks after all
+four source Spiders died. Real held-D input retained a raw x lane of
+89.99996948242188 while root travel stayed blocked and native staff damage
+reduced the Cocoon. It released at tick 3413, subsequent movement resumed,
+and authority plus client wire state removed Webbed. Native death corpses,
+decals and ShootWeb/Shield/disintegrate/Webbed/SpiderDie audio were present.
+The browser reported no page/console errors or failed responses.
+
+This is bounded phase evidence, not final immutable acceptance: production
+bytes were built at `f2092b00`, with subsequent documented test-input and
+fixture-only changes on `7a7a1a16`. Final reconciliation must preserve the
+other accepted reports and run the unchanged complete canonical gate plus
+the built journey on the actual resulting commit before publication.
+
+A bounded fresh source read also retained Sagerz's September 30 follow-up
+message `1554914536342036532`, which explicitly references the earlier
+Firestorm Spider report and describes persistent partial slowing below the
+full-web threshold. It supplies `Slow_Spider_Bug.mp4`; its text matches the
+proved partial-lane defect, but neither that wording nor the clip establishes
+the original Firestorm occurrence. Media stream/visual review is pending the
+next actual owned M5 slot. No new product behavior is inferred from an
+unreviewed attachment.
