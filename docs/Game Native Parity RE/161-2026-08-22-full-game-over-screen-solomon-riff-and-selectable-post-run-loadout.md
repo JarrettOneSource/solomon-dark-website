@@ -58,15 +58,15 @@ and requested activity cursor. The actor-manager handoff also covers an ordinary
 Hub region reattachment and Tutorial/College confirmation where the run phase
 can remain `hub`.
 
-| Member | Investigation disposition | Required proof |
+| Member | Prepared-source disposition | Accepted proof |
 | --- | --- | --- |
 | GameOver entry, input below500, input from500, 20-tick clicked and250-tick automatic exits | verified-already-at-parity | existing recovered program, public lifecycle tests and built journeys |
-| private/standalone retained Create, same/different pairs | recovered-pending-port | start fresh Hub presentation at confirmed phase boundary; built desktop/touch paths |
-| shared solo Create to resident Hub with clock behind or ahead | recovered-pending-port | public independent-clock regressions and exact built duplicate-root red/green |
-| shared party own-player readiness, final confirmation and final-member disconnect | recovered-pending-port | keep per-member admission/barrier; all returned clients use the resident manager |
-| same-phase Hub actor-manager reattachment, including College confirmation | recovered-pending-port | changed local native registration resets presentation without changing admission |
+| private/standalone retained Create, same/different pairs | exact-ported | 400 focused contracts; private late-click and touch same-pair built journeys |
+| shared solo Create to resident Hub with clock behind or ahead | exact-ported | all four current-main red/candidate green cases; built shared desktop/touch returns |
+| shared party own-player readiness, final confirmation and final-member disconnect | exact-ported | two real clients submit distinct pairs; first confirmation waits, final confirmation/disconnect releases |
+| same-phase Hub actor-manager reattachment, including College confirmation | exact-ported | public same-phase transfer cases in both clock directions; existing College/region host contracts pass |
 | same-owner Hub updates and lower stale samples | verified-already-at-parity | keep existing interpolation/sequence rejection; no tick reset workaround |
-| active/terminal profile, economy/purchases, fresh ranks, save/reconnect | verified-already-at-parity pending focused integration | existing owners remain authoritative; direct/new-menu journeys retain durable profile |
+| active/terminal profile, economy/purchases, fresh ranks, save/reconnect | verified-already-at-parity | isolated 2,468-gold/all-eight-purchase fixture survives direct Create, leave/Last Game and title New Game |
 | observing a Boneyard | out-of-system: observer ends when the observed match leaves Boneyard | host `observer-target-ended` and run-scoped observer decoder; it never owns a Create/Hub timeline |
 | Hail terminal clock, welcome/bootstrap transfer, spider status | out-of-system: Reports70/71/72 own different mechanisms | no changes to those owners |
 
@@ -91,6 +91,55 @@ unique painter roots, fresh selected skills, retained durable profile and empty
 real browser/transport/host error arrays. Convert pending membership dispositions
 only after that acceptance, then record publication/deployment separately.
 
+
+
+### Prepared implementation acceptance — 2026-09-30
+
+Clean candidate `9758db1852393610e0fc354d1754894874a56485` reconciles this
+client-only correction onto published Report73 `b30900a2`. M2/M5 tracked-byte
+manifests match all7,236files and tree
+`05c5a496bcdd04d9a6e77a2f2feff35195027339`. M5's private external-SSD Node22.17,
+Bash5.3.15, Python3.12.10, SDK10.0.302 and Chrome153 toolchain owns all local
+checks; no Website check or native runtime session ran on Windows/WSL.
+
+All four public actor-manager cases fail on the unchanged published client
+owner, then pass with the correction. The surrounding client/Hub timeline,
+run, host, shared-world, simulation, save, coordinator, scene identity and
+GameOver suites pass400tests with no failures or skips. The production frontend
+and host builds and configured bundle budget also pass.
+
+The actual built-browser command exits zero across five journeys:
+
+| Journey | Observed result |
+| --- | --- |
+| shared desktop / early click | input below500 ignored; accepted508; direct Water/Mind confirmation returns to a moving resident Hub; leave/Last Game and title New Game also move |
+| shared touch / unattended | early touch ignored; normal automatic exit; same Fire/Arcane pair remains selectable; physical movement joystick advances tick36.56→138.22 and travels61.38 X units |
+| private desktop / late click | accepted800; changed Earth/Body wizard returns with clock2376.56→2468.36 and travels59.43 X units |
+| shared party / distinct choices | first own submission leaves `loadout`; second real client submits Earth/Body; both return with their own choices and the leader moves90.48 X units |
+| shared party / final-member disconnect | accepted700; confirmed leader waits; closing the remaining member releases the barrier and returns the leader to a moving Hub |
+
+Every case creates a later active run with a distinct run ID, preserves the
+isolated profile's2,468gold and all eight purchased-only flags, and starts the
+new wizard at level1. The fixture stages an owned profile and one lethal
+contact; it does not replay the reporter's saved run or perform a live purchase.
+The comparison enters the ordinary resident title by reloading after completed
+death, because the retained Create Back control is deliberately disabled. It
+then uses the actual Play/New Game controls; the fix itself performs no reload
+or main-menu redirection. Desktop, touch and party return captures were visually
+inspected for the new wizard, native Hub, controls and party ownership.
+
+Page, console, HTTP-response, protocol, host and unexpected-request arrays are
+empty. Three exact `net::ERR_ABORTED` media requests for combat/death/academy
+MP3s during scene teardown are recorded separately. All other request failures
+remain fatal. The initial probe's missing-list instrumentation errors and the
+first capture's unqualified media assertion are explicitly excluded from
+product-error claims; neither caused a product change.
+
+The native membership above is closed by these public contracts and built
+journeys. The unchanged canonical all-mode gate and browser acceptance of the
+final documented publication tree remain release requirements, recorded with
+actual final heads in the authorized private report receipt. This prepared
+receipt does not claim publication or production deployment.
 
 ## Reported smell and parity question
 
