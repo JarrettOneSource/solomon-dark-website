@@ -58,9 +58,8 @@ export class NativeScreenFlashPresentation {
     // An unconditional overwrite discards its predecessors even after it expires.
     const anchor = eligible.findLast(({ write }) => !write.onlyIfClear)
     if (anchor) this.retiredOrder = Math.max(this.retiredOrder, anchor.write.order - 1)
-    // Conditional attempts can still be suppressed by late history. Only an
-    // unconditional write establishes a permanent overwrite watermark.
-    if (alpha <= 0 && anchor) this.retiredOrder = Math.max(this.retiredOrder, anchor.write.order)
+    // Keep the anchor even after expiry: it still determines whether later
+    // conditional attempts were suppressed at their original ticks.
     for (const order of this.writes.keys()) {
       if (order <= this.retiredOrder) this.writes.delete(order)
     }

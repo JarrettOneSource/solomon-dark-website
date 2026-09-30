@@ -1,5 +1,36 @@
 # 2026-08-15 — Complete right-click ability system
 
+## 2026-09-30 — Conditional suppression survives anchor expiry
+
+Task `87f1ead8` closeout review identified and reproduced one missed retirement
+case in the approved shared timeline. Unconditional cyan100 suppresses
+conditional black150. At202 the cyan fade is clear, but deleting its anchor
+while retaining the conditional attempt let black reappear at203 with alpha
+`.4700005054473877`. Both single admission and repeated canonical consumption
+failed the public regression on published `b48`; its preceding acceptance remains
+a dated valid receipt for the cases it covered.
+
+The observer now retains the latest unconditional anchor after fade expiry.
+It removes only its superseded predecessors, so every retained conditional
+attempt is still evaluated at its original tick against its suppressing history.
+This also preserves the earlier contract allowing late history to correct a
+conditional-only provisional display. A later unconditional write still moves
+the retirement watermark; source gain, float aging, reset and future eligibility
+are unchanged. No protocol/save/producer/Ring/art/compositor changes are needed.
+
+The current only-if-clear producer is Ultra Banish. Its normal birth in
+`demon-skull-death.ts` also emits an unconditional flash, and the spell has
+150/2000 remaining ticks. Conditional attempts are bounded by that finite spell
+(one maximum per tick) and a subsequent unconditional anchor trims earlier
+history. An old-schema restore can continue a conditional-only tail, also finite.
+Arbitrary synthetic conditional-only histories remain retained for late-history
+correction until a later unconditional write/reset; adding a timeout/cap would
+change that contract. This correction adds one required anchor, rather than a
+new indefinitely growing producer. Existing author history pruning already
+retains that anchor. Supplemental exact M5 gate/browser/GPU, publication and
+cleanup are recorded in REPORT-retirement-review.md and its compact receipts.
+
+
 ## 2026-09-29 — Approved shared flash authority and presentation repair
 
 The user approved the concrete ordering/timing remedy for task `87f1ead8`.

@@ -114,6 +114,24 @@ test('late history still resolves a conditional attempt after its provisional fa
   assert.deepEqual(late.sample(110), { alpha: .9000000953674316, color: 15073279 })
 })
 
+for (const repeatedConsume of [false, true]) {
+  test(`a suppressed conditional flash stays suppressed after anchor expiry (${repeatedConsume ? 'repeated consume' : 'single consume'})`, () => {
+    const conditional = { ...blackWrite, tick: 150, onlyIfClear: true }
+    const state = flashState([cyanWrite, conditional])
+    const lane = new NativeSecondaryScreenFeedbackPresentation(98, ring.worldKey)
+    lane.consumeScreenFlashes(state, context)
+    assert.equal(lane.sample(150)!.color, 15073279)
+    if (repeatedConsume) lane.consumeScreenFlashes(state, context)
+    assert.equal(lane.sample(202), null)
+    if (repeatedConsume) lane.consumeScreenFlashes(state, context)
+    assert.equal(lane.sample(203), null)
+    assert.equal(lane.sample(220), null)
+    lane.consumeScreenFlashes(flashState([cyanWrite, conditional,
+      { ...conditional, order: 3, tick: 250 }]), context)
+    assert.deepEqual(lane.sample(250), { alpha: 1, color: 0 })
+  })
+}
+
 test('observer gain is sampled at eligibility and held during exact float32 aging', () => {
   const lane = new NativeSecondaryScreenFeedbackPresentation(98, ring.worldKey)
   const state = flashState([cyanWrite])
