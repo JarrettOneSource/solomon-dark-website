@@ -3155,3 +3155,91 @@ remain unknown; completion here is an investigated non-reproduction, not a
 claim that no historical crash occurred. The identical runtime commit already
 passed the canonical WSL Website gate for report 51 (3,957 Node tests, 24
 Python tests, no renderer quality failures).
+
+## 2026-09-30 — Report 72: Spider escape and target-owned Cocoon lifetime
+
+### Report, boundary and reproduced cause
+
+The September 29 text-only report describes full immobilization after killing
+spiders, with running and attacking unable to release it. No clip, save,
+duration or input trace was supplied. The same message's new-game failure is
+Report 59. Its independent client transition work is outside this system.
+The report's exact historical occurrence remains uncorrelated; the current
+failures below are deterministic public-authority reproductions.
+
+This reopening covers Webbed's movement lane, every Cocoon damage receiver,
+and target-owned restraint lifetime. The existing complete Spider census,
+23 generated encounter programs, ordered setup flags, Silk delivery, Shield
+filtering, art, sound and death records remain the native data authority.
+The earlier implementation attenuated the stored movement lane, omitted web
+state from an in-step enemy damage commit, and did not mirror the native
+missing-Cocoon release branch. These omissions leave partial webs permanent,
+disable automatic staff escape, or retain an undamageable full restraint.
+
+### Current native proof
+
+All new RE and pre-fix Website execution used the exclusive M5 Pro external
+SSD, task `87091111`. The exact `138b654480fa755689845f2e96e5fcf692de0855`
+Git tree `6acc8fc6729e397cdfd06de6785c540345c8f339` was materialized by hashing
+all 7,235 tracked files against its original Git index before overlaying the
+new regressions. No Website check ran on M2 or Windows/WSL.
+
+The copied retail 0.72.5 image is 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Bounded LLVM instruction dumps and PE-section reads establish:
+
+| Native owner | Current instruction / data evidence | Contract |
+| --- | --- | --- |
+| Webbed apply | `0x00623B50..0x00623B93` | Set target flag `+0x138 bit 0x20`, compute a float32 movement factor, and multiply target `+0x218`. |
+| Webbed tick | `0x00623BA0..0x00623C4B` | Renew duration to 9999; partial severity below 3 decreases only when stored lane `+0x158/+0x15C` length squared exceeds .5. |
+| Webbed constants | double `0x0079E610 = 2.9000000953674316`; double `0x007870C8 = .0010000000474974513`; float `0x007DE870 = .5`, `0x007DE8E0 = 3`, `0x007DE984 = 10` | The doubles contain promoted float32 values. Existing `Math.fround(2.9)` and `Math.fround(.001)` constants are correct; movement-factor storage is also float32. |
+| Player movement | `0x0054B001..0x0054B050`, alternate call ending `0x0054B58D`, gait `0x0054B592..0x0054B66E` | Multiply `+0x218` into temporary collision arguments. Raw stored input lane still owns movement admission, facing, gait and later retention. Full web prevents root travel while retaining an attempted movement action. |
+| Cocoon damage/release | `0x00533350..0x00533517` | Subtract physical and magical packet channels from target `+0x20C`; preserve positive HP and hit pulse. At zero HP remove modifier `0x1B79`, clear severity, and retire every matching target-owned Cocoon. Forced release first zeros HP. |
+| Missing Cocoon | `0x005335EE..0x00533611` | Resolve player identity `+0x214/+0x216`; on a missing handle call `0x00533350(1)`. A full web does not outlive its damageable restraint. |
+| Mouth damage source | `0x00450C41`, polygon helper `0x006427E0`, prior complete Discorporeal ledger in entry 301 | Mask `0xFFFFFFFF` with caster exclusion includes eligible Cocoon actors. Damage dispatch runs during the caster's turn and uses the same target receiver. |
+
+Source death is not a release rule: Silk's packet is source-less and Webbed /
+Cocoon identity belongs to the target. Killing applying spiders retains a
+healthy full Cocoon. A stationary partial web also retains its native severity.
+No clean-stock runtime receipt is claimed; the Windows executable was not
+launched under this Mac-only task contract.
+
+### Membership and implementation contract
+
+| Member / branch | Disposition before implementation | Consequence and acceptance |
+| --- | --- | --- |
+| All authored Spider phases and flag-43 payload multipliers, Silk stacks and maximum payload | verified-already-at-parity | Retain the complete existing catalog and source-program tests. No balance/data change. |
+| Source-less Silk, Shield/Deflect/Stoneskin admission | verified-already-at-parity | Keep the 22 existing passing Spider/Cocoon regressions and real Shield journey. |
+| Partial severities, threshold, movement decay, stationary persistence | recovered-pending-port | Apply web factor to submitted displacement while keeping raw lane available to modifier decay. Public first/second-stack escape regressions must pass. |
+| Full root immobilization, movement attempt, automatic staff action | recovered-pending-port | Keep physical delta zero while admitting native attempted movement/staff contact. Public full-web movement escape and real built input must pass. |
+| Direct player spell/staff damage and full release | verified-already-at-parity | Retain existing receiver/effect ownership and expand real input verification. |
+| In-step friendly Mouth damage: positive HP, hit pulse, lethal release | recovered-pending-port | Commit `webbedPlayers` with the changed actors/effects. Exercise the actual authored Mouth action through public enemy stepping. |
+| Full restraint with missing or retired matching Cocoon | recovered-pending-port | Mirror forced native target release; preserve stationary partial webs. Cover old orphan state recovery. |
+| Healthy Cocoon after applying Spider death/despawn | verified-already-at-parity | The six-second idle control retains severity 3 and native payload 10 after the source retires. Do not clear it on Spider death. |
+| Target death, disconnect, removal and world reset | verified-already-at-parity | Existing owner teardown remains; run lifecycle/save regressions on the final tree. |
+| Pause, save/restore, authority, wire admission and presentation | verified-already-at-parity | Keep strict codecs and target identity. Final built journey must retain pause/Last Game and actual root/web replication. |
+| Other independent native movement and boss systems | out-of-system | Their existing algorithms remain. The Mouth callback is included only as an incoming Cocoon damage member. |
+
+### Pre-fix signal and validation boundary
+
+Private Node 22.17.0 on M5 ran the current public Spider/Cocoon suite in
+830.965 ms: 28 tests, the 22 existing tests passing and all six added behavioral
+regressions failing their intended assertions:
+
+- After 1,500 real authority movement ticks, one or two source-less partial
+  webs retain their original severity instead of wearing off.
+- A full Cocoon retains its intentional ten HP for 600 idle ticks after its
+  Spider dies, then 500 movement-input ticks still cannot admit staff escape.
+- The stock authored Discorporeal Mouth action delivers four damage, but a
+  ten-HP Cocoon remains ten instead of six, and its hit pulse is lost.
+- A previously player-damaged two-HP Cocoon emits its release event and retires
+  under Mouth damage while the full two-HP web remains.
+- A missing-Cocoon full web remains during the target tick; the independent
+  stationary partial-web control must continue to persist after the fix.
+
+The disposable broader primary-input matrix had fixture errors and is excluded
+from acceptance evidence. It is not a reproduced product exception. Final
+acceptance requires focused green checks, the unchanged complete canonical
+Website gate, and a real built browser journey through actual transport/input,
+source death, full restraint, damage/release, pause/save/resume and continued
+movement. No publication, deployment or completion reaction is yet claimed.

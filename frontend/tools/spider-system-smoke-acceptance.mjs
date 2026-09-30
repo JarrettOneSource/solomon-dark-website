@@ -76,10 +76,8 @@ export async function acceptSpiderSystem({ host, page, wire, screenshotPath }) {
     await page.screenshot({ path: imagePath(screenshotPath, `web-${severity}`) })
   }
   assert.equal(host.state().world.enemies.actors.filter(actor => actor.brain.family === 'cocoon').length, 1)
-  await page.keyboard.down('d')
   const heldPosition = { ...getPlayerCharacter(host.state(), playerId).position }
   await ticks(host, 25)
-  await page.keyboard.up('d')
   assert.deepEqual(getPlayerCharacter(host.state(), playerId).position, heldPosition)
 
   await page.locator('.boneyard-scene').focus()
@@ -129,16 +127,7 @@ export async function acceptSpiderSystem({ host, page, wire, screenshotPath }) {
   assert.ok([...wire.events.values()].some(event => event.type === 'cocoon-released'))
   await page.screenshot({ path: imagePath(screenshotPath, 'released') })
 
-  state = host.state()
-  const victim = spiders(host)[0]
-  assert.ok(victim)
-  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
-  const killed = damageBoneyardEnemy(state.world.enemies, {
-    actorId: victim.id, amount: victim.currentHealth, magic: true, sourcePlayerId: playerId,
-    tick: state.tick, registerWorldPainter: order.register,
-  })
-  state.world = { ...state.world, enemies: killed.store }
-  state.worldManagerOrder = order.state()
+  const sourceDeathEscape = await acceptSourceDeathEscape({ host, page, wire, screenshotPath, playerId, bounds })
   await waitUntil(() => wire.latestSnapshot?.world.kind === 'boneyard'
     && wire.latestSnapshot.world.spiderRemains.some(remains => remains.state.decal !== null),
   'normal Spider death did not replicate its corpse and decal', 10_000)
@@ -147,7 +136,66 @@ export async function acceptSpiderSystem({ host, page, wire, screenshotPath }) {
   for (const name of ['shoot-web-', 'disintegrate', 'webbed-', 'spider-die']) {
     assert.ok(audio.some(source => source.includes(name)), `missing real audio playback: ${name}`)
   }
-  return { phase: phase.name, startWave: phase.startWave, births, shields, severities, silkIds, pausedTick, restoredRunId: runId, audio: audio.filter(source => /shoot-web|disintegrate|webbed-|spider-die/.test(source)) }
+  return { phase: phase.name, startWave: phase.startWave, births, shields, severities, silkIds, pausedTick, restoredRunId: runId, sourceDeathEscape, audio: audio.filter(source => /shoot-web|disintegrate|webbed-|spider-die/.test(source)) }
+}
+
+async function acceptSourceDeathEscape({ host, page, wire, screenshotPath, playerId, bounds }) {
+  const position = { ...getPlayerCharacter(host.state(), playerId).position }
+  for (let severity = 1; severity <= 3; severity += 1) {
+    primeSpit(host, playerId, position, bounds)
+    await waitUntil(() => host.state().world.enemies.webbedPlayers[playerId]?.severity === severity,
+      `source-death fixture did not receive live Silk ${severity}`, 10_000)
+  }
+  const state = host.state()
+  const applyingSpiderIds = spiders(host).map(actor => actor.id)
+  assert.ok(applyingSpiderIds.length > 0)
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  let enemies = state.world.enemies
+  const web = { ...enemies.webbedPlayers[playerId] }
+  for (const id of applyingSpiderIds) {
+    const actor = enemies.actors.find(candidate => candidate.id === id)
+    enemies = damageBoneyardEnemy(enemies, { actorId: id, amount: actor.currentHealth,
+      magic: true, sourcePlayerId: null, tick: state.tick, registerWorldPainter: order.register }).store
+  }
+  // Hold reinforcements after the native wave/spit checks so source-death escape has no new attackers.
+  state.world = { ...state.world, enemies, waves: null }
+  state.worldManagerOrder = order.state()
+  const retainedPosition = { ...getPlayerCharacter(state, playerId).position }
+  await ticks(host, 550)
+  assert.equal(spiders(host).length, 0)
+  assert.deepEqual(host.state().world.enemies.webbedPlayers[playerId], web)
+  assert.deepEqual(getPlayerCharacter(host.state(), playerId).position, retainedPosition)
+  await waitUntil(() => wire.latestSnapshot?.world.kind === 'boneyard'
+    && wire.latestSnapshot.world.webbedPlayers[playerId]?.severity === 3,
+  'dead-source Cocoon was not replicated', 10_000)
+  await page.screenshot({ path: imagePath(screenshotPath, 'source-dead-retained') })
+
+  await page.locator('.boneyard-scene').focus()
+  await page.keyboard.down('d')
+  let attemptedWhileRestrained = null
+  try {
+    await waitUntil(() => {
+      const current = host.state()
+      const character = getPlayerCharacter(current, playerId)
+      if (current.world.enemies.webbedPlayers[playerId]) {
+        assert.deepEqual(character.position, retainedPosition)
+        if (character.velocity.x > 0) attemptedWhileRestrained = { tick: current.tick, velocity: character.velocity,
+          cocoonHealth: current.world.enemies.webbedPlayers[playerId].cocoonHealth }
+        return false
+      }
+      return true
+    }, 'real movement did not admit staff escape after all Spider sources died', 15_000)
+    assert.ok(attemptedWhileRestrained, 'the retained input lane was not observed while root motion was blocked')
+    await ticks(host, 25)
+  } finally { await page.keyboard.up('d') }
+  const releasedTick = host.state().tick
+  assert.ok(getPlayerCharacter(host.state(), playerId).position.x > retainedPosition.x)
+  await waitUntil(() => wire.latestSnapshot?.world.kind === 'boneyard'
+    && wire.latestSnapshot.world.webbedPlayers[playerId] === undefined,
+  'client retained source-dead restraint after real staff release', 10_000)
+  assert.equal(spiders(host).length, 0)
+  await page.screenshot({ path: imagePath(screenshotPath, 'source-dead-escaped') })
+  return { applyingSpiderIds, retainedPosition, web, attemptedWhileRestrained, releasedTick }
 }
 
 function spiders(host) { return host.state().world.enemies.actors.filter(actor => actor.config.enemyToken === 'SPIDER' && actor.lifeState === 'alive') }

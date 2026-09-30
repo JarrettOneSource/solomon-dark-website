@@ -212,6 +212,7 @@ export function damageWorkingBoneyardEnemy(work: WorkingStep, request: DamageBon
   })
   if (!result.accepted) return
   work.actors = [...result.store.actors]
+  work.webbedPlayers = { ...result.store.webbedPlayers }
   work.maggots = [...result.store.maggots]
   work.deathEffects = [...result.store.deathEffects]
   work.bossNarration = result.store.bossNarration

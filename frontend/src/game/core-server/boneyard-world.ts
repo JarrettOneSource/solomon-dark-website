@@ -69,15 +69,21 @@ export function stepBoneyardWorldTick(
       locked
         ? createIdlePlayerCharacterInput()
         : inputs[playerId] ?? createIdlePlayerCharacterInput(),
-      locked ? 0 : (playerCombat[playerId]?.movementScale ?? 1)
-        * nativeWebbedMovementScale(world.enemies.webbedPlayers[playerId]),
+      locked ? 0 : (playerCombat[playerId]?.movementScale ?? 1),
     )
+    // PlayerWizard +0x218 scales the collision delta while the raw lane owns input and gait.
+    const webMovementScale = nativeWebbedMovementScale(world.enemies.webbedPlayers[playerId])
+    const delta = {
+      x: Math.fround(plan.delta.x * webMovementScale),
+      y: Math.fround(plan.delta.y * webMovementScale),
+    }
     const requested = {
-      x: player.position.x + plan.delta.x,
-      y: player.position.y + plan.delta.y,
+      x: player.position.x + delta.x,
+      y: player.position.y + delta.y,
     }
     return {
       collisionEnabled: playerCombat[playerId]?.collisionEnabled ?? true,
+      delta,
       plan,
       player,
       playerId,
@@ -87,7 +93,7 @@ export function stepBoneyardWorldTick(
   const collisionPlans = plans.filter(({ collisionEnabled }) => collisionEnabled)
 
   let gateLeaves = world.gateLeaves
-  for (const { plan, requested } of collisionPlans) {
+  for (const { delta, requested } of collisionPlans) {
     const contacts = touchingBoneyardGateLeaves(
       requested,
       gateLeaves,
@@ -96,7 +102,7 @@ export function stepBoneyardWorldTick(
     if (contacts.length === 0) continue
     const nextLeaves = [...gateLeaves]
     for (const index of contacts) {
-      nextLeaves[index] = applyBoneyardGateContact(nextLeaves[index], plan.delta)
+      nextLeaves[index] = applyBoneyardGateContact(nextLeaves[index], delta)
     }
     gateLeaves = nextLeaves
   }
@@ -123,8 +129,8 @@ export function stepBoneyardWorldTick(
     Object.fromEntries(plans.map(({ playerId }) => [playerId, []]))
   const resolvedBodies = resolveActorMotion(
     [
-      ...collisionPlans.map(({ plan, player, playerId }) => ({
-        delta: plan.delta,
+      ...collisionPlans.map(({ delta, player, playerId }) => ({
+        delta,
         id: `player-${playerId}`,
         position: player.position,
         ...PLAYER_CHARACTER_PHYSICS,

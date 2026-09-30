@@ -129,7 +129,12 @@ export function stepSpiderWebs(work: WorkingStep, context: BoneyardEnemyStoreSte
   work.spiderSpitTicksRemaining = Math.max(0, work.spiderSpitTicksRemaining - 1)
   for (const [playerId, web] of Object.entries(work.webbedPlayers)) {
     const player = context.players[playerId]
-    const next = player?.alive && player.connected ? stepNativeWebbed(web, player.velocityPerTick) : null
+    const restraintValid = web.severity < 3 || work.actors.some(actor => (
+      actor.lifeState === 'alive' && actor.brain.family === 'cocoon'
+      && actor.brain.ownerPlayerId === playerId
+    ))
+    const next = player?.alive && player.connected && restraintValid
+      ? stepNativeWebbed(web, player.velocityPerTick) : null
     if (next) work.webbedPlayers[playerId] = next
     else delete work.webbedPlayers[playerId]
   }

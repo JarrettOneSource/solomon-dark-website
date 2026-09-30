@@ -33,7 +33,7 @@ export function stepNativeWebbed(
 }
 
 export function nativeWebbedMovementScale(source: NativeWebbedState | undefined): number {
-  return source === undefined ? 1 : Math.max(0, 1 - source.severity / Math.fround(2.9))
+  return source === undefined ? 1 : Math.fround(Math.max(0, 1 - source.severity / Math.fround(2.9)))
 }
 
 export function damageNativeCocoon(

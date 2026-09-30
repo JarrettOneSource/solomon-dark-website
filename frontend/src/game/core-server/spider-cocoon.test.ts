@@ -2,18 +2,24 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createNativeSilk } from '../core-kernels/native-silk.ts'
+import { createNativeDemonSkullAction } from '../core-kernels/native-demon-skull.ts'
+import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
+import { nativeDiscorporealRecipe } from '../core-kernels/native-survival-discorporeal.ts'
 import { grantPlayerSkillRanks, nativeSecondaryAbilityRankStats } from '../core-kernels/player-progression.ts'
-import { playerSkillDerivedStatsAt, replacePlayerEconomy } from './player-entity-store.ts'
+import { playerSkillDerivedStatsAt, replacePlayerCharacter, replacePlayerEconomy } from './player-entity-store.ts'
 import { applyNativeWebbed } from '../core-kernels/native-webbed.ts'
 import { createBoneyardEnemyStore, boneyardEnemyLiveCount, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { addNativeCocoon } from './enemies/construction.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
 import { boneyardEnemyBodies } from './boneyard-world-placement.ts'
 import { createBoneyardCatalog, materializeBoneyard } from '../host/boneyard-catalog.ts'
-import { createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords } from './game-simulation.ts'
+import { createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords, getPlayerCharacter, stepGameSimulationTick } from './game-simulation.ts'
+import type { GameSimulationState } from './game-simulation.ts'
+import type { WizardElement } from '../core-kernels/player-character.ts'
 import { applyPlayerContacts } from './player-contact-system.ts'
 import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import type { BoneyardEnemyStore, BoneyardEnemyStoreStepContext } from './enemies/model.ts'
 
 test('the target-owned Cocoon is a projectile target, stays out of physical crowd and wave counts, and takes web HP damage', () => {
   const position = { x: 200, y: 300 }
@@ -207,10 +213,162 @@ test('Stoneskin rejects unshielded Webbed and does not prevent an active Shield 
   }
 })
 
-function shieldContactScene(shield: number) {
+for (const stacks of [1, 2]) {
+  test(`movement wears off ${stacks} partial Spider webs after every applying Spider dies`, () => {
+    let state = spiderEscapeScene(stacks)
+    for (let tick = 0; tick < 1_500; tick += 1) {
+      state = stepGameSimulationTick(state, { owner: escapeInput(true) })
+    }
+    assert.equal(state.world.kind, 'boneyard')
+    if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    const web = state.world.enemies.webbedPlayers.owner
+    if (stacks === 1) assert.equal(web, undefined)
+    else {
+      assert.ok(web, 'the second stack needs its remaining native movement ticks')
+      assert.ok(web.severity > 0 && web.severity < 0.75)
+    }
+    assert.equal(state.world.enemies.actors.some(actor => actor.config.enemyToken === 'SPIDER'), false)
+    assert.ok(getPlayerCharacter(state, 'owner').position.x > 500)
+  })
+}
+
+test('a full Cocoon survives its applying Spiders but movement still admits native staff attacks to escape', () => {
+  let state = spiderEscapeScene(3)
+  for (let tick = 0; tick < 600; tick += 1) state = stepGameSimulationTick(state, { owner: escapeInput(false) })
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  assert.equal(state.world.enemies.webbedPlayers.owner.severity, 3)
+  assert.equal(state.world.enemies.webbedPlayers.owner.cocoonHealth, 10)
+  assert.equal(state.world.enemies.actors.filter(actor => actor.brain.family === 'cocoon').length, 1)
+  assert.equal(state.world.enemies.actors.some(actor => actor.config.enemyToken === 'SPIDER'), false)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 500, y: 500 })
+  for (let tick = 0; tick < 500; tick += 1) state = stepGameSimulationTick(state, { owner: escapeInput(true) })
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  assert.equal(state.world.enemies.webbedPlayers.owner, undefined)
+  assert.ok(getPlayerCharacter(state, 'owner').position.x > 500)
+})
+
+for (const element of ['air', 'earth', 'ether', 'fire', 'water'] as const) {
+  test(`${element} primary input can break a retained Cocoon after its applying Spider dies`, () => {
+    let state = spiderEscapeScene(3, element)
+    for (let tick = 0; tick < 500; tick += 1) {
+      state = stepGameSimulationTick(state, { owner: {
+        ...escapeInput(false), aim: { x: 750, y: 500 }, cast: { primary: true, quickbar: null },
+      } })
+      if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+      if (state.world.enemies.webbedPlayers.owner === undefined) break
+    }
+    if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    assert.equal(state.world.enemies.webbedPlayers.owner, undefined)
+    assert.ok(getPlayerCharacter(state, 'owner').primaryCast.castSequence > 0)
+    assert.equal(state.world.enemies.actors.some(actor => actor.config.enemyToken === 'SPIDER' && actor.lifeState === 'alive'), false)
+  })
+}
+
+for (const remainingHealth of [10, 2]) {
+  test(`Discorporeal Mouth preserves target-owned Cocoon damage and release at ${remainingHealth} HP`, () => {
+    const state = spiderEscapeScene(3)
+    if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+    const position = getPlayerCharacter(state, 'owner').position
+    const context: BoneyardEnemyStoreStepContext = {
+      tick: 1, players: { owner: { alive: true, connected: true, eligible: true,
+        collisionRadius: 25, headingDeg: 90, position, velocityPerTick: { x: 0, y: 0 } } },
+      registerWorldPainter: order.register, projectileWorldBlocked: () => false,
+      clipSpellSegment: ({ end }) => end, resolveMovement: request => request.requestedPosition,
+      resolveSpawnIntents: () => [],
+    }
+    let store = stepBoneyardEnemyStore(state.world.enemies, { ...context,
+      resolveSpawnIntents: () => [{ enemyToken: 'DEMONSKULL', nativeTypeId: 1008, flags: [], id: 10,
+        authoredRecipe: nativeDiscorporealRecipe(NATIVE_SURVIVAL_BOSS_SOURCES[0]!.sourceSha256),
+        locationPolicy: 'anywhere', position: { x: position.x + 200, y: position.y },
+        spawnTick: 1, waveOrdinal: 38 }],
+    }).store
+    const cocoon = store.actors.find(actor => actor.brain.family === 'cocoon')!
+    if (remainingHealth < 10) store = damageBoneyardEnemy(store, {
+      actorId: cocoon.id, amount: 10 - remainingHealth, magic: true, sourcePlayerId: 'owner',
+      tick: 1, registerWorldPainter: order.register,
+    }).store
+    const mouth = createNativeDemonSkullAction('mouth', 270, 270, 1, 123)
+    if (mouth.kind !== 'mouth') throw new Error('Expected Mouth action')
+    store = { ...store, actors: store.actors.map(actor => actor.brain.family !== 'demon-skull' ? actor : {
+      ...actor, headingDeg: 270, targetPlayerId: 'owner', nextTargetRefreshTick: 1_000,
+      brain: { ...actor.brain, actions: [{ ...mouth, warmupTicks: 0 }], bodyHeadingDeg: 270, pendingAttack: null },
+    }) }
+    let events: ReturnType<typeof stepBoneyardEnemyStore>['events'] = []
+    for (let tick = 2; tick <= 5; tick += 1) {
+      const result = stepBoneyardEnemyStore(store, { ...context, tick })
+      store = result.store
+      events = result.events
+    }
+    if (remainingHealth === 10) {
+      assert.equal(store.webbedPlayers.owner.cocoonHealth, 6)
+      assert.ok(store.webbedPlayers.owner.hitPulse > 0)
+    } else {
+      assert.ok(events.some(event => event.type === 'cocoon-released'))
+      assert.equal(store.webbedPlayers.owner, undefined)
+      const retired = stepBoneyardEnemyStore(store, { ...context, tick: 6 }).store
+      assert.equal(retired.actors.some(actor => actor.brain.family === 'cocoon'), false)
+      assert.equal(retired.webbedPlayers.owner, undefined)
+    }
+  })
+}
+
+test('the target update releases a previously orphaned full Cocoon without clearing retained partial webs', () => {
+  const state = spiderEscapeScene(3)
+  if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const source: BoneyardEnemyStore = { ...state.world.enemies,
+    actors: state.world.enemies.actors.filter(actor => actor.brain.family !== 'cocoon'),
+    webbedPlayers: { ...state.world.enemies.webbedPlayers, other: applyNativeWebbed(null, 10) },
+  }
+  const players = { owner: { alive: true, connected: true, eligible: true, collisionRadius: 25,
+    position: { x: 500, y: 500 }, headingDeg: 90, velocityPerTick: { x: 0, y: 0 } } }
+  const result = stepBoneyardEnemyStore(source, { players: { ...players, other: players.owner },
+    projectileWorldBlocked: () => false, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [], tick: 1,
+  }).store
+  assert.equal(result.webbedPlayers.owner, undefined)
+  assert.equal(result.webbedPlayers.other.severity, 1)
+})
+
+function escapeInput(movement: boolean) {
+  return { aim: null, cast: { primary: false, quickbar: null },
+    movement: { x: movement ? 1 : 0, y: 0 }, viewportHeight: 900, viewportWidth: 1_600 }
+}
+
+function spiderEscapeScene(stacks: number, element: WizardElement = 'fire'): GameSimulationState {
+  let source: GameSimulationState = shieldContactScene(0, element)
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  source = { ...source, playerEntities: replacePlayerCharacter(source.playerEntities, 'owner', {
+    ...getPlayerCharacter(source, 'owner'), position: { x: 500, y: 500 },
+    velocity: { x: 0, y: 0 }, headingIndex: 6,
+  }), world: { ...source.world, arenaTransition: null, encounter: null, waves: null,
+    bounds: { x: 0, y: 0, w: 4_000, h: 4_000 },
+    collision: { circles: [], polygons: [], segments: [] }, gateLeaves: [], lanternPosition: null,
+  } }
+  const order = createNativeWorldManagerOrder(source.worldManagerOrder)
+  for (let stack = 0; stack < stacks; stack += 1) {
+    if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    const contact = collideSilk({ ...source, world: source.world }, 10)
+    const contacts = applyPlayerContacts(source, gameSimulationPlayerRecords(source),
+      [contact], 1, undefined, order.register)
+    source = { ...source, world: contacts.world, playerEntities: contacts.playerEntities,
+      secondaryAbilities: contacts.secondaryAbilities }
+  }
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  let enemies = source.world.enemies
+  for (const actor of enemies.actors.filter(candidate => candidate.config.enemyToken === 'SPIDER')) {
+    enemies = damageBoneyardEnemy(enemies, { actorId: actor.id, amount: actor.currentHealth,
+      magic: true, sourcePlayerId: null, tick: source.tick, registerWorldPainter: order.register }).store
+  }
+  return { ...source, worldManagerOrder: order.state(), world: { ...source.world, enemies } }
+}
+
+function shieldContactScene(shield: number, element: WizardElement = 'fire') {
   const loaded = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 67))!
   const initial = enterBoneyardWorld(createGameSimulation({ owner: {
-    displayName: 'Silk Shield target', element: 'fire', discipline: 'arcane',
+    displayName: 'Silk Shield target', element, discipline: 'arcane',
   } }), loaded)
   if (initial.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
   const position = gameSimulationPlayerRecords(initial).owner!.position
@@ -229,7 +387,8 @@ function shieldContactScene(shield: number) {
   }
 }
 
-function collideSilk(source: ReturnType<typeof shieldContactScene>, strength = 20) {
+function collideSilk(source: GameSimulationState, strength = 20) {
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
   const position = gameSimulationPlayerRecords(source).owner!.position
   const created = createNativeSilk(position, { position, velocityPerTick: { x: 0, y: 0 } }, strength, createNativeRng(10))
   const ownerActorId = source.world.enemies.actors[0]!.id
