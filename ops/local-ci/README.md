@@ -3,8 +3,9 @@
 The maintained worker runs automatically on the M5 from
 `/Volumes/Drive/solomon-cicd`. Its one native launchd job is
 `gui/501/com.jarrett.solomon-dark-main-deploy`. WSL scheduling is retired.
-The only internal-disk registration is a small LaunchAgents symlink to the SSD
-plist. The launcher defers before creating data if the mounted external volume
+The only internal-disk registration is a small native LaunchAgents plist. It
+loads at login even if the SSD is absent and waits for the SSD entry point to
+return. The launcher defers before creating data if the mounted external volume
 does not match the installed volume UUID.
 
 The worker fetches published `origin/main` from its own bare mirror without
@@ -21,6 +22,11 @@ Use `SDR_DEPLOY_SSH_IDENTITY` for the authorized private NFO key and retain
 normal OpenSSH known-host verification. Keys and machine configuration are not
 release members. `HOME` remains the user's home; tool-specific home/cache
 variables select the SSD.
+
+The background job needs macOS removable-volume access. Permission held by an
+SSH session does not grant that access to a launchd job. Verify a fresh native
+invocation in `state/status.json` after installation, including its foreign-lease
+deferral when a report owns compute.
 
 The exact source runs the unchanged all-mode `./scripts/validate.sh`. Clean
 source/index identity and a fresh main check precede packaging. The macOS SDK

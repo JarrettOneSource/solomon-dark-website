@@ -1,11 +1,15 @@
 import importlib.util
+from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
+import plistlib
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 OPS = Path(__file__).resolve().parents[1] / 'ops/local-ci'
@@ -30,6 +34,29 @@ def worker_fixture(root):
     (root / 'tools/bash/bin/bash').symlink_to('/bin/bash')
     (root / 'config.json').write_text(json.dumps({'volume_uuid': installer.mount_information()['VolumeUUID'], 'environment': {}}))
     return root / 'current/deploy-main.sh'
+
+
+@contextmanager
+def native_job(definition):
+    # launchd requires its registration on storage with real Unix ownership.
+    path = Path.home() / 'Library/LaunchAgents' / (definition['Label'] + '.plist')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        raise RuntimeError('test registration already exists')
+    path.write_bytes(plistlib.dumps(definition))
+    path.chmod(0o600)
+    job = f'gui/{os.getuid()}/{definition["Label"]}'
+    loaded = False
+    try:
+        subprocess.run(['/bin/launchctl', 'bootstrap', f'gui/{os.getuid()}', str(path)], check=True)
+        loaded = True
+        yield job
+    finally:
+        try:
+            if loaded:
+                subprocess.run(['/bin/launchctl', 'bootout', job], check=True)
+        finally:
+            path.unlink()
 
 
 class ComputeOwnershipTests(unittest.TestCase):
@@ -87,6 +114,49 @@ class ComputeOwnershipTests(unittest.TestCase):
 
 
 class MacInstallationTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'native launchd registration')
+    def test_native_registration_defers_absent_entry_and_runs_when_it_returns(self):
+        import time
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'absent-ci'
+            definition = installer.registration_definition(root)
+            label = installer.LABEL + '.test-' + uuid.uuid4().hex
+            definition['Label'] = label
+            with native_job(definition) as job:
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    state = subprocess.check_output(['/bin/launchctl', 'print', job], text=True)
+                    if 'last exit code = 0' in state:
+                        break
+                    time.sleep(0.05)
+                else:
+                    self.fail('absent entry did not defer successfully')
+                self.assertFalse(root.exists())
+                (root / 'current').mkdir(parents=True)
+                receipt = root / 'ran'
+                (root / 'current/run-worker.py').write_text(f'from pathlib import Path\nPath({str(receipt)!r}).write_text("returned")\n')
+                subprocess.run(['/bin/launchctl', 'kickstart', job], check=True)
+                deadline = time.monotonic() + 10
+                while not receipt.exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                self.assertEqual(receipt.read_text(), 'returned')
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'native launchd ownership')
+    def test_installer_preserves_an_unrelated_native_job_at_the_same_label(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ci'
+            label = installer.LABEL + '.test-' + uuid.uuid4().hex
+            with native_job({'Label': label, 'ProgramArguments': ['/usr/bin/true']}) as job:
+                (root / 'launchd').mkdir(parents=True)
+                with patch.object(installer, 'LABEL', label), patch.object(installer.Path, 'home', return_value=Path(directory) / 'home'):
+                    (root / 'launchd' / (label + '.plist')).write_bytes(plistlib.dumps(installer.registration_definition(root)))
+                    with self.assertRaisesRegex(RuntimeError, 'unrelated native job'):
+                        installer.refresh_scheduler(root)
+                    self.assertFalse((Path.home() / 'Library/LaunchAgents' / (label + '.plist')).exists())
+                state = subprocess.check_output(['/bin/launchctl', 'print', job], text=True)
+                self.assertIn('/usr/bin/true', state)
+                self.assertNotIn(str(root / 'current/run-worker.py'), state)
+
     @unittest.skipUnless(sys.platform == 'darwin', 'native macOS volume installation')
     def test_atomic_complete_versions_reconcile_and_prune(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -194,6 +264,11 @@ class MacInstallationTests(unittest.TestCase):
 
 
 class ArtifactAdmissionTests(unittest.TestCase):
+    def test_installer_rejects_a_root_that_escapes_the_external_volume(self):
+        root = installer.VOLUME / '..' / 'unowned-ci-root'
+        with self.assertRaisesRegex(RuntimeError, 'must live on its external volume'):
+            installer.install_version(OPS, root)
+
     def test_only_linux_x64_native_bytes_are_admitted(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'node'

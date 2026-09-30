@@ -28,7 +28,7 @@ def write_json(path, data):
 
 
 def storage_ready(root):
-    root = root.absolute()
+    root = root.resolve()
     if VOLUME not in root.parents or not VOLUME.is_mount() or not (root / 'config.json').is_file():
         return False
     result = subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', str(VOLUME)],
@@ -134,6 +134,7 @@ def stop_group(child):
 
 
 def run_once(root):
+    root = root.resolve()
     if not storage_ready(root):
         print('External CI volume is absent or does not match its installed identity; deferred.')
         return 0

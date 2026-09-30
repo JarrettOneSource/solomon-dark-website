@@ -38,8 +38,21 @@ def atomic_text(path, text):
     temporary.replace(path)
 
 
+def registration_definition(root):
+    # A tiny native registration must load even when the SSD is absent at login.
+    return {
+        'Label': LABEL,
+        'ProgramArguments': ['/bin/sh', '-c',
+                             'test -f "$1" || exit 0; exec /usr/bin/python3 "$1" --root "$2"',
+                             'solomon-cicd', str(root / 'current/run-worker.py'), str(root)],
+        'RunAtLoad': True, 'StartInterval': 60, 'ProcessType': 'Background', 'Nice': 10,
+        'LowPriorityIO': True, 'ThrottleInterval': 10, 'ExitTimeOut': 45,
+    }
+
+
 def install_version(source, root):
-    if VOLUME not in root.absolute().parents:
+    root = root.resolve()
+    if VOLUME not in root.parents:
         raise RuntimeError('The complete CI installation must live on its external volume')
     information = mount_information()
     config_path = root / 'config.json'
@@ -89,14 +102,8 @@ def install_version(source, root):
         atomic_text(config_path, json.dumps({'volume_uuid': information['VolumeUUID'], 'environment': {}}, indent=2) + '\n')
         config_path.chmod(0o600)
     # A stable native registration resolves the atomically updated complete worker version.
-    plist = {
-        'Label': LABEL,
-        'ProgramArguments': ['/usr/bin/python3', str(root / 'current/run-worker.py'), '--root', str(root)],
-        'RunAtLoad': True, 'StartInterval': 60, 'ProcessType': 'Background', 'Nice': 10,
-        'LowPriorityIO': True, 'ThrottleInterval': 10, 'ExitTimeOut': 45,
-    }
     plist_path = root / 'launchd' / (LABEL + '.plist')
-    data = plistlib.dumps(plist, sort_keys=True)
+    data = plistlib.dumps(registration_definition(root), sort_keys=True)
     temporary = plist_path.with_suffix('.plist.next')
     temporary.write_bytes(data)
     temporary.replace(plist_path)
@@ -112,8 +119,9 @@ def install_version(source, root):
 
 @contextmanager
 def idle_installation(root):
+    root = root.resolve()
     mount_information()
-    if VOLUME not in root.absolute().parents:
+    if VOLUME not in root.parents:
         raise RuntimeError('The complete CI installation must live on its external volume')
     (root / 'state').mkdir(parents=True, exist_ok=True)
     with (root / 'state/deploy.lock').open('a') as lock:
@@ -130,14 +138,27 @@ def refresh_scheduler(root):
     registration = Path.home() / 'Library/LaunchAgents' / (LABEL + '.plist')
     target = root / 'launchd' / (LABEL + '.plist')
     registration.parent.mkdir(parents=True, exist_ok=True)
+    owned = False
     if registration.exists() or registration.is_symlink():
-        if not registration.is_symlink() or registration.resolve() != target.resolve():
+        if registration.is_symlink():
+            owned = registration.resolve() == target.resolve()
+        else:
+            old = plistlib.loads(registration.read_bytes())
+            owned = old.get('Label') == LABEL and str(root / 'current/run-worker.py') in old.get('ProgramArguments', []) and str(root) in old.get('ProgramArguments', [])
+        if not owned:
             raise RuntimeError('An unrelated launchd registration already owns this label')
-    else:
-        registration.symlink_to(target)
-    if subprocess.run(['/bin/launchctl', 'print', domain + '/' + LABEL], capture_output=True).returncode == 0:
+    existing = subprocess.run(['/bin/launchctl', 'print', domain + '/' + LABEL], capture_output=True, text=True)
+    if existing.returncode == 0 and (not owned or str(root / 'current/run-worker.py') not in existing.stdout):
+        raise RuntimeError('An unrelated native job already owns this label')
+    if registration.is_symlink():
+        registration.unlink()
+    temporary = registration.with_suffix('.plist.next')
+    temporary.write_bytes(target.read_bytes())
+    temporary.chmod(0o600)
+    temporary.replace(registration)
+    if existing.returncode == 0:
         subprocess.run(['/bin/launchctl', 'bootout', domain + '/' + LABEL], check=True)
-    subprocess.run(['/bin/launchctl', 'bootstrap', domain, str(target)], check=True)
+    subprocess.run(['/bin/launchctl', 'bootstrap', domain, str(registration)], check=True)
     subprocess.run(['/bin/launchctl', 'enable', domain + '/' + LABEL], check=True)
 
 
@@ -147,6 +168,7 @@ def main():
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument('--no-bootstrap', action='store_true')
     arguments = parser.parse_args()
+    arguments.root = arguments.root.resolve()
     if arguments.no_bootstrap:
         changed = install_version(arguments.source, arguments.root)
         print(json.dumps({'installed_root': str(arguments.root), 'components_changed': changed}))
