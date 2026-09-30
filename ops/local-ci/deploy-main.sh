@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 set -Eeuo pipefail
 
 umask 077
@@ -10,9 +10,12 @@ ssh_command="${SDR_DEPLOY_SSH_COMMAND:-/usr/bin/ssh}"
 scp_command="${SDR_DEPLOY_SCP_COMMAND:-/usr/bin/scp}"
 ssh_identity="${SDR_DEPLOY_SSH_IDENTITY:-$HOME/.ssh/id_ed25519_nfoservers_root}"
 public_url="${SDR_DEPLOY_PUBLIC_URL:-https://solomondarker.com}"
+ci_root="${SDR_DEPLOY_ROOT:-/Volumes/Drive/solomon-cicd}"
+if [[ "${SDR_DEPLOY_LOCK_HELD:-}" != 1 ]]; then
+    exec /usr/bin/python3 "$(dirname -- "$0")/run-worker.py" --root "$ci_root"
+fi
 caddy_source_path="ops/nfo/solomon-dark-revived.caddy"
 game_unit_source_path="ops/nfo/solomon-dark-game.service"
-worker_artifact_path="Deploy/solomon-dark-main-deploy"
 remote_caddy_site="/etc/caddy/sites/solomon-dark-revived.caddy"
 remote_game_unit="/etc/systemd/system/solomon-dark-game.service"
 ssh_options=(
@@ -20,18 +23,17 @@ ssh_options=(
     -o ConnectTimeout=15
     -o IdentitiesOnly=yes
     -o StrictHostKeyChecking=yes
+    -o "UserKnownHostsFile=$ci_root/credentials/known_hosts"
+    -o "HostKeyAlias=${SDR_DEPLOY_HOST_KEY_ALIAS:-fleet-nfo-server}"
     -i "$ssh_identity"
 )
 
-data_root="${XDG_DATA_HOME:-$HOME/.local/share}/solomon-dark-main-deploy"
-state_root="${XDG_STATE_HOME:-$HOME/.local/state}/solomon-dark-main-deploy"
+data_root="$ci_root/data"
+state_root="$ci_root/state"
 mirror="$data_root/repository.git"
 run_parent="$data_root/runs"
-artifact_root="$state_root/artifacts"
-lock_file="$state_root/deploy.lock"
+artifact_root="$ci_root/artifacts"
 failed_target_file="$state_root/failed-target"
-worker_path="$HOME/.local/libexec/solomon-dark-main-deploy"
-worker_next="${worker_path}.next"
 
 run_root=""
 source_checkout=""
@@ -43,7 +45,7 @@ remote_upload=""
 worker_temp=""
 
 log() {
-    printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"
+    printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
 }
 
 fail() {
@@ -69,11 +71,9 @@ cleanup() {
     if [[ -n "$failed_target_temp" && -f "$failed_target_temp" ]]; then
         unlink -- "$failed_target_temp"
     fi
-    if [[ -n "$worker_temp" && -f "$worker_temp" ]]; then
-        unlink -- "$worker_temp"
+    if [[ -n "$worker_temp" && -d "$worker_temp" ]]; then
+        rm -rf -- "$worker_temp"
     fi
-    [[ ! -f "$worker_next" ]] || unlink -- "$worker_next"
-
     if (( worktree_registered == 1 )); then
         git --git-dir="$mirror" worktree remove --force "$source_checkout" \
             >/dev/null 2>&1 || true
@@ -81,7 +81,14 @@ cleanup() {
     fi
 
     if [[ -n "$run_root" && -d "$run_root" ]]; then
-        rmdir -- "$run_root" >/dev/null 2>&1 || true
+        python3 - "$run_root" "$run_parent" <<'PY_CLEAN'
+from pathlib import Path
+import shutil, sys
+p, parent = map(Path, sys.argv[1:])
+if p.parent != parent or p.is_symlink():
+    raise SystemExit("refusing unowned run cleanup")
+shutil.rmtree(p)
+PY_CLEAN
     fi
 
     exit "$exit_code"
@@ -120,29 +127,45 @@ discard_artifact() {
 
 record_failed_target() {
     failed_target_temp="$state_root/.failed-target.$$"
-    printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$failed_target_temp"
+    printf '%s %s\n' "$target_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$failed_target_temp"
     mv -- "$failed_target_temp" "$failed_target_file"
     failed_target_temp=""
 }
 
-install_validated_worker() {
-    worker_temp="$(mktemp "$state_root/worker.XXXXXXXX")"
-    tar --extract --gzip --file "$artifact" --to-stdout \
-        "./$worker_artifact_path" >"$worker_temp"
-    chmod 0700 "$worker_temp"
-    if [[ -f "$worker_path" ]] && cmp --silent "$worker_temp" "$worker_path"; then
-        unlink -- "$worker_temp"
-        worker_temp=""
-        return 1
-    fi
-    install -D -m 0700 -- "$worker_temp" "$worker_next"
-    mv -- "$worker_next" "$worker_path"
-    unlink -- "$worker_temp"
-    worker_temp=""
-    return 0
+sha_file() {
+    python3 - "$1" <<'PY_HASH'
+import hashlib, sys
+with open(sys.argv[1], 'rb') as source:
+    digest = hashlib.file_digest(source, 'sha256')
+print(digest.hexdigest())
+PY_HASH
 }
 
-for command_name in cmp curl date flock git install mktemp python3 sha256sum tar; do
+sha_stream() {
+    python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+}
+
+install_file() {
+    mkdir -p -- "$(dirname -- "$3")"
+    install -m "$1" -- "$2" "$3"
+}
+
+install_validated_worker() {
+    worker_temp="$(mktemp -d "$state_root/worker.XXXXXXXX")"
+    tar -xzf "$artifact" -C "$worker_temp" ./Deploy/M5Worker || fail "validated worker extraction failed"
+    for name in deploy-main.sh run-worker.py install.py; do
+        [[ -f "$worker_temp/Deploy/M5Worker/$name" ]] || fail "validated worker lacks $name"
+    done
+    result="$(python3 "$ci_root/current/install.py" --root "$ci_root" \
+        --source "$worker_temp/Deploy/M5Worker" --no-bootstrap)" || fail "validated worker installation failed"
+    rm -rf -- "$worker_temp" || fail "validated worker staging cleanup failed"
+    worker_temp=""
+    worker_changed="$(python3 -c 'import json,sys; print("changed" if json.loads(sys.argv[1])["components_changed"] else "unchanged")' "$result")" || fail "invalid worker installation receipt"
+    [[ "$worker_changed" != changed ]] || return 0
+    return 3
+}
+
+for command_name in curl date git install mktemp python3 tar; do
     require_command "$command_name"
 done
 [[ -x "$ssh_command" ]] || fail "SSH client is not executable: $ssh_command"
@@ -150,19 +173,6 @@ done
 [[ -r "$ssh_identity" ]] || fail "SSH identity is not readable: $ssh_identity"
 
 mkdir -p -- "$data_root" "$state_root" "$run_parent" "$artifact_root"
-if [[ "${SDR_DEPLOY_LOCK_HELD:-}" != 1 ]]; then
-    if flock --exclusive --nonblock --close --conflict-exit-code 73 \
-        "$lock_file" /usr/bin/env SDR_DEPLOY_LOCK_HELD=1 "$0" "$@"; then
-        exit 0
-    else
-        lock_exit=$?
-    fi
-    if (( lock_exit == 73 )); then
-        log "Another main deployment is already running"
-        exit 0
-    fi
-    exit "$lock_exit"
-fi
 
 if [[ ! -d "$mirror/objects" ]]; then
     log "Creating the isolated main mirror"
@@ -173,18 +183,21 @@ else
 fi
 
 target_sha="$(fetch_main)"
+# Bootstrap cannot replace this Mac launcher with an older Linux-only release.
+if ! git --git-dir="$mirror" cat-file -e "$target_sha:ops/local-ci/run-worker.py" 2>/dev/null; then
+    log "origin/main $target_sha predates the M5 worker; waiting for the validated migration commit"
+    exit 0
+fi
 [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || fail "origin/main did not resolve to a commit"
 target_caddy_checksum="$(
     git --git-dir="$mirror" show "$target_sha:$caddy_source_path" |
-        sha256sum |
-        awk '{print $1}'
+        sha_stream
 )"
 [[ "$target_caddy_checksum" =~ ^[0-9a-f]{64}$ ]] ||
     fail "origin/main did not contain a valid Caddy site configuration"
 target_game_unit_checksum="$(
     git --git-dir="$mirror" show "$target_sha:$game_unit_source_path" |
-        sha256sum |
-        awk '{print $1}'
+        sha_stream
 )"
 [[ "$target_game_unit_checksum" =~ ^[0-9a-f]{64}$ ]] ||
     fail "origin/main did not contain a valid game systemd unit"
@@ -220,7 +233,7 @@ artifact_checksum=""
 if [[ -f "$artifact" && -f "$checksum_file" ]]; then
     read -r artifact_checksum <"$checksum_file"
     if [[ ! "$artifact_checksum" =~ ^[0-9a-f]{64}$ ]] ||
-        ! printf '%s  %s\n' "$artifact_checksum" "$artifact" | sha256sum --check --status; then
+        ! [[ "$(sha_file "$artifact")" == "$artifact_checksum" ]]; then
         log "Discarding an invalid cached artifact for $target_sha"
         discard_artifact
         artifact_checksum=""
@@ -231,10 +244,10 @@ if [[ -z "$artifact_checksum" ]]; then
     node_version="$(tr -d '[:space:]' < <(
         git --git-dir="$mirror" show "$target_sha:.node-version"
     ))"
-    node_bin="$HOME/.nvm/versions/node/v$node_version/bin"
+    node_bin="$ci_root/tools/node/bin"
     [[ -x "$node_bin/node" && -x "$node_bin/npm" ]] ||
-        fail "Node.js $node_version is not installed under $HOME/.nvm"
-    export PATH="$node_bin:$HOME/.dotnet:/usr/local/bin:/usr/bin:/bin"
+        fail "Pinned Node.js $node_version is not installed on the CI SSD"
+    [[ "$(node --version)" == "v$node_version" ]] || fail "CI Node version differs from the admitted source"
 
     run_root="$(mktemp -d "$run_parent/run.XXXXXXXX")"
     source_checkout="$run_root/source"
@@ -247,6 +260,10 @@ if [[ -z "$artifact_checksum" ]]; then
         SDR_BUILD_REVISION="$target_sha" ./scripts/validate.sh
     )
 
+    git -C "$source_checkout" diff --exit-code
+    git -C "$source_checkout" diff --cached --exit-code
+    [[ "$(git -C "$source_checkout" write-tree)" == "$(git --git-dir="$mirror" rev-parse "$target_sha^{tree}")" ]] || fail "validated source index changed"
+
     newest_sha="$(fetch_main)"
     if [[ "$newest_sha" != "$target_sha" ]]; then
         log "Validated $target_sha was superseded by $newest_sha; deferring to the next run"
@@ -255,25 +272,34 @@ if [[ -z "$artifact_checksum" ]]; then
 
     publish_dir="$source_checkout/.deploy-publish"
     log "Publishing release $target_sha"
-    "$HOME/.dotnet/dotnet" publish "$source_checkout/backend/Server.csproj" \
+    "$SDR_DOTNET" restore "$source_checkout/backend/Server.csproj" --runtime linux-x64 -p:UseAppHost=false --nologo
+    "$SDR_DOTNET" publish "$source_checkout/backend/Server.csproj" \
         --configuration Release \
         --no-restore \
+        --runtime linux-x64 \
+        --self-contained false \
+        -p:UseAppHost=false \
         --output "$publish_dir" \
         --nologo \
         --verbosity minimal
     printf '%s\n' "$target_sha" >"$publish_dir/DEPLOYED_GIT_SHA"
-    install -D -m 0644 \
+    install_file 0644 \
         "$source_checkout/$caddy_source_path" \
         "$publish_dir/Deploy/solomon-dark-revived.caddy"
-    install -D -m 0644 \
+    install_file 0644 \
         "$source_checkout/$game_unit_source_path" \
         "$publish_dir/Deploy/solomon-dark-game.service"
-    install -D -m 0700 \
-        "$source_checkout/ops/local-ci/deploy-main.sh" \
-        "$publish_dir/$worker_artifact_path"
+    for name in deploy-main.sh run-worker.py install.py; do
+        install_file 0700 "$source_checkout/ops/local-ci/$name" "$publish_dir/Deploy/M5Worker/$name"
+    done
+    install_file 0755 "$ci_root/tools/node-linux-x64/bin/node" "$publish_dir/Runtime/node"
+    python3 "$source_checkout/ops/local-ci/check-linux-artifact.py" "$publish_dir"
 
     for required_file in \
-        Deploy/solomon-dark-main-deploy \
+        Deploy/M5Worker/deploy-main.sh \
+        Deploy/M5Worker/run-worker.py \
+        Deploy/M5Worker/install.py \
+        Runtime/node \
         Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
@@ -290,9 +316,8 @@ if [[ -z "$artifact_checksum" ]]; then
     done
 
     artifact_temp="$artifact_root/.$target_sha.$$.tmp"
-    tar --create --gzip --file "$artifact_temp" --directory "$publish_dir" .
-    checksum_output="$(sha256sum "$artifact_temp")"
-    artifact_checksum="${checksum_output%% *}"
+    tar -czf "$artifact_temp" -C "$publish_dir" .
+    artifact_checksum="$(sha_file "$artifact_temp")"
     mv -- "$artifact_temp" "$artifact"
     artifact_temp=""
     checksum_temp="$artifact_root/.$target_sha.$$.sha256.tmp"
@@ -313,6 +338,9 @@ if install_validated_worker; then
     discard_artifact
     log "Installed the validated deployment worker from $target_sha; deferring production cutover to the next run"
     exit 0
+else
+    worker_update_status=$?
+    [[ "$worker_update_status" == 3 ]] || fail "validated worker admission failed"
 fi
 
 deployed_sha="$(remote_deployed_sha)"
@@ -692,7 +720,7 @@ if payload != {"revision": sys.argv[2]}:
     raise SystemExit("public deployment manifest does not match origin/main")
 PY
 
-printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$state_root/last-success"
+printf '%s %s\n' "$target_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$state_root/last-success"
 [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
 discard_artifact
 log "Production deployment of origin/main $target_sha passed live health checks"

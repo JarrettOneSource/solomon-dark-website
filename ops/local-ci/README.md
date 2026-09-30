@@ -1,77 +1,67 @@
-# Machine-local main deployment
+# M5 main deployment
 
-This worker polls `origin/main` from its own bare mirror, validates the exact
-commit with `./scripts/validate.sh`, publishes an immutable release archive,
-and deploys it to NFO. The archive includes the checked-in Caddy site and game
-systemd unit, whose live checksums are reconciled even when the runtime commit
-is already current. It never reads or modifies a developer checkout.
+The maintained worker runs automatically on the M5 from
+`/Volumes/Drive/solomon-cicd`. Its one native launchd job is
+`gui/501/com.jarrett.solomon-dark-main-deploy`. WSL scheduling is retired.
+The only internal-disk registration is a small LaunchAgents symlink to the SSD
+plist. The launcher defers before creating data if the mounted external volume
+does not match the installed volume UUID.
 
-The cutover is fail-closed: a changed `main` is not deployed until validation
-passes, the SQLite database is backed up and checked, and an unhealthy release
-is rolled back atomically. Active browser games do not defer a validated
-release. The worker asks the supervisor to close admissions, freeze each host,
-publish one final checkpoint per connected player, wait up to the bounded save
-grace for cloud/IndexedDB acknowledgements, and disconnect players with the
-`game updating` reason before restarting the Website and game units. Changed
-Caddy configuration is validated before installation, reloaded gracefully, and
-restored with a failed release. The game unit is verified, backed up, installed,
-and daemon-reloaded before the candidate starts; rollback restores and reloads
-the prior unit before restarting the prior release. Successful cutovers retain
-the previous release, database backup, and any replaced Caddy site or game unit
-on NFO.
+The worker fetches published `origin/main` from its own bare mirror without
+GitHub credentials. It holds a native deployment lock and the shared exclusive
+M5 lease at `/Volumes/Drive/codex-acceptance/solomon-heavy-lease`. A foreign lease
+defers the invocation without starting validation or changing that ownership.
+Signals terminate the owned process group, wait for bounded shutdown, and
+release only the matching owned lease. The 90-minute invocation limit remains.
 
-The release also publishes `/deployment.json`. Connected players see the custom
-update surface while saving and reload only when that manifest identifies the
-announced target revision. Idle production `/game` tabs use the same manifest
-to pick up a release without a game connection.
+Pinned tools, cache, temporary files, source worktrees, immutable release
+artifacts, worker versions, logs and status all live on the SSD. Configure
+machine-local endpoints under the protected `config.json` `environment` object.
+Use `SDR_DEPLOY_SSH_IDENTITY` for the authorized private NFO key and retain
+normal OpenSSH known-host verification. Keys and machine configuration are not
+release members. `HOME` remains the user's home; tool-specific home/cache
+variables select the SSD.
 
-The worker is intentionally a fixed local systemd service instead of a GitHub
-Actions self-hosted runner. This is a public repository, so a persistent Actions
-runner would allow untrusted workflow code to target the deployment machine.
-The worker fetches the public repository without GitHub credentials and only
-executes commits that have reached `main`.
+The exact source runs the unchanged all-mode `./scripts/validate.sh`. Clean
+source/index identity and a fresh main check precede packaging. The macOS SDK
+publishes `linux-x64` managed dependencies with no platform apphost; native
+SQLite and the separately pinned Linux x64 Node executable must be ELF64
+x86-64. A Mac executable or foreign runtime dependency target rejects the
+artifact before upload. The release includes the existing Caddy site, game
+unit, ML checkpoint and complete maintained worker components.
 
-Every validated release contains the exact deployment worker that built it. If
-that worker differs from the installed copy, the current run atomically installs
-it, independently discards the old-format artifact and checksum, and exits
-before contacting production.
-The next timer run validates and packages the commit again under the new worker.
-This keeps machine-local deployment changes synchronized without executing an
-unvalidated script from the public repository.
+The NFO transaction is preserved: close admissions, freeze and checkpoint
+players through their normal cloud/IndexedDB owners, wait for bounded save
+acknowledgements, back up/check SQLite, install verified game/Caddy/model
+configuration, atomically swap the release, and verify health. An unhealthy
+candidate restores the prior release/configuration; successful cutovers retain
+NFO rollback and database backups. The public no-store `/deployment.json`
+remains the automatic app reload edge.
 
-A remote cutover failure records its target SHA and suppresses further automatic
-attempts for that same commit. The failed candidate's service status and recent
-Website/game journals are included in the local deployment receipt before the
-remote rollback. After correcting the cause, run `./ops/local-ci/install.sh`
-from the exact intended checkout; explicit installation clears the failed-target
-record and starts one fresh deployment attempt.
+Complete worker versions are installed atomically behind `current`. A validated
+component update is admitted only after the full gate, discards the artifact
+built by the older worker, and defers deployment to the next invocation.
+The replacement launcher and installer are part of the same version, so an old
+Linux-only worker cannot overwrite the Mac installation. The bootstrap launcher
+waits while published main still predates this migration. Keep the current and
+one prior worker version; the stable scheduler resolves `current/run-worker.py`
+at each invocation, so replacing a complete version needs no competing refresh
+job or scheduler restart. Completed source/build/artifact trees and full success
+logs are deleted. `state/status.json` retains bounded diagnostics, while
+`state/last-success` and `state/failed-target` preserve the deployed or suppressed
+revision. A remote cutover failure suppresses repeated drains at the same SHA.
 
-Install or refresh it on the deployment machine:
+Install from an accepted source tree after staging the pinned SSD tools,
+protected configuration and authorized SSH identity:
 
-```bash
-./ops/local-ci/install.sh
+```sh
+./ops/local-ci/install.sh --root /Volumes/Drive/solomon-cicd
+launchctl print gui/501/com.jarrett.solomon-dark-main-deploy
+cat /Volumes/Drive/solomon-cicd/state/status.json
 ```
 
-The service allows 90 minutes for validation, packaging, and cutover. Run the
-installer while the worker is idle to apply changed service or timer settings.
-
-The first installation remains explicit because no validated worker exists yet.
-After that bootstrap, validated releases own worker refreshes as described above.
-
-On WSL, keep the user manager enabled with linger and launch the distribution
-at Windows logon. This workstation uses a per-user Startup entry for Ubuntu, so
-the timer starts after a reboot without requiring an elevated scheduled task.
-
-Inspect the timer and recent deployment receipts:
-
-```bash
-systemctl --user status solomon-dark-main-deploy.timer
-journalctl --user -u solomon-dark-main-deploy.service --since today
-```
-
-The service uses native Linux OpenSSH in batch mode, verifies the existing host
-key, and defaults to the private key at
-`~/.ssh/id_ed25519_nfoservers_root`. `SDR_DEPLOY_SSH_COMMAND`,
-`SDR_DEPLOY_SCP_COMMAND`, `SDR_DEPLOY_SSH_IDENTITY`,
-`SDR_DEPLOY_REMOTE_HOST`, `SDR_DEPLOY_REPOSITORY_URL`, and
-`SDR_DEPLOY_PUBLIC_URL` may override those machine-local endpoints.
+Install only while the existing worker is idle. Explicit installation clears a
+failed target; automatic validated self-update preserves that safety state.
+The installer creates native scheduler registration for subsequent logins and
+starts this same worker, rather than a parallel deployment path. Reinstalling or
+refreshing the scheduler must not stop an unrelated report/model process.

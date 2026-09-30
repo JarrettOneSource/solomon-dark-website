@@ -728,8 +728,17 @@ validates that file at process start. A protected environment variable must not
 duplicate the revision because doing so couples an application release to the
 version of the machine-local deployment worker.
 
-The machine-local worker is itself a validated release member. When its packaged
-copy changes, the current worker installs that copy only after the complete gate
+The maintained main worker now lives on the M5 external SSD under
+`/Volumes/Drive/solomon-cicd`, with one native launchd registration and the same
+exclusive M5 compute lease used by report acceptance. Missing storage and a
+foreign lease defer before heavy work. Its canonical Mac validation produces a
+Linux x64 release with verified native assets; the established NFO save/drain,
+backup, configuration, atomic cutover and rollback transaction is unchanged.
+WSL scheduling is retired. See [M5 worker installation and lifecycle](../ops/local-ci/README.md).
+
+The complete machine-local worker, launcher and installer form one validated
+release member. When their packaged version changes, the current worker installs
+that version atomically only after the complete gate
 has passed, discards the artifact built under the older worker, and exits before
 remote cutover. The replacement worker then validates and packages the commit
 again. The release also owns the exact game systemd unit: its checksum
