@@ -1,5 +1,97 @@
 # 2026-08-22 — Full Game Over screen, Solomon Riff, and selectable post-run loadout
 
+## 2026-09-30 — Direct post-death Create returns to one Hub presentation owner
+
+### Reopened contract and evidence
+
+Report59 describes a freeze when starting a new wizard directly after death;
+returning to the main menu avoids it. The earlier end-to-end receipt exercised
+the private authority, where Create and the returned Hub share one simulation
+clock. It missed the shared-Hub transfer between independently clocked actor
+managers. Treating `world.kind === 'hub'` as one presentation lifetime was the
+falsified assumption.
+
+On exact deployed `138b654480fa755689845f2e96e5fcf692de0855`, a real built
+Chrome153 shared-Hub journey enters a stock Boneyard, applies one lethal
+contact through the production player damage/death owner, waits for native
+GameOver input, selects Water/Mind in the real Create controls, and confirms.
+The authority completes the loadout and returns to the resident Hub at tick202
+with no retained party run. The displayed Hub stays at tick0 and produces110
+`duplicate native actor registration ordinal 61` errors for the returned player
+and Student13. This is an isolated supported-path reproduction; it does not
+claim the reporter's original save or lethal input was retained.
+
+A bounded read-only correlation adds supporting historical evidence. Firestorm's
+related diagnostic `c9f11a5f-f16f-4a8d-8453-c8eb4bd7e6e4`, protocol140, contains74
+copies of that same ordinal61 player/Student13 error from September29
+09:06:12.715 through09:06:13.530UTC. The operator records that player leaving the
+shared Hub at09:06:13.650UTC, tick498. Its later Hail error at09:34:51.694 is
+Report70; the two afternoon welcome timeouts belong to Report71. The direct
+Discord report has no exact diagnostic/save reference, so the historical error
+is a qualified correlation, not identification of the September28 occurrence.
+
+The public client-session regressions receive real encoded host snapshots from
+`confirmGameSimulationLoadout` and `mergeGameSimulationPlayersIntoHub`.
+A temporary post-run Hub at tick1000 followed by a resident Hub at25 remains
+presented at1000 before the fix; a returned clock at2000 blends both managers
+at1995. The first case can freeze indefinitely; the latter can mix actor roots
+for an interpolation interval. Snapshot sequence ordering remains strict and
+is independent of these legitimate world clocks.
+
+### Native contract and complete affected membership
+
+The sealed retail0.72.5 artifact and prior recovered facts below remain the
+native authority: GameOver `0x005CAD40/0x005CF4F0/0x005C7910` owns acceptance,
+20-tick input or250-tick unattended exit, and teardown. Create
+`0x005A7F60`, with fresh generation `0x005D0290/0x006594E0/0x00674EE0`, owns
+new-wizard state and prior-choice defaults. Ledger297 records region sleep/wake,
+`Gameplay_SwitchRegion 0x005CDDD0`, `Region::ClearLive 0x0063E510`, and actor
+manager add/remove `0x004013C0/0x00402450`: actor registrations belong to the
+current resident manager, and a new owner cannot interpolate against another
+manager's roots. The Website's direct Create destination and continuously
+resident shared Hub remain the established product extension. No native timing,
+authored asset/table row, population, or save-admission rule changes.
+
+Boundary: post-terminal world retirement through own-player Create confirmation
+and reattachment, including the same client's Hub timeline, local prediction,
+and requested activity cursor. The actor-manager handoff also covers an ordinary
+Hub region reattachment and Tutorial/College confirmation where the run phase
+can remain `hub`.
+
+| Member | Investigation disposition | Required proof |
+| --- | --- | --- |
+| GameOver entry, input below500, input from500, 20-tick clicked and250-tick automatic exits | verified-already-at-parity | existing recovered program, public lifecycle tests and built journeys |
+| private/standalone retained Create, same/different pairs | recovered-pending-port | start fresh Hub presentation at confirmed phase boundary; built desktop/touch paths |
+| shared solo Create to resident Hub with clock behind or ahead | recovered-pending-port | public independent-clock regressions and exact built duplicate-root red/green |
+| shared party own-player readiness, final confirmation and final-member disconnect | recovered-pending-port | keep per-member admission/barrier; all returned clients use the resident manager |
+| same-phase Hub actor-manager reattachment, including College confirmation | recovered-pending-port | changed local native registration resets presentation without changing admission |
+| same-owner Hub updates and lower stale samples | verified-already-at-parity | keep existing interpolation/sequence rejection; no tick reset workaround |
+| active/terminal profile, economy/purchases, fresh ranks, save/reconnect | verified-already-at-parity pending focused integration | existing owners remain authoritative; direct/new-menu journeys retain durable profile |
+| observing a Boneyard | out-of-system: observer ends when the observed match leaves Boneyard | host `observer-target-ended` and run-scoped observer decoder; it never owns a Create/Hub timeline |
+| Hail terminal clock, welcome/bootstrap transfer, spider status | out-of-system: Reports70/71/72 own different mechanisms | no changes to those owners |
+
+### Owning correction and validation contract
+
+`GameClientSession` currently creates a new Hub timeline only when the previous
+snapshot has a different `world.kind`. A shared run's temporary loadout Hub
+and the existing global Hub both use `hub`, although they have separate clocks
+and native registrations. `HubPresentationTimeline.push` correctly rejects
+lower ticks within its owner. The session instead must start a new timeline,
+local prediction state and Hub activity cursor when the run phase changes or
+the local player's native actor-manager registration changes. Existing ordered
+snapshots provide that authoritative boundary; no new timer, retry, actor
+removal, admission relaxation, or main-menu redirection is needed.
+
+Before delivery: public regressions cover resident clocks on either side and a
+same-phase manager transfer; focused client/timeline/host/shared-world/save and
+run tests pass. Run the unchanged canonical all-mode gate and real built desktop
+and touch direct paths, early/late input, automatic exit, relevant party/readiness
+and main-menu comparison. Verify actual host progress, moving rendered frames,
+unique painter roots, fresh selected skills, retained durable profile and empty
+real browser/transport/host error arrays. Convert pending membership dispositions
+only after that acceptance, then record publication/deployment separately.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: terminal death does not pop the recognizable Game

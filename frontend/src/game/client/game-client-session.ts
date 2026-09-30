@@ -666,6 +666,16 @@ export function connectGameClientSession(
         pendingInputs = []
       }
       const previousWorldKind = snapshot.world.kind
+      const previousRegistration = snapshot.players[welcome.playerId]?.lighting.lightRegistration
+      const nextRegistration = reconstructedSnapshot.players[welcome.playerId]?.lighting.lightRegistration
+      // Post-run Create and the resident shared Hub have independent clocks and actor managers.
+      const sameHubPresentationOwner = previousWorldKind === 'hub'
+        && reconstructedSnapshot.world.kind === 'hub'
+        && snapshot.run.phase === reconstructedSnapshot.run.phase
+        && previousRegistration !== undefined
+        && nextRegistration !== undefined
+        && previousRegistration.managerLane === nextRegistration.managerLane
+        && previousRegistration.registrationOrdinal === nextRegistration.registrationOrdinal
       const presentationWasHeld = gameplayPause !== null
         || gameplayResumeGrace !== null
         || snapshot.levelUpBarrier !== null
@@ -677,21 +687,23 @@ export function connectGameClientSession(
           reconcileLocalHubPresentation(
             reconstructedSnapshot,
             receivedAtMs,
-            previousWorldKind === 'hub',
+            sameHubPresentationOwner,
           )
         }
       } else {
         localHubPresentation = undefined
       }
       snapshot = reconstructedSnapshot
-      if (previousWorldKind !== snapshot.world.kind) {
+      if (previousWorldKind !== snapshot.world.kind || (
+        isHubGameSnapshot(snapshot) && !sameHubPresentationOwner
+      )) {
         requestedHubActivity = snapshot.world.kind === 'hub'
           ? snapshot.world.participants[welcome.playerId]?.activity ?? null
           : null
       }
       lastSnapshotReceivedAtMs = receivedAtMs
       if (isHubGameSnapshot(snapshot)) {
-        if (!presentationTimeline || previousWorldKind !== 'hub') {
+        if (!presentationTimeline || !sameHubPresentationOwner) {
           presentationTimeline = createPresentationTimeline(
             snapshot,
             lastSnapshotReceivedAtMs,

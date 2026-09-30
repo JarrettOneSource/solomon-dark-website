@@ -8,6 +8,7 @@ import {
   enterBoneyardWorld,
   getPlayerEconomy,
   getPlayerCharacter,
+  mergeGameSimulationPlayersIntoHub,
   grantGameSimulationPlayerExperience,
   stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
@@ -1008,6 +1009,74 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   })
   session.destroy()
 })
+
+for (const sourcePhase of ['loadout', 'hub'] as const) {
+  for (const sharedHubTick of [25, 2_000]) {
+    test(`Hub actor-manager reattachment from ${sourcePhase} presents independent tick ${sharedHubTick}`, async (context) => {
+      const playerId = 'player-1'
+      const created = createGameSimulation({ [playerId]: CHARACTER })
+      const loadout = {
+        ...created,
+        tick: 1_000,
+        run: {
+          ...created.run,
+          eligiblePlayerIds: [playerId],
+          gameOverEventId: 1,
+          lastCompletedRunId: 'completed-run',
+          nextGameOverEventId: 2,
+          phase: 'loadout' as const,
+        },
+      }
+      const confirmed = confirmGameSimulationLoadout(loadout, playerId, {
+        discipline: 'mind',
+        displayName: 'Reborn',
+        element: 'water',
+      })
+      assert.ok(confirmed)
+      const transport = new MemoryTransport()
+      const connecting = connectGameClientSession({
+        character: CHARACTER,
+        credential: 'spawn-secret',
+        now: () => 0,
+        profile: NULL_PROFILE,
+        transport,
+      })
+      receiveWelcome(transport, createGameSnapshot(
+        sourcePhase === 'loadout' ? loadout : confirmed,
+        playerId,
+      ))
+      const session = await connecting
+      context.after(() => session.destroy())
+
+      const sharedHub = mergeGameSimulationPlayersIntoHub({
+        ...createGameSimulation({}),
+        tick: sharedHubTick,
+      }, confirmed)
+      const expected = createGameSnapshot(sharedHub, playerId)
+      if (expected.world.kind !== 'hub') assert.fail('expected the resident Hub')
+      receiveSnapshot(transport, expected, 0)
+
+      const presentation = session.samplePresentation()
+      assert.equal(presentation.tick, sharedHubTick)
+      assert.equal(presentation.run.phase, 'hub')
+      assert.deepEqual(presentation.players[playerId]!.config, expected.players[playerId]!.config)
+      assert.equal(presentation.world.traderAnimationSeed, expected.world.traderAnimationSeed)
+      assert.deepEqual(presentation.world.students.map(student => ({
+        id: student.id,
+        registration: student.painterRegistration,
+      })), expected.world.students.map(student => ({
+        id: student.id,
+        registration: student.painterRegistration,
+      })))
+      const ordinals = [
+        presentation.players[playerId]!.lighting.lightRegistration.registrationOrdinal,
+        ...presentation.world.students.map(student => student.painterRegistration.registrationOrdinal),
+      ]
+      assert.equal(new Set(ordinals).size, ordinals.length,
+        'the returned player and students must belong to one native actor manager')
+    })
+  }
+}
 
 test('client consumes each run-scoped Boneyard enemy event exactly once', async () => {
   const transport = new MemoryTransport()
