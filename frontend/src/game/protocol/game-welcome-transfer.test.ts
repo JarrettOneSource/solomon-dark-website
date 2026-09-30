@@ -146,6 +146,12 @@ test('welcome envelopes reject malformed offsets, lengths, unknown fields and an
   const partial = new GameWelcomeReceiver()
   partial.receive({ ...valid, type: 'server-welcome-chunk' })
   assert.throws(() => partial.receive(welcomeMessage()), /interrupted/)
+  assert.throws(() => partial.receive({ type: 'server-pong', nonce: 1 }), /interrupted/)
+  const failure = { type: 'server-disconnect', code: 'invalid-message', reason: 'Transfer rejected' } as const
+  assert.deepEqual(partial.receive(failure), { message: failure, nextOffset: null })
+  const direct = new GameWelcomeReceiver()
+  direct.receive(welcomeMessage())
+  assert.throws(() => direct.receive(welcomeMessage()), /another welcome/)
 })
 
 function welcomeMessage(): ServerWelcomeMessage {

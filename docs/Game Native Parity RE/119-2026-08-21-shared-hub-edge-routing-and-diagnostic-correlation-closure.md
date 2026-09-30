@@ -52,7 +52,7 @@ changed. The captured world remains authoritative and strictly validated.
 | Member | Final implementation disposition | Owner and acceptance |
 | --- | --- | --- |
 | small full welcome | verified-already-at-parity | host / codec / player and observer; retain direct complete message; built New Game reaches Hub with zero chunks |
-| large welcome, all player/observer and standalone/shared/private branches | exact-ported | one host welcome publisher and bounded string sender; existing 8,192-character/four-chunk checkpoint window; strict player/observer regressions and authentic shared restore |
+| large welcome, all player/observer and standalone/shared/private branches | exact-ported | one host welcome publisher and bounded string sender; existing 8,192-code-unit/four-chunk checkpoint window; strict player/observer regressions and authentic shared restore |
 | welcome decode/materialization | exact-ported | player and observer; publish only the complete strictly decoded welcome; reject malformed, mismatched, interrupted and late transfers |
 | initial sidebands and snapshot baseline | exact-ported | host; bounded ordered prefix and withheld ordinary snapshots until complete acknowledgement; actual host window/unsent-ack regression |
 | deadline, cancellation, stale/invalid/late acknowledgement, disconnect | exact-ported | transfer / transport owners; five seconds without new progress, strict sent-offset acknowledgements, partial/timer release; unit and controlled built stalled-UI checks |
@@ -88,7 +88,7 @@ The authentic 20 KiB/s TCP reproduction now reaches `sessionReady` after
 10,562 ms, preserving tick 585815 and all 238 secondary actors without callback
 errors. A real built frontend/backend/supervisor cloud Last Game journey over
 a private HTTPS fixture completes its first welcome in 10,615 ms, in 153 chunks
-of at most 8,192 characters. It receives the exact captured tick, 238 secondary
+of at most 8,192 UTF-16 code units. It receives the exact captured tick, 238 secondary
 actors and two primary transients, then saves and leaves through the normal UI.
 A fresh browser context re-enters its updated cloud checkpoint and saves again.
 An anonymous IndexedDB journey repeats the legacy restore/save/leave/re-entry;

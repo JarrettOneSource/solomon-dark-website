@@ -932,8 +932,8 @@ needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
 Protocol `36` welcomes a client with one complete snapshot plus its sequence. Protocol 144 delivers
-welcomes above the existing 64 KiB string threshold in acknowledged 8 KiB
-UTF-16 slices, with at most four chunks outstanding. Player and observer
+welcomes above the existing 65,536-code-unit string threshold in acknowledged
+8,192-code-unit UTF-16 slices, with at most four chunks outstanding. Player and observer
 clients assemble one complete strictly decoded welcome before publishing state.
 Only valid new progress renews the existing five-second deadline; stalled,
 malformed or cancelled transfers release their partial data. The host holds

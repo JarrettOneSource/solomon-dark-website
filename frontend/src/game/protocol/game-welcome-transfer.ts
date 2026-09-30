@@ -114,8 +114,11 @@ export class GameWelcomeReceiver {
 
   receive(message: ServerGameMessage): WelcomeReception {
     if (message.type !== 'server-welcome-chunk') {
+      if (this.pending && message.type !== 'server-disconnect') {
+        throw new Error('The server interrupted its welcome transfer')
+      }
       if (message.type === 'server-welcome') {
-        if (this.pending) throw new Error('The server interrupted its welcome transfer')
+        if (this.complete) throw new Error('The server sent another welcome')
         this.complete = true
       }
       return { message, nextOffset: null }
