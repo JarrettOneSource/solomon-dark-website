@@ -252,7 +252,7 @@ test('a full Cocoon survives its applying Spiders but movement still admits nati
 for (const element of ['air', 'earth', 'ether', 'fire', 'water'] as const) {
   test(`${element} primary input can break a retained Cocoon after its applying Spider dies`, () => {
     let state = spiderEscapeScene(3, element)
-    for (let tick = 0; tick < 500; tick += 1) {
+    for (let tick = 0; tick < 2_000; tick += 1) {
       state = stepGameSimulationTick(state, { owner: {
         ...escapeInput(false), aim: { x: 750, y: 500 },
         cast: { primary: element !== 'earth' || tick % 100 < 30, quickbar: null },

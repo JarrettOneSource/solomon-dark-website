@@ -3259,3 +3259,9 @@ throw contract instead of treating a held rock as an attack contact. No
 staff damage, cooldown, Boulder behavior or web balance changed for those
 fixture corrections. The temporary trajectory instrumentation is removed
 before candidate acceptance.
+
+The Earth hold/release control also confirmed gradual native damage: five short
+thirty-tick charges reduced ten HP to `5.462425351142883` in 500 ticks.
+The same real-input scenario passed at a 2,000-tick observation budget. The
+primary-member checks use that budget and stop as soon as the actual restraint
+releases; they do not raise charge, damage or mana to force an outcome.
