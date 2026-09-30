@@ -1,0 +1,41 @@
+.desktop-download-link {
+  position: absolute;
+  right: max(22px, env(safe-area-inset-right));
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  z-index: 40;
+  border: 1px solid #a28b51;
+  border-radius: 5px;
+  background: #171421;
+  color: #eee3c4;
+  padding: 10px 18px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+  cursor: pointer;
+}
+.desktop-download-link:hover, .desktop-download-link:focus-visible { background: #302839; outline: 2px solid #bdad7c; }
+.desktop-friends-panel {
+  position: absolute;
+  right: 22px;
+  bottom: calc(132px + env(safe-area-inset-bottom));
+  z-index: 60;
+  width: min(430px, calc(100vw - 44px));
+  max-height: calc(100vh - 174px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid #a28b51;
+  border-radius: 8px;
+  background: #171421;
+  color: #eee3c4;
+  box-shadow: 0 10px 45px #000b;
+  font: 16px/1.5 sans-serif;
+}
+.desktop-friends-panel h2 { margin: 0 0 12px; font-size: 24px; }
+.desktop-friends-panel p { margin: 12px 0; }
+.desktop-friends-panel label { display: block; margin-top: 14px; }
+.desktop-friends-panel input { display: block; width: 100%; box-sizing: border-box; padding: 10px; margin: 5px 0 8px; border: 1px solid #746e78; background: #0c0a12; color: #fff; }
+.desktop-friends-panel button { padding: 8px 12px; border: 1px solid #a28b51; border-radius: 4px; background: #302839; color: #eee3c4; cursor: pointer; }
+.desktop-friends-panel button:disabled { opacity: .45; cursor: not-allowed; }
+.desktop-friends-actions { display: flex; flex-wrap: wrap; gap: 10px; }

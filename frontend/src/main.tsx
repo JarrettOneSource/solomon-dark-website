@@ -53,6 +53,7 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { path: '/', element: <Home /> },
+      { path: '/download', lazy: async () => ({ Component: (await import('./pages/Download')).default }) },
       {
         path: '/boneyard',
         element: (

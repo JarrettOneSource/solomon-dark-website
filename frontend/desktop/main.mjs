@@ -3,9 +3,11 @@ import { spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, Menu, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session } from 'electron'
+import electronUpdater from 'electron-updater'
 
 import { startStaticClientServer } from './static-client-server.mjs'
+import { checkLaunchUpdate } from './updates.mjs'
 
 const READINESS_TIMEOUT_MS = 10_000
 const SHUTDOWN_TIMEOUT_MS = 3_000
@@ -14,12 +16,18 @@ let clientServer
 let gameHost
 let quitting = false
 
-app.setName('Solomon Dark')
+const DESKTOP_ORIGIN = 'sdr://desktop'
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'sdr',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+}])
+app.setName('Solomon Darker')
+app.setAppUserModelId('com.solomondarker.desktop')
+if (process.env.SDR_DESKTOP_USER_DATA) app.setPath('userData', resolve(process.env.SDR_DESKTOP_USER_DATA))
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+// Closing the app also closes its authoritative server, including on macOS.
+app.on('window-all-closed', () => { if (!quitting) app.quit() })
 app.on('before-quit', (event) => {
   if (quitting) return
   event.preventDefault()
@@ -29,15 +37,26 @@ app.on('before-quit', (event) => {
 
 void app.whenReady().then(start).catch(async (error) => {
   console.error(error)
+  quitting = true
   await shutdown()
+  dialog.showErrorBox('Solomon Darker could not start', error.message)
   app.exit(1)
 })
 
 async function start() {
   const applicationRoot = app.getAppPath()
-  const clientRoot = resolve(process.env.SDR_DESKTOP_CLIENT_ROOT || join(applicationRoot, 'client'))
+  const resources = app.isPackaged ? process.resourcesPath : applicationRoot
+  const clientRoot = resolve(process.env.SDR_DESKTOP_CLIENT_ROOT || join(resources, 'client'))
   clientServer = await startStaticClientServer({ root: clientRoot })
-  const endpoint = desktopRemoteEndpoint() ?? await startLocalGameHost(applicationRoot, clientServer.origin)
+  // Keep IndexedDB and localStorage independent of the ephemeral TCP port.
+  protocol.handle('sdr', (request) => {
+    if (!isDesktopUrl(request.url) || !['GET', 'HEAD'].includes(request.method)) {
+      return new Response(null, { status: 403 })
+    }
+    const url = new URL(request.url)
+    return net.fetch(`${clientServer.origin}${url.pathname}${url.search}`, { method: request.method })
+  })
+  const endpoint = desktopRemoteEndpoint() ?? await startLocalGameHost(resources, DESKTOP_ORIGIN)
   const preload = resolve(applicationRoot, 'preload.cjs')
   await access(preload)
 
@@ -50,7 +69,7 @@ async function start() {
     minHeight: 600,
     minWidth: 960,
     show: false,
-    title: 'Solomon Dark',
+    title: 'Solomon Darker',
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -61,18 +80,42 @@ async function start() {
     },
   })
   const provideEndpoint = (event) => {
-    event.returnValue = event.sender === window.webContents ? endpoint : null
+    const frame = event.senderFrame
+    event.returnValue = event.sender === window.webContents
+      && frame === window.webContents.mainFrame && isDesktopUrl(frame.url)
+      ? { ...endpoint, desktop: {
+          version: app.getVersion(),
+          signalingUrl: process.env.SDR_DESKTOP_SIGNALING_URL || 'wss://solomondarker.com/desktop-signal',
+        } }
+      : null
   }
   ipcMain.on(ENDPOINT_CHANNEL, provideEndpoint)
   window.once('closed', () => ipcMain.off(ENDPOINT_CHANNEL, provideEndpoint))
-  const gameUrl = `${clientServer.origin}/game`
+  const gameUrl = `${DESKTOP_ORIGIN}/game`
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
-    if (new URL(url).origin !== clientServer.origin) event.preventDefault()
+    if (!isDesktopUrl(url)) event.preventDefault()
   })
   window.webContents.on('will-attach-webview', (event) => event.preventDefault())
   window.once('ready-to-show', () => window.show())
   await window.loadURL(gameUrl)
+  if (app.isPackaged && process.env.SDR_DESKTOP_SKIP_UPDATE_CHECK !== '1') {
+    void checkLaunchUpdate({
+      updater: electronUpdater.autoUpdater,
+      ask: (options) => dialog.showMessageBox(window, options),
+      beforeInstall: async () => { quitting = true; await shutdown() },
+    })
+  }
+}
+
+function isDesktopUrl(value) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'sdr:' && url.hostname === 'desktop'
+      && !url.port && !url.username && !url.password
+  } catch {
+    return false
+  }
 }
 
 async function startLocalGameHost(applicationRoot, origin) {
@@ -101,7 +144,7 @@ async function startLocalGameHost(applicationRoot, origin) {
       app.quit()
     }
   })
-  return { kind: 'localhost', url: ready.url, credential }
+  return { kind: 'localhost', sessionKind: 'standalone', url: ready.url, credential }
 }
 
 function desktopRemoteEndpoint() {
@@ -164,6 +207,7 @@ function hostReadiness(child) {
 }
 
 async function shutdown() {
+  for (const window of BrowserWindow.getAllWindows()) window.destroy()
   await Promise.allSettled([
     stopChild(gameHost),
     clientServer?.close(),

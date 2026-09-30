@@ -75,6 +75,8 @@ export async function stagePinnedNodeRuntime({
     await mkdir(destination, { recursive: true })
     const target = join(destination, platform === 'win32' ? 'node.exe' : 'node')
     await copyFile(source, target)
+    await copyFile(join(extraction, descriptor.executable.split('/')[0], 'LICENSE'),
+      join(destination, 'LICENSE.node.txt'))
     if (platform !== 'win32') await chmod(target, 0o755)
     return { executable: target, sha256: actual, version: PINNED_NODE_VERSION }
   } finally {
@@ -94,7 +96,13 @@ async function sha256(path) {
 
 async function extractArchive(archive, destination, extractor) {
   if (extractor === 'zip') {
-    await run('unzip', ['-q', archive, '-d', destination])
+    if (process.platform === 'win32') {
+      const quote = value => `'${value.replaceAll("'", "''")}'`
+      await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        `$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath ${quote(archive)} -DestinationPath ${quote(destination)}`])
+    } else {
+      await run('unzip', ['-q', archive, '-d', destination])
+    }
     return
   }
   await run('tar', [extractor === 'tar-xz' ? '-xJf' : '-xzf', archive, '-C', destination])

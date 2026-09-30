@@ -172,6 +172,7 @@ import type { SkillPickerRenderer } from './renderer/skill-picker-renderer.ts'
 import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
 import type { TitleMenuPromptKind } from './title-menu-prompt.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
+import DesktopMenuActions from '../desktop/DesktopMenuActions.tsx'
 import './main-menu.css'
 
 const DISCORD_INVITE_URL = 'https://discord.gg/HGHxZgyM2p'
@@ -1998,6 +1999,7 @@ function MainMenuContent({
               screen={screen === 'play' ? 'play' : 'root'}
               viewport={fixedViewport}
             />
+            {screen === 'root' && titlePrompt === null && <DesktopMenuActions />}
 
             <div
               className="main-menu-native-stage main-menu-account-stage"

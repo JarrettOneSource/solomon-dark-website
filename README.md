@@ -136,7 +136,8 @@ release health gates are documented in `ops/nfo/README.md`.
 
 The desktop rebuild packages the same production browser client; it does not
 contain a second renderer or gameplay implementation. Electron serves that
-bundle on an OS-assigned loopback origin, starts the bundled Node runtime as a
+bundle through the stable `sdr://desktop` origin backed by an OS-assigned
+loopback HTTP server, starts the bundled Node runtime as a
 separate authoritative process, and injects its credentialed
 `ws://127.0.0.1/...` endpoint through an isolated preload.
 
@@ -144,21 +145,48 @@ From `frontend/`:
 
 ```bash
 npm run package:desktop:linux
+xvfb-run -a npm run smoke:desktop
+xvfb-run -a npm run smoke:desktop:peers
+
+# On Apple Silicon macOS:
+npm run package:desktop:mac
 npm run smoke:desktop
+npm run smoke:desktop:peers
+
+# On Windows x64:
+npm run package:desktop:windows
+npm run smoke:desktop
+npm run smoke:desktop:peers
 ```
 
 Packaging verifies the official Node archive SHA-256, builds both the cloud
-session supervisor and standalone Hub host, and writes the Linux application
-under `dist-desktop/`. The smoke runs the real packaged Electron app under
-Xvfb, enters the Hub, verifies WebGL and authoritative movement, proves the
+session supervisor and standalone Hub host, and writes installers and unpacked
+applications under `dist-desktop/`. The smoke runs the real packaged Electron app,
+enters the Hub, verifies WebGL and authoritative movement, proves the
 host executable is the bundled Node runtime in a separate process, exits, and
-checks that the child process was reaped. `npm run dev:desktop` exercises the
+checks that the child process was reaped and storage survives relaunch.
+`npm run dev:desktop` exercises the
 same boundary with the development machine's Node runtime.
 
-The website is not contacted during desktop solo. Encrypted direct peer
-hosting/joining and save persistence are subsequent product slices; the one
-client, protocol, and server bundle are already the shared foundation for
-those modes.
+Solo gameplay is local; packaged launches separately attempt a bounded update
+check that never makes offline play mandatory-online. **Play with friends** on
+the title screen hosts an invitation or joins a compatible desktop. Ordered,
+encrypted WebRTC carries the existing protocol to the player's local authority.
+The peer smoke launches two real packaged apps, proves guest movement reaches
+the host, stops signaling while gameplay continues, and checks host departure.
+
+Both website and browser `/game` expose **Download Offline**. `/download` lists
+only actual published GitHub release assets, with an explicit unpublished state
+before the first release. `.github/workflows/desktop.yml` builds Windows x64,
+macOS ARM64, and Linux x64 installers. Tagged `v<desktop/package.json version>`
+releases require platform signing, notarization where applicable, packaged
+acceptance tests, and the complete Website gate before becoming public. See
+[desktop release operations](docs/desktop-release.md) for secrets and deployment.
+
+Local identity, saves and settings are separate from the website account. Cloud
+subscriptions, publishing and global Hall submission are not proxied by the
+offline app. Restrictive home networks may need an operator-provided TURN relay;
+automatic host migration and universal NAT-connectivity claims remain out of scope.
 
 ## Mod packages
 

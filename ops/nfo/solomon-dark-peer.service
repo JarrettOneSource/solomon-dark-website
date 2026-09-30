@@ -1,0 +1,24 @@
+[Unit]
+Description=Solomon Darker desktop friend invitations
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/solomon-dark-revived
+ExecStart=/opt/solomon-dark-node-v22.17.0/bin/node /opt/solomon-dark-revived/GameHost/peer-signaling.mjs
+Environment=SDR_PEER_PORT=5223
+Environment=SDR_PEER_TRUSTED_PROXY=1
+EnvironmentFile=-/etc/solomon-dark-peer.env
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

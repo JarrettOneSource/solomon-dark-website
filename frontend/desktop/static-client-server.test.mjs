@@ -127,6 +127,17 @@ test('desktop static server closes a failed source and terminates the partial re
   assert.deepEqual(await health.json(), { status: 'ok' })
 })
 
+test('desktop shutdown closes paused streaming responses and is idempotent', { timeout: 3000 }, async context => {
+  const { root, server, sources, requestAsset } = await createStreamingFixture(context)
+  await writeLargeAsset(root, 'paused.mp3')
+  const response = await requestAsset('/paused.mp3')
+  response.pause()
+  await waitFor(() => sources[0]?.isPaused(), 'the media response must be paused')
+  await server.close()
+  await server.close()
+  await waitFor(() => sources[0].closed, 'shutdown must release the streaming file')
+})
+
 async function createStreamingFixture(context) {
   const root = await mkdtemp(join(tmpdir(), 'solomon-desktop-stream-'))
   const resources = []

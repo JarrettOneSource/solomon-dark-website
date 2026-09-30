@@ -3,6 +3,9 @@ import { rendererFiles } from './tools/quality/scope.mjs'
 
 export default {
   mutate: rendererFiles,
+  // Installer bundles contain platform symlinks and are generated output, not
+  // renderer input. Keep source selection and mutation thresholds unchanged.
+  ignorePatterns: ['dist-desktop/**', '.desktop-stage/**', '.cache/**', 'desktop/node_modules/**'],
   testRunner: 'command',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.app.json',

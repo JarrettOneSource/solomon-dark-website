@@ -46,6 +46,7 @@ install_dependencies() {
     printf 'Restoring pinned dependencies\n'
     "$dotnet_command" restore backend/Server.csproj --nologo
     npm --prefix frontend ci --no-audit --no-fund
+    npm --prefix frontend/desktop ci --no-audit --no-fund
     python3 -m venv .venv
     .venv/bin/python -m pip install --disable-pip-version-check --requirement tests/requirements.txt
 }
