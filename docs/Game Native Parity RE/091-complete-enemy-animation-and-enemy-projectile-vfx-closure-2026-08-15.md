@@ -3243,3 +3243,19 @@ acceptance requires focused green checks, the unchanged complete canonical
 Website gate, and a real built browser journey through actual transport/input,
 source death, full restraint, damage/release, pause/save/resume and continued
 movement. No publication, deployment or completion reaction is yet claimed.
+
+### Focused input-journey correction
+
+On the rebased `be7e71a5` candidate the focused M5 suite passed 101/103 checks
+and test TypeScript plus frontend lint passed. The two remaining assertions
+were fixture assumptions, not new product failures. A temporary test-only
+trajectory showed the ordinary one-damage staff contacts reducing ten Cocoon
+HP to zero at tick 593, with root position fixed until release. The original
+500-tick expectation was too short; the retained regression uses 1,000 ticks.
+Earth's existing native held-Boulder state correctly remained `held`, with
+one cast and no throw emission while the button stayed down. Its primary
+journey now holds then releases the button, matching the recovered charge /
+throw contract instead of treating a held rock as an attack contact. No
+staff damage, cooldown, Boulder behavior or web balance changed for those
+fixture corrections. The temporary trajectory instrumentation is removed
+before candidate acceptance.

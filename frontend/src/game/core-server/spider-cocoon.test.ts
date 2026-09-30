@@ -242,7 +242,7 @@ test('a full Cocoon survives its applying Spiders but movement still admits nati
   assert.equal(state.world.enemies.actors.filter(actor => actor.brain.family === 'cocoon').length, 1)
   assert.equal(state.world.enemies.actors.some(actor => actor.config.enemyToken === 'SPIDER'), false)
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 500, y: 500 })
-  for (let tick = 0; tick < 500; tick += 1) state = stepGameSimulationTick(state, { owner: escapeInput(true) })
+  for (let tick = 0; tick < 1_000; tick += 1) state = stepGameSimulationTick(state, { owner: escapeInput(true) })
   assert.equal(state.world.kind, 'boneyard')
   if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
   assert.equal(state.world.enemies.webbedPlayers.owner, undefined)
@@ -254,7 +254,8 @@ for (const element of ['air', 'earth', 'ether', 'fire', 'water'] as const) {
     let state = spiderEscapeScene(3, element)
     for (let tick = 0; tick < 500; tick += 1) {
       state = stepGameSimulationTick(state, { owner: {
-        ...escapeInput(false), aim: { x: 750, y: 500 }, cast: { primary: true, quickbar: null },
+        ...escapeInput(false), aim: { x: 750, y: 500 },
+        cast: { primary: element !== 'earth' || tick % 100 < 30, quickbar: null },
       } })
       if (state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
       if (state.world.enemies.webbedPlayers.owner === undefined) break
