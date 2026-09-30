@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import { createNativeScreenFlashWriter } from '../src/game/core-kernels/native-screen-flash.ts'
 import { acceptSharedScreenFlashOrder } from './screen-flash-order-smoke-acceptance.mjs'
 import assert from 'node:assert/strict'
@@ -39,7 +40,6 @@ import {
   setPlayerEntityMana,
 } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { nativeWeldVisualPlan } from '../src/game/renderer/primary-spell-weld-native.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -160,11 +160,12 @@ try {
   const wireSecondarySamples = []
   page.on('websocket', (socket) => {
     if (new URL(socket.url()).href !== new URL(host.address.url).href) return
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       try {
-        const message = decodeServerGameMessage(
-          Buffer.isBuffer(payload) ? payload.toString() : payload,
-        )
+        const message = welcomeReceiver.receivePayload(Buffer.isBuffer(payload) ? payload.toString() : payload, () => {})
+        if (message === null) return
         const snapshot = message.type === 'server-welcome' ? message.snapshot : null
         const frame = message.type === 'server-snapshot' ? message.frame : null
         const state = snapshot ?? frame

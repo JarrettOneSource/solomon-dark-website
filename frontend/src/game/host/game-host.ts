@@ -67,6 +67,8 @@ import type { SharedGameWorldsState, SharedPartyRun } from './shared-game-worlds
 import { acceptSharedPartyInvitation, addSharedHubPlayer, confirmSharedPartyLoadout, continueSharedPartyGameOver, createSharedGameWorlds, denySharedPartyInvitation, detachSharedGamePlayer, inviteSharedPartyPlayer, joinSharedPartyPlayer, kickSharedPartyPlayer, leaveSharedParty, rejoinSharedPartyRunPlayer, removeSharedGamePlayer, replaceSharedGameStateForPlayer, restoreSharedGamePlayer, sharedGameStateForPlayer, sharedLoadedBoneyardForPlayer, sharedPartySaveStateForPlayer, startSharedPartyRun, stepSharedGameWorlds } from './shared-game-worlds.ts'
 import type { MaterializedWebSessionContent, WebSessionContentSummary } from './web-mod-content.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
+import { GAME_STRING_STREAM_THRESHOLD } from '../protocol/game-string-transfer.ts'
+import { GameWelcomeSender } from '../protocol/game-welcome-transfer.ts'
 import { GameSaveCheckpointSender } from '../protocol/game-save-checkpoint-transfer.ts'
 import { monitorWebSocketHeartbeat, resolveGameHeartbeatInterval } from './websocket-heartbeat.ts'
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
@@ -616,6 +618,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const leaderboardIneligibleRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
   const pending = new Set<WebSocket>()
+  const welcomeTransfers = new Map<WebSocket, GameWelcomeSender>()
+  const completedWelcomeOffsets = new WeakMap<WebSocket, number>()
   const pendingPartyRejoins = new WeakMap<WebSocket, PartyRejoinSlot>()
   const supersededClients = new WeakSet<WebSocket>()
   const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
@@ -817,10 +821,30 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
 
+      if (message.type === 'client-welcome-chunk-ack') {
+        const transfer = welcomeTransfers.get(socket)
+        if (!transfer) {
+          const completedOffset = completedWelcomeOffsets.get(socket)
+          if (completedOffset !== undefined && message.nextOffset <= completedOffset) return
+          disconnect(socket, 'invalid-message', 'Welcome acknowledgement has no pending transfer.')
+          return
+        }
+        try {
+          transfer.acknowledge(message.nextOffset)
+        } catch (error) {
+          disconnect(socket, 'invalid-message', error instanceof Error
+            ? error.message : 'The welcome acknowledgement is invalid.')
+        }
+        return
+      }
+      if (welcomeTransfers.has(socket) && message.type !== 'client-disconnect') {
+        disconnect(socket, 'invalid-message', 'The welcome must be acknowledged before game commands.')
+        return
+      }
       const observer = observers.get(socket)
       if (observer) {
         if (message.type === 'client-ping') {
-          socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+          sendGamePayload(socket, encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
           return
         }
         if (message.type === 'client-snapshot-ack') {
@@ -941,7 +965,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             viewPlayerId: observed.viewPlayerId,
           }
           observers.set(socket, joinedObserver)
-          socket.send(encodeGameMessage({
+          sendWelcomePayload(socket, encodeGameMessage({
             type: 'server-welcome',
             cheatsEnabled: sessionKind === 'private-college' && privateCollegeCheatsEnabled,
             developerAccess: false,
@@ -978,7 +1002,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             modRuntimeScopeForPlayer(observed.viewPlayerId)?.runtime ?? privateModHost,
             observed.viewPlayerId,
           )
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-boneyard-loaded',
             boneyard: observed.loadedBoneyard,
           }))
@@ -1675,7 +1699,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ?? createPlayerReference()
         const joinedClient: HostClient = {
           saveCheckpointSender: new GameSaveCheckpointSender(checkpoint => {
-            if (socket.readyState === WebSocket.OPEN) socket.send(encodeGameMessage(checkpoint))
+            if (socket.readyState === WebSocket.OPEN) sendGamePayload(socket, encodeGameMessage(checkpoint))
           }),
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
@@ -1745,7 +1769,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             deliverChat: message => deliverSocialChat(joinedClient, message),
             deliverCollegeInvitations: invitations => {
               if (joinedClient.socket.readyState !== WebSocket.OPEN) return
-              joinedClient.socket.send(encodeGameMessage({
+              sendGamePayload(joinedClient.socket, encodeGameMessage({
                 type: 'server-college-invitations',
                 invitations,
               }))
@@ -1812,7 +1836,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           connectedDetails,
         )
         options.onPlayerCountChanged?.(clients.size)
-        socket.send(encodeGameMessage({
+        sendWelcomePayload(socket, encodeGameMessage({
           type: 'server-welcome',
           cheatsEnabled: joinedClient.cheatsEnabled,
           developerAccess: joinedClient.developerAccess,
@@ -1861,7 +1885,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ? loadedBoneyardForPartyRejoin(stagedPartyRejoin)
           : loadedBoneyardForPlayer(playerId)
         if (playerBoneyard) {
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-boneyard-loaded',
             boneyard: playerBoneyard,
           }))
@@ -1915,7 +1939,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       if (deploymentRestart) {
         if (message.type === 'client-ping') {
-          socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+          sendGamePayload(socket, encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
         } else if (message.type === 'client-disconnect') {
           disconnectCauses.set(socket, {
             reason: 'client disconnected while saving for update',
@@ -2488,7 +2512,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const profile = localPlayerCardByReference(message.playerReference)
           ?? client.socialConnection?.resolvePlayerCard(message.playerReference)
           ?? null
-        socket.send(encodeGameMessage({
+        sendGamePayload(socket, encodeGameMessage({
           type: 'server-player-card',
           profile,
           requestId: message.requestId,
@@ -2539,7 +2563,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ? localClientByReference(message.targetPlayerReference!)
           : null
         if (whisperTarget?.playerId === client.playerId) {
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
             reason: 'target-unavailable',
@@ -2552,7 +2576,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && client.socialConnection
           && !client.onlinePreferences.globalChat
         ) {
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
             reason: 'channel-unavailable',
@@ -2565,7 +2589,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && !whisperTarget
           && !client.socialConnection
         ) {
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
             reason: 'target-unavailable',
@@ -2579,7 +2603,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ? []
             : chatRecipients(client, message.channel)
         if (recipients === null) {
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
             reason: 'channel-unavailable',
@@ -2590,7 +2614,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const nowMs = Date.now()
         const retryAfterMs = chatRateRetryAfter(client, nowMs)
         if (retryAfterMs > 0) {
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
             reason: 'rate-limited',
@@ -2600,7 +2624,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         if (message.channel === 'global' && client.socialConnection) {
           if (!client.socialConnection.publishGlobal(message.text)) {
-            socket.send(encodeGameMessage({
+            sendGamePayload(socket, encodeGameMessage({
               type: 'server-chat-rejected',
               channel: message.channel,
               reason: 'channel-unavailable',
@@ -2614,7 +2638,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             message.targetPlayerReference!,
             message.text,
           )) {
-            socket.send(encodeGameMessage({
+            sendGamePayload(socket, encodeGameMessage({
               type: 'server-chat-rejected',
               channel: message.channel,
               reason: 'target-unavailable',
@@ -2645,14 +2669,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         })
         nextChatSequence += 1
         for (const recipient of recipients) {
-          if (recipient.socket.readyState === WebSocket.OPEN) recipient.socket.send(encoded)
+          if (recipient.socket.readyState === WebSocket.OPEN) sendGamePayload(recipient.socket, encoded)
         }
         const senderState = stateForPlayer(client.playerId)
         for (const observer of observers.values()) {
           if (
             observer.socket.readyState === WebSocket.OPEN
             && observationWorld(observer.runId)?.state === senderState
-          ) observer.socket.send(encoded)
+          ) sendGamePayload(observer.socket, encoded)
         }
         return
       }
@@ -2958,7 +2982,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (message.type === 'client-cheat-mode') {
         if (sessionKind === 'private-college' && !client.developerAccess) {
           if (client.playerId !== authorityForPlayer(client.playerId)) {
-            socket.send(encodeGameMessage({
+            sendGamePayload(socket, encodeGameMessage({
               type: 'server-cheat-mode',
               enabled: privateCollegeCheatsEnabled,
             }))
@@ -2992,7 +3016,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           taintActiveRun(client)
         }
         client.cheatsEnabled = message.enabled && !client.developerAccess
-        socket.send(encodeGameMessage({
+        sendGamePayload(socket, encodeGameMessage({
           type: 'server-cheat-mode',
           enabled: client.cheatsEnabled,
         }))
@@ -3008,7 +3032,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }>,
         ) => {
           if (socket.readyState !== WebSocket.OPEN) return
-          socket.send(encodeGameMessage({
+          sendGamePayload(socket, encodeGameMessage({
             type: 'server-lua-result',
             requestId: message.requestId,
             ...result,
@@ -3098,7 +3122,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-ping') {
-        socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+        sendGamePayload(socket, encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
         return
       }
       if (message.type === 'client-snapshot-ack') {
@@ -3306,7 +3330,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           true,
           true,
         )
-        socket.send(encodeGameMessage({
+        sendGamePayload(socket, encodeGameMessage({
           type: 'server-save-before-leave',
           checkpointSequence,
           requestId: message.requestId,
@@ -3331,6 +3355,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (released) return
       released = true
       clearTimeout(helloDeadline)
+      cancelWelcome(socket)
       stopHeartbeat()
       pending.delete(socket)
       const client = clients.get(socket)
@@ -4234,7 +4259,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       return true
     }
     for (const client of clients.values()) {
-      if (client.socket.readyState !== WebSocket.OPEN) continue
+      if (client.socket.readyState !== WebSocket.OPEN || welcomeTransfers.has(client.socket)) continue
       if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
         disconnectCauses.set(client.socket, {
           reason: 'active party run ended during catch-up',
@@ -4287,7 +4312,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         || recoveryKeyframe
         || !acknowledgedBaseline
         || lastSentBaseline?.worldIdentity !== currentBaseline.worldIdentity
-      client.socket.send(encodeGameMessage({
+      sendGamePayload(client.socket, encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: client.acknowledgedSequence,
         frame: createGameSnapshotFrame(
@@ -4313,6 +4338,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       pruneReplicationBaselines(client)
     }
     for (const observer of observers.values()) {
+      if (welcomeTransfers.has(observer.socket)) continue
       if (observer.socket.readyState !== WebSocket.OPEN) continue
       if (recoveryKeyframePending(observer, 'observer', { observerId: observer.observerId })) continue
       const observed = observationWorld(observer.runId)
@@ -4348,7 +4374,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         || recoveryKeyframe
         || !acknowledgedBaseline
         || lastSentBaseline?.worldIdentity !== currentBaseline.worldIdentity
-      observer.socket.send(encodeGameMessage({
+      sendGamePayload(observer.socket, encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: 0,
         frame: createGameSnapshotFrame(
@@ -4837,7 +4863,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.socket.readyState !== WebSocket.OPEN
         || partyForPlayer(parties, client.playerId) === null
       ) continue
-      client.socket.send(encodeGameMessage({
+      sendGamePayload(client.socket, encodeGameMessage({
         type: 'server-party-state',
         state: projectPartyState(
           parties,
@@ -5638,7 +5664,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     result: Readonly<{ accepted: boolean; reason: string | null }>,
   ): void {
     if (client.socket.readyState !== WebSocket.OPEN) return
-    client.socket.send(encodeGameMessage({
+    sendGamePayload(client.socket, encodeGameMessage({
       type: 'server-party-action',
       action,
       ok: result.accepted,
@@ -5681,7 +5707,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         &&
         client.socket.readyState === WebSocket.OPEN
         && stateForPlayer(client.playerId) === playerState
-      ) client.socket.send(encodeGameMessage(message))
+      ) sendGamePayload(client.socket, encodeGameMessage(message))
     }
   }
 
@@ -5737,7 +5763,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         socialChatSequences.delete(socialChatSequences.keys().next().value!)
       }
     }
-    recipient.socket.send(encodeGameMessage({
+    sendGamePayload(recipient.socket, encodeGameMessage({
       type: 'server-chat',
       ...(message.activity === undefined ? {} : { activity: message.activity }),
       channel: message.channel,
@@ -5820,7 +5846,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         || !recipient.onlinePreferences.globalChat
         || recipient.socket.readyState !== WebSocket.OPEN
       ) continue
-      recipient.socket.send(encoded)
+      sendGamePayload(recipient.socket, encoded)
     }
   }
 
@@ -6246,7 +6272,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         targetRevision,
       )
       restart.checkpointSequences.set(socket, checkpointSequence)
-      socket.send(encodeGameMessage({
+      sendGamePayload(socket, encodeGameMessage({
         type: 'server-deployment-restart',
         checkpointSequence,
         targetRevision,
@@ -6798,7 +6824,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (
         client.socket.readyState === WebSocket.OPEN
         && party?.memberPlayerIds.includes(client.playerId)
-      ) client.socket.send(encodeGameMessage({
+      ) sendGamePayload(client.socket, encodeGameMessage({
         type: 'server-gameplay-resume-grace',
         grace,
       }))
@@ -6876,7 +6902,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (
         client.socket.readyState === WebSocket.OPEN
         && party?.memberPlayerIds.includes(client.playerId)
-      ) client.socket.send(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
+      ) sendGamePayload(client.socket, encodeGameMessage({ type: 'server-gameplay-pause', pause }))
     }
   }
 
@@ -6935,7 +6961,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   function broadcast(message: Parameters<typeof encodeGameMessage>[0]): void {
     const encoded = encodeGameMessage(message)
     for (const client of clients.values()) {
-      if (client.socket.readyState === WebSocket.OPEN) client.socket.send(encoded)
+      if (client.socket.readyState === WebSocket.OPEN) sendGamePayload(client.socket, encoded)
     }
   }
 
@@ -6992,7 +7018,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         entry,
       )
       issuedLeaderboardReceipts.add(receiptKey)
-      client.socket.send(encodeGameMessage({
+      sendGamePayload(client.socket, encodeGameMessage({
         type: 'server-leaderboard-receipt',
         receipt,
       }))
@@ -7015,17 +7041,66 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
+  function cancelWelcome(socket: WebSocket): void {
+    welcomeTransfers.get(socket)?.close()
+    welcomeTransfers.delete(socket)
+  }
+
+  function sendGamePayload(socket: WebSocket, payload: string): void {
+    const transfer = welcomeTransfers.get(socket)
+    if (!transfer) {
+      socket.send(payload)
+      return
+    }
+    try {
+      transfer.defer(payload)
+    } catch (error) {
+      logGameServerEvent(options.log, 'game-host', 'warning', 'connection.welcome_queue_exceeded',
+        'A game welcome control queue exceeded its byte bound.',
+        logDetails(gameServerErrorDetails(error)))
+      disconnect(socket, 'invalid-message', 'The game welcome control queue exceeded its byte limit.')
+    }
+  }
+
+  function sendWelcomePayload(socket: WebSocket, payload: string): void {
+    if (payload.length <= GAME_STRING_STREAM_THRESHOLD) {
+      socket.send(payload)
+      return
+    }
+    const transfer = new GameWelcomeSender(
+      payload,
+      value => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(value)
+      },
+      length => {
+        welcomeTransfers.delete(socket)
+        completedWelcomeOffsets.set(socket, length)
+      },
+      () => {
+        welcomeTransfers.delete(socket)
+        const reason = 'game welcome transfer timed out'
+        disconnectCauses.set(socket, { reason, source: 'welcome-transfer-timeout' })
+        logGameServerEvent(options.log, 'game-host', 'warning', 'connection.welcome_timeout',
+          'A game peer stopped acknowledging its welcome transfer.', logDetails())
+        socket.close(GAME_CONNECTION_TIMEOUT_CLOSE_CODE, reason)
+      },
+    )
+    welcomeTransfers.set(socket, transfer)
+    transfer.start()
+  }
+
   function disconnect(
     socket: WebSocket,
     code: ServerDisconnectMessage['code'],
     reason: string,
   ): void {
+    cancelWelcome(socket)
     disconnectCauses.set(socket, {
       reason,
       source: `server-${code}`,
     })
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(encodeGameMessage({ type: 'server-disconnect', code, reason }))
+      sendGamePayload(socket, encodeGameMessage({ type: 'server-disconnect', code, reason }))
     }
     socket.close(1008, reason.slice(0, 123))
   }
@@ -7094,7 +7169,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     host: PreparedModHost | null,
   ): void {
     if (!host || socket.readyState !== WebSocket.OPEN) return
-    socket.send(encodeGameMessage({ type: 'server-mod-content', ...host.project() }))
+    sendGamePayload(socket, encodeGameMessage({ type: 'server-mod-content', ...host.project() }))
   }
 
   function sendPreparedModRuntime(
@@ -7103,7 +7178,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     viewerId: PlayerId,
   ): void {
     if (!host || socket.readyState !== WebSocket.OPEN) return
-    socket.send(encodeGameMessage({ type: 'server-mod-runtime', ...host.runtimeProjection(viewerId) }))
+    sendGamePayload(socket, encodeGameMessage({ type: 'server-mod-runtime', ...host.runtimeProjection(viewerId) }))
   }
 
   function broadcastPreparedModProjection(

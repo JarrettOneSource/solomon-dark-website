@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 // Run after npm run build: npm run test:hail-browser. Uses a private disposable host.
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -10,7 +11,6 @@ import { NATIVE_HAIL_LIFETIME_TICKS, NATIVE_HAIL_MINIMUM_SCALE, NATIVE_HAIL_MAXI
 import { MAX_PLAYER_LEVEL, MAX_PLAYER_EXPERIENCE, NATIVE_LEVEL_THRESHOLDS } from '../src/game/core-kernels/player-progression.ts'
 import { grantPlayerEntitySkillRanks, setPlayerEntityMana } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { enterElementHub, enterBoneyard, openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 
 const output = process.env.SDR_HAIL_OUTPUT || '/tmp/solomon-hail'
@@ -40,9 +40,12 @@ try {
   page.on('requestfailed', r => errors.requests.push(`${r.url()}: ${r.failure()?.errorText}`))
   page.on('websocket', socket => {
     socket.on('socketerror', e => errors.wire.push(String(e)))
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       try {
-        const message = decodeServerGameMessage(String(payload))
+        const message = welcomeReceiver.receivePayload(String(payload), () => {})
+        if (message === null) return
         if (message.type === 'server-error') errors.wire.push(message.message)
         if (message.type === 'server-snapshot') snapshots.push({ at: performance.now(), tick: message.frame.tick })
       } catch (e) { errors.wire.push(e.message) }

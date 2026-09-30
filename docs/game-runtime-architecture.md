@@ -931,7 +931,20 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `36` welcomes a client with one complete snapshot plus its sequence.
+Protocol `36` welcomes a client with one complete snapshot plus its sequence. Protocol 144 delivers
+welcomes above the existing 64 KiB string threshold in acknowledged 8 KiB
+UTF-16 slices, with at most four chunks outstanding. Player and observer
+clients assemble one complete strictly decoded welcome before publishing state.
+Only valid new progress renews the existing five-second deadline; stalled,
+malformed or cancelled transfers release their partial data. The host holds
+ordinary snapshots and queues its initial control prefix until the complete
+welcome is acknowledged, retaining the original replication baseline and
+ordering. This shares the checkpoint string primitive without changing save
+coalescing, atomic leave/deployment checkpoints, actor populations or save
+schema. The native save loader and simulation remain the authority; this is a
+Website delivery contract. [Report 71's evidence and historical limits](<Game Native Parity RE/119-2026-08-21-shared-hub-edge-routing-and-diagnostic-correlation-closure.md#2026-09-30--report-71-saved-game-welcome-delivery>)
+records the exact captured-world/slow-transport reproduction.
+
 Subsequent messages keep session-owned players at the frame root and use a
 discriminated world payload. Both Hub and Boneyard carry a compact
 replicated-entity lane. Boneyard keeps encounter, gate, and wave-scheduling

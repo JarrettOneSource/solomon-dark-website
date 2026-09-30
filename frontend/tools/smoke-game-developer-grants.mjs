@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { spawn } from 'node:child_process'
@@ -18,7 +19,6 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../src/game/protocol/game-protocol-contract.ts'
 import {
-  decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 
@@ -461,8 +461,11 @@ async function connectTrackedPlayer(url, credential, origin) {
   const reconstructor = new EntityReplicationReconstructor()
   reconstructor.reset(welcome.snapshot, welcome.snapshotSequence)
   let snapshot = welcome.snapshot
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   const receive = data => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message === null) return
     if (message.type !== 'server-snapshot') return
     snapshot = reconstructor.apply(message.frame, message.sequence)
     socket.send(encodeGameMessage({
@@ -504,8 +507,11 @@ function openSocket(url, origin) {
 function nextMessage(socket, predicate, timeoutMs = 10_000) {
   return new Promise((resolveMessage, reject) => {
     const timeout = setTimeout(() => finish(new Error('timed out waiting for game message')), timeoutMs)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     const receive = data => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (message === null) return
       if (predicate(message)) finish(message)
     }
     const fail = error => finish(error)

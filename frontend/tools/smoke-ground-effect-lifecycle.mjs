@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
@@ -10,7 +11,6 @@ import { NATIVE_GENERATED_BONEYARDS } from '../src/game/host/native-generated-bo
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { enterElementHub, startElementHub, enterBoneyard, waitUntil } from './game-smoke-navigation.mjs'
 import { acceptGroundEffects } from './ground-effects-smoke-acceptance.mjs'
@@ -205,9 +205,12 @@ function observeWire(page, endpoint) {
   const reconstructor = new EntityReplicationReconstructor()
   page.on('websocket', socket => {
     if (socket.url() !== endpoint) return
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       try {
-        const message = decodeServerGameMessage(Buffer.isBuffer(payload) ? payload.toString() : payload)
+        const message = welcomeReceiver.receivePayload(Buffer.isBuffer(payload) ? payload.toString() : payload, () => {})
+        if (message === null) return
         if (message.type === 'server-boneyard-loaded') wire.loadedBoneyard = message.boneyard
         if (message.type === 'server-welcome') {
           reconstructor.reset(message.snapshot, message.snapshotSequence)

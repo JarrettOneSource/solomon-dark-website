@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 // Report 05: isolate acknowledgment starvation from browser rendering through
 // the real session supervisor. This is fault injection, not a historical replay.
 import assert from 'node:assert/strict'
@@ -7,7 +8,6 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { startGameSessionSupervisor } from '../src/game/host/game-session-supervisor.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { enterBoneyard, enterElementHub, waitUntil } from './game-smoke-navigation.mjs'
 
 const output = process.env.SDR_MULTIPLAYER_RECOVERY_OUTPUT
@@ -47,9 +47,12 @@ try {
     page.on('requestfailed', request => errors.requests.push(`${request.url()}: ${request.failure()?.errorText}`))
     page.on('websocket', socket => {
       socket.on('socketerror', error => errors.wire.push(String(error)))
+      const welcomeReceiver = new GameWelcomeReceiver()
+      socket.on('close', () => welcomeReceiver.close())
       socket.on('framereceived', ({ payload }) => {
         try {
-          const message = decodeServerGameMessage(String(payload))
+          const message = welcomeReceiver.receivePayload(String(payload), () => {})
+          if (message === null) return
           if (message.type === 'server-error') errors.wire.push(message.message)
           if (message.type === 'server-snapshot') client.snapshots.push({
             at: performance.now(), sequence: message.sequence, tick: message.frame.tick,

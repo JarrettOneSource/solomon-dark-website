@@ -3,9 +3,6 @@ import {
   type GameSessionKind,
 } from '../protocol/game-protocol-contract.ts'
 import {
-  GameProtocolError,
-} from '../protocol/codecs/values.ts'
-import {
   decodeServerGameMessage,
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'
@@ -41,6 +38,7 @@ import {
   failureFromTransportClose,
 } from './game-connection-failure.ts'
 import type { GameTransport } from './game-transport.ts'
+import { GameWelcomeReceiver, GAME_WELCOME_PROGRESS_TIMEOUT_MS } from '../protocol/game-welcome-transfer.ts'
 
 const PING_INTERVAL_MS = 2_000
 
@@ -95,17 +93,31 @@ export function connectGameObserverSession(
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     let enemyEventCursor: { eventId: number; runId: string } | null = null
     const entityReplication = new EntityReplicationReconstructor()
+    const welcomeReceiver = new GameWelcomeReceiver()
     const now = options.now ?? (() => performance.now())
-    const handshakeDeadline = globalThis.setTimeout(() => {
+    let handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The observer handshake timed out.'))
-    }, 5_000)
+    }, GAME_WELCOME_PROGRESS_TIMEOUT_MS)
 
     const removeMessage = options.transport.onMessage((payload) => {
       let message
+      let welcomeOffset: number | null = null
       try {
-        message = decodeServerGameMessage(payload)
+        const reception = welcomeReceiver.receive(decodeServerGameMessage(payload))
+        if (reception.message === null) {
+          globalThis.clearTimeout(handshakeDeadline)
+          handshakeDeadline = globalThis.setTimeout(() => {
+            fail(new Error('The observer handshake timed out.'))
+          }, GAME_WELCOME_PROGRESS_TIMEOUT_MS)
+          options.transport.send(encodeGameMessage({
+            type: 'client-welcome-chunk-ack', nextOffset: reception.nextOffset,
+          }))
+          return
+        }
+        message = reception.message
+        welcomeOffset = reception.nextOffset
       } catch (error) {
-        fail(error instanceof GameProtocolError ? error : new Error('Invalid observer message'))
+        fail(error instanceof Error ? error : new Error('Invalid observer message'))
         return
       }
       if (message.type === 'server-disconnect') {
@@ -113,34 +125,41 @@ export function connectGameObserverSession(
         return
       }
       if (message.type === 'server-welcome') {
-        const clientSnapshot = createGameClientSnapshot(message.snapshot)
-        if (
-          settled
-          || message.observer !== true
-          || message.protocolVersion !== GAME_PROTOCOL_VERSION
-          || message.sessionKind === 'standalone'
-          || !isBoneyardGameSnapshot(clientSnapshot)
-          || !clientSnapshot.players[message.playerId]
-        ) {
-          fail(new Error('The server returned an invalid observer welcome.'))
-          return
+        try {
+          const clientSnapshot = createGameClientSnapshot(message.snapshot)
+          if (
+            settled
+            || message.observer !== true
+            || message.protocolVersion !== GAME_PROTOCOL_VERSION
+            || message.sessionKind === 'standalone'
+            || !isBoneyardGameSnapshot(clientSnapshot)
+            || !clientSnapshot.players[message.playerId]
+          ) {
+            fail(new Error('The server returned an invalid observer welcome.'))
+            return
+          }
+          welcome = message
+          snapshot = clientSnapshot
+          viewPlayerId = message.playerId
+          lastSnapshotSequence = message.snapshotSequence
+          entityReplication.reset(clientSnapshot, message.snapshotSequence)
+          enemyEventCursor = {
+            eventId: clientSnapshot.world.enemyEvents.at(-1)?.eventId ?? 0,
+            runId: clientSnapshot.world.runId,
+          }
+          timeline = createBoneyardPresentationTimeline({
+            initialReceivedAtMs: now(),
+            initialSnapshot: clientSnapshot,
+            serverTickRate: message.serverTickRate,
+            snapshotRate: message.snapshotRate,
+          })
+          if (welcomeOffset !== null) options.transport.send(encodeGameMessage({
+            type: 'client-welcome-chunk-ack', nextOffset: welcomeOffset,
+          }))
+          finishHandshake()
+        } catch (error) {
+          fail(error)
         }
-        welcome = message
-        snapshot = clientSnapshot
-        viewPlayerId = message.playerId
-        lastSnapshotSequence = message.snapshotSequence
-        entityReplication.reset(clientSnapshot, message.snapshotSequence)
-        enemyEventCursor = {
-          eventId: clientSnapshot.world.enemyEvents.at(-1)?.eventId ?? 0,
-          runId: clientSnapshot.world.runId,
-        }
-        timeline = createBoneyardPresentationTimeline({
-          initialReceivedAtMs: now(),
-          initialSnapshot: clientSnapshot,
-          serverTickRate: message.serverTickRate,
-          snapshotRate: message.snapshotRate,
-        })
-        finishHandshake()
         return
       }
       if (message.type === 'server-boneyard-loaded') {
@@ -287,11 +306,15 @@ export function connectGameObserverSession(
         fail(new Error('The observer Boneyard does not match its snapshot.'))
         return
       }
-      settled = true
-      globalThis.clearTimeout(handshakeDeadline)
-      sendPing()
-      pingTimer = globalThis.setInterval(sendPing, PING_INTERVAL_MS)
-      resolve(session)
+      try {
+        sendPing()
+        pingTimer = globalThis.setInterval(sendPing, PING_INTERVAL_MS)
+        settled = true
+        globalThis.clearTimeout(handshakeDeadline)
+        resolve(session)
+      } catch (error) {
+        fail(error)
+      }
     }
 
     function currentState(): GameObserverState {
@@ -316,6 +339,7 @@ export function connectGameObserverSession(
     }
 
     function cleanup(): void {
+      welcomeReceiver.close()
       globalThis.clearTimeout(handshakeDeadline)
       if (pingTimer !== undefined) globalThis.clearInterval(pingTimer)
       pingTimer = undefined

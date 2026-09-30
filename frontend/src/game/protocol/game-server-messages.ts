@@ -1,3 +1,4 @@
+import type { GameStringChunk } from './game-string-transfer.ts'
 import type { BoneyardChoice, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import type { LuaConsoleObject, LuaConsoleValue } from './codecs/lua.ts'
@@ -38,6 +39,10 @@ export interface ServerWelcomeMessage {
   observer?: boolean
   snapshot: GameSnapshot
   snapshotSequence: number
+}
+
+export interface ServerWelcomeChunkMessage extends GameStringChunk {
+  readonly type: 'server-welcome-chunk'
 }
 
 export interface ServerModCatalogMessage {
@@ -217,6 +222,7 @@ export type ServerGameMessage =
   | ServerGameplayPauseMessage
   | ServerGameplayResumeGraceMessage
   | ServerWelcomeMessage
+  | ServerWelcomeChunkMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
   | ServerSaveBeforeLeaveMessage

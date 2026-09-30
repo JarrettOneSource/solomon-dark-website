@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -10,7 +11,6 @@ import {
 } from '../src/game/core-server/game-simulation.ts'
 import { enterElementHub, enterBoneyard, waitUntil } from './game-smoke-navigation.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
 
 const evidence = process.env.SDR_TOOLTIP_EVIDENCE || '/tmp/solomon-skill-tooltip'
@@ -48,9 +48,12 @@ try {
     const reconstructor = new EntityReplicationReconstructor()
     page.on('websocket', socket => {
       if (new URL(socket.url()).href !== new URL(host.address.url).href) return
+      const welcomeReceiver = new GameWelcomeReceiver()
+      socket.on('close', () => welcomeReceiver.close())
       socket.on('framereceived', ({ payload }) => {
         try {
-          const message = decodeServerGameMessage(Buffer.isBuffer(payload) ? payload.toString() : payload)
+          const message = welcomeReceiver.receivePayload(Buffer.isBuffer(payload) ? payload.toString() : payload, () => {})
+          if (message === null) return
           if (message.type === 'server-welcome') {
             wire.playerId = message.playerId
             wire.snapshot = message.snapshot

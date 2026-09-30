@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes, createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -13,7 +14,6 @@ import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
 import { grantPlayerEntitySkillRanks } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { boneyardGeometrySha256 } from '../src/game/host/project-boneyard.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { enterElementHub, enterBoneyard, waitUntil } from './game-smoke-navigation.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
@@ -96,9 +96,12 @@ async function journey(name, document, saveSha256) {
     page.on('requestfailed', request => errors.requests.push(`${request.url()}: ${request.failure()?.errorText}`))
     page.on('websocket', socket => {
       socket.on('socketerror', error => errors.wire.push(String(error)))
+      const welcomeReceiver = new GameWelcomeReceiver()
+      socket.on('close', () => welcomeReceiver.close())
       socket.on('framereceived', ({ payload }) => {
         try {
-          const message = decodeServerGameMessage(String(payload))
+          const message = welcomeReceiver.receivePayload(String(payload), () => {})
+          if (message === null) return
           if (message.type === 'server-snapshot' || message.type === 'server-welcome') wireFrames++
           if (message.type === 'server-error') errors.wire.push(message.message)
         } catch (error) { errors.wire.push(error.message) }

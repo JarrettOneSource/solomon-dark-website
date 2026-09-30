@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -40,7 +41,6 @@ import { NATIVE_GENERATED_BONEYARDS } from '../src/game/host/native-generated-bo
 import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression, getPlayerSkillBook } from '../src/game/core-server/game-simulation.ts'
 import { grantPlayerEntitySkillRanks, replacePlayerCharacter, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { EntityReplicationReconstructor, REPLICATED_ENTITY_TYPES } from '../src/game/protocol/entity-replication.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 
@@ -1483,11 +1483,15 @@ function observeGameWire(page, endpoint) {
   page.on('websocket', (socket) => {
     if (new URL(socket.url()).href !== endpointUrl) return
     receipt.socketCount += 1
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       try {
+        const receivedMessage = welcomeReceiver.receivePayload(Buffer.isBuffer(payload) ? payload.toString() : payload, () => {})
+        if (receivedMessage === null) return
         recordWireMessage(
           receipt,
-          decodeServerGameMessage(Buffer.isBuffer(payload) ? payload.toString() : payload),
+          receivedMessage,
         )
       } catch (error) {
         boundedPush(receipt.errors, error instanceof Error ? error.message : String(error), 16)

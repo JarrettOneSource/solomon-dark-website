@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 
@@ -18,7 +19,6 @@ import { getPlayerCharacter, getPlayerEconomy } from '../src/game/core-server/ga
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
 import {
-  decodeServerGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 
 export function observeGoldPlacementWire(page, endpoint) {
@@ -26,9 +26,12 @@ export function observeGoldPlacementWire(page, endpoint) {
   const receipt = { errors: [], snapshot: null }
   page.on('websocket', (socket) => {
     if (new URL(socket.url()).href !== new URL(endpoint).href) return
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       try {
-        const message = decodeServerGameMessage(Buffer.isBuffer(payload) ? payload.toString() : payload)
+        const message = welcomeReceiver.receivePayload(Buffer.isBuffer(payload) ? payload.toString() : payload, () => {})
+        if (message === null) return
         if (message.type === 'server-welcome') {
           reconstructor.reset(message.snapshot, message.snapshotSequence)
           receipt.snapshot = message.snapshot

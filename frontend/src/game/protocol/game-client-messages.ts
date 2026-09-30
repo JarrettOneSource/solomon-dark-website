@@ -184,6 +184,11 @@ export interface ClientSaveCheckpointChunkAckMessage {
   nextOffset: number
 }
 
+export interface ClientWelcomeChunkAckMessage {
+  readonly type: 'client-welcome-chunk-ack'
+  readonly nextOffset: number
+}
+
 export interface ClientDeploymentReadyMessage {
   type: 'client-deployment-ready'
   checkpointSequence: number
@@ -321,6 +326,7 @@ export type ClientGameMessage =
   | ClientResumeGraceReadyMessage
   | ClientSaveBeforeLeaveMessage
   | ClientSaveCheckpointChunkAckMessage
+  | ClientWelcomeChunkAckMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
   | ClientStartTutorialMessage

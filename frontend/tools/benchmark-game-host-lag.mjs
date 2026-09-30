@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import { performance } from 'node:perf_hooks'
 
 import { WebSocket } from 'ws'
@@ -14,7 +15,6 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../src/game/protocol/game-protocol-contract.ts'
 import {
-  decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 import * as replication from '../src/game/protocol/entity-replication.ts'
@@ -227,10 +227,14 @@ async function connectClient(url, displayName) {
     socket,
   }
   const checkpointReceiver = new GameSaveCheckpointReceiver()
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   socket.on('message', data => {
     let message
     try {
-      message = decodeServerGameMessage(data.toString())
+      const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (receivedMessage === null) return
+      message = receivedMessage
       if (message.type === 'server-save-checkpoint') checkpointReceiver.acceptComplete(message)
       if (message.type === 'server-save-checkpoint-chunk') {
         const complete = checkpointReceiver.acceptChunk(message)

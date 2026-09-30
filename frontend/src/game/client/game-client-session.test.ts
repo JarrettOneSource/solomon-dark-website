@@ -46,7 +46,8 @@ import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 import type { GameTransport, GameTransportClose } from './game-transport.ts'
 import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 import { GameSaveCheckpointSender, SAVE_CHECKPOINT_STREAM_THRESHOLD } from '../protocol/game-save-checkpoint-transfer.ts'
-import type { ServerSaveCheckpointChunkMessage, ServerSaveCheckpointMessage } from '../protocol/game-server-messages.ts'
+import { GAME_STRING_CHUNK_CHARACTERS, GameStringSender, type GameStringChunk } from '../protocol/game-string-transfer.ts'
+import type { ServerSaveCheckpointChunkMessage, ServerSaveCheckpointMessage, ServerWelcomeMessage } from '../protocol/game-server-messages.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -2169,6 +2170,101 @@ test('destroying a client rejects an unfinished leave save', async () => {
   await assert.rejects(saving, /destroyed/)
 })
 
+
+test('client admits a complete welcome that keeps progressing beyond five seconds', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  const payload = encodeGameMessage(welcomeMessage(snapshot))
+  const chunks: GameStringChunk[] = []
+  const sender = new GameStringSender(payload, chunk => chunks.push(chunk))
+  sender.start()
+  assert.ok(payload.length > GAME_STRING_CHUNK_CHARACTERS)
+  let elapsedMs = 0
+  for (let index = 0; index < chunks.length; index += 1) {
+    if (index > 0) { context.mock.timers.tick(4000); elapsedMs += 4000 }
+    const chunk = chunks[index]!
+    transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', ...chunk }))
+    const acknowledgement = transport.sent.map(decodeClientGameMessage).findLast(message => (
+      message.type === 'client-welcome-chunk-ack'
+      && message.nextOffset === chunk.offset + chunk.data.length
+    ))
+    assert.ok(acknowledgement)
+    sender.acknowledge(chunk.offset + chunk.data.length)
+  }
+  const session = await connecting
+  context.after(() => session.destroy())
+  assert.ok(elapsedMs > 5000)
+  assert.equal(session.getSnapshot().tick, snapshot.tick)
+  assert.deepEqual(session.getSnapshot().players['player-1'], snapshot.players['player-1'])
+})
+
+test('client rejects an interrupted welcome before publishing state and ignores cancelled late chunks', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const rejected = assert.rejects(connecting, /pending transfer/)
+  transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: '{', offset: 0, totalLength: 100 }))
+  transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: 'bad', offset: 2, totalLength: 100 }))
+  await rejected
+  assert.equal(transport.readyState, 'closed')
+  assert.doesNotThrow(() => transport.receive(encodeGameMessage({
+    type: 'server-welcome-chunk', data: 'late', offset: 1, totalLength: 100,
+  })))
+  const cancelled = new MemoryTransport()
+  const pending = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport: cancelled })
+  const cancellation = assert.rejects(pending)
+  cancelled.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: '{', offset: 0, totalLength: 100 }))
+  cancelled.disconnect({ code: 1000, reason: 'cancelled', wasClean: true })
+  await cancellation
+  context.mock.timers.tick(10_000)
+  assert.doesNotThrow(() => cancelled.receive(encodeGameMessage({
+    type: 'server-welcome-chunk', data: 'late', offset: 1, totalLength: 100,
+  })))
+})
+
+test('client still fails a welcome that stops delivering valid chunks for five seconds', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const rejected = assert.rejects(connecting, /handshake timed out/)
+  transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: '{', offset: 0, totalLength: 100 }))
+  context.mock.timers.tick(5000)
+  await rejected
+  assert.equal(transport.readyState, 'closed')
+})
+
+test('observer admits a progressing chunked welcome before its matching Boneyard', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameObserverSession({ credential: 'observer-secret', transport })
+  const boneyard = loadedBoneyardFixture('observer-progress')
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), boneyard)
+  const snapshot = createGameSnapshot(state, 'player-1')
+  const payload = encodeGameMessage({ ...welcomeMessage(snapshot), observer: true,
+    sessionKind: 'global-hub' })
+  for (let offset = 0; offset < payload.length; offset += GAME_STRING_CHUNK_CHARACTERS) {
+    if (offset > 0) context.mock.timers.tick(4000)
+    const data = payload.slice(offset, offset + GAME_STRING_CHUNK_CHARACTERS)
+    transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data, offset,
+      totalLength: payload.length }))
+    assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+      type: 'client-welcome-chunk-ack', nextOffset: offset + data.length,
+    })
+  }
+  transport.receive(encodeGameMessage({ type: 'server-boneyard-loaded', boneyard }))
+  const session = await connecting
+  context.after(() => session.close())
+  assert.equal(session.current().snapshot.tick, snapshot.tick)
+  assert.equal(session.current().boneyard.runId, boneyard.runId)
+  assert.deepEqual(session.current().snapshot.players['player-1'], snapshot.players['player-1'])
+})
+
 function kernelParameters() {
   return {
     fixedTickSeconds: 0.01,
@@ -2180,11 +2276,10 @@ function kernelParameters() {
   }
 }
 
-function receiveWelcome(
-  transport: MemoryTransport,
+function welcomeMessage(
   snapshot: ReturnType<typeof createGameSnapshot>,
-): void {
-  transport.receive(encodeGameMessage({
+): ServerWelcomeMessage {
+  return {
     type: 'server-welcome',
     cheatsEnabled: false,
     developerAccess: false,
@@ -2203,7 +2298,14 @@ function receiveWelcome(
     gameplayResumeGrace: null,
     snapshot,
     snapshotSequence: 1,
-  }))
+  }
+}
+
+function receiveWelcome(
+  transport: MemoryTransport,
+  snapshot: ReturnType<typeof createGameSnapshot>,
+): void {
+  transport.receive(encodeGameMessage(welcomeMessage(snapshot)))
 }
 
 let nextSnapshotSequence = 10

@@ -38,6 +38,7 @@ import {
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'
 import { GameSaveCheckpointReceiver } from '../protocol/game-save-checkpoint-transfer.ts'
+import { GameWelcomeReceiver, GAME_WELCOME_PROGRESS_TIMEOUT_MS } from '../protocol/game-welcome-transfer.ts'
 import type {
   BoneyardChoice,
   LoadedBoneyard,
@@ -365,16 +366,37 @@ export function connectGameClientSession(
     let pendingLeaveSave: PendingLeaveSave | null = null
     const entityReplication = new EntityReplicationReconstructor()
     const saveCheckpointReceiver = new GameSaveCheckpointReceiver()
+    const welcomeReceiver = new GameWelcomeReceiver()
     let pendingInputs: PendingInput[] = []
-    const handshakeDeadline = globalThis.setTimeout(() => {
+    let handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
-    }, 5000)
+    }, GAME_WELCOME_PROGRESS_TIMEOUT_MS)
     const removeMessage = options.transport.onMessage((payload) => {
       let message
+      let welcomeOffset: number | null = null
       try {
-        message = decodeServerGameMessage(payload)
+        const decoded = decodeServerGameMessage(payload)
+        const reception = welcomeReceiver.receive(decoded)
+        if (reception.nextOffset !== null && decoded.type === 'server-welcome-chunk') {
+          welcomeOffset = reception.nextOffset
+          if (decoded.offset % (64 * 1024) === 0) options.diagnostics?.info(
+            'connection.welcome_progress', 'Receiving the authoritative game state.',
+            `received=${welcomeOffset}; total=${decoded.totalLength}`,
+          )
+        }
+        if (reception.message === null) {
+          globalThis.clearTimeout(handshakeDeadline)
+          handshakeDeadline = globalThis.setTimeout(() => {
+            fail(new Error('The game server handshake timed out.'))
+          }, GAME_WELCOME_PROGRESS_TIMEOUT_MS)
+          options.transport.send(encodeGameMessage({
+            type: 'client-welcome-chunk-ack', nextOffset: reception.nextOffset,
+          }))
+          return
+        }
+        message = reception.message
       } catch (error) {
-        fail(error instanceof GameProtocolError ? error : new Error('Invalid server message'))
+        fail(error instanceof Error ? error : new Error('Invalid server message'))
         return
       }
       if (message.type === 'server-disconnect') {
@@ -382,47 +404,54 @@ export function connectGameClientSession(
         return
       }
       if (message.type === 'server-welcome') {
-        if (settled || message.observer === true || message.protocolVersion !== GAME_PROTOCOL_VERSION) {
-          fail(new Error('The server selected an incompatible protocol.'))
-          return
+        try {
+          if (settled || message.observer === true || message.protocolVersion !== GAME_PROTOCOL_VERSION) {
+            fail(new Error('The server selected an incompatible protocol.'))
+            return
+          }
+          welcome = message
+          authoritativeCheatsEnabled = message.cheatsEnabled
+          snapshot = createGameClientSnapshot(message.snapshot)
+          gameplayPause = message.gameplayPause
+          gameplayResumeGrace = message.gameplayResumeGrace
+          requestedHubActivity = snapshot.world.kind === 'hub'
+            ? snapshot.world.participants[message.playerId]?.activity ?? null
+            : null
+          modCatalog = message.modCatalog
+          enemyEventCursor = initialEnemyEventCursor(snapshot)
+          lastSnapshotSequence = message.snapshotSequence
+          entityReplication.reset(snapshot, lastSnapshotSequence)
+          if (!snapshot.players[message.playerId]) {
+            fail(new Error('The server welcome snapshot does not contain the assigned player.'))
+            return
+          }
+          predictionEnabled = supportsLocalPrediction(message)
+          lastSnapshotReceivedAtMs = now()
+          if (isHubGameSnapshot(snapshot)) {
+            presentationTimeline = createPresentationTimeline(
+              snapshot,
+              lastSnapshotReceivedAtMs,
+              message,
+            )
+            resetLocalHubPresentation(snapshot, lastSnapshotReceivedAtMs)
+          } else if (isBoneyardGameSnapshot(snapshot)) {
+            boneyardPresentationTimeline = createBoneyardTimeline(
+              snapshot,
+              lastSnapshotReceivedAtMs,
+              message,
+            )
+          }
+          if (welcomeOffset !== null) options.transport.send(encodeGameMessage({
+            type: 'client-welcome-chunk-ack', nextOffset: welcomeOffset,
+          }))
+          sendPing()
+          pingTimer = globalThis.setInterval(sendPing, PING_INTERVAL_MS)
+          settled = true
+          globalThis.clearTimeout(handshakeDeadline)
+          resolve(session)
+        } catch (error) {
+          fail(error)
         }
-        welcome = message
-        authoritativeCheatsEnabled = message.cheatsEnabled
-        snapshot = createGameClientSnapshot(message.snapshot)
-        gameplayPause = message.gameplayPause
-        gameplayResumeGrace = message.gameplayResumeGrace
-        requestedHubActivity = snapshot.world.kind === 'hub'
-          ? snapshot.world.participants[message.playerId]?.activity ?? null
-          : null
-        modCatalog = message.modCatalog
-        enemyEventCursor = initialEnemyEventCursor(snapshot)
-        lastSnapshotSequence = message.snapshotSequence
-        entityReplication.reset(snapshot, lastSnapshotSequence)
-        if (!snapshot.players[message.playerId]) {
-          fail(new Error('The server welcome snapshot does not contain the assigned player.'))
-          return
-        }
-        predictionEnabled = supportsLocalPrediction(message)
-        lastSnapshotReceivedAtMs = now()
-        if (isHubGameSnapshot(snapshot)) {
-          presentationTimeline = createPresentationTimeline(
-            snapshot,
-            lastSnapshotReceivedAtMs,
-            message,
-          )
-          resetLocalHubPresentation(snapshot, lastSnapshotReceivedAtMs)
-        } else if (isBoneyardGameSnapshot(snapshot)) {
-          boneyardPresentationTimeline = createBoneyardTimeline(
-            snapshot,
-            lastSnapshotReceivedAtMs,
-            message,
-          )
-        }
-        settled = true
-        globalThis.clearTimeout(handshakeDeadline)
-        sendPing()
-        pingTimer = globalThis.setInterval(sendPing, PING_INTERVAL_MS)
-        resolve(session)
         return
       }
       if (!welcome || !snapshot) {
@@ -868,6 +897,7 @@ export function connectGameClientSession(
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
         saveCheckpointReceiver.close()
+        welcomeReceiver.close()
         removeClose()
         removeMessage()
         if (options.transport.readyState === 'open') {
@@ -1730,6 +1760,7 @@ export function connectGameClientSession(
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
         saveCheckpointReceiver.close()
+        welcomeReceiver.close()
         rejectPendingLeaveSave(failure)
         rejectPendingLuaExecutions(failure)
         rejectPendingPlayerCardRequests(failure)
@@ -1750,6 +1781,7 @@ export function connectGameClientSession(
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
       saveCheckpointReceiver.close()
+      welcomeReceiver.close()
       rejectPendingLeaveSave(failure)
       rejectPendingLuaExecutions(failure)
       rejectPendingPlayerCardRequests(failure)
@@ -1827,6 +1859,7 @@ export function connectGameClientSession(
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
       saveCheckpointReceiver.close()
+      welcomeReceiver.close()
       rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       rejectPendingLuaExecutions(new Error('The game is restarting for an update.'))
       rejectPendingPlayerCardRequests(new Error('The game is restarting for an update.'))

@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
@@ -14,7 +15,6 @@ import { replacePlayerCharacter } from '../src/game/core-server/player-entity-st
 import { createBoneyardCatalog, materializeBoneyard } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
 import { waitUntil } from './game-smoke-navigation.mjs'
@@ -79,9 +79,12 @@ page.on('console', message => { if (message.type() === 'error') errors.console.p
 page.on('response', response => { if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`) })
 page.on('websocket', socket => {
   if (new URL(socket.url()).href !== new URL(host.address.url).href) return
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   socket.on('framereceived', ({ payload }) => {
     try {
-      const message = decodeServerGameMessage(Buffer.isBuffer(payload) ? payload.toString() : payload)
+      const message = welcomeReceiver.receivePayload(Buffer.isBuffer(payload) ? payload.toString() : payload, () => {})
+      if (message === null) return
       if (message.type === 'server-welcome') {
         wire.reset(message.snapshot, message.snapshotSequence)
         latest = message.snapshot; sequence = message.snapshotSequence

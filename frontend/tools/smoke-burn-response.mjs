@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 // Real Mac Chrome journey for native periodic hit response and Burn teardown.
 import assert from 'node:assert/strict'
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
@@ -10,7 +11,6 @@ import { preview } from 'vite'
 import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { boneyardGeometrySha256 } from '../src/game/host/project-boneyard.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { applyNativeSecondaryFireBurn, resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { boneyardNativeSecondaryTarget } from '../src/game/core-server/native-secondary-world.ts'
 import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
@@ -72,9 +72,12 @@ try {
   page.on('requestfailed', request => errors.requests.push(request.url()))
   page.on('websocket', socket => {
     socket.on('socketerror', error => errors.wire.push(String(error)))
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       try {
-        const message = decodeServerGameMessage(String(payload))
+        const message = welcomeReceiver.receivePayload(String(payload), () => {})
+        if (message === null) return
         const frame = message.type === 'server-welcome' ? message.snapshot
           : message.type === 'server-snapshot' ? message.frame : null
         if (frame) frames.push(frame)

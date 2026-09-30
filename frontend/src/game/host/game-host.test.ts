@@ -1,3 +1,5 @@
+import { GAME_STRING_CHUNK_WINDOW } from '../protocol/game-string-transfer.ts'
+import { GameWelcomeReceiver } from '../protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import type { RunArchive } from './run-archive.ts'
 import { createRequire } from 'node:module'
@@ -434,8 +436,11 @@ test('developer observer watches one private run without joining or mutating par
   // observer admission becomes the event under test.
   await new Promise(resolve => setTimeout(resolve, 30))
   let playerFacingObserverCueCount = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  leader.socket.on('close', () => welcomeReceiver.close())
   const countPlayerFacingCue = (payload: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(payload.toString())
+    const message = welcomeReceiver.receivePayload(payload.toString(), payload => leader.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-party-state') playerFacingObserverCueCount += 1
   }
   leader.socket.on('message', countPlayerFacingCue)
@@ -513,8 +518,11 @@ test('developer observer watches one private run without joining or mutating par
   assert.equal(stalledWelcomeMessage.type, 'server-welcome')
   const stalledObserverId = stalledWelcomeMessage.resumeToken
   const stalledSnapshots: ServerSnapshotMessage[] = []
+  const welcomeReceiver2 = new GameWelcomeReceiver()
+  stalledObserver.on('close', () => welcomeReceiver2.close())
   stalledObserver.on('message', (data) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver2.receivePayload(data.toString(), payload => stalledObserver.send(payload))
+    if (message === null) return
     if (message.type === 'server-snapshot') stalledSnapshots.push(message)
   })
   await waitFor(() => stalledSnapshots.length >= GAME_REPLICATION_HIGH_WATER_MARK)
@@ -1736,8 +1744,11 @@ test('every crafted Hub gameplay-pause source is rejected without suspending the
   context.after(() => second.socket.close())
 
   const pauseMessages: ServerGameMessage[] = []
+  const welcomeReceiver = new GameWelcomeReceiver()
+  first.socket.on('close', () => welcomeReceiver.close())
   const observePause = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => first.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-gameplay-pause') pauseMessages.push(message)
   }
   first.socket.on('message', observePause)
@@ -1975,8 +1986,12 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   logs.length = 0
   runtimeEvents.length = 0
   let pauseCheckpointCount = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  first.socket.on('close', () => welcomeReceiver.close())
   const countPauseCheckpoint = (data: WebSocket.RawData) => {
-    const message = materializeServerMessage(first.socket, decodeServerGameMessage(data.toString()))
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => first.socket.send(payload))
+    if (receivedMessage === null) return
+    const message = materializeServerMessage(first.socket, receivedMessage)
     if (message.type === 'server-save-checkpoint') pauseCheckpointCount += 1
   }
   first.socket.on('message', countPauseCheckpoint)
@@ -2119,8 +2134,12 @@ test('multiplayer compact skill selector resumes directly after teardown', async
   await paused
   const heldTick = host.state().tick
   let graceMessages = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  first.socket.on('close', () => welcomeReceiver.close())
   const observeGrace = (data: WebSocket.RawData) => {
-    if (decodeServerGameMessage(data.toString()).type === 'server-gameplay-resume-grace') {
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => first.socket.send(payload))
+    if (receivedMessage === null) return
+    if (receivedMessage.type === 'server-gameplay-resume-grace') {
       graceMessages += 1
     }
   }
@@ -2451,8 +2470,11 @@ test('shared Hub activity is replicated while every resident and the Hub clock s
   context.after(() => second.socket.close())
 
   const pauseMessages: ServerGameMessage[] = []
+  const welcomeReceiver = new GameWelcomeReceiver()
+  second.socket.on('close', () => welcomeReceiver.close())
   const observePause = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => second.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-gameplay-pause') pauseMessages.push(message)
   }
   second.socket.on('message', observePause)
@@ -2704,8 +2726,12 @@ test('game host pauses a leveling player and authoritatively books the offered s
   assert.deepEqual(client.welcome.snapshot.levelUpBarrier?.pendingPlayerIds, [playerId])
 
   let gameplayPauseMessages = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  client.socket.on('close', () => welcomeReceiver.close())
   const observePause = (data: WebSocket.RawData) => {
-    if (decodeServerGameMessage(data.toString()).type === 'server-gameplay-pause') {
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => client.socket.send(payload))
+    if (receivedMessage === null) return
+    if (receivedMessage.type === 'server-gameplay-pause') {
       gameplayPauseMessages += 1
     }
   }
@@ -2827,8 +2853,12 @@ test('multiplayer SkillPicker holds through final close then resumes without a t
   context.after(() => second.socket.off('message', countSecondCheckpoint))
 
   let graceMessages = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  first.socket.on('close', () => welcomeReceiver.close())
   const observeGrace = (data: WebSocket.RawData) => {
-    if (decodeServerGameMessage(data.toString()).type === 'server-gameplay-resume-grace') {
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => first.socket.send(payload))
+    if (receivedMessage === null) return
+    if (receivedMessage.type === 'server-gameplay-resume-grace') {
       graceMessages += 1
     }
   }
@@ -2989,8 +3019,12 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   Object.assign(current, grantGameSimulationPlayerExperience(withCharm, playerId, 300))
   const firstOffer = getPlayerProgression(host.state(), playerId).pendingOffer!
   let intermediateCheckpointCount = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  client.socket.on('close', () => welcomeReceiver.close())
   const countIntermediateCheckpoint = (data: WebSocket.RawData) => {
-    const message = materializeServerMessage(client.socket, decodeServerGameMessage(data.toString()))
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => client.socket.send(payload))
+    if (receivedMessage === null) return
+    const message = materializeServerMessage(client.socket, receivedMessage)
     if (message.type === 'server-save-checkpoint') intermediateCheckpointCount += 1
   }
   client.socket.on('message', countIntermediateCheckpoint)
@@ -3266,6 +3300,37 @@ test('Boneyard host authorizes HUD concentration replacement only for the addres
   assert.deepEqual(await pong, { type: 'server-pong', nonce: 84 })
 })
 
+test('large welcome holds live snapshots and rejects acknowledgements for unsent offsets', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    createSimulation: () => createGameSimulation({}, {
+      hubStudentPopulation: createHubStudentFixturePopulation({ count: 256, seed: 0x712a }),
+    }),
+  })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  context.after(() => closeSocket(socket))
+  const messages: ServerGameMessage[] = []
+  socket.on('message', data => messages.push(decodeServerGameMessage(data.toString())))
+  socket.send(encodeGameMessage({ type: 'client-hello', protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret', character: FIRST_CHARACTER,
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false, enhancedEffects: true,
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true } }))
+  await waitFor(() => messages.filter(message => message.type === 'server-welcome-chunk').length === GAME_STRING_CHUNK_WINDOW)
+  await new Promise(resolve => setTimeout(resolve, 120))
+  assert.equal(messages.filter(message => message.type === 'server-welcome-chunk').length, GAME_STRING_CHUNK_WINDOW)
+  assert.equal(messages.some(message => message.type === 'server-snapshot'), false)
+  socket.send(encodeGameMessage({ type: 'client-welcome-chunk-ack', nextOffset: 1 }))
+  await waitFor(() => messages.some(message => message.type === 'server-disconnect'))
+  const failure = messages.find(message => message.type === 'server-disconnect')
+  assert.equal(failure?.type, 'server-disconnect')
+  if (failure?.type === 'server-disconnect') {
+    assert.equal(failure.code, 'invalid-message')
+    assert.match(failure.reason, /exceeds a sent chunk/)
+  }
+})
+
 test('game host accepts an empty deterministic Hub fixture factory', async (context) => {
   let factoryCalls = 0
   const host = await startGameHost({
@@ -3473,12 +3538,18 @@ test('game host closes an unacknowledged recovery without freezing a healthy pee
 
   const stalledFrames: ServerSnapshotMessage[] = []
   const healthyFrames: ServerSnapshotMessage[] = []
+  const welcomeReceiver = new GameWelcomeReceiver()
+  stalled.socket.on('close', () => welcomeReceiver.close())
   stalled.socket.on('message', data => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => stalled.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-snapshot') stalledFrames.push(message)
   })
+  const welcomeReceiver2 = new GameWelcomeReceiver()
+  healthy.socket.on('close', () => welcomeReceiver2.close())
   healthy.socket.on('message', data => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver2.receivePayload(data.toString(), payload => healthy.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-snapshot') healthyFrames.push(message)
   })
   await waitFor(() => stalledFrames.length > 0 && healthyFrames.length > 0)
@@ -3523,14 +3594,21 @@ test('game host bounds a slow player before baseline eviction while healthy peer
   const stalledSnapshots: ServerSnapshotMessage[] = []
   const healthySnapshots: ServerSnapshotMessage[] = []
   stalled.stopSnapshotAcknowledgements()
+  const welcomeReceiver = new GameWelcomeReceiver()
+  stalled.socket.on('close', () => welcomeReceiver.close())
   stalled.socket.on('message', (data) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => stalled.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-snapshot') stalledSnapshots.push(message)
   })
+  const welcomeReceiver2 = new GameWelcomeReceiver()
+  healthy.socket.on('close', () => welcomeReceiver2.close())
   healthy.socket.on('message', (data) => {
+    const receivedMessage = welcomeReceiver2.receivePayload(data.toString(), payload => healthy.socket.send(payload))
+    if (receivedMessage === null) return
     const message = materializeServerMessage(
       healthy.socket,
-      decodeServerGameMessage(data.toString()),
+      receivedMessage,
     )
     if (message.type === 'server-snapshot') healthySnapshots.push(message)
   })
@@ -5165,8 +5243,12 @@ test('host retains the profile and removes only the continuation on Game Over', 
   assert.equal(archives[0]?.loadedBoneyard.runId, host.loadedBoneyard()?.runId)
 
   let laterProgress = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  client.socket.on('close', () => welcomeReceiver.close())
   const countProgress = (data: WebSocket.RawData) => {
-    const message = materializeServerMessage(client.socket, decodeServerGameMessage(data.toString()))
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => client.socket.send(payload))
+    if (receivedMessage === null) return
+    const message = materializeServerMessage(client.socket, receivedMessage)
     if (message.type === 'server-save-checkpoint' && message.reason === 'progress') {
       laterProgress += 1
     }
@@ -5415,8 +5497,12 @@ test('Submit Runs independently gates each party member receipt and Memoratorium
   await new Promise(resolve => setTimeout(resolve, 20))
 
   let secondReceiptCount = 0
+  const welcomeReceiver = new GameWelcomeReceiver()
+  second.socket.on('close', () => welcomeReceiver.close())
   const countSecondReceipt = (payload: WebSocket.RawData) => {
-    if (decodeServerGameMessage(payload.toString()).type === 'server-leaderboard-receipt') {
+    const receivedMessage = welcomeReceiver.receivePayload(payload.toString(), payload => second.socket.send(payload))
+    if (receivedMessage === null) return
+    if (receivedMessage.type === 'server-leaderboard-receipt') {
       secondReceiptCount += 1
     }
   }
@@ -5841,8 +5927,12 @@ async function join(
 }
 
 function installSnapshotAcknowledgements(socket: WebSocket): () => void {
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   const acknowledgeSnapshots = (data: WebSocket.RawData) => {
-    materializeServerMessage(socket, decodeServerGameMessage(data.toString()))
+    const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (receivedMessage === null) return
+    materializeServerMessage(socket, receivedMessage)
   }
   socket.on('message', acknowledgeSnapshots)
   return () => socket.off('message', acknowledgeSnapshots)
@@ -6173,8 +6263,11 @@ function collectChatMessages(socket: WebSocket): {
   stop: () => void
 } {
   const messages: TestChatMessage[] = []
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   const receive = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-chat' || message.type === 'server-chat-rejected') {
       messages.push(message)
     }
@@ -6318,8 +6411,12 @@ function deploymentMessages(socket: WebSocket): Promise<{
       cleanup()
       reject(new Error('timed out waiting for deployment messages'))
     }, 3_000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data: WebSocket.RawData) => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (message === null) return
       if (message.type === 'server-save-checkpoint') checkpoint = message
       if (message.type === 'server-deployment-restart') restart = message
       if (checkpoint && restart && checkpoint.sequence === restart.checkpointSequence) {
@@ -6332,6 +6429,8 @@ function deploymentMessages(socket: WebSocket): Promise<{
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)
@@ -6348,8 +6447,12 @@ function leaveSaveMessages(socket: WebSocket, requestId: number): Promise<{
   return new Promise((resolve, reject) => {
     let checkpoint: Extract<ServerGameMessage, { type: 'server-save-checkpoint' }> | null = null
     const timeout = setTimeout(() => fail(new Error('timed out waiting for leave save')), 3_000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data: WebSocket.RawData) => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (message === null) return
       if (message.type === 'server-save-checkpoint') checkpoint = message
       if (
         message.type === 'server-save-before-leave'
@@ -6365,6 +6468,8 @@ function leaveSaveMessages(socket: WebSocket, requestId: number): Promise<{
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)
@@ -6390,10 +6495,15 @@ function nextMessage(
       cleanup()
       reject(new Error('timed out waiting for game message'))
     }, 10_000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data: WebSocket.RawData) => {
+      const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (receivedMessage === null) return
       const message = materializeServerMessage(
         socket,
-        decodeServerGameMessage(data.toString()),
+        receivedMessage,
       )
       if (!predicate(message)) return
       cleanup()
@@ -6404,6 +6514,8 @@ function nextMessage(
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)

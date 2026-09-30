@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -8,7 +9,6 @@ import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { MAX_PLAYER_LEVEL, MAX_PLAYER_EXPERIENCE, NATIVE_LEVEL_THRESHOLDS } from '../src/game/core-kernels/player-progression.ts'
 import { grantPlayerEntitySkillRanks, setPlayerEntityMana } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { enterElementHub, enterBoneyard, openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 
 // Optional original browser-game-save.json stays private; only its hash and
@@ -56,9 +56,12 @@ async function journey(name, original) {
     page.on('requestfailed', r => errors.requests.push(`${r.url()}: ${r.failure()?.errorText}`))
     page.on('websocket', socket => {
       socket.on('socketerror', e => errors.wire.push(String(e)))
+      const welcomeReceiver = new GameWelcomeReceiver()
+      socket.on('close', () => welcomeReceiver.close())
       socket.on('framereceived', ({ payload }) => {
         try {
-          const m = decodeServerGameMessage(String(payload))
+          const m = welcomeReceiver.receivePayload(String(payload), () => {})
+          if (m === null) return
           if (m.type === 'server-error') errors.wire.push(m.message)
           if (m.type === 'server-snapshot') snapshots.push({ at: performance.now(), tick: m.frame.tick })
         } catch (e) { errors.wire.push(e.message) }

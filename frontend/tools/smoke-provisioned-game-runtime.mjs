@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 
 import { WebSocket } from 'ws'
@@ -6,7 +7,6 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../src/game/protocol/game-protocol-contract.ts'
 import {
-  decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 import {
@@ -108,8 +108,12 @@ function nextMessage(socket, predicate) {
       cleanup()
       reject(new Error('timed out waiting for game message'))
     }, 5000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data) => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (message === null) return
       if (!predicate(message)) return
       cleanup()
       resolve(message)
@@ -119,6 +123,8 @@ function nextMessage(socket, predicate) {
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)
@@ -134,10 +140,15 @@ function nextSnapshot(socket, replication, predicate) {
       cleanup()
       reject(new Error('timed out waiting for game snapshot'))
     }, 5000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data) => {
       let message
       try {
-        message = decodeServerGameMessage(data.toString())
+        const receivedMessage = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+        if (receivedMessage === null) return
+        message = receivedMessage
         if (message.type !== 'server-snapshot') return
         if (message.sequence <= replication.lastSequence) return
         const snapshot = replication.reconstructor.apply(message.frame, message.sequence)
@@ -167,6 +178,8 @@ function nextSnapshot(socket, replication, predicate) {
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)

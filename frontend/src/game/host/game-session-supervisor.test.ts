@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import test from 'node:test'
@@ -10,7 +11,6 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../protocol/game-protocol-contract.ts'
 import {
-  decodeServerGameMessage,
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'
 import type {
@@ -1268,8 +1268,11 @@ test('first returning nonleader recovers the updated party run under the origina
     ],
   )
   let countdownStartedBeforeLeader = false
+  const welcomeReceiver = new GameWelcomeReceiver()
+  recoveredMember.socket.on('close', () => welcomeReceiver.close())
   const observeEarlyCountdown = (data: WebSocket.RawData) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => recoveredMember.socket.send(payload))
+    if (message === null) return
     if (
       message.type === 'server-gameplay-resume-grace'
       && message.grace?.remainingMs !== null
@@ -2048,8 +2051,11 @@ function messageQueue(socket: WebSocket) {
     resolve: (message: ServerGameMessage) => void
     timeout: ReturnType<typeof setTimeout>
   }> = []
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   socket.on('message', (data) => {
-    let message = decodeServerGameMessage(data.toString())
+    let message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-save-checkpoint') checkpointReceiver.acceptComplete(message)
     if (message.type === 'server-save-checkpoint-chunk') {
       checkpointProgress = `${message.sequence}:${message.offset + message.data.length}/${message.totalLength}`

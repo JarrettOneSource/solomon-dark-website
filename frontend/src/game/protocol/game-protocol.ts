@@ -1,8 +1,10 @@
+import { GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from './game-protocol-contract.ts'
 import { NATIVE_TUTORIAL_SURFACE_ACTIONS } from '../core-kernels/native-tutorial.ts'
 import { isWizardDiscipline, isWizardElement } from '../core-kernels/player-character.ts'
 import { isNativeBeltSkill, nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 import { SAVE_CHECKPOINT_CHUNK_CHARACTERS } from './game-save-checkpoint-transfer.ts'
+import { GAME_STRING_CHUNK_CHARACTERS } from './game-string-transfer.ts'
 import { hubInventoryAction } from './codecs/economy.ts'
 import { hubPlayerActivity } from './codecs/hub.ts'
 import {
@@ -486,6 +488,11 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       requestId: luaRequestId(value.requestId),
     }
   }
+  if (value.type === 'client-welcome-chunk-ack') {
+    onlyKeys(value, 'message', ['type', 'nextOffset'])
+    return { type: 'client-welcome-chunk-ack',
+      nextOffset: integerWithin(value.nextOffset, 'nextOffset', 1, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES) }
+  }
   if (value.type === 'client-save-checkpoint-chunk-ack') {
     onlyKeys(value, 'message', ['type', 'sequence', 'nextOffset'])
     return {
@@ -510,6 +517,16 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
 
 export function decodeServerGameMessage(payload: string): ServerGameMessage {
   const value = parseObject(payload)
+  if (value.type === 'server-welcome-chunk') {
+    onlyKeys(value, 'message', ['type', 'data', 'offset', 'totalLength'])
+    const totalLength = integerWithin(value.totalLength, 'totalLength', 1, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES)
+    const offset = integerWithin(value.offset, 'offset', 0, totalLength - 1)
+    const data = limitedString(value.data, 'data', GAME_STRING_CHUNK_CHARACTERS)
+    if (data.length === 0 || offset + data.length > totalLength) {
+      throw new GameProtocolError('Welcome chunk exceeds its declared length')
+    }
+    return { type: 'server-welcome-chunk', data, offset, totalLength }
+  }
   if (value.type === 'server-welcome') {
     onlyKeys(value, 'message', [
       'type',

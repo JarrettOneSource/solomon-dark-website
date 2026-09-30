@@ -1,5 +1,76 @@
 # 2026-08-21 — Shared-Hub edge routing and diagnostic correlation closure
 
+## 2026-09-30 — Report 71 saved-game welcome delivery
+
+Task `4fcac09e` starts from submitted diagnostic
+`2adc19a2-512d-4416-8dfd-700e4b886fc0`, not Report 70's different Hail
+clock failure. Its retained 1,120-byte ZIP has SHA-256
+`283de0cd08bfb27c1032436f884fa15e1632fcc14c93df1225a2c275553c26cb`.
+Protocol 141 / `engine-sp9onSBI.js` resumed into `shared-hub`, opened the
+transport at 16:56:28.042 UTC on September 29, and reported the five-second
+handshake timeout at 16:56:33.043. The authoritative host authenticated the
+same Firestorm Earth/Mind wizard at 16:56:29.546 without a restore exception;
+it then reached eight unacknowledged snapshots. The close carrying that exact
+reason reached the proxy at 16:56:56.759.
+
+The same no-input connection retained run archive
+`e111969a-1b6c-431c-ad85-23449e0552cd`, run
+`32795572ee35fbf4463462bf3bdd91e5`, revision
+`8c46630927445c4f118929e26285b5b62d745e4f`, tick 585815, with zero
+simulation steps. Its 198,909 compressed bytes hash to
+`6da0f60b4bd121ed3790fa3c654dd27a2a45961d0afcc76b1648be101fe66378`.
+The archive has 238 secondary actors: three Storm Clouds, four Leviathans,
+eight appendages, one Golem, 198 Storm Drops, five Ether Fades, three Ether
+Bolts, and sixteen Leviathan Motes, plus two primary transients. It does not
+prove a 1,000-live-Tornado population. The current cloud slot and later DB
+backup are different runs and are not substitutes for this connection.
+
+An operator-private owner save reconstructed by the original revision's
+existing save producer preserves that captured world; it omits production
+rejoin capabilities for the isolated test. It is 2,453,889 bytes, SHA-256
+`d3b19089b88e06138cb43c918151b39c134c3244a5df9eac70f8d28cb799d648`.
+The original and current public supervisor, protocol decoder and client
+session admit it in about 208/210 ms on the coordinated M5 SSD, with no
+materialization exception. The full welcome is about 1.25 MB of logical text.
+A controlled 20 KiB/s downstream TCP relay still delivers bytes, but the
+unchanged current client rejects at five seconds after forwarding 98,535
+wire bytes, before WebSocket exposes the complete welcome. This proves a
+valid saved-world delivery failure, rather than malformed actors or a slow
+simulation step. Historical bandwidth, compressed packet bytes and the
+original browser-held document were not retained; this reproduction does
+not establish those missing historical measurements.
+
+### Boundary and complete affected membership
+
+This is a Website bootstrap/transport contract, with no retail network
+protocol to port. Native save ownership and full-world revival remain under
+ledger 110's sole loader contract. StormCloud/Tornado construction, update,
+RNG, rain children, fade, light and composite presentation remain under
+ledgers 083/084/121; no actor, rank, population or lifetime is removed or
+changed. The captured world remains authoritative and strictly validated.
+
+| Member | Owner | Investigation disposition and acceptance |
+| --- | --- | --- |
+| small full welcome | host / protocol / client and observer | preserve direct complete message; normal new-game and Hub admission |
+| large welcome, all player/observer and standalone/shared/private branches | bounded string transfer / host | recovered-pending-port; reuse existing checkpoint chunk size/window, acknowledge bounded progress, retain one complete logical welcome |
+| welcome decode/materialization | client and observer | recovered-pending-port; reject malformed, mismatched or interrupted transfers before publishing state |
+| initial sidebands and snapshot baseline | host | recovered-pending-port; preserve order and hold ordinary snapshots until welcome is acknowledged |
+| deadline, cancellation, stale/invalid/late acknowledgement, disconnect | transfer and transport owners | recovered-pending-port; five-second no-progress bound, release partial data and timers, exact offset validation |
+| save checkpoint chunks, atomic leave/deployment saves and coalescing | checkpoint transfer / host | preserve existing semantics while sharing the bounded string primitive; public regressions |
+| local/cloud/legacy save, new-game/resume/rejoin, strict admission and integrity | existing save/provisioner owners | verified-existing; exact archived owner state plus save/host regressions and built Last Game journey |
+| TCP/TLS/compression, supervisor ticket and child lifetime | existing adapters / supervisor | verified-existing; actual transport/proxy integration, no invented retail protocol or retry |
+| native actors, spells, economy, profile and world clocks | native simulation/save owners | verified-existing; no gameplay correction justified by this transport finding |
+
+The implementation boundary is the shared string transfer primitive, welcome
+messages/codec, authoritative publication order, client/observer bootstrap and
+public regressions. Protocol changes for the new acknowledged envelope;
+save data remains under its existing schema. No deadline inflation, silent
+restore retry, actor stripping, clock clamping or admission relaxation is
+justified. Final dispositions require the exact built re-entry, failure and
+round-trip receipts, the unchanged full Website gate, publication and the
+maintained deployment; they are not claimed by the investigation above.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: New Game reached the shared-Hub admission API, then

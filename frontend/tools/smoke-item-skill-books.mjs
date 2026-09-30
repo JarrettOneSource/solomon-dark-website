@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -9,7 +10,6 @@ import { NATIVE_SKILL_CATALOG } from '../src/game/core-kernels/player-progressio
 import { getPlayerEconomy, getPlayerSkillBook, getPlayerProgression } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerEconomy, restorePlayerEntityHealth } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 import { enterElementHub, enterBoneyard, openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 import { observeGoldPlacementWire } from './smoke-loot-gold-placement.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
@@ -58,9 +58,12 @@ async function journey(scenario) {
       })
       page.on('websocket', socket => {
         socket.on('socketerror', error => errors.wire.push(String(error)))
+        const welcomeReceiver = new GameWelcomeReceiver()
+        socket.on('close', () => welcomeReceiver.close())
         socket.on('framereceived', ({ payload }) => {
           try {
-            const message = decodeServerGameMessage(String(payload))
+            const message = welcomeReceiver.receivePayload(String(payload), () => {})
+            if (message === null) return
             if (message.type === 'server-error') errors.wire.push(message.message)
           } catch (error) { errors.wire.push(error.message) }
         })

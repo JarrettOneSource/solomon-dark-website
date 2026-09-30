@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
@@ -24,7 +25,6 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../src/game/protocol/game-protocol-contract.ts'
 import {
-  decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 import { PAUSE_MENU_ACTION_BOUNDS } from '../src/game/pause-menu-contract.ts'
@@ -212,8 +212,11 @@ try {
   assert.equal(host.capacityParticipantCount(), 2)
 
   const modalPauseEdges = []
+  const welcomeReceiver = new GameWelcomeReceiver()
+  peer.socket.on('close', () => welcomeReceiver.close())
   const observeModalPause = (data) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => peer.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-gameplay-pause') modalPauseEdges.push(message.pause?.source ?? null)
   }
   peer.socket.on('message', observeModalPause)
@@ -336,8 +339,11 @@ try {
   ).split(',').includes(playerId), peer.welcome.playerId)
 
   const hubPauseEdges = []
+  const welcomeReceiver2 = new GameWelcomeReceiver()
+  peer.socket.on('close', () => welcomeReceiver2.close())
   const observeHubPause = (data) => {
-    const message = decodeServerGameMessage(data.toString())
+    const message = welcomeReceiver2.receivePayload(data.toString(), payload => peer.socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-gameplay-pause') hubPauseEdges.push(message.pause)
   }
   peer.socket.on('message', observeHubPause)
@@ -1089,8 +1095,12 @@ function nextRawMessage(socket, predicate) {
       cleanup()
       reject(new Error('timed out waiting for raw peer message'))
     }, 30_000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data) => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (message === null) return
       if (!predicate(message)) return
       cleanup()
       resolve(message)
@@ -1100,6 +1110,8 @@ function nextRawMessage(socket, predicate) {
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)

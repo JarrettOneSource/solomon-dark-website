@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 
@@ -14,7 +15,6 @@ import {
   GAME_PROTOCOL_VERSION,
 } from '../src/game/protocol/game-protocol-contract.ts'
 import {
-  decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 
@@ -309,8 +309,12 @@ function nextMessage(socket, predicate) {
       cleanup()
       reject(new Error('timed out waiting for raw client message'))
     }, 30_000)
+    const welcomeReceiver = new GameWelcomeReceiver()
+    const closeWelcome = () => welcomeReceiver.close()
+    socket.on('close', closeWelcome)
     const receive = (data) => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+      if (message === null) return
       if (!predicate(message)) return
       cleanup()
       resolve(message)
@@ -320,6 +324,8 @@ function nextMessage(socket, predicate) {
       reject(error)
     }
     const cleanup = () => {
+      socket.off('close', closeWelcome)
+      welcomeReceiver.close()
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)
