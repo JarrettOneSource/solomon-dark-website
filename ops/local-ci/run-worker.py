@@ -105,6 +105,12 @@ def worker_environment(root, config):
     return environment
 
 
+def group_active(group_id):
+    rows = subprocess.check_output(['/bin/ps', '-axo', 'pgid=,stat='], text=True).splitlines()
+    return any(int(parts[0]) == group_id and not parts[1].startswith('Z')
+               for row in rows if len(parts := row.split()) == 2)
+
+
 def stop_group(child):
     """A finished shell can still have owned compiler/browser descendants."""
     try:
@@ -114,16 +120,17 @@ def stop_group(child):
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         child.poll()
-        try:
-            os.killpg(child.pid, 0)
-        except ProcessLookupError:
+        # kill(..., 0) also succeeds for zombies; only live descendants own work.
+        if not group_active(child.pid):
             return
-        time.sleep(0.05)
+        time.sleep(0.1)
     try:
         os.killpg(child.pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    child.wait()
+    child.wait(timeout=5)
+    if group_active(child.pid):
+        raise RuntimeError('Owned deployment processes remain active after forced shutdown')
 
 
 def run_once(root):
@@ -190,7 +197,7 @@ def run_once(root):
                         stop_group(child)
             state = 'cancelled' if cancelled else 'success' if code == 0 else 'failed'
             with log_path.open(errors='replace') as log:
-                tail = [line[:2048] for line in deque(log, maxlen=40)]
+                tail = [line.rstrip('\n')[:2047] + '\n' for line in deque(log, maxlen=40)]
             summary = {'state': state, 'invocation_id': invocation, 'started_at_utc': started,
                        'finished_at_utc': now(), 'exit_code': code,
                        'tail': tail}
@@ -206,7 +213,8 @@ def run_once(root):
         finally:
             for number, handler in handlers.items():
                 signal.signal(number, handler)
-            lease.release()
+            if child is None or not group_active(child.pid):
+                lease.release()
         return result
 
 

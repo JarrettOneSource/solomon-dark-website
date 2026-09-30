@@ -25,8 +25,9 @@ variables select the SSD.
 The exact source runs the unchanged all-mode `./scripts/validate.sh`. Clean
 source/index identity and a fresh main check precede packaging. The macOS SDK
 publishes `linux-x64` managed dependencies with no platform apphost; native
-SQLite and the separately pinned Linux x64 Node executable must be ELF64
-x86-64. A Mac executable or foreign runtime dependency target rejects the
+SQLite must be ELF64 x86-64. NFO keeps its existing verified pinned Linux Node
+runtime, referenced by the unchanged game unit. A Mac native library or foreign
+runtime dependency target rejects the
 artifact before upload. The release includes the existing Caddy site, game
 unit, ML checkpoint and complete maintained worker components.
 
@@ -50,6 +51,7 @@ job or scheduler restart. Completed source/build/artifact trees and full success
 logs are deleted. `state/status.json` retains bounded diagnostics, while
 `state/last-success` and `state/failed-target` preserve the deployed or suppressed
 revision. A remote cutover failure suppresses repeated drains at the same SHA.
+Cached artifacts for superseded targets are removed on the next fresh main read.
 
 Install from an accepted source tree after staging the pinned SSD tools,
 protected configuration and authorized SSH identity:

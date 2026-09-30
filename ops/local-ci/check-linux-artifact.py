@@ -16,7 +16,7 @@ def require_linux_x64(path):
 
 
 def check_release(root):
-    required = [root / 'Runtime/node', root / 'libe_sqlite3.so']
+    required = [root / 'libe_sqlite3.so']
     for path in required:
         if not path.is_file():
             raise ValueError(f'Linux release is missing {path.relative_to(root)}')

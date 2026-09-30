@@ -23,6 +23,15 @@ installer = load('ci_installer', 'install.py')
 artifact = load('ci_artifact', 'check-linux-artifact.py')
 
 
+def worker_fixture(root):
+    root.mkdir()
+    (root / 'current').mkdir()
+    (root / 'tools/bash/bin').mkdir(parents=True)
+    (root / 'tools/bash/bin/bash').symlink_to('/bin/bash')
+    (root / 'config.json').write_text(json.dumps({'volume_uuid': installer.mount_information()['VolumeUUID'], 'environment': {}}))
+    return root / 'current/deploy-main.sh'
+
+
 class ComputeOwnershipTests(unittest.TestCase):
     def test_foreign_busy_lease_is_neither_changed_nor_released(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -122,12 +131,7 @@ class MacInstallationTests(unittest.TestCase):
         import time
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'ci'
-            root.mkdir()
-            (root / 'current').mkdir()
-            (root / 'tools/bash/bin').mkdir(parents=True)
-            (root / 'tools/bash/bin/bash').symlink_to('/bin/bash')
-            (root / 'config.json').write_text(json.dumps({'volume_uuid': installer.mount_information()['VolumeUUID'], 'environment': {}}))
-            worker = root / 'current/deploy-main.sh'
+            worker = worker_fixture(root)
             worker.write_text('echo $$ > "$SDR_DEPLOY_ROOT/child.pid"\ntrap "exit 0" TERM\nsleep 300 &\necho $! > "$SDR_DEPLOY_ROOT/grandchild.pid"\nwait\n')
             lease = Path(directory) / 'lease'
             code = ('import importlib.util,pathlib,sys; '
@@ -138,9 +142,9 @@ class MacInstallationTests(unittest.TestCase):
             child = subprocess.Popen([sys.executable, '-c', code, str(OPS / 'run-worker.py'), str(root), str(lease)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 end = time.monotonic() + 10
-                while not (root / 'child.pid').exists() and child.poll() is None and time.monotonic() < end:
+                while not (root / 'grandchild.pid').exists() and child.poll() is None and time.monotonic() < end:
                     time.sleep(0.02)
-                self.assertTrue((root / 'child.pid').exists())
+                self.assertTrue((root / 'grandchild.pid').exists())
                 child.send_signal(signal.SIGTERM)
                 output, errors = child.communicate(timeout=10)
                 self.assertEqual(child.returncode, 143, errors.decode())
@@ -149,11 +153,44 @@ class MacInstallationTests(unittest.TestCase):
                 self.assertEqual(status['state'], 'cancelled')
                 self.assertEqual(status['exit_code'], 143)
                 grandchild = int((root / 'grandchild.pid').read_text())
-                self.assertNotEqual(subprocess.run(['/bin/kill', '-0', str(grandchild)], capture_output=True).returncode, 0)
+                result = subprocess.run(['/bin/ps', '-p', str(grandchild), '-o', 'stat='], capture_output=True, text=True)
+                self.assertTrue(not result.stdout.strip() or result.stdout.strip().startswith('Z'), result.stdout)
+                self.assertFalse(runner.group_active(int((root / 'child.pid').read_text())))
             finally:
                 if child.poll() is None:
                     child.kill()
                     child.communicate()
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'native macOS process lifecycle')
+    def test_success_stops_remaining_descendants_before_releasing_compute(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ci'
+            worker = worker_fixture(root)
+            worker.write_text('sleep 300 &\necho $$ > "$SDR_DEPLOY_ROOT/group.pid"\nexit 0\n')
+            lease = Path(directory) / 'lease'
+            with patch.object(runner, 'LEASE', lease):
+                self.assertEqual(runner.run_once(root), 0)
+            self.assertFalse(runner.group_active(int((root / 'group.pid').read_text())))
+            self.assertFalse(lease.exists())
+            self.assertFalse((root / 'logs/current.log').exists())
+            self.assertEqual(json.loads((root / 'state/status.json').read_text())['state'], 'success')
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'native macOS failure lifecycle')
+    def test_failed_worker_releases_compute_and_retains_bounded_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ci'
+            worker = worker_fixture(root)
+            worker.write_text('for ((i=0;i<100;i++)); do printf "%3000s\\n" error; done\nexit 7\n')
+            lease = Path(directory) / 'lease'
+            with patch.object(runner, 'LEASE', lease):
+                self.assertEqual(runner.run_once(root), 7)
+            self.assertFalse(lease.exists())
+            status = json.loads((root / 'state/status.json').read_text())
+            self.assertEqual(status['state'], 'failed')
+            self.assertEqual(status['exit_code'], 7)
+            self.assertEqual(len(status['tail']), 40)
+            self.assertTrue(all(len(line) <= 2048 for line in status['tail']))
+            self.assertLessEqual((root / 'logs/current.log').stat().st_size, 40 * 2048)
 
 
 class ArtifactAdmissionTests(unittest.TestCase):
@@ -176,11 +213,9 @@ class ArtifactAdmissionTests(unittest.TestCase):
     def test_managed_release_target_and_required_sqlite_are_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / 'Runtime').mkdir()
             header = bytearray(64)
             header[:6] = b'\x7fELF\x02\x01'
             struct.pack_into('<H', header, 18, 62)
-            (root / 'Runtime/node').write_bytes(header)
             (root / 'libe_sqlite3.so').write_bytes(header)
             (root / 'Server.deps.json').write_text(json.dumps({'runtimeTarget': {'name': '.NETCoreApp,Version=v10.0/linux-x64'}}))
             self.assertEqual(artifact.check_release(root)['runtime'], 'linux-x64')

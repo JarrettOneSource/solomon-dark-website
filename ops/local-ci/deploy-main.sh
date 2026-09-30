@@ -204,6 +204,13 @@ target_game_unit_checksum="$(
 short_sha="${target_sha:0:12}"
 artifact="$artifact_root/$target_sha.tar.gz"
 checksum_file="$artifact.sha256"
+# Only the current main target can be reused; preserve unrelated files in this directory.
+for cached in "$artifact_root"/*; do
+    [[ -f "$cached" && ! -L "$cached" ]] || continue
+    cached_name="${cached##*/}"
+    [[ "$cached_name" =~ ^([0-9a-f]{40})\.tar\.gz(\.sha256)?$ ]] || continue
+    [[ "${BASH_REMATCH[1]}" == "$target_sha" ]] || unlink -- "$cached"
+done
 
 deployed_sha="$(remote_deployed_sha)"
 live_caddy_checksum="$(remote_caddy_checksum)"
@@ -292,14 +299,12 @@ if [[ -z "$artifact_checksum" ]]; then
     for name in deploy-main.sh run-worker.py install.py; do
         install_file 0700 "$source_checkout/ops/local-ci/$name" "$publish_dir/Deploy/M5Worker/$name"
     done
-    install_file 0755 "$ci_root/tools/node-linux-x64/bin/node" "$publish_dir/Runtime/node"
     python3 "$source_checkout/ops/local-ci/check-linux-artifact.py" "$publish_dir"
 
     for required_file in \
         Deploy/M5Worker/deploy-main.sh \
         Deploy/M5Worker/run-worker.py \
         Deploy/M5Worker/install.py \
-        Runtime/node \
         Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
