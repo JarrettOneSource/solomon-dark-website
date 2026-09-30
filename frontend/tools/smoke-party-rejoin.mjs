@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -797,11 +798,14 @@ async function resolveAllOffers(client, acknowledgeSkillPickerGrace = true) {
 }
 
 function messageQueue(socket, label) {
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   const checkpointReceiver = new GameSaveCheckpointReceiver()
   const buffered = []
   const waiters = []
   socket.on('message', data => {
-    let message = JSON.parse(data.toString())
+    let message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-save-checkpoint') checkpointReceiver.acceptComplete(message)
     if (message.type === 'server-save-checkpoint-chunk') {
       const complete = checkpointReceiver.acceptChunk(message)

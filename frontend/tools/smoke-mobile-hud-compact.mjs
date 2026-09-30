@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -1252,10 +1253,13 @@ async function enterRawHub(displayName, element) {
 }
 
 function rawMessageQueue(socket) {
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   const pending = []
   const waiters = []
   socket.on('message', (data) => {
-    const message = JSON.parse(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message === null) return
     const index = waiters.findIndex((waiter) => waiter.predicate(message))
     if (index >= 0) {
       const [waiter] = waiters.splice(index, 1)

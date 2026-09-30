@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -970,6 +971,8 @@ async function enterRawHub(displayName, element) {
 }
 
 function rawMessageQueue(socket) {
+  const welcomeReceiver = new GameWelcomeReceiver()
+  socket.on('close', () => welcomeReceiver.close())
   const buffered = []
   const waiters = []
   const rejectWaiters = (error) => {
@@ -979,7 +982,8 @@ function rawMessageQueue(socket) {
     }
   }
   socket.on('message', (data) => {
-    const message = JSON.parse(data.toString())
+    const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message === null) return
     if (message.type === 'server-snapshot') {
       socket.send(JSON.stringify({
         type: 'client-snapshot-ack',

@@ -31,9 +31,6 @@ import {
   MAX_LUA_CONSOLE_CODE_LENGTH,
 } from '../protocol/game-protocol-limits.ts'
 import {
-  GameProtocolError,
-} from '../protocol/codecs/values.ts'
-import {
   decodeServerGameMessage,
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'

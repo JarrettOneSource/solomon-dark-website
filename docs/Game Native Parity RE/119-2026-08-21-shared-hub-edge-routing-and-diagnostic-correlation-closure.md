@@ -29,11 +29,11 @@ An operator-private owner save reconstructed by the original revision's
 existing save producer preserves that captured world; it omits production
 rejoin capabilities for the isolated test. It is 2,453,889 bytes, SHA-256
 `d3b19089b88e06138cb43c918151b39c134c3244a5df9eac70f8d28cb799d648`.
-The original and current public supervisor, protocol decoder and client
-session admit it in about 208/210 ms on the coordinated M5 SSD, with no
+The original revision and pre-fix `138b6544` public supervisor, protocol decoder
+and client session admit it in about 208/210 ms on the coordinated M5 SSD, with no
 materialization exception. The full welcome is about 1.25 MB of logical text.
 A controlled 20 KiB/s downstream TCP relay still delivers bytes, but the
-unchanged current client rejects at five seconds after forwarding 98,535
+pre-fix client rejects at five seconds after forwarding 98,535
 wire bytes, before WebSocket exposes the complete welcome. This proves a
 valid saved-world delivery failure, rather than malformed actors or a slow
 simulation step. Historical bandwidth, compressed packet bytes and the
@@ -49,26 +49,65 @@ RNG, rain children, fade, light and composite presentation remain under
 ledgers 083/084/121; no actor, rank, population or lifetime is removed or
 changed. The captured world remains authoritative and strictly validated.
 
-| Member | Owner | Investigation disposition and acceptance |
+| Member | Final implementation disposition | Owner and acceptance |
 | --- | --- | --- |
-| small full welcome | host / protocol / client and observer | preserve direct complete message; normal new-game and Hub admission |
-| large welcome, all player/observer and standalone/shared/private branches | bounded string transfer / host | recovered-pending-port; reuse existing checkpoint chunk size/window, acknowledge bounded progress, retain one complete logical welcome |
-| welcome decode/materialization | client and observer | recovered-pending-port; reject malformed, mismatched or interrupted transfers before publishing state |
-| initial sidebands and snapshot baseline | host | recovered-pending-port; preserve order and hold ordinary snapshots until welcome is acknowledged |
-| deadline, cancellation, stale/invalid/late acknowledgement, disconnect | transfer and transport owners | recovered-pending-port; five-second no-progress bound, release partial data and timers, exact offset validation |
-| save checkpoint chunks, atomic leave/deployment saves and coalescing | checkpoint transfer / host | preserve existing semantics while sharing the bounded string primitive; public regressions |
-| local/cloud/legacy save, new-game/resume/rejoin, strict admission and integrity | existing save/provisioner owners | verified-existing; exact archived owner state plus save/host regressions and built Last Game journey |
-| TCP/TLS/compression, supervisor ticket and child lifetime | existing adapters / supervisor | verified-existing; actual transport/proxy integration, no invented retail protocol or retry |
-| native actors, spells, economy, profile and world clocks | native simulation/save owners | verified-existing; no gameplay correction justified by this transport finding |
+| small full welcome | verified-already-at-parity | host / codec / player and observer; retain direct complete message; built New Game reaches Hub with zero chunks |
+| large welcome, all player/observer and standalone/shared/private branches | exact-ported | one host welcome publisher and bounded string sender; existing 8,192-character/four-chunk checkpoint window; strict player/observer regressions and authentic shared restore |
+| welcome decode/materialization | exact-ported | player and observer; publish only the complete strictly decoded welcome; reject malformed, mismatched, interrupted and late transfers |
+| initial sidebands and snapshot baseline | exact-ported | host; bounded ordered prefix and withheld ordinary snapshots until complete acknowledgement; actual host window/unsent-ack regression |
+| deadline, cancellation, stale/invalid/late acknowledgement, disconnect | exact-ported | transfer / transport owners; five seconds without new progress, strict sent-offset acknowledgements, partial/timer release; unit and controlled built stalled-UI checks |
+| save checkpoint chunks, atomic leave/deployment saves and coalescing | verified-already-at-parity | checkpoint / host; delegate the existing window to the shared primitive without changing sequence, pending-latest or atomic semantics; public checkpoint regressions and cloud/IndexedDB round trips |
+| local/cloud/legacy save, new-game/resume/rejoin, strict admission and integrity | verified-already-at-parity | existing save/provisioner owners; original schema-46 state migrates through current schema 47; cloud/IndexedDB Last Game and normal New Game, plus save/host/supervisor regressions |
+| direct Node socket collectors and browser welcome observers | exact-ported | canonical per-connection receiver; read-only browser taps do not send duplicate acknowledgements; in-page probes observe the logical welcome parsed by the real client |
+| raw wire byte/snapshot counters, outgoing input taps and logical JSON-parse instrumentation | out-of-system | these count frames or observe the client's already assembled payload; they neither admit peers nor consume a raw welcome as logical state |
+| TCP/TLS/compression, supervisor ticket and child lifetime | verified-already-at-parity | existing adapters / supervisor; real compiled transport and admission integration, no network protocol invented for retail and no restore retry |
+| native actors, spells, economy, profile and world clocks | verified-already-at-parity | existing native simulation/save owners and ledgers 083/084/110/121; no native data or gameplay correction justified by this transport finding |
 
 The implementation boundary is the shared string transfer primitive, welcome
 messages/codec, authoritative publication order, client/observer bootstrap and
 public regressions. Protocol changes for the new acknowledged envelope;
 save data remains under its existing schema. No deadline inflation, silent
 restore retry, actor stripping, clock clamping or admission relaxation is
-justified. Final dispositions require the exact built re-entry, failure and
-round-trip receipts, the unchanged full Website gate, publication and the
-maintained deployment; they are not claimed by the investigation above.
+justified. The implementation dispositions above close this Website bootstrap
+boundary; they do not claim a retail networking mechanism. The exact final
+all-mode Website gate, normal publication and maintained rollout remain
+separate acceptance prerequisites recorded in the Report 71 completion receipt.
+
+### Implemented contract and preliminary M5 acceptance
+
+Protocol 144 carries large welcomes in acknowledged bounded chunks. The
+logical welcome and save schema 47 stay unchanged. Only newly accepted chunks
+or newly acknowledged sent offsets renew the five-second inactivity deadline;
+stale acknowledgements cannot keep a stalled transfer alive. The host withholds
+ordinary snapshots and retains initial sideband order until completion. The
+player sends the final acknowledgement after strict welcome materialization;
+observer bootstrap retains its following Boneyard-loaded boundary. Failure,
+cancellation and disconnect release the partial string, queued prefix and timer.
+
+The authentic 20 KiB/s TCP reproduction now reaches `sessionReady` after
+10,562 ms, preserving tick 585815 and all 238 secondary actors without callback
+errors. A real built frontend/backend/supervisor cloud Last Game journey over
+a private HTTPS fixture completes its first welcome in 10,615 ms, in 153 chunks
+of at most 8,192 characters. It receives the exact captured tick, 238 secondary
+actors and two primary transients, then saves and leaves through the normal UI.
+A fresh browser context re-enters its updated cloud checkpoint and saves again.
+An anonymous IndexedDB journey repeats the legacy restore/save/leave/re-entry;
+normal New Game uses a small direct welcome and reaches the native Hub.
+Positive journeys have empty page, console, request, response, host and gateway
+error arrays. The private fixture pins only its own local TLS certificate inside
+the owned browser; production TLS and admission are unchanged.
+
+Stopping delivery after partial chunks still renders the exact handshake timeout,
+exposes no partial welcome and submits diagnostics through the built backend.
+The two expected console diagnostics name that intentionally induced timeout;
+all other error arrays stay empty. Six transfer/codec regressions plus the
+existing checkpoint/client suite passed 52 tests before the final raw-tool
+caller cutover, and the actual host rejects an unsent acknowledgement while
+holding the four-chunk window and live snapshots. Final source changes must
+pass the unchanged all-mode gate and built journeys again before publication.
+The historical missing wire/bandwidth/browser-save evidence remains missing;
+these measurements establish the corrected delivery contract, not a recovered
+measurement of the reporter's network or proof of the struck-through aside.
 
 
 ## Reported smell and parity question

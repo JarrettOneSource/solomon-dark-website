@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -86,9 +87,12 @@ try {
   })
   page.on('requestfailed', (request) => errors.requests.push(request.url()))
   page.on('websocket', (socket) => {
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('socketerror', (error) => errors.wire.push(String(error)))
     socket.on('framereceived', ({ payload }) => {
-      const message = JSON.parse(String(payload))
+      const message = welcomeReceiver.receivePayload(String(payload), () => {})
+      if (message === null) return
       const frame = message.type === 'server-welcome' ? message.snapshot
         : message.type === 'server-snapshot' ? message.frame : null
       if (frame) frames.push(frame)

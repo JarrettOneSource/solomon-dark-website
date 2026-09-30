@@ -64,17 +64,20 @@ test('welcome chunks expose one strictly decoded welcome and retain the ordered 
     sender.defer(sideband)
     assert.equal(completed, 0)
     for (let index = 0; index < wire.length; index += 1) {
-      const message = decodeServerGameMessage(wire[index]!)
+      const message = receiver.receivePayload(wire[index]!, payload => {
+        const acknowledgement = decodeClientGameMessage(payload)
+        assert.equal(acknowledgement.type, 'client-welcome-chunk-ack')
+        if (acknowledgement.type === 'client-welcome-chunk-ack') {
+          sender.acknowledge(acknowledgement.nextOffset)
+        }
+      })
+      if (message === null) continue
       if (message.type === 'server-pong') {
         assert.equal(completed, 1)
         continue
       }
-      const result = receiver.receive(message)
-      if (result.message !== null) {
-        assert.equal(result.message.type, 'server-welcome')
-        if (result.message.type === 'server-welcome') received.push(result.message)
-      }
-      if (result.nextOffset !== null) sender.acknowledge(result.nextOffset)
+      assert.equal(message.type, 'server-welcome')
+      if (message.type === 'server-welcome') received.push(message)
     }
     assert.deepEqual(received, [welcome])
     assert.equal(completed, 1)
@@ -153,7 +156,7 @@ function welcomeMessage(): ServerWelcomeMessage {
     snapshotRate: 20, sessionKind: 'standalone', cheatsEnabled: false,
     developerAccess: false, gameplayPause: null, gameplayResumeGrace: null,
     content: { manifestSha256: '0'.repeat(64), mods: [] }, modAssets: [], modCatalog: [],
-    boneyards: [], kernelParameters: { fixedTickSeconds: 0.01, movementAcceleration: 0.5,
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }], kernelParameters: { fixedTickSeconds: 0.01, movementAcceleration: 0.5,
       movementLaneCap: 5, movementRetention: 0.8, movementThresholdSquared: 0.01,
       playerRadius: 25 },
     snapshot: createGameSnapshot(createGameSimulation({ owner: character }), 'owner'),

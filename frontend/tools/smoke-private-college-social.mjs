@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -333,17 +334,12 @@ async function gamePage(label, { settings, token: accountToken, viewport }) {
     }
   })
   page.on('websocket', socket => {
+    const welcomeReceiver = new GameWelcomeReceiver()
+    socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
       const text = typeof payload === 'string' ? payload : payload.toString('utf8')
-      if (!text.includes('"server-welcome"')) return
-      try {
-        const message = JSON.parse(text)
-        if (message?.type === 'server-welcome' && message.observer !== true) {
-          welcomes.push(message)
-        }
-      } catch {
-        // The production protocol decoder remains the authority for malformed frames.
-      }
+      const message = welcomeReceiver.receivePayload(text, () => {})
+      if (message?.type === 'server-welcome' && message.observer !== true) welcomes.push(message)
     })
   })
   await page.route('**/deployment.json*', route => {

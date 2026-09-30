@@ -1,3 +1,4 @@
+import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -154,8 +155,11 @@ try {
         await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject) })
         const welcome = new Promise((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('raw player welcome timeout')), 10000)
+          const welcomeReceiver = new GameWelcomeReceiver()
+          socket.on('close', () => welcomeReceiver.close())
           socket.on('message', data => {
-            const message = JSON.parse(data.toString())
+            const message = welcomeReceiver.receivePayload(data.toString(), payload => socket.send(payload))
+            if (message === null) return
             if (message.type === 'server-welcome') { clearTimeout(timer); resolve(message) }
           })
         })

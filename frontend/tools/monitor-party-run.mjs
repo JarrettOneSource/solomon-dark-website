@@ -299,16 +299,22 @@ async function createClient(browser, name, element) {
     const NativeSocket = window.WebSocket
     const probe = { socket: null, playerId: null, party: null }
     window.__sdrSoak = probe
+    // The real client parses the complete logical welcome after assembling its chunks.
+    const nativeParse = JSON.parse
+    JSON.parse = function (...args) {
+      const message = nativeParse.apply(this, args)
+      if (message?.type === 'server-welcome') probe.playerId = message.playerId
+      return message
+    }
     window.WebSocket = class extends NativeSocket {
       constructor(...args) {
         super(...args)
         this.addEventListener('message', event => {
           if (typeof event.data !== 'string') return
           const prefix = event.data.slice(0, 100)
-          if (!prefix.includes('"type":"server-welcome"') && !prefix.includes('"type":"server-party-state"')) return
-          const message = JSON.parse(event.data)
-          if (message.type === 'server-welcome') { probe.socket = this; probe.playerId = message.playerId }
-          if (message.type === 'server-party-state') probe.party = message.state.party
+          if (prefix.includes('"type":"server-welcome"') || prefix.includes('"type":"server-welcome-chunk"')) probe.socket = this
+          if (!prefix.includes('"type":"server-party-state"')) return
+          probe.party = JSON.parse(event.data).state.party
         })
       }
     }
