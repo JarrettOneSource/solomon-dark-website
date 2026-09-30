@@ -196,7 +196,11 @@ function addInventorySectionHeader(
   addBitmapText(context, layer, label, header.font, centerX, baselineY, { tint: header.tint })
 }
 
-export function addBackpackFrame(context: RenderContext, layer: Container): void {
+export function addBackpackFrame(
+  context: RenderContext,
+  layer: Container,
+  caption: string,
+): Container {
   addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 513.5)
   addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1663.5, 513.5, -1, 1)
   addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 775.5, 1, -1)
@@ -206,14 +210,17 @@ export function addBackpackFrame(context: RenderContext, layer: Container): void
   addCenteredAtlasSprite(context, layer, 'UI', 71, 21, 809)
   addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 809)
   const header = HUB_INVENTORY_ROOT_CHROME.backpackHeader
+  const captionLayer = new Container({ label: 'native-inventory-backpack-caption', eventMode: 'none' })
+  layer.addChild(captionLayer)
   addInventorySectionHeader(
     context,
-    layer,
-    header.text,
+    captionLayer,
+    caption,
     header.centerX,
     header.frameTop,
     header.baselineY,
   )
+  return captionLayer
 }
 
 export function addChatPanel(context: RenderContext, layer: Container): void {

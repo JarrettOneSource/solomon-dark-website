@@ -6,6 +6,228 @@
 > grid's **Y offset**. Goodie construction and authoritative inventory ownership
 > are unaffected.
 
+## 2026-09-30 — Shared parent-cell implementation and local acceptance
+
+The approved candidate reuses `HubInventoryUi`'s return callback through both
+ordinary and service inventory actions. With no selected transfer item, primary
+pointer down returns one root; release is consumed so a held press cannot pop a
+second root after motion finishes. Native button Enter/Space and accessibility
+clicks share the action. Selected-item click-to-parent and captured drag routes
+remain intact. The ordinary grid now paints the extracted gold pad/UI-1/normal
+Sack composite, and the caption uses the existing root item name with its whole
+backplate hidden until the same discrete page model settles. No navigation
+duration, protocol, economy or save rule changed.
+
+The native-composite regression failed exactly 1/35 on the previous constant
+contract and passed 35/35 after the shared cutover. The focused Hub UI suite
+passed 128/128 with test type checking. Current production frontend/host build,
+bundle budget and frontend lint passed on the M5 SSD. An initial broad-smoke
+phase sample missed a short pre-existing Flyby tail; the harness now records
+the actual attribute transition rather than depending on catching that frame
+after a screenshot. Retained-canvas reveal ownership is awaited through the
+existing two-frame scene handoff. Responsive deselection uses transformed
+stage coordinates. These are harness repairs; no Flyby or scene architecture
+change was made.
+
+Real built desktop 1600x900 and touch 844x390 journeys each passed 14 first-cell
+returns and 56 total traversals: empty/filled/nested roots, Fomentius, Hagatha,
+Luthacus/storage, Shlorio pre-roll and result, and paused Boneyard. Every probe
+checks unchanged host backpack, one close cue, no error cue, correct settled
+root name, hidden moving caption, transition lock, and returning/reopening
+through public input. Desktop includes Enter, Space and held-pointer release;
+touch uses actual touchscreen taps. Current observed motion was
+368.8–377.3 ms desktop / 368.5–378.1 ms touch, with 2,450 moving-frame samples
+and empty page/console/failed-response arrays. The native arrow region has 212
+opaque gold pixels; reviewed current frames show the full Sack/pad/arrow and
+correct root headings.
+
+The existing real-server delivery-hold journey passed 45 transfer/equipment/
+storage/parent-drop/cancel/teardown cases, with zero changed pixel channels at
+the former source before acknowledgement. A new focused journey held nine
+real server messages while the parent return completed locally with an
+unchanged host backpack. Neither navigation nor presentation waits for an item
+acknowledgement. StoreGrid/storage transactions themselves are a separate
+owner; imported/stored Sacks in the shared player grid use this correction.
+
+All rows of the earlier navigation inventory now have a local disposition:
+affected first-cell input, supported input equivalents, parent composite and
+root caption are `exact-ported`; existing UI-47, authored height/Y/clock/clip,
+lock and teardown are `verified-already-at-parity`; item IDs/economy/protocol,
+stats swipes, Forge fire and separate belt/drop mutation owners remain
+`out-of-system` with their prior contracts retained. No browser approximation
+or caption unknown remains. These are local candidate results; the exact final
+unchanged canonical gate, publication and production rollout must be recorded
+in the external implementation receipt before closure.
+
+## 2026-09-30 — Approved parent-cell implementation: caption recovery
+
+The user approved the proved correction and actual maintained production
+deployment. Straightforward verified fixes no longer require another approval.
+The prior investigation/decision hold below remains dated evidence.
+
+Fresh M5 PE string/xref recovery found the sole `Backpack` literal at
+`0x007948F8`, referenced at `0x00556B13`. Full instruction recovery of
+`InventoryScreen` overlay/header owner `0x00556940` establishes the missing
+caption contract at `0x00556B01..0x00556D72`:
+
+- `InventoryScreen+0x168` is tested first; any active Sack traversal skips the
+  entire variable caption/backplate block. It does not preserve the previous
+  label or slide an incoming label.
+- With no traversal, the caption starts as `Backpack`. Current root `+0x158`
+  is read; a nonzero root UID at root `+0x04` selects its owner at root `+0x08`
+  and the ordinary item name getter at vtable `+0x1C`. This supplies the Sack's
+  own name, not a hard-coded `Sack of Goodies` label.
+- The existing native menu-font measure/draw path sizes UI record 4 around the
+  chosen caption. There is no depth, content-count, trader or world-kind name
+  substitution in this branch. UI row 4 is already the shared web header frame.
+- Update `0x00551D3A..0x00551D9D` clears the same motion flag at update 37 for
+  the 365-high stage. Restore the caption at that renderer tick, independently
+  of a later React timeout notification.
+
+Fresh data also drains the parent composite's item origin adjustment: doubles
+`0x007DE840=0` and `0x007856B8=18`. After drawing UI-1 at `[0,-12]`, scale
+`.65`, the ordinary Sack painter runs at the holder centre plus `[0,18]`,
+inside relative clip `[-35,-35,70,67]`. The quarter-alpha gold pad remains
+`[-30,-30,60,60]`, RGB `[.85,.73,.44]`; the Sack and arrow retain alpha one.
+
+Implementation boundary: reuse the current local return callback, the existing
+item name/root lookup, native atlas sprites, clipped item painter, discrete
+Sack offset clock and header renderer. Add first-press navigation with release
+deduplication; retain the selected-item click-to-transfer and captured drag
+routes. No change to page duration, economy, protocol or forge fire is needed.
+Candidate tests and complete member/browser/publication/deployment receipts
+will follow; this recovery does not claim an implementation already passed.
+
+## 2026-09-30 — Renewed Report 22: parent-cell action and navigation timing
+
+**Investigation / user-decision hold. No product remedy has been applied.**
+The September 24 vertical-motion correction remains valid. The renewed report
+identifies a different bag control: the kind-7 parent holder in cell zero,
+rather than the Game-owned UI-47 backpack at the bottom of the screen.
+
+### Evidence and causal model
+
+- The sealed retail image was rehashed on the M5 SSD: 0.72.5,
+  SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred base `0x00400000`. Fresh bounded LLVM disassembly used the existing
+  Command Line Tools, without a new Ghidra project or Windows/WSL execution.
+- `InventoryScreen` vtable `0x00794F54` routes pointer press at slot `+0x64`
+  to `0x0056F760`. At `0x0056FA6A..0x0056FA85`, kind 7 calls activation
+  `0x0056D920` immediately on the first press. The ordinary same-item
+  double-activation comparison is later at `0x0056FAA5..0x0056FACD`; it does
+  not gate this parent branch. Activation rejects motion while `+0x168` is
+  set, then pops the root stack at `+0x174/+0x184` for a parent return.
+- Return/open `0x0056DA3E..0x0056DA88` /
+  `0x0056DC26..0x0056DC6E` still use grid height and opposite directions.
+  Update `0x00551CDE..0x00551D9D` subtracts direction times ten from both Y
+  lanes, subtracts ten from the countdown, snaps the incoming page to zero,
+  changes the active page, retires the old page and clears the lock. The
+  prior 100-Hz clock and complete 220/295/365 height table remain applicable.
+  No easing, speed multiplier, queued return or reversal is authored here.
+- The complete reporter-labeled original clip, attachment
+  `1554349666370326598`, was decoded and all 120 frames reviewed on the M5 SSD.
+  Served bytes remain 692,779; SHA-256
+  `d76176255f7aab8d771fd18bfafd2421e088e8c1220f0549e102f5daeff0bae8`.
+  It shows empty-Sack entry and a return using the first-cell bag. Last
+  unchanged to first settled recorded-frame intervals are approximately
+  368 ms for each direction, consistent with the 37-update nominal 370-ms
+  contract. These are sampled video intervals, with about 33.45 ms between
+  ordinary frames; neither the input timestamp nor the engine clock was
+  recorded. The clip's native executable/version is not independently sealed.
+- Current Website source `24d0b9bcee7a05ba24e570bc80681775a2abff84`, tree
+  `c2b72f1a2bc50948d7f76fd35cd53e170ee7a676`, makes cell zero exclusively a
+  selected-item transfer action in `HubInventoryActions.tsx`. With no selected
+  item it plays `bad-action` and returns. It never invokes the existing local
+  parent-navigation callback. This is a missing input branch, independent of
+  item ownership or host acknowledgement.
+- The exact production frontend/host build passed on the M5 SSD. Real mouse
+  clicks and focused Enter failed to return in all 13 tested desktop parent
+  cells; three real touchscreen taps failed in empty/filled/nested cells.
+  All gestures were trusted userspace input, no item was selected, no new page
+  transition started and the host backpacks remained unchanged. Each click
+  or Enter emitted the error cue. The existing UI-47/KeyI return completed
+  26 desktop transitions at 369.0–376.6 ms and six touch transitions at
+  369.5–372.1 ms, with 682 moving-frame samples and empty page/console/failed
+  response arrays. The desktop journey also exercised the existing trader,
+  storage, item-transfer, teardown and Boneyard paths.
+- Read-only production metadata reported revision `b48fd4ed`; its actual served
+  `use-coarse-pointer-JVxHU7we.js` contains the same no-selected-item error
+  branch. Affected inventory source is unchanged between that revision and
+  tested `24d0b9bc`. Publication, this passive source inspection and a live
+  authenticated browser outcome are distinct; no live-account journey or
+  deployment action was performed.
+
+### Parent-control presentation recovery
+
+The old parent-drop closure in entry 293 omitted the first-press navigation
+branch and assigned the native `.25` alpha to the whole Sack icon. Fresh
+`InventoryGrid` painter `0x0055A2F1..0x0055A485` falsifies that assignment:
+kind 7 draws a 60-square gold pad at relative `[-30,-30]`, with RGB
+`[.85,.73,.44]` and alpha `.25`, restores white/alpha one, draws UI record 1
+at `[0,-12]` with scale `.65`, then draws the current root's Sack using its
+ordinary item painter inside the recovered 70 by 67 clip. UI-1 is 41 by 57;
+the served/current web instead paints only the Sack inside a container whose
+whole alpha is `.25`, and omits the arrow/pad. There is one shared parent-cell
+composite; no Sack-depth or trader-specific glyph is needed.
+
+The clip also changes the settled grid caption from `Backpack` to
+`Sack of Goodies`; current `chrome.ts` always consumes the fixed `Backpack`
+caption. This adjacent navigation-presentation discrepancy is recorded, not
+silently accepted. The settled-name behavior is directly observed; the exact
+native caption writer and its phase during page motion still need a focused
+trace before a caption implementation. That is extractable static evidence,
+not a reason to request Windows access or to invent a caption transition.
+
+### Boundary and provisional membership
+
+Native system: InventoryScreen/InventoryGrid child-root navigation, including
+the first-cell parent affordance, existing Game-owned return, page admission,
+motion, clip, root presentation, shared hosts and teardown. A decision hold is
+not final system acceptance; the pending rows below require approved work.
+
+| Member | Investigation disposition | Evidence / next acceptance |
+| --- | --- | --- |
+| Empty, filled and nested first-cell parent press | recovered-pending-port | Native first-press branch; 13 desktop and 3 touch failures |
+| Parent keyboard/touch equivalents in Website | recovered-pending-port | Existing semantic button errors; restore its admitted navigation meaning |
+| Kind-7 pad, UI-1 arrow and ordinary Sack art | recovered-pending-port | Fresh painter/constants, native clip and current rendered pixels |
+| Root/Sack caption | recovered-pending-port | Settled appearance proved; exact caption producer/transition phase trace remains |
+| UI-47 bottom backpack, KeyI, one-level back and root close | verified-already-at-parity for tested paths | 32 successful transitions, geometry/control receipts and transition-lock checks |
+| Grid-height/Y motion, discrete cadence, clip and retirement | verified-already-at-parity for fixed stage | Fresh raw arithmetic, retained authored table, 682 current moving frames |
+| Native two-/three-/four-row layout table | verified-already-at-parity in retained contract | All native rows remain recovered; Website's fixed 900 stage selects 365 |
+| Motion interruption/reactivation | verified-already-at-parity for tested paths | Repeated KeyI during each observed traversal is rejected; no queued back |
+| Standalone Hub and paused Boneyard | recovered-pending-port for first cell; existing motion verified | Shared callback/renderer cause, real built journeys |
+| Fomentius, Hagatha and Luthacus companion player grids | recovered-pending-port for first cell; existing paths verified | Existing full desktop journey and common owner; candidate must repeat each |
+| Shlorio pre-roll and result companions | recovered-pending-port | Both share the owner; independently assert both phases in approved acceptance |
+| Parent item drop and existing click-to-transfer shortcut | verified-already-at-parity for existing transfer contract | Fresh kind-7 setter thread, retained entry 293 and full current transfer journey; preserve transfer gestures |
+| Close/reopen, stale path and renderer teardown | verified-already-at-parity for tested paths | Existing full journey; candidate must repeat after new callback wiring |
+| Page-open/back/close audio | verified-already-at-parity for existing navigation | Existing stock cue routing; remove empty-parent error when navigation is restored |
+| Item IDs/tree, economy, saves, protocol and network authority | out-of-system for remedy | Navigation is local; no ownership or schema change proposed |
+| Stats swipes, forge fire, belt activation and drag/equipment mutations | out-of-system | Separate owners/reports; forge is Report 67 |
+
+### Proposed approved implementation and gate
+
+Ask the user to approve restoring the complete parent-bag affordance across
+the shared inventory hosts: a plain click/tap/Enter returns one root when no
+item-transfer operation is in progress, with the native pad/arrow/Sack
+presentation and recovered root caption. Preserve the existing item-transfer
+gestures and nominal 370-ms page motion. Trace the caption producer before
+using it in code. No speed-up beyond stock is supported by this investigation.
+
+Reuse `HubInventoryUi`'s existing local parent-return callback through
+`NativeHubSurface` / `InventoryActions`; complete the shared presentation in
+`renderer/hub-inventory/pages.ts`, `chrome.ts` and its render contract. No new
+navigation owner, protocol, retry, multiplier or network wait is needed.
+After approval, add meaningful regressions at the existing interfaces and
+repeat each pending member, then the unchanged full canonical gate and real
+built desktop/touch journeys on the exact final M5 SSD tree before publication.
+
+No product code, product test, protocol, configuration, publication or reaction
+changed in this investigation. A diagnostic build/browser comparison is not
+implementation acceptance. The user's explicit discrepancy-before-remedy
+decision boundary controls this hold; it is not a skill-invented approval.
+Original/mixed message `1554349667230416936` remains unmarked because both
+Report 22 and separate Report 67 must be resolved.
+
 ## 2026-09-24 — Report 22: native vertical Sack-page transition
 
 ### Cause and evidence

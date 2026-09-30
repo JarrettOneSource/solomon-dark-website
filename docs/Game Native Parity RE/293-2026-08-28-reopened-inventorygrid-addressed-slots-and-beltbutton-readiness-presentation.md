@@ -1,5 +1,20 @@
 # 2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation
 
+> **Approved 2026-09-30 candidate:** entry 252 records the complete parent-cell
+> input/composite/caption correction. The `.25` alpha applies only to the
+> native gold pad; normal Sack and UI-1 arrow remain opaque. Existing selected
+> item transfer, drag, equipment and delivery-held source suppression were
+> preserved and rechecked through the real built client. Prior hold notes are
+> retained history; exact publication/deployment closure is still external.
+
+> **2026-09-30 renewed Report 22:** [entry 252's parent-cell investigation](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-30--renewed-report-22-parent-cell-action-and-navigation-timing)
+> reopens the parent-holder navigation and presentation members. The prior
+> closure verified item insertion/drop, but omitted the kind-7 first-press
+> navigation branch. Native `.25` alpha belongs to a gold pad; it does not fade
+> the entire Sack art, and a separate UI-1 up arrow is authored. Existing item
+> transfer and Flyby results remain retained evidence. No remedy is applied
+> before the user's discrepancy decision.
+
 ## 2026-09-28 — Report 51: live BeltButtons inside InventoryScreen
 
 ### Report, causal trace, and limits before implementation

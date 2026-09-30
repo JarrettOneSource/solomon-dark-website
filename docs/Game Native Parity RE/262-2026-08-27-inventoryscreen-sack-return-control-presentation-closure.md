@@ -1,5 +1,18 @@
 # 2026-08-27 — InventoryScreen Sack return-control presentation closure
 
+> **Approved 2026-09-30 candidate:** entry 252 now records restored kind-7
+> first-cell return/composite/caption and complete local desktop/touch/shared
+> service acceptance. The existing Game-owned UI-47 remains a distinct working
+> return. Earlier decision-hold notes below are historical; final exact gate,
+> publication and actual deployment belong to the implementation receipt.
+
+> **2026-09-30 renewed Report 22:** [entry 252](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-30--renewed-report-22-parent-cell-action-and-navigation-timing)
+> distinguishes the first-cell kind-7 parent bag from this Game-owned UI-47
+> bottom backpack. Current built desktop/touch journeys verify the UI-47 return
+> and 370-ms motion; the first-cell action and composite remain pending the
+> user's remedy decision. Do not treat this earlier UI-47 closure as proof of
+> every bag target.
+
 > **2026-09-24 report 22:** [entry 252](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-24--report-22-native-vertical-sack-page-transition)
 > supersedes only the historical 160-tick horizontal page-motion statement.
 > Native navigation uses grid-height Y motion and settles after 37 updates

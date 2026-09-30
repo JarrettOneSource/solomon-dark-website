@@ -71,6 +71,7 @@ export function InventoryActions({
   onNotice,
   onOpenDye,
   onOpenSack,
+  onInventoryBack,
   onSelect,
   selection,
   referenceDropTarget = null,
@@ -93,6 +94,7 @@ export function InventoryActions({
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
   onOpenSack: (sackId: number) => void
+  onInventoryBack: () => void
   onSelect: (selection: HubInventorySelectionModel | null) => void
   selection: HubInventorySelectionModel | null
   referenceDropTarget?: InventoryReferenceDropTarget | null
@@ -115,6 +117,7 @@ export function InventoryActions({
       visibleSlot: hubInventoryVisibleSlot(slot, sackPath.length > 0),
     }))
   const pressRef = useRef<InventoryPointerPress | null>(null)
+  const parentPressHandled = useRef(false)
   const equipmentClickRef = useRef<InventoryEquipmentClickPress | null>(null)
   const lastActivationRef = useRef<InventoryActivation | null>(null)
   const selectedBackpackItem = selection?.owner === 'backpack'
@@ -386,7 +389,8 @@ export function InventoryActions({
           <NativeAction
             data={{ 'data-inventory-parent-holder': 'true' }}
             disabled={transitionLocked}
-            label="Move selected item to parent inventory"
+            label={selectedBackpackItem
+              ? 'Move selected item to parent inventory' : 'Return to parent inventory'}
             rect={(() => {
               const position = hubInventorySlotPosition(HUB_INVENTORY_PARENT_HOLDER.visibleSlot)
               return [
@@ -396,9 +400,21 @@ export function InventoryActions({
                 HUB_INVENTORY_GRID.cellSize,
               ] as const
             })()}
-            onClick={() => {
+            onPointerDown={(event) => {
+              parentPressHandled.current = false
+              if (event.button === 0 && !selectedBackpackItem) {
+                parentPressHandled.current = true
+                onInventoryBack()
+              }
+            }}
+            onPointerCancel={() => { parentPressHandled.current = false }}
+            onClick={(event) => {
+              if (event.detail > 0 && parentPressHandled.current) {
+                parentPressHandled.current = false
+                return
+              }
               if (!selectedBackpackItem) {
-                onMoveSound('bad-action', 1)
+                onInventoryBack()
                 return
               }
               onMoveSound('backpack-open', 1.25)

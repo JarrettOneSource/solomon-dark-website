@@ -823,6 +823,7 @@ export function NativeHubSurface({
                 onAction({ itemId, slot, type: 'bind-belt-item' })
               }}
               onOpenSack={onOpenSack}
+              onInventoryBack={onInventoryBack}
               onClose={() => {
                 audio.playSound('open-panel')
                 onClose()
@@ -877,6 +878,7 @@ export function NativeHubSurface({
               onMoveSound={(cue, playbackRate) => audio.playSound(cue, { playbackRate })}
               onOpenDye={openDye}
               onOpenSack={onOpenSack}
+              onInventoryBack={onInventoryBack}
               onSelect={(next) => {
                 audio.playSound('click')
                 setInventorySelection(next)

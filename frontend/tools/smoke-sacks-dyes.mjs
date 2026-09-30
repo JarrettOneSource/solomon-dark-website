@@ -36,6 +36,7 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
 const screenshotRoot = process.env.SDR_SACKS_DYES_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-sacks-dyes'
 const hasTouch = booleanEnvironment('SDR_SACKS_DYES_HAS_TOUCH', false)
+const parentNavigation = booleanEnvironment('SDR_SACKS_DYES_PARENT_NAVIGATION', false)
 const returnControlOnly = booleanEnvironment('SDR_SACKS_DYES_RETURN_ONLY', false)
 const reportedParityOnly = booleanEnvironment('SDR_SACKS_DYES_REPORTED_PARITY_ONLY', false)
 const expectedSackTransitionMs = process.env.SDR_SACKS_DYES_EXPECT_TRANSITION_MS
@@ -75,6 +76,7 @@ const IDS = Object.freeze({
 })
 const ALL_SWATCH_ROWS = Object.freeze(NATIVE_DYE_SWATCHES.map((_, index) => index))
 const resumeControlReceipts = []
+const parentNavigationReceipts = []
 const seeded = createSeededSave()
 const staticServer = await startStaticClientServer({
   root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
@@ -205,6 +207,7 @@ try {
       failedResponses,
       pageErrors,
       sackNavigation: await sackNavigationReceipt(page),
+      parentNavigationReceipts,
       screenshots: [
         overviewScreenshot,
         attributesScreenshot,
@@ -239,6 +242,7 @@ try {
       hasTouch,
       pageErrors,
       sackNavigation: await sackNavigationReceipt(page),
+      parentNavigationReceipts,
       resumeControls: resumeControlReceipts,
       screenshots: [
         `${screenshotRoot}-empty-sack.png`,
@@ -325,12 +329,12 @@ try {
   }
 
   const invalidFlybyAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  await page.evaluate(() => { window.__sdrInventoryFlybyPhases.length = 0 })
   await dragToStagePoint(page, inventory, backpackItem(IDS.rootKey), { x: 800, y: 450 })
   await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="flying"]')
     .waitFor()
   await page.screenshot({ path: `${screenshotRoot}-inventory-flyby-restore.png` })
-  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="trailing"]')
-    .waitFor()
+  await page.waitForFunction(() => window.__sdrInventoryFlybyPhases.includes('trailing'))
   await page.waitForFunction(() => (
     document.querySelector('.hub-inventory-native-canvas')
       ?.dataset.nativeInventoryFlybyPhase === undefined
@@ -350,6 +354,7 @@ try {
     close: await inventorySoundCount(page, 'backpack-close.wav'),
     open: await inventorySoundCount(page, 'backpack-open.wav'),
   }
+  const parentProbeAudioStart = parentNavigationReceipts.length
 
   const highLevelRing = backpackItem(IDS.highLevelRing)
   await highLevelRing.click()
@@ -382,9 +387,7 @@ try {
     playerLevel: 1,
     requiredLevel: 3,
   }
-  await inventory.locator('[data-inventory-empty-space="true"]').click({
-    position: { x: 800, y: 450 },
-  })
+  await deselectInventory(page, inventory)
 
   await backpackItem(IDS.clickRingOne).click()
   await backpackItem(IDS.clickRingOne).locator('xpath=self::*[@data-selected="true"]').waitFor()
@@ -409,9 +412,7 @@ try {
     economy.equipment.rings[0]?.id === IDS.clickRingTwo
     && flatten(economy.backpack).filter(({ id }) => id === IDS.clickRingOne).length === 1
   ))
-  await inventory.locator('[data-inventory-empty-space="true"]').click({
-    position: { x: 800, y: 450 },
-  })
+  await deselectInventory(page, inventory)
   await inventory.locator('xpath=self::*[@data-native-inventory-selection=""]').waitFor()
 
   const equippedRingTwo = inventory.locator(
@@ -525,8 +526,9 @@ try {
   await parentHolder.waitFor()
   assert.equal(
     await inventoryCanvas.getAttribute('data-native-inventory-parent-holder-alpha'),
-    '0.25',
+    '1',
   )
+  assert.equal(await inventoryCanvas.getAttribute('data-native-inventory-parent-pad-alpha'), '0.25')
   await page.screenshot({ path: `${screenshotRoot}-inventory-parent-holder.png` })
   const parentHolderAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
   await item(IDS.movableSackKey).click()
@@ -672,12 +674,21 @@ try {
       '.hub-native-ui-overlay[data-surface-kind="service"] .hub-native-ui-stage',
     )
     await companion.waitFor()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     await companion.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
     await openSack(page, companion, companion.locator(
       `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.sourceSack}"]`,
     ), IDS.sourceSack)
     await page.screenshot({ path: `${screenshotRoot}-${trader}-sack-inside.png` })
     await returnFromSack(companion, '')
+    if (parentNavigation && trader === 'shlorio') {
+      await companion.getByRole('button', { name: /^DOWSE / }).click()
+      await waitForHostEconomy(gameHost, (economy) => economy.dowsingRolled)
+      await openSack(page, companion, companion.locator(
+        `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.sourceSack}"]`,
+      ), IDS.sourceSack)
+      await returnFromSack(companion, '')
+    }
     await page.keyboard.press('Escape')
     await companion.waitFor({ state: 'detached' })
   }
@@ -738,7 +749,9 @@ try {
     close: await inventorySoundCount(page, 'backpack-close.wav') - sackAudioBefore.close,
     open: await inventorySoundCount(page, 'backpack-open.wav') - sackAudioBefore.open,
   }
-  assert.deepEqual(sackAudio, { close: 12, open: 26 })
+  const addedNavigationCues = parentNavigationReceipts.length - parentProbeAudioStart
+    + (parentNavigation ? 1 : 0) // Additional Shlorio result-phase entry/return.
+  assert.deepEqual(sackAudio, { close: 12 + addedNavigationCues, open: 26 + addedNavigationCues })
 
   await returnFromSack(storage, '')
   await page.keyboard.press('Escape')
@@ -820,6 +833,7 @@ try {
     resumeControls: resumeControlReceipts,
     sackAudio,
     sackNavigation: await sackNavigationReceipt(page),
+    parentNavigationReceipts,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
       `${screenshotRoot}-hub-equipment-level-rejection.png`,
@@ -927,6 +941,7 @@ function createSeededSave() {
   const mergeSack = sack(IDS.mergeSack, 'Potion Sack', [mergeStack])
   const seededEconomy = {
     ...economy,
+    gold: parentNavigation ? 10_000 : economy.gold,
     backpack: [
       rootKey,
       sourceSack,
@@ -1095,6 +1110,15 @@ async function dragToPoint(targetPage, source, point) {
   await targetPage.mouse.up()
 }
 
+async function deselectInventory(targetPage, inventory) {
+  const stage = await inventory.boundingBox()
+  assert.ok(stage)
+  const scale = stage.width / 1_600
+  const point = { x: stage.x + 800 * scale, y: stage.y + 450 * scale }
+  if (hasTouch) await targetPage.touchscreen.tap(point.x, point.y)
+  else await targetPage.mouse.click(point.x, point.y)
+}
+
 async function doubleActivate(targetPage, target) {
   const box = await target.boundingBox()
   assert.ok(box, 'Sack/Dye activation target has no browser geometry')
@@ -1109,10 +1133,15 @@ async function doubleActivate(targetPage, target) {
 function installSackNavigationProbe() {
   const receipts = []
   window.__sdrSackNavigation = receipts
+  window.__sdrInventoryFlybyPhases = []
   let active = null
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       const owner = mutation.target
+      if (mutation.attributeName === 'data-native-inventory-flyby-phase') {
+        window.__sdrInventoryFlybyPhases.push(owner.getAttribute('data-native-inventory-flyby-phase'))
+        continue
+      }
       const direction = owner.getAttribute('data-native-sack-transition')
       if (direction) {
         if (active) continue
@@ -1130,6 +1159,7 @@ function installSackNavigationProbe() {
               ticks: Number(data.nativeSackPageTicks),
               incomingX: Number(data.nativeSackIncomingX), outgoingX: Number(data.nativeSackOutgoingX),
               incomingY: Number(data.nativeSackIncomingY), outgoingY: Number(data.nativeSackOutgoingY),
+              captionVisible: data.nativeSackCaptionVisible,
               clip: data.nativeSackClip ?? null })
           }
           requestAnimationFrame(sample)
@@ -1143,7 +1173,7 @@ function installSackNavigationProbe() {
     }
   })
   observer.observe(document, { subtree: true, attributes: true,
-    attributeFilter: ['data-native-sack-transition'] })
+    attributeFilter: ['data-native-sack-transition', 'data-native-inventory-flyby-phase'] })
 }
 
 async function sackNavigationReceipt(targetPage) {
@@ -1165,6 +1195,7 @@ async function sackNavigationReceipt(targetPage) {
           assert.equal(sample.outgoingY, -sign * sample.ticks * 10 || 0)
           assert.equal(sample.clip, '0,492,1600,305')
           assert.ok(sample.ticks >= 0 && sample.ticks < 37)
+          if (parentNavigation) assert.equal(sample.captionVisible, 'false')
         }
       }
     }
@@ -1191,6 +1222,66 @@ async function openSack(targetPage, inventory, target, sackId, parentPath = []) 
     timeout: 5_000,
   })
   resumeControlReceipts.push(await inventoryResumeControlReceipt(inventory, path))
+  if (parentNavigation) await verifyParentNavigation(targetPage, inventory, sackId, parentPath)
+}
+
+async function verifyParentNavigation(targetPage, inventory, sackId, parentPath) {
+  const canvas = inventory.locator('.hub-inventory-native-canvas')
+  const path = [...parentPath, sackId].join('/')
+  const expectedParent = parentPath.join('/')
+  const expectedCaption = findHostBackpackItem(gameHost, sackId).name
+  assert.equal(await canvas.getAttribute('data-native-sack-caption'), expectedCaption)
+  assert.equal(await canvas.getAttribute('data-native-sack-caption-visible'), 'true')
+  assert.equal(await inventory.locator('[data-selected="true"]').count(), 0)
+  const before = JSON.stringify(gameHost.state().playerEntities.economies[0].backpack)
+  const badActionBefore = await audioCueCount(targetPage, 'bad-action.wav')
+  const closeBefore = await audioCueCount(targetPage, 'backpack-close.wav')
+  const parent = inventory.locator('[data-inventory-parent-holder="true"]')
+  const box = await parent.boundingBox()
+  assert.ok(box)
+  const index = parentNavigationReceipts.length
+  const holdPointer = !hasTouch && parentPath.length > 0
+  const gesture = hasTouch ? 'touch tap' : holdPointer ? 'held pointer' : index % 3 === 1 ? 'Enter' : index % 3 === 2 ? 'Space' : 'mouse click'
+  await targetPage.screenshot({ path: `${screenshotRoot}-parent-before-${index}.png` })
+  if (hasTouch) await targetPage.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+  else if (holdPointer) {
+    await targetPage.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await targetPage.mouse.down()
+  } else if (gesture === 'Enter' || gesture === 'Space') {
+    await parent.focus()
+    await targetPage.keyboard.press(gesture)
+  } else await targetPage.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await inventory.locator(`xpath=self::*[@data-native-sack-path="${expectedParent}"]`).waitFor({ timeout: 1_000 })
+  await assertSackTransitionLock(targetPage, inventory, expectedParent)
+  await targetPage.waitForFunction(() => document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeSackCaptionVisible === 'false')
+  await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor()
+  if (holdPointer) {
+    await targetPage.waitForTimeout(100)
+    await targetPage.mouse.up()
+    await targetPage.waitForTimeout(50)
+    assert.equal(await inventory.getAttribute('data-native-sack-path'), expectedParent,
+      'releasing a completed first-press return must not navigate a second time')
+  }
+  const parentCaption = parentPath.length === 0 ? 'Backpack'
+    : findHostBackpackItem(gameHost, parentPath.at(-1)).name
+  assert.equal(await canvas.getAttribute('data-native-sack-caption'), parentCaption)
+  assert.equal(await canvas.getAttribute('data-native-sack-caption-visible'), 'true')
+  assert.equal(JSON.stringify(gameHost.state().playerEntities.economies[0].backpack), before)
+  assert.equal(await audioCueCount(targetPage, 'bad-action.wav'), badActionBefore)
+  assert.equal(await audioCueCount(targetPage, 'backpack-close.wav'), closeBefore + 1)
+  parentNavigationReceipts.push({ path, expectedParent, expectedCaption, parentCaption, gesture,
+    hostBackpackUnchanged: true, errorCueDelta: 0,
+    world: gameHost.state().world.kind,
+    trader: await canvas.getAttribute('data-sdr-trader-canvas-owner'),
+    dowsingRolled: gameHost.state().playerEntities.economies[0].dowsingRolled })
+  await doubleActivate(targetPage, inventory.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${sackId}"]`,
+  ))
+  await inventory.locator(`xpath=self::*[@data-native-sack-path="${path}"]`).waitFor()
+  await assertSackTransitionLock(targetPage, inventory, path)
+  await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor()
+  assert.equal(await canvas.getAttribute('data-native-sack-caption'), expectedCaption)
+  assert.equal(await canvas.getAttribute('data-native-sack-caption-visible'), 'true')
 }
 
 async function returnFromSack(inventory, path) {

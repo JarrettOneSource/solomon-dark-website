@@ -18,6 +18,7 @@ import {
   HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_PARENT_HOLDER,
+  HUB_INVENTORY_ROOT_CHROME,
   HUB_SACK_PAGE_CLIP,
   HUB_UNFORGE_TARGET,
   hubInventoryFlybyFrame,
@@ -131,9 +132,12 @@ export function buildInventory(
   addTiledAtlas(context, layer, 'UI', 49, 0, 490, 1600, 310)
   addHorizontalChain(context, layer, 0, 470, 1600)
   addHorizontalChain(context, layer, 0, 800, 1600)
-  addBackpackFrame(context, layer)
+  const captionText = inventorySackAtPath(economy.backpack, model.sackPath)?.name
+    ?? HUB_INVENTORY_ROOT_CHROME.backpackHeader.text
+  const caption = addBackpackFrame(context, layer, captionText)
+  caption.visible = model.sackTransition === null
 
-  const sackPages = buildSackPages(context, layer, model, selection, dragging, hiddenItemIds)
+  const sackPages = buildSackPages(context, layer, model, selection, dragging, hiddenItemIds, caption)
 
   addGold(context, layer, economy.gold)
   const modalHud = addBelt(
@@ -186,7 +190,7 @@ export function buildInventory(
   const dragger = dragging
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
     : null
-  return { dragger, flybys: flybyViews, itemInfo, modalHud, playerPreview, sackPages }
+  return { caption, captionText, dragger, flybys: flybyViews, itemInfo, modalHud, playerPreview, sackPages }
 }
 
 function buildSackPages(
@@ -196,6 +200,7 @@ function buildSackPages(
   selection: HubInventorySelectionModel | null,
   dragging: HubInventoryDragModel | null,
   hiddenItemIds: ReadonlySet<number>,
+  caption: Container,
 ): InventorySackPages | null {
   const viewport = new Container({ label: 'native-sack-page-viewport', eventMode: 'none' })
   const { x, y, width, height } = HUB_SACK_PAGE_CLIP
@@ -230,7 +235,7 @@ function buildSackPages(
       hiddenItemIds,
     )
     viewport.addChild(outgoing, incoming)
-    sackPages = { clip, incoming, outgoing, transition: model.sackTransition }
+    sackPages = { caption, clip, incoming, outgoing, transition: model.sackTransition }
   } else {
     const page = new Container()
     page.label = 'native-sack-page-current'
@@ -271,15 +276,28 @@ function addInventoryGridPage(
     if (index === HUB_INVENTORY_PARENT_HOLDER.visibleSlot && parentHolderItem) {
       const parentHolder = new Container()
       parentHolder.label = 'native-inventory-parent-holder'
-      parentHolder.alpha = HUB_INVENTORY_PARENT_HOLDER.alpha
+      const holder = HUB_INVENTORY_PARENT_HOLDER
+      const centerX = position.x + HUB_INVENTORY_GRID.cellSize / 2
+      const centerY = position.y + HUB_INVENTORY_GRID.cellSize / 2
+      const [padX, padY, padWidth, padHeight] = holder.pad.rect
+      const pad = new Graphics({ label: 'native-inventory-parent-pad', eventMode: 'none' })
+        .rect(centerX + padX, centerY + padY, padWidth, padHeight)
+        .fill({ color: holder.pad.tint, alpha: holder.pad.alpha })
+      parentHolder.addChild(pad)
+      addCenteredAtlasSprite(
+        context, parentHolder, 'UI', holder.arrow.record,
+        centerX + holder.arrow.offset[0], centerY + holder.arrow.offset[1],
+        holder.arrow.scale, holder.arrow.scale,
+      )
+      const [clipX, clipY, clipWidth, clipHeight] = holder.itemClip
       addClippedItemIcon(
         context,
         parentHolder,
         parentHolderItem,
-        position.x + HUB_INVENTORY_GRID.cellSize / 2,
-        position.y + HUB_INVENTORY_GRID.cellSize / 2,
+        centerX + holder.itemOffset[0],
+        centerY + holder.itemOffset[1],
         element,
-        [position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize],
+        [centerX + clipX, centerY + clipY, clipWidth, clipHeight],
       )
       layer.addChild(parentHolder)
     }

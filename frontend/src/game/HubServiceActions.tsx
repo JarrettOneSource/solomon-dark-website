@@ -50,6 +50,7 @@ export function ServiceActions({
   onNotice,
   onOpenDye,
   onOpenSack,
+  onInventoryBack,
   onPressedControl,
   onSelect,
   selection,
@@ -81,6 +82,7 @@ export function ServiceActions({
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
   onOpenSack: (sackId: number) => void
+  onInventoryBack: () => void
   onPressedControl: (control: HubInventoryPressedControl) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
@@ -114,6 +116,7 @@ export function ServiceActions({
       onNotice={onNotice}
       onOpenDye={onOpenDye}
       onOpenSack={onOpenSack}
+      onInventoryBack={onInventoryBack}
       onSelect={onInventorySelect}
       sackPath={sackPath}
       transitionLocked={transitionLocked}

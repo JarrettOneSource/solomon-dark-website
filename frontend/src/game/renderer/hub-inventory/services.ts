@@ -79,6 +79,8 @@ export function buildService(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
 ): {
+  readonly caption: Container
+  readonly captionText: string
   readonly dragger: Container | null
   readonly flybys: readonly InventoryFlybyView[]
   readonly itemInfo: Container | null
@@ -137,6 +139,8 @@ export function buildService(
     if (inventory.dragger) layer.addChild(inventory.dragger)
     for (const flyby of inventory.flybys) layer.addChild(flyby.container)
     return {
+      caption: inventory.caption,
+      captionText: inventory.captionText,
       dragger: inventory.dragger,
       flybys: inventory.flybys,
       itemInfo: inventory.itemInfo,
@@ -164,6 +168,8 @@ export function buildService(
   if (inventory.dragger) layer.addChild(inventory.dragger)
   for (const flyby of inventory.flybys) layer.addChild(flyby.container)
   return {
+    caption: inventory.caption,
+    captionText: inventory.captionText,
     dragger: inventory.dragger,
     flybys: inventory.flybys,
     itemInfo: inventory.itemInfo,

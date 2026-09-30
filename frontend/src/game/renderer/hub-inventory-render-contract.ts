@@ -61,7 +61,10 @@ export const HUB_INVENTORY_FLYBY = {
 } as const
 
 export const HUB_INVENTORY_PARENT_HOLDER = {
-  alpha: 0.25,
+  arrow: { offset: [0, -12], record: 1, scale: 0.65 },
+  itemClip: [-35, -35, 70, 67],
+  itemOffset: [0, 18],
+  pad: { alpha: 0.25, rect: [-30, -30, 60, 60], tint: 0xd9ba70 },
   visibleSlot: 0,
 } as const
 

@@ -172,6 +172,8 @@ export interface ChatRenderState {
 }
 
 export interface InventoryBuildState {
+  readonly caption: Container
+  readonly captionText: string
   readonly dragger: Container | null
   readonly flybys: readonly InventoryFlybyView[]
   readonly itemInfo: Container | null
@@ -192,6 +194,7 @@ export interface NativeModalHudView {
 }
 
 export interface InventorySackPages {
+  readonly caption: Container
   readonly clip: Container
   readonly incoming: Container
   readonly outgoing: Container

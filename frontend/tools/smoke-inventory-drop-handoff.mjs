@@ -14,6 +14,7 @@ import { HUB_INVENTORY_GRID, HUB_SHOP_GRID, HUB_UNFORGE_TARGET, hubInventorySlot
 import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem, findInventoryItem, projectInventoryItems } from '../src/game/core-kernels/hub-economy.ts'
 
 const report50Only = process.argv.includes('--report50-only')
+const report22ParentOnly = process.argv.includes('--report22-parent-only')
 const screenshotRoot = process.env.SDR_INVENTORY_DROP_SCREENSHOT_ROOT
   || await mkdtemp(join(tmpdir(), 'solomon-inventory-drop-'))
 await mkdir(screenshotRoot, { recursive: true })
@@ -135,7 +136,25 @@ try {
   await page.locator('.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 60_000 })
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
-  if (report50Only) {
+  if (report22ParentOnly) {
+    await openSack(inventory, inventory.locator('[data-inventory-item-id="40010"]'), '40010')
+    await openSack(inventory, inventory.locator('[data-inventory-item-id="40011"]'), '40010/40011')
+    const before = JSON.stringify(host.state().playerEntities.economies[0].backpack)
+    holdingSnapshots = true
+    await page.waitForTimeout(100)
+    await inventory.locator('[data-inventory-parent-holder="true"]').click()
+    await waitForSack(inventory, '40010')
+    assert.ok(pendingMessages.length > 0, 'real server delivery must remain held during local navigation')
+    assert.equal(JSON.stringify(host.state().playerEntities.economies[0].backpack), before)
+    const heldMessages = pendingMessages.length
+    await page.screenshot({ path: join(screenshotRoot, 'parent-with-delivery-held.png') })
+    releaseSnapshots()
+    await inventory.locator('[data-inventory-parent-holder="true"]').click()
+    await waitForSack(inventory, '')
+    await closeInventory(inventory)
+    receipts.push({ name: 'parent-return-with-real-server-delivery-held', heldMessages,
+      backpackUnchanged: true, path: '40010/40011 -> 40010 -> root' })
+  } else if (report50Only) {
     await exerciseReport50(inventory)
     await closeInventory(inventory)
     await openBoneyardInventory()
@@ -214,10 +233,10 @@ async function exerciseInventory(inventory, scene) {
     await openSack(inventory, item(40_011), '40010/40011')
     await releaseItem(inventory, item(ringId), await cellCenter(inventory, 12), 'hub-nested-blank')
     await releaseItem(inventory, item(ringId), await cellCenter(inventory, 0), 'hub-nested-parent')
-    await inventory.getByRole('button', { name: 'Return to parent inventory', exact: true }).click()
+    await inventory.locator('[data-inventory-resume="true"]').click()
     await waitForSack(inventory, '40010')
     await releaseItem(inventory, item(ringId), await cellCenter(inventory, 0), 'hub-root-parent')
-    await inventory.getByRole('button', { name: 'Return to parent inventory', exact: true }).click()
+    await inventory.locator('[data-inventory-resume="true"]').click()
     await waitForSack(inventory, '')
     await releaseItem(inventory, item(40_013), await stagePoint(inventory, ...HUB_UNFORGE_TARGET.center), 'hub-empty-sack-unforge')
     assert.equal(findInventoryItem(currentEconomy().backpack, 40_013), null)
@@ -270,7 +289,7 @@ async function exerciseReport50(inventory) {
   assert.deepEqual([displaced?.parentSackId, displaced?.slot], [40_011, 0])
 
   await releaseItem(inventory, item(ringId), await center(equipment('ring-0')), 'report50-occupied-re-equip')
-  await inventory.getByRole('button', { name: 'Return to parent inventory', exact: true }).click()
+  await inventory.locator('[data-inventory-resume="true"]').click()
   await waitForSack(inventory, '40010')
   await releaseItem(inventory, item(ringId, 'equipment'), await center(item(40_011)), 'report50-sack-target')
   placement = projectInventoryItems(currentEconomy().backpack)
@@ -313,7 +332,7 @@ async function exerciseReport50Boneyard(inventory) {
 }
 
 async function leaveNestedSacks(inventory) {
-  const parent = inventory.getByRole('button', { name: 'Return to parent inventory', exact: true })
+  const parent = inventory.locator('[data-inventory-resume="true"]')
   await parent.click()
   await waitForSack(inventory, '40010')
   await parent.click()

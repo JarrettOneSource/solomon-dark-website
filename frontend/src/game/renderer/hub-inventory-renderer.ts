@@ -155,6 +155,7 @@ export async function createHubInventoryRenderer(
   let inventoryFlybys: readonly InventoryFlybyView[] = []
   let inventoryItemInfo: Container | null = null
   let inventorySackPages: InventorySackPages | null = null
+  let inventoryCaption: Container | null = null
   let modalHud: NativeModalHudView | null = null
   let beltAvailability: NativeModalBeltAvailability | null = null
   let unforgeTarget: Sprite | null = null
@@ -257,6 +258,7 @@ export async function createHubInventoryRenderer(
       )
       inventorySackPages.incoming.position.set(0, offsets.incomingY)
       inventorySackPages.outgoing.position.set(0, offsets.outgoingY)
+      inventorySackPages.caption.visible = offsets.settled
       canvas.dataset.nativeSackPageState = offsets.settled ? 'settled' : 'moving'
       canvas.dataset.nativeSackPageTicks = `${offsets.ticks}`
       canvas.dataset.nativeSackIncomingX = `${inventorySackPages.incoming.x}`
@@ -274,6 +276,8 @@ export async function createHubInventoryRenderer(
       delete canvas.dataset.nativeSackOutgoingY
       delete canvas.dataset.nativeSackClip
     }
+    if (inventoryCaption) canvas.dataset.nativeSackCaptionVisible = `${inventoryCaption.visible}`
+    else delete canvas.dataset.nativeSackCaptionVisible
   }
 
   function renderItemEffects(nowMs: number): void {
@@ -447,10 +451,12 @@ export async function createHubInventoryRenderer(
     }
     if (model.kind !== 'dialogue' && model.sackPath.length > 0) {
       canvas.dataset.nativeInventoryParentHolder = 'visible'
-      canvas.dataset.nativeInventoryParentHolderAlpha = `${HUB_INVENTORY_PARENT_HOLDER.alpha}`
+      canvas.dataset.nativeInventoryParentHolderAlpha = '1'
+      canvas.dataset.nativeInventoryParentPadAlpha = `${HUB_INVENTORY_PARENT_HOLDER.pad.alpha}`
     } else {
       delete canvas.dataset.nativeInventoryParentHolder
       delete canvas.dataset.nativeInventoryParentHolderAlpha
+      delete canvas.dataset.nativeInventoryParentPadAlpha
     }
   }
 
@@ -466,6 +472,8 @@ export async function createHubInventoryRenderer(
     inventoryFlybys = []
     inventoryItemInfo = null
     inventorySackPages = null
+    inventoryCaption = null
+    delete canvas.dataset.nativeSackCaption
     modalHud = null
     unforgeTarget = null
     surface.removeChildren().forEach((child) => child.destroy({ children: true }))
@@ -476,6 +484,8 @@ export async function createHubInventoryRenderer(
       inventoryFlybys = inventory.flybys
       inventoryItemInfo = inventory.itemInfo
       inventorySackPages = inventory.sackPages
+      inventoryCaption = inventory.caption
+      canvas.dataset.nativeSackCaption = inventory.captionText
       modalHud = inventory.modalHud
     }
     else if (model.kind === 'dialogue') chatRenderState = buildDialogue(context, surface, model)
@@ -486,6 +496,8 @@ export async function createHubInventoryRenderer(
       inventoryFlybys = service.flybys
       inventoryItemInfo = service.itemInfo
       inventorySackPages = service.sackPages
+      inventoryCaption = service.caption
+      canvas.dataset.nativeSackCaption = service.captionText
       modalHud = service.modalHud
       dowsingFieldTiles = serviceOverlay.children.filter(
         (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',

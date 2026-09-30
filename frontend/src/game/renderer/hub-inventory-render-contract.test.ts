@@ -217,9 +217,12 @@ test('InventoryFlyby owns twenty discrete steps and ten independently fading cop
   assert.equal(hubInventoryFlybyFrame(1_000, 1_290).complete, true)
 })
 
-test('nested InventoryGrid reserves its painted quarter-alpha parent holder at cell zero', () => {
+test('nested InventoryGrid reserves the native gold pad, up arrow and ordinary Sack at cell zero', () => {
   assert.deepEqual(HUB_INVENTORY_PARENT_HOLDER, {
-    alpha: 0.25,
+    arrow: { offset: [0, -12], record: 1, scale: 0.65 },
+    itemClip: [-35, -35, 70, 67],
+    itemOffset: [0, 18],
+    pad: { alpha: 0.25, rect: [-30, -30, 60, 60], tint: 0xd9ba70 },
     visibleSlot: 0,
   })
   assert.equal(hubInventoryRootSlot(HUB_INVENTORY_PARENT_HOLDER.visibleSlot, true), null)

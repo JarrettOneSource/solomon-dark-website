@@ -1,6 +1,7 @@
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode,
   WheelEvent as ReactWheelEvent,
@@ -34,7 +35,7 @@ export function NativeAction({
   gameBack?: boolean
   label: string
   onBlur?: () => void
-  onClick?: () => void
+  onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void
   onFocus?: () => void
   onKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
   onLostPointerCapture?: (event: ReactPointerEvent<HTMLButtonElement>) => void
