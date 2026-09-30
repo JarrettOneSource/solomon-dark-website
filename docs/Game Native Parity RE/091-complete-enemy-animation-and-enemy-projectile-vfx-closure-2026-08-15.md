@@ -3279,14 +3279,15 @@ The real built Spider journey spawned the native Small Spider Wave first
 cohort (actor IDs 9–12 at tick 855), retained the rank-1/rank-3 Shield checks,
 received real Silk stacks 1–3, paused, restored Last Game and released a first
 Cocoon with manual primary input. It then received three more live Spider
-spits and killed every applying Spider through the public damage receiver.
+spits and killed every live cohort Spider, including the applying sources,
+through the public damage receiver.
 The isolation fixture preserved the real arena/encounter/waves ownership while
 deferring reinforcements. An earlier invalid `waves=null` fixture was caught
 by the strict codec and was corrected at the producer; no admission guard
 changed. That failed setup run is excluded from accepted evidence.
 
 A full ten-HP Cocoon remained unchanged for 550 idle native ticks after all
-four source Spiders died. Real held-D input retained a raw x lane of
+four cohort Spiders died. Real held-D input retained a raw x lane of
 89.99996948242188 while root travel stayed blocked and native staff damage
 reduced the Cocoon. It released at tick 3413, subsequent movement resumed,
 and authority plus client wire state removed Webbed. Native death corpses,
@@ -3304,6 +3305,10 @@ message `1554914536342036532`, which explicitly references the earlier
 Firestorm Spider report and describes persistent partial slowing below the
 full-web threshold. It supplies `Slow_Spider_Bug.mp4`; its text matches the
 proved partial-lane defect, but neither that wording nor the clip establishes
-the original Firestorm occurrence. Media stream/visual review is pending the
-next actual owned M5 slot. No new product behavior is inferred from an
-unreviewed attachment.
+the original Firestorm occurrence. Private M5 Chrome metadata and normal
+playback completed: 15.4967 seconds, 1920 by 1114 pixels. Four paused-frame
+canvas captures were identical black and are excluded from visual evidence.
+Presented-frame or native decoder review is pending a future owned M5 slot;
+no product behavior is inferred from unavailable visual content. Original
+bytes are retained at 7,948,771 bytes, SHA-256
+`82bcc3009d1c54bf24be2966c5f88e3cc9a8a1a4c21b7f1599644be857508766`.
