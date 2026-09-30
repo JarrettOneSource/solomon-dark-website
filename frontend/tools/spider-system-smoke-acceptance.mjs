@@ -158,7 +158,10 @@ async function acceptSourceDeathEscape({ host, page, wire, screenshotPath, playe
       magic: true, sourcePlayerId: null, tick: state.tick, registerWorldPainter: order.register }).store
   }
   // Hold reinforcements after the native wave/spit checks so source-death escape has no new attackers.
-  state.world = { ...state.world, enemies, waves: null }
+  state.world = { ...state.world, enemies, waves: {
+    ...state.world.waves, phase: 'interwave', interwaveDelayTicks: 100_000,
+    spiderState: { ...createNativeSpiderWaveState(), phaseIndex: state.world.waves.spiderWaves.length },
+  } }
   state.worldManagerOrder = order.state()
   const retainedPosition = { ...getPlayerCharacter(state, playerId).position }
   await ticks(host, 550)
