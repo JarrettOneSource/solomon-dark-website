@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createNativeWaterHailActor, nativeWaterHailLifeAtAge } from '../core-kernels/air-water-spell-actors.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
 import {
   createBoneyardArenaTransition,
@@ -668,6 +670,55 @@ test('interpolates the persistent Tutorial camera age between authority snapshot
     x: 0,
     y: 0,
   })
+})
+
+test('Hail presentation freezes its native age at terminal entry, including late joins and fractional sampling', () => {
+  const worldTick = 132_841
+  for (const age of [0, 1, 128, 133]) {
+    const hail = {
+      ...createNativeWaterHailActor(1, 'local', 'boneyard:run-1', worldTick - age,
+        { x: 20, y: 20 }, { x: 1, y: 0 }, createNativeRng(42)).actor,
+      ageTicks: age, life: nativeWaterHailLifeAtAge(age),
+      painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 100 }],
+    }
+    const terminal = snapshotAt(worldTick, 10, 100)
+    terminal.run = { ...terminal.run, phase: 'game-over', gameOverTicks: 0,
+      gameOverEventId: 1, nextGameOverEventId: 2 }
+    terminal.primarySpells = { nextId: 2, projectiles: [], transients: [hail] }
+    const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+      initialSnapshot: terminal, serverTickRate: 100, snapshotRate: 20 })
+    if (age >= 2) {
+      const active = snapshotAt(worldTick - 2, 10, 100)
+      active.primarySpells = { nextId: 2, projectiles: [], transients: [{
+        ...hail, ageTicks: age - 2, life: nativeWaterHailLifeAtAge(age - 2),
+      }] }
+      const entry = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+        initialSnapshot: active, serverTickRate: 100, snapshotRate: 20 })
+      entry.push({ ...terminal, tick: worldTick + 3,
+        run: { ...terminal.run, gameOverTicks: 3 } }, 50)
+      for (const now of [70, 75, 79.5, 95, 100]) {
+        const sampled = entry.sample(now).primarySpells.transients[0]
+        assert.ok(sampled?.kind === 'water-hail')
+        assert.equal(sampled.ageTicks, age)
+        assert.equal(sampled.life, hail.life)
+      }
+    }
+    for (const elapsed of [5, 134, 500]) {
+      const newer = { ...terminal, tick: worldTick + elapsed,
+        run: { ...terminal.run, gameOverTicks: elapsed } }
+      timeline.push(newer, elapsed * 10)
+      for (const now of [elapsed * 10, elapsed * 10 + 24.5, elapsed * 10 + 50]) {
+        const sampled = timeline.sample(now).primarySpells.transients[0]
+        assert.ok(sampled?.kind === 'water-hail')
+        assert.equal(sampled.ageTicks, age)
+        assert.equal(sampled.life, hail.life)
+        assert.deepEqual(sampled.position, hail.position)
+      }
+      const joined = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+        initialSnapshot: newer, serverTickRate: 100, snapshotRate: 20 }).sample(0)
+      assert.deepEqual(joined.primarySpells.transients, [hail])
+    }
+  }
 })
 
 test('freezes Mage samples at the exact all-dead edge between snapshots', () => {
@@ -1507,6 +1558,16 @@ test('does not rewind a displayed Air lifetime for a sub-interval Boneyard snaps
   assert.equal(atEventReceipt.tick, 100)
   assert.equal(atEventReceipt.primarySpells.transients[0]?.ageTicks, 4)
   assert.deepEqual(timeline.sample(61).primarySpells.transients, [])
+
+  const terminal = { ...initial, tick: 150,
+    run: { ...initial.run, phase: 'game-over' as const, gameOverTicks: 50,
+      gameOverEventId: 1, nextGameOverEventId: 2 } }
+  const stopped = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: terminal, serverTickRate: 100, snapshotRate: 20 })
+  stopped.push({ ...terminal, tick: 155, run: { ...terminal.run, gameOverTicks: 55 } }, 50)
+  for (const now of [50, 75, 99.5, 100]) {
+    assert.deepEqual(stopped.sample(now).primarySpells.transients, initial.primarySpells.transients)
+  }
 })
 
 test('Lantern position interpolates independently of Solomon and copies the snapshot', () => {

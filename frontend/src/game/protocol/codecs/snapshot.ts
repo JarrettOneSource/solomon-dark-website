@@ -263,7 +263,7 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const primarySpells = primarySpellFrameState(
     source.primarySpells,
     'frame.primarySpells',
-    tick,
+    gameRunWorldTick(tick, run),
   )
   validatePrimarySpellFrameOwners(primarySpells, players, 'frame.primarySpells')
   const secondaryAbilities = nativeSecondaryState(

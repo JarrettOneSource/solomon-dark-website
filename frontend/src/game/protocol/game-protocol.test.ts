@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer'
 import test from 'node:test'
 import { NATIVE_HAIL_MINIMUM_HEIGHT, createNativeWaterHailActor, nativeWaterHailLifeAtAge, stepNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS, gameRunWorldTick } from '../core-kernels/game-run.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createHubEconomy, hagathaOffers } from '../core-kernels/hub-economy.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
@@ -4494,6 +4494,62 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [{ ...earthImpact, lifetimeTicks: earthImpact.lifetimeTicks + 1 }],
     },
   }), /lifetimeTicks does not match/)
+})
+
+test('compact Hail uses the stopped Arena clock throughout Game Over and still rejects invalid births', () => {
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loadedBoneyardFixture('hail-terminal'),
+  )
+  // Report70's retained terminal epoch and first Hail age; other rows cover the live endpoints.
+  const worldTick = 132_841
+  for (const age of [128, 0, 1, 133]) {
+    const birth = createNativeWaterHailActor(
+      1, 'player-1', 'boneyard:hail-terminal', worldTick - age,
+      { x: 20, y: 20 }, { x: 1, y: 0 }, createNativeRng(42),
+    )
+    let actor = birth.actor
+    let rng = birth.rng
+    for (let update = 0; update < age; update += 1) {
+      const stepped = stepNativeWaterHailActor(actor, rng)
+      assert.ok(stepped.actor)
+      actor = stepped.actor
+      rng = stepped.rng
+    }
+    const retained = { ...actor, painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 100 }] }
+    let state: GameSimulationState = {
+      ...active,
+      primarySpells: { nextId: 2, projectiles: [], transients: [retained] },
+      run: { ...active.run, phase: 'game-over', gameOverTicks: 0, gameOverEventId: 1, nextGameOverEventId: 2 },
+      tick: worldTick,
+    }
+    for (const elapsed of [0, 5, 6, 134, 500, 950, 1_200]) {
+      while (state.run.gameOverTicks < elapsed) state = stepGameSimulationTick(state, {})
+      assert.equal(state.run.phase, 'game-over')
+      assert.equal(state.primarySpells.transients[0], retained)
+      const snapshot = createGameSnapshot(state, 'player-1')
+      const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+      const message = { type: 'server-snapshot' as const, acknowledgedInputSequence: 0, sequence: 1, frame }
+      const decoded = decodeServerGameMessage(encodeGameMessage(message))
+      assert.equal(decoded.type, 'server-snapshot')
+      assert.deepEqual(materializePrimarySpellSimulationFrame(
+        decoded.frame.primarySpells, gameRunWorldTick(decoded.frame.tick, decoded.frame.run),
+      ).transients, [retained])
+      if (elapsed === 0 || elapsed === 1_200) {
+        for (const invalidBirth of [worldTick + 1, worldTick - 134]) {
+          const invalid = createPrimarySpellSimulationFrame({
+            ...state.primarySpells, transients: [{ ...retained, birthTick: invalidBirth }],
+          })
+          assert.throws(() => decodeServerGameMessage(encodeGameMessage({
+            ...message, frame: { ...frame, primarySpells: invalid },
+          })), /birthTick is outside the native Hail lifecycle/)
+        }
+      }
+    }
+    state = stepGameSimulationTick(state, {})
+    assert.equal(state.run.phase, 'loadout')
+    assert.deepEqual(state.primarySpells.transients, [])
+  }
 })
 
 test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycles', () => {

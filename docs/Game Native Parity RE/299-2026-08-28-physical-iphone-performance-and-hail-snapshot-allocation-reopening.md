@@ -2033,3 +2033,118 @@ ports 5537/5538 closed. The twelve changed code/test files matched between
 local and Mac at manifest SHA-256
 `04c9453e7f800025e415a9a660b66a4ebb6fd95809bc505b6ebdce28ce3ceda8`.
 Only this documentation was written after the final validation.
+
+## 2026-09-30 — Report70 compact Hail stopped-world clock reopening
+
+### Cause and source provenance
+
+Report70 says acquiring Hail on Frost Jet crashed. The retained original
+1448x944 screenshot (SHA-256
+`69d0464f13b41f661982483873b3079a5f9e2fb8cfd1edf659de8844a9030914`)
+shows `frame.primarySpells.hail.rows[0].birthTick is outside the native Hail lifecycle`.
+It shows no completed diagnostic receipt. A narrowly matched production
+submission belongs to the reporter's Firestorm account, captured September29
+09:35:24.393 UTC and submitted 09:36:17.795 UTC; its protocol140 stack names
+`engine-H3bVi8Ai.js`. The corresponding connection failed at 09:34:51.694 UTC.
+Private diagnostic content and account identifiers are not repository fixtures.
+
+The same connection/run's retained operator archive has compressed SHA-256
+`c3e5b67cbd555b3773ec84f7e45209676c474efe4b5b20f23759a8b8ffe4900a`,
+revision `d91a3ea8576003c7f991c3e10d7e2a3640f54779`, protocol140,
+and terminal capture time 09:34:51.431 UTC. It records Boneyard Game Over at
+simulation tick **132841**, Game Over elapsed zero, with **19** valid Hail
+actors. Row0 has birth tick **132713**, age **128**, and float32 life
+**0.08000165224075317**. The archive directly establishes a terminal-clock
+failure after Hail was present; it does not record the exact acquisition input
+or the rejected WebSocket payload. The disconnect journal later reports tick
+132878. No original player save, profile or production input was changed.
+
+On current unmodified `a6b5ef98`, compacting those exact archived spell actors
+and calling the actual frame codec accepts elapsed0/5 and rejects elapsed6
+at tick132847 with the exact screenshot error. The retained native actor is
+still age128: Game Over advances `state.tick` and `run.gameOverTicks` while
+preserving the resident Arena's primary actors. Both historical and current
+snapshot codecs pass the outer tick to Hail validation. Boneyard retained Hail
+copy/interpolation also reconstructs age/life from that outer tick. The compact
+contract above missed the stopped-world boundary already recovered for Mage
+pulses in entry097. Widening 134 ticks, clamping birth, dropping rows or reducing
+particles would conceal the clock defect.
+
+### Native contract and boundary
+
+Use the sealed retail0.72.5 PE, preferred base `0x00400000`, executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The existing instruction-derived Hail closure in entry121 remains authoritative:
+sole Water-handler constructor xref `0x00543F4C` to `Anim_Hail 0x00454030`,
+parent `0x00453060`, update slot `0x00785024 -> 0x00458D80`, and painter
+`0x004540B0`; life starts at float32 2 and loses float32 0.015 once per Arena
+update, admitting ages0..133. Existing GameOver/PlayerWizard evidence in
+entry097/161 establishes a stopped Arena with independent player-death, score
+and Game Over clocks. No new stock runtime capture or native approximation is
+claimed. No authored table, constructor, RNG, scale, bounce or asset changes
+are needed.
+
+The owning boundary is **learned Hail's compact birth/age/life reconstruction
+against its authoritative world clock**. The existing `gameRunWorldTick`
+function supplies that clock: outer tick minus terminal elapsed, retaining the
+same epoch for active play, pauses, resume and terminal late joins.
+
+| Member | Contract and implementation consequence | Disposition and focused proof |
+| --- | --- | --- |
+| Learned Hail skill38, ranks1..10, normal Frost/Cone emissions, Enhanced Effects On/Off | Existing constructor/RNG/chance and native 134-update lifetime; all share the compact rows | verified-already-at-parity for birth/update; clock consumers exact-ported; native lifetime and strict-frame regressions |
+| Rank0, underpowered and Frost Over | Existing allocation exclusion; no new births or alternate clock | verified-already-at-parity |
+| Airborne, bounce, settled, fade and release retirement | Stored native age/life stop with Arena; live updates retain exact float32 recurrence | verified-already-at-parity |
+| Compact keyframes/deltas and dictionary/position/id/birth validation | Validate Hail using stopped Arena time; future or age134 rows remain invalid | exact-ported; native-age endpoint and terminal timeline regressions |
+| Retained Boneyard copy, fractional interpolation and terminal late join | Reconstruct Hail age/life using each endpoint's world time | exact-ported; native-age endpoint and terminal timeline regressions |
+| Hub compact copy/interpolation and active/paused Boneyard | World and outer clocks coincide; retain existing behavior | verified-already-at-parity |
+| Other primary fixed-lifetime presentation actors sharing the Boneyard clock input | Arena-time sampling must remain stopped with the same world; no producer or material change | exact-ported; stopped Air endpoint regression |
+| Full welcome snapshots, save/continuation and old save schemas | Stored explicit Hail age/life and run epoch remain valid; no data shape or migration change | verified-already-at-parity, built checkpoint/Last Game resume passed |
+| Player death, terminal Mindblast/overlays/flash, Game Over timing/score/loadout | Established independent clocks continue; old world actors clear at loadout | out-of-system for clock reinterpretation; regression acceptance required |
+| Welded Hailstones, Frost chance/performance, Cold Aura design and unrelated reports | Separate actors/owners; no retuning or recovery obligation for this clock fix | out-of-system |
+
+### Planned correction and acceptance
+
+Reuse `gameRunWorldTick` at the compact snapshot decoder and Boneyard primary
+presentation endpoints. Preserve strict Hail admission and native rows/counts;
+no schema change is needed. Advance the protocol version for changed clock
+interpretation so an old decoder cannot admit a new session.
+
+Before product changes, real public regressions fail for native Hail age128
+in the host simulation/frame/decoder path and for terminal retained Hail
+presentation. Cover ages0/1/128/133, invalid future/age134 births, complete
+terminal exit, entry between ordinary20Hz snapshots, late join, frozen level-up
+and save/resume. Run focused tests and built supported UI acquisition/casting,
+both Enhanced Effects modes and terminal exits. Finally run the unchanged
+complete M5 gate on the exact final source, verify maintained production
+rollout, and record final member dispositions and limits below.
+
+### Implemented correction and focused M5 receipt
+
+The snapshot codec now supplies `gameRunWorldTick(tick, run)` to compact Hail
+validation. Boneyard primary copies and interpolation endpoints use that same
+world clock. Interpolation reaches the stopped-world boundary before the outer
+terminal bracket finishes; other primary fixed lifetimes, including Air's last
+live age, remain frozen too. Player/corpse, terminal overlay, score, flash and
+Game Over clock consumers keep their established independent time. Protocol143
+changes interpretation only; save46/data shape and strict134-tick admission are
+unchanged.
+
+On the M5 SSD, the two public regressions failed before the fix (the exact
+row0 error and fractional terminal aging) and pass afterward. The focused
+protocol/timeline/Hail/native/save suite passed180 tests; production build and
+bundle budget passed. Existing built Hail ranks0/1/2/3/10 passed with empty
+page/console/response/request/wire/host/actor errors. The maintained
+`tools/smoke-hail-lifecycle.mjs` passed actual UI Hail acquisition, frozen level-up,
+checkpoint/Last Game restoration and casting in both Enhanced Effects modes.
+Five naturally emitted Hail rows remained unchanged through110 input-exit and
+241 automatic-exit terminal frames while corpse frames advanced to3; both
+paths cleared old primary actors at loadout, with all error arrays empty.
+The deterministic native minimum-level/offer/prerequisite fixtures belong only
+to the disposable test host; the reporter's account/run was never replayed
+into production.
+
+The full unchanged validation gate, final built journey, publication, actual
+maintained rollout and cleanup are required delivery checks; their final
+qualified receipts are retained with Report70 in the private campaign archive.
+No universal FPS, historical acquisition-input replay, retail runtime session
+or exact rejected historical WebSocket packet is claimed.

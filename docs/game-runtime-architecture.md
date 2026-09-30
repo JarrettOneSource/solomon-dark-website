@@ -2271,3 +2271,12 @@ The Game route loads `engine.ts` when a player or observer connects. The
 connection module owns transport setup and complete protocol decoding, so the
 title screen does not eagerly load it. Both existing async connection paths
 handle a module-load failure through their normal connection-failure owner.
+
+Protocol143 preserves protocol142's data shape and uses the existing stopped
+Arena clock for compact Hail birth validation and Boneyard primary presentation.
+Game Over's independent terminal clock continues while primary actor ages/lives
+remain frozen; fractional sampling reaches the exact stopped-world boundary.
+Future or expired Hail births still fail the native134-update contract. Full
+snapshots and saves keep explicit actor ages and require no schema migration.
+See the Report70 reopening in native ledger299 for the correlated production
+capture, clock trace and acceptance evidence.

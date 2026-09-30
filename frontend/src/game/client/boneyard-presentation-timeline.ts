@@ -183,6 +183,15 @@ function interpolateSnapshot(
       if (!players[playerId]) players[playerId] = copyPlayer(newerPlayer)
     }
   }
+  const primaryTime = {
+    newerTick: gameRunWorldTick(newer.tick, newer.run),
+    olderTick: gameRunWorldTick(older.tick, older.run),
+    targetTick: Math.min(targetTick, gameRunWorldTick(newer.tick, newer.run)),
+  }
+  const primarySpan = primaryTime.newerTick - primaryTime.olderTick
+  const primaryBlend = primarySpan > 0
+    ? clamp((primaryTime.targetTick - primaryTime.olderTick) / primarySpan, 0, 1)
+    : blend
   return {
     enhancedEffects: blend < 1 ? older.enhancedEffects : newer.enhancedEffects,
     screenFlashes: copyNativeScreenFlashes(newer.screenFlashes),
@@ -196,8 +205,8 @@ function interpolateSnapshot(
     primarySpells: primarySpellPresentation.interpolateFrame(
       older.primarySpells,
       newer.primarySpells,
-      blend,
-      { newerTick: newer.tick, olderTick: older.tick, targetTick },
+      primaryBlend,
+      primaryTime,
     ),
     secondaryAbilities: interpolateNativeSecondaryState(
       older.secondaryAbilities,
@@ -430,7 +439,7 @@ function presentationCopy(
     ])),
     primarySpells: primarySpellPresentation.copyFrame(
       snapshot.primarySpells,
-      snapshot.tick,
+      gameRunWorldTick(snapshot.tick, snapshot.run),
     ),
     secondaryAbilities: copyNativeSecondaryState(snapshot.secondaryAbilities),
     run: snapshot.run,
