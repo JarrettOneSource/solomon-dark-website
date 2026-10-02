@@ -712,9 +712,9 @@ live_caddy_checksum="$(remote_caddy_checksum)"
 live_game_unit_checksum="$(remote_game_unit_checksum)"
 [[ "$live_game_unit_checksum" == "$target_game_unit_checksum" ]] ||
     fail "production game unit does not match origin/main after deploying $target_sha"
-curl --fail --silent --show-error --retry 10 --retry-all-errors \
+curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
-public_deployment="$(curl --fail --silent --show-error --retry 10 --retry-all-errors \
+public_deployment="$(curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/deployment.json")"
 python3 - "$public_deployment" "$target_sha" <<'PY'
 import json
