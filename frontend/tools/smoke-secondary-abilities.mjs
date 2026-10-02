@@ -7,6 +7,8 @@ import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { acceptItemSets } from './item-set-smoke-acceptance.mjs'
 import { acceptLanternAndCursor } from './lantern-cursor-smoke-acceptance.mjs'
+import { acceptEtherDrain } from './ether-drain-smoke-acceptance.mjs'
+import { acceptEtherDrainGameplay } from './ether-drain-gameplay-smoke-acceptance.mjs'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
@@ -117,6 +119,10 @@ await mkdir(screenshotRoot, { recursive: true })
 const credential = 'secondary-ability-browser-parity'
 const externalBaseUrl = process.env.SDR_SECONDARY_ABILITY_BASE_URL?.replace(/\/$/, '')
 const productionBuild = process.env.SDR_SECONDARY_ABILITY_PRODUCTION === '1'
+if (process.env.SDR_ETHER_DRAIN_ACCEPTANCE === '1' || process.env.SDR_ETHER_DRAIN_GAMEPLAY_ACCEPTANCE === '1') {
+  assert.equal(productionBuild, true, 'Ether Drain acceptance requires the compiled client')
+  assert.equal(requestedScene, 'boneyard')
+}
 let vite = null
 let staticServer = null
 let baseUrl = externalBaseUrl
@@ -201,6 +207,30 @@ try {
   })
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(installGameTextureUploadSmokeProbe)
+  if (process.env.SDR_ETHER_DRAIN_GAMEPLAY_ACCEPTANCE === '1') {
+    await page.addInitScript(() => {
+      const apps = [], samples = []
+      window.__sdrPixiApps = apps
+      window.__secondaryCaptureMaskSamples = samples
+      // Installed Pixi ApplicationInitHook exposes its normal public stage.
+      window.__PIXI_APP_INIT__ = app => apps.push(app)
+      const observe = () => {
+        const visit = node => {
+          if (node.label?.startsWith('secondary:ether-drain-captured-image:')) {
+            const mask = node.mask
+            samples.push({ at: performance.now(), label: node.label, parentLabel: node.parent?.label,
+              mask: mask ? { label: mask.label, x: mask.x, y: mask.y, width: mask.width, height: mask.height,
+                connected: mask.parent === node.parent } : null })
+          }
+          for (const child of node.children ?? []) visit(child)
+        }
+        for (const app of apps) if (app.stage && app.canvas?.matches('.boneyard-world-canvas')) visit(app.stage)
+        if (samples.length > 10000) samples.splice(0, samples.length - 10000)
+        requestAnimationFrame(observe)
+      }
+      requestAnimationFrame(observe)
+    })
+  }
   await page.addInitScript(() => {
     const samples = []
     Object.defineProperty(window, '__secondaryRenderSamples', { value: samples })
@@ -1014,6 +1044,14 @@ try {
   const sharedIceblast = process.env.SDR_ICEBLAST_ACCEPTANCE === '1'
     ? await captureSharedFrostMissile(page, canvas, host, playerId, baseSkillBook, boneyardEnemyBaseline)
     : null
+  const etherDrain = process.env.SDR_ETHER_DRAIN_ACCEPTANCE === '1'
+    ? await acceptEtherDrain({ page, canvas, host, playerId, baseSkillBook, armQuickbar,
+        castSecondaryPointer, stabilizeBoneyardCooldownEnemies, screenshotRoot })
+    : null
+  const etherDrainGameplay = process.env.SDR_ETHER_DRAIN_GAMEPLAY_ACCEPTANCE === '1'
+    ? await acceptEtherDrainGameplay({ page, canvas, host, playerId, baseSkillBook, armQuickbar,
+        castSecondaryPointer, stabilizeBoneyardCooldownEnemies, screenshotRoot })
+    : null
   const browserReceipt = await canvas.evaluate((node) => ({
     context: (node.getContext('webgl2') || node.getContext('webgl'))?.constructor.name,
     rendererName: node.dataset.rendererName,
@@ -1051,6 +1089,8 @@ try {
     belt: beltReceipt,
     browser: browserReceipt,
     consoleErrors,
+    etherDrain,
+    etherDrainGameplay,
     insufficientMana: insufficientManaReceipt,
     itemSets,
     lanternCursor,

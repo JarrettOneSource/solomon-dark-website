@@ -114,6 +114,7 @@ export type GameSoundCue =
   | 'poof'
   | 'nuke'
   | 'phase'
+  | 'crunch-drain'
   | 'portal-die'
   | 'portal-hurt'
   | 'portal-open'

@@ -193,7 +193,7 @@ export function drawNativeHurricaneDamage(
   })
 }
 
-function nativeHurricaneFastDistance(distanceSquared: number): number {
+export function nativeHurricaneFastDistance(distanceSquared: number): number {
   const half = Math.fround(distanceSquared * 0.5)
   let estimate = floatFromBits(0x5f3759df - (floatBits(distanceSquared) >>> 1))
   estimate = Math.fround((1.5 - estimate * estimate * half) * estimate)

@@ -7,7 +7,7 @@ import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-m
 import { boneyardMouthWorldTargets } from '../core-server/boneyard-world-targets.ts'
 import { normalizeSavedDiscorporeal } from './discorporeal-save.ts'
 import { createNativePuppetHit, nativePuppetHitAlpha, receiveNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
-import { nativePuppetHit, nativeWorldPuppetHits } from '../protocol/codecs/native-state.ts'
+import { nativePuppetHit, nativeWorldPainterRegistrations, nativeWorldPuppetHits, vector } from '../protocol/codecs/native-state.ts'
 import type { BoastSelection, ModBoastSelection } from '../core-kernels/boast.ts'
 import type { NativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
 import { assertNativeDemonArticulationState, createNativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
@@ -35,6 +35,12 @@ import { NATIVE_FLOAT_DIVISOR, createNativeRng, drawNativeFloat, drawNativeInteg
 import { NATIVE_BANISH_RING_ALPHA_LOSS, NATIVE_FADE_ALPHA_LOSS, NATIVE_TRAGIC_CONTACT_ALPHA_LOSS } from '../core-server/boneyard-transient-effects.ts'
 import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
 import { nativeSecondaryPainterManagerLane } from '../core-kernels/native-secondary-abilities.ts'
+import { createNativeEtherDrainState, nativeEtherDrainCapturesFamily } from '../core-kernels/native-ether-drain.ts'
+import { nativeEtherDrainState } from '../protocol/codecs/secondary-actors.ts'
+import { NATIVE_GOLEM_DEATH_FRAGMENT_COUNT, NATIVE_GOLEM_DEATH_MAX_AGE, NATIVE_GOLEM_DEATH_PAINTER_COUNT } from '../core-kernels/native-death-animations.ts'
+import { playerDeathEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
+import { nativeDeathWeapons, nativeGolemDeathAnimation } from '../protocol/codecs/death-animations.ts'
+import { legacyDeathWeaponActor, legacyGolemDeathAnimation } from './legacy-death-animations.ts'
 import { nativeSpiderWaveDefinitions } from '../core-kernels/native-spider-wave-data.ts'
 import { createNativeSpiderWaveState } from '../core-kernels/native-spider-wave-program.ts'
 import { NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS, NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, STOCK_TUTORIAL_BONEYARD_ID } from '../core-kernels/native-tutorial.ts'
@@ -57,7 +63,7 @@ import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
 import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
 import type { HubWorldState } from '../core-server/hub-world.ts'
 import { createHubWorld } from '../core-server/hub-world.ts'
-import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, refreshPlayerEntityHagathaSkillEffects, replacePlayerCharacter, replacePlayerEconomy, unlockPlayerEntityAdvancedSkill } from '../core-server/player-entity-store.ts'
+import { autofillPlayerEntitySkillSelections, migratePlayerStarterEquipmentAppearance, playerCharacterAt, refreshPlayerEntityHagathaSkillEffects, replacePlayerCharacter, replacePlayerEconomy, unlockPlayerEntityAdvancedSkill } from '../core-server/player-entity-store.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import type { LuaConsoleValue } from '../protocol/codecs/lua.ts'
@@ -656,6 +662,23 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   if (!sameCharacter(config, continuation.summary.character)) {
     throw new Error('game save owner character summary drifted')
   }
+  if (parsed.sourceSchemaVersion < 48 && state.world.kind === 'boneyard') {
+    const world = state.world
+    let nextId = 1
+    const deathWeapons = state.playerEntities.identities.flatMap(({ playerId }, index) => {
+      const progression = state.playerEntities.progressions[index]!
+      const registration = state.playerEntities.lightings[index]!.deathWeaponPainterRegistration
+      const player = playerCharacterAt(state.playerEntities, playerId)!
+      if (registration === null || progression.deathEpoch < 1
+        || progression.lifeState !== 'dying' && progression.lifeState !== 'spectating') return []
+      const weapon = playerDeathEquipmentAppearance(state.playerEntities.configs[index]!.element,
+        state.playerEntities.economies[index]!.equipment).weapon
+      return [legacyDeathWeaponActor({ deathEpoch: progression.deathEpoch, headingIndex: player.headingIndex,
+        playerId, runId: world.runId, weapon }, progression.deathTick, player.position,
+        state.tick, nextId++, registration)]
+    })
+    state = { ...state, world: { ...world, deathWeapons, nextDeathWeaponId: nextId } }
+  }
   createGameSnapshot(state, continuation.summary.playerId)
   if (state.world.kind === 'boneyard' && state.world.enemies.puppetHits.length > 0) {
     const owners = new Map(boneyardMouthWorldTargets(state.world, state).map(target => [target.id, target.hitKind]))
@@ -783,7 +806,7 @@ function normalizeSimulation(
     playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion, savedTick),
     primarySpells: normalizePrimarySpells(source.primarySpells, sourceSchemaVersion),
     run: normalizeRun(source.run),
-    secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities, sourceSchemaVersion),
+    secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities, sourceSchemaVersion, savedTick),
     tick: source.tick,
     world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion, savedTick),
   }
@@ -1027,9 +1050,21 @@ function normalizeWorldPainterOwnership(
         sourceSchemaVersion,
       )
     : world
+  const secondary = record(input.secondaryAbilities, 'game save secondary abilities')
+  const actors = array(secondary.actors, 'game save secondary actors').map(value => {
+    const actor = record(value, 'game save secondary actor')
+    if (sourceSchemaVersion >= 48 || actor.kind !== 'golem-death') return actor
+    const old = actor.painterRegistrations === undefined && migrateMissing ? [register('actor')]
+      : array(actor.painterRegistrations, 'legacy Golem death painter registrations')
+    if (old.length !== 1 || !isManagerRegistration(old[0], 'actor')) {
+      throw new Error('legacy Golem death must have one replay painter root')
+    }
+    return { ...actor, painterRegistrations: [old[0], ...Array.from({ length: NATIVE_GOLEM_DEATH_FRAGMENT_COUNT }, () => register('actor'))] }
+  })
   return {
     ...input,
     primarySpells: { ...primarySpells, projectiles, transients },
+    secondaryAbilities: { ...secondary, actors },
     world: normalizedWorld,
     worldManagerOrder: { nextRegistrationOrdinal },
   }
@@ -1640,6 +1675,10 @@ function normalizePlayerStore(
   const progressions = array(source.progressions, 'game save player progressions').map(
     (value, index) => {
       const progression = record(value, `game save player progression ${index}`)
+      if (sourceSchemaVersion >= 48 && (typeof progression.corpseConsumed !== 'boolean'
+        || progression.corpseConsumed && progression.lifeState !== 'dying' && progression.lifeState !== 'spectating')) {
+        throw new Error(`game save player progression ${index} corpseConsumed requires a dead player and a boolean`)
+      }
       if (sourceSchemaVersion >= 31 && typeof progression.poisonBeforeCold !== 'boolean') {
         throw new Error(`game save player progression ${index} poison/cold order is invalid`)
       }
@@ -1658,6 +1697,7 @@ function normalizePlayerStore(
       )
       const normalized = {
         ...progression,
+        corpseConsumed: sourceSchemaVersion < 48 ? false : progression.corpseConsumed,
         hitFeedback: normalizeSavedPuppetHit(progression.hitFeedback, progression.lastDamageTick,
           savedTick, sourceSchemaVersion, `game save player ${index} hit feedback`),
         circleSlowTicksRemaining: sourceSchemaVersion < 34 ? 0 : progression.circleSlowTicksRemaining,
@@ -1755,19 +1795,46 @@ function normalizeDemonSkullEncounter(value: unknown) {
   }
 }
 
-function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): GameSimulationState['secondaryAbilities'] {
+function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number, savedTick: number): GameSimulationState['secondaryAbilities'] {
   const source = record(value, 'game save secondary abilities')
   const players = record(source.players, 'game save secondary players')
   let rng = parseNativeRng(source.rng, 'game save secondary RNG')
-  const actors = array(source.actors, 'game save secondary actors').map((value, index) => {
+  const savedActors = array(source.actors, 'game save secondary actors')
+  const legacyDebris = sourceSchemaVersion < 48 ? savedActors.map((value, index) => record(value, `game save secondary actor ${index}`))
+    .filter(actor => actor.kind === 'ether-drain-debris') : []
+  const actors = savedActors.filter(value => sourceSchemaVersion >= 48
+    || record(value, 'legacy secondary actor').kind !== 'ether-drain-debris').map((value, index) => {
     const actor = record(value, `game save secondary actor ${index}`)
+    if (sourceSchemaVersion < 48 && actor.kind === 'ether-drain') {
+      const animations = legacyDebris.filter(child => child.worldKey === actor.worldKey
+        && array(child.hitTargetIds, 'legacy field parent')[0] === actor.id).map(child => ({
+          kind: 'debris', position: child.position, direction: child.velocity, remainingDistance: child.quantity,
+          speed: child.slowFactor, oscillationDegrees: child.phase, rotationDegrees: finiteNumber(child.rotationRadians, 'legacy debris rotation') * 180 / Math.PI, variant: child.variant,
+        }))
+      return { ...actor, etherDrain: nativeEtherDrainState({ ...createNativeEtherDrainState(), animations }, `game save secondary actor ${index}.etherDrain`), hitTargetIds: [], quantity: 0 }
+    }
+    if (actor.kind === 'ether-drain') return { ...actor, etherDrain: actor.etherDrain === null ? null
+      : nativeEtherDrainState(actor.etherDrain, `game save secondary actor ${index}.etherDrain`) }
     if (sourceSchemaVersion < 46 && actor.kind === 'storm-strike') {
       return { ...actor, enhanced: true }
     }
-    if (sourceSchemaVersion < 46 && actor.kind === 'golem-death') {
-      // The old enhanced bit redundantly meant Iron; variant already preserves
-      // that material. Historical shipped quality was always On.
-      return { ...actor, enhanced: true, lifetimeTicks: 667 }
+    if (actor.kind === 'golem-death') {
+      const enhanced = sourceSchemaVersion < 46 ? true : actor.enhanced
+      if (typeof enhanced !== 'boolean') throw new Error('saved Golem death quality is invalid')
+      const lifetimeTicks = enhanced ? NATIVE_GOLEM_DEATH_MAX_AGE.on : NATIVE_GOLEM_DEATH_MAX_AGE.off
+      if (sourceSchemaVersion >= 48 && (actor.presentationRng !== null || actor.lifetimeTicks !== lifetimeTicks)) {
+        throw new Error('saved Golem death must retain its mutable owner and native lifetime envelope')
+      }
+      const golemDeath = sourceSchemaVersion < 48
+        ? legacyGolemDeathAnimation(parseNativeRng(actor.presentationRng, 'saved Golem death constructor RNG'), enhanced,
+          integerWithin(actor.ageTicks, 'saved Golem death age', 0, 133),
+          vector(actor.position, 'saved Golem death position'), savedTick)
+        : nativeGolemDeathAnimation(actor.golemDeath, `game save secondary actor ${index}.golemDeath`, enhanced)
+      const painterRegistrations = sourceSchemaVersion < 48 ? actor.painterRegistrations
+        : nativeWorldPainterRegistrations(actor.painterRegistrations, `game save secondary actor ${index}.painterRegistrations`,
+          'actor', NATIVE_GOLEM_DEATH_PAINTER_COUNT)
+      return { ...actor, enhanced, golemDeath, painterRegistrations, presentationRng: null,
+        lifetimeTicks }
     }
     if (actor.kind === 'leviathan' || actor.kind === 'leviathan-appendage') {
       // Older saves stored equipment-resolved damage; bolts now resolve the live caster once.
@@ -2097,6 +2164,10 @@ function normalizeWorld(
   if (source.kind !== 'boneyard') return source
   const loadedBoneyard = parseLoadedBoneyard(loadedBoneyardValue)
   const defaults = createBoneyardWorld(loadedBoneyard)
+  const deathWeapons = sourceSchemaVersion < 48 ? [] : nativeDeathWeapons(source.deathWeapons, 'game save deathWeapons', savedTick)
+  const nextDeathWeaponId = sourceSchemaVersion < 48 ? 1
+    : integerWithin(source.nextDeathWeaponId, 'game save nextDeathWeaponId', 1, Number.MAX_SAFE_INTEGER)
+  if (deathWeapons.some(actor => actor.id >= nextDeathWeaponId)) throw new Error('game save death weapon allocator is behind its actors')
   const previousSceneryIds = sourceSchemaVersion < 34 ? new Set(array(
     source.primarySceneryTargets ?? defaults.primarySceneryTargets, 'legacy saved scenery targets',
   ).map(value => record(value, 'legacy saved scenery target').id)) : null
@@ -2109,6 +2180,10 @@ function normalizeWorld(
       const lethalMagicDamage = sourceSchemaVersion < 34 ? false : actor.lethalMagicDamage
       if (typeof lethalMagicDamage !== 'boolean') throw new Error('saved enemy lethal magic provenance is invalid')
       const config = record(actor.config, `game save Boneyard enemy config ${index}`)
+      if ('etherDrainCaptured' in actor && (actor.etherDrainCaptured !== true || actor.lifeState !== 'dying'
+        || !nativeEtherDrainCapturesFamily(String(config.enemyToken)))) {
+        throw new Error(`game save Boneyard enemy actor ${index} has an invalid Ether Drain capture`)
+      }
       let brain = actor.brain
       if (sourceSchemaVersion < 26 && config.enemyToken === 'WRAITH') {
         const visualPhase = nextBoneyardWaveRandom(enemyRngState)
@@ -2381,18 +2456,28 @@ function normalizeWorld(
     ...source,
     primarySceneryTargets: previousSceneryIds === null ? source.primarySceneryTargets
       : defaults.primarySceneryTargets.filter(target => target.id.startsWith('fencepost:') || previousSceneryIds.has(target.id)),
+    deathWeapons,
+    nextDeathWeaponId,
     enemies: {
       ...enemies,
       featuredBossId,
-      deathEffects: sourceSchemaVersion < 39 ? array(enemies.deathEffects, 'saved enemy death effects').flatMap(value => {
-        const effect = normalizeLegacyGrowingEffect(record(value, 'saved enemy death effect'), sourceSchemaVersion)
+      deathEffects: sourceSchemaVersion < 48 ? array(enemies.deathEffects, 'saved enemy death effects').flatMap(value => {
+        const saved = record(value, 'saved enemy death effect')
+        const effect = sourceSchemaVersion < 39 ? normalizeLegacyGrowingEffect(saved, sourceSchemaVersion) : saved
         if (effect === null) return []
-        return [{
+        const migrated = {
           ...effect,
           ...(sourceSchemaVersion < 33 ? { scaleY: effect.scale } : {}),
           ...(sourceSchemaVersion < 34 && effect.kind === 'unbind' ? { presentationOwner: 'late-world-overlay', painterRegistration: null } : {}),
           ...(sourceSchemaVersion < 36 && effect.kind === 'fade-perspective-clipped' ? { presentationOwner: 'background', painterRegistration: null } : {}),
-        }]
+        }
+        if ((effect.kind === 'bouncer' || effect.kind === 'smoky-bouncer' || effect.kind === 'black-smoky-bouncer')
+          && effect.height === 0 && effect.verticalVelocity === 0 && effect.angularVelocityDeg === 0) {
+          const velocity = record(effect.velocity, 'saved settled Bouncer velocity')
+          // Shipped <=47 stopped motion but left the pre-settle bounce value.
+          if (velocity.x === 0 && velocity.y === 0) return [{ ...migrated, bounceVelocity: 0 }]
+        }
+        return [migrated]
       }) : enemies.deathEffects,
       demonSkullEncounter: sourceSchemaVersion < 34 ? createNativeDemonSkullEncounter() : normalizeDemonSkullEncounter(enemies.demonSkullEncounter),
       bossNarration: sourceSchemaVersion < 34 ? createNativeBossNarration() : enemies.bossNarration,
@@ -2408,6 +2493,9 @@ function normalizeWorld(
       actors: enemyActors,
       maggots: array(enemies.maggots, 'game save Maggots').map((value, index) => {
         const maggot = record(value, `game save Maggot ${index}`)
+        if ('etherDrainCaptured' in maggot && (maggot.etherDrainCaptured !== true || maggot.lifeState !== 'dying')) {
+          throw new Error(`game save Maggot ${index} has an invalid Ether Drain capture`)
+        }
         return { ...maggot, hitFeedback: normalizeSavedPuppetHit(maggot.hitFeedback, maggot.lastDamageTick,
           savedTick, sourceSchemaVersion, `game save Maggot ${index} hit feedback`) }
       }),

@@ -1,3 +1,4 @@
+import { nativeDeathWeapons } from './death-animations.ts'
 import { nativeWorldPuppetHits } from './native-state.ts'
 import type { BoneyardGateLeafSnapshot } from '../../core-kernels/boneyard.ts'
 import type { GameRunLifecycleState } from '../../core-kernels/game-run.ts'
@@ -166,6 +167,7 @@ export function gameWorldSnapshot(
       'puppetHits',
       'arenaTransition',
       'deathEffects',
+      'deathWeapons',
       'encounter',
       'enemies',
       'enemyEvents',
@@ -350,6 +352,7 @@ export function gameWorldSnapshot(
       bossSpells: nativeBossSpells(source.bossSpells, `${field}.bossSpells`, snapshotTick),
       puppetHits: nativeWorldPuppetHits(source.puppetHits, `${field}.puppetHits`, snapshotTick),
       deathEffects,
+      deathWeapons: nativeDeathWeapons(source.deathWeapons, `${field}.deathWeapons`, snapshotTick),
       encounter,
       enemies,
       enemyEvents,
@@ -411,6 +414,7 @@ export function gameWorldSnapshotFrame(
       'arenaTransition',
       'encounter',
       'entities',
+      'deathWeapons',
       'enemyEvents',
       'enemyWorldFeedback',
       'gateLeaves',
@@ -458,6 +462,7 @@ export function gameWorldSnapshotFrame(
       puppetHits: nativeWorldPuppetHits(source.puppetHits, `${field}.puppetHits`, snapshotTick),
       encounter,
       entities: replicatedEntityFrame(source.entities, `${field}.entities`),
+      deathWeapons: nativeDeathWeapons(source.deathWeapons, `${field}.deathWeapons`, snapshotTick),
       enemyEvents: boneyardEnemyEvents(
         source.enemyEvents,
         `${field}.enemyEvents`,

@@ -58,6 +58,7 @@ export function interpolateNativeSecondaryState(
     const discrete = blend < 1 ? actor : next
     return {
       ...discrete,
+      ...(discrete.golemDeath ? { golemDeath: copyGolemDeath(discrete.golemDeath) } : {}),
       ageTicks: lerp(actor.ageTicks, next.ageTicks, blend),
       alpha: lerp(actor.alpha, next.alpha, blend),
       endpoint: {
@@ -105,6 +106,7 @@ function copyActor(
 ): NativeSecondarySnapshotState['actors'][number] {
   return {
     ...actor,
+    ...(actor.golemDeath ? { golemDeath: copyGolemDeath(actor.golemDeath) } : {}),
     golem: actor.golem === null ? null : copyGolem(actor.golem),
     endpoint: { ...actor.endpoint },
     hitTargetIds: [...actor.hitTargetIds],
@@ -124,6 +126,11 @@ function copyActor(
         },
     velocity: { ...actor.velocity },
   }
+}
+
+function copyGolemDeath(source: NonNullable<NativeSecondarySnapshotState['actors'][number]['golemDeath']>): NonNullable<NativeSecondarySnapshotState['actors'][number]['golemDeath']> {
+  return { ...source, fragments: source.fragments.map(fragment => fragment === null ? null : { ...fragment,
+    position: { ...fragment.position }, velocity: { ...fragment.velocity } }) }
 }
 
 function copyGolem(

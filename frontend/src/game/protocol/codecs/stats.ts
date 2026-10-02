@@ -14,6 +14,7 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
     'weldBuildId',
     'weldComponentRanks',
     'coldSlowTicksRemaining',
+    'corpseConsumed',
     'concentrationSkillIds',
     'currentHealth',
     'currentMana',
@@ -264,7 +265,12 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
   if (!(PLAYER_LIFE_STATES as readonly string[]).includes(lifeState)) {
     throw new GameProtocolError(`${field}.lifeState is not supported`)
   }
+  const corpseConsumed = boolean(source.corpseConsumed, `${field}.corpseConsumed`)
+  if (corpseConsumed && lifeState !== 'dying' && lifeState !== 'spectating') {
+    throw new GameProtocolError(`${field}.corpseConsumed requires a dead player`)
+  }
   return {
+    corpseConsumed,
     circleSlowTicksRemaining: integerWithin(source.circleSlowTicksRemaining, `${field}.circleSlowTicksRemaining`, 0, 20),
     advancedUnlocks,
     coldSlowTicksRemaining,

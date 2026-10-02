@@ -1,6 +1,7 @@
 import badguys from '../../editor/manifest/badguys.json'
 import deadhawg from '../../editor/manifest/deadhawg.json'
 import golem from '../../editor/manifest/golem.json'
+import demon from '../../editor/manifest/demon.json'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
 import playerMindblastRing from '../../assets/game/player-mindblast-ring.png'
@@ -8,7 +9,7 @@ import playerHardenIce from '../../assets/game/player-harden-ice.png'
 import playerStoneskin from '../../assets/game/player-stoneskin.png'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
 
-export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'Clothes', 'DeadHawg', 'Golem'] as const
+export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'Clothes', 'DeadHawg', 'Demon', 'Golem'] as const
 export type NativeSecondaryAtlas = typeof NATIVE_SECONDARY_ATLASES[number]
 
 const specialFiles = import.meta.glob([
@@ -25,10 +26,11 @@ export const NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES = Object.freeze({
 })
 
 const BADGUYS_ENTRIES = Object.freeze([
-  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 77, 78, 84, 85, 86, 88, 90,
+  0, 7, 8, 9, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 77, 78, 84, 85, 86, 88, 90,
   ...range(110, 112), ...range(158, 167), ...range(238, 250),
   ...range(251, 266), ...range(267, 270),
   ...range(333, 433), ...range(446, 450), ...range(1836, 1839), ...range(2008, 2010),
+  ...range(1477, 1584), ...range(2293, 2346),
 ])
 const DEADHAWG_ENTRIES = Object.freeze([
   2, 4, 5, 6, 16, 17, 18, ...range(46, 87), ...range(177, 179), ...range(200, 207),
@@ -43,12 +45,14 @@ export const NATIVE_SECONDARY_SPRITE_MEMBERSHIP = Object.freeze({
   BadGuys: BADGUYS_ENTRIES,
   Clothes: CLOTHES_ENTRIES,
   DeadHawg: DEADHAWG_ENTRIES,
+  Demon: Object.freeze(range(80, 97)),
   Golem: GOLEM_ENTRIES,
 }) satisfies Readonly<Record<NativeSecondaryAtlas, readonly number[]>>
 
 const manifests: Readonly<Record<Exclude<NativeSecondaryAtlas, 'Clothes'>, AtlasManifest>> = {
   BadGuys: badguys as AtlasManifest,
   DeadHawg: deadhawg as AtlasManifest,
+  Demon: demon as AtlasManifest,
   Golem: golem as AtlasManifest,
 }
 export interface NativeSecondarySpriteRecord {

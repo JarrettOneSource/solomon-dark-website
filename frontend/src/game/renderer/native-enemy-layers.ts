@@ -1,3 +1,4 @@
+export { stableInclusiveUnit } from '../core-kernels/native-enemy-presentation-random.ts'
 import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
 import { nativeDemonSkullFacing } from '../core-kernels/native-demon-skull-attachments.ts'
 import type { NativeEnemyAtlas, NativeEnemyFamily, NativeEnemyFamilyPresentation, NativeEnemySpriteLayer, NativeEnemyVisualSnapshot } from './native-enemy-presentation-model.ts'
@@ -168,24 +169,6 @@ export function stableUnit(
   return value / 0x1_0000_0000
 }
 
-export function stableInclusiveUnit(
-  enemy: NativeEnemyVisualSnapshot,
-  channel: number,
-  epoch = 0,
-): number {
-  let value = (
-    (enemy.id >>> 0)
-    ^ Math.imul((Math.floor(enemy.spawnTick) + 1) >>> 0, 0x9e3779b1)
-    ^ Math.imul((channel + 1) >>> 0, 0x85ebca6b)
-    ^ Math.imul((epoch + 1) >>> 0, 0xc2b2ae35)
-  ) >>> 0
-  value ^= value >>> 16
-  value = Math.imul(value, 0x7feb352d) >>> 0
-  value ^= value >>> 15
-  value = Math.imul(value, 0x846ca68b) >>> 0
-  value = (value ^ (value >>> 16)) >>> 0
-  return value / 0xffff_ffff
-}
 
 export function stableInteger(
   enemy: NativeEnemyVisualSnapshot,

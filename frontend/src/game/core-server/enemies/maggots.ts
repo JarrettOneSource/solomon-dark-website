@@ -143,6 +143,7 @@ export function stepMaggots(
       continue
     }
     if (source.lifeState === 'dying') {
+      if (source.etherDrainCaptured) { retireMaggot(work, source, context.tick); continue }
       const deathStartedTick = source.deathStartedTick ?? context.tick
       const deathTick = Math.max(0, context.tick - deathStartedTick)
       if (

@@ -99,6 +99,7 @@ export function applyPlayerContacts(
       },
       tick,
       source.enhancedEffects ?? true,
+      registerWorldPainter,
     )
     secondaryAbilities = received.state
     if (received.reflectedDamage > 0 && received.ownerId !== null && damageSource?.reflectableActorId != null) {

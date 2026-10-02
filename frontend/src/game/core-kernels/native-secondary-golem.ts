@@ -9,7 +9,6 @@ import type { Vector2 } from './vector.ts'
 export const NATIVE_GOLEM_RADIUS = 30
 export const NATIVE_GOLEM_PLACEMENT_RADIUS = 25
 export const NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED = 6_400
-export const NATIVE_GOLEM_DEATH_DURATION_TICKS = 134
 export const NATIVE_GOLEM_DEATH_PRESENTATION_RNG_DRAWS = 273
 
 const TARGET_DISTANCE_SQUARED = 999_999
@@ -411,32 +410,6 @@ export function damageNativeSecondaryGolem(
       ? damage.primaryDamage * actor.golem.reflectFactor
       : 0,
   }
-}
-
-/**
- * Golem::DeathEffect 0x00619730 consumes the full visual construction stream:
- * 30 shuffle draws, seven draws for each of 30 rock bouncers, then three
- * draws for the unbind star. Presentation replays from the pre-consumption
- * state while simulation advances past all 273 draws.
- */
-export function consumeNativeGolemDeathPresentationRng(
-  source: NativeRngState,
-): NativeRngState {
-  let rng = source
-  for (let index = 0; index < 30; index += 1) rng = drawNativeInteger(rng, 30).state
-  for (let index = 0; index < 30; index += 1) {
-    rng = drawNativeFloat(rng, 3).state
-    rng = drawNativeFloat(rng, 20).state
-    rng = drawNativeFloat(rng, 360).state
-    rng = drawNativeFloat(rng, 10).state
-    rng = drawNativeFloat(rng, 1).state
-    rng = drawNativeFloat(rng, 10).state
-    rng = drawNativeFloat(rng, 20, true).state
-  }
-  rng = drawNativeFloat(rng, 360).state
-  rng = drawNativeFloat(rng, 5).state
-  rng = drawNativeInteger(rng, 10).state
-  return rng
 }
 
 function maybeStartProvoke(

@@ -71,7 +71,7 @@ export class PlayerDeathBurstCrossingTracker {
         continue
       }
       const key = playerDeathBurstKey(runId, playerId, current.deathEpoch)
-      const crossed = current.deathEpoch > 0
+      const crossed = !player.progression.corpseConsumed && current.deathEpoch > 0
         && current.deathTick >= PLAYER_DEATH_FRAME_THREE_TICK
         && (
           current.deathEpoch > previous.deathEpoch

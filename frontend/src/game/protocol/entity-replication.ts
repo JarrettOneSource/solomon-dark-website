@@ -344,6 +344,7 @@ export function createGameSnapshotFrame(
     ...common,
     world: {
       arenaTransition: snapshot.world.arenaTransition,
+      deathWeapons: snapshot.world.deathWeapons,
       featuredBossId: snapshot.world.featuredBossId,
       bossNarration: snapshot.world.bossNarration,
       bossSpells: snapshot.world.bossSpells,
@@ -551,6 +552,7 @@ export class EntityReplicationReconstructor {
       ...common,
       world: {
         arenaTransition: frame.world.arenaTransition,
+        deathWeapons: frame.world.deathWeapons,
         featuredBossId: frame.world.featuredBossId,
         bossNarration: frame.world.bossNarration,
         bossSpells: frame.world.bossSpells,

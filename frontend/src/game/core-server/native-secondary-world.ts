@@ -1,6 +1,7 @@
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { nativeEtherDrainCapturesFamily } from '../core-kernels/native-ether-drain.ts'
 import type { NativeSecondaryDamageContact, NativeSecondaryDampenCandidates, NativeSecondaryDampenProjectileCandidate, NativeSecondaryHeadingPerturbation, NativeSecondaryPositionResult, NativeSecondaryTarget, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -8,7 +9,7 @@ import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { canPlaceBoneyardBody } from './boneyard-collision.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
 import { dampenBoneyardCasters } from './enemies/dampen.ts'
-import type { BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore } from './enemies/model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore } from './enemies/model.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 const NATIVE_TELEPORT_GRID_STEP = 100
 const NATIVE_TELEPORT_GRID_INSET = 100
@@ -29,6 +30,7 @@ export interface BoneyardNativeTeleportWorld {
 }
 
 export interface BoneyardSecondaryCombatResult {
+  readonly captures: readonly Readonly<{ actor: BoneyardEnemyActor | null; fieldIndex: number }>[]
   readonly enemies: BoneyardEnemyStore
   readonly events: readonly BoneyardEnemySemanticEvent[]
 }
@@ -296,6 +298,7 @@ export function resolveBoneyardNativeSecondaryCombat(
         bossSpells: source.bossSpells.filter(({ id }) => !removedProjectileIds.has(id)),
       }
   const events: BoneyardEnemySemanticEvent[] = []
+  const captures: Array<Readonly<{ actor: BoneyardEnemyActor | null; fieldIndex: number }>> = []
   enemies = dampenBoneyardCasters(enemies, result.dampenedCasterTargetIds, tick, registerWorldPainter)
 
   for (const targetId of result.dispelledShieldTargetIds) {
@@ -327,9 +330,10 @@ export function resolveBoneyardNativeSecondaryCombat(
     )
     enemies = damaged.enemies
     events.push(...damaged.events)
+    captures.push(...damaged.captures)
   }
   enemies = applyEarthquakeHeadingPerturbations(enemies, result.headingPerturbations)
-  return { enemies, events: Object.freeze(events) }
+  return { captures: Object.freeze(captures), enemies, events: Object.freeze(events) }
 }
 
 function applyEarthquakeHeadingPerturbations(
@@ -391,10 +395,10 @@ function applyContact(
   if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
     throw new RangeError('secondary damage multiplier must be finite and non-negative')
   }
-  const target = contact.etherDrain === true
-    ? source.actors.find(({ id }) => id === contact.targetId)
-    : undefined
-  const etherDrainCapture = target !== undefined && etherDrainFields.some((field) => {
+  const actor = source.actors.find(({ id }) => id === contact.targetId)
+  const target = contact.etherDrain === true && nativeEtherDrainCapturesFamily(actor?.config.enemyToken ?? 'MAGGOT')
+    ? actor ?? source.maggots.find(({ id }) => id === contact.targetId) : undefined
+  const fieldIndex = target === undefined ? -1 : etherDrainFields.findIndex((field) => {
     const dx = field.x - target.position.x
     const dy = field.y - target.position.y
     return dx * dx + dy * dy < 1600
@@ -402,7 +406,7 @@ function applyContact(
   const damaged = damageBoneyardEnemy(source, {
     enhancedEffects,
     actorId: contact.targetId,
-    etherDrainCapture,
+    etherDrainCapture: fieldIndex >= 0,
     hitStrength: contact.hitStrength,
     suppressHitReaction: contact.suppressHitReaction,
     magic: contact.kind !== 'physical',
@@ -414,7 +418,8 @@ function applyContact(
     suppressHurtSound: contact.suppressHurtSound,
     tick,
   })
-  return { enemies: damaged.store, events: damaged.events }
+  return { captures: damaged.killed && fieldIndex >= 0 ? [{ actor: actor ?? null, fieldIndex }] : [],
+    enemies: damaged.store, events: damaged.events }
 }
 
 function canPlaceNativeTeleportBody(

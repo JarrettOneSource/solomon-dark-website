@@ -93,7 +93,6 @@ export const ML_BOT_POLICY_SECONDARY_ACTOR_CLASSES = Object.freeze({
   'ether-drain': 'effect',
   'ether-drain-capture-flare': 'presentation',
   'ether-drain-cloud': 'presentation',
-  'ether-drain-debris': 'presentation',
   'ether-fade': 'presentation',
   'fire-burn': 'status-carrier',
   'fire-burn-flame': 'presentation',

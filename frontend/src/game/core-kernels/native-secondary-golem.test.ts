@@ -1,10 +1,10 @@
+import { createNativeGolemDeathAnimation } from './native-death-animations.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createNativeRng } from './native-rng.ts'
 import {
   NATIVE_GOLEM_DEATH_PRESENTATION_RNG_DRAWS,
-  consumeNativeGolemDeathPresentationRng,
   damageNativeSecondaryGolem,
   nativeInitialGolemArticulation,
   stepNativeSecondaryGolem,
@@ -290,7 +290,7 @@ test('Golem target polling, owner orbit, provoke roll, and death RNG consumption
   assert.equal(forcedProvoke.provokeStarted, true)
   assert.deepEqual(forcedProvoke.rng, forcedProvokeRng)
 
-  const consumed = consumeNativeGolemDeathPresentationRng(createNativeRng(1))
+  const consumed = createNativeGolemDeathAnimation(createNativeRng(1), { x: 0, y: 0 }, true).rng
   assert.equal(NATIVE_GOLEM_DEATH_PRESENTATION_RNG_DRAWS, 273)
   assert.equal(consumed.indexA, 53)
   assert.equal(consumed.indexB, 29)

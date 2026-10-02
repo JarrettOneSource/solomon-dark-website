@@ -41,6 +41,8 @@ export function createBoneyardWorld(
   const ownsSolomonEncounter = loaded.choice.source === 'default'
     && loaded.scene.solomonDig !== null
   return {
+    deathWeapons: [],
+    nextDeathWeaponId: 1,
     arenaTransition: ownsRetailEncounter
       ? createBoneyardArenaTransition(loaded.scene.bounds, loaded.scene.spawn)
       : null,

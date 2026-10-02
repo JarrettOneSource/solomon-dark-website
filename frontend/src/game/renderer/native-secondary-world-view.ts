@@ -41,6 +41,8 @@ import {
   type NativeStormWeatherComposite,
 } from './native-secondary-presentation-types.ts'
 import { updateNativeSecondaryPresentationPlan } from './native-secondary-presentation.ts'
+import { nativeGolemDeathPresentationPlan } from './native-secondary-golem-presentation.ts'
+import { NATIVE_GOLEM_DEATH_FRAGMENT_COUNT, NATIVE_GOLEM_DEATH_STAR_TICKS } from '../core-kernels/native-death-animations.ts'
 import {
   AirPrimarySpellView,
   type NativeAirLightningViewState,
@@ -62,6 +64,7 @@ const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
   'dampened-smoke',
   'freeze-wave-visual',
   'golem',
+  'golem-death',
   'leviathan',
   'leviathan-appendage',
   'plane-orb-shot',
@@ -125,6 +128,7 @@ export interface NativeSecondaryDiagnosticSample {
 }
 
 interface NativeSecondarySpriteBinding {
+  clipMask?: Sprite
   alpha: number
   atlas: NativeSecondarySpriteDraw['atlas'] | null
   blend: NativeSecondarySpriteDraw['blend'] | null
@@ -178,6 +182,7 @@ class NativeSecondaryActorView {
   private stormWeather: NativeStormWeatherView | null = null
   private readonly textures: PlayerWorldTextures['secondary']
   private readonly specialTextures: PlayerWorldTextures['secondarySpecial']
+  private readonly golemDeathMember: number | 'star' | undefined
   private readonly underlaySpriteBindings: NativeSecondarySpriteBinding[] = []
   private readonly underlaySprites: Sprite[] = []
   private underlayPainterLayer: MutableNativeSecondaryPainterLayer | null = null
@@ -190,6 +195,7 @@ class NativeSecondaryActorView {
     root: Container,
     pointGain = 1,
     enhancedEffects = state.enhanced,
+    golemDeathMember?: number | 'star',
   ) {
     this.state = state
     this.birthPointGain = pointGain
@@ -198,11 +204,12 @@ class NativeSecondaryActorView {
     this.textures = textures.secondary
     this.specialTextures = textures.secondarySpecial
     this.renderer = renderer
+    this.golemDeathMember = golemDeathMember
     this.primitiveParent = this.directPrimitives ? root : this.container
     this.container.label = `native-secondary:${state.kind}:${state.id}`
     this.container.eventMode = 'none'
     this.container.sortableChildren = true
-    this.plan = updateNativeSecondaryPresentationPlan(
+    this.plan = golemDeathMember !== undefined ? nativeGolemDeathPresentationPlan(state, golemDeathMember) : updateNativeSecondaryPresentationPlan(
       this.presentationScratch,
       state,
       state.ageTicks,
@@ -249,7 +256,7 @@ class NativeSecondaryActorView {
         this.underlayContainer.label = `native-secondary-underlay:${state.kind}:${state.id}`
       }
     }
-    this.plan = updateNativeSecondaryPresentationPlan(
+    this.plan = this.golemDeathMember !== undefined ? nativeGolemDeathPresentationPlan(state, this.golemDeathMember) : updateNativeSecondaryPresentationPlan(
       this.presentationScratch,
       state,
       presentationFrame,
@@ -345,6 +352,10 @@ class NativeSecondaryActorView {
         this.textures,
         this.plan.meshes.length + this.plan.quads.length + index,
       )
+      else {
+        sprite.mask = null
+        this.spriteBindings[index]!.clipMask?.removeFromParent()
+      }
     }
     while (this.backgroundSprites.length < this.plan.backgroundDraws.length) {
       const sprite = new Sprite({ eventMode: 'none' })
@@ -612,6 +623,9 @@ class NativeSecondaryActorView {
   }
 
   destroy(): void {
+    for (const binding of [...this.spriteBindings, ...this.backgroundSpriteBindings, ...this.underlaySpriteBindings]) {
+      binding.clipMask?.destroy()
+    }
     this.electricArc?.destroy()
     if (this.stormWeather) {
       this.container.removeChild(this.stormWeather.composite)
@@ -1087,6 +1101,8 @@ export class NativeSecondaryWorldView {
   private readonly renderer: Renderer
   private readonly textures: PlayerWorldTextures
   private readonly views = new Map<number, NativeSecondaryActorView>()
+  private readonly golemDeathViews = new Map<string, { readonly parentId: number; readonly view: NativeSecondaryActorView }>()
+  private readonly liveGolemDeathViews = new Set<string>()
   private totalPrimitiveCount = 0
 
   constructor(
@@ -1109,9 +1125,33 @@ export class NativeSecondaryWorldView {
     enhancedEffects = true,
   ): void {
     this.liveIds.clear()
+    this.liveGolemDeathViews.clear()
     for (const actor of state.actors) {
       if (actor.worldKey !== worldKey) continue
       if (actor.kind === 'earthquake-scenery-wobble') continue
+      if (actor.kind === 'golem-death') {
+        const members: (number | 'star')[] = actor.golemDeath!.fragments.flatMap((fragment, index) => fragment === null ? [] : [index])
+        if (actor.ageTicks < NATIVE_GOLEM_DEATH_STAR_TICKS) members.push('star')
+        for (const member of members) {
+          const key = `secondary:${actor.id}:golem-${member === 'star' ? 'star' : `fragment:${member}`}`
+          this.liveGolemDeathViews.add(key)
+          const registration = nativeWorldPainterRegistration(actor, member === 'star' ? NATIVE_GOLEM_DEATH_FRAGMENT_COUNT : member)
+          const memberState = { ...actor, painterRegistrations: [registration] }
+          let current = this.golemDeathViews.get(key)
+          if (!current) {
+            const view = new NativeSecondaryActorView(memberState, this.textures, this.renderer, this.root, 1, enhancedEffects, member)
+            current = { parentId: actor.id, view }
+            this.golemDeathViews.set(key, current)
+            this.root.addChild(view.container)
+            this.addKind('golem-death')
+            this.totalPrimitiveCount += view.primitiveCount
+          }
+          const previousPrimitiveCount = current.view.primitiveCount
+          current.view.update(memberState, presentationFrame, enhancedEffects)
+          this.totalPrimitiveCount += current.view.primitiveCount - previousPrimitiveCount
+        }
+        continue
+      }
       this.liveIds.add(actor.id)
       let view = this.views.get(actor.id)
       if (!view) {
@@ -1159,6 +1199,14 @@ export class NativeSecondaryWorldView {
       view.destroy()
       this.views.delete(id)
     }
+    for (const [key, { view }] of this.golemDeathViews) {
+      if (this.liveGolemDeathViews.has(key)) continue
+      this.totalPrimitiveCount -= view.primitiveCount
+      this.removeKind('golem-death')
+      view.container.removeFromParent()
+      view.destroy()
+      this.golemDeathViews.delete(key)
+    }
     this.compositeOwnerByActorId.clear()
     for (const [actorId, parentId] of nativeSecondaryCompositeOwnerEntries(
       state.actors,
@@ -1172,6 +1220,9 @@ export class NativeSecondaryWorldView {
     for (const [id, view] of this.views) {
       if (this.compositeOwnerByActorId.has(id)) continue
       painterLayers.push(...view.painterLayers(id, painterLayers.length))
+    }
+    for (const [key, { parentId, view }] of this.golemDeathViews) {
+      painterLayers.push({ ...view.painterLayer(parentId, painterLayers.length), id: key })
     }
     for (const layer of painterLayers) {
       this.setDepth(
@@ -1197,6 +1248,8 @@ export class NativeSecondaryWorldView {
   }
 
   setDepth(id: string, depth: number): void {
+    const golemDeath = this.golemDeathViews.get(id)
+    if (golemDeath) { golemDeath.view.setDepth(depth); return }
     const arc = /^secondary:(\d+):(body(?:-band-\d+)?)$/.exec(id)
     if (arc) {
       this.views.get(Number(arc[1]))?.setArcDepth(arc[2]!, depth)
@@ -1219,6 +1272,8 @@ export class NativeSecondaryWorldView {
   }
 
   setTint(id: string, tint: number): void {
+    const golemDeath = this.golemDeathViews.get(id)
+    if (golemDeath) { golemDeath.view.setTint(tint); return }
     const arc = /^secondary:(\d+):body(?:-band-\d+)?$/.exec(id)
     if (arc) { this.views.get(Number(arc[1]))?.setTint(tint); return }
     if (id.startsWith('secondary-underlay:') || id.startsWith('secondary-background:')) return
@@ -1242,10 +1297,11 @@ export class NativeSecondaryWorldView {
     for (const [id, view] of this.views) {
       view.setRenderable(this.compositeForMember(id) ? true : renderable)
     }
+    for (const { view } of this.golemDeathViews.values()) view.setRenderable(renderable)
   }
 
   get count(): number {
-    return this.views.size
+    return this.views.size + this.golemDeathViews.size
   }
 
   get kinds(): readonly NativeSecondaryActorState['kind'][] {
@@ -1271,6 +1327,7 @@ export class NativeSecondaryWorldView {
         leviathanCompositePlan: composite.diagnosticPlan,
       } : sample)
     }
+    for (const { parentId, view } of this.golemDeathViews.values()) samples.push(view.diagnosticSample(parentId, parentId))
     return samples
   }
 
@@ -1290,6 +1347,9 @@ export class NativeSecondaryWorldView {
       view.destroy()
     }
     this.views.clear()
+    for (const { view } of this.golemDeathViews.values()) { view.container.removeFromParent(); view.destroy() }
+    this.golemDeathViews.clear()
+    this.liveGolemDeathViews.clear()
     this.cachedDiagnosticSamples.length = 0
     this.cachedKinds.length = 0
     this.cachedPainterLayers.length = 0
@@ -1404,6 +1464,19 @@ function applyDraw(
   textures: PlayerWorldTextures['secondary'],
   sourceOrder: number,
 ): void {
+  if (draw.clip) {
+    const mask = binding.clipMask ??= new Sprite(Texture.WHITE)
+    mask.eventMode = 'none'
+    mask.label = 'ether-drain-capture-clip'
+    if (mask.parent !== sprite.parent) sprite.parent!.addChild(mask)
+    mask.position.set(draw.clip.x, draw.clip.y)
+    mask.width = draw.clip.width
+    mask.height = draw.clip.height
+    sprite.mask = mask
+  } else {
+    sprite.mask = null
+    binding.clipMask?.removeFromParent()
+  }
   const sourceChanged = binding.atlas !== draw.atlas || binding.entry !== draw.entry
   if (sourceChanged) {
     const record = nativeSecondarySpriteRecord(draw.atlas, draw.entry)

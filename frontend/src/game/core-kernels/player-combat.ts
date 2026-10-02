@@ -32,6 +32,7 @@ export interface PlayerCombatComponent {
   readonly hitFeedback: NativePuppetHitState
   readonly circleSlowTicksRemaining: number
   readonly coldSlowTicksRemaining: number
+  readonly corpseConsumed: boolean
   readonly currentHealth: number
   readonly currentMana: number
   readonly dazzleTicksRemaining: number
@@ -72,6 +73,7 @@ export function createPlayerCombat(): PlayerCombatComponent {
     hitFeedback: createNativePuppetHit(),
     circleSlowTicksRemaining: 0,
     coldSlowTicksRemaining: 0,
+    corpseConsumed: false,
     currentHealth: PLAYER_INITIAL_HEALTH,
     currentMana: PLAYER_INITIAL_MANA,
     dazzleTicksRemaining: 0,
@@ -254,6 +256,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
       beganDeathEpoch: true,
       combat: {
         ...source,
+        corpseConsumed: false,
         deathAgeTicks: 0,
         deathEpoch: source.deathEpoch + 1,
         deathTick: 0,
@@ -299,7 +302,8 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
       completedDeathPresentation:
         deathAgeTicks === PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
       emittedDeathBurst:
-        source.deathTick < PLAYER_DEATH_FRAME_THREE_TICK
+        !source.corpseConsumed
+        && source.deathTick < PLAYER_DEATH_FRAME_THREE_TICK
         && deathTick >= PLAYER_DEATH_FRAME_THREE_TICK,
     }
   }
@@ -425,9 +429,9 @@ export function playerCanCast(
 }
 
 export function playerCollisionEnabled(
-  source: Pick<PlayerCombatComponent, 'deathTick' | 'lifeState'>,
+  source: Pick<PlayerCombatComponent, 'deathTick' | 'lifeState'> & Partial<Pick<PlayerCombatComponent, 'corpseConsumed'>>,
 ): boolean {
-  return source.lifeState !== 'spectating'
+  return !source.corpseConsumed && source.lifeState !== 'spectating'
     && !(source.lifeState === 'dying' && source.deathTick >= PLAYER_DEATH_FRAME_THREE_TICK)
 }
 

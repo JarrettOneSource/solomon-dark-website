@@ -381,7 +381,7 @@ export class BoneyardDynamicScene {
     const secondaryAbilityPainterLayers = this.secondaryAbilities.painterLayers()
     for (const layer of playerDeathWeaponPainterLayers) {
       this.playerDeathWeapons.setTint(
-        layer.playerId,
+        layer.weaponId,
         nativeBoneyardLightTint(worldLightScalar(layer.position)),
       )
     }
@@ -493,16 +493,10 @@ export class BoneyardDynamicScene {
       })
     }
     for (const layer of playerDeathWeaponPainterLayers) {
-      const playerId = layer.id.slice('player-death-weapon:'.length)
-      const registration = snapshot.players[playerId]
-        ?.lighting.deathWeaponPainterRegistration
-      if (!registration) {
-        throw new Error(`death weapon ${playerId} lost its painter registration`)
-      }
       dynamicLayers.push({
         id: layer.id,
         queueFamily: 'ordinary-dynamic',
-        registration,
+        registration: layer.registration,
         worldY: layer.worldY,
         sortBias: 0,
       })
@@ -676,11 +670,9 @@ export class BoneyardDynamicScene {
       const depth = positionedDynamics.get(`player:${id}`)?.zIndex ?? 1
       view.setDepth(depth)
       this.playerDeathBursts.setDepth(id, depth)
-      this.playerDeathWeapons.setDepth(
-        id,
-        positionedDynamics.get(`player-death-weapon:${id}`)?.zIndex ?? depth,
-      )
     }
+    for (const layer of playerDeathWeaponPainterLayers) this.playerDeathWeapons.setDepth(layer.weaponId,
+      positionedDynamics.get(layer.id)?.zIndex ?? 1)
     this.seeker.setDepth(
       (positionedDynamics.get(`player:${localPlayerId}`)?.zIndex ?? 1) + 0.25,
     )

@@ -133,6 +133,8 @@ function buildNativeSecondaryPresentationPlan(
     ),
   ): NativeSecondarySpriteDraw => {
     const target = scratch?.nextDraw() ?? ({} as MutableSecondarySpriteDraw)
+    if (options.clip) target.clip = options.clip
+    else delete target.clip
     target.alpha = options.alpha ?? actor.alpha
     target.atlas = atlas
     target.blend = options.blend ?? 'normal'
@@ -804,6 +806,22 @@ function buildNativeSecondaryPresentationPlan(
           scaleX: actor.slowFactor * actor.scale,
           scaleY: actor.slowFactor * actor.scale,
         })] : []),
+        ...(actor.etherDrain?.animations ?? []).flatMap((animation, index) => {
+          if (animation.kind === 'debris') return [draw('DeadHawg', 177 + animation.variant, {
+            alpha: actor.alpha, role: `ether-drain-private-debris-${index}`,
+            offset: { x: animation.position.x - actor.position.x, y: animation.position.y - actor.position.y },
+            rotationRadians: animation.rotationDegrees * Math.PI / 180, scaleX: 1, scaleY: 1,
+          })]
+          const clip = animation.alpha < 1 ? { x: -100, y: -110, width: 200, height: 110 } : undefined
+          return [
+            ...(clip ? [draw('BadGuys', 9, { alpha: actor.alpha, role: 'ether-drain-capture-back-rim', scaleX: 1, scaleY: 1 })] : []),
+            draw(animation.atlas, animation.entry, { alpha: actor.alpha, clip,
+              offset: { x: 0, y: animation.bodyYOffset - 10 + 35 * Math.max(0, 1 - animation.alpha) },
+              role: 'ether-drain-captured-image', scaleX: 1, scaleY: 1, tint: animation.tint }),
+            ...(clip ? [draw('BadGuys', 8, { alpha: actor.alpha, offset: { x: 0, y: -1 },
+              role: 'ether-drain-capture-front-rim', scaleX: 1, scaleY: 1 })] : []),
+          ]
+        }),
       ])
     }
     case 'ether-drain-cloud':
@@ -814,13 +832,6 @@ function buildNativeSecondaryPresentationPlan(
         rotationRadians: actor.rotationRadians,
         scaleX: actor.scale,
         scaleY: actor.scale,
-      })])
-    case 'ether-drain-debris':
-      return plan([draw('DeadHawg', 177 + actor.variant, {
-        role: 'ether-drain-suck-debris',
-        rotationRadians: actor.rotationRadians,
-        scaleX: 1,
-        scaleY: 1,
       })])
     case 'ether-drain-capture-flare':
       return plan([draw('BadGuys', 36, {

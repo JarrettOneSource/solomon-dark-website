@@ -483,8 +483,9 @@ opposite `-/+47` degrees during recovery. Provoke counts from 100 through a
 negative 50-tick tail; its effect fires at zero and the tail holds both limbs
 in mode three. Death `0x00619730` consumes exactly 273 RNG draws and leaves 30
 world-owned `DeadHawg 78..87` bouncers plus a short additive `BadGuys 86`
-star. Presentation must replay from the pre-consumption RNG snapshot while the
-host advances the authoritative stream immediately.
+star. Their constructor advances the host stream once; each Bouncer then owns
+mutable motion/life and an independent painter root. A renderer constructor
+replay cannot represent field displacement or consumption (Report66 cutover below).
 
 The consolidated Air/Water actor pass must preserve the more detailed state
 already recovered from `StormCloud 0x006021A0`, its draw at `0x005E8970`, the
@@ -626,8 +627,8 @@ does not authorize collapsing their child programs:
   `Float(10)` rotation speed and `Integer(2)` horizontal-damping gate at every
   bounce, and settles above velocity `-0.75`. While height is nonzero, global
   ticks divisible by three return before integration, rotation, or life decay;
-  all other updates rotate and subtract `0.015` life. Once settled, life decays
-  every tick. These actors and the two impact fades survive the
+  other airborne updates rotate and subtract `0.015` life. Once settled, life
+  decays every tick without motion/contact RNG. These actors and the two impact fades survive the
   parent (up to 1,000 ticks for `DeadHawg[6]`) and therefore require independent
   world ownership; a cycling parent sprite or hashed debris is not parity.
   Impact calls Region helper `0x00448600` with exact RGBA `(1,1,1,1)` and
@@ -2275,3 +2276,457 @@ is justified. The current runtime had already passed the complete canonical
 M2 Website gate for report 35; this report adds documentation only, with
 focused Storm/Leviathan tests and a real built-client save journey. There is no
 browser-platform blocked member.
+
+
+## 2026-09-30 — Report 66 Ether Drain target-system reopening
+
+### Reported behavior and recovered boundary
+
+Report 66 supplies one original 12-second Ether Drain clip and four connected
+questions: radial attraction, pickup membership/consumption, Rush escape, and
+lethal center damage. The reporter explicitly recalls rather than proves the
+Sack/Key and Book/Quad Damage distinctions. The original retained clip is
+6,405,516 bytes, SHA256
+`df0cf83e6a1c55e9886b246adf21a2fbf4f9e90633d285117ee60179551b6e79`.
+Its initial archive samples do not prove an exact force or damage contract.
+The shared source message also contains accepted Report 20 Ring work; this
+reopening does not reopen that presentation/flash system.
+
+This entry reopens the earlier Ether Drain closure because it did not close
+the complete target inventory: current `createNativeSecondaryTickContext`
+feeds only `boneyardNativeSecondaryTargets` (living enemies), and the host
+consumes only enemy damage/knockbacks. `stepBoneyardLootStore` has participant
+collection and Orb attraction but no field-consumption path. Entry 176 already
+recorded the missing player/corpse producer as future Ether Drain work.
+
+Native system boundary: EtherDrain `0x807`, construction/payment/registration,
+retained spatial target arrays, radial force callbacks, center damage and
+capture, its independent children/presentation, and target lifetime through
+field expiry or scene teardown. The existing authored rank row 74, scale/
+countdown/child program and galaxy painter remain evidence to revalidate;
+player/loot admissions cannot be inferred from the earlier enemy-only port.
+
+### Initial evidence and membership inventory
+
+The local stock executable was independently verified at 4,723,200 bytes and
+SHA256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. Existing read-only native catalog v3 row 74
+identifies constructor `0x005F8360`, tick `0x0061CF20`, refresh `0x00606580`,
+contact/force `0x005F8620`, destructor `0x005F84F0`, parent painter/light
+`0x005EE120/0x005EE780`, and capture-presentation callback `0x005EE840`.
+Existing raw decompilation of the last callback writes parent pulse `+0x19C`
+and creates a fade; it does not itself establish the player corpse writer.
+That older shorthand attribution must be retraced to the actual capture call.
+
+| Member / branch | Evidence thread | Investigation state / required proof |
+| --- | --- | --- |
+| Row 74 ranks 0..10 damage; all 13 mana entries | exact stock `ether_drain.cfg`, catalog v3 row 74 | Revalidate full row; no guessed force/damage constants. |
+| Scale-in, active, final 50 ticks, scale-out, expiry | `0x0061CF20`, existing phase tests | Existing fixed-tick port; revalidate pressure start/stop and children. |
+| Retained targets, strict broad ellipse, refresh ages | `0x00606580` | Recover all masks and both arrays before implementation. |
+| Living enemies / Maggots / authored stationary branches | `0x005F8620`, enemy force and damage overrides | Existing enemy pressure/damage; prove callback behavior and material flags. |
+| Living player, caster and other party members | refresh/contact plus Player force/damage slots | Missing from web field path; recover force accumulation, Rush and damage. |
+| Dead player / captured corpse and terminal archive | native capture callback, Player `+0x1C0`, entry 176 | Reconcile actual writer, presentation, save/profile consequences. |
+| Golem / GoodImp / other friendly bodies | actor flags and force/damage overrides | Determine exact field membership; do not apply enemy contact by family guesses. |
+| Orb health / mana / experience | actor `0x7DB`, flag `0x400` and virtual force | Recover motion, consumption radius and lifetime. |
+| Gold amount/tier/scatter/delay | `0x7DC`, force/capture and existing loot state | Recover delayed/empty/nonempty distinctions; no unconditional deletion. |
+| Sack item carriers, including Key | `0x7DD`, held item and force/capture | Constructor confirms `0x400`; recover exact held-item rule. |
+| Bonus Book / random-skill / Quad Damage | `0x7F6` constructor and refresh mask | Prove floaters from actual flags, not reporter memory. |
+| Telekinesis / Orb participant attraction and pickup | stock actor pickup ticks / field update order | Collection remains owner-owned; prove rescue and field competition. |
+| Parent galaxies, light, audio, SuckCloud, free SuckDebris, capture fade | existing full row 74 child program | Revalidate unchanged branch; recover actual captured-object handoff. |
+| Shared/private/party Boneyard; Hub rejection; reset/continuation | authority/context, row 74 world ownership | Per-member public regressions and real built browser journeys. |
+
+All rows remain provisional investigation inventory. No final parity claim is
+made here. Required acceptance uses the exclusive private M5 external-SSD
+environment, meaningful red/green public simulation tests, the unchanged
+canonical all-mode gate on exact reconciled main, real built browser paths,
+normal publication, maintained deployment verification, and scoped cleanup.
+
+### First bounded M5 recovery and public failure receipt
+
+Before product implementation, an exclusive M5 Pro external-SSD lease ran
+from 2026-09-30 20:05:14 through 20:17:53 UTC. Original Website commit
+`cf82e7e3fa80bf41c94277dd0cac7a9ec70fa3e0` and tree
+`6928d6f8d2e68db0df6046ba900d5c77b3b67891` were materialized from their
+actual commit/tree bytes; all 7,239 indexed source files matched. The only
+regression overlay was the two public caster cases in
+`core-server/game-simulation.test.ts`; no product change existed. Both
+failed with the intended `ERR_ASSERTION`: after a real admitted category-2
+cast the idle caster received no inward movement over 100 steps, and the
+center caster remained alive after 250 steps. There were two executions,
+zero passes, two failures and zero skips. These prove the missing current
+player path, not the still-unrecovered numerical force override.
+
+Fresh sealed-image instructions correct two inherited recovery assumptions:
+
+| Fresh evidence | Recovered consequence | Confidence / status |
+| --- | --- | --- |
+| `0x005F8712..0x005F873D` | Sack `0x7DD` checks positive signed timer `+0x14C`; Gold `0x7DC` checks positive timer `+0x144`. A positive timer returns before the force callback and before consumption. Held-item pointer or Gold amount is not this gate. | high; the older nonempty-container immunity note is false |
+| `0x005F87D2..0x005F880E` | Eligible flag-`0x400` objects are retired through virtual `+0x18` strictly inside squared distance 100, then invoke parent callback `0x005EE840(1)`. They do not receive hostile damage. | high; radius-10 consumption, not an invented radius-20 deletion rule |
+| `0x006065F0..0x006066A7` | Spatial refresh admits mask `0xC02` through the strict broad ellipse into retained group/slot references; `+0x168` starts from prefix count `+0x164`. | high for mask/representation; initialization/prefix membership still open |
+| `0x006066AB..0x0060670E` | A second retained reference array admits mask `0x4` and owns a separate scenery-presentation path. | high; complete scenery variants/ordering still need recovery |
+| `0x0061D503..0x0061D517` | Pressure processing is gated by post-update state not equal to scale-out and countdown above 50. Scale-in is not independently rejected. | high; inherited gameplay-age `41..990` claim cannot be used as the general gate |
+| Primary RTTI/vtable census, virtual `+0x38` | PlayerWizard, Orb, Gold, Sack, Bonus, Badguy, Skeleton/Archer/Mage, Zombie, Maggot, Coffin, Portal, Spider and Cocoon use `0x00623C60`; Demon uses `0x0047A2E0`; Golem uses `0x005EE9B0`. | high for addresses; callback bodies remain open |
+| `0x0061DC99..0x0061DE1E` | Capture art is selected only for Skeleton IDs 1001/1002/1003, Zombie 1006 and Demon 1009. It uses actual facing/body selectors/tint and the field's private animation manager. Unsupported classes select no capture image. | high; exact inherited fade/draw/destructor program and authored banks still open |
+| `0x005EE8BF` and `0x0061DE52`, sealed audio registry rows 67 and 19 | Direct center/captured-fade callback (`parameter >= 1`) uses `phase` at `+0xB9C`; supported enemy capture-art birth uses `crunchdrain` at `+0x35C`. Neither establishes a spell-birth `crunchdrain` cue. | high for names/calls; exact callback playback parameters still need recovery |
+
+The user then prioritized moving CI/CD compute to the M5. The Report 66 lease
+was released after exact owner comparison with no owned process and no new,
+missing or changed scoped real-home path. Pending source/tool/native evidence
+is explicitly preserved. No original Report 66 media decoder or browser
+acceptance was launched, and no complete native/Website acceptance or
+publication is claimed. Remaining extractable callbacks, initialization,
+constants, secondary-array behavior and original clip review still require
+an actually granted M5 slot. This is an investigation checkpoint, not a final
+member disposition.
+
+### Light M2 preparation during migration
+
+The original audio catalog binds `phase.wav` (11,244 bytes, SHA256
+`cbd9572e6910191bab3b856120e39c67573efd708514b3443eac27bc0c6f48d3`)
+to registry 67 / offset `+0xB9C`, and `crunchdrain.wav` (31,808 bytes, SHA256
+`5885f636b67b20463c53db5ca4ffa8de9e32ba65724751a15dd20785bc441ddc`)
+to registry 19 / `+0x35C`. Those data rows match the freshly extracted
+callsite offsets above. The prior unresolved spell-birth association must
+not hide the now-proved enemy-capture cue.
+
+Prepared public fixtures now distinguish floating world Bonus books from
+ordinary inventory skill books carried by Sacks. The native pressure path
+checks the carrier type and delay, not the held inventory kind. Actual owned
+`miscItem`/`potionItem` factories create Key, both inventory book classes and
+Potion payloads for center-consumption tests; the Gold variant also checks
+no pickup credit. A delayed-Gold/Key case preserves admission during positive
+delay and requires consumption before the next native refresh opportunity.
+These extra cases are prepared only, not executed red/green evidence.
+
+The `0x800` member is the existing friendly/summoned target lane in the
+Website (`enemies/puppet-hits.ts`), currently supplied by Golems. Their
+`0x005EE9B0` force override and `0x00607F60` damage receiver must be recovered;
+adding them to an enemy damage path by numeric ID would be incorrect.
+Primary Arrow/Firebolt/Guided and Silk lanes have different flags and are
+not automatically field targets merely because they are nearby.
+
+The original-media helper has also been prepared to await an actual
+`requestVideoFrameCallback` after seek/play and record observed media time,
+PNG hashes and nonblack pixels. A paused `seeked` event alone proved
+insufficient in a sibling's review. No such modified helper has been run
+for Report 66 yet.
+
+### Owner ordering still to close
+
+The already extracted parent tick places its free-debris gate at
+`0x0061D93F` after retained-object pressure/contact and the
+scenery branch. The broader gameplay gate is state not scale-out and
+countdown above 50, so it cannot be grouped with the cloud gate's separate
+state-at-entry active branch. The current kernel groups both gates before
+pressure and currently advances no free-debris gate during scale-in.
+This is a supported ordering/timing discrepancy in the same owner; the
+precise program, callbacks and all RNG consumers must be reconciled before
+changing it. The fresh assembly is available; no new M2 disassembly or
+Website command was run for this review.
+
+Scenery array indexing at `0x0061D642..0x0061D6E4` also reads a group byte
+from the first array while taking its slot from the second. That requires
+inspection against the initialized group/slot membership before any
+translation. The user explicitly rejects copying native bugs; a suspicious
+raw-array detail is not itself a supported gameplay rule.
+
+### 2026-10-01 recovered field contract before implementation
+
+The two subsequent exclusive M5 phases retained the same sealed executable.
+Normal playback of the exact original clip presented all 359 frames, reached
+`ended`, and reported zero dropped/corrupt frames or media errors. Six actual
+presented-frame callbacks yielded distinct nonblack images. The late image
+shows the wizard at a bright field with a lower health bar; it does not reveal
+inputs, Rush rank, exact damage source, or pickup identities. Sparse images
+are not a force/damage oracle.
+
+| Field member | Instruction-backed disposition |
+| --- | --- |
+| PlayerWizard, including caster and party | Constructor `0x0052B559` writes flags `0x801`: admitted by query mask `0xC02`, with contact damage doubled by bit 1. Generic Force `0x00623C60` directly resolves collision displacement; it does not add velocity or advance gait. Existing incoming receiver `0x00548150` enters the already-ported health owner `0x0052F540`. |
+| Gold and Sack, every payload | Flags `0x400`; positive activation timer exempts both pressure and retirement. A nonpositive timer permits pressure with the additional falloff factor, and strict squared distance below 100 retires the carrier without collection or credit. Key, Potion and inventory Books do not change this rule. |
+| Orb and Bonus | Constructors and Orb reset retain flags 0. Transient registration `0x0063E5B0` attaches the actor/world without changing flags. All six direct `0x004683E0` notification callers are Gold/Sack materializers; the ordinary Orb death dispatcher registers without that notification. Orb and world Bonus books/Quad Damage therefore float outside this retail field query. Normal Orb attraction, Telekinesis and collection remain their own program. The report's recalled Orb deletion differs from this sealed build. |
+| Golem | Constructor `0x005F58D8` writes `0x800`; Force `0x005EE9B0` applies factor 0.25 and translates articulation anchors by actual movement. Damage receiver `0x00607F60` rejects pre-assembly contacts and admits physical/magic damage afterward; only physical enemy damage can reflect. |
+| Enemy force overrides | Generic factor 1; Demon `0x0047A2E0` factor 0.5 with articulation translation; DireFaculty `0x0047A420` float32 0.35; DemonSkull `0x0047A470` float32 0.1; Heartmonger `0x0047A4C0` factor 0.25. Other admitted enemy families use the generic Force slot. |
+| GoodImp and projectiles | GoodImp constructor clears flags to 0 and has a no-op damage slot; primary/projectile flags are outside `0xC02`. Nearby presence alone does not admit them. |
+| Player corpse | Actual writer is `0x00533AAA`, in maintenance `0x00533520`: while dying and native presentation timer `+0x1BC` at least 130, strict squared distance below 100 invokes parent callback `(2)` and writes consumed `+0x1C0=1`. This timer maps to the Website's `deathTick`, not its separate elapsed `deathAgeTicks`. Consumed body presentation stops and the ordinary terminal profile archive suppresses carried-item transfer. Death burst timer 159 is a separate owner. |
+| Captured enemies | Common death admission `0x0047BF70` uses damage flag `0x100` and the first registered field strictly within 40. `0x0061DC20` clears the field's private capture animation before selection; Skeleton/Archer/Mage, Zombie and Demon select actual facing/body/tint art. Unsupported families select no captured image; the accepted Spider branch remains intact. |
+| Captured animation and callbacks | Anim_Sucked starts alpha 1.25 and loses float32 0.2 each update. Draw uses the selected art and parent position, with the inherited mask/clip and body Y offset. Retirement calls the parent with 1.5. Supported-art birth plays `crunchdrain` at one FloatRange(float32 0.9, 1) pitch draw; callbacks with parameter at least 1 play `phase` at pitch 1.5 and create BadGuys36 with scale/alpha equal to the parameter. |
+| Pressure/contact arithmetic | Float32 delta and squared distance; admitted at squared distance at most 262144. Normalize to one, store float32 `max(float32 .1, 1-d²/262144)`, then encoded 1.100000023841858, then intensity; loose carriers receive another falloff multiplication. Contact is strictly inside radii 20/15/10, with scalar `mDamage/100` and successive factors 1/2/4, then player bit-1 factor 2. Magic contact flags `0x10A` suppress ordinary hit redraw/audio. |
+| Child ordering and scenery | Cloud gate remains in the state-at-entry active branch before pressure. Free-debris Integer(50) gate follows pressure and mask-4 scenery, and shares the scale-in-inclusive pressure gate. The actual scenery lookup reads its own group/slot array; the first array supplies only the suspicious invalidation precheck. That cross-array precheck is not a behavior to reproduce. Tree leaf selection uses secondary variants 0..2/3..5/7 for DeadHawg177/178/179; variant 6 selects no leaf. Existing exact Tree polygon data owns the spawn geometry. |
+
+The additional two public Gold/Sack tests ran on unchanged `cf82e7e3`, with
+only the test overlay, and both failed at the intended assertions. The first
+payload loop stops at Gold on its red execution, so this is not a separate
+red receipt for every held item. The original two caster reds were preserved
+without replay. Implementation now has a proved complete target boundary:
+typed generation-aware field references, existing physical/contact/loot
+receivers, consumed-corpse persistence, captured-art ownership, and the
+correct child RNG ordering. Required final acceptance/publication is pending.
+
+### Private animation ownership and image-bank correction
+
+Further sealed instructions close the private manager at `+0x1A0`:
+Tree/free SuckDebris insert at `0x0061D8EF/0x0061DA47`, capture clears it at
+`0x0061DC94`, and its tick occurs at `0x0061DC02`, after the parent pulse
+decay. A new private debris therefore receives its three update draws on its
+birth tick. A successful simultaneous Cloud/debris birth consumes 16 words
+(8 Cloud, 5 debris birth, 3 private update), correcting the inherited 13-word
+test. Private image replacement clears debris as well as the preceding image;
+the independent phase flare registers through `0x0063E5E0` at `0x005EE985`.
+This is why private state now belongs to the saved field rather than another
+world actor kind. Old flat debris is converted to its matching field on save
+migration, and orphaned old children are discarded instead of acquiring a
+different parent.
+
+The earlier body/DeadHawg shorthand was incorrect. Actual capture selection
+uses Skeleton `+0x230` headgear and `+0x224` head-facing offset. The existing
+six headgear banks are BadGuys `1477..1584`. Zombie `+0x24C` selects its three
+head banks, BadGuys `2293..2346`. Demon lookup dereferences singleton
+`0x00819998`, not DeadHawg `0x00819994`; native asset-object-map destination
+`0x0140` and direct `0x0061DC20` consumer identify Demon `80..97`.
+Those exact retained builder/consumer rows corroborate the sealed callsite.
+The implementation reuses the existing Skeleton presentation color sampler;
+it does not introduce another random material program.
+
+Anim_Sucked `0x00455370` conditionally draws BadGuys 9, clips the selected
+image to field-local `(-100,-110,200,110)` below alpha one, resets the clip,
+then draws BadGuys 8 at Y -1. The image Y is
+`bodyYOffset - 10 + 35*max(0,1-alpha)`, with bodyYOffset 23 for Skeleton
+headgear and zero for the other selections. Original `crunchdrain.wav`
+is retained unchanged at 31,808 bytes/SHA256
+`5885f636b67b20463c53db5ca4ffa8de9e32ba65724751a15dd20785bc441ddc`.
+
+Seven death callers are covered: Imp/GoodImp/GreenImp `0x004824A0`, Demon
+`0x00482930`, Spider `0x00482D60`, Skeleton/Archer/Mage `0x0048D2A0`, Zombie
+`0x004947B0`, Wraith `0x00495600`, and Maggot `0x0049C830`. Their capture
+branch returns before ordinary death effects and family child spawning;
+the common death/drop work `0x004819D0` precedes that branch. Captured Imps
+therefore do not split, and captured Rotten Zombies do not emit a PoisonPool.
+Unsupported image classes still clear the private manager without a new
+image or `crunchdrain` request. Bosses without this death helper retain their
+ordinary programs.
+
+Scenery uses the existing `0x004012C0` random-sign primitive and a separate
+Float(1) step, forcing the sign back toward the interval beyond -1/+1.
+The Tree helper `0x004054B0` obtains an area centroid from `0x00404F40`;
+it is not another random point draw. Leaf birth adds Float(150) and a unit
+heading to that center. Existing exact Tree polygons and the existing shared
+scenery phase carrier are reused. Variant 6 has no leaf, while variants
+0..2/3..5/7 select DeadHawg 177/178/179. The suspicious cross-array invalid
+reference precheck is deliberately not implemented.
+
+Protocol 145/save 48 carry the complete field references/private animation
+state and consumed-corpse bit through the existing strict codecs, snapshot
+and historical-save owners. Final compatibility, complete scoped tests and
+built acceptance are still pending; the earlier focused green receipts describe
+their recorded partial candidates, not this later private-owner cutover.
+
+
+### 2026-10-01 — field notification and separate world-animation owner
+
+New Gold/Sack notification `0x006064B0`, specifically the refresh write at
+`0x00606509`, appends an eligible drop and resets the ordinary/scenery query
+clock. The Website now refreshes those members in the same field tick. Its
+public new-enemy/new-Gold regression failed at the actual membership assertion
+before this correction and then passed. Positive pickup delay still protects
+position/consumption; the manually advanced enemy fixture does not imply one
+elapsed loot tick.
+
+The independent animation-pointer list is `+0x1EC` (count `+0x1F4`, data
+`+0x200`). `Anim_Bouncer` virtual `+0x1C` at `0x0045BCE0` tail-calls
+`0x0045AE30`, which enumerates the Scene's Ether Drain registry
+`+0x13A8/+0x13B4` and appends a reference under ordinary strict squared
+radius `1048576`. Field initialization `0x0060642D/0x00606478` asks existing
+world animations to register; birth `0x00456DFD..0x00456E04` invokes the
+same virtual. This is a separate presentation-physics lane and provides no
+Orb/Bonus membership rule.
+
+**Layout correction:** eligibility `0x00453160` tests stored bounce velocity
+`+0x2C`, not height. Bouncer tick `0x00456720` uses height `+0x38`; native
+settling zeroes the stored bounce with planar/vertical/spin motion. The
+Website's former grounded path rerolled contact RNG and left that bounce
+value nonzero. The current correction skips grounded motion/contact RNG
+while retaining fade and zeroes the bounce when settling. Historical saves
+through47 repair only states with zero height and zero planar/vertical/spin
+motion. These latest invariant/migration changes have written regressions
+but await an actually granted M5 check; earlier greens do not cover them.
+
+RTTI admits Bouncer, Additive/Colored/Smoky/BlackSmoky Bouncer, BoulderBit,
+Hail, StaffBouncer and WandBouncer through that virtual. Scrap registers but
+its virtual `+0x20` returns false. Private SuckCloud/SuckDebris/Sucked do not
+participate. Pressure `0x0061DA9E..0x0061DB9F` uses fast normalization
+`0x0043A8E0` (the established native Hurricane primitive), multiplies the
+stored `falloff*1.100000023841858` strength twice and then field intensity,
+and has no additional512-radius cutoff. Strict squared radius100 retires
+an animation and writes pulse2 before parent fade, without pickup credit or
+an independent phase flare. It retains the existing phase/countdown gate.
+
+| Member | Website disposition | Current evidence boundary |
+|---|---|---|
+| Enemy Bouncer/Smoky/BlackSmoky/BoulderBit records | routed through existing authoritative death-effect store | corrected grounded public red/green; latest stored-bounce fix pending |
+| Primary Hail, Weld Hail Bouncer and Weld BoulderBit | routed through existing primary transient owners | direct Hail/save/wire test prepared, pending |
+| Secondary Earthquake/Comet/Stoneskin/Golem assembly pieces | routed through existing secondary actors | direct Stoneskin-chip test prepared, pending |
+| World animation references and per-store birth cursors | retained in field state, strict wire/disk48; legacy47 rebinds | current strict-reference controls passed on the preceding candidate; latest controls pending |
+| Scrap and private field animations | excluded by actual virtual eligibility/owner | raw RTTI/virtual readback, no fabricated field flag |
+| Golem death fragments and dropped staff/wand | mutable affected-member cutover required by21:15 scope decision | source implemented, validation pending |
+| Orb/Bonus, normal pickup and Telekinesis | unchanged by this lane | verified flags0/no Gold-Sack notification; reporter recollection remains qualified |
+
+The private draw owner sets multiplicative RGBA `(1,1,1,field intensity)`
+at `0x005EE70E..0x005EE73F` before manager draw `0x004023F0` and restores
+it afterward. `0x0041FF60` stores modulation; `0x0041FE50` composes it with
+ordinary draw RGBA. Private captured images/debris/rims therefore inherit
+field opacity; the capture timer controls descent, clipping and lifetime,
+not a second opacity fade. A new renderer regression and the corresponding
+source correction are pending M5 validation. Skeleton captured art uses
+YOffset23; Zombie/Demon use0, now enforced with the bank in the strict codec.
+
+The preceding43-file candidate had26 distinct focused passing cases across
+25/26 plus a corrected2/2 command and TypeScript0, not one26/26 receipt.
+The first purported grounded red was an airborne fixture with an old stored
+bounce and is excluded. A corrected grounded fixture reproduced a genuine
+missing-force red against preserved own pre-animation files, which were
+restored exactly before green. Latest settled-state/opacity/Hail/offset edits
+are unverified M2 source work after SSH failed before lease acquisition.
+No current retail input trace, full canonical gate, built journey, publication
+or deployment is claimed by these partial receipts.
+
+
+### 2026-10-01 — required replay-member cutover, pending validation
+
+The21:15 scope decision closes the earlier follow-up proposal: Golem death
+fragments and staff/wand drops are members of this field animation lane.
+`Anim_BouncerColored`, `Anim_StaffBouncer` and `Anim_WandBouncer` all have
+Bouncer tick `0x00456720`, registration `0x0045BCE0` and stored-bounce
+eligibility `0x00453160`. Existing renderer-only age/seed replay prevented
+real field displacement, retirement and deterministic mutable continuation.
+
+- Golem death retains its existing actor kind/atlas/quality/short Unbind star,
+  but now owns30 indexed nullable fragment slots. The canonical constructor
+  consumes the recorded273 words once, and the shared Bouncer motion owner
+  advances actual fragment state. The old replay's two-times integration and
+  warming gravity are removed from runtime. Life retires each fragment;
+  the parent persists through the remaining fragments/star. Wire lifetime
+  envelopes710/177 account for native airborne skipped fades, rather than
+  using667/134 active-update counts as a premature wall-tick deletion.
+  The30 Bouncers and short star retain31 actor-lane painter registrations,
+  allocated at production by the existing manager. Each live member reuses
+  the established view/draw program with its own world-Y/depth/tint/teardown;
+  the obsolete single-root batch path is bypassed. Current codecs require31
+  roots; historical one-root saves allocate the extra roots without RNG draws.
+- Staff/wand production `0x00534120` selects the existing Clothes appearance,
+  creates one Bouncer per death epoch, sets life99999, registers at world
+  `+0x2C4` and invokes `+0x1C`. A dedicated Boneyard world collection owns
+  its position/motion/life, cached appearance, id and painter registration.
+  Existing player lighting registration remains the one-shot producer marker.
+  Consuming a corpse or removing its player does not erase an unconsumed
+  independent drop; field consumption does not remove the equipped item or
+  restart the epoch.
+- The field stores Golem parent/index and weapon ids under the existing
+  monotonic cursor contract. It applies the proved independent animation
+  pressure to real positions and removes only the consumed slot/object.
+  Golem fragments survive owner removal as independent world presentation;
+  current validation permits an absent owner only for that exact actor kind.
+- Renderers draw current state, not reconstructed age curves. Snapshot/frame,
+  client copies and disk48 carry the mutable states with strict clocks,
+  domains, unique ids/epochs/painter registrations and exact30 Golem slots.
+  Historical saves through47 reconstruct retired replay inputs only inside
+  the save owner. Historical constructor seeds cannot recover a past global
+  bounce stream; migration reconstructs the corrected bounded recurrence
+  without changing saved global RNG, then future ticks use the real owner.
+
+Existing Bouncer, Comet/Stoneskin and the two migrated members reuse a small
+class-specific motion primitive; this is not a generic animation engine.
+Original graphics, audio, existing Golem actor/model membership, shared
+Webbed movement, normal Orb/Bonus/Telekinesis behavior and transport144 owners
+are preserved. Public producer/field/owner-removal/save/wire tests and native
+constructor/RNG/settling/current-invalid-state controls are prepared. All
+cutover edits remain unverified M2 source work while the M5 is offline;
+earlier26-case greens describe their recorded preceding candidate only.
+
+The scoped motion primitive preserves the instruction's double gravity/planar
+damping and float32 stored bounce damping. Exact-plane landings also settle,
+avoiding the stock strict-plane test that strands nonzero motion at height0.
+This deliberate ordinary bug correction has a prepared regression; no new
+membership flag is introduced. Game Over keeps the existing gameplay-world
+freeze: dropped weapons follow its continuing death clock, and that clock now
+calls the same corpse maintenance130 check as the active path. Sealed maintenance
+`0x005339E7..0x00533AAA` places capture directly after timer increment and before
+the later ordinary death/Last Word disposition. A real terminal-control fixture
+is prepared; no new retail Game Over runtime trace is claimed.
+
+The existing secondary browser harness has a scoped compiled-client/live-host
+member journey with actual quickbar casts and declared settled/position fixtures.
+It checks Gold/carried-Key retirement without credit, Golem member motion/art/
+independent roots, a real death-produced staff/wand retained after owner departure,
+field consumption/painter retirement and hardware-renderer identity. It is unrun.
+
+
+### 2026-10-02 — affected owners implemented, independent acceptance recorded
+
+This supersedes the preceding offline and prepared-test status only. The native
+instruction anchors, original media qualifications and earlier red/oracle history
+remain intact. The candidate is based on real `cf82e7e3` (published transport 144)
+and proposes protocol 145/save 48. No final current-main canonical gate,
+publication, deployment or complete-parity outcome is claimed yet.
+
+| Member | Implemented disposition and independent evidence |
+| --- | --- |
+| Living caster and party targets | Exact pressure/contact arithmetic and direct collision displacement; raw velocity/gait remain under their existing owners. Public caster/party/lethality and diagonal arithmetic regressions pass. Built rank-one held Rush stays inside from the deep start and escapes from the outer start over four seconds, with both raw vectors exactly `98.99996948242188,0`. |
+| Gold/Sack and every carried payload | Exact native delay, notification and strict consumption path; no pickup credit. Public payload/delay/notification regressions pass; compiled Gold/carried-Key retirement passes. |
+| Orb/Bonus and Telekinesis | Verified already outside field membership in the sealed build; no invented flag. Built ordinary floaters survive at the field, collect through the normal consumer, and Bonus0 completes the real picker/barrier UI. Telekinesis rank-zero/rank-one distances are 250 and 235.0136331 in the declared control. The reporter's recalled Orb deletion remains qualified. |
+| Family force and inactive Maggots | Native family factors and existing collision/articulation owners; generic, Demon, Faculty, DemonSkull and Heartmonger constants are instruction-backed. The public inactive-Maggot/hidden-Coffin case passes; no hidden Coffin or Cocoon capture membership is added. |
+| Supported captured images | Skeleton/Archer/Mage, Zombie and Demon retain exact authored bank/facing/body/tint, private manager, field opacity, native clipping/descent and callback lifetime. Public capture/save/retirement cases and renderer controls pass. Built art/rims/crunch pass for all five tokens; Zombie runs with Enhanced Effects off. Demon additionally exposes the actual attached Sprite mask `(-100,-110,200,110)`, its retirement detachment and phase pitch 1.5 through installed Pixi's initialization hook. |
+| Unsupported captured images | Imp, Spider, Wraith and Maggot retire without a selected capture image. Public cases retain reward and suppress ordinary effects/splits/Rotten poison pool/crunch as applicable. Built Imp/Spider/Wraith retirement has no capture art, crunch, phase callback or clip; no new Spider/Cocoon teardown rule is introduced. |
+| Consumed player corpse | Native maintenance timer 130 and strict radius 10 own the consumed bit in active and Game Over death-clock paths. Public carried-item archive, Last Word, death-burst, terminal and persistence controls pass. No fresh retail Game Over trace is claimed. |
+| Ordinary world Bouncers, Hail and secondary chips | Exact stored-bounce eligibility and separate animation-reference list; existing death-effect/primary/secondary owners receive native pressure and retirement. Focused public movement/save/wire, settling and exact-plane correction controls pass. Scrap and private field animations remain excluded under their proved virtual/owner rules. |
+| Golem death members | Mutable 30 indexed nullable fragments, native constructor 273-word order, 31 independent painter roots including the short star, native life envelopes and existing member art/depth/tint/teardown. Production, server, render and strict current/legacy save-wire controls pass. Built selected grounded/airborne/consumed members pass; this is not a claim of all 30 live pixels. |
+| Dropped staff/wand | One native death producer per epoch with cached appearance and independent world motion/life/painter ownership. Obsolete runtime renderer replay is removed. Public production/owner-removal/consumption/save controls and a real compiled death-produced staff survive owner departure and then retire through the field. |
+| Private debris and scenery | Existing authored Tree geometry and native float32 centroid/RNG program; private manager ordering and parent ownership are retained. Focused state/opacity/clip controls pass. The suspicious stock cross-array invalidation bug is not copied. |
+| Wire/save/teardown | Current strict typed fields, 30 slots/31 roots, death-weapon clocks/ids/epochs and consumed/captured validation; historical <=47 migration is isolated in the save owner. The migration preserves saved global RNG but cannot recover a lost historical global bounce stream. Public current-invalid-state/legacy/RNG/reset/owner-lifetime coverage and built exact field save/owner projection/resume pass. |
+
+Independent M5 receipts are scoped and kept distinct: TypeScript exit0; 21 distinct
+motion cases across the recorded commands; Golem producer 1/1; server members 8/8;
+renderer 4/4; save/wire 87/87; production Vite exit0. The compiled member journey
+and later gameplay cases use the same runtime source identified by the
+`c31b788c5fea0fcdb6ee324314a4e19bbe98a6deb92efe2d8b1d2adb312a9ba8`
+manifest, not a commit of that name. The pre-ledger-update helper/source manifest
+`d3f641c9c9d5d9799f792bc68f5461b0868490acff98e06f4322fc9077db03f3`
+has 69 modified/new/deleted paths on the same real base.
+
+The remaining-only compiled journey exits0 on Apple M5 Pro ANGLE Metal with page,
+console and failed-response arrays empty. Its declared peer is an authoritative
+actor fixture, not a second authenticated party/reentry receipt. Exact field
+state survives the normal save codec and owner projection; the live compiled
+host continues it. Real center pressure reaches dying state at
+`-10.360000244379043` HP, and the retained screenshot is visible gameplay.
+Original media still supplies the recorded 359-frame playback and six visible
+samples, not exact inputs, Rush rank, hidden pickup identity or HP history.
+
+Fixture/oracle corrections are explicit. The unchanged public 80-tick Rush test
+keeps its x-distance-below10 oracle in its open collision fixture; the built scene
+uses the established 512 pressure boundary and does not replace that regression.
+The broader lane initially admitted only radius14 bodies; valid capture fixtures
+now admit native Demon radius35 and existing enemy/Lantern bodies, with actual
+spawned-body admission checked. A newly born fast Imp can leave contact range
+before the next100-tick field query; the successful fixture waits the real query
+boundary without altering field clocks, admission, flags or gameplay. Native
+constructor seeding uses the maintained current-tick/lastStepTick-minus1 pattern.
+Retirement assertions follow the seeded allocated identity while ordinary waves
+continue. Normal Bonus offers are resolved through the picker UI before lethal
+pressure rather than hiding their legitimate pause.
+
+The two actual product reds in the later cutover were missing current-disk Golem
+painter-root rejection and discarded captured-image clipping. Their strict
+regressions pass after the shared decoder and draw-factory fixes. The former
+mana fizzle, mismatched quickbar key, float32 position oracle and distant weapon
+birth admission are separately qualified fixture failures, not product proof.
+A receipt-printing Python error on scalar lines of pretty JSON was recovered from
+the complete browser result without replay; the actual browser exit0 is distinct.
+
+Report72's eventual integration must preserve its in-step webbedPlayers writeback
+alongside these capture/maggot changes. Field position displacement remains
+independent of raw Webbed walking decay/staff admission; captured Spider must not
+clear a healthy Cocoon. Retain one painter stream and the highest strict transport
+and save contracts. No unpublished sibling branch is adopted by these receipts.
+The final immutable current-main canonical gate and normal deployment remain the
+next boundary after the coordinator's actual publication-lock handoff.

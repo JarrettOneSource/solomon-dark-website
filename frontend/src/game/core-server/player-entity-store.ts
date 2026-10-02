@@ -1459,7 +1459,7 @@ export function stepPlayerEntityCombatTick(
       ) completedDeathPresentationPlayerIds.push(playerId)
       if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
       if (
-        ownsNativeHagathaSelector(
+        !resolved.progression.corpseConsumed && ownsNativeHagathaSelector(
           source.economies[index]!.ownedPerkSelectors,
           NATIVE_HAGATHA_SELECTORS.lastWord,
         )

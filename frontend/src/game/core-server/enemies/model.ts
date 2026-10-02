@@ -201,6 +201,7 @@ export interface BoneyardEnemyLightingState {
 }
 
 export interface BoneyardEnemyActor {
+  readonly etherDrainCaptured?: true
   readonly hitFeedback: NativePuppetHitState
   /** Native Actor +80, independent of visual feedback +78 and sampled strength. */
   readonly hitReactionTimer: number
@@ -351,6 +352,7 @@ export type BoneyardEnemyProjectileEffect = BoneyardEnemyProjectileEffectBase & 
 )
 
 export interface BoneyardMaggotActor {
+  readonly etherDrainCaptured?: true
   readonly hitFeedback: NativePuppetHitState
   readonly blizzardPushAccumulator: number
   readonly blizzardPushLastTick: number | null

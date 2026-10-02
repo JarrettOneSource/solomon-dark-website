@@ -110,6 +110,7 @@ export function createGameSnapshot(
                 combatBounds: { ...state.world.arenaTransition.combatBounds },
                 fullBounds: { ...state.world.arenaTransition.fullBounds },
               },
+          deathWeapons: state.world.deathWeapons,
           deathEffects: [
             ...projectBoneyardEnemyDeathEffects(state.world.enemies),
             ...state.world.loot.effects.map(projectBoneyardEnemyDeathEffect),
@@ -382,6 +383,7 @@ function protocolPlayerState(
         skillRuntime.concentrationSkillIdB,
       ],
       currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
+      corpseConsumed: progression.corpseConsumed,
       currentMana: progression.currentMana,
       damageX4TicksRemaining: progression.damageX4TicksRemaining,
       deferredSkillChoices: progression.deferredSkillChoices,

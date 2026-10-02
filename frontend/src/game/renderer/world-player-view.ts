@@ -260,6 +260,7 @@ export class PlayerWorldView {
     elementEffectVisible = true,
     movementFacing = false,
   ): void {
+    this.container.visible = !player.progression.corpseConsumed
     this.statusMaterial = player.progression
     const playerTextures = this.textures.players[player.config.element]
     const elementEffectPhase = player.lighting.overlayEffectPhase

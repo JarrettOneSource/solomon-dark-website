@@ -2,6 +2,7 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import type { NativeSecondaryAtlas } from './native-secondary-assets.ts'
 
 export interface NativeSecondarySpriteDraw {
+  readonly clip?: Readonly<{ x: number; y: number; width: number; height: number }>
   readonly alpha: number
   readonly atlas: NativeSecondaryAtlas
   readonly blend: 'add' | 'normal'

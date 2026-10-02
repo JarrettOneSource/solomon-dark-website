@@ -1,8 +1,11 @@
 import type { NativeSecondaryActorKind, NativeSecondaryActorState, NativeSecondaryGolemState } from '../../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_MINDBLAST_BURST_LIFETIME_TICKS, NATIVE_MINDBLAST_SHOCKWAVE_GROWTH, NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS, NATIVE_SECONDARY_ACTOR_KINDS, nativeSecondaryLightDisposition, nativeSecondaryPainterManagerLane } from '../../core-kernels/native-secondary-abilities.ts'
 import type { NativeSecondaryAbilityId } from '../../core-kernels/native-secondary-ability-contract.ts'
+import { nativeEtherDrainTargetKey, nativeEtherDrainWorldAnimationKey, type NativeEtherDrainAnimation, type NativeEtherDrainTargetRef, type NativeEtherDrainState, type NativeEtherDrainWorldAnimationRef } from '../../core-kernels/native-ether-drain.ts'
+import { NATIVE_GOLEM_DEATH_FRAGMENT_COUNT, NATIVE_GOLEM_DEATH_MAX_AGE, NATIVE_GOLEM_DEATH_PAINTER_COUNT } from '../../core-kernels/native-death-animations.ts'
+import { nativeGolemDeathAnimation } from './death-animations.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../../core-kernels/native-secondary-ability-contract.ts'
-import { MAX_PRIMARY_SPELL_HIT_TARGETS } from '../game-protocol-limits.ts'
+import { MAX_BONEYARD_ENEMIES, MAX_BONEYARD_ENEMY_DEATH_EFFECTS, MAX_BONEYARD_LOOT, MAX_BONEYARD_MAGGOTS, MAX_BONEYARD_OBJECTS, MAX_PLAYERS, MAX_PRIMARY_SPELL_HIT_TARGETS, MAX_PRIMARY_SPELL_TRANSIENTS, MAX_SECONDARY_ACTORS } from '../game-protocol-limits.ts'
 import type { ProtocolPlayerSnapshotFrame } from '../game-state.ts'
 import { absentNativeActorLight, nativeRngState, nativeWorldManagerRegistration, nativeWorldPainterRegistrations, vector } from './native-state.ts'
 import { GameProtocolError, boolean, boundedInteger, finite, limitedArray, limitedString, memberString, nonnegativeFinite, nonnegativeInteger, onlyKeys, positiveFinite, positiveInteger, record, unitInterval, validatedPlayerId } from './values.ts'
@@ -18,6 +21,8 @@ export function nativeSecondaryActor(
     'midpoint', 'miscLightAppendOrdinal', 'ownerId', 'phase', 'position', 'presentationRng',
     'painterRegistrations', 'quantity', 'radius', 'rank', 'rotationRadians', 'scale', 'skillId',
     'slowFactor', 'targetId', 'variant', 'velocity', 'worldKey',
+    ...(source.kind === 'ether-drain' ? ['etherDrain'] : []),
+    ...(source.kind === 'golem-death' ? ['golemDeath'] : []),
   ])
   const kind = memberString(
     source.kind,
@@ -25,7 +30,7 @@ export function nativeSecondaryActor(
     NATIVE_SECONDARY_ACTOR_KINDS,
   ) as NativeSecondaryActorKind
   const ownerId = validatedPlayerId(source.ownerId, `${field}.ownerId`)
-  if (!players[ownerId]) throw new GameProtocolError(`${field}.ownerId has no player snapshot`)
+  if (!players[ownerId] && kind !== 'golem-death') throw new GameProtocolError(`${field}.ownerId has no player snapshot`)
   const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
   const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
   if (ageTicks >= lifetimeTicks) {
@@ -124,10 +129,11 @@ export function nativeSecondaryActor(
   }
   if (kind === 'golem-death' || kind === 'golem-assembly-debris') {
     const enhanced = boolean(source.enhanced, `${field}.enhanced`)
-    const expectedLifetime = kind === 'golem-death' ? enhanced ? 667 : 134 : enhanced ? 400 : 80
+    const expectedLifetime = kind === 'golem-death' ? enhanced ? NATIVE_GOLEM_DEATH_MAX_AGE.on : NATIVE_GOLEM_DEATH_MAX_AGE.off : enhanced ? 400 : 80
     if (skillId !== 45 || source.damage !== 0 || lifetimeTicks !== expectedLifetime || ageTicks >= lifetimeTicks) {
       throw new GameProtocolError(`${field} violates the Golem born-quality lifetime`)
     }
+    if (kind === 'golem-death' && presentationRng !== null) throw new GameProtocolError(`${field} retains an obsolete renderer replay seed`)
     if (kind === 'golem-assembly-debris' && (
       source.frame !== 2008 && source.frame !== 2009 && source.frame !== 2010
       || positiveFinite(source.alpha, `${field}.alpha`) > (enhanced ? 10 : 2)
@@ -171,7 +177,7 @@ export function nativeSecondaryActor(
     source.painterRegistrations,
     `${field}.painterRegistrations`,
     nativeSecondaryPainterManagerLane(kind),
-    1,
+    kind === 'golem-death' ? NATIVE_GOLEM_DEATH_PAINTER_COUNT : 1,
   )
   let miscLightAppendOrdinal: number | null = null
   if (lightDisposition === 'misc') {
@@ -183,6 +189,11 @@ export function nativeSecondaryActor(
     throw new GameProtocolError(`${field}.miscLightAppendOrdinal must be null`)
   }
   return {
+    ...(kind === 'golem-death' ? { golemDeath: nativeGolemDeathAnimation(source.golemDeath, `${field}.golemDeath`, boolean(source.enhanced, `${field}.enhanced`)) } : {}),
+    ...(kind === 'ether-drain' ? {
+      etherDrain: source.etherDrain === null ? null
+        : nativeEtherDrainState(source.etherDrain, `${field}.etherDrain`),
+    } : {}),
     ageTicks,
     alpha: nonnegativeFinite(source.alpha, `${field}.alpha`),
     damage: nonnegativeFinite(source.damage, `${field}.damage`),
@@ -216,6 +227,97 @@ export function nativeSecondaryActor(
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
 
+}
+
+export function nativeEtherDrainState(value: unknown, field: string): NativeEtherDrainState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['animations', 'targetsInitialized', 'lastLootRegistrationOrdinal', 'loose', 'queried', 'scenery', 'worldAnimationRefs', 'lastWorldAnimationIds'])
+  const readRefs = (value: unknown, name: 'loose' | 'queried', maximum: number) => {
+    const refs = limitedArray(value, `${field}.${name}`, maximum).map((value, index): NativeEtherDrainTargetRef => {
+      const path = `${field}.${name}[${index}]`
+      const ref = record(value, path)
+      const kind = memberString(ref.kind, `${path}.kind`, ['enemy', 'golem', 'loot', 'player'] as const)
+      if ((name === 'loose') !== (kind === 'loot')) throw new GameProtocolError(`${path} is in the wrong field target lane`)
+      onlyKeys(ref, path, kind === 'enemy' || kind === 'loot' ? ['kind', 'id', 'registrationOrdinal'] : ['kind', 'id'])
+      if (kind === 'player') return { kind, id: validatedPlayerId(ref.id, `${path}.id`) }
+      const id = positiveInteger(ref.id, `${path}.id`)
+      if (kind === 'golem') return { kind, id }
+      return { kind, id, registrationOrdinal: nonnegativeInteger(ref.registrationOrdinal, `${path}.registrationOrdinal`) }
+    })
+    if (new Set(refs.map(nativeEtherDrainTargetKey)).size !== refs.length) {
+      throw new GameProtocolError(`${field}.${name} contains duplicate target references`)
+    }
+    return Object.freeze(refs)
+  }
+  const loose = readRefs(source.loose, 'loose', MAX_BONEYARD_LOOT)
+  const queried = readRefs(source.queried, 'queried', MAX_BONEYARD_ENEMIES + MAX_BONEYARD_MAGGOTS + MAX_PLAYERS + MAX_SECONDARY_ACTORS)
+  const lastLootRegistrationOrdinal = boundedInteger(source.lastLootRegistrationOrdinal,
+    `${field}.lastLootRegistrationOrdinal`, -1, Number.MAX_SAFE_INTEGER)
+  if (loose.some(ref => ref.kind === 'loot' && ref.registrationOrdinal > lastLootRegistrationOrdinal)) {
+    throw new GameProtocolError(`${field} has a loose target beyond its registration cursor`)
+  }
+  // At most one leaf per retained scenery object and one free child per field
+  // tick; the constructor bounds the complete field lifetime to 1061 ticks.
+  const animations = limitedArray(source.animations, `${field}.animations`, (MAX_BONEYARD_OBJECTS + 1) * 1061 + 1)
+    .map((value, index): NativeEtherDrainAnimation => {
+      const path = `${field}.animations[${index}]`
+      const animation = record(value, path)
+      if (animation.kind === 'debris') {
+        onlyKeys(animation, path, ['kind', 'position', 'direction', 'remainingDistance', 'speed', 'oscillationDegrees', 'rotationDegrees', 'variant'])
+        return { kind: 'debris', position: vector(animation.position, `${path}.position`),
+          direction: vector(animation.direction, `${path}.direction`),
+          remainingDistance: positiveFinite(animation.remainingDistance, `${path}.remainingDistance`),
+          speed: positiveFinite(animation.speed, `${path}.speed`),
+          oscillationDegrees: finite(animation.oscillationDegrees, `${path}.oscillationDegrees`),
+          rotationDegrees: finite(animation.rotationDegrees, `${path}.rotationDegrees`),
+          variant: boundedInteger(animation.variant, `${path}.variant`, 0, 2) as 0 | 1 | 2,
+        }
+      }
+      if (animation.kind !== 'captured') throw new GameProtocolError(`${path}.kind is not a field animation`)
+      onlyKeys(animation, path, ['kind', 'alpha', 'atlas', 'entry', 'tint', 'bodyYOffset'])
+      const atlas = memberString(animation.atlas, `${path}.atlas`, ['BadGuys', 'Demon'] as const)
+      const entry = positiveInteger(animation.entry, `${path}.entry`)
+      if (atlas === 'BadGuys' ? !((entry >= 1477 && entry <= 1584) || (entry >= 2293 && entry <= 2346))
+        : entry < 80 || entry > 97) throw new GameProtocolError(`${path}.entry is outside native capture art`)
+      const alpha = positiveFinite(animation.alpha, `${path}.alpha`)
+      if (alpha > 1.25) throw new GameProtocolError(`${path}.alpha exceeds its capture birth`)
+      const bodyYOffset = atlas === 'BadGuys' && entry <= 1584 ? 23 : 0
+      if (animation.bodyYOffset !== bodyYOffset) throw new GameProtocolError(`${path}.bodyYOffset does not match its native capture art`)
+      return { kind: 'captured', alpha, atlas, entry, bodyYOffset,
+        tint: boundedInteger(animation.tint, `${path}.tint`, 0, 0xffffff) }
+    })
+  if (animations.filter(animation => animation.kind === 'captured').length > 1) {
+    throw new GameProtocolError(`${field}.animations has multiple captured images after a replacement`)
+  }
+  const scenery = limitedArray(source.scenery, `${field}.scenery`, MAX_BONEYARD_OBJECTS)
+    .map((id, index) => nonnegativeInteger(id, `${field}.scenery[${index}]`))
+  if (new Set(scenery).size !== scenery.length) throw new GameProtocolError(`${field}.scenery contains duplicate references`)
+  const animationKinds = ['enemy-death-effect', 'primary-transient', 'secondary-actor', 'death-weapon', 'golem-fragment'] as const
+  const savedIds = record(source.lastWorldAnimationIds, `${field}.lastWorldAnimationIds`)
+  onlyKeys(savedIds, `${field}.lastWorldAnimationIds`, animationKinds)
+  const lastWorldAnimationIds = {
+    'enemy-death-effect': nonnegativeInteger(savedIds['enemy-death-effect'], `${field}.lastWorldAnimationIds.enemy-death-effect`),
+    'primary-transient': nonnegativeInteger(savedIds['primary-transient'], `${field}.lastWorldAnimationIds.primary-transient`),
+    'secondary-actor': nonnegativeInteger(savedIds['secondary-actor'], `${field}.lastWorldAnimationIds.secondary-actor`),
+    'death-weapon': nonnegativeInteger(savedIds['death-weapon'], `${field}.lastWorldAnimationIds.death-weapon`),
+    'golem-fragment': nonnegativeInteger(savedIds['golem-fragment'], `${field}.lastWorldAnimationIds.golem-fragment`),
+  }
+  const worldAnimationRefs = limitedArray(source.worldAnimationRefs, `${field}.worldAnimationRefs`,
+    MAX_BONEYARD_ENEMY_DEATH_EFFECTS * 2 + MAX_PRIMARY_SPELL_TRANSIENTS + MAX_SECONDARY_ACTORS * NATIVE_GOLEM_DEATH_PAINTER_COUNT).map((value, index): NativeEtherDrainWorldAnimationRef => {
+      const path = `${field}.worldAnimationRefs[${index}]`
+      const ref = record(value, path)
+      const kind = memberString(ref.kind, `${path}.kind`, animationKinds)
+      onlyKeys(ref, path, kind === 'golem-fragment' ? ['kind', 'id', 'index'] : ['kind', 'id'])
+      const id = positiveInteger(ref.id, `${path}.id`)
+      if (id > lastWorldAnimationIds[kind]) throw new GameProtocolError(`${path} is beyond its animation registration cursor`)
+      return kind === 'golem-fragment' ? { kind, id, index: boundedInteger(ref.index, `${path}.index`, 0, NATIVE_GOLEM_DEATH_FRAGMENT_COUNT - 1) } : { kind, id }
+    })
+  if (new Set(worldAnimationRefs.map(nativeEtherDrainWorldAnimationKey)).size !== worldAnimationRefs.length) {
+    throw new GameProtocolError(`${field}.worldAnimationRefs contains duplicate references`)
+  }
+  return { animations: Object.freeze(animations), targetsInitialized: boolean(source.targetsInitialized, `${field}.targetsInitialized`),
+    lastLootRegistrationOrdinal, loose, queried, scenery: Object.freeze(scenery),
+    worldAnimationRefs: Object.freeze(worldAnimationRefs), lastWorldAnimationIds }
 }
 
 function nativeSecondaryGolemState(

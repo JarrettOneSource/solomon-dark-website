@@ -21,6 +21,8 @@ export function stepDyingActor(
   if (stored.config.enemyToken === 'COCOON') return null
   const tick = context.tick
   let source = stored
+  const captured = source.etherDrainCaptured === true
+    || (source.brain.family === 'spider' && source.brain.phase === 'captured')
   if (source.config.enemyToken === 'DEMONSKULL' && source.brain.family === 'demon-skull' && source.brain.deathCountdown > 0) {
     return stepDyingDemonSkull(work, { ...source, config: source.config, brain: source.brain }, tick)
   }
@@ -46,7 +48,7 @@ export function stepDyingActor(
       brain: source.brain.family === 'faculty' ? { ...source.brain, bodyPose: 3, bodyHeadingDeg: headingDeg } : source.brain }
     if (deathTick < 250) return source
   }
-  if (source.config.enemyToken === 'DEMON') {
+  if (source.config.enemyToken === 'DEMON' && !captured) {
     const deathStartedTick = source.deathStartedTick ?? tick
     const deathTick = Math.max(0, tick - deathStartedTick)
     if (!source.deathPresentationStarted) {
@@ -63,9 +65,8 @@ export function stepDyingActor(
   }
   detachHeartmongerCrows(work, source, context)
   emitEvent(work, tick, 'enemy-death', source.id)
-  const captured = source.brain.family === 'spider' && source.brain.phase === 'captured'
   const output = terminalOutput(source.config.enemyToken)
-  const outputCount = terminalOutputCount(work, source)
+  const outputCount = captured ? 0 : terminalOutputCount(work, source)
   emitEvent(work, tick, 'enemy-terminal-output', source.id, {
     count: outputCount,
     output,
@@ -74,6 +75,7 @@ export function stepDyingActor(
   if (!captured) emitEnemyDeathSounds(work, source, tick, outputCount)
   if (
     source.config.enemyToken === 'ZOMBIE'
+    && !captured
     && source.config.family.rotten
     && source.config.family.poisonPoolDamage > 0
   ) {
@@ -86,7 +88,7 @@ export function stepDyingActor(
     )
   }
   if (!captured) spawnEnemyDeathEffects(work, source, tick, outputCount)
-  spawnTerminalChildren(work, source, context)
+  if (!captured) spawnTerminalChildren(work, source, context)
   const rewardEventId = emitEvent(work, tick, 'reward', source.id, {
     targetPlayerId: source.lastDamagedByPlayerId,
   })

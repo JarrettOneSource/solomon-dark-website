@@ -1,199 +1,93 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
-
-import { playerDeathEquipmentAppearance } from '../player-character-presentation.ts'
+import type { NativeDeathWeaponActor } from '../core-kernels/native-death-animations.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import type { GameSnapshot, ProtocolPlayerState } from '../protocol/game-state.ts'
-import {
-  playerDeathWeaponSample,
-  type PlayerDeathWeaponTrigger,
-} from './player-death-weapon-presentation.ts'
+import type { GameSnapshot } from '../protocol/game-state.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
-
-interface ActiveDeathWeapon {
-  readonly deathEpoch: number
-  readonly view: PlayerDeathWeaponView
-}
 
 export interface PlayerDeathWeaponPainterLayer {
   readonly id: string
+  readonly weaponId: number
   readonly playerId: string
   readonly position: Readonly<Vector2>
+  readonly registration: NativeWorldManagerRegistration
   readonly worldY: number
 }
 
+/** Independent world animations; a dead or absent owner does not retire a drop. */
 export class PlayerDeathWeaponViews {
-  private readonly active = new Map<string, ActiveDeathWeapon>()
+  private readonly active = new Map<number, PlayerDeathWeaponView>()
   private readonly root: Container
-  private runId: string
   private readonly textures: PlayerWorldTextures
-
-  constructor(
-    root: Container,
-    textures: PlayerWorldTextures,
-    initialSnapshot: GameSnapshot,
-  ) {
-    if (initialSnapshot.world.kind !== 'boneyard') {
-      throw new Error('Player death-weapon views require a Boneyard snapshot')
-    }
-    this.root = root
+  private runId: string
+  constructor(root: Container, textures: PlayerWorldTextures, initialSnapshot: GameSnapshot) {
+    if (initialSnapshot.world.kind !== 'boneyard') throw new Error('Player death-weapon views require a Boneyard snapshot')
     this.runId = initialSnapshot.world.runId
+    this.root = root
     this.textures = textures
   }
-
   update(snapshot: GameSnapshot): void {
-    if (snapshot.world.kind !== 'boneyard') {
-      throw new Error('Player death-weapon views require a Boneyard snapshot')
+    if (snapshot.world.kind !== 'boneyard') throw new Error('Player death-weapon views require a Boneyard snapshot')
+    if (snapshot.world.runId !== this.runId) { this.clear(); this.runId = snapshot.world.runId }
+    const live = new Set<number>()
+    for (const actor of snapshot.world.deathWeapons) {
+      live.add(actor.id)
+      if (!this.active.has(actor.id)) this.active.set(actor.id, new PlayerDeathWeaponView(this.root, this.textures, actor))
+      this.active.get(actor.id)!.update(actor)
     }
-    if (snapshot.world.runId !== this.runId) {
-      this.clear()
-      this.runId = snapshot.world.runId
-    }
-    const liveIds = new Set<string>()
-    for (const [playerId, player] of Object.entries(snapshot.players)) {
-      if (player.progression.lifeState !== 'dying'
-        && player.progression.lifeState !== 'spectating') continue
-      liveIds.add(playerId)
-      const current = this.active.get(playerId)
-      if (!current || current.deathEpoch !== player.progression.deathEpoch) {
-        current?.view.destroy()
-        const view = new PlayerDeathWeaponView(
-          this.root,
-          this.textures,
-          this.runId,
-          playerId,
-          player,
-        )
-        this.active.set(playerId, {
-          deathEpoch: player.progression.deathEpoch,
-          view,
-        })
-      }
-      this.active.get(playerId)!.view.update(player)
-    }
-    for (const [playerId, active] of this.active) {
-      if (liveIds.has(playerId)) continue
-      active.view.destroy()
-      this.active.delete(playerId)
-    }
+    for (const [id, view] of this.active) if (!live.has(id)) { view.destroy(); this.active.delete(id) }
   }
-
   painterLayers(): readonly PlayerDeathWeaponPainterLayer[] {
-    return [...this.active.entries()].map(([playerId, active]) => ({
-      id: `player-death-weapon:${playerId}`,
-      playerId,
-      position: active.view.position,
-      worldY: active.view.position.y,
-    }))
+    return [...this.active.entries()].map(([id, view]) => ({ id: `player-death-weapon:${id}`, weaponId: id,
+      playerId: view.actor.ownerId, position: view.position, worldY: view.position.y, registration: view.actor.painterRegistration }))
   }
-
-  setDepth(playerId: string, depth: number): void {
-    const active = this.active.get(playerId)
-    if (active) active.view.setDepth(depth)
-  }
-
-  setRenderable(renderable: boolean): void {
-    for (const active of this.active.values()) active.view.setRenderable(renderable)
-  }
-
-  setTint(playerId: string, tint: number): void {
-    const active = this.active.get(playerId)
-    if (active) active.view.setTint(tint)
-  }
-
-  get size(): number {
-    return this.active.size
-  }
-
-  destroy(): void {
-    this.clear()
-  }
-
-  private clear(): void {
-    for (const active of this.active.values()) active.view.destroy()
-    this.active.clear()
-  }
+  setDepth(id: number, depth: number): void { this.active.get(id)?.setDepth(depth) }
+  setRenderable(renderable: boolean): void { for (const view of this.active.values()) view.setRenderable(renderable) }
+  setTint(id: number, tint: number): void { this.active.get(id)?.setTint(tint) }
+  get size(): number { return this.active.size }
+  destroy(): void { this.clear() }
+  private clear(): void { for (const view of this.active.values()) view.destroy(); this.active.clear() }
 }
 
 class PlayerDeathWeaponView {
   private readonly container: Container
-  private readonly origin: Readonly<Vector2>
   private readonly root: Container
   private readonly shadow: Sprite
   private readonly sprite: Sprite
-  private readonly trigger: PlayerDeathWeaponTrigger
-
-  constructor(
-    root: Container,
-    textures: PlayerWorldTextures,
-    runId: string,
-    playerId: string,
-    player: ProtocolPlayerState,
-  ) {
-    const appearance = playerDeathEquipmentAppearance(
-      player.config.element,
-      player.economy.equipment,
-    )
-    const source = appearance.weapon.kind === 'staff'
-      ? textures.death.weapon.staff[appearance.weapon.selector]
-      : textures.death.weapon.wand
-    if (!source) throw new Error(`Missing native ${appearance.weapon.kind} death texture`)
+  actor: NativeDeathWeaponActor
+  constructor(root: Container, textures: PlayerWorldTextures, actor: NativeDeathWeaponActor) {
+    this.actor = actor
     this.root = root
-    this.origin = { ...player.position }
-    this.trigger = {
-      deathEpoch: player.progression.deathEpoch,
-      headingIndex: player.headingIndex,
-      playerId,
-      runId,
-      weapon: appearance.weapon,
-    }
-    this.container = new Container({ label: `player-death-weapon:${playerId}` })
+    const source = actor.weapon.kind === 'staff' ? textures.death.weapon.staff[actor.weapon.selector] : textures.death.weapon.wand
+    if (!source) throw new Error(`Missing native ${actor.weapon.kind} death texture`)
+    this.container = new Container({ label: `player-death-weapon:${actor.id}` })
     this.container.eventMode = 'none'
-    this.shadow = deathWeaponSprite(source, `player-death-weapon-shadow:${playerId}`)
-    this.shadow.alpha = 1
+    this.shadow = deathWeaponSprite(source, `player-death-weapon-shadow:${actor.id}`)
     this.shadow.position.set(0, 2)
-    this.shadow.scale.set(1, 0.75)
-    this.shadow.tint = 0x000000
-    this.sprite = deathWeaponSprite(source, `player-death-weapon:${playerId}`)
+    this.shadow.scale.set(1, .75)
+    this.shadow.tint = 0
+    this.sprite = deathWeaponSprite(source, `player-death-weapon:${actor.id}`)
     this.container.addChild(this.shadow, this.sprite)
     root.addChild(this.container)
   }
-
-  update(player: ProtocolPlayerState): void {
-    const sample = playerDeathWeaponSample(this.trigger, player.progression.deathTick)
-    this.container.position.set(
-      this.origin.x + sample.offset.x,
-      this.origin.y + sample.offset.y,
-    )
-    this.shadow.rotation = sample.rotationRadians
-    this.sprite.position.set(0, sample.height)
-    this.sprite.rotation = sample.rotationRadians
+  update(actor: NativeDeathWeaponActor): void {
+    this.actor = actor
+    this.container.position.set(actor.motion.position.x, actor.motion.position.y)
+    const rotation = actor.motion.rotationDegrees * Math.PI / 180
+    this.shadow.rotation = rotation
+    this.sprite.position.set(0, actor.motion.height)
+    this.sprite.rotation = rotation
+    this.shadow.alpha = this.sprite.alpha = Math.min(1, actor.life)
   }
-
-  get position(): Readonly<Vector2> {
-    return { x: this.container.x, y: this.container.y }
-  }
-
-  setDepth(depth: number): void {
-    this.container.zIndex = depth
-  }
-
-  setRenderable(renderable: boolean): void {
-    this.container.renderable = renderable
-  }
-
-  setTint(tint: number): void {
-    this.sprite.tint = tint
-  }
-
-  destroy(): void {
-    this.root.removeChild(this.container)
-    this.container.destroy({ children: true })
-  }
+  get position(): Readonly<Vector2> { return { x: this.container.x, y: this.container.y } }
+  setDepth(depth: number): void { this.container.zIndex = depth }
+  setRenderable(renderable: boolean): void { this.container.renderable = renderable }
+  setTint(tint: number): void { this.sprite.tint = tint }
+  destroy(): void { this.root.removeChild(this.container); this.container.destroy({ children: true }) }
 }
-
 function deathWeaponSprite(texture: Texture, label: string): Sprite {
   const sprite = new Sprite(texture)
-  sprite.anchor.set(0.5)
+  sprite.anchor.set(.5)
   sprite.eventMode = 'none'
   sprite.label = label
   return sprite

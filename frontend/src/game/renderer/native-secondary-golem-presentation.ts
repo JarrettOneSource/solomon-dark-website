@@ -1,11 +1,7 @@
 import {
-  drawNativeFloat,
-  drawNativeInteger,
-  type NativeRngState,
-} from '../core-kernels/native-rng.ts'
-import {
   roundHalfToEven,
 } from '../core-kernels/native-rounding.ts'
+import { NATIVE_GOLEM_DEATH_STAR_TICKS } from '../core-kernels/native-death-animations.ts'
 import type {
   NativeSecondaryActorState,
 } from '../core-kernels/native-secondary-abilities.ts'
@@ -231,19 +227,21 @@ export function nativeGolemPresentationPlan(
 
 export function nativeGolemDeathPresentationPlan(
   actor: NativeSecondaryActorState,
+  member?: number | 'star',
 ): NativeSecondaryPresentationPlan {
-  if (actor.kind !== 'golem-death' || actor.presentationRng === null) {
-    throw new TypeError('Native Golem death presentation requires its pre-consumption RNG state')
+  if (actor.kind !== 'golem-death' || actor.golemDeath === undefined) {
+    throw new TypeError('Native Golem death presentation requires its mutable fragments')
   }
-  const created = createGolemDeathParticles(actor.presentationRng, actor.enhanced)
-  const stepped = stepGolemDeathParticles(created.particles, created.rng, actor.ageTicks)
+  const animation = actor.golemDeath
+  const root = typeof member === 'number' ? animation.fragments[member]?.position ?? actor.position : actor.position
   const tint = actor.variant === 1 ? GOLEM_IRON_TINT : WHITE
-  const draws = stepped.particles.flatMap((particle, index) => {
+  const draws = animation.fragments.flatMap((particle, index) => {
+    if (particle === null || member !== undefined && member !== index) return []
     const alpha = Math.max(0, Math.min(1, particle.life))
     return alpha <= 0 ? [] : [
       ...(actor.enhanced ? [secondarySprite(actor, 'DeadHawg', 78 + index % 10, `golem-death-shadow-${index}`, {
-        alpha, offset: { x: particle.position.x, y: particle.position.y + 2 },
-        rotationRadians: degreesToRadians(particle.rotation), scaleX: actor.scale, scaleY: actor.scale * .75, tint: 0,
+        alpha, offset: { x: particle.position.x - root.x, y: particle.position.y - root.y + 2 },
+        rotationRadians: degreesToRadians(particle.rotationDegrees), scaleX: actor.scale, scaleY: actor.scale * .75, tint: 0,
       })] : []), secondarySprite(
       actor,
       'DeadHawg',
@@ -252,20 +250,20 @@ export function nativeGolemDeathPresentationPlan(
       {
         alpha,
         offset: {
-          x: particle.position.x,
-          y: particle.position.y + particle.height,
+          x: particle.position.x - root.x,
+          y: particle.position.y - root.y + particle.height,
         },
-        rotationRadians: degreesToRadians(particle.rotation),
+        rotationRadians: degreesToRadians(particle.rotationDegrees),
         tint,
       },
     )]
   })
-  if (actor.ageTicks < 15) {
+  if (actor.ageTicks < NATIVE_GOLEM_DEATH_STAR_TICKS && (member === undefined || member === 'star')) {
     draws.push(secondarySprite(actor, 'BadGuys', 86, 'golem-death-star', {
       alpha: 0.75 - actor.ageTicks * 0.05,
       blend: 'add',
       offset: { x: 0, y: -15 },
-      rotationRadians: degreesToRadians(created.starRotation + created.starStep * actor.ageTicks),
+      rotationRadians: degreesToRadians(animation.starRotationDegrees + animation.starStepDegrees * actor.ageTicks),
       scaleX: 2,
       scaleY: 2,
       tint: GOLEM_STAR_TINT,
@@ -277,12 +275,12 @@ export function nativeGolemDeathPresentationPlan(
     meshes: [],
     quads: [],
     queueFamily: 'ordinary-dynamic',
-    root: { ...actor.position },
+    root: { ...root },
     sortBias: 0,
     stormComposite: null,
     backgroundDraws: [],
     underlayDraws: [],
-    worldY: actor.position.y,
+    worldY: root.y,
   }
 }
 
@@ -450,148 +448,4 @@ function cosmeticGolemUnit(
 
 function nativeGolemGreenTint(unit: number): number {
   return (Math.round((0.5 + unit * 0.3) * 255) << 16) | 0x00ff80
-}
-
-interface GolemDeathParticle {
-  bounceProgress: number
-  bounceVelocity: number
-  height: number
-  life: number
-  position: Vector2
-  rotation: number
-  rotationStep: number
-  velocity: Vector2
-  verticalVelocity: number
-}
-
-function createGolemDeathParticles(sourceRng: NativeRngState, enhanced: boolean): Readonly<{
-  particles: readonly GolemDeathParticle[]
-  rng: NativeRngState
-  starRotation: number
-  starStep: number
-}> {
-  const shuffled = nativeFullRangeShuffle(
-    Array.from({ length: 30 }, (_, index) => index * 18),
-    sourceRng,
-  )
-  let rng = shuffled.rng
-  const particles: GolemDeathParticle[] = []
-  for (let index = 0; index < 30; index += 1) {
-    const fall = drawNativeFloat(rng, 3)
-    rng = fall.state
-    const height = drawNativeFloat(rng, 20)
-    rng = height.state
-    const rotation = drawNativeFloat(rng, 360)
-    rng = rotation.state
-    const rotationStep = drawNativeFloat(rng, 10)
-    rng = rotationStep.state
-    const speed = drawNativeFloat(rng, 1)
-    rng = speed.state
-    const radius = drawNativeFloat(rng, 10)
-    rng = radius.state
-    const angular = drawNativeFloat(rng, 20, true)
-    rng = angular.state
-    const radians = degreesToRadians(shuffled.values[index]!)
-    const magnitude = 1.5 * (speed.value + 0.5)
-    const velocity = { x: Math.sin(radians) * magnitude, y: -Math.cos(radians) * magnitude }
-    const positionFactor = radius.value + 17
-    particles.push({
-      bounceProgress: 0,
-      bounceVelocity: -(fall.value + 2),
-      height: -height.value,
-      life: enhanced ? 10 : 2,
-      position: {
-        x: velocity.x * positionFactor,
-        y: velocity.y * positionFactor,
-      },
-      rotation: rotation.value,
-      rotationStep: angular.value,
-      velocity,
-      verticalVelocity: -(fall.value + 2),
-    })
-  }
-  const starRotation = drawNativeFloat(rng, 360)
-  rng = starRotation.state
-  const starPitch = drawNativeFloat(rng, 5)
-  rng = starPitch.state
-  const starSample = drawNativeInteger(rng, 10)
-  rng = starSample.state
-  return {
-    particles,
-    rng,
-    starRotation: starRotation.value,
-    starStep: (starSample.value + starPitch.value) * 0.5,
-  }
-}
-
-function stepGolemDeathParticles(
-  source: readonly GolemDeathParticle[],
-  sourceRng: NativeRngState,
-  ageTicks: number,
-): Readonly<{ particles: readonly GolemDeathParticle[]; rng: NativeRngState }> {
-  const particles = source.map((particle) => ({
-    ...particle,
-    position: { ...particle.position },
-    velocity: { ...particle.velocity },
-  }))
-  let rng = sourceRng
-  for (let tick = 0; tick < Math.floor(ageTicks); tick += 1) {
-    for (const particle of particles) {
-      if (particle.life <= 0) continue
-      if (particle.height !== 0) {
-        particle.position.x += particle.velocity.x
-        particle.position.y += particle.velocity.y
-        particle.height += 2 * particle.verticalVelocity
-        particle.verticalVelocity += 2 * particle.bounceProgress * 0.4
-        particle.bounceProgress = Math.min(1, particle.bounceProgress + 0.02)
-        if (particle.height > 0) {
-          const rotationStep = drawNativeFloat(rng, 10)
-          rng = rotationStep.state
-          particle.rotationStep = rotationStep.value + 1
-          particle.bounceVelocity *= 0.65
-          particle.verticalVelocity = particle.bounceVelocity
-          const sound = drawNativeInteger(rng, 3)
-          rng = sound.state
-          if (sound.value === 1) {
-            rng = drawNativeFloat(rng, 0.2).state
-            rng = drawNativeInteger(rng, 4).state
-          }
-          const damp = drawNativeInteger(rng, 2)
-          rng = damp.state
-          if (damp.value === 1) {
-            particle.velocity.x *= 0.65
-            particle.velocity.y *= 0.65
-          }
-          if (particle.verticalVelocity > -0.75) {
-            particle.bounceVelocity = 0
-            particle.bounceProgress = 0
-            particle.verticalVelocity = 0
-            particle.velocity.x = 0
-            particle.velocity.y = 0
-            particle.rotationStep = 0
-          }
-          particle.height = particle.verticalVelocity
-        }
-      }
-      particle.rotation += particle.rotationStep
-      particle.life -= 0.015
-    }
-  }
-  return { particles, rng }
-}
-
-function nativeFullRangeShuffle<T>(
-  source: readonly T[],
-  sourceRng: NativeRngState,
-): Readonly<{ rng: NativeRngState; values: readonly T[] }> {
-  const values = [...source]
-  let rng = sourceRng
-  for (let index = 0; index < values.length; index += 1) {
-    const draw = drawNativeInteger(rng, values.length)
-    rng = draw.state
-    const swap = values[index]!
-    values[index] = values[draw.value]!
-    values[draw.value] = swap
-  }
-  return { rng, values }
 }

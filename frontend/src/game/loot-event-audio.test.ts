@@ -77,6 +77,7 @@ function snapshot(
       gateLeaves: [],
       goodies: [],
       kind: 'boneyard',
+      deathWeapons: [],
       lanternLightRegistration: null,
       lanternPosition: null,
       loot: [],

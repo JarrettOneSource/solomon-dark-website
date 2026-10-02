@@ -1,7 +1,13 @@
-import type { Vector2 } from '../core-kernels/vector.ts'
-import type { PlayerDeathEquipmentAppearance } from '../player-character-presentation.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { createNativeGolemDeathAnimation, stepNativeGolemDeathAnimation,
+  type NativeGolemDeathAnimation, type NativeDeathWeaponActor } from '../core-kernels/native-death-animations.ts'
+import type { NativeBouncerMotion } from '../core-kernels/native-bouncer.ts'
 
-export const NATIVE_PLAYER_DEATH_WEAPON_BOUNCER = Object.freeze({
+// Only saved schemas through47 use the retired weapon replay below.
+import type { Vector2 } from '../core-kernels/vector.ts'
+import type { PlayerDeathEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
+
+const NATIVE_PLAYER_DEATH_WEAPON_BOUNCER = Object.freeze({
   bounceDamping: 0.65,
   gravity: 0.4,
   initialHorizontalSpeed: 1.5,
@@ -15,10 +21,9 @@ export const NATIVE_PLAYER_DEATH_WEAPON_BOUNCER = Object.freeze({
   minimumInitialRotationSpeed: 1,
   settleVerticalSpeed: 0.75,
   updatePeriod: 3,
-  updatesPerPeriod: 2,
 })
 
-export interface PlayerDeathWeaponTrigger {
+interface PlayerDeathWeaponTrigger {
   readonly deathEpoch: number
   readonly headingIndex: number
   readonly playerId: string
@@ -26,17 +31,11 @@ export interface PlayerDeathWeaponTrigger {
   readonly weapon: PlayerDeathEquipmentAppearance['weapon']
 }
 
-export interface PlayerDeathWeaponSample {
-  readonly height: number
-  readonly offset: Readonly<Vector2>
-  readonly rotationRadians: number
-  readonly settled: boolean
-}
-
-export function playerDeathWeaponSample(
+function legacyDeathWeaponMotion(
   trigger: PlayerDeathWeaponTrigger,
   ageTicks: number,
-): PlayerDeathWeaponSample {
+  origin: Readonly<Vector2>,
+): NativeBouncerMotion {
   if (!Number.isFinite(ageTicks)) throw new RangeError('Death-weapon age must be finite')
   const age = Math.max(0, Math.trunc(ageTicks))
   const seed = stableHash(
@@ -98,6 +97,7 @@ export function playerDeathWeaponSample(
         > -NATIVE_PLAYER_DEATH_WEAPON_BOUNCER.settleVerticalSpeed
       ) {
         height = 0
+        verticalVelocity = 0
         velocityX = 0
         velocityY = 0
         rotationSpeed = 0
@@ -107,12 +107,9 @@ export function playerDeathWeaponSample(
     rotationDegrees += rotationSpeed
   }
 
-  return {
-    height,
-    offset: { x, y },
-    rotationRadians: rotationDegrees * Math.PI / 180,
-    settled,
-  }
+  return { height, bounceVelocity: settled ? 0 : bounceVelocity,
+    position: { x: origin.x + x, y: origin.y + y }, rotationDegrees, rotationStepDegrees: rotationSpeed,
+    velocity: { x: velocityX, y: velocityY }, verticalVelocity }
 }
 
 function normalizedHeading(headingIndex: number): number {
@@ -139,4 +136,20 @@ function mix(seed: number, salt: number): number {
 
 function unit(value: number): number {
   return value / 0x1_0000_0000
+}
+
+/** Old saves retain the constructor seed, not an executed historical bounce stream. */
+export function legacyGolemDeathAnimation(rng: NativeRngState, enhanced: boolean, ageTicks: number,
+  origin: Readonly<Vector2>, savedTick: number): NativeGolemDeathAnimation {
+  let reconstructed = createNativeGolemDeathAnimation(rng, origin, enhanced)
+  for (let age = 1; age <= ageTicks; age++) reconstructed = stepNativeGolemDeathAnimation(
+    reconstructed.animation, Math.max(0, savedTick - ageTicks + age), reconstructed.rng)
+  return reconstructed.animation
+}
+
+export function legacyDeathWeaponActor(trigger: PlayerDeathWeaponTrigger, ageTicks: number, origin: Readonly<Vector2>,
+  tick: number, id: number, painterRegistration: NativeDeathWeaponActor['painterRegistration']): NativeDeathWeaponActor {
+  const motion = legacyDeathWeaponMotion(trigger, ageTicks, origin)
+  return { id, ageTicks: 0, birthTick: tick, deathEpoch: trigger.deathEpoch, life: 99999,
+    motion, ownerId: trigger.playerId, painterRegistration, weapon: trigger.weapon }
 }

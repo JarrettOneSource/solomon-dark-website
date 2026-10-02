@@ -94,6 +94,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
         },
       },
       kind: 'boneyard',
+      deathWeapons: [],
       lanternLightRegistration: null,
       lanternPosition: null,
       loot: [],

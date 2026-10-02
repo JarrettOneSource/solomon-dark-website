@@ -355,6 +355,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         },
       },
       kind: 'boneyard',
+      deathWeapons: [],
       lanternLightRegistration: { managerLane: 'actor', registrationOrdinal: 2 },
       lanternPosition: { x: 120, y: 160 },
       loot: [],

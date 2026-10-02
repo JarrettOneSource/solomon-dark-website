@@ -54,7 +54,7 @@ export function projectBoneyardEnemies(
   spiderContext?: BoneyardSpiderPresentationContext,
 ): readonly BoneyardEnemySnapshot[] {
   return store.actors.filter((actor) => (
-    actor.brain.family !== 'spider' || actor.brain.phase !== 'captured'
+    !actor.etherDrainCaptured && (actor.brain.family !== 'spider' || actor.brain.phase !== 'captured')
   )).map((actor) => ({
     ...(actor.brain.family === 'demon-skull' ? { demonSkull: {
       bodyHeadingDeg: actor.brain.bodyHeadingDeg, bodyOffset: actor.brain.bodyOffset,
@@ -192,7 +192,7 @@ export function projectBoneyardMaggots(
   store: BoneyardEnemyStore,
   tick: number,
 ): readonly BoneyardMaggotSnapshot[] {
-  return store.maggots.map((maggot) => {
+  return store.maggots.filter(maggot => !maggot.etherDrainCaptured).map((maggot) => {
     return {
       alpha: 1,
       currentHealth: maggot.currentHealth,

@@ -1,3 +1,4 @@
+import type { NativeDeathWeaponActor } from '../core-kernels/native-death-animations.ts'
 import type { NativeScreenFlashState } from '../core-kernels/native-screen-flash.ts'
 import type { NativePuppetHitState, NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
@@ -130,6 +131,7 @@ export interface ProtocolPlayerProgression {
   circleSlowTicksRemaining: number
   advancedUnlocks: readonly boolean[]
   coldSlowTicksRemaining: number
+  corpseConsumed: boolean
   concentrationSkillIds: readonly [number | null, number | null]
   currentHealth: number
   currentMana: number
@@ -223,6 +225,7 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  deathWeapons: readonly NativeDeathWeaponActor[]
   puppetHits: readonly NativeWorldPuppetHit[]
   spiderSilks: readonly BoneyardSilkSnapshot[]
   silkFragments: readonly NativeFadeLineActor[]
@@ -904,6 +907,7 @@ export interface HubWorldSnapshotFrame {
 }
 
 export interface BoneyardWorldSnapshotFrame {
+  deathWeapons: readonly NativeDeathWeaponActor[]
   puppetHits: readonly NativeWorldPuppetHit[]
   spiderSilks: readonly BoneyardSilkSnapshot[]
   silkFragments: readonly NativeFadeLineActor[]

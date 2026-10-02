@@ -1,3 +1,4 @@
+import { stepNativeBouncerMotion } from '../core-kernels/native-bouncer.ts'
 import { roundHalfToEven } from '../core-kernels/native-rounding.ts'
 import type {
   RegisterNativeWorldPainter,
@@ -178,60 +179,17 @@ function stepDeathEffect(
   }
 
   if (source.kind === 'bouncer' || source.kind === 'smoky-bouncer' || source.kind === 'black-smoky-bouncer') {
-    const skipsAirborneMotion = source.height < 0 && tick % 3 === 0
-    const position = skipsAirborneMotion
-      ? source.position
-      : {
-          x: source.position.x + source.velocity.x,
-          y: source.position.y + source.velocity.y,
-        }
-    let velocityX = source.velocity.x
-    let velocityY = source.velocity.y
-    let height = skipsAirborneMotion
-      ? source.height
-      : source.height + source.verticalVelocity
-    let verticalVelocity = skipsAirborneMotion
-      ? source.verticalVelocity
-      : source.verticalVelocity + 0.4
-    let bounceVelocity = source.bounceVelocity
-    let angularVelocityDeg = source.angularVelocityDeg
-    const rotationDeg = skipsAirborneMotion
-      ? source.rotationDeg
-      : source.rotationDeg + angularVelocityDeg
-    const opacityTimer = skipsAirborneMotion
-      ? source.opacityTimer
-      : source.opacityTimer - source.alphaLossPerTick
-    if (!skipsAirborneMotion && height >= 0) {
-      height = 0
-      bounceVelocity *= source.bounceRetention
-      verticalVelocity = bounceVelocity
-      angularVelocityDeg = 1 + drawUnit() * 10
-      if (drawUnit() < 0.5) {
-        velocityX *= source.bounceRetention
-        velocityY *= source.bounceRetention
-      }
-      if (verticalVelocity > -0.75) {
-        verticalVelocity = 0
-        angularVelocityDeg = 0
-        velocityX = 0
-        velocityY = 0
-      }
-      height = verticalVelocity
-    }
-    if (opacityTimer <= 0 || source.kind === 'black-smoky-bouncer' && height >= 0) return null
-    const bounced = cloneDeathEffect(source)
-    bounced.ageTicks = ageTicks
-    bounced.alpha = Math.min(1, opacityTimer)
-    bounced.angularVelocityDeg = angularVelocityDeg
-    bounced.bounceVelocity = bounceVelocity
-    bounced.height = height
-    bounced.lastStepTick = tick
-    bounced.opacityTimer = opacityTimer
-    bounced.position = position
-    bounced.rotationDeg = rotationDeg
-    bounced.verticalVelocity = verticalVelocity
-    bounced.velocity = { x: velocityX, y: velocityY }
-    return bounced
+    const stepped = stepNativeBouncerMotion({ bounceVelocity: source.bounceVelocity, height: source.height,
+      position: source.position, rotationDegrees: source.rotationDeg, rotationStepDegrees: source.angularVelocityDeg,
+      velocity: source.velocity, verticalVelocity: source.verticalVelocity }, tick, {
+      float: maximum => drawUnit() * maximum, integer: maximum => drawInteger(drawUnit, maximum),
+    })
+    const motion = stepped.motion
+    const opacityTimer = stepped.skipped ? source.opacityTimer : Math.fround(source.opacityTimer - source.alphaLossPerTick)
+    if (opacityTimer <= 0 || source.kind === 'black-smoky-bouncer' && motion.height >= 0) return null
+    return { ...source, ageTicks, alpha: Math.min(1, opacityTimer), lastStepTick: tick, opacityTimer,
+      angularVelocityDeg: motion.rotationStepDegrees, bounceVelocity: motion.bounceVelocity, height: motion.height,
+      position: motion.position, rotationDeg: motion.rotationDegrees, verticalVelocity: motion.verticalVelocity, velocity: motion.velocity }
   }
 
   if (source.kind === 'scrap') {

@@ -35,6 +35,10 @@ import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-ker
 import type { NativeSecondarySimulationState, NativeSecondaryTargetEffectState, NativeSecondaryTickContext, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
 import { activateNativeSecondaryBeltSkill, applyNativeSecondaryDazzle, applyNativeSecondaryEtherBurn, applyNativeSecondaryFireBurn, applyNativeSecondaryTargetEffect, applyNativeUnforgeCooldownRejuvenation, createNativeSecondarySimulation, emitNativePlayerScreenFlash, enrollNativeSecondaryPainterOwners, materializeNativePlayerFlashResponse, nativeSecondaryManaCeiling, nativeSecondaryManaReserve, nativeSecondaryTargetEffect, removeNativeSecondaryOwner, resetNativeSecondaryWorld, spawnNativeScriptFires, stepNativeMindblastPresentation, stepNativeSecondaryAbilities, triggerNativePlayerMindblast } from '../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_GOLEM_PLACEMENT_RADIUS, NATIVE_GOLEM_RADIUS } from '../core-kernels/native-secondary-golem.ts'
+import { captureNativeEtherDrainImage, pulseNativeEtherDrain } from '../core-kernels/native-secondary-abilities.ts'
+import { createNativeDeathWeaponActor, stepNativeDeathWeaponActors } from '../core-kernels/native-death-animations.ts'
+import { playerDeathEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
+import { NATIVE_ETHER_DRAIN_CONSUMPTION_DISTANCE_SQUARED, NATIVE_ETHER_DRAIN_CORPSE_TIMER_TICKS } from '../core-kernels/native-ether-drain.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS, type NativeSecondaryAbilityId } from '../core-kernels/native-secondary-ability-contract.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
@@ -76,6 +80,8 @@ import { registerHubStudentPopulationPainters } from './hub-students.ts'
 import type { HubWorldState } from './hub-world.ts'
 import { addHubParticipant, beginHubCollegeIntro, confirmHubCollegeIntroLoadout, createHubWorld, hubSpawnPoint, removeHubParticipant, stepHubWorldTick } from './hub-world.ts'
 import { boneyardNativeSecondaryDampenCandidates, boneyardNativeSecondaryTarget, boneyardNativeSecondaryTargets, resolveBoneyardNativeSecondaryCombat, resolveBoneyardNativeTeleport, resolveNativeCollisionAdjustedPosition } from './native-secondary-world.ts'
+import { applyBoneyardEtherDrainWorldAnimationForces, boneyardNativeEtherDrainTargets, boneyardNativeEtherDrainWorldAnimations, nativeEtherDrainCapturedImage } from './native-ether-drain-world.ts'
+import { applyBoneyardEtherDrainForces } from './boneyard-world-placement.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import { applyPlayerContacts, finiteModMutation, gameWorldKey } from './player-contact-system.ts'
 import type { PlayerEntityStore } from './player-entity-store.ts'
@@ -1012,7 +1018,8 @@ export function gameSimulationDurableProfileEconomy(
   if (state.run.phase === 'loadout' && state.world.kind === 'hub') return economy
   const completedRun = state.world.kind === 'boneyard'
     && (state.run.phase === 'game-over' || state.run.phase === 'loadout')
-  const lastWord = completedRun && economy.ownedPerkSelectors.includes(12)
+  const corpseConsumed = playerProgressionAt(state.playerEntities, playerId)?.corpseConsumed ?? false
+  const lastWord = completedRun && !corpseConsumed && economy.ownedPerkSelectors.includes(12)
   return archiveCompletedRunEconomy(economy, {
     displayName: player.config.displayName,
     groundGold: lastWord && state.world.kind === 'boneyard'
@@ -1026,7 +1033,7 @@ export function gameSimulationDurableProfileEconomy(
         ))
       : [],
     starterElement: player.config.element,
-    transferCarriedItems: completedRun,
+    transferCarriedItems: completedRun && !corpseConsumed,
   })
 }
 
@@ -1939,6 +1946,14 @@ function stepGameSimulationTickWithScreenFlashes(
     const tick = state.tick + 1
     let gameRng = state.gameRng
     let world = state.world
+    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
+    playerEntities = consumedCorpses.playerEntities
+    secondaryAbilities = consumedCorpses.secondaryAbilities
+    // The former drop view followed the continuing death clock on Game Over.
+    // Keep its independent Bouncer moving while the gameplay world is frozen.
+    const weapons = stepNativeDeathWeaponActors(world.deathWeapons, tick, secondaryAbilities.rng)
+    world = { ...world, deathWeapons: weapons.actors }
+    secondaryAbilities = { ...secondaryAbilities, rng: weapons.rng }
     for (const playerId of combat.lastWordBurstPlayerIds) {
       const triggered = triggerHagathaLastWord(
         playerEntities,
@@ -2722,6 +2737,11 @@ function finishGameSimulationTick(
         return { position: player.position, viewportHeight: input.viewportHeight, viewportWidth: input.viewportWidth }
       }))
     : null
+  if (world.kind === 'boneyard') {
+    const weapons = stepNativeDeathWeaponActors(world.deathWeapons, tick, secondaryAbilities.rng)
+    world = { ...world, deathWeapons: weapons.actors }
+    secondaryAbilities = { ...secondaryAbilities, rng: weapons.rng }
+  }
   const secondaryResult = stepNativeSecondaryAbilities({
     ...secondaryAbilities,
     actors: secondaryAbilities.actors.filter(({ id }) => !unsteppedSecondaryActorIds.has(id)),
@@ -2731,6 +2751,7 @@ function finishGameSimulationTick(
     resolvedPlayers,
     playerEntities,
     postStaffInputs,
+    spellsBeforePrimary,
     secondaryAbilities,
     worldManagerOrder,
     secondaryProjectileVisible,
@@ -2747,6 +2768,43 @@ function finishGameSimulationTick(
           ...unsteppedSecondaryActors,
         ].sort((left, right) => left.id - right.id)),
       }
+  if (world.kind === 'boneyard' && secondaryResult.etherDrainWorldAnimationContacts.length > 0) {
+    const moved = applyBoneyardEtherDrainWorldAnimationForces(world, spellsBeforePrimary, secondaryAbilities,
+      secondaryResult.etherDrainWorldAnimationContacts)
+    world = moved.world
+    spellsBeforePrimary = moved.primary
+    secondaryAbilities = moved.secondary
+  }
+  if (world.kind === 'boneyard' && secondaryResult.etherDrainContacts.length > 0) {
+    const moved = applyBoneyardEtherDrainForces(world, resolvedPlayers, secondaryAbilities,
+      secondaryResult.etherDrainContacts, Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [playerId, {
+        alive: playerEntities.progressions[index]!.lifeState === 'alive',
+        collisionEnabled: playerCollisionEnabledAfterCombatTick(playerEntities.progressions[index]!),
+        eligible: previous.run.eligiblePlayerIds.includes(playerId),
+        movementScale: playerEntityMovementScale(playerEntities, playerId),
+      }])))
+    world = moved.world
+    resolvedPlayers = moved.players
+    secondaryAbilities = moved.secondary
+    for (const fieldId of moved.consumedFieldActorIds) secondaryAbilities = pulseNativeEtherDrain(secondaryAbilities, fieldId, 1, tick)
+    const fieldDamage: BoneyardEnemyPlayerDamage[] = secondaryResult.etherDrainContacts.flatMap(contact => {
+      if (contact.amount <= 0 || (contact.target.kind !== 'player' && contact.target.kind !== 'golem')) return []
+      const field = secondaryAbilities.actors.find(actor => actor.id === contact.sourceActorId)
+      if (!field) return []
+      return [{ actorId: 0, coldSlowTicks: 0, dazzleTicks: 0, eventId: 0, hitStrength: contact.hitStrength,
+        magicDamage: contact.amount, physicalDamage: 0, poisonDamage: 0, poisonDuration: 0,
+        playerId: contact.target.kind === 'player' ? contact.target.id : `golem:${contact.target.id}`,
+        source: { position: field.position, collisionRadius: field.radius, reflectableActorId: null },
+        suppressHitResponse: (contact.damageFlags & 8) !== 0,
+      }]
+    })
+    const received = applyPlayerContacts({ world, playerEntities, secondaryAbilities, enhancedEffects: previous.enhancedEffects },
+      resolvedPlayers, fieldDamage, tick, extensions, worldManagerOrder.register, writeScreenFlash)
+    world = received.world
+    playerEntities = received.playerEntities
+    secondaryAbilities = received.secondaryAbilities
+    resolvedPlayers = received.resolvedPlayers
+  }
   const secondaryOutcomes = applySecondaryPlayerOutcomes(
     playerEntities,
     resolvedPlayers,
@@ -3075,9 +3133,16 @@ function finishGameSimulationTick(
         }
       }
     }
+    const etherDrainFields = secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain' && actor.worldKey === boneyardWorldKey)
     const secondaryCombat = resolveBoneyardNativeSecondaryCombat(
       world.enemies,
-      secondaryResult,
+      { ...secondaryResult, damage: [...secondaryResult.damage, ...secondaryResult.etherDrainContacts.flatMap(contact => (
+        contact.target.kind === 'enemy' && contact.amount > 0 ? [{ amount: contact.amount, etherDrain: (contact.damageFlags & 0x100) !== 0,
+          hitStrength: contact.hitStrength, kind: 'magic' as const, ownerId: contact.ownerId,
+          sourceActorId: contact.sourceActorId, suppressHitReaction: (contact.damageFlags & 8) !== 0,
+          suppressHurtSound: (contact.damageFlags & 8) !== 0, targetId: contact.target.id,
+        }] : []
+      ))] },
       tick,
       lethalObserver,
       (targetId, ownerId) => {
@@ -3090,9 +3155,7 @@ function finishGameSimulationTick(
           : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId)
       },
       worldManagerOrder.register,
-      secondaryAbilities.actors.filter((actor) => (
-        actor.kind === 'ether-drain' && actor.worldKey === boneyardWorldKey
-      )).map(({ position }) => position),
+      etherDrainFields.map(({ position }) => position),
       previous.enhancedEffects,
     )
     world = {
@@ -3103,6 +3166,10 @@ function finishGameSimulationTick(
         secondaryCombat.events,
         tick,
       ),
+    }
+    for (const capture of secondaryCombat.captures) {
+      secondaryAbilities = captureNativeEtherDrainImage(secondaryAbilities, etherDrainFields[capture.fieldIndex]!.id,
+        capture.actor ? nativeEtherDrainCapturedImage(capture.actor, tick) : null, tick)
     }
     world = applyBoneyardSecondaryEnemyKnockbacks(
       world,
@@ -3286,6 +3353,11 @@ function finishGameSimulationTick(
   )
   playerEntities = combat.store
   secondaryAbilities = { ...secondaryAbilities, rng: combat.rng }
+  if (world.kind === 'boneyard') {
+    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
+    playerEntities = consumedCorpses.playerEntities
+    secondaryAbilities = consumedCorpses.secondaryAbilities
+  }
   const harden = synchronizePlayerHardenEffects({
     enhancedEffects: previous.enhancedEffects,
     after: playerEntities,
@@ -3338,6 +3410,7 @@ function finishGameSimulationTick(
     if (!progression || !lighting) continue
     if (
       progression.lifeState === 'dying'
+      && !progression.corpseConsumed
       && lighting.deathWeaponPainterRegistration === null
     ) {
       playerEntities = setPlayerDeathWeaponPainterRegistration(
@@ -3345,6 +3418,17 @@ function finishGameSimulationTick(
         playerId,
         worldManagerOrder.register('actor'),
       )
+      if (world.kind === 'boneyard') {
+        const character = playerCharacterAt(playerEntities, playerId)!
+        const economy = playerEconomyAt(playerEntities, playerId)!
+        const born = createNativeDeathWeaponActor({ deathEpoch: progression.deathEpoch,
+          headingIndex: character.headingIndex, id: world.nextDeathWeaponId, ownerId: playerId,
+          painterRegistration: playerLightingAt(playerEntities, playerId)!.deathWeaponPainterRegistration!,
+          position: character.position, tick,
+          weapon: playerDeathEquipmentAppearance(character.config.element, economy.equipment).weapon }, secondaryAbilities.rng)
+        secondaryAbilities = { ...secondaryAbilities, rng: born.rng }
+        world = { ...world, deathWeapons: [...world.deathWeapons, born.actor], nextDeathWeaponId: world.nextDeathWeaponId + 1 }
+      }
     } else if (
       progression.lifeState === 'alive'
       && lighting.deathWeaponPainterRegistration !== null
@@ -3633,12 +3717,40 @@ function applySecondaryPlayerOutcomes(
   return { playerEntities, secondaryAbilities, secondaryPlayers }
 }
 
+// Player maintenance0x005339E7..0x00533AAA owns this timer in both death paths.
+function consumeNativeEtherDrainPlayerCorpses(
+  world: BoneyardWorldState,
+  sourceEntities: PlayerEntityStore,
+  sourceSecondary: NativeSecondarySimulationState,
+  tick: number,
+): Readonly<{ playerEntities: PlayerEntityStore; secondaryAbilities: NativeSecondarySimulationState }> {
+  let secondaryAbilities = sourceSecondary
+  const worldKey = `boneyard:${world.runId}`
+  const fields = sourceSecondary.actors.filter(actor => actor.kind === 'ether-drain' && actor.worldKey === worldKey)
+  const progressions = sourceEntities.progressions.map((progression, index) => {
+    if (progression.lifeState !== 'dying' || progression.corpseConsumed || progression.deathTick < NATIVE_ETHER_DRAIN_CORPSE_TIMER_TICKS) return progression
+    const playerId = sourceEntities.identities[index]!.playerId
+    const player = playerCharacterAt(sourceEntities, playerId)!
+    let consumed = false
+    for (const field of fields) {
+      const dx = Math.fround(field.position.x - player.position.x)
+      const dy = Math.fround(field.position.y - player.position.y)
+      if (Math.fround(dx * dx + dy * dy) >= NATIVE_ETHER_DRAIN_CONSUMPTION_DISTANCE_SQUARED) continue
+      secondaryAbilities = pulseNativeEtherDrain(secondaryAbilities, field.id, 2, tick)
+      consumed = true
+    }
+    return consumed ? { ...progression, corpseConsumed: true } : progression
+  })
+  return { playerEntities: { ...sourceEntities, progressions }, secondaryAbilities }
+}
+
 function createNativeSecondaryTickContext(
   world: GameWorldState,
   boneyardCollision: ReturnType<typeof withBoneyardGateCollision> | null,
   resolvedPlayers: Readonly<Record<PlayerId, PlayerCharacterState>>,
   playerEntities: PlayerEntityStore,
   postStaffInputs: PlayerCharacterInputs,
+  primarySpells: PrimarySpellSimulationState,
   secondaryAbilities: NativeSecondarySimulationState,
   worldManagerOrder: NativeWorldManagerOrder,
   secondaryProjectileVisible: ReturnType<typeof createBoneyardProjectileVisibility> | null,
@@ -3647,8 +3759,13 @@ function createNativeSecondaryTickContext(
   writeScreenFlash?: WriteNativeScreenFlash,
 ): NativeSecondaryTickContext {
   return {
+    worldKey: world.kind === 'boneyard' ? `boneyard:${world.runId}` : null,
     writeScreenFlash,
     enhancedEffects,
+    etherDrainTargets: worldKey => world.kind === 'boneyard' && worldKey === `boneyard:${world.runId}`
+      ? boneyardNativeEtherDrainTargets(world, resolvedPlayers, playerEntities, secondaryAbilities) : [],
+    etherDrainWorldAnimations: worldKey => world.kind === 'boneyard' && worldKey === `boneyard:${world.runId}`
+      ? boneyardNativeEtherDrainWorldAnimations(world, primarySpells, secondaryAbilities) : [],
     dampenCandidates: (worldKey, origin) => (
       world.kind === 'boneyard'
       && worldKey === `boneyard:${world.runId}`
@@ -4225,6 +4342,7 @@ function activateGameSimulationBeltSkill(
       resolvedPlayers,
       playerEntities,
       { [playerId]: input },
+      state.primarySpells,
       state.secondaryAbilities,
       worldManagerOrder,
       null,

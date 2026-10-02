@@ -1,5 +1,5 @@
 import { BONEYARD_SKELETON_WEAPONS } from '../core-kernels/boneyard-enemy-config-model.ts'
-import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
+import { nativeSkeletonBaseTint, nativeSkeletonBurningTint as burningTint } from '../core-kernels/native-skeleton-color.ts'
 import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
 import { nativeSkeletonHeadFacing } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { NativeEnemyActionFrame, NativeEnemyAnimationSample } from './native-enemy-animation.ts'
@@ -328,12 +328,8 @@ function skeletonFamilyComposition(
     finiteOrZero(animation?.stridePhaseDeg ?? 0) * 0.5 * Math.PI / 180,
   ))
   const bodyHeight = stableInclusiveUnit(enemy, 70) * 3
-  const neutral = 1 - stableInclusiveUnit(enemy, 71) * 0.15
-  const bodyGlowTint = burningTint(0.25 + stableInclusiveUnit(enemy, 73, fixedAge) * 0.75)
-  const baseTint = !includeFire && enemy.lighting.charge > 0 ? 0xffffff
-    : !includeFire && burning ? bodyGlowTint : burning
-    ? burningTint(stableInclusiveUnit(enemy, 72, fixedAge) * 0.5)
-    : packRgb(neutral, neutral, 1)
+  const bodyGlowTint = burningTint(.25 + stableInclusiveUnit(enemy, 73, fixedAge) * .75)
+  const baseTint = nativeSkeletonBaseTint(enemy, burning, enemy.lighting.charge, fixedAge, includeFire)
   const articulated = source.map((sourceLayer) => {
     let y = 0
     if (sourceLayer.role.endsWith('-limbs')) y = -bob
@@ -389,11 +385,6 @@ function insertHeldBeforeHeadgear(
     held,
     ...source.slice(headIndex),
   ]
-}
-
-function burningTint(green: number): number {
-  const color = nativeDesaturateColor([1, Math.fround(green), 0, 1], .5)
-  return packRgb(color[0], color[1], color[2])
 }
 
 function skeletonFamilyBurningFireLayers(

@@ -116,6 +116,7 @@ test('Bouncer ground contacts retain exact RNG order, settling, and retirement',
   assert.deepEqual(draws, [0.25, 0.25])
   assert.equal(bounced.height, 0)
   assert.equal(bounced.verticalVelocity, 0)
+  assert.equal(bounced.bounceVelocity, 0)
   assert.deepEqual(bounced.velocity, { x: 0, y: 0 })
   assert.equal(
     stepBoneyardTransientEffects(
@@ -124,6 +125,19 @@ test('Bouncer ground contacts retain exact RNG order, settling, and retirement',
       .deathEffects.length,
     0,
   )
+})
+
+test('settled Bouncers retain their native position and rotation while fading without contact RNG', () => {
+  const source = deathEffect({ kind: 'bouncer', height: 0, bounceVelocity: 0, verticalVelocity: 0,
+    velocity: { x: 0, y: 0 }, angularVelocityDeg: 0, opacityTimer: 2, alphaLossPerTick: .25 })
+  let draws = 0
+  const next = stepBoneyardTransientEffects([source], [], 11, () => { draws++; return .5 },
+    100, registerTestWorldPainter).deathEffects[0]!
+  assert.equal(draws, 0)
+  assert.deepEqual(next.position, source.position)
+  assert.equal(next.rotationDeg, source.rotationDeg)
+  assert.equal(next.bounceVelocity, 0)
+  assert.equal(next.opacityTimer, 1.75)
 })
 
 test('SmokyBouncer births receive a fresh world-painter registration', () => {
@@ -253,13 +267,14 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
   assert.deepEqual(result.deathEffects[6], {
     ...source[6]!,
     ageTicks: 3,
-    alpha: 0.8,
-    height: -1.6,
+    // Bouncer0x456720 stores height, velocity and life after each native update.
+    alpha: 0.7999999523162842,
+    height: -1.600000023841858,
     lastStepTick: 13,
-    opacityTimer: 0.8,
+    opacityTimer: 0.7999999523162842,
     position: { x: 12, y: 24 },
     rotationDeg: 9,
-    verticalVelocity: 0.8,
+    verticalVelocity: 0.800000011920929,
     velocity: { x: 1, y: 2 },
   })
 })

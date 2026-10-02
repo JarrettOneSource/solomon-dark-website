@@ -1,3 +1,4 @@
+import { createNativeGolemDeathAnimation, NATIVE_GOLEM_DEATH_MAX_AGE, stepNativeGolemDeathAnimation } from '../core-kernels/native-death-animations.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -72,12 +73,13 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'shield-explosion', 'acid-rain', 'acid-drop', 'mindblast-burst',
   'mindblast-shockwave', 'ring-fire-explosion',
   'ring-fire-fragment', 'acid-splash', 'ether-drain',
-  'ether-drain-cloud', 'ether-drain-debris', 'ether-drain-capture-flare', 'comet',
+  'ether-drain-cloud', 'ether-drain-capture-flare', 'comet',
   'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
 ]
 
 function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
   return {
+    ...(kind === 'golem-death' ? { golemDeath: createNativeGolemDeathAnimation(createNativeRng(711), { x: 100, y: 200 }, true).animation } : {}),
     ageTicks: kind === 'golem' ? 400 : 10,
     alpha: 1,
     damage: 1,
@@ -111,7 +113,7 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     ownerId: 'player',
     phase: kind === 'dampened-smoke' ? 1 : 0,
     position: { x: 100, y: 200 },
-    presentationRng: kind === 'dampen-wave' || kind === 'golem-death' || kind === 'freeze-wave-visual'
+    presentationRng: kind === 'dampen-wave' || kind === 'freeze-wave-visual'
       || kind === 'storm-cloud' || kind === 'prismatic-wave' || kind === 'magic-circle'
       || kind === 'shield-explosion' || kind === 'magic-trap-burst'
       || kind === 'mindblast-burst'
@@ -800,9 +802,12 @@ test('Ether Drain uses the exact parent painter, child classes, capture pulse, a
     scaleX: 2,
   })
   const debris = nativeSecondaryPresentationPlan({
-    ...actor('ether-drain-debris'),
-    variant: 2,
-  }).draws[0]!
+    ...actor('ether-drain'),
+    etherDrain: { animations: [{ kind: 'debris', direction: { x: 1, y: 0 }, position: { x: 1, y: 0 },
+      oscillationDegrees: 0, remainingDistance: 1, rotationDegrees: 0, speed: 1, variant: 2 }],
+      targetsInitialized: true, lastLootRegistrationOrdinal: -1, loose: [], queried: [], scenery: [], worldAnimationRefs: [],
+      lastWorldAnimationIds: { 'enemy-death-effect': 0, 'primary-transient': 0, 'secondary-actor': 0, 'death-weapon': 0, 'golem-fragment': 0 } },
+  }).draws.find(draw => draw.role.startsWith('ether-drain-private-debris'))!
   assert.equal(debris.atlas, 'DeadHawg')
   assert.equal(debris.entry, 179)
   assert.equal(debris.blend, 'normal')
@@ -821,6 +826,31 @@ test('Ether Drain uses the exact parent painter, child classes, capture pulse, a
   assert.ok(light.intensity >= 0.25 && light.intensity < 0.5)
   assert.deepEqual(nativeSecondaryProviderLightSource(source, 12), light)
   assert.notEqual(nativeSecondaryProviderLightSource(source, 13)?.intensity, light.intensity)
+})
+
+test('Ether Drain private capture and debris inherit field opacity while the capture timer controls sinking', () => {
+  const field = { ...actor('ether-drain'), alpha: .25,
+    etherDrain: { animations: [
+      { kind: 'captured' as const, alpha: .2, atlas: 'BadGuys' as const, entry: 1477, bodyYOffset: 23 as const, tint: 0xffffff },
+      { kind: 'debris' as const, direction: { x: 1, y: 0 }, position: { x: 1, y: 0 }, oscillationDegrees: 0,
+        remainingDistance: 1, rotationDegrees: 0, speed: 1, variant: 2 as const },
+    ], targetsInitialized: true, lastLootRegistrationOrdinal: -1, loose: [], queried: [], scenery: [], worldAnimationRefs: [],
+    lastWorldAnimationIds: { 'enemy-death-effect': 0, 'primary-transient': 0, 'secondary-actor': 0, 'death-weapon': 0, 'golem-fragment': 0 } } }
+  const draws = nativeSecondaryPresentationPlan(field).draws.filter(draw => draw.role === 'ether-drain-capture-back-rim'
+    || draw.role === 'ether-drain-capture-front-rim'
+    || draw.role === 'ether-drain-captured-image' || draw.role.startsWith('ether-drain-private-debris'))
+  assert.equal(draws.length, 4)
+  assert.ok(draws.every(draw => draw.alpha === .25))
+  const image = draws.find(draw => draw.role === 'ether-drain-captured-image')!
+  assert.deepEqual(image.clip, { x: -100, y: -110, width: 200, height: 110 })
+  assert.deepEqual(image.offset, { x: 0, y: 41 })
+  const scratch = new NativeSecondaryPresentationScratch()
+  const pooled = updateNativeSecondaryPresentationPlan(scratch, field)
+  assert.deepEqual(pooled.draws.find(draw => draw.role === 'ether-drain-captured-image')!.clip, image.clip)
+  const unclipped = updateNativeSecondaryPresentationPlan(scratch, { ...field, etherDrain: { ...field.etherDrain,
+    animations: field.etherDrain.animations.map(animation => animation.kind === 'captured' ? { ...animation, alpha: 1.05 } : animation),
+  } })
+  assert.ok(unclipped.draws.every(draw => draw.clip === undefined), 'pooled ordinary/debris slots do not retain the old capture clip')
 })
 
 test('Ring artwork resolves inline bundle records instead of compact decoration indices', () => {
@@ -2519,11 +2549,9 @@ test('Golem attack and provoke phases select the native limb banks and rotations
   assert.equal(provoke.draws.find(({ role }) => role === 'golem-limb-right')!.entry, 49)
 })
 
-test('Golem death replays thirty rock records plus the short additive star', () => {
+test('Golem death draws thirty authoritative rock records plus the short additive star', () => {
   const birth = nativeSecondaryPresentationPlan({
-    ...actor('golem-death'),
-    ageTicks: 0,
-    enhanced: false,
+    ...golemDeathAtAge(false, 0),
     variant: 1,
   })
   assert.equal(birth.draws.length, 31)
@@ -2534,26 +2562,47 @@ test('Golem death replays thirty rock records plus the short additive star', () 
   assert.equal(birth.draws.at(-1)!.entry, 86)
   assert.equal(birth.draws.at(-1)!.blend, 'add')
   assert.equal(nativeSecondaryPresentationPlan({
-    ...actor('golem-death'),
-    ageTicks: 15,
-    enhanced: false,
+    ...golemDeathAtAge(false, 15),
   }).draws.length, 30)
 })
 
-test('Golem death keeps Iron identity independent of born quality and retains enhanced shadows and long-lived debris', () => {
+test('Golem death keeps Iron identity independent of born quality and retains enhanced shadows and independent debris', () => {
   for (const variant of [0, 1]) {
-    const input = { ...actor('golem-death'), ageTicks: 0, variant, presentationRng: createNativeRng(123) }
-    const on = nativeGolemDeathPresentationPlan({ ...input, enhanced: true })
-    const off = nativeGolemDeathPresentationPlan({ ...input, enhanced: false })
+    const on = nativeGolemDeathPresentationPlan({ ...golemDeathAtAge(true, 0), variant })
+    const off = nativeGolemDeathPresentationPlan({ ...golemDeathAtAge(false, 0), variant })
     assert.equal(on.draws.filter(draw => draw.role.startsWith('golem-death-shadow-')).length, 30)
     assert.equal(off.draws.some(draw => draw.role.startsWith('golem-death-shadow-')), false)
     assert.deepEqual(on.draws.filter(draw => !draw.role.startsWith('golem-death-shadow-')), off.draws)
-    const oldOn = nativeGolemDeathPresentationPlan({ ...input, enhanced: true, ageTicks: 150 })
-    const oldOff = nativeGolemDeathPresentationPlan({ ...input, enhanced: false, ageTicks: 150 })
-    assert.equal(oldOn.draws.filter(draw => draw.role.startsWith('golem-death-rock-')).length, 30)
-    assert.equal(oldOff.draws.length, 0)
-    assert.equal(nativeGolemDeathPresentationPlan({ ...input, enhanced: true, ageTicks: 667 }).draws.length, 0)
+    assert.equal(nativeGolemDeathPresentationPlan({ ...golemDeathAtAge(true, 150), variant }).draws
+      .filter(draw => draw.role.startsWith('golem-death-rock-')).length, 30)
+    assert.equal(nativeGolemDeathPresentationPlan({ ...golemDeathAtAge(false, NATIVE_GOLEM_DEATH_MAX_AGE.off), variant }).draws.length, 0)
+    assert.equal(nativeGolemDeathPresentationPlan({ ...golemDeathAtAge(true, NATIVE_GOLEM_DEATH_MAX_AGE.on), variant }).draws.length, 0)
   }
+})
+
+function golemDeathAtAge(enhanced: boolean, ageTicks: number): NativeSecondaryActorState {
+  let current = createNativeGolemDeathAnimation(createNativeRng(123), { x: 100, y: 200 }, enhanced)
+  for (let tick = 1; tick <= ageTicks; tick++) current = stepNativeGolemDeathAnimation(current.animation, tick, current.rng)
+  return { ...actor('golem-death'), ageTicks, enhanced, golemDeath: current.animation, presentationRng: null }
+}
+
+test('Golem death member roots follow independent authoritative positions and retire only the selected drawing', () => {
+  const source = golemDeathAtAge(true, 0)
+  const moved = { ...source, golemDeath: { ...source.golemDeath!, fragments: source.golemDeath!.fragments.map((fragment, index) =>
+    index === 0 ? { ...fragment!, position: { x: 430, y: 100 }, height: 0 } : fragment) } }
+  const fragment = nativeGolemDeathPresentationPlan(moved, 0)
+  assert.deepEqual(fragment.root, { x: 430, y: 100 })
+  assert.equal(fragment.worldY, 100)
+  assert.deepEqual(fragment.draws.map(draw => draw.role), ['golem-death-shadow-0', 'golem-death-rock-0'])
+  assert.deepEqual(fragment.draws[1]!.offset, { x: 0, y: 0 })
+  const star = nativeGolemDeathPresentationPlan(moved, 'star')
+  assert.deepEqual(star.root, source.position)
+  assert.deepEqual(star.draws.map(draw => draw.role), ['golem-death-star'])
+  const consumed = { ...moved, golemDeath: { ...moved.golemDeath, fragments: moved.golemDeath.fragments.map((fragment, index) =>
+    index === 0 ? null : fragment) } }
+  assert.deepEqual(nativeGolemDeathPresentationPlan(consumed, 0).draws, [])
+  assert.ok(nativeGolemDeathPresentationPlan(consumed, 1).draws.length > 0)
+  assert.deepEqual(nativeGolemDeathPresentationPlan({ ...consumed, ageTicks: 15 }, 'star').draws, [])
 })
 
 test('Earthquake uses the exact floor-copy thresholds and Region largest-vector reducer', () => {

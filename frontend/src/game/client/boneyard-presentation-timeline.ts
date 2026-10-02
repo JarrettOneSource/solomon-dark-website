@@ -218,6 +218,7 @@ function interpolateSnapshot(
     world: {
       ...enemyPresentation.interpolate(older.world, newer.world, blend,
         Math.min(targetTick, gameRunWorldTick(newer.tick, newer.run))),
+      deathWeapons: (blend < 1 ? older.world.deathWeapons : newer.world.deathWeapons).map(copyDeathWeapon),
       featuredBossId: blend >= 1 ? newer.world.featuredBossId : older.world.featuredBossId,
       bossNarration: blend >= 1 ? newer.world.bossNarration : older.world.bossNarration,
       bossSpells: interpolateBossSpells(older.world.bossSpells, newer.world.bossSpells, blend),
@@ -446,6 +447,7 @@ function presentationCopy(
     tick: snapshot.tick,
     world: {
       ...copyBoneyardEnemySamples(snapshot.world, gameRunWorldTick(snapshot.tick, snapshot.run)),
+      deathWeapons: snapshot.world.deathWeapons.map(copyDeathWeapon),
       featuredBossId: snapshot.world.featuredBossId,
       bossNarration: snapshot.world.bossNarration,
       bossSpells: snapshot.world.bossSpells,
@@ -470,6 +472,11 @@ function presentationCopy(
       waves: copyWaves(snapshot.world.waves),
     },
   }
+}
+
+function copyDeathWeapon(actor: BoneyardWorldSnapshot['deathWeapons'][number]): BoneyardWorldSnapshot['deathWeapons'][number] {
+  return { ...actor, painterRegistration: { ...actor.painterRegistration }, weapon: { ...actor.weapon },
+    motion: { ...actor.motion, position: { ...actor.motion.position }, velocity: { ...actor.motion.velocity } } }
 }
 
 function copyLanternPosition(

@@ -1,4 +1,5 @@
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
+import type { NativeDeathWeaponActor } from '../core-kernels/native-death-animations.ts'
 import type { BoneyardSolomonEncounterState } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardGateLeafState } from '../core-kernels/boneyard-gate.ts'
 import type { BoneyardWaveDirectorState } from '../core-kernels/boneyard-wave-director.ts'
@@ -46,6 +47,8 @@ export interface BoneyardSummonTarget {
 }
 
 export interface BoneyardWorldState {
+  deathWeapons: readonly NativeDeathWeaponActor[]
+  nextDeathWeaponId: number
   arenaTransition: BoneyardArenaTransitionState | null
   bounds: BoneyardBounds
   collision: BoneyardCollisionWorld

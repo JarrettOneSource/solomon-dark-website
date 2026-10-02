@@ -1,4 +1,5 @@
 import { receiveNativePuppetHit } from '../../core-kernels/native-puppet-hit.ts'
+import { nativeEtherDrainCapturesFamily } from '../../core-kernels/native-ether-drain.ts'
 import { nextBoneyardWaveRandom } from '../../core-kernels/boneyard-wave-timeline.ts'
 import { cancelNativeBossNarration } from '../../core-kernels/native-boss-audio.ts'
 import { queueNativeDemonSkullHealthTriggers } from '../../core-kernels/native-demon-skull.ts'
@@ -154,6 +155,7 @@ export function damageBoneyardEnemy(
   const nextActor: BoneyardEnemyActor = killed
     ? {
         ...actor,
+        ...(request.etherDrainCapture && nativeEtherDrainCapturesFamily(actor.config.enemyToken) ? { etherDrainCaptured: true as const } : {}),
         brain: damageBrain.family === 'spider' && request.etherDrainCapture === true
           ? { ...damageBrain, phase: 'captured' }
           : deathBrain(damageBrain),
@@ -424,7 +426,7 @@ function damageBoneyardMaggot(
 ): DamageBoneyardEnemyResult {
   const index = source.maggots.findIndex((maggot) => maggot.id === request.actorId)
   const maggot = source.maggots[index]
-  if (!maggot || maggot.lifeState !== 'alive' || !maggot.combatActive) {
+  if (!maggot || maggot.lifeState !== 'alive' || !maggot.combatActive && !request.etherDrainCapture) {
     return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
   }
   const currentHealth = maggot.currentHealth - request.amount
@@ -432,6 +434,7 @@ function damageBoneyardMaggot(
   const killed = currentHealth <= 0
   const nextMaggot: BoneyardMaggotActor = {
     ...maggot,
+    ...(killed && request.etherDrainCapture ? { etherDrainCaptured: true as const } : {}),
     currentHealth,
     deathEpoch: killed ? source.nextDeathEpoch : maggot.deathEpoch,
     deathStartedTick: killed ? request.tick : maggot.deathStartedTick,

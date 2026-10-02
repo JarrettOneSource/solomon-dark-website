@@ -1,3 +1,4 @@
+import { NATIVE_GOLEM_DEATH_MAX_AGE } from './native-death-animations.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -27,6 +28,7 @@ import {
   applyNativeSecondaryTargetEffect,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
+  captureNativeEtherDrainImage,
   enrollNativeSecondaryPainterOwners,
   materializeNativePlayerFlashResponse,
   NATIVE_ETHER_BURN_LIFETIME_TICKS,
@@ -3488,23 +3490,29 @@ test('Golem terminal damage owns the exact four-cue death sequence', () => {
     state = stepNativeSecondaryAbilities(state, context(45, tick, null)).state
   }
   const golem = state.actors.find(({ kind }) => kind === 'golem')!
+  const painters = createNativeWorldManagerOrder({ nextRegistrationOrdinal: { actor: 3000, transient: 4000 } })
   const result = applyNativeSecondaryGolemDamage(state, golem.id, {
     primaryDamage: 10_000,
     reflectablePhysicalSourceInRange: false,
     secondaryDamage: 0,
-  }, 2)
+  }, 2, true, painters.register)
   assert.equal(result.killed, true)
   assert.equal(result.state.actors.some(({ id }) => id === golem.id), false)
   assert.equal(result.state.actors.some(({ kind }) => kind === 'golem-death'), true)
   const death = result.state.actors.find(({ kind }) => kind === 'golem-death')!
+  assert.deepEqual(death.painterRegistrations, Array.from({ length: 31 }, (_, index) => ({
+    managerLane: 'actor', registrationOrdinal: 3000 + index,
+  })))
+  enrollNativeSecondaryPainterOwners(result.state, painters.register)
+  assert.equal(painters.state().nextRegistrationOrdinal.actor, 3031, 'enrollment does not register born roots again')
   const off = applyNativeSecondaryGolemDamage(state, golem.id, {
     primaryDamage: 10_000, reflectablePhysicalSourceInRange: false, secondaryDamage: 0,
   }, 2, false)
   const coarse = off.state.actors.find(({ kind }) => kind === 'golem-death')!
   assert.equal(death.enhanced, true)
-  assert.equal(death.lifetimeTicks, 667)
+  assert.equal(death.lifetimeTicks, NATIVE_GOLEM_DEATH_MAX_AGE.on)
   assert.equal(coarse.enhanced, false)
-  assert.equal(coarse.lifetimeTicks, 134)
+  assert.equal(coarse.lifetimeTicks, NATIVE_GOLEM_DEATH_MAX_AGE.off)
   assert.equal(coarse.variant, death.variant)
   assert.deepEqual(off.state.rng, result.state.rng)
   assert.deepEqual(
@@ -3781,7 +3789,8 @@ test('Acid Rain and Ether Drain preserve their native no-reaction contacts', () 
       const result = stepNativeSecondaryAbilities(state, { ...context(skillId, tick, null),
         targets: () => [target], target: () => target })
       assert.ok(result.damage.every(contact => contact.suppressHitReaction === true), `skill ${skillId}`)
-      contacts += result.damage.length
+      assert.ok(result.etherDrainContacts.every(contact => (contact.damageFlags & 8) !== 0))
+      contacts += result.damage.length + result.etherDrainContacts.filter(contact => contact.magicContact).length
       state = result.state
     }
     assert.ok(contacts > 0, `skill ${skillId} must actually damage a target`)
@@ -4605,7 +4614,7 @@ test('Ether Drain retains its strict ellipse and applies exact pressure, contact
     { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 1, position: { x: 119, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
     { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 2, position: { x: 114, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
     { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 3, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 4, nativeFlags: 1, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'PlayerWizard', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 4, nativeFlags: 0x801, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
     { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 5, position: { x: 612, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
     { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 6, position: { x: 100, y: 820 }, radius: 10, scale: 1, shieldHealth: 0 },
     { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 7, position: { x: 1_123, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
@@ -4625,22 +4634,27 @@ test('Ether Drain retains its strict ellipse and applies exact pressure, contact
     state = stepNativeSecondaryAbilities(state, tickContext(tick)).state
   }
   const beforeContactRng = state.rng
-  const result = stepNativeSecondaryAbilities(state, tickContext(42))
+  const result = stepNativeSecondaryAbilities({ ...state,
+    actors: state.actors.filter(actor => actor.kind === 'ether-drain').map(actor => ({ ...actor,
+      etherDrain: { ...actor.etherDrain!, animations: [] },
+    })),
+  }, tickContext(42))
   const parent = result.state.actors.find(({ kind }) => kind === 'ether-drain')!
   const baseDamage = parent.damage / 100
 
   assert.deepEqual(queryRadii, [1_024, 1_024, 1_024])
-  assert.deepEqual(parent.hitTargetIds, [1, 2, 3, 4, 5, 7])
-  assert.deepEqual(result.damage.map(({ amount, targetId }) => ({ amount, targetId })), [
-    { amount: baseDamage, targetId: 1 },
-    { amount: baseDamage * 2, targetId: 2 },
-    { amount: baseDamage * 4, targetId: 3 },
-    { amount: baseDamage * 8, targetId: 4 },
+  assert.deepEqual(parent.etherDrain?.queried.map(ref => ref.id), [1, 2, 3, 4, 5, 7])
+  assert.deepEqual(result.etherDrainContacts.filter(contact => contact.magicContact).map(({ amount, target }) => ({ amount, targetId: target.id })), [
+    { amount: Math.fround(baseDamage), targetId: 1 },
+    { amount: Math.fround(baseDamage * 2), targetId: 2 },
+    { amount: Math.fround(baseDamage * 4), targetId: 3 },
+    { amount: Math.fround(baseDamage * 8), targetId: 4 },
   ])
-  assert.deepEqual(result.knockbacks.map(({ targetId }) => targetId), [1, 2, 3, 4, 5])
-  assert.ok(result.damage.every((contact) => contact.etherDrain === true))
-  assert.equal(result.knockbacks.at(-1)?.delta.x, -0.1 * parent.alpha * 1.1)
-  assert.deepEqual(result.state.rng, advanceNativeRngWords(beforeContactRng, 4))
+  assert.deepEqual(result.etherDrainContacts.map(({ target }) => target.id), [1, 2, 3, 4, 5])
+  assert.ok(result.etherDrainContacts.every(contact => contact.damageFlags === 0x10a))
+  assert.equal(result.etherDrainContacts.at(-1)?.delta.x,
+    Math.fround(-Math.fround(Math.fround(.1) * 1.100000023841858) * parent.alpha))
+  assert.deepEqual(result.state.rng, advanceNativeRngWords(beforeContactRng, 5))
 })
 
 test('Ether Drain owns exact SuckCloud/SuckDebris RNG, travel, and callback boundaries', () => {
@@ -4648,7 +4662,8 @@ test('Ether Drain owns exact SuckCloud/SuckDebris RNG, travel, and callback boun
   for (let tick = 2; tick <= 42; tick += 1) {
     state = stepNativeSecondaryAbilities(state, context(74, tick, null)).state
   }
-  const parentBeforeChildren = state.actors.find(({ kind }) => kind === 'ether-drain')!
+  const activeParent = state.actors.find(({ kind }) => kind === 'ether-drain')!
+  const parentBeforeChildren = { ...activeParent, etherDrain: { ...activeParent.etherDrain!, animations: [] } }
 
   let childSeed = 1
   for (;; childSeed += 1) {
@@ -4659,14 +4674,15 @@ test('Ether Drain owns exact SuckCloud/SuckDebris RNG, travel, and callback boun
   }
   const childRng = createNativeRng(childSeed)
   const born = stepNativeSecondaryAbilities(
-    { ...state, rng: childRng },
+    { ...state, actors: [parentBeforeChildren], rng: childRng },
     context(74, 43, null),
   ).state
   const cloud = born.actors.find(({ kind }) => kind === 'ether-drain-cloud')!
-  const debris = born.actors.find(({ kind }) => kind === 'ether-drain-debris')!
+  const bornParent = born.actors.find(actor => actor.kind === 'ether-drain')!
+  const debris = bornParent.etherDrain!.animations.find(animation => animation.kind === 'debris')!
   assert.ok(cloud)
   assert.ok(debris)
-  assert.deepEqual(born.rng, advanceNativeRngWords(childRng, 13))
+  assert.deepEqual(born.rng, advanceNativeRngWords(childRng, 16))
 
   const cloudGate = drawNativeInteger(childRng, 5)
   const cloudScale = drawNativeFloat(cloudGate.state, 1.5)
@@ -4691,23 +4707,25 @@ test('Ether Drain owns exact SuckCloud/SuckDebris RNG, travel, and callback boun
   const debrisDirection = drawUnitVectorForTest(debrisRotation.state)
   const debrisRecord = drawNativeInteger(debrisDirection.rng, 3)
   assert.equal(debris.variant, debrisRecord.value)
-  assert.equal(debris.phase, debrisOscillation.value)
-  assert.equal(debris.rotationRadians, debrisRotation.value * Math.PI / 180)
-  assert.deepEqual(debris.endpoint, parentBeforeChildren.position)
-  assert.deepEqual(debris.hitTargetIds, [parentBeforeChildren.id])
-  assert.ok(Math.abs(debris.quantity - 1_024) < 0.001)
+  if (debris.kind !== 'debris') throw new Error('expected private debris')
+  const firstOscillation = drawNativeFloat(debrisRecord.state, 17)
+  const firstSpeedGate = drawNativeInteger(firstOscillation.state, 100)
+  const firstRotation = drawNativeFloat(firstSpeedGate.state, 5)
+  assert.equal(debris.oscillationDegrees, Math.fround(debrisOscillation.value + 3 + firstOscillation.value))
+  assert.equal(debris.rotationDegrees, Math.fround(debrisRotation.value + 3 + firstRotation.value))
+  assert.ok(Math.abs(debris.remainingDistance - 1_023) < 0.001)
 
   const callbackRng = createNativeRng(500)
   const callback = stepNativeSecondaryAbilities({
     ...born,
     actors: [
-      { ...parentBeforeChildren, freezeTicks: 99, phase: 2, quantity: 99, scale: 1, slowFactor: 0 },
-      { ...debris, quantity: 0.5, slowFactor: 1 },
+      { ...parentBeforeChildren, freezeTicks: 99, phase: 2, quantity: 99, scale: 1, slowFactor: 0,
+        etherDrain: { ...parentBeforeChildren.etherDrain, animations: [{ ...debris, remainingDistance: .5, speed: 1 }] } },
     ],
     rng: callbackRng,
   }, context(74, 44, null)).state
   assert.deepEqual(callback.rng, advanceNativeRngWords(callbackRng, 3))
-  assert.equal(callback.actors.some(({ kind }) => kind === 'ether-drain-debris'), false)
+  assert.deepEqual(callback.actors.find(actor => actor.kind === 'ether-drain')!.etherDrain!.animations, [])
   assert.equal(callback.actors.some(({ kind }) => kind === 'ether-drain-capture-flare'), false)
   assert.equal(callback.actors.find(({ kind }) => kind === 'ether-drain')?.slowFactor, 2)
 
@@ -4723,6 +4741,53 @@ test('Ether Drain owns exact SuckCloud/SuckDebris RNG, travel, and callback boun
     noCallback.actors.find(({ kind }) => kind === 'ether-drain')?.slowFactor,
     Math.fround(1 - Math.fround(0.1)),
   )
+})
+
+test('Ether Drain capture replaces its private debris and image, including unsupported captures', () => {
+  let state = stepNativeSecondaryAbilities(cast(74).state, context(74, 2, null)).state
+  const parent = state.actors.find(actor => actor.kind === 'ether-drain')!
+  state = { ...state, actors: [{ ...parent, etherDrain: { ...parent.etherDrain!, animations: [{
+    kind: 'debris', direction: { x: 1, y: 0 }, oscillationDegrees: 0, position: { x: 200, y: 0 },
+    remainingDistance: 100, rotationDegrees: 0, speed: 1, variant: 0,
+  }] } }], rng: createNativeRng(91) }
+  const before = state.rng
+  state = captureNativeEtherDrainImage(state, parent.id, { atlas: 'BadGuys', bodyYOffset: 23, entry: 1477, tint: 0xffffff }, 2)
+  const captured = state.actors.find(actor => actor.id === parent.id)!.etherDrain!.animations
+  assert.equal(captured.length, 1)
+  assert.equal(captured[0]!.kind, 'captured')
+  assert.deepEqual(state.rng, advanceNativeRngWords(before, 1))
+  assert.equal(state.events.filter(event => event.cue === 'crunch-drain').length, 1)
+  const beforeUnsupported = state.rng
+  state = captureNativeEtherDrainImage(state, parent.id, null, 3)
+  assert.deepEqual(state.actors.find(actor => actor.id === parent.id)!.etherDrain!.animations, [])
+  assert.deepEqual(state.rng, beforeUnsupported)
+  assert.equal(state.events.filter(event => event.cue === 'crunch-drain').length, 1)
+  assert.ok(state.actors.some(actor => actor.kind === 'ether-drain-capture-flare' && actor.scale === 1.5))
+})
+
+test('Ether Drain Tree leaves use the retained scenery phase and secondary variant, with born-tick RNG', () => {
+  for (const secondaryVariant of [6, 7]) {
+    let seed = 1
+    for (;; seed += 1) {
+      const rng = createNativeRng(seed)
+      const gate = drawNativeInteger(advanceNativeRngWords(rng, 2), 100)
+      if (gate.value !== 1) continue
+      const freeGate = drawNativeInteger(advanceNativeRngWords(rng, secondaryVariant === 6 ? 3 : 7), 50)
+      if (freeGate.value !== 1) break
+    }
+    const rng = createNativeRng(seed)
+    const source = cast(74).state
+    const result = stepNativeSecondaryAbilities({ ...source, rng }, { ...context(74, 2, null),
+      sceneryTargets: () => [{ id: 1, position: { x: 100, y: 0 }, secondaryVariant, typeId: 2001 }],
+    }).state
+    const field = result.actors.find(actor => actor.kind === 'ether-drain')!
+    assert.deepEqual(field.etherDrain!.scenery, [1])
+    assert.ok(result.actors.some(actor => actor.kind === 'earthquake-scenery-wobble' && actor.targetId === 1))
+    assert.equal(field.etherDrain!.animations.length, secondaryVariant === 6 ? 0 : 1)
+    if (secondaryVariant === 7) assert.equal(field.etherDrain!.animations[0]!.kind === 'debris'
+      ? field.etherDrain!.animations[0]!.variant : null, 2)
+    assert.deepEqual(result.rng, advanceNativeRngWords(rng, secondaryVariant === 6 ? 4 : 11))
+  }
 })
 
 test('Magic Storm emits drops before its seven-draw strike geometry and owns the 101-step fade', () => {

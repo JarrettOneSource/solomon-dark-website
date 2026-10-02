@@ -114,6 +114,7 @@ import mindstar from '../assets/game/audio/sfx/mindstar.wav'
 import nuke from '../assets/game/audio/sfx/nuke.wav'
 import openPanel from '../assets/game/audio/sfx/openpanel.wav'
 import phase from '../assets/game/audio/sfx/phase.wav'
+import crunchDrain from '../assets/game/audio/sfx/crunchdrain.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
 import pickupBag from '../assets/game/audio/sfx/pickup-bag.wav'
 import pickupCoin from '../assets/game/audio/sfx/pickup-coin.wav'
@@ -351,6 +352,7 @@ export const GAME_AUDIO_SOURCES = {
     poof,
     nuke,
     phase,
+    'crunch-drain': crunchDrain,
     'pop-shield': popShield,
     'portal-die': portalDie,
     'portal-hurt': portalHurt,

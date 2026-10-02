@@ -4,7 +4,11 @@ import type { PlayerBeltComponent } from './native-belt.ts'
 import { createNativeDampenedSpell, stepNativeDampenedSpell } from './native-dampened-spell.ts'
 import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
 import { createNativeStoneskinWarp } from './native-stoneskin.ts'
+import { createNativeGolemDeathAnimation, NATIVE_GOLEM_DEATH_MAX_AGE, NATIVE_GOLEM_DEATH_PAINTER_COUNT, NATIVE_GOLEM_DEATH_STAR_TICKS, stepNativeGolemDeathAnimation, type NativeGolemDeathAnimation } from './native-death-animations.ts'
+import { stepNativeBouncerMotion } from './native-bouncer.ts'
 import { createNativeGolemAssemblyDebris } from './native-golem-debris.ts'
+import { createNativeEtherDrainDebris, createNativeEtherDrainState, nativeEtherDrainContact, nativeEtherDrainEnemyForceFactor, nativeEtherDrainLeafCenter, nativeEtherDrainTargetKey, nativeEtherDrainWorldAnimationContact, nativeEtherDrainWorldAnimationKey, refreshNativeEtherDrainTargets, refreshNativeEtherDrainWorldAnimations, stepNativeEtherDrainAnimations, type NativeEtherDrainCapturedImage, type NativeEtherDrainContact, type NativeEtherDrainDebris, type NativeEtherDrainTarget, type NativeEtherDrainState, type NativeEtherDrainWorldAnimationContact, type NativeEtherDrainWorldAnimationTarget } from './native-ether-drain.ts'
+import { NATIVE_TREE_OCCLUSION_POLYGONS } from './native-tree-geometry.ts'
 import { stepNativeWeldBoulderDebrisParticle } from './native-weld-boulder-debris.ts'
 import { nativeAirPresentationRandom } from './native-air-presentation.ts'
 import {
@@ -30,9 +34,7 @@ import {
   type NativeSecondaryCastAction,
 } from './native-secondary-cast-action.ts'
 import {
-  NATIVE_GOLEM_DEATH_DURATION_TICKS,
   NATIVE_GOLEM_RADIUS,
-  consumeNativeGolemDeathPresentationRng,
   damageNativeSecondaryGolem as damageNativeSecondaryGolemActor,
   nativeInitialGolemArticulation,
   stepNativeSecondaryGolem,
@@ -108,7 +110,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'dampen-wave', 'dampened-projectile', 'dampened-smoke', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
   'mindblast-burst', 'mindblast-shockwave',
   'ring-fire-explosion', 'ring-fire-fragment',
-  'acid-splash', 'ether-drain', 'ether-drain-cloud', 'ether-drain-debris',
+  'acid-splash', 'ether-drain', 'ether-drain-cloud',
   'ether-drain-capture-flare', 'comet', 'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
 ] as const)
 
@@ -125,7 +127,7 @@ export const NATIVE_SECONDARY_AUDIO_CUES = Object.freeze([
   'big-fire', 'nuke', 'ignite', 'magic-storm', 'lightning-start', 'thunder',
   'prismatic-shock', 'ring-of-ice', 'quake-cracks', 'quake-crack-small',
   'golem-provoke', 'knockback-golem', 'stone-step', 'golem-die', 'stone-break',
-  'flame-lash-start', 'flash-spell', 'rock-hit',
+  'flame-lash-start', 'flash-spell', 'rock-hit', 'crunch-drain',
   'stoneskin-on', 'stoneskin', 'teleport', 'magic-circle', 'set-trap', 'trap',
   'magic-missile', 'throw-fire', 'ice-start', 'start-boulder', 'harden', 'ice-shatter',
   'flash', 'dampen', 'magic-shield-up', 'hit-shield', 'pop-shield',
@@ -176,6 +178,8 @@ export interface NativeSecondaryActorState {
   readonly alpha: number
   readonly damage: number
   readonly enhanced: boolean
+  readonly etherDrain?: NativeEtherDrainState | null
+  readonly golemDeath?: NativeGolemDeathAnimation
   readonly endpoint: Vector2
   readonly frame: number
   readonly freezeTicks: number
@@ -345,6 +349,7 @@ export interface NativeSecondarySceneryTarget {
   readonly id: number
   readonly position: Vector2
   readonly typeId: number
+  readonly secondaryVariant?: number
 }
 
 export interface NativeSecondaryPlayerAuthority {
@@ -399,6 +404,9 @@ export interface NativeSecondaryPositionResult {
 }
 
 export interface NativeSecondaryTickContext {
+  readonly worldKey?: string | null
+  readonly etherDrainTargets?: (worldKey: string) => readonly NativeEtherDrainTarget[]
+  readonly etherDrainWorldAnimations?: (worldKey: string) => readonly NativeEtherDrainWorldAnimationTarget[]
   readonly enhancedEffects?: boolean
   readonly effectVisible?: (worldKey: string, position: Vector2, margin: number) => boolean
   readonly dampenCandidates: (
@@ -497,6 +505,8 @@ export interface NativeSecondarySteamedPulse {
 }
 
 export interface NativeSecondaryTickResult {
+  readonly etherDrainContacts: readonly NativeEtherDrainContact[]
+  readonly etherDrainWorldAnimationContacts: readonly NativeEtherDrainWorldAnimationContact[]
   readonly dampenedCasterTargetIds: readonly number[]
   readonly damage: readonly NativeSecondaryDamageContact[]
   readonly dispelledShieldTargetIds: readonly number[]
@@ -644,16 +654,10 @@ const ETHER_DRAIN_SCALE_OUT_COUNTDOWN_TICKS = 100
 const ETHER_DRAIN_GAMEPLAY_CUTOFF_TICKS = 50
 const ETHER_DRAIN_CANDIDATE_REFRESH_TICKS = 100
 const ETHER_DRAIN_BROAD_QUERY_RADIUS = 1_024
-const ETHER_DRAIN_BROAD_VERTICAL_SCALE = Math.fround(0.8)
-const ETHER_DRAIN_PRESSURE_RADIUS_SQUARED = 512 * 512
-const ETHER_DRAIN_CONTACT_RADIUS_SQUARED = 20 * 20
-const ETHER_DRAIN_CONTACT_DOUBLE_RADIUS_SQUARED = 15 * 15
-const ETHER_DRAIN_CONTACT_QUADRUPLE_RADIUS_SQUARED = 10 * 10
 const ETHER_DRAIN_CAPTURE_PULSE = Math.fround(2)
 const ETHER_DRAIN_CAPTURE_PULSE_LOSS = Math.fround(0.1)
 const ETHER_DRAIN_CLOUD_TERMINAL_PHASE = 180
 const ETHER_DRAIN_DEBRIS_DISTANCE = Math.fround(1_024)
-const ETHER_DRAIN_DEBRIS_SPEED_GAIN = Math.fround(0.05)
 const COMET_FALL_TICKS = 400
 const COMET_WARNING_TICKS_REMAINING = 175
 const COMET_TRAIL_LIFE_PER_TICK = Math.fround(0.025)
@@ -665,9 +669,6 @@ const FREEZE_WAVE_VISUAL_LIFETIME_TICKS = 176
 const FREEZE_WAVE_NORMAL_SNOW_COUNT = 100
 const FREEZE_WAVE_ENHANCED_SNOW_COUNT = 200
 const COMET_IMPACT_LIFETIME_TICKS = 1_000
-const COMET_DEBRIS_GRAVITY = Math.fround(0.4)
-const COMET_DEBRIS_DAMPING = Math.fround(0.65)
-const COMET_DEBRIS_SETTLE_VELOCITY = Math.fround(-0.75)
 const COMET_DEBRIS_LIFE_PER_TICK = Math.fround(0.015)
 const EARTHQUAKE_QUERY_RADIUS = 512
 const EARTHQUAKE_PHASE_START = Math.fround(-5)
@@ -1088,7 +1089,7 @@ export function removeNativeSecondaryOwner(
   delete players[playerId]
   return {
     ...source,
-    actors: source.actors.filter(({ ownerId }) => ownerId !== playerId),
+    actors: source.actors.filter(({ ownerId, kind }) => ownerId !== playerId || kind === 'golem-death'),
     players,
     targetEffects: source.targetEffects.flatMap((effect) => {
       const next = {
@@ -1266,6 +1267,7 @@ export function applyNativeSecondaryGolemDamage(
   }>,
   tick: number,
   enhancedEffects = true,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): NativeSecondaryGolemDamageResult {
   const actor = source.actors.find(({ id, kind }) => id === actorId && kind === 'golem')
   if (!actor || actor.golem === null) {
@@ -1309,20 +1311,22 @@ export function applyNativeSecondaryGolemDamage(
     }
   }
 
-  const presentationRng = source.rng
+  const deathAnimation = createNativeGolemDeathAnimation(source.rng, actor.position, enhancedEffects)
   let state: NativeSecondarySimulationState = {
     ...source,
     actors: source.actors.filter(({ id }) => id !== actor.id),
-    rng: consumeNativeGolemDeathPresentationRng(source.rng),
+    rng: deathAnimation.rng,
   }
   const deathId = state.nextActorId
   state = spawn(state, actorSeed({
     enhanced: enhancedEffects,
     kind: 'golem-death',
-    lifetimeTicks: enhancedEffects ? 667 : NATIVE_GOLEM_DEATH_DURATION_TICKS,
+    lifetimeTicks: enhancedEffects ? NATIVE_GOLEM_DEATH_MAX_AGE.on : NATIVE_GOLEM_DEATH_MAX_AGE.off,
     ownerId: actor.ownerId,
     position: actor.position,
-    presentationRng,
+    golemDeath: deathAnimation.animation,
+    ...(registerWorldPainter ? { painterRegistrations: Object.freeze(
+      Array.from({ length: NATIVE_GOLEM_DEATH_PAINTER_COUNT }, () => registerWorldPainter('actor'))) } : {}),
     skillId: 45,
     variant: actor.golem.iron ? 1 : 0,
     worldKey: actor.worldKey,
@@ -1435,6 +1439,8 @@ export function stepNativeSecondaryAbilities(
   const actorsAtStepStart = state.actors
   const damage: NativeSecondaryDamageContact[] = []
   const knockbacks: NativeSecondaryKnockbackContact[] = []
+  const etherDrainContacts: NativeEtherDrainContact[] = []
+  const etherDrainWorldAnimationContacts: NativeEtherDrainWorldAnimationContact[] = []
   const disruptedTargetIds = new Set<number>()
   const dampenedCasterTargetIds = new Set<number>()
   const manaRecovered: Record<string, number> = {}
@@ -1463,7 +1469,6 @@ export function stepNativeSecondaryAbilities(
   }
   const fireBurnRequests: NativeFireBurnRequest[] = []
   const electricBurnRequests: NativeElectricBurnRequest[] = []
-  const etherDrainPulseParentIds = new Set<number>()
   const leviathanParents = new Map(actorsAtStepStart
     .filter(({ kind }) => kind === 'leviathan')
     .map((actor) => [actor.id, actor] as const))
@@ -1642,6 +1647,15 @@ export function stepNativeSecondaryAbilities(
   }
 
   for (const sourceActor of actorsAtStepStart) {
+    if (sourceActor.kind === 'golem-death') {
+      if (context.worldKey === null || context.worldKey !== undefined && sourceActor.worldKey !== context.worldKey) continue
+      if (!sourceActor.golemDeath) throw new Error(`Golem death actor ${sourceActor.id} has no mutable fragments`)
+      const stepped = stepNativeGolemDeathAnimation(sourceActor.golemDeath, context.tick, rng)
+      rng = stepped.rng
+      const actor = { ...advanceActor(sourceActor), golemDeath: stepped.animation }
+      if (actor.ageTicks < NATIVE_GOLEM_DEATH_STAR_TICKS || actor.golemDeath.fragments.some(fragment => fragment !== null)) advancedActors.push(actor)
+      continue
+    }
     const owner = context.players[sourceActor.ownerId]
     const enhancedEffects = context.enhancedEffects ?? owner?.enhancedEffects ?? true
     if (!owner || owner.worldKey !== sourceActor.worldKey) continue
@@ -3260,9 +3274,7 @@ export function stepNativeSecondaryAbilities(
           phase,
           rotationRadians: sourceActor.rotationRadians + scale * 2 * Math.PI / 180,
           scale: Math.max(0, scale),
-          slowFactor: Math.max(0, Math.fround(
-            sourceActor.slowFactor - ETHER_DRAIN_CAPTURE_PULSE_LOSS,
-          )),
+          slowFactor: sourceActor.slowFactor,
         }
         if (actor.ageTicks === 1) {
           state = emitNativeSecondaryEvent(state, {
@@ -3279,69 +3291,119 @@ export function stepNativeSecondaryAbilities(
             state = cloud.state
             rng = cloud.rng
           }
-          const debrisGate = drawNativeInteger(rng, 50)
-          rng = debrisGate.state
-          if (debrisGate.value === 1) {
-            const debris = spawnEtherDrainDebris(state, actor, rng)
-            state = debris.state
-            rng = debris.rng
-          }
         }
 
         refreshCountdown -= 1
-        if (refreshCountdown < 1) {
-          const retainedIds = candidates(actor, ETHER_DRAIN_BROAD_QUERY_RADIUS)
-            .filter((target) => {
-              const dx = Math.fround(target.position.x - actor.position.x)
-              const dy = Math.fround(
-                Math.fround(target.position.y - actor.position.y)
-                / ETHER_DRAIN_BROAD_VERTICAL_SCALE,
-              )
-              return Math.fround(dx * dx + dy * dy)
-                < ETHER_DRAIN_BROAD_QUERY_RADIUS * ETHER_DRAIN_BROAD_QUERY_RADIUS
-            })
-            .map(({ id }) => id)
-          actor = {
-            ...actor,
-            hitTargetIds: Object.freeze(retainedIds),
-          }
-          refreshCountdown = ETHER_DRAIN_CANDIDATE_REFRESH_TICKS
+        const fieldTargets = context.etherDrainTargets?.(actor.worldKey)
+          ?? (refreshCountdown < 1 || !sourceActor.etherDrain
+            ? candidates(actor, ETHER_DRAIN_BROAD_QUERY_RADIUS)
+            : sourceActor.etherDrain.queried.flatMap(ref => {
+                if (ref.kind !== 'enemy') return []
+                const target = context.target(actor.worldKey, ref.id)
+                return target ? [target] : []
+              })).map((target): NativeEtherDrainTarget => ({
+            activationDelayTicks: 0,
+            forceFactor: nativeEtherDrainEnemyForceFactor(target.family),
+            nativeFlags: target.nativeFlags ?? 2,
+            position: target.position,
+            ref: { kind: 'enemy', id: target.id, registrationOrdinal: target.lightRegistration.registrationOrdinal },
+          }))
+        const targetRefresh = refreshNativeEtherDrainTargets(
+          sourceActor.etherDrain ?? null, fieldTargets, actor.position, refreshCountdown < 1,
+        )
+        const worldAnimations = context.etherDrainWorldAnimations?.(actor.worldKey) ?? []
+        let retainedTargets = refreshNativeEtherDrainWorldAnimations(targetRefresh.state,
+          worldAnimations, actor.position, sourceActor.etherDrain?.targetsInitialized ?? false)
+        const scenery = context.sceneryTargets?.(actor.worldKey, actor.position, ETHER_DRAIN_BROAD_QUERY_RADIUS) ?? []
+        if (targetRefresh.refreshed) {
+          retainedTargets = { ...retainedTargets, scenery: scenery.filter(target => {
+            const dx = Math.fround(target.position.x - actor.position.x)
+            const dy = Math.fround(Math.fround(target.position.y - actor.position.y) / Math.fround(.8))
+            return Math.fround(dx * dx + dy * dy) < ETHER_DRAIN_BROAD_QUERY_RADIUS ** 2
+          }).map(target => target.id) }
         }
-        actor = { ...actor, quantity: refreshCountdown }
+        if (targetRefresh.refreshed) refreshCountdown = ETHER_DRAIN_CANDIDATE_REFRESH_TICKS
+        actor = { ...actor, etherDrain: retainedTargets, hitTargetIds: [], quantity: refreshCountdown }
 
         if (phase !== 2 && activeCountdown > ETHER_DRAIN_GAMEPLAY_CUTOFF_TICKS) {
-          for (const targetId of actor.hitTargetIds) {
-            const target = context.target(actor.worldKey, targetId)
-            if (!target) continue
-            const dx = Math.fround(actor.position.x - target.position.x)
-            const dy = Math.fround(actor.position.y - target.position.y)
-            const distanceSquared = Math.fround(dx * dx + dy * dy)
-            if (distanceSquared > ETHER_DRAIN_PRESSURE_RADIUS_SQUARED) continue
-            const falloff = Math.max(
-              0.1,
-              1 - distanceSquared / ETHER_DRAIN_PRESSURE_RADIUS_SQUARED,
-            )
-            if (distanceSquared > 0) {
-              const inverseDistance = 1 / Math.sqrt(distanceSquared)
-              knockbacks.push({
-                delta: {
-                  x: dx * inverseDistance * intensity * 1.1 * falloff,
-                  y: dy * inverseDistance * intensity * 1.1 * falloff,
-                },
-                sourceActorId: actor.id,
-                targetId: target.id,
-              })
+          const byRef = new Map(fieldTargets.map(target => [nativeEtherDrainTargetKey(target.ref), target]))
+          for (const ref of [...retainedTargets.loose, ...retainedTargets.queried]) {
+            const target = byRef.get(nativeEtherDrainTargetKey(ref))
+            const contact = target ? nativeEtherDrainContact(actor, target) : null
+            if (contact === null) continue
+            let hitStrength = 0
+            if (contact.magicContact) {
+              const lane = drawNativeFloat(rng, Math.fround(.5))
+              rng = lane.state
+              hitStrength = Math.fround(.5 + lane.value)
             }
-            if (distanceSquared < ETHER_DRAIN_CONTACT_RADIUS_SQUARED) {
-              let multiplier = 1
-              if (distanceSquared < ETHER_DRAIN_CONTACT_DOUBLE_RADIUS_SQUARED) multiplier *= 2
-              if (distanceSquared < ETHER_DRAIN_CONTACT_QUADRUPLE_RADIUS_SQUARED) multiplier *= 2
-              if (((target.nativeFlags ?? 0) & 1) !== 0) multiplier *= 2
-              addDamage(actor, target, actor.damage / 100 * multiplier, 'magic')
-              const contactLane = drawNativeFloat(rng, Math.fround(0.5))
-              rng = contactLane.state
+            etherDrainContacts.push({ ...contact, hitStrength })
+          }
+          for (const ref of retainedTargets.worldAnimationRefs) {
+            const target = worldAnimations.find(target => nativeEtherDrainWorldAnimationKey(target.ref) === nativeEtherDrainWorldAnimationKey(ref))
+            const contact = target ? nativeEtherDrainWorldAnimationContact(actor, target) : null
+            if (contact) {
+              etherDrainWorldAnimationContacts.push(contact)
+              if (contact.consume) actor = { ...actor, slowFactor: ETHER_DRAIN_CAPTURE_PULSE }
             }
           }
+          for (const sceneryId of retainedTargets.scenery) {
+            const target = scenery.find(candidate => candidate.id === sceneryId)
+            if (!target) continue
+            const key = `${actor.worldKey}:${target.id}`
+            const previousPhase = earthquakeSceneryPhases.get(key) ?? 0
+            const sign = drawNativeSign(rng, 1)
+            const step = drawNativeFloat(sign.state, 1)
+            rng = step.state
+            const phase = Math.fround(previousPhase + (previousPhase < -1 ? 1 : previousPhase > 1 ? -1 : sign.value) * step.value)
+            let carrier = state.actors.find(candidate => candidate.kind === 'earthquake-scenery-wobble'
+              && candidate.worldKey === actor.worldKey && candidate.targetId === target.id)
+            if (!carrier) {
+              const id = state.nextActorId
+              state = spawn(state, actorSeed({ kind: 'earthquake-scenery-wobble', ownerId: actor.ownerId,
+                skillId: 74, worldKey: actor.worldKey, lifetimeTicks: Number.MAX_SAFE_INTEGER,
+                position: target.position, targetId: target.id, variant: target.typeId, phase }))
+              carrier = state.actors.find(candidate => candidate.id === id)!
+            }
+            earthquakeWobblePhases.set(carrier.id, phase)
+            earthquakeSceneryPhases.set(key, phase)
+            if (target.typeId !== 2001) continue
+            const gate = drawNativeInteger(rng, 100)
+            rng = gate.state
+            if (gate.value !== 1) continue
+            const secondaryVariant = target.secondaryVariant ?? 0
+            const variant = secondaryVariant >= 0 && secondaryVariant <= 2 ? 0
+              : secondaryVariant <= 5 && secondaryVariant >= 3 ? 1 : secondaryVariant === 7 ? 2 : null
+            if (variant === null) continue
+            const oscillation = drawNativeFloat(rng, 360)
+            const rotation = drawNativeFloat(oscillation.state, 360)
+            const radius = drawNativeFloat(rotation.state, 150)
+            const direction = drawNativeUnitVector(radius.state)
+            rng = direction.rng
+            const center = nativeEtherDrainLeafCenter(NATIVE_TREE_OCCLUSION_POLYGONS[secondaryVariant]!)
+            const position = { x: Math.fround(target.position.x + Math.fround(center.x + direction.value.x * radius.value)),
+              y: Math.fround(target.position.y + Math.fround(center.y + direction.value.y * radius.value)) }
+            const animation = createNativeEtherDrainDebris(actor.position, position, oscillation.value,
+              rotation.value, variant)
+            actor = { ...actor, etherDrain: { ...actor.etherDrain!, animations: [...actor.etherDrain!.animations, animation] } }
+          }
+          const debrisGate = drawNativeInteger(rng, 50)
+          rng = debrisGate.state
+          if (debrisGate.value === 1) {
+            const debris = spawnEtherDrainDebris(actor, rng)
+            rng = debris.rng
+            actor = { ...actor, etherDrain: { ...actor.etherDrain!,
+              animations: [...actor.etherDrain!.animations, debris.animation],
+            } }
+          }
+        }
+        actor = { ...actor, slowFactor: Math.max(0, Math.fround(actor.slowFactor - ETHER_DRAIN_CAPTURE_PULSE_LOSS)) }
+        const privateStep = stepNativeEtherDrainAnimations(actor.etherDrain!.animations, actor.position, rng)
+        rng = privateStep.rng
+        actor = { ...actor, etherDrain: { ...actor.etherDrain!, animations: privateStep.animations } }
+        for (const pulse of privateStep.pulses) {
+          state = pulseNativeEtherDrain(state, actor.id, pulse, context.tick, true)
+          actor = { ...actor, slowFactor: ETHER_DRAIN_CAPTURE_PULSE }
         }
         break
       }
@@ -3356,53 +3418,6 @@ export function stepNativeSecondaryAbilities(
           },
         }
         retain = phase <= ETHER_DRAIN_CLOUD_TERMINAL_PHASE
-        break
-      }
-      case 'ether-drain-debris': {
-        const oscillationRotation = drawNativeFloat(rng, 17)
-        const speedGate = drawNativeInteger(oscillationRotation.state, 100)
-        const spriteRotation = drawNativeFloat(speedGate.state, 5)
-        rng = spriteRotation.state
-        const remainingDistance = Math.fround(
-          sourceActor.quantity - sourceActor.slowFactor,
-        )
-        let speed = Math.fround(
-          sourceActor.slowFactor + ETHER_DRAIN_DEBRIS_SPEED_GAIN,
-        )
-        if (speedGate.value === 3) speed = Math.fround(speed * Math.fround(0.5))
-        const oscillationDegrees = Math.fround(
-          sourceActor.phase + 3 + oscillationRotation.value,
-        )
-        const rotationRadians = normalizeRadians(
-          sourceActor.rotationRadians + (3 + spriteRotation.value) * Math.PI / 180,
-        )
-        const perpendicularDistance = Math.fround(
-          Math.sin(oscillationDegrees * Math.PI / 180) * remainingDistance / 7,
-        )
-        actor = {
-          ...actor,
-          phase: oscillationDegrees,
-          position: {
-            x: Math.fround(
-              sourceActor.endpoint.x
-              + remainingDistance * sourceActor.velocity.x
-              + perpendicularDistance * sourceActor.velocity.y,
-            ),
-            y: Math.fround(
-              sourceActor.endpoint.y
-              + remainingDistance * sourceActor.velocity.y
-              - perpendicularDistance * sourceActor.velocity.x,
-            ),
-          },
-          quantity: remainingDistance,
-          rotationRadians,
-          slowFactor: speed,
-        }
-        if (remainingDistance <= 0) {
-          const parentId = sourceActor.hitTargetIds[0]
-          if (parentId !== undefined) etherDrainPulseParentIds.add(parentId)
-          retain = false
-        }
         break
       }
       case 'ether-drain-capture-flare':
@@ -3558,59 +3573,18 @@ export function stepNativeSecondaryAbilities(
         break
       case 'stoneskin-chip':
       case 'comet-debris': {
-        if (sourceActor.phase !== 0 && context.tick % 3 === 0) break
-        let position = sourceActor.position
-        let velocity = sourceActor.velocity
-        let height = sourceActor.phase
-        let verticalVelocity = sourceActor.endpoint.x
-        let bounceVelocity = sourceActor.endpoint.y
-        let rotationVelocity = sourceActor.slowFactor
-        if (sourceActor.phase !== 0) {
-          position = {
-            x: Math.fround(sourceActor.position.x + sourceActor.velocity.x),
-            y: Math.fround(sourceActor.position.y + sourceActor.velocity.y),
-          }
-          height = Math.fround(sourceActor.phase + sourceActor.endpoint.x)
-          verticalVelocity = Math.fround(
-            sourceActor.endpoint.x + COMET_DEBRIS_GRAVITY,
-          )
-          if (height > 0) {
-            const rotationSpeed = drawNativeFloat(rng, 10)
-            const horizontalDamping = drawNativeInteger(rotationSpeed.state, 2)
-            rng = horizontalDamping.state
-            rotationVelocity = (1 + rotationSpeed.value) * Math.PI / 180
-            bounceVelocity = Math.fround(
-              sourceActor.endpoint.y * COMET_DEBRIS_DAMPING,
-            )
-            verticalVelocity = bounceVelocity
-            if (horizontalDamping.value === 1) {
-              velocity = {
-                x: Math.fround(sourceActor.velocity.x * COMET_DEBRIS_DAMPING),
-                y: Math.fround(sourceActor.velocity.y * COMET_DEBRIS_DAMPING),
-              }
-            }
-            if (COMET_DEBRIS_SETTLE_VELOCITY < verticalVelocity) {
-              bounceVelocity = 0
-              verticalVelocity = 0
-              velocity = ZERO
-              rotationVelocity = 0
-            }
-            height = verticalVelocity
-          }
-        }
-        const life = Math.fround(sourceActor.alpha - COMET_DEBRIS_LIFE_PER_TICK)
-        actor = {
-          ...actor,
-          alpha: Math.max(0, life),
-          endpoint: { x: verticalVelocity, y: bounceVelocity },
-          phase: height,
-          position,
-          rotationRadians: normalizeRadians(
-            sourceActor.rotationRadians + rotationVelocity,
-          ),
-          slowFactor: rotationVelocity,
-          velocity,
-        }
+        const stepped = stepNativeBouncerMotion({ bounceVelocity: sourceActor.endpoint.y, height: sourceActor.phase,
+          position: sourceActor.position, rotationDegrees: sourceActor.rotationRadians * 180 / Math.PI,
+          rotationStepDegrees: sourceActor.slowFactor * 180 / Math.PI,
+          velocity: sourceActor.velocity, verticalVelocity: sourceActor.endpoint.x }, context.tick, {
+          float: maximum => { const draw = drawNativeFloat(rng, maximum); rng = draw.state; return draw.value },
+          integer: maximum => { const draw = drawNativeInteger(rng, maximum); rng = draw.state; return draw.value },
+        })
+        const motion = stepped.motion
+        const life = stepped.skipped ? sourceActor.alpha : Math.fround(sourceActor.alpha - COMET_DEBRIS_LIFE_PER_TICK)
+        actor = { ...actor, alpha: Math.max(0, life), endpoint: { x: motion.verticalVelocity, y: motion.bounceVelocity },
+          phase: motion.height, position: motion.position, rotationRadians: motion.rotationDegrees * Math.PI / 180,
+          slowFactor: motion.rotationStepDegrees * Math.PI / 180, velocity: motion.velocity }
         retain = life > 0
         break
       }
@@ -3717,17 +3691,6 @@ export function stepNativeSecondaryAbilities(
         const phase = earthquakeWobblePhases.get(candidate.id)
         return phase === undefined ? candidate : Object.freeze({ ...candidate, phase })
       }),
-    }
-  }
-  if (etherDrainPulseParentIds.size > 0) {
-    state = {
-      ...state,
-      actors: state.actors.map((candidate) => (
-        candidate.kind === 'ether-drain'
-          && etherDrainPulseParentIds.has(candidate.id)
-          ? Object.freeze({ ...candidate, slowFactor: ETHER_DRAIN_CAPTURE_PULSE })
-          : candidate
-      )),
     }
   }
   for (const request of fireBurnRequests) {
@@ -3921,6 +3884,8 @@ export function stepNativeSecondaryAbilities(
   }
   state = enrollNativeSecondaryLightOwners(state, context)
   return {
+    etherDrainContacts: Object.freeze(etherDrainContacts),
+    etherDrainWorldAnimationContacts: Object.freeze(etherDrainWorldAnimationContacts),
     damage: Object.freeze(damage),
     dampenedCasterTargetIds: Object.freeze([...dampenedCasterTargetIds].sort((a, b) => a - b)),
     dispelledShieldTargetIds: Object.freeze([...dispelledShieldTargetIds].sort((a, b) => a - b)),
@@ -4003,6 +3968,8 @@ export function activateNativeSecondaryBeltSkill(
   state = enrollNativeSecondaryLightOwners(state, context)
   return {
     damage: [],
+    etherDrainContacts: [],
+    etherDrainWorldAnimationContacts: [],
     dampenedCasterTargetIds: cast.dampenedCasterTargetIds,
     dispelledShieldTargetIds: cast.dispelledShieldTargetIds,
     disruptedTargetIds: [],
@@ -4843,6 +4810,7 @@ function castAbility(
           alpha: 0,
           damage: v.mDamage,
           enhanced: authority.enhancedEffects,
+          etherDrain: null,
           freezeTicks: ETHER_DRAIN_ACTIVE_COUNTDOWN_TICKS,
           kind: 'ether-drain',
           lifetimeTicks: 1_061,
@@ -5181,10 +5149,9 @@ function spawnEtherDrainCloud(
 }
 
 function spawnEtherDrainDebris(
-  source: NativeSecondarySimulationState,
   parent: NativeSecondaryActorState,
   sourceRng: NativeRngState,
-): { readonly rng: NativeRngState; readonly state: NativeSecondarySimulationState } {
+): { readonly rng: NativeRngState; readonly animation: NativeEtherDrainDebris } {
   const oscillationRotation = drawNativeFloat(sourceRng, 360)
   const spriteRotation = drawNativeFloat(oscillationRotation.state, 360)
   const radialDirection = drawNativeUnitVector(spriteRotation.state)
@@ -5197,27 +5164,68 @@ function spawnEtherDrainDebris(
       parent.position.y + radialDirection.value.y * ETHER_DRAIN_DEBRIS_DISTANCE,
     ),
   }
-  const outwardDirection = unit(parent.position, position)
   return {
     rng: record.state,
-    state: spawn(source, actorSeed({
-      endpoint: parent.position,
-      hitTargetIds: [parent.id],
-      kind: 'ether-drain-debris',
-      lifetimeTicks: 0x7fff_ffff,
-      ownerId: parent.ownerId,
-      phase: oscillationRotation.value,
-      position,
-      quantity: length(parent.position, position),
-      rank: parent.rank,
-      rotationRadians: spriteRotation.value * Math.PI / 180,
-      skillId: 74,
-      slowFactor: 1,
-      variant: record.value,
-      velocity: outwardDirection,
-      worldKey: parent.worldKey,
-    })),
+    animation: createNativeEtherDrainDebris(parent.position, position, oscillationRotation.value,
+      spriteRotation.value, record.value as 0 | 1 | 2),
   }
+}
+
+export function captureNativeEtherDrainImage(
+  source: NativeSecondarySimulationState,
+  fieldId: number,
+  image: Omit<NativeEtherDrainCapturedImage, 'kind' | 'alpha'> | null,
+  tick: number,
+): NativeSecondarySimulationState {
+  const parent = source.actors.find(actor => actor.id === fieldId && actor.kind === 'ether-drain')
+  if (!parent) return source
+  const previous = parent.etherDrain?.animations ?? []
+  let state = source
+  for (const animation of previous) state = pulseNativeEtherDrain(state, fieldId,
+    animation.kind === 'captured' ? 1.5 : .5, tick, true)
+  state = { ...state, actors: state.actors.map(actor => actor.id === fieldId ? { ...actor,
+    etherDrain: { ...(actor.etherDrain ?? createNativeEtherDrainState()),
+      animations: image ? [{ ...image, kind: 'captured', alpha: Math.fround(1.25 - Math.fround(.2)) }] : [],
+    },
+  } : actor) }
+  if (image === null) return state
+  const pitch = drawNativeFloatRange(state.rng, Math.fround(.9), 1)
+  return emitNativeSecondaryEvent({ ...state, rng: pitch.state }, {
+    ...eventSeed(parent, tick, 'crunch-drain', 'pulse'), pitch: pitch.value,
+  })
+}
+
+/** The field owns the pulse; the flare is an independently fading child. */
+export function pulseNativeEtherDrain(
+  source: NativeSecondarySimulationState,
+  actorId: number,
+  parameter: number,
+  tick: number,
+  afterParentTick = false,
+): NativeSecondarySimulationState {
+  const parent = source.actors.find(actor => actor.id === actorId && actor.kind === 'ether-drain')
+  if (!parent) return source
+  let state: NativeSecondarySimulationState = {
+    ...source,
+    actors: source.actors.map(actor => actor === parent ? { ...actor,
+      slowFactor: afterParentTick ? ETHER_DRAIN_CAPTURE_PULSE
+        : Math.fround(ETHER_DRAIN_CAPTURE_PULSE - ETHER_DRAIN_CAPTURE_PULSE_LOSS),
+    } : actor),
+  }
+  if (parameter < 1) return state
+  state = spawn(state, actorSeed({
+    alpha: parameter,
+    enhanced: parent.enhanced,
+    kind: 'ether-drain-capture-flare',
+    lifetimeTicks: Math.ceil(parameter / ETHER_DRAIN_SCALE_OUT_PER_TICK) + 1,
+    ownerId: parent.ownerId,
+    position: { x: parent.position.x, y: Math.fround(parent.position.y - parameter * 10) },
+    rank: parent.rank,
+    scale: parameter,
+    skillId: 74,
+    worldKey: parent.worldKey,
+  }))
+  return emitNativeSecondaryEvent(state, { ...eventSeed(parent, tick, 'phase', 'pulse'), pitch: 1.5 })
 }
 
 function nearestNativeLeviathanTarget(
@@ -5611,13 +5619,14 @@ export function enrollNativeSecondaryPainterOwners(
 ): NativeSecondarySimulationState {
   const actors = source.actors.map((actor) => {
     const painterLane = nativeSecondaryPainterManagerLane(actor.kind)
+    const painterCount = actor.kind === 'golem-death' ? NATIVE_GOLEM_DEATH_PAINTER_COUNT : 1
     const existingPainterRegistrations = actor.painterRegistrations ?? []
     const painterRegistrations = existingPainterRegistrations.length === 0
-      ? Object.freeze([register(painterLane)])
+      ? Object.freeze(Array.from({ length: painterCount }, () => register(painterLane)))
       : existingPainterRegistrations
     if (
-      painterRegistrations.length !== 1
-      || painterRegistrations[0]!.managerLane !== painterLane
+      painterRegistrations.length !== painterCount
+      || painterRegistrations.some(registration => registration.managerLane !== painterLane)
     ) {
       throw new Error(`${actor.kind} changed native painter-manager ownership`)
     }

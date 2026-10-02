@@ -3,10 +3,8 @@ import test from 'node:test'
 import { createHubEconomy } from './core-kernels/hub-economy.ts'
 import weaponProgram from '../assets/game/player-weapon-attachment-program.json' with { type: 'json' }
 import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
-import {
-  NATIVE_PLAYER_DEATH_WEAPON_BOUNCER,
-  playerDeathWeaponSample,
-} from './renderer/player-death-weapon-presentation.ts'
+import { createNativeRng } from './core-kernels/native-rng.ts'
+import { createNativeDeathWeaponActor, stepNativeDeathWeaponActors } from './core-kernels/native-death-animations.ts'
 
 import {
   NATIVE_PLAYER_ROBE_FIXED_POSE_COUNT,
@@ -348,29 +346,23 @@ test('mod wearables keep custom living art while death and memorial use declared
   })
 })
 
-test('death weapon owns one deterministic native-shaped bouncer through settlement', () => {
-  const trigger = {
-    deathEpoch: 1,
-    headingIndex: 0,
-    playerId: 'wizard',
-    runId: 'run-a',
-    weapon: { kind: 'staff' as const, selector: 3 },
-  }
-  const opening = playerDeathWeaponSample(trigger, 0)
-  assert.ok(opening.offset.y <= -(
-    NATIVE_PLAYER_DEATH_WEAPON_BOUNCER.initialRadius
-    * NATIVE_PLAYER_DEATH_WEAPON_BOUNCER.initialHorizontalSpeed
-  ))
-  assert.ok(opening.height <= 0)
-  assert.equal(opening.settled, false)
-  assert.deepEqual(playerDeathWeaponSample(trigger, 0), opening)
-
-  const moving = playerDeathWeaponSample(trigger, 12)
-  assert.notDeepEqual(moving, opening)
-  const settled = playerDeathWeaponSample(trigger, 10_000)
+test('death weapon owns one deterministic native Bouncer through settlement', () => {
+  const options = { deathEpoch: 1, headingIndex: 0, id: 1, ownerId: 'wizard',
+    painterRegistration: { managerLane: 'actor' as const, registrationOrdinal: 1 },
+    position: { x: 0, y: 0 }, tick: 0, weapon: { kind: 'staff' as const, selector: 3 } }
+  const birth = createNativeDeathWeaponActor(options, createNativeRng(37))
+  assert.ok(birth.actor.motion.position.y <= -22.5)
+  assert.ok(birth.actor.motion.height <= 0)
+  assert.equal(birth.actor.life, 99999)
+  assert.deepEqual(createNativeDeathWeaponActor(options, createNativeRng(37)), birth)
+  let current = { actors: [birth.actor] as readonly typeof birth.actor[], rng: birth.rng }
+  for (let tick = 1; tick <= 400; tick++) current = stepNativeDeathWeaponActors(current.actors, tick, current.rng)
+  const settled = current.actors[0]!.motion
   assert.equal(settled.height, 0)
-  assert.equal(settled.settled, true)
-  assert.deepEqual(playerDeathWeaponSample(trigger, 20_000), settled)
+  assert.equal(settled.bounceVelocity, 0)
+  const next = stepNativeDeathWeaponActors(current.actors, 401, current.rng)
+  assert.deepEqual(next.actors[0]!.motion, settled)
+  assert.deepEqual(next.rng, current.rng)
 })
 
 function closeTo(actual: number, expected: number, epsilon = 0.001): void {
