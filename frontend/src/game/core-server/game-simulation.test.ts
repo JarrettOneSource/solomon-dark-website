@@ -4664,8 +4664,6 @@ test('Ether Drain pulls grounded world Bouncers and consumes them without a pick
   state = stepGameSimulationTick(state, {})
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   const pulled = state.world.enemies.deathEffects.find(effect => effect.id === grounded!.id)!
-  assert.equal(pulled.kind, 'water-hail')
-  if (pulled.kind !== 'water-hail') throw new Error('expected Water Hail')
   assert.ok(pulled.position.x < 430)
   assert.deepEqual(pulled.velocity, { x: 0, y: 0 })
   assert.deepEqual(state.world.enemies.deathEffects.find(effect => effect.id === airborne!.id)!.position, { x: 450, y: 250 })
@@ -4707,6 +4705,8 @@ test('Ether Drain routes grounded primary Hail and secondary chips through their
     worldManagerOrder: managers.state() }
   state = stepGameSimulationTick(state, {})
   const pulled = state.primarySpells.transients.find(effect => effect.id === hail.id)!
+  assert.equal(pulled.kind, 'water-hail')
+  if (!('position' in pulled)) throw new Error('expected a positioned Water Hail actor')
   assert.ok(pulled.position.x < 430)
   assert.equal(state.secondaryAbilities.actors.some(actor => actor.id === chip.id), false)
   const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
