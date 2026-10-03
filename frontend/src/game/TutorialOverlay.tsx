@@ -250,6 +250,7 @@ export function TutorialModalCallouts({
     coarsePointer,
     modalProgress,
     progression,
+    skillViewportOffsetX: modalSlides.skillViewportOffsetX,
     resumeBindingLabel: gameBindingLabel(stage === 10 ? controls.openInventory : controls.openSkills),
     stage,
   })

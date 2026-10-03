@@ -91,6 +91,7 @@ export interface TutorialModalTeachingInput {
   /** Live `0x005C7200` InventoryScreen / SkillScreen slide progress. */
   readonly modalProgress: number
   readonly progression: ProtocolPlayerProgression
+  readonly skillViewportOffsetX: number
   /** Label of the binding that closes the modal (inventory or skills key). */
   readonly resumeBindingLabel: string
   readonly stage: number
@@ -253,7 +254,10 @@ function skillModalPlans(input: TutorialModalTeachingInput): readonly TutorialMo
     pointer('quick-use', { x: belt1.x - 20, y: belt1.y - 50 }, belt1, false),
   ]
   if (placements.length > 2) {
-    const target = Object.freeze({ x: placements[2]!.x + 100, y: placements[2]!.y + 80 })
+    const target = Object.freeze({
+      x: placements[2]!.x + 100 - input.skillViewportOffsetX,
+      y: placements[2]!.y + 80,
+    })
     plans.push(
       pointer('concentration', { x: target.x + 100, y: target.y - 20 }, target, false),
       callout('concentration', TUTORIAL_MODAL_TEXT.concentration, target.x + 50, target.y - 165),
@@ -261,7 +265,10 @@ function skillModalPlans(input: TutorialModalTeachingInput): readonly TutorialMo
     )
   }
   if (placements.length > 0) {
-    const target = Object.freeze({ x: placements[0]!.x + 100, y: placements[0]!.y + 70 })
+    const target = Object.freeze({
+      x: placements[0]!.x + 100 - input.skillViewportOffsetX,
+      y: placements[0]!.y + 70,
+    })
     plans.push(
       pointer('hover', { x: target.x - 100, y: target.y - 30 }, target, false),
       callout(

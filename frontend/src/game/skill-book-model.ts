@@ -6,6 +6,7 @@ import {
 } from './core-kernels/player-progression.ts'
 import type { NativeHudPoint, NativeHudRect } from './native-hud-layout.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import { clampNativeUiSwipeBoxOffset } from './native-ui/native-ui-swipe-box.ts'
 
 export const NATIVE_SKILL_DRAG_THRESHOLD_SQUARED = 9
 export const NATIVE_SKILL_DRAGGER_SIZE = 40
@@ -22,6 +23,12 @@ export const NATIVE_SKILL_SCREEN_PAGE_REGION_HEIGHT = 760
 export const NATIVE_SKILL_SCREEN_PAGE_REGION_TOP = 50
 export const NATIVE_SKILL_SCREEN_ROW_INSET = 10
 export const NATIVE_SKILL_SCREEN_ROW_OFFSET_Y = 22
+export const NATIVE_SKILL_SCREEN_PAGE_VIEWPORT: Readonly<NativeHudRect> = Object.freeze({
+  x: 0,
+  y: NATIVE_SKILL_SCREEN_PAGE_REGION_TOP,
+  width: NATIVE_SKILL_SCREEN_WIDTH,
+  height: NATIVE_SKILL_SCREEN_PAGE_REGION_HEIGHT,
+})
 
 export interface NativeSkillBookRow {
   readonly category: number
@@ -46,6 +53,12 @@ export interface NativeSkillBookPagePlacement {
   readonly page: NativeSkillBookPage
   readonly x: number
   readonly y: number
+}
+
+export interface NativeSkillBookPageLayout {
+  readonly contentWidth: number
+  readonly placements: readonly NativeSkillBookPagePlacement[]
+  readonly rowCount: 0 | 1 | 2
 }
 
 export interface NativeBeltPullOffBurstMember {
@@ -258,43 +271,66 @@ export function nativeSkillBookPages(
   }))
 }
 
-/** Recovered row wrapping and centering used by SkillScreen_BuildPages. */
-export function nativeSkillBookPagePlacements(
+/** Retail 0x0066B380: fill two rows, then extend the shorter row horizontally. */
+export function nativeSkillBookPageLayout(
   pages: readonly NativeSkillBookPage[],
-): readonly NativeSkillBookPagePlacement[] {
-  if (pages.length === 0) return Object.freeze([])
+): NativeSkillBookPageLayout {
   const maximumRowWidth = NATIVE_SKILL_SCREEN_WIDTH - NATIVE_SKILL_SCREEN_ROW_INSET
-  const rows: NativeSkillBookPage[][] = [[]]
-  const rowWidths = [0]
+  const rowWidths: [number, number] = [0, 0]
+  let rowIndex: 0 | 1 = 0
+  let wrapping = true
+  const placements: NativeSkillBookPagePlacement[] = []
   for (const page of pages) {
-    const rowIndex = rows.length - 1
-    if (rowWidths[rowIndex]! > 0 && rowWidths[rowIndex]! + page.width > maximumRowWidth) {
-      rows.push([page])
-      rowWidths.push(page.width)
-    } else {
-      rows[rowIndex]!.push(page)
-      rowWidths[rowIndex] = rowWidths[rowIndex]! + page.width
+    if (rowWidths[rowIndex] + page.width > maximumRowWidth) {
+      if (wrapping && rowIndex === 0) rowIndex = 1
+      else {
+        wrapping = false
+        rowIndex = rowWidths[0] < rowWidths[1] ? 0 : 1
+      }
     }
+    placements.push({ page, x: rowWidths[rowIndex], y: rowIndex * NATIVE_SKILL_PAGE_HEIGHT })
+    rowWidths[rowIndex] += page.width
   }
-  const widestRow = Math.max(...rowWidths)
-  const xOrigin = NATIVE_SKILL_SCREEN_WIDTH / 2 - widestRow / 2
-  const yOrigin = rows.length === 1
+  const contentWidth = Math.max(...rowWidths)
+  const rowCount = rowWidths[1] > 0 ? 2 : pages.length > 0 ? 1 : 0
+  const xOrigin = Math.max(0, NATIVE_SKILL_SCREEN_WIDTH / 2 - contentWidth / 2)
+  const yOrigin = rowCount < 2
     ? NATIVE_SKILL_SCREEN_PAGE_REGION_TOP
       + (NATIVE_SKILL_SCREEN_PAGE_REGION_HEIGHT - NATIVE_SKILL_PAGE_HEIGHT) / 2
     : NATIVE_SKILL_SCREEN_PAGE_REGION_TOP + NATIVE_SKILL_SCREEN_ROW_OFFSET_Y
-  const placements: NativeSkillBookPagePlacement[] = []
-  rows.forEach((row, rowIndex) => {
-    let x = xOrigin
-    for (const page of row) {
-      placements.push(Object.freeze({
-        page,
-        x,
-        y: yOrigin + rowIndex * NATIVE_SKILL_PAGE_HEIGHT,
-      }))
-      x += page.width
-    }
+  return Object.freeze({
+    contentWidth,
+    placements: Object.freeze(placements.map(({ page, x, y }) => Object.freeze({
+      page, x: x + xOrigin, y: y + yOrigin,
+    }))),
+    rowCount,
   })
-  return Object.freeze(placements)
+}
+
+export function nativeSkillBookPagePlacements(
+  pages: readonly NativeSkillBookPage[],
+): readonly NativeSkillBookPagePlacement[] {
+  return nativeSkillBookPageLayout(pages).placements
+}
+
+/** Reveal the complete native column, including its name and quick description. */
+export function nativeSkillBookColumnScrollOffset(
+  requested: number,
+  placement: NativeSkillBookPagePlacement,
+  rowIndex: number,
+  contentWidth: number,
+): number {
+  const left = placement.x + (rowIndex === 0
+    ? 0
+    : NATIVE_SKILL_PAGE_BASE_WIDTH + (rowIndex - 1) * NATIVE_SKILL_PAGE_DEPENDENT_WIDTH)
+  const width = rowIndex === 0 ? NATIVE_SKILL_PAGE_BASE_WIDTH : NATIVE_SKILL_PAGE_DEPENDENT_WIDTH
+  const current = clampNativeUiSwipeBoxOffset(requested, contentWidth, NATIVE_SKILL_SCREEN_WIDTH)
+  const offset = left < current
+    ? left
+    : left + width > current + NATIVE_SKILL_SCREEN_WIDTH
+      ? left + width - NATIVE_SKILL_SCREEN_WIDTH
+      : current
+  return clampNativeUiSwipeBoxOffset(offset, contentWidth, NATIVE_SKILL_SCREEN_WIDTH)
 }
 
 export function nativeSkillBookRows(

@@ -64,6 +64,7 @@ function plans(
     backpack: [amulet],
     modalProgress: 1,
     progression: baseline,
+    skillViewportOffsetX: 0,
     resumeBindingLabel: 'I',
     stage,
     ...overrides,
@@ -260,6 +261,18 @@ test('paints the stage-13 skill members from the native skill book page placemen
   const hover = callout(stage[5])
   assert.equal(hover.text, 'Hover your mouse over a\nskill icon for more information.')
   assert.deepEqual(center(hover), [hoverTip.x - 115, hoverTip.y - 30])
+})
+
+test('skill lesson targets share the scrolled page coordinates while the belt lesson stays fixed', () => {
+  const original = plans(13, { progression: threePages })
+  const scrolled = plans(13, { progression: threePages, skillViewportOffsetX: 100 })
+  assert.deepEqual(scrolled.slice(0, 4), original.slice(0, 4))
+  for (const index of [4, 7]) {
+    const before = pointer(original[index])
+    const after = pointer(scrolled[index])
+    assert.equal(after.toX, before.toX - 100)
+    assert.equal(after.toY, before.toY)
+  }
 })
 
 test('adds the concentration lesson only once a third skill page exists', () => {

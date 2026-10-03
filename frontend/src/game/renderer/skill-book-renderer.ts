@@ -37,6 +37,7 @@ import type {
 } from '../protocol/game-state.ts'
 import {
   NATIVE_SKILL_DRAGGER_SCALE,
+  NATIVE_SKILL_SCREEN_PAGE_VIEWPORT,
   type NativeSkillBookPagePlacement,
   type NativeSkillBookRow,
 } from '../skill-book-model.ts'
@@ -77,10 +78,13 @@ export interface SkillBookRendererPresentation {
   readonly economy: ProtocolPlayerEconomy
   readonly element: WizardElement
   readonly hoveredSkillId: number | null
+  readonly hoveredRootSkillId: number | null
   readonly hudProgress: number
   readonly openProgress: number
   readonly placements: readonly NativeSkillBookPagePlacement[]
   readonly progression: ProtocolPlayerProgression
+  readonly scrollX: number
+  readonly showHelp: boolean
   readonly targetQuickbarSlot: number | null
 }
 
@@ -130,11 +134,21 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const ambient = new Container()
   const fixtures = new Container()
   const overlay = new Container()
+  const help = new Container()
   const pages = new Container()
+  const pageViewport = new Container()
+  const pageMask = new Graphics().rect(
+    NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.x,
+    NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.y,
+    NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width,
+    NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.height,
+  ).fill(0xffffff)
+  pageViewport.addChild(pages, pageMask)
+  pageViewport.mask = pageMask
   const hud = new Container()
   const hover = new Container()
   const dragger = new Container()
-  root.addChild(curtain, ambient, fixtures, field, overlay, pages, hud, hover, dragger)
+  root.addChild(curtain, ambient, fixtures, field, overlay, help, pageViewport, hud, hover, dragger)
   application.stage.addChild(root)
 
   drawSkillScreenField(field, resources)
@@ -144,6 +158,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
 
   let destroyed = false
   let lastSealTick = -1
+  let previousPresentation: SkillBookRendererPresentation | null = null
   const renderer: SkillBookRenderer = {
     canvas: gpu.canvas,
     mount: gpu.mount,
@@ -179,22 +194,33 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
     setPresentation(presentation) {
       if (destroyed) return
       gpu.canvas.dataset.nativeHoverSkillId = `${presentation.hoveredSkillId ?? ''}`
+      gpu.canvas.dataset.nativeHoverRootSkillId = `${presentation.hoveredRootSkillId ?? ''}`
       const progress = presentation.openProgress
       curtain.alpha = progress
       field.alpha = progress ** 3
       ambient.alpha = progress ** 9
       fixtures.alpha = progress ** 9
       overlay.alpha = progress ** 3
+      help.alpha = progress ** 3
       pages.alpha = progress ** 2
+      pages.position.x = -presentation.scrollX
       hud.alpha = progress
       hover.alpha = progress ** 2
-      destroyChildren(pages)
+      if (previousPresentation === null
+        || previousPresentation.placements !== presentation.placements
+        || previousPresentation.progression !== presentation.progression) {
+        destroyChildren(pages)
+        for (const placement of presentation.placements) {
+          drawSkillPage(pages, resources, placement, presentation)
+        }
+      }
+      if (previousPresentation?.showHelp !== presentation.showHelp) {
+        destroyChildren(help)
+        if (presentation.showHelp) drawSkillScreenHelp(help, resources)
+      }
       destroyChildren(hud)
       destroyChildren(hover)
       destroyChildren(dragger)
-      for (const placement of presentation.placements) {
-        drawSkillPage(pages, resources, placement, presentation)
-      }
       const hudLayout = nativeHudModalSlideLayout(
         NATIVE_HUD_BACKBUFFER.width,
         NATIVE_HUD_BACKBUFFER.height,
@@ -209,6 +235,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       )
       drawNativeHoverBox(hover, resources, presentation)
       drawSkillDragger(dragger, resources, presentation)
+      previousPresentation = presentation
       renderer.render(performance.now())
     },
   }
@@ -345,6 +372,9 @@ function drawSkillScreenOverlay(layer: Container, textures: GameTextureMap): voi
     NATIVE_SKILL_SCREEN_ROOT.titleY,
     NATIVE_SKILL_SCREEN_ROOT.titleTint,
   )
+}
+
+function drawSkillScreenHelp(layer: Container, textures: GameTextureMap): void {
   const usesTouchHelp = window.matchMedia('(pointer: coarse)').matches
   addShadowedText(
     layer,
@@ -601,10 +631,11 @@ function drawNativeHoverBox(
   let sourceX = 0
   let sourceY = 0
   for (const placement of presentation.placements) {
+    if (placement.page.rootSkillId !== presentation.hoveredRootSkillId) continue
     const index = placement.page.rows.findIndex(({ id }) => id === hovered)
     if (index < 0) continue
     row = placement.page.rows[index]
-    sourceX = placement.x + rowCenterX(index)
+    sourceX = placement.x + rowCenterX(index) - presentation.scrollX
     sourceY = placement.y + NATIVE_SKILL_ROW_PRESENTATION.rowCenterY
     break
   }

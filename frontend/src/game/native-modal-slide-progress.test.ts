@@ -5,6 +5,7 @@ import {
   initialNativeModalSlideProgressSnapshot,
   nativeModalSlideProgressSnapshot,
   setNativeModalSlideProgress,
+  setNativeSkillViewportOffsetX,
   subscribeNativeModalSlideProgress,
 } from './native-modal-slide-progress.ts'
 
@@ -16,12 +17,20 @@ test('publishes the live inventory and skill modal slide independently', () => {
   setNativeModalSlideProgress('inventory', 0.25)
   setNativeModalSlideProgress('skills', 0.75)
   setNativeModalSlideProgress('skills', 0.75)
-  assert.deepEqual(nativeModalSlideProgressSnapshot(), { inventory: 0.25, skills: 0.75 })
+  assert.deepEqual(nativeModalSlideProgressSnapshot(), { inventory: 0.25, skills: 0.75, skillViewportOffsetX: 0 })
   assert.equal(notifications, 2)
   unsubscribe()
   setNativeModalSlideProgress('inventory', 0)
   setNativeModalSlideProgress('skills', 0)
-  assert.deepEqual(initialNativeModalSlideProgressSnapshot(), { inventory: 0, skills: 0 })
+  assert.deepEqual(initialNativeModalSlideProgressSnapshot(), { inventory: 0, skills: 0, skillViewportOffsetX: 0 })
+})
+
+test('publishes page translation without changing either optional-book opening envelope', () => {
+  setNativeModalSlideProgress('skills', 0.75)
+  setNativeSkillViewportOffsetX(320)
+  assert.deepEqual(nativeModalSlideProgressSnapshot(), { inventory: 0, skills: 0.75, skillViewportOffsetX: 320 })
+  setNativeSkillViewportOffsetX(0)
+  setNativeModalSlideProgress('skills', 0)
 })
 
 test('rejects progress outside the native slide interval', () => {

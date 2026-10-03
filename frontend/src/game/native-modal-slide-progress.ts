@@ -3,11 +3,13 @@ export type NativeModalSlideKind = 'inventory' | 'skills'
 export interface NativeModalSlideProgressSnapshot {
   readonly inventory: number
   readonly skills: number
+  readonly skillViewportOffsetX: number
 }
 
 const INITIAL_SNAPSHOT: NativeModalSlideProgressSnapshot = Object.freeze({
   inventory: 0,
   skills: 0,
+  skillViewportOffsetX: 0,
 })
 
 let snapshot = INITIAL_SNAPSHOT
@@ -33,4 +35,11 @@ export function setNativeModalSlideProgress(kind: NativeModalSlideKind, progress
 export function subscribeNativeModalSlideProgress(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+/** The optional book and tutorial overlay share one native content transform. */
+export function setNativeSkillViewportOffsetX(offset: number): void {
+  if (snapshot.skillViewportOffsetX === offset) return
+  snapshot = Object.freeze({ ...snapshot, skillViewportOffsetX: offset })
+  for (const listener of listeners) listener()
 }

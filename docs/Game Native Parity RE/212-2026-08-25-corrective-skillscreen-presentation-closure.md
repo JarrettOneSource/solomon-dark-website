@@ -1,5 +1,226 @@
 # 2026-08-25 — Corrective SkillScreen presentation closure
 
+## 2026-10-03 — Report62: high-count page extent reopening
+
+The unchanged live report `1554346487985606666` supplies an overflowing web
+SkillScreen image and original-game two-row horizontal-navigation footage.
+The earlier level75 message is context only. This entry does not reopen level
+progression or the accepted Report47 glyph/tooltip correction.
+
+The previous page-layout receipt tested three pages that fit in two rows. It
+did not establish the inherited SwipeBox content extent, maximum row count or
+horizontal-navigation branch. Calling complete public-row construction
+coverage a complete high-count navigation receipt missed those consumers.
+
+### Evidence and current causal trace
+
+- Focused live Discord read at `2026-10-03T09:28:03.039021Z`: the primary,
+  context and attachment IDs are unchanged; nine nearby messages contain no
+  relevant correction. The context image is not a completion target.
+- Retained web image `1554346487092355193__image.png`, 1903 by 1080,
+  SHA-256 `a6f74a5d2b31b9a0ff4f9131dc2d7514e6b2700ef5df8e441f57349e006cca39`:
+  three dependency-page rows; the third row crosses the bottom chain/belt and
+  its quick descriptions extend below the image. This is direct observation,
+  not proof of the reporter's complete saved rank vector or input history.
+- Current published `49dfb71adeffa910d8d80f3103f8186d3dcf337b`:
+  `nativeSkillBookPagePlacements` wraps after width 1590 with no row limit;
+  multi-row placement starts at 72 with pitch 300. A third page row occupies
+  native y 672..972, beyond both the page region's bottom 810 and the 900-pixel
+  stage. The shared renderer consumes every placement; semantic buttons use
+  the same x/y; the stage clips overflow. Neither owner has a page scroll
+  offset or navigation control. This is confirmed source evidence; no current
+  built-client baseline has yet run for this reopening.
+- Entry194's recovered `SwipeBox` caller census includes SkillScreen. The
+  maintained `native-ui-swipe-box.ts` already owns exact extent clamps and
+  previous-minus-current pointer dragging. These established base mechanics
+  are reusable; the missing SkillScreen-specific layout, axes, chrome and
+  step behavior still require the original clip/native comparison.
+
+### Boundary and provisional membership
+
+System: optional actor-owned SkillScreen dependency-page construction and
+its inherited content viewport/navigation, shared by College and Boneyard.
+Catalog membership and loadout authority remain their established owners.
+
+| Member | Native/current owner | Investigation disposition and required proof |
+| --- | --- | --- |
+| All public rows 8..79, effective/item-granted availability and acquisition order | catalog; `0x0066B380`; `nativeSkillBookPages` | Existing membership retained; prove no row loss while navigating and after grant removal. |
+| Dependency roots, transitive/shared children and widest page | `0x0065E670`; page width 200 plus 160 per child | Layout/navigation pending native comparison; preserve page and row order. |
+| Empty, fitting one/two-row and high-count overflow branches | builder `0x0066B380` | Recover full layout/content extent before implementation. |
+| Page clip, translation and navigation bounds | inherited SwipeBox `0x00431400/0x00431860/0x004316D0` | Existing base facts retained; recover SkillScreen axis/extent consumers. |
+| Navigation arrow membership, placement, input and retirement | SkillScreen root and inherited controls | Original footage/native evidence pending; no guessed arrow or scrollbar accepted. |
+| Mouse/touch background drag, wheel and keyboard reachability | SkillScreen/SwipeBox; browser semantic input | Recover native branches; prove movement, clamping and actionable card hit coordinates. |
+| Primary, concentration and category 2 belt drag variants | `HoverButton`; `SkillDragger`; shared host commands | Preserve selection, concentration lock, duplicate belt legality and actor isolation across navigation. |
+| Every quick-description and detailed HoverBox variant | page painter; existing exact glyph/box owner | Preserve typography; prove fully reachable source cards and details at both horizontal bounds. |
+| GPU pages and semantic hit/focus regions | `skill-book-renderer`; `SkillBook` | One coordinate model must own translation and clipping for both consumers. |
+| Tutorial skill-modal callouts | `tutorial-modal-callouts.ts` consumes page placements | Preserve the authored starter/three-page targets; inspect any changed geometry caller. |
+| Book open/close, Inventory replacement, input suspension and teardown | shared optional-book lifecycle | Existing contract retained; prove scroll/hover/drag state retires with the screen. |
+| Desktop and contained touch/narrow viewport projection | fixed native stage and full-browser curtain | Preserve text size, aspect containment, modality and accessible navigation. |
+| Item/shop/Boast/party SwipeBox siblings | distinct content owners | Out of this reopening; reuse the established primitive without changing sibling contracts. |
+| Mandatory SkillPicker, mod-skill aside, stat pages and level progression | distinct owners | Out of this page-navigation system; preserve accepted behavior. |
+| Rows 80/81 and reserve 82; Report61/63 | nonpublic rows; independent reports | Out of system; no level-cap, wave-counter or set-bonus implementation. |
+
+### Remaining evidence and acceptance
+
+The original clip's exact two-row packing, content extent, arrow step/press
+behavior and any inherited-axis override remain unverified in this pass.
+Do not select a remedy until verified presented frames and native evidence
+settle them. The reporter's exact save is unavailable; a controlled high-count
+fixture must be labeled separately from an exact historical replay.
+
+Required acceptance: a meaningful failing high-count regression; complete
+shared layout/render/hit correction; keyboard/pointer/touch reachability and
+descriptions; both scenes and relevant scale/aspect cases; selection/belt and
+book-lifecycle journeys; the unchanged exact-candidate canonical all-mode gate
+and real built browser acceptance. All local checks and intensive media/native
+work use a granted M5 SSD slot. No implementation or acceptance result is
+claimed by this provisional entry.
+
+### Bounded M5 diagnosis and recovered packing
+
+The October 3 M5 diagnostic admitted the exact published commit `3f130d3382bb321dd631aeb4e720ed8e5ed63d06`,
+tree `72e35c15968ec5c9cbe5d6ff3ef3d00f48cde236`, index and all 7,254 original
+tracked blobs. A genuine shallow Git root imported the unchanged original
+commit object; no synthetic Git revision was used. The unmodified production
+frontend/host build and bundle budget passed. No canonical all-mode gate ran.
+
+A real built College journey used the existing owned-rank grant and native
+Weld 1000 APIs. It produced 27 unique public visible rows and 16 dependency pages,
+with no forged rank vector, missing Weld build or mutually exclusive pair.
+Actual page rows began at 72/372/672/972. The final four icon hit targets
+`8,10,9,52` lay wholly below the 900-pixel stage; third-row quick descriptions
+crossed the fixed HUD. Navigation controls were absent. Page, console, HTTP
+response and host error arrays were empty. This is a controlled owned-skill
+fixture, not a replay of the unavailable reporter save.
+
+The sealed 4,723,200-byte retail image retained SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` at preferred
+base `0x00400000`. Private installed Apple LLVM instruction extraction plus
+standard-library PE mapping established these rules:
+
+- `0x006576C0` embeds a SwipeBox at SkillScreen `+0xA4`; its rectangle is
+  `(0,50,screenWidth,screenHeight-140)` in opener `0x0067CAC0`.
+- Builder `0x0066B380`, especially `0x0066B6C3..0x0066B799`, initially packs
+  pages in acquisition order until a page would exceed viewport width minus 10.
+  It wraps into row two at local y 300. When another wrap would exceed 300, it
+  permanently stops adding rows and appends to the shorter row extent. Equal
+  extents choose row two. It preserves the original page list order.
+- Row pitch/page height is 300 (`0x00784898`, `0x007858F8`); dependent width is
+  160 (`0x0078BFB8`). Two rows receive the 22-pixel inset (`0x00786C58`). A
+  single row is vertically centered; the common 22-pixel addition cancels the
+  single-row adjustment. Horizontal centering clamps at zero, so overflow
+  starts at the left edge rather than at a negative centered origin.
+- Builder `0x0066B90B/0x0066B917` writes the widest content extent and zero
+  vertical extent into the embedded SwipeBox. `0x004316D0` therefore clamps
+  horizontal offset to `0..max(0,contentWidth-viewportWidth)` and vertical
+  offset to zero. `0x004315F0` moves every child by the actual clamped delta;
+  `0x00431860` clips/translates the same children while preserving outer HUD.
+- `0x00431C80/0x00431CD0/0x00431520/0x00431DA0` recover background pointer
+  down, previous-minus-current drag, tick consumption and release. This is a
+  continuous content viewport, not a third/fourth vertical page or scrollbar.
+- Builder `0x0066B7F9..0x0066B802` sets the second-row flag; overlay
+  `0x0065C677` suppresses the instructional help branch for two-row content.
+  The current always-painted help text is another missing consumer of layout.
+
+Full original playback used the existing campaign presented-video helper under
+private Chrome. The 15.582233-second clip ended after 467 frames with zero
+drops; 18 nonblack `requestVideoFrameCallback` captures and browser error
+arrays were checked. Settled 11.011/15.5155-second frames show exactly two
+rows, horizontally clipped content and a stationary belt/HUD. Earlier failed
+file-viewer/HTTP setup attempts yielded no usable menu evidence and are not
+acceptance receipts. No clicked-arrow step or exact input history is inferred
+from the successful frames.
+
+The owning navigation-lifetime contract is still open: `0x0067CB4D` reads the addressed actor-owned skill book
+`+0x7A0` and submits it to the SwipeBox setter before the builder runs. Whether
+the saved value survives that clamp, who writes it on close, and its reset
+scope require the destructor/opener/actor initialization thread. Do not add
+persistence fields or default to component reset from this read alone. A
+dedicated native arrow action is also unproved; retain the reported claim
+without inventing a paging step or guessed visual control.
+
+Two existing-interface packing regressions are prepared from the recovered
+instructions and the captured 16-page width inventory. They have not run yet;
+the M2 has no Website validation receipt. GPU/semantic translation, focus,
+selection, descriptions, lifecycle and touch/scale acceptance remain pending.
+The actual M5 lease was released at 14:48:19.327801 UTC with zero owned
+processes and unchanged 24-entry real-home/immediate-child snapshot. The private
+SSD source/tool/evidence root remains inactive for the pending remedy.
+
+### Narrow lifetime closure and intended regressions
+
+The short M5 loan acquired at15:43:54.129656 UTC extracted only the four
+planned destructor/wrapper/opener/book-constructor ranges and three directly
+called attachment/rectangle functions. It released at15:51:09.080111 with
+zero owned processes and unchanged24-entry home/immediate-child snapshot.
+No original-media, build or full-gate replay ran.
+
+- `0x0066B267..0x0066B27C` reads SkillScreen `+0x128`, the embedded SwipeBox
+  `+0x84` horizontal offset, dereferences the actor-owned book handle at
+  `+0x78`, and stores the offset in that book's `+0x7A0`. The write precedes
+  page destruction and reference release; it is not a raw actor-field write.
+- Book constructor `0x006594E0`, write `0x006595F5`, initializes `+0x7A0`
+  from `FLDZ`. Deleting wrapper `0x0067CAA0` calls the same screen destructor.
+- Game opener `0x005CA6AD..0x005CA721` allocates a fresh screen when the
+  optional-book pointer is absent. `0x004277E0` binds the destruction backlink;
+  `0x004280E0` registers the child and its parent. These calls do not construct
+  skill pages. The fresh embedded SwipeBox constructor initializes content
+  extent to zero. Its rectangle setter `0x00427770` invokes the SwipeBox's
+  no-op slot `+0x1C`; it does not set a page extent.
+- Open `0x0067CAC0` submits the saved book offset to `0x004315F0` before
+  builder `0x0066B380` assigns content extent. That initial zero-extent clamp
+  clears the requested offset; the builder then retains the clamped origin.
+  The native saved field therefore does not establish restored visible scroll
+  on a fresh screen. The port starts a fresh viewport at the left edge and
+  keeps its offset local to that screen; it adds no protocol/save persistence
+  field from the attempted native bookmark.
+
+The two prepared public `nativeSkillBookPagePlacements` cases ran against the
+unchanged runtime with pinned Node22.17.0. Both failed with `ERR_ASSERTION`,
+exactly2 failures and0 skips, exposing third/fourth rows and wrong overflow
+centering. These are intended regression reds, not a successful gate. The
+source overlay contained only35 test lines; no runtime remedy ran on M5.
+
+Implementation now updates the shared native packing/extent model, the one
+SkillBook content viewport and its renderer/semantic translation, background
+pointer/touch drag, and browser keyboard/focus reachability. Fixed chrome,
+HUD/belt, native glyphs, book transitions and host-authoritative selections
+retain their existing owners. The native input evidence proves background
+drag; no paging-arrow producer or nonzero horizontal wheel-axis writer was
+found in these constructors/openers. A guessed arrow or scrollbar is not part
+of the remedy. Browser keyboard focus/scroll remains an accessibility input
+into the same bounded content viewport, as in existing SwipeBox menus.
+
+### Prepared complete remedy and next verification
+
+The current unvalidated candidate puts packing, row count, content extent and
+complete-column focus reveal in `skill-book-model.ts`, using the existing
+SwipeBox clamp/drag primitives. `SkillBook` owns one clipped horizontal viewport
+and its pointer identity, offset, hover page and focus. Semantic controls and
+the GPU page layer consume the same transform; shared-dependency copies keep
+their own HoverBox source. Fixed HUD and book transitions retain their existing
+owners. Tutorial pointers consume the published viewport offset and reset it
+with the screen. The maintained tutorial browser helper now supplies that
+coordinate field. Page glyphs stay retained during panning; two-row help is
+omitted at its producer.
+
+`smoke-skill-book-navigation.mjs` is prepared for the next granted M5 phase.
+It uses the actual production client/host and valid grant/Weld APIs, separates
+the five mutually exclusive branch pairs into two fixtures, and covers their
+complete public-row union. Desktop and contained touch cases exercise College
+and Boneyard, background pan and keyboard bounds, every semantic entry/detail
+owner, primary/concentration selection, belt drag and reciprocal Inventory
+replacement. It samples real WebGL HoverBox gutter pixels at each visible
+source to detect missing or wrongly anchored descriptions, including repeated
+dependency rows. No new native arrow, scrollbar, wheel action, rank cap or
+text scaling is introduced.
+
+The model-capacity interruption at16:59:34 was an agent execution error; the
+sealed11-file partial candidate was recovered unchanged before further edits.
+All additional implementation/tests/helpers remain unvalidated. Focused green,
+typing/lint/build, complete built journeys and the final exact-candidate
+canonical all-mode gate still require actual M5/main-lock ownership.
+
 ## 2026-09-27 — Report 47: inline skill-stat unit typography reopening
 
 The edited report identifies the damage and mana-cost `/ second` suffixes in

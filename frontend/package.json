@@ -100,6 +100,7 @@
     "smoke:game:skill-picker": "node --experimental-strip-types tools/smoke-skill-picker.mjs",
     "smoke:game:creativity-insight": "node --experimental-strip-types tools/smoke-creativity-insight.mjs",
     "smoke:game:skill-book": "node --experimental-strip-types tools/smoke-skill-book.mjs",
+    "smoke:game:skill-book-navigation": "node --experimental-strip-types tools/smoke-skill-book-navigation.mjs",
     "smoke:game:inventory-tooltips": "node --experimental-strip-types tools/smoke-inventory-tooltip-layering.mjs",
     "smoke:game:inventory-skill-book": "node --experimental-strip-types tools/smoke-inventory-skill-book.mjs",
     "smoke:game:tutorial-amulet": "node --experimental-strip-types tools/smoke-sorcerors-amulet.mjs",

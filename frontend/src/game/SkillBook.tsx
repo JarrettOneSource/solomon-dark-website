@@ -23,7 +23,7 @@ import {
   type NativeHudPoint,
   type NativeHudRect,
 } from './native-hud-layout.ts'
-import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
+import { setNativeModalSlideProgress, setNativeSkillViewportOffsetX } from './native-modal-slide-progress.ts'
 import {
   nativeOptionalBookHudProgress,
   nativeOptionalBookKeyAction,
@@ -40,12 +40,19 @@ import {
 } from './renderer/skill-book-renderer.ts'
 import {
   nativeBeltPullOffStarted,
+  nativeSkillBookColumnScrollOffset,
   nativeSkillDragStarted,
-  nativeSkillBookPagePlacements,
+  nativeSkillBookPageLayout,
   nativeSkillBookPages,
   nativeSkillQuickbarDropSlot,
+  NATIVE_SKILL_SCREEN_PAGE_VIEWPORT,
   type NativeSkillBookRow,
 } from './skill-book-model.ts'
+import {
+  clampNativeUiSwipeBoxOffset,
+  dragNativeUiSwipeBoxOffset,
+  NATIVE_UI_SWIPE_BOX,
+} from './native-ui/native-ui-swipe-box.ts'
 import './skill-book.css'
 
 interface SkillBookProps {
@@ -69,6 +76,11 @@ interface SkillBookProps {
 
 interface SkillBookDragState {
   readonly position: NativeHudPoint
+  readonly skillId: number
+}
+
+interface SkillBookHoverState {
+  readonly rootSkillId: number
   readonly skillId: number
 }
 
@@ -105,10 +117,16 @@ function SkillBookSurface({
   topMost,
 }: SkillBookProps & { model: SkillBookModel }) {
   const pages = useMemo(() => nativeSkillBookPages(progression), [progression])
-  const placements = useMemo(() => nativeSkillBookPagePlacements(pages), [pages])
+  const layout = useMemo(() => nativeSkillBookPageLayout(pages), [pages])
+  const placements = layout.placements
+  const [requestedScrollX, setRequestedScrollX] = useState(0)
+  const scrollX = clampNativeUiSwipeBoxOffset(
+    requestedScrollX, layout.contentWidth, NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width,
+  )
   const [targetQuickbarSlot, setTargetQuickbarSlot] = useState<number | null>(null)
   const [drag, setDrag] = useState<SkillBookDragState | null>(null)
-  const [hoveredSkillId, setHoveredSkillId] = useState<number | null>(null)
+  const [hoveredSkill, setHoveredSkill] = useState<SkillBookHoverState | null>(null)
+  const hoveredSkillId = hoveredSkill?.skillId ?? null
   const [pullOffBurst, setPullOffBurst] = useState<SkillBookPullOffBurstState | null>(null)
   const [openProgress, setOpenProgress] = useState(0)
   const [phase, setPhase] = useState<'opening' | 'settled' | 'closing'>('opening')
@@ -121,6 +139,7 @@ function SkillBookSurface({
   const closeCompletedRef = useRef(false)
   const closeStartedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
+  const panRef = useRef<{ pointerId: number; pointerX: number; scrollX: number } | null>(null)
   const hudProgress = nativeOptionalBookHudProgress(openProgress, inventoryScreenOpen)
   const presentation = useMemo((): SkillBookRendererPresentation => ({
     belt: beltEntries,
@@ -129,19 +148,34 @@ function SkillBookSurface({
     economy,
     element,
     hoveredSkillId,
+    hoveredRootSkillId: hoveredSkill?.rootSkillId ?? null,
     hudProgress,
     openProgress,
     placements,
     progression,
+    scrollX,
+    showHelp: layout.rowCount < 2,
     targetQuickbarSlot,
-  }), [beltEntries, drag, economy, element, hoveredSkillId, hudProgress,
-    openProgress, placements, progression, targetQuickbarSlot])
+  }), [beltEntries, drag, economy, element, hoveredSkill, hoveredSkillId, hudProgress,
+    layout.rowCount, openProgress, placements, progression, scrollX, targetQuickbarSlot])
   const presentationRef = useRef(presentation)
   presentationRef.current = presentation
 
   useLayoutEffect(() => {
     setNativeModalSlideProgress('skills', 0)
+    return () => setNativeSkillViewportOffsetX(0)
   }, [])
+
+  useLayoutEffect(() => {
+    setNativeSkillViewportOffsetX(scrollX)
+    if (panRef.current) panRef.current.scrollX = scrollX
+  }, [scrollX])
+
+  useLayoutEffect(() => {
+    setRequestedScrollX((current) => clampNativeUiSwipeBoxOffset(
+      current, layout.contentWidth, NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width,
+    ))
+  }, [layout.contentWidth])
 
   useEffect(() => subscribeGamePresentationFrames((nowMs) => {
     rendererRef.current?.render(nowMs)
@@ -215,6 +249,7 @@ function SkillBookSurface({
     if (closeStartedRef.current) return
     closeStartedRef.current = true
     setDrag(null)
+    panRef.current = null
     setTargetQuickbarSlot(null)
     onCloseStart?.()
     audio.playSound('open-panel')
@@ -243,6 +278,27 @@ function SkillBookSurface({
       beginClose('inventory')
       return
     }
+    const maximumScrollX = Math.max(0, layout.contentWidth - NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width)
+    if (maximumScrollX > 0) {
+      let next: number | null = null
+      switch (event.key) {
+        case 'Home': next = 0; break
+        case 'End': next = maximumScrollX; break
+        case 'ArrowLeft': next = scrollX - NATIVE_UI_SWIPE_BOX.wheelStep; break
+        case 'ArrowRight': next = scrollX + NATIVE_UI_SWIPE_BOX.wheelStep; break
+        case 'PageUp': next = scrollX - NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width; break
+        case 'PageDown': next = scrollX + NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width; break
+      }
+      if (next !== null) {
+        event.preventDefault()
+        event.stopPropagation()
+        setHoveredSkill(null)
+        setRequestedScrollX(clampNativeUiSwipeBoxOffset(
+          next, layout.contentWidth, NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width,
+        ))
+        return
+      }
+    }
     const slot = event.key >= '1' && event.key <= '7' ? Number(event.key) : null
     if (slot !== null) {
       event.preventDefault()
@@ -264,7 +320,7 @@ function SkillBookSurface({
       className="skill-book-overlay"
       data-open-progress={openProgress}
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) setHoveredSkillId(null)
+        if (event.target === event.currentTarget) setHoveredSkill(null)
       }}
     >
       <div
@@ -288,11 +344,13 @@ function SkillBookSurface({
         data-drag-position-x={drag?.position.x ?? ''}
         data-drag-position-y={drag?.position.y ?? ''}
         data-hovered-skill-id={hoveredSkillId ?? ''}
+        data-skill-book-scroll-x={scrollX}
+        data-skill-book-scroll-max={Math.max(0, layout.contentWidth - NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width)}
         data-input-suspended={inputSuspended}
         data-renderer-state={rendererState}
         onKeyDown={handleKeyDown}
         onPointerDown={(event) => {
-          if (event.target === event.currentTarget) setHoveredSkillId(null)
+          if (event.target === event.currentTarget) setHoveredSkill(null)
         }}
       >
         <div ref={hostRef} className="skill-book-renderer" aria-hidden />
@@ -314,54 +372,107 @@ function SkillBookSurface({
           style={{ height: tome.height, left: tome.x, top: tome.y, width: tome.width }}
           onClick={() => beginClose()}
         />
-        <div className="skill-book-pages" aria-label="Learned skill dependency pages">
-          {placements.map(({ page, x, y }) => (
-            <section
-              key={page.rootSkillId}
-              className="skill-book-page-actions"
-              data-root-skill-id={page.rootSkillId}
-              style={{ height: page.height, left: x, top: y, width: page.width }}
-            >
-              {page.rows.map((row, index) => (
-                <SkillBookEntry
-                  key={row.id}
-                  index={index}
-                  row={row}
-                  selected={row.id === progression.selectedPrimarySkillId
-                    || progression.concentrationSkillIds.includes(row.id)}
-                  nativePointForClient={nativePointForClient}
-                  onDragEnd={() => {
-                    setDrag(null)
-                    setTargetQuickbarSlot(null)
-                  }}
-                  onDragMove={(skillId, position) => {
-                    setHoveredSkillId(null)
-                    setDrag({ position, skillId })
-                    setTargetQuickbarSlot(nativeSkillQuickbarDropSlot(position, belt))
-                  }}
-                  onHover={setHoveredSkillId}
-                  onPointerDrop={(skillId, position) => {
-                    const slot = nativeSkillQuickbarDropSlot(position, belt)
-                    if (slot !== null) assign(skillId, slot)
-                    else {
+        <div
+          className="skill-book-viewport"
+          data-scrollable={layout.contentWidth > NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width}
+          style={{
+            left: NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.x,
+            top: NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.y,
+            width: NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width,
+            height: NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.height,
+          }}
+          onPointerDown={(event) => {
+            if (panRef.current || event.button !== 0
+              || (event.target instanceof Element && event.target.closest('button'))) return
+            const point = nativePointForClient(event.clientX, event.clientY)
+            if (!point) return
+            setHoveredSkill(null)
+            panRef.current = { pointerId: event.pointerId, pointerX: point.x, scrollX }
+            event.currentTarget.setPointerCapture(event.pointerId)
+          }}
+          onPointerMove={(event) => {
+            const pan = panRef.current
+            if (!pan || pan.pointerId !== event.pointerId) return
+            const point = nativePointForClient(event.clientX, event.clientY)
+            if (!point) return
+            const next = dragNativeUiSwipeBoxOffset(pan.scrollX, pan.pointerX, point.x,
+              layout.contentWidth, NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width)
+            pan.pointerX = point.x
+            pan.scrollX = next
+            setRequestedScrollX(next)
+          }}
+          onPointerUp={(event) => {
+            if (panRef.current?.pointerId !== event.pointerId) return
+            panRef.current = null
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }
+          }}
+          onPointerCancel={(event) => {
+            if (panRef.current?.pointerId === event.pointerId) panRef.current = null
+          }}
+          onLostPointerCapture={(event) => {
+            if (panRef.current?.pointerId === event.pointerId) panRef.current = null
+          }}
+        >
+          <div
+            className="skill-book-pages"
+            aria-label="Learned skill dependency pages"
+            style={{ transform: `translateX(${-scrollX}px)` }}
+          >
+            {placements.map(({ page, x, y }) => (
+              <section
+                key={page.rootSkillId}
+                className="skill-book-page-actions"
+                data-root-skill-id={page.rootSkillId}
+                style={{ height: page.height, left: x, top: y - NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.y, width: page.width }}
+              >
+                {page.rows.map((row, index) => (
+                  <SkillBookEntry
+                    key={row.id}
+                    index={index}
+                    row={row}
+                    selected={row.id === progression.selectedPrimarySkillId
+                      || progression.concentrationSkillIds.includes(row.id)}
+                    nativePointForClient={nativePointForClient}
+                    onDragEnd={() => {
                       setDrag(null)
                       setTargetQuickbarSlot(null)
-                    }
-                  }}
-                  onSelectConcentration={() => {
-                    onSelectConcentration(row.id)
-                    audio.playSound('click')
-                    audio.playSound('concentrate')
-                  }}
-                  onSelectPrimary={() => {
-                    onSelectPrimarySkill(row.id)
-                    audio.playSound('click')
-                  }}
-                  concentrationLocked={progression.mindChugTicksRemaining > 0}
-                />
-              ))}
-            </section>
-          ))}
+                    }}
+                    onDragMove={(skillId, position) => {
+                      setHoveredSkill(null)
+                      setDrag({ position, skillId })
+                      setTargetQuickbarSlot(nativeSkillQuickbarDropSlot(position, belt))
+                    }}
+                    onHover={(skillId) => setHoveredSkill(skillId === null
+                      ? null
+                      : { rootSkillId: page.rootSkillId, skillId })}
+                    onReveal={() => setRequestedScrollX((current) => nativeSkillBookColumnScrollOffset(
+                      current, { page, x, y }, index, layout.contentWidth,
+                    ))}
+                    onPointerDrop={(skillId, position) => {
+                      const slot = nativeSkillQuickbarDropSlot(position, belt)
+                      if (slot !== null) assign(skillId, slot)
+                      else {
+                        setDrag(null)
+                        setTargetQuickbarSlot(null)
+                      }
+                    }}
+                    onSelectConcentration={() => {
+                      onSelectConcentration(row.id)
+                      audio.playSound('click')
+                      audio.playSound('concentrate')
+                    }}
+                    onSelectPrimary={() => {
+                      onSelectPrimarySkill(row.id)
+                      audio.playSound('click')
+                    }}
+                    concentrationLocked={progression.mindChugTicksRemaining > 0}
+                  />
+                ))}
+              </section>
+            ))}
+          </div>
         </div>
         <span className="skill-book-semantic-help">
           Hover over a skill icon for more information about a skill.
@@ -412,6 +523,7 @@ function SkillBookEntry({
   onDragMove,
   onHover,
   onPointerDrop,
+  onReveal,
   onSelectConcentration,
   onSelectPrimary,
   row,
@@ -424,6 +536,7 @@ function SkillBookEntry({
   onDragMove: (skillId: number, position: NativeHudPoint) => void
   onHover: (skillId: number | null) => void
   onPointerDrop: (skillId: number, position: NativeHudPoint) => void
+  onReveal: () => void
   onSelectConcentration: () => void
   onSelectPrimary: () => void
   row: NativeSkillBookRow
@@ -480,7 +593,10 @@ function SkillBookEntry({
         if (row.category === 1) onSelectPrimary()
         if (row.category === 3 && !selected && !concentrationLocked) onSelectConcentration()
       }}
-      onFocus={() => onHover(row.id)}
+      onFocus={() => {
+        onReveal()
+        onHover(row.id)
+      }}
       onPointerEnter={() => onHover(row.id)}
       onPointerLeave={(event) => {
         if (event.pointerType === 'mouse') onHover(null)

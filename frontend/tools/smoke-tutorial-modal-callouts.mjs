@@ -470,6 +470,7 @@ function expectedPlans(state, playerId, stage, coarsePointer, modalProgress = 1)
     coarsePointer,
     modalProgress,
     progression: player.progression,
+    skillViewportOffsetX: 0,
     resumeBindingLabel: gameBindingLabel(stage === 10 ? INVENTORY_KEY : SKILLS_KEY),
     stage,
   })

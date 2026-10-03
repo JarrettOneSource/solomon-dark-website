@@ -40,6 +40,15 @@
   pointer-events: none;
 }
 
+.skill-book-viewport {
+  position: absolute;
+  overflow: clip;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.skill-book-viewport[data-scrollable='true'] { cursor: grab; }
+
 .skill-book-close-action,
 .skill-book-inventory-action {
   position: absolute;

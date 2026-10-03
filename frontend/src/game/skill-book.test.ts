@@ -27,6 +27,8 @@ import {
   NATIVE_SKILL_PAGE_HEIGHT,
   formatNativeSkillBookTooltipLine,
   nativeSkillBookPagePlacements,
+  nativeSkillBookPageLayout,
+  nativeSkillBookColumnScrollOffset,
   nativeSkillBookPages,
   nativeSkillBookRows,
   nativeSkillBookTooltipLines,
@@ -170,6 +172,69 @@ test('uses the recovered page dimensions, wrapping, and common centering', () =>
     [200, 372],
     [1040, 372],
   ])
+})
+
+test('keeps the captured high-count dependency pages in two native rows', () => {
+  // These widths and root IDs come from the built 27-owned-row grant/Weld
+  // baseline. Expected packing comes from retail builder 0x0066B380.
+  const dimensions: readonly (readonly [number, number])[] = [
+    [16, 680], [21, 200], [56, 200], [69, 200], [67, 200],
+    [59, 360], [63, 200], [57, 200], [40, 680], [74, 200],
+    [62, 200], [64, 200], [65, 520], [66, 200], [8, 520], [52, 200],
+  ]
+  const pages = dimensions.map(([rootSkillId, width]): NativeSkillBookPage => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT,
+    rootSkillId,
+    rows: [],
+    width,
+  }))
+  const placements = nativeSkillBookPagePlacements(pages)
+  assert.deepEqual(placements.map(({ page }) => page.rootSkillId), pages.map(page => page.rootSkillId))
+  assert.deepEqual(placements.map(({ x, y }) => [x, y]), [
+    [0, 72], [680, 72], [880, 72], [1080, 72], [1280, 72],
+    [0, 372], [360, 372], [560, 372], [760, 372], [1440, 372],
+    [1480, 72], [1640, 372], [1680, 72], [1840, 372], [2040, 372], [2200, 72],
+  ])
+})
+
+test('balances horizontal overflow into the shorter row, choosing row two at equal extents', () => {
+  const pages: NativeSkillBookPage[] = [840, 840, 840, 200, 200].map((width, index) => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT,
+    rootSkillId: 8 + index,
+    rows: [],
+    width,
+  }))
+  assert.deepEqual(nativeSkillBookPagePlacements(pages).map(({ x, y }) => [x, y]), [
+    [0, 72], [0, 372], [840, 372], [840, 72], [1040, 72],
+  ])
+})
+
+test('keeps native single-row centering and exposes the bounded horizontal extent', () => {
+  const starter = nativeSkillBookPageLayout(nativeSkillBookPages(baseline))
+  assert.equal(starter.rowCount, 1)
+  assert.equal(starter.contentWidth, 400)
+  assert.deepEqual(starter.placements.map(({ x, y }) => [x, y]), [[600, 280], [800, 280]])
+  const empty = nativeSkillBookPageLayout([])
+  assert.equal(empty.rowCount, 0)
+  assert.equal(empty.contentWidth, 0)
+  assert.deepEqual(empty.placements, [])
+  const overflowing = nativeSkillBookPageLayout([840, 840, 840].map((width, index) => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT, rootSkillId: 8 + index, rows: [], width,
+  })))
+  assert.equal(overflowing.rowCount, 2)
+  assert.equal(overflowing.contentWidth, 1680)
+})
+
+test('keyboard focus reveals a full native skill column and clamps stale offsets after membership shrinks', () => {
+  const page: NativeSkillBookPage = {
+    height: NATIVE_SKILL_PAGE_HEIGHT, rootSkillId: 8, rows: [], width: 520,
+  }
+  const placement = { page, x: 2040, y: 372 }
+  assert.equal(nativeSkillBookColumnScrollOffset(0, placement, 0, 2560), 640)
+  assert.equal(nativeSkillBookColumnScrollOffset(0, placement, 1, 2560), 800)
+  assert.equal(nativeSkillBookColumnScrollOffset(0, placement, 2, 2560), 960)
+  assert.equal(nativeSkillBookColumnScrollOffset(960, { page, x: 0, y: 72 }, 0, 2560), 0)
+  assert.equal(nativeSkillBookColumnScrollOffset(960, { page, x: 600, y: 280 }, 0, 400), 0)
 })
 
 test('uses the native SkillDragger threshold and maximum-overlap belt hit model', () => {
