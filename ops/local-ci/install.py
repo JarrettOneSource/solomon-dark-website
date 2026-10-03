@@ -45,7 +45,8 @@ def registration_definition(root):
         'ProgramArguments': ['/bin/sh', '-c',
                              'test -f "$1" || exit 0; exec /usr/bin/python3 "$1" --root "$2"',
                              'solomon-cicd', str(root / 'current/run-worker.py'), str(root)],
-        'RunAtLoad': True, 'StartInterval': 60, 'ProcessType': 'Background', 'Nice': 10,
+        # Standard avoids the measured Background slowdown in the renderer workload.
+        'RunAtLoad': True, 'StartInterval': 60, 'ProcessType': 'Standard', 'Nice': 10,
         'LowPriorityIO': True, 'ThrottleInterval': 10, 'ExitTimeOut': 45,
     }
 

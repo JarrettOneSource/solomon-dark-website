@@ -18,6 +18,9 @@ idle agent servers. Heavy work started afterward must still use the shared
 lease convention; the check cannot prevent a later nonparticipating start.
 Signals terminate the owned process group, wait for bounded shutdown, and
 release only the matching owned lease. The 90-minute invocation limit remains.
+The native job uses Standard classification with the existing nice and I/O
+priority. This retains macOS's light resource limits while avoiding the measured
+Background-class slowdown in the canonical renderer workload.
 
 Pinned tools, cache, temporary files, source worktrees, immutable release
 artifacts, worker versions, logs and status all live on the SSD. Configure
@@ -52,6 +55,9 @@ remains the automatic app reload edge.
 Complete worker versions are installed atomically behind `current`. A validated
 component update is admitted only after the full gate, discards the artifact
 built by the older worker, and defers deployment to the next invocation.
+The installer in the admitted bundle constructs that version's complete
+definition. Automatic self-update replaces worker components without stopping
+its own scheduler; native registration policy is applied by an idle installation.
 The replacement launcher and installer are part of the same version, so an old
 Linux-only worker cannot overwrite the Mac installation. The bootstrap launcher
 waits while published main still predates this migration. Keep the current and

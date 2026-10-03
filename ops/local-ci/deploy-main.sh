@@ -156,7 +156,8 @@ install_validated_worker() {
     for name in deploy-main.sh run-worker.py install.py; do
         [[ -f "$worker_temp/Deploy/M5Worker/$name" ]] || fail "validated worker lacks $name"
     done
-    result="$(python3 "$ci_root/current/install.py" --root "$ci_root" \
+    # The admitted installer owns its new version's definition, not the older running code.
+    result="$(python3 "$worker_temp/Deploy/M5Worker/install.py" --root "$ci_root" \
         --source "$worker_temp/Deploy/M5Worker" --no-bootstrap)" || fail "validated worker installation failed"
     rm -rf -- "$worker_temp" || fail "validated worker staging cleanup failed"
     worker_temp=""
