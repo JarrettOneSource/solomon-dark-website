@@ -4361,7 +4361,7 @@ test('Skeleton death hands off immediately to exact independent shatter actors',
   assert.ok(result.store.deathEffects
     .filter(({ kind }) => kind === 'bouncer')
     .every(({ opacityTimer, shadow }) => (
-      Math.abs(opacityTimer - 9.985) < 1e-12 && shadow
+      opacityTimer === Math.fround(9.985) && shadow
     )))
   const star = result.store.deathEffects.find(({ kind }) => kind === 'unbind')
   assert.ok(star)

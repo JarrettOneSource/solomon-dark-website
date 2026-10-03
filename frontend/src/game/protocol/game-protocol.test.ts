@@ -1297,6 +1297,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
+    corpseConsumed: false,
     advancedUnlocks: Array<boolean>(8).fill(false),
     weldBuildId: null,
     weldComponentRanks: null,

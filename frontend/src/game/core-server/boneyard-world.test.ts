@@ -1983,7 +1983,7 @@ test('retains every native group-four scene-object family for Earthquake wobble 
   ]
 
   assert.deepEqual(createBoneyardWorld(loaded).earthquakeSceneryTargets, [
-    { id: 0, position: { x: 80, y: 90 }, typeId: 2001 },
+    { id: 0, position: { x: 80, y: 90 }, typeId: 2001, secondaryVariant: 0 },
     { id: 1, position: { x: 120, y: 130 }, typeId: 2029 },
     { id: 2, position: { x: 160, y: 170 }, typeId: 2040 },
     { id: 3, position: { x: 200, y: 210 }, typeId: 2061 },

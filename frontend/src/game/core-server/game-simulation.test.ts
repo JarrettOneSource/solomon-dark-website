@@ -4657,7 +4657,8 @@ test('Ether Drain pulls grounded world Bouncers and consumes them without a pick
   const [grounded, airborne, consumed] = bouncers
   const prepared = bouncers.slice(0, 3).map((effect, index) => ({ ...effect,
     height: index === 1 ? -1 : 0, position: { x: [430, 450, 409][index]!, y: 250 },
-    bounceVelocity: 0, verticalVelocity: 0, velocity: { x: 0, y: 0 },
+    bounceVelocity: index === 1 ? -2 : 0, verticalVelocity: index === 1 ? -2 : 0,
+    angularVelocityDeg: 0, velocity: { x: 0, y: 0 },
   }))
   state = { ...state, world: { ...state.world, loot: { ...state.world.loot, actors: [] },
     enemies: { ...state.world.enemies, deathEffects: prepared } } }
@@ -6182,7 +6183,14 @@ test('one dead player spectates until all-dead Game Over returns the session thr
       archiveObserved = true
       return
     }
-    assert.equal(state.world, frozenWorld)
+    // Gameplay stays frozen; independently owned dropped Bouncers follow the
+    // continuing death clock, just like the native maintenance lane.
+    for (const [key, value] of Object.entries(frozenWorld)) {
+      if (key !== 'deathWeapons') assert.equal(Reflect.get(state.world, key), value, key)
+    }
+    if (state.world.kind !== 'boneyard' || frozenWorld.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.equal(state.world.deathWeapons.length, frozenWorld.deathWeapons.length)
+    assert.ok(state.world.deathWeapons.every((weapon, index) => weapon.ageTicks > frozenWorld.deathWeapons[index]!.ageTicks))
   }
   for (let age = 1; age <= 254; age += 1) {
     state = stepGameSimulationTick(state, {

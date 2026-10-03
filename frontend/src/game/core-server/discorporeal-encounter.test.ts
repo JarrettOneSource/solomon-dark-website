@@ -290,7 +290,7 @@ test('mega UltraBanish uses background Bouncers with the native long fade and se
     assert.equal(offBone.length, (remainingTicks - 1) % 3 === 0 ? 1 : 0)
     if (offBone.length > 0) {
       assert.deepEqual(offBone[0], { ...onBone[0]!, shadow: false })
-      assert.equal(offBone[0]!.opacityTimer, 20 - offBone[0]!.alphaLossPerTick)
+      assert.equal(offBone[0]!.opacityTimer, Math.fround(20 - offBone[0]!.alphaLossPerTick))
     }
     const switched = step(on, { enhancedEffects: false }).store
     const retained = switched.deathEffects.find(effect => effect.id === onBone[0]!.id)
