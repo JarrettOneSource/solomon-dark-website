@@ -12,6 +12,10 @@ The worker fetches published `origin/main` from its own bare mirror without
 GitHub credentials. It holds a native deployment lock and the shared exclusive
 M5 lease at `/Volumes/Drive/codex-acceptance/solomon-heavy-lease`. A foreign lease
 defers the invocation without starting validation or changing that ownership.
+An already-running native Clang compiler also defers admission when no
+cooperative lease exists. This check leaves foreign work untouched and ignores
+idle agent servers. Heavy work started afterward must still use the shared
+lease convention; the check cannot prevent a later nonparticipating start.
 Signals terminate the owned process group, wait for bounded shutdown, and
 release only the matching owned lease. The 90-minute invocation limit remains.
 

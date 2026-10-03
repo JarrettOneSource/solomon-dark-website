@@ -114,6 +114,58 @@ class ComputeOwnershipTests(unittest.TestCase):
 
 
 class MacInstallationTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'native compiler admission')
+    def test_foreign_waiting_compiler_defers_ci_until_it_finishes(self):
+        import time
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ci'
+            worker = worker_fixture(root)
+            marker = root / 'validation-started'
+            worker.write_text('touch "$SDR_DEPLOY_ROOT/validation-started"\n')
+            compiler = subprocess.Popen(['/usr/bin/clang', '-x', 'c', '-fsyntax-only', '-'],
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    state = subprocess.run(['/bin/ps', '-p', str(compiler.pid), '-o', 'comm='], capture_output=True, text=True)
+                    if Path(state.stdout.strip()).name in ('clang', 'clang++'):
+                        break
+                    time.sleep(0.02)
+                else:
+                    self.fail('owned waiting compiler did not become ready')
+                with patch.object(runner, 'LEASE', Path(directory) / 'lease'):
+                    self.assertEqual(runner.run_once(root), 0)
+                    self.assertFalse(marker.exists(), 'CI work started alongside the compiler')
+                    self.assertIsNone(compiler.poll(), 'CI touched the foreign compiler')
+                    status = json.loads((root / 'state/status.json').read_text())
+                    self.assertEqual(status['state'], 'deferred')
+                    self.assertEqual(status['reason'], 'foreign build compiler active')
+                    compiler.communicate(input=b'int main(void) { return 0; }\n', timeout=10)
+                    self.assertEqual(compiler.returncode, 0)
+                    self.assertEqual(runner.run_once(root), 0)
+                self.assertTrue(marker.exists(), 'CI did not recover after the compiler ended')
+            finally:
+                if compiler.poll() is None:
+                    compiler.communicate(input=b'int main(void) { return 0; }\n', timeout=10)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'native process admission')
+    def test_idle_node_server_does_not_block_ci_or_get_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ci'
+            worker = worker_fixture(root)
+            marker = root / 'validation-started'
+            worker.write_text('touch "$SDR_DEPLOY_ROOT/validation-started"\n')
+            server = subprocess.Popen(['node', '-e', 'console.log("ready"); process.stdin.resume()'],
+                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                self.assertEqual(server.stdout.readline(), b'ready\n')
+                with patch.object(runner, 'LEASE', Path(directory) / 'lease'):
+                    self.assertEqual(runner.run_once(root), 0)
+                self.assertTrue(marker.exists())
+                self.assertIsNone(server.poll(), 'CI stopped an unrelated idle server')
+            finally:
+                server.communicate(input=b'', timeout=10)
+
     @unittest.skipUnless(sys.platform == 'darwin', 'native launchd registration')
     def test_native_registration_defers_absent_entry_and_runs_when_it_returns(self):
         import time

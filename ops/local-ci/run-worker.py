@@ -111,6 +111,19 @@ def group_active(group_id):
                for row in rows if len(parts := row.split()) == 2)
 
 
+def active_compilers():
+    rows = subprocess.check_output(['/bin/ps', '-axo', 'pid=,stat=,comm='], text=True).splitlines()
+    compilers = []
+    for row in rows:
+        parts = row.split(None, 2)
+        if len(parts) != 3 or parts[1].startswith('Z'):
+            continue
+        name = Path(parts[2]).name
+        if name in ('clang', 'clang++'):
+            compilers.append({'pid': int(parts[0]), 'name': name})
+    return compilers
+
+
 def stop_group(child):
     """A finished shell can still have owned compiler/browser descendants."""
     try:
@@ -146,6 +159,11 @@ def run_once(root):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print('Another CI invocation is active; deferred.')
+            return 0
+        compilers = active_compilers()
+        if compilers:
+            write_json(root / 'state/status.json', {'state': 'deferred', 'reason': 'foreign build compiler active',
+                                                   'compilers': compilers[:3], 'at_utc': now()})
             return 0
         invocation = uuid.uuid4().hex
         owner = {'task_id': 'solomon-cicd', 'worker': 'solomon-cicd', 'root': str(root), 'pid': os.getpid(),
