@@ -261,3 +261,54 @@ remote/Student/scenery overlaps, camera/settings and region-return behavior,
 a real built game journey, the final current-main exact all-mode gate,
 normal publication and managed live deployment, and both-device cleanup.
 This focused result is not a final report completion or a production claim.
+
+### Maintained member and built visual receipts — 2026-10-03
+
+Clean candidate `428668a7a5e8bea7512357a9115890977c65b0c1`, tree
+`c5adf6d7c388585f012df54a28ffffbd5e23a023`, matched all `7,256` tracked M2/M5
+files, manifest
+`9c663ba5708356c4b3fc22f597932167f41e2b6a1994743209525e9b678fc2d5`.
+The maintained public-renderer smoke passed `532` cases at `18:12:35Z`.
+Its real ambient producer supplies twelve samples: cast ticks `0..7`, release
+ticks `268`, `270`, `300`, and idle tick `500`, including the two live
+transient painter registrations. It observed all four Teacher body frames,
+local/guest/Student overlap, and camera FOV `80/100/130` with the applicable
+Enhanced Effects variant. Every case retained nonempty opaque-actor and exposed
+rune controls; zero opaque pixels changed above tolerance and the maximum
+channel difference was one. Browser and failed-response arrays were empty.
+
+The actual production build passed at `18:18:45Z`. Its authenticated local
+Node-host/browser Teacher visual journey passed at `19:24:17Z`, using normal
+keyboard input at the valid east upper-arc `(625,670)` and opposite-row
+`(625,790)` locations. `110` live samples observed body frames `0..3` and a
+release. Actual upper-arc positions ranged X `616.129..625.859`, Y
+`665.583..677.975`. Both full-scene screenshots retain the pale ring and native
+architecture, with the ring behind the nearby wizard. Console, page and
+failed-response arrays were empty. This is one real built local session;
+guest and Student pixel coverage comes from declared real-renderer snapshots,
+not a claim of multiple rendered live peers.
+
+The failed driver attempts remain qualified: a missing `/game` endpoint caused
+an initial handshake 404; the corrected generic NPC-selector journey entered
+the Hub but its unchanged speech `Skip` control detached; one visual route
+ran into Teacher's collision circle; a four-unit arrival tolerance could not
+reach the driver's ten-unit route grid. The successful visual journey used
+the established twelve-unit allowance without changing its thirty-unit visual
+position oracle or changing gameplay.
+
+The separate region-return driver failed at `19:24:49Z` before entering the
+Hub because it required a tutorial prompt that was absent. Its entry helper
+also omitted the current first College-office flow. The already successful
+NPC entry implementation is now shared through `enterHubForSmoke` in
+`hub-smoke-navigation.mjs`; the NPC and region drivers call that one
+implementation. This test-driver correction and the maintained regression's
+normal-rune-visibility assertion are later source changes and remain unrun.
+No region-return success is claimed by the built visual result.
+
+The final acceptance lease was cleaned and released at `19:33:32Z`, before
+its `19:34:03Z` bound. Own processes were absent, all twenty-four monitored
+home entries/immediate children were unchanged, and private temporary/profile
+data was cleared. The full unchanged canonical gate, corrected region-return
+journey, final source acceptance, normal publication/managed live deployment
+and task cleanup remain pending. The previous source-qualified results remain
+valid; later test-driver/doc bytes need their own exact acceptance.

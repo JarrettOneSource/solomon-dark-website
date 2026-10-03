@@ -17,6 +17,7 @@ import {
 } from '../src/game/core-kernels/native-hub-world-membership.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { hubActorDepth } from '../src/game/hub-depth.ts'
+import { enterHubForSmoke } from './hub-smoke-navigation.mjs'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4187'
 const screenshotRoot = process.env.SDR_GAME_HUB_ROOM_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-room'
@@ -225,33 +226,7 @@ async function provisionProductionRuntime() {
 }
 
 async function enterHub(page) {
-  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
-  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
-  await tutorialPrompt.waitFor({ state: 'visible', timeout: 30_000 })
-  await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
-  await tutorialPrompt.waitFor({ state: 'hidden', timeout: 30_000 })
-  await page.getByRole('button', { name: 'Play' }).click()
-  await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-    timeout: 30_000,
-  })
-  await page.getByRole('button', { name: /fire/i }).click()
-  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
-    timeout: 15_000,
-  })
-  await page.locator('.create-menu-discipline-arcane').click()
-  const hubScene = page.locator('.hub-scene[data-renderer-state="ready"]')
-  try {
-    await hubScene.waitFor({ timeout: 90_000 })
-  } catch (error) {
-    process.stderr.write(`${JSON.stringify({
-      body: (await page.locator('body').innerText()).slice(0, 2_000),
-      url: page.url(),
-    })}\n`)
-    throw error
-  }
-  await page.locator('.hub-world-canvas[data-hub-region="courtyard"]').waitFor({ timeout: 30_000 })
+  await enterHubForSmoke(page, baseUrl, /fire/i)
 }
 
 async function playerPosition(canvas) {

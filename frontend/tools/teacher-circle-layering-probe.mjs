@@ -69,6 +69,7 @@ export async function inspectTeacherCircleLayering({ defaults, ambientSamples })
               guest: player(fixed.players.guest, actorKind === 'guest' ? position : { x: 750, y: 850 }),
             }, world: { ...fixed.world, ambient, students: student ? [student] : [] } }
             renderer.render(frame)
+            if (!rune.visible) throw new Error('Teacher rune is hidden in the normal rendered scene')
             const actor = world.children.find(child => child.label === (student ? 'student' : 'local-player')
               && child.x === position.x && child.y === position.y)
             if (!actor) throw new Error('real player actor is missing')

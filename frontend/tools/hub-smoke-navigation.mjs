@@ -8,6 +8,69 @@ import {
 } from '../src/game/core-kernels/hub-regions.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 
+export async function enterHubForSmoke(page, baseUrl, primaryLabel = /fire/i) {
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  await declineTutorialOffer(page)
+  await page.getByRole('button', { name: 'Play' }).click()
+  await declineTutorialOffer(page)
+  await page.getByRole('button', { name: 'New Game' }).click()
+  await enterCreateAfterCollegeOffice(page)
+  await page.getByRole('button', { name: primaryLabel }).click()
+  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
+  await page.locator('.create-menu-discipline-arcane').click()
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.locator('.hub-world-canvas[data-hub-region="courtyard"]').waitFor({ timeout: 30_000 })
+}
+
+async function enterCreateAfterCollegeOffice(page) {
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"][data-story-office="true"]')
+  const first = await Promise.race([
+    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+    office.waitFor({ timeout: 90_000 }).then(() => 'office'),
+  ])
+  if (first === 'create') return
+
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, undefined, { timeout: 30_000 })
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis: frameAxis, direction: frameDirection, target: value }) => {
+      const frameValue = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[frameAxis]
+      return typeof frameValue === 'number'
+        && (frameDirection === 'at-least' ? frameValue >= value : frameValue <= value)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
+}
+
+async function declineTutorialOffer(page) {
+  const offer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await offer.isVisible()) await offer.getByRole('button', { name: 'NO' }).click()
+}
+
 export async function hubSmokePlayerPosition(canvas) {
   return canvas.evaluate((node) => ({
     x: node.__sdrHubFrame.playerX,
