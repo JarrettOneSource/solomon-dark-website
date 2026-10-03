@@ -2,18 +2,19 @@ import { resolveActorMotion, type ActorPhysicsWorld } from '../core-kernels/acto
 import {
   HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   HUB_STORY_OFFICE_POLISHER_ACTOR,
+  hubFixedActor,
   planHubParticipantMovement,
   stepHubParticipantMovement,
   type HubRegionPhysicsBody,
 } from '../core-kernels/hub-participant-movement.ts'
 import {
   createHubParticipantState,
+  isHubRegionTraversable,
   moveWithHubRegionCollisionState,
   type HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
 import {
   PLAYER_CHARACTER_PHYSICS,
-  PLAYER_CHARACTER_RADIUS,
   commitPlayerCharacterTick,
   planPlayerCharacterTick,
   type PlayerCharacterInput,
@@ -33,6 +34,8 @@ export interface HubCharacterPredictionOptions {
   readonly collegeIntroPending?: boolean
   /** The server still holds the College walker until its renderer reported ready. */
   readonly collegeIntroWaiting?: boolean
+  /** The immovable Skorcha body currently present in the latest Hub snapshot. */
+  readonly skorchaPosition?: Readonly<Vector2> | null
 }
 
 const LOCAL_PLAYER_BODY_ID = 'player-local'
@@ -50,11 +53,13 @@ const SCRIPTED_PHYSICS_WORLD: ActorPhysicsWorld = {
   }),
 }
 
-function resolveScriptedMovement(
+function resolveFixedActorMovement(
   previous: PlayerCharacterState,
   plan: PlayerCharacterMovementPlan,
   participant: Readonly<HubParticipantState>,
   collegeIntroPending: boolean,
+  world: ActorPhysicsWorld,
+  skorchaPosition: Readonly<Vector2> | null,
 ): Vector2 {
   const bodies: HubRegionPhysicsBody[] = [{
     delta: plan.delta,
@@ -69,7 +74,10 @@ function resolveScriptedMovement(
   if (collegeIntroPending && participant.region === 'office') {
     bodies.push(HUB_STORY_OFFICE_POLISHER_ACTOR)
   }
-  const resolved = resolveActorMotion(bodies, SCRIPTED_PHYSICS_WORLD, () => true)
+  if (skorchaPosition && participant.region === 'courtyard') {
+    bodies.push(hubFixedActor('skorcha', 'courtyard', skorchaPosition.x, skorchaPosition.y, 10))
+  }
+  const resolved = resolveActorMotion(bodies, world, () => true)
   const player = resolved.find((body) => body.id === LOCAL_PLAYER_BODY_ID)
   if (!player) throw new Error('Hub prediction lost the local player body')
   return player.position
@@ -87,25 +95,29 @@ export function predictPlayerCharacterInHub(
   const collegeIntroWaiting = options.collegeIntroWaiting ?? false
   const movement = planHubParticipantMovement(previous, participant, collegeIntroWaiting)
   let nextCollisionRngState = collisionRngState
-  let committed: PlayerCharacterState
-  if (movement.plan) {
-    committed = commitPlayerCharacterTick(
-      previous,
-      movement.plan,
-      resolveScriptedMovement(previous, movement.plan, participant, collegeIntroPending),
-    )
-  } else {
-    const plan = planPlayerCharacterTick(previous, input, movementScale)
-    const moved = moveWithHubRegionCollisionState(
-      participant.region,
-      previous.position,
-      plan.delta,
-      PLAYER_CHARACTER_RADIUS,
-      collisionRngState,
-    )
-    nextCollisionRngState = moved.rngState
-    committed = commitPlayerCharacterTick(previous, plan, moved.position)
+  const plan = movement.plan ?? planPlayerCharacterTick(previous, input, movementScale)
+  const world: ActorPhysicsWorld = movement.plan ? SCRIPTED_PHYSICS_WORLD : {
+    canPlace: (_id, position, radius) => isHubRegionTraversable(participant.region, position, radius),
+    move: (_id, position, delta, radius) => {
+      const moved = moveWithHubRegionCollisionState(
+        participant.region,
+        position,
+        delta,
+        radius,
+        nextCollisionRngState,
+      )
+      nextCollisionRngState = moved.rngState
+      return moved.position
+    },
   }
+  const committed = commitPlayerCharacterTick(previous, plan, resolveFixedActorMovement(
+    previous,
+    plan,
+    participant,
+    collegeIntroPending,
+    world,
+    options.skorchaPosition ?? null,
+  ))
   const stepped = stepHubParticipantMovement(
     participant,
     committed,

@@ -248,6 +248,7 @@ interface PendingInput {
 
 interface LocalHubPresentationState {
   collisionRngState: number
+  skorchaPosition: { x: number; y: number } | null
   correction: { x: number; y: number }
   correctionDurationMs: number
   correctionStartedAtMs: number
@@ -1634,6 +1635,7 @@ export function connectGameClientSession(
       }
       localHubPresentation = {
         collisionRngState: hubSnapshot.world.collisionRngState,
+        skorchaPosition: hubSnapshot.world.skorcha ? { ...hubSnapshot.world.skorcha.position } : null,
         correction: { x: 0, y: 0 },
         correctionDurationMs: 1000 / welcome.snapshotRate,
         correctionStartedAtMs: receivedAtMs,
@@ -1670,6 +1672,7 @@ export function connectGameClientSession(
       const displayed = displayedLocalPlayer(previous, receivedAtMs)
       localHubPresentation = {
         collisionRngState: hubSnapshot.world.collisionRngState,
+        skorchaPosition: hubSnapshot.world.skorcha ? { ...hubSnapshot.world.skorcha.position } : null,
         correction: {
           x: displayed.position.x - authoritative.position.x,
           y: displayed.position.y - authoritative.position.y,
@@ -1719,6 +1722,7 @@ export function connectGameClientSession(
           {
             collegeIntroPending: state.player.economy.collegeIntroPending,
             collegeIntroWaiting: hubCollegeIntroUnstarted(state.predictedParticipant),
+            skorchaPosition: state.skorchaPosition,
           },
         )
         state.predictedParticipant = predicted.participant

@@ -17,6 +17,8 @@ import {
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import { createHubCollegeIntroParticipantState } from '../core-kernels/hub-regions.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
@@ -1693,6 +1695,54 @@ test('client prediction gives forced College movement facing priority over a sta
   ).player
   assert.equal(predicted.headingIndex, 2)
   assert.ok(predicted.position.y < player.position.y)
+})
+
+test('client prediction tracks Skorcha presence when Hub snapshots add and remove its body', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER, profile: NULL_PROFILE, credential: 'spawn-secret',
+    now: () => nowMs, transport,
+  })
+  const state = createGameSimulation({ 'player-1': CHARACTER })
+  const source = createGameSnapshot(state, 'player-1')
+  if (source.world.kind !== 'hub') throw new Error('expected a Hub snapshot')
+  const native = createHubSkorchaAtVariant(createNativeRng(123), 0)
+  const skorcha = {
+    dismissalIndex: native.dismissalIndex,
+    gesture: native.gesture,
+    gestureTicksRemaining: native.gestureTicksRemaining,
+    hatFrame: 0 as const,
+    position: { ...native.position },
+    variant: native.variant,
+  }
+  const player = { ...source.players['player-1'],
+    position: { x: native.position.x + 35.5, y: native.position.y },
+    velocity: { x: -90, y: 0 } }
+  const present = { ...source, players: { ...source.players, 'player-1': player },
+    world: { ...source.world, skorcha } }
+  receiveWelcome(transport, present)
+  const session = await connecting
+  session.sendInput(gameplayInput({ x: -1, y: 0 }))
+  nowMs += 10
+  const blocked = session.samplePresentation().players['player-1'].position
+  assert.ok(blocked.x - native.position.x >= 35)
+
+  nowMs += 50
+  receiveSnapshot(transport, { ...present,
+    players: { ...present.players, 'player-1': { ...player, position: blocked } },
+    tick: present.tick + 5, world: { ...present.world, skorcha: null },
+  }, 0)
+  nowMs += 10
+  const absent = session.samplePresentation().players['player-1'].position
+  assert.ok(absent.x < blocked.x, 'removal must let movement through the former body')
+
+  nowMs += 50
+  receiveSnapshot(transport, { ...present, tick: present.tick + 10 }, 0)
+  nowMs += 50
+  const returned = session.samplePresentation().players['player-1'].position
+  assert.ok(returned.x - native.position.x >= 35, 'the new presence must be used after reconciliation')
+  session.destroy()
 })
 
 test('client does not rewind a locally presented turn while acknowledgement is delayed', async () => {
