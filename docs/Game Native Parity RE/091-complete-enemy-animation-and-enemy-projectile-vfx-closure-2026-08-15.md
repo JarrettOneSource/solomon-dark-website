@@ -3308,7 +3308,40 @@ proved partial-lane defect, but neither that wording nor the clip establishes
 the original Firestorm occurrence. Private M5 Chrome metadata and normal
 playback completed: 15.4967 seconds, 1920 by 1114 pixels. Four paused-frame
 canvas captures were identical black and are excluded from visual evidence.
-Presented-frame or native decoder review is pending a future owned M5 slot;
-no product behavior is inferred from unavailable visual content. Original
-bytes are retained at 7,948,771 bytes, SHA-256
+Those paused captures were excluded at that checkpoint. Original bytes are
+retained at 7,948,771 bytes, SHA-256
 `82bcc3009d1c54bf24be2966c5f88e3cc9a8a1a4c21b7f1599644be857508766`.
+
+### Presented-frame review and current transport qualification
+
+The October 1 exclusive M5 comparison resolved the capture limitation without
+changing gameplay. Normal playback of the same source used
+`requestVideoFrameCallback` and presented 464 frames through the complete
+15.4967-second clip. Samples at 5.009711, 10.019422 and 14.528178 seconds showed
+distinct Boneyard combat, changing terrain/camera positions and spell/Shield
+effects; extraction errors were empty. Repeating the previous paused-seek
+script in the same private browser again yielded four identical black images.
+The source is readable; the paused capture was not valid visual evidence.
+Neither the sampled clip nor reporter wording establishes authoritative web
+severity, raw inputs, native ticks, every off-screen Spider lifetime, or the
+exact original Firestorm occurrence. No gameplay change followed from the clip.
+
+The October 2 transport 144 production journey passed on exact candidate
+`74526223439570a1b3b257e663a2130b1333fdbc`, tree
+`f5e5f2372bf95ead5a31a9def4b6f2143e5a9ec3`, after all 7,239 tracked file bytes
+were verified. It retained native Wave 7, both Shield ranks, real Silk stacks,
+pause/Last Game, corpse/decal/audio assertions and source-death isolation. All
+four cohort Spiders died, while healthy severity 3 / ten-HP restraint persisted
+for 550 idle ticks. Real held-D input retained raw velocity 89.99996948242188
+while root travel was blocked; staff damage released the Cocoon at tick 3423,
+movement resumed, and authority/wire Webbed state cleared. Page/console errors
+and failed responses were empty.
+
+Final October 3 reconciliation with published
+`49dfb71adeffa910d8d80f3103f8186d3dcf337b` preserved every one of the seven owned
+file byte streams before this factual ledger update. The upstream ten-path
+change is CI infrastructure and documentation, with no Spider/gameplay,
+transport 144 or save 47 change. Earlier focused and current transport receipts
+therefore remain qualified; the unchanged canonical all-mode gate and managed
+publication/deployment have separate final receipts. Prepared Report 66 field,
+capture and transport 145/save 48 changes remain a separate unpublished release.
