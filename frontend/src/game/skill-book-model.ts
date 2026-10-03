@@ -6,7 +6,7 @@ import {
 } from './core-kernels/player-progression.ts'
 import type { NativeHudPoint, NativeHudRect } from './native-hud-layout.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
-import { clampNativeUiSwipeBoxOffset } from './native-ui/native-ui-swipe-box.ts'
+import { clampNativeUiSwipeBoxOffset } from './native-ui/core.ts'
 
 export const NATIVE_SKILL_DRAG_THRESHOLD_SQUARED = 9
 export const NATIVE_SKILL_DRAGGER_SIZE = 40

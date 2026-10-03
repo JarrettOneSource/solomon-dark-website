@@ -52,7 +52,7 @@ import {
   clampNativeUiSwipeBoxOffset,
   dragNativeUiSwipeBoxOffset,
   NATIVE_UI_SWIPE_BOX,
-} from './native-ui/native-ui-swipe-box.ts'
+} from './native-ui/core.ts'
 import './skill-book.css'
 
 interface SkillBookProps {
