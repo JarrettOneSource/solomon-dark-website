@@ -6189,8 +6189,10 @@ test('one dead player spectates until all-dead Game Over returns the session thr
       if (key !== 'deathWeapons') assert.equal(Reflect.get(state.world, key), value, key)
     }
     if (state.world.kind !== 'boneyard' || frozenWorld.kind !== 'boneyard') throw new Error('expected Boneyard')
-    assert.equal(state.world.deathWeapons.length, frozenWorld.deathWeapons.length)
-    assert.ok(state.world.deathWeapons.every((weapon, index) => weapon.ageTicks > frozenWorld.deathWeapons[index]!.ageTicks))
+    const frozenWeapons = frozenWorld.deathWeapons
+    assert.ok(frozenWeapons.length > 0, 'the independent death-clock comparison needs actual drops')
+    assert.equal(state.world.deathWeapons.length, frozenWeapons.length)
+    assert.ok(state.world.deathWeapons.every((weapon, index) => weapon.ageTicks > frozenWeapons[index]!.ageTicks))
   }
   for (let age = 1; age <= 254; age += 1) {
     state = stepGameSimulationTick(state, {
