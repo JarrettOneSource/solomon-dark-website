@@ -178,13 +178,18 @@ try {
         await page.keyboard.press('End')
         await waitForOffset(stage, maximum)
         await page.keyboard.press('b')
-        await page.getByRole('dialog', { name: 'Inventory', exact: true }).waitFor({ timeout: 20000 })
+        const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
+        await inventory.waitFor({ timeout: 20000 })
+        await page.locator('.skill-book-stage').waitFor({ state: 'detached', timeout: 20000 })
+        await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]')
+          .waitFor({ timeout: 20000 })
         await page.keyboard.press('v')
         await stage.waitFor({ timeout: 20000 })
+        await inventory.waitFor({ state: 'detached', timeout: 20000 })
         await waitForOffset(stage, 0)
         assert.equal(progression(playerId).selectedPrimarySkillId, 8)
         await stage.locator('[data-skill-book-resume]').click()
-        await stage.waitFor({ state: 'detached', timeout: 20000 })
+        await page.locator('.skill-book-stage').waitFor({ state: 'detached', timeout: 20000 })
         receipts.push({ name, fixture: 'valid grant/Weld API; legal alternate mutually-exclusive branches; not reporter-save replay',
           ownedIds: fixture.ids, semanticEntries: entryCount, contentWidth: fixture.layout.contentWidth,
           viewportRows: 2, maximum, dragged, everyEntryFocused: true, primary: 8, concentration: concentrationId,
