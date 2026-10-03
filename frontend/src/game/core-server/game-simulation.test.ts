@@ -68,6 +68,8 @@ import {
   createNativeSecondaryPlayerState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { nativeCocoonPosition } from '../core-kernels/native-webbed.ts'
+import { applyPlayerContacts } from './player-contact-system.ts'
 import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
 import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
 import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile } from '../save/game-save-document.ts'
@@ -5314,6 +5316,128 @@ test('Ether Drain current saves reject capture markers on living or unsupported 
     assert.throws(() => restoreGameSaveDocument(JSON.stringify(document)), /capture|captured/i, invalid)
   }
 })
+
+
+for (const stacks of [1, 3]) {
+  test(`Ether Drain field displacement preserves idle ${stacks}-stack Webbed while raw walking keeps its own lane`, () => {
+    let state = withEtherDrainWebbed(etherDrainSimulation({ x: 400, y: 250 }), stacks)
+    const initial = getPlayerCharacter(state)
+    for (let tick = 0; tick < 40; tick++) state = stepGameSimulationTick(state, {})
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const pulled = getPlayerCharacter(state)
+    assert.ok(pulled.position.x > initial.position.x)
+    assert.deepEqual(pulled.velocity, initial.velocity)
+    assert.equal(pulled.gaitDegrees, initial.gaitDegrees)
+    assert.equal(state.world.enemies.webbedPlayers['local-player']!.severity, stacks)
+    if (stacks === 3) {
+      assert.equal(state.world.enemies.webbedPlayers['local-player']!.cocoonHealth, 10)
+      assert.equal(state.world.enemies.actors.filter(actor => actor.brain.family === 'cocoon').length, 1)
+    }
+    const walked = stepGameSimulationTick(state, { 'local-player': gameplayInput(1, 0) })
+    if (walked.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.ok(getPlayerCharacter(walked).velocity.x > 0)
+    assert.ok(getPlayerCharacter(walked).gaitDegrees > pulled.gaitDegrees)
+    if (stacks === 1) assert.ok(walked.world.enemies.webbedPlayers['local-player']!.severity < stacks)
+    else assert.equal(walked.world.enemies.webbedPlayers['local-player']!.severity, 3)
+  })
+}
+
+test('Ether Drain capture retires an applying Spider without clearing its healthy target-owned Cocoon', () => {
+  let state = withEtherDrainEnemy(etherDrainSimulation({ x: 400, y: 250 }), 'SPIDER')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const spider = state.world.enemies.actors[0]!
+  state = withEtherDrainWebbed(state, 3, spider.id)
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.actors.find(actor => actor.id === spider.id)?.etherDrainCaptured, true)
+  for (let tick = 0; tick < 20; tick++) state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.actors.some(actor => actor.id === spider.id), false)
+  assert.equal(state.world.enemies.webbedPlayers['local-player']!.severity, 3)
+  assert.equal(state.world.enemies.webbedPlayers['local-player']!.cocoonHealth, 10)
+  assert.equal(state.world.enemies.actors.filter(actor => actor.brain.family === 'cocoon').length, 1)
+  assert.equal(state.world.enemies.spiderRemains.length, 0)
+})
+
+for (const health of [10, .1]) {
+  test(`Ether Drain direct Cocoon damage commits the target-owned ${health}-HP web and release`, () => {
+    let state = withEtherDrainWebbed(etherDrainSimulation({ x: 400, y: 250 }), 3)
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const character = getPlayerCharacter(state)
+    const center = nativeCocoonPosition(character.position, character.headingIndex * 15)
+    const cocoon = state.world.enemies.actors.find(actor => actor.brain.family === 'cocoon')!
+    state = { ...state, world: { ...state.world, enemies: { ...state.world.enemies,
+      webbedPlayers: { 'local-player': { ...state.world.enemies.webbedPlayers['local-player']!, cocoonHealth: health } },
+    } }, secondaryAbilities: { ...state.secondaryAbilities, actors: state.secondaryAbilities.actors.map(actor =>
+      actor.kind === 'ether-drain' ? { ...actor, position: center, quantity: 0 } : actor) } }
+    const hit = stepGameSimulationTick(state, {})
+    if (hit.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.equal(hit.world.enemies.actors.find(actor => actor.id === cocoon.id)?.etherDrainCaptured, undefined)
+    if (health === 10) {
+      assert.ok(hit.world.enemies.webbedPlayers['local-player']!.cocoonHealth < health)
+      assert.ok(hit.world.enemies.webbedPlayers['local-player']!.cocoonHealth > 0)
+      assert.ok(hit.world.enemies.webbedPlayers['local-player']!.hitPulse > 0)
+    } else {
+      assert.equal(hit.world.enemies.webbedPlayers['local-player'], undefined)
+      assert.ok(hit.world.enemyEvents.some(event => event.actorId === cocoon.id && event.type === 'cocoon-released'))
+      const retired = stepGameSimulationTick(hit, {})
+      if (retired.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.equal(retired.world.enemies.actors.some(actor => actor.id === cocoon.id), false)
+    }
+  })
+}
+
+test('Ether Drain and Webbed retain field/Cocoon painter ownership through current48 and legacy47 continuation', () => {
+  let state = withEtherDrainWebbed(etherDrainSimulation({ x: 400, y: 250 }), 3)
+  for (let tick = 0; tick < 10; tick++) state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
+  const cocoon = state.world.enemies.actors.find(actor => actor.brain.family === 'cocoon')!
+  const document = createGameSaveDocument({ integrity: 'local-only',
+    loadedBoneyard: combatBoneyard('ether-drain-targets'), mods: [], modState: {}, playerId: 'local-player', state })
+  for (const version of [47, 48]) {
+    const saved = JSON.parse(document)
+    if (version === 47) {
+      saved.schemaVersion = 47
+      const simulation = saved.continuation.simulation
+      for (const progression of simulation.playerEntities.progressions) delete progression.corpseConsumed
+      delete simulation.world.deathWeapons
+      delete simulation.world.nextDeathWeaponId
+      for (const actor of simulation.secondaryAbilities.actors) delete actor.etherDrain
+    }
+    const restored = restoreGameSaveDocument(JSON.stringify(saved)).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.deepEqual(restored.world.enemies.webbedPlayers, state.world.enemies.webbedPlayers)
+    assert.deepEqual(restored.world.enemies.actors.find(actor => actor.id === cocoon.id)!.lightRegistration, cocoon.lightRegistration)
+    assert.deepEqual(restored.worldManagerOrder, state.worldManagerOrder)
+    if (version === 48) assert.deepEqual(restored.secondaryAbilities.actors.find(actor => actor.id === field.id)!.etherDrain, field.etherDrain)
+    const snapshot = gameSnapshot(createGameSnapshot(restored, 'local-player'))
+    if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+    assert.deepEqual(snapshot.world.webbedPlayers, state.world.enemies.webbedPlayers)
+    const next = stepGameSimulationTick(restored, {})
+    if (next.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.equal(next.world.enemies.webbedPlayers['local-player']!.severity, 3)
+    assert.ok(next.secondaryAbilities.actors.find(actor => actor.id === field.id)!.etherDrain!.queried
+      .some(ref => ref.kind === 'player' && ref.id === 'local-player'))
+  }
+  const invalid = JSON.parse(document)
+  invalid.continuation.simulation.world.enemies.actors.find((actor: { id: number }) => actor.id === cocoon.id).etherDrainCaptured = true
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /invalid Ether Drain capture/)
+})
+
+function withEtherDrainWebbed(state: GameSimulationState, stacks: number, sourceActorId = 0): GameSimulationState {
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  for (let index = 0; index < stacks; index++) {
+    const contact = applyPlayerContacts(state, playerCharacterRecords(state.playerEntities), [{
+      actorId: sourceActorId, playerId: 'local-player', eventId: index + 1, source: null,
+      webbedStrength: 10, physicalDamage: 1, magicDamage: 0, coldSlowTicks: 0, dazzleTicks: 0,
+      poisonDamage: 0, poisonDuration: 0,
+    }], state.tick, undefined, order.register)
+    state = { ...state, world: contact.world, playerEntities: contact.playerEntities,
+      secondaryAbilities: contact.secondaryAbilities }
+  }
+  return { ...state, worldManagerOrder: order.state() }
+}
 
 function withEtherDrainEnemy(
   state: GameSimulationState,
