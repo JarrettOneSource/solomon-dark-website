@@ -1216,3 +1216,189 @@ Boneyard with `createHubWorld`; subsequent `createBoneyardWorld` constructs
 `createBoneyardEnemyStore`. `BoneyardScene` disposes its renderer (including
 the compact grids) on unmount or a changed `loaded` world. No player/profile
 owner carries those transient records across Game Over.
+
+## 2026-10-03 — Report 56: auxiliary ground shadows and occluder ownership
+
+### Investigation state and reported contrast
+
+This is an investigation entry, not an implementation or acceptance receipt.
+Report 56 compares a wizard beside Useful Thyngs, the north arch, and the
+College statue: “Shadow does NOT display behind Circus tent or Arch, but DOES
+display behind statue.” The exact original `1554266192884146226` in thread
+`1542255501855825960` was rechecked under account `600774060439371807` on
+2026-10-03. Its wording, null edited timestamp, and three attachment IDs are
+unchanged; a bounded eight-message surrounding window contains no related
+withdrawal or correction. No completion reaction has been added.
+
+All three retained images were directly inspected. Their different positions,
+headings, camera crops, and scenery silhouettes do not establish an identical
+shadow comparison. The historical build and exact input state are unknown.
+Attachment `1554266191776714782` remains a 658-by-510 PNG, 353,076 bytes,
+SHA-256 `5ee9b9c3c9d5723256790a7f9d276069f18cde9f00de7177a614b4c609697c39`;
+its source declares WebP and 287,966 bytes, so encoding/byte equivalence is not
+claimed. Attachments `1554266192141746176` and `1554266192552665118` remain
+1164-by-740 / 1,217,854 bytes / SHA-256
+`8020fe22359d66cb23b51d39cfcf3ef43f9eb69c6e73edc3a380575a5306b271`
+and 1489-by-781 / 1,700,497 bytes / SHA-256
+`f6956ec12cda394b44a8e7a0bf6ff8936f55e945281c1d2e19d7d236a55678c9`.
+Original media and older archive snapshots are preserved.
+
+The maintained source was freshly fetched at
+`ae26c65e76d5392257cabdb1ac346432f2aac547`, tree
+`0e449d360ad45f00e01ff98b1edb4e294a9cdc3e`. Report 55's accepted Teacher
+ground owner remains present. No Website check, build, browser, stock-runtime
+probe, new disassembly, or new decompilation has run in this Report 56 phase.
+This M2 phase uses retained text/stock inputs and light PE header/RTTI/vtable
+reads only. Current-renderer pixels and the historical report's causal
+attribution remain unmeasured until an admitted M5 diagnostic phase.
+
+### Native evidence before product changes
+
+The sealed retail 0.72.5 executable is 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `00400000`. These file addresses are not fresh runtime
+pointers or ASLR observations.
+
+| Evidence | Exact source | Established fact | Confidence |
+| --- | --- | --- | --- |
+| Light PE/RTTI read | `SolomonDarkAbandonware/SolomonDark.exe`, PlayerWizard vtable `00793F74` | Body `+1C=0054BA80`, auxiliary `+28=00528AD0`, light provider `+30=005299A0`; these are separate callbacks. | high |
+| Retained instructions | `Decompiled Game/dump_vt7_vt10.log`, lines 1747–1906, `00528AD0..00528D09` | The ordinary auxiliary calls the BadGuys glyph at manager offset `3384`, record 67, at `position - 5*headingVector` and scale `1.25*actorScale`. | high |
+| Retained Courtyard decompilation | `Decompiled Game/ghidra_outputs/chase_field_offsets_20260413.txt`, lines 6771–6789 and 6880–6885 | The actor-manager walk calls every `+28` at return `0051FA67`, before seals and the main queue flush at `0051FD2D`. | high for call relationship; existing decompiler interpretation for surrounding presentation |
+| Retained Arena decompilation | same export, lines 10806–10876 | Scenery, actor, and transient managers invoke `+28` at returns `0046F8FE`, `0046F947`, and `0046F98C`, before Region multiply and the main queue. | high for call relationship |
+| Light PE/RTTI read and retained callback | Student vtable `007916DC`, `refs_dat819978.log` lines 20887–20904 | Student `+28=00502090`; its retained formula uses the same ordinary heading offset and actor-scale multiplication. The omitted glyph-register binding still needs instruction confirmation. | high for callback/formula; glyph identity pending |
+| Light PE/RTTI read and existing entry 018 | CollegeStatue vtable `00791584`, `+1C=00501490`, `+28=00501510` | College 39 is body art; College 41 is a separate multiply ground shadow with the already recovered common phase. | high for vtable and retained contract; a fresh operand read remains pending |
+| Authored bundle metadata | stock `College.bundle` (543 rows), `BadGuys.bundle` (2,509 rows); maintained `native_bundle_art.py` schema | Record 67 has a 25-by-25 logical canvas, zero center, and no outline points. Reported occluders consume registered College artwork; they do not use an inferred hull/mask. | high |
+| Current source | `world-player-view.ts`, `hub-actors.ts`, `hub-world-scene.ts`, `hub-private-room-scene.ts` | Player/Student and several NPC shadows are nested in body painter roots; statue shadow retains a raw row-derived depth while its body receives sequential queue depth. | high, static source |
+
+The `00414EA0` helper is a generic glyph transform/draw entry, also used by
+unrelated elements and effects. Its callers do not all become members of this
+ground-shadow system. Membership follows the concrete auxiliary callback,
+selected glyph, owning manager, and scene consumer, rather than address
+adjacency or every use of a generic renderer helper.
+
+### Boundary and complete current inventory
+
+The reopened boundary is native pre-world `Puppet +28` ground presentation
+consumed by College scenes, together with PlayerWizard's shared Arena consumer
+and the artwork that occludes those ground pixels. Body/attachment/death
+compositors, light-source submission, directional silhouette projection, and
+late direct Astronomer rendering retain their separate owners. The field and
+callback sweep below includes negative and dormant siblings so that a future
+fix cannot silently leave another supported auxiliary member in a body row.
+The inventory is not yet a final disposition table.
+
+| Native class/member | Vtable / `+28` | Current Website consumer or branch | Investigation disposition |
+| --- | --- | --- | --- |
+| PlayerWizard, all five element appearances, all 24 headings, local and remote | `00793F74 / 00528AD0` | Shared `PlayerWorldView` in Courtyard, all four private rooms, Arena/Tutorial Boneyards | Ordinary native contract recovered; ground ownership/position/opacity and early-death branch need measured diagnosis and port. |
+| Student, walking/reading, all headings and authored constructor scales | `007916DC / 00502090` | `HubStudentView`, live/pool/retirement branches | Separate callback/formula recovered; exact glyph/operand confirmation remains pending; current body-owned fixed-size shadow is a sibling mismatch. |
+| CollegeStatue | `00791584 / 00501510` | `HubWorldScene.statueAura`, College 41 multiply | Separate ground owner recovered; current obsolete raw depth needs measured diagnosis. |
+| PerkWitch / Hagatha | `00791664 / 00501990` | `HubHagathaView` | Callback and actor membership recovered; exact glyph binding/transform operand widths need retained or admitted instruction confirmation. |
+| Annalist / Provokatus | `00791754 / 00502180` | Courtyard `addNpc` | Same ground interval; callback sets half alpha and a distinct transform. Exact selected glyph/operands remain pending. |
+| Illuminator | `007917CC / 005022F0` | No maintained survival snapshot member | Dormant native sibling; confirm builder reachability and selected glyph before a final reasoned out-of-system disposition. |
+| PotionGuy / Fomentius | `00791844 / 00502420` | Useful Thyngs shadow College 33; body stack College 34 / 160–164 / 32 / 54–58 | Ground callback and authored kit already recovered; preserve all kit registrations and ground order. |
+| Tyrannia / Skorcha | `007918BC / 005053E0` | Optional/shared scheduled `HubSkorchaView`, both placements | Callback/body split recovered; exact glyph/scale/offset and mirroring need instruction confirmation. |
+| ItemsGuy / Luthacus | `00791934 / 00502520` | `HubCommonTraderView` | Callback/body split recovered; exact auxiliary draw remains pending. |
+| Teacher / Machinimbus | `007919AC / 00505480` | Report 55's accepted `HubTeacherView.ground`, College 13 followed by BadGuys 67 | Reuse accepted native/render evidence; preserve rune, shadow and artwork. Additional sibling integration must retain this ground interval and lifetime. |
+| CustomObject, all 18 private-room rows listed below | `00791A94 / 00505E80` | Authored room props/portraits | Callback exists separately from body `00505E50`; its actual delegation/negative branches and each region's ground caller must be recovered before changing props. |
+| ArchChancellorStanding | `00791B74 / 00506050` | Native variant; standing reachability differs from maintained seated Office actor | Record-67 helper call recovered; scale operand width and concrete population reachability pending. |
+| Dowser / Shlorio | `00791CDC / 00502CF0` | Library actor | Auxiliary transform is separate; current body-only construction has no explicit ground owner. Exact glyph selection remains pending. |
+| Memorator | `00791D54 / 00502E60` | Mortuary actor | Auxiliary heading-sensitive transform is separate; exact glyph selection and private-room order remain pending. |
+| Annalist2 | `00791EB4 / 00503060` | Native alternate/story builder | Dormant sibling; concrete reachability and selected glyph remain pending. |
+| Polisher | `00792DB4 / 00502980` | Maintained story Office policy actor | Separate ground transform; preserve policy admission/visibility and recover exact selected glyph/caller. |
+| NPC base | `007915EC / 0055C300` | Common base only | Auxiliary is a no-op, so no invented shadow. |
+| CollegeObstacle selectors 0–7 | `0079151C / 0055C300` | Eight Courtyard artwork actor roots | Auxiliary is a no-op; occluder artwork remains in its body painter. |
+| ArchChancellor / ArchChancellorDesk | `00791AFC / 0055C300`; `00791BEC / 0055C300` | Office seated actor and native desk sibling | No auxiliary shadow; body/desk art is not a substitute ground caster. |
+| Librarian | `00791C64 / 0055C300` | Library counter/body stack | No auxiliary shadow. |
+| Painting interaction actors 0, 1, 100, 3–9 | `00791DCC / 0055C300` | Mortuary dialogue roots, separate from CustomObject portrait presentation | No auxiliary shadow. Dynamic memorial portraits require their own recovered presenter classification. |
+| Astronomer/helper/assistants | direct late Courtyard program `0051C790 / 0051DBB0` | Southern render bank | Separate direct presentation after the shared Region queue, not an ordinary actor-manager `+28` member. Preserve existing shadows there. |
+| Player terminal nine-layer corpse shadow and death-weapon shadow | Player body/death compositor and registered bouncer | `PlayerWorldView.deathShadowLayers`, `PlayerDeathWeaponView` | Separate class-local/actor draw programs, already recovered in entry 097; overlap with the ordinary auxiliary lifetime must be checked without moving these passes into the ground lane. |
+| Boneyard directional scenery/enemy projections and light-provider records | entries 064 / 078 / 090 | Indexed meshes, analytic/raster lights, enemy underlays | Separate class-specific owners, not College occluder masks. Preserve Report 09 batching/performance and existing exact outline tables. |
+
+The complete reported occluder artwork inventory is the existing eight
+CollegeObstacle selectors plus the tent kit and statue body. Selector 7 is the
+north arch in Report 56's third attachment; selector 0 is the distinct large
+east arch/banner composition from the earlier layering report.
+
+| Occluder/member | World root | Authored College body program |
+| --- | --- | --- |
+| CollegeObstacle 0 | `(1458.5,320.5)` | `148..159`, all twelve registered pieces |
+| CollegeObstacle 1 | `(955.5,239.5)` | `25` |
+| CollegeObstacle 2 | `(749.5,162.5)` | `23` |
+| CollegeObstacle 3 | `(1893,490)` | `28` |
+| CollegeObstacle 4 | `(1746,534)` | `29` |
+| CollegeObstacle 5 | `(1840,715)` | `27` |
+| CollegeObstacle 6 | `(628,215)` | `20` |
+| CollegeObstacle 7 / north arch | `(956,169)` | `24` |
+| Useful Thyngs / Fomentius | `(1397,664)`, bias `-5` | Contiguous body callback `34`, actor `160..164`, front `32`, balloons `54..58`; shadow `33` is auxiliary |
+| CollegeStatue | `(961,834)` | Body `39`; multiply `41` is auxiliary |
+
+Every private CustomObject row also remains enumerated while its auxiliary
+delegation is unresolved: Mortuary `0..9`; StoreRoom `0`, `1`, `2`; Library
+`0`, `1`, `2`, `100`; Office `0`. The complete roots and room callback programs
+are retained in this entry's private-room section and
+`core-kernels/hub-private-room-layout.ts`. An absent/null visual at Library
+selector 100 is not evidence that its native auxiliary callback is a no-op.
+
+### Recovered PlayerWizard contract and pending native reads
+
+The exact retained instruction branch first rejects consumed corpse byte
+`+1C0`. If drive `+160` is zero, or drive timer `+1BC <= 150`, it draws the
+ordinary ground glyph. The ordinary branch offsets opposite the continuous
+native heading by five world units and multiplies actor scale `+74` by the
+double `00784740 = 1.25`. Special surface state `+154 == 2` instead uses
+offset two (`007DE838`), scale multiplier
+`1.2000000476837158` (`00785360`), and alpha `0.5` (`007DE870`), then restores
+opaque diffuse color. When drive is active and timer exceeds 150, it draws no
+ordinary glyph and writes the six-sector terminal vector at `+1F4/+1F8`;
+the vector constants are 150, 9, and 55 at `00785D90`, `00786970`, and
+`00785AA8`. Those vector writes belong to the existing death compositor,
+not a shadow animation to invent.
+
+Current `PlayerWorldView` constructs a zero-offset, scale-1.25, alpha-0.72
+sprite under the body and hides it as soon as the death draw plan is visible.
+The native offset, auxiliary owner, opacity producer and early-death interval
+therefore require separate checks. Corpse consumption already exists in schema
+48 and must continue suppressing both eligible presentations. Native timer
+writers, casting gates, special-surface reachability and private-room ground
+callers must be reconciled with current authoritative fields before a shared
+implementation is chosen. An inferred field name in old pseudo-source is not
+sufficient evidence for that mapping.
+
+The statue auxiliary is also distinct from the body queue root. The earlier
+sentence in this entry saying body and aura remain children of one actor root
+does not describe the native `+28/+1C` split and is superseded for the ground
+shadow by this evidence. Current body queue depth is assigned by
+`NativeHubPainterPlanner`, while `statueAura` still keeps
+`hubActorDepth(834)-1`, a raw-row value. This proves a source-level stale
+ownership path; its current pixel effect still needs the actual renderer
+discriminator. The accepted Report 55 code provides a concrete shared
+Courtyard ground interval, but does not prove another callback's constants.
+
+### Diagnostic and completion contract
+
+Before product changes, use the existing public renderer/real-texture harness
+pattern from `teacher-circle-layering-probe.mjs` to compare all three reported
+occluders across both sides of their actual queue rows. Capture each ordinary
+ground glyph and each occluder's actual opaque-alpha mask independently.
+Measure exposed ground, opaque occluder/body pixels, source eligibility and
+the parent/order/position of the actual shadow. A ground reference must use
+the same authored glyph and geometry in the recovered auxiliary interval;
+guessed hulls, screenshots alone and broad depth inequalities are not oracles.
+Verify whether the reported contrast is expected artwork coverage, misplaced
+ground submission, missing state/geometry, or a combination.
+
+Recover the pending glyph/operand/caller branches for every enumerated native
+auxiliary, then select the smallest complete remedy. Per-member acceptance
+must retain local/guest/Student presentation, all supported College rooms,
+Arena's pre-multiply interval, camera 80/100/130, Enhanced Effects branches,
+death/consumption/materialization, pool reuse, departure and teardown. Native
+complex-lighting/shadow settings gate directional products separately; they
+must not become an invented ordinary-circle visibility switch. Preserve
+authored alpha, registered shape, animation and the accepted indexed renderer.
+
+All Website execution and intensive recovery wait for explicit M5 grant and
+fresh actual admission. Final delivery still requires a supported final
+disposition for every row, actual built scenes, the unchanged all-mode
+canonical gate on immutable exact bytes, normal publication/current-main
+reconciliation, managed live verification and both-device scoped cleanup.
+No Report 56 resolution is claimed by this entry.
