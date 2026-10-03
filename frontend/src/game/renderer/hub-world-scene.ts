@@ -221,6 +221,7 @@ export class HubWorldScene {
 
     this.teacher = new HubTeacherView(textures, 576.5, 710.5, traderAnimationSeed ^ 5008)
     this.world.addChild(
+      this.teacher.ground,
       this.teacher.preWorld,
       this.teacher.container,
       this.teacher.worldColumn,
@@ -1188,6 +1189,7 @@ class HubPotionTraderView {
 
 class HubTeacherView {
   readonly container = new Container({ label: 'teacher' })
+  readonly ground = new Container({ label: 'teacher-ground' })
   readonly postWorld = new Container({ label: 'teacher-release-post-world' })
   readonly preWorld = new Container({ label: 'teacher-release-pre-world' })
   readonly worldColumn = new Container({ label: 'teacher-release-column' })
@@ -1212,6 +1214,10 @@ class HubTeacherView {
     this.container.position.set(x, y)
     this.container.zIndex = hubWorldDepthForActor(y)
     this.container.eventMode = 'none'
+    this.ground.position.set(x, y)
+    this.ground.zIndex = HUB_WORLD_DEPTH.teacherGround
+    this.ground.sortableChildren = true
+    this.ground.eventMode = 'none'
     const releaseX = x + HUB_TEACHER_CAST_ORIGIN.x
     const releaseY = y + HUB_TEACHER_CAST_ORIGIN.y
     this.releaseY = releaseY
@@ -1240,7 +1246,8 @@ class HubTeacherView {
     this.worldColumn.addChild(this.column)
     this.worldFrames.addChild(this.frames)
     this.postWorld.addChild(this.core)
-    this.container.addChild(this.rune, shadow, this.actor)
+    this.ground.addChild(this.rune, shadow)
+    this.container.addChild(this.actor)
   }
 
   update(elapsedSeconds: number): void {

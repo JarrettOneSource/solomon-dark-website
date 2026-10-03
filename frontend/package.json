@@ -59,6 +59,7 @@
     "smoke:game:deployment-restart": "node tools/smoke-game-deployment-restart.mjs",
     "smoke:game:match-loading": "node tools/smoke-match-loading.mjs",
     "smoke:game:hub-combat-entry": "node tools/smoke-hub-combat-entry.mjs",
+    "smoke:game:teacher-circle": "node --experimental-strip-types tools/smoke-teacher-circle-layering.mjs",
     "smoke:game:memorial": "node --experimental-strip-types tools/smoke-shared-memorial.mjs",
     "smoke:game:boneyard-collision": "node --experimental-strip-types tools/smoke-boneyard-player-collision.mjs",
     "smoke:game:boneyard-tree-occlusion": "node tools/smoke-boneyard-tree-occlusion.mjs",

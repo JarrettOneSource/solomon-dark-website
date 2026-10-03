@@ -35,6 +35,8 @@ export const HUB_WORLD_DEPTH = {
   courtyardOnboarding: HUB_COURTYARD_ONBOARDING_DEPTH,
   sealGlyphs: 10,
   sealCore: 11,
+  // Teacher +0x28 is drawn after the Courtyard raster and before its seals.
+  teacherGround: 1,
   usefulThyngsShadow: HUB_USEFUL_THYNGS_SHADOW_DEPTH,
   fountain: 980,
   statueAura: hubActorDepth(834) - 1,
