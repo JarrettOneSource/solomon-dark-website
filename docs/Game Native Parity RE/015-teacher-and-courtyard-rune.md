@@ -146,25 +146,32 @@ functions but kept both callbacks in one browser actor composite. Earlier
 validation of the rune's presence and opacity did not test its overlap with a
 different world actor.
 
-### System boundary and provisional membership
+### System boundary and membership
 
 The owning system is Teacher's `+0x28` auxiliary callback and its relationship
 to the existing Teacher body, release children, and Courtyard intervals. No
 new gameplay, replication, or native art extraction is required by the traced
-cause. Product code has not changed; current built behavior still requires an
-admitted M5 baseline.
+cause. The investigation baseline and subsequent source-qualified acceptance are
+recorded below; final publication is a separate gate.
 
 | Member | Native source | Current disposition and required proof |
 | --- | --- | --- |
-| Teacher-local rune | `0x00505480`, College `13`, alpha `.25`, local `(-40,+30)` | `recovered-pending-port`; verify the current failure, then preserve pixels/geometry while restoring the auxiliary interval |
-| Teacher ground shadow | same callback, BadGuys `67`, scale `1.25`, actor origin | `recovered-pending-port`; remains immediately after the rune in the same auxiliary owner |
-| Teacher body frames `501`, `502`, `503`, `504` | `0x0051C710`, current frame selector | unchanged owner; verify each pose still sorts in the Region body queue |
-| Teacher flare, column, SpriteArray frames, and core | `0x00505560`, existing pre-world/two-transient/post-world roots | unchanged owners; preserve the previously recovered release program and validate release crossings |
-| Courtyard scene and party/private-College reuse | type `5008` construction; current shared `HubWorldScene` | one rendering path; verify local/remote players, Students, camera changes, and region leave/return |
-| Independent animated Courtyard seals | College `106..118` and `12`, `0x0051EB60` | separate owner; preserve their recovered later ground interval and authored registration |
+| Teacher-local rune | `0x00505480`, College `13`, alpha `.25`, local `(-40,+30)` | `exact-ported`; real red/green, unchanged artwork/geometry, 532 member cases and built visual evidence below |
+| Teacher ground shadow | same callback, BadGuys `67`, scale `1.25`, actor origin | `exact-ported`; unchanged sprite follows the rune in the recovered auxiliary owner; native callback and actual scene evidence |
+| Teacher body record `501` | `0x0051C710`, frame `0` | `verified-already-at-parity`; unchanged actor registration; maintained and built frame coverage |
+| Teacher body record `502` | same renderer, frame `1` | `verified-already-at-parity`; maintained and built frame coverage |
+| Teacher body record `503` | same renderer, release frame `2` | `verified-already-at-parity`; real ambient/release and built coverage |
+| Teacher body record `504` | same renderer, idle frame `3` | `verified-already-at-parity`; maintained and built frame coverage |
+| Teacher flare | `0x00505560`, direct pre-world owner | `verified-already-at-parity`; unchanged member; real release samples and room smoke retain the native program |
+| Teacher column | same release, first transient registration at actor Y `+15` | `verified-already-at-parity`; unchanged member; real ambient registrations and built release checks |
+| Teacher SpriteArray frames | same release, second transient registration | `verified-already-at-parity`; unchanged member; real ambient registrations and built release checks |
+| Teacher core | same release, direct post-world owner | `verified-already-at-parity`; unchanged member; actual release samples and room smoke |
+| Courtyard camera/region lifecycle | type `5008`; shared `HubWorldScene` parents and teardown | `verified-already-at-parity`; 532 camera/member cases, renderer destruction and actual four-room leave/return |
+| Guest/party/private-College presentation reuse | same scene implementation and registered player views | `verified-already-at-parity` for the shared renderer; controlled guest snapshot coverage, unchanged routing; no claim of multiple rendered live peers |
+| Independent animated Courtyard seals | College `106..118` and `12`, `0x0051EB60` | `verified-already-at-parity`; separate owner, unchanged artwork/registration and later ground interval; whole-scene built captures |
 | Lower-campus static College `13` | `(1500,1000)` Courtyard raster registration | `out-of-system`: static raster occurrence is not the Teacher callback |
 | Secondary Magic Circle `49` | `0x005E1BA0/0x005E1C20`, BadGuys `48`/`7` | `out-of-system`: separate cast actor, art, lifecycle, and Region/light ownership |
-| Other actors' ground callbacks and Report 56 shadow occlusion | other vtables and caster/scenery contracts | `out-of-system`: this report traces the Teacher callback only; inspect a concrete shared overlap before expanding scope |
+| Other actors' ground callbacks and Report 56 shadow occlusion | other vtables and caster/scenery contracts | `out-of-system`: Teacher callback alone is reopened; no separate report completion is claimed |
 
 ### Validation contract and open questions
 
@@ -312,3 +319,22 @@ data was cleared. The full unchanged canonical gate, corrected region-return
 journey, final source acceptance, normal publication/managed live deployment
 and task cleanup remain pending. The previous source-qualified results remain
 valid; later test-driver/doc bytes need their own exact acceptance.
+
+### Corrected entry and remaining final gate — 2026-10-03
+
+Exact clean `1cfda61c`, tree `daf2d147`, all `7,256` tracked files matching
+manifest `d4ccbb7070e2daed9d3e54168545207fa01586322685d17b79ff284f064cf55f`,
+passed all changed helper syntax checks. The updated normal-rune-visibility
+and 532 member assertions passed at `20:45:50Z`; the production build passed
+at `20:46:02Z`. The corrected shared entry then completed the real built
+StoreRoom, Mortuary, Office and Library journeys and every Courtyard return
+at `20:48:20Z`. Console, page, response and request-error arrays were empty.
+The room smoke retains its native Teacher release and Courtyard painter checks;
+the earlier successful focused visual and member results remain source-qualified.
+
+The final documentation freeze changes no runtime/helper code from that tested
+candidate. The unchanged exact-source all-mode gate, normal publication and
+managed live deployment remain separate required steps; their terminal receipts
+belong to the completion report. No quality configuration or runtime cap is
+changed by this repair. Historical reporter revision/timing remains unknown,
+and controlled guest/Student snapshots are distinguished from live peers.
