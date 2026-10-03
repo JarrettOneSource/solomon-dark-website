@@ -296,3 +296,23 @@ member dispositions, canonical acceptance and publication/deployment are
 pending an actual subsequent M5 handoff. The independently reproduced
 authority pocket/native placement behavior stays explicitly separate; the
 client remedy is not represented as fixing it or a permanent softlock.
+
+
+### First focused green: fixture reachability correction
+
+Exact clean candidate6d7c5e1a passed121of122focused cases; the sole failure
+was the test fixture for `library-prop-1`, not a prediction mismatch. All16
+22.5-degree sampled starts were invalid. Its circle `(258.5,678.5),r40`
+is beside the authored shelf contour `(182,669.5)-(336,719.5)` after the
+Library `(16,102.5)` transform. The25-radius player has a narrow valid strip
+between the expanded shelf edge and the sloped outer-wall contour. A radius69
+approach at330degrees gives approximately `(318.25575,644)`, in that strip;
+the old angle grid misses it. The fixture now samples15-degree intervals,
+including that authored approach. Runtime geometry and both validity/contact
+assertions are unchanged. This source-derived setup correction awaits M5
+confirmation; no new green result is claimed.
+
+The runner stopped before typing/lint/build/built and automatically cleared
+private temp/profiles and released the lease at19:47:01UTC, immediately after
+the terminal focused result. All31scoped home entries are unchanged and no
+owned process or new home child remains. Later stages are still pending.

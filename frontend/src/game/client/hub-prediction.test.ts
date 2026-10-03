@@ -213,8 +213,10 @@ function assertFixedBodyPrediction(
 ): void {
   let exercisedStarts = 0
   let contacted = false
-  for (let direction = 0; direction < 16; direction += 1) {
-    const angle = direction * Math.PI / 8
+  // Library shelf1 has a narrow valid approach between its expanded contour
+  // and the outer wall; the authored330-degree approach is missed by22.5-degree steps.
+  for (let direction = 0; direction < 24; direction += 1) {
+    const angle = direction * Math.PI / 12
     const radius = PLAYER_CHARACTER_RADIUS + actor.radius + 4
     const start = {
       x: actor.position.x + Math.cos(angle) * radius,
