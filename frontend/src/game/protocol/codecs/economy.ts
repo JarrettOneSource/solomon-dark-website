@@ -52,6 +52,12 @@ import {
   record,
 } from './values.ts'
 
+function inventoryDyeSessionId(value: unknown, field: string): string {
+  const id = limitedString(value, field, 64)
+  if (id.length === 0) throw new GameProtocolError(`${field} must not be empty`)
+  return id
+}
+
 export function hubInventoryAction(value: unknown): HubInventoryAction {
   const source = record(value, 'action')
   const type = limitedString(source.type, 'action.type', 64)
@@ -141,8 +147,20 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type', 'itemId'])
     return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
   }
+  if (type === 'open-dye') {
+    onlyKeys(source, 'action', ['type', 'dyeItemId', 'sessionId'])
+    return {
+      type,
+      dyeItemId: positiveInteger(source.dyeItemId, 'action.dyeItemId'),
+      sessionId: inventoryDyeSessionId(source.sessionId, 'action.sessionId'),
+    }
+  }
+  if (type === 'close-dye') {
+    onlyKeys(source, 'action', ['type', 'sessionId'])
+    return { type, sessionId: inventoryDyeSessionId(source.sessionId, 'action.sessionId') }
+  }
   if (type === 'dye') {
-    onlyKeys(source, 'action', ['type', 'dyeItemId', 'layer', 'swatchRows', 'targetItemId'])
+    onlyKeys(source, 'action', ['type', 'sessionId', 'layer', 'swatchRows', 'targetItemId'])
     const layer = limitedString(source.layer, 'action.layer', 16)
     if (layer !== 'cloth' && layer !== 'trim') {
       throw new GameProtocolError('action.layer is not supported')
@@ -157,7 +175,7 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     }
     return {
       type,
-      dyeItemId: positiveInteger(source.dyeItemId, 'action.dyeItemId'),
+      sessionId: inventoryDyeSessionId(source.sessionId, 'action.sessionId'),
       layer,
       swatchRows,
       targetItemId: positiveInteger(source.targetItemId, 'action.targetItemId'),
@@ -299,6 +317,7 @@ export function playerEconomy(value: unknown, field: string): ProtocolPlayerEcon
     'dowsingFee',
     'dowsingOffers',
     'dowsingRolled',
+    'dyeSessionId',
     'equipment',
     'fomentiusStock',
     'gold',
@@ -394,6 +413,9 @@ export function playerEconomy(value: unknown, field: string): ProtocolPlayerEcon
     dowsingFee: boundedInteger(source.dowsingFee, `${field}.dowsingFee`, 500, 950),
     dowsingOffers,
     dowsingRolled,
+    dyeSessionId: source.dyeSessionId === null
+      ? null
+      : inventoryDyeSessionId(source.dyeSessionId, `${field}.dyeSessionId`),
     equipment,
     fomentiusStock,
     gold: boundedInteger(source.gold, `${field}.gold`, 0, 10_000_000),
@@ -452,6 +474,7 @@ export function hubActionFeedback(
     'transferGesture',
     'unforgeOutcome',
     'skillBookOutcome',
+    'dyeSessionId',
   ])
   const action = limitedString(source.action, `${field}.action`, 32)
   if (![
@@ -462,6 +485,7 @@ export function hubActionFeedback(
     'buy-hagatha',
     'buy-teacher-spell',
     'close-dowsing',
+    'close-dye',
     'close-hagatha',
     'consume',
     'dye',
@@ -469,6 +493,7 @@ export function hubActionFeedback(
     'equip',
     'interact-goodie',
     'move-inventory-item',
+    'open-dye',
     'read-librarian-book',
     'read-skill-book',
     'remove-hagatha',
@@ -477,6 +502,13 @@ export function hubActionFeedback(
     'unforge',
     'unequip',
   ].includes(action)) throw new GameProtocolError(`${field}.action is not supported`)
+  const painting = action === 'open-dye' || action === 'dye' || action === 'close-dye'
+  const dyeSessionId = painting
+    ? inventoryDyeSessionId(source.dyeSessionId, `${field}.dyeSessionId`)
+    : undefined
+  if (!painting && Object.hasOwn(source, 'dyeSessionId')) {
+    throw new GameProtocolError(`${field}.dyeSessionId requires a painting action`)
+  }
   const reason = source.reason === null
     ? null
     : limitedString(source.reason, `${field}.reason`, 32)
@@ -542,6 +574,7 @@ export function hubActionFeedback(
   return {
     skillBookOutcome,
     accepted,
+    ...(dyeSessionId === undefined ? {} : { dyeSessionId }),
     action: action as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['action'],
     dowsingPitch,
     reason: reason as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['reason'],

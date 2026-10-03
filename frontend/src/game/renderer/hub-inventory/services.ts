@@ -209,7 +209,7 @@ export function buildDyeClothing(
     { tint: 0xe4c56d },
   )
   const instruction = model.pending
-    ? 'DYEING...'
+    ? model.admitted ? 'DYEING...' : 'OPENING...'
     : model.targetItemId !== null
       ? 'CHOOSE DYE CLOTH OR DYE TRIM'
       : model.swatchRows.length === 0
@@ -313,7 +313,7 @@ export function buildDyeClothing(
   addBitmapText(
     context,
     layer,
-    'CANCEL',
+    model.targetItemId === null ? 'DONE' : 'CANCEL',
     'menu',
     cancelLeft + cancelWidth / 2,
     cancelTop + 31,

@@ -140,7 +140,7 @@ export function DyeClothingActions({
         data={{ 'data-native-dye-cancel': phase === 'layer' ? 'layer' : 'session' }}
         disabled={blocked}
         gameBack
-        label={phase === 'layer' ? 'Cancel layer choice' : 'Cancel Fabric Dye'}
+        label={phase === 'layer' ? 'Cancel layer choice' : 'Done Fabric Dye'}
         rect={HUB_DYE_CLOTHING.cancelRect}
         onClick={onCancel}
       />

@@ -12,7 +12,7 @@ import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS } from '../core-kernels/native
 import type { PlayerCharacterConfig, PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { PLAYER_CHARACTER_INPUT_ACCELERATION, PLAYER_CHARACTER_MOVEMENT_LANE_CAP, PLAYER_CHARACTER_MOVEMENT_RETENTION, PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import type { DetachedGameSimulationPlayer, GameSimulationState, PlayerId } from '../core-server/game-simulation.ts'
-import { GAME_FIXED_TICK_SECONDS, GAME_TICK_RATE, addPlayerCharacter, applyGameSimulationHubAction, applyGameSimulationTutorialAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, completedGameSimulationCollegeIntroPlayerIds, confirmGameSimulationLoadout, continueGameSimulationOver, createGameSimulation, declineGameSimulationTutorial, detachGameSimulationPlayer, enterBoneyardWorld, getPlayerBelt, getPlayerCharacter, getPlayerEconomy, getPlayerProgression, grantGameSimulationPlayerExperience, projectDetachedGameSimulationPlayer, reconcileGameSimulationPlayerModPackages, rejoinGameSimulationPlayer, removePlayerCharacter, rerollDetachedGameSimulationPlayerSkill, rerollGameSimulationPlayerSkill, returnGameSimulationToHub, saveDetachedGameSimulationPlayerSkill, saveGameSimulationPlayerSkill, selectDetachedGameSimulationPlayerSkill, selectGameSimulationPlayerConcentration, selectGameSimulationPlayerConcentrationSlot, selectGameSimulationPlayerPrimarySkill, selectGameSimulationPlayerSkill, stepGameSimulationTick, synchronizeDetachedGameSimulationPlayer } from '../core-server/game-simulation.ts'
+import { GAME_FIXED_TICK_SECONDS, GAME_TICK_RATE, addPlayerCharacter, applyGameSimulationHubAction, closeGameSimulationInventoryDyeSession, applyGameSimulationTutorialAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, completedGameSimulationCollegeIntroPlayerIds, confirmGameSimulationLoadout, continueGameSimulationOver, createGameSimulation, declineGameSimulationTutorial, detachGameSimulationPlayer, enterBoneyardWorld, getPlayerBelt, getPlayerCharacter, getPlayerEconomy, getPlayerProgression, grantGameSimulationPlayerExperience, projectDetachedGameSimulationPlayer, reconcileGameSimulationPlayerModPackages, rejoinGameSimulationPlayer, removePlayerCharacter, rerollDetachedGameSimulationPlayerSkill, rerollGameSimulationPlayerSkill, returnGameSimulationToHub, saveDetachedGameSimulationPlayerSkill, saveGameSimulationPlayerSkill, selectDetachedGameSimulationPlayerSkill, selectGameSimulationPlayerConcentration, selectGameSimulationPlayerConcentrationSlot, selectGameSimulationPlayerPrimarySkill, selectGameSimulationPlayerSkill, stepGameSimulationTick, synchronizeDetachedGameSimulationPlayer } from '../core-server/game-simulation.ts'
 import { gameplayResumeGraceReasonForPauseSource } from '../gameplay-resume-grace.ts'
 import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
 import type { LuaConsoleObject } from '../protocol/codecs/lua.ts'
@@ -1654,6 +1654,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             else privateParties = updated.state
           }
         }
+        if (replacedClient) {
+          replaceStateForPlayer(replacedClient.playerId, closeGameSimulationInventoryDyeSession(
+            stateForClient(replacedClient), replacedClient.playerId,
+          ))
+        }
         const playerState = stagedPartyRejoin
           ? partyRejoinStagingState(stagedPartyRejoin)
           : stateForPlayer(playerId)
@@ -1981,6 +1986,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           || client.hubActivity === message.activity
         ) return
         client.hubActivity = message.activity
+        if (message.activity !== 'occupied') {
+          replaceStateForPlayer(client.playerId, closeGameSimulationInventoryDyeSession(
+            activeState, client.playerId,
+          ))
+        }
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
@@ -2014,6 +2024,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (message.type === 'client-gameplay-pause') {
         const activeState = stateForPlayer(client.playerId)
         if (activeState.world.kind === 'hub') return
+        if (!message.paused || message.source !== 'inventory') {
+          replaceStateForPlayer(client.playerId, closeGameSimulationInventoryDyeSession(
+            activeState, client.playerId,
+          ))
+        }
         const activePause = gameplayPauseForPlayer(client.playerId)
         if (message.paused) {
           if (gameplayResumeGraceForPlayer(client.playerId) !== null) return
@@ -2079,6 +2094,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (message.targetTick > activeState.tick + GAME_TICK_RATE * 2) {
           disconnect(socket, 'invalid-message', 'Input targets too far ahead of the server tick.')
           return
+        }
+        if (message.input.movement.x !== 0 || message.input.movement.y !== 0
+          || message.input.cast.primary || message.input.cast.quickbar !== null) {
+          replaceStateForPlayer(client.playerId, closeGameSimulationInventoryDyeSession(
+            activeState, client.playerId,
+          ))
         }
         const pendingTail = newestQueuedInput(client.queuedInputs)
         const castTransition = !sameCast(
@@ -3418,6 +3439,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       publishPlayerActivity(client, 'left-game')
+      replaceStateForPlayer(client.playerId, closeGameSimulationInventoryDyeSession(
+        stateForClient(client), client.playerId,
+      ))
       client.socialConnection?.close()
       clients.delete(socket)
       client.saveCheckpointSender.close()
@@ -8069,6 +8093,8 @@ function pauseAllowsInventoryAction(
     && pause.source === 'inventory'
     && (
       action.type === 'activate-belt-slot'
+      || action.type === 'open-dye'
+      || action.type === 'close-dye'
       || action.type === 'consume'
       || action.type === 'bind-belt-item'
       || action.type === 'dye'

@@ -34,6 +34,7 @@ import {
   createEquipmentInventoryItem,
   createHubEconomy,
   discardInventoryItem,
+  beginInventoryDyeSession,
   dyeInventoryClothing,
   dowse,
   economyHasWizardKey,
@@ -249,7 +250,8 @@ test('mod wearable items use existing slots, native dye transactions, and strict
     backpack: [...inserted.state.backpack, dye],
     nextItemId: inserted.state.nextItemId + 1,
   }
-  const dyed = dyeInventoryClothing(withDye, dye.id, identified.id, 'cloth', [1])
+  const opened = beginInventoryDyeSession(withDye, dye.id, 'mod-wearable')
+  const dyed = dyeInventoryClothing(opened.state, opened.session!, identified.id, 'cloth', [1])
   assert.equal(dyed.accepted, true)
   assert.notEqual(findInventoryItem(dyed.state.backpack, identified.id)?.iconTints?.[0], 0x6688cc)
   const equipped = equipInventoryItem(
@@ -2020,12 +2022,14 @@ test('Fabric Dye commits cloth and trim transactionally against recursive Hat/Ro
     [[target.id, 1, carrier.id]],
   )
 
-  const invalid = dyeInventoryClothing(state, dye.id, target.id, 'cloth', [])
+  const opened = beginInventoryDyeSession(state, dye.id, 'recursive-paint')
+  assert.equal(opened.accepted, true)
+  const invalid = dyeInventoryClothing(opened.state, opened.session!, target.id, 'cloth', [])
   assert.equal(invalid.reason, 'invalid-target')
-  assert.strictEqual(invalid.state, state)
+  assert.strictEqual(invalid.state, opened.state)
   assert.equal(findInventoryItem(state.backpack, dye.id)?.quantity, 2)
 
-  const cloth = dyeInventoryClothing(state, dye.id, target.id, 'cloth', [1, 9])
+  const cloth = dyeInventoryClothing(opened.state, opened.session!, target.id, 'cloth', [1, 9])
   assert.equal(cloth.accepted, true)
   assert.equal(findInventoryItem(cloth.state.backpack, dye.id)?.quantity, 1)
   assert.deepEqual(findInventoryItem(cloth.state.backpack, target.id)?.iconTints, [
@@ -2033,21 +2037,68 @@ test('Fabric Dye commits cloth and trim transactionally against recursive Hat/Ro
     robeRecipe.iconTints[1],
   ])
 
-  const trim = dyeInventoryClothing(cloth.state, dye.id, target.id, 'trim', [1])
+  const trim = dyeInventoryClothing(cloth.state, cloth.session!, target.id, 'trim', [1])
   assert.equal(trim.accepted, true)
-  assert.equal(findInventoryItem(trim.state.backpack, dye.id), null)
+  assert.equal(findInventoryItem(trim.state.backpack, dye.id)?.quantity, 1)
   assert.deepEqual(findInventoryItem(trim.state.backpack, target.id)?.iconTints, [
     0x6d363e,
     0x7b3b3b,
   ])
-  assert.equal(trim.state.revision, state.revision + 2)
+  assert.equal(trim.state.revision, state.revision + 3)
 
   const equippedOnly = {
     ...base,
     backpack: [dye],
     equipment: { ...base.equipment, robe: target },
   }
-  const excluded = dyeInventoryClothing(equippedOnly, dye.id, target.id, 'cloth', [1])
+  const excluded = dyeInventoryClothing(equippedOnly, beginInventoryDyeSession(equippedOnly, dye.id, 'worn-target').session!, target.id, 'cloth', [1])
   assert.equal(excluded.reason, 'item-not-found')
   assert.strictEqual(excluded.state, equippedOnly)
+})
+
+test('one kit permits repeated layer and garment changes in its open painting session', () => {
+  const base = createHubEconomy(1)
+  const robe = createEquipmentInventoryItem(
+    DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'robe')!,
+    69_001,
+  )
+  const hat = createEquipmentInventoryItem(
+    DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!,
+    69_002,
+  )
+  const kit: HubInventoryItem = {
+    equipmentType: null,
+    iconRecords: [42],
+    id: 69_003,
+    kind: 'dye',
+    name: 'Fabric Dye Kit',
+    nativeSubtype: 0,
+    nativeTypeId: 7012,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const unusedKit = { ...kit, id: 69_004 }
+  const carrier = nativeTestSack(69_005, [kit, unusedKit, robe, hat])
+  const state = { ...base, backpack: [carrier] }
+
+  const opened = beginInventoryDyeSession(state, kit.id, 'retained-painting')
+  assert.equal(opened.accepted, true)
+  const cloth = dyeInventoryClothing(opened.state, opened.session!, robe.id, 'cloth', [1])
+  assert.equal(cloth.accepted, true)
+  assert.equal(findInventoryItem(cloth.state.backpack, kit.id), null)
+  assert.equal(findInventoryItem(cloth.state.backpack, unusedKit.id)?.quantity, 1)
+
+  // Retail clears the initiating kit pointer while retaining DyeClothing.
+  const trim = dyeInventoryClothing(cloth.state, cloth.session!, robe.id, 'trim', [9])
+  assert.equal(trim.accepted, true, 'the retained painting session accepts another layer')
+  assert.deepEqual(findInventoryItem(trim.state.backpack, robe.id)?.iconTints, [
+    0x7b3b3b,
+    0x10104f,
+  ])
+
+  const otherGarment = dyeInventoryClothing(trim.state, trim.session!, hat.id, 'cloth', [5])
+  assert.equal(otherGarment.accepted, true)
+  assert.equal(findInventoryItem(otherGarment.state.backpack, hat.id)?.iconTints?.[0], 0x75b475)
+  assert.equal(findInventoryItem(otherGarment.state.backpack, unusedKit.id)?.quantity, 1)
 })

@@ -13,8 +13,8 @@ import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import { confirmPostRunLoadout, continueGameOver, continuePostRunToCollegeIntro, createGameRunLifecycle, startGameRun, stepGameRunLifecycle, synchronizeGameRunParticipants } from '../core-kernels/game-run.ts'
 import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
 import { NATIVE_HALL_OF_FAME_SCORE, archiveNativeHallOfFameRun, createNativeHallOfFameRun, recordNativeHallOfFameAwesomestKill, recordNativeHallOfFameOrdinaryKill, resetNativeHallOfFameKillStreak } from '../core-kernels/hall-of-fame-score.ts'
-import type { EquipmentSlot, HubEconomyRejection, HubEconomyState, HubInventoryAction, HubInventoryItem, HubTraderId, ModConsumableContent } from '../core-kernels/hub-economy.ts'
-import { NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID, applyNativeStarterEquipmentAppearance, archiveCompletedRunEconomy, archiveHagathaLastWordItems, buyDowsingOffer, buyFomentiusItem, buyHagathaPerk, buyTeacherSpell, closeDowsingOffers, closeHagathaShop, consumeInventoryItem, dowse, dyeInventoryClothing, equipEligibleInventorySackContents, equipInventoryItem, findInventoryItem, hagathaOffers, moveInventoryItem, readInventorySkillBook, readLibrarianBook, reconcileHubEconomyModPackages, removeHagathaPerk, selectHubBoast, transferInventoryItem, unequipInventorySlot, unforgeInventoryItem } from '../core-kernels/hub-economy.ts'
+import type { EquipmentSlot, HubEconomyRejection, HubEconomyState, HubEconomyResult, NativeInventoryDyeSession, HubInventoryAction, HubInventoryItem, HubTraderId, ModConsumableContent } from '../core-kernels/hub-economy.ts'
+import { NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID, applyNativeStarterEquipmentAppearance, beginInventoryDyeSession, archiveCompletedRunEconomy, archiveHagathaLastWordItems, buyDowsingOffer, buyFomentiusItem, buyHagathaPerk, buyTeacherSpell, closeDowsingOffers, closeHagathaShop, consumeInventoryItem, dowse, dyeInventoryClothing, equipEligibleInventorySackContents, equipInventoryItem, findInventoryItem, hagathaOffers, moveInventoryItem, readInventorySkillBook, readLibrarianBook, reconcileHubEconomyModPackages, removeHagathaPerk, selectHubBoast, transferInventoryItem, unequipInventorySlot, unforgeInventoryItem } from '../core-kernels/hub-economy.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import { HUB_REGION_DEFINITIONS, firstHubRegionLineObstruction, isHubRegionPathTraversable, isHubRegionTraversable } from '../core-kernels/hub-regions.ts'
 import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
@@ -97,6 +97,7 @@ export interface GameSimulationState {
   combatRng: NativeRngState
   enhancedEffects: boolean
   hallOfFameClockStartedAtTick: number
+  inventoryDyeSessions: Readonly<Record<PlayerId, NativeInventoryDyeSession>>
   levelUpBarrier: PlayerLevelUpBarrierState | null
   worldManagerOrder: NativeWorldManagerOrderState
   modEffects: readonly GameSimulationModEffect[]
@@ -278,6 +279,7 @@ export function createGameSimulation(
     combatRng: createNativeRng(options.combatRngSeed ?? 0),
     enhancedEffects: options.enhancedEffects ?? true,
     hallOfFameClockStartedAtTick: 0,
+    inventoryDyeSessions: {},
     levelUpBarrier,
     worldManagerOrder: worldManagerOrder.state(),
     modEffects: Object.freeze([]),
@@ -445,6 +447,7 @@ export function removePlayerCharacter(
   )
   return {
     ...state,
+    inventoryDyeSessions: closeGameSimulationInventoryDyeSession(state, playerId).inventoryDyeSessions,
     levelUpBarrier,
     playerEntities,
     primarySpells: removePrimarySpellOwner(state.primarySpells, playerId),
@@ -857,6 +860,7 @@ export function enterBoneyardWorld(
   return {
     ...state,
     levelUpBarrier: null,
+    inventoryDyeSessions: {},
     worldManagerOrder: worldManagerOrder.state(),
     modEffects: Object.freeze([]),
     playerEntities,
@@ -902,6 +906,7 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
   return {
     ...state,
     gameRng: hubSeed.state,
+    inventoryDyeSessions: {},
     modEffects: Object.freeze([]),
     levelUpBarrier: null,
     worldManagerOrder: worldManagerOrder.state(),
@@ -1209,9 +1214,23 @@ export function applyGameSimulationHubAction(
   action: HubInventoryAction,
   extensions?: GameSimulationExtensions,
 ): GameSimulationInventoryActionResult {
-  const result = applyGameSimulationHubActionTransaction(state, playerId, action, extensions)
+  const painting = action.type === 'open-dye' || action.type === 'dye' || action.type === 'close-dye'
+  const prepared = painting ? state : closeGameSimulationInventoryDyeSession(state, playerId)
+  const result = applyGameSimulationHubActionTransaction(prepared, playerId, action, extensions)
   const finalized = finalizeInventorySkillAvailability(state, result.state, playerId)
   return finalized === result.state ? result : { ...result, state: finalized }
+}
+
+export function closeGameSimulationInventoryDyeSession(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  sessionId?: string,
+): GameSimulationState {
+  const current = state.inventoryDyeSessions[playerId]
+  if (!current || (sessionId !== undefined && current.id !== sessionId)) return state
+  const inventoryDyeSessions = { ...state.inventoryDyeSessions }
+  delete inventoryDyeSessions[playerId]
+  return { ...state, inventoryDyeSessions }
 }
 
 function finalizeInventorySkillAvailability(
@@ -1334,7 +1353,8 @@ function applyGameSimulationHubActionTransaction(
       extensions?.hasConsumable(consumedPotion.modContent.contentId) !== true) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
-  const result = (() => {
+  let inventoryDyeSessions = state.inventoryDyeSessions
+  const result: HubEconomyResult = (() => {
     switch (action.type) {
       case 'buy-dowsing': return buyDowsingOffer(economy, action.offerId)
       case 'buy-fomentius': return buyFomentiusItem(economy, action.itemId)
@@ -1363,13 +1383,32 @@ function applyGameSimulationHubActionTransaction(
         unforgeOutcome: null,
       }
       case 'consume': return consumeInventoryItem(economy, action.itemId)
-      case 'dye': return dyeInventoryClothing(
-        economy,
-        action.dyeItemId,
-        action.targetItemId,
-        action.layer,
-        action.swatchRows,
-      )
+      case 'open-dye': {
+        const opened = beginInventoryDyeSession(economy, action.dyeItemId, action.sessionId)
+        if (opened.accepted && opened.session) {
+          inventoryDyeSessions = { ...inventoryDyeSessions, [playerId]: opened.session }
+        }
+        return opened
+      }
+      case 'close-dye': {
+        inventoryDyeSessions = closeGameSimulationInventoryDyeSession(
+          state, playerId, action.sessionId,
+        ).inventoryDyeSessions
+        return { accepted: true, dowsingPitch: null, reason: null, state: economy, unforgeOutcome: null }
+      }
+      case 'dye': {
+        const session = inventoryDyeSessions[playerId]
+        if (!session || session.id !== action.sessionId) {
+          return { accepted: false, dowsingPitch: null, reason: 'invalid-target', state: economy, unforgeOutcome: null }
+        }
+        const painted = dyeInventoryClothing(
+          economy, session, action.targetItemId, action.layer, action.swatchRows,
+        )
+        if (painted.accepted && painted.session) {
+          inventoryDyeSessions = { ...inventoryDyeSessions, [playerId]: painted.session }
+        }
+        return painted
+      }
       case 'dowse': return dowse(economy, action.referenceItemId)
       case 'equip': return equipInventoryItem(economy, action.itemId, action.slot, {
         creativityRank:
@@ -1406,6 +1445,8 @@ function applyGameSimulationHubActionTransaction(
   const actionFeedback = {
     accepted: result.accepted,
     action: action.type,
+    ...((action.type === 'open-dye' || action.type === 'dye' || action.type === 'close-dye')
+      ? { dyeSessionId: action.sessionId } : {}),
     skillBookOutcome: null,
     dowsingPitch: result.dowsingPitch,
     reason: result.reason,
@@ -1602,6 +1643,7 @@ function applyGameSimulationHubActionTransaction(
     reason: result.reason,
     state: {
       ...state,
+      inventoryDyeSessions,
       gameRng,
       levelUpBarrier,
       modEffects,
@@ -1907,7 +1949,19 @@ export function stepGameSimulationTick(
   options: GameSimulationTickOptions = {},
 ): GameSimulationState {
   const flashes = createNativeScreenFlashWriter(state.screenFlashes, state.tick + 1)
-  const result = stepGameSimulationTickWithScreenFlashes(state, inputs, options, flashes.write)
+  for (const playerId of Object.keys(state.inventoryDyeSessions)) {
+    const input = inputs[playerId]
+    if (input && (input.movement.x !== 0 || input.movement.y !== 0
+      || input.cast.primary || input.cast.quickbar !== null)) {
+      state = closeGameSimulationInventoryDyeSession(state, playerId)
+    }
+  }
+  let result = stepGameSimulationTickWithScreenFlashes(state, inputs, options, flashes.write)
+  for (const playerId of Object.keys(result.inventoryDyeSessions)) {
+    if (playerProgressionAt(result.playerEntities, playerId)?.lifeState !== 'alive') {
+      result = closeGameSimulationInventoryDyeSession(result, playerId)
+    }
+  }
   if (result === state) return state
   return { ...result, screenFlashes: result.screenFlashes === state.screenFlashes
     ? flashes.state() : result.screenFlashes }
@@ -4473,6 +4527,8 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'close-dowsing':
     case 'consume':
     case 'dye':
+    case 'open-dye':
+    case 'close-dye':
     case 'equip':
     case 'interact-goodie':
     case 'move-inventory-item':

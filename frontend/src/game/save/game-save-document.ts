@@ -58,7 +58,7 @@ import { createBoneyardWorld } from '../core-server/boneyard-world-construction.
 import type { BoneyardWorldState } from '../core-server/boneyard-world-state.ts'
 import type { BoneyardProjectileKnockback } from '../core-server/enemies/model.ts'
 import type { GameSimulationState } from '../core-server/game-simulation.ts'
-import { gameSimulationDurableProfileEconomy, gameSimulationRetiredWizardEconomy, removePlayerCharacter } from '../core-server/game-simulation.ts'
+import { closeGameSimulationInventoryDyeSession, gameSimulationDurableProfileEconomy, gameSimulationRetiredWizardEconomy, removePlayerCharacter } from '../core-server/game-simulation.ts'
 import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
 import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
 import type { HubWorldState } from '../core-server/hub-world.ts'
@@ -228,7 +228,7 @@ export function createGameSaveDocument(
   const character = ownerState.playerEntities.configs[ownerIndex]!
   const playerEntities = diskPlayerStoreProjection(ownerState.playerEntities)
   const simulation = {
-    ...ownerState,
+    ...diskSimulationState(ownerState),
     accumulatorSeconds: 0,
     modEffects: [],
     nextModConsumableUseId: 1,
@@ -264,6 +264,14 @@ export function createGameSaveDocument(
       ),
     ),
   })
+}
+
+function diskSimulationState({
+  inventoryDyeSessions: _sessions,
+  ...state
+}: GameSimulationState): Omit<GameSimulationState, 'inventoryDyeSessions'> {
+  // Painting authorization belongs to the open live menu, never a checkpoint.
+  return state
 }
 
 export function createGameSaveSupportDocument(document: string): string {
@@ -330,7 +338,7 @@ function savedOwnerProfile(
 ) {
   return {
     advancedUnlocks: [...state.playerEntities.skillBooks[ownerIndex]!.advancedUnlocks],
-    economy,
+    economy: diskEconomy(economy),
     hagathaRuntime: state.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
   }
 }
@@ -410,7 +418,7 @@ function ownerProjection(
 function diskPlayerStoreProjection(
   source: GameSimulationState['playerEntities'],
 ): GameSimulationState['playerEntities'] {
-  const economies = source.economies.map(normalizeHubEconomyInventorySlots)
+  const economies = source.economies.map(diskEconomy)
   const progressions = source.progressions.map(progression => Object.freeze({
     ...progression,
     damageX4TicksRemaining: 0,
@@ -440,6 +448,13 @@ function diskPlayerStoreProjection(
     skillBooks: Object.freeze(skillBooks),
     skillRuntimes: Object.freeze(skillRuntimes),
   }
+}
+
+function diskEconomy(source: HubEconomyState): HubEconomyState {
+  const economy = normalizeHubEconomyInventorySlots(source)
+  return economy.actionFeedback?.dyeSessionId === undefined
+    ? economy
+    : { ...economy, actionFeedback: null }
 }
 
 function diskSecondaryProjection(
@@ -638,6 +653,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   let state = {
     ...rawState,
     accumulatorSeconds: 0,
+    inventoryDyeSessions: {},
     playerEntities,
     run: rawRun,
     tick: Number(rawState.tick),
@@ -768,6 +784,7 @@ export function hydrateGameSaveProfile(
   )
   const hydrated = {
     ...state,
+    inventoryDyeSessions: closeGameSimulationInventoryDyeSession(state, playerId).inventoryDyeSessions,
     gameRng: refreshed.rng,
     playerEntities: refreshed.store,
   }
@@ -1942,15 +1959,26 @@ function normalizeEconomy(
     && !('unforgeOutcome' in source.actionFeedback)
     ? { ...source.actionFeedback, unforgeOutcome: null }
     : source.actionFeedback
+  // Pre-session saves recorded one-shot dye results without a correlation ID.
+  // Validate those historical fields, then retire presentation rather than a grant.
+  const feedbackSource = priorFeedback && typeof priorFeedback === 'object'
+    && 'action' in priorFeedback && priorFeedback.action === 'dye'
+    && !('dyeSessionId' in priorFeedback)
+    ? { ...priorFeedback, dyeSessionId: 'historical-dye-result' }
+    : priorFeedback
   // Old book receipts cannot reconstruct a historical random result. Retire
   // their presentation only; do not alter ranks, inventory or gameplay RNG.
-  const feedback = sourceSchemaVersion < 42 && priorFeedback && typeof priorFeedback === 'object'
-    ? ('action' in priorFeedback && priorFeedback.action === 'read-skill-book'
+  const feedback = sourceSchemaVersion < 42 && feedbackSource && typeof feedbackSource === 'object'
+    ? ('action' in feedbackSource && feedbackSource.action === 'read-skill-book'
         ? null
-        : { ...priorFeedback, skillBookOutcome: null })
-    : sourceSchemaVersion >= 42 && priorFeedback !== null
-      ? hubActionFeedback(priorFeedback, 'game save player economy.actionFeedback')
-      : priorFeedback
+        : { ...feedbackSource, skillBookOutcome: null })
+    : sourceSchemaVersion >= 42 && feedbackSource !== null
+      ? hubActionFeedback(feedbackSource, 'game save player economy.actionFeedback')
+      : feedbackSource
+  const paintingFeedback = feedback && typeof feedback === 'object'
+    && 'action' in feedback
+    && (feedback.action === 'dye' || feedback.action === 'open-dye' || feedback.action === 'close-dye')
+  if (paintingFeedback) hubActionFeedback(feedback, 'game save player economy.actionFeedback')
   const tonicPurchases = Number(source.tonicPurchases)
   const sourceOutcomes = Array.isArray(source.ownedPerkSelectors)
     ? [...source.ownedPerkSelectors]
@@ -1979,7 +2007,7 @@ function normalizeEconomy(
     : { outcomes: sourceBundle, removed: [] }
   const restored = normalizeHubEconomyInventorySlots({
     ...source,
-    actionFeedback: feedback,
+    actionFeedback: paintingFeedback ? null : feedback,
     collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
     dowsingRolled,
     hagathaBundleSelectors: bundleRepair.outcomes,

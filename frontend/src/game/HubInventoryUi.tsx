@@ -319,6 +319,14 @@ export default function HubInventoryUi({
       if (inputSuspended) return
       if (event.repeat) return
       if (inventoryCloseTarget !== null) return
+      const dyeBack = overlayRoot.current?.querySelector<HTMLButtonElement>('[data-native-dye-cancel]')
+      if (dyeBack && (event.code === menuKeyCode || event.code === inventoryKeyCode
+        || event.code === skillsKeyCode)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        if (!dyeBack.disabled) dyeBack.click()
+        return
+      }
       if (surface?.kind === 'inventory') {
         const action = nativeOptionalBookKeyAction(event.code, 'inventory', {
           inventory: inventoryKeyCode,
@@ -373,6 +381,7 @@ export default function HubInventoryUi({
     menuKeyCode,
     nearestInteraction,
     openWorldDialogue,
+    overlayRoot,
     onSurfaceChange,
     skillsKeyCode,
     surface,

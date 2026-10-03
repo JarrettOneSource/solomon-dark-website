@@ -1992,9 +1992,13 @@ test('simulation owns recursive sack moves, Fabric Dye commits, and nested potio
     true,
   )
 
-  const dyed = applyGameSimulationHubAction(moved.state, 'first', {
+  const dyeOpened = applyGameSimulationHubAction(moved.state, 'first', {
+    type: 'open-dye', dyeItemId: dye.id, sessionId: 'recursive-dye',
+  })
+  assert.equal(dyeOpened.accepted, true)
+  const dyed = applyGameSimulationHubAction(dyeOpened.state, 'first', {
     type: 'dye',
-    dyeItemId: dye.id,
+    sessionId: 'recursive-dye',
     layer: 'cloth',
     swatchRows: [1, 9],
     targetItemId: target.id,
@@ -2002,7 +2006,7 @@ test('simulation owns recursive sack moves, Fabric Dye commits, and nested potio
   assert.equal(dyed.accepted, true)
   const dyedEconomy = getPlayerEconomy(dyed.state, 'first')
   assert.equal(dyedEconomy.actionFeedback?.action, 'dye')
-  assert.equal(dyedEconomy.actionFeedback?.sequence, 2)
+  assert.equal(dyedEconomy.actionFeedback?.sequence, 3)
   assert.equal(findInventoryItem(dyedEconomy.backpack, dye.id), null)
   assert.deepEqual(findInventoryItem(dyedEconomy.backpack, target.id)?.iconTints, [
     0x6d363e,

@@ -289,8 +289,12 @@ Commit computes luminance with `(0.308600008, 0.609399974, 0.0820000023)`,
 moves every channel 75 percent toward it, and clamps. DyeWhat splits its
 80-pixel Hat/Robe control at `top+40`: return 1 writes Cloth `+0x88`, return 2
 writes Trim `+0x98`. Cancel returns 0 and mutates neither target nor kit. Only
-a successful layer result writes the tint, removes exactly one initiating kit
-from its recursive owner, plays the dye stream once, and tears down the modal.
+a successful layer result writes the tint and plays the dye stream. The first
+such result removes the initiating kit from its recursive owner and clears the
+parent's kit pointer; later results reuse the same open painting session without
+another kit. DyeWhat closes its child choice, while DyeClothing remains open
+until its separate Done/close path. The earlier per-layer teardown interpretation
+is superseded by the Report69 instruction and presented-media evidence below.
 
 ## Complete membership and current disposition
 
@@ -305,9 +309,9 @@ from its recursive owner, plays the dye stream once, and tears down the modal.
 | non-empty Sack Unforge rejection | `0x0056EC30` | verified-already-at-parity |
 | recursive consume/equip/direct-use/key/HUD/bot lookup | `0x0056D1B0`, lookup family | exact-ported |
 | recursive Luthacus storage transfer/presentation | shared item-list ownership | exact-ported |
-| Fabric Dye open/cancel/commit/consume | DyeClothing family | exact-ported |
+| Fabric Dye open/cancel/commit/consume | DyeClothing family | reopened by Report69; recovered-pending-port |
 | all 18 swatches, mixing, pulse and opacity | DyeClothing table/update | exact-ported |
-| recursive Hat/Robe target list and Cloth/Trim choice | `0x0055F410`, DyeWhat | exact-ported |
+| recursive Hat/Robe target list and Cloth/Trim choice | `0x0055F410`, DyeWhat | target/color data retained; painting-session lifetime reopened by Report69 |
 | Hat/Robe two-tint persistence and character/icon rendering | `+0x88`, `+0x98` | exact-ported |
 | stock dye stream | registry member `+0x1374` | exact-ported |
 | Item_Misc book subtypes 2/3 | `0x0056D1B0`, skill flows | exact-ported |
@@ -447,3 +451,148 @@ gate and production-bundle browser receipt. The focused code/RE commit is
 and fabric dye`) on parent `b57eab6f4410b8cc80b4692654659135fdda5e2e`.
 This docs-only receipt accompanies that commit in the same normal fast-forward
 publication. Deployment was not requested and remains a separate owner action.
+
+## 2026-10-03 — Report69: one kit owns the open painting session
+
+### Reopened cause and boundary
+
+The earlier pass recovered the palette, target tint writes and recursive item
+removal, but treated a successful **DyeWhat child** result as termination of the
+**DyeClothing parent**. It did not retain the parent kit-pointer guard and
+independent close flag as one lifetime. Its per-layer tests and browser receipts
+therefore confirmed the implemented transaction while missing the native
+session contract. Their historical results remain recorded above; they do not
+establish the now-refuted per-layer kit rule.
+
+The reopened system is the kit-authorized painting parent and its color/target/
+layer child operations, first successful application, subsequent applications,
+Done/back/cancel/interruption, authority and persistence. The shared Inventory
+and four companion service entry points, Hub and paused Boneyard consumers,
+recursive Hat/Robe targets, and existing supported mod dyeable wearables belong
+to the implementation membership. Price, bucket/vial styling and unrelated
+commerce/customization changes are outside this remedy.
+
+### Exact diagnostic evidence
+
+- Own scoped source refresh at `2026-10-03T14:45:20.436323+00:00` verified the
+  original Report69 message unchanged and unedited, with its original attachment
+  identity and no relevant correction in ten narrowly surrounding messages.
+- Retail 0.72.5 remained 4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+  image base `0x00400000`. Targeted raw instructions and all three relevant
+  vtables were extracted on the admitted M5 SSD with a private copy of its
+  installed LLVM tool; tool SHA-256
+  `83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+  Standard-library PE mapping verified image identity, sections and vtable
+  pointers. No new Ghidra import, Windows/WSL work or injected native observation
+  was used.
+- The complete original 81.610467-second clip, SHA-256
+  `eb72e9714eeae507ef0801391f2aca784a25e0eb6da36d933efc5962b83ce6c2`, played
+  normally through same-origin HTML/video and `requestVideoFrameCallback`.
+  Eighty-three distinct nonblack samples reached media time `81.410256` with
+  `2442` presented frames and empty error arrays. All three chronological
+  contact sheets and relevant full-size frames were inspected. This is
+  presented-session evidence, not paused-seek captures or an every-frame input
+  trace.
+- In the second visible painting session, frame `73.001678` shows the open
+  empty tub and an initiating kit in the inventory. By `80.008867`, the same
+  parent is still open with a purple tub, both a Hat and a Robe have changed
+  color, and the former kit cell is empty; the pointer is on Done. The menu is
+  closed in the later samples. These observations support retained parent and
+  multiple targets; exact charge semantics come from the native guard below.
+- M5 source was an independent clone of the accepted bare object mirror,
+  detached at original published commit
+  `3f130d3382bb321dd631aeb4e720ed8e5ed63d06`. Its original tree and index were
+  both `72e35c15968ec5c9cbe5d6ff3ef3d00f48cde236`; all 7,254 tracked bytes
+  matched the M2 original manifest and status was clean. No foreign working
+  overlay or substituted build revision was used.
+- The unchanged public `dyeInventoryClothing` baseline accepted the first
+  Cloth write and removed its kit. A subsequent Trim or another item's Cloth
+  write using that initiating ID rejected `item-not-found`; empty colors left
+  state unchanged. This is an actual public-kernel baseline, not a built UI,
+  original reporter-save or multiplayer journey.
+
+### Instruction-derived parent/child contract
+
+| Operation | Exact native evidence | Recovered rule |
+| --- | --- | --- |
+| Entry | `0x0056D85C..0x0056D8BF`, constructor `0x0055AFD0` | Misc subtype 0 constructs/registers the parent; `+0x78` receives the initiating kit and `+0x7C` its inventory owner; entry does not unlink that kit |
+| Eligible target and child | `0x0055F704..0x0055F87D` | The parent's hot-rect list resolves clothing and enters DyeWhat; child results `<=0` skip tint and kit mutation |
+| Cloth/Trim choice | `0x00551140..0x005511B1`, `0x005511C0..0x005511F6` | A left hit above/below the child midpoint returns 1/2; outside returns 0; the other mouse callback returns 2 for an inside hit and 0 outside |
+| Child lifetime | `0x00551200..0x005512E5`, parent call `0x0055F874` | The child runs its modal loop, returns its result and retires; it is distinct from the painting parent |
+| Successful write/audio | `0x0055F883..0x0055F923` | Each positive result uses registry audio member `+0x1374` and writes one selected Hat 7005 or Robe 7006 tint channel |
+| First kit removal | `0x0055F926..0x0055F95A` | If parent `+0x78` is nonnull, recursive owner lookup `0x00552850` and node removal `0x005528C0` unlink it, then `+0x78` is set to zero |
+| Subsequent applications | callback entry `0x0055F439`, continuation `0x0055F961..0x0055F9DE` | Admission checks the close flag, not a still-present kit; the null kit pointer skips later removal and the retained parent accepts another application |
+| Mixed color retention | `0x00550F20..0x00550FBD`, `0x0040FC60..0x0040FCC9` | Swatches update parent color `+0xC0`; commit computes a desaturated temporary without writing the parent color, so further mix/application uses the retained bucket |
+| Parent Done/back/close | `0x00551100..0x00551132` | The independent close helper sets byte `+0x1F0 = 1`; the successful-application callback does not call it or set that flag |
+| Fade/teardown | `0x00550E50..0x00550EA8`, destructor `0x0055BED0..0x0055BF7C` | The flagged parent fades and retires; destruction removes its UI/hot-rect ownership and does not consume an unused kit |
+
+There is no clothing-count cap in the retained application path. One open
+session charges on its first successful paint, permits repeated Cloth/Trim and
+different eligible items/colors, and ends through the parent lifetime. Closing
+before a successful application preserves the kit; closing afterward preserves
+the committed tints and never refunds the consumed kit. Reopening requires
+another live eligible kit. No historical input sequence, hidden quantity or
+server state is inferred from the clip.
+
+### Implementation consequence and current status
+
+The source at `3f130d33` has only a UI-local modal and independent authoritative
+dye transactions. The kernel consumes each time; accepted feedback closes the
+outer modal after 120ms; the UI's missing-kit effect also assumes the initiating
+kit must remain present. Those shared assumptions must be replaced together.
+Authority must retain an admitted transient painting session, validate every
+target/color mutation through the existing canonical transaction, charge once
+on first success, and invalidate continuation at the actual parent/actor/network
+lifetime. A caller-supplied free-use flag cannot represent this contract.
+
+The original 18-color table, blend/desaturation helpers, sparse inventory
+projection, recursive ownership, supported wearable rules, price 300, 256-row
+wire bound, 32-level Sack bound and existing save/input limits remain the
+canonical implementations. Native entry/mixing audio was also recovered at
+`0x0056D86D` / `0x00550F2F`; an unrelated sound or visual redesign is not included
+in this consumption/session remedy.
+
+At this checkpoint the affected session members are `recovered-pending-port`.
+No product fix, built UI acceptance, full canonical gate, publication,
+deployment or report completion is claimed. The diagnostic M5 lease was cleaned
+and released at `2026-10-03T15:20:03.748393+00:00` with zero owned processes and
+unchanged 24-entry home/immediate-child scope; its private root is retained
+inactive for the pending remedy and later acceptance. Required next checks are
+repeat layer/item/color use, unused/used Done and cancel, reopening/no-kit,
+rejected targets/colors, stale lifetime and participant ownership, root/nested
+and companion entry, paused Boneyard, desktop/touch input, and save/resume/
+disconnect behavior before exact final validation and managed publication.
+
+### Prepared implementation and validation boundary
+
+The subsequent M2 candidate replaces the one-shot caller contract with explicit
+open/paint/close actions and one transient authority-owned session per actor.
+The kernel validates the initiating kit at admission and first paint, consumes
+one unit only on first success, and reuses the established recursive target and
+color transaction for later paints. Client correlation identities cannot supply
+a paid/free-use flag. Owner projection and correlated results cross protocol146;
+the durable save shape remains schema48. The session and painting feedback are
+omitted from saves, and historical one-shot feedback is validated then retired.
+
+Shared Hub/run/companion UI callers keep the parent and bucket after paint,
+close the child target choice, route Back through the current dye control and
+close on grant revocation even while awaiting a result. Unmount, movement/cast,
+pause/surface change, actor/world replacement and transport loss retire the
+authority grant. The client's ordinary stopped-input packet before inventory
+actions preserves the session.
+
+The original pre-change public regression produced its intended repeated-layer
+`ERR_ASSERTION` on M5 at `2026-10-03T17:34:57.610804+00:00`; the short lease was
+cleaned/released at `17:37:01.201244`. Its setup now enters the real session
+interface while retaining the native repeat-layer/item assertions. Prepared
+coverage includes root/nested and mod wearable callers, unused/used close,
+reopen/no-kit/stale close, peer ownership, actual paused host/resume and transport
+takeover, idle versus gameplay input, strict wire rejection, historical saves,
+and the maintained all-color Sack/Dye browser journey with multiple paints
+before Done and a second admitted kit afterward.
+
+These source changes are **unvalidated** at this preparation boundary. No green
+test, formatting/lint/type check, build, current candidate browser, full gate,
+publication or deployment is claimed. Native/media/intended-red evidence stays
+qualified and is not repeated merely because the candidate was prepared.

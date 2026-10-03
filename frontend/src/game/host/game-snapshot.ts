@@ -329,6 +329,7 @@ function protocolPlayerState(
       dowsingFee: economy.dowsingFee,
       dowsingOffers: economy.dowsingOffers.map((offer) => ({ ...offer })),
       dowsingRolled: economy.dowsingRolled,
+      dyeSessionId: state.inventoryDyeSessions[playerId]?.id ?? null,
       equipment: {
         amulet: economy.equipment.amulet && protocolInventoryItem(economy.equipment.amulet),
         hat: economy.equipment.hat && protocolInventoryItem(economy.equipment.hat),

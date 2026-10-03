@@ -16,7 +16,11 @@ import {
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  FOMENTIUS_STOCK_DEFINITIONS,
   createEquipmentInventoryItem,
+  createFomentiusInventoryItem,
+  findInventoryItem,
+  type HubInventoryAction,
 } from '../core-kernels/hub-economy.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import {
@@ -73,6 +77,7 @@ import {
   startGameHost,
   type GameHostAdmission,
 } from './game-host.ts'
+import { createGameSnapshot } from './game-snapshot.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import {
   deriveGameActivityEvents,
@@ -2362,6 +2367,77 @@ test('an Inventory pause excludes another player from its belt actions', async (
   assert.ok(getPlayerEconomy(host.state(), playerId).backpack.some(({ id }) => id === ring.id))
 })
 
+test('paused owner keeps a painting session for repeat layers; peer admission is excluded and resume ends it', async context => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const owner = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const peer = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => owner.socket.close())
+  context.after(() => peer.socket.close())
+  const loadedOwner = nextMessage(owner.socket, message => message.type === 'server-boneyard-loaded')
+  const loadedPeer = nextMessage(peer.socket, message => message.type === 'server-boneyard-loaded')
+  const ready = completeInitialGameplayReadiness([owner.socket, peer.socket])
+  owner.socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId: 'default-random' }))
+  await Promise.all([loadedOwner, loadedPeer, ready])
+  const paused = nextMessage(owner.socket, message => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  ))
+  owner.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true, source: 'inventory' }))
+  await paused
+  const ids = new Map<string, { kit: number; robe: number }>()
+  for (const client of [owner, peer]) {
+    const playerId = client.welcome.playerId
+    const state = host.state()
+    const economy = getPlayerEconomy(state, playerId)
+    const kit = createFomentiusInventoryItem(
+      FOMENTIUS_STOCK_DEFINITIONS.find(row => row.kind === 'dye')!, economy.nextItemId,
+    )
+    const robe = createEquipmentInventoryItem(
+      DOWSING_EQUIPMENT_RECIPES.find(row => row.type === 'robe')!, kit.id + 1,
+    )
+    state.playerEntities = replacePlayerEconomy(state.playerEntities, playerId, {
+      ...economy, backpack: [...economy.backpack, kit, robe], nextItemId: robe.id + 1,
+    })
+    ids.set(playerId, { kit: kit.id, robe: robe.id })
+  }
+  const ownerId = owner.welcome.playerId
+  const peerId = peer.welcome.playerId
+  const ownerItems = ids.get(ownerId)!
+  const peerItems = ids.get(peerId)!
+  const heldTick = host.state().tick
+  peer.socket.send(encodeGameMessage({ type: 'client-hub-action', action: {
+    type: 'open-dye', dyeItemId: peerItems.kit, sessionId: 'peer-paint',
+  } }))
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(createGameSnapshot(host.state(), peerId).players[peerId]?.economy?.dyeSessionId, null)
+  assert.ok(findInventoryItem(getPlayerEconomy(host.state(), peerId).backpack, peerItems.kit))
+  const request = async (action: HubInventoryAction) => {
+    const before = getPlayerEconomy(host.state(), ownerId).actionFeedback?.sequence ?? 0
+    const result = nextMessage(owner.socket, message => {
+      if (message.type !== 'server-snapshot') return false
+      const feedback = message.snapshot.players[ownerId]?.economy?.actionFeedback
+      return feedback?.action === action.type && feedback.sequence > before
+    })
+    owner.socket.send(encodeGameMessage({ type: 'client-hub-action', action }))
+    const received = await result
+    assert.equal(received.type, 'server-snapshot')
+    if (received.type === 'server-snapshot') {
+      assert.equal(received.snapshot.players[ownerId]?.economy?.actionFeedback?.accepted, true)
+    }
+  }
+  await request({ type: 'open-dye', dyeItemId: ownerItems.kit, sessionId: 'owner-paint' })
+  await request({ type: 'dye', sessionId: 'owner-paint', targetItemId: ownerItems.robe, layer: 'cloth', swatchRows: [1] })
+  await request({ type: 'dye', sessionId: 'owner-paint', targetItemId: ownerItems.robe, layer: 'trim', swatchRows: [9] })
+  assert.equal(host.state().tick, heldTick)
+  const economy = getPlayerEconomy(host.state(), ownerId)
+  assert.equal(findInventoryItem(economy.backpack, ownerItems.kit), null)
+  assert.deepEqual(findInventoryItem(economy.backpack, ownerItems.robe)?.iconTints, [0x7b3b3b, 0x10104f])
+  const resumed = nextMessage(owner.socket, message => message.type === 'server-gameplay-pause' && message.pause === null)
+  owner.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
+  await resumed
+  assert.equal(createGameSnapshot(host.state(), ownerId).players[ownerId]?.economy?.dyeSessionId, null)
+})
+
 test('solo Pause and full Skill Screen release through resume progress', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
@@ -4527,6 +4603,21 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   assert.equal(first.socket.readyState, WebSocket.OPEN)
   assert.equal(host.capacityParticipantCount(), 2)
 
+  const paintingState = host.playerState(first.welcome.playerId)
+  assert.ok(paintingState)
+  const paintingEconomy = getPlayerEconomy(paintingState, first.welcome.playerId)
+  const unusedDye = createFomentiusInventoryItem(
+    FOMENTIUS_STOCK_DEFINITIONS.find(row => row.kind === 'dye')!, paintingEconomy.nextItemId,
+  )
+  paintingState.playerEntities = replacePlayerEconomy(paintingState.playerEntities, first.welcome.playerId, {
+    ...paintingEconomy, backpack: [...paintingEconomy.backpack, unusedDye], nextItemId: unusedDye.id + 1,
+  })
+  const painting = applyGameSimulationHubAction(paintingState, first.welcome.playerId, {
+    type: 'open-dye', dyeItemId: unusedDye.id, sessionId: 'takeover-painting',
+  })
+  assert.equal(painting.accepted, true)
+  Object.assign(paintingState, painting.state)
+
   const firstClosed = socketClose(first.socket)
   const replacementSocket = await openSocket(host.address.url)
   context.after(() => replacementSocket.close())
@@ -4549,6 +4640,10 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   const replacement = await replacementMessage
   assert.equal(replacement.type, 'server-welcome')
   assert.equal(replacement.playerId, first.welcome.playerId)
+  assert.equal(replacement.snapshot.players[replacement.playerId]?.economy?.dyeSessionId, null)
+  const replacementState = host.playerState(replacement.playerId)
+  assert.ok(replacementState)
+  assert.equal(findInventoryItem(getPlayerEconomy(replacementState, replacement.playerId).backpack, unusedDye.id)?.quantity, 1)
   assert.notEqual(replacement.resumeToken, first.welcome.resumeToken)
   assert.equal(replacement.snapshot.world.kind, 'boneyard')
   assert.equal(replacement.snapshot.world.kind === 'boneyard'

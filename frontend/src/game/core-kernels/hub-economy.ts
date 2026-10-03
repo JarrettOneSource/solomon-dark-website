@@ -102,6 +102,11 @@ export const NATIVE_DYE_SWATCH_COLORS = [
   [0.1, 0.1, 0.1],
 ] as const
 export type NativeDyeLayer = 'cloth' | 'trim'
+export interface NativeInventoryDyeSession {
+  readonly id: string
+  readonly dyeItemId: number
+  readonly kitConsumed: boolean
+}
 export type HubInventoryAction =
   | { readonly type: 'acknowledge-college-intro-dialogue' }
   | {
@@ -118,9 +123,11 @@ export type HubInventoryAction =
   | { readonly type: 'activate-belt-slot'; readonly slot: number; readonly aim?: Vector2 | null }
   | { readonly type: 'close-dowsing' }
   | { readonly type: 'consume'; readonly itemId: number }
+  | { readonly type: 'open-dye'; readonly dyeItemId: number; readonly sessionId: string }
+  | { readonly type: 'close-dye'; readonly sessionId: string }
   | {
       readonly type: 'dye'
-      readonly dyeItemId: number
+      readonly sessionId: string
       readonly layer: NativeDyeLayer
       readonly swatchRows: readonly number[]
       readonly targetItemId: number
@@ -342,6 +349,7 @@ export type NativeSkillBookOutcome =
 export interface HubActionFeedback {
   readonly accepted: boolean
   readonly action: HubInventoryAction['type']
+  readonly dyeSessionId?: string
   readonly skillBookOutcome: NativeSkillBookOutcome | null
   readonly dowsingPitch: number | null
   readonly reason: HubEconomyRejection | null
@@ -426,6 +434,10 @@ export interface HubEconomyResult {
   readonly reason: HubEconomyRejection | null
   readonly state: HubEconomyState
   readonly unforgeOutcome: NativeUnforgeOutcome | null
+}
+
+export interface HubInventoryDyeResult extends HubEconomyResult {
+  readonly session: NativeInventoryDyeSession | null
 }
 
 export interface HubLootInventoryResult {
@@ -1517,28 +1529,55 @@ export function readInventorySkillBook(
     : rejected(source, 'item-not-found')
 }
 
-export function dyeInventoryClothing(
+export function beginInventoryDyeSession(
   source: HubEconomyState,
   dyeItemId: number,
+  sessionId: string,
+): HubInventoryDyeResult {
+  if (sessionId.length === 0 || sessionId.length > 64) {
+    return { ...rejected(source, 'invalid-target'), session: null }
+  }
+  if (!hubEconomyInventoryIsValid(source)) {
+    return { ...rejected(source, 'invalid-inventory'), session: null }
+  }
+  const dye = findInventoryItem(source.backpack, dyeItemId)
+  if (!dye) return { ...rejected(source, 'item-not-found'), session: null }
+  if (dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0 || dye.kind !== 'dye') {
+    return { ...rejected(source, 'ineligible-item'), session: null }
+  }
+  return {
+    ...accepted(source),
+    session: { id: sessionId, dyeItemId, kitConsumed: false },
+  }
+}
+
+export function dyeInventoryClothing(
+  source: HubEconomyState,
+  session: NativeInventoryDyeSession,
   targetItemId: number,
   layer: NativeDyeLayer,
   swatchRows: readonly number[],
-): HubEconomyResult {
-  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
-  if (!nativeDyeRowsAreValid(swatchRows)) return rejected(source, 'invalid-target')
-  const dye = findInventoryItem(source.backpack, dyeItemId)
-  if (!dye) return rejected(source, 'item-not-found')
-  if (dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0 || dye.kind !== 'dye') {
-    return rejected(source, 'ineligible-item')
+): HubInventoryDyeResult {
+  const reject = (reason: HubEconomyRejection): HubInventoryDyeResult => ({
+    ...rejected(source, reason), session,
+  })
+  if (!hubEconomyInventoryIsValid(source)) return reject('invalid-inventory')
+  if (!nativeDyeRowsAreValid(swatchRows)) return reject('invalid-target')
+  if (!session.kitConsumed) {
+    const dye = findInventoryItem(source.backpack, session.dyeItemId)
+    if (!dye) return reject('item-not-found')
+    if (dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0 || dye.kind !== 'dye') {
+      return reject('ineligible-item')
+    }
   }
   const target = findInventoryItem(source.backpack, targetItemId)
-  if (!target) return rejected(source, 'item-not-found')
+  if (!target) return reject('item-not-found')
   if (!inventoryDyeableClothingItems(source.backpack).some(({ item }) => item.id === targetItemId)) {
-    return rejected(source, 'invalid-target')
+    return reject('invalid-target')
   }
   const currentTints = clothingTints(target)
   const committedTint = nativeDyeCommittedTint(swatchRows)
-  if (!currentTints || committedTint === null) return rejected(source, 'invalid-target')
+  if (!currentTints || committedTint === null) return reject('invalid-target')
   const iconTints: readonly [number, number] = layer === 'cloth'
     ? [committedTint, currentTints[1]]
     : [currentTints[0], committedTint]
@@ -1546,10 +1585,15 @@ export function dyeInventoryClothing(
     ...target,
     iconTints,
   })
-  if (!dyed) return rejected(source, 'invalid-target')
-  const backpack = consumeInventoryTreeItem(dyed, dyeItemId)
-  if (!backpack) return rejected(source, 'item-not-found')
-  return accepted({ ...source, backpack })
+  if (!dyed) return reject('invalid-target')
+  const backpack = session.kitConsumed
+    ? dyed
+    : consumeInventoryTreeItem(dyed, session.dyeItemId)
+  if (!backpack) return reject('item-not-found')
+  return {
+    ...accepted({ ...source, backpack }),
+    session: session.kitConsumed ? session : { ...session, kitConsumed: true },
+  }
 }
 
 export interface NativeUnforgeVitals {

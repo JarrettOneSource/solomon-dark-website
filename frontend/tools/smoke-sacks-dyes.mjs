@@ -73,6 +73,7 @@ const IDS = Object.freeze({
   storageKey: 40_012,
   storageSack: 40_013,
   target: 40_009,
+  secondDyeTarget: 40_020,
 })
 const ALL_SWATCH_ROWS = Object.freeze(NATIVE_DYE_SWATCHES.map((_, index) => index))
 const resumeControlReceipts = []
@@ -605,7 +606,7 @@ try {
   await waitForDyePhase(inventory, 'layer')
   await inventory.getByRole('button', { name: 'Cancel layer choice' }).click()
   await waitForDyePhase(inventory, 'target')
-  await inventory.getByRole('button', { name: 'Cancel Fabric Dye' }).click()
+  await inventory.getByRole('button', { name: 'Done Fabric Dye' }).click()
   await waitForDyeClosed(inventory)
   assert.equal(await item(IDS.dyeOne).count(), 1)
   assert.equal(await item(IDS.dyeTwo).count(), 1)
@@ -629,8 +630,9 @@ try {
   await waitForDyeSettled(inventory)
   await page.screenshot({ path: `${screenshotRoot}-dye-cloth-choice.png` })
   await inventory.getByRole('button', { name: 'Dye cloth' }).click()
-  await waitForDyeClosed(inventory)
-  await item(IDS.dyeOne).waitFor({ state: 'detached' })
+  await waitForDyePhase(inventory, 'target')
+  assert.equal(findHostBackpackItem(gameHost, IDS.dyeOne), null)
+  assert.ok(findHostBackpackItem(gameHost, IDS.dyeTwo))
   const expectedCloth = nativeDyeCommittedTint(ALL_SWATCH_ROWS)
   assert.notEqual(expectedCloth, null)
   await waitForSavedTarget(page, IDS.target, (target) => (
@@ -639,24 +641,43 @@ try {
   ))
   assert.equal(await dyeAudioCount(page), 1)
 
-  await doubleActivate(page, item(IDS.dyeTwo))
-  await waitForDyePhase(inventory, 'mix')
   await inventory.locator('[data-native-dye-swatch="1"]').click()
   await inventory.locator('[data-native-dye-swatch="9"]').click()
   await inventory.locator(`[data-native-dye-target="${IDS.target}"]`).click()
   await waitForDyePhase(inventory, 'layer')
-  await waitForDyeSettled(inventory)
   await page.screenshot({ path: `${screenshotRoot}-dye-trim-choice.png` })
   await inventory.getByRole('button', { name: 'Dye trim' }).click()
-  await waitForDyeClosed(inventory)
-  await item(IDS.dyeTwo).waitFor({ state: 'detached' })
-  const expectedTrim = nativeDyeCommittedTint([1, 9])
+  await waitForDyePhase(inventory, 'target')
+  const expectedTrim = nativeDyeCommittedTint([...ALL_SWATCH_ROWS, 1, 9])
   assert.notEqual(expectedTrim, null)
   const dyedTarget = await waitForSavedTarget(page, IDS.target, (target) => (
     target.iconTints?.[0] === expectedCloth && target.iconTints?.[1] === expectedTrim
   ))
   assert.deepEqual(dyedTarget.iconTints, [expectedCloth, expectedTrim])
-  assert.equal(await dyeAudioCount(page), 2)
+  assert.ok(findHostBackpackItem(gameHost, IDS.dyeTwo))
+
+  await inventory.locator(`[data-native-dye-target="${IDS.secondDyeTarget}"]`).click()
+  await waitForDyePhase(inventory, 'layer')
+  await inventory.getByRole('button', { name: 'Dye cloth' }).click()
+  await waitForDyePhase(inventory, 'target')
+  await waitForSavedTarget(page, IDS.secondDyeTarget, target => target.iconTints?.[0] === expectedTrim)
+  assert.equal(await dyeAudioCount(page), 3)
+  assert.ok(findHostBackpackItem(gameHost, IDS.dyeTwo))
+  await inventory.getByRole('button', { name: 'Done Fabric Dye' }).click()
+  await waitForDyeClosed(inventory)
+
+  await doubleActivate(page, item(IDS.dyeTwo))
+  await waitForDyePhase(inventory, 'mix')
+  await inventory.locator('[data-native-dye-swatch="9"]').click()
+  await inventory.locator(`[data-native-dye-target="${IDS.secondDyeTarget}"]`).click()
+  await waitForDyePhase(inventory, 'layer')
+  await inventory.getByRole('button', { name: 'Dye cloth' }).click()
+  await waitForDyePhase(inventory, 'target')
+  await waitForSavedTarget(page, IDS.secondDyeTarget, target => target.iconTints?.[0] === 0x10104f)
+  assert.equal(findHostBackpackItem(gameHost, IDS.dyeTwo), null)
+  assert.equal(await dyeAudioCount(page), 4)
+  await inventory.getByRole('button', { name: 'Done Fabric Dye' }).click()
+  await waitForDyeClosed(inventory)
 
   await doubleActivate(page, item(IDS.target))
   await waitForSavedEconomy(page, (economy) => economy.equipment.robe?.id === IDS.target)
@@ -902,7 +923,10 @@ function createSeededSave() {
   const destinationSack = sack(IDS.destinationSack, 'Destination Sack', [])
   const dyeOne = inventoryItem(IDS.dyeOne, 'Fabric Dye Kit', 'dye', 7012, 0, [42])
   const dyeTwo = inventoryItem(IDS.dyeTwo, 'Fabric Dye Kit', 'dye', 7012, 0, [42])
-  const dyeInnerSack = sack(IDS.dyeInnerSack, 'Dye Inner Sack', [dyeOne, dyeTwo, target])
+  const secondDyeTarget = createEquipmentInventoryItem(
+    DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat'), IDS.secondDyeTarget,
+  )
+  const dyeInnerSack = sack(IDS.dyeInnerSack, 'Dye Inner Sack', [dyeOne, dyeTwo, target, secondDyeTarget])
   const dyeCarrier = sack(IDS.dyeCarrier, 'Dye Carrier', [dyeInnerSack])
   const storageKey = inventoryItem(IDS.storageKey, 'Wizard Key', 'key', 7012, 1, [43])
   const storageSack = sack(IDS.storageSack, 'Storage Sack', [storageKey])

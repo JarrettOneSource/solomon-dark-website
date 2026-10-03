@@ -25,6 +25,25 @@ The authoritative belt, saves, replication, item actions and native screen
 geometry remain unchanged. The recovered ownership, failing baseline and
 regressions are recorded in [entry 115, report 32](<Game Native Parity RE/115-2026-08-20-inventory-and-skillscreen-interaction-closure-in-hub-and-boneyard.md#2026-09-25--report-32-live-shared-belt-across-optional-book-lifetimes>).
 
+## Painting sessions
+
+Painting is an authority-admitted transient actor session. Its client-generated
+identity correlates open/paint/close requests and feedback; it confers no grant
+until the simulation validates a live owned kit. The first accepted paint
+consumes one kit through the canonical recursive inventory transaction. Later
+paints use that same live session until Done, inventory/surface/input lifetime
+loss, world or actor replacement, or disconnect. The client retains its palette
+and parent modal after each accepted layer result. A late close/result cannot
+affect a newer session identity.
+
+The session record and painting feedback are omitted from checkpoints/profiles;
+restore starts with no painting session while keeping accepted tint and kit
+changes. Existing schema48 remains unchanged; historical one-shot dye feedback
+is validated and retired during normalization. Protocol146 carries explicit
+session actions, owner projection and correlated feedback. Native parent/child
+ownership and the pre-change failing witness are recorded in [entry170,
+  Report69](<Game Native Parity RE/170-2026-08-23-recursive-item-sack-ownership-and-fabric-dye-transactional-direct-use.md#2026-10-03--report69-one-kit-owns-the-open-painting-session>).
+
 ## Product topology
 
 Completed Boneyard runs and retired run segments have a separate, private

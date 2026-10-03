@@ -9,7 +9,7 @@ import { ALL_DISABLED, input } from '../../../tools/native-loot-test-fixture.ts'
 import { createNativeRng, drawNativeInteger } from './native-rng.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES, FOMENTIUS_STOCK_DEFINITIONS,
-  createFomentiusInventoryItem, createHubEconomy, dyeInventoryClothing,
+  createFomentiusInventoryItem, createHubEconomy, beginInventoryDyeSession, dyeInventoryClothing,
   equipInventoryItem, findInventoryItem, insertLootInventoryItem, transferInventoryItem,
   type HubEconomyState, type HubInventoryItem,
 } from './hub-economy.ts'
@@ -310,11 +310,12 @@ test('all named garments retain realized colors through frames, containers, equi
     )
     const withDye = insertLootInventoryItem(picked.state, dye)
     assert.equal(withDye.accepted, true)
-    const cloth = dyeInventoryClothing(withDye.state, dye.id, item.id, 'cloth', [1, 9])
+    const opened = beginInventoryDyeSession(withDye.state, dye.id, `loot-${item.id}`)
+    const cloth = dyeInventoryClothing(opened.state, opened.session!, item.id, 'cloth', [1, 9])
     assert.equal(cloth.accepted, true)
     assert.deepEqual(findInventoryItem(cloth.state.backpack, item.id)?.iconTints, [0x6d363e, item.iconTints![1]])
     retain(cloth.state, `${recipe.name}: dyed cloth`)
-    const trim = dyeInventoryClothing(cloth.state, dye.id, item.id, 'trim', [1])
+    const trim = dyeInventoryClothing(cloth.state, cloth.session!, item.id, 'trim', [1])
     assert.equal(trim.accepted, true)
     assert.deepEqual(findInventoryItem(trim.state.backpack, item.id)?.iconTints, [0x6d363e, 0x7b3b3b])
     retain(trim.state, `${recipe.name}: dyed trim`)

@@ -83,6 +83,7 @@ export interface HubInventorySackTransitionModel {
 }
 
 export interface HubInventoryDyeModalModel {
+  readonly admitted: boolean
   readonly closingAtMs: number | null
   readonly dyeItemId: number
   readonly openedAtMs: number
@@ -90,6 +91,7 @@ export interface HubInventoryDyeModalModel {
   readonly pending: boolean
   readonly selectedAtMs: number | null
   readonly selectedRow: number | null
+  readonly sessionId: string
   readonly swatchRows: readonly number[]
   readonly targetItemId: number | null
 }

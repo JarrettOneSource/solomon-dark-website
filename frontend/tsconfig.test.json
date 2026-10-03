@@ -72,6 +72,7 @@
     "src/game/core-server/air-water-player-visual-system.test.ts",
     "src/game/core-kernels/player-progression.test.ts",
     "src/game/core-server/game-simulation.test.ts",
+    "src/game/core-server/inventory-dye-session.test.ts",
     "src/game/core-server/player-entity-store.test.ts",
     "src/game/core-server/hub-student-store.test.ts",
     "src/game/headless/hub-headless-environment.test.ts",

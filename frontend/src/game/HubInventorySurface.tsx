@@ -245,6 +245,14 @@ export function NativeHubSurface({
   }
   const [statsPage, setStatsPage] = useState(0)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
+  const dyeSessionIdRef = useRef<string | null>(null)
+  const dyeActionRef = useRef(onAction)
+  dyeActionRef.current = onAction
+  useEffect(() => () => {
+    if (dyeSessionIdRef.current !== null) {
+      dyeActionRef.current({ type: 'close-dye', sessionId: dyeSessionIdRef.current })
+    }
+  }, [])
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
   const { inventoryFlyby, inventoryFlybys, startInventoryFlyby } = useHubInventoryFlybys(
     economy.actionFeedback, onAction, sackPath,
@@ -321,17 +329,35 @@ export function NativeHubSurface({
       }, NATIVE_SELECTOR_ACCEPT_TICKS * 10)
       return
     }
+    if (feedback.action === 'close-dye') return
+    if ((feedback.action === 'open-dye' || feedback.action === 'dye')
+      && feedback.dyeSessionId !== dyeSessionIdRef.current) return
+    if (feedback.action === 'open-dye') {
+      if (!feedback.accepted) {
+        audio.playSound('bad-action')
+        dyeSessionIdRef.current = null
+        setDyeModal(null)
+        return
+      }
+      if (economy.dyeSessionId !== dyeSessionIdRef.current) {
+        dyeSessionIdRef.current = null
+        setDyeModal(null)
+      } else {
+        setDyeModal(current => current ? { ...current, admitted: true, pending: false } : current)
+      }
+      return
+    }
     if (feedback.action === 'dye') {
       if (!feedback.accepted) {
         audio.playSound('bad-action')
-        setDyeModal((current) => current ? { ...current, pending: false } : current)
+        setDyeModal((current) => current?.admitted ? { ...current, pending: false } : current)
         return
       }
       audio.playStream('dye')
-      setDyeModal((current) => current ? {
+      setDyeModal((current) => current?.admitted ? {
         ...current,
-        closingAtMs: performance.now(),
         pending: false,
+        targetItemId: null,
       } : current)
       return
     }
@@ -355,7 +381,7 @@ export function NativeHubSurface({
       return
     }
     playSuccessfulInventoryFeedback(audio, feedback, onClose)
-  }, [audio, economy.actionFeedback, modContent, onClose, pendingNpcSelection, serviceSelection?.id])
+  }, [audio, economy.actionFeedback, economy.dyeSessionId, modContent, onClose, pendingNpcSelection, serviceSelection?.id])
 
   useEffect(() => () => {
     if (selectorResponseTimeoutRef.current !== null) {
@@ -376,19 +402,20 @@ export function NativeHubSurface({
   }, [sackPath])
 
   useEffect(() => {
-    if (!dyeModal || dyeModal.pending || dyeModal.closingAtMs !== null) return
-    const dye = findInventoryItem(economy.backpack, dyeModal.dyeItemId)
-    if (!dye || dye.kind !== 'dye' || dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0) {
+    if (!dyeModal || dyeModal.closingAtMs !== null) return
+    if (dyeModal.admitted && economy.dyeSessionId !== dyeModal.sessionId) {
+      dyeSessionIdRef.current = null
       setDyeModal(null)
       return
     }
+    if (dyeModal.pending) return
     if (dyeModal.targetItemId !== null
       && !inventoryDyeableClothingItems(economy.backpack).some(
         ({ item }) => item.id === dyeModal.targetItemId,
       )) {
       setDyeModal((current) => current ? { ...current, targetItemId: null } : current)
     }
-  }, [dyeModal, economy.backpack])
+  }, [dyeModal, economy.backpack, economy.dyeSessionId])
 
   useEffect(() => {
     const selectedAtMs = dyeModal?.selectedAtMs
@@ -646,24 +673,33 @@ export function NativeHubSurface({
     audio.playSound('click')
     setNotice(null)
     setInventoryDrag(null)
+    const sessionId = crypto.randomUUID()
+    dyeSessionIdRef.current = sessionId
     setDyeModal({
+      admitted: false,
       closingAtMs: null,
       dyeItemId,
       openedAtMs: performance.now(),
       path: sackPath,
-      pending: false,
+      pending: true,
       selectedAtMs: null,
       selectedRow: null,
+      sessionId,
       swatchRows: [],
       targetItemId: null,
     })
+    onAction({ type: 'open-dye', dyeItemId, sessionId })
   }
-  const cancelDye = () => setDyeModal((current) => {
-    if (!current || current.closingAtMs !== null || current.pending) return current
-    return current.targetItemId === null
-      ? { ...current, closingAtMs: performance.now() }
-      : { ...current, targetItemId: null }
-  })
+  const cancelDye = () => {
+    if (!dyeModal || dyeModal.closingAtMs !== null || dyeModal.pending) return
+    if (dyeModal.targetItemId !== null) {
+      setDyeModal(current => current ? { ...current, targetItemId: null } : current)
+      return
+    }
+    dyeSessionIdRef.current = null
+    onAction({ type: 'close-dye', sessionId: dyeModal.sessionId })
+    setDyeModal(current => current ? { ...current, closingAtMs: performance.now() } : current)
+  }
 
   const label = hubInventorySurfaceLabel(surface, storyOffice)
   const semanticTooltip = hubInventorySurfaceTooltip(
@@ -706,7 +742,7 @@ export function NativeHubSurface({
                 setDyeModal((current) => current ? { ...current, pending: true } : current)
                 onAction({
                   type: 'dye',
-                  dyeItemId: dyeModal.dyeItemId,
+                  sessionId: dyeModal.sessionId,
                   layer,
                   swatchRows: dyeModal.swatchRows,
                   targetItemId: dyeModal.targetItemId,
