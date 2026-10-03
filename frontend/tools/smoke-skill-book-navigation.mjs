@@ -87,7 +87,6 @@ try {
         assert.equal(Number(await stage.getAttribute('data-skill-book-scroll-max')), maximum)
         const name = `${scenario.name}-${branch}-${scene}`
         await page.screenshot({ path: `${output}/${name}-start.png` })
-        const viewport = stage.locator('.skill-book-viewport')
         const beforeHud = await stage.locator('[data-skill-book-resume]').boundingBox()
         await backgroundDrag(page, stage, scenario.touch)
         const dragged = Number(await stage.getAttribute('data-skill-book-scroll-x'))
