@@ -156,38 +156,38 @@ instruction extraction is claimed by this web diagnostic.
 The27permanent bodies and conditional Office body below are constructed by
 `hub-participant-movement.ts` from the same canonical room layout that the
 server consumes. Each row's geometry is recovered already; ordinary client
-contact behavior needs individual validation before a final disposition.
+contact behavior now has individual passing focused evidence as recorded below.
 
-| Body | Region | Center | Radius | Provisional disposition |
+| Body | Region | Center | Radius | Focused disposition |
 | --- | --- | --- | ---: | --- |
-| perk-witch | courtyard | `(1340,280)` |15| recovered-pending-port |
-| potion-trader | courtyard | `(1397,664)` |30| recovered-pending-port |
-| annalist | courtyard | `(895.5,455.5)` |8| recovered-pending-port |
-| items-trader | courtyard | `(1700.5,449.5)` |25| recovered-pending-port |
-| teacher | courtyard | `(576.5,710.5)` |25| recovered-pending-port |
-| memorator | mortuary | `(628,770)` |25| recovered-pending-port |
-| painting-0 | mortuary | `(512,695)` |40| recovered-pending-port |
-| painting-1 | mortuary | `(350,681)` |40| recovered-pending-port |
-| painting-2 | mortuary | `(673,681)` |40| recovered-pending-port |
-| painting-3 | mortuary | `(744,538)` |40| recovered-pending-port |
-| painting-4 | mortuary | `(590,538)` |40| recovered-pending-port |
-| painting-5 | mortuary | `(434,538)` |40| recovered-pending-port |
-| painting-6 | mortuary | `(279,538)` |40| recovered-pending-port |
-| painting-7 | mortuary | `(354,398)` |40| recovered-pending-port |
-| painting-8 | mortuary | `(512,398)` |40| recovered-pending-port |
-| painting-9 | mortuary | `(670,398)` |40| recovered-pending-port |
-| librarian | library | `(512,595)` |55| recovered-pending-port |
-| dowser | library | `(900,642.5)` |25| recovered-pending-port |
-| library-prop-0 | library | `(239.5,788)` |40| recovered-pending-port |
-| library-prop-1 | library | `(258.5,678.5)` |40| recovered-pending-port |
-| library-prop-2 | library | `(762,732.5)` |40| recovered-pending-port |
-| library-prop-3 | library | `(831,620.5)` |40| recovered-pending-port |
-| storeroom-prop-0 | storeroom | `(538,324)` |40| recovered-pending-port |
-| storeroom-prop-1 | storeroom | `(537.5,434)` |40| recovered-pending-port |
-| storeroom-prop-2 | storeroom | `(536,542.5)` |40| recovered-pending-port |
-| arch-chancellor | office | `(514,467)` |55| recovered-pending-port |
-| office-prop-0 | office | `(517.5,681)` |40| recovered-pending-port |
-| story-office-polisher | pending admission in office | `(566,735)` |15| recovered-pending-port; preserve admission gate |
+| perk-witch | courtyard | `(1340,280)` |15| exact-ported |
+| potion-trader | courtyard | `(1397,664)` |30| exact-ported |
+| annalist | courtyard | `(895.5,455.5)` |8| exact-ported |
+| items-trader | courtyard | `(1700.5,449.5)` |25| exact-ported |
+| teacher | courtyard | `(576.5,710.5)` |25| exact-ported |
+| memorator | mortuary | `(628,770)` |25| exact-ported |
+| painting-0 | mortuary | `(512,695)` |40| exact-ported |
+| painting-1 | mortuary | `(350,681)` |40| exact-ported |
+| painting-2 | mortuary | `(673,681)` |40| exact-ported |
+| painting-3 | mortuary | `(744,538)` |40| exact-ported |
+| painting-4 | mortuary | `(590,538)` |40| exact-ported |
+| painting-5 | mortuary | `(434,538)` |40| exact-ported |
+| painting-6 | mortuary | `(279,538)` |40| exact-ported |
+| painting-7 | mortuary | `(354,398)` |40| exact-ported |
+| painting-8 | mortuary | `(512,398)` |40| exact-ported |
+| painting-9 | mortuary | `(670,398)` |40| exact-ported |
+| librarian | library | `(512,595)` |55| exact-ported |
+| dowser | library | `(900,642.5)` |25| exact-ported |
+| library-prop-0 | library | `(239.5,788)` |40| exact-ported |
+| library-prop-1 | library | `(258.5,678.5)` |40| exact-ported |
+| library-prop-2 | library | `(762,732.5)` |40| exact-ported |
+| library-prop-3 | library | `(831,620.5)` |40| exact-ported |
+| storeroom-prop-0 | storeroom | `(538,324)` |40| exact-ported |
+| storeroom-prop-1 | storeroom | `(537.5,434)` |40| exact-ported |
+| storeroom-prop-2 | storeroom | `(536,542.5)` |40| exact-ported |
+| arch-chancellor | office | `(514,467)` |55| exact-ported |
+| office-prop-0 | office | `(517.5,681)` |40| exact-ported |
+| story-office-polisher | pending admission in office | `(566,735)` |15| exact-ported; preserve admission gate |
 
 Skorcha is another immovable actor with three authored placement variants,
 radius10 and present/absent/appearing/disappearing lifetime. Its position is
@@ -316,3 +316,55 @@ The runner stopped before typing/lint/build/built and automatically cleared
 private temp/profiles and released the lease at19:47:01UTC, immediately after
 the terminal focused result. All31scoped home entries are unchanged and no
 owned process or new home child remains. Later stages are still pending.
+
+
+### Exact d292 focused acceptance on published ae26
+
+The corrected Library fixture passed on exact candidate
+`d292cd8acdd7004e25448db517fc1622fccb3653`, tree
+`e33c0ac4075cb900fa3e5558348ce49a47125955`, above published `ae26c65e`.
+All7,256tracked Git blobs and the five Report57 SHA256s matched before checks;
+private Git HEAD/tree and tracked working state were exact and clean.
+All122focused prediction/session/actor/region/Skorcha cases passed with
+0failures and0skips. This includes actual valid contact for each of the27
+permanent fixed bodies, pending/completed Office polisher behavior, all three
+Skorcha placements and session presence addition/removal/reconciliation.
+The previously failed16-angle Library fixture remains a preserved witness;
+the corrected15-degree approach includes its authored narrow330-degree path
+without changing geometry or relaxing contact/validity assertions.
+
+Test TypeScript, frontend lint, normal production build and configured game
+bundle budget all passed. The real private-host built journey then passed
+its explicit known north/reverse non-penetrating route assertion and all
+page/console/failed-response/request-failure arrays are empty.213position
+samples have minimum rendered annalist distance33.04627165 (previous
+qualified baseline27.93495391), authority minimum33.00251638 and maximum
+sampled displayed/authority separation2.00001905. These latter samples use
+different instantaneous clocks and are not a zero-lag assertion. Actual
+Student count0 and normal `ANNAL_INTRO`/choices/`Skip`/`Done` interaction
+gates are recorded. Controlled starting pose and normal keyboard input
+remain qualified; historical input and built authority-pocket entry are
+not inferred from this successful predictor-correction journey.
+
+The admission-only Office polisher and three known Skorcha positions have
+`exact-ported` prediction dispositions. Skorcha animation/window
+scheduling remains authority-owned and already verified by its unchanged
+control tests; client body presence is adopted from accepted snapshots.
+Existing College/portal/private-region shared-solver behavior is verified
+unchanged by the focused controls. Students/other players and the general
+Boneyard push solver are outside this fixed-body client correction; their
+authoritative native rules were not altered. The separate92-rejection
+authority-pocket fixture and observed east escape remain as documented
+above, not a permanent-softlock fix or a claimed built authority-entry
+reproduction.
+
+All focused stages ended23:07:57UTC. Automatic terminal cleanup released
+the exact lease immediately at23:07:57.530852, with0owned processes and no
+new scoped home children, private temp/profiles cleared. Pre-existing
+40-byte Chrome Crashpad settings bytes/SHA are unchanged; its mtime-only
+touch is preserved. The runtime was not checked on M2.
+
+Final unchanged canonical all-mode acceptance, remaining supported built
+input/lifecycle paths, normal publication/managed deployment/live readback
+and complete own task cleanup remain pending. Focused acceptance alone is
+not Report57 completion or permission for a premature completion reaction.
