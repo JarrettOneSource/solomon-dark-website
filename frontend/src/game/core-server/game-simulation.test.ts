@@ -5335,12 +5335,17 @@ for (const stacks of [1, 3]) {
       assert.equal(state.world.enemies.webbedPlayers['local-player']!.cocoonHealth, 10)
       assert.equal(state.world.enemies.actors.filter(actor => actor.brain.family === 'cocoon').length, 1)
     }
-    const walked = stepGameSimulationTick(state, { 'local-player': gameplayInput(1, 0) })
+    let walked = stepGameSimulationTick(state, { 'local-player': gameplayInput(1, 0) })
     if (walked.world.kind !== 'boneyard') throw new Error('expected Boneyard')
     assert.ok(getPlayerCharacter(walked).velocity.x > 0)
     assert.ok(getPlayerCharacter(walked).gaitDegrees > pulled.gaitDegrees)
-    if (stacks === 1) assert.ok(walked.world.enemies.webbedPlayers['local-player']!.severity < stacks)
-    else assert.equal(walked.world.enemies.webbedPlayers['local-player']!.severity, 3)
+    if (stacks === 1) {
+      // The native threshold reads squared raw velocity per tick, so initial
+      // movement below0.5 need not remove a partial web on its first tick.
+      for (let tick = 0; tick < 15; tick++) walked = stepGameSimulationTick(walked, { 'local-player': gameplayInput(1, 0) })
+      if (walked.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.ok(walked.world.enemies.webbedPlayers['local-player']!.severity < stacks)
+    } else assert.equal(walked.world.enemies.webbedPlayers['local-player']!.severity, 3)
   })
 }
 
