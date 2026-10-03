@@ -18,9 +18,9 @@ test('the stock right-click atlas membership is complete and every row is regist
       NATIVE_SECONDARY_ASSET_SOURCES: readonly string[]
       NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES: Readonly<{ etherPlane: string }>
       NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES: readonly string[]
-      NATIVE_SECONDARY_SPRITE_MEMBERSHIP: Readonly<Record<'BadGuys' | 'Clothes' | 'DeadHawg' | 'Golem', readonly number[]>>
+      NATIVE_SECONDARY_SPRITE_MEMBERSHIP: Readonly<Record<'BadGuys' | 'Clothes' | 'DeadHawg' | 'Demon' | 'Golem', readonly number[]>>
       NATIVE_SECONDARY_SPRITE_RECORDS: readonly unknown[]
-      nativeSecondarySpriteRecord(atlas: 'BadGuys' | 'Clothes' | 'DeadHawg' | 'Golem', entry: number): { source: string }
+      nativeSecondarySpriteRecord(atlas: 'BadGuys' | 'Clothes' | 'DeadHawg' | 'Demon' | 'Golem', entry: number): { source: string }
     }
     const hubTextures = await server.ssrLoadModule('/src/game/renderer/hub-textures.ts') as {
       hubWorldAssetSources(): readonly string[]
@@ -30,9 +30,15 @@ test('the stock right-click atlas membership is complete and every row is regist
       HUB_VISUAL_ATLAS_SOURCES: readonly string[]
     }
     const membership = module.NATIVE_SECONDARY_SPRITE_MEMBERSHIP
-    assert.deepEqual(membership.BadGuys.slice(0, 30), [
-      0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 77, 78, 84, 85, 86,
+    assert.deepEqual(membership.BadGuys.slice(0, 32), [
+      0, 7, 8, 9, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 77, 78, 84, 85, 86,
     ])
+    // Ether Drain capture selector0x0061DC20 owns these complete authored banks.
+    assert.deepEqual(membership.BadGuys.filter(entry => entry >= 1477 && entry <= 1584),
+      Array.from({ length: 108 }, (_, index) => 1477 + index))
+    assert.deepEqual(membership.BadGuys.filter(entry => entry >= 2293 && entry <= 2346),
+      Array.from({ length: 54 }, (_, index) => 2293 + index))
+    assert.deepEqual(membership.Demon, Array.from({ length: 18 }, (_, index) => 80 + index))
     assert.equal(membership.BadGuys.includes(343), true)
     assert.equal(membership.BadGuys.includes(400), true)
     assert.deepEqual(
