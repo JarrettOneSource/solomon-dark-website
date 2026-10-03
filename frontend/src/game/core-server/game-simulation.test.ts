@@ -4664,6 +4664,8 @@ test('Ether Drain pulls grounded world Bouncers and consumes them without a pick
   state = stepGameSimulationTick(state, {})
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   const pulled = state.world.enemies.deathEffects.find(effect => effect.id === grounded!.id)!
+  assert.equal(pulled.kind, 'water-hail')
+  if (pulled.kind !== 'water-hail') throw new Error('expected Water Hail')
   assert.ok(pulled.position.x < 430)
   assert.deepEqual(pulled.velocity, { x: 0, y: 0 })
   assert.deepEqual(state.world.enemies.deathEffects.find(effect => effect.id === airborne!.id)!.position, { x: 450, y: 250 })
@@ -5012,7 +5014,7 @@ test('Ether Drain preserves world Orbs and Bonus books or Quad Damage at its cen
     const position = { x: 400, y: 250 }
     const loot = spawnBoneyardLootSpecs(state.world.loot, [
       { activationDelayTicks: 0, id: 1, kind: 'orb', nativeTypeId: 2011, orbKind: 'mana', value: .5, phase: 0, position, source: 'script' },
-      { bonusKind, id: 2, kind: 'bonus', nativeTypeId: 2038, phase: 0, position, source: 'script' },
+      { activationDelayTicks: 0, bonusKind, id: 2, kind: 'bonus', nativeTypeId: 2038, phase: 0, position, source: 'script' },
     ], state.tick).store
     state = stepGameSimulationTick({ ...state, world: { ...state.world, loot } }, {})
     if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
