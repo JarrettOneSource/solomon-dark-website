@@ -32,6 +32,8 @@ try {
 import { createHubInventoryRenderer } from '/src/game/renderer/hub-inventory-renderer.ts'
 import { createGameSimulation } from '/src/game/core-server/game-simulation.ts'
 import { createGameSnapshot } from '/src/game/host/game-snapshot.ts'
+import { layoutNativeUiText, nativeUiGlyphInkBounds } from '/src/game/native-ui/native-ui-text.ts'
+import { nativeUiAtlasSource } from '/src/game/native-ui/native-ui-assets.ts'
 const snapshot = createGameSnapshot(createGameSimulation(), 'local-player')
 const player = snapshot.players['local-player']
 const renderer = await createHubInventoryRenderer([])
@@ -41,7 +43,31 @@ const model = { kind:'inventory', config:player.config, economy:player.economy,
   flybys:[], inspection:null, notice:null, pressedControl:null, sackPath:[],
   sackTransition:null, selection:null, statsPage:0, runSummary:null }
 window.report61 = {
-  setSummary(summary) { renderer.setModel({...model,runSummary:summary}); renderer.render(performance.now(),1,1) }
+  setSummary(summary) { renderer.setModel({...model,runSummary:summary}); renderer.render(performance.now(),1,1) },
+  async expectedInk(lines) {
+    const image = new Image()
+    image.src = nativeUiAtlasSource('Fonts')
+    await image.decode()
+    const atlas = document.createElement('canvas')
+    atlas.width=image.width; atlas.height=image.height
+    const context=atlas.getContext('2d')
+    context.drawImage(image,0,0)
+    const points=[]
+    for (const [text,x,y] of lines) {
+      const layout=layoutNativeUiText({text,x,y,font:'medium',align:'center',tint:0xd9ba70})
+      for (const glyph of layout.glyphs) {
+        const [fx,fy,w,h]=glyph.frame
+        const ink=nativeUiGlyphInkBounds(glyph)
+        const data=context.getImageData(fx,fy,w,h).data
+        for (let py=0;py<h;py++) for (let px=0;px<w;px++) {
+          const at=(py*w+px)*4
+          if (data[at+3]>=250 && data[at]>=245 && data[at+1]>=245 && data[at+2]>=245)
+            points.push([Math.round(ink.left+px),Math.round(ink.top+py)])
+        }
+      }
+    }
+    return points
+  }
 }
 document.body.dataset.ready='true'
 </script>` })))
@@ -58,16 +84,41 @@ document.body.dataset.ready='true'
     const canvas = page.locator('canvas').first()
     // Preserve the actual image and raw diagnostics before any assertion,
     // including the old painter's wrong zero strings/missing Wave.
-    await canvas.screenshot({ path: join(output, `${name}.png`) })
+    const image = await canvas.screenshot({ path: join(output, `${name}.png`) })
     const diagnostic = await canvas.getAttribute('data-native-inventory-run-summary')
-    const observation = { name, requestedSummary: summary, diagnostic }
+    const anchors = summary === null ? [] : summary.wave > 0
+      ? [[800, 329], [800, 344], [800, 364]] : [[800, 344], [800, 364]]
+    const pixelWitness = await page.evaluate(async ({ encoded, lines }) => {
+      const points = await window.report61.expectedInk(lines)
+      const image = new Image()
+      image.src = 'data:image/png;base64,' + encoded
+      await image.decode()
+      const decoded = document.createElement('canvas')
+      decoded.width=image.width; decoded.height=image.height
+      const context=decoded.getContext('2d')
+      context.drawImage(image,0,0)
+      const data=context.getImageData(0,0,image.width,image.height).data
+      const matched = points.filter(([x,y]) => {
+        const at=(y*image.width+x)*4
+        return Math.abs(data[at]-217)<=2 && Math.abs(data[at+1]-186)<=2 && Math.abs(data[at+2]-112)<=2
+      }).length
+      return { expectedOpaqueInk: points.length, matchedNativeGoldInk: matched,
+        fraction: points.length===0 ? null : matched/points.length }
+    }, { encoded: image.toString('base64'), lines: expected.map((text,index) => [text,...anchors[index]]) })
+    const observation = { name, requestedSummary: summary, diagnostic, pixelWitness }
     observations.push(observation)
     await writeFile(join(output, 'observations.json'), JSON.stringify({ observations, errors }, null, 2) + '\n')
-    assert.ok(diagnostic !== null, 'Production inventory has no recovered live run-summary output; inspect retained baseline image')
+    if (summary !== null) {
+      assert.ok(pixelWitness.expectedOpaqueInk > 50, 'The sealed native font must supply opaque glyph ink')
+      assert.ok(pixelWitness.fraction >= 0.9,
+        `${name}: actual painted text fails recovered native value/case/position/gold contract; retained PNG and pixel witness are the baseline evidence`)
+    }
+    // Diagnostics are checked only after actual pixels. Missing new APIs are
+    // never the reason classified as the baseline behavior regression.
+    assert.ok(diagnostic !== null, 'Candidate production summary diagnostics are unavailable')
     const lines = JSON.parse(diagnostic)
     assert.deepEqual(lines.map(line => line.text), expected)
-    assert.deepEqual(lines.map(line => [line.x, line.y]), summary === null ? [] : summary.wave > 0
-      ? [[800, 329], [800, 344], [800, 364]] : [[800, 344], [800, 364]])
+    assert.deepEqual(lines.map(line => [line.x, line.y]), anchors)
   }
   assert.deepEqual(errors, { console: [], page: [], responses: [] })
 } catch (error) {

@@ -346,6 +346,7 @@ test('inventory summary clears retired run/actor values and reads restored state
   assert.deepEqual(projectInventoryRunSummary({ players, world: { kind: 'hub' } }, 'local-player'), {
     wave: 0, monstersKilled: 0, awesomeness: 0,
   })
+  assert.equal(projectInventoryRunSummary({ players: {}, world: { kind: 'hub' } }, 'local-player'), null)
   assert.equal(projectInventoryRunSummary({ players, world: { kind: 'hub' } }, 'local-player', 'restored-run'), null)
   for (const changed of [
     { ...restored!, wave: 13 },
