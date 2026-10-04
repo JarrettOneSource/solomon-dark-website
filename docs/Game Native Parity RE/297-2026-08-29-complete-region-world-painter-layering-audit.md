@@ -1268,7 +1268,7 @@ pointers or ASLR observations.
 | Light PE/RTTI read and retained callback | Student vtable `007916DC`, `refs_dat819978.log` lines 20887–20904 | Student `+28=00502090`; its retained formula uses the same ordinary heading offset and actor-scale multiplication. The omitted glyph-register binding still needs instruction confirmation. | high for callback/formula; glyph identity pending |
 | Light PE/RTTI read and existing entry 018 | CollegeStatue vtable `00791584`, `+1C=00501490`, `+28=00501510` | College 39 is body art; College 41 is a separate multiply ground shadow with the already recovered common phase. | high for vtable and retained contract; a fresh operand read remains pending |
 | Authored bundle metadata | stock `College.bundle` (543 rows), `BadGuys.bundle` (2,509 rows); maintained `native_bundle_art.py` schema | Record 67 has a 25-by-25 logical canvas, zero center, and no outline points. Reported occluders consume registered College artwork; they do not use an inferred hull/mask. | high |
-| Current source | `world-player-view.ts`, `hub-actors.ts`, `hub-world-scene.ts`, `hub-private-room-scene.ts` | Player/Student and several NPC shadows are nested in body painter roots; statue shadow retains a raw row-derived depth while its body receives sequential queue depth. | high, static source |
+| Current source, corrected 2026-10-04 | `world-player-view.ts`, `hub-actors.ts`, `hub-world-scene.ts`, `hub-private-room-scene.ts` | Player/Student and several NPC shadows are nested in body painter roots; `applyPainterOrder` reassigns statue shadow to `statueBody.zIndex - .25`. Its constructor's raw depth does not persist through the actual render update. | high, complete source path and actual rows |
 
 The `00414EA0` helper is a generic glyph transform/draw entry, also used by
 unrelated elements and effects. Its callers do not all become members of this
@@ -1291,7 +1291,7 @@ The inventory is not yet a final disposition table.
 | --- | --- | --- | --- |
 | PlayerWizard, all five element appearances, all 24 headings, local and remote | `00793F74 / 00528AD0` | Shared `PlayerWorldView` in Courtyard, all four private rooms, Arena/Tutorial Boneyards | Ordinary native contract recovered; ground ownership/position/opacity and early-death branch need measured diagnosis and port. |
 | Student, walking/reading, all headings and authored constructor scales | `007916DC / 00502090` | `HubStudentView`, live/pool/retirement branches | Separate callback/formula recovered; exact glyph/operand confirmation remains pending; current body-owned fixed-size shadow is a sibling mismatch. |
-| CollegeStatue | `00791584 / 00501510` | `HubWorldScene.statueAura`, College 41 multiply | Separate ground owner recovered; current obsolete raw depth needs measured diagnosis. |
+| CollegeStatue | `00791584 / 00501510` | `HubWorldScene.statueAura`, College 41 multiply | Separate native ground owner recovered; current body-row depth minus .25 is measured in supported cases below. The original stale-constructor-depth interpretation is withdrawn. |
 | PerkWitch / Hagatha | `00791664 / 00501990` | `HubHagathaView` | Callback and actor membership recovered; exact glyph binding/transform operand widths need retained or admitted instruction confirmation. |
 | Annalist / Provokatus | `00791754 / 00502180` | Courtyard `addNpc` | Same ground interval; callback sets half alpha and a distinct transform. Exact selected glyph/operands remain pending. |
 | Illuminator | `007917CC / 005022F0` | No maintained survival snapshot member | Dormant native sibling; confirm builder reachability and selected glyph before a final reasoned out-of-system disposition. |
@@ -1368,10 +1368,12 @@ The statue auxiliary is also distinct from the body queue root. The earlier
 sentence in this entry saying body and aura remain children of one actor root
 does not describe the native `+28/+1C` split and is superseded for the ground
 shadow by this evidence. Current body queue depth is assigned by
-`NativeHubPainterPlanner`, while `statueAura` still keeps
-`hubActorDepth(834)-1`, a raw-row value. This proves a source-level stale
-ownership path; its current pixel effect still needs the actual renderer
-discriminator. The accepted Report 55 code provides a concrete shared
+`NativeHubPainterPlanner`; the complete source path then assigns
+`statueAura.zIndex = statueBody.zIndex - .25` in `applyPainterOrder`. The initial
+M2 trace missed that per-frame assignment and incorrectly treated the
+constructor's `hubActorDepth(834)-1` as the actual final depth. That assumption
+is withdrawn. The mismatch is body-row auxiliary ownership, not a lingering
+raw constructor value. The accepted Report 55 code provides a concrete shared
 Courtyard ground interval, but does not prove another callback's constants.
 
 ### Diagnostic and completion contract
@@ -1511,3 +1513,83 @@ controls; persist failed measurements rather than treating a missing exposed
 circle as a passed test. Source is still ledger-only; final native membership,
 meaningful pixel proof, implementation, checks/built/full acceptance,
 publication/deployment/reaction and final cleanup remain pending.
+
+### 2026-10-04 — short loan: retained supported cases and one failed control
+
+The one new loan acquired at `02:59:06.329286Z`, with explicit heavy cutoff
+`03:06:03.487384Z` and release bound `03:11:03.487384Z`, at most twelve
+minutes from acquisition including cleanup. The minimal 122,880-byte ledger
+delta reconstructed exact `bcf1414d` / tree `dac4557b`; all 7,256 tracked
+bytes and index matched before and after. Existing private tools/dependencies
+and the prior 25 native ranges were reused. Only eight missing native ranges
+ran, exit zero at `02:59:19.702584Z`.
+
+The real public WebGL renderer retained all 76 rows and seven representative
+images before rejecting the sole `statue-exposed-control` at `(1140,860)`.
+It exited one at `02:59:31.840892Z`. Both current and native-parameter
+circle contributions are zero at that point despite nonempty isolated masks;
+the alleged exposed comparison is unsupported. Its precise coverage by other
+late artwork still needs measurement. This is not a whole-scope meaningful
+red or passed diagnostic. Browser, HTTP and request errors are empty.
+
+The supported rows remain useful independently of that failed control:
+
+| Supported case | Actual nonempty masks and observation | Same-art ground reference |
+| --- | --- | --- |
+| Tent `(1397,664)` | Source alpha 1,147 pixels, opaque wizard 1,576, opaque tent stack 23,386. The current body-owned circle changes 341 opaque stack pixels, maximum RGB difference 135. Actor depth 1012 is after tent stack 1011. | Zero opaque stack/body changes; the fully covered ground glyph correctly contributes no exposed pixels at this overlap. |
+| Tent exposed `(1520,684)` | Same real glyph changes 340 exposed pixels; the native-parameter reference changes 385. Opaque stack/body changes zero. | Positive visible-ground control is supported; masking all circles to hide the bug would fail it. |
+| North arch: 25 samples plus exposed `(1100,215)` | Opaque arch changes zero across the current samples. The exposed control changes 298 ground pixels, native-parameter reference 200; all three isolated masks are nonempty. | Current disappearance on covered artwork is not proof of a dropped source or a need to draw shadows over the arch. These rows do not establish every arch/state branch. |
+| Statue `(1050,765)` | Source alpha 1,147, opaque wizard 1,576, opaque statue 17,536. Ordinary circle contributes 323 exposed pixels. College 41 at actual depth 1014.75 multiplies all 1,576 opaque wizard pixels, maximum RGB difference 171; wizard is at 1014 and statue body at 1015. | Moving only the unchanged College-41 pass into the native ground interval changes zero opaque wizard pixels, maximum difference 1; exposed ground remains present. |
+| Statue positive `(1080,735)` | Ordinary current/native-parameter exposed contributions 317/346, source/body/statue masks 1,147/1,576/17,536; the current multiply pass affects 1,224 opaque wizard pixels. | Zero opaque wizard changes with identical authored multiply artwork in ground interval. This is a supported positive control for the next discriminator. |
+
+Inspected current/ground PNG pairs show the darkened wizard beside the statue
+and the tent-stack overlap. The supported observations separate the wizard's
+BadGuys-67 circle from the statue's College-41 multiplier. They establish
+body-row auxiliary ownership defects in these controlled cases, not the
+historical screenshot's exact cause or final membership acceptance.
+
+The actual row depths and the complete source at
+`hub-world-scene.ts:700` also falsify the earlier stale-raw-depth assumption.
+`applyPainterOrder` assigns `statueAura = statueBody.zIndex - .25` every
+frame. Its constructor value is overwritten; all current guidance above now
+records body-row ownership. Old task receipts preserve the superseded initial
+trace as history, not a current fact. No product patch follows from that
+incorrect assumption or the unsupported `(1140,860)` control.
+
+New native instructions close several narrower questions: Player maintenance
+`00533520` increments `+1BC` at `005339E7` only while `+160` is nonzero;
+it queries Region `+114` at `00533F45`, writes surface value 2 at
+`0053401C`, and restores 0 at `005340FE`. Courtyard and all four private
+rooms resolve `+114` to `005088E0`, bytes `32 C0 C2 0C 00`, returning false.
+Arena resolves it to `004677A0`; its live Terrain predicate still needs full
+source/model reconciliation. Matrix helper `004030A0` stores arguments into
+the diagonal X/Y/Z lanes before composition, confirming the recovered
+auxiliary three-axis scale arguments. Registered College glyph helper
+`004142E0` adds half logical canvas dimensions plus caller X/Y before the
+quad and restores the transform afterward.
+
+Bounded reads also disclose precise remaining gaps. The trig wrapper jumps
+at `00747106` to `00752330`; the fallback after `0074710B` continues beyond
+the captured endpoint, so a sin/cos semantic is not yet claimed. Registry
+`005B7080` dispatches IDs above 3002 to `005B8369`; the captured prefix does
+not reach the dormant NPC cases. The requested constructor start `005022A0`
+was inside an instruction and is disqualified as a complete constructor read.
+Already retained aligned `annalist-ground` output does contain the subsequent
+Illuminator type assignment `005022A3 -> 138E` (5006); that type alone does
+not prove factory reachability. Follow only these missing branches rather
+than repeating the completed recovery. Casting/drive writer semantics and
+supported special-surface admission must also remain explicit before porting
+their state branches.
+
+Automatic terminal cleanup released at `02:59:32.747102Z`, independently
+verified with no owned processes, exact lease absent, all tracked source bytes
+matching, private temp/profiles cleared and no new home children. Only the
+known pre-existing 40-byte same-SHA Chrome settings mtime touch was preserved.
+Parent and Report 62 received the immediate actual handoff. No second compute
+attempt, product patch, main lock, full gate or publication was performed.
+
+The next minimal discriminator must preserve the rejected row and identify
+its actual late-art coverage; use the already nonempty `(1080,735)` row as a
+separate positive control. Keep nonempty controls and supported-case evidence
+distinct from whole-test acceptance. All extractable applicable native gaps,
+per-member/built acceptance and the report's later delivery gates remain open.
