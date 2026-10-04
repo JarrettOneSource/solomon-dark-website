@@ -698,3 +698,36 @@ proofs and older runtime touch pass with their existing source qualifications.
 Current-runtime touch, new helper lint, the unchanged final all-mode canonical
 gate and honest final tested-build identity remain pending, followed by normal
 publication, managed live verification and both-device cleanup.
+
+### 2026-10-04 — full-gate disconnect ownership regression
+
+Exact candidate `a6d2bfb8` passed changed-helper lint, its production build and
+one maintained current-runtime touch journey. The rebuilt files were checked
+against the accepted `bd13dd7b` artifacts: the 16 changed path entries are seven
+renamed JavaScript pairs plus HTML/deployment metadata. Every remaining byte
+matches after replacing only the actual full revision literal and the seven
+observed import filenames; the other 117 fingerprints are unchanged.
+
+The unchanged full gate failed at `15:40:52.567549`: its 2,825-test Node block
+passed 2,824 and failed the existing public regression, "staged catch-up loses
+its capability when the final live peer disconnects." The new unconditional
+painting-session cleanup in `game-host.ts` attempted `replaceStateForPlayer`
+for the staged actor after its party run ended. `stateForClient` deliberately
+uses the Hub after that staging lifetime ends; the actor is absent from the
+shared world identity map, so the strict replacement invariant correctly
+rejected the write. The transport-replacement cleanup has the same unnecessary
+write when session revocation is a no-op.
+
+`closeGameSimulationInventoryDyeSession` already returns its original state
+when the actor has no painting grant. Actor removal clears grants, and detached
+party catch-up stores only actor/Hall data. Connection-lifetime cleanup must
+honor that no-op result and replace authoritative state only when an actual
+grant was revoked. The strict shared-world setter and the existing regression
+must remain unchanged. This causal correction still needs focused and full
+validation; the failed gate is not acceptance or publication.
+
+Automatic cleanup drained the surviving owned Roslyn child and removed the
+SSD image/mount/registration link, private TMP/profiles and exact lease at
+`15:41:03.550377`. No owned processes/groups or new home children remained.
+Passing lint/build/touch and older source-qualified proofs are preserved; the
+full quality/mutation tail and final postcanonical build identity are pending.

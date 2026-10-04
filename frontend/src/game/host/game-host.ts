@@ -1655,9 +1655,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
         }
         if (replacedClient) {
-          replaceStateForPlayer(replacedClient.playerId, closeGameSimulationInventoryDyeSession(
-            stateForClient(replacedClient), replacedClient.playerId,
-          ))
+          closeClientInventoryDyeSession(replacedClient)
         }
         const playerState = stagedPartyRejoin
           ? partyRejoinStagingState(stagedPartyRejoin)
@@ -3439,9 +3437,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       publishPlayerActivity(client, 'left-game')
-      replaceStateForPlayer(client.playerId, closeGameSimulationInventoryDyeSession(
-        stateForClient(client), client.playerId,
-      ))
+      closeClientInventoryDyeSession(client)
       client.socialConnection?.close()
       clients.delete(socket)
       client.saveCheckpointSender.close()
@@ -4554,6 +4550,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return activeRunForPartyRejoin(client.partyRejoinSlot) && client.partyRejoinSlot.detachedState
       ? partyRejoinStagingState(client.partyRejoinSlot)
       : sharedWorlds?.hub ?? state
+  }
+
+  function closeClientInventoryDyeSession(client: HostClient): void {
+    const current = stateForClient(client)
+    const closed = closeGameSimulationInventoryDyeSession(current, client.playerId)
+    // Staged catch-up can close after its live run has already retired.
+    if (closed !== current) replaceStateForPlayer(client.playerId, closed)
   }
 
   function partyRejoinStagingState(slot: PartyRejoinSlot): GameSimulationState {
