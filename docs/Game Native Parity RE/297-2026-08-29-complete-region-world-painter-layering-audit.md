@@ -1702,3 +1702,62 @@ may need a subsequent bounded read. Existing 38 native ranges, 76 qualified
 renderer rows, and the passed two-point coverage are reused. This preparation
 has not executed; no product patch, new M5 grant, acceptance, or publication
 is claimed.
+
+### 2026-10-04 — native-only partial failure; five retained functions recovered
+
+The new one-phase clock was fixed at `16:12:22.930464Z`, heavy cutoff
+`16:19:22.930464Z`, release bound `16:24:22.930464Z`. Actual lease acquisition
+was `16:12:23.957625Z`. Fresh scoped Discord source remained unchanged,
+current main remained `3c32f09c`, and exact `8e47b5fd` / tree `20a48a8d`,
+clean index and all 7,257 original tracked-file bytes admitted at
+`16:12:35.846949Z`. The automatic supervisor started before minimal staging.
+Only the sixty-second `only-final-native-gaps` stage ran; no old native range,
+pixel/preflight, Node/Chrome, Website, publication or main-lock stage ran.
+
+All five new function commands returned zero and wrote their text outputs.
+The containing stage then failed one at `16:12:36.100840Z` with
+`Unmapped native data 0081BD20+300`. The 300-byte read, following 92-byte NPC
+table and direct-store census did not produce data or a receipt. Neither a
+whole diagnostic pass nor a completed census is claimed. The five retained
+texts were copied read-only and individually hashed on M2 after release;
+the sealed binary/private LLVM identity checks preceded all five commands.
+Command/range/hash provenance is in the partial function readback receipt.
+
+| Retained function | Raw text SHA-256 | Supported instruction result |
+| --- | --- | --- |
+| `00410500..00410720` | `351ac6f914a3fb9945e65ae2a1b2a3d5a05ad32d2dc40ba21e04490e02f99cf6` | Completed direction helper `00410500..0041054C` forms a float32 angle from `[Math+4]*degrees/180`; X calls the now-proved sine `007470D0`, Y calls `00748330` and negates its float32 result. The X direction is not the current cosine-based component. The second callee and Math-field producer remain to establish before claiming a complete numeric replacement. |
+| `00405160..00405500` | `d0e8da55be3b585e7a98ae251c0187ec5b377ca6582d14e45b5040fac0be3019` | Completed contour predicate ends at `00405432`. Its object owns a point-buffer pointer at `+4` and count at `+38`; counts below two reject. The edge walk uses strict Y-side and X-intersection parity comparisons, without a guessed hull or epsilon. The five 60-byte objects are not five coordinate arrays; their producer and pointed-to authored buffers must be recovered. |
+| `004118B0..00411B00` | `bf1133b094f1df0e9ed8875e31061a706ea3a4e61695b77696aff766b9441a7f` | Completed quad predicate `004118B0..004118EB` calls captured triangle helper `004119C0..00411A6B` for `(p0,p1,p2)`, then `(p1,p3,p2)`, using four XY records at offsets 0/8/16/24. Its return is their triangle-membership union. Arena's already captured bridge/hole exclusion and current scene admission still belong to the owning query. |
+| `00503000..00503060` | `8f7d3de79de374985af51aa572a7788a6b0b7530d81de54838f1af2f6ea726a1` | Constructor `00503033` assigns vtable `00791EB4`; `00503039` assigns type `139E` (5022); it returns at `00503058`. Retained RTTI now conclusively binds the full factory case to Annalist2. Its documented story-only census and absent maintained producer support `out-of-system` for this Website auxiliary consumer, while its exact record-67 native contract is preserved. |
+| `0050B4F0..0050B720` | `b195fd8bd84f3e3eb1a710103ef35d18026dcaa2b7ab05a13660539d062b23d7` | Constructor `0050B52E` assigns vtable `00792DB4`; `0050B54A` assigns type `1393` (5011); it returns at `0050B633`. Retained RTTI binds this to Polisher. Its `+1BC` write at `0050B5DA` is float zero in that separate Polisher object, not a PlayerWizard timer reset. |
+
+The earlier preparation's unbound 5011 row is therefore closed as Polisher,
+already in the affected inventory. Current `HubPrivateRoomScene` owns its
+conditional Office body/marker and `createHubPolisherClock(... ^ 5011, ...)`;
+its ground callback `00502980` remains `recovered-pending-port`. The older
+interaction census's story-only description does not remove a presenter that
+the maintained Website currently admits. Preserve the existing Office policy
+and visibility lifetime when adding its native record-67 ground owner.
+Annalist2 and Standing retain their reasoned unsupported-story dispositions;
+Illuminator's compiled factory reachability is established separately from
+any current Website population. No new NPC is invented from a factory case.
+
+The failed reader requested a fixed 300-byte file-backed span for `0081BD20`.
+That span did not map under the sealed PE's actual section/raw bounds. Do not
+fill it with zeros, call a header/pointer dump an extracted contour table, or
+repeat the unchanged raw read. Follow the contour object's construction and
+its point-buffer producer. The unproduced store census remains no evidence
+at all; the EDI/type2030 ownership correction and PlayerWizard `+160/+1BC`
+mapping uncertainty are unchanged. A distinct future missing-producer/callee/
+census slice must reuse all 43 retained ranges and prior controlled pixels.
+
+Automatic terminal cleanup released at `16:12:36.625678Z`, with PGID57467
+fully drained, no unresolved groups/processes/cleanup errors, all 31 scoped
+home entries unchanged, no new home children, private TMP/profile clear,
+source-after error null and exact lease absent. Every original tracked byte
+still matched the admitted tree at `16:12:36.624915Z`. Parent received the
+actual handoff before M2 interpretation. This phase closed on failure despite
+unused clock time; no second attempt, clock reset or extension followed.
+The actual failure and all partial outputs remain retained. Report56 remains
+unfinished; no product fix, full member/built acceptance or publication is
+claimed by this receipt.
