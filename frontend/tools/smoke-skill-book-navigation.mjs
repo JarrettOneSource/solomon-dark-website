@@ -279,13 +279,13 @@ function grantFixture(playerId, branch) {
 }
 
 function grantRemovalFixture(playerId) {
-  for (const id of [8, 57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70]) {
+  for (const id of [8, 57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71]) {
     const state = host.state()
     const next = grantPlayerEntitySkillRanks(state.playerEntities, playerId, id, 1, state.gameRng)
     Object.assign(state, { playerEntities: next.store, gameRng: next.rng })
   }
   const before = nativeSkillBookPageLayout(nativeSkillBookPages(progression(playerId)))
-  assert.equal(before.contentWidth, 1560, 'Sixteen learned entries fit the viewport')
+  assert.equal(before.contentWidth, 1560, `Learned entries fit the viewport: ${JSON.stringify(before)}`)
   assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[11], 0)
   const state = host.state()
   const economy = getPlayerEconomy(state, playerId)
@@ -297,7 +297,8 @@ function grantRemovalFixture(playerId) {
   assert.equal(getPlayerSkillBook(host.state(), playerId).effectiveRanks[11], 1)
   const pages = nativeSkillBookPages(progression(playerId))
   const layout = nativeSkillBookPageLayout(pages)
-  assert.ok(layout.contentWidth > 1600, 'The temporary Call Leviathan page creates real overflow')
+  assert.ok(layout.contentWidth > 1600,
+    `The temporary Call Leviathan page creates real overflow: ${JSON.stringify({ before, layout })}`)
   return { ids: [...new Set(pages.flatMap(page => page.rows.map(row => row.id)))], layout,
     beforeWidth: before.contentWidth, originalAmulet: economy.equipment.amulet }
 }
