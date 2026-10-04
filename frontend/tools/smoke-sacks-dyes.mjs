@@ -274,7 +274,10 @@ try {
   const occupiedDestinationSlot = Number(
     await backpackItem(IDS.clickRingOne).getAttribute('data-inventory-slot'),
   )
-  const occupiedFlybyAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  const { audioStart: occupiedFlybyAudioStart, phaseStart: occupiedFlybyPhaseStart } = await page.evaluate(() => ({
+    audioStart: window.__sdrAudioEvents.length,
+    phaseStart: window.__sdrInventoryFlybyPhases.length,
+  }))
   await dragTo(page, backpackItem(IDS.rootKey), backpackItem(IDS.clickRingOne))
   const inventoryCanvas = inventory.locator('.hub-inventory-native-canvas')
   await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="flying"]')
@@ -291,9 +294,42 @@ try {
     flatten(occupiedBeforeCommit.backpack).find(({ id }) => id === IDS.rootKey)?.inventorySlot,
     blankDestinationSlot,
   )
-  await page.screenshot({ path: `${screenshotRoot}-inventory-flyby-swap.png` })
-  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="trailing"]')
-    .waitFor()
+  try {
+    await page.screenshot({ path: `${screenshotRoot}-inventory-flyby-swap.png` })
+    await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="trailing"]')
+      .waitFor()
+  } catch (error) {
+    try {
+      const saved = await savedEconomy(page)
+      const observation = await page.evaluate((phaseStart) => {
+        const data = document.querySelector('.hub-inventory-native-canvas')?.dataset
+        return {
+          atMs: performance.now(),
+          phases: window.__sdrInventoryFlybyPhases.slice(phaseStart),
+          currentPhase: data?.nativeInventoryFlybyPhase ?? null,
+          ticks: data?.nativeInventoryFlybyTicks ?? null,
+          mainItems: data?.nativeInventoryFlybyMainItems ?? null,
+          afterimages: data?.nativeInventoryFlybyAfterimages ?? null,
+        }
+      }, occupiedFlybyPhaseStart)
+      process.stderr.write(`SDR_FLYBY_OBSERVATION ${JSON.stringify({
+        stage: 'occupied-slot trailing wait', hasTouch, observation,
+        hostFeedback: getPlayerEconomy(gameHost.state(), gameHost.hostPlayerId()).actionFeedback,
+        hostSlots: [IDS.rootKey, IDS.clickRingOne].map(id => ({
+          id, slot: findHostBackpackItem(gameHost, id)?.inventorySlot ?? null,
+        })),
+        savedSlots: [IDS.rootKey, IDS.clickRingOne].map(id => ({
+          id, slot: flatten(saved.backpack).find(item => item.id === id)?.inventorySlot ?? null,
+        })),
+        pageErrors, consoleErrors, failedResponses,
+      })}\n`)
+    } catch (observationError) {
+      process.stderr.write(`SDR_FLYBY_OBSERVATION ${JSON.stringify({
+        stage: 'occupied-slot trailing wait', observationError: String(observationError),
+      })}\n`)
+    }
+    throw error
+  }
   await waitForSavedEconomy(page, (economy) => {
     const backpack = flatten(economy.backpack)
     return backpack.find(({ id }) => id === IDS.rootKey)?.inventorySlot
