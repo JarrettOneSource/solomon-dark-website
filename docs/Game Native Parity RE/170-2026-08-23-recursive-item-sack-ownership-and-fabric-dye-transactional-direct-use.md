@@ -596,3 +596,28 @@ These source changes are **unvalidated** at this preparation boundary. No green
 test, formatting/lint/type check, build, current candidate browser, full gate,
 publication or deployment is claimed. Native/media/intended-red evidence stays
 qualified and is not repeated merely because the candidate was prepared.
+
+### 2026-10-04 — first focused candidate check and bounded correction
+
+Exact integrated `055cb04c` on published `ae26c65e` admitted all 7,257 tracked
+bytes on M5. Pinned dependency restoration and the migrated repeat witness
+passed; the witness ended at `2026-10-03T23:55:32.765447+00:00`. The broader
+focused stage ended at `23:55:46.419002` with 368 passes, 97 failures and no
+skips. The automatic runner stopped there and cleaned/released its exact lease
+at `23:55:47.458365`, with zero owned processes, all 31 monitored home entries
+unchanged, no new children and private temporary/profile cleanup.
+
+Ninety-five failures identified one actual integration omission: the common
+full tick result builder did not preserve `inventoryDyeSessions`. The prepared
+correction explicitly carries that existing field through the tick, without
+an optional-state or free-use fallback. The other failures were a positive
+welcome fixture missing its required painting correlation ID and a malformed
+profile-feedback assertion using the full-continuation consumer. The latter
+now exercises `restoreGameSaveProfile` for the profile and independently
+`restoreGameSaveDocument` for the continuation; strict rejection remains.
+
+These corrections are unrun. Host-boundary tests, both TypeScript checks,
+lint, build, desktop/touch browser stages and the full canonical gate did not
+run in this failed phase. Earlier witness/native/media evidence retains its
+exact source and observation qualifications; this is not a completed report
+or an accepted current candidate.

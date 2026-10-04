@@ -3599,6 +3599,7 @@ function finishGameSimulationTick(
     combatRng,
     enhancedEffects: previous.enhancedEffects,
     hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
+    inventoryDyeSessions: previous.inventoryDyeSessions,
     levelUpBarrier,
     worldManagerOrder: worldManagerOrder.state(),
     modEffects: previous.modEffects,

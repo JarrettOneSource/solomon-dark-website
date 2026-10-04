@@ -21,7 +21,7 @@ import {
 import { replacePlayerEconomy } from './player-entity-store.ts'
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
-import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
+import { createGameSaveDocument, restoreGameSaveDocument, restoreGameSaveProfile } from '../save/game-save-document.ts'
 
 function fixture(nested = false) {
   const state = createGameSimulation({
@@ -155,11 +155,18 @@ test('checkpoint and profile keep paid colors and consumption but omit painting 
   historical.profile.economy.actionFeedback = oneShotFeedback
   historical.continuation.simulation.playerEntities.economies[0].actionFeedback = oneShotFeedback
   const oldResult = restoreGameSaveDocument(JSON.stringify(historical))
+  const oldProfile = restoreGameSaveProfile(JSON.stringify(historical))
+  assert.equal(oldProfile.economy.actionFeedback, null)
   assert.equal(getPlayerEconomy(oldResult.state, 'owner').actionFeedback, null)
   assert.equal(paint(oldResult.state, 'never-saved-session', robe.id).accepted, false)
   historical.profile.economy.actionFeedback = { ...oneShotFeedback, kitConsumed: true }
-  assert.throws(() => restoreGameSaveDocument(JSON.stringify(historical)))
+  assert.throws(() => restoreGameSaveProfile(JSON.stringify(historical)))
   historical.profile.economy.actionFeedback = null
+  historical.continuation.simulation.playerEntities.economies[0].actionFeedback = {
+    ...oneShotFeedback, kitConsumed: true,
+  }
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(historical)))
+  historical.continuation.simulation.playerEntities.economies[0].actionFeedback = null
   historical.continuation.simulation.inventoryDyeSessions = {
     owner: { id: 'never-saved-session', dyeItemId: kit.id, kitConsumed: true },
   }

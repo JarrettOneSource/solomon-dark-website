@@ -1130,6 +1130,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
               skillBookOutcome: null,
               accepted: true,
               action: 'dye',
+              dyeSessionId: 'welcome-painting',
               dowsingPitch: null,
               reason: null,
               sequence: 2,
