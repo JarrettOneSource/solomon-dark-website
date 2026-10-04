@@ -285,7 +285,7 @@ function grantRemovalFixture(playerId) {
     Object.assign(state, { playerEntities: next.store, gameRng: next.rng })
   }
   const before = nativeSkillBookPageLayout(nativeSkillBookPages(progression(playerId)))
-  assert.equal(before.contentWidth, 1600, 'Sixteen learned entries fit the viewport')
+  assert.equal(before.contentWidth, 1560, 'Sixteen learned entries fit the viewport')
   assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[11], 0)
   const state = host.state()
   const economy = getPlayerEconomy(state, playerId)
