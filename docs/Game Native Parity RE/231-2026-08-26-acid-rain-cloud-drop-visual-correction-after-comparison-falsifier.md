@@ -374,3 +374,51 @@ matrix; the defect is the adapter's composition choice.
 - The final docs-inclusive canonical Mac gate runs with this publication
   receipt already present. No tracked file changes between that gate and the
   fast-forward push. Deployment and production cutover remain unrequested.
+
+## 2026-10-04 — Report 60 original-media review
+
+The renewed report names a central rotating plane. This reopens the current
+Acid center's visual acceptance without changing the previously recovered
+native painter or declaring a new renderer defect from the wording alone.
+
+### Original evidence and observed interval
+
+- The retained original MP4 is unchanged: SHA-256
+  `e3e788cd28876b40117bd7caf9127d565f3e145148d5f75cd64db506fdd956cd`.
+  A focused original/nearby-source read on October 4 finds no correction or
+  withdrawal. No performance allegation is added to scope.
+- An isolated M5 native AVAssetReader operation read the complete delivered
+  stream: 210 eligible samples, completed status, zero observed ineligible
+  samples. Twenty-two requested timeline samples retain exact CMTime PTS,
+  1906x1080 decoder raster and identity preferred transform. The native movie
+  duration is 7.023 seconds at timescale 1000; this does not replace the prior
+  demuxer's 7.022378-second provenance with an exact timing-equivalence claim.
+- All 22 exported images were inspected. Samples through actual PTS
+  0.9839111111 have no visible Acid field; a bright primary effect obscures
+  the sampled 1.3175333333 frame. From 1.6511444444 through 6.8555777778, a
+  narrow bright green member remains vertically aligned while the camera and
+  world background translate. Its interior/edge detail changes. The sampled
+  occurrence shows no diagonal sweep of the entire stretched envelope.
+- This is native BGRA/DeviceRGB image collection with actual delivered-sample
+  timestamps, not FFmpeg frame indexing, source-packet counting, playback-drop
+  measurement or calibrated color equivalence. It covers this short captured
+  occurrence; it does not close the spell's active/fade/residue lifecycle.
+
+### Causal disposition and next falsifier
+
+The strongest current explanation is the existing record-10 additive center
+at a small constructor phase. Entry 083 recovers construction `Float(1)`;
+the instructions recorded above use center X scale `7.5*s*p`, Y scale `6*s`,
+and rotation-then-world-axis-scale. A small `p` predicts a thin fixed-axis
+envelope while the irregular ink rotates. Current published source still uses
+those operands and the shared `S*R` adapter.
+
+This remains an attribution inference. The clip does not identify its exact
+build, cast age, constructor phase or renderer primitive. There is no new
+product remedy, final member disposition, native-low-phase visual acceptance
+or completion claim. The next focused current-built control must identify the
+actual center sprite label/asset and local matrix at very low and near-one
+phases over multiple ages. Reuse the recovered instruction/art facts; recover
+more native evidence only if that control falsifies them. A supported mismatch
+must be fixed in its shared owner. An intentional/native matching shape needs
+a concrete product decision before changing its authored rule.
