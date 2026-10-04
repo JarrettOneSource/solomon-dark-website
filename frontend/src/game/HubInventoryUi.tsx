@@ -53,7 +53,7 @@ import {
   HUB_SACK_PAGE_TRANSITION,
 } from './renderer/hub-inventory-render-contract.ts'
 import './hub-inventory.css'
-import type { HubUiSurface } from './hub-inventory-ui-model.ts'
+import type { HubUiSurface, InventoryRunSummary } from './hub-inventory-ui-model.ts'
 import { NativeHubSurface } from './HubInventorySurface.tsx'
 
 function hubNativeSurfaceOwnerKey(surface: Exclude<HubUiSurface, null>): string {
@@ -87,6 +87,7 @@ interface HubInventoryUiProps {
   overlayRoot: RefObject<HTMLDivElement | null>
   playerPosition: Vector2
   progression: ProtocolPlayerProgression
+  runSummary: InventoryRunSummary | null
   region: HubRegionId
   secondaryPlayerState: NativeSecondaryPlayerState | undefined
   skillsKeyCode: string
@@ -124,6 +125,7 @@ export default function HubInventoryUi({
   playerPosition,
   secondaryPlayerState,
   progression,
+  runSummary,
   region,
   skillsKeyCode,
   surface,
@@ -436,6 +438,7 @@ export default function HubInventoryUi({
       onUnassignBeltEntry={onUnassignBeltEntry}
       perkRemovalEnabled={interactionsEnabled}
       progression={progression}
+      runSummary={runSummary}
       secondaryPlayerState={secondaryPlayerState}
       replacementTarget={inventoryCloseTarget}
       rendererOwner={rendererOwner}

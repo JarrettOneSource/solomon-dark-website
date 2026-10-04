@@ -5,6 +5,7 @@ import {
   nativeBeltPotionProjection,
 } from '../../core-kernels/native-belt.ts'
 import { type WizardElement } from '../../core-kernels/player-character.ts'
+import type { InventoryRunSummary } from '../../hub-inventory-ui-model.ts'
 import { nativeSkillIconRecord } from '../../core-kernels/player-progression.ts'
 import { nativeBeltSkillAvailability, nativeCooldownSectorPoints } from '../../skill-quickbar.ts'
 import { equipmentSlotsForItem, hubEquipmentItemForAlias } from '../../hub-inventory-presentation.ts'
@@ -23,6 +24,8 @@ import {
 import {
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_MODAL_HUD_CONTROLS,
+  HUB_INVENTORY_RUN_SUMMARY_STYLE,
+  hubInventoryRunSummaryLines,
   hubInventoryEquipmentSlotRects,
 } from '../hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from '../native-element-vfx-view.ts'
@@ -54,6 +57,7 @@ export function addPlayerPreview(
   layer: Container,
   element: WizardElement,
   economy: ProtocolPlayerEconomy,
+  summary: InventoryRunSummary,
 ): NativeElementVfxView | null {
   const seal = addAtlasSprite(context, layer, 'UI', 62, 800, 249, { anchor: 0.5, scale: 1.25 })
   seal.alpha = 0.32
@@ -62,8 +66,10 @@ export function addPlayerPreview(
     layer, context.playerCharacterAtlas, context.elementVfxTextures, context.modTextures,
     element, economy.equipment,
   )
-  addBitmapText(context, layer, 'KILLS: 0', 'medium', 800, 337, { tint: 0xe7cc71 })
-  addBitmapText(context, layer, 'AWESOMENESS: 0', 'medium', 800, 359, { tint: 0xe7cc71 })
+  for (const line of hubInventoryRunSummaryLines(summary)) {
+    addBitmapText(context, layer, line.text, HUB_INVENTORY_RUN_SUMMARY_STYLE.font,
+      line.x, line.y, HUB_INVENTORY_RUN_SUMMARY_STYLE)
+  }
   return vfx
 }
 

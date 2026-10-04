@@ -1,3 +1,4 @@
+import type { InventoryRunSummary } from '../hub-inventory-ui-model.ts'
 import {
   nativeSkillColorRoot,
 } from '../core-kernels/player-progression.ts'
@@ -987,4 +988,20 @@ export function hubInventoryMeleeDamageLine(
 function nativeInventoryStatNumber(value: number): string {
   if (!Number.isFinite(value)) throw new RangeError('native inventory stat value must be finite')
   return value.toFixed(1)
+}
+
+export const HUB_INVENTORY_RUN_SUMMARY_STYLE = {
+  font: 'medium', align: 'center', tint: 0xd9ba70,
+} as const
+
+export function hubInventoryRunSummaryLines(
+  summary: InventoryRunSummary | null,
+  companion = false,
+): readonly { readonly text: string; readonly x: number; readonly y: number }[] {
+  if (summary === null || companion) return []
+  return [
+    ...(summary.wave > 0 ? [{ text: `Wave: ${summary.wave}`, x: 800, y: 329 }] : []),
+    { text: `Kills: ${summary.monstersKilled}`, x: 800, y: 344 },
+    { text: `Awesomeness: ${summary.awesomeness}`, x: 800, y: 364 },
+  ]
 }

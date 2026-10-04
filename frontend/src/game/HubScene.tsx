@@ -46,7 +46,7 @@ import CollegeIntroOverlay from './CollegeIntroOverlay.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi from './HubInventoryUi.tsx'
-import type { HubUiSurface } from './hub-inventory-ui-model.ts'
+import { FRESH_INVENTORY_RUN_SUMMARY, type HubUiSurface } from './hub-inventory-ui-model.ts'
 import {
   HUB_HUD_SHORTCUTS,
   hubInteractionAtPoint,
@@ -1053,6 +1053,7 @@ export default function HubScene({
           overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
+          runSummary={FRESH_INVENTORY_RUN_SUMMARY}
           secondaryPlayerState={secondaryPlayerState}
           skillsKeyCode={settings.controls.openSkills}
           region={currentRegion}

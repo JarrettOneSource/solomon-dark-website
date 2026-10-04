@@ -73,7 +73,7 @@ import {
 import GameHud from './GameHud.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import GameOverOverlay from './GameOverOverlay.tsx'
-import type { HubUiSurface } from './hub-inventory-ui-model.ts'
+import { projectInventoryRunSummary, sameInventoryRunSummary, type HubUiSurface } from './hub-inventory-ui-model.ts'
 import './hub.css'
 import HubInventoryUi from './HubInventoryUi.tsx'
 import {
@@ -253,6 +253,9 @@ export default function BoneyardScene({
     boneyardInitialSnapshot.players[playerId]!.economy,
   )
   const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
+  const [inventoryRunSummary, setInventoryRunSummary] = useState(() => (
+    projectInventoryRunSummary(boneyardInitialSnapshot, playerId, loaded.runId)
+  ))
   const [secondaryPlayerState, setSecondaryPlayerState] = useState(() => (
     boneyardInitialSnapshot.secondaryAbilities.players[playerId]
   ))
@@ -503,6 +506,8 @@ export default function BoneyardScene({
       },
     )
     return subscribe((snapshot) => {
+      const summary = projectInventoryRunSummary(snapshot, playerId, loaded.runId)
+      setInventoryRunSummary((current) => sameInventoryRunSummary(current, summary) ? current : summary)
       if (
         snapshot.world.kind !== 'boneyard'
         || snapshot.world.runId !== loaded.runId
@@ -1188,6 +1193,7 @@ export default function BoneyardScene({
               overlayRoot={sceneRef}
               playerPosition={inventoryPlayerPosition}
               progression={progression}
+              runSummary={inventoryRunSummary}
               secondaryPlayerState={secondaryPlayerState}
               skillsKeyCode={settings.controls.openSkills}
               region="courtyard"
