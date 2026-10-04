@@ -621,3 +621,42 @@ lint, build, desktop/touch browser stages and the full canonical gate did not
 run in this failed phase. Earlier witness/native/media evidence retains its
 exact source and observation qualifications; this is not a completed report
 or an accepted current candidate.
+
+
+### 2026-10-04 — focused and built acceptance; final release pending
+
+Corrected runtime `3c060f2a` admitted all 7,257 tracked paths on M5. The six
+focused suites passed 465/465 tests and paused/resume host cases passed 2/2,
+with zero failures/skips. App/test types, lint, production build and maintained
+full desktop Sack/Dye acceptance exited zero. The desktop result covers all
+18 swatches, unused Done, cloth/trim/another garment before Done on one admitted
+kit, a second fresh kit afterward, four dye audio events, saved/equipped tints
+and the existing Sack/companion/Boneyard checks. No browser/console/response
+errors were reported.
+
+That phase's touch run stopped at the initial Inventory flyby trailing wait,
+before painting. Its retained screenshot shows the occupied-slot flight but
+no terminal recorder/host/save state survived. Its cause remains unproven.
+The phase cleaned/released at `2026-10-04T02:06:00.670233+00:00` before analysis.
+
+An observation-only maintained helper (`bb3c5aed`) preserves the original input,
+screenshot, assertion and timeout while reusing the existing phase recorder and
+capturing actual renderer/host/save/error state on failure. Against the unchanged
+qualified `3c060f2a` build, the single full touch journey passed at
+`2026-10-04T05:09:55.070006+00:00`: all 18 swatches, four dye audio events,
+26 Sack transitions and zero browser/console/response errors. Its relevant
+cloth/trim/character/flyby frames were inspected. The earlier timeout did not
+reproduce; this pass does not prove its cause or a runtime flake fix.
+
+Automatic cleanup checked the confirmed task-created process group before
+private-path cleanup, then released at `05:09:55.988029`. Owned processes and
+new home children were zero, private TMP/profiles were cleared and the exact
+lease was absent. The 31-entry home scope preserves the pre-existing 40-byte
+Chrome settings file with identical bytes/SHA and only an mtime touch.
+
+Session admission/first charge/repeat use, cancellation/lifetime, strict wire
+and historical-save behavior now have focused and built evidence with explicit
+source qualifications. Final immutable current-main canonical validation,
+normal publication, managed deployment/live verification and both-device task
+cleanup remain pending. No full gate, publication, deployment or Report 69
+completion is claimed. Preserve price 300, original limits and unrelated art.
