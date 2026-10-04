@@ -274,46 +274,61 @@ try {
   const occupiedDestinationSlot = Number(
     await backpackItem(IDS.clickRingOne).getAttribute('data-inventory-slot'),
   )
-  const { audioStart: occupiedFlybyAudioStart, phaseStart: occupiedFlybyPhaseStart } = await page.evaluate(() => ({
+  const { audioStart: occupiedFlybyAudioStart, phaseStart: occupiedFlybyPhaseStart, frameStart: occupiedFlybyFrameStart } = await page.evaluate(() => ({
     audioStart: window.__sdrAudioEvents.length,
     phaseStart: window.__sdrInventoryFlybyPhases.length,
+    frameStart: window.__sdrInventoryFlybyFrames.length,
   }))
-  await dragTo(page, backpackItem(IDS.rootKey), backpackItem(IDS.clickRingOne))
   const inventoryCanvas = inventory.locator('.hub-inventory-native-canvas')
-  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="flying"]')
-    .waitFor()
-  await page.waitForFunction(() => {
-    const canvas = document.querySelector('.hub-inventory-native-canvas')
-    const ticks = Number(canvas?.dataset.nativeInventoryFlybyTicks ?? -1)
-    return ticks > 0 && ticks < 20
-      && Number(canvas?.dataset.nativeInventoryFlybyMainItems ?? 0) === 2
-      && Number(canvas?.dataset.nativeInventoryFlybyAfterimages ?? 0) > 0
-  })
-  const occupiedBeforeCommit = await savedEconomy(page)
-  assert.equal(
-    flatten(occupiedBeforeCommit.backpack).find(({ id }) => id === IDS.rootKey)?.inventorySlot,
-    blankDestinationSlot,
-  )
+  let occupiedFlybyStage = 'occupied-slot gesture'
   try {
+    await dragTo(page, backpackItem(IDS.rootKey), backpackItem(IDS.clickRingOne))
+    occupiedFlybyStage = 'occupied-slot flying phase'
+    await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="flying"]')
+      .waitFor()
+    occupiedFlybyStage = 'occupied-slot intermediate-frame predicate'
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('.hub-inventory-native-canvas')
+      const ticks = Number(canvas?.dataset.nativeInventoryFlybyTicks ?? -1)
+      window.__sdrInventoryFlybyPredicateSamples.push({
+        atMs: performance.now(), phase: canvas?.dataset.nativeInventoryFlybyPhase ?? null,
+        ticks, mainItems: Number(canvas?.dataset.nativeInventoryFlybyMainItems ?? 0),
+        afterimages: Number(canvas?.dataset.nativeInventoryFlybyAfterimages ?? 0),
+      })
+      return ticks > 0 && ticks < 20
+        && Number(canvas?.dataset.nativeInventoryFlybyMainItems ?? 0) === 2
+        && Number(canvas?.dataset.nativeInventoryFlybyAfterimages ?? 0) > 0
+    })
+    occupiedFlybyStage = 'occupied-slot precommit save'
+    const occupiedBeforeCommit = await savedEconomy(page)
+    assert.equal(
+      flatten(occupiedBeforeCommit.backpack).find(({ id }) => id === IDS.rootKey)?.inventorySlot,
+      blankDestinationSlot,
+    )
+    occupiedFlybyStage = 'occupied-slot screenshot'
     await page.screenshot({ path: `${screenshotRoot}-inventory-flyby-swap.png` })
+    occupiedFlybyStage = 'occupied-slot trailing phase'
     await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="trailing"]')
       .waitFor()
   } catch (error) {
     try {
       const saved = await savedEconomy(page)
-      const observation = await page.evaluate((phaseStart) => {
+      const observation = await page.evaluate(({ phaseStart, frameStart }) => {
         const data = document.querySelector('.hub-inventory-native-canvas')?.dataset
         return {
           atMs: performance.now(),
           phases: window.__sdrInventoryFlybyPhases.slice(phaseStart),
+          frames: window.__sdrInventoryFlybyFrames.slice(frameStart),
+          predicateSamples: window.__sdrInventoryFlybyPredicateSamples,
           currentPhase: data?.nativeInventoryFlybyPhase ?? null,
           ticks: data?.nativeInventoryFlybyTicks ?? null,
           mainItems: data?.nativeInventoryFlybyMainItems ?? null,
           afterimages: data?.nativeInventoryFlybyAfterimages ?? null,
         }
-      }, occupiedFlybyPhaseStart)
+      }, { phaseStart: occupiedFlybyPhaseStart, frameStart: occupiedFlybyFrameStart })
+      await page.screenshot({ path: `${screenshotRoot}-occupied-flyby-failure.png` })
       process.stderr.write(`SDR_FLYBY_OBSERVATION ${JSON.stringify({
-        stage: 'occupied-slot trailing wait', hasTouch, observation,
+        stage: occupiedFlybyStage, hasTouch, observation,
         hostFeedback: getPlayerEconomy(gameHost.state(), gameHost.hostPlayerId()).actionFeedback,
         hostSlots: [IDS.rootKey, IDS.clickRingOne].map(id => ({
           id, slot: findHostBackpackItem(gameHost, id)?.inventorySlot ?? null,
@@ -325,7 +340,7 @@ try {
       })}\n`)
     } catch (observationError) {
       process.stderr.write(`SDR_FLYBY_OBSERVATION ${JSON.stringify({
-        stage: 'occupied-slot trailing wait', observationError: String(observationError),
+        stage: occupiedFlybyStage, observationError: String(observationError),
       })}\n`)
     }
     throw error
@@ -1194,12 +1209,21 @@ function installSackNavigationProbe() {
   const receipts = []
   window.__sdrSackNavigation = receipts
   window.__sdrInventoryFlybyPhases = []
+  window.__sdrInventoryFlybyFrames = []
+  window.__sdrInventoryFlybyPredicateSamples = []
   let active = null
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       const owner = mutation.target
       if (mutation.attributeName === 'data-native-inventory-flyby-phase') {
         window.__sdrInventoryFlybyPhases.push(owner.getAttribute('data-native-inventory-flyby-phase'))
+        const data = owner.dataset
+        window.__sdrInventoryFlybyFrames.push({
+          atMs: performance.now(), phase: data.nativeInventoryFlybyPhase ?? null,
+          ticks: Number(data.nativeInventoryFlybyTicks ?? -1),
+          mainItems: Number(data.nativeInventoryFlybyMainItems ?? 0),
+          afterimages: Number(data.nativeInventoryFlybyAfterimages ?? 0),
+        })
         continue
       }
       const direction = owner.getAttribute('data-native-sack-transition')
