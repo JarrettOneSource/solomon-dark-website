@@ -1593,3 +1593,112 @@ its actual late-art coverage; use the already nonempty `(1080,735)` row as a
 separate positive control. Keep nonempty controls and supported-case evidence
 distinct from whole-test acceptance. All extractable applicable native gaps,
 per-member/built acceptance and the report's later delivery gates remain open.
+
+### 2026-10-04 — recovered terminal coverage and native ownership correction
+
+The bounded phase admitted exact `53493bc8` / tree `129c447a`, clean index
+and all 7,257 original tracked-file bytes on published `3c32f09c`. Its three
+actual stages completed: owned-PGID cleanup preflight zero at
+`08:41:31.468071Z`, five missing native reads zero at `08:41:32.433927Z`,
+and real public WebGL late-art coverage zero at `08:42:00.852788Z`.
+Automatic cleanup released at `08:42:02.343867Z`, before the worker's
+`usage_limit_exceeded` terminal at `08:42:10Z`. The usage error does not
+erase these completed results. Parent recovered the final receipts and
+independently observed no owned process or lease. No diagnostic was replayed.
+
+The replacement M2 continuation copied only the five existing native text
+outputs and sixteen retained PNGs. Every byte count and SHA-256 matches the
+completed native/pixel receipts; all sixteen images were directly inspected.
+The original Discord message was freshly rechecked under the authorized
+account: same wording, null edit timestamp, same three attachments, and an
+eight-message surrounding window with no related correction or withdrawal.
+
+| Controlled current-source case | Measured source and actual late-art coverage | Causal result |
+| --- | --- | --- |
+| Previous failed `(1140,860)` | Source alpha 1,150 pixels; opaque body 1,573; opaque statue 17,574. All 1,150 source pixels overlap opaque southern-bank art; foreground overlap is zero. | Original source contribution zero. Temporarily omitting only the late artwork exposes 348 circle pixels, 497 total changed pixels. Restored frame differs at zero pixels and every visible/renderable flag is restored. |
+| Separate positive `(1080,735)` | Source alpha 1,147 pixels; opaque body 1,576; opaque statue 17,536; no late opaque source overlap. | 317 exposed circle pixels with or without late art, 434 total changes in each comparison. Restoration differs at zero pixels; all flags restored. |
+
+The actual frames show the southern stone bank hiding the wizard and its
+ground circle together at the previously failed point. This closes that
+control's missing-coverage explanation; it supplies no reason to alter circle
+geometry or make it paint over scenery. The prior failed whole diagnostic
+remains failed history, while its other supported tent/statue observations
+remain valid and separate. Both new controls and browser, response and
+request error arrays are empty. These two controlled snapshots do not claim
+complete member/state or built-journey acceptance.
+
+The five new ranges reuse the same sealed retail executable and private LLVM
+identities documented above. Their raw text SHA-256 values are:
+
+| Native range | SHA-256 | New instruction-derived fact |
+| --- | --- | --- |
+| `00752330..00752600` | `b5612b607930044101b0a2f06afd349eb568764d7a84f4f745f484e2f669a4f5` | The wrapper's fast path receives the x87 argument and returns its SSE reduction/polynomial result through x87; its exceptional branch returns to `0074711F`. |
+| `0074710B..00747160` | `cd86ba65a75b428ab38734956bfd5b4248947d64f9ec4b367759e17b3b9a9aa1` | Fallback `0074713D` executes `fsin`. Together with the previously captured wrapper, this identifies the common finite game-phase wave as sine, rather than cosine or a guessed waveform. Exceptional math-library branches outside the bound are not game-phase behavior claims. |
+| `005B8369..005B8900` | `026195c0bb1697db407604e9306352ac1c76c06f7be9171453efe7895cbd679f` | The later NPC family dispatch at `005B8848..005B8856` subtracts 5002, admits indices 0..22 and jumps through `005B9774`. The fixed range ends before all target constructors and does not by itself close dormant reachability. |
+| `0046791E..004679B0` | `72b43421b04c4b95fcf74a214ea63a12307b5f8c4a742ebf5243cd1c4be29ac7` | The retained Arena prefix now reaches both terminal returns. After bounds check, the final branch tests local coordinates against the terrain record at `0081BD20 + 60*(selector-25)` through `00405160`; true returns one and optionally writes zero to the supplied byte pointer. Failed/exhausted membership returns zero. Terrain identity and maintained admission still need reconciliation. |
+| `00533350..00533520` | `b6d9a2b38feb433f4ba1365d1d0b43e99b45c88156d5e33a6abf68d34381fd89` | This cleanup routine directly changes `+208/+20C/+210`, releases the identified companion and matching type-2058 transient objects, and clears the `+214/+216` identity. It contains no direct `+160/+1BC` write. The shown call cannot justify inventing a drive-timer reset. |
+
+Re-reading the complete existing player tick instructions also falsifies a
+previous task-note inference about `0054B4F8`. At `0054B39A`, the current
+player in ESI requests factory type `07EE` (2030), and `0054B3AF` assigns
+that new result to EDI. `0054B4F8` writes `[EDI+160]` from the global
+`00819E54` zero predicate; it does **not** write PlayerWizard `[ESI+160]`.
+The retained `refs_dat819978.log` decompilation independently agrees on the
+separate allocated owner. Calling this a PlayerWizard primary-cast producer
+or evidence that its death timer runs during casting is withdrawn. Existing
+PlayerWizard maintenance still increments `+1BC` only when its own `+160`
+is nonzero. Close the owning PlayerWizard transition/caller before selecting
+an authoritative shadow lifetime field; do not reuse the Website light-drive
+union solely because of its name.
+
+The sine semantic now supports completing the previously recovered statue
+amplitude-five/additive-component formula. The current `-2*sin` and
+direction-vector multiplication are superseded approximations, but no product
+change or complete member disposition is claimed in this continuation.
+Misaligned `005022A0` remains disqualified; the aligned constructor evidence
+and the withdrawn stale constructor-depth theory remain unchanged. M2 retained
+text/source reconciliation continues before any new resource request.
+
+The retained full factory export
+`ghidra_outputs/factory_7e2_20260414.txt:1151..1160` closes Illuminator's
+compiled reachability: case `138E` (5006) allocates `174` bytes and calls
+the already aligned `00502270` constructor. This is factory reachability,
+not a live survival population claim. The same retained export maps `139E`
+(5022) to `00503000`, and `13A0` (5024) to `00502B20`. The independent
+retained `actor_1391_1392_cluster_20260415.txt:321..345` assigns that latter
+constructor `ArchChancellorStanding::vftable` and type `13A0`. Actual
+alternate population instructions `00513F5B..00513FA3` require story phase
+one, request `13A0`, and register the returned actor. Standing therefore has
+an established story construction path; entries 194/201 retain the maintained
+survival boundary. Its recovered record-67 auxiliary remains documented
+without adding a standing actor to the seated Office presenter.
+
+Case `1393` (5011) instead calls `0050B4F0`, and the captured alternate
+builder requests it at `005142BC`. Do not call this Annalist2, Standing, or a
+dormant ground caster before binding its actual constructor/vtable. The
+existing Annalist2 story census in entries 118/194/201/204 and its known
+`00503060` auxiliary are retained; its exact `00503000` constructor link
+remains an explicit small gap. Bounded range absence is not a full producer
+census.
+
+Arena's first surface-query path owns Terrain grid `+8F24` with bridge/hole
+exclusion; the final path owns compact grid `+8F84`. Entry 091's complete
+mask census supersedes the old entries 090/106 shorthand: authored selectors
+25..29 and dynamic DeadSpider records are active compact producers, while
+all twelve native survival templates have zero Terrain rows. Current
+`NativeCompactMaskView` already consumes all five authored selectors and the
+replicated Spider decal. Reuse these memberships and authored data when
+closing the ordinary auxiliary's surface predicate; no water-only admission
+or always-false Arena surface branch is justified by the absent Terrain rows.
+
+The M2 preparation now bounds five genuinely new native targets: direction
+helper `00410500`, contour predicate `00405160`, Terrain predicate
+`004118B0`, constructors `00503000` and `0050B4F0`; plus the complete
+five 60-byte compact contour rows at `0081BD20` and 23 NPC dispatch entries
+at `005B9774`. A direct-store byte-pattern census for `+160/+1BC` supplies
+candidate addresses only, not aligned instructions, ownership, an exclusive
+writer set, or a casting/death conclusion. Only missing owning/caller context
+may need a subsequent bounded read. Existing 38 native ranges, 76 qualified
+renderer rows, and the passed two-point coverage are reused. This preparation
+has not executed; no product patch, new M5 grant, acceptance, or publication
+is claimed.
