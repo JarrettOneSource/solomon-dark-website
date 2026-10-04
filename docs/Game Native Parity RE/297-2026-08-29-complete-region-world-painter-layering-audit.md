@@ -1837,3 +1837,111 @@ phase closed despite unused time; no reset, extension or second attempt.
 The16:12 failure and all its valid partial functions remain preserved.
 Initialized contours/Math scalar and player-owning contexts remain to prove;
 no product fix, final member acceptance or Report56 completion is claimed.
+
+### 2026-10-04 — owning contexts passed; exact scalar and allocated-object owners
+
+The distinct owning-context clock began at `22:12:21.095058Z`, with heavy
+cutoff `22:19:21.095058Z` and release bound `22:24:21.095058Z`. The original
+Discord message and three attachments remained unchanged; actual published
+main was `59443b078bf72ee729b4cf982933d8fa236aa605`. Fresh mounted-SSD,
+global pipeline/compiler, own-root release and executable/private-LLVM checks
+preceded atomic acquisition at `22:12:21.708447Z`. The proved supervisor
+started before the one-ledger delta was staged. Exact `0e23029d` / tree
+`e4645838`, clean index and all 7,258 original blobs admitted at
+`22:12:31.099776Z`. Sole stage `only-new-native-owning-contexts` ran
+`22:12:31.105292Z` through `22:12:31.297701Z`, exit zero. Seven genuinely new
+contexts and 89 typed file operands were retained; none of the old44 ranges,
+tables, byte censuses, pixels, preflight, Website or browser stages replayed.
+
+| New retained context | Raw text SHA-256 |
+| --- | --- |
+| `004100D0..00410300` | `b072f3f844a5caf2ca0598c8bc979b1ac7cd2a72de1ea32b272ba67ad74876f1` |
+| `0053CFE0..0053DC60` | `75293eb4ffd4be19dbeb4147dd88b3ea71e01bdfc2a552037e8a08c964fe010c` |
+| `0053DC60..0053E6A0` | `2fd73714b7c753b3adefa33774348c6bddecc0ff579bfd2b0c83a097094f386e` |
+| `0053E6A0..0053EDB0` | `f772da8e33d9fa0842dad57878209bc41d634a66f2f09ed62ebe8b49d320c9c0` |
+| `0053EDB0..0053F3C0` | `ec556a6d83722760a20a85706f97c3ca0017f427495f95124bf411767312db15` |
+| `0053F3C0..0053F9C0` | `92a46f462e06d624e104a32afc77d490db1df83d9ee2698138d9c2d7d3d9ebda` |
+| `005BDB50..005C38F0` boundary discovery | `c57ea6ef8292322d89f70070ac0019082ff3aab61f9cf24b0d41ad7e5fafcfaa` |
+
+`004100D0` loads float32 `[007DE8A8]`; `004100D6` stores it into Math+4
+at `00B4027C`. The independently captured file bytes are `da 0f 49 40`,
+exactly **3.141592502593994**. This is neither JavaScript `Math.PI` nor
+`Math.fround(Math.PI)`. Combined with the already completed `00410500`
+helper and proved sine/cosine callees, the native direction uses
+`theta = float32(nativePi32 * degrees / 180)`, then stores float32 sine to X
+and negated float32 cosine to Y. Its explicit angle/result stores belong to
+the contract; fallback semantics do not claim browser/SSE bit identity. The
+separate Math+0 epsilon loop is not the angle scalar. Retained startup
+`0040C690 -> 004100D0` corroborates this initialized-global ownership.
+
+The five new store neighborhoods now have actual canonical instruction and
+register ownership. The factory call is `005B7080` in every row:
+
+| Entry; current actor register | Factory type push / call | Returned object binding | Captured `+160` store |
+| --- | --- | --- | --- |
+| `0053CFE0`; ESI at `0053D00D` | 2003 at `0053DA40` / `0053DA4A` | EDI=EAX at `0053DA52` | byte `[EDI+160]` at `0053DBAC` |
+| `0053DC60`; ESI at `0053DC87` | 2004 at `0053E4EE` / `0053E4F8` | EDI=EAX at `0053E500` | dword `[EDI+160]` at `0053E5CC` |
+| `0053E6A0`; EDI at `0053E6B2` | 2014 at `0053EB90` / `0053EB9A` | ESI=EAX at `0053EBA2` | byte `[ESI+160]` at `0053ECE3` |
+| `0053EDB0`; EDI at `0053EDC2` | 2015 at `0053F1C7` / `0053F1D1` | ESI=EAX at `0053F1D6` | byte `[ESI+160]` at `0053F31C` |
+| `0053F3C0`; EDI at `0053F3D2` | 2016 at `0053F7B6` / `0053F7C0` | ESI=EAX at `0053F7C8` | byte `[ESI+160]` at `0053F8FD` |
+
+No direct rebinding of the returned object's callee-saved register intervenes
+before its captured store. These are separate allocated objects, not writes
+to the current PlayerWizard. The prior EDI/type2030 correction remains in
+force. The unaligned pattern census still supplies candidates only; this
+scoped recovery does not establish an exclusive writer set or exclude alias,
+indirect or uncaptured writes. In particular it supplies no evidence that
+primary casting sets PlayerWizard's own `+160`.
+
+The already captured PlayerWizard path establishes its own terminal use
+without those false ownership assumptions: `0052A597/0052A5AF` reset its
+drive/timer; canonical death receiver ESI at `00534147` owns both
+`005341B7/005344E0` writes of drive=1. Tick `005339D4..005339E7` increments
+own `+1BC` only while own `+160` is nonzero. Auxiliary `00528AD4` binds its
+current actor, rejects consumed `+1C0`, and selects its distinct terminal
+vector path only when own drive is nonzero **and timer >150**. The ordinary
+ground glyph still draws through timer150. Existing animation/death evidence
+corroborates the terminal mapping and separates queued casts. The current
+`lighting.driveActive` contract also includes primary casting, so that field
+must not be adopted as this ground auxiliary's eligibility solely by name.
+Its light-system behavior and the separate corpse layers remain outside this
+Report56 ownership correction.
+
+The broad new window discovers the enclosing producer at actual prologue
+`005BF6A0` (`sub esp,20h; push esi; mov esi,ecx`). Its continuous captured
+body reaches the contour setup at `005C3280` and ends in tail paths
+`005C38E2 -> 005B6C90` or `005C38EB -> 005A7D90`. Retained MyApp vtable
+`0079A004`, slot `+C4`, independently corroborates `005BF6A0`; this is not
+a new exhaustive caller census. Runtime objects remain distinct from raw
+file bytes. The 89 typed operands and an M2 symbolic FPU/stack trace recover
+the following **outgoing call arguments only**:
+
+| ECX object | Ordered `(esp,esp+4)` pairs passed to `00404620` | Final pair passed to `00404930` |
+| --- | --- | --- |
+| `0081BD20` | `(26,21),(52,9),(91,40),(82,58),(59,67),(45,83),(26,88),(5,72),(13,52),(36,43)` | `(-50,-46)` |
+| `0081BD5C` | `(41.5,28.5),(51.5,51.5),(32.5,68.5),(5.5,36.5),(17.5,7.5),(33.5,5.5)` | `(-28,-37)` |
+| `0081BD98` | `(47.5,4.5),(88.5,23.5),(97.5,42.5),(91.5,61.5),(55.5,80.5),(9.5,66.5),(8.5,35.5)` | `(-50.5,-42.5)` |
+| `0081BDD4` | `(43.5,44.5),(6.5,27.5),(7.5,10.5),(23.5,9.5),(41.5,3.5),(66.5,20.5),(64.5,38.5)` | `(-36,-24.5)` |
+| `0081BE10` | `(104.5,1.5),(143.5,10.5),(185.5,44.5),(214.5,105.5),(208.5,142.5),(147.5,205.5),(106.5,216.5),(43.5,199.5),(16.5,169.5),(0.5,109.5),(34.5,38.5)` | `(-108,-108.5)` |
+
+The trace follows all46 calls and preserves `fst` without popping at
+`005C3409`; both arguments to that call are 51.5. These are not yet final
+vertices, ordered point-buffer contents, or a proved translation. Exact
+`00404620` and `00404930` callee bodies remain necessary to establish
+mutation/count/buffer behavior. Retained catalogs identify their canonical
+entries and field hits through `00404691` / `00404995`, but existing retained
+files contain no callee bodies. A distinct two-callee read is the remaining
+native evidence slice; all51 prior ranges, typed constants, tables, qualified
+pixels and failure receipts are reused. No unchanged 300-byte span is retried.
+
+Automatic release completed at `22:12:32.345901Z`. Source-after matched
+every original byte at `22:12:32.345017Z`; process/group/error arrays were
+empty, all31 home entries unchanged, no new children, private TMP/profile
+clear and exact lease absent. Parent accepted the full receipts and
+independently verified clear resources at `22:19:17Z` before this M2-only
+interpretation. All seven text hashes match their retained receipt; derived
+owner and call-argument receipts preserve raw instruction/value provenance.
+The fixed clock closed at release despite unused time. No extra attempt,
+extension, new M5 grant, product change, final acceptance or publication is
+claimed. The16:12 partial failure, earlier usage error and prior qualifications
+remain preserved.
