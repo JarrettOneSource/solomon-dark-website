@@ -660,3 +660,41 @@ source qualifications. Final immutable current-main canonical validation,
 normal publication, managed deployment/live verification and both-device task
 cleanup remain pending. No full gate, publication, deployment or Report 69
 completion is claimed. Preserve price 300, original limits and unrelated art.
+
+### 2026-10-04 — published modal integration and qualified desktop continuation
+
+Rebased runtime `bd13dd7b` incorporates published `3c32f09c` while preserving all
+23 own non-package paths and every published script. Its exact 7,258-path build
+passed at `08:19:49.937004`. The first desktop journey then timed out at the
+initial occupied Inventory flyby's intermediate-frame predicate, before dye;
+touch and the full canonical gate did not run. Automatic cleanup released that
+phase at `08:20:45.372406`. The timeout's cause remains unproven.
+
+Observation helper `40f5125a` changes no production input, gesture, predicate,
+assertion or timeout. It records phase-edge snapshots and predicate polls and
+emits renderer/host/save/error facts before a supplemental failure screenshot.
+Those observations are not a complete frame history, and no runtime remedy
+was applied.
+
+One maintained desktop journey against the unchanged `bd13dd7b` build passed
+at `14:57:00.250935`: all 18 swatches, unused Done, cloth/trim/another garment
+before Done on one admitted kit, a fresh second kit afterward, four dye audio
+events and saved/equipped tints. Its surrounding Sack/companion/paused Boneyard
+checks passed with 26 Sack transitions and empty browser/console/response error
+arrays. Cloth choice, trim choice, dyed character and occupied flyby frames
+were copied and inspected. This is source-qualified desktop acceptance; the
+earlier intermediate-frame timeout did not reproduce, which does not establish
+its cause or a flake fix.
+
+The runner drained recorded PGID `40916` and released at `14:57:00.333315`, with
+no owned processes/groups or new home children, cleared private TMP/profiles and
+an absent exact lease. The 31-entry home scope preserved the known 40-byte
+Chrome settings with identical bytes and only an mtime touch. All 126 retained
+deployment/index/JavaScript fingerprints matched before and after observation.
+No native registration was created in this desktop phase.
+
+Keep the earlier 465 focused and two host tests, native/media/intended-red
+proofs and older runtime touch pass with their existing source qualifications.
+Current-runtime touch, new helper lint, the unchanged final all-mode canonical
+gate and honest final tested-build identity remain pending, followed by normal
+publication, managed live verification and both-device cleanup.
