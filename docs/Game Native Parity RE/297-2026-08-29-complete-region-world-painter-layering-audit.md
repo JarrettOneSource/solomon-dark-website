@@ -1945,3 +1945,75 @@ The fixed clock closed at release despite unused time. No extra attempt,
 extension, new M5 grant, product change, final acceptance or publication is
 claimed. The16:12 partial failure, earlier usage error and prior qualifications
 remain preserved.
+
+### 2026-10-04 — two callee reads passed; complete translation, partial append
+
+The distinct grant bound actual turn `01a1091f-4cda-79b3-8fcd-fed9eb9accda`
+and attempt `report56-retry-1791154375-5e9bb71f`. Fresh original plus eight
+nearby messages were unchanged at `22:57:17.407308Z`: null edit, the same
+three attachments and no related correction. Actual published main remained
+`59443b0`; all frozen helper/package identities matched. Fresh SSD/source/
+native/private-LLVM/global pipeline/compiler/CI/lease checks passed before the
+clock. LLVM's expected symlink resolves inside the owned SSD tools tree with
+the pinned hash; a manual read-only no-symlink assertion was corrected before
+any clock, admission, staging or native attempt. Frozen helpers were unchanged.
+
+Clock preparation was `23:01:52.088284Z`, heavy cutoff
+`23:08:52.088284Z`, release bound `23:13:52.088284Z`: twelve minutes total
+including five cleanup minutes. Actual atomic acquisition was
+`23:01:52.850662Z`; supervisor25338 started before minimal staging. Exact
+`edf00e22` / tree `f2002da8`, clean index and all 7,258 original tracked-file
+bytes admitted at `23:02:04.324229Z`. Sole sixty-second stage
+`only-new-native-contour-callees` / PID and PGID25377 ran
+`23:02:04.326189Z..23:02:04.516567Z`, exit zero. It retained exactly the
+two reviewed ranges; old51 ranges/tables/censuses/pixels/preflight/Website
+did not replay. Success of this bounded extraction does not make an
+incomplete function body complete.
+
+| Actual retained text | SHA-256 | Semantic coverage |
+| --- | --- | --- |
+| `00404620..004046A0` | `b0dde312e62b06ad313fddfd2b0563e7d6f45491c95618b66d9e89d5cfc2232b` | Partial append prefix. Last instruction starts at `0040469E`; target `004046A8` and the return/tail lie outside the capture. |
+| `00404930..004049B0` | `c6d3969b121f661f067022f37b804b4fcb252fdac5048194214a609277171f62` | Complete translation body, including `ret 8` at `004049A1` and following padding. |
+
+`00404930` loops over unchanged count `+38`. For each index it adds outgoing
+argument X to X and argument Y to Y in **both** point buffers, at object `+0`
+and `+4`, with explicit float32 stores at `0040496A/76/83/93`. It preserves
+the list order and does not write count/capacity. Its `+8..+14` cache reset is
+separate from the point arrays; no guessed value is assigned to the additional
+`007DE858` cache scalar. The already completed `00405160` membership reader
+consumes `+4` and `+38` with its strict parity comparisons. This closes the
+five final-pair **translation operation**, not the initialized vertex lists.
+
+The append prefix binds receiver ESI at `00404627`, increments count `+38`
+at `00404629`, and compares it with capacity `+34`. On growth it calls actual
+entry `00404E20` at `00404639`, passing `2*newCount+1`. The following visible
+stores address record `newCount-1` and place the two incoming float32 values
+in both buffers. The capture then ends after `fld [eax]` at `0040469E`.
+Do not infer the missing tail, a complete return path, growth preservation of
+older points, or starting count zero from that prefix. No final polygon table
+is claimed yet, despite all outgoing arguments and translation being known.
+
+The remaining bounded semantic slice is the append continuation, actual
+growth callee, and constructor/reset evidence for initial count and buffers.
+Canonical `004045A0` is retained in the Ghidra function catalog and existing
+callers; the `0078212F` global-object word context remains qualified as an
+unaligned candidate until actual construction instructions/callers establish
+its role. A necessary instruction overlap may join incomplete control flow;
+reuse the prefix and complete translation rather than replaying them wholesale.
+Use actual boundaries and enough extent to close branches/returns, including
+any directly shown construction helper required by that context. No new read
+or clock is authorized by this M2 preparation.
+
+Automatic release was `23:02:05.500712Z`, source-after-finally exact at
+`23:02:05.499923Z`. PGID25377 drained; owned processes/unresolved groups/
+cleanup errors/home changes/new children were empty, all31 home entries
+unchanged, TMP/profile cleared and exact lease absent. Fresh own metadata
+at `23:07:34.230178Z` independently found supervisor25338 and stage25377/
+group absent, source clean `edf00e22/f2002da8`, empty private TMP/profile
+and lease absent. Both text hashes match. Full release/source/native receipts
+and handoff were sent to parent before M2 interpretation. This phase closed
+despite unused time; no second attempt, reset or extension followed. Actual
+retained M5 baseline is now `edf00e22/f2002da8`. Earlier failures, usage error,
+original evidence and all qualified observations remain preserved. Report56
+is unfinished; no product change, final contour coordinates, current-source
+acceptance or publication is claimed.
