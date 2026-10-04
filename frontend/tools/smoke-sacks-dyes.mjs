@@ -326,7 +326,6 @@ try {
           afterimages: data?.nativeInventoryFlybyAfterimages ?? null,
         }
       }, { phaseStart: occupiedFlybyPhaseStart, frameStart: occupiedFlybyFrameStart })
-      await page.screenshot({ path: `${screenshotRoot}-occupied-flyby-failure.png` })
       process.stderr.write(`SDR_FLYBY_OBSERVATION ${JSON.stringify({
         stage: occupiedFlybyStage, hasTouch, observation,
         hostFeedback: getPlayerEconomy(gameHost.state(), gameHost.hostPlayerId()).actionFeedback,
@@ -338,6 +337,7 @@ try {
         })),
         pageErrors, consoleErrors, failedResponses,
       })}\n`)
+      await page.screenshot({ path: `${screenshotRoot}-occupied-flyby-failure.png` })
     } catch (observationError) {
       process.stderr.write(`SDR_FLYBY_OBSERVATION ${JSON.stringify({
         stage: occupiedFlybyStage, observationError: String(observationError),
