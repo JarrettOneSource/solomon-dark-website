@@ -1402,3 +1402,112 @@ disposition for every row, actual built scenes, the unchanged all-mode
 canonical gate on immutable exact bytes, normal publication/current-main
 reconciliation, managed live verification and both-device scoped cleanup.
 No Report 56 resolution is claimed by this entry.
+
+### 2026-10-04 — targeted native operands recovered; pixel control still open
+
+The first admitted M5 setup timed out before staging-ready and ran no native
+or renderer command. Its automatic clean release was `01:06:37.384371Z`.
+The remaining original phase admitted exact `513b6a7b` / tree `1e715e1c`,
+clean index and all 7,256 tracked-file bytes before execution. Private Node
+22.17.0, Chrome and matching-lock dependencies were copied read-only from
+coordinated stable sources. The private installed Apple LLVM copy has SHA-256
+`83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+The unchanged sealed retail executable above passed identity checks.
+
+The bounded `llvm-objdump --disassemble --x86-asm-syntax=intel` extraction
+completed all 25 declared ranges from `01:15:53.736772Z` through
+`01:16:02.359674Z`, exit zero. Each range's exact start/stop, command, raw
+instruction hash and typed absolute operands are retained in the task's
+native receipt. Range bounds sometimes include adjacent constructors; only
+the cited callback instructions below are used as native facts. No new Ghidra
+project or Windows runtime was involved.
+
+The previously omitted ECX bindings are now instruction-confirmed. The glyph
+manager has a `0x38` header and `0xC4` records, so offsets `3384`, `197C`,
+`08A4` and `040C` identify records 67, 33, 11 and 5 respectively.
+
+| Auxiliary member | Exact binding / draw evidence | Recovered result |
+| --- | --- | --- |
+| Student | `005020B4..005020C1`, draw `0050210C`; typed operands `007DE8D8`, `00784740` | BadGuys 67; opposite-heading offset 5; scale `1.25*actorScale`. This supersedes the pending glyph identity in the first inventory. |
+| Hagatha / PerkWitch | `005019D8..005019E3`, `00501A12`; second binding `00501AFC..00501B02`, draw `00501B08` | BadGuys 67 at `actor+(-18,+7)` under matrix arguments `(1.25,1.0499999523162842,1)`; the same auxiliary additionally draws additive College 5 at `actor+(11,8)` under scale `1.2000000476837158`, with its own diffuse/random program. Preserve that sibling output when separating the ground owner. |
+| Annalist / Provokatus | `0050218E..005021B7`, `005021F3..005021FE`, draw `0050222D` | Half-alpha BadGuys 67 at `actor+(-2,0)` under the same three matrix arguments; diffuse opaque state is restored. |
+| Illuminator | binding `0050233B..00502346`, draw `00502380` | BadGuys 67; X offset uses mutable `+140 * .25`, Y offset zero; same matrix arguments. Population reachability remains open. |
+| Fomentius / PotionGuy | `00502426..00502442` | College 33 at `(10,60)`, with float32 operands `007DE984=10`, `007867F0=60`. |
+| Luthacus / ItemsGuy | `00502523..0050255B`, binding `00502536..00502542` | Authored College 11 at `actor+(15,8)`, not a generic BadGuys-67 oval. Constants are doubles `00784D80=15` and `007847A8=8`. |
+| Polisher | binding `005029C8..005029D3`, draw `00502A02` | BadGuys 67 at `actor+(5,10)`, same matrix arguments. |
+| Shlorio / Dowser | binding `00502D38..00502D43`, draw `00502D72` | BadGuys 67 at `actor+(-3,+4)`, same matrix arguments. |
+| Memorator | binding `00502EC6..00502ECC`, draw `00502F23` | BadGuys 67 with the recovered heading-sensitive opposite-five translation plus `(0,5)`, same matrix arguments. |
+| Annalist2 | binding `005030A8..005030B3`, draw `005030E2` | BadGuys 67 at `actor+(-7,0)`, same matrix arguments; alternate population reachability remains open. |
+| Skorcha / Tyrannia | binding `0050543A..00505449`, draw `0050545F` | BadGuys 67 under the same matrix arguments; actor-origin translation. Mirroring and all optional placements still need renderer evidence. |
+| Standing ArchChancellor | `0050606A..00506092` | BadGuys 67 at actor origin, float32 `00785590=1.75`; standing-population reachability remains open. |
+
+Newly consumed authored inputs are fully read for College 5 (50-by-46 logical
+canvas) and College 11 (67-by-54); both have zero center and no outline points.
+They must be retained as the native artwork, not replaced by a hull or oval.
+This is native recovery, not a claim that the current Website already consumes
+the correct fields or pixels.
+
+Private-room ground invocation is also instruction-confirmed: Mortuary
+`0050F105` (return `0050F107`), Library `00511935` (return `00511937`),
+StoreRoom `0051996A` (return `0051996C`) and Office `0051A485` (return
+`0051A487`) invoke each actor's `+28` before the pre-world animation/main
+queue intervals. Thus the shared player auxiliary has all four room consumers.
+
+CustomObject `00505E80` delegates `(selector,x,y)` to Region `+120`; body
+`00505E50` separately delegates to `+11C`. Fresh light reads of the same
+sealed PE show Mortuary `007927DC`, StoreRoom `0079294C`, Office `00792AB4`
+and Library `00792C04` all have `+120=00508910`, whose bytes are
+`C2 0C 00` (`ret 12`). All 18 current CustomObject auxiliary rows are therefore
+native no-ops. Each is `out-of-system` for auxiliary shadow production:
+Mortuary 0,1,2,3,4,5,6,7,8,9; StoreRoom 0,1,2; Library 0,1,2,100; Office 0.
+Their authored body artwork remains relevant occluder content; this negative
+callback does not authorize changing its painter or image.
+
+The fresh statue instructions refute additional details of the earlier entry
+018 summary. Body `005014BA` and auxiliary `00501574` multiply the common
+trig result by double `007DE8D8=5`, not 2. The auxiliary at
+`005015A1..005015B5` **adds** the 60-degree helper components to the negative
+wave X and `0.800000011920929` times positive-wave Y; it does not multiply
+the entire wave by the direction vector. College 39 / 41 binding and multiply
+mode 2 followed by restoration to 0 are confirmed. The exact common trig
+helper semantic and registered transform still need reconciliation before a
+replacement formula is implemented. Current `hubStatueOffsets` retains the
+older `-2*sin` / vector-multiplication approximation. No product correction
+is made from a partially recovered formula.
+
+Player reset `0052A500` clears drive `+160` and timer `+1BC` at
+`0052A597/0052A5AF`; the targeted tick range recovers reads but not the
+timer's complete increment/casting writers. Special surface `+154==2` is read
+in movement/footstep branches at `0054AD81`, `0054AE9D`, `0054B369`.
+Its writer/admission, complete timer mapping, statue trig helper and dormant
+population reachability remain specific native gaps, not platform exemptions.
+
+### Actual initial renderer failure and recovery boundary
+
+The actual public current renderer started at `01:16:02.446685Z`. Scene/glyph
+selection and earlier mask checks reached the final exposed-circle control,
+which failed with “An exposed ordinary shadow control has no pixels” at
+`01:17:18.755Z`; the process exited one at `01:17:22.017607Z`. Browser,
+failed-response and request-failure arrays were empty. The initial helper
+threw before returning its rows/images, so no numerical differential result
+or meaningful red regression is retained or claimed. Whether that control
+was covered by artwork, by the wizard body, or exposes the actual position/
+opacity defect remains unresolved.
+
+Automatic cleanup released at `01:17:26.015645Z`: no owned processes, private
+temp/profiles cleared, no new home children; the only home difference was the
+pre-existing 40-byte same-SHA Chrome settings mtime touch, preserved. The
+corrected diagnostic writes rows/images before rejecting exactly the same
+failed controls. A pixel-only retry admitted at `01:26:14.155299Z` but its
+timing guard refused to start inside the original `01:28:08.336784Z` heavy
+cutoff. It automatically released at `01:26:31.841015Z`; no pixel retry ran,
+all tracked bytes matched before/after, and its 31-entry home scope was
+unchanged. The original `01:33:08.336784Z` release bound was not extended.
+
+The next stage reuses the admitted source/tools and these native outputs,
+freshens actual main/source/resource admission, and runs the retained-row
+public-renderer discriminator with enough bounded time. Keep all nonempty
+controls; persist failed measurements rather than treating a missing exposed
+circle as a passed test. Source is still ledger-only; final native membership,
+meaningful pixel proof, implementation, checks/built/full acceptance,
+publication/deployment/reaction and final cleanup remain pending.
