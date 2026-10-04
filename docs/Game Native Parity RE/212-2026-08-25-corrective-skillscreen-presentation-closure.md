@@ -221,6 +221,45 @@ All additional implementation/tests/helpers remain unvalidated. Focused green,
 typing/lint/build, complete built journeys and the final exact-candidate
 canonical all-mode gate still require actual M5/main-lock ownership.
 
+### October 4 scoped acceptance and final integration checks
+
+The admitted `d6446f4d` source passed 59 focused tests (no failures/skips),
+TypeScript, normal lint and the production frontend/host build and bundle budget.
+The helper-only `eabda806` correction preserves all runtime blobs. Its exact
+7,257-blob source admission and separately identified compiled `d6446f4d` runtime
+passed helper lint, corrected quick navigation, the full eight-case matrix and
+four authored tutorial viewport cases. The automatic terminal release was
+2026-10-04T01:50:18.981652Z before interpretation.
+
+Desktop/touch, legal alternate branches and Hub/Boneyard each exercised 67 owned
+IDs and 71 semantic copies; their union contains every public ID 8–79. Real pan,
+keyboard bounds, every visible column and GPU detailed-box owner, fixed HUD,
+primary/concentration authority, duplicate belt assignment and reciprocal
+Inventory retirement/reopening at offset zero passed with empty error arrays.
+Stock/wide/tall/touch tutorial geometry, opening/settled states, backpack and
+third-page concentration targets and blinking duty cycle passed unchanged.
+The first reopening timeout remains failed evidence; the successful correction
+waits for actual outgoing owner retirement, rather than a filtered settled
+selector disappearing upon entry into its closing phase.
+
+Two narrow integration cases complete the newly changed consumers. The maintained
+navigation helper's `--item-removal` case uses the native named Strangler grant
+for Call Leviathan, permanently unlearned, appended to a fitting learned layout.
+It pans the real overflow and removes the provider through the established
+revisioned economy API. A supported primary choice publishes the changed paused
+owner; the open screen must clamp to zero, remove the temporary row and retain
+all remaining reachable columns. Its desktop/touch fixtures are controlled API
+cases, not an exact historical-save replay.
+
+The maintained tutorial helper's `--scroll-translation` case uses the stock
+Tutorial restore and legal learned-rank grants. A real 100-pixel pan must move
+both lesson targets by exactly that offset, keep fixed HUD geometry stationary,
+and restore the unshifted targets when the screen is closed and reopened. Their
+source-qualified results, final unchanged canonical all-mode gate and deployment
+receipts are recorded by the report campaign; no unexecuted outcome is asserted
+by this source freeze. No arrow/wheel producer, persistence field, level cap or
+Report47/61/63 behavior is added.
+
 ## 2026-09-27 — Report 47: inline skill-stat unit typography reopening
 
 The edited report identifies the damage and mana-cost `/ second` suffixes in

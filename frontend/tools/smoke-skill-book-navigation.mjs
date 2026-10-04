@@ -6,7 +6,9 @@ import { chromium } from 'playwright-core'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
-import { grantPlayerEntitySkillRanks, grantPlayerEntityWeldBuild } from '../src/game/core-server/player-entity-store.ts'
+import { grantPlayerEntitySkillRanks, grantPlayerEntityWeldBuild, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { getPlayerEconomy, getPlayerSkillBook } from '../src/game/core-server/game-simulation.ts'
+import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem } from '../src/game/core-kernels/hub-economy.ts'
 import { nativeSkillBookPageLayout, nativeSkillBookPages, nativeSkillBookTooltipLines } from '../src/game/skill-book-model.ts'
 import { nativeSkillHoverBoxLayout } from '../src/game/renderer/native-skill-hover-box-layout.ts'
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
@@ -25,12 +27,13 @@ const browser = await chromium.launch({
 const errors = { page: [], console: [], responses: [], requests: [], host: [] }
 const receipts = []
 let host
+const itemRemoval = process.argv.includes('--item-removal')
 try {
   for (const scenario of [
     { name: 'desktop', width: 1600, height: 900, touch: false },
     { name: 'touch', width: 844, height: 390, touch: true },
   ]) {
-    for (const branch of process.argv.includes('--quick') ? ['a'] : ['a', 'b']) {
+    for (const branch of itemRemoval || process.argv.includes('--quick') ? ['a'] : ['a', 'b']) {
       const credential = randomBytes(32).toString('base64url')
       host = await startGameHost({
         allowedOrigins: [server.origin], authentication: { kind: 'shared', credential },
@@ -66,11 +69,11 @@ try {
         json: { revision: new URL(route.request().url()).searchParams.get('current') },
       }))
       await enterElementHub(page, server.origin, 'Fire')
-      for (const scene of ['hub', 'boneyard']) {
+      for (const scene of itemRemoval ? ['hub'] : ['hub', 'boneyard']) {
         if (scene === 'boneyard') await enterBoneyard(page)
         await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor({ timeout: 20000 })
         const playerId = host.hostPlayerId()
-        const fixture = grantFixture(playerId, branch)
+        const fixture = itemRemoval ? grantRemovalFixture(playerId) : grantFixture(playerId, branch)
         await page.getByRole('button', { name: 'Open skills', exact: true }).click()
         const stage = page.locator('.skill-book-stage[data-transition-phase="settled"][data-renderer-state="ready"]')
         await stage.waitFor({ timeout: 90000 })
@@ -86,6 +89,46 @@ try {
         assert.equal(Number(await stage.getAttribute('data-skill-book-scroll-x')), 0)
         assert.equal(Number(await stage.getAttribute('data-skill-book-scroll-max')), maximum)
         const name = `${scenario.name}-${branch}-${scene}`
+        if (itemRemoval) {
+          await backgroundDrag(page, stage, scenario.touch)
+          await waitForOffset(stage, maximum)
+          await page.screenshot({ path: `${output}/${name}-item-before.png` })
+          const state = host.state()
+          const economy = getPlayerEconomy(state, playerId)
+          Object.assign(state, { playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+            ...economy, equipment: { ...economy.equipment, amulet: fixture.originalAmulet },
+            revision: economy.revision + 1,
+          }) })
+          assert.equal(getPlayerSkillBook(host.state(), playerId).effectiveRanks[11], 0)
+          // A real supported primary choice broadcasts a paused owner's changed snapshot.
+          assert.notEqual(progression(playerId).selectedPrimarySkillId, 8)
+          await stage.locator('.skill-book-entry-action[data-skill-id="8"]').first().click()
+          await waitUntil(() => progression(playerId).selectedPrimarySkillId === 8, 'Primary publication pulse was not accepted', 5000)
+          await stage.locator('.skill-book-entry-action[data-skill-id="11"]').waitFor({ state: 'detached' })
+          await waitForOffset(stage, 0)
+          assert.equal(Number(await stage.getAttribute('data-skill-book-scroll-max')), 0)
+          const after = nativeSkillBookPageLayout(nativeSkillBookPages(progression(playerId)))
+          assert.equal(after.contentWidth, fixture.beforeWidth)
+          assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[11], 0)
+          assert.equal(await stage.locator('.skill-book-entry-action').count(), fixture.ids.length - 1)
+          for (const entry of await stage.locator('.skill-book-entry-action').all()) {
+            await entry.focus()
+            await entry.evaluate(node => {
+              const rect = node.getBoundingClientRect()
+              const viewport = document.querySelector('.skill-book-viewport').getBoundingClientRect()
+              if (rect.left < viewport.left - 0.1 || rect.right > viewport.right + 0.1
+                || rect.top < viewport.top - 0.1 || rect.bottom > viewport.bottom + 0.1) {
+                throw new Error('Post-removal entry is stranded outside the native viewport')
+              }
+            })
+          }
+          await page.screenshot({ path: `${output}/${name}-item-after.png` })
+          await stage.locator('[data-skill-book-resume]').click()
+          await page.locator('.skill-book-stage').waitFor({ state: 'detached' })
+          receipts.push({ name, itemGrantRemoval: true, temporarySkill: 11, beforeWidth: fixture.layout.contentWidth,
+            afterWidth: after.contentWidth, beforeOffset: maximum, afterOffset: 0, remainingEntries: fixture.ids.length - 1 })
+          continue
+        }
         await page.screenshot({ path: `${output}/${name}-start.png` })
         const beforeHud = await stage.locator('[data-skill-book-resume]').boundingBox()
         await backgroundDrag(page, stage, scenario.touch)
@@ -205,6 +248,11 @@ try {
   assert.deepEqual(errors, { page: [], console: [], responses: [], requests: [], host: [] })
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'ok', productionClient: true, receipts, errors }, null, 2))
   console.log(JSON.stringify({ status: 'ok', productionClient: true, receipts, errors }))
+} catch (error) {
+  await writeFile(`${output}/journey-failure.json`, JSON.stringify({
+    error: error.stack ?? String(error), receipts, errors,
+  }, null, 2))
+  throw error
 } finally {
   await browser.close()
   await host?.close()
@@ -228,6 +276,30 @@ function grantFixture(playerId, branch) {
   Object.assign(state, { playerEntities: weld.store, gameRng: weld.rng })
   const pages = nativeSkillBookPages(progression(playerId))
   return { ids: [...new Set(pages.flatMap(page => page.rows.map(row => row.id)))], layout: nativeSkillBookPageLayout(pages) }
+}
+
+function grantRemovalFixture(playerId) {
+  for (const id of [8, 57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70]) {
+    const state = host.state()
+    const next = grantPlayerEntitySkillRanks(state.playerEntities, playerId, id, 1, state.gameRng)
+    Object.assign(state, { playerEntities: next.store, gameRng: next.rng })
+  }
+  const before = nativeSkillBookPageLayout(nativeSkillBookPages(progression(playerId)))
+  assert.equal(before.contentWidth, 1600, 'Sixteen learned entries fit the viewport')
+  assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[11], 0)
+  const state = host.state()
+  const economy = getPlayerEconomy(state, playerId)
+  const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES.find(row => row.sourceIndex === 15), economy.nextItemId)
+  Object.assign(state, { playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+    ...economy, equipment: { ...economy.equipment, amulet: item }, nextItemId: item.id + 1,
+    revision: economy.revision + 1,
+  }) })
+  assert.equal(getPlayerSkillBook(host.state(), playerId).effectiveRanks[11], 1)
+  const pages = nativeSkillBookPages(progression(playerId))
+  const layout = nativeSkillBookPageLayout(pages)
+  assert.ok(layout.contentWidth > 1600, 'The temporary Call Leviathan page creates real overflow')
+  return { ids: [...new Set(pages.flatMap(page => page.rows.map(row => row.id)))], layout,
+    beforeWidth: before.contentWidth, originalAmulet: economy.equipment.amulet }
 }
 
 async function waitForOffset(stage, offset) {

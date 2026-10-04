@@ -12,6 +12,7 @@
 // steady modal pointers must never hide.
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
@@ -38,6 +39,7 @@ import {
 import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
+import { nativeSkillBookPages, nativeSkillBookPageLayout } from '../src/game/skill-book-model.ts'
 import { NATIVE_HUD_BACKBUFFER } from '../src/game/native-hud-layout.ts'
 import { layoutNativeUiText } from '../src/game/native-ui/native-ui-text.ts'
 import {
@@ -211,6 +213,11 @@ async function runScenario(scenario) {
     await waitForRestoredTutorial(host)
     await waitForBoneyardRenderer(page, errors)
     const playerId = host.state().playerEntities.identities[0].playerId
+    if (process.argv.includes('--scroll-translation')) {
+      const translation = await runScrolledTutorial(page, host, playerId, scenario)
+      assert.deepEqual(errors, { consoleErrors: [], failedResponses: [], hostErrors: [], pageErrors: [] })
+      return { ...errors, scenario: scenario.name, viewport: scenario.viewport, translation }
+    }
     grantTutorialAmulet(host, playerId)
 
     // Stage 10: Tutorial activation has stripped the starter potions, so the amulet is cell zero.
@@ -444,6 +451,14 @@ async function runScenario(scenario) {
     let note = `failure screenshot: ${path}`
     try {
       await page.screenshot({ path })
+      await writeFile(`${screenshotRoot}-${scenario.name}-failure.json`, JSON.stringify({
+        errors,
+        modalState: await page.evaluate(() => [...document.querySelectorAll(
+          '.main-menu-page, .skill-book-stage, .hub-native-ui-overlay, .tutorial-modal-callouts',
+        )].map(node => ({ className: node.className,
+          attributes: Object.fromEntries([...node.attributes].filter(a => a.name.startsWith('data-'))
+            .map(a => [a.name, a.value])) }))),
+      }, null, 2))
     } catch (screenshotError) {
       note = `failure screenshot unavailable: ${screenshotError instanceof Error ? screenshotError.message : String(screenshotError)}`
     }
@@ -463,17 +478,77 @@ function snapshotPlayer(state, playerId) {
   return player
 }
 
-function expectedPlans(state, playerId, stage, coarsePointer, modalProgress = 1) {
+function expectedPlans(state, playerId, stage, coarsePointer, modalProgress = 1, skillViewportOffsetX = 0) {
   const player = snapshotPlayer(state, playerId)
   return tutorialModalTeachingPlans({
     backpack: player.economy.backpack,
     coarsePointer,
     modalProgress,
     progression: player.progression,
-    skillViewportOffsetX: 0,
+    skillViewportOffsetX,
     resumeBindingLabel: gameBindingLabel(stage === 10 ? INVENTORY_KEY : SKILLS_KEY),
     stage,
   })
+}
+
+async function runScrolledTutorial(page, host, playerId, scenario) {
+  const excluded = new Set([13, 19, 29, 36, 47, 52])
+  for (let id = 8; id < 80; id += 1) {
+    if (excluded.has(id)) continue
+    const state = host.state()
+    const granted = grantPlayerEntitySkillRanks(state.playerEntities, playerId, id, 1, state.gameRng)
+    Object.assign(state, { playerEntities: granted.store, gameRng: granted.rng })
+  }
+  const layout = nativeSkillBookPageLayout(nativeSkillBookPages(snapshotPlayer(host.state(), playerId).progression))
+  assert.equal(layout.rowCount, 2)
+  assert.ok(layout.contentWidth > 1600)
+  const open = async () => {
+    forceTutorialState(host, { ...INTRO_CLEARED, ...idleNarration(host), skillsOpened: false, stage: 12, stageTicks: 0 })
+    await page.locator('.tutorial-overlay[data-stage="12"]').waitFor({ timeout: 15000 })
+    await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor({ timeout: 15000 })
+    await page.keyboard.press(SKILLS_KEY)
+    await waitForTutorialStage(host, page, 13)
+    await page.locator('.skill-book-stage[data-transition-phase="settled"][data-renderer-state="ready"]')
+      .waitFor({ timeout: 30000 })
+    await page.locator('.tutorial-modal-callouts[data-stage="13"]').waitFor({ timeout: 15000 })
+  }
+  await open()
+  assert.equal(Number(await page.locator('.skill-book-stage').getAttribute('data-skill-book-scroll-x')), 0)
+  const beforeRaw = await measureModal(page, 13)
+  const before = compareModal(beforeRaw, expectedPlans(host.state(), playerId, 13, scenario.hasTouch), 'high-count tutorial before pan')
+  const stage = await page.locator('.skill-book-stage').boundingBox()
+  const point = x => ({ x: stage.x + x * stage.width / 1600, y: stage.y + 740 * stage.height / 900 })
+  const from = point(1200)
+  const to = point(1100)
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 2 })
+  await page.mouse.up()
+  await page.waitForFunction(() => Number(document.querySelector('.skill-book-stage')?.dataset.skillBookScrollX) === 100)
+  const shiftedRaw = await measureModal(page, 13)
+  const shifted = compareModal(shiftedRaw, expectedPlans(host.state(), playerId, 13, scenario.hasTouch, 1, 100), 'high-count tutorial after pan')
+  for (const id of ['hover', 'concentration']) {
+    const oldPointer = beforeRaw.pointers.find(p => p.id === id)
+    const pointer = shiftedRaw.pointers.find(p => p.id === id)
+    assert.equal(pointer.toX, oldPointer.toX - 100, `${id} actual pointer translation`)
+    assert.equal(pointer.toY, oldPointer.toY)
+  }
+  for (const id of ['resume', 'quick-use']) {
+    const geometry = pointer => [pointer.x, pointer.y, pointer.toX, pointer.toY, pointer.scale]
+    assert.deepEqual(geometry(shiftedRaw.pointers.find(p => p.id === id)), geometry(beforeRaw.pointers.find(p => p.id === id)),
+      `${id} fixed HUD pointer remains stationary`)
+  }
+  await screenshotInBlinkWindow(page, `${screenshotRoot}-${scenario.name}-scrolled.png`)
+  await page.locator('.skill-book-stage').focus()
+  await page.keyboard.press(SKILLS_KEY)
+  await page.locator('.skill-book-stage').waitFor({ state: 'detached', timeout: 15000 })
+  await page.locator('.tutorial-modal-callouts').waitFor({ state: 'detached', timeout: 15000 })
+  await open()
+  assert.equal(Number(await page.locator('.skill-book-stage').getAttribute('data-skill-book-scroll-x')), 0)
+  const reset = compareModal(await measureModal(page, 13), expectedPlans(host.state(), playerId, 13, scenario.hasTouch), 'high-count tutorial reopened')
+  assert.deepEqual(reset.pointers, before.pointers)
+  await screenshotInBlinkWindow(page, `${screenshotRoot}-${scenario.name}-reopened.png`)
+  return { contentWidth: layout.contentWidth, before, shifted, reset, actualScroll: 100, reopenedScroll: 0 }
 }
 
 function measureResponsiveHudPointer(page, anchor, nativeTargetHeight) {
