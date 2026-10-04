@@ -1693,6 +1693,30 @@ test('Storm and Acid falling drops use the exact native gradient streaks', () =>
   })), [{ alpha: 0.75, atlas: 'BadGuys', entry: 63, tint: 0xccffcc }])
 })
 
+test('Acid Rain keeps its additive center broad across constructor phases and actor ages', () => {
+  const scratch = new NativeSecondaryPresentationScratch()
+  for (const { scale, width, height } of [
+    { scale: 0.5, width: 3.75, height: 3 },
+    { scale: 1, width: 7.5, height: 6 },
+    { scale: 2, width: 15, height: 12 },
+  ]) {
+    for (const rotationRadians of [0.04837999865412712, 0.9989299774169922, 0]) {
+      for (const ageTicks of [40, 160, 480]) {
+        const source = { ...actor('acid-rain'), ageTicks, phase: 1, rotationRadians, scale }
+        const plan = nativeSecondaryPresentationPlan(source, 987)
+        const reused = updateNativeSecondaryPresentationPlan(scratch, source, 987)
+        assert.deepEqual(reused, plan)
+        const center = plan.draws.find(({ role }) => role === 'acid-rain-cloud-circle-additive')
+        assert.ok(center)
+        const matrix = { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }
+        writeNativeRotationThenScaleMatrix(matrix, center.rotationRadians, center.scaleX, center.scaleY, center.offset.x, center.offset.y)
+        close(Math.hypot(matrix.a, matrix.c), width, 'Acid center world-X extent stays broad')
+        close(Math.hypot(matrix.b, matrix.d), height, 'Acid center world-Y extent preserves field scale')
+      }
+    }
+  }
+})
+
 test('Acid Rain uses fixed-tick actor age for its cloud and splits out ground residue', () => {
   const source = {
     ...actor('acid-rain'),
@@ -1749,7 +1773,7 @@ test('Acid Rain uses fixed-tick actor age for its cloud and splits out ground re
       offset: { x: 0, y: -200 },
       role: 'acid-rain-cloud-circle-additive',
       rotationRadians: -40 * Math.PI / 180,
-      scaleX: 1.5,
+      scaleX: 3.75,
       scaleY: 3,
       tint: 0x407326,
     },
@@ -1782,9 +1806,16 @@ test('Acid Rain uses fixed-tick actor age for its cloud and splits out ground re
   const noResidue = nativeSecondaryPresentationPlan({ ...source, alpha: 0 }, 987)
   assert.equal(noResidue.draws.length, 3)
   assert.equal(noResidue.underlayDraws.length, 0)
+  const fading = nativeSecondaryPresentationPlan({ ...source, phase: 0.2 }, 987)
+  assert.equal(fading.draws[2]!.alpha, Math.fround(0.2))
+  assert.equal(fading.draws[2]!.scaleX, 3.75)
+  assert.deepEqual(fading.underlayDraws, plan.underlayDraws)
   const residueOnly = nativeSecondaryPresentationPlan({ ...source, phase: 0 }, 987)
   assert.equal(residueOnly.draws.length, 0)
   assert.equal(residueOnly.underlayDraws.length, 1)
+  const cleared = nativeSecondaryPresentationPlan({ ...source, alpha: 0, phase: 0 }, 987)
+  assert.equal(cleared.draws.length, 0)
+  assert.equal(cleared.underlayDraws.length, 0)
 
   const center = plan.draws[2]!
   const centerMatrix = { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }
@@ -1796,9 +1827,9 @@ test('Acid Rain uses fixed-tick actor age for its cloud and splits out ground re
     center.offset.x,
     center.offset.y,
   )
-  close(centerMatrix.a, 1.149066664678467, 'Acid center a')
+  close(centerMatrix.a, 2.8726666616961675, 'Acid center a')
   close(centerMatrix.b, -1.9283628290596178, 'Acid center b uses Y scale')
-  close(centerMatrix.c, 0.9641814145298089, 'Acid center c uses X scale')
+  close(centerMatrix.c, 2.4104535363245223, 'Acid center c uses X scale')
   close(centerMatrix.d, 2.298133329356934, 'Acid center d')
   assert.equal(centerMatrix.tx, 0)
   assert.equal(centerMatrix.ty, -200)

@@ -698,7 +698,8 @@ function buildNativeSecondaryPresentationPlan(
           offset: { x: 0, y: Math.fround(-175 + fieldScale * -50) },
           role: 'acid-rain-cloud-circle-additive',
           rotationRadians: Math.fround(age * Math.fround(-0.5)) * Math.PI / 180,
-          scaleX: Math.fround(secondBaseScale * constructorPhase),
+          // The authored center stays broad even when the random phase is near zero.
+          scaleX: secondBaseScale,
           scaleY: Math.fround(secondBaseScale * Math.fround(0.8)),
           tint: 0x407326,
         }),

@@ -422,3 +422,72 @@ phases over multiple ages. Reuse the recovered instruction/art facts; recover
 more native evidence only if that control falsifies them. A supported mismatch
 must be fixed in its shared owner. An intentional/native matching shape needs
 a concrete product decision before changing its authored rule.
+
+## 2026-10-04 — Report 60 current sprite attribution
+
+An isolated production-build diagnostic on original commit `29034f3d`, tree
+`e19c5f61`, verified all 7,258 original blobs and real original Git identity.
+Only the declared read-only Acid sprite observer and scoped Tutorial helper
+were overlaid. This is diagnostic source, not clean production acceptance.
+The exact offline install, build and two real-input journeys passed; outputs
+were hash-verified and acknowledged before full own compute/root cleanup.
+
+- The current native RNG probe chose seed 29 after 32 probes for actual phase
+  `0.04837999865412712`; seed 490 gave `0.9989299774169922`. Old seed 70 was
+  only a lead, not the admitted very-low control.
+- Three actual post-render reads per phase used requested ages 40, 160 and
+  480. Very-low rendered ages were `40.439999997615814`,
+  `160.32000000476836`, `480.51999999880786`; near-one ages were
+  `40.89000000357629`, `160.8599999964237`, `480.9599999964237`.
+- Actual labelled cloud sprites were BadGuys-78 source-over and additive,
+  and BadGuys-10 additive. Record 78 retained local X/Y row norms `(5,4)`
+  at both phases. Record 10 had `(0.3628499806,6)` at the very-low phase and
+  `(7.4919748306,6)` near one; these are derived from the actual live local
+  matrix coefficients, not substituted expected matrices. Field scale and
+  cloud alpha were 1; materials, tints and offsets `[-175,-175,-225]` persisted.
+- All six PNGs were inspected: the very-low control shows a narrow vertically
+  aligned green center at all three sampled ages; near one shows a broad glow.
+  The changing record-10 coefficients preserve its narrow world-axis envelope
+  while the two mottled cloud layers remain broad. The PNG is bracketed by
+  actual renderer reads, with 12–17 ticks of age progression; it is not an
+  exact same-frame image/matrix pair or full lifecycle capture.
+- Separately computed recovered-native expectations differ from the observed
+  coefficients by at most `1.3322676295501878e-15`. This supports the existing
+  record-10 `7.5*s*p`, `6*s`, `S*R` routing in current source. It does not
+  independently validate stock-native visual intent or identify the original
+  clip's exact phase, age, build or primitive.
+
+The current center mechanism is now supported by observed members, matrices
+and paired controls. It is confined to the Acid root's record-10 width operand;
+the record-78 cloud pair, DeadHawg-4 underlay, acid-drop/splash children and
+shared affine owner have distinct existing contracts. No product fix or native
+rule exception is made here. The original clip shares the narrow fixed-axis
+appearance, but that relationship remains qualified rather than a claimed
+historical input identity. A nondegenerate authored center would be an explicit
+presentation change to the recovered native rule, requiring its disposition
+before implementation; no additional native replay is implied by this result.
+
+### Authored center-width correction authorized for Report 60
+
+The user requested this visual bug fixed under the continued campaign's routine
+fix/publication authority. The chosen presentation correction changes only the
+Acid root's record-10 X width from `7.5*s*p` to `7.5*s`, so the constructor's
+random phase cannot collapse the glow into a thin plane. This intentionally
+departs from the recovered stock-derived width rule; the recovery was not
+falsified, stock visual intent was not independently proved, and the original
+clip's exact input identity is not claimed.
+
+Both allocating and scratch presentation APIs share this Acid-specific owner.
+The phase is still generated and consumed as before, and still controls the
+record-78 pair's slow rotation. Record-10 age rotation, Y width, texture, alpha,
+ADD blend, tint and offset remain unchanged. The record-78 pair, DeadHawg-4
+residue, drop/splash ownership, fades, lifetimes, damage/radius and shared `S*R`
+adapter also remain unchanged; no flag or generic art/shader change is added.
+
+The public regression is prepared to fail the original owner at the observed
+low phase and pass the corrected owner across ages/scales, including zero
+phase. Existing fixed-tick/material/residue assertions are preserved and extend
+to a fading cloud and cleared presentation. Relevant kernel child/pulse/radius/
+expiry contracts are selected for focused verification. No test, typecheck,
+lint, build, new browser control or full acceptance has run for this correction
+yet; the actual before diagnostic remains the archived `29034f3d` evidence.
