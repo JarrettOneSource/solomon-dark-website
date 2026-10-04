@@ -1761,3 +1761,79 @@ unused clock time; no second attempt, clock reset or extension followed.
 The actual failure and all partial outputs remain retained. Report56 remains
 unfinished; no product fix, full member/built acceptance or publication is
 claimed by this receipt.
+
+### 2026-10-04 — producer slice completed; cosine and complete NPC dispatch
+
+The new clock was fixed at `20:29:52.607174Z`, heavy cutoff
+`20:36:52.607174Z`, release bound `20:41:52.607174Z`. Fresh original/source,
+mounted SSD, known pipeline/compiler absence, released own root and sealed
+executable/private LLVM identities passed. Atomic acquisition was
+`20:29:53.304316Z`. Exact `f4dffc4d` / tree `512996f3`, clean index and all
+7,258 original tracked-file bytes admitted at `20:30:03.004498Z`. The only
+stage, `only-new-native-producer-candidates`, ran `20:30:03.006690Z` through
+`20:30:03.258381Z`, exit zero. It retained one new function, the unreached
+92-byte NPC table, 74 direct-store byte candidates and 1,101 absolute-word
+candidates. No failed300 span, old43 ranges, pixels/preflight, Node/Chrome or
+Website command ran. Success of this finite slice is not complete recovery.
+
+The retained `00748330..007484E0` text hash is
+`4173be53d61d11620c4852eecf846c9d130da5dd3714fc143fa51e124caab47e`.
+It executes `fcos` at `0074839D`, with another at `007483D4` after argument
+reduction. The shared direction helper therefore returns float32 sine for X
+and negated float32 cosine for Y. This refutes the current component ordering.
+Math+4 initialization is still a separate scalar question; byte words near
+`004100D8` are not decoded proof. Retained startup `0040C690` independently
+calls aligned `004100D0` (`ghidra_decomp_darkcloud_owner_funcs.log:419`),
+providing its next genuine entry. The SSE numerical implementation is not
+claimed bit-identical to browser math from fallback semantics alone.
+
+Complete NPC table `005B9774`, SHA-256
+`8e90f8e31826104cd5e5febe3c4203c8229d90dc1067308d636f8cfcc8aed2bf`:
+
+| Type | Target | Type | Target |
+| --- | --- | --- | --- |
+| 5002 | `005B8A2D` | 5014 | `005B95E5` |
+| 5003 | `005B8A67` | 5015 | `005B8CAB` |
+| 5004 | `005B8ADB` | 5016 | `005B89F3` |
+| 5005 | `005B8B4F` | 5017 | `005B897F` |
+| 5006 | `005B8AA1` | 5018 | `005B89B9` |
+| 5007 | `005B8B15` | 5019 | `005B8BFD` |
+| 5008 | `005B8B89` | 5020 | `005B8C37` |
+| 5009 | `005B8BC3` | 5021 | `005B8CE5` |
+| 5010 | `005B8C71` | 5022 | `005B8D1F` |
+| 5011 | `005B885D` | 5023 | `005B88D1` |
+| 5012 | `005B8897` | 5024 | `005B890B` |
+| 5013 | `005B8945` | | |
+
+All23 entries, including default5014, are retained. Combine them with the
+already recovered factory/constructor links; a target alone adds neither a
+current population nor a ground caster.
+
+Actual PE metadata proves `.data` begins at `00804000`, virtual size3,398,208,
+raw size88,576: file-backed bytes end at `00819A00`. Both five contour objects
+`0081BD20..0081BE4C` and Math globals `00B40278/+4` are runtime zero-fill
+locations whose initialized contents require their producer. They are not
+file coordinate rows. Operand leads cluster at `005C328E..005C3828`, with
+array construction/destruction leads `0078212F/007835AA`; they remain
+unaligned until canonical boundaries/callers establish actual instructions.
+Do not dump zeros, derive a hull, or repeat the known failed raw span.
+
+The store census matched qualified resets `0052A45B/0052A597`, timer reset
+`0052A5AF`, death writes `005341B7/005344E0` and separate type2030 write
+`0054B4F8`. New neighborhood candidates are `0053DBAC`, `0053E5CC`,
+`0053ECE3`, `0053F31C`, `0053F8FD`; neighborhood and byte patterns are not
+PlayerWizard ownership or exclusive-writer proof. Existing canonical entries
+`0053CFE0`, `0053DC60`, `0053E6A0`, `0053EDB0`, `0053F3C0`, followed by
+`0053F9C0`, bound new context reads; the retained Air contract contains the
+corresponding dispatch family. Existing animation/death documents corroborate
+terminal+160/+1BC while separating queued actions, but the contradictory old
+cast-drive shorthand still needs owning-instruction reconciliation.
+
+Automatic release was `20:30:04.243012Z`: PGID77067 drained, process/group/
+error arrays empty, all31 home entries unchanged, no new children, TMP/profile
+clear, source-after exact at `20:30:04.238870Z`, lease absent. Parent read and
+independently accepted the full release before M2 interpretation. This one
+phase closed despite unused time; no reset, extension or second attempt.
+The16:12 failure and all its valid partial functions remain preserved.
+Initialized contours/Math scalar and player-owning contexts remain to prove;
+no product fix, final member acceptance or Report56 completion is claimed.
