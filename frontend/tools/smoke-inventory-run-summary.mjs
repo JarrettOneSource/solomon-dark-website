@@ -70,7 +70,7 @@ window.report61 = {
   }
 }
 document.body.dataset.ready='true'
-</script>` })))
+</script>` }))
   await page.goto(new URL('__report61_inventory', origin).href)
   await page.locator('body[data-ready="true"]').waitFor({ timeout: 90_000 })
   let previousInkLines = []
