@@ -2017,3 +2017,113 @@ retained M5 baseline is now `edf00e22/f2002da8`. Earlier failures, usage error,
 original evidence and all qualified observations remain preserved. Report56
 is unfinished; no product change, final contour coordinates, current-source
 acceptance or publication is claimed.
+
+### 2026-10-05 — contour construction recovered; exact authored surface rows
+
+The new distinct phase bound turn `01a1094c-da8f-7802-a186-f05e748dd46d`
+and attempt `report56-retry-1791157351-ff85e974`. Fresh original/source,
+frozen helpers/package, mounted SSD, sealed native/private LLVM and actual
+global build/compiler/CI/lease checks passed. Original plus eight nearby
+messages were unchanged at `23:45:42.744807Z`. Clock preparation was
+`23:48:11.072076Z`, heavy cutoff `23:55:11.072076Z`, release bound
+`2026-10-05T00:00:11.072076Z`: twelve minutes including five cleanup minutes.
+Atomic acquisition was `23:48:12.090209Z`. Supervisor33361 preceded staging;
+exact `aaa677ee` / tree `85e2a311`, clean index and all 7,258 original bytes
+admitted at `23:48:23.029897Z`. Sole sixty-second construction stage,
+PID/PGID33399, ran `23:48:23.031815Z..23:48:23.224095Z`, exit zero.
+
+It produced the four fixed missing contexts and the fifth helper only after
+validating padding/push bytes and actual decoded `00782133 -> 0074798E`.
+The two-byte instruction join is the only old53 overlap; complete translation,
+append prefix, tables, censuses, pixels/preflight and Website were not replayed.
+
+| New retained context | Text SHA-256 | Closed control-flow evidence |
+| --- | --- | --- |
+| `0040469E..00404930` | `454b3a4d23b9a612701c8b8cb7c7031a5e32e10caacf12e91b88e9610436d7ef` | The joined instruction matches the retained prefix; append ends at `ret 8`, `004046C9`. |
+| `004045A0..00404620` | `c189a90d8ffe18988fb5fb46e2180bc5ad158de493cadad1b8a95071034c3d00` | Both constructor returns, `004045F6/0040460C`, initialize count/capacity zero and both buffers null. |
+| `00404E20..00405160` | `ed93e338ef188cf6dee9ff3735c0f9512dacba42bedaa04e46ed4e9f43284fe8` | Actual growth completes at `ret 4`, `00404F39`; subsequent contexts include the known next entry. |
+| `00782120..00782180` | `3cca7b480c46e970e0dfbb8db191fec2df8c5dcaa0dfe6b0685356f79ae89800` | Actual five-object construction call ends at `00782143`; its constructor callback/base/stride/count are decoded. |
+| `0074798E..00748330` | `d98d82607ddaf8962cb1c3b38be26e1a1e682c22213a314829bbad24ad0c5808` | Construction loop and normal return `007479D8`, plus its success cleanup return `007479F2`, are complete. |
+
+Constructor `004045A0` explicitly clears capacity `+34`, count `+38`,
+buffer `+0`, buffer `+4` and field `+30` on both return paths. Global
+initializer `00782120` pushes destructor `00404610`, constructor `004045A0`,
+count5, stride `3C` and base `0081BD20`. The actual `0074798E` helper calls
+the constructor with current element in ECX at `007479B2`, advances by
+the supplied stride at `007479B5`, and repeats from zero through count-1.
+Its normal-success cleanup does not destruct the constructed elements.
+This establishes the five object identities and initial empty lists from
+instructions; it does not substitute file-zero bytes for runtime objects.
+
+The actual growth helper receives the owning object in retained **ESI**, not
+ECX. It allocates and zeroes two arrays of eight-byte XY records, copies each
+old-capacity record at the same increasing index into the corresponding new
+buffer, releases the old buffers and writes new capacity at `00404F32`.
+It does not change count. This is the normally successful allocation path;
+no live allocator or out-of-memory outcome is claimed. Append's complete
+tail copies the new pair into the corresponding original buffer, resets only
+the separate `+8..+14` cache and returns. It neither reorders points nor adds
+another count increment or point transform. Unknown `007DE858` cache scalar
+is not needed by the already complete `+4/+38` membership reader.
+
+Combining this construction with the retained ordered call arguments and
+complete float32 translation yields these **exact authored construction
+results**, not a live memory dump. All values below are exactly representable
+float32 values; authored order and implicit closing edge are preserved.
+
+| Selector / object | Count / final capacity | Ordered translated XY vertices |
+| --- | --- | --- |
+| 25 / `0081BD20` | 10 / 21 | `(-24,-25),(2,-37),(41,-6),(32,12),(9,21),(-5,37),(-24,42),(-45,26),(-37,6),(-14,-3)` |
+| 26 / `0081BD5C` | 6 / 9 | `(13.5,-8.5),(23.5,14.5),(4.5,31.5),(-22.5,-.5),(-10.5,-29.5),(5.5,-31.5)` |
+| 27 / `0081BD98` | 7 / 9 | `(-3,-38),(38,-19),(47,0),(41,19),(5,38),(-41,24),(-42,-7)` |
+| 28 / `0081BDD4` | 7 / 9 | `(7.5,20),(-29.5,3),(-28.5,-14),(-12.5,-15),(5.5,-21),(30.5,-4),(28.5,14)` |
+| 29 / `0081BE10` | 11 / 21 | `(-3.5,-107),(35.5,-98),(77.5,-64),(106.5,-3),(100.5,34),(39.5,97),(-1.5,108),(-64.5,91),(-91.5,61),(-107.5,1),(-73.5,-70)` |
+
+There are41 vertices. Capacity grows from zero at new count1 to3, at4 to9,
+and, where reached, at10 to21. Both buffers have the same constructed points.
+Detailed instruction/source hashes, offsets, per-point call provenance and
+construction proof are retained in `CONTOUR-CONSTRUCTION-PROOF-20261005.json`.
+Only this selected construction lead is now instruction-confirmed; the
+remaining unaligned census is still not an exclusive writer/xref set.
+
+The already captured Arena branch at `0046794F` computes
+`0081BD20 + 60*(type-25)` and calls `00405160` at `00467969`. Its query
+is float32 `(worldX-recordX, worldY-recordY)` after the separate rectangle/grid
+admission. This branch applies no rotation/scale to the polygon query; do not
+invent an inverse render transform or raster-alpha predicate from the visual
+compact mask. Preserve its grid/rectangle admission and the separately
+recovered Terrain bridge/hole and DeadSpider branches. Private College rooms
+remain their confirmed false surface queries; Courtyard retains its owning
+query. This closes the declared missing native contour dependencies.
+
+Actual automatic release was `23:48:24.200606Z`, with original source-after
+matching at `23:48:24.199839Z`. PGID33399 drained, process/group/error/home-
+change/new-child arrays empty, all31 home entries unchanged, TMP/profile
+clear and lease absent. Parent independently read the full release/source/
+five-range receipt and verified clear resources at `23:50:17.208958Z`.
+All five raw hashes match; full handoff preceded M2 interpretation. The phase
+closed despite unused time; no extra attempt, extension or reset followed.
+Actual retained M5 source is now `aaa677ee/85e2a311`.
+
+Source porting must still honor the continuous angle in native actor `+6C`.
+Current `actorHeadingFromVector` returns degrees, but `actorHeadingIndex`
+rounds them to24 directions; PlayerCharacter and its codec retain only that
+integer. Student already retains continuous internal `heading`/store heading,
+while its published snapshot exposes only `headingIndex`. Use existing
+authoritative angle ownership and preserve degree/index invariants through
+all facing writers and snapshot/codec callers, rather than reconstructing a
+continuous angle from a rounded index or client presentation displacement.
+The ground eligibility uses the supported own terminal/consumed state;
+primary-cast-inclusive `lighting.driveActive` remains a separate light contract.
+No new casting/death mapping is inferred from the unaligned census.
+
+Normal construction, scalar, callback/constructor/member and owning interval
+evidence is now available for the complete shared ground port. Supported
+members remain PlayerWizard, Student, statue, Hagatha including its additive
+sibling, Annalist, Fomentius, Luthacus, Skorcha, Dowser, Memorator and
+conditional Office Polisher, with accepted Teacher ownership preserved.
+The documented dormant/negative/separate-body/light/corpse/direct families
+retain their reasoned dispositions. Product changes, all member/current-
+source/built acceptance, publication/live verification and both-device cleanup
+remain undone. Earlier failure/usage/ownership/original evidence and every
+qualified observation are preserved; Report56 is not complete.
