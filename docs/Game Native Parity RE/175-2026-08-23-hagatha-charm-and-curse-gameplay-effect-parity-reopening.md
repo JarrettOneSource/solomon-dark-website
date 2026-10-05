@@ -2021,3 +2021,38 @@ exact jitter multiplier/order and the unit-vector internals remain explicit
 unknowns where only an index, rather than a captured or retained body, exists.
 Text, sound, browser comparison, all-mode validation and publication remain
 separate pending boundaries. No product code or expectations changed.
+
+### Closed cue source checkpoint, M2 only
+
+Parent review of the complete contract authorized the established text, audio
+and shared flash members while the four remaining native facts stay qualified.
+The original product baseline remains Git`0400350c`; test-first checkpoint
+`84d09044` adds three existing public-interface regression files without product
+changes. Those tests are authored but unrun; their exact patch is retained for
+a distinct M5 failing-baseline check. No M2 Website execution is permitted.
+
+Direct contact now retains the accepted rescue result. Both normal and Game
+Over combat result consumers use the same participant feedback producer. One
+`player-cheat-death` event uses the existing shared world counter, requires the
+victim ID/point and carries no borrowed skill or enemy identity. Its strict
+codec admits actor zero only for this explicit participant member and rejects
+extra sound/gain payload. The producer writes the unconditional white shared
+Region flash. The client expands one event into the four recovered requests,
+with one point gain reused for all four; local notification ownership is
+independent of hearing another participant's cue. The existing post-rescue
+hurt/Flash continuation is preserved; the captured`00530570` branch still
+compares old/current HP, terminal flag and context before its ordinary ouch.
+
+All three overload producer seams now use one canonical overload producer.
+The audio consumer interprets its one event as the recovered three-request,
+gain-one program; it does not apply distance attenuation. The local note cursor
+uses the same accepted event once and starts after the initial retained cursor.
+The shared notice manager and Hub/Boneyard glyph renderer are recorded in
+entry100. Tests additionally cover strict rescue frames, four sound rates/gain,
+overload duplicate/rejoin behavior and the distinct death-drive/HUD gates.
+
+This checkpoint does not implement or infer Player+204 ownership, UnitVector
+RNG internals, protection/Sparkle state, FreezeWave jitter or Golem Knockback.
+No mode gate, build, browser, pixel or audible comparison has run. Separate
+text and sound acceptance, source integration (including Report56's canonical
+Golem facing), unchanged all-mode validation and publication remain pending.

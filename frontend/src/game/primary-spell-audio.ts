@@ -2,6 +2,7 @@ import type { GameClientSnapshot, GameSnapshot } from './protocol/game-state.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   hubAudioAttenuation,
+  NATIVE_MANA_OVERLOAD_SOUND_REQUESTS,
   type GameLoopCue,
   type GameSoundCue,
   type SecondaryStreamCue,
@@ -442,6 +443,15 @@ export class PrimarySpellAudioSynchronizer {
           || event.cue === null
           || SECONDARY_LOOP_CUES.has(event.cue)
         ) continue
+        if (event.kind === 'overload') {
+          for (const request of NATIVE_MANA_OVERLOAD_SOUND_REQUESTS) {
+            this.audio.playSound(request.cue, {
+              playbackRate: request.playbackRate,
+              volume: request.volume,
+            })
+          }
+          continue
+        }
         const volume = event.gain * hubAudioAttenuation(Math.hypot(
           event.position.x - listener.position.x,
           event.position.y - listener.position.y,

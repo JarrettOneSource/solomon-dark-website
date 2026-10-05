@@ -123,6 +123,7 @@ export function boneyardEnemyEvents(
     const type = rawType as BoneyardEnemyEventSnapshot['type']
     const payloadKeys = (() => {
       switch (type) {
+        case 'player-cheat-death': return ['sourcePosition', 'targetPlayerId']
         case 'enemy-stream': return ['stream', 'sourcePosition']
         case 'enemy-screen-flash': return ['screenFlash', 'screenFlashOnlyIfClear', 'sourcePosition']
         case 'enemy-camera-shake': return ['cameraShake', 'sourcePosition']
@@ -192,7 +193,7 @@ export function boneyardEnemyEvents(
     previousEventId = eventId
     previousTick = tick
     const base = {
-      actorId: type === 'player-deflected'
+      actorId: type === 'player-deflected' || type === 'player-cheat-death'
         ? nonnegativeInteger(source.actorId, `${eventField}.actorId`)
         : positiveInteger(source.actorId, `${eventField}.actorId`),
       eventId,
@@ -201,6 +202,14 @@ export function boneyardEnemyEvents(
       type,
     }
     switch (type) {
+      case 'player-cheat-death': {
+        if (base.actorId !== 0) throw new GameProtocolError(`${eventField}.actorId must be zero for participant feedback`)
+        return {
+          ...base,
+          sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
+          targetPlayerId: validatedPlayerId(source.targetPlayerId, `${eventField}.targetPlayerId`),
+        }
+      }
       case 'enemy-stream': {
         const stream = limitedString(source.stream, `${eventField}.stream`, 64)
         if (!NATIVE_BOSS_STREAM_CUES.includes(stream as NativeBossStreamCue)) {

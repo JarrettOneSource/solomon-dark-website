@@ -42,6 +42,6 @@ export function nativeSkillBookResultLayout(skillId: number) {
 }
 
 export function nativeSkillBookWorldMessage(sequence: number, skillId: number, tick: number) {
-  // Negative presentation IDs cannot collide with positive replicated Loot event IDs.
-  return { eventId: -sequence, tick, text: nativeSkillBookResultText(skillId), tint: 0x8080ff }
+  return { eventId: -sequence, source: 'book' as const,
+    tick, text: nativeSkillBookResultText(skillId), tint: 0x8080ff }
 }

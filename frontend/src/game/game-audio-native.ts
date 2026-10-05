@@ -255,6 +255,22 @@ export function nativeSolomonDigSoundRequest(
   }
 }
 
+export const NATIVE_MANA_OVERLOAD_SOUND_REQUESTS: readonly NativeEnemyEventSoundRequest[] = Object.freeze([
+  { cue: 'fizzle', playbackRate: 1, sourcePosition: null, volume: 1 },
+  { cue: 'fizzle', playbackRate: 1.5, sourcePosition: null, volume: 1 },
+  { cue: 'fizzle', playbackRate: Math.fround(0.8), sourcePosition: null, volume: 1 },
+])
+
+/** Point attenuation has already been evaluated once for this program. */
+export function nativePlayerCheatDeathSoundRequests(pointGain: number): readonly NativeEnemyEventSoundRequest[] {
+  return [
+    { cue: 'flash-spell', playbackRate: 1, sourcePosition: null, volume: pointGain },
+    { cue: 'flash-spell', playbackRate: Math.fround(0.8), sourcePosition: null, volume: pointGain },
+    { cue: 'flash-spell', playbackRate: 0.5, sourcePosition: null, volume: pointGain },
+    { cue: 'flash', playbackRate: 1, sourcePosition: null, volume: pointGain },
+  ]
+}
+
 export function nativeEnemyEventSoundRequest(
   event: BoneyardEnemyEventSnapshot,
 ): NativeEnemyEventSoundRequest | null {

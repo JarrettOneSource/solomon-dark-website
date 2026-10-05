@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from 'react'
 import { type NativeLootMessageVisual } from './loot-message-presentation.ts'
-import NativeLootBitmapText from './NativeLootBitmapText.tsx'
+import NativeWorldNotifications from './NativeWorldNotifications.tsx'
 import { NativeUiButton, NativeUiDialog } from './native-ui/react.ts'
 import { NativeUiPlanView } from './native-ui/react-raw.ts'
 import { planNativeUiMessageFrame } from './native-ui/core.ts'
@@ -22,12 +22,7 @@ export default function SkillBookFeedback({ skillId, hubMessages, onDismiss, sty
   }), [layout])
   return <>
     {hubMessages.length > 0 ? <div className="main-menu-native-stage skill-book-hub-messages-stage" style={style}>
-      <div className="boneyard-loot-messages" aria-live="polite">
-        {hubMessages.map(message => <span key={message.eventId} aria-label={message.text}
-          style={{ opacity: message.alpha, transform: `scale(${message.scale})` }}>
-          <NativeLootBitmapText text={message.text} tint={message.tint} />
-        </span>)}
-      </div>
+      <NativeWorldNotifications messages={hubMessages} />
     </div> : null}
     {skillId !== null && layout !== null && frame !== null ? <NativeUiDialog
       aria-label="Skill improved"

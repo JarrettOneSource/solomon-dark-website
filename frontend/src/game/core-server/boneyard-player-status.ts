@@ -1,11 +1,33 @@
 import { drawNativeFloat, type NativeRngState } from '../core-kernels/native-rng.ts'
 import { directionFromHeading } from '../core-kernels/primary-spell-targeting.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type {
   BoneyardEnemyDeathEffect,
   BoneyardEnemySemanticEvent,
   BoneyardEnemyStore,
 } from './enemies/model.ts'
+
+/** The accepted rescue owns one cue; its four sounds are one client program. */
+export function emitPlayerCheatDeathFeedback(
+  source: BoneyardEnemyStore,
+  request: Readonly<{ playerId: string; position: Readonly<Vector2>; tick: number; worldKey: string }>,
+  writeScreenFlash?: WriteNativeScreenFlash,
+): Readonly<{ event: BoneyardEnemySemanticEvent; store: BoneyardEnemyStore }> {
+  writeScreenFlash?.({
+    flash: { alpha: 1, blue: 1, decayPerTick: Math.fround(0.01),
+      green: 1, pointAttenuated: false, red: 1 },
+    onlyIfClear: false,
+    position: request.position,
+    tick: request.tick,
+    worldKey: request.worldKey,
+  })
+  return {
+    event: { actorId: 0, eventId: source.nextEventId, sourcePosition: { ...request.position },
+      targetPlayerId: request.playerId, tick: request.tick, type: 'player-cheat-death' },
+    store: { ...source, nextEventId: source.nextEventId + 1 },
+  }
+}
 
 export function emitPlayerStatusBurst(
   source: BoneyardEnemyStore,

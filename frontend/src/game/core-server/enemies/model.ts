@@ -587,6 +587,7 @@ export type BoneyardCombatSound =
 
 export type BoneyardEnemySemanticEventType =
   | 'cocoon-released'
+  | 'player-cheat-death'
   | 'player-status-sound'
   | 'attack-marker'
   | 'coffin-maggot-release'

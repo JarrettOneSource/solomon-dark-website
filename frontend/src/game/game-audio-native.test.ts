@@ -16,6 +16,7 @@ import {
   nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
   nativeEnemyEventSoundRequest,
+  nativePlayerCheatDeathSoundRequests,
   nativeFootstepCue,
   nativeLootEventSoundRequest,
   nativeSolomonDigSoundRequest,
@@ -44,6 +45,15 @@ test('maps the level-up request at scalar one', () => {
     cue: 'level-up',
     playbackRate: 1,
   })
+})
+
+test('Cheat Death preserves its four ordered rates and the once-computed point gain', () => {
+  assert.deepEqual(nativePlayerCheatDeathSoundRequests(0.375), [
+    { cue: 'flash-spell', playbackRate: 1, sourcePosition: null, volume: 0.375 },
+    { cue: 'flash-spell', playbackRate: 0.800000011920929, sourcePosition: null, volume: 0.375 },
+    { cue: 'flash-spell', playbackRate: 0.5, sourcePosition: null, volume: 0.375 },
+    { cue: 'flash', playbackRate: 1, sourcePosition: null, volume: 0.375 },
+  ])
 })
 
 test('caps each retained Hail bounce sound at ten native voices', () => {

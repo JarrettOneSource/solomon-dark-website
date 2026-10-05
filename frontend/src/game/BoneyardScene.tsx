@@ -57,6 +57,7 @@ import {
   nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
   nativeEnemyEventSoundRequest,
+  nativePlayerCheatDeathSoundRequests,
   nativeLootEventSoundRequest,
   nativeSolomonDigSoundRequest,
   newSolomonVoiceEvent,
@@ -88,10 +89,11 @@ import TouchJoystick from './input/TouchJoystick.tsx'
 import { BoneyardLootEventSynchronizer } from './loot-event-audio.ts'
 import {
   NativeLootMessagePresentation,
+  nativeWorldNotificationsVisible,
   type NativeLootMessageVisual,
 } from './loot-message-presentation.ts'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
-import NativeLootBitmapText from './NativeLootBitmapText.tsx'
+import NativeWorldNotifications from './NativeWorldNotifications.tsx'
 import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import type { GameModAsset } from './protocol/game-mod-contract.ts'
@@ -343,6 +345,9 @@ export default function BoneyardScene({
     new NativeLootMessagePresentation(boneyardInitialSnapshot.tick)
   ))
   const [lootMessages, setLootMessages] = useState<readonly NativeLootMessageVisual[]>([])
+  const [notificationsVisible, setNotificationsVisible] = useState(() =>
+    nativeWorldNotificationsVisible(boneyardInitialSnapshot.players[playerId]?.progression.lifeState ?? null))
+  const nextSecondaryNoticeId = useRef(boneyardInitialSnapshot.secondaryAbilities.nextEventId)
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [spectatorStatus, setSpectatorStatus] =
     useState<BoneyardSpectatorStatusPresentation | null>(null)
@@ -417,6 +422,17 @@ export default function BoneyardScene({
         bookFeedback.sequence, bookFeedback.outcome.skillId, snapshot.tick,
       ))
     }
+    const sameWorld = snapshot.world.kind === 'boneyard' && snapshot.world.runId === loaded.runId
+    if (sameWorld) for (const event of snapshot.secondaryAbilities.events) {
+      if (event.eventId >= nextSecondaryNoticeId.current && event.kind === 'overload'
+        && event.ownerId === playerId && event.worldKey === `boneyard:${loaded.runId}`) {
+        lootMessagePresentation.consumeText({ source: 'secondary', eventId: event.eventId,
+          tick: event.tick, text: 'Overloaded Mana!', tint: 0xffffff })
+      }
+    }
+    nextSecondaryNoticeId.current = snapshot.secondaryAbilities.nextEventId
+    setNotificationsVisible(sameWorld
+      && nativeWorldNotificationsVisible(snapshot.players[playerId]?.progression.lifeState ?? null))
     setLootMessages(lootMessagePresentation.sample(snapshot.tick))
     setRun((current) => (
       snapshot.run.phase === 'game-over' && current.phase === 'game-over'
@@ -464,6 +480,23 @@ export default function BoneyardScene({
         scene.dataset.lastEnemyEventOutput = event.output
       }
     }
+    if (event.type === 'player-cheat-death') {
+      const snapshot = samplePresentation()
+      const localPlayer = snapshot.players[playerId]
+      const camera = rendererRef.current?.camera(snapshot)
+      const pointGain = camera ? nativeBoneyardPointGain(event.sourcePosition!, camera,
+        viewportRef.current.width / camera.zoom,
+        localPlayer?.progression.lifeState === 'dying'
+          || localPlayer?.progression.lifeState === 'spectating') : 1
+      for (const request of nativePlayerCheatDeathSoundRequests(pointGain)) {
+        audio.playSound(request.cue, { playbackRate: request.playbackRate, volume: request.volume })
+      }
+      if (event.targetPlayerId === playerId) {
+        lootMessagePresentation.consumeText({ source: 'combat', eventId: event.eventId,
+          tick: event.tick, text: 'CHEAT DEATH!', tint: 0xffffff })
+        setLootMessages(lootMessagePresentation.sample(snapshot.tick))
+      }
+    }
     const sound = nativeEnemyEventSoundRequest(event)
     if (sound || event.stream !== undefined) {
       const sourcePosition = sound?.sourcePosition ?? event.sourcePosition ?? null
@@ -489,7 +522,7 @@ export default function BoneyardScene({
     const renderer = rendererRef.current
     if (renderer) renderer.consumeEnemyEvent(event)
     else pendingEnemyPresentationEventsRef.current.push(event)
-  }), [audio, loaded.runId, playerId, samplePresentation, subscribeEnemyEvent])
+  }), [audio, loaded.runId, lootMessagePresentation, playerId, samplePresentation, subscribeEnemyEvent])
 
   useEffect(() => {
     const synchronizer = new PlayerFootstepAudioSynchronizer(
@@ -1084,20 +1117,8 @@ export default function BoneyardScene({
                 worldTarget={tutorialWorldTarget}
               />
             ) : null}
-            <div className="boneyard-loot-messages" aria-live="polite" aria-atomic="false">
-              {lootMessages.map((message) => (
-                <span
-                  key={message.eventId}
-                  aria-label={message.text}
-                  style={{
-                    opacity: message.alpha,
-                    transform: `scale(${message.scale})`,
-                  }}
-                >
-                  <NativeLootBitmapText text={message.text} tint={message.tint} />
-                </span>
-              ))}
-            </div>
+            <NativeWorldNotifications messages={lootMessages}
+              visible={notificationsVisible && tutorialAccess?.combat !== false} />
 
             <GameHud
               accountUsername={accountUsername}

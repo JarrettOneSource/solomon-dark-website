@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useState } from 'react'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
-import { NativeLootMessagePresentation, type NativeLootMessageVisual } from './loot-message-presentation.ts'
+import { NativeLootMessagePresentation, nativeWorldNotificationsVisible, type NativeLootMessageVisual } from './loot-message-presentation.ts'
 import { NativeSkillBookFeedbackCursor, nativeSkillBookWorldMessage } from './skill-book-feedback.ts'
 
 interface SkillBookFeedbackState {
@@ -42,7 +42,9 @@ export function useSkillBookFeedback(session: GameClientSession | null, audio: G
         }
         setState(current => ({ ...current, skillId }))
       }
-      const hubMessages = messages.sample(snapshot.tick)
+      const sampledMessages = messages.sample(snapshot.tick)
+      const hubMessages = nativeWorldNotificationsVisible(snapshot.players[session.playerId]?.progression.lifeState ?? null)
+        ? sampledMessages : []
       setState(current => current.hubMessages.length === 0 && hubMessages.length === 0
         ? current : { ...current, hubMessages })
     })
@@ -58,4 +60,3 @@ export function useSkillBookFeedback(session: GameClientSession | null, audio: G
     dismiss,
   }
 }
-

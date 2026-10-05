@@ -14,7 +14,7 @@ import { playerPoisonHealthDamage } from '../core-kernels/player-combat.ts'
 import { NATIVE_FLASH_RESPONSE_RADIUS, playerDeflectReflectionSourceInRange, resolvePlayerFlashResponse, resolvePlayerHarmfulContact } from '../core-kernels/player-harmful-contact.ts'
 import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import { emitPlayerStatusBurst } from './boneyard-player-status.ts'
+import { emitPlayerCheatDeathFeedback, emitPlayerStatusBurst } from './boneyard-player-status.ts'
 import type { BoneyardWorldState } from './boneyard-world-state.ts'
 import { addNativeCocoon } from './enemies/construction.ts'
 import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
@@ -199,7 +199,7 @@ export function applyPlayerContacts(
     }
     applyStatusModifiers()
     const before = progression
-    playerEntities = damagePlayerEntityWithResult(
+    const acceptedDamage = damagePlayerEntityWithResult(
       playerEntities,
       damage.playerId,
       healthDamage,
@@ -207,7 +207,16 @@ export function applyPlayerContacts(
       true,
       !damage.suppressHitResponse,
       damage.hitStrength,
-    ).store
+    )
+    playerEntities = acceptedDamage.store
+    if (acceptedDamage.cheatDeathTriggered) {
+      const feedback = emitPlayerCheatDeathFeedback(world.enemies, {
+        playerId: damage.playerId, position: character.position, tick,
+        worldKey: `boneyard:${world.runId}`,
+      }, writeScreenFlash)
+      world = { ...world, enemies: feedback.store }
+      playerDamageSoundEvents.push(feedback.event)
+    }
     const after = playerEntities.progressions[playerIndex]!
     playHurtResponse()
     applyFlashResponse()

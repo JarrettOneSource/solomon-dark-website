@@ -3747,17 +3747,7 @@ export function stepNativeSecondaryAbilities(
       player = clearPlayerToggles(player)
       if (overloaded && authority.eligible) {
         overloadedPlayerIds.add(playerId)
-        state = emitNativeSecondaryEvent(state, {
-          actorId: null,
-          cue: 'fizzle',
-          kind: 'overload',
-          ownerId: playerId,
-          pitch: 1,
-          position: authority.character.position,
-          skillId: player.lastSkillId ?? 78,
-          tick: context.tick,
-          worldKey: authority.worldKey,
-        })
+        state = emitNativeManaOverload(state, playerId, player, authority, context.tick)
       }
     }
 
@@ -3856,17 +3846,7 @@ export function stepNativeSecondaryAbilities(
       player = clearPlayerToggles(player)
       if (overloaded) {
         overloadedPlayerIds.add(playerId)
-        state = emitNativeSecondaryEvent(state, {
-          actorId: null,
-          cue: 'fizzle',
-          kind: 'overload',
-          ownerId: playerId,
-          pitch: 1,
-          position: authority.character.position,
-          skillId: player.lastSkillId ?? 78,
-          tick: context.tick,
-          worldKey: authority.worldKey,
-        })
+        state = emitNativeManaOverload(state, playerId, player, authority, context.tick)
       }
     }
     if (player.planewalkerTicksRemaining > 0 && authority.eligible) {
@@ -3940,17 +3920,7 @@ export function activateNativeSecondaryBeltSkill(
     player = clearPlayerToggles(player)
     if (overloaded && authority.eligible) {
       overloadedPlayerIds.push(playerId)
-      state = emitNativeSecondaryEvent(state, {
-        actorId: null,
-        cue: 'fizzle',
-        kind: 'overload',
-        ownerId: playerId,
-        pitch: 1,
-        position: authority.character.position,
-        skillId: player.lastSkillId ?? 78,
-        tick: context.tick,
-        worldKey: authority.worldKey,
-      })
+      state = emitNativeManaOverload(state, playerId, player, authority, context.tick)
     }
   }
   const cast = castAbility(state, player, playerId, skillId, authority, context)
@@ -6248,6 +6218,20 @@ function nativeSecondaryRechargeFactor(
         authority.secondaryRechargeFactor,
         applyNativeEquipmentTransform(classRecharge, 1),
       )
+}
+
+function emitNativeManaOverload(
+  source: NativeSecondarySimulationState,
+  playerId: string,
+  player: NativeSecondaryPlayerState,
+  authority: NativeSecondaryPlayerAuthority,
+  tick: number,
+): NativeSecondarySimulationState {
+  return emitNativeSecondaryEvent(source, {
+    actorId: null, cue: 'fizzle', gain: 1, kind: 'overload', ownerId: playerId,
+    pitch: 1, position: authority.character.position,
+    skillId: player.lastSkillId ?? 78, tick, worldKey: authority.worldKey,
+  })
 }
 
 function clearPlayerToggles(source: NativeSecondaryPlayerState): NativeSecondaryPlayerState {

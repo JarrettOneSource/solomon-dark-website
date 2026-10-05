@@ -1,23 +1,22 @@
 .boneyard-loot-messages {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
   left: 50%;
   pointer-events: none;
   position: absolute;
-  text-align: center;
   top: 67px;
-  transform: translateX(-50%);
-  transform-origin: center top;
   z-index: 45;
 }
 
 .boneyard-loot-messages > span {
   display: block;
-  filter: drop-shadow(0 2px 0 #000);
-  height: 18px;
-  transform-origin: center;
+  left: 0;
+  position: absolute;
   white-space: nowrap;
+}
+
+.boneyard-loot-message-shadow {
+  left: 0;
+  position: absolute;
+  top: 2px;
 }
 
 .boneyard-loot-bitmap-text {

@@ -14,6 +14,7 @@ import { grantPlayerSkillRanks } from '../core-kernels/player-progression.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
+import { boneyardEnemyEvents } from '../protocol/codecs/enemy-effects.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { NATIVE_MAGE_ACTION_PROGRAMS } from './enemies/programs.ts'
 import type { GameSimulationExtensions, GameSimulationState } from './game-simulation.ts'
@@ -59,6 +60,17 @@ test('accepted Cheat Death emits one participant cue and the shared white flash'
     if (next.world.kind !== 'boneyard') throw new Error('Boneyard required')
     assert.equal(next.world.enemyEvents.filter(event => event.type.startsWith('player-cheat-death')).length, 1)
   }
+})
+
+test('participant rescue frames require their owner/point and reject borrowed actor or sound fields', () => {
+  const event = { actorId: 0, eventId: 1, runId: 'run', tick: 1, type: 'player-cheat-death',
+    sourcePosition: { x: 10, y: 20 }, targetPlayerId: 'owner' }
+  const decode = (value: unknown) => boneyardEnemyEvents([value], 'events', 'run', 1)
+  assert.deepEqual(decode(event), [event])
+  assert.throws(() => decode({ ...event, targetPlayerId: null }), /targetPlayerId/)
+  assert.throws(() => decode({ ...event, sourcePosition: undefined }), /sourcePosition/)
+  assert.throws(() => decode({ ...event, actorId: 3 }), /actorId/)
+  assert.throws(() => decode({ ...event, gainScale: 1 }), /gainScale/)
 })
 
 test('a poison Mage impact poisons the player and lowers health', () => {

@@ -1,4 +1,5 @@
 import type { BoneyardLootEventSnapshot } from './protocol/game-state.ts'
+import type { PlayerCombatComponent } from './core-kernels/player-combat.ts'
 
 export const NATIVE_LOOT_MESSAGE_INITIAL_LIFETIME = Math.fround(1.5)
 export const NATIVE_LOOT_MESSAGE_LIFETIME_LOSS = Math.fround(0.005000000074505806)
@@ -8,8 +9,24 @@ export const NATIVE_LOOT_MESSAGE_INSERT_SHIFT = Math.fround(4)
 export const NATIVE_LOOT_MESSAGE_INSERT_LIFETIME_LOSS = Math.fround(0.10000000149011612)
 export const NATIVE_LOOT_MESSAGE_SCALE_DENOMINATOR = Math.fround(250)
 
+export interface NativeWorldNotificationInput {
+  readonly eventId: number
+  readonly source: 'loot' | 'book' | 'combat' | 'secondary'
+  readonly tick: number
+  readonly text: string
+  readonly tint: number
+}
+
+export function nativeWorldNotificationsVisible(
+  lifeState: PlayerCombatComponent['lifeState'] | null,
+  combatHud = true,
+): boolean {
+  return combatHud && (lifeState === 'alive' || lifeState === 'lethal-pending')
+}
+
 interface NativeLootMessageState {
   readonly eventId: number
+  readonly key: string
   readonly lifetime: number
   readonly offset: number
   readonly text: string
@@ -24,7 +41,7 @@ export interface NativeLootMessageVisual extends NativeLootMessageState {
 const EMPTY_LOOT_MESSAGE_VISUALS: readonly NativeLootMessageVisual[] = Object.freeze([])
 
 export class NativeLootMessagePresentation {
-  private activeEventId: number | null = null
+  private activeKey: string | null = null
   private lastTick: number
   private messages: NativeLootMessageState[] = []
 
@@ -36,14 +53,15 @@ export class NativeLootMessagePresentation {
     if (event.text === undefined) return false
     return this.consumeText({
       eventId: event.eventId, tick: event.tick, text: event.text,
+      source: 'loot',
       tint: nativeLootMessageTint(event),
     })
   }
 
-  consumeText(event: Readonly<{ eventId: number; tick: number; text: string; tint: number }>): boolean {
+  consumeText(event: NativeWorldNotificationInput): boolean {
     this.advance(Math.max(this.lastTick, event.tick - 1))
     const gold = goldAmount(event.text)
-    const activeIndex = this.messages.findIndex(({ eventId }) => eventId === this.activeEventId)
+    const activeIndex = this.messages.findIndex(({ key }) => key === this.activeKey)
     const active = activeIndex < 0 ? undefined : this.messages[activeIndex]
     const activeGold = active === undefined ? null : goldAmount(active.text)
     if (gold !== null && active && activeGold !== null && active.lifetime > 1) {
@@ -68,12 +86,13 @@ export class NativeLootMessagePresentation {
     }
     this.messages.push(Object.freeze({
       eventId: event.eventId,
+      key: `${event.source}:${event.eventId}`,
       lifetime: NATIVE_LOOT_MESSAGE_INITIAL_LIFETIME,
       offset: NATIVE_LOOT_MESSAGE_INITIAL_OFFSET,
       text: event.text,
       tint: event.tint,
     }))
-    this.activeEventId = event.eventId
+    this.activeKey = `${event.source}:${event.eventId}`
     return true
   }
 
@@ -83,9 +102,9 @@ export class NativeLootMessagePresentation {
     return Object.freeze(this.messages.map((message) => Object.freeze({
       ...message,
       alpha: Math.min(1, Math.max(0, message.lifetime)),
-      scale: Math.max(0, Math.fround(
+      scale: Math.fround(Number(Math.max(0, Math.fround(
         1 - Math.max(0, message.offset) / NATIVE_LOOT_MESSAGE_SCALE_DENOMINATOR,
-      )),
+      )).toFixed(2))),
     })))
   }
 
@@ -96,7 +115,7 @@ export class NativeLootMessagePresentation {
   }
 
   private step(): void {
-    const activeIndex = this.messages.findIndex(({ eventId }) => eventId === this.activeEventId)
+    const activeIndex = this.messages.findIndex(({ key }) => key === this.activeKey)
     if (activeIndex >= 0 && this.messages[activeIndex]!.offset < 0) {
       let remaining = this.messages.length
       this.messages = this.messages.map((message, index) => {
@@ -118,8 +137,8 @@ export class NativeLootMessagePresentation {
       const lifetime = Math.fround(message.lifetime - NATIVE_LOOT_MESSAGE_LIFETIME_LOSS)
       return lifetime > 0 ? [{ ...message, lifetime }] : []
     })
-    if (!this.messages.some(({ eventId }) => eventId === this.activeEventId)) {
-      this.activeEventId = null
+    if (!this.messages.some(({ key }) => key === this.activeKey)) {
+      this.activeKey = null
     }
   }
 }

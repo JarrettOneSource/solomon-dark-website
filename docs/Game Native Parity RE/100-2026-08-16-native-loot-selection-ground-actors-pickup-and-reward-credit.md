@@ -1609,3 +1609,27 @@ The existing Tutorial combat-HUD projection in entry186 changes at stage13
 close, corresponding to the captured Game`+0x1AC4` visibility gate. Reuse
 those established owners for notification visibility, preserving book/loot
 pause and run teardown. Current product rendering remains unchanged here.
+
+### M2 closed-member source checkpoint
+
+The one existing manager now keeps domain-qualified keys for Loot, book,
+participant rescue and secondary overload, preserving original upstream IDs,
+GOLD merging, list pressure and stored-float lifetime. Its sampled scale follows
+native float storage, two-decimal formatting and float32 parsing. Equal numeric
+IDs from independent lanes cannot select the wrong active row or React key.
+
+Hub and Boneyard now share one glyph renderer. It uses the existing body-font
+planner's measured center and explicit baseline with the recovered scale;
+row Y is rounded relative to origin50/pen17. A separate black glyph pass at
+Y+2 precedes foreground, preserving the shadow offset independently of scale.
+Fixed flex rows and continuous CSS scaling are removed. The glyph planner
+requires positive scale; zero-scale/zero-alpha rows produce no pixels and are
+omitted from that planner without changing manager state. Existing local
+death-drive and Tutorial HUD projections control display; the manager retains
+its fixed tick/pause clock and existing scene teardown.
+
+The shared change covers Gold, item/Sack names, all three Bonuses, book rank,
+rescue and overload. The two documented legacy CodeLine sources keep their
+existing out-of-system admission boundary. Current rendering and interface
+tests are authored but unrun; this is an implementation checkpoint, not native
+pixel, sound or all-mode acceptance.

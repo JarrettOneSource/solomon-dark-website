@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { NativeLootMessagePresentation } from './loot-message-presentation.ts'
+import { NativeLootMessagePresentation, nativeWorldNotificationsVisible } from './loot-message-presentation.ts'
 import type { BoneyardLootEventSnapshot } from './protocol/game-state.ts'
 
 test('empty loot-message samples retain identity across ordinary fixed ticks', () => {
@@ -9,6 +9,15 @@ test('empty loot-message samples retain identity across ordinary fixed ticks', (
   const initial = presentation.sample(0)
   assert.equal(initial.length, 0)
   assert.strictEqual(presentation.sample(1_000), initial)
+})
+
+test('notification visibility follows death drive and the combat HUD, not lethal pending', () => {
+  assert.equal(nativeWorldNotificationsVisible('alive'), true)
+  assert.equal(nativeWorldNotificationsVisible('lethal-pending'), true)
+  assert.equal(nativeWorldNotificationsVisible('dying'), false)
+  assert.equal(nativeWorldNotificationsVisible('spectating'), false)
+  assert.equal(nativeWorldNotificationsVisible(null), false)
+  assert.equal(nativeWorldNotificationsVisible('alive', false), false)
 })
 
 test('native loot messages merge active Gold, rise eighteen ticks, and expire after float32 decay', () => {

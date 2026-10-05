@@ -84,6 +84,7 @@ import { applyBoneyardEtherDrainWorldAnimationForces, boneyardNativeEtherDrainTa
 import { applyBoneyardEtherDrainForces } from './boneyard-world-placement.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import { applyPlayerContacts, finiteModMutation, gameWorldKey } from './player-contact-system.ts'
+import { emitPlayerCheatDeathFeedback } from './boneyard-player-status.ts'
 import type { PlayerEntityStore } from './player-entity-store.ts'
 import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, autofillPlayerEntitySkillSelections, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, refreshPlayerEntityHagathaSkillEffects, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
 import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
@@ -2000,6 +2001,7 @@ function stepGameSimulationTickWithScreenFlashes(
     const tick = state.tick + 1
     let gameRng = state.gameRng
     let world = state.world
+    world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
@@ -3408,6 +3410,7 @@ function finishGameSimulationTick(
   playerEntities = combat.store
   secondaryAbilities = { ...secondaryAbilities, rng: combat.rng }
   if (world.kind === 'boneyard') {
+    world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
@@ -4633,6 +4636,26 @@ function gravestoneSourceIds(
     .map(({ id }) => id))
   GRAVESTONE_SOURCE_IDS.set(scenery, ids)
   return ids
+}
+
+function recordPlayerCheatDeathFeedback(
+  source: BoneyardWorldState,
+  playerEntities: PlayerEntityStore,
+  playerIds: readonly string[],
+  tick: number,
+  writeScreenFlash: WriteNativeScreenFlash,
+): BoneyardWorldState {
+  let world = source
+  for (const playerId of playerIds) {
+    const character = playerCharacterAt(playerEntities, playerId)
+    if (character === null) continue
+    const feedback = emitPlayerCheatDeathFeedback(world.enemies, {
+      playerId, position: character.position, tick, worldKey: `boneyard:${world.runId}`,
+    }, writeScreenFlash)
+    world = { ...world, enemies: feedback.store,
+      enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents, [feedback.event], tick) }
+  }
+  return world
 }
 
 function retainBoneyardEnemyEvents(
