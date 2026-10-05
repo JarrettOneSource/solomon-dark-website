@@ -175,6 +175,21 @@ try {
   receipt.audioRecording = { mimeType: recording.mimeType, bytes: recording.bytes.length,
     pcmBytes: pcm.length, channels: 2, sampleRate: recording.sampleRate, pcmFormat: 's16le',
     peak, rms: Math.sqrt(squared / (pcm.length / 2)) }
+  await page.keyboard.press('Escape')
+  const activePause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await activePause.waitFor({ timeout: 10000 })
+  await page.waitForTimeout(50)
+  const paused = { tick: host.state().tick,
+    fraction: getPlayerProgression(host.state(), playerId).rescueProtection.fraction,
+    noticeOpacity: await notice.evaluate(node => getComputedStyle(node).opacity) }
+  assert.ok(paused.fraction > 0)
+  await page.waitForTimeout(250)
+  assert.equal(host.state().tick, paused.tick)
+  assert.equal(getPlayerProgression(host.state(), playerId).rescueProtection.fraction, paused.fraction)
+  assert.equal(await notice.evaluate(node => getComputedStyle(node).opacity), paused.noticeOpacity)
+  receipt.pause = paused
+  await activePause.getByRole('button', { name: 'RESUME GAME' }).click()
+  await activePause.waitFor({ state: 'detached', timeout: 10000 })
   await waitUntil(() => getPlayerProgression(host.state(), playerId).rescueProtection.fraction === 0,
     'Rescue protection did not retire', 10000)
   await waitUntil(() => getPlayerProgression(host.state(), playerId).rescueProtection.particles.length === 0,
