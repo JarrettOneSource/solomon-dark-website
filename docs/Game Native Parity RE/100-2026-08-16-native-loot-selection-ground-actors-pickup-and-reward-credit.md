@@ -1515,7 +1515,7 @@ their values before using the existing float32 recipe as an arithmetic oracle.
 
 The previously stated claim that offset enters only the scale expression and
 never screen-Y is **reopened**. Full draw005CF000..005CF47D uses Fonts
-`DAT_008199A0+0xE7D98` (retained body group3), white/black shadow and caller
+`DAT_008199A0+0xE7D98` (Fonts wrapper group3, the menu/dialog face), white/black shadow and caller
 color. It rounds row+20 via00747360 and passes the float result at argument+20
 of004F5620, next to zero atargument+1C, at both005CF2B8 and005CF3B0. Those
 stack-slot observations alone do not prove a screen coordinate or another
@@ -1648,3 +1648,37 @@ of missing ink. Measure the foreground glyphs' real rectangles/visibility and
 record their union, body-font/baseline attributes, shadowY+2 and actual screenshot;
 preserve the baseline renderer. Text and sound acceptance remain separately
 pending until those observations and the output recording complete.
+
+### Report65 original-comparison falsifier: wrapper group3 is menu, not body
+
+Actual2315 M5 configuredALL passed42 Python/4195 Node tests and unchanged
+renderer gates (100% coverage;603 killed/198 compile errors/2 timeouts/24
+equivalent ignored; no failures). The actual built screenshot nevertheless
+falsified the font attribution above: at1600x900 the web notice's foreground
+rectangles occupied109x11px (745..854,Y57..68), while the original second
+clip shows the larger serif face centered aroundX800 with its top near50.
+This is a real presentation defect, not a reason to accept a passing unit tally.
+
+Retained Mod Loader native-presentation-ui-fonts-and-loader.md wrapper table
+explicitly maps group3 to offset0xE7D98, records216..307/header[24,6,28].
+Its native-items-equipment-and-loot.md notification contract selects that
+same group at005CF000. Maintained tools/extract-native-ui-kit.py maps Fonts
+group3 to Website font menu; body is group0/header[13,3,28]. The previous
+phrase body group3 was wrong. No new native read or replacement font is needed.
+Use the existing menu face for every shared current notice. Preserve the
+recovered baseline67, centered measurement, two-decimal scale and Y+2 shadow.
+For CHEAT DEATH! at scale1, the retained glyph advances total203 (two AT
+kerning adjustments−2 each); visible atlas rectangles span202x20 at
+X698.5..900.5/Y49..69. The original compressed pixels can omit low-alpha
+edge rows; the DOM rectangle is an atlas-frame measurement, not a claimed
+202x20 solid-ink block. The real4b captured109x11 frame is the regression red.
+
+The same browser run captured all four actual source starts in order with
+pitches1/0.800000011920929/0.5/1 and gain1, with emptyerror arrays. It then
+failed a helper expectation that a second100000-damage hit36ticks later was
+fully ignored. Protection was0.9100000858306885, so damage attenuation allowed
+about9000 damage: the native contract is a fadingfraction, not4seconds of
+absolute invulnerability. Check no duplicate accepted birth immediately at
+fraction1, before yielding the host clock; keep the fraction/retirement tests.
+OutputPCM/pause/teardown remained unrun after that helper failure. All owned
+phase groups/native registration/export/roots/exactlease were actually closed.
