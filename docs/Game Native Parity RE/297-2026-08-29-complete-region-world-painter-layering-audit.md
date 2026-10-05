@@ -2305,3 +2305,13 @@ new work under unused bounds or product acceptance is claimed. College33/41
 and the registered absolute bases remain unchanged. Current-main integration,
 clean immutable candidate, complete Website and built member acceptance,
 publication/live/archive boundary and both-device cleanup remain pending.
+
+The pre-packet affected-caller sweep found four shorthand Player facing writes
+missed by the first colon-property search: two complex-shadow snapshot producers,
+the real-host Hub-room pose setter, and the inline weapon-view Staff matrix
+fixture. They now retain the coherent degree/index pair. Generated shadow data
+uses the actual authored spawn angle through `playerCharacterFacing`; fixtures
+whose contract supplies a discrete bank use that bank's fifteen-degree
+representative. Separate Hall-of-Fame portrait headings remain their discrete
+contract. This closes a concrete transport/NaN-ground caller gap before the
+current source is sealed; browser execution remains required on M5.

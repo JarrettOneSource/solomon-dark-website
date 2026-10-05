@@ -8,7 +8,7 @@ import {
   moveWithHubRegionCollisionState,
 } from '../src/game/core-kernels/hub-regions.ts'
 import { HUB_SPAWN } from '../src/game/core-kernels/hub-math.ts'
-import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_RADIUS, playerCharacterFacing } from '../src/game/core-kernels/player-character.ts'
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import {
@@ -669,7 +669,7 @@ function setHostPlayerPose(host, playerId, position, headingIndex) {
   Object.assign(state, {
     playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
       ...player,
-      headingIndex,
+      ...playerCharacterFacing(headingIndex * 15),
       position: { ...position },
       velocity: { x: 0, y: 0 },
     }),

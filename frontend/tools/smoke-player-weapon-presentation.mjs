@@ -127,7 +127,7 @@ try {
         recipeIndex: null, nativeSelector: selector }
       for (let pose = 0; pose < 10; pose += 1) {
         for (let headingIndex = 0; headingIndex < 24; headingIndex += 1) {
-          view.update({ ...source, headingIndex,
+          view.update({ ...source, headingDegrees: headingIndex * 15, headingIndex,
             economy: { ...source.economy, equipment: { ...source.economy.equipment, weapon } },
           }, 200, pose)
           application.renderer.render(application.stage)
