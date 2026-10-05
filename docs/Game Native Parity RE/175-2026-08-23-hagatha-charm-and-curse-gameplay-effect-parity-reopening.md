@@ -2112,3 +2112,13 @@ The closed cue source remains an unvalidated implementation checkpoint.
 Protection and affected wave/Golem source work awaits complete contract review;
 Source/protocol integration, text and sound comparison and all-mode acceptance
 are still pending. No extra native target or data span was read in this phase.
+
+Parent review of settled entry301 accepts its explicitly recorded fresh
+instruction/decompile continuation through`00473220`, sampled duration plus
+one second/100-Hz conversion and complete Player`+204`/Arena ownership. The
+actual1052 local-target caller agrees with this retained setter/field chain.
+Reuse existing authoritative`blindnessTicksRemaining` for the captured lethal
+guard; no new death-grace timer or setter read is needed. This is retained
+evidence plus new caller agreement, not a new direct-store observation. Only
+the bounded`005F3B50..005F3D30` initializer and four bytes at`0078606C` remain
+proposed; no Crow/Golem/Knockback caller or tick replay is admitted.
