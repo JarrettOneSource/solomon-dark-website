@@ -49,6 +49,29 @@ test('player character headings use the native twenty-four-direction bank', () =
   ])
 })
 
+test('movement retains the continuous native heading across stop and body quantization', () => {
+  const initial = createPlayerCharacter(CHARACTER, { x: 100, y: 200 })
+  const moved = commitPlayerCharacterTick(initial, {
+    delta: { x: 0.3, y: -1 },
+    face: true,
+    movementActive: true,
+    requestedVelocity: { x: 30, y: -100 },
+    retainedVelocity: { x: 30, y: -100 },
+  }, { x: 100.3, y: 199 })
+  const expectedHeading = Math.fround(actorHeadingFromVector(30, -100))
+  assert.equal(moved.headingDegrees, expectedHeading)
+  assert.equal(moved.headingIndex, actorHeadingIndex(expectedHeading))
+  assert.notEqual(moved.headingDegrees, moved.headingIndex * 15)
+  const stopped = commitPlayerCharacterTick(moved, {
+    delta: { x: 0, y: 0 },
+    movementActive: false,
+    requestedVelocity: { x: 0, y: 0 },
+    retainedVelocity: { x: 0, y: 0 },
+  }, moved.position)
+  assert.equal(stopped.headingDegrees, expectedHeading)
+  assert.equal(stopped.headingIndex, moved.headingIndex)
+})
+
 test('player character planning replays the native fixed-tick movement lane', () => {
   assert.equal(PLAYER_CHARACTER_STEADY_SPEED, 100)
   assert.equal(PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, 0.01)

@@ -343,7 +343,7 @@ function spiderEscapeScene(stacks: number, element: WizardElement = 'fire'): Gam
   if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
   source = { ...source, playerEntities: replacePlayerCharacter(source.playerEntities, 'owner', {
     ...getPlayerCharacter(source, 'owner'), position: { x: 500, y: 500 },
-    velocity: { x: 0, y: 0 }, headingIndex: 6,
+    velocity: { x: 0, y: 0 }, headingDegrees: 90, headingIndex: 6,
   }), world: { ...source.world, arenaTransition: null, encounter: null, waves: null,
     bounds: { x: 0, y: 0, w: 4_000, h: 4_000 },
     collision: { circles: [], polygons: [], segments: [] }, gateLeaves: [], lanternPosition: null,

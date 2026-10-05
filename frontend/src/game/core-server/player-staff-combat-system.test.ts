@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import { createIdlePlayerCharacterInput, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import { createIdlePlayerCharacterInput, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import {
   createNativePlayerStaffAction,
   resolveNativeStaffPhysicalContacts,
@@ -28,6 +28,17 @@ import type { PlayerStaffCombatSystemContext } from './player-staff-combat-syste
 const CONFIG = { discipline: 'body', displayName: 'Staff', element: 'air' } as const
 const ETHER_CONFIG = { ...CONFIG, element: 'ether' } as const
 const PLAYER_ID = 'caster'
+
+test('native Staff birth preserves the continuous Player angle inside one body bank', () => {
+  const context = staffFixture()
+  const player = { ...context.players[PLAYER_ID]!, ...playerCharacterFacing(22.25) }
+  const result = stepPlayerStaffCombatSystem({ ...context, players: { [PLAYER_ID]: player },
+    movementContactsByPlayerId: { [PLAYER_ID]: [{ bodyId: 'enemy-1', staffHostile: true }] },
+  })
+  const action = result.spells.transients.find(actor => actor.kind === 'player-staff-melee')
+  assert.ok(action?.kind === 'player-staff-melee')
+  assert.equal(action.headingDegrees, 22.25)
+})
 
 test('the Solomon prelude gate suppresses only new automatic staff actions', () => {
   const context = staffFixture()
@@ -81,7 +92,7 @@ test('movement-result hostile contact admits without facing while nonhostile con
       [PLAYER_ID]: [{ bodyId: 'enemy-1', staffHostile: true }],
     },
     players: {
-      [PLAYER_ID]: { ...context.players[PLAYER_ID]!, headingIndex: 12 },
+      [PLAYER_ID]: { ...context.players[PLAYER_ID]!, headingDegrees: 180, headingIndex: 12 },
     },
   }
   const admitted = stepPlayerStaffCombatSystem(facingAway)
@@ -387,7 +398,7 @@ function staffFixture(
 ): PlayerStaffCombatSystemContext {
   const player = {
     ...createPlayerCharacter(config, { x: 0, y: 0 }),
-    headingIndex: 0,
+    ...playerCharacterFacing(0),
   }
   const playerEntities = playerEntitiesOverride ?? addPlayerEntity(
     createPlayerEntityStore(),

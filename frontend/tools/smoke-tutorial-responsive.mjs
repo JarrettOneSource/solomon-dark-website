@@ -48,6 +48,7 @@ import { resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secon
 import {
   PLAYER_CHARACTER_RADIUS,
   createIdlePlayerPrimaryCast,
+  playerCharacterFacing,
 } from '../src/game/core-kernels/player-character.ts'
 import {
   NATIVE_COLLEGE_TITLE_SWITCH_CURSOR,
@@ -684,7 +685,7 @@ async function exerciseTutorialStaffMelee(host, page, coarsePointer, screenshotP
     ...state,
     playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
       ...character,
-      headingIndex: actorHeadingIndex(actorHeadingFromVector(
+      ...playerCharacterFacing(actorHeadingFromVector(
         staged.target.position.x - staged.playerPosition.x,
         staged.target.position.y - staged.playerPosition.y,
       )),

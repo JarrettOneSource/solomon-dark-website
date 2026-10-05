@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { NativePlayerWeaponKind } from './native-player-weapon.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
 
 import {
   createIdlePlayerCharacterInput,
@@ -1926,6 +1927,25 @@ test('Ether has no distance or legacy PoC flight-time range cap', () => {
   })
   assert.equal(result.spells.projectiles[0].ageTicks, ageTicks + 1)
   assert.equal(result.spells.projectiles[0].position.x, 103)
+})
+
+test('every primary element retains the accepted continuous cast angle before body quantization', () => {
+  for (const element of ['air', 'earth', 'ether', 'fire', 'water'] as const) {
+    const initial = simulation(element)
+    const player = getPlayerCharacter(initial, PLAYER_ID)
+    const state = stepGameSimulationTick(initial, { [PLAYER_ID]: {
+      ...createIdlePlayerCharacterInput(),
+      aim: { x: player.position.x + 30, y: player.position.y - 100 - 25 / INTEGRATION_VIEW_SCALE },
+      cast: { primary: true, quickbar: null },
+      viewportHeight: 900,
+      viewportWidth: 1_600,
+    } })
+    const caster = getPlayerCharacter(state, PLAYER_ID)
+    const expectedHeading = Math.fround(actorHeadingFromVector(30, -100))
+    assert.equal(caster.headingDegrees, expectedHeading, element)
+    assert.equal(caster.headingIndex, actorHeadingIndex(expectedHeading), element)
+    assert.notEqual(caster.headingDegrees, caster.headingIndex * 15, element)
+  }
 })
 
 test('one-shot casts retain accepted facing against movement through projectile birth', () => {

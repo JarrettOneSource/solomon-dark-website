@@ -28,6 +28,7 @@ import {
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
+  withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
 import { stepBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { damageBoneyardEnemy } from '../src/game/core-server/enemies/damage.ts'
@@ -462,6 +463,7 @@ try {
     : await proveRetiredEntry(
         page,
         scene,
+        loadedBoneyard.scene,
         wire,
         loadedBoneyard.runId,
         gateCrossing,
@@ -3919,6 +3921,7 @@ async function waitForRenderedDeathSequence(page) {
 async function proveRetiredEntry(
   page,
   scene,
+  boneyardScene,
   wire,
   runId,
   gateCrossing,
@@ -3954,6 +3957,44 @@ async function proveRetiredEntry(
   const boundaryY = gateCrossing.direction > 0
     ? transition.combatBounds.y + PLAYER_CHARACTER_RADIUS
     : transition.combatBounds.y + transition.combatBounds.h - PLAYER_CHARACTER_RADIUS
+  const collision = withBoneyardGateCollision(
+    createBoneyardCollisionWorld(boneyardScene),
+    snapshot.world.gateLeaves,
+  )
+  const playableScene = { ...boneyardScene, bounds: transition.combatBounds }
+  const stagingTolerance = 10
+  const clearReturnLane = (point) => (
+    (point.y - boundaryY) * gateCrossing.direction >= 25 + stagingTolerance + 1
+    && [-stagingTolerance, 0, stagingTolerance].every((dx) => (
+      [-stagingTolerance, 0, stagingTolerance].every((dy) => {
+        const start = { x: point.x + dx, y: point.y + dy }
+        return traversesBoneyard(start, {
+          x: start.x,
+          y: start.y - gateCrossing.direction * 25,
+        }, transition.combatBounds, collision)
+      })
+    ))
+  )
+  const initial = await playerPointReceipt(scene, gateCrossing.target)
+  // Escape movement can stop against scenery while retirement is correctly sealed.
+  if (!clearReturnLane(initial)) {
+    const route = planBoneyardPath(
+      playableScene,
+      initial,
+      { x: initial.x, y: boundaryY + gateCrossing.direction * (25 + stagingTolerance + 1) },
+      (point) => clearReturnLane(point) ? [] : null,
+      'a clear retired-entry return lane',
+      collision,
+    )
+    const target = route.at(-1)
+    assert.ok(target, 'expected collision-safe return staging')
+    await walkToPoint(page, scene, playableScene, target, 5_000, stagingTolerance, collision)
+  }
+  const staged = await playerPointReceipt(scene, gateCrossing.target)
+  assert.ok(traversesBoneyard(staged, {
+    x: staged.x,
+    y: staged.y - gateCrossing.direction * 25,
+  }, transition.combatBounds, collision), 'retired-entry return lane remains obstructed')
   const beforeY = Number(await scene.getAttribute('data-local-player-y'))
   const returnKey = gateCrossing.direction > 0 ? 'w' : 's'
   await page.bringToFront()
@@ -4213,7 +4254,10 @@ async function holdUntil(page, key, predicate, timeoutMs) {
   }
 }
 
-async function walkToPoint(page, scene, boneyardScene, target, timeoutMs, tolerance = 10) {
+async function walkToPoint(
+  page, scene, boneyardScene, target, timeoutMs, tolerance = 10,
+  collision = createBoneyardCollisionWorld(boneyardScene),
+) {
   await page.bringToFront()
   await scene.focus()
   const startedAt = Date.now()
@@ -4221,6 +4265,7 @@ async function walkToPoint(page, scene, boneyardScene, target, timeoutMs, tolera
     boneyardScene,
     await playerPointReceipt(scene, target),
     target,
+    collision,
   )
   let routeIndex = 1
   let stalledSteps = 0
@@ -4237,7 +4282,7 @@ async function walkToPoint(page, scene, boneyardScene, target, timeoutMs, tolera
       routeIndex += 1
     }
     if (routeIndex >= route.length) {
-      route = planPointPath(boneyardScene, before, target)
+      route = planPointPath(boneyardScene, before, target, collision)
       routeIndex = 1
       continue
     }
@@ -4260,7 +4305,7 @@ async function walkToPoint(page, scene, boneyardScene, target, timeoutMs, tolera
     } else {
       stalledSteps += 1
       if (stalledSteps >= 6) {
-        route = planPointPath(boneyardScene, after, target)
+        route = planPointPath(boneyardScene, after, target, collision)
         routeIndex = 1
         stalledSteps = 0
       }

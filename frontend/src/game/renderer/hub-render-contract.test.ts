@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+import { createServer } from 'vite'
+
 import {
   HUB_DIAGNOSTIC_WINDOW_FRAMES,
   HUB_WORLD_LAYER_BOUNDS,
@@ -19,6 +23,33 @@ test('Hub world atlas pages stay within the texture limit', () => {
     ))
     assert.ok(png.readUInt32BE(16) <= 2_048)
     assert.ok(png.readUInt32BE(20) <= 2_048)
+  }
+})
+
+test('Hub startup requests every raw native ground glyph once', async () => {
+  const server = await createServer({
+    appType: 'custom',
+    logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)),
+    server: { middlewareMode: true },
+  })
+  try {
+    const { hubWorldAssetSources } = await server.ssrLoadModule('/src/game/renderer/hub-textures.ts') as Pick<
+      typeof import('./hub-textures.ts'), 'hubWorldAssetSources'
+    >
+    const { hub } = await server.ssrLoadModule('/src/lib/assets.ts') as Pick<
+      typeof import('../../lib/assets.ts'), 'hub'
+    >
+    const sources = hubWorldAssetSources()
+    for (const source of [
+      hub.npcs.perkWitchGroundGlow,
+      hub.npcs.itemsGround,
+      hub.npcs.teacher.shadow,
+    ]) {
+      assert.equal(sources.filter(loaded => loaded === source).length, 1, `Hub omitted ground glyph ${source}`)
+    }
+  } finally {
+    await server.close()
   }
 })
 

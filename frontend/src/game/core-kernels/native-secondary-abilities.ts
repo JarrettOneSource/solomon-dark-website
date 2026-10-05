@@ -1,5 +1,5 @@
 import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
-import { actorHeadingIndex, actorHeadingVector } from './actor-heading.ts'
+import { actorHeadingVector } from './actor-heading.ts'
 import type { PlayerBeltComponent } from './native-belt.ts'
 import { createNativeDampenedSpell, stepNativeDampenedSpell } from './native-dampened-spell.ts'
 import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
@@ -532,7 +532,7 @@ export interface NativeSecondaryTickResult {
   readonly manaSpent: Readonly<Record<string, number>>
   readonly healthRecovered: Readonly<Record<string, number>>
   readonly headingPerturbations: readonly NativeSecondaryHeadingPerturbation[]
-  readonly facingHeadingIndexes: Readonly<Record<string, number>>
+  readonly facingHeadingDegreesByPlayer: Readonly<Record<string, number>>
   readonly knockbacks: readonly NativeSecondaryKnockbackContact[]
   readonly relocatedPlayers: Readonly<Record<string, Vector2>>
   readonly removedProjectileIds: readonly number[]
@@ -1464,7 +1464,7 @@ export function stepNativeSecondaryAbilities(
   const healthRecovered: Record<string, number> = {}
   const headingPerturbations: NativeSecondaryHeadingPerturbation[] = []
   const steamedPulses: NativeSecondarySteamedPulse[] = []
-  const facingHeadingIndexes: Record<string, number> = {}
+  const facingHeadingDegreesByPlayer: Record<string, number> = {}
   const relocatedPlayers: Record<string, Vector2> = {}
   const removedProjectileIds = new Set<number>()
   const dispelledShieldTargetIds = new Set<number>()
@@ -3863,8 +3863,8 @@ export function stepNativeSecondaryAbilities(
         if (cast.manaUnderflow) manaUnderflowPlayerIds.add(playerId)
         if (cast.manaSpent > 0) manaSpent[playerId] = cast.manaSpent
         if (cast.relocated) relocatedPlayers[playerId] = cast.relocated
-        if (cast.facingHeadingIndex !== null) {
-          facingHeadingIndexes[playerId] = cast.facingHeadingIndex
+        if (cast.facingHeadingDegrees !== null) {
+          facingHeadingDegreesByPlayer[playerId] = cast.facingHeadingDegrees
         }
         cast.removedProjectileIds.forEach((id) => removedProjectileIds.add(id))
         cast.dampenedCasterTargetIds.forEach((id) => dampenedCasterTargetIds.add(id))
@@ -3900,7 +3900,7 @@ export function stepNativeSecondaryAbilities(
     dampenedCasterTargetIds: Object.freeze([...dampenedCasterTargetIds].sort((a, b) => a - b)),
     dispelledShieldTargetIds: Object.freeze([...dispelledShieldTargetIds].sort((a, b) => a - b)),
     disruptedTargetIds: Object.freeze([...disruptedTargetIds].sort((a, b) => a - b)),
-    facingHeadingIndexes: Object.freeze(facingHeadingIndexes),
+    facingHeadingDegreesByPlayer: Object.freeze(facingHeadingDegreesByPlayer),
     headingPerturbations: Object.freeze(headingPerturbations),
     healthRecovered: Object.freeze(healthRecovered),
     knockbacks: Object.freeze(knockbacks),
@@ -3923,7 +3923,7 @@ interface CastResult {
   readonly manaRecovered: number
   readonly manaUnderflow: boolean
   readonly manaSpent: number
-  readonly facingHeadingIndex: number | null
+  readonly facingHeadingDegrees: number | null
   readonly player: NativeSecondaryPlayerState
   readonly relocated: Vector2 | null
   readonly removedProjectileIds: readonly number[]
@@ -3973,8 +3973,8 @@ export function activateNativeSecondaryBeltSkill(
     dampenedCasterTargetIds: cast.dampenedCasterTargetIds,
     dispelledShieldTargetIds: cast.dispelledShieldTargetIds,
     disruptedTargetIds: [],
-    facingHeadingIndexes: cast.facingHeadingIndex === null
-      ? {} : { [playerId]: cast.facingHeadingIndex },
+    facingHeadingDegreesByPlayer: cast.facingHeadingDegrees === null
+      ? {} : { [playerId]: cast.facingHeadingDegrees },
     headingPerturbations: [],
     healthRecovered: {},
     knockbacks: [],
@@ -4047,7 +4047,7 @@ function castAbility(
   ): CastResult => ({
     dispelledShieldTargetIds: [], dampenedCasterTargetIds: [], manaRecovered: 0, manaUnderflow,
     manaSpent: 0, player: nextPlayer,
-    facingHeadingIndex: null, relocated: null, removedProjectileIds: [], state,
+    facingHeadingDegrees: null, relocated: null, removedProjectileIds: [], state,
   })
   if (!authority.eligible) {
     return none(fizzle(source, playerId, skillId, authority, context.tick), {
@@ -4092,7 +4092,7 @@ function castAbility(
   let manaSpent = cost
   let castManaRecovered = 0
   let relocated: Vector2 | null = null
-  let facingHeadingIndex: number | null = null
+  let facingHeadingDegrees: number | null = null
   let removedProjectileIds: readonly number[] = []
   let dampenedCasterTargetIds: readonly number[] = []
   let dispelledShieldTargetIds: readonly number[] = []
@@ -4207,7 +4207,7 @@ function castAbility(
         return {
           dispelledShieldTargetIds,
           dampenedCasterTargetIds,
-          facingHeadingIndex: null,
+          facingHeadingDegrees: null,
           manaRecovered: castManaRecovered,
           manaUnderflow: false,
           manaSpent,
@@ -4380,7 +4380,7 @@ function castAbility(
         freezeTicks: Math.round(v.mDuration * 100),
         kind: 'prismatic-wave',
         lifetimeTicks: PRISMATIC_PRESENTATION_LIFETIME_TICKS,
-        phase: authority.character.headingIndex * 15,
+        phase: authority.character.headingDegrees,
         position: { x: origin.x, y: origin.y - 25 },
         presentationRng: flashColor.state,
         radius: PRISMATIC_QUERY_RADIUS,
@@ -4489,7 +4489,7 @@ function castAbility(
       const placementSign = drawNativeSign(state.rng, 45)
       state = { ...state, rng: placementSign.state }
       const placementHeading = Math.fround(
-        authority.character.headingIndex * 15 + placementSign.value,
+        authority.character.headingDegrees + placementSign.value,
       )
       const placementDirection = nativeHeadingVector(placementHeading)
       const requestedPosition = {
@@ -4503,7 +4503,7 @@ function castAbility(
         state.rng,
       )
       state = { ...state, rng: placement.rng }
-      facingHeadingIndex = actorHeadingIndex(placementHeading)
+      facingHeadingDegrees = placementHeading
       const pose = drawNativeInteger(state.rng, 2)
       state = { ...state, rng: pose.state }
       const golemRotationRadians = normalizeRadians(
@@ -4918,7 +4918,7 @@ function castAbility(
   return {
     dispelledShieldTargetIds,
     dampenedCasterTargetIds,
-    facingHeadingIndex,
+    facingHeadingDegrees,
     manaRecovered: castManaRecovered,
     manaUnderflow: false,
     manaSpent,

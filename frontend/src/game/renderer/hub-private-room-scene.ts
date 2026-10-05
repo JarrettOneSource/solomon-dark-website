@@ -8,6 +8,10 @@ import {
   type PrivateHubRegionId,
 } from '../core-kernels/hub-private-room-layout.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import { nativeGroundHeadingVector, nativeNpcGroundGlyph } from '../core-kernels/native-ground-auxiliary.ts'
+import { NativeGroundGlyphView } from './native-ground-glyph-view.ts'
+import { actorSprite } from './hub-actors.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
 import {
   createHubCommonTraderClock,
@@ -29,6 +33,7 @@ import {
   HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
   HUB_MORTUARY_MEMORIAL_GLOW,
   hubMemoratorHeadingIndex,
+  hubMemoratorHeadingDegrees,
   hubRoomFlameTransform,
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
@@ -39,7 +44,7 @@ import {
   type NativeHubPainterLayer,
 } from '../hub-painter-order.ts'
 import { HubMemorialPaintingView } from './hub-memorial-painting-view.ts'
-import { HUB_NPC_MARKER_TAIL_OFFSET } from '../hub-depth.ts'
+import { HUB_GROUND_AUXILIARY_DEPTH, HUB_NPC_MARKER_TAIL_OFFSET } from '../hub-depth.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
@@ -80,6 +85,7 @@ function depthTarget(setDepth: (depth: number) => void): { zIndex: number } {
 export class HubPrivateRoomScene {
   readonly world = new Container({ isRenderGroup: true, label: 'college-private-rooms' })
   private readonly rooms: Record<PrivateHubRegionId, Container>
+  private readonly grounds = new Map<PrivateHubRegionId, Container>()
   private readonly players = new Map<string, PlayerWorldView>()
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly nonPlayerActors: Record<PrivateHubRegionId, Container[]> = {
@@ -104,11 +110,13 @@ export class HubPrivateRoomScene {
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
   private readonly textures: HubWorldTextures
   private memoratorBody!: Sprite
+  private memoratorGround!: NativeGroundGlyphView
   private memoratorFrames: readonly Texture[] = []
   private readonly dowserClock: HubCommonTraderClock
   private dowserBody!: Sprite
   private readonly polisherClock: HubPolisherClock
   private polisherBody!: Sprite
+  private polisherGround!: NativeGroundGlyphView
   private polisherMarker!: Sprite
   private polisherFrames: readonly Texture[] = []
   private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
@@ -302,9 +310,11 @@ export class HubPrivateRoomScene {
     for (const view of this.mortuaryDynamicPaintings) view.destroy()
     this.mortuaryDynamicPaintings.length = 0
     this.mortuaryStaticPaintings.length = 0
+    for (const view of this.players.values()) view.destroy()
     this.players.clear()
     this.playerElements.clear()
     this.livePlayerIds.clear()
+    this.grounds.clear()
     this.world.destroy({ children: true })
   }
 
@@ -322,6 +332,7 @@ export class HubPrivateRoomScene {
       MEMORATOR_FRAME.height,
     )
     const memoratorVisual = layout.actors.memorator.visual
+    this.memoratorGround = this.addNpcGround('mortuary', 'memorator', memoratorVisual.position, { x: 0, y: 10 })
     const memorator = new Container({ label: 'college-mortuary-memorator' })
     memorator.sortableChildren = true
     memorator.position.copyFrom(memoratorVisual.position)
@@ -385,6 +396,7 @@ export class HubPrivateRoomScene {
     this.addNpcMarker(room, 'librarian', hub.rooms.library.librarianMarker)
 
     const dowserVisual = layout.actors.dowser.visual
+    this.addNpcGround('library', 'shlorio', dowserVisual.position, { x: -3, y: 4 })
     const dowser = new Container({ label: 'college-library-dowser' })
     dowser.sortableChildren = true
     dowser.position.copyFrom(dowserVisual.position)
@@ -475,6 +487,8 @@ export class HubPrivateRoomScene {
     room.addChild(archChancellor)
     this.addNpcMarker(room, 'arch-chancellor', hub.rooms.office.archChancellorMarker)
     const polisherDefinition = NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher
+    this.polisherGround = this.addNpcGround('office', 'polisher', polisherDefinition.geometry.position, { x: 5, y: 10 })
+    this.polisherGround.container.visible = false
     this.polisherFrames = this.textures.visualAtlas.strip(
       hub.rooms.office.polisher,
       4,
@@ -699,8 +713,27 @@ export class HubPrivateRoomScene {
     }
   }
 
+  private addNpcGround(
+    region: PrivateHubRegionId,
+    id: NativeHubFixedActorPainterId,
+    position: Readonly<Vector2>,
+    offset: Readonly<Vector2>,
+  ): NativeGroundGlyphView {
+    const view = new NativeGroundGlyphView(actorSprite(this.textures.base[hub.npcs.teacher.shadow], 0))
+    view.update(nativeNpcGroundGlyph(position, offset))
+    view.container.label = `${id}-ground`
+    view.container.zIndex = nativeHubFixedActorPainterRegistration(id).registrationOrdinal
+    this.grounds.get(region)!.addChild(view.container)
+    return view
+  }
+
   private room(label: PrivateHubRegionId): Container {
     const room = new Container({ label: `college-${label}` })
+    const ground = new Container({ label: `college-${label}-ground`, eventMode: 'none' })
+    ground.zIndex = HUB_GROUND_AUXILIARY_DEPTH
+    ground.sortableChildren = true
+    this.grounds.set(label, ground)
+    room.addChild(ground)
     room.sortableChildren = true
     room.eventMode = 'none'
     return room
@@ -788,6 +821,11 @@ export class HubPrivateRoomScene {
       }
       const player = snapshot.players[localPlayerId]
       if (player) {
+        const direction = nativeGroundHeadingVector(hubMemoratorHeadingDegrees(player.position))
+        this.memoratorGround.update(nativeNpcGroundGlyph(
+          HUB_PRIVATE_ROOM_LAYOUTS.mortuary.actors.memorator.visual.position,
+          { x: -Math.fround(5 * direction.x), y: 5 - Math.fround(5 * direction.y) },
+        ))
         this.memoratorBody.texture = this.memoratorFrames[
           hubMemoratorHeadingIndex(player.position)
         ]
@@ -800,6 +838,7 @@ export class HubPrivateRoomScene {
     }
     if (region === 'office') {
       this.polisherBody.visible = storyOffice
+      this.polisherGround.container.visible = storyOffice
       if (storyOffice) {
         this.polisherBody.texture = this.polisherFrames[
           this.polisherClock.advanceTo(snapshot.tick)
@@ -836,14 +875,18 @@ export class HubPrivateRoomScene {
         view = new PlayerWorldView(player.config.element, this.textures, this.modTextures, this.renderer, false)
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
+        this.grounds.get(region)!.addChild(view.ground)
         room.addChild(view.container)
         room.addChild(view.enhancedHit.container)
         view.enhancedHit.container.zIndex = HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH + .125
       } else if (view.container.parent !== room) {
+        view.ground.removeFromParent()
         view.container.parent?.removeChild(view.container)
+        this.grounds.get(region)!.addChild(view.ground)
         room.addChild(view.container)
         room.addChild(view.enhancedHit.container)
       }
+      view.ground.zIndex = player.lighting.lightRegistration.registrationOrdinal
       view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, undefined, snapshot.enhancedEffects, snapshot.secondaryAbilities.stoneskinWarp)
       view.update(
         player,

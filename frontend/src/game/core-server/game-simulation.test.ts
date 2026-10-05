@@ -325,6 +325,8 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(ownerParticipant()?.collegeIntro?.phase, 'courtyard-walk')
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 972, y: 1_044 })
   assert.equal(getPlayerCharacter(state, 'owner').headingIndex, 2)
+  assert.notEqual(getPlayerCharacter(state, 'owner').headingDegrees, 30)
+  assert.equal(actorHeadingIndex(getPlayerCharacter(state, 'owner').headingDegrees), 2)
   assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
   assert.equal(getPlayerCharacter(state, 'owner').primaryCast.actionTick, -1)
   const staleCollegeCharacter = getPlayerCharacter(state, 'owner')
@@ -1347,6 +1349,7 @@ test('locked Goodies require an explicit nearest-facing interaction and consume 
     ...state,
     playerEntities: replacePlayerCharacter(state.playerEntities, 'local-player', {
       ...getPlayerCharacter(state),
+      headingDegrees: 0,
       headingIndex: 0,
       position: { x: 0, y: 0 },
     }),
@@ -2036,6 +2039,27 @@ test('game simulation owns fixed-step accumulation independently of its world', 
   state = stepGameSimulation(state, {}, 0.005)
   assert.equal(state.tick, 1)
   assert.equal(state.accumulatorSeconds, 0)
+})
+
+test('a public Golem cast commits its continuous facing and body bank as one Player invariant', () => {
+  let state = withPlayerSkillRank(etherDrainSimulation({ x: 400, y: 250 }), 'local-player', 45, 1)
+  for (let tick = 0; tick < 150; tick++) state = stepGameSimulationTick(state, {})
+  const initial = getPlayerCharacter(state)
+  state = { ...state, playerEntities: replacePlayerCharacter(
+    setPlayerEntityMana(state.playerEntities, 'local-player', 100), 'local-player', {
+      ...initial, headingDegrees: 22.25, headingIndex: 1, velocity: { x: 0, y: 0 },
+    },
+  ) }
+  state = stepGameSimulationTick(bindGameSimulationPlayerSkillQuickbar(state, 'local-player', 45, 1)!, {
+    'local-player': { ...gameplayInput(0, 0), cast: { primary: false, quickbar: 1 } },
+  })
+  assert.ok(state.secondaryAbilities.actors.some(actor => actor.kind === 'golem'))
+  const caster = getPlayerCharacter(state)
+  assert.ok([67.25, -22.75].includes(caster.headingDegrees))
+  assert.equal(caster.headingIndex, actorHeadingIndex(caster.headingDegrees))
+  const snapshot = gameSnapshot(JSON.parse(JSON.stringify(createGameSnapshot(state, 'local-player'))))
+  assert.equal(snapshot.players['local-player']!.headingDegrees, caster.headingDegrees)
+  assert.equal(snapshot.players['local-player']!.headingIndex, caster.headingIndex)
 })
 
 test('native Golem cooldown ticks map to 25 authoritative wall-clock seconds', () => {
@@ -4235,6 +4259,10 @@ test('Deflect cancels the contact, faces and sounds once, and reflects concentra
     source.config.maximumHealth - source.config.primaryDamage! * 5,
   )
   const publishedPlayer = getPlayerCharacter(state)
+  assert.equal(publishedPlayer.headingDegrees, Math.fround(actorHeadingFromVector(
+    source.position.x - publishedPlayer.position.x,
+    source.position.y - publishedPlayer.position.y,
+  )))
   assert.equal(publishedPlayer.headingIndex, actorHeadingIndex(actorHeadingFromVector(
     source.position.x - publishedPlayer.position.x,
     source.position.y - publishedPlayer.position.y,
@@ -5819,6 +5847,7 @@ test('completed wave respawns only dead run members at the authored spawn on the
     ...state,
     playerEntities: replacePlayerCharacter(state.playerEntities, 'first', {
       ...getPlayerCharacter(state, 'first'),
+      headingDegrees: 103.25,
       headingIndex: 7,
       position: { x: 111, y: 112 },
       velocity: { x: 0, y: 0 },
@@ -5892,6 +5921,7 @@ test('completed wave respawns only dead run members at the authored spawn on the
   })
   assert.deepEqual(getPlayerCharacter(state, 'first').velocity, { x: 0, y: 0 })
   assert.equal(getPlayerCharacter(state, 'first').headingIndex, 7)
+  assert.equal(getPlayerCharacter(state, 'first').headingDegrees, 103.25)
   assert.equal(getPlayerCharacter(state, 'first').primaryCast.actionTick, -1)
   assert.equal(getPlayerProgression(state, 'second'), secondProgression)
   assert.deepEqual(getPlayerCharacter(state, 'second').position, secondPosition)

@@ -1404,6 +1404,17 @@ There is one composed client, not one DOM client and one canvas client.
   WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and
   painter ordering remain renderer-independent inputs.
+- Actor auxiliary ground products have independent scene ownership before the
+  world queue and lighting composite. Player and Student views expose a ground
+  sibling alongside their body; scene registration, room changes, pooling,
+  departure and destruction coordinate both products. Body pose, material
+  capture and body queue depth do not own auxiliary eligibility. Fixed College
+  NPCs use the same early interval while preserving their individual glyph,
+  transform, color and policy programs. Player locomotion retains its continuous
+  float32 angle together with the derived body-bank index through projection,
+  prediction, transport and saves; Student reuses its existing continuous
+  heading. [Ledger297](<Game Native Parity RE/297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+  owns the recovered membership and current-source acceptance requirements.
 - A loaded Boneyard composes its immutable stock-generator output once into
   bounded GPU tiles and tightly cropped resident main-layer textures. The
   recovered native effective-Y queue interleaves those main layers with GPU

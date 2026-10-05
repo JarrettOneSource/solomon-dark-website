@@ -1,3 +1,4 @@
+import { actorHeadingIndex } from '../../core-kernels/actor-heading.ts'
 import type { PlayerCharacterConfig } from '../../core-kernels/player-character.ts'
 import {
   NATIVE_PLAYER_MAX_LIGHT_OVERLAY,
@@ -43,6 +44,7 @@ export function playerSnapshotFrame(value: unknown, field: string): ProtocolPlay
     'economy',
     'footstepTick',
     'gaitDegrees',
+    'headingDegrees',
     'headingIndex',
     'lighting',
     'movementScale',
@@ -66,6 +68,11 @@ export function playerSnapshotFrame(value: unknown, field: string): ProtocolPlay
     progression.weldBuildId,
   )
   const lighting = playerLighting(source.lighting, `${field}.lighting`)
+  const headingDegrees = finite(source.headingDegrees, `${field}.headingDegrees`)
+  const headingIndex = integer(source.headingIndex, `${field}.headingIndex`)
+  if (headingIndex !== actorHeadingIndex(headingDegrees)) {
+    throw new GameProtocolError(`${field}.headingIndex is inconsistent with continuous heading`)
+  }
   if (lighting.driveActive !== playerLightDriveActive(primaryCast, progression.lifeState)) {
     throw new GameProtocolError(`${field}.lighting.driveActive is inconsistent with player state`)
   }
@@ -75,7 +82,8 @@ export function playerSnapshotFrame(value: unknown, field: string): ProtocolPlay
     ...(economy ? { economy } : {}),
     footstepTick: nonnegativeInteger(source.footstepTick, `${field}.footstepTick`),
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
-    headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
+    headingDegrees,
+    headingIndex,
     lighting,
     movementScale: nonnegativeFinite(source.movementScale, `${field}.movementScale`),
     position: vector(source.position, `${field}.position`),

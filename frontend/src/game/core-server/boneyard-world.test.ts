@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Buffer } from 'node:buffer'
-import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import { createNativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
@@ -82,6 +82,16 @@ function stepWorld(
     externalSpawnIntents,
   )
 }
+
+test('authored Boneyard spawn retains its continuous angle before body-bank selection', () => {
+  const world = createBoneyardWorld(gatedBoneyard())
+  const player = spawnPlayerCharacterInBoneyard({
+    discipline: 'arcane', displayName: 'Spawn', element: 'fire',
+  }, { ...world, spawn: { ...world.spawn, facingDeg: 22.25 } })
+  assert.equal(player.headingDegrees, 22.25)
+  assert.equal(player.headingIndex, actorHeadingIndex(22.25))
+  assert.deepEqual(player.position, { x: world.spawn.x, y: world.spawn.y })
+})
 
 test('world commits sequential Pike constraints to the authoritative player root', () => {
   const loaded = gatedBoneyard()

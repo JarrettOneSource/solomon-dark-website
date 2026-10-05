@@ -122,6 +122,8 @@ import hubNpcItems from '../assets/game/hub-npc-items.png'
 import hubNpcItemsFrames from '../assets/game/hub-npc-items-frames.png'
 import hubNpcPerkWitch from '../assets/game/hub-npc-perk-witch.png'
 import hubNpcPerkWitchAccessory from '../assets/game/hub-npc-perk-witch-accessory.png'
+import hubHagathaGroundGlow from '../assets/game/hub-hagatha-ground-glow.png'
+import hubLuthacusGroundShadow from '../assets/game/hub-luthacus-ground-shadow.png'
 import hubNpcPerkWitchCrossfades from '../assets/game/hub-npc-perk-witch-crossfades.png'
 import hubNpcPerkWitchFrames from '../assets/game/hub-npc-perk-witch-frames.png'
 import hubNpcPotion from '../assets/game/hub-npc-potion.png'
@@ -623,9 +625,11 @@ export const hub = {
   npcs: {
     annalist: hubNpcAnnalist,
     items: hubNpcItems,
+    itemsGround: hubLuthacusGroundShadow,
     itemsFrames: hubNpcItemsFrames,
     perkWitch: hubNpcPerkWitch,
     perkWitchAccessory: hubNpcPerkWitchAccessory,
+    perkWitchGroundGlow: hubHagathaGroundGlow,
     perkWitchCrossfades: hubNpcPerkWitchCrossfades,
     perkWitchFrames: hubNpcPerkWitchFrames,
     potion: hubNpcPotion,

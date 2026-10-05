@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import test from 'node:test'
+import { playerCharacterFacing } from '../core-kernels/player-character.ts'
+import { playerSnapshotFrame } from './codecs/players.ts'
 import { NATIVE_HAIL_MINIMUM_HEIGHT, createNativeWaterHailActor, nativeWaterHailLifeAtAge, stepNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS, gameRunWorldTick } from '../core-kernels/game-run.ts'
@@ -113,6 +115,24 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
     sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   }
 }
+
+test('Player transport retains a continuous heading and rejects a mismatched body index', () => {
+  const state = createGameSimulation({ 'player-1': CHARACTER })
+  const snapshot = createGameSnapshot(state, 'player-1')
+  const player = { ...snapshot.players['player-1']!, ...playerCharacterFacing(22.25) }
+  const frame = createGameSnapshotFrame({ ...snapshot, players: { 'player-1': player } }, 0, undefined, true)
+  const message = { type: 'server-snapshot' as const, frame, sequence: 1, acknowledgedInputSequence: 0 }
+  const decoded = decodeServerGameMessage(encodeGameMessage(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  if (decoded.type !== 'server-snapshot') throw new Error('expected snapshot')
+  assert.equal(decoded.frame.players['player-1']!.headingDegrees, 22.25)
+  assert.equal(decoded.frame.players['player-1']!.headingIndex, 1)
+  assert.deepEqual(playerSnapshotFrame(player, 'player'), player)
+  assert.throws(() => playerSnapshotFrame({ ...player, headingIndex: 2 }, 'player'), /inconsistent with continuous heading/)
+  const { headingDegrees: _heading, ...missingHeading } = player
+  assert.throws(() => playerSnapshotFrame(missingHeading, 'player'), /headingDegrees/)
+  assert.throws(() => playerSnapshotFrame({ ...player, headingDegrees: Number.NaN }, 'player'), /headingDegrees/)
+})
 
 test('client protocol validates character, input, lifecycle, Lua, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({

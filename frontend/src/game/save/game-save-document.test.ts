@@ -19,7 +19,7 @@ import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
-import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
+import { createIdlePlayerCharacterInput, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server/boneyard-enemy-store.ts'
 import { emitPlayerStatusBurst } from '../core-server/boneyard-player-status.ts'
 import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
@@ -29,7 +29,7 @@ import { applyGameSimulationHubAction, armGameSimulationCollegeIntro, bindGameSi
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { HubWorldRuntime, createHubWorld } from '../core-server/hub-world.ts'
-import { grantPlayerEntitySkillRanks, replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import { grantPlayerEntitySkillRanks, playerCharacterAt, replacePlayerCharacter, replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
@@ -99,6 +99,26 @@ test('continuations preserve rescue particles while old saves initialize an empt
   assert.deepEqual(old.playerEntities.progressions[0]!.rescueProtection,
     { fraction: 0, nextParticleId: 1, particles: [] })
   assert.deepEqual(old.secondaryAbilities.cameraDisplacements, [])
+})
+
+test('current saves preserve continuous Player heading and schema48 recovers its stored body facing', () => {
+  const initial = createGameSimulation({ owner: OWNER })
+  const character = { ...playerCharacterAt(initial.playerEntities, 'owner')!, ...playerCharacterFacing(22.25) }
+  const state = { ...initial, playerEntities: replacePlayerCharacter(initial.playerEntities, 'owner', character) }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const current = playerCharacterAt(restoreGameSaveDocument(document).state.playerEntities, 'owner')!
+  assert.equal(current.headingDegrees, 22.25)
+  assert.equal(current.headingIndex, 1)
+  const old = JSON.parse(document)
+  old.schemaVersion = 48
+  for (const locomotion of old.continuation.simulation.playerEntities.locomotions) delete locomotion.headingDegrees
+  const migrated = playerCharacterAt(restoreGameSaveDocument(JSON.stringify(old)).state.playerEntities, 'owner')!
+  assert.equal(migrated.headingDegrees, 15)
+  assert.equal(migrated.headingIndex, 1)
+  const mismatched = JSON.parse(document)
+  mismatched.continuation.simulation.playerEntities.locomotions[0].headingIndex = 2
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(mismatched)), /heading invariant/)
 })
 
 test('Enhanced Effects continuation preserves the world mode and old saves default On without RNG changes', () => {

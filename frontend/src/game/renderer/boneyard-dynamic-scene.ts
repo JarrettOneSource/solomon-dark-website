@@ -110,6 +110,7 @@ export class BoneyardDynamicScene {
   readonly seeker: NativeHagathaSeekerView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
+  readonly playerGround = new Container({ label: 'boneyard-player-ground', eventMode: 'none', sortableChildren: true })
   readonly solomon: BoneyardSolomonView | null
   private readonly staticPainterLayers: StaticPainterLayer[]
   private readonly textures: BoneyardWorldTextures
@@ -163,6 +164,8 @@ export class BoneyardDynamicScene {
     preWorld.sortableChildren = true
     preWorld.zIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX / 2
     root.addChild(preWorld)
+    this.playerGround.zIndex = 0
+    preWorld.addChild(this.playerGround)
     const enemyUnderlays = new Container({ label: 'boneyard-enemy-underlays' })
     enemyUnderlays.eventMode = 'none'
     enemyUnderlays.sortableChildren = true
@@ -259,9 +262,11 @@ export class BoneyardDynamicScene {
       if (!view) {
         view = new PlayerWorldView(player.config.element, this.textures, this.modTextures, this.renderer, true)
         this.players.set(playerId, view)
+        this.playerGround.addChild(view.ground)
         this.root.addChild(view.container)
         this.root.addChild(view.enhancedHit.container)
       }
+      view.ground.zIndex = player.lighting.lightRegistration.registrationOrdinal
       view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, snapshot.world.webbedPlayers[playerId], snapshot.enhancedEffects, snapshot.secondaryAbilities.stoneskinWarp)
       view.update(
         player,
@@ -271,6 +276,9 @@ export class BoneyardDynamicScene {
           playerId,
           `boneyard:${this.boneyard.runId}`,
         ),
+        true,
+        false,
+        this.compactMasks.specialSurfaceAt(player.position, snapshot.world.spiderRemains),
       )
     }
     for (const [playerId, view] of this.players) {

@@ -111,8 +111,16 @@ export function nativeCollegePathHeadingIndex(
   sourceCursor: number,
   position: Readonly<Vector2>,
 ): number {
+  return actorHeadingIndex(nativeCollegePathHeadingDegrees(phase, sourceCursor, position))
+}
+
+export function nativeCollegePathHeadingDegrees(
+  phase: Extract<NativeCollegeIntroPhase, 'courtyard-walk' | 'office-walk'>,
+  sourceCursor: number,
+  position: Readonly<Vector2>,
+): number {
   const { target } = nativeCollegePathTarget(phase, sourceCursor, position)
-  return actorHeadingIndex(actorHeadingFromVector(
+  return Math.fround(actorHeadingFromVector(
     target.x - position.x,
     target.y - position.y,
   ))

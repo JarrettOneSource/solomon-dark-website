@@ -101,6 +101,7 @@ try {
     const player = {
       ...source,
       gaitDegrees: 63,
+      headingDegrees: 135,
       headingIndex: 9,
       position: { x: 500, y: 350 },
       primaryCast: {
@@ -118,7 +119,7 @@ try {
       walkCyclePrimary: 3.4,
     }
     const view = new actors.PlayerWorldView('ether', textures)
-    application.stage.addChild(view.container)
+    application.stage.addChild(view.ground, view.container)
     view.update(player, 100)
     view.setWorldTint(0x336699)
     application.renderer.render(application.stage)

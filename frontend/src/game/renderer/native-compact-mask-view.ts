@@ -5,6 +5,8 @@ import type { BoneyardSpiderRemainsSnapshot } from '../protocol/spider-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { renderNativeDiffuseMask } from './native-texture-color.ts'
+import { compactGridCells } from './native-compact-grid.ts'
+import { NativeCompactGroundSurface } from './native-compact-ground-surface.ts'
 
 interface CompactMask {
   readonly id: string
@@ -24,12 +26,14 @@ export class NativeCompactMaskView {
   private readonly renderer: Renderer
   private readonly textures: BoneyardWorldTextures
   private readonly authored: readonly CompactMask[]
+  private readonly surface: NativeCompactGroundSurface
   private readonly maximumColumn: number
   private readonly maximumRow: number
   private readonly groundSprites = new Map<string, Sprite>()
   private readonly targets = new Map<string, PlayerMaskTarget>()
 
   constructor(root: Container, ground: Container, renderer: Renderer, textures: BoneyardWorldTextures, scene: BoneyardScene) {
+    this.surface = new NativeCompactGroundSurface(scene)
     this.root = root
     this.ground = ground
     this.renderer = renderer
@@ -41,6 +45,10 @@ export class NativeCompactMaskView {
       rotation: sprite.s0, scaleX: sprite.s1 * ((sprite.flags & 1) !== 0 ? 0.8 : 1),
       scaleY: sprite.s1, alpha: sprite.atlasEntry === 29 ? 1 : 0.75, dynamic: false,
     }))
+  }
+
+  specialSurfaceAt(point: Readonly<BoneyardPoint>, remains: readonly BoneyardSpiderRemainsSnapshot[]): boolean {
+    return this.surface.contains(point, remains)
   }
 
   update(
@@ -195,16 +203,4 @@ function intersects(mask: CompactMask, bounds: Readonly<BoneyardBounds>): boolea
     && mask.position.y + record.height / 2 >= bounds.y
     && mask.position.x - record.width / 2 <= bounds.x + bounds.w
     && mask.position.y - record.height / 2 <= bounds.y + bounds.h
-}
-
-/** MagicGrid 0x00588040 admits whole 50-unit cells, including its outer border. */
-function compactGridCells(bounds: Readonly<BoneyardBounds>, maximumColumn: number, maximumRow: number) {
-  const cell = (value: number, maximum: number): number => {
-    const integer = Math.trunc(Math.fround(value))
-    return integer < 0 ? -1 : Math.min(Math.trunc(integer / 50), maximum)
-  }
-  return {
-    left: cell(bounds.x, maximumColumn), right: cell(Math.fround(bounds.x) + Math.fround(bounds.w), maximumColumn),
-    top: cell(bounds.y, maximumRow), bottom: cell(Math.fround(bounds.y) + Math.fround(bounds.h), maximumRow),
-  }
 }

@@ -698,6 +698,7 @@ test('wave respawn restores only a non-positive player on the same durable entit
   store = grantPlayerEntityExperience(store, 'first', 100, createNativeRng(102)).store
   store = replacePlayerCharacter(store, 'first', {
     ...playerCharacterAt(store, 'first')!,
+    headingDegrees: 103.25,
     headingIndex: 7,
     primaryCast: {
       ...playerCharacterAt(store, 'first')!.primaryCast,
@@ -743,6 +744,7 @@ test('wave respawn restores only a non-positive player on the same durable entit
   assert.deepEqual(playerCharacterAt(store, 'first')?.position, { x: 123, y: 234 })
   assert.deepEqual(playerCharacterAt(store, 'first')?.velocity, { x: 0, y: 0 })
   assert.equal(playerCharacterAt(store, 'first')?.headingIndex, 7)
+  assert.equal(playerCharacterAt(store, 'first')?.headingDegrees, 103.25)
   assert.equal(playerCharacterAt(store, 'first')?.primaryCast.actionTick, -1)
   assert.equal(playerCharacterAt(store, 'first')?.primaryCast.channelActive, false)
   assert.equal(playerProgressionAt(store, 'second'), secondBefore)

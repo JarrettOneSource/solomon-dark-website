@@ -2,6 +2,11 @@ import { Container, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import { nativeNpcGroundGlyph } from '../core-kernels/native-ground-auxiliary.ts'
+import { createNativeRng, drawNativeFloat, type NativeRngState } from '../core-kernels/native-rng.ts'
+import { NativeGroundGlyphView } from './native-ground-glyph-view.ts'
+import { packRgb } from './native-enemy-layers.ts'
+import { setNativeDiffuseColor } from './native-texture-color.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
 import {
   HUB_ASTRONOMER_ROOT,
@@ -92,6 +97,7 @@ import {
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
   readonly world = new Container({ isRenderGroup: true, label: 'college-courtyard' })
+  readonly ground = new Container({ label: 'college-courtyard-ground', eventMode: 'none' })
   readonly southern = new Container({
     isRenderGroup: true,
     label: 'college-courtyard-southern-bank',
@@ -155,6 +161,9 @@ export class HubWorldScene {
     this.renderer = renderer
     this.modTextures = modTextures
     this.stage.eventMode = 'none'
+    this.ground.sortableChildren = true
+    this.ground.zIndex = HUB_WORLD_DEPTH.ground
+    this.world.addChild(this.ground)
     this.world.sortableChildren = true
     this.world.eventMode = 'none'
     this.southern.sortableChildren = true
@@ -175,21 +184,22 @@ export class HubWorldScene {
     this.world.addChild(this.sealGlyphs, this.sealCore)
     this.usefulThyngsShadow = this.worldLayer(
       hub.tent.shadow,
-      HUB_WORLD_DEPTH.usefulThyngsShadow,
+      nativeHubFixedActorPainterRegistration('fomentius').registrationOrdinal,
       HUB_WORLD_LAYER_BOUNDS.usefulThyngsShadow,
     )
-    this.world.addChild(this.usefulThyngsShadow)
+    this.ground.addChild(this.usefulThyngsShadow)
 
     this.statueAura = new Sprite(textures.base[hub.props.statue.aura])
     this.statueAura.position.set(HUB_STATUE_ROOT.x - 24, HUB_STATUE_ROOT.y - 166)
-    this.statueAura.zIndex = HUB_WORLD_DEPTH.statueAura
+    this.statueAura.zIndex = nativeHubFixedActorPainterRegistration('college-statue').registrationOrdinal
     this.statueAura.blendMode = 'multiply'
     this.statueAura.eventMode = 'none'
     this.statueBody = new Sprite(textures.base[hub.props.statue.body])
     this.statueBody.position.set(HUB_STATUE_ROOT.x - 76, HUB_STATUE_ROOT.y - 189)
     this.statueBody.zIndex = HUB_WORLD_DEPTH.statue
     this.statueBody.eventMode = 'none'
-    this.world.addChild(this.statueAura, this.statueBody)
+    this.ground.addChild(this.statueAura)
+    this.world.addChild(this.statueBody)
 
     this.addNpc(hub.npcs.annalist, 895.5, 455.5)
 
@@ -199,6 +209,9 @@ export class HubWorldScene {
       traderAnimationSeed ^ 5005,
       createdAtTick,
     )
+    this.hagatha.ground.zIndex = nativeHubFixedActorPainterRegistration('hagatha').registrationOrdinal
+    this.luthacus.ground.zIndex = nativeHubFixedActorPainterRegistration('luthacus').registrationOrdinal
+    this.ground.addChild(this.hagatha.ground, this.luthacus.ground)
     this.world.addChild(this.hagatha.container, this.luthacus.container)
 
     this.potion = new HubPotionTraderView(textures, createdAtTick)
@@ -223,8 +236,9 @@ export class HubWorldScene {
     this.world.addChild(this.usefulThyngsStack)
 
     this.teacher = new HubTeacherView(textures, 576.5, 710.5, traderAnimationSeed ^ 5008)
+    this.teacher.ground.zIndex = nativeHubFixedActorPainterRegistration('teacher').registrationOrdinal
+    this.ground.addChild(this.teacher.ground)
     this.world.addChild(
-      this.teacher.ground,
       this.teacher.preWorld,
       this.teacher.container,
       this.teacher.worldColumn,
@@ -233,6 +247,8 @@ export class HubWorldScene {
     )
 
     this.skorcha = new HubSkorchaView(textures)
+    this.skorcha.ground.zIndex = nativeHubFixedActorPainterRegistration('skorcha').registrationOrdinal
+    this.ground.addChild(this.skorcha.ground)
     this.world.addChild(this.skorcha.container)
 
     this.addNpcMarkers()
@@ -473,6 +489,8 @@ export class HubWorldScene {
     this.secondaryAbilities.destroy()
     for (const view of this.retiredStudentViews) view.destroy()
     this.retiredStudentViews.length = 0
+    for (const view of this.players.values()) view.destroy()
+    for (const view of this.students.values()) view.destroy()
     this.players.clear()
     this.playerElements.clear()
     this.livePlayerIds.clear()
@@ -489,15 +507,17 @@ export class HubWorldScene {
     actor.position.set(x, y)
     actor.zIndex = hubWorldDepthForActor(y)
     actor.eventMode = 'none'
-    const shadow = actorSprite(this.textures.base[hub.npcs.teacher.shadow], 0)
-    shadow.scale.set(1.25)
-    shadow.alpha = 0.62
+    const shadow = new NativeGroundGlyphView(actorSprite(this.textures.base[hub.npcs.teacher.shadow], 0))
+    shadow.update(nativeNpcGroundGlyph({ x, y }, { x: -2, y: 0 }, 0.5))
+    shadow.container.label = 'annalist-ground'
+    shadow.container.zIndex = nativeHubFixedActorPainterRegistration('annalist').registrationOrdinal
+    this.ground.addChild(shadow.container)
     const body = new Sprite(this.textures.base[source])
     body.anchor.set(0.5, 1)
     body.position.y = 4
     body.zIndex = 1
     body.eventMode = 'none'
-    actor.addChild(shadow, body)
+    actor.addChild(body)
     this.nonPlayerActors.push(actor)
     this.world.addChild(actor)
   }
@@ -706,7 +726,6 @@ export class HubWorldScene {
         sortBias: layer.sortBias, target: layer.target, worldY: layer.worldY })
     }
     this.lastPainterOrder = this.painterPlanner.apply(layers, referenceY)
-    this.statueAura.zIndex = this.statueBody.zIndex - 0.25
     for (const [interactionId, target] of [
       ['hagatha', this.hagatha.container],
       ['annalist', annalist],
@@ -846,10 +865,12 @@ export class HubWorldScene {
         view = new PlayerWorldView(player.config.element, this.textures, this.modTextures, this.renderer, false)
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
+        this.ground.addChild(view.ground)
         this.world.addChild(view.container)
         this.world.addChild(view.enhancedHit.container)
         view.enhancedHit.container.zIndex = HUB_WORLD_DEPTH.courtyardForeground + .125
       }
+      view.ground.zIndex = player.lighting.lightRegistration.registrationOrdinal
       view.setStatusEffects(snapshot.secondaryAbilities.players[playerId], snapshot.tick, undefined, snapshot.enhancedEffects, snapshot.secondaryAbilities.stoneskinWarp)
       view.update(
         player,
@@ -885,13 +906,16 @@ export class HubWorldScene {
           this.createdStudentViewCount += 1
         }
         this.students.set(student.id, view)
+        this.ground.addChild(view.ground)
         this.world.addChild(view.container)
       }
+      view.ground.zIndex = student.painterRegistration.registrationOrdinal
       view.update(student)
     }
     for (const [id, view] of this.students) {
       if (live.has(id)) continue
       this.students.delete(id)
+      view.ground.removeFromParent()
       this.world.removeChild(view.container)
       view.prepareForPool()
       if (this.retiredStudentViews.length < 256) this.retiredStudentViews.push(view)
@@ -1042,6 +1066,9 @@ class HubAstronomerView {
 
 class HubHagathaView {
   readonly container = new Container({ label: 'perk-witch' })
+  readonly ground = new Container({ label: 'hagatha-ground', eventMode: 'none' })
+  private readonly glow: Sprite
+  private groundRng: NativeRngState
   private readonly body: Sprite
   private readonly clock: HubHagathaClock
   private readonly liveParticleIds = new Set<number>()
@@ -1051,14 +1078,24 @@ class HubHagathaView {
   constructor(textures: HubWorldTextures, seed: number, createdAtTick: number) {
     this.textures = textures
     this.clock = createHubHagathaClock(seed, createdAtTick)
+    this.groundRng = createNativeRng(seed >>> 0)
     this.container.sortableChildren = true
     this.container.position.set(1340, 280)
+    this.ground.position.copyFrom(this.container.position)
+    this.ground.sortableChildren = true
     this.container.zIndex = hubWorldDepthForActor(280)
     this.container.eventMode = 'none'
 
     const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
-    shadow.scale.set(1.25)
-    shadow.alpha = 0.62
+    shadow.position.set(-18, 7)
+    shadow.scale.set(1.25, 1.0499999523162842)
+    this.glow = actorSprite(textures.base[hub.npcs.perkWitchGroundGlow], 1)
+    this.glow.position.set(11, 8)
+    this.glow.scale.set(1.2000000476837158)
+    this.glow.alpha = 0.5
+    this.glow.blendMode = 'add'
+    setNativeDiffuseColor(this.glow, true)
+    this.ground.addChild(shadow, this.glow)
     this.body = new Sprite(textures.traders.hagatha.body[0])
     this.body.anchor.set(0.5)
     this.body.position.set(-5, 0)
@@ -1069,11 +1106,14 @@ class HubHagathaView {
     accessory.position.set(-25, 15)
     accessory.zIndex = 2
     accessory.eventMode = 'none'
-    this.container.addChild(shadow, this.body, accessory)
+    this.container.addChild(this.body, accessory)
   }
 
   update(tick: number): void {
     const frame = this.clock.advanceTo(tick)
+    const green = drawNativeFloat(this.groundRng, 0.25, true)
+    this.groundRng = green.state
+    this.glow.tint = packRgb(0.5, Math.fround(0.25 + green.value), 0)
     this.body.texture = this.textures.traders.hagatha.body[frame.bodyFrame]
     const live = this.liveParticleIds
     live.clear()
@@ -1107,6 +1147,7 @@ class HubHagathaView {
 
 class HubCommonTraderView {
   readonly container = new Container({ label: 'items-trader' })
+  readonly ground: Container
   private readonly clock: HubCommonTraderClock
   private readonly sprite: Sprite
   private readonly textures: HubWorldTextures
@@ -1118,14 +1159,15 @@ class HubCommonTraderView {
     this.container.position.set(1700.5, 449.5)
     this.container.zIndex = hubWorldDepthForActor(449.5)
     this.container.eventMode = 'none'
-    const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
-    shadow.scale.set(1.25)
-    shadow.alpha = 0.62
+    const shadow = new NativeGroundGlyphView(actorSprite(textures.base[hub.npcs.itemsGround], 0))
+    shadow.update({ position: { x: 1715.5, y: 457.5 }, scaleX: 1, scaleY: 1, alpha: 1 })
+    this.ground = shadow.container
+    this.ground.label = 'luthacus-ground'
     this.sprite = new Sprite(textures.traders.luthacus[0])
     this.sprite.anchor.set(0.5)
     this.sprite.zIndex = 1
     this.sprite.eventMode = 'none'
-    this.container.addChild(shadow, this.sprite)
+    this.container.addChild(this.sprite)
   }
 
   update(tick: number): void {
@@ -1135,6 +1177,8 @@ class HubCommonTraderView {
 
 class HubSkorchaView {
   readonly container = new Container({ label: 'skorcha' })
+  readonly ground: Container
+  private readonly groundGlyph: NativeGroundGlyphView
   private readonly body: Sprite
   private readonly hat: Sprite
   private readonly textures: HubWorldTextures
@@ -1144,16 +1188,18 @@ class HubSkorchaView {
     this.container.sortableChildren = true
     this.container.eventMode = 'none'
     this.container.visible = false
-    const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
-    shadow.scale.set(1.25)
-    shadow.alpha = 0.62
+    this.groundGlyph = new NativeGroundGlyphView(actorSprite(textures.base[hub.npcs.teacher.shadow], 0))
+    this.ground = this.groundGlyph.container
+    this.ground.label = 'skorcha-ground'
+    this.ground.visible = false
     this.body = actorSprite(textures.skorcha[0], 1)
     this.hat = actorSprite(textures.skorcha[3], 2)
-    this.container.addChild(shadow, this.body, this.hat)
+    this.container.addChild(this.body, this.hat)
   }
 
   update(state: ProtocolHubSkorchaState | null): void {
     this.container.visible = state !== null
+    this.groundGlyph.update(state === null ? null : nativeNpcGroundGlyph(state.position, { x: 0, y: 0 }))
     if (state === null) return
     this.container.position.copyFrom(state.position)
     this.container.zIndex = hubWorldDepthForActor(state.position.y)
@@ -1224,7 +1270,7 @@ class HubTeacherView {
     this.container.zIndex = hubWorldDepthForActor(y)
     this.container.eventMode = 'none'
     this.ground.position.set(x, y)
-    this.ground.zIndex = HUB_WORLD_DEPTH.teacherGround
+    this.ground.zIndex = HUB_WORLD_DEPTH.ground
     this.ground.sortableChildren = true
     this.ground.eventMode = 'none'
     const releaseX = x + HUB_TEACHER_CAST_ORIGIN.x

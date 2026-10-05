@@ -1,3 +1,5 @@
+import { nativePlayerGroundGlyph } from '../core-kernels/native-ground-auxiliary.ts'
+import { NativeGroundGlyphView } from './native-ground-glyph-view.ts'
 import { multiplyNativeTints, nativePuppetHitTint, setNativeDiffuseColor } from './native-texture-color.ts'
 import {
   type ActorMovementFacingState,
@@ -53,7 +55,8 @@ export class PlayerWorldView {
   private enhancedEffects = true
   private presentationTick = 0
   readonly container = new Container({ label: 'local-player' })
-  private readonly shadow: Sprite
+  readonly ground: Container
+  private readonly groundGlyph: NativeGroundGlyphView
   private readonly harden: PlayerHardenView
   private readonly stoneskin: PlayerStoneskinView
   private stoneskinWarp: readonly number[] | null = null
@@ -135,9 +138,9 @@ export class PlayerWorldView {
     const playerTextures = textures.players[element]
     this.container.sortableChildren = true
     this.container.eventMode = 'none'
-    this.shadow = actorSprite(textures.playerShadow, 0)
-    this.shadow.scale.set(1.25)
-    this.shadow.alpha = 0.72
+    this.groundGlyph = new NativeGroundGlyphView(actorSprite(textures.playerShadow, 0))
+    this.ground = this.groundGlyph.container
+    this.ground.label = 'player-ground'
     this.staffBack = actorSprite(playerTextures.staffBack[0][0], 1)
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
     this.robeSecondary = actorSprite(playerTextures.robe[0][0], 3)
@@ -226,7 +229,6 @@ export class PlayerWorldView {
     this.magicShield.eventMode = 'none'
     this.magicShield.visible = false
     this.container.addChild(
-      this.shadow,
       this.staffBack,
       this.enchantStaff.container,
       this.robe,
@@ -259,6 +261,7 @@ export class PlayerWorldView {
     staffActionPose: PlayerStaffAttachmentPose | null = null,
     elementEffectVisible = true,
     movementFacing = false,
+    specialSurface = false,
   ): void {
     this.container.visible = !player.progression.corpseConsumed
     this.statusMaterial = player.progression
@@ -373,7 +376,14 @@ export class PlayerWorldView {
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
-    this.shadow.visible = !death.visible
+    this.groundGlyph.update(nativePlayerGroundGlyph({
+      position: player.position,
+      headingDegrees: player.headingDegrees,
+      scale: 1,
+      lifeState: player.progression.lifeState,
+      deathTick: player.progression.deathTick,
+      corpseConsumed: player.progression.corpseConsumed,
+    }, specialSurface))
     // The extracted native item banks already partition each pose into an
     // all-transparent back or front cell from Clothes point-0 depth. Keeping
     // both passes live preserves every melee pose without duplicating pixels.
@@ -748,7 +758,7 @@ export class PlayerWorldView {
     if (player === null) return
     const stoneskin = (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0
     const excluded = [
-      this.shadow, this.harden.container, this.webbed.container,
+      this.harden.container, this.webbed.container,
       this.stoneskin.container,
       this.orbHardenOverlay.container, this.damageX4HardenOverlay.container,
     ]
@@ -794,6 +804,7 @@ export class PlayerWorldView {
   }
 
   destroy(): void {
+    this.groundGlyph.destroy()
     this.enhancedHit.destroy()
     this.harden.destroy()
     this.stoneskin.destroy()

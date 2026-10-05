@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { playerCharacterFacing } from '../core-kernels/player-character.ts'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
@@ -64,6 +66,7 @@ function playerAt(x: number, headingIndex = 0): ProtocolPlayerState {
     economy: DEFAULT_PLAYER.economy,
     footstepTick: 0,
     gaitDegrees: x,
+    headingDegrees: headingIndex * 15,
     headingIndex,
     lighting: LIGHTING,
     movementScale: DEFAULT_PLAYER.movementScale,
@@ -1085,6 +1088,34 @@ test('uses authoritative ticks rather than packet arrival spacing when receipts 
   assert.equal(presentation.sample(900).players.remote.position.x, 100)
 })
 
+test('Player interpolation derives its body bank from the continuous sampled angle', () => {
+  for (const [from, to, expected] of [[0, 14, 7], [359, 1, 0]]) {
+    const older = snapshotAt(100, 0, 0), newer = snapshotAt(105, 0, 0)
+    const presentation = timeline({ ...older, players: { ...older.players,
+      remote: { ...older.players.remote, ...playerCharacterFacing(from) } } })
+    presentation.push({ ...newer, players: { ...newer.players,
+      remote: { ...newer.players.remote, ...playerCharacterFacing(to) } } }, INTERVAL_MS)
+    const sampled = presentation.sample(75).players.remote
+    assert.equal(sampled.headingDegrees, expected)
+    assert.equal(sampled.headingIndex, actorHeadingIndex(expected))
+  }
+})
+
+test('Student interpolation keeps its existing continuous heading and body bank coherent', () => {
+  const native = createGameSnapshot(createGameSimulation(), null)
+  if (native.world.kind !== 'hub') throw new Error('expected College')
+  const student = native.world.students[0]!
+  const older = snapshotAt(100, 0, 0), newer = snapshotAt(105, 0, 0)
+  older.world.students = [{ ...student, heading: 0, headingIndex: 0 }]
+  newer.world.students = [{ ...student, heading: 14, headingIndex: 1 }]
+  const presentation = timeline(older)
+  presentation.push(newer, INTERVAL_MS)
+  const sampled = presentation.sample(75).world.students[0]!
+  assert.equal(sampled.heading, 7)
+  assert.equal(sampled.headingIndex, actorHeadingIndex(sampled.heading))
+  assert.equal(sampled.headingIndex, 0)
+})
+
 test('takes the shortest path through cyclic headings, gait, walk poses, and ambient tracks', () => {
   assert.equal(lerpCycle(359, 1, 0.5, 360), 0)
   assert.equal(lerpCycle(23, 1, 0.5, 24), 0)
@@ -1099,6 +1130,7 @@ test('takes the shortest path through cyclic headings, gait, walk poses, and amb
       remote: {
         ...firstBase.players.remote,
         gaitDegrees: 359,
+        headingDegrees: 345,
         headingIndex: 23,
         walkCyclePrimary: 4.8,
       },
@@ -1120,6 +1152,7 @@ test('takes the shortest path through cyclic headings, gait, walk poses, and amb
       remote: {
         ...secondBase.players.remote,
         gaitDegrees: 1,
+        headingDegrees: 15,
         headingIndex: 1,
         walkCyclePrimary: 0.2,
       },

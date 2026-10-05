@@ -1,4 +1,5 @@
 import type { Vector2 } from './core-kernels/vector.ts'
+import { nativeGroundHeadingVector } from './core-kernels/native-ground-auxiliary.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -684,13 +685,13 @@ export function hubStatueOffsets(state: ProtocolAmbientState): {
   aura: Vector2
   body: Vector2
 } {
-  const wave = -2 * Math.sin(state.statuePhaseDegrees * Math.PI / 180)
+  const wave = Math.fround(5 * nativeGroundHeadingVector(state.statuePhaseDegrees).x)
   return {
     aura: {
-      x: Math.cos(Math.PI / 3) * wave,
-      y: -Math.sin(Math.PI / 3) * wave * 0.8,
+      x: -wave,
+      y: Math.fround(0.800000011920929 * wave),
     },
-    body: { x: 0, y: wave - 15 },
+    body: { x: 0, y: Math.fround(wave - 15) },
   }
 }
 

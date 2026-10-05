@@ -1216,3 +1216,1204 @@ Boneyard with `createHubWorld`; subsequent `createBoneyardWorld` constructs
 `createBoneyardEnemyStore`. `BoneyardScene` disposes its renderer (including
 the compact grids) on unmount or a changed `loaded` world. No player/profile
 owner carries those transient records across Game Over.
+
+## 2026-10-03 — Report 56: auxiliary ground shadows and occluder ownership
+
+### Investigation state and reported contrast
+
+This is an investigation entry, not an implementation or acceptance receipt.
+Report 56 compares a wizard beside Useful Thyngs, the north arch, and the
+College statue: “Shadow does NOT display behind Circus tent or Arch, but DOES
+display behind statue.” The exact original `1554266192884146226` in thread
+`1542255501855825960` was rechecked under account `600774060439371807` on
+2026-10-03. Its wording, null edited timestamp, and three attachment IDs are
+unchanged; a bounded eight-message surrounding window contains no related
+withdrawal or correction. No completion reaction has been added.
+
+All three retained images were directly inspected. Their different positions,
+headings, camera crops, and scenery silhouettes do not establish an identical
+shadow comparison. The historical build and exact input state are unknown.
+Attachment `1554266191776714782` remains a 658-by-510 PNG, 353,076 bytes,
+SHA-256 `5ee9b9c3c9d5723256790a7f9d276069f18cde9f00de7177a614b4c609697c39`;
+its source declares WebP and 287,966 bytes, so encoding/byte equivalence is not
+claimed. Attachments `1554266192141746176` and `1554266192552665118` remain
+1164-by-740 / 1,217,854 bytes / SHA-256
+`8020fe22359d66cb23b51d39cfcf3ef43f9eb69c6e73edc3a380575a5306b271`
+and 1489-by-781 / 1,700,497 bytes / SHA-256
+`f6956ec12cda394b44a8e7a0bf6ff8936f55e945281c1d2e19d7d236a55678c9`.
+Original media and older archive snapshots are preserved.
+
+The maintained source was freshly fetched at
+`ae26c65e76d5392257cabdb1ac346432f2aac547`, tree
+`0e449d360ad45f00e01ff98b1edb4e294a9cdc3e`. Report 55's accepted Teacher
+ground owner remains present. No Website check, build, browser, stock-runtime
+probe, new disassembly, or new decompilation has run in this Report 56 phase.
+This M2 phase uses retained text/stock inputs and light PE header/RTTI/vtable
+reads only. Current-renderer pixels and the historical report's causal
+attribution remain unmeasured until an admitted M5 diagnostic phase.
+
+### Native evidence before product changes
+
+The sealed retail 0.72.5 executable is 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `00400000`. These file addresses are not fresh runtime
+pointers or ASLR observations.
+
+| Evidence | Exact source | Established fact | Confidence |
+| --- | --- | --- | --- |
+| Light PE/RTTI read | `SolomonDarkAbandonware/SolomonDark.exe`, PlayerWizard vtable `00793F74` | Body `+1C=0054BA80`, auxiliary `+28=00528AD0`, light provider `+30=005299A0`; these are separate callbacks. | high |
+| Retained instructions | `Decompiled Game/dump_vt7_vt10.log`, lines 1747–1906, `00528AD0..00528D09` | The ordinary auxiliary calls the BadGuys glyph at manager offset `3384`, record 67, at `position - 5*headingVector` and scale `1.25*actorScale`. | high |
+| Retained Courtyard decompilation | `Decompiled Game/ghidra_outputs/chase_field_offsets_20260413.txt`, lines 6771–6789 and 6880–6885 | The actor-manager walk calls every `+28` at return `0051FA67`, before seals and the main queue flush at `0051FD2D`. | high for call relationship; existing decompiler interpretation for surrounding presentation |
+| Retained Arena decompilation | same export, lines 10806–10876 | Scenery, actor, and transient managers invoke `+28` at returns `0046F8FE`, `0046F947`, and `0046F98C`, before Region multiply and the main queue. | high for call relationship |
+| Light PE/RTTI read and retained callback | Student vtable `007916DC`, `refs_dat819978.log` lines 20887–20904 | Student `+28=00502090`; its retained formula uses the same ordinary heading offset and actor-scale multiplication. The omitted glyph-register binding still needs instruction confirmation. | high for callback/formula; glyph identity pending |
+| Light PE/RTTI read and existing entry 018 | CollegeStatue vtable `00791584`, `+1C=00501490`, `+28=00501510` | College 39 is body art; College 41 is a separate multiply ground shadow with the already recovered common phase. | high for vtable and retained contract; a fresh operand read remains pending |
+| Authored bundle metadata | stock `College.bundle` (543 rows), `BadGuys.bundle` (2,509 rows); maintained `native_bundle_art.py` schema | Record 67 has a 25-by-25 logical canvas, zero center, and no outline points. Reported occluders consume registered College artwork; they do not use an inferred hull/mask. | high |
+| Current source, corrected 2026-10-04 | `world-player-view.ts`, `hub-actors.ts`, `hub-world-scene.ts`, `hub-private-room-scene.ts` | Player/Student and several NPC shadows are nested in body painter roots; `applyPainterOrder` reassigns statue shadow to `statueBody.zIndex - .25`. Its constructor's raw depth does not persist through the actual render update. | high, complete source path and actual rows |
+
+The `00414EA0` helper is a generic glyph transform/draw entry, also used by
+unrelated elements and effects. Its callers do not all become members of this
+ground-shadow system. Membership follows the concrete auxiliary callback,
+selected glyph, owning manager, and scene consumer, rather than address
+adjacency or every use of a generic renderer helper.
+
+### Boundary and complete current inventory
+
+The reopened boundary is native pre-world `Puppet +28` ground presentation
+consumed by College scenes, together with PlayerWizard's shared Arena consumer
+and the artwork that occludes those ground pixels. Body/attachment/death
+compositors, light-source submission, directional silhouette projection, and
+late direct Astronomer rendering retain their separate owners. The field and
+callback sweep below includes negative and dormant siblings so that a future
+fix cannot silently leave another supported auxiliary member in a body row.
+The inventory is not yet a final disposition table.
+
+| Native class/member | Vtable / `+28` | Current Website consumer or branch | Investigation disposition |
+| --- | --- | --- | --- |
+| PlayerWizard, all five element appearances, all 24 headings, local and remote | `00793F74 / 00528AD0` | Shared `PlayerWorldView` in Courtyard, all four private rooms, Arena/Tutorial Boneyards | Ordinary native contract recovered; ground ownership/position/opacity and early-death branch need measured diagnosis and port. |
+| Student, walking/reading, all headings and authored constructor scales | `007916DC / 00502090` | `HubStudentView`, live/pool/retirement branches | Separate callback/formula recovered; exact glyph/operand confirmation remains pending; current body-owned fixed-size shadow is a sibling mismatch. |
+| CollegeStatue | `00791584 / 00501510` | `HubWorldScene.statueAura`, College 41 multiply | Separate native ground owner recovered; current body-row depth minus .25 is measured in supported cases below. The original stale-constructor-depth interpretation is withdrawn. |
+| PerkWitch / Hagatha | `00791664 / 00501990` | `HubHagathaView` | Callback and actor membership recovered; exact glyph binding/transform operand widths need retained or admitted instruction confirmation. |
+| Annalist / Provokatus | `00791754 / 00502180` | Courtyard `addNpc` | Same ground interval; callback sets half alpha and a distinct transform. Exact selected glyph/operands remain pending. |
+| Illuminator | `007917CC / 005022F0` | No maintained survival snapshot member | Dormant native sibling; confirm builder reachability and selected glyph before a final reasoned out-of-system disposition. |
+| PotionGuy / Fomentius | `00791844 / 00502420` | Useful Thyngs shadow College 33; body stack College 34 / 160–164 / 32 / 54–58 | Ground callback and authored kit already recovered; preserve all kit registrations and ground order. |
+| Tyrannia / Skorcha | `007918BC / 005053E0` | Optional/shared scheduled `HubSkorchaView`, both placements | Callback/body split recovered; exact glyph/scale/offset and mirroring need instruction confirmation. |
+| ItemsGuy / Luthacus | `00791934 / 00502520` | `HubCommonTraderView` | Callback/body split recovered; exact auxiliary draw remains pending. |
+| Teacher / Machinimbus | `007919AC / 00505480` | Report 55's accepted `HubTeacherView.ground`, College 13 followed by BadGuys 67 | Reuse accepted native/render evidence; preserve rune, shadow and artwork. Additional sibling integration must retain this ground interval and lifetime. |
+| CustomObject, all 18 private-room rows listed below | `00791A94 / 00505E80` | Authored room props/portraits | Callback exists separately from body `00505E50`; its actual delegation/negative branches and each region's ground caller must be recovered before changing props. |
+| ArchChancellorStanding | `00791B74 / 00506050` | Native variant; standing reachability differs from maintained seated Office actor | Record-67 helper call recovered; scale operand width and concrete population reachability pending. |
+| Dowser / Shlorio | `00791CDC / 00502CF0` | Library actor | Auxiliary transform is separate; current body-only construction has no explicit ground owner. Exact glyph selection remains pending. |
+| Memorator | `00791D54 / 00502E60` | Mortuary actor | Auxiliary heading-sensitive transform is separate; exact glyph selection and private-room order remain pending. |
+| Annalist2 | `00791EB4 / 00503060` | Native alternate/story builder | Dormant sibling; concrete reachability and selected glyph remain pending. |
+| Polisher | `00792DB4 / 00502980` | Maintained story Office policy actor | Separate ground transform; preserve policy admission/visibility and recover exact selected glyph/caller. |
+| NPC base | `007915EC / 0055C300` | Common base only | Auxiliary is a no-op, so no invented shadow. |
+| CollegeObstacle selectors 0–7 | `0079151C / 0055C300` | Eight Courtyard artwork actor roots | Auxiliary is a no-op; occluder artwork remains in its body painter. |
+| ArchChancellor / ArchChancellorDesk | `00791AFC / 0055C300`; `00791BEC / 0055C300` | Office seated actor and native desk sibling | No auxiliary shadow; body/desk art is not a substitute ground caster. |
+| Librarian | `00791C64 / 0055C300` | Library counter/body stack | No auxiliary shadow. |
+| Painting interaction actors 0, 1, 100, 3–9 | `00791DCC / 0055C300` | Mortuary dialogue roots, separate from CustomObject portrait presentation | No auxiliary shadow. Dynamic memorial portraits require their own recovered presenter classification. |
+| Astronomer/helper/assistants | direct late Courtyard program `0051C790 / 0051DBB0` | Southern render bank | Separate direct presentation after the shared Region queue, not an ordinary actor-manager `+28` member. Preserve existing shadows there. |
+| Player terminal nine-layer corpse shadow and death-weapon shadow | Player body/death compositor and registered bouncer | `PlayerWorldView.deathShadowLayers`, `PlayerDeathWeaponView` | Separate class-local/actor draw programs, already recovered in entry 097; overlap with the ordinary auxiliary lifetime must be checked without moving these passes into the ground lane. |
+| Boneyard directional scenery/enemy projections and light-provider records | entries 064 / 078 / 090 | Indexed meshes, analytic/raster lights, enemy underlays | Separate class-specific owners, not College occluder masks. Preserve Report 09 batching/performance and existing exact outline tables. |
+
+The complete reported occluder artwork inventory is the existing eight
+CollegeObstacle selectors plus the tent kit and statue body. Selector 7 is the
+north arch in Report 56's third attachment; selector 0 is the distinct large
+east arch/banner composition from the earlier layering report.
+
+| Occluder/member | World root | Authored College body program |
+| --- | --- | --- |
+| CollegeObstacle 0 | `(1458.5,320.5)` | `148..159`, all twelve registered pieces |
+| CollegeObstacle 1 | `(955.5,239.5)` | `25` |
+| CollegeObstacle 2 | `(749.5,162.5)` | `23` |
+| CollegeObstacle 3 | `(1893,490)` | `28` |
+| CollegeObstacle 4 | `(1746,534)` | `29` |
+| CollegeObstacle 5 | `(1840,715)` | `27` |
+| CollegeObstacle 6 | `(628,215)` | `20` |
+| CollegeObstacle 7 / north arch | `(956,169)` | `24` |
+| Useful Thyngs / Fomentius | `(1397,664)`, bias `-5` | Contiguous body callback `34`, actor `160..164`, front `32`, balloons `54..58`; shadow `33` is auxiliary |
+| CollegeStatue | `(961,834)` | Body `39`; multiply `41` is auxiliary |
+
+Every private CustomObject row also remains enumerated while its auxiliary
+delegation is unresolved: Mortuary `0..9`; StoreRoom `0`, `1`, `2`; Library
+`0`, `1`, `2`, `100`; Office `0`. The complete roots and room callback programs
+are retained in this entry's private-room section and
+`core-kernels/hub-private-room-layout.ts`. An absent/null visual at Library
+selector 100 is not evidence that its native auxiliary callback is a no-op.
+
+### Recovered PlayerWizard contract and pending native reads
+
+The exact retained instruction branch first rejects consumed corpse byte
+`+1C0`. If drive `+160` is zero, or drive timer `+1BC <= 150`, it draws the
+ordinary ground glyph. The ordinary branch offsets opposite the continuous
+native heading by five world units and multiplies actor scale `+74` by the
+double `00784740 = 1.25`. Special surface state `+154 == 2` instead uses
+offset two (`007DE838`), scale multiplier
+`1.2000000476837158` (`00785360`), and alpha `0.5` (`007DE870`), then restores
+opaque diffuse color. When drive is active and timer exceeds 150, it draws no
+ordinary glyph and writes the six-sector terminal vector at `+1F4/+1F8`;
+the vector constants are 150, 9, and 55 at `00785D90`, `00786970`, and
+`00785AA8`. Those vector writes belong to the existing death compositor,
+not a shadow animation to invent.
+
+Current `PlayerWorldView` constructs a zero-offset, scale-1.25, alpha-0.72
+sprite under the body and hides it as soon as the death draw plan is visible.
+The native offset, auxiliary owner, opacity producer and early-death interval
+therefore require separate checks. Corpse consumption already exists in schema
+48 and must continue suppressing both eligible presentations. Native timer
+writers, casting gates, special-surface reachability and private-room ground
+callers must be reconciled with current authoritative fields before a shared
+implementation is chosen. An inferred field name in old pseudo-source is not
+sufficient evidence for that mapping.
+
+The statue auxiliary is also distinct from the body queue root. The earlier
+sentence in this entry saying body and aura remain children of one actor root
+does not describe the native `+28/+1C` split and is superseded for the ground
+shadow by this evidence. Current body queue depth is assigned by
+`NativeHubPainterPlanner`; the complete source path then assigns
+`statueAura.zIndex = statueBody.zIndex - .25` in `applyPainterOrder`. The initial
+M2 trace missed that per-frame assignment and incorrectly treated the
+constructor's `hubActorDepth(834)-1` as the actual final depth. That assumption
+is withdrawn. The mismatch is body-row auxiliary ownership, not a lingering
+raw constructor value. The accepted Report 55 code provides a concrete shared
+Courtyard ground interval, but does not prove another callback's constants.
+
+### Diagnostic and completion contract
+
+Before product changes, use the existing public renderer/real-texture harness
+pattern from `teacher-circle-layering-probe.mjs` to compare all three reported
+occluders across both sides of their actual queue rows. Capture each ordinary
+ground glyph and each occluder's actual opaque-alpha mask independently.
+Measure exposed ground, opaque occluder/body pixels, source eligibility and
+the parent/order/position of the actual shadow. A ground reference must use
+the same authored glyph and geometry in the recovered auxiliary interval;
+guessed hulls, screenshots alone and broad depth inequalities are not oracles.
+Verify whether the reported contrast is expected artwork coverage, misplaced
+ground submission, missing state/geometry, or a combination.
+
+Recover the pending glyph/operand/caller branches for every enumerated native
+auxiliary, then select the smallest complete remedy. Per-member acceptance
+must retain local/guest/Student presentation, all supported College rooms,
+Arena's pre-multiply interval, camera 80/100/130, Enhanced Effects branches,
+death/consumption/materialization, pool reuse, departure and teardown. Native
+complex-lighting/shadow settings gate directional products separately; they
+must not become an invented ordinary-circle visibility switch. Preserve
+authored alpha, registered shape, animation and the accepted indexed renderer.
+
+All Website execution and intensive recovery wait for explicit M5 grant and
+fresh actual admission. Final delivery still requires a supported final
+disposition for every row, actual built scenes, the unchanged all-mode
+canonical gate on immutable exact bytes, normal publication/current-main
+reconciliation, managed live verification and both-device scoped cleanup.
+No Report 56 resolution is claimed by this entry.
+
+### 2026-10-04 — targeted native operands recovered; pixel control still open
+
+The first admitted M5 setup timed out before staging-ready and ran no native
+or renderer command. Its automatic clean release was `01:06:37.384371Z`.
+The remaining original phase admitted exact `513b6a7b` / tree `1e715e1c`,
+clean index and all 7,256 tracked-file bytes before execution. Private Node
+22.17.0, Chrome and matching-lock dependencies were copied read-only from
+coordinated stable sources. The private installed Apple LLVM copy has SHA-256
+`83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+The unchanged sealed retail executable above passed identity checks.
+
+The bounded `llvm-objdump --disassemble --x86-asm-syntax=intel` extraction
+completed all 25 declared ranges from `01:15:53.736772Z` through
+`01:16:02.359674Z`, exit zero. Each range's exact start/stop, command, raw
+instruction hash and typed absolute operands are retained in the task's
+native receipt. Range bounds sometimes include adjacent constructors; only
+the cited callback instructions below are used as native facts. No new Ghidra
+project or Windows runtime was involved.
+
+The previously omitted ECX bindings are now instruction-confirmed. The glyph
+manager has a `0x38` header and `0xC4` records, so offsets `3384`, `197C`,
+`08A4` and `040C` identify records 67, 33, 11 and 5 respectively.
+
+| Auxiliary member | Exact binding / draw evidence | Recovered result |
+| --- | --- | --- |
+| Student | `005020B4..005020C1`, draw `0050210C`; typed operands `007DE8D8`, `00784740` | BadGuys 67; opposite-heading offset 5; scale `1.25*actorScale`. This supersedes the pending glyph identity in the first inventory. |
+| Hagatha / PerkWitch | `005019D8..005019E3`, `00501A12`; second binding `00501AFC..00501B02`, draw `00501B08` | BadGuys 67 at `actor+(-18,+7)` under matrix arguments `(1.25,1.0499999523162842,1)`; the same auxiliary additionally draws additive College 5 at `actor+(11,8)` under scale `1.2000000476837158`, with its own diffuse/random program. Preserve that sibling output when separating the ground owner. |
+| Annalist / Provokatus | `0050218E..005021B7`, `005021F3..005021FE`, draw `0050222D` | Half-alpha BadGuys 67 at `actor+(-2,0)` under the same three matrix arguments; diffuse opaque state is restored. |
+| Illuminator | binding `0050233B..00502346`, draw `00502380` | BadGuys 67; X offset uses mutable `+140 * .25`, Y offset zero; same matrix arguments. Population reachability remains open. |
+| Fomentius / PotionGuy | `00502426..00502442` | College 33 at `(10,60)`, with float32 operands `007DE984=10`, `007867F0=60`. |
+| Luthacus / ItemsGuy | `00502523..0050255B`, binding `00502536..00502542` | Authored College 11 at `actor+(15,8)`, not a generic BadGuys-67 oval. Constants are doubles `00784D80=15` and `007847A8=8`. |
+| Polisher | binding `005029C8..005029D3`, draw `00502A02` | BadGuys 67 at `actor+(5,10)`, same matrix arguments. |
+| Shlorio / Dowser | binding `00502D38..00502D43`, draw `00502D72` | BadGuys 67 at `actor+(-3,+4)`, same matrix arguments. |
+| Memorator | binding `00502EC6..00502ECC`, draw `00502F23` | BadGuys 67 with the recovered heading-sensitive opposite-five translation plus `(0,5)`, same matrix arguments. |
+| Annalist2 | binding `005030A8..005030B3`, draw `005030E2` | BadGuys 67 at `actor+(-7,0)`, same matrix arguments; alternate population reachability remains open. |
+| Skorcha / Tyrannia | binding `0050543A..00505449`, draw `0050545F` | BadGuys 67 under the same matrix arguments; actor-origin translation. Mirroring and all optional placements still need renderer evidence. |
+| Standing ArchChancellor | `0050606A..00506092` | BadGuys 67 at actor origin, float32 `00785590=1.75`; standing-population reachability remains open. |
+
+Newly consumed authored inputs are fully read for College 5 (50-by-46 logical
+canvas) and College 11 (67-by-54); both have zero center and no outline points.
+They must be retained as the native artwork, not replaced by a hull or oval.
+This is native recovery, not a claim that the current Website already consumes
+the correct fields or pixels.
+
+Private-room ground invocation is also instruction-confirmed: Mortuary
+`0050F105` (return `0050F107`), Library `00511935` (return `00511937`),
+StoreRoom `0051996A` (return `0051996C`) and Office `0051A485` (return
+`0051A487`) invoke each actor's `+28` before the pre-world animation/main
+queue intervals. Thus the shared player auxiliary has all four room consumers.
+
+CustomObject `00505E80` delegates `(selector,x,y)` to Region `+120`; body
+`00505E50` separately delegates to `+11C`. Fresh light reads of the same
+sealed PE show Mortuary `007927DC`, StoreRoom `0079294C`, Office `00792AB4`
+and Library `00792C04` all have `+120=00508910`, whose bytes are
+`C2 0C 00` (`ret 12`). All 18 current CustomObject auxiliary rows are therefore
+native no-ops. Each is `out-of-system` for auxiliary shadow production:
+Mortuary 0,1,2,3,4,5,6,7,8,9; StoreRoom 0,1,2; Library 0,1,2,100; Office 0.
+Their authored body artwork remains relevant occluder content; this negative
+callback does not authorize changing its painter or image.
+
+The fresh statue instructions refute additional details of the earlier entry
+018 summary. Body `005014BA` and auxiliary `00501574` multiply the common
+trig result by double `007DE8D8=5`, not 2. The auxiliary at
+`005015A1..005015B5` **adds** the 60-degree helper components to the negative
+wave X and `0.800000011920929` times positive-wave Y; it does not multiply
+the entire wave by the direction vector. College 39 / 41 binding and multiply
+mode 2 followed by restoration to 0 are confirmed. The exact common trig
+helper semantic and registered transform still need reconciliation before a
+replacement formula is implemented. Current `hubStatueOffsets` retains the
+older `-2*sin` / vector-multiplication approximation. No product correction
+is made from a partially recovered formula.
+
+Player reset `0052A500` clears drive `+160` and timer `+1BC` at
+`0052A597/0052A5AF`; the targeted tick range recovers reads but not the
+timer's complete increment/casting writers. Special surface `+154==2` is read
+in movement/footstep branches at `0054AD81`, `0054AE9D`, `0054B369`.
+Its writer/admission, complete timer mapping, statue trig helper and dormant
+population reachability remain specific native gaps, not platform exemptions.
+
+### Actual initial renderer failure and recovery boundary
+
+The actual public current renderer started at `01:16:02.446685Z`. Scene/glyph
+selection and earlier mask checks reached the final exposed-circle control,
+which failed with “An exposed ordinary shadow control has no pixels” at
+`01:17:18.755Z`; the process exited one at `01:17:22.017607Z`. Browser,
+failed-response and request-failure arrays were empty. The initial helper
+threw before returning its rows/images, so no numerical differential result
+or meaningful red regression is retained or claimed. Whether that control
+was covered by artwork, by the wizard body, or exposes the actual position/
+opacity defect remains unresolved.
+
+Automatic cleanup released at `01:17:26.015645Z`: no owned processes, private
+temp/profiles cleared, no new home children; the only home difference was the
+pre-existing 40-byte same-SHA Chrome settings mtime touch, preserved. The
+corrected diagnostic writes rows/images before rejecting exactly the same
+failed controls. A pixel-only retry admitted at `01:26:14.155299Z` but its
+timing guard refused to start inside the original `01:28:08.336784Z` heavy
+cutoff. It automatically released at `01:26:31.841015Z`; no pixel retry ran,
+all tracked bytes matched before/after, and its 31-entry home scope was
+unchanged. The original `01:33:08.336784Z` release bound was not extended.
+
+The next stage reuses the admitted source/tools and these native outputs,
+freshens actual main/source/resource admission, and runs the retained-row
+public-renderer discriminator with enough bounded time. Keep all nonempty
+controls; persist failed measurements rather than treating a missing exposed
+circle as a passed test. Source is still ledger-only; final native membership,
+meaningful pixel proof, implementation, checks/built/full acceptance,
+publication/deployment/reaction and final cleanup remain pending.
+
+### 2026-10-04 — short loan: retained supported cases and one failed control
+
+The one new loan acquired at `02:59:06.329286Z`, with explicit heavy cutoff
+`03:06:03.487384Z` and release bound `03:11:03.487384Z`, at most twelve
+minutes from acquisition including cleanup. The minimal 122,880-byte ledger
+delta reconstructed exact `bcf1414d` / tree `dac4557b`; all 7,256 tracked
+bytes and index matched before and after. Existing private tools/dependencies
+and the prior 25 native ranges were reused. Only eight missing native ranges
+ran, exit zero at `02:59:19.702584Z`.
+
+The real public WebGL renderer retained all 76 rows and seven representative
+images before rejecting the sole `statue-exposed-control` at `(1140,860)`.
+It exited one at `02:59:31.840892Z`. Both current and native-parameter
+circle contributions are zero at that point despite nonempty isolated masks;
+the alleged exposed comparison is unsupported. Its precise coverage by other
+late artwork still needs measurement. This is not a whole-scope meaningful
+red or passed diagnostic. Browser, HTTP and request errors are empty.
+
+The supported rows remain useful independently of that failed control:
+
+| Supported case | Actual nonempty masks and observation | Same-art ground reference |
+| --- | --- | --- |
+| Tent `(1397,664)` | Source alpha 1,147 pixels, opaque wizard 1,576, opaque tent stack 23,386. The current body-owned circle changes 341 opaque stack pixels, maximum RGB difference 135. Actor depth 1012 is after tent stack 1011. | Zero opaque stack/body changes; the fully covered ground glyph correctly contributes no exposed pixels at this overlap. |
+| Tent exposed `(1520,684)` | Same real glyph changes 340 exposed pixels; the native-parameter reference changes 385. Opaque stack/body changes zero. | Positive visible-ground control is supported; masking all circles to hide the bug would fail it. |
+| North arch: 25 samples plus exposed `(1100,215)` | Opaque arch changes zero across the current samples. The exposed control changes 298 ground pixels, native-parameter reference 200; all three isolated masks are nonempty. | Current disappearance on covered artwork is not proof of a dropped source or a need to draw shadows over the arch. These rows do not establish every arch/state branch. |
+| Statue `(1050,765)` | Source alpha 1,147, opaque wizard 1,576, opaque statue 17,536. Ordinary circle contributes 323 exposed pixels. College 41 at actual depth 1014.75 multiplies all 1,576 opaque wizard pixels, maximum RGB difference 171; wizard is at 1014 and statue body at 1015. | Moving only the unchanged College-41 pass into the native ground interval changes zero opaque wizard pixels, maximum difference 1; exposed ground remains present. |
+| Statue positive `(1080,735)` | Ordinary current/native-parameter exposed contributions 317/346, source/body/statue masks 1,147/1,576/17,536; the current multiply pass affects 1,224 opaque wizard pixels. | Zero opaque wizard changes with identical authored multiply artwork in ground interval. This is a supported positive control for the next discriminator. |
+
+Inspected current/ground PNG pairs show the darkened wizard beside the statue
+and the tent-stack overlap. The supported observations separate the wizard's
+BadGuys-67 circle from the statue's College-41 multiplier. They establish
+body-row auxiliary ownership defects in these controlled cases, not the
+historical screenshot's exact cause or final membership acceptance.
+
+The actual row depths and the complete source at
+`hub-world-scene.ts:700` also falsify the earlier stale-raw-depth assumption.
+`applyPainterOrder` assigns `statueAura = statueBody.zIndex - .25` every
+frame. Its constructor value is overwritten; all current guidance above now
+records body-row ownership. Old task receipts preserve the superseded initial
+trace as history, not a current fact. No product patch follows from that
+incorrect assumption or the unsupported `(1140,860)` control.
+
+New native instructions close several narrower questions: Player maintenance
+`00533520` increments `+1BC` at `005339E7` only while `+160` is nonzero;
+it queries Region `+114` at `00533F45`, writes surface value 2 at
+`0053401C`, and restores 0 at `005340FE`. Courtyard and all four private
+rooms resolve `+114` to `005088E0`, bytes `32 C0 C2 0C 00`, returning false.
+Arena resolves it to `004677A0`; its live Terrain predicate still needs full
+source/model reconciliation. Matrix helper `004030A0` stores arguments into
+the diagonal X/Y/Z lanes before composition, confirming the recovered
+auxiliary three-axis scale arguments. Registered College glyph helper
+`004142E0` adds half logical canvas dimensions plus caller X/Y before the
+quad and restores the transform afterward.
+
+Bounded reads also disclose precise remaining gaps. The trig wrapper jumps
+at `00747106` to `00752330`; the fallback after `0074710B` continues beyond
+the captured endpoint, so a sin/cos semantic is not yet claimed. Registry
+`005B7080` dispatches IDs above 3002 to `005B8369`; the captured prefix does
+not reach the dormant NPC cases. The requested constructor start `005022A0`
+was inside an instruction and is disqualified as a complete constructor read.
+Already retained aligned `annalist-ground` output does contain the subsequent
+Illuminator type assignment `005022A3 -> 138E` (5006); that type alone does
+not prove factory reachability. Follow only these missing branches rather
+than repeating the completed recovery. Casting/drive writer semantics and
+supported special-surface admission must also remain explicit before porting
+their state branches.
+
+Automatic terminal cleanup released at `02:59:32.747102Z`, independently
+verified with no owned processes, exact lease absent, all tracked source bytes
+matching, private temp/profiles cleared and no new home children. Only the
+known pre-existing 40-byte same-SHA Chrome settings mtime touch was preserved.
+Parent and Report 62 received the immediate actual handoff. No second compute
+attempt, product patch, main lock, full gate or publication was performed.
+
+The next minimal discriminator must preserve the rejected row and identify
+its actual late-art coverage; use the already nonempty `(1080,735)` row as a
+separate positive control. Keep nonempty controls and supported-case evidence
+distinct from whole-test acceptance. All extractable applicable native gaps,
+per-member/built acceptance and the report's later delivery gates remain open.
+
+### 2026-10-04 — recovered terminal coverage and native ownership correction
+
+The bounded phase admitted exact `53493bc8` / tree `129c447a`, clean index
+and all 7,257 original tracked-file bytes on published `3c32f09c`. Its three
+actual stages completed: owned-PGID cleanup preflight zero at
+`08:41:31.468071Z`, five missing native reads zero at `08:41:32.433927Z`,
+and real public WebGL late-art coverage zero at `08:42:00.852788Z`.
+Automatic cleanup released at `08:42:02.343867Z`, before the worker's
+`usage_limit_exceeded` terminal at `08:42:10Z`. The usage error does not
+erase these completed results. Parent recovered the final receipts and
+independently observed no owned process or lease. No diagnostic was replayed.
+
+The replacement M2 continuation copied only the five existing native text
+outputs and sixteen retained PNGs. Every byte count and SHA-256 matches the
+completed native/pixel receipts; all sixteen images were directly inspected.
+The original Discord message was freshly rechecked under the authorized
+account: same wording, null edit timestamp, same three attachments, and an
+eight-message surrounding window with no related correction or withdrawal.
+
+| Controlled current-source case | Measured source and actual late-art coverage | Causal result |
+| --- | --- | --- |
+| Previous failed `(1140,860)` | Source alpha 1,150 pixels; opaque body 1,573; opaque statue 17,574. All 1,150 source pixels overlap opaque southern-bank art; foreground overlap is zero. | Original source contribution zero. Temporarily omitting only the late artwork exposes 348 circle pixels, 497 total changed pixels. Restored frame differs at zero pixels and every visible/renderable flag is restored. |
+| Separate positive `(1080,735)` | Source alpha 1,147 pixels; opaque body 1,576; opaque statue 17,536; no late opaque source overlap. | 317 exposed circle pixels with or without late art, 434 total changes in each comparison. Restoration differs at zero pixels; all flags restored. |
+
+The actual frames show the southern stone bank hiding the wizard and its
+ground circle together at the previously failed point. This closes that
+control's missing-coverage explanation; it supplies no reason to alter circle
+geometry or make it paint over scenery. The prior failed whole diagnostic
+remains failed history, while its other supported tent/statue observations
+remain valid and separate. Both new controls and browser, response and
+request error arrays are empty. These two controlled snapshots do not claim
+complete member/state or built-journey acceptance.
+
+The five new ranges reuse the same sealed retail executable and private LLVM
+identities documented above. Their raw text SHA-256 values are:
+
+| Native range | SHA-256 | New instruction-derived fact |
+| --- | --- | --- |
+| `00752330..00752600` | `b5612b607930044101b0a2f06afd349eb568764d7a84f4f745f484e2f669a4f5` | The wrapper's fast path receives the x87 argument and returns its SSE reduction/polynomial result through x87; its exceptional branch returns to `0074711F`. |
+| `0074710B..00747160` | `cd86ba65a75b428ab38734956bfd5b4248947d64f9ec4b367759e17b3b9a9aa1` | Fallback `0074713D` executes `fsin`. Together with the previously captured wrapper, this identifies the common finite game-phase wave as sine, rather than cosine or a guessed waveform. Exceptional math-library branches outside the bound are not game-phase behavior claims. |
+| `005B8369..005B8900` | `026195c0bb1697db407604e9306352ac1c76c06f7be9171453efe7895cbd679f` | The later NPC family dispatch at `005B8848..005B8856` subtracts 5002, admits indices 0..22 and jumps through `005B9774`. The fixed range ends before all target constructors and does not by itself close dormant reachability. |
+| `0046791E..004679B0` | `72b43421b04c4b95fcf74a214ea63a12307b5f8c4a742ebf5243cd1c4be29ac7` | The retained Arena prefix now reaches both terminal returns. After bounds check, the final branch tests local coordinates against the terrain record at `0081BD20 + 60*(selector-25)` through `00405160`; true returns one and optionally writes zero to the supplied byte pointer. Failed/exhausted membership returns zero. Terrain identity and maintained admission still need reconciliation. |
+| `00533350..00533520` | `b6d9a2b38feb433f4ba1365d1d0b43e99b45c88156d5e33a6abf68d34381fd89` | This cleanup routine directly changes `+208/+20C/+210`, releases the identified companion and matching type-2058 transient objects, and clears the `+214/+216` identity. It contains no direct `+160/+1BC` write. The shown call cannot justify inventing a drive-timer reset. |
+
+Re-reading the complete existing player tick instructions also falsifies a
+previous task-note inference about `0054B4F8`. At `0054B39A`, the current
+player in ESI requests factory type `07EE` (2030), and `0054B3AF` assigns
+that new result to EDI. `0054B4F8` writes `[EDI+160]` from the global
+`00819E54` zero predicate; it does **not** write PlayerWizard `[ESI+160]`.
+The retained `refs_dat819978.log` decompilation independently agrees on the
+separate allocated owner. Calling this a PlayerWizard primary-cast producer
+or evidence that its death timer runs during casting is withdrawn. Existing
+PlayerWizard maintenance still increments `+1BC` only when its own `+160`
+is nonzero. Close the owning PlayerWizard transition/caller before selecting
+an authoritative shadow lifetime field; do not reuse the Website light-drive
+union solely because of its name.
+
+The sine semantic now supports completing the previously recovered statue
+amplitude-five/additive-component formula. The current `-2*sin` and
+direction-vector multiplication are superseded approximations, but no product
+change or complete member disposition is claimed in this continuation.
+Misaligned `005022A0` remains disqualified; the aligned constructor evidence
+and the withdrawn stale constructor-depth theory remain unchanged. M2 retained
+text/source reconciliation continues before any new resource request.
+
+The retained full factory export
+`ghidra_outputs/factory_7e2_20260414.txt:1151..1160` closes Illuminator's
+compiled reachability: case `138E` (5006) allocates `174` bytes and calls
+the already aligned `00502270` constructor. This is factory reachability,
+not a live survival population claim. The same retained export maps `139E`
+(5022) to `00503000`, and `13A0` (5024) to `00502B20`. The independent
+retained `actor_1391_1392_cluster_20260415.txt:321..345` assigns that latter
+constructor `ArchChancellorStanding::vftable` and type `13A0`. Actual
+alternate population instructions `00513F5B..00513FA3` require story phase
+one, request `13A0`, and register the returned actor. Standing therefore has
+an established story construction path; entries 194/201 retain the maintained
+survival boundary. Its recovered record-67 auxiliary remains documented
+without adding a standing actor to the seated Office presenter.
+
+Case `1393` (5011) instead calls `0050B4F0`, and the captured alternate
+builder requests it at `005142BC`. Do not call this Annalist2, Standing, or a
+dormant ground caster before binding its actual constructor/vtable. The
+existing Annalist2 story census in entries 118/194/201/204 and its known
+`00503060` auxiliary are retained; its exact `00503000` constructor link
+remains an explicit small gap. Bounded range absence is not a full producer
+census.
+
+Arena's first surface-query path owns Terrain grid `+8F24` with bridge/hole
+exclusion; the final path owns compact grid `+8F84`. Entry 091's complete
+mask census supersedes the old entries 090/106 shorthand: authored selectors
+25..29 and dynamic DeadSpider records are active compact producers, while
+all twelve native survival templates have zero Terrain rows. Current
+`NativeCompactMaskView` already consumes all five authored selectors and the
+replicated Spider decal. Reuse these memberships and authored data when
+closing the ordinary auxiliary's surface predicate; no water-only admission
+or always-false Arena surface branch is justified by the absent Terrain rows.
+
+The M2 preparation now bounds five genuinely new native targets: direction
+helper `00410500`, contour predicate `00405160`, Terrain predicate
+`004118B0`, constructors `00503000` and `0050B4F0`; plus the complete
+five 60-byte compact contour rows at `0081BD20` and 23 NPC dispatch entries
+at `005B9774`. A direct-store byte-pattern census for `+160/+1BC` supplies
+candidate addresses only, not aligned instructions, ownership, an exclusive
+writer set, or a casting/death conclusion. Only missing owning/caller context
+may need a subsequent bounded read. Existing 38 native ranges, 76 qualified
+renderer rows, and the passed two-point coverage are reused. This preparation
+has not executed; no product patch, new M5 grant, acceptance, or publication
+is claimed.
+
+### 2026-10-04 — native-only partial failure; five retained functions recovered
+
+The new one-phase clock was fixed at `16:12:22.930464Z`, heavy cutoff
+`16:19:22.930464Z`, release bound `16:24:22.930464Z`. Actual lease acquisition
+was `16:12:23.957625Z`. Fresh scoped Discord source remained unchanged,
+current main remained `3c32f09c`, and exact `8e47b5fd` / tree `20a48a8d`,
+clean index and all 7,257 original tracked-file bytes admitted at
+`16:12:35.846949Z`. The automatic supervisor started before minimal staging.
+Only the sixty-second `only-final-native-gaps` stage ran; no old native range,
+pixel/preflight, Node/Chrome, Website, publication or main-lock stage ran.
+
+All five new function commands returned zero and wrote their text outputs.
+The containing stage then failed one at `16:12:36.100840Z` with
+`Unmapped native data 0081BD20+300`. The 300-byte read, following 92-byte NPC
+table and direct-store census did not produce data or a receipt. Neither a
+whole diagnostic pass nor a completed census is claimed. The five retained
+texts were copied read-only and individually hashed on M2 after release;
+the sealed binary/private LLVM identity checks preceded all five commands.
+Command/range/hash provenance is in the partial function readback receipt.
+
+| Retained function | Raw text SHA-256 | Supported instruction result |
+| --- | --- | --- |
+| `00410500..00410720` | `351ac6f914a3fb9945e65ae2a1b2a3d5a05ad32d2dc40ba21e04490e02f99cf6` | Completed direction helper `00410500..0041054C` forms a float32 angle from `[Math+4]*degrees/180`; X calls the now-proved sine `007470D0`, Y calls `00748330` and negates its float32 result. The X direction is not the current cosine-based component. The second callee and Math-field producer remain to establish before claiming a complete numeric replacement. |
+| `00405160..00405500` | `d0e8da55be3b585e7a98ae251c0187ec5b377ca6582d14e45b5040fac0be3019` | Completed contour predicate ends at `00405432`. Its object owns a point-buffer pointer at `+4` and count at `+38`; counts below two reject. The edge walk uses strict Y-side and X-intersection parity comparisons, without a guessed hull or epsilon. The five 60-byte objects are not five coordinate arrays; their producer and pointed-to authored buffers must be recovered. |
+| `004118B0..00411B00` | `bf1133b094f1df0e9ed8875e31061a706ea3a4e61695b77696aff766b9441a7f` | Completed quad predicate `004118B0..004118EB` calls captured triangle helper `004119C0..00411A6B` for `(p0,p1,p2)`, then `(p1,p3,p2)`, using four XY records at offsets 0/8/16/24. Its return is their triangle-membership union. Arena's already captured bridge/hole exclusion and current scene admission still belong to the owning query. |
+| `00503000..00503060` | `8f7d3de79de374985af51aa572a7788a6b0b7530d81de54838f1af2f6ea726a1` | Constructor `00503033` assigns vtable `00791EB4`; `00503039` assigns type `139E` (5022); it returns at `00503058`. Retained RTTI now conclusively binds the full factory case to Annalist2. Its documented story-only census and absent maintained producer support `out-of-system` for this Website auxiliary consumer, while its exact record-67 native contract is preserved. |
+| `0050B4F0..0050B720` | `b195fd8bd84f3e3eb1a710103ef35d18026dcaa2b7ab05a13660539d062b23d7` | Constructor `0050B52E` assigns vtable `00792DB4`; `0050B54A` assigns type `1393` (5011); it returns at `0050B633`. Retained RTTI binds this to Polisher. Its `+1BC` write at `0050B5DA` is float zero in that separate Polisher object, not a PlayerWizard timer reset. |
+
+The earlier preparation's unbound 5011 row is therefore closed as Polisher,
+already in the affected inventory. Current `HubPrivateRoomScene` owns its
+conditional Office body/marker and `createHubPolisherClock(... ^ 5011, ...)`;
+its ground callback `00502980` remains `recovered-pending-port`. The older
+interaction census's story-only description does not remove a presenter that
+the maintained Website currently admits. Preserve the existing Office policy
+and visibility lifetime when adding its native record-67 ground owner.
+Annalist2 and Standing retain their reasoned unsupported-story dispositions;
+Illuminator's compiled factory reachability is established separately from
+any current Website population. No new NPC is invented from a factory case.
+
+The failed reader requested a fixed 300-byte file-backed span for `0081BD20`.
+That span did not map under the sealed PE's actual section/raw bounds. Do not
+fill it with zeros, call a header/pointer dump an extracted contour table, or
+repeat the unchanged raw read. Follow the contour object's construction and
+its point-buffer producer. The unproduced store census remains no evidence
+at all; the EDI/type2030 ownership correction and PlayerWizard `+160/+1BC`
+mapping uncertainty are unchanged. A distinct future missing-producer/callee/
+census slice must reuse all 43 retained ranges and prior controlled pixels.
+
+Automatic terminal cleanup released at `16:12:36.625678Z`, with PGID57467
+fully drained, no unresolved groups/processes/cleanup errors, all 31 scoped
+home entries unchanged, no new home children, private TMP/profile clear,
+source-after error null and exact lease absent. Every original tracked byte
+still matched the admitted tree at `16:12:36.624915Z`. Parent received the
+actual handoff before M2 interpretation. This phase closed on failure despite
+unused clock time; no second attempt, clock reset or extension followed.
+The actual failure and all partial outputs remain retained. Report56 remains
+unfinished; no product fix, full member/built acceptance or publication is
+claimed by this receipt.
+
+### 2026-10-04 — producer slice completed; cosine and complete NPC dispatch
+
+The new clock was fixed at `20:29:52.607174Z`, heavy cutoff
+`20:36:52.607174Z`, release bound `20:41:52.607174Z`. Fresh original/source,
+mounted SSD, known pipeline/compiler absence, released own root and sealed
+executable/private LLVM identities passed. Atomic acquisition was
+`20:29:53.304316Z`. Exact `f4dffc4d` / tree `512996f3`, clean index and all
+7,258 original tracked-file bytes admitted at `20:30:03.004498Z`. The only
+stage, `only-new-native-producer-candidates`, ran `20:30:03.006690Z` through
+`20:30:03.258381Z`, exit zero. It retained one new function, the unreached
+92-byte NPC table, 74 direct-store byte candidates and 1,101 absolute-word
+candidates. No failed300 span, old43 ranges, pixels/preflight, Node/Chrome or
+Website command ran. Success of this finite slice is not complete recovery.
+
+The retained `00748330..007484E0` text hash is
+`4173be53d61d11620c4852eecf846c9d130da5dd3714fc143fa51e124caab47e`.
+It executes `fcos` at `0074839D`, with another at `007483D4` after argument
+reduction. The shared direction helper therefore returns float32 sine for X
+and negated float32 cosine for Y. This refutes the current component ordering.
+Math+4 initialization is still a separate scalar question; byte words near
+`004100D8` are not decoded proof. Retained startup `0040C690` independently
+calls aligned `004100D0` (`ghidra_decomp_darkcloud_owner_funcs.log:419`),
+providing its next genuine entry. The SSE numerical implementation is not
+claimed bit-identical to browser math from fallback semantics alone.
+
+Complete NPC table `005B9774`, SHA-256
+`8e90f8e31826104cd5e5febe3c4203c8229d90dc1067308d636f8cfcc8aed2bf`:
+
+| Type | Target | Type | Target |
+| --- | --- | --- | --- |
+| 5002 | `005B8A2D` | 5014 | `005B95E5` |
+| 5003 | `005B8A67` | 5015 | `005B8CAB` |
+| 5004 | `005B8ADB` | 5016 | `005B89F3` |
+| 5005 | `005B8B4F` | 5017 | `005B897F` |
+| 5006 | `005B8AA1` | 5018 | `005B89B9` |
+| 5007 | `005B8B15` | 5019 | `005B8BFD` |
+| 5008 | `005B8B89` | 5020 | `005B8C37` |
+| 5009 | `005B8BC3` | 5021 | `005B8CE5` |
+| 5010 | `005B8C71` | 5022 | `005B8D1F` |
+| 5011 | `005B885D` | 5023 | `005B88D1` |
+| 5012 | `005B8897` | 5024 | `005B890B` |
+| 5013 | `005B8945` | | |
+
+All23 entries, including default5014, are retained. Combine them with the
+already recovered factory/constructor links; a target alone adds neither a
+current population nor a ground caster.
+
+Actual PE metadata proves `.data` begins at `00804000`, virtual size3,398,208,
+raw size88,576: file-backed bytes end at `00819A00`. Both five contour objects
+`0081BD20..0081BE4C` and Math globals `00B40278/+4` are runtime zero-fill
+locations whose initialized contents require their producer. They are not
+file coordinate rows. Operand leads cluster at `005C328E..005C3828`, with
+array construction/destruction leads `0078212F/007835AA`; they remain
+unaligned until canonical boundaries/callers establish actual instructions.
+Do not dump zeros, derive a hull, or repeat the known failed raw span.
+
+The store census matched qualified resets `0052A45B/0052A597`, timer reset
+`0052A5AF`, death writes `005341B7/005344E0` and separate type2030 write
+`0054B4F8`. New neighborhood candidates are `0053DBAC`, `0053E5CC`,
+`0053ECE3`, `0053F31C`, `0053F8FD`; neighborhood and byte patterns are not
+PlayerWizard ownership or exclusive-writer proof. Existing canonical entries
+`0053CFE0`, `0053DC60`, `0053E6A0`, `0053EDB0`, `0053F3C0`, followed by
+`0053F9C0`, bound new context reads; the retained Air contract contains the
+corresponding dispatch family. Existing animation/death documents corroborate
+terminal+160/+1BC while separating queued actions, but the contradictory old
+cast-drive shorthand still needs owning-instruction reconciliation.
+
+Automatic release was `20:30:04.243012Z`: PGID77067 drained, process/group/
+error arrays empty, all31 home entries unchanged, no new children, TMP/profile
+clear, source-after exact at `20:30:04.238870Z`, lease absent. Parent read and
+independently accepted the full release before M2 interpretation. This one
+phase closed despite unused time; no reset, extension or second attempt.
+The16:12 failure and all its valid partial functions remain preserved.
+Initialized contours/Math scalar and player-owning contexts remain to prove;
+no product fix, final member acceptance or Report56 completion is claimed.
+
+### 2026-10-04 — owning contexts passed; exact scalar and allocated-object owners
+
+The distinct owning-context clock began at `22:12:21.095058Z`, with heavy
+cutoff `22:19:21.095058Z` and release bound `22:24:21.095058Z`. The original
+Discord message and three attachments remained unchanged; actual published
+main was `59443b078bf72ee729b4cf982933d8fa236aa605`. Fresh mounted-SSD,
+global pipeline/compiler, own-root release and executable/private-LLVM checks
+preceded atomic acquisition at `22:12:21.708447Z`. The proved supervisor
+started before the one-ledger delta was staged. Exact `0e23029d` / tree
+`e4645838`, clean index and all 7,258 original blobs admitted at
+`22:12:31.099776Z`. Sole stage `only-new-native-owning-contexts` ran
+`22:12:31.105292Z` through `22:12:31.297701Z`, exit zero. Seven genuinely new
+contexts and 89 typed file operands were retained; none of the old44 ranges,
+tables, byte censuses, pixels, preflight, Website or browser stages replayed.
+
+| New retained context | Raw text SHA-256 |
+| --- | --- |
+| `004100D0..00410300` | `b072f3f844a5caf2ca0598c8bc979b1ac7cd2a72de1ea32b272ba67ad74876f1` |
+| `0053CFE0..0053DC60` | `75293eb4ffd4be19dbeb4147dd88b3ea71e01bdfc2a552037e8a08c964fe010c` |
+| `0053DC60..0053E6A0` | `2fd73714b7c753b3adefa33774348c6bddecc0ff579bfd2b0c83a097094f386e` |
+| `0053E6A0..0053EDB0` | `f772da8e33d9fa0842dad57878209bc41d634a66f2f09ed62ebe8b49d320c9c0` |
+| `0053EDB0..0053F3C0` | `ec556a6d83722760a20a85706f97c3ca0017f427495f95124bf411767312db15` |
+| `0053F3C0..0053F9C0` | `92a46f462e06d624e104a32afc77d490db1df83d9ee2698138d9c2d7d3d9ebda` |
+| `005BDB50..005C38F0` boundary discovery | `c57ea6ef8292322d89f70070ac0019082ff3aab61f9cf24b0d41ad7e5fafcfaa` |
+
+`004100D0` loads float32 `[007DE8A8]`; `004100D6` stores it into Math+4
+at `00B4027C`. The independently captured file bytes are `da 0f 49 40`,
+exactly **3.141592502593994**. This is neither JavaScript `Math.PI` nor
+`Math.fround(Math.PI)`. Combined with the already completed `00410500`
+helper and proved sine/cosine callees, the native direction uses
+`theta = float32(nativePi32 * degrees / 180)`, then stores float32 sine to X
+and negated float32 cosine to Y. Its explicit angle/result stores belong to
+the contract; fallback semantics do not claim browser/SSE bit identity. The
+separate Math+0 epsilon loop is not the angle scalar. Retained startup
+`0040C690 -> 004100D0` corroborates this initialized-global ownership.
+
+The five new store neighborhoods now have actual canonical instruction and
+register ownership. The factory call is `005B7080` in every row:
+
+| Entry; current actor register | Factory type push / call | Returned object binding | Captured `+160` store |
+| --- | --- | --- | --- |
+| `0053CFE0`; ESI at `0053D00D` | 2003 at `0053DA40` / `0053DA4A` | EDI=EAX at `0053DA52` | byte `[EDI+160]` at `0053DBAC` |
+| `0053DC60`; ESI at `0053DC87` | 2004 at `0053E4EE` / `0053E4F8` | EDI=EAX at `0053E500` | dword `[EDI+160]` at `0053E5CC` |
+| `0053E6A0`; EDI at `0053E6B2` | 2014 at `0053EB90` / `0053EB9A` | ESI=EAX at `0053EBA2` | byte `[ESI+160]` at `0053ECE3` |
+| `0053EDB0`; EDI at `0053EDC2` | 2015 at `0053F1C7` / `0053F1D1` | ESI=EAX at `0053F1D6` | byte `[ESI+160]` at `0053F31C` |
+| `0053F3C0`; EDI at `0053F3D2` | 2016 at `0053F7B6` / `0053F7C0` | ESI=EAX at `0053F7C8` | byte `[ESI+160]` at `0053F8FD` |
+
+No direct rebinding of the returned object's callee-saved register intervenes
+before its captured store. These are separate allocated objects, not writes
+to the current PlayerWizard. The prior EDI/type2030 correction remains in
+force. The unaligned pattern census still supplies candidates only; this
+scoped recovery does not establish an exclusive writer set or exclude alias,
+indirect or uncaptured writes. In particular it supplies no evidence that
+primary casting sets PlayerWizard's own `+160`.
+
+The already captured PlayerWizard path establishes its own terminal use
+without those false ownership assumptions: `0052A597/0052A5AF` reset its
+drive/timer; canonical death receiver ESI at `00534147` owns both
+`005341B7/005344E0` writes of drive=1. Tick `005339D4..005339E7` increments
+own `+1BC` only while own `+160` is nonzero. Auxiliary `00528AD4` binds its
+current actor, rejects consumed `+1C0`, and selects its distinct terminal
+vector path only when own drive is nonzero **and timer >150**. The ordinary
+ground glyph still draws through timer150. Existing animation/death evidence
+corroborates the terminal mapping and separates queued casts. The current
+`lighting.driveActive` contract also includes primary casting, so that field
+must not be adopted as this ground auxiliary's eligibility solely by name.
+Its light-system behavior and the separate corpse layers remain outside this
+Report56 ownership correction.
+
+The broad new window discovers the enclosing producer at actual prologue
+`005BF6A0` (`sub esp,20h; push esi; mov esi,ecx`). Its continuous captured
+body reaches the contour setup at `005C3280` and ends in tail paths
+`005C38E2 -> 005B6C90` or `005C38EB -> 005A7D90`. Retained MyApp vtable
+`0079A004`, slot `+C4`, independently corroborates `005BF6A0`; this is not
+a new exhaustive caller census. Runtime objects remain distinct from raw
+file bytes. The 89 typed operands and an M2 symbolic FPU/stack trace recover
+the following **outgoing call arguments only**:
+
+| ECX object | Ordered `(esp,esp+4)` pairs passed to `00404620` | Final pair passed to `00404930` |
+| --- | --- | --- |
+| `0081BD20` | `(26,21),(52,9),(91,40),(82,58),(59,67),(45,83),(26,88),(5,72),(13,52),(36,43)` | `(-50,-46)` |
+| `0081BD5C` | `(41.5,28.5),(51.5,51.5),(32.5,68.5),(5.5,36.5),(17.5,7.5),(33.5,5.5)` | `(-28,-37)` |
+| `0081BD98` | `(47.5,4.5),(88.5,23.5),(97.5,42.5),(91.5,61.5),(55.5,80.5),(9.5,66.5),(8.5,35.5)` | `(-50.5,-42.5)` |
+| `0081BDD4` | `(43.5,44.5),(6.5,27.5),(7.5,10.5),(23.5,9.5),(41.5,3.5),(66.5,20.5),(64.5,38.5)` | `(-36,-24.5)` |
+| `0081BE10` | `(104.5,1.5),(143.5,10.5),(185.5,44.5),(214.5,105.5),(208.5,142.5),(147.5,205.5),(106.5,216.5),(43.5,199.5),(16.5,169.5),(0.5,109.5),(34.5,38.5)` | `(-108,-108.5)` |
+
+The trace follows all46 calls and preserves `fst` without popping at
+`005C3409`; both arguments to that call are 51.5. These are not yet final
+vertices, ordered point-buffer contents, or a proved translation. Exact
+`00404620` and `00404930` callee bodies remain necessary to establish
+mutation/count/buffer behavior. Retained catalogs identify their canonical
+entries and field hits through `00404691` / `00404995`, but existing retained
+files contain no callee bodies. A distinct two-callee read is the remaining
+native evidence slice; all51 prior ranges, typed constants, tables, qualified
+pixels and failure receipts are reused. No unchanged 300-byte span is retried.
+
+Automatic release completed at `22:12:32.345901Z`. Source-after matched
+every original byte at `22:12:32.345017Z`; process/group/error arrays were
+empty, all31 home entries unchanged, no new children, private TMP/profile
+clear and exact lease absent. Parent accepted the full receipts and
+independently verified clear resources at `22:19:17Z` before this M2-only
+interpretation. All seven text hashes match their retained receipt; derived
+owner and call-argument receipts preserve raw instruction/value provenance.
+The fixed clock closed at release despite unused time. No extra attempt,
+extension, new M5 grant, product change, final acceptance or publication is
+claimed. The16:12 partial failure, earlier usage error and prior qualifications
+remain preserved.
+
+### 2026-10-04 — two callee reads passed; complete translation, partial append
+
+The distinct grant bound actual turn `01a1091f-4cda-79b3-8fcd-fed9eb9accda`
+and attempt `report56-retry-1791154375-5e9bb71f`. Fresh original plus eight
+nearby messages were unchanged at `22:57:17.407308Z`: null edit, the same
+three attachments and no related correction. Actual published main remained
+`59443b0`; all frozen helper/package identities matched. Fresh SSD/source/
+native/private-LLVM/global pipeline/compiler/CI/lease checks passed before the
+clock. LLVM's expected symlink resolves inside the owned SSD tools tree with
+the pinned hash; a manual read-only no-symlink assertion was corrected before
+any clock, admission, staging or native attempt. Frozen helpers were unchanged.
+
+Clock preparation was `23:01:52.088284Z`, heavy cutoff
+`23:08:52.088284Z`, release bound `23:13:52.088284Z`: twelve minutes total
+including five cleanup minutes. Actual atomic acquisition was
+`23:01:52.850662Z`; supervisor25338 started before minimal staging. Exact
+`edf00e22` / tree `f2002da8`, clean index and all 7,258 original tracked-file
+bytes admitted at `23:02:04.324229Z`. Sole sixty-second stage
+`only-new-native-contour-callees` / PID and PGID25377 ran
+`23:02:04.326189Z..23:02:04.516567Z`, exit zero. It retained exactly the
+two reviewed ranges; old51 ranges/tables/censuses/pixels/preflight/Website
+did not replay. Success of this bounded extraction does not make an
+incomplete function body complete.
+
+| Actual retained text | SHA-256 | Semantic coverage |
+| --- | --- | --- |
+| `00404620..004046A0` | `b0dde312e62b06ad313fddfd2b0563e7d6f45491c95618b66d9e89d5cfc2232b` | Partial append prefix. Last instruction starts at `0040469E`; target `004046A8` and the return/tail lie outside the capture. |
+| `00404930..004049B0` | `c6d3969b121f661f067022f37b804b4fcb252fdac5048194214a609277171f62` | Complete translation body, including `ret 8` at `004049A1` and following padding. |
+
+`00404930` loops over unchanged count `+38`. For each index it adds outgoing
+argument X to X and argument Y to Y in **both** point buffers, at object `+0`
+and `+4`, with explicit float32 stores at `0040496A/76/83/93`. It preserves
+the list order and does not write count/capacity. Its `+8..+14` cache reset is
+separate from the point arrays; no guessed value is assigned to the additional
+`007DE858` cache scalar. The already completed `00405160` membership reader
+consumes `+4` and `+38` with its strict parity comparisons. This closes the
+five final-pair **translation operation**, not the initialized vertex lists.
+
+The append prefix binds receiver ESI at `00404627`, increments count `+38`
+at `00404629`, and compares it with capacity `+34`. On growth it calls actual
+entry `00404E20` at `00404639`, passing `2*newCount+1`. The following visible
+stores address record `newCount-1` and place the two incoming float32 values
+in both buffers. The capture then ends after `fld [eax]` at `0040469E`.
+Do not infer the missing tail, a complete return path, growth preservation of
+older points, or starting count zero from that prefix. No final polygon table
+is claimed yet, despite all outgoing arguments and translation being known.
+
+The remaining bounded semantic slice is the append continuation, actual
+growth callee, and constructor/reset evidence for initial count and buffers.
+Canonical `004045A0` is retained in the Ghidra function catalog and existing
+callers; the `0078212F` global-object word context remains qualified as an
+unaligned candidate until actual construction instructions/callers establish
+its role. A necessary instruction overlap may join incomplete control flow;
+reuse the prefix and complete translation rather than replaying them wholesale.
+Use actual boundaries and enough extent to close branches/returns, including
+any directly shown construction helper required by that context. No new read
+or clock is authorized by this M2 preparation.
+
+Automatic release was `23:02:05.500712Z`, source-after-finally exact at
+`23:02:05.499923Z`. PGID25377 drained; owned processes/unresolved groups/
+cleanup errors/home changes/new children were empty, all31 home entries
+unchanged, TMP/profile cleared and exact lease absent. Fresh own metadata
+at `23:07:34.230178Z` independently found supervisor25338 and stage25377/
+group absent, source clean `edf00e22/f2002da8`, empty private TMP/profile
+and lease absent. Both text hashes match. Full release/source/native receipts
+and handoff were sent to parent before M2 interpretation. This phase closed
+despite unused time; no second attempt, reset or extension followed. Actual
+retained M5 baseline is now `edf00e22/f2002da8`. Earlier failures, usage error,
+original evidence and all qualified observations remain preserved. Report56
+is unfinished; no product change, final contour coordinates, current-source
+acceptance or publication is claimed.
+
+### 2026-10-05 — contour construction recovered; exact authored surface rows
+
+The new distinct phase bound turn `01a1094c-da8f-7802-a186-f05e748dd46d`
+and attempt `report56-retry-1791157351-ff85e974`. Fresh original/source,
+frozen helpers/package, mounted SSD, sealed native/private LLVM and actual
+global build/compiler/CI/lease checks passed. Original plus eight nearby
+messages were unchanged at `23:45:42.744807Z`. Clock preparation was
+`23:48:11.072076Z`, heavy cutoff `23:55:11.072076Z`, release bound
+`2026-10-05T00:00:11.072076Z`: twelve minutes including five cleanup minutes.
+Atomic acquisition was `23:48:12.090209Z`. Supervisor33361 preceded staging;
+exact `aaa677ee` / tree `85e2a311`, clean index and all 7,258 original bytes
+admitted at `23:48:23.029897Z`. Sole sixty-second construction stage,
+PID/PGID33399, ran `23:48:23.031815Z..23:48:23.224095Z`, exit zero.
+
+It produced the four fixed missing contexts and the fifth helper only after
+validating padding/push bytes and actual decoded `00782133 -> 0074798E`.
+The two-byte instruction join is the only old53 overlap; complete translation,
+append prefix, tables, censuses, pixels/preflight and Website were not replayed.
+
+| New retained context | Text SHA-256 | Closed control-flow evidence |
+| --- | --- | --- |
+| `0040469E..00404930` | `454b3a4d23b9a612701c8b8cb7c7031a5e32e10caacf12e91b88e9610436d7ef` | The joined instruction matches the retained prefix; append ends at `ret 8`, `004046C9`. |
+| `004045A0..00404620` | `c189a90d8ffe18988fb5fb46e2180bc5ad158de493cadad1b8a95071034c3d00` | Both constructor returns, `004045F6/0040460C`, initialize count/capacity zero and both buffers null. |
+| `00404E20..00405160` | `ed93e338ef188cf6dee9ff3735c0f9512dacba42bedaa04e46ed4e9f43284fe8` | Actual growth completes at `ret 4`, `00404F39`; subsequent contexts include the known next entry. |
+| `00782120..00782180` | `3cca7b480c46e970e0dfbb8db191fec2df8c5dcaa0dfe6b0685356f79ae89800` | Actual five-object construction call ends at `00782143`; its constructor callback/base/stride/count are decoded. |
+| `0074798E..00748330` | `d98d82607ddaf8962cb1c3b38be26e1a1e682c22213a314829bbad24ad0c5808` | Construction loop and normal return `007479D8`, plus its success cleanup return `007479F2`, are complete. |
+
+Constructor `004045A0` explicitly clears capacity `+34`, count `+38`,
+buffer `+0`, buffer `+4` and field `+30` on both return paths. Global
+initializer `00782120` pushes destructor `00404610`, constructor `004045A0`,
+count5, stride `3C` and base `0081BD20`. The actual `0074798E` helper calls
+the constructor with current element in ECX at `007479B2`, advances by
+the supplied stride at `007479B5`, and repeats from zero through count-1.
+Its normal-success cleanup does not destruct the constructed elements.
+This establishes the five object identities and initial empty lists from
+instructions; it does not substitute file-zero bytes for runtime objects.
+
+The actual growth helper receives the owning object in retained **ESI**, not
+ECX. It allocates and zeroes two arrays of eight-byte XY records, copies each
+old-capacity record at the same increasing index into the corresponding new
+buffer, releases the old buffers and writes new capacity at `00404F32`.
+It does not change count. This is the normally successful allocation path;
+no live allocator or out-of-memory outcome is claimed. Append's complete
+tail copies the new pair into the corresponding original buffer, resets only
+the separate `+8..+14` cache and returns. It neither reorders points nor adds
+another count increment or point transform. Unknown `007DE858` cache scalar
+is not needed by the already complete `+4/+38` membership reader.
+
+Combining this construction with the retained ordered call arguments and
+complete float32 translation yields these **exact authored construction
+results**, not a live memory dump. All values below are exactly representable
+float32 values; authored order and implicit closing edge are preserved.
+
+| Selector / object | Count / final capacity | Ordered translated XY vertices |
+| --- | --- | --- |
+| 25 / `0081BD20` | 10 / 21 | `(-24,-25),(2,-37),(41,-6),(32,12),(9,21),(-5,37),(-24,42),(-45,26),(-37,6),(-14,-3)` |
+| 26 / `0081BD5C` | 6 / 9 | `(13.5,-8.5),(23.5,14.5),(4.5,31.5),(-22.5,-.5),(-10.5,-29.5),(5.5,-31.5)` |
+| 27 / `0081BD98` | 7 / 9 | `(-3,-38),(38,-19),(47,0),(41,19),(5,38),(-41,24),(-42,-7)` |
+| 28 / `0081BDD4` | 7 / 9 | `(7.5,20),(-29.5,3),(-28.5,-14),(-12.5,-15),(5.5,-21),(30.5,-4),(28.5,14)` |
+| 29 / `0081BE10` | 11 / 21 | `(-3.5,-107),(35.5,-98),(77.5,-64),(106.5,-3),(100.5,34),(39.5,97),(-1.5,108),(-64.5,91),(-91.5,61),(-107.5,1),(-73.5,-70)` |
+
+There are41 vertices. Capacity grows from zero at new count1 to3, at4 to9,
+and, where reached, at10 to21. Both buffers have the same constructed points.
+Detailed instruction/source hashes, offsets, per-point call provenance and
+construction proof are retained in `CONTOUR-CONSTRUCTION-PROOF-20261005.json`.
+Only this selected construction lead is now instruction-confirmed; the
+remaining unaligned census is still not an exclusive writer/xref set.
+
+The already captured Arena branch at `0046794F` computes
+`0081BD20 + 60*(type-25)` and calls `00405160` at `00467969`. Its query
+is float32 `(worldX-recordX, worldY-recordY)` after the separate rectangle/grid
+admission. This branch applies no rotation/scale to the polygon query; do not
+invent an inverse render transform or raster-alpha predicate from the visual
+compact mask. Preserve its grid/rectangle admission and the separately
+recovered Terrain bridge/hole and DeadSpider branches. Private College rooms
+remain their confirmed false surface queries; Courtyard retains its owning
+query. This closes the declared missing native contour dependencies.
+
+Actual automatic release was `23:48:24.200606Z`, with original source-after
+matching at `23:48:24.199839Z`. PGID33399 drained, process/group/error/home-
+change/new-child arrays empty, all31 home entries unchanged, TMP/profile
+clear and lease absent. Parent independently read the full release/source/
+five-range receipt and verified clear resources at `23:50:17.208958Z`.
+All five raw hashes match; full handoff preceded M2 interpretation. The phase
+closed despite unused time; no extra attempt, extension or reset followed.
+Actual retained M5 source is now `aaa677ee/85e2a311`.
+
+Source porting must still honor the continuous angle in native actor `+6C`.
+Current `actorHeadingFromVector` returns degrees, but `actorHeadingIndex`
+rounds them to24 directions; PlayerCharacter and its codec retain only that
+integer. **Source correction during the implementation audit:** Student's
+continuous `heading` already survives its SoA state, host projection, strict
+codec and published snapshot. The earlier dropped-angle statement was wrong;
+reuse that existing field and add no duplicate Student DTO angle. Use existing
+authoritative angle ownership and preserve degree/index invariants through
+all facing writers and snapshot/codec callers, rather than reconstructing a
+continuous angle from a rounded index or client presentation displacement.
+The ground eligibility uses the supported own terminal/consumed state;
+primary-cast-inclusive `lighting.driveActive` remains a separate light contract.
+No new casting/death mapping is inferred from the unaligned census.
+
+Normal construction, scalar, callback/constructor/member and owning interval
+evidence is now available for the complete shared ground port. Supported
+members remain PlayerWizard, Student, statue, Hagatha including its additive
+sibling, Annalist, Fomentius, Luthacus, Skorcha, Dowser, Memorator and
+conditional Office Polisher, with accepted Teacher ownership preserved.
+The documented dormant/negative/separate-body/light/corpse/direct families
+retain their reasoned dispositions. Product changes, all member/current-
+source/built acceptance, publication/live verification and both-device cleanup
+remain undone. Earlier failure/usage/ownership/original evidence and every
+qualified observation are preserved; Report56 is not complete.
+
+
+### 2026-10-05 — supported shared ground owner source cutover (acceptance pending)
+
+Parent authority `PARENT-SOURCE-PORT-AUTHORITY-20261005.json` authorizes the
+complete supported source cutover on M2. The original sealed b5ba plan remains
+preserved. Its incorrect dropped-Student-angle statement is withdrawn: existing
+Student `heading` already survives SoA, projection, codec and replication; no
+Student DTO field is added. Client interpolation now derives the body bank
+from that same existing continuous heading rather than interpolating two
+independent representations. Tests are authored, not executed on M2.
+
+PlayerCharacter now owns float32 `headingDegrees` and its derived24-bank index
+through one `playerCharacterFacing` helper. Movement, primary casting, Staff
+admission/birth/sample writes, contact deflection, authored spawn and forced
+College paths preserve the pair. Entity locomotion/projection, prediction,
+reconciliation and both timelines retain it. Existing continuous scalar action
+callers (Prismatic, Golem and Spider/Cocoon) consume the stored angle rather
+than recreating it from a sheet index. Discrete sheet selectors, Goodie facing,
+separate corpse programs and the existing lighting drive/recipe remain their
+qualified contracts. Protocol147 requires the finite heading and consistent
+index; save49 preserves it, while genuine older saves recover the body-angle
+representative `15*savedIndex`. Missing live data is rejected rather than
+silently fabricated. Current Student wire shape remains unchanged.
+
+| Supported auxiliary | Source cutover / preserved program | Current disposition |
+| --- | --- | --- |
+| PlayerWizard | BadGuys67, native opposite5/2 offset,1.25/1.2 factor and1/.5 alpha; supported current Player body scale1; consumed rejection and ordinary glyph through terminal150. Public Courtyard, every private room and Arena attach an independent ground sibling. | source implemented; built acceptance pending |
+| Student | Existing continuous heading/actor scale; native opposite5 and1.25 factor. Registration ordinal, pooling, detach/reuse and destruction remain coordinated with body ownership. | source implemented; built acceptance pending |
+| Hagatha | BadGuys67 at(-18,+7), matrix(1.25,1.05); additive College5 at(+11,+8),1.2 scale, diffuse(.5,.25+signedFloat(.25),0,.5). Existing body/accessory/particle clock is preserved. | source implemented with exact College5 asset; built acceptance pending |
+| Annalist | Half-alpha BadGuys67 at(-2,0), asymmetric native NPC matrix. | source implemented; built acceptance pending |
+| Fomentius | Existing registered College33 world layer keeps the audited absolute(10,60) recipe and1327/507 crop placement; only the owner interval changes. | source implemented; built acceptance pending |
+| Luthacus | Direct registered College11 at actor+(15,8), scale1; generic oval removed. | source implemented with exact College11 asset; built acceptance pending |
+| Skorcha | Actor-origin BadGuys67/asymmetric matrix, all existing conditional placements/variants; body mirroring is independent. | source implemented; built acceptance pending |
+| Dowser | BadGuys67 at(-3,+4), native NPC matrix in Library ground pass. | source implemented; built acceptance pending |
+| Memorator | Continuous existing target-facing direction, opposite5+(0,5), native NPC matrix in Mortuary ground pass. | source implemented; built acceptance pending |
+| Polisher | Existing conditional story Office admission, BadGuys67(+5,+10)/NPC matrix; body/ground visibility remains paired. | source implemented; built acceptance pending |
+| College Statue | Audited registered College41 multiply aura moves to ground; old per-frame bodyY-minus.25 assignment is removed. Shared phase gives wave5*sin, bodyY=wave-15 and aura(-wave,.8*wave), retaining both existing registered bases. | source implemented; built acceptance pending |
+| Teacher | Accepted rune/BadGuys67 program reused under the same early ground interval and registration order; body/release recipes preserved. | accepted prior program reused; integrated acceptance pending |
+
+College ground now has one explicit pass after its raster and before seals/body
+queues. Registration ordinals order its products; neither body Y-depth nor a
+body material capture owns their pixels. The former tent/statue depth constants
+are removed. All three Player scene constructors and the Student constructor
+were read; room reparenting, cohort departures, pooled reuse and live/retired
+scene destruction attach/detach/dispose both owners. No per-object shadow
+suppression, pixel mask or new render target is introduced.
+
+Arena's reachable authored25..29 and live DeadSpider query uses all41 constructed
+vertices in authored order, strict side/intersection parity, existing whole50-
+unit/border cells and raw sprite rectangle admission. It subtracts record
+position without inverse visual rotation/scale and reads the current Spider
+cohort before presenting Player ground output. Native predicate recovery is
+kept distinct from native shape production: the pre-existing091/297 Terrain
+boundary and twelve-template zero-Terrain census still apply. Current editor
+spline strokes remain unchanged; they are not inferred to be native quads or
+river-width geometry, and generic Terrain is **not** labelled exact-ported.
+Dormant Illuminator/Annalist2/standing Chancellor, negative obstacle/custom/
+Librarian/desk populations and separate corpse/directional/light families retain
+their prior supported dispositions.
+
+The new render random draw uses the established client-local native RNG
+primitive with the recovered signed range, channels, alpha and render cadence.
+It does not claim synchronization with stock process-global renderer/physics
+RNG. Float32 stores/nativePi32 and source formulas are preserved without a
+browser/x87/SSE bit-identity claim. Unaligned writer-candidate and normal static
+constructor qualifications remain unchanged; factory2030 EDI is not Player
+ESI, and no new +160 casting/death mapping is inferred.
+
+Current static review passes diff whitespace and relative import existence apart
+from the two explicitly pending native glyph PNGs. The asset-only packet is
+prepared separately, entirely unrun, with no source delta and the accepted
+retained AAA source unchanged. No Website/Node/test/build/browser executes on
+M2. New model/transport/save/continuous-angle/contour/grid/lifecycle regressions
+are routed through the configured acceptance gate, which is unchanged apart
+from including the new tests. Original red behavior and native/pixel proof are
+retained; no extraction or age replay is proposed. Meaningful future baseline
+angle failure, focused checks, required ALL, actual built member journeys,
+publication/live verification and both-device cleanup remain pending.
+Report56 is unfinished and holds no M5 lease or source mainlock.
+
+Recovery source review on `2026-10-05` preserves the full uncommitted cutover.
+The current original and eight nearby Discord messages were reread at
+`03:52:25Z`: content, edited timestamp and the three attachment identities are
+unchanged, with no correction or withdrawal. No native or media work was
+repeated. The source audit found two complete Player test fixtures lacking the
+new angle and maintained browser fixtures still writing only a body index.
+Those producers must retain a coherent degree/index pair; direct Player view
+probes must attach both public products. Existing action, placement, contact,
+respawn and timeline tests will cover the continuous angle across the actual
+public interfaces. All authored tests remain unexecuted on M2, and the exact
+candidate's M5 gates and member journeys still own acceptance.
+
+The recovery member review joins Hagatha's retained callback to the already
+recovered shared Graphics dispatcher. `00501A93` sets Context `+223=1`,
+`00501B08` submits College5, and `00501B19` restores zero. Entry301's retained
+`004208A0` proof (the shared hit-material paragraph) establishes that this
+flag selects diffuse RGB instead of texture modulation while preserving
+texture alpha and independent blend ownership. Hagatha's additive sibling
+therefore uses the existing per-drawable `setNativeDiffuseColor` primitive;
+its ordinary shadow and other actors keep their own texture modes. The
+new sibling also reuses established `packRgb` truncation for
+`(.5,.25+signedFloat(.25),0)`, rather than the older ambient rounding helper.
+This is a member join using retained evidence, not new native extraction or
+a change to Teacher/ambient color programs. Actual member pixels remain pending.
+
+The maintained Hub extractor must use the same raw-crop contract as the
+reviewed asset packet for College5/11. Their logical canvases equal the source
+rectangles and their registered origins are zero. `registered_sprite` composites
+onto a transparent canvas and can discard RGB beneath zero alpha; direct `crop`
+preserves all four stock channels without changing registration. Only these
+two new outputs use that exact-crop path. Existing registered artwork and its
+absolute offsets remain unchanged; image execution still requires the M5 grant.
+
+The compact query's record `+4/+8` operands are float32 stores, just like its
+world-point inputs. The source record boundary therefore rounds authored and
+interpolated DeadSpider positions before constructing the rectangle/grid row
+or subtracting the position. Otherwise a double-only record displacement can
+turn an exact strict contour vertex into an interior point. The public query
+regression uses selector25 at `(100.000003,100)` and world point `(141,94)`:
+the native stored position is `(100,100)`, so the local `(41,-6)` vertex stays
+outside. This preserves the recovered float-store contract without changing
+rendered rotation/scale or claiming browser/x87 bit identity.
+
+The distinct `04:47` asset-only grant was consumed before admission. A final
+read-only check at `04:50:01.441324Z` observed clear resources and clean
+retained `aaa677ee/85e2a311`; the fixed clock was prepared once at
+`04:50:35.906463Z`. The single automatic supervisor refused admission at
+`04:50:48` when the periodic CI worker and deploy/fetch children appeared.
+No source staging, private setup, asset draw or output occurred. M2 transport
+PGID45211 exited one and drained with empty before/after membership. Parent's
+independent `04:54:35.280488Z` check confirmed no lease, unchanged prior23:48
+release, clean AAA source, no ready marker, no asset staging and no private
+asset runtime. Exact failed inputs/clock/receipts remain archived; unused bounds
+do not authorize another attempt. Source cutover and member acceptance remain
+pending the two exact glyph imports and a separate current-source Website gate.
+
+### 2026-10-05 — exact College5/11 assets extracted and cleanly released
+
+A distinct watched turn `01a10a7f-f3b3-7e42-ae06-45c94c34481f`, attempt
+`report56-retry-1791177504-a98166f0`, used the unchanged reviewed asset packet.
+The scoped original and eight nearby messages were unchanged at `05:20:12Z`.
+One uninterrupted final read-only checker, clock preparer and launcher fixed
+the clock at `05:27:18.540975Z`; work cutoff was `05:37:18.540975Z` and total
+release/export bound `05:42:18.540975Z`, including five cleanup minutes. Actual
+atomic admission was `05:27:22.856258Z`, supervisor49859. Retained source
+`aaa677ee/85e2a311`, clean index and all7,258 original bytes matched; source
+delta was zero and the M2 product WIP was never staged.
+
+Pinned private Python3.12/framework and arm64 Pillow12.3 offline wheel setup,
+both private loaded-image/prefix probes, and the sole sixty-second asset stage
+all exited zero. The glyph stage ran `05:27:48.105774Z..05:27:48.181605Z`.
+Both zero-origin logical canvases use the exact native crop/registered-origin
+contract, retaining raw RGBA including transparent RGB. Exact source-crop
+pixels and encoded PNG decode round trips matched on M5.
+
+| Stock glyph / maintained output | Dimensions / bytes | PNG SHA-256 | Raw RGBA SHA-256 |
+| --- | --- | --- | --- |
+| College5 / `hub-hagatha-ground-glow.png` | 50×46 /1,411 | `2d1048990eb2d4c1804b98b852e050f2a97cfb8861ba4995ef2d417af45e4284` | `c2cdd1dfa9aa3e2d4fb58be81b13d4780e4d738360935ff42ee2f0946ba9f073` |
+| College11 / `hub-luthacus-ground-shadow.png` | 67×54 /884 | `8ee51ad744036a2fd6e3fbf8f5c980f945f670bab106328072d6f0cf0fcffe98` | `a1210b80748a861eb3a66185a920fbd4778660e6c640b60cf5cc215d09b84bba` |
+
+Automatic release was `05:27:49.789562Z`. All six created PGIDs49904/49907/
+49910/49915/49918/49921 drained; owned processes, unresolved groups, errors,
+home changes and new home children were empty. All31 real-home entries were
+unchanged, TMP/profile clear, private asset runtime and input staging removed,
+and the exact lease absent. Source-after and finally again matched every
+original byte. The one M2 job ended zero at `05:28:00.172621Z`; SSH50351 and
+every staging/export Popen group drained. Both exported PNGs match their
+actual byte counts/hashes. Full terminal/readback preceded source import.
+
+Only these two exact bytes are imported under the standing M2 source authority;
+no M2 image decoding, native extraction, Website test/build/browser execution,
+new work under unused bounds or product acceptance is claimed. College33/41
+and the registered absolute bases remain unchanged. Current-main integration,
+clean immutable candidate, complete Website and built member acceptance,
+publication/live/archive boundary and both-device cleanup remain pending.
+
+The pre-packet affected-caller sweep found four shorthand Player facing writes
+missed by the first colon-property search: two complex-shadow snapshot producers,
+the real-host Hub-room pose setter, and the inline weapon-view Staff matrix
+fixture. They now retain the coherent degree/index pair. Generated shadow data
+uses the actual authored spawn angle through `playerCharacterFacing`; fixtures
+whose contract supplies a discrete bank use that bank's fifteen-degree
+representative. Separate Hall-of-Fame portrait headings remain their discrete
+contract. This closes a concrete transport/NaN-ground caller gap before the
+current source is sealed; browser execution remains required on M5.
+
+The broader shorthand sweep also found the actual Golem facing outcome writer:
+`castAbility` already computes the continuous signed placement heading, but
+returned only `facingHeadingIndex`; `applySecondaryPlayerOutcomes` then changed
+the Player's bank alone. The existing internal outcome now returns canonical
+continuous degrees, and that single simulation commit derives the degree/index
+pair with `playerCharacterFacing`. Its type, tick/cast adapters and callers are
+migrated together without a compatibility field. The public Golem cast and
+strict snapshot regression use a nonbank initial angle and confirm the native
+signed45 change survives the authoritative Player record. No new native
+recovery is needed; actual M5 execution remains pending.
+
+### 2026-10-05 — Hub ground asset loading owns the authored products
+
+The distinct `10:35` remaining acceptance phase reconstructed source
+`3b498031/703a22ae` with all126 fingerprints identical to the accepted `09:18`
+clean build. The real public Hub constructor then failed the Hagatha assertion
+`Hagatha authored products missing`; its retained receipt contains only the
+preceding Annalist container-placement row and no completed masks. This is
+direct browser evidence of missing products, not a member parity pass.
+`REMAINING-1035-TERMINAL-CLEANUP-READBACK-20261005.json` and parent
+`REPORT56-REMAINING-1035-PARENT-CLOSED-20261005.json` retain the terminal,
+export and complete resource closure. No bounds or runtime from that phase
+remain available.
+
+The maintained source identifies the loader cause with high confidence:
+`lib/assets.ts` exposes College5 as `hub.npcs.perkWitchGroundGlow` and College11
+as `hub.npcs.itemsGround`; `HubHagathaView` and `HubLuthacusView` read those
+keys from `textures.base`. Neither URL is in `hubRequestedAssetSources()` or
+the87 generated Hub visual originals. `loadHubWorldTextures()` populates base
+only from its declared physical loads and selected packed frames. Consequently
+these reads supply no texture to `actorSprite`; importing a PNG into the asset
+catalog alone does not establish scene loading ownership.
+
+The complete source-registration sweep also finds the shared raw
+`hub.npcs.teacher.shadow` (`actor-shadow.png`) missing from both lists. The
+Player/Student shadow is already requested as packed BadGuys67, but its packed
+key does not populate the separate raw URL used by Annalist, Hagatha, Skorcha,
+private-room NPC grounds and the existing Teacher. The preceding Annalist
+placement assertion does not establish that its glyph was loaded. No native
+geometry or asset fact changes.
+
+| Ground source | Existing loader owner / required correction |
+| --- | --- |
+| College5 / Hagatha50×46 | Add the existing raw URL to the canonical Hub requested sources. |
+| College11 / Luthacus67×54 | Add the existing raw URL to the canonical Hub requested sources. |
+| Shared actor shadow25×25 | Add the existing raw URL used by the Hub NPC/Teacher callers to the same requested sources. |
+| Player/Student BadGuys67 | Already requested through `playerWorldAssetSources()` and the combat atlas. |
+| College33 / Fomentius tent | Already registered in the generated Hub visual atlas; preserve its packed frame and absolute base. |
+| College41 / Statue aura | Already an explicit stock-framed Hub load; preserve its native frame and absolute base. |
+
+Implementation must restore the three raw registrations through the existing
+stock texture loading path, keeping the two exact exported PNGs, actor callers,
+native offsets, material programs and nonvacuous probe assertions intact. A
+regression through the public `hubWorldAssetSources()` contract must require
+each raw ground source once; real public scene loading must still prove the
+authored glyph dimensions and complete member/mask behavior. The prior exact
+`3b498031` ALL/quality/build results remain historical evidence. A changed
+candidate requires its own complete Website and public/built acceptance; none
+is claimed from this source audit or the failed browser phase.
+
+### 2026-10-05 — Arena acceptance must establish a clear return lane
+
+The exact `f1fae2c9` source passes the focused Hub asset contract and public
+ground-owner suites:66 rows,41 mask cases and allfive Arena variants. Its
+production-built wire/save, four College rooms and20-second Courtyard
+performance/pooling/policy substeps also pass. The Arena retirement smoke then
+fails its meaningful return-motion assertion before ALL. Parent receipts
+`REPORT56-F1FAE2C9-1133-PARENT-CLOSED-20261005.json` and
+`REPORT56-ARENA-1241-PARENT-CLOSED-20261005.json` independently close those
+phases; neither is complete candidate acceptance.
+
+The distinct bounded `12:41` observation preserves the original seed, two-second
+W input and every assertion. Its21 before/during/after samples show host ticks
+7671..7881, alive Player, no pause/grace/barrier/pending offer or browser input
+block, input112 acknowledged, and north velocity approaching90. Position remains
+`(952.5519296023333,1517.757341505318)`. Both existing world/combat collision
+resolvers reject the25-unit north move. The direct trace is856,302 bytes SHA
+`6fc1432cd2ab4266b94d15da63a0df252158423eae488656af60e1350cd689f0`;
+readonly sampling costs80ms total,6ms maximum within the unchanged window.
+
+Exact stock-bank template0/source`2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f`
+contains locked chest`object-138`, type2061, at
+`(936.56884765625,1475.88232421875)`. The established collision construction
+uses local rectangle`(-25.125,-8.625)..(25.875,16.875)` and Player radius25.
+Its expanded south edge is`1517.75732421875`, within`1.73e-5` of the held
+Player Y; Player X lies within its horizontal span. Type2061's collision shapes
+have no source ID, explaining the empty named-blocker list while the actual
+resolver still blocks. Parent's complete causal review
+`REPORT56-ARENA-1241-PARENT-CAUSAL-REVIEW-20261005.json` independently joins
+the trace, source geometry and retained screenshots.
+
+This is a driver precondition defect: its arbitrary post-escape X does not
+guarantee a clear straight return path. The product correctly prevents movement
+through the chest. Repair the smoke's setup using its existing collision/path
+planner and actual keyboard navigation to a nearby clear lane. Retain the
+required25/available movement, retired boundary and alive checks, fixed seed
+and two-second probe; do not teleport, remove enemies, alter health or geometry.
+Temporary observation code remains external evidence. Reuse the qualified
+unchanged product substeps, then run the corrected Arena journey and the final
+exact candidate's unchanged ALL/build-identity closure. Current-source complete
+acceptance, publication/live/archive and both-device cleanup remain pending.

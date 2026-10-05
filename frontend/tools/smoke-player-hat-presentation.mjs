@@ -56,14 +56,14 @@ try {
     const state = simulation.createGameSimulation({ wizard: config })
     const initial = snapshots.createGameSnapshot(state, 'wizard').players.wizard
     const view = new actors.PlayerWorldView('earth', loaded.textures, modTextures, application.renderer, false)
-    application.stage.addChild(view.container)
+    application.stage.addChild(view.ground, view.container)
     const failures = []
     const readPixels = () => {
       application.renderer.render({ container: application.stage, target, clear: true })
       return application.renderer.extract.pixels({ target }).pixels
     }
     const player = (selector, heading, gait, damageTick, color) => ({
-      ...initial, headingIndex: heading, gaitDegrees: gait,
+      ...initial, headingDegrees: heading * 15, headingIndex: heading, gaitDegrees: gait,
       position: { x: 160, y: 150 },
       primaryCast: { ...initial.primaryCast, selectedPrimaryId: 16 },
       progression: { ...initial.progression, lastDamageTick: damageTick },
@@ -106,7 +106,7 @@ try {
         preview.update({ ...player(selector, heading, 0, -1000, 0x99cc99),
           position: { x: 80 + column * 160, y: 140 + selector * 160 } }, 200)
         preview.container.scale.set(1.5)
-        application.stage.addChild(preview.container)
+        application.stage.addChild(preview.ground, preview.container)
         previews.push(preview)
       }
     }

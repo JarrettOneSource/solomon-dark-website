@@ -19,7 +19,7 @@ import {
   HUB_SOUTHERN_FOREGROUND_DEPTH,
   HUB_USEFUL_THYNGS_CHILD_DEPTH,
   HUB_NPC_MARKER_TAIL_OFFSET,
-  HUB_USEFUL_THYNGS_SHADOW_DEPTH,
+  HUB_GROUND_AUXILIARY_DEPTH,
   hubActorDepth,
 } from './hub-depth.ts'
 import {
@@ -267,8 +267,8 @@ test('sorts each Useful Thyngs painter around PotionGuy', () => {
     trader: 1,
   })
   assert.equal(HUB_NPC_MARKER_TAIL_OFFSET, 0.1)
-  assert.equal(HUB_USEFUL_THYNGS_SHADOW_DEPTH, 900)
-  assert.ok(HUB_USEFUL_THYNGS_SHADOW_DEPTH < hubActorDepth(664))
+  assert.equal(HUB_GROUND_AUXILIARY_DEPTH, 1)
+  assert.ok(HUB_GROUND_AUXILIARY_DEPTH < hubActorDepth(664))
 })
 
 test('submits the recovered southern Courtyard stack after every actor', () => {
@@ -554,9 +554,9 @@ test('Courtyard ambient painters share the recovered native fixed update', () =>
   for (let tick = 0; tick < 180; tick += 1) ambient = stepHubAmbient(ambient)
   closeTo(ambient.statuePhaseDegrees, 90)
   const statue = hubStatueOffsets(ambient)
-  closeTo(statue.body.y, -17)
-  closeTo(statue.aura.x, -1)
-  closeTo(statue.aura.y, Math.sqrt(3) * 0.8)
+  closeTo(statue.body.y, -10)
+  closeTo(statue.aura.x, -5)
+  closeTo(statue.aura.y, 4)
   assert.ok(ambient.sealCorePhase > 0 && ambient.sealCorePhase < 3)
   assert.ok(ambient.sealGlyphPhase > 0 && ambient.sealGlyphPhase < 3)
 })

@@ -210,6 +210,9 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
 function hubRequestedAssetSources(): readonly string[] {
   return [
     ...playerWorldAssetSources(),
+    hub.npcs.perkWitchGroundGlow,
+    hub.npcs.itemsGround,
+    hub.npcs.teacher.shadow,
     boneyardCombatAssetSource(boneyard.levelUpSparkle),
   ]
 }

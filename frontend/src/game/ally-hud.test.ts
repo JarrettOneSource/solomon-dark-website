@@ -31,6 +31,7 @@ function player(displayName: string): ProtocolPlayerState {
     economy: DEFAULT_PLAYER.economy,
     footstepTick: 0,
     gaitDegrees: 0,
+    headingDegrees: 0,
     headingIndex: 0,
     lighting: DEFAULT_PLAYER.lighting,
     movementScale: DEFAULT_PLAYER.movementScale,

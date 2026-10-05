@@ -1,4 +1,6 @@
 import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
+import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { copyNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { clamp, lerp } from './presentation-math.ts'
 import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
@@ -77,7 +79,6 @@ interface TimedSnapshot {
 
 const MAX_BUFFERED_SNAPSHOTS = 8
 const WALK_FRAME_COUNT = 5
-const HEADING_COUNT = 24
 const FULL_CIRCLE = 360
 const SEAL_TRACK_LENGTH = 3
 
@@ -424,12 +425,7 @@ function interpolatePlayer(
     economy: discrete.economy,
     footstepTick: discrete.footstepTick,
     gaitDegrees: lerpCycle(older.gaitDegrees, newer.gaitDegrees, blend, FULL_CIRCLE),
-    headingIndex: Math.round(lerpCycle(
-      older.headingIndex,
-      newer.headingIndex,
-      blend,
-      HEADING_COUNT,
-    )) % HEADING_COUNT,
+    ...playerCharacterFacing(lerpCycle(older.headingDegrees, newer.headingDegrees, blend, FULL_CIRCLE)),
     lighting: {
       ...discrete.lighting,
       deathWeaponPainterRegistration:
@@ -511,17 +507,13 @@ function interpolateStudent(
   blend: number,
 ): ProtocolStudentState {
   const discrete = blend < 1 ? older : newer
+  const heading = Math.fround(lerpCycle(older.heading, newer.heading, blend, FULL_CIRCLE))
   return {
     ...discrete,
     framePhase: lerpCycle(older.framePhase, newer.framePhase, blend, WALK_FRAME_COUNT),
     gaitDegrees: lerpCycle(older.gaitDegrees, newer.gaitDegrees, blend, FULL_CIRCLE),
-    heading: lerpCycle(older.heading, newer.heading, blend, FULL_CIRCLE),
-    headingIndex: Math.round(lerpCycle(
-      older.headingIndex,
-      newer.headingIndex,
-      blend,
-      HEADING_COUNT,
-    )) % HEADING_COUNT,
+    heading,
+    headingIndex: actorHeadingIndex(heading),
     position: {
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),

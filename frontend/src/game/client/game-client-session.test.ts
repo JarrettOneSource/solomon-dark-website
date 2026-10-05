@@ -1669,6 +1669,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
   const sourcePlayer = source.players['player-1']
   const eastboundPlayer = {
     ...sourcePlayer,
+    headingDegrees: 90,
     headingIndex: 6,
     velocity: { x: 90, y: 0 },
   }
@@ -1759,6 +1760,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
       ...initialSnapshot.players,
       'player-1': {
         ...initialSnapshot.players['player-1'],
+        headingDegrees: castHeadingIndex * 15,
         headingIndex: castHeadingIndex,
         progression: {
           ...initialSnapshot.players['player-1'].progression,

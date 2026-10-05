@@ -85,7 +85,7 @@ export async function proveKeyDrops({
   const player = getPlayerCharacter(current, hostPlayerId)
   Object.assign(current, { playerEntities: replacePlayerCharacter(
     current.playerEntities, hostPlayerId, {
-      ...player, headingIndex: 0,
+      ...player, headingDegrees: 0, headingIndex: 0,
       position: { x: chest.position.x, y: chest.position.y + 35 },
       velocity: { x: 0, y: 0 },
     },

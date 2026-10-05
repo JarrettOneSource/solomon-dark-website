@@ -166,7 +166,7 @@ try {
             economy: economyModule.createHubEconomy(0x5299a0),
             footstepTick: 0,
             gaitDegrees: headingIndex * 15,
-            headingIndex,
+            ...playerModule.playerCharacterFacing(headingIndex * 15),
             lighting: {
               driveActive: false,
               lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
@@ -424,7 +424,8 @@ try {
     const viewport = { displayScale: 1, height: 900, width: 1600 }
     const template = templatesModule.NATIVE_GENERATED_BONEYARDS[0]
     const runId = 'generated-complex-shadow-browser-proof'
-    const headingIndex = Math.round(template.scene.spawn.facingDeg / 15)
+    const facing = playerModule.playerCharacterFacing(template.scene.spawn.facingDeg)
+    const headingIndex = facing.headingIndex
     const encounter = template.scene.solomonDig
       ? encounterModule.createSolomonEncounter(
           template.scene.solomonDig,
@@ -445,7 +446,7 @@ try {
           economy: economyModule.createHubEconomy(0x57fe40),
           footstepTick: 0,
           gaitDegrees: headingIndex * 15,
-          headingIndex,
+          ...facing,
           lighting: {
             driveActive: false,
             lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
