@@ -1091,10 +1091,10 @@ test('uses authoritative ticks rather than packet arrival spacing when receipts 
 test('Player interpolation derives its body bank from the continuous sampled angle', () => {
   for (const [from, to, expected] of [[0, 14, 7], [359, 1, 0]]) {
     const older = snapshotAt(100, 0, 0), newer = snapshotAt(105, 0, 0)
-    older.players.remote = { ...older.players.remote, ...playerCharacterFacing(from) }
-    newer.players.remote = { ...newer.players.remote, ...playerCharacterFacing(to) }
-    const presentation = timeline(older)
-    presentation.push(newer, INTERVAL_MS)
+    const presentation = timeline({ ...older, players: { ...older.players,
+      remote: { ...older.players.remote, ...playerCharacterFacing(from) } } })
+    presentation.push({ ...newer, players: { ...newer.players,
+      remote: { ...newer.players.remote, ...playerCharacterFacing(to) } } }, INTERVAL_MS)
     const sampled = presentation.sample(75).players.remote
     assert.equal(sampled.headingDegrees, expected)
     assert.equal(sampled.headingIndex, actorHeadingIndex(expected))

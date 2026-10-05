@@ -51,11 +51,12 @@ test('Boneyard interpolation retains continuous Player facing across bins and th
   for (const [from, to, expected] of [[0, 14, 7], [359, 1, 0]]) {
     const older = snapshotAt(100, 0, 0), newer = snapshotAt(105, 0, 0)
     const playerId = Object.keys(older.players)[0]!
-    older.players[playerId] = { ...older.players[playerId]!, ...playerCharacterFacing(from) }
-    newer.players[playerId] = { ...newer.players[playerId]!, ...playerCharacterFacing(to) }
     const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
-      initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
-    timeline.push(newer, 50)
+      initialSnapshot: { ...older, players: { ...older.players,
+        [playerId]: { ...older.players[playerId]!, ...playerCharacterFacing(from) } } },
+      serverTickRate: 100, snapshotRate: 20 })
+    timeline.push({ ...newer, players: { ...newer.players,
+      [playerId]: { ...newer.players[playerId]!, ...playerCharacterFacing(to) } } }, 50)
     const sampled = timeline.sample(75).players[playerId]!
     assert.equal(sampled.headingDegrees, expected)
     assert.equal(sampled.headingIndex, 0)
