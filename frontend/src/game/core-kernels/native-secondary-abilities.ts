@@ -2020,7 +2020,7 @@ export function stepNativeSecondaryAbilities(
         rng = wave.rng
         state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, wave.displacement, context.tick)
         actor = { ...actor, alpha: wave.scalar, phase: wave.life, radius: wave.radius,
-          velocity: wave.displacement, scale: Math.fround(1 + actor.ageTicks * .08) }
+          velocity: ZERO, scale: Math.fround(1 + actor.ageTicks * .08) }
         retain = wave.retain
         if (!retain) break
         if (actor.ageTicks % 10 === 0) {
@@ -2115,7 +2115,7 @@ export function stepNativeSecondaryAbilities(
           scalar: sourceActor.alpha, life: sourceActor.phase, fadeThreshold: FREEZE_WAVE_FADE_THRESHOLD }, rng)
         rng = wave.rng
         state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, wave.displacement, context.tick)
-        actor = { ...actor, alpha: wave.scalar, phase: wave.life, radius: wave.radius, velocity: wave.displacement }
+        actor = { ...actor, alpha: wave.scalar, phase: wave.life, radius: wave.radius, velocity: ZERO }
         retain = wave.retain
         if (!retain) break
         if (actor.ageTicks % 10 === 0) {
@@ -6182,6 +6182,10 @@ function advanceActor(actor: NativeSecondaryActorState): NativeSecondaryActorSta
     && actor.kind !== 'comet-debris'
     && actor.kind !== 'storm-strike'
     && actor.kind !== 'ring-fire-fragment'
+    && actor.kind !== 'shockwave'
+    && actor.kind !== 'rescue-shockwave'
+    && actor.kind !== 'mindblast-shockwave'
+    && actor.kind !== 'freeze-wave'
   const advancesAge = actor.kind !== 'golem'
   const advancesFrame = advancesAge
     && actor.kind !== 'stoneskin-chip'
@@ -6655,7 +6659,7 @@ export function stepNativeMindblastPresentation(
     state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, wave.displacement, tick)
     if (!wave.retain) return []
     actor = { ...actor, radius: wave.radius, phase: wave.life, alpha: wave.scalar,
-      velocity: wave.displacement, scale: Math.fround(1 + actor.ageTicks * .08) }
+      velocity: ZERO, scale: Math.fround(1 + actor.ageTicks * .08) }
     return [actor]
   })
   return { ...state, actors, rng }

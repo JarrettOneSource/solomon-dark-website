@@ -2213,3 +2213,20 @@ CALL`005FFF42` both target this same circle helper. Reuse the established Region
 cell/traversal order with that exact predicate and preserve their retained
 pointer lists across later target movement, collision and expiry. This is
 retained predicate plus already-exported caller reconciliation, no new read.
+
+### Report65 parent source review: expanding waves keep their fixed birth origin
+
+Parent full source review at2026-10-05 14:52:20 UTC found one P1 in candidate
+27795ad8. Shockwave, rescue Shockwave, Mindblast and FreezeWave updates stored
+world-camera displacement in actor.velocity. The common advanceActor then
+added that vector to world position on the next tick; Game Over did likewise.
+This changes target acquisition, light placement and the registered native
+birth origin. The captured native ticks grow radius and submit their random
+vector to Region448590; that proposal is not locomotion. Its existing separate
+cameraDisplacements transport already owns it.
+
+Keep those four wave positions fixed across common and Game Over updates,
+including expiry, and keep their locomotion vector zero. Record this contract
+before correction. Preserve27795 plus the new public multi-tick regression
+as an explicit test overlay for genuine M5 failing proof; it remains UNRUN.
+Native evidence/old phase clocks stay closed and no additional read is needed.

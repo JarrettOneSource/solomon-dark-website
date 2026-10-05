@@ -230,6 +230,53 @@ function cast(skillId: NativeSecondaryAbilityId): ReturnType<typeof stepNativeSe
   )
 }
 
+test('all expanding wave kinds preserve their fixed birth origin through multiple updates and expiry', () => {
+  const origin = { x: 21, y: 34 }
+  const kinds = [['shockwave', 21], ['rescue-shockwave', null],
+    ['mindblast-shockwave', null], ['freeze-wave', 35]] as const
+  for (const [kind, skillId] of kinds) {
+    const born = spawnNativePlayerRescueShockwave(createNativeSecondarySimulation(31), {
+      ownerId: 'player', position: origin, worldKey: 'boneyard:test',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    })
+    let state: NativeSecondarySimulationState = { ...born,
+      actors: [{ ...born.actors[0]!, kind, skillId, phase: Math.fround(.03) }] }
+    let expired = false
+    for (let tick = 1; tick <= 4; tick += 1) {
+      const result = stepNativeSecondaryAbilities(state, context(35, tick, null))
+      state = result.state
+      const wave = state.actors[0]
+      assert.equal(state.cameraDisplacements[0]?.tick, tick, kind)
+      if (wave === undefined) { expired = true; break }
+      assert.deepEqual(wave.position, origin, kind)
+      assert.deepEqual(wave.velocity, { x: 0, y: 0 }, kind)
+    }
+    assert.equal(expired, true, kind)
+  }
+})
+
+test('Game Over expanding waves preserve their fixed origin and still submit expiry proposals', () => {
+  const origin = { x: 21, y: 34 }
+  for (const kind of ['mindblast-shockwave', 'rescue-shockwave'] as const) {
+    const born = spawnNativePlayerRescueShockwave(createNativeSecondarySimulation(31), {
+      ownerId: 'player', position: origin, worldKey: 'boneyard:test',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    })
+    let state: NativeSecondarySimulationState = { ...born,
+      actors: [{ ...born.actors[0]!, kind, phase: Math.fround(.03) }] }
+    let expired = false
+    for (let tick = 1; tick <= 4; tick += 1) {
+      state = stepNativeMindblastPresentation(state, tick)
+      assert.equal(state.cameraDisplacements[0]?.tick, tick, kind)
+      const wave = state.actors[0]
+      if (wave === undefined) { expired = true; break }
+      assert.deepEqual(wave.position, origin, kind)
+      assert.deepEqual(wave.velocity, { x: 0, y: 0 }, kind)
+    }
+    assert.equal(expired, true, kind)
+  }
+})
+
 test('accepted rescue has its own zero-damage wave, contacts and final Region proposal', () => {
   let state = spawnNativePlayerRescueShockwave(createNativeSecondarySimulation(31), {
     ownerId: 'player', worldKey: 'boneyard:test', position: { x: 0, y: 0 },
