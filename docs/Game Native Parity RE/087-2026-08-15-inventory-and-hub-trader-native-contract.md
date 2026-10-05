@@ -183,7 +183,7 @@ in-system instruction associations described above. These initial byte leads
 remain historical evidence and do not assign a new diagnostic or waive browser
 acceptance.
 
-### Shared implementation and public regression preparation (unrun)
+### Shared implementation and public regression preparation
 
 Parent contract review accepted the eleven-member boundary on 2026-10-04.
 The M2 candidate now uses `projectInventoryRunSummary` at the shared UI-model
@@ -210,9 +210,9 @@ The tests were prepared first in the existing public presentation/renderer
 contract suites. They cover exact owner versus peer, independent nonzero
 changes, Tutorial with no survival director, retired actor/run, new generation,
 restored numerical input, zero/negative wave omission, null/companion suppression,
-and native case/positions/font/tint. Candidate checks and browser acceptance
-remain unexecuted. Source preparation is not a red/green test result or a
-verified fix.
+and native case/positions/font/tint. The 0600 results below qualify public tests
+on candidate `99c123d1`; candidate renderer and built-scene journeys remain
+unexecuted. Source preparation is not a verified fix.
 
 The maintained `smoke-inventory-run-summary.mjs` drives the production book
 painter in a declared read-only renderer-model fixture, saving actual PNG and
@@ -242,7 +242,7 @@ party or physical-device journey. The existing built inventory-stat journeys
 remain in the executable desktop/touch acceptance plan. None is recorded as
 passing before actual execution and retained-image review.
 
-### Validation contract (unrun)
+### Validation contract and current acceptance frontier
 
 On 2026-10-05 the accepted Report61 changes were reconciled onto fetched
 published main `d1161e0b97ae41659b5ea437f1c8000310a0cad0`. Report60 changed
@@ -252,7 +252,37 @@ helper remain sealed for the genuine pre-fix pixel comparison. The earlier 0141
 phase admitted that baseline and built it successfully, then stopped on a helper
 syntax error before Chrome, PNG or behavior receipt. That failure is unqualified
 as a red; the one-parenthesis correction and early private Node parser gate have
-only been prepared. No candidate test/build/browser result is claimed.
+only been prepared at that checkpoint. The later 0600 results below supersede
+that preparation-only state.
+
+The distinct 2026-10-05 0600 phase admitted the original `59443b0` baseline
+with all 7258 tracked blobs/modes, built it, and preserved that exact source
+after the external renderer comparison. The retained 1600-by-900 PNG SHA-256
+`607bdd17d606d3f5fd6c7cf9f28939136d7e85e0892d3e90ffd603e3537b0de0`
+visibly has Kills: 0, Awesomeness: 0 and no Wave for declared inputs 6/17/91.
+The independent native-gold witness matched zero of 824 opaque glyph pixels;
+console/page/response errors were empty. Its assertion precedes candidate
+diagnostics, so missing new APIs did not substitute for this genuine pixel red.
+This is production-painter fixture evidence, not real scene/network/physical
+acceptance. The original baseline and this witness are retained for subsequent
+candidate acceptance; an unrelated adapter correction does not require replay.
+
+Candidate `99c123d1` was separately admitted with all 7260 original blob/mode
+records. Its public hub/native suites passed 131/133 tests and lint exited 0.
+Production build then exited 2 on TS2345: the companion object in
+`hub-inventory/services.ts::buildService` omitted required `runSummary`.
+The complete `buildInventory` caller audit found only that object and the
+normal renderer's typed inventory model, which already carries the field.
+The companion producer must supply explicit `runSummary: null`, preserving
+the reviewed companion suppression and required type instead of making the
+contract optional. These passed checks qualify only `99c123d1`; the corrected
+candidate still needs its own build, painter and built-scene acceptance.
+
+The phase closed at 06:02:50.988275 UTC with all owned groups drained,
+output durably exported/acknowledged, root and exact lease removed, and no new
+home children. The sole home difference was an unchanged-byte Chrome Crashpad
+settings mtime touch. No candidate painter or built-scene journey ran before
+the build failure. The closed phase has no remaining execution authority.
 
 - Meaningful public presentation regressions: zero/positive wave; independent
   nonzero kills and score; addressed-owner projection; open-book snapshot
