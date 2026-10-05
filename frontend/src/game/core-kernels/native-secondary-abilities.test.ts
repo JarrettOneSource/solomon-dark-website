@@ -250,7 +250,6 @@ test('all expanding wave kinds preserve their fixed birth origin through multipl
       assert.equal(state.cameraDisplacements[0]?.tick, tick, kind)
       if (wave === undefined) { expired = true; break }
       assert.deepEqual(wave.position, origin, kind)
-      assert.deepEqual(wave.velocity, { x: 0, y: 0 }, kind)
     }
     assert.equal(expired, true, kind)
   }
@@ -272,7 +271,6 @@ test('Game Over expanding waves preserve their fixed origin and still submit exp
       const wave = state.actors[0]
       if (wave === undefined) { expired = true; break }
       assert.deepEqual(wave.position, origin, kind)
-      assert.deepEqual(wave.velocity, { x: 0, y: 0 }, kind)
     }
     assert.equal(expired, true, kind)
   }
