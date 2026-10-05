@@ -8,8 +8,8 @@ The reported missing Wave line reopens the central wizard/run-stat preview,
 not the gameplay HUD or the left SwipePages statistics. The earlier Inventory
 pass recovered the preview art and interaction family but left its two text
 lines as constants. It did not close the Game-owned summary producer, positive
-wave gate, or formatting contract. Those unfinished members require recovery
-and verification together before this entry can claim their parity.
+wave gate, or formatting contract. Those members were unfinished at intake; the native recovery, implementation
+and scoped validation below now establish their contracts.
 
 The exact original Discord message `1554289976458350723` was re-read with a
 13-message surrounding window on 2026-10-04 through account
@@ -43,8 +43,8 @@ omits the preview rectangle, so it cannot settle rectangle or mode semantics.
 Native system: the standalone InventoryScreen's central local-wizard preview
 and three Game-owned run-summary strings, from Game value/cache production to
 the optional book's shared painter and teardown. The owning root is
-`0x00568B90`; `0x00562520` is the separate left STATS painter. Recover the
-cache writers and every native branch before treating this inventory as closed.
+`0x00568B90`; `0x00562520` is the separate left STATS painter. The cache writers and native branches are recovered below; this provisional
+intake table is retained as historical scope.
 
 | Member or branch | Owner/source | Intake disposition | Required proof |
 | --- | --- | --- | --- |
@@ -257,8 +257,9 @@ and release grace rather than trying to keep both books open together. The peer
 then leaves through the public menu and rejoins with its saved party claim via
 the established local provisioning fixture. The resumed shared run must retain
 the leader's intervening values, display the peer's current values, and accept
-a new live update without restoring stale pre-disconnect state. It is currently
-unrun. The fixture maps a declared remote endpoint to the real local socket and
+a new live update without restoring stale pre-disconnect state. The1955 run
+completed those assertions; its local telemetry fixture405 was corrected before
+the final canonical gate. The fixture maps a declared remote endpoint to the real local socket and
 routes local admission/rejoin requests, as in the existing party-rejoin journey.
 A successful local network journey would not substitute
 for public managed-service/live evidence or a physical-device claim.
@@ -818,7 +819,7 @@ the current declared values. Actual shared-network open-book value updates
 remain separately required; the shared host has its own periodic publication
 clock. This changes only the fixture ordering and receipts, with no input
 sequence injection, product test API, counter/font/tint/geometry change or
-timeout extension. These new helper checks are unrun.
+timeout extension. These helper checks were unrun at that preparation checkpoint.
 
 The 1608 phase released at 16:13:41.772041 UTC; parent verified all 125 groups,
 250 stream hashes, export/ACK, root/exact lease and both-device group absence.
@@ -854,7 +855,7 @@ earlier movement/inventory teaching completed. It records the restored stage,
 native inventory/skills permissions, no survival director, and actual public
 button transitions while retaining the numerical input fixtures. It does not
 claim fresh movement/combat Tutorial playthrough or expose a hidden menu. This
-new preparation is unrun. Accepted desktop/source-model/focus/native/baseline
+preparation was unrun at that checkpoint. Accepted desktop/source-model/focus/native/baseline
 results are reused; only Tutorial, Hub companions/results, stats and actual
 local member/network/rejoin journeys remain in the next finite scope.
 The reusable scene receipt describes its actual built-client fixture generically;
@@ -864,7 +865,7 @@ is validated before acquiring the static server or browser.
 The closed1852 run verified original99 artifact125 fingerprints and the final
 e3ff source7270, then its Tutorial helper terminated from the host timer's
 exactly-one-player invariant. Restored and paused PNGs exist, but no scene
-receipt/wire trace survived, so Tutorial acceptance remains pending. The guard
+receipt/wire trace survived, so that run did not accept Tutorial. The guard
 rejects both zero and multiple players; the actual count was not recorded.
 The additional-actor fixture already excludes Tutorial and is not the cause.
 Source permits a zero-player tick after disconnect when `resetWhenEmpty` is
@@ -900,3 +901,33 @@ member isolation. Its final error list contained only the local static fixture's
 that existing backend receipt contract (201, UUID logId, submission time), as
 the existing run-performance test does; it remains a declared local HTTP fixture,
 not managed-service storage acceptance. No error is filtered or product changed.
+
+
+### Consolidated Report61 implementation and evidence
+
+The central preview uses the addressed actor's existing Hall of Fame run metrics
+and the actual Tutorial/survival ordinal. Native literals, positive signed-word
+Wave visibility, medium font1, centered x800 and y329/344/364, and D9BA70 tint
+are recovered and implemented. Fresh Hub values are zero; companion windows
+suppress the summary; removed/replaced actor or run does not retain a cache.
+There is no added counter/save cache, global font, HUD or menu-XP change.
+
+Original594's source-module renderer fails the native gold/glyph witness. The
+corrected candidate passes all five declared renderer cases; exact retained
+pixels match773/773 fully opaque white texels at ceil(position-.5). Aggregate
+and every numeric glyph retain0.9, and changed/stale digits fail. These are
+source-module fixture witnesses, separate from the dist-built gameplay checks.
+
+The exact99 built artifact's125 fingerprints were reconstructed and verified.
+Six desktop book/owner/reset cases, Tutorial lesson12/public12→13/current5/book
+checks, all Hub companion/result suppressions and both existing stats journeys
+are retained. Eleven actual local WebSocket member/live/zero/leave/rejoin
+assertions completed; the local backend telemetry receipt now matches its
+existing201/UUID/time contract. The final release gate tests its actual current
+HEAD build and unchanged repository validator, with no borrowed provider pass.
+
+Numerical saves and host mutations are declared fixtures; Tutorial is restored
+lesson12 rather than a fresh movement/combat playthrough. Local provisioning
+and telemetry receipts do not prove managed-service storage. Touch is Chrome
+emulation, not physical-device evidence. Publication, managed deployment and
+task cleanup are recorded separately by the release workflow.
