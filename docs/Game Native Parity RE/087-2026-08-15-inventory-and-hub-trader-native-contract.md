@@ -827,3 +827,33 @@ The explicit final-source readback was unreached and is not claimed. Its clocks
 are closed; accepted baseline/native/numeric/painter and qualified exact-source
 substeps are reused while remaining built/network/ALL/publication/live gates
 stay unfinished.
+
+### 2026-10-05 — Observed pause publication and Tutorial availability
+
+The closed 1739 run reconstructed the genuine99 artifact with all125 retained
+fingerprints identical, cut over only the120 helper/docs and verified all7270
+original files before and after. Parent accepted six desktop built cases.
+Actual tick5/received sequence27 held visible6/17/91 while authority held
+7/19/164. Public inventory close/resume produced sequence31 and the reopened
+book showed7/19/164. Other-actor isolation, zero-Wave omission and book
+replacement also passed. This confirms the private fixture publication boundary;
+it is not a production counter change or a built120-head acceptance.
+
+Tutorial-touch then failed on its first public inventory tap. Its saved fixture
+still had stage0 despite clearing intro fields and assigning numerical Wave6;
+the actual page displayed the stock left-joystick movement lesson. Native
+Tutorial HUD access enables inventory from stage9 and skills from stage12,
+as implemented in `nativeTutorialHudAccess` and the retained Tutorial render
+recovery (`0x005D08C0`, modal paths `0x005C9C70`/`0x005C9BB0`, entry224).
+The existing modal-callout journey uses declared lesson9/12 states and public
+backpack/tome controls. The missing control at stage0 is the expected gate,
+not a counter defect. The early-stage0 failure remains qualified evidence.
+
+The remaining summary helper prepares a declared restored lesson12 save with
+earlier movement/inventory teaching completed. It records the restored stage,
+native inventory/skills permissions, no survival director, and actual public
+button transitions while retaining the numerical input fixtures. It does not
+claim fresh movement/combat Tutorial playthrough or expose a hidden menu. This
+new preparation is unrun. Accepted desktop/source-model/focus/native/baseline
+results are reused; only Tutorial, Hub companions/results, stats and actual
+local member/network/rejoin journeys remain in the next finite scope.

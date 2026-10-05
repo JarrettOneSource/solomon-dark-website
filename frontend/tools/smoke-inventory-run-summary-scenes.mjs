@@ -11,6 +11,7 @@ import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
 import { createGameSaveDocument, restoreGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
+import { nativeTutorialHudAccess } from '../src/game/core-kernels/native-tutorial.ts'
 import { observeGameWire, waitUntil } from './game-smoke-navigation.mjs'
 
 const output = process.env.SDR_REPORT61_SCENE_OUTPUT
@@ -23,15 +24,18 @@ const errors = { page: [], console: [], responses: [] }
 let failure = null
 const owner = 'report61-restored-owner'
 const config = { discipline: 'arcane', displayName: 'Summary', element: 'ether' }
+const allModes = ['survival-desktop', 'tutorial-touch', 'hub-desktop']
+const modes = process.env.SDR_REPORT61_SCENE_MODES?.split(',') ?? allModes
+assert.ok(modes.length > 0 && modes.every(mode => allModes.includes(mode)))
 try {
-  for (const mode of ['survival-desktop', 'tutorial-touch', 'hub-desktop']) await journey(mode)
+  for (const mode of modes) await journey(mode)
   assert.deepEqual(errors, { page: [], console: [], responses: [] })
 } catch (error) {
   failure = `${error.name}: ${error.message}`
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ receipts, errors, failure,
-    qualification: 'Exact built client, actual host/snapshot/UI/save restoration. Standalone paused fixture changes stay unpublished until public close/resume; a new observed frame precedes reopened current values. Declared numerical fixtures/additional actor/read-only wire metadata; touch is Mac Chrome emulation, not physical-device or network-party evidence.' }, null, 2) + '\n')
+    qualification: 'Exact accepted99 built client, actual host/snapshot/UI/save restoration with later helper code. Tutorial is a declared restored lesson12 numerical fixture, not fresh movement/combat playthrough. Standalone paused changes stay unpublished until public close/resume/newframe/reopened current values. Declared additional actor/wire metadata; touch is Chrome emulation, not physical-device or network-party evidence.' }, null, 2) + '\n')
   await browser.close()
   await server.close()
 }
@@ -52,6 +56,12 @@ async function journey(mode) {
     playerEntities: { ...initial.playerEntities, economies: initial.playerEntities.economies.map(row =>
       ({ ...row, collegeIntroPending: false, tutorialPending: false })) } }
   if (loaded) initial = stageNumbers(initial, { wave: 6, monstersKilled: 17, awesomeness: 91 })
+  if (tutorial) initial = { ...initial, world: { ...initial.world,
+    tutorial: { ...initial.world.tutorial, stage: 12, stageTicks: 0,
+      introMovementTicksRemaining: 0, movementInstructionAcknowledged: true,
+      inventorySeen: true, inventoryOpened: false, skillsSeen: false, skillsOpened: false,
+      dialogueArmed: false },
+  } }
   if (hub) {
     // Fund one declared Shlorio roll without changing fresh-Game counters.
     const economy = getPlayerEconomy(initial, owner)
@@ -65,6 +75,15 @@ async function journey(mode) {
     assert.equal(restored.state.world.hallOfFameRuns[owner].monstersKilled, 17)
     assert.equal(restored.state.world.hallOfFameRuns[owner].awesomeness, 91)
     assert.equal(tutorial ? restored.state.world.tutorial.waveOrdinal : restored.state.world.waves.waveOrdinal, 6)
+  }
+  if (tutorial) {
+    assert.equal(restored.state.world.waves, null)
+    assert.equal(restored.state.world.tutorial.stage, 12)
+    const access = nativeTutorialHudAccess(restored.state.world.tutorial)
+    assert.equal(access.inventory, true)
+    assert.equal(access.skills, true)
+    receipts.push({ mode, name: 'declared-restored-tutorial-lesson', stage: 12, nativeAccess: access,
+      noSurvivalDirector: true, qualification: 'Restored later lesson/numerical fixture; no fresh movement/combat playthrough' })
   }
   const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
   const context = await browser.newContext(tutorial
@@ -99,6 +118,13 @@ async function journey(mode) {
     await page.locator(hub ? '.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]'
       : '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
     assert.equal(host.hostPlayerId(), owner)
+    if (tutorial) {
+      await page.locator('.tutorial-overlay[data-stage="12"]').waitFor()
+      assert.equal(host.state().world.tutorial.stage, 12)
+      receipts.push({ mode, name: 'actual-public-inventory-entry-permitted',
+        authorityStage: host.state().world.tutorial.stage,
+        nativeAccess: nativeTutorialHudAccess(host.state().world.tutorial) })
+    }
     inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
     await activate(page.getByRole('button', { name: /Open inventory/ }), tutorial)
     if (hub) await capture('fresh-hub', { wave: 0, monstersKilled: 0, awesomeness: 0 })
@@ -132,9 +158,17 @@ async function journey(mode) {
         await reopenPublished('zero-wave-publication')
         await capture('zero-wave-omitted', { wave: 0, monstersKilled: 2, awesomeness: 71 })
       }
+      if (tutorial) assert.equal(nativeTutorialHudAccess(host.state().world.tutorial).skills, true)
+      const beforeSkillsStage = tutorial ? host.state().world.tutorial.stage : null
       await activate(inventory.getByRole('button', { name: 'Open skills', exact: true }), tutorial)
       const skills = page.getByRole('dialog', { name: 'Skills', exact: true })
       await skills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor()
+      if (tutorial) {
+        await waitUntil(() => host.state().world.tutorial.stage === 13,
+          'Public skills entry did not reach the native modal lesson', 15_000)
+        receipts.push({ mode, name: 'actual-public-skills-transition', beforeStage: beforeSkillsStage,
+          afterStage: host.state().world.tutorial.stage })
+      }
       await activate(skills.getByRole('button', { name: 'Open inventory', exact: true }), tutorial)
       const world = host.state().world
       await capture('book-reopened', { wave: tutorial ? world.tutorial.waveOrdinal : world.waves.waveOrdinal,
