@@ -791,3 +791,39 @@ replayed or promoted to an integrated-source pass. Corrected source-module
 renderer, dist-built scenes/all companions, actual local connected-party
 member/rejoin, full ALL, publication/live and both-device cleanup remain
 required under their separate accepted boundaries.
+
+### 2026-10-05 — Corrected painter acceptance and paused fixture publication
+
+Exact integrated `99c787f5` passed 131 hub and 133 native-UI executions, lint,
+production build and all five corrected Vite/source-model painter cases. The
+positive pixel witnesses were 773/773, 814/814, 600/600 and 912/912, with every
+numeric glyph at 1.0; zero-Wave and retired-actor forbidden ink was zero. The
+fixed wrong/stale controls still rejected 8/24 and 9/30 changed-digit matches
+under the unchanged 0.9 requirement. Parent accepted these qualified results,
+125 built fingerprints and the first actual built restored 6/17/91 capture.
+
+The built journey then timed out after directly changing `host.state()` to
+7/19/164 while its standalone inventory pause remained active. Its host timer
+returns during pause/resume grace; direct fixture mutation is not a snapshot
+publication event. The browser also suppresses repeated stopped input. The
+client still accepts fresh frames during pause and the Boneyard summary
+subscriber projects them. No wire trace was collected at the failing boundary,
+so missing publication is a source-supported hypothesis, not an observed
+production counter defect or proof of a stale received snapshot.
+
+The remaining helper preparation records read-only wire/authority boundaries
+and preserves the standalone pause contract: last-published values remain held,
+public close/resume supplies a publication boundary, and reopening must show
+the current declared values. Actual shared-network open-book value updates
+remain separately required; the shared host has its own periodic publication
+clock. This changes only the fixture ordering and receipts, with no input
+sequence injection, product test API, counter/font/tint/geometry change or
+timeout extension. These new helper checks are unrun.
+
+The 1608 phase released at 16:13:41.772041 UTC; parent verified all 125 groups,
+250 stream hashes, export/ACK, root/exact lease and both-device group absence.
+Home31 had only the known unchanged-byte 40-byte Crashpad settings mtime touch.
+The explicit final-source readback was unreached and is not claimed. Its clocks
+are closed; accepted baseline/native/numeric/painter and qualified exact-source
+substeps are reused while remaining built/network/ALL/publication/live gates
+stay unfinished.

@@ -11,6 +11,7 @@ import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
 import { createGameSaveDocument, restoreGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
+import { observeGameWire, waitUntil } from './game-smoke-navigation.mjs'
 
 const output = process.env.SDR_REPORT61_SCENE_OUTPUT
 assert.ok(output && resolve(output).startsWith('/Volumes/Drive/codex-acceptance/solomon-report61-d7634e23/'))
@@ -30,7 +31,7 @@ try {
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ receipts, errors, failure,
-    qualification: 'Exact built client, actual host/snapshot/UI/save restoration. Declared numerical fixtures and additional actor exercise address isolation; touch is Mac Chrome emulation, not a physical device or a network party claim.' }, null, 2) + '\n')
+    qualification: 'Exact built client, actual host/snapshot/UI/save restoration. Standalone paused fixture changes stay unpublished until public close/resume; a new observed frame precedes reopened current values. Declared numerical fixtures/additional actor/read-only wire metadata; touch is Mac Chrome emulation, not physical-device or network-party evidence.' }, null, 2) + '\n')
   await browser.close()
   await server.close()
 }
@@ -70,6 +71,7 @@ async function journey(mode) {
     ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
     : { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })
   const page = await context.newPage()
+  const wire = observeGameWire(page)
   page.setDefaultTimeout(15_000)
   page.on('pageerror', error => errors.page.push(error.message))
   page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
@@ -108,16 +110,26 @@ async function journey(mode) {
       assert.equal(ownRun.awesomeness, 91)
       const restoredWave = tutorial ? host.state().world.tutorial.waveOrdinal : host.state().world.waves.waveOrdinal
       await capture('restored', { wave: restoredWave, monstersKilled: 17, awesomeness: 91 })
+      const beforeMutation = { ...authority(), snapshotSequence: wire.snapshotSequence() }
       Object.assign(host.state(), stageNumbers(host.state(), { wave: 7, monstersKilled: 19, awesomeness: 164 }))
-      await capture('open-live-update', { wave: 7, monstersKilled: 19, awesomeness: 164 })
+      await capture('paused-last-published-values', { wave: restoredWave, monstersKilled: 17, awesomeness: 91 })
+      assert.equal(host.state().tick, beforeMutation.tick, 'Standalone inventory must retain its authoritative pause')
+      receipts.push({ mode, name: 'unpublished-authority-fixture', beforeMutation,
+        authority: authority(),
+        receivedSnapshotSequence: wire.snapshotSequence() })
+      await reopenPublished('public-resume-publishes-current-values')
+      await capture('reopened-current-values', { wave: 7, monstersKilled: 19, awesomeness: 164 })
       if (!tutorial) {
         Object.assign(host.state(), addPlayerCharacter(host.state(), 'report61-other-actor', { ...config, displayName: 'Other' }))
         const world = host.state().world
         Object.assign(host.state(), { world: { ...world, hallOfFameRuns: { ...world.hallOfFameRuns,
           'report61-other-actor': { ...world.hallOfFameRuns['report61-other-actor'], monstersKilled: 999, awesomeness: 8888 } } } })
         assert.ok(createGameSnapshot(host.state(), owner).players['report61-other-actor'])
+        await reopenPublished('other-actor-publication')
+        await page.waitForFunction(() => document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.playerCount === 2)
         await capture('other-actor-isolation', { wave: 7, monstersKilled: 19, awesomeness: 164 })
         Object.assign(host.state(), stageNumbers(host.state(), { wave: 0, monstersKilled: 2, awesomeness: 71 }))
+        await reopenPublished('zero-wave-publication')
         await capture('zero-wave-omitted', { wave: 0, monstersKilled: 2, awesomeness: 71 })
       }
       await activate(inventory.getByRole('button', { name: 'Open skills', exact: true }), tutorial)
@@ -157,6 +169,29 @@ async function journey(mode) {
   } finally {
     await context.close()
     await host.close()
+    receipts.push({ mode, name: 'read-only-wire-trace', frames: wire.frames })
+  }
+
+  async function reopenPublished(name) {
+    const previousSequence = wire.snapshotSequence()
+    assert.equal(typeof previousSequence, 'number', 'An actual received snapshot must precede the fixture change')
+    await activate(inventory.getByRole('button', { name: 'Close inventory', exact: true }), tutorial)
+    await inventory.waitFor({ state: 'hidden' })
+    await waitUntil(() => wire.snapshotSequence() > previousSequence,
+      'Public pause release did not publish a fresh snapshot', 15_000)
+    await page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
+    receipts.push({ mode, name, previousSequence, publishedSequence: wire.snapshotSequence(),
+      authority: authority(), hostPlayerId: host.hostPlayerId() })
+    await activate(page.getByRole('button', { name: /Open inventory/ }), tutorial)
+  }
+
+  function authority() {
+    const state = host.state()
+    const run = state.world.hallOfFameRuns[owner]
+    return { tick: state.tick, runId: state.world.runId, summary: {
+      wave: tutorial ? state.world.tutorial.waveOrdinal : state.world.waves.waveOrdinal,
+      monstersKilled: run.monstersKilled, awesomeness: run.awesomeness,
+    } }
   }
 
   async function capture(name, summary) {

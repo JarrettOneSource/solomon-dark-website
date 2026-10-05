@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { materializeWebSessionContent } from '../src/game/host/web-mod-content.ts'
-import { enterElementHub, enterBoneyard, waitUntil } from './game-smoke-navigation.mjs'
+import { enterElementHub, enterBoneyard, observeGameWire, waitUntil } from './game-smoke-navigation.mjs'
 
 const output = process.env.SDR_REPORT61_NETWORK_OUTPUT
 assert.ok(output && resolve(output).startsWith('/Volumes/Drive/codex-acceptance/solomon-report61-d7634e23/'))
@@ -34,7 +34,7 @@ try {
   for (const element of ['Fire', 'Air']) {
     const context = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })
     const page = await context.newPage()
-    const client = { context, page, element, id: null, sockets: 0 }
+    const client = { context, page, element, id: null, sockets: 0, wire: observeGameWire(page) }
     clients.push(client)
     page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
     page.on('pageerror', error => errors.page.push(error.message))
@@ -217,7 +217,7 @@ try {
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ receipts, errors, failure,
-    peers: clients.map(client => ({ playerId: client.id, sockets: client.sockets })),
+    peers: clients.map(client => ({ playerId: client.id, sockets: client.sockets, wire: client.wire.frames })),
     qualification: 'Built dist client, actual ticket-authenticated local WebSocket peers, public invitation/acceptance and saved-claim leave/rejoin through the established local provisioning/socket-address fixture. Sequential pause-owner books retain live owner/peer checks and reject stale pre-disconnect values. Declared authoritative numeric fixtures; public managed-service/live and physical-device evidence remain separate.' }, null, 2) + '\n')
   await Promise.all(clients.map(client => client.context.close()))
   await browser.close()
