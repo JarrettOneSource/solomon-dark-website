@@ -2292,3 +2292,25 @@ oracles. New assertions remainUNRUN. Reuse qualified14 unchanged-file passes
 and original accepted wave red; next finite check is types/these four complete
 files, including every shared test-vector helper consumer. Whole finalALL and
 old040/84+5add red/text ANDsound/browser/publication/live/cleanup remain open.
+
+### Report65 original-baseline regressions and production compiler admission
+
+The M5 1940 check materialized the original 040035 product/test-first84 and
+5add gameplay commits using original Git objects. All six selected regressions
+failed with ERR_ASSERTION: rescue cue count0 vs1; notification scale
+0.984000027179718 vs0.9800000190734863; insertion offsets3/-18 vs4/-17;
+one overload request vs three; protected physical damage5 vs1.25; and blinded
+lethal contact consumed a charge when the recovered suffix must remain gated.
+These are genuine behavioral reds, with no import or fixture-construction errors.
+The earlier27795 position red remains accepted separately.
+
+The 1920 correction check passed configured test types and all184 tests in the
+four affected files. The 2010 check passed all74 tests in the three complete
+closed-cue files and the browser helper's Node syntax check. Production build
+then rejected the new Sparkle view's constructor parameter properties under the
+existing app erasableSyntaxOnly contract (TS1294). Declare and assign the same
+private readonly fields explicitly; preserve all Sparkle ownership and rendering
+behavior. Browser/original text/audio and finalALL acceptance remain pending.
+All three actual jobs exported their terminal evidence and drained their owned
+groups; roots/leases were released. These conclusions do not claim a build,
+browser or physical speaker result that did not run.

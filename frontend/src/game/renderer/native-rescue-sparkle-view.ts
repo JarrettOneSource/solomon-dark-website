@@ -5,8 +5,13 @@ import { nativeEnemySpriteGeometry } from './native-enemy-assets.ts'
 
 export class NativeRescueSparkleViews {
   private readonly views = new Map<string, { sprite: Sprite; particle: NativeSparkleState }>()
+  private readonly root: Container
+  private readonly texture: Texture
 
-  constructor(private readonly root: Container, private readonly texture: Texture) {}
+  constructor(root: Container, texture: Texture) {
+    this.root = root
+    this.texture = texture
+  }
 
   update(
     players: Readonly<Record<string, { progression: { rescueProtection: NativePlayerRescueProtection } }>>,
