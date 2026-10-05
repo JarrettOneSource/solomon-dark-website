@@ -2332,3 +2332,19 @@ Future or expired Hail births still fail the native134-update contract. Full
 snapshots and saves keep explicit actor ages and require no schema migration.
 See the Report70 reopening in native ledger299 for the correlated production
 capture, clock trace and acceptance evidence.
+
+## Rescue protection and shared native areas
+
+Protocol148 extends published147 with authoritative rescue protection/particles,
+participant rescue feedback and current-tick Region camera proposals. The new
+mandatory fields require a protocol boundary; this is one task revision after
+integrating the published continuous-facing contract. Simulation accepted
+rescue results own wave/feedback births. Replaying client feedback never creates
+a gameplay actor. Transient Sparkles retain world pose/registration and use the
+shared primitive while preserving the separate level-up emitter clock.
+
+The expanding wave update and neutral Knockback-area update serve their actual
+native consumers. Wave camera proposals are independent of locomotion: native
+wave origins remain fixed in normal and Game Over paths. Staff and Golem keep
+distinct provenance/admission while sharing area movement/list/terminal timing.
+Retained evidence and source boundaries are in ledger175; validation is pending.
