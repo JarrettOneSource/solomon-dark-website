@@ -690,3 +690,17 @@ releases the view's containers and target before borrowed UI atlas textures.
 Inventory input, drop geometry, unforge transactions and Sack behavior retain
 their existing contracts. Shipping dispositions remain pending actual M5
 type/focused checks, unchanged canonical gate and built per-member journeys.
+
+
+The existing transparent inventory canvas requests
+`preserveBrowserCompositingAlpha` from the fixed-function renderer. Its normal
+mode therefore uses browser compositing alpha for that renderer, including
+an ordinary offscreen draw. The recovered Unforge intermediate instead needs
+native `SRCALPHA / INVSRCALPHA` on both RGB and alpha (the alpha square already
+recorded above). The new private capture scopes the normal/PMA and normal/NPM
+blend arrays to the existing native factors, flushes the state cache, renders
+its target and restores both previous arrays in `finally`. Screen compositing
+retains the established transparent-canvas contract; shared renderer setup
+and other scratch consumers are unchanged. The independent stock-record GPU
+oracle checks all 55 scroll steps, wrap, composed marker/reveal, clipping and
+state restoration, plus retained target/borrowed texture ownership.

@@ -1,4 +1,5 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer, type Texture } from 'pixi.js'
+import { requireNativeWebGlRenderer } from './native-material-batch.ts'
 import {
   NATIVE_UNFORGE_CAPTURE_SIZE,
   NATIVE_UNFORGE_TARGET_RECORDS,
@@ -48,7 +49,22 @@ export class NativeUnforgeTargetView {
     this.marker.tint = frame.markerTint
     this.images[0].position.set(...frame.imageCenters[0])
     this.images[1].position.set(...frame.imageCenters[1])
-    renderer.render({ clear: true, clearColor: [0, 0, 0, 0], container: this.capture, target: this.target })
+    const webgl = requireNativeWebGlRenderer(renderer)
+    const modes = webgl.state['blendModesMap']
+    const normal = modes.normal
+    const normalNpm = modes['normal-npm']
+    const { ONE, SRC_ALPHA, ONE_MINUS_SRC_ALPHA } = webgl.gl
+    // The screen preserves browser alpha; this intermediate uses native alpha.
+    modes.normal = [ONE, ONE_MINUS_SRC_ALPHA, SRC_ALPHA, ONE_MINUS_SRC_ALPHA]
+    modes['normal-npm'] = [SRC_ALPHA, ONE_MINUS_SRC_ALPHA, SRC_ALPHA, ONE_MINUS_SRC_ALPHA]
+    webgl.state.resetState()
+    try {
+      renderer.render({ clear: true, clearColor: [0, 0, 0, 0], container: this.capture, target: this.target })
+    } finally {
+      modes.normal = normal
+      modes['normal-npm'] = normalNpm
+      webgl.state.resetState()
+    }
     return frame
   }
 

@@ -16,6 +16,7 @@ import {
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { unforgeBrowserReceipt } from './unforge-browser-receipt.mjs'
 
 import {
   hubPortalAt,
@@ -41,6 +42,7 @@ const dowsingMessageOnly = process.argv.includes('--dowsing-message-only')
 const focusedSave = focusedHagatha || dowsingMessageOnly
 const rendererLifecycleOnly = process.argv.includes('--renderer-lifecycle-only')
 const productionBuild = process.env.SDR_GAME_TRADER_PRODUCTION === '1'
+const unforgeReceipts = []
 let staticServer = null
 let gameHost = null
 let gameCredential = null
@@ -247,9 +249,12 @@ try {
       failedResponses,
       host: await pageReceipt(hostPage),
       rendererLifecycle,
+      unforgeReceipts,
     }, null, 2)}\n`)
     step('focused native UI renderer lifecycle receipt complete')
     await browser.close()
+    await gameHost?.close()
+    await staticServer?.close()
     process.exit(0)
   }
   await fundTraderSmoke(hostPage)
@@ -474,6 +479,7 @@ try {
   await shlorio.waitFor()
   await waitForNativeSurfaceSettled(shlorio)
   const dowse = shlorio.getByRole('button', { name: /DOWSE\s+650 gold/ })
+  unforgeReceipts.push(await unforgeBrowserReceipt(hostPage, shlorio, 'Shlorio before Dowsing'))
   const beforeDowsing = await dialogGold(shlorio)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-preroll.png` })
   // Native Dowsing can offer gear above the wizard's level. A starter-hat
@@ -507,6 +513,7 @@ try {
   await waitForDialogGold(shlorio, beforeDowsing - 650)
   const dowsingCells = shlorio.getByRole('button', { name: /^Buy .* for \d+ gold$/ })
   await dowsingCells.first().waitFor()
+  unforgeReceipts.push(await unforgeBrowserReceipt(hostPage, shlorio, 'Shlorio after Dowsing'))
   const dowsingLabels = await dowsingCells.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
   const dowsingRecipes = dowsingLabels.map(label => DOWSING_EQUIPMENT_RECIPES.find(
     recipe => recipe.name === parsePurchaseLabel(label).name,
@@ -626,6 +633,7 @@ try {
   const inventory = hostPage.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
+  unforgeReceipts.push(await unforgeBrowserReceipt(hostPage, inventory, 'Inventory after service changes'))
   assert.equal(await inventory.getByRole('button', { name: /^Equip / }).count(), 0)
   const unforgeTintSamples = []
   for (let sample = 0; sample < 6; sample += 1) {
@@ -678,6 +686,7 @@ try {
   await clickInventoryStagePoint(hostPage, inventory, { x: 1562, y: 868 })
   await inventory.waitFor()
   await equipmentItem.waitFor()
+  unforgeReceipts.push(await unforgeBrowserReceipt(hostPage, inventory, 'Inventory after inert target click'))
 
   await dragInventoryPointer(hostPage, inventory, equipmentItem, { x: 1550, y: 450 })
   await equipmentItem.waitFor()
@@ -751,6 +760,7 @@ try {
     singleClient,
     status: 'ok',
     stock,
+    unforgeReceipts,
   })}\n`)
 } catch (error) {
   process.stderr.write(`${JSON.stringify({
@@ -763,8 +773,8 @@ try {
   })}\n`)
   throw error
 } finally {
-  await gameHost?.close()
   await browser.close()
+  await gameHost?.close()
   await staticServer?.close()
 }
 
@@ -985,6 +995,7 @@ async function inventoryGold(page, markRendererOwner = false) {
     await inventory.locator('.hub-inventory-native-canvas').evaluate((canvas) => {
       canvas.dataset.sdrInventoryRendererOwner = 'scene'
     })
+    unforgeReceipts.push(await unforgeBrowserReceipt(page, inventory, 'Hub Inventory'))
   }
   const gold = await dialogGold(inventory)
   await closeInventory(page, inventory)
@@ -1005,6 +1016,7 @@ async function exerciseRetainedInventoryRenderer(page) {
     const service = page.getByRole('dialog', { name: title })
     await service.waitFor()
     await waitForNativeSurfaceSettled(service)
+    unforgeReceipts.push(await unforgeBrowserReceipt(page, service, `${trader} companion Inventory`))
     const canvas = service.locator('.hub-inventory-native-canvas')
     assert.equal(
       await canvas.getAttribute('data-sdr-inventory-renderer-owner'),

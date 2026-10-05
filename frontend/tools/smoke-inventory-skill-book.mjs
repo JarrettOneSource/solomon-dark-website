@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
+import { unforgeBrowserReceipt } from './unforge-browser-receipt.mjs'
 
 import {
   DEFAULT_GAME_SETTINGS,
@@ -70,12 +71,14 @@ try {
 
   const optionalBookReceipts = []
   const skillBookViewportReceipts = []
+  const unforgeReceipts = []
 
   await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 10_000 })
   await activate(page, page.getByRole('button', { name: /Open inventory/ }))
   const hubInventory = page.getByRole('dialog', { name: 'Inventory' })
   await hubInventory.waitFor({ timeout: 5_000 })
   await waitForInventory(hubInventory)
+  unforgeReceipts.push(await unforgeBrowserReceipt(page, hubInventory, 'Hub standalone Inventory'))
   const inventoryToSkills = observeOptionalBookOverlap(page, 'skills')
   await hubInventory.getByRole('button', { name: 'Open skills' }).click()
   optionalBookReceipts.push(await inventoryToSkills)
@@ -85,6 +88,7 @@ try {
   })
   skillBookViewportReceipts.push(await skillBookViewportReceipt(page, hubSkills, 'Hub'))
   await hubInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  assert.equal(await page.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
   await page.screenshot({ path: `${screenshotRoot}-hub-skills.png` })
   const skillsToInventory = observeOptionalBookOverlap(page, 'inventory')
   await hubSkills.getByRole('button', { name: 'Open inventory' }).click()
@@ -144,6 +148,7 @@ try {
   await matchInventory.waitFor({ timeout: 10_000 })
   await waitForInventory(matchInventory)
   assert.equal(await boneyard.getAttribute('data-gameplay-input-blocked'), 'true')
+  unforgeReceipts.push(await unforgeBrowserReceipt(page, matchInventory, 'Paused Boneyard Inventory after Skills'))
   const matchManaPotion = matchInventory.getByLabel('Backpack').getByRole('button', {
     exact: true,
     name: 'Mana Potion, quantity 1',
@@ -188,6 +193,7 @@ try {
     pageErrors,
     pointerEvents: await page.evaluate(() => window.__sdrInventoryPointerEvents),
     skillBookViewportReceipts,
+    unforgeReceipts,
   })}\n`)
 } finally {
   await browser.close()
