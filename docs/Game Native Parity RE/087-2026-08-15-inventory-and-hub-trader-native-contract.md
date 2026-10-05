@@ -768,3 +768,26 @@ fails on any browser-console/page error. Native-equipment
 combat effects, dormant random outfitting,
 selling, and persistent account storage are not silently invented by this
 milestone.
+
+### 2026-10-05 — Published Report56 source integration
+
+Report61's clean `43e05cda` source was rebased onto the fetched, actually
+published main `29764a0e` (tree `64ddaadb`). All eight own patches remained
+identical. Full-tree comparison preserved the 17 Report61 paths and all 74
+upstream paths byte-for-byte with their original Git modes; there was no direct
+path overlap. The only subsequent source change is this ledger checkpoint.
+
+The integrated source retains Report56's continuous facing/player-state,
+protocol 147, save schema 49 and migration, session/presentation timelines,
+package scripts and renderer changes. Report61's addressed-player summary,
+required companion `runSummary: null`, native font/tint/anchors and corrected
+per-digit pixel witness are unchanged. Existing fixture factories and state
+spreads carry the added facing field without replacing those upstream contracts.
+
+This is M2 source/Git review, not an integrated test, build or gameplay result.
+The accepted original594 model-fixture red, retained numeric diagnosis and
+qualified e92 checks remain evidence of their own exact inputs; none was
+replayed or promoted to an integrated-source pass. Corrected source-module
+renderer, dist-built scenes/all companions, actual local connected-party
+member/rejoin, full ALL, publication/live and both-device cleanup remain
+required under their separate accepted boundaries.
