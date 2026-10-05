@@ -90,13 +90,17 @@ export function hubPolisherWipeGain(playerPosition: Vector2): number {
 }
 
 export function hubMemoratorHeadingIndex(playerPosition: Vector2): number {
+  return Math.round(hubMemoratorHeadingDegrees(playerPosition) / 360 * 16) % 16
+}
+
+export function hubMemoratorHeadingDegrees(playerPosition: Vector2): number {
   const memoratorPosition = HUB_PRIVATE_ROOM_LAYOUTS.mortuary.actors.memorator.visual.position
   const radians = Math.atan2(
     playerPosition.x - memoratorPosition.x,
     -(playerPosition.y - memoratorPosition.y),
   )
   const heading = (radians + Math.PI * 2) % (Math.PI * 2)
-  return Math.round(heading / (Math.PI * 2) * 16) % 16
+  return Math.fround(heading * 180 / Math.PI)
 }
 
 export function hubRoomFlameTransform(

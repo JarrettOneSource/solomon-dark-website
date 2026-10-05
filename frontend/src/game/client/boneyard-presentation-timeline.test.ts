@@ -13,7 +13,7 @@ import {
   createNativeTutorialState,
   nativeTutorialCameraBounds,
 } from '../core-kernels/native-tutorial.ts'
-import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
+import { createIdlePlayerPrimaryCast, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../core-kernels/player-combat.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
@@ -46,6 +46,21 @@ const CHARACTER = {
 const DEFAULT_SNAPSHOT = createGameSnapshot(createGameSimulation(), null)
 const DEFAULT_PLAYER = DEFAULT_SNAPSHOT.players['local-player']!
 const LIGHTING = DEFAULT_PLAYER.lighting
+
+test('Boneyard interpolation retains continuous Player facing across bins and the zero seam', () => {
+  for (const [from, to, expected] of [[0, 14, 7], [359, 1, 0]]) {
+    const older = snapshotAt(100, 0, 0), newer = snapshotAt(105, 0, 0)
+    const playerId = Object.keys(older.players)[0]!
+    older.players[playerId] = { ...older.players[playerId]!, ...playerCharacterFacing(from) }
+    newer.players[playerId] = { ...newer.players[playerId]!, ...playerCharacterFacing(to) }
+    const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+      initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+    timeline.push(newer, 50)
+    const sampled = timeline.sample(75).players[playerId]!
+    assert.equal(sampled.headingDegrees, expected)
+    assert.equal(sampled.headingIndex, 0)
+  }
+})
 
 test('interpolation carries authoritative flash history while its sampled clock gates eligibility', () => {
   const older = snapshotAt(100, 10, 100)
@@ -97,6 +112,7 @@ function playerAt(x: number): ProtocolPlayerState {
     economy: DEFAULT_PLAYER.economy,
     footstepTick: x,
     gaitDegrees: x,
+    headingDegrees: 0,
     headingIndex: 0,
     lighting: LIGHTING,
     movementScale: DEFAULT_PLAYER.movementScale,

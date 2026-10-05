@@ -48,6 +48,7 @@ export interface PlayerCharacterState {
   config: PlayerCharacterConfig
   footstepTick: number
   gaitDegrees: number
+  headingDegrees: number
   headingIndex: number
   position: Vector2
   primaryCast: PlayerPrimaryCastState
@@ -104,12 +105,18 @@ export function createPlayerCharacter(
     config: { ...config },
     footstepTick: 0,
     gaitDegrees: 0,
-    headingIndex: actorHeadingIndex(180),
+    ...playerCharacterFacing(180),
     position: { ...position },
     primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
   }
+}
+
+/** The actor's continuous +6C angle and its body-bank index share one owner. */
+export function playerCharacterFacing(heading: number): Pick<PlayerCharacterState, 'headingDegrees' | 'headingIndex'> {
+  const headingDegrees = Math.fround(heading)
+  return { headingDegrees, headingIndex: actorHeadingIndex(headingDegrees) }
 }
 
 export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
@@ -216,20 +223,21 @@ export function commitPlayerCharacterTick(
     plan.requestedVelocity.y,
   )
   const requestedDistance = Math.hypot(plan.delta.x, plan.delta.y)
+  const facing = plan.movementActive
+    && requestedSpeed > 0.01
+    && (plan.face || !playerPrimaryCastOwnsFacing(previous.primaryCast))
+    ? playerCharacterFacing(actorHeadingFromVector(
+        plan.requestedVelocity.x,
+        plan.requestedVelocity.y,
+      ))
+    : { headingDegrees: previous.headingDegrees, headingIndex: previous.headingIndex }
   return {
     ...previous,
+    ...facing,
     gaitDegrees: (
       previous.gaitDegrees
       + requestedDistance * PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT
     ) % 360,
-    headingIndex: plan.movementActive
-      && requestedSpeed > 0.01
-      && (plan.face || !playerPrimaryCastOwnsFacing(previous.primaryCast))
-      ? actorHeadingIndex(actorHeadingFromVector(
-          plan.requestedVelocity.x,
-          plan.requestedVelocity.y,
-        ))
-      : previous.headingIndex,
     position: { ...resolvedPosition },
     velocity: { ...plan.retainedVelocity },
     walkCyclePrimary: advancePlayerCharacterWalkCycle(

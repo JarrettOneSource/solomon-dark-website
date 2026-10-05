@@ -48,7 +48,7 @@ import type { NativeWorldManagerOrderState, NativeWorldManagerRegistration } fro
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { createNativeWraithFlightState } from '../core-kernels/native-wraith-flight.ts'
 import type { PlayerCharacterConfig, PlayerPrimaryCastState } from '../core-kernels/player-character.ts'
-import { createIdlePlayerPrimaryCast, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import { createIdlePlayerPrimaryCast, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import type { PlayerSkillBookComponent, PlayerStatBookComponent } from '../core-kernels/player-progression.ts'
 import { buildPlayerSkillOffer, isNativeBeltSkill, nativeSecondaryAbilityRankStats, nativeWeldBuild, nativeWeldComponentRanksForBuild } from '../core-kernels/player-progression.ts'
 import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-runtime.ts'
@@ -1734,8 +1734,19 @@ function normalizePlayerStore(
     },
   )
 
+  const locomotions = array(source.locomotions, 'game save player locomotions').map((value, index) => {
+    const locomotion = record(value, `game save player locomotion ${index}`)
+    const headingIndex = integerWithin(locomotion.headingIndex, `game save player locomotion ${index} headingIndex`, 0, 23)
+    const headingDegrees = sourceSchemaVersion < 49
+      ? headingIndex * 15
+      : finiteNumber(locomotion.headingDegrees, `game save player locomotion ${index} headingDegrees`)
+    const facing = playerCharacterFacing(headingDegrees)
+    if (facing.headingIndex !== headingIndex) throw new Error(`game save player locomotion ${index} heading invariant is invalid`)
+    return { ...locomotion, ...facing }
+  })
   return {
     ...source,
+    locomotions,
     belts,
     economies,
     lightings: sourceSchemaVersion < 34 ? array(source.lightings, 'game save player lightings').map((value, index) => ({

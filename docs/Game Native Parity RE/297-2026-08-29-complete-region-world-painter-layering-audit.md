@@ -2108,8 +2108,10 @@ Actual retained M5 source is now `aaa677ee/85e2a311`.
 Source porting must still honor the continuous angle in native actor `+6C`.
 Current `actorHeadingFromVector` returns degrees, but `actorHeadingIndex`
 rounds them to24 directions; PlayerCharacter and its codec retain only that
-integer. Student already retains continuous internal `heading`/store heading,
-while its published snapshot exposes only `headingIndex`. Use existing
+integer. **Source correction during the implementation audit:** Student's
+continuous `heading` already survives its SoA state, host projection, strict
+codec and published snapshot. The earlier dropped-angle statement was wrong;
+reuse that existing field and add no duplicate Student DTO angle. Use existing
 authoritative angle ownership and preserve degree/index invariants through
 all facing writers and snapshot/codec callers, rather than reconstructing a
 continuous angle from a rounded index or client presentation displacement.
@@ -2127,3 +2129,179 @@ retain their reasoned dispositions. Product changes, all member/current-
 source/built acceptance, publication/live verification and both-device cleanup
 remain undone. Earlier failure/usage/ownership/original evidence and every
 qualified observation are preserved; Report56 is not complete.
+
+
+### 2026-10-05 — supported shared ground owner source cutover (acceptance pending)
+
+Parent authority `PARENT-SOURCE-PORT-AUTHORITY-20261005.json` authorizes the
+complete supported source cutover on M2. The original sealed b5ba plan remains
+preserved. Its incorrect dropped-Student-angle statement is withdrawn: existing
+Student `heading` already survives SoA, projection, codec and replication; no
+Student DTO field is added. Client interpolation now derives the body bank
+from that same existing continuous heading rather than interpolating two
+independent representations. Tests are authored, not executed on M2.
+
+PlayerCharacter now owns float32 `headingDegrees` and its derived24-bank index
+through one `playerCharacterFacing` helper. Movement, primary casting, Staff
+admission/birth/sample writes, contact deflection, authored spawn and forced
+College paths preserve the pair. Entity locomotion/projection, prediction,
+reconciliation and both timelines retain it. Existing continuous scalar action
+callers (Prismatic, Golem and Spider/Cocoon) consume the stored angle rather
+than recreating it from a sheet index. Discrete sheet selectors, Goodie facing,
+separate corpse programs and the existing lighting drive/recipe remain their
+qualified contracts. Protocol147 requires the finite heading and consistent
+index; save49 preserves it, while genuine older saves recover the body-angle
+representative `15*savedIndex`. Missing live data is rejected rather than
+silently fabricated. Current Student wire shape remains unchanged.
+
+| Supported auxiliary | Source cutover / preserved program | Current disposition |
+| --- | --- | --- |
+| PlayerWizard | BadGuys67, native opposite5/2 offset,1.25/1.2 factor and1/.5 alpha; supported current Player body scale1; consumed rejection and ordinary glyph through terminal150. Public Courtyard, every private room and Arena attach an independent ground sibling. | source implemented; built acceptance pending |
+| Student | Existing continuous heading/actor scale; native opposite5 and1.25 factor. Registration ordinal, pooling, detach/reuse and destruction remain coordinated with body ownership. | source implemented; built acceptance pending |
+| Hagatha | BadGuys67 at(-18,+7), matrix(1.25,1.05); additive College5 at(+11,+8),1.2 scale, diffuse(.5,.25+signedFloat(.25),0,.5). Existing body/accessory/particle clock is preserved. | source implemented with exact College5 asset; built acceptance pending |
+| Annalist | Half-alpha BadGuys67 at(-2,0), asymmetric native NPC matrix. | source implemented; built acceptance pending |
+| Fomentius | Existing registered College33 world layer keeps the audited absolute(10,60) recipe and1327/507 crop placement; only the owner interval changes. | source implemented; built acceptance pending |
+| Luthacus | Direct registered College11 at actor+(15,8), scale1; generic oval removed. | source implemented with exact College11 asset; built acceptance pending |
+| Skorcha | Actor-origin BadGuys67/asymmetric matrix, all existing conditional placements/variants; body mirroring is independent. | source implemented; built acceptance pending |
+| Dowser | BadGuys67 at(-3,+4), native NPC matrix in Library ground pass. | source implemented; built acceptance pending |
+| Memorator | Continuous existing target-facing direction, opposite5+(0,5), native NPC matrix in Mortuary ground pass. | source implemented; built acceptance pending |
+| Polisher | Existing conditional story Office admission, BadGuys67(+5,+10)/NPC matrix; body/ground visibility remains paired. | source implemented; built acceptance pending |
+| College Statue | Audited registered College41 multiply aura moves to ground; old per-frame bodyY-minus.25 assignment is removed. Shared phase gives wave5*sin, bodyY=wave-15 and aura(-wave,.8*wave), retaining both existing registered bases. | source implemented; built acceptance pending |
+| Teacher | Accepted rune/BadGuys67 program reused under the same early ground interval and registration order; body/release recipes preserved. | accepted prior program reused; integrated acceptance pending |
+
+College ground now has one explicit pass after its raster and before seals/body
+queues. Registration ordinals order its products; neither body Y-depth nor a
+body material capture owns their pixels. The former tent/statue depth constants
+are removed. All three Player scene constructors and the Student constructor
+were read; room reparenting, cohort departures, pooled reuse and live/retired
+scene destruction attach/detach/dispose both owners. No per-object shadow
+suppression, pixel mask or new render target is introduced.
+
+Arena's reachable authored25..29 and live DeadSpider query uses all41 constructed
+vertices in authored order, strict side/intersection parity, existing whole50-
+unit/border cells and raw sprite rectangle admission. It subtracts record
+position without inverse visual rotation/scale and reads the current Spider
+cohort before presenting Player ground output. Native predicate recovery is
+kept distinct from native shape production: the pre-existing091/297 Terrain
+boundary and twelve-template zero-Terrain census still apply. Current editor
+spline strokes remain unchanged; they are not inferred to be native quads or
+river-width geometry, and generic Terrain is **not** labelled exact-ported.
+Dormant Illuminator/Annalist2/standing Chancellor, negative obstacle/custom/
+Librarian/desk populations and separate corpse/directional/light families retain
+their prior supported dispositions.
+
+The new render random draw uses the established client-local native RNG
+primitive with the recovered signed range, channels, alpha and render cadence.
+It does not claim synchronization with stock process-global renderer/physics
+RNG. Float32 stores/nativePi32 and source formulas are preserved without a
+browser/x87/SSE bit-identity claim. Unaligned writer-candidate and normal static
+constructor qualifications remain unchanged; factory2030 EDI is not Player
+ESI, and no new +160 casting/death mapping is inferred.
+
+Current static review passes diff whitespace and relative import existence apart
+from the two explicitly pending native glyph PNGs. The asset-only packet is
+prepared separately, entirely unrun, with no source delta and the accepted
+retained AAA source unchanged. No Website/Node/test/build/browser executes on
+M2. New model/transport/save/continuous-angle/contour/grid/lifecycle regressions
+are routed through the configured acceptance gate, which is unchanged apart
+from including the new tests. Original red behavior and native/pixel proof are
+retained; no extraction or age replay is proposed. Meaningful future baseline
+angle failure, focused checks, required ALL, actual built member journeys,
+publication/live verification and both-device cleanup remain pending.
+Report56 is unfinished and holds no M5 lease or source mainlock.
+
+Recovery source review on `2026-10-05` preserves the full uncommitted cutover.
+The current original and eight nearby Discord messages were reread at
+`03:52:25Z`: content, edited timestamp and the three attachment identities are
+unchanged, with no correction or withdrawal. No native or media work was
+repeated. The source audit found two complete Player test fixtures lacking the
+new angle and maintained browser fixtures still writing only a body index.
+Those producers must retain a coherent degree/index pair; direct Player view
+probes must attach both public products. Existing action, placement, contact,
+respawn and timeline tests will cover the continuous angle across the actual
+public interfaces. All authored tests remain unexecuted on M2, and the exact
+candidate's M5 gates and member journeys still own acceptance.
+
+The recovery member review joins Hagatha's retained callback to the already
+recovered shared Graphics dispatcher. `00501A93` sets Context `+223=1`,
+`00501B08` submits College5, and `00501B19` restores zero. Entry301's retained
+`004208A0` proof (the shared hit-material paragraph) establishes that this
+flag selects diffuse RGB instead of texture modulation while preserving
+texture alpha and independent blend ownership. Hagatha's additive sibling
+therefore uses the existing per-drawable `setNativeDiffuseColor` primitive;
+its ordinary shadow and other actors keep their own texture modes. The
+new sibling also reuses established `packRgb` truncation for
+`(.5,.25+signedFloat(.25),0)`, rather than the older ambient rounding helper.
+This is a member join using retained evidence, not new native extraction or
+a change to Teacher/ambient color programs. Actual member pixels remain pending.
+
+The maintained Hub extractor must use the same raw-crop contract as the
+reviewed asset packet for College5/11. Their logical canvases equal the source
+rectangles and their registered origins are zero. `registered_sprite` composites
+onto a transparent canvas and can discard RGB beneath zero alpha; direct `crop`
+preserves all four stock channels without changing registration. Only these
+two new outputs use that exact-crop path. Existing registered artwork and its
+absolute offsets remain unchanged; image execution still requires the M5 grant.
+
+The compact query's record `+4/+8` operands are float32 stores, just like its
+world-point inputs. The source record boundary therefore rounds authored and
+interpolated DeadSpider positions before constructing the rectangle/grid row
+or subtracting the position. Otherwise a double-only record displacement can
+turn an exact strict contour vertex into an interior point. The public query
+regression uses selector25 at `(100.000003,100)` and world point `(141,94)`:
+the native stored position is `(100,100)`, so the local `(41,-6)` vertex stays
+outside. This preserves the recovered float-store contract without changing
+rendered rotation/scale or claiming browser/x87 bit identity.
+
+The distinct `04:47` asset-only grant was consumed before admission. A final
+read-only check at `04:50:01.441324Z` observed clear resources and clean
+retained `aaa677ee/85e2a311`; the fixed clock was prepared once at
+`04:50:35.906463Z`. The single automatic supervisor refused admission at
+`04:50:48` when the periodic CI worker and deploy/fetch children appeared.
+No source staging, private setup, asset draw or output occurred. M2 transport
+PGID45211 exited one and drained with empty before/after membership. Parent's
+independent `04:54:35.280488Z` check confirmed no lease, unchanged prior23:48
+release, clean AAA source, no ready marker, no asset staging and no private
+asset runtime. Exact failed inputs/clock/receipts remain archived; unused bounds
+do not authorize another attempt. Source cutover and member acceptance remain
+pending the two exact glyph imports and a separate current-source Website gate.
+
+### 2026-10-05 — exact College5/11 assets extracted and cleanly released
+
+A distinct watched turn `01a10a7f-f3b3-7e42-ae06-45c94c34481f`, attempt
+`report56-retry-1791177504-a98166f0`, used the unchanged reviewed asset packet.
+The scoped original and eight nearby messages were unchanged at `05:20:12Z`.
+One uninterrupted final read-only checker, clock preparer and launcher fixed
+the clock at `05:27:18.540975Z`; work cutoff was `05:37:18.540975Z` and total
+release/export bound `05:42:18.540975Z`, including five cleanup minutes. Actual
+atomic admission was `05:27:22.856258Z`, supervisor49859. Retained source
+`aaa677ee/85e2a311`, clean index and all7,258 original bytes matched; source
+delta was zero and the M2 product WIP was never staged.
+
+Pinned private Python3.12/framework and arm64 Pillow12.3 offline wheel setup,
+both private loaded-image/prefix probes, and the sole sixty-second asset stage
+all exited zero. The glyph stage ran `05:27:48.105774Z..05:27:48.181605Z`.
+Both zero-origin logical canvases use the exact native crop/registered-origin
+contract, retaining raw RGBA including transparent RGB. Exact source-crop
+pixels and encoded PNG decode round trips matched on M5.
+
+| Stock glyph / maintained output | Dimensions / bytes | PNG SHA-256 | Raw RGBA SHA-256 |
+| --- | --- | --- | --- |
+| College5 / `hub-hagatha-ground-glow.png` | 50×46 /1,411 | `2d1048990eb2d4c1804b98b852e050f2a97cfb8861ba4995ef2d417af45e4284` | `c2cdd1dfa9aa3e2d4fb58be81b13d4780e4d738360935ff42ee2f0946ba9f073` |
+| College11 / `hub-luthacus-ground-shadow.png` | 67×54 /884 | `8ee51ad744036a2fd6e3fbf8f5c980f945f670bab106328072d6f0cf0fcffe98` | `a1210b80748a861eb3a66185a920fbd4778660e6c640b60cf5cc215d09b84bba` |
+
+Automatic release was `05:27:49.789562Z`. All six created PGIDs49904/49907/
+49910/49915/49918/49921 drained; owned processes, unresolved groups, errors,
+home changes and new home children were empty. All31 real-home entries were
+unchanged, TMP/profile clear, private asset runtime and input staging removed,
+and the exact lease absent. Source-after and finally again matched every
+original byte. The one M2 job ended zero at `05:28:00.172621Z`; SSH50351 and
+every staging/export Popen group drained. Both exported PNGs match their
+actual byte counts/hashes. Full terminal/readback preceded source import.
+
+Only these two exact bytes are imported under the standing M2 source authority;
+no M2 image decoding, native extraction, Website test/build/browser execution,
+new work under unused bounds or product acceptance is claimed. College33/41
+and the registered absolute bases remain unchanged. Current-main integration,
+clean immutable candidate, complete Website and built member acceptance,
+publication/live/archive boundary and both-device cleanup remain pending.

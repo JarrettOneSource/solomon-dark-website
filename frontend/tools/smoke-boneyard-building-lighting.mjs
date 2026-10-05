@@ -120,6 +120,7 @@ try {
           economy: economyModule.createHubEconomy(0x60e940),
           footstepTick: 0,
           gaitDegrees: 90,
+          headingDegrees: 90,
           headingIndex: 6,
           lighting: {
             driveActive: false,

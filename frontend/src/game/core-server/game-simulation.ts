@@ -19,7 +19,7 @@ import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import { HUB_REGION_DEFINITIONS, firstHubRegionLineObstruction, isHubRegionPathTraversable, isHubRegionTraversable } from '../core-kernels/hub-regions.ts'
 import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
 import { nativeBeltEntryItem, nativeBeltEquipmentSlots } from '../core-kernels/native-belt.ts'
-import { NATIVE_COLLEGE_COURTYARD_PATH, nativeCollegePathHeadingIndex } from '../core-kernels/native-college-intro.ts'
+import { NATIVE_COLLEGE_COURTYARD_PATH, nativeCollegePathHeadingDegrees } from '../core-kernels/native-college-intro.ts'
 import { nativeEquipmentHasFeature, nativeEquipmentRecipeEffects } from '../core-kernels/native-equipment-effects.ts'
 import { NATIVE_HAGATHA_LAST_WORD_DAMAGE, NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE, NATIVE_HAGATHA_LAST_WORD_SACK_SUFFIXES, nativeHagathaBossDamageFactor } from '../core-kernels/native-hagatha-effects.ts'
 import type { NativeBoastFailureProducer } from '../core-kernels/native-hub-npc.ts'
@@ -46,7 +46,7 @@ import { NATIVE_TUTORIAL_FIRES, acknowledgeNativeTutorialMovementInstruction, ap
 import type { DeferredNativeWorldManagerRegistrations, NativeWorldManagerOrder, NativeWorldManagerOrderState } from '../core-kernels/native-world-manager-order.ts'
 import { createDeferredNativeWorldManagerRegistrations, createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import type { PlayerCharacterConfig, PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
-import { NATIVE_GAMEPLAY_VIEWPORT_WIDTH, PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput, createIdlePlayerPrimaryCast, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import { NATIVE_GAMEPLAY_VIEWPORT_WIDTH, PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput, createIdlePlayerPrimaryCast, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import { NATIVE_FLASH_RESPONSE_RADIUS } from '../core-kernels/player-harmful-contact.ts'
 import { NATIVE_PLAYER_STAFF_CAST_TWO_OVERLAY } from '../core-kernels/player-lighting.ts'
@@ -380,11 +380,11 @@ export function armGameSimulationCollegeIntro(
   }
   const character = {
     ...createPlayerCharacter(player.config, NATIVE_COLLEGE_COURTYARD_PATH[0]),
-    headingIndex: nativeCollegePathHeadingIndex(
+    ...playerCharacterFacing(nativeCollegePathHeadingDegrees(
       'courtyard-walk',
       0,
       NATIVE_COLLEGE_COURTYARD_PATH[0],
-    ),
+    )),
   }
   return {
     ...state,

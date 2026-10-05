@@ -102,6 +102,7 @@ try {
           },
           footstepTick: 0,
           gaitDegrees: 0,
+          headingDegrees: 0,
           headingIndex: 0,
           position,
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),

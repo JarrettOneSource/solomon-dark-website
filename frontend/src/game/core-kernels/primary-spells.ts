@@ -9,9 +9,9 @@ import {
 } from './native-player-weapon.ts'
 import {
   actorHeadingFromVector,
-  actorHeadingIndex,
 } from './actor-heading.ts'
 import {
+  playerCharacterFacing,
   playerPrimaryCastOwnsFacing,
   type PlayerCharacterInput,
   type PlayerCharacterState,
@@ -1294,9 +1294,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const castOwnsFacing = playerPrimaryCastOwnsFacing(primaryCast)
     let nextPlayer: PlayerCharacterState = {
       ...player,
-      headingIndex: castOwnsFacing
-        ? actorHeadingIndex(actorHeadingFromVector(aimDirection.x, aimDirection.y))
-        : player.headingIndex,
+      ...(castOwnsFacing
+        ? playerCharacterFacing(actorHeadingFromVector(aimDirection.x, aimDirection.y))
+        : { headingDegrees: player.headingDegrees, headingIndex: player.headingIndex }),
       primaryCast: { ...primaryCast, aimDirection },
     }
     const worldKey = context.worldKeyForPlayer(playerId)

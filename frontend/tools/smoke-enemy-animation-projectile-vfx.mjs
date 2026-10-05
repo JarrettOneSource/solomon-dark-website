@@ -561,6 +561,7 @@ try {
           economy: economyModule.createHubEconomy(1),
           footstepTick: 0,
           gaitDegrees: 0,
+          headingDegrees: 0,
           headingIndex: 0,
           lighting: {
             driveActive: false,

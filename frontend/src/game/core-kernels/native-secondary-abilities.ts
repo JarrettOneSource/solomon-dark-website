@@ -4380,7 +4380,7 @@ function castAbility(
         freezeTicks: Math.round(v.mDuration * 100),
         kind: 'prismatic-wave',
         lifetimeTicks: PRISMATIC_PRESENTATION_LIFETIME_TICKS,
-        phase: authority.character.headingIndex * 15,
+        phase: authority.character.headingDegrees,
         position: { x: origin.x, y: origin.y - 25 },
         presentationRng: flashColor.state,
         radius: PRISMATIC_QUERY_RADIUS,
@@ -4489,7 +4489,7 @@ function castAbility(
       const placementSign = drawNativeSign(state.rng, 45)
       state = { ...state, rng: placementSign.state }
       const placementHeading = Math.fround(
-        authority.character.headingIndex * 15 + placementSign.value,
+        authority.character.headingDegrees + placementSign.value,
       )
       const placementDirection = nativeHeadingVector(placementHeading)
       const requestedPosition = {

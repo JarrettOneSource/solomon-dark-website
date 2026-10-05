@@ -53,7 +53,7 @@ export class PlayerWebbedView {
     this.cocoon.visible = web.severity >= 3
     this.hit.visible = this.cocoon.visible && web.hitPulse > 0
     if (this.cocoon.visible) {
-      const tilt = nativeCocoonTilt(player.headingIndex * 15)
+      const tilt = nativeCocoonTilt(player.headingDegrees)
       const bottom = this.record.height - this.record.anchorY
       const matrix = new Matrix(
         1, 0, -tilt.x / this.record.height, 1 - tilt.y / this.record.height,

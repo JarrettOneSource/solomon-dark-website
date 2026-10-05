@@ -1,5 +1,5 @@
 import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
-import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { failBoast } from '../core-kernels/boast.ts'
 import { nativeCrowBlindness } from '../core-kernels/native-crow-blindness.ts'
 import { resolveNativeBoast } from '../core-kernels/native-hub-npc.ts'
@@ -9,7 +9,7 @@ import { NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED } from '../core-kernels/native-se
 import { applyNativeWebbed } from '../core-kernels/native-webbed.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { PlayerCharacterState } from '../core-kernels/player-character.ts'
-import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_RADIUS, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { playerPoisonHealthDamage } from '../core-kernels/player-combat.ts'
 import { NATIVE_FLASH_RESPONSE_RADIUS, playerDeflectReflectionSourceInRange, resolvePlayerFlashResponse, resolvePlayerHarmfulContact } from '../core-kernels/player-harmful-contact.ts'
 import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
@@ -160,7 +160,7 @@ export function applyPlayerContacts(
           ...resolvedPlayers,
           [damage.playerId]: {
             ...character,
-            headingIndex: actorHeadingIndex(actorHeadingFromVector(
+            ...playerCharacterFacing(actorHeadingFromVector(
               damageSource.position.x - character.position.x,
               damageSource.position.y - character.position.y,
             )),
@@ -333,7 +333,7 @@ export function applyPlayerContacts(
         const admitted = addNativeCocoon(enemies, damage.playerId, character.position, {
           [damage.playerId]: {
             alive: true, connected: true, eligible: true, collisionRadius: PLAYER_CHARACTER_RADIUS,
-            headingDeg: character.headingIndex * 15, position: character.position,
+            headingDeg: character.headingDegrees, position: character.position,
             velocityPerTick: { x: 0, y: 0 },
           },
         }, tick, registerWorldPainter)

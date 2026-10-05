@@ -70,7 +70,7 @@ try {
     const wandRecipe = items.DOWSING_EQUIPMENT_RECIPES[13]
     const robeRecipes = [46, 1, 7, null]
     const view = new actors.PlayerWorldView('fire', loaded.textures, modTextures, application.renderer, false)
-    application.stage.addChild(view.container)
+    application.stage.addChild(view.ground, view.container)
     const failures = []
     let effectFrames = 0
     let frames = 0
@@ -84,7 +84,7 @@ try {
         for (let heading = 0; heading < 24; heading += 1) {
           for (let pose = 0; pose < 3; pose += 1) {
             const player = {
-              ...source, headingIndex: heading, position: { x: 450, y: 300 },
+              ...source, headingDegrees: heading * 15, headingIndex: heading, position: { x: 450, y: 300 },
               economy: { ...source.economy, equipment: {
                 ...source.economy.equipment, weapon,
                 robe: robeRecipe === null ? null : items.createEquipmentInventoryItem(
@@ -149,7 +149,7 @@ try {
         for (const phase of [0, Math.fround(0.45)]) {
           view.setStatusEffects(secondary.createNativeSecondaryPlayerState(), 200)
           const player = {
-            ...source, headingIndex: 6, position: { x: 450, y: 300 },
+            ...source, headingDegrees: 90, headingIndex: 6, position: { x: 450, y: 300 },
             lighting: { ...source.lighting, overlayEffectPhase: phase },
             primaryCast: { ...source.primaryCast, selectedPrimaryId },
             progression: { ...source.progression, damageX4TicksRemaining: 100, hardenCoating: 1 },
@@ -205,13 +205,13 @@ try {
           castAction: pose === 0 ? null : { weaponKind: 'wand', progress: pose === 1 ? 0.5 : 1 },
         }, 200)
         sample.update({
-          ...source, headingIndex: heading,
+          ...source, headingDegrees: heading * 15, headingIndex: heading,
           position: { x: 80 + heading / 4 * 145, y: 135 + pose * 170 },
           economy: { ...source.economy, equipment: {
             ...source.economy.equipment, weapon: items.createEquipmentInventoryItem(wandRecipe, 100),
           } },
         }, 200)
-        application.stage.addChild(sample.container)
+        application.stage.addChild(sample.ground, sample.container)
         previews.push(sample)
       }
     }

@@ -2318,6 +2318,7 @@ function locomotionComponent(character: PlayerCharacterState): PlayerLocomotionC
   return {
     footstepTick: character.footstepTick,
     gaitDegrees: character.gaitDegrees,
+    headingDegrees: character.headingDegrees,
     headingIndex: character.headingIndex,
     position: character.position,
     velocity: character.velocity,

@@ -425,7 +425,7 @@ export function stepBoneyardWorldTick(
           collisionRadius: PLAYER_CHARACTER_RADIUS,
           connected: true,
           eligible: combat?.eligible ?? false,
-          headingDeg: player.headingIndex * 15,
+          headingDeg: player.headingDegrees,
           position: player.position,
           velocityPerTick: {
             x: player.velocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,

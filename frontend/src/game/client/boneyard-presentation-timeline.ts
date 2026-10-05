@@ -1,3 +1,4 @@
+import { playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { copyNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { receiveNativePuppetHit, stepNativePuppetHit, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
@@ -60,8 +61,6 @@ const MAX_BUFFERED_SNAPSHOTS = 8
 const WALK_FRAME_COUNT = 5
 
 const SOLOMON_WALK_FRAME_COUNT = 6
-
-const HEADING_COUNT = 24
 
 export function createBoneyardPresentationTimeline(
   options: BoneyardPresentationTimelineOptions,
@@ -307,12 +306,7 @@ function interpolatePlayer(
     economy: discrete.economy,
     footstepTick: discrete.footstepTick,
     gaitDegrees: lerpCycle(older.gaitDegrees, newer.gaitDegrees, blend, FULL_CIRCLE),
-    headingIndex: Math.round(lerpCycle(
-      older.headingIndex,
-      newer.headingIndex,
-      blend,
-      HEADING_COUNT,
-    )) % HEADING_COUNT,
+    ...playerCharacterFacing(lerpCycle(older.headingDegrees, newer.headingDegrees, blend, FULL_CIRCLE)),
     lighting: {
       ...discrete.lighting,
       deathWeaponPainterRegistration:

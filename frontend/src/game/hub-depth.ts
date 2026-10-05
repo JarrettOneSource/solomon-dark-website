@@ -11,7 +11,7 @@ export const HUB_USEFUL_THYNGS_CHILD_DEPTH = Object.freeze({
   balloons: 3,
 } as const)
 export const HUB_NPC_MARKER_TAIL_OFFSET = 0.1
-export const HUB_USEFUL_THYNGS_SHADOW_DEPTH = HUB_ACTOR_DEPTH_BASE - 100
+export const HUB_GROUND_AUXILIARY_DEPTH = 1
 
 // Region+0x278 paints immediately before the shared 0x0068C480 world queue.
 export const HUB_PRE_WORLD_ANIMATION_DEPTH = HUB_ACTOR_DEPTH_BASE - 1

@@ -1681,12 +1681,11 @@ export function connectGameClientSession(
         player: {
           ...copyPlayer(authoritative),
           gaitDegrees: previous.player.gaitDegrees,
-          headingIndex: (
-            participant.collegeIntro !== null
-            && participant.collegeIntro.phase !== 'arch-dialogue'
-          ) || playerPrimaryCastOwnsFacing(authoritative.primaryCast)
-            ? authoritative.headingIndex
-            : previous.player.headingIndex,
+          ...((participant.collegeIntro !== null
+            && participant.collegeIntro.phase !== 'arch-dialogue')
+            || playerPrimaryCastOwnsFacing(authoritative.primaryCast)
+            ? { headingDegrees: authoritative.headingDegrees, headingIndex: authoritative.headingIndex }
+            : { headingDegrees: previous.player.headingDegrees, headingIndex: previous.player.headingIndex }),
           velocity: { ...previous.player.velocity },
           walkCyclePrimary: previous.player.walkCyclePrimary,
         },

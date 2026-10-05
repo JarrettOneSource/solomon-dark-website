@@ -822,7 +822,7 @@ test('Phasing follows the wizard heading instead of an unrelated aim point', () 
       players: {
         player: {
           ...authority,
-          character: { ...authority.character, headingIndex: 0 },
+          character: { ...authority.character, headingDegrees: 0, headingIndex: 0 },
         },
       },
     },
@@ -850,7 +850,7 @@ test('Phasing preserves native accepted-failure and single traversal-streak sema
       players: {
         player: {
           ...successfulAuthority,
-          character: { ...successfulAuthority.character, headingIndex: 6 },
+          character: { ...successfulAuthority.character, headingDegrees: 90, headingIndex: 6 },
         },
       },
     },

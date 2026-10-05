@@ -7,7 +7,7 @@ import {
   HUB_POST_WORLD_ANIMATION_DEPTH,
   HUB_PRE_WORLD_ANIMATION_DEPTH,
   HUB_SOUTHERN_FOREGROUND_DEPTH,
-  HUB_USEFUL_THYNGS_SHADOW_DEPTH,
+  HUB_GROUND_AUXILIARY_DEPTH,
   hubActorDepth,
 } from '../hub-depth.ts'
 import { NATIVE_HUB_COURTYARD_OBSTACLES } from '../core-kernels/native-hub-world-membership.ts'
@@ -35,11 +35,9 @@ export const HUB_WORLD_DEPTH = {
   courtyardOnboarding: HUB_COURTYARD_ONBOARDING_DEPTH,
   sealGlyphs: 10,
   sealCore: 11,
-  // Teacher +0x28 is drawn after the Courtyard raster and before its seals.
-  teacherGround: 1,
-  usefulThyngsShadow: HUB_USEFUL_THYNGS_SHADOW_DEPTH,
+  // Every actor +0x28 follows the Courtyard raster and precedes its seals.
+  ground: HUB_GROUND_AUXILIARY_DEPTH,
   fountain: 980,
-  statueAura: hubActorDepth(834) - 1,
   statue: hubActorDepth(834),
   teacherPostWorld: HUB_POST_WORLD_ANIMATION_DEPTH,
   teacherPreWorld: HUB_PRE_WORLD_ANIMATION_DEPTH,

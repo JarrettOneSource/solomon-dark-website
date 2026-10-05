@@ -1,3 +1,5 @@
+import { nativeStudentGroundGlyph } from '../core-kernels/native-ground-auxiliary.ts'
+import { NativeGroundGlyphView } from './native-ground-glyph-view.ts'
 import { hub } from '../../lib/assets.ts'
 import { hubStudentHeadOffset, hubStudentPropOffset } from '../hub-presentation.ts'
 import type { ProtocolStudentState } from '../protocol/game-state.ts'
@@ -7,7 +9,8 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 
 export class HubStudentView {
   readonly container = new Container({ label: 'student' })
-  private readonly shadow: Sprite
+  readonly ground: Container
+  private readonly groundGlyph: NativeGroundGlyphView
   private readonly body: Sprite
   private readonly props: Sprite[] = []
   private readonly head: Sprite
@@ -22,16 +25,17 @@ export class HubStudentView {
     this.textures = textures
     this.container.sortableChildren = true
     this.container.eventMode = 'none'
-    this.shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
-    this.shadow.alpha = 0.62
-    this.shadow.scale.set(1.1)
+    this.groundGlyph = new NativeGroundGlyphView(actorSprite(textures.base[hub.npcs.teacher.shadow], 0))
+    this.ground = this.groundGlyph.container
+    this.ground.label = 'student-ground'
     this.body = actorSprite(textures.students.walk[0][0], 1)
     this.head = actorSprite(textures.students.head[0], 3)
     this.head.scale.set(1)
-    this.container.addChild(this.shadow, this.body, this.head)
+    this.container.addChild(this.body, this.head)
   }
 
   update(student: ProtocolStudentState): void {
+    this.groundGlyph.update(nativeStudentGroundGlyph(student))
     const heading = spriteFrameIndex(Math.round(student.headingIndex), 24)
     const pose = spriteFrameIndex(student.framePhase, 5)
     const headingChanged = heading !== this.cachedHeading
@@ -64,6 +68,7 @@ export class HubStudentView {
   }
 
   prepareForPool(): void {
+    this.groundGlyph.prepareForPool()
     this.container.visible = false
     this.cachedHeading = -1
     this.cachedPose = -1
@@ -74,6 +79,7 @@ export class HubStudentView {
   }
 
   destroy(): void {
+    this.groundGlyph.destroy()
     this.container.destroy({ children: true })
     this.props.length = 0
   }

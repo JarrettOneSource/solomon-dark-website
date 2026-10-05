@@ -109,7 +109,7 @@ function fixture(row) {
   const point = clearLocation(world, row.rootProof ? 180 : row.fireAtBoss ? 75 : 200)
   const current = gameSimulationPlayerRecords(state).proof
   state = { ...state, playerEntities: replacePlayerCharacter(state.playerEntities, 'proof', { ...current,
-    position: point.player, headingIndex: 12 }), world: { ...world, encounter: null, waves: null, arenaTransition: null,
+    position: point.player, headingDegrees: 180, headingIndex: 12 }), world: { ...world, encounter: null, waves: null, arenaTransition: null,
       lanternPosition: { x: point.player.x, y: (point.player.y + point.boss.y) / 2 } },
     // Keep the observer alive through every attack using the existing shield state.
     secondaryAbilities: { ...state.secondaryAbilities, players: { proof: { ...createNativeSecondaryPlayerState(),

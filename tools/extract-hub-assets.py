@@ -774,6 +774,9 @@ def main() -> int:
         output_dir,
         "hub-npc-perk-witch-accessory",
     )
+    for entry, name in ((5, "hub-hagatha-ground-glow"), (11, "hub-luthacus-ground-shadow")):
+        # These zero-origin logical canvases are exact crops; retain transparent RGB.
+        save(crop(college, college_records[entry]), output_dir, name)
     save(
         build_registered_strip(college, college_records, tuple(range(89, 93))),
         output_dir,

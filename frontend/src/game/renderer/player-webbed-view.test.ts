@@ -35,7 +35,7 @@ test('webbing captures the current wizard, adds each admitted layer, and release
   view.update(player, partial, source, [shadow], false)
   assert.deepEqual(layers.map((layer) => layer.alpha), [1, 0.5, 0])
   const full = applyNativeWebbed(applyNativeWebbed(first, 50), 10)
-  view.update({ ...player, headingIndex: 0 }, { ...full, hitPulse: 0.75 }, source, [shadow], false)
+  view.update({ ...player, headingDegrees: 0, headingIndex: 0 }, { ...full, hitPulse: 0.75 }, source, [shadow], false)
   const cocoon = view.container.children.find((child) => child.label === 'player-cocoon')!
   const hit = view.container.children.find((child) => child.label === 'player-cocoon-hit')!
   assert.ok(cocoon instanceof Sprite)

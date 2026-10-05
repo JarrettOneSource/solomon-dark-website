@@ -1,4 +1,4 @@
-import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_RADIUS, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import type { PlayerCharacterInput, PlayerCharacterState, WizardElement } from '../core-kernels/player-character.ts'
 import {
   NATIVE_STAFF_KNOCKBACK_DAZZLE_TICKS,
@@ -225,7 +225,7 @@ export function stepPlayerStaffCombatSystem(
     const stepped = stepNativePlayerStaffAction(transient, owner.position)
     const nextOwner = {
       ...owner,
-      headingIndex: normalizedHeadingIndex(stepped.sample.headingDegrees),
+      ...playerCharacterFacing(stepped.sample.headingDegrees),
     }
     players = { ...players, [transient.ownerId]: nextOwner }
     if (stepped.contact) {
@@ -387,12 +387,12 @@ export function stepPlayerStaffCombatSystem(
       if (!movementContacts.some(({ staffHostile }) => staffHostile)) continue
     } else if (nativeStaffAdmissionTarget({
       collisionRadius: PLAYER_CHARACTER_RADIUS,
-      headingDegrees: player.headingIndex * 15,
+      headingDegrees: player.headingDegrees,
       position: player.position,
     }, staffCombatTargets(enemies)) === null) continue
     const action = createNativePlayerStaffAction({
       derived,
-      headingDegrees: player.headingIndex * 15,
+      headingDegrees: player.headingDegrees,
       id: nextId,
       lane: runtime.staffMeleeAlternate ? 'secondary' : 'primary',
       origin: player.position,
@@ -581,10 +581,6 @@ function registerStaffTransient<T extends NativePlayerStaffTransient>(
       ? registerNativeWorldPainterRoots(registerWorldPainter, 'actor')
       : Object.freeze([]),
   }) as unknown as T & NativeWorldPainterOwner
-}
-
-function normalizedHeadingIndex(headingDegrees: number): number {
-  return Math.floor((((headingDegrees % 360) + 360) % 360 + 7.5) / 15) % 24
 }
 
 function playerElementTint(element: WizardElement): number {

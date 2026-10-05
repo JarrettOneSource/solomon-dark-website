@@ -1,5 +1,5 @@
 import { nativeBoneyardFencePosts } from '../core-kernels/boneyard-fence-posts.ts'
-import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import type { ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
 import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
 import type { BoneyardSolomonEncounterState } from '../core-kernels/boneyard-encounter.ts'
@@ -10,7 +10,7 @@ import type { NativeSecondaryKnockbackContact } from '../core-kernels/native-sec
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeEtherDrainContact } from '../core-kernels/native-ether-drain.ts'
 import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
-import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { boneyardBodyCollisionSourceIds, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, withBoneyardGateCollision } from './boneyard-collision.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
@@ -24,7 +24,7 @@ export function spawnPlayerCharacterInBoneyard(
 ): PlayerCharacterState {
   return {
     ...createPlayerCharacter(config, { x: world.spawn.x, y: world.spawn.y }),
-    headingIndex: actorHeadingIndex(world.spawn.facingDeg),
+    ...playerCharacterFacing(world.spawn.facingDeg),
   }
 }
 

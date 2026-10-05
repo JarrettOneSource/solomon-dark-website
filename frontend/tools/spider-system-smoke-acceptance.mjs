@@ -25,7 +25,7 @@ export async function acceptSpiderSystem({ host, page, wire, screenshotPath }) {
     x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2,
   }, bounds, initialWorld.collision, 25)
   state.playerEntities = replacePlayerCharacter(state.playerEntities, playerId, {
-    ...getPlayerCharacter(state, playerId), position, velocity: { x: 0, y: 0 }, headingIndex: 6,
+    ...getPlayerCharacter(state, playerId), position, velocity: { x: 0, y: 0 }, headingDegrees: 90, headingIndex: 6,
   })
   state.world = {
     ...initialWorld,
