@@ -104,11 +104,11 @@ try {
   assert.equal(repeat.secondaryAbilities.actors.filter(value => value.kind === 'rescue-shockwave').length, 1)
   assert.equal(repeat.world.enemyEvents.filter(value => value.type === 'player-cheat-death').length, 1)
   const notice = page.locator('.boneyard-loot-messages > span[aria-label="CHEAT DEATH!"]')
-  const foreground = notice.locator(':scope > [data-native-ui-font="body"]')
+  const foreground = notice.locator(':scope > [data-native-ui-font="menu"]')
   await foreground.locator('i').first().waitFor({ state: 'visible', timeout: 15000 })
   await page.waitForTimeout(200)
   receipt.text = await notice.evaluate(node => {
-    const foreground = node.querySelector(':scope > [data-native-ui-font="body"]')
+    const foreground = node.querySelector(':scope > [data-native-ui-font="menu"]')
     const glyphs = [...foreground.querySelectorAll('i')].map(glyph => ({
       codePoint: Number(glyph.dataset.nativeUiGlyph), bounds: glyph.getBoundingClientRect().toJSON(),
       maskImage: getComputedStyle(glyph).maskImage,
