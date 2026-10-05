@@ -211,8 +211,10 @@ contract suites. They cover exact owner versus peer, independent nonzero
 changes, Tutorial with no survival director, retired actor/run, new generation,
 restored numerical input, zero/negative wave omission, null/companion suppression,
 and native case/positions/font/tint. The 0600 results below qualify public tests
-on candidate `99c123d1`; candidate renderer and built-scene journeys remain
-unexecuted. Source preparation is not a verified fix.
+on candidate `99c123d1`; 0648 also qualifies public tests, lint and production
+build on corrected candidate `e92f7f24`. Its source-module renderer image was
+captured, but the witness required the diagnosis below. Built-scene and network
+journeys remain unexecuted. Source preparation is not a verified fix.
 
 The maintained `smoke-inventory-run-summary.mjs` drives the production book
 painter in a declared read-only renderer-model fixture, saving actual PNG and
@@ -235,12 +237,31 @@ before assertions; this preparation has not executed on M2.
 `smoke-inventory-run-summary-scenes.mjs` prepares an exact built-client and real
 host/save/UI journey for restored survival and Tutorial values, updates while
 the book stays open, a second actor with different counters, zero Wave,
-Skills-to-Inventory replacement, fresh Hub and three merchant companions.
+Skills-to-Inventory replacement, fresh Hub and all four merchant companions,
+including Shlorio before and after an authoritative dowsing roll. The Hub
+fixture explicitly funds that roll while preserving fresh-Game zero counters.
 It declares its numerical fixtures and Mac Chrome touch emulation. The second
 actor fixture proves addressed-state isolation; it does not claim a network
 party or physical-device journey. The existing built inventory-stat journeys
 remain in the executable desktop/touch acceptance plan. None is recorded as
 passing before actual execution and retained-image review.
+
+`smoke-inventory-run-summary-network.mjs` prepares a separate built-client
+journey with two real ticket-authenticated WebSocket peers, public invitation
+and acceptance, and a shared Boneyard run. Declared authority-side numerical
+fixtures give each actual member different kills/Awesomeness and a shared
+Wave; independently updating either member must preserve the other's display.
+It records actual peer IDs, sockets, shared run, screenshots and errors. This
+opens each member's book sequentially, honoring the existing party pause owner
+and release grace rather than trying to keep both books open together. The peer
+then leaves through the public menu and rejoins with its saved party claim via
+the established local provisioning fixture. The resumed shared run must retain
+the leader's intervening values, display the peer's current values, and accept
+a new live update without restoring stale pre-disconnect state. It is currently
+unrun. The fixture maps a declared remote endpoint to the real local socket and
+routes local admission/rejoin requests, as in the existing party-rejoin journey.
+A successful local network journey would not substitute
+for public managed-service/live evidence or a physical-device claim.
 
 ### Validation contract and current acceptance frontier
 
@@ -263,8 +284,11 @@ visibly has Kills: 0, Awesomeness: 0 and no Wave for declared inputs 6/17/91.
 The independent native-gold witness matched zero of 824 opaque glyph pixels;
 console/page/response errors were empty. Its assertion precedes candidate
 diagnostics, so missing new APIs did not substitute for this genuine pixel red.
-This is production-painter fixture evidence, not real scene/network/physical
-acceptance. The original baseline and this witness are retained for subsequent
+The PNG uses Vite `createServer` and `/src` module imports in a declared model
+fixture exercising production renderer source. It is not a dist-served gameplay
+image. Successful production builds are separate evidence; real built-scene,
+network and physical-device acceptance remain distinct. The original baseline
+and this witness are retained for subsequent
 candidate acceptance; an unrelated adapter correction does not require replay.
 
 Candidate `99c123d1` was separately admitted with all 7260 original blob/mode
@@ -273,16 +297,57 @@ Production build then exited 2 on TS2345: the companion object in
 `hub-inventory/services.ts::buildService` omitted required `runSummary`.
 The complete `buildInventory` caller audit found only that object and the
 normal renderer's typed inventory model, which already carries the field.
-The companion producer must supply explicit `runSummary: null`, preserving
+The companion producer was corrected to explicit `runSummary: null`, preserving
 the reviewed companion suppression and required type instead of making the
-contract optional. These passed checks qualify only `99c123d1`; the corrected
-candidate still needs its own build, painter and built-scene acceptance.
+contract optional. The later `e92f7f24` public suites, lint and production build
+passed; corrected-witness renderer and built-scene acceptance remain required.
 
 The phase closed at 06:02:50.988275 UTC with all owned groups drained,
 output durably exported/acknowledged, root and exact lease removed, and no new
 home children. The sole home difference was an unchanged-byte Chrome Crashpad
 settings mtime touch. No candidate painter or built-scene journey ran before
 the build failure. The closed phase has no remaining execution authority.
+
+### 2026-10-05 — Source-module pixel witness diagnosis
+
+The 0648 `e92f7f24` image SHA-256
+`679f83927ea280d4eff93fc432e47b69e8be9850ef4a85ab6dad23b7cb072f95`
+visibly has Wave: 6, Kills: 17 and Awesomeness: 91 at the recovered anchors,
+but the first witness matched only 549/824 samples. This was not evidence to
+alter the production font, tint or geometry. The closed 0857 M5 diagnostic
+reproduced that ratio from the same retained PNG, then measured coordinate and
+texture-alpha controls without repainting either renderer or rerunning a build.
+Both source admission and final readback verified all 7260 original `e92f7f24`
+blobs/modes. Its numeric receipt SHA-256 is
+`770cb4dabde278b2d25043e6e232ae6e6f6eb06c09685053d686d4189f84564e`.
+
+Wave: 6 has even width 68 and integer glyph x bounds; Kills: 17 and
+Awesomeness: 91 have odd widths 75/155 and half-integral x bounds. All y bounds
+are integral. The production POINT-filtered sprites retain those authored
+positions. `Math.round` in the witness incorrectly chose the next column for
+the half-origin glyphs; pixel-centre coverage uses `ceil(position - .5)`.
+Its mask also called 51 source texels with alpha 250–254 opaque, then compared
+their composited colour against an unattenuated tint. All source RGB values
+were white. Exact fully opaque white texels avoid that composition assumption.
+
+With corrected coverage and fully opaque white texels, all 773/773 samples and
+all five numeric glyphs matched. The same method left the accepted old baseline
+at 0/773. Wrong Wave: 7 still matched 756/772 aggregate samples, but its changed
+digit matched only 8/24; stale Awesomeness: 92 matched 757/778 aggregate samples,
+but the changed digit matched only 9/30. Thus the canonical witness must retain
+the 0.9 aggregate requirement and also require 0.9 for every numeric glyph.
+Wrong/stale expected values keep font, tint and anchors fixed and use the actual
+retained pixels; diagnostics remain secondary. These are confirmed witness
+errors, not a production-renderer correction or a gameplay pass.
+
+The 0857 diagnostic passed and closed at 08:59:17.415386 UTC with all 46 stage
+groups and eight M2 transport/job groups drained, 92 stream hashes verified,
+durable export/ACK, root/exact lease removal and the previously qualified
+unchanged-byte Crashpad settings mtime touch. Parent numeric acceptance on
+2026-10-05 authorizes the witness repair with the original 0.9 requirement.
+The actual repaired helper and remaining renderer/built/member/network journeys
+still need their own acceptance; no baseline or unchanged product replay is
+required solely because the witness changes.
 
 - Meaningful public presentation regressions: zero/positive wave; independent
   nonzero kills and score; addressed-owner projection; open-book snapshot

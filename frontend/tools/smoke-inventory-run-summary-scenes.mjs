@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
-import { createGameSimulation, enterBoneyardWorld, addPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
+import { createGameSimulation, enterBoneyardWorld, addPlayerCharacter, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
@@ -51,6 +51,13 @@ async function journey(mode) {
     playerEntities: { ...initial.playerEntities, economies: initial.playerEntities.economies.map(row =>
       ({ ...row, collegeIntroPending: false, tutorialPending: false })) } }
   if (loaded) initial = stageNumbers(initial, { wave: 6, monstersKilled: 17, awesomeness: 91 })
+  if (hub) {
+    // Fund one declared Shlorio roll without changing fresh-Game counters.
+    const economy = getPlayerEconomy(initial, owner)
+    initial = { ...initial, playerEntities: { ...initial.playerEntities,
+      economies: initial.playerEntities.economies.map(row => row === economy
+        ? { ...row, gold: row.gold + row.dowsingFee } : row) } }
+  }
   const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: loaded, mods: [], modState: {}, playerId: owner, state: initial })
   const restored = restoreGameSaveDocument(document)
   if (loaded) {
@@ -123,7 +130,7 @@ async function journey(mode) {
     }
     await activate(inventory.getByRole('button', { name: 'Close inventory', exact: true }), tutorial)
     await inventory.waitFor({ state: 'hidden' })
-    if (hub) for (const [name, title] of [['Fomentius', "FOMENTIUS' USEFUL THYNGS"], ['Luthacus', "LUTHACUS' SCAVENGED GOODS"], ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"]]) {
+    if (hub) for (const [name, title] of [['Fomentius', "FOMENTIUS' USEFUL THYNGS"], ['Hagatha', "HAGATHA'S CHARMS AND CURSES"], ['Luthacus', "LUTHACUS' SCAVENGED GOODS"], ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"]]) {
       await page.getByRole('button', { name: `Open ${name} interaction`, exact: true }).click()
       const service = page.getByRole('dialog', { name: title, exact: true })
       const canvas = service.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]')
@@ -131,6 +138,15 @@ async function journey(mode) {
       await canvas.screenshot({ path: join(output, `${mode}-companion-${name}.png`) })
       assert.deepEqual(JSON.parse(await canvas.getAttribute('data-native-inventory-run-summary')), [])
       receipts.push({ mode, name: `companion-${name}`, summary: [] })
+      if (name === 'Shlorio') {
+        const dowse = service.getByRole('button', { name: /^DOWSE/ })
+        await dowse.click()
+        await dowse.waitFor({ state: 'detached' })
+        assert.equal(getPlayerEconomy(host.state(), owner).dowsingRolled, true)
+        await canvas.screenshot({ path: join(output, `${mode}-companion-Shlorio-result.png`) })
+        assert.deepEqual(JSON.parse(await canvas.getAttribute('data-native-inventory-run-summary')), [])
+        receipts.push({ mode, name: 'companion-Shlorio-result', summary: [] })
+      }
       await service.getByRole('button', { name: 'Done', exact: true }).click()
       await service.waitFor({ state: 'hidden' })
     }

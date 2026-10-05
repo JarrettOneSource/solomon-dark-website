@@ -53,26 +53,62 @@ window.report61 = {
     const context=atlas.getContext('2d')
     context.drawImage(image,0,0)
     const points=[]
+    const numericGlyphs=[]
     for (const [text,x,y] of lines) {
       const layout=layoutNativeUiText({text,x,y,font:'medium',align:'center',tint:0xd9ba70})
       for (const glyph of layout.glyphs) {
         const [fx,fy,w,h]=glyph.frame
         const ink=nativeUiGlyphInkBounds(glyph)
         const data=context.getImageData(fx,fy,w,h).data
+        const digitPoints=/^[0-9]$/.test(glyph.character)?[]:null
         for (let py=0;py<h;py++) for (let px=0;px<w;px++) {
           const at=(py*w+px)*4
-          if (data[at+3]>=250 && data[at]>=245 && data[at+1]>=245 && data[at+2]>=245)
-            points.push([Math.round(ink.left+px),Math.round(ink.top+py)])
+          // Uniform tint is valid only for fully opaque white atlas texels.
+          if (data[at+3]===255 && data[at]===255 && data[at+1]===255 && data[at+2]===255) {
+            // POINT coverage includes the pixel centre on the left/top edge.
+            const point=[Math.ceil(ink.left+px-0.5),Math.ceil(ink.top+py-0.5)]
+            points.push(point)
+            digitPoints?.push(point)
+          }
         }
+        if (digitPoints!==null) numericGlyphs.push({line:text,character:glyph.character,points:digitPoints})
       }
     }
-    return points
+    return {points,numericGlyphs}
   }
 }
 document.body.dataset.ready='true'
 </script>` }))
   await page.goto(new URL('__report61_inventory', origin).href)
   await page.locator('body[data-ready="true"]').waitFor({ timeout: 90_000 })
+  const readPixelWitness = (image, lines, forbidden=[]) => page.evaluate(async ({ encoded, lines, forbidden }) => {
+    const expected = await window.report61.expectedInk(lines)
+    const points = expected.points
+    const forbiddenPoints = (await window.report61.expectedInk(forbidden)).points
+    const image = new Image()
+    image.src = 'data:image/png;base64,' + encoded
+    await image.decode()
+    const decoded = document.createElement('canvas')
+    decoded.width=image.width; decoded.height=image.height
+    const context=decoded.getContext('2d')
+    context.drawImage(image,0,0)
+    const data=context.getImageData(0,0,image.width,image.height).data
+    const gold = ([x,y]) => {
+      const at=(y*image.width+x)*4
+      return Math.abs(data[at]-217)<=2 && Math.abs(data[at+1]-186)<=2 && Math.abs(data[at+2]-112)<=2
+    }
+    const matched = points.filter(gold).length
+    const forbiddenMatched = forbiddenPoints.filter(gold).length
+    return { expectedOpaqueInk: points.length, matchedNativeGoldInk: matched,
+      fraction: points.length===0 ? null : matched/points.length,
+      numericGlyphs: expected.numericGlyphs.map(({line,character,points:digitPoints}) => {
+        const digitMatched=digitPoints.filter(gold).length
+        return {line,character,expectedOpaqueInk:digitPoints.length,matchedNativeGoldInk:digitMatched,
+          fraction:digitPoints.length===0?null:digitMatched/digitPoints.length}
+      }),
+      forbiddenOpaqueInk: forbiddenPoints.length, forbiddenNativeGoldInk: forbiddenMatched,
+      forbiddenFraction: forbiddenPoints.length===0 ? null : forbiddenMatched/forbiddenPoints.length }
+  }, { encoded: image.toString('base64'), lines, forbidden })
   let previousInkLines = []
   for (const [name, summary, expected] of [
     ['survival-nonzero', { wave: 6, monstersKilled: 17, awesomeness: 91 }, ['Wave: 6', 'Kills: 17', 'Awesomeness: 91']],
@@ -91,35 +127,30 @@ document.body.dataset.ready='true'
       ? [[800, 329], [800, 344], [800, 364]] : [[800, 344], [800, 364]]
     const inkLines = expected.map((text,index) => [text,...anchors[index]])
     const forbiddenLines = summary === null ? previousInkLines : summary.wave <= 0 ? [['Wave: 7', 800, 329]] : []
-    const pixelWitness = await page.evaluate(async ({ encoded, lines, forbidden }) => {
-      const points = await window.report61.expectedInk(lines)
-      const forbiddenPoints = await window.report61.expectedInk(forbidden)
-      const image = new Image()
-      image.src = 'data:image/png;base64,' + encoded
-      await image.decode()
-      const decoded = document.createElement('canvas')
-      decoded.width=image.width; decoded.height=image.height
-      const context=decoded.getContext('2d')
-      context.drawImage(image,0,0)
-      const data=context.getImageData(0,0,image.width,image.height).data
-      const gold = ([x,y]) => {
-        const at=(y*image.width+x)*4
-        return Math.abs(data[at]-217)<=2 && Math.abs(data[at+1]-186)<=2 && Math.abs(data[at+2]-112)<=2
-      }
-      const matched = points.filter(gold).length
-      const forbiddenMatched = forbiddenPoints.filter(gold).length
-      return { expectedOpaqueInk: points.length, matchedNativeGoldInk: matched,
-        fraction: points.length===0 ? null : matched/points.length,
-        forbiddenOpaqueInk: forbiddenPoints.length, forbiddenNativeGoldInk: forbiddenMatched,
-        forbiddenFraction: forbiddenPoints.length===0 ? null : forbiddenMatched/forbiddenPoints.length }
-    }, { encoded: image.toString('base64'), lines: inkLines, forbidden: forbiddenLines })
-    const observation = { name, requestedSummary: summary, diagnostic, pixelWitness }
+    const pixelWitness = await readPixelWitness(image,inkLines,forbiddenLines)
+    const negativeControls=[]
+    if (name==='survival-nonzero') for (const [control,texts] of [
+      ['wrong-wave-digit',['Wave: 7','Kills: 17','Awesomeness: 91']],
+      ['stale-score-digit',['Wave: 6','Kills: 17','Awesomeness: 92']],
+    ]) {
+      const lines=texts.map((text,index)=>[text,...anchors[index]])
+      negativeControls.push({name:control,expected:texts,pixelWitness:await readPixelWitness(image,lines)})
+    }
+    const observation = { name, requestedSummary: summary, diagnostic, pixelWitness, negativeControls }
     observations.push(observation)
     await writeFile(join(output, 'observations.json'), JSON.stringify({ observations, errors }, null, 2) + '\n')
     if (summary !== null) {
       assert.ok(pixelWitness.expectedOpaqueInk > 50, 'The sealed native font must supply opaque glyph ink')
       assert.ok(pixelWitness.fraction >= 0.9,
-        `${name}: actual painted text fails recovered native value/case/position/gold contract; retained PNG and pixel witness are the baseline evidence`)
+        `${name}: actual painted text fails recovered native value/case/position/gold contract; retained PNG and pixel witness are the evidence`)
+      assert.ok(pixelWitness.numericGlyphs.length>0,'Expected numeric glyphs must be witnessed')
+      assert.ok(pixelWitness.numericGlyphs.every(glyph=>glyph.expectedOpaqueInk>0&&glyph.fraction>=0.9),
+        `${name}: actual numeric glyph pixels differ from the expected current values`)
+    }
+    for (const control of negativeControls) {
+      assert.ok(control.pixelWitness.fraction>=0.9,`${control.name}: shared-letter aggregate control was not exercised`)
+      assert.ok(control.pixelWitness.numericGlyphs.some(glyph=>glyph.expectedOpaqueInk>0&&glyph.fraction<0.9),
+        `${control.name}: wrong/stale numeric glyphs incorrectly passed the 0.9 contract`)
     }
     if (forbiddenLines.length > 0) assert.ok(pixelWitness.forbiddenFraction < 0.05,
       `${name}: retired Wave/actor text still appears in the actual pixels`)
@@ -137,7 +168,7 @@ document.body.dataset.ready='true'
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ observations, errors, failure,
-    qualification: 'Real production inventory painter with declared read-only renderer-model fixture. Native/gameplay/current-built scene lifecycle and physical-device acceptance remain separate.' }, null, 2) + '\n')
+    qualification: 'Exact production renderer source via Vite /src imports in a declared read-only model fixture; not dist-served gameplay. Native/gameplay/current-built lifecycle, network party and physical-device acceptance remain separate.' }, null, 2) + '\n')
   await browser?.close()
   await server.close()
 }
