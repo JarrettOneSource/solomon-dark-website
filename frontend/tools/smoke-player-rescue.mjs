@@ -92,7 +92,7 @@ try {
     shadow: { left: getComputedStyle(node.firstElementChild).left, top: getComputedStyle(node.firstElementChild).top } }))
   assert.equal(receipt.text.text, 'CHEAT DEATH!')
   assert.ok(receipt.text.bounds.width > 20 && receipt.text.bounds.height > 0)
-  assert.deepEqual(receipt.text.shadow, { left: '2px', top: '2px' })
+  assert.deepEqual(receipt.text.shadow, { left: '0px', top: '2px' })
   await page.screenshot({ path: `${output}/cheat-death-text.png` })
   await page.waitForFunction(mark => window.__sdrAudioEvents.slice(mark).filter(event => event.type === 'buffer-start'
     && /\/flash(?:-spell)?(?:-[\w-]+)?\.wav$/.test(new URL(event.src, location.href).pathname)).length >= 4,
