@@ -93,8 +93,9 @@ try {
     slot === index ? { ...value, hagathaRuntime: { ...value.hagathaRuntime, cheatDeathCharges: 1 } } : value) }
   const soundMark = await page.evaluate(() => window.__sdrAudioEvents.length)
   await page.evaluate(() => window.__rescueStartAudioCapture())
-  const tick = state.tick
-  const result = damageGameSimulationPlayer(state, playerId, 100000, tick)
+  const authoritative = host.state()
+  const tick = authoritative.tick
+  const result = damageGameSimulationPlayer(authoritative, playerId, 100000, tick)
   assert.equal(getPlayerProgression(result, playerId).rescueProtection.fraction, 1)
   assert.equal(result.secondaryAbilities.actors.filter(value => value.kind === 'rescue-shockwave').length, 1)
   Object.assign(host.state(), result)
