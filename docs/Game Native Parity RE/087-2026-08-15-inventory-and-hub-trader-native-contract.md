@@ -857,3 +857,6 @@ claim fresh movement/combat Tutorial playthrough or expose a hidden menu. This
 new preparation is unrun. Accepted desktop/source-model/focus/native/baseline
 results are reused; only Tutorial, Hub companions/results, stats and actual
 local member/network/rejoin journeys remain in the next finite scope.
+The reusable scene receipt describes its actual built-client fixture generically;
+the phase receipt and fingerprints bind the specific served revision. Mode input
+is validated before acquiring the static server or browser.

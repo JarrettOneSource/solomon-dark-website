@@ -16,6 +16,9 @@ import { observeGameWire, waitUntil } from './game-smoke-navigation.mjs'
 
 const output = process.env.SDR_REPORT61_SCENE_OUTPUT
 assert.ok(output && resolve(output).startsWith('/Volumes/Drive/codex-acceptance/solomon-report61-d7634e23/'))
+const allModes = ['survival-desktop', 'tutorial-touch', 'hub-desktop']
+const modes = process.env.SDR_REPORT61_SCENE_MODES?.split(',') ?? allModes
+assert.ok(modes.length > 0 && modes.every(mode => allModes.includes(mode)))
 await mkdir(output, { recursive: true })
 const server = await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
 const browser = await chromium.launch({ executablePath: process.env.SDR_CHROME_PATH, headless: true })
@@ -24,9 +27,6 @@ const errors = { page: [], console: [], responses: [] }
 let failure = null
 const owner = 'report61-restored-owner'
 const config = { discipline: 'arcane', displayName: 'Summary', element: 'ether' }
-const allModes = ['survival-desktop', 'tutorial-touch', 'hub-desktop']
-const modes = process.env.SDR_REPORT61_SCENE_MODES?.split(',') ?? allModes
-assert.ok(modes.length > 0 && modes.every(mode => allModes.includes(mode)))
 try {
   for (const mode of modes) await journey(mode)
   assert.deepEqual(errors, { page: [], console: [], responses: [] })
@@ -35,7 +35,7 @@ try {
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ receipts, errors, failure,
-    qualification: 'Exact accepted99 built client, actual host/snapshot/UI/save restoration with later helper code. Tutorial is a declared restored lesson12 numerical fixture, not fresh movement/combat playthrough. Standalone paused changes stay unpublished until public close/resume/newframe/reopened current values. Declared additional actor/wire metadata; touch is Chrome emulation, not physical-device or network-party evidence.' }, null, 2) + '\n')
+    qualification: 'Actual built client and host/snapshot/UI/save restoration with declared fixtures. Tutorial is a restored lesson12 numerical fixture, not fresh movement/combat playthrough. Standalone paused changes stay unpublished until public close/resume/newframe/reopened current values. Declared additional actor/wire metadata; touch is Chrome emulation, not physical-device or network-party evidence.' }, null, 2) + '\n')
   await browser.close()
   await server.close()
 }
