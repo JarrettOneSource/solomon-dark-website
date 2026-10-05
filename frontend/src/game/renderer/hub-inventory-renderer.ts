@@ -39,6 +39,7 @@ import {
   hubInventoryFlybyFrame,
   hubInventoryMeleeDamageLine,
   hubInventoryPrimarySpellLines,
+  hubInventoryRunSummaryLines,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
   hubSackPageOffsets,
@@ -401,6 +402,9 @@ export async function createHubInventoryRenderer(
   }
 
   function writeModelDiagnostics(model: HubInventoryRendererModel): void {
+    canvas.dataset.nativeInventoryRunSummary = JSON.stringify(
+      model.kind === 'inventory' ? hubInventoryRunSummaryLines(model.runSummary) : [],
+    )
     if (model.kind === 'dialogue') {
       delete canvas.dataset.nativePrimarySpellBuild
       delete canvas.dataset.nativePrimarySpellId

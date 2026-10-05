@@ -176,3 +176,30 @@ async function moveHubAxis(page, key, axis, target, direction) {
     await page.waitForTimeout(150)
   }
 }
+
+/** Read-only protocol boundaries; omit credentials, saves and full world frames. */
+export function observeGameWire(page) {
+  const frames = []
+  let latestSnapshotSequence = null
+  page.on('websocket', socket => {
+    for (const [event, direction] of [['framesent', 'sent'], ['framereceived', 'received']]) {
+      socket.on(event, ({ payload }) => {
+        let message
+        try {
+          message = JSON.parse(typeof payload === 'string' ? payload : payload.toString('utf8'))
+        } catch (error) {
+          frames.push({ direction, at: new Date().toISOString(), decodeError: error.message })
+          return
+        }
+        if (!['client-input', 'client-gameplay-pause', 'server-snapshot',
+          'server-gameplay-pause', 'server-gameplay-resume-grace'].includes(message?.type)) return
+        frames.push({ direction, at: new Date().toISOString(), type: message.type,
+          sequence: message.sequence, targetTick: message.targetTick,
+          acknowledgedInputSequence: message.acknowledgedInputSequence,
+          pause: message.pause, graceReason: message.grace?.reason })
+        if (message.type === 'server-snapshot') latestSnapshotSequence = message.sequence
+      })
+    }
+  })
+  return { frames, snapshotSequence: () => latestSnapshotSequence }
+}

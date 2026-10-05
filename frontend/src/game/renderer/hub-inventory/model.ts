@@ -8,6 +8,7 @@ import { type PlayerBeltComponent } from '../../core-kernels/native-belt.ts'
 import type { NativeSecondaryPlayerState } from '../../core-kernels/native-secondary-abilities.ts'
 import { type PlayerCharacterConfig } from '../../core-kernels/player-character.ts'
 import { type HubInteractionId } from '../../hub-inventory-presentation.ts'
+import type { InventoryRunSummary } from '../../hub-inventory-ui-model.ts'
 import {
   type HubNpcChatContent,
   type HubNpcSelectorRow,
@@ -118,6 +119,7 @@ export type HubInventoryRendererModel =
       readonly flybys: readonly HubInventoryFlybyModel[]
       readonly inspection: HubServiceInspectionModel | null
       readonly kind: 'inventory'
+      readonly runSummary: InventoryRunSummary | null
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl
       readonly progression: ProtocolPlayerProgression
@@ -147,6 +149,7 @@ export type HubInventoryRendererModel =
       readonly economy: ProtocolPlayerEconomy
       readonly flybys: readonly HubInventoryFlybyModel[]
       readonly kind: 'service'
+      readonly runSummary: InventoryRunSummary | null
       readonly dowsingReferenceItem: HubInventoryItem | null
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl

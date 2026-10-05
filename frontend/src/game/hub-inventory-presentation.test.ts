@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createGameSimulation } from './core-server/game-simulation.ts'
+import { createGameSnapshot } from './host/game-snapshot.ts'
+import { projectInventoryRunSummary, sameInventoryRunSummary } from './hub-inventory-ui-model.ts'
+
 
 import {
   archiveHubMemorialPortrait,
@@ -298,4 +302,59 @@ test('explicit click-to-slot admission emits only compatible authoritative equip
   })
   assert.equal(hubEquipmentClickAction(robe, 'hat', false), null)
   assert.equal(hubEquipmentClickAction(potion, 'weapon', false), null)
+})
+
+test('inventory summary uses the addressed actor and current survival or Tutorial wave', () => {
+  const initial = createGameSnapshot(createGameSimulation(), 'local-player').players
+  const players = { ...initial, peer: initial['local-player']! }
+  const world = {
+    kind: 'boneyard' as const,
+    runId: 'first-run',
+    hallOfFameRuns: {
+      'local-player': { monstersKilled: 17, awesomeness: 91 },
+      peer: { monstersKilled: 400, awesomeness: 9_000 },
+    },
+    tutorial: null,
+    waves: { waveOrdinal: 6 },
+  }
+  assert.deepEqual(projectInventoryRunSummary({ players, world }, 'local-player', 'first-run'), {
+    wave: 6, monstersKilled: 17, awesomeness: 91,
+  })
+  assert.deepEqual(projectInventoryRunSummary({ players, world: {
+    ...world, tutorial: { waveOrdinal: 3 }, waves: null,
+  } }, 'local-player', 'first-run'), { wave: 3, monstersKilled: 17, awesomeness: 91 })
+  assert.deepEqual(projectInventoryRunSummary({ players, world }, 'peer', 'first-run'), {
+    wave: 6, monstersKilled: 400, awesomeness: 9_000,
+  })
+})
+
+test('inventory summary clears retired run/actor values and reads restored state without a display cache', () => {
+  const players = createGameSnapshot(createGameSimulation(), 'local-player').players
+  const world = {
+    kind: 'boneyard' as const, runId: 'restored-run', tutorial: null, waves: { waveOrdinal: 12 },
+    hallOfFameRuns: { 'local-player': { monstersKilled: 321, awesomeness: 4_567 } },
+  }
+  const restored = projectInventoryRunSummary({ players, world }, 'local-player', 'restored-run')
+  assert.deepEqual(restored, { wave: 12, monstersKilled: 321, awesomeness: 4_567 })
+  assert.equal(projectInventoryRunSummary({ players, world }, 'local-player', 'old-run'), null)
+  assert.deepEqual(projectInventoryRunSummary({ players, world: {
+    ...world, runId: 'next-run', waves: { waveOrdinal: 0 },
+    hallOfFameRuns: { 'local-player': { monstersKilled: 0, awesomeness: 0 } },
+  } }, 'local-player', 'next-run'), { wave: 0, monstersKilled: 0, awesomeness: 0 })
+  assert.equal(projectInventoryRunSummary({ players: {}, world }, 'local-player', 'restored-run'), null)
+  assert.equal(projectInventoryRunSummary({ players, world: { ...world, hallOfFameRuns: {} } }, 'local-player'), null)
+  assert.deepEqual(projectInventoryRunSummary({ players, world: { kind: 'hub' } }, 'local-player'), {
+    wave: 0, monstersKilled: 0, awesomeness: 0,
+  })
+  assert.equal(projectInventoryRunSummary({ players: {}, world: { kind: 'hub' } }, 'local-player'), null)
+  assert.equal(projectInventoryRunSummary({ players, world: { kind: 'hub' } }, 'local-player', 'restored-run'), null)
+  for (const changed of [
+    { ...restored!, wave: 13 },
+    { ...restored!, monstersKilled: 322 },
+    { ...restored!, awesomeness: 4_568 },
+  ]) assert.equal(sameInventoryRunSummary(restored, changed), false)
+  assert.equal(sameInventoryRunSummary(restored, { ...restored! }), true)
+  assert.equal(sameInventoryRunSummary(restored, null), false)
+  assert.equal(sameInventoryRunSummary(null, restored), false)
+  assert.equal(sameInventoryRunSummary(null, null), true)
 })

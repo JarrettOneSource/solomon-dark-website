@@ -1,3 +1,4 @@
+import type { InventoryRunSummary } from './hub-inventory-ui-model.ts'
 import {
   hubInventorySurfaceDiagnostics,
   hubInventorySurfaceLabel,
@@ -117,6 +118,7 @@ export function NativeHubSurface({
   onUnassignBeltEntry,
   perkRemovalEnabled,
   progression,
+  runSummary,
   secondaryPlayerState,
   replacementTarget,
   rendererOwner,
@@ -152,6 +154,7 @@ export function NativeHubSurface({
   onUnassignBeltEntry?: (slot: number) => void
   perkRemovalEnabled: boolean
   progression: ProtocolPlayerProgression
+  runSummary: InventoryRunSummary | null
   secondaryPlayerState: NativeSecondaryPlayerState | undefined
   replacementTarget: 'closed' | 'skills' | null
   rendererOwner: RetainedRendererOwner<HubInventoryRenderer>
@@ -540,6 +543,7 @@ export function NativeHubSurface({
       flybys: inventoryFlybys,
       inspection: serviceHoverInspection ?? serviceFocusInspection,
       kind: 'inventory',
+      runSummary,
       notice,
       pressedControl,
       progression,
@@ -571,6 +575,7 @@ export function NativeHubSurface({
       inspection: serviceHoverInspection ?? serviceFocusInspection,
       inventorySelection,
       kind: 'service',
+      runSummary,
       dowsingReferenceItem,
       notice,
       pressedControl,
@@ -597,6 +602,7 @@ export function NativeHubSurface({
     pendingNpcSelection,
     pressedControl,
     progression,
+    runSummary,
     sackPath,
     sackTransition,
     serviceFocusInspection,

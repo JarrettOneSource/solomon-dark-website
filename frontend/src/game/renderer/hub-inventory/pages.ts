@@ -1,3 +1,4 @@
+import type { InventoryRunSummary } from '../../hub-inventory-ui-model.ts'
 import {
   type HubInventoryItem,
   NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
@@ -78,6 +79,7 @@ import {
 } from 'pixi.js'
 
 interface InventoryPageModel {
+    readonly runSummary: InventoryRunSummary | null
     readonly belt: PlayerBeltComponent
     readonly config: PlayerCharacterConfig
     readonly economy: ProtocolPlayerEconomy
@@ -115,7 +117,8 @@ export function buildInventory(
   addInventorySidePanelBackdrop(context, layer, 'right', companion)
   if (model.leftPane === 'hagatha') addHagathaInventoryPane(context, layer, economy)
   else addStats(context, layer, model, companion, model.statsPage)
-  const playerPreview = companion ? null : addPlayerPreview(context, layer, model.config.element, model.economy)
+  const playerPreview = companion || model.runSummary === null ? null
+    : addPlayerPreview(context, layer, model.config.element, model.economy, model.runSummary)
   addEquipment(
     context,
     layer,

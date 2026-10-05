@@ -98,6 +98,7 @@ export function buildService(
     inspection: model.inspection,
     leftPane: model.trader === 'hagatha' ? 'hagatha' : 'stats',
     progression: model.progression,
+    runSummary: null,
     sackPath: model.sackPath,
     sackTransition: model.sackTransition,
     selection: model.inventorySelection,

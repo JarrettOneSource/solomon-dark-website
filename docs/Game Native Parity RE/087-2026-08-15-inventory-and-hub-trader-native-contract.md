@@ -1,5 +1,369 @@
 # 2026-08-15 — Inventory and hub-trader native contract
 
+## 2026-10-04 — Report61: InventoryScreen Game-owned run-stat preview recovery
+
+### Reported smell and 2026-10-04 intake evidence
+
+The reported missing Wave line reopens the central wizard/run-stat preview,
+not the gameplay HUD or the left SwipePages statistics. The earlier Inventory
+pass recovered the preview art and interaction family but left its two text
+lines as constants. It did not close the Game-owned summary producer, positive
+wave gate, or formatting contract. Those members were unfinished at intake; the native recovery, implementation
+and scoped validation below now establish their contracts.
+
+The exact original Discord message `1554289976458350723` was re-read with a
+13-message surrounding window on 2026-10-04 through account
+`600774060439371807`. Its text and edited timestamp
+`2026-09-29T04:22:35.353000+00:00` are unchanged; no nearby linked correction
+or withdrawal changes this report. The full original attachment is a
+912-by-571 PNG, 294447 bytes, SHA-256
+`6f820244b29fe42730a0fae1982e6a5ff2b342aec9b502c69c37305a61c7e2e0`.
+It visibly shows Wave: 1, Kills: 0, and Awesomeness: 0 under the wizard.
+The reporter identifies it as original Solomon Dark. The cropped image does
+not independently establish executable identity, scene, inputs, or lifecycle.
+Report84's separate menu-XP allegation is not adopted by this investigation.
+
+| Evidence class | Exact source | Observation and qualification | Confidence |
+| --- | --- | --- | --- |
+| Published source at intake | clean Website `59443b078bf72ee729b4cf982933d8fa236aa605`, tree `c3352f924e24710d310b8ee5f76b8deb881535b1`; HEAD, fresh origin/main, and FETCH_HEAD agreed at intake | `renderer/hub-inventory/equipment.ts::addPlayerPreview` paints fixed `KILLS: 0` at `(800,337)` and `AWESOMENESS: 0` at `(800,359)`, tint `0xe7cc71`; no run-stat input exists | high |
+| Published build at intake | no-store live `deployment.json` returned the same `59443b0`; `/game` entry `index-CIvEDLQF.js`; actual shared `use-coarse-pointer-C8mK_mXH.js`, 383003 bytes, SHA-256 `33ae944b845bbb029f9c6f50ff297111e879d71f2af1ef01ba8c0e6998cd09c1` | compiled preview contains those same two fixed strings/coordinates/tint in one painter body; this is static served-byte proof, not browser acceptance | high |
+| Retained decompiler evidence | read-only Mod Loader `runtime/ghidra_progression_derived_offsets_current.txt`, SHA-256 `880c9b09d086db36561dcac7aeb4b42a47112a88eb8a6483bc0c39556b84638d`, `FUN_00568b90` block at lines 21559–22687 | Inventory root painter gates the live wizard preview on `InventoryScreen+0x160 == 0` and non-null `Game+0x1358`. It draws cached strings at `Game+0x1C3C/+0x1C58/+0x1C74`; the first additionally requires signed short `Game+0x1C30 > 0`. Decompiled font/call arguments remain incomplete | high for retained branch/field leads; raw-instruction verification pending |
+| Retained native font-wrapper lead | `Decompiled Game/callers_text_render.log`, `FUN_004a58b0` | the three summary calls use this common wrapper after copying the corresponding Game string; the export loses material argument flow, so font/alignment/scale must be verified from instructions | incomplete |
+| Immutable native binary/data | retail executable, 4723200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`; standard-library PE section reads | exact literals are `Wave: %d` at `0x0079B180`, `Kills: %d` at `0x0079B18C`, and `Awesomeness: %d` at `0x0079964C`. Referenced double offsets are `0x00785690 = 80`, `0x00791480 = 95`, `0x007948F0 = 115`; referenced RGB floats are `.85`, `.73`, `.44`. These bytes establish data, not a complete instruction/placement contract | high for literal/scalar bytes |
+| Existing settled upstream recovery | entry118, `Game` counters `0x005C9430/0x005C94E0`, contact `0x0063E7D0`; entry051 wave director; current `host/game-snapshot.ts` | authority already publishes actor-specific `hallOfFameRuns` kills/Awesomeness and world `waves.waveOrdinal`; Tutorial also has its own authored wave state. No new gameplay counter is justified by this display defect | high |
+
+The old `inventory-screen.png` witness cited above remains explicitly
+**debugger-instrumented/runtime-staged**; it supports native appearance and
+must not be reclassified as a new clean-stock observation. The manually
+simplified `00560380__InventoryScreen_Ctor.c` is marked inferred/manual and
+omits the preview rectangle, so it cannot settle rectangle or mode semantics.
+
+### Initial system boundary and provisional membership
+
+Native system: the standalone InventoryScreen's central local-wizard preview
+and three Game-owned run-summary strings, from Game value/cache production to
+the optional book's shared painter and teardown. The owning root is
+`0x00568B90`; `0x00562520` is the separate left STATS painter. The cache writers and native branches are recovered below; this provisional
+intake table is retained as historical scope.
+
+| Member or branch | Owner/source | Intake disposition | Required proof |
+| --- | --- | --- | --- |
+| Wave literal/value/cache and positive-value visibility | Game `+0x1C30/+0x1C3C`; root `0x00568B90` | retained-recovery pending instruction verification and port | all cache writers/xrefs, zero/positive wave branch, exact current wave source |
+| Kills literal/value/cache | Game `+0x1C58`; native kill producer `0x005C9430` | retained-recovery pending cache-writer verification and port | independent nonzero kills and live updates |
+| Awesomeness literal/value/cache | Game `+0x1C74`; score producer `0x005C94E0` | retained-recovery pending cache-writer verification and port | independent nonzero score, ordinary/maximum bonus/reset/archive boundaries reuse entry118 |
+| Shared three-line bitmap formatting, placement and tint | root `0x00568B90`, wrapper `0x004A58B0`, native data above | unresolved extractable instruction/rectangle evidence | font, alignment, scale, baselines, exact color and complete literal census |
+| Standalone with live local wizard | root `+0x160 == 0`, non-null `Game+0x1358`; current `pages.ts` | recovered branch pending constructor/mode verification and port | exact preview rectangle; standalone mode membership |
+| Companion inventories: Fomentius, Hagatha, Luthacus, Shlorio pre-roll/result | same native root mode and current companion `buildInventory` callers | current preview suppressed; native mode mapping pending | complete constructor/caller census, no accidental preview/stat introduction |
+| Hub standalone; survival before/after first wave; authored Tutorial | one shared book/root plus Game wave/cache writers | scene-specific value/reset contract unresolved | zero-wave/positive-wave behavior, Tutorial mapping and return/new-run resets |
+| Local owner, party peers, actor/run replacement, open-book refresh | native local Game/player binding; current Boneyard snapshot subscriber and shared renderer model | current projection missing; reuse existing authority | correct addressed actor's metrics, shared wave, no stale values after replacement/restore |
+| Nested Sack, selection, notices and Painting child lifetime | established parent InventoryScreen model | existing behavior to preserve; no separate statistic owner found | parent stat values survive child overlays; close/replacement tears down the model |
+| Left identity/primary/attribute/perk SwipePages, menu XP, HUD and completed Hall row | separate painters and existing entries295/118/164/051 | out-of-system: this pass changes the central preview consumer only | preserve established contracts; shared upstream facts may be reused without reopening their implementation |
+
+This was the provisional intake inventory. The instruction and retained-evidence
+reconciliation below supersede its native recovery questions; the subsequent
+parent review accepted the eleven-member implementation boundary. No member is
+claimed `exact-ported` before candidate execution and observable acceptance.
+
+### Actual native-only instruction phase — 2026-10-04 21:47 UTC
+
+The distinct `report61-native-stats-20261004-2145` phase actually admitted at
+21:47:37.023022 UTC, exported ten bounded LLVM instruction ranges, and ended
+native exit 0 at 21:47:38.841194. Automatic cleanup completed at
+21:47:39.786570: native group93333 empty, own M5 root removed, exact lease
+released; M2 SSH84464 exit0 and actual post-drain rows empty. All ten stdout
+and stderr hashes were checked. The 512000-byte export SHA-256 is
+`ebbfa523cff9a5633f1f902040a4960b6256cf66274e753496ad53d9915192d9`.
+The earlier 2139 phase was refused before acquisition and produced no native
+result. Both clocks are closed. These are static instruction facts, not a
+native runtime, browser, Website gate or report-acceptance receipt.
+
+| Recovered member | Exact instruction evidence | Contract and remaining qualification |
+| --- | --- | --- |
+| standalone/non-null player gate | root `0x00568DD8..0x00568DF7` | `InventoryScreen+0x160 == 0`, with non-null `Game+0x1358`; incoming third constructor argument is stored at `+0x160` at `0x005606E1`; complete caller/mode reconciliation remains open |
+| positive Wave visibility | `0x005690D3..0x005690DC` | signed 16-bit word `Game+0x1C30 > 0`; zero/negative values omit only Wave |
+| Wave producer and cache | actual direct Arena call `0x00465D3D -> 0x005C9370`; `0x005C9396..0x005C93CC` | adds a sign-extended byte delta to the word, formats exact `Wave: %d` using `0x0079B180`, and stores cache `+0x1C3C` |
+| Kills producer and cache | `0x005C9456..0x005C9489` | adds a sign-extended byte delta to 32-bit `Game+0x1C34`, formats exact `Kills: %d` at `0x0079B18C`, and stores `+0x1C58`; no positive-value render gate |
+| Awesomeness cache | `0x005C95E4..0x005C960C` | settled scoring producer updates 32-bit `Game+0x1C38`, formats exact `Awesomeness: %d` at `0x0079964C`, and stores `+0x1C74`; scoring formula remains owned by entry118 |
+| all three font bindings | calls `0x0056914A/0x005691BE/0x00569231` | each selects `Application+0x4D530`, the already recovered medium group1 font, then wrapper `0x004A58B0 -> 0x004A57C0 -> 0x0043AFC0`; no per-call scale argument. Default-centre primitive reuse still needs final reconciliation |
+| literal case, text offsets and gold | `0x005690DE..0x00569231`; verified binary scalars | x is preview player's centre x; y is preview player y plus 80/95/115. The gold inputs are native float RGB `.85/.73/.44`, rounding to `0xD9BA70`, rather than the current `0xe7cc71`. Case is exact mixed case; medium glyphs supply small-cap appearance |
+| fresh Game values/cache | constructor `0x005CC800`, counter initialization `0x005CCF00/07/0D`; cache refresh through `0x005CD2AB` | counters initialize at zero; Wave/Kills strings are formatted from their fields, and score delta0 initializes its cache through the same producer |
+| serialized values/cache | `0x005CE3D0`, field paths `0x005CE84D/0x005CE85B/0x005CE91D`, refresh through `0x005CEF9C` | native Wave/Kills/score fields are serialized, then caches rebuilt from the current values; score delta0 refreshes its cache. This is a separate method after the SwitchRegion body, not proof that SwitchRegion resets counters |
+
+Seven direct in-system literal address-byte candidates now have actual
+instruction associations (the eighth is the separate, previously settled Hall
+consumer). The Wave helper was selected from an actual decoded Arena call,
+not by aligning backwards from a byte occurrence. Fixed-range names alone
+do not establish exclusive function ownership.
+
+The preview y anchor comes from the centre of rectangle `InventoryScreen
++0x430` (`+0x434 + .5*+0x43C`) at `0x00568F5E..0x00568F6A`; the constructor
+passes its pane rectangle to `0x00551610` at `0x00560936/0x00560A2B`.
+The current recovered paneTop89/height320 predicts centre249, but the setter
+link still needs direct or retained authoritative proof before final layout
+constants are treated as recovered. Root additionally stages native heading135 and the raw `Actor+0x74` value1.15.
+The retained actor-layout authority identifies `+0x74` as `move_speed_scale`,
+reused by animation advance, not composed preview render scale. Do not infer
+a wizard art correction from this raw movement-field value.
+
+Game construction, field serialization and the ordinary SwitchRegion body
+are now separated. Current `returnGameSimulationToHub` explicitly creates
+fresh player/run state, while Tutorial/College transitions have their own
+boundary. Continue that mapping, native constructor/caller membership and
+pane setter/default font reconciliation before implementation. Existing
+Boneyard values remain reusable candidates, not proof of every scene's lifetime.
+
+### Retained evidence reconciliation after the closed 2145 phase
+
+The existing read-only `native-hub-trader-catalog.json` (schema8, exact retail
+SHA above) records standalone right pane `(1230,89,320,320)` and wizard centre
+`(800,249)`, with all service companion previews suppressed. It also records
+standalone heading index9/native135 degrees and a composed preview scale1.25.
+Those geometry/capture findings are authoritative retained evidence, not a new
+clean-stock capture. Combined with the new raw root offsets80/95/115, the three
+stat anchors are `(800,329)`, `(800,344)`, `(800,364)`. The raw actor-field1.15
+is a movement/animation scalar (`Actor+0x74`), while composed preview scale1.25
+belongs to the draw representation. The retained actor layout and current
+preview resolve that distinction; no scale/pose art change is required.
+
+Entry295's complete ExactText ABI already identifies `0x004A57C0` as the
+centre wrapper and native mode0 as half-width subtraction. The newly read
+`0x004A58B0 ->0x004A57C0 ->0x0043AFC0` chain therefore resolves alignment
+without another extraction. Medium glyph advance, kerning, point sampler and
+native text primitive remain verified already at parity. Reuse the existing
+native-ui text/Pixi path for these three mixed-case strings in `0xD9BA70`.
+
+The native Book opener `0x005C6F10` already has a complete three-producer
+census in entry115: configured keyboard, HUD and authored action dispatcher,
+shared by Hub/Boneyard and reciprocal Skills replacement. The retained trader
+catalog independently supplies the four companion consumers and their parent
+Inventory relationship. A new immutable raw E8/rel32 scan finds nine Inventory
+constructor candidates: four in builder `0x004FB890`, four in NPC owner
+`0x00514A20`, one in Book opener `0x005C6F10`; plus three pane-setter candidates
+(two already decoded in the constructor, one in its update). These raw byte
+occurrences are explicitly not new instruction/xref proof; retain prior
+canonical native caller evidence and extract a missing caller only when it can
+change the supported contract.
+
+Current host `returnGameSimulationToHub` callers are a missing-mod continuation
+fallback and empty private-run retirement. Post-run loadout uses a separate
+fresh-generation rebuild of character/run/clock state, with Tutorial/College
+intro staged afterwards. Existing ordinary Hub values are fresh-Game zeros;
+active/restored survival and authored Tutorial require their current own-player
+counter records and world wave source. A new shared display projection must
+bind to the current addressed actor/world and reject stale scene-era values.
+The Game serializer confirms numerical fields are saved and formatted caches
+are derived; it does not authorize persisting renderer strings or changing
+save/authority behaviour for a display defect. Final Game-generation mapping,
+constructor/caller mapping and observable final display/lifetime acceptance
+remain the proof frontier; source recovery does not waive browser acceptance.
+
+### Historical baseline causal trace and closed native follow-up
+
+At the original `59443b0` baseline, `BoneyardScene` subscribes to current
+authoritative snapshots, while its initial snapshot is retained for scene setup.
+Neither it nor `HubScene` passes
+run-summary values into `HubInventoryUi` → `NativeHubSurface` →
+`HubInventoryRendererModel` → `pages.ts::buildInventory` → `addPlayerPreview`.
+The last function always substitutes two zero strings. Companion pages skip
+that function. `useHubInventoryRenderer` already rebuilds on model changes,
+so the accepted candidate below reuses current snapshot values and this existing
+presentation invalidation path.
+
+The closed 2145 instruction phase and retained-evidence reconciliation established
+the Game cache writers, constructor/restore boundaries, font, geometry, caller
+membership and existing scene-generation mapping before implementation. The
+accepted eleven-member contract governs the shared projection below; no additional
+native extraction is pending for these already reviewed facts.
+
+Raw little-endian address-byte matches in the exact PE provide finite leads,
+not proven xrefs: Wave at `0x005C93B0/0x005CD156/0x005CEE05`, Kills at
+`0x005C946D/0x005CD209/0x005CEECC`, Awesomeness at `0x005C95F6` (plus the
+separate Hall consumer at `0x005A1C76`). The closed native phase resolved the
+in-system instruction associations described above. These initial byte leads
+remain historical evidence and do not assign a new diagnostic or waive browser
+acceptance.
+
+### Shared implementation and public regression preparation
+
+Parent contract review accepted the eleven-member boundary on 2026-10-04.
+The M2 candidate now uses `projectInventoryRunSummary` at the shared UI-model
+boundary to consume the current addressed actor's authoritative values.
+Tutorial chooses its authored `waveOrdinal`; survival chooses its wave
+snapshot; an absent actor/run record or replaced run yields no stale summary.
+Fresh Hub is the already established new-generation zero state. No numeric
+counter, save string/cache, authority mutation, protocol or art change is added.
+Both scene subscribers also clear the projected preview when the addressed
+actor disappears or that scene's world/run is replaced; retained economy data
+cannot keep the central actor and summary visible after that boundary.
+
+Affected source callers are `BoneyardScene` current subscription and initial
+snapshot, `HubScene` fresh generation/subscription, `HubInventoryUi`,
+`NativeHubSurface` in `HubInventorySurface.tsx`,
+both inventory/service renderer model variants, shared `buildInventory`, and
+`addPlayerPreview`. The projector/equality keep unrelated snapshots from
+rebuilding the book; every relevant wave/kill/score change invalidates the model.
+Companion pages still suppress the preview. The painter consumes one canonical
+three-line plan in recovered centred medium text at329/344/364, goldD9BA70,
+using the existing native-ui primitive and exact mixed-case format strings.
+
+The tests were prepared first in the existing public presentation/renderer
+contract suites. They cover exact owner versus peer, independent nonzero
+changes, Tutorial with no survival director, retired actor/run, new generation,
+restored numerical input, zero/negative wave omission, null/companion suppression,
+and native case/positions/font/tint. The 0600 results below qualify public tests
+on candidate `99c123d1`; 0648 also qualifies public tests, lint and production
+build on corrected candidate `e92f7f24`. Its source-module renderer image was
+captured, but the witness required the diagnosis below. Built-scene and network
+journeys remain unexecuted. Source preparation is not a verified fix.
+
+The maintained `smoke-inventory-run-summary.mjs` drives the production book
+painter in a declared read-only renderer-model fixture, saving actual PNG and
+raw observations before its assertion. It can exercise the exact old Git
+baseline renderer with a helper outside that checkout; that baseline's wrong
+zero labels/missing Wave must be visually inspected and recorded as the genuine
+behavior failure, separately from the absence of new diagnostic output. Unit
+imports missing on an old revision do not prove the old behavior. Candidate
+checks repeat nonzero/live/zero/restored/retired display states. This fixture
+cannot replace real current-built scene/subscription, save/restoration,
+Tutorial, party-owner and desktop/touch journeys, nor the unchanged full gate.
+
+The baseline helper now samples opaque glyph ink from the existing native font
+atlas and compares the actual PNG pixels with independently specified native
+strings, anchors and gold. The first nonzero case must fail those pixels before
+new candidate diagnostics are checked. Candidate cases also test actual absence
+of the retired Wave/actor text. All PNGs and raw pixel observations are retained
+before assertions; this preparation has not executed on M2.
+
+`smoke-inventory-run-summary-scenes.mjs` prepares an exact built-client and real
+host/save/UI journey for restored survival and Tutorial values, updates while
+the book stays open, a second actor with different counters, zero Wave,
+Skills-to-Inventory replacement, fresh Hub and all four merchant companions,
+including Shlorio before and after an authoritative dowsing roll. The Hub
+fixture explicitly funds that roll while preserving fresh-Game zero counters.
+It declares its numerical fixtures and Mac Chrome touch emulation. The second
+actor fixture proves addressed-state isolation; it does not claim a network
+party or physical-device journey. The existing built inventory-stat journeys
+remain in the executable desktop/touch acceptance plan. None is recorded as
+passing before actual execution and retained-image review.
+
+`smoke-inventory-run-summary-network.mjs` prepares a separate built-client
+journey with two real ticket-authenticated WebSocket peers, public invitation
+and acceptance, and a shared Boneyard run. Declared authority-side numerical
+fixtures give each actual member different kills/Awesomeness and a shared
+Wave; independently updating either member must preserve the other's display.
+It records actual peer IDs, sockets, shared run, screenshots and errors. This
+opens each member's book sequentially, honoring the existing party pause owner
+and release grace rather than trying to keep both books open together. The peer
+then leaves through the public menu and rejoins with its saved party claim via
+the established local provisioning fixture. The resumed shared run must retain
+the leader's intervening values, display the peer's current values, and accept
+a new live update without restoring stale pre-disconnect state. The1955 run
+completed those assertions; its local telemetry fixture405 was corrected before
+the final canonical gate. The fixture maps a declared remote endpoint to the real local socket and
+routes local admission/rejoin requests, as in the existing party-rejoin journey.
+A successful local network journey would not substitute
+for public managed-service/live evidence or a physical-device claim.
+
+### Validation contract and current acceptance frontier
+
+On 2026-10-05 the accepted Report61 changes were reconciled onto fetched
+published main `d1161e0b97ae41659b5ea437f1c8000310a0cad0`. Report60 changed
+only its Acid Rain presentation, tests and ledger; its files are disjoint from
+this implementation. The original `59443b0` baseline and corrected external
+helper remain sealed for the genuine pre-fix pixel comparison. The earlier 0141
+phase admitted that baseline and built it successfully, then stopped on a helper
+syntax error before Chrome, PNG or behavior receipt. That failure is unqualified
+as a red; the one-parenthesis correction and early private Node parser gate have
+only been prepared at that checkpoint. The later 0600 results below supersede
+that preparation-only state.
+
+The distinct 2026-10-05 0600 phase admitted the original `59443b0` baseline
+with all 7258 tracked blobs/modes, built it, and preserved that exact source
+after the external renderer comparison. The retained 1600-by-900 PNG SHA-256
+`607bdd17d606d3f5fd6c7cf9f28939136d7e85e0892d3e90ffd603e3537b0de0`
+visibly has Kills: 0, Awesomeness: 0 and no Wave for declared inputs 6/17/91.
+The independent native-gold witness matched zero of 824 opaque glyph pixels;
+console/page/response errors were empty. Its assertion precedes candidate
+diagnostics, so missing new APIs did not substitute for this genuine pixel red.
+The PNG uses Vite `createServer` and `/src` module imports in a declared model
+fixture exercising production renderer source. It is not a dist-served gameplay
+image. Successful production builds are separate evidence; real built-scene,
+network and physical-device acceptance remain distinct. The original baseline
+and this witness are retained for subsequent
+candidate acceptance; an unrelated adapter correction does not require replay.
+
+Candidate `99c123d1` was separately admitted with all 7260 original blob/mode
+records. Its public hub/native suites passed 131/133 tests and lint exited 0.
+Production build then exited 2 on TS2345: the companion object in
+`hub-inventory/services.ts::buildService` omitted required `runSummary`.
+The complete `buildInventory` caller audit found only that object and the
+normal renderer's typed inventory model, which already carries the field.
+The companion producer was corrected to explicit `runSummary: null`, preserving
+the reviewed companion suppression and required type instead of making the
+contract optional. The later `e92f7f24` public suites, lint and production build
+passed; corrected-witness renderer and built-scene acceptance remain required.
+
+The phase closed at 06:02:50.988275 UTC with all owned groups drained,
+output durably exported/acknowledged, root and exact lease removed, and no new
+home children. The sole home difference was an unchanged-byte Chrome Crashpad
+settings mtime touch. No candidate painter or built-scene journey ran before
+the build failure. The closed phase has no remaining execution authority.
+
+### 2026-10-05 — Source-module pixel witness diagnosis
+
+The 0648 `e92f7f24` image SHA-256
+`679f83927ea280d4eff93fc432e47b69e8be9850ef4a85ab6dad23b7cb072f95`
+visibly has Wave: 6, Kills: 17 and Awesomeness: 91 at the recovered anchors,
+but the first witness matched only 549/824 samples. This was not evidence to
+alter the production font, tint or geometry. The closed 0857 M5 diagnostic
+reproduced that ratio from the same retained PNG, then measured coordinate and
+texture-alpha controls without repainting either renderer or rerunning a build.
+Both source admission and final readback verified all 7260 original `e92f7f24`
+blobs/modes. Its numeric receipt SHA-256 is
+`770cb4dabde278b2d25043e6e232ae6e6f6eb06c09685053d686d4189f84564e`.
+
+Wave: 6 has even width 68 and integer glyph x bounds; Kills: 17 and
+Awesomeness: 91 have odd widths 75/155 and half-integral x bounds. All y bounds
+are integral. The production POINT-filtered sprites retain those authored
+positions. `Math.round` in the witness incorrectly chose the next column for
+the half-origin glyphs; pixel-centre coverage uses `ceil(position - .5)`.
+Its mask also called 51 source texels with alpha 250–254 opaque, then compared
+their composited colour against an unattenuated tint. All source RGB values
+were white. Exact fully opaque white texels avoid that composition assumption.
+
+With corrected coverage and fully opaque white texels, all 773/773 samples and
+all five numeric glyphs matched. The same method left the accepted old baseline
+at 0/773. Wrong Wave: 7 still matched 756/772 aggregate samples, but its changed
+digit matched only 8/24; stale Awesomeness: 92 matched 757/778 aggregate samples,
+but the changed digit matched only 9/30. Thus the canonical witness must retain
+the 0.9 aggregate requirement and also require 0.9 for every numeric glyph.
+Wrong/stale expected values keep font, tint and anchors fixed and use the actual
+retained pixels; diagnostics remain secondary. These are confirmed witness
+errors, not a production-renderer correction or a gameplay pass.
+
+The 0857 diagnostic passed and closed at 08:59:17.415386 UTC with all 46 stage
+groups and eight M2 transport/job groups drained, 92 stream hashes verified,
+durable export/ACK, root/exact lease removal and the previously qualified
+unchanged-byte Crashpad settings mtime touch. Parent numeric acceptance on
+2026-10-05 authorizes the witness repair with the original 0.9 requirement.
+The actual repaired helper and remaining renderer/built/member/network journeys
+still need their own acceptance; no baseline or unchanged product replay is
+required solely because the witness changes.
+
+- Meaningful public presentation regressions: zero/positive wave; independent
+  nonzero kills and score; addressed-owner projection; open-book snapshot
+  updates; Hub/Tutorial/survival entry and run/actor replacement; companion
+  exclusion; exact native literal/layout contract after recovery.
+- Real M5 browser journey through supported native member states, comparing
+  current-built display and native/retained original evidence with provenance
+  and physical-device limits explicit. The original crop is not a fixture of
+  a full native scene.
+- The final exact candidate must pass unchanged all-mode Website validation,
+  normal publication, managed PRIMARY deployment/live checks, original-only
+  completion reaction/readback and all-own cleanup before this investigation
+  gains final dispositions.
+
+
 ## 2026-08-16 parity reopening
 
 The presentation/interaction row below is reopened. The prior closure proved
@@ -405,3 +769,165 @@ fails on any browser-console/page error. Native-equipment
 combat effects, dormant random outfitting,
 selling, and persistent account storage are not silently invented by this
 milestone.
+
+### 2026-10-05 — Published Report56 source integration
+
+Report61's clean `43e05cda` source was rebased onto the fetched, actually
+published main `29764a0e` (tree `64ddaadb`). All eight own patches remained
+identical. Full-tree comparison preserved the 17 Report61 paths and all 74
+upstream paths byte-for-byte with their original Git modes; there was no direct
+path overlap. The only subsequent source change is this ledger checkpoint.
+
+The integrated source retains Report56's continuous facing/player-state,
+protocol 147, save schema 49 and migration, session/presentation timelines,
+package scripts and renderer changes. Report61's addressed-player summary,
+required companion `runSummary: null`, native font/tint/anchors and corrected
+per-digit pixel witness are unchanged. Existing fixture factories and state
+spreads carry the added facing field without replacing those upstream contracts.
+
+This is M2 source/Git review, not an integrated test, build or gameplay result.
+The accepted original594 model-fixture red, retained numeric diagnosis and
+qualified e92 checks remain evidence of their own exact inputs; none was
+replayed or promoted to an integrated-source pass. Corrected source-module
+renderer, dist-built scenes/all companions, actual local connected-party
+member/rejoin, full ALL, publication/live and both-device cleanup remain
+required under their separate accepted boundaries.
+
+### 2026-10-05 — Corrected painter acceptance and paused fixture publication
+
+Exact integrated `99c787f5` passed 131 hub and 133 native-UI executions, lint,
+production build and all five corrected Vite/source-model painter cases. The
+positive pixel witnesses were 773/773, 814/814, 600/600 and 912/912, with every
+numeric glyph at 1.0; zero-Wave and retired-actor forbidden ink was zero. The
+fixed wrong/stale controls still rejected 8/24 and 9/30 changed-digit matches
+under the unchanged 0.9 requirement. Parent accepted these qualified results,
+125 built fingerprints and the first actual built restored 6/17/91 capture.
+
+The built journey then timed out after directly changing `host.state()` to
+7/19/164 while its standalone inventory pause remained active. Its host timer
+returns during pause/resume grace; direct fixture mutation is not a snapshot
+publication event. The browser also suppresses repeated stopped input. The
+client still accepts fresh frames during pause and the Boneyard summary
+subscriber projects them. No wire trace was collected at the failing boundary,
+so missing publication is a source-supported hypothesis, not an observed
+production counter defect or proof of a stale received snapshot.
+
+The remaining helper preparation records read-only wire/authority boundaries
+and preserves the standalone pause contract: last-published values remain held,
+public close/resume supplies a publication boundary, and reopening must show
+the current declared values. Actual shared-network open-book value updates
+remain separately required; the shared host has its own periodic publication
+clock. This changes only the fixture ordering and receipts, with no input
+sequence injection, product test API, counter/font/tint/geometry change or
+timeout extension. These helper checks were unrun at that preparation checkpoint.
+
+The 1608 phase released at 16:13:41.772041 UTC; parent verified all 125 groups,
+250 stream hashes, export/ACK, root/exact lease and both-device group absence.
+Home31 had only the known unchanged-byte 40-byte Crashpad settings mtime touch.
+The explicit final-source readback was unreached and is not claimed. Its clocks
+are closed; accepted baseline/native/numeric/painter and qualified exact-source
+substeps are reused while remaining built/network/ALL/publication/live gates
+stay unfinished.
+
+### 2026-10-05 — Observed pause publication and Tutorial availability
+
+The closed 1739 run reconstructed the genuine99 artifact with all125 retained
+fingerprints identical, cut over only the120 helper/docs and verified all7270
+original files before and after. Parent accepted six desktop built cases.
+Actual tick5/received sequence27 held visible6/17/91 while authority held
+7/19/164. Public inventory close/resume produced sequence31 and the reopened
+book showed7/19/164. Other-actor isolation, zero-Wave omission and book
+replacement also passed. This confirms the private fixture publication boundary;
+it is not a production counter change or a built120-head acceptance.
+
+Tutorial-touch then failed on its first public inventory tap. Its saved fixture
+still had stage0 despite clearing intro fields and assigning numerical Wave6;
+the actual page displayed the stock left-joystick movement lesson. Native
+Tutorial HUD access enables inventory from stage9 and skills from stage12,
+as implemented in `nativeTutorialHudAccess` and the retained Tutorial render
+recovery (`0x005D08C0`, modal paths `0x005C9C70`/`0x005C9BB0`, entry224).
+The existing modal-callout journey uses declared lesson9/12 states and public
+backpack/tome controls. The missing control at stage0 is the expected gate,
+not a counter defect. The early-stage0 failure remains qualified evidence.
+
+The remaining summary helper prepares a declared restored lesson12 save with
+earlier movement/inventory teaching completed. It records the restored stage,
+native inventory/skills permissions, no survival director, and actual public
+button transitions while retaining the numerical input fixtures. It does not
+claim fresh movement/combat Tutorial playthrough or expose a hidden menu. This
+preparation was unrun at that checkpoint. Accepted desktop/source-model/focus/native/baseline
+results are reused; only Tutorial, Hub companions/results, stats and actual
+local member/network/rejoin journeys remain in the next finite scope.
+The reusable scene receipt describes its actual built-client fixture generically;
+the phase receipt and fingerprints bind the specific served revision. Mode input
+is validated before acquiring the static server or browser.
+
+The closed1852 run verified original99 artifact125 fingerprints and the final
+e3ff source7270, then its Tutorial helper terminated from the host timer's
+exactly-one-player invariant. Restored and paused PNGs exist, but no scene
+receipt/wire trace survived, so that run did not accept Tutorial. The guard
+rejects both zero and multiple players; the actual count was not recorded.
+The additional-actor fixture already excludes Tutorial and is not the cause.
+Source permits a zero-player tick after disconnect when `resetWhenEmpty` is
+false. The helper now records read-only membership/publication checkpoints and
+existing host lifecycle events to recover the first failure, and stops the host
+timer before context teardown. This is a helper lifecycle repair and causal
+probe, not a native/product counter change or an accepted runtime conclusion.
+
+The1915 probe established the first event: publishing the declared Tutorial
+Wave7 caused protocol rejection (`waveOrdinal` outside native0–6), close4008
+and the actual member transition1→0. The native singleton timer error was
+secondary; no extra actor was added. Restored and paused6/17/91 captures were
+valid. The Tutorial live-number fixture uses5/19/164 within its native range;
+the already-accepted survival fixture remains7/19/164. These are declared
+numerical inputs, not a natural Tutorial progression. Temporary lifecycle logs
+are removed; native singleton assertions and host-before-context teardown stay.
+
+The1927 run completed valid Tutorial restored/paused/live5 and public12→13
+skills/book cases, plus Hub zeros and all four companion/result suppressions.
+Its final aggregate failed only because server-first helper teardown deliberately
+sent close1012 while the client error listener was still active. There were no
+failed scene assertions. The ephemeral helper host uses the existing
+`resetWhenEmpty` contract, so it can close the browser context first without a
+zero-player Tutorial tick, then stop the host. Error capture is unchanged and
+no console message is filtered. These scene observations are retained with that
+teardown qualification; stats/network and the final canonical gate remain open.
+
+The1955 run passed corrected Tutorial cleanup and existing desktop/touch stats
+with empty gameplay error lists. All11 real local connected-member/live/zero/
+saved-claim rejoin assertions completed, including current shared Wave8 and
+member isolation. Its final error list contained only the local static fixture's
+405 for automatic run-performance upload. The network fixture now acknowledges
+that existing backend receipt contract (201, UUID logId, submission time), as
+the existing run-performance test does; it remains a declared local HTTP fixture,
+not managed-service storage acceptance. No error is filtered or product changed.
+
+
+### Consolidated Report61 implementation and evidence
+
+The central preview uses the addressed actor's existing Hall of Fame run metrics
+and the actual Tutorial/survival ordinal. Native literals, positive signed-word
+Wave visibility, medium font1, centered x800 and y329/344/364, and D9BA70 tint
+are recovered and implemented. Fresh Hub values are zero; companion windows
+suppress the summary; removed/replaced actor or run does not retain a cache.
+There is no added counter/save cache, global font, HUD or menu-XP change.
+
+Original594's source-module renderer fails the native gold/glyph witness. The
+corrected candidate passes all five declared renderer cases; exact retained
+pixels match773/773 fully opaque white texels at ceil(position-.5). Aggregate
+and every numeric glyph retain0.9, and changed/stale digits fail. These are
+source-module fixture witnesses, separate from the dist-built gameplay checks.
+
+The exact99 built artifact's125 fingerprints were reconstructed and verified.
+Six desktop book/owner/reset cases, Tutorial lesson12/public12→13/current5/book
+checks, all Hub companion/result suppressions and both existing stats journeys
+are retained. Eleven actual local WebSocket member/live/zero/leave/rejoin
+assertions completed; the local backend telemetry receipt now matches its
+existing201/UUID/time contract. The final release gate tests its actual current
+HEAD build and unchanged repository validator, with no borrowed provider pass.
+
+Numerical saves and host mutations are declared fixtures; Tutorial is restored
+lesson12 rather than a fresh movement/combat playthrough. Local provisioning
+and telemetry receipts do not prove managed-service storage. Touch is Chrome
+emulation, not physical-device evidence. Publication, managed deployment and
+task cleanup are recorded separately by the release workflow.

@@ -46,7 +46,7 @@ import CollegeIntroOverlay from './CollegeIntroOverlay.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi from './HubInventoryUi.tsx'
-import type { HubUiSurface } from './hub-inventory-ui-model.ts'
+import { projectInventoryRunSummary, sameInventoryRunSummary, type HubUiSurface } from './hub-inventory-ui-model.ts'
 import {
   HUB_HUD_SHORTCUTS,
   hubInteractionAtPoint,
@@ -317,6 +317,9 @@ export default function HubScene({
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     hubInitialSnapshot.players[playerId]!.economy
   ))
+  const [inventoryRunSummary, setInventoryRunSummary] = useState(() => (
+    projectInventoryRunSummary(hubInitialSnapshot, playerId)
+  ))
   const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
   const [secondaryPlayerState, setSecondaryPlayerState] = useState(() => (
     hubInitialSnapshot.secondaryAbilities.players[playerId]
@@ -527,6 +530,8 @@ export default function HubScene({
       },
     )
     return subscribe((snapshot) => {
+      const summary = isHubGameSnapshot(snapshot) ? projectInventoryRunSummary(snapshot, playerId) : null
+      setInventoryRunSummary((current) => sameInventoryRunSummary(current, summary) ? current : summary)
       if (!isHubGameSnapshot(snapshot)) return
       const nextActivities = hubPlayerActivities(snapshot.world.participants)
       setPlayerActivities((current) => (
@@ -1053,6 +1058,7 @@ export default function HubScene({
           overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
+          runSummary={inventoryRunSummary}
           secondaryPlayerState={secondaryPlayerState}
           skillsKeyCode={settings.controls.openSkills}
           region={currentRegion}

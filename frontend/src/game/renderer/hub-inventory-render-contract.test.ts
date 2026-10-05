@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { HUB_INVENTORY_RUN_SUMMARY_STYLE, hubInventoryRunSummaryLines } from './hub-inventory-render-contract.ts'
+
 
 import nativeAssetsJson from '../../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
@@ -1422,4 +1424,23 @@ test('native melee range keeps one decimal and the authored small italic unit', 
   assert.deepEqual(hubInventoryMeleeDamageLine({ ...source, inventoryStats: {
     ...source.inventoryStats, meleeDamageMinimum: 5.5, meleeDamageMaximum: 6,
   } }), { text: '5.5 - 6.0', unit: ' / whack' })
+})
+
+test('native inventory paints live run values with mixed-case gold centred at the recovered anchors', () => {
+  assert.deepEqual(HUB_INVENTORY_RUN_SUMMARY_STYLE, { font: 'medium', align: 'center', tint: 0xd9ba70 })
+  assert.deepEqual(hubInventoryRunSummaryLines({ wave: 6, monstersKilled: 17, awesomeness: 91 }), [
+    { text: 'Wave: 6', x: 800, y: 329 },
+    { text: 'Kills: 17', x: 800, y: 344 },
+    { text: 'Awesomeness: 91', x: 800, y: 364 },
+  ])
+  assert.deepEqual(hubInventoryRunSummaryLines({ wave: 0, monstersKilled: 2, awesomeness: 71 }), [
+    { text: 'Kills: 2', x: 800, y: 344 },
+    { text: 'Awesomeness: 71', x: 800, y: 364 },
+  ])
+  assert.deepEqual(hubInventoryRunSummaryLines({ wave: -1, monstersKilled: 0, awesomeness: 0 }), [
+    { text: 'Kills: 0', x: 800, y: 344 },
+    { text: 'Awesomeness: 0', x: 800, y: 364 },
+  ])
+  assert.deepEqual(hubInventoryRunSummaryLines(null), [])
+  assert.deepEqual(hubInventoryRunSummaryLines({ wave: 6, monstersKilled: 17, awesomeness: 91 }, true), [])
 })
