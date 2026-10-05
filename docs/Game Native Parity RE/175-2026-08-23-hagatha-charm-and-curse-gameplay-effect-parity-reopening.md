@@ -2056,3 +2056,59 @@ RNG internals, protection/Sparkle state, FreezeWave jitter or Golem Knockback.
 No mode gate, build, browser, pixel or audible comparison has run. Separate
 text and sound acceptance, source integration (including Report56's canonical
 Golem facing), unchanged all-mode validation and publication remain pending.
+
+### Actual remaining-owner1052 phase
+
+The separately granted four-window phase admitted at`10:53:33.414261 UTC` and
+released its exact lease/root at`10:53:38.564343`. Native/SSH/controller returned
+zero; all owned groups drained before interpretation. Its194560-byte export
+SHA-256`7e50e772ccf77cec9e89acef9bb95e8e6e1163c720f5f685afff91c9879d2dad`
+binds twelve files, four actual ranges and zero data spans. Executed lifecycle,
+packet and readiness are frozen; no later read may borrow this closed clock.
+
+RandomUnitVector`00410C50` reaches actual`RET 8` at`00410CE5`; the entry at
+`00410CF0` is a neighbor. Its second argument is an optional RNG pointer,
+not a signedness flag. Zero selects global`00818B08`. One unsigned Integer
+draw uses`RNG+E4+1`; the retained divisor100000 gives the same closed domain
+as Float. Integer conversion, division, angle multiplication, radians and
+both trig results each pass through float32 stores. Retained`7DE878=360`,
+Math service`00B4027C` pi and`7DE888=180` close the angle conversion; the same
+`7470D0/748330` calls and stores as the retained full`00410500` body give
+`sin(theta), -cos(theta)`. Rescue birth therefore consumes four unsigned
+words: radius, vector, constructor angle, then decay. Do not copy the level-up
+emitter's signed-X five-word schedule or replace the native radians store.
+
+FreezeWave`005FFDC0` confirms the shared jitter formula: grow/store radius,
+draw the vector, multiply each component by retained qword3 with float32
+stores, multiply/store by the current`+140` scalar, then call the strict Region
+maximum proposal at`005FFE5A`. Only afterwards does it subtract/store life and
+retire or fade. Expiry still proposes a vector. The early`005FFEA2` return is
+not the end of the living branch: the explicit`005FFE82 -> 005FFEA3` edge
+continues through the owned body to`00600211`. Padding after that return and
+the next class entry`00600220` are not attributed to FreezeWave.
+
+Crow strike`0047A160..0047A2DB` now proves target identity equal to local
+Game`+1358`, post-contact HP above retained10, empty shield, the unsigned100
+chance draw and sampled1..2.5 seconds passed with target-this to`00473220`
+at`0047A2B9`. Retained entry301 independently records that blindness setter's
+added second/100-Hz conversion and the Player`+204`/Arena countdown use.
+The captured caller does not itself show the setter's direct field store;
+that residual callee qualification stays explicit rather than assigning a
+new death-grace owner.
+
+Golem's actual action-counter37 branch creates type`0x7E9` at`00616DAE`,
+registers it, forms a point from average foot coordinates plus a backward20
+heading offset with float32 stores, draws its damage range from`+1F0/+1F4`,
+then calls initializer`005F3B50` at`00616EAD`. It copies the Golem participant
+index into the child and traverses the child's target list. The actual Golem
+function returns at`0061781C`; its next draw entry is outside this owner.
+The initializer receives heading, retained90 and50, and a dword from`0078606C`.
+Neither argument roles nor that unextracted value are inferred solely from
+stack slots. Remaining bounded evidence is the two small callee bodies
+`00473220`/`005F3B50` and, if no retained typed proof exists, four bytes at
+`0078606C`. No Golem caller or already-retained Knockback tick replay is needed.
+
+The closed cue source remains an unvalidated implementation checkpoint.
+Protection and affected wave/Golem source work awaits complete contract review;
+Source/protocol integration, text and sound comparison and all-mode acceptance
+are still pending. No extra native target or data span was read in this phase.
