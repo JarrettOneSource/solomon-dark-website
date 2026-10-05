@@ -1874,3 +1874,65 @@ consumers remain explicit extraction questions. The parent receives the full
 facts, source consequences and finite missing-window proposal before further
 resource admission or product implementation. Text and sound acceptance
 remain independently pending.
+
+
+### Actual details0738 and retained Player/wave reconciliation
+
+The separately reviewed/granted four-window details phase0738 exited zero and
+released compute at07:41:13.232670UTC before interpretation. Its exact export
+184320bytes/SHA
+`f0a2eac907842b33e875ae1cd116f9b5900b09ece7ae0212c1e46d7051c392a9`
+contains only the four declared windows, ten typed scalar spans and three
+bounded literal spans. No0621census/list-step/audio replay, stock/media/Website
+execution or additional native target was performed. The exact notification
+ABI/position/quantized-scale and legacy script member closure now lives in
+entry100 above its prior assumption history.
+
+Mana overload006639D0 has three unconditional requests for registry32/+598
+`sounds/fizzle.wav`, fullgain1, at rates1,1.5 andfloat32.8, at006639F8,
+00663A1B and00663A3E. Then it clears the three active toggles, reserved/current
+mana, and emits white `Overloaded Mana!` only when progression+14 is local0
+and the passed notify boolean is true. Common refresh ends beforeRET00663AD2.
+The existing current producer emits one fizzle atpitch1 and carries overload
+IDs to the MP-clearing owner; the extra two requests and notification are
+shared missing consumers, not a reason to alter the gameplay overload ceiling.
+Native fizzle file9072bytes/SHA
+`938420950d859ebc00a9b1a37e548c7c2183a8504689b32aab3de3c683899e76`
+is already in the retained audio registry. Reuse that asset/director and close
+all three current overload-result paths rather than adding one scene exception.
+
+The new typed bytes close shared Shockwave operands: qword00784D08 is
+0.009999999776482582 per life step, qword00784970 is0.8999999761581421 fade
+factor, and qword007DE910 is3. Current float32 step/fade factors represent those
+promoted values. The native per-tick random unit vector is multiplied by3 and
+current wave push/light scalar. Rescue starts atscalar2, so its nominal incoming
+Region-vector magnitude is6 before the existing strict-largest reducer.
+Preserve the reducer, retained decay/reset, camera-shake setting and every
+actually affected wave producer. Source sweep identifies Ring of Fire and
+Magic Shield `shockwave`, common/equipment Mindblast and Last Word
+`mindblast-shockwave`, the separate Last Word Game Over update, and secondary
+FreezeWave/primaryWater wave owners to reconcile. Persistent native Knockback
+is not implied by unrelated Staff/WeldHail knockback intents.
+
+The Player+1D4 store was not a guessed ordinary hurt latch. The already accepted
+full damage capture0052F76C..0052F7BB proves that a positive value multiplies
+physical, magic and poison damage lanes by`1-value`; rescue writes one.
+Retained full Player tick00533520 in`refs_dat819978.log`, lines24694..24745,
+subtracts00794088 and clamps zero before creating one Anim_Sparkle, copies the
+updated factor into particle+28, and adds RandomFloat2 to its decay. This is
+a distinct actor-owned damage-suppression/sparkle lifetime. It must not be
+confused with the existing180-tick level-threshold emitter atPlayer+168.
+Only the already recovered Anim_Sparkle primitive may be reused; its new emitter
+geometry, alpha, RNG schedule and exact loss still need their own evidence.
+The retained tick also decrements Player+204 by007DE820 and clamps zero;
+that countdown gates the lethal suffix, but its upstream semantic ownership
+remains unclaimed. No such damage-suppression field was found in current combat
+state, so the earlier charge-only gameplay closure did not cover this native
+post-rescue consumer.
+
+The exact loss at00794088 and precise rescue sparkle position/tick operands
+were not among0738's declared data/window targets and were not silently read.
+Recover them from retained proved data/instructions if available, otherwise
+propose a distinct smallest finite read. Current source behavior, tests, saves
+and protocol remain unchanged. Text and sound acceptance remain independently
+pending after full contract review and exact built/native comparison.

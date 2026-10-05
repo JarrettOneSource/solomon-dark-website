@@ -1537,3 +1537,64 @@ names, all three Bonus colors, skill-book IDs/feedback cursors, and the newly
 proved rescue/overload/script consumers. A new replicated notice cannot silently
 collide with independent positive Loot/enemy event IDs or negative book IDs.
 Current source/native comparison and actual text acceptance remain pending.
+
+
+### Actual separately granted details phase0738 — coordinates and scale
+
+The four-window/13-span details phase exited native/SSH zero and automatically
+released its owned M5 root/groups/lease at2026-10-05T07:41:13.232670+00:00,
+before interpretation. The 184320-byte export SHA-256 is
+`f0a2eac907842b33e875ae1cd116f9b5900b09ece7ae0212c1e46d7051c392a9`.
+It binds the same original retail PE and LLVM identities as phase0621. Neither
+phase is browser, media or live acceptance; both clocks are closed.
+
+Fresh4F5620 bodySHA
+`0a127a044861bcc4b5d155efd9de52bb718dbf691a5cd8fcfe22ad4500b3caf2`
+ends atRET004F570A with cleanup0x24. It saves font+4, selects alignment0,
+forwards the by-value28-byte String plus both scalar floats unchanged to
+0043BCD0, and restores the previous alignment. The verified retained
+`Decompiled Game/reverse-engineering/pseudo-source/ui/0043BCD0__ExactText_Render.c`
+body, also owned by existing UI-kit entry183, subtracts measured half-width
+from the first float for alignment0 and advances the second float by font
+line-height on wrap. That combined instruction/retained-body evidence establishes
+the X/Y roles; the conclusion is not based solely on argument-slot numbers.
+
+The native notification uses X0 and rounded row offset as Y relative to its
+shared centered pen/origin. Captured draw translates the GUI origin by half
+viewport width and50, adds17 to the render pen, and draws black at+2 before
+caller color. Thus the owner must preserve row-position movement alongside
+scale; the old only-scale/no-Y statement is superseded. Use the existing
+bitmap text baseline/origin contract to reproduce this transform, including
+native integer coordinate rounding; do not patch a fixedCSS top per source.
+
+The actual format at0079B788 is `_s(%.2f)%s`. Native first computes/stores the
+float scale, formats it to two decimals, and the common ExactText parser reads
+that directive back asfloat32. Current continuous CSS scale omits this authored
+formatting quantization. This is a shared change for every enumerated notice.
+
+The typed captured operands close the arithmetic: qword00785358 is
+0.4000000059604645, qword007847B0 is0.02500000037252903 and qword00785078 is
+0.004999999888241291. These are exactly promoted float32 values, not guessed
+ideal decimal doubles. Keep native operation/store order and lifetime/removal
+boundaries. Dword007847A0 is1.5, dword0079B4B0 is-18, qword007DE850 is250,
+and qword00785AB0 is17. Existing float32 pressure factors already represent
+those values; new precision changes are not justified merely by the qword load.
+
+The remaining two legacy script CALLs are now identified. Helper006847F0 searches
+for opcode0x435 labels; failure emits red `(1,0,0,1)` text
+`LABEL NOT FOUND :%s:` at00684901. The helper body ends at00684952; later
+functions inside its bounded diagnostic are neighbors, not that owner.
+GameplayAction_Dispatch's captured indirect-JMP uses index`opcode-0x3E9` and
+base0068AEB8. The first original table entry bytes`b29d6800` target00689DB2,
+which constructs white `(1,1,1,1)` notification from String operand0 and calls
+insertion00689E07. This is opcode1001. Only that captured notification branch
+is interpreted; unrelated action cases are not new work.
+
+Their current supported disposition follows the existing Bonedit compatibility
+boundary in entry051: default maps use the owned survival director; generic
+native Trigger/TimeLine/CodeLine graphs are retained opaque rather than executed
+as a new VM. These two native producers are out-of-system for current runtime
+admission, with their presentation contracts still recorded for any future
+compatible producer. Do not invent a script source to exercise them. Gold,
+item-name, all three Bonuses, book-rank, Cheat Death and mana-overload remain
+actual current shared-system consumers needing final per-member acceptance.
