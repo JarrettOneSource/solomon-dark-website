@@ -2172,9 +2172,9 @@ function stepGameSimulationTickWithScreenFlashes(
         activeInputs,
         worldManagerOrder,
         null,
+        writeScreenFlash,
         options.extensions,
         options.attributionObserver,
-        writeScreenFlash,
       )
     }
     case 'boneyard': {
@@ -2315,9 +2315,9 @@ function stepGameSimulationTickWithScreenFlashes(
         activeInputs,
         worldManagerOrder,
         deferredEnemyProjectileLightRegistrations,
+        writeScreenFlash,
         options.extensions,
         options.attributionObserver,
-        writeScreenFlash,
       )
     }
   }
@@ -2341,9 +2341,9 @@ function finishGameSimulationTick(
   inputs: PlayerCharacterInputs,
   worldManagerOrder: NativeWorldManagerOrder,
   deferredEnemyProjectileLightRegistrations: DeferredNativeWorldManagerRegistrations | null,
+  writeScreenFlash: WriteNativeScreenFlash,
   extensions?: GameSimulationExtensions,
   attributionObserver?: BoneyardEnemyAttributionObserver,
-  writeScreenFlash?: WriteNativeScreenFlash,
 ): GameSimulationState {
   const tick = previous.tick + 1
   let resolvedPlayers = result.players

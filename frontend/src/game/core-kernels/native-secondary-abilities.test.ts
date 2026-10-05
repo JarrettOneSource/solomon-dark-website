@@ -1,6 +1,8 @@
 import { NATIVE_GOLEM_DEATH_MAX_AGE } from './native-death-animations.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { observeMlBotPolicyOwnEffects } from '../core-server/ml-bot-policy/own-effects.ts'
+import { createPrimarySpellSimulation } from './primary-spells.ts'
 
 import { actorHeadingVector } from './actor-heading.ts'
 import { buildNativeAirPathLightSources } from './native-air-presentation.ts'
@@ -338,6 +340,12 @@ test('Golem area keeps collision-appended targets for five moves before terminal
   assert.ok(area)
   assert.deepEqual(area.hitTargetIds, [1])
   assert.deepEqual(birth.damage, [])
+  const observed = observeMlBotPolicyOwnEffects({
+    primarySpells: createPrimarySpellSimulation(), secondaryAbilities: birth.state,
+  }, { playerId: area.ownerId, position: area.position, quickbar: [45], worldKey: area.worldKey })
+  assert.equal(observed.blockR[0], 1)
+  assert.equal(observed.blockR[11], 1)
+  assert.equal(observed.secondaryEffectActive[0], true)
   let state: NativeSecondarySimulationState = { ...birth.state, actors: [area] }
   let moves = 0
   for (let tick = 38; tick <= 42; tick += 1) {

@@ -2228,5 +2228,43 @@ cameraDisplacements transport already owns it.
 Keep those four wave positions fixed across common and Game Over updates,
 including expiry, and keep their locomotion vector zero. Record this contract
 before correction. Preserve27795 plus the new public multi-tick regression
-as an explicit test overlay for genuine M5 failing proof; it remains UNRUN.
+as an explicit test overlay for genuine M5 failing proof; it was UNRUN at
+this source review. The actual first application phase below records its result.
 Native evidence/old phase clocks stay closed and no additional read is needed.
+
+### Report65 first application phase: actual drift red and complete runtime boundaries
+
+The exact264086c8 M5 application phase admitted16:42:13.520579UTC and released
+16:45:38.520753UTC after a candidate TypeScript failure. Original27795 plus
+the preserved position-only overlay produced two actual position assertion
+failures: normal Shockwave and Game Over Mindblast moved21/34 to
+26.600716590881348/36.152201414108276 on the next update. This is the fixed-origin
+regression, not an import/syntax or velocity representation failure. Each loop
+stops at its first failed member; the remaining wave kinds are candidate
+coverage, not separate red observations. Text AND sound acceptance remain open.
+
+Five compiler diagnostics have four source boundary omissions. The shared
+Knockback mover lacks its Vector2 import. Both Hub/Boneyard finish callers
+already receive the one authoritative tick screen-flash writer; make that
+required private finish argument explicit rather than discarding feedback or
+weakening rescue's required writer. New rescue and Golem-area actor kinds also
+reach the existing exhaustive ML runtime own-effect observer. Classify both as
+effects alongside other waves/areas, retaining rescue.skillId=null and real
+Golem skill45 provenance. This is runtime caller completion, with no training,
+model artifact, feature-width or learned-skill identity change. The Sparkle
+codec must pass its already-recovered transient lane to the existing required
+registration validator; reuse that validator instead of a duplicate lane check.
+
+Full actual terminal/export/hashACK/group/home/root/exactlease cleanup was read
+before this interpretation. The11-file40960-byte export is315d7e7c; all clocks
+are closed and phase consumed. Focused18 never ran; old040/84 and5add reds,
+built/native text and sound, fullALL/publication/live/cleanup remain pending.
+Record these actual boundary corrections before code. M2 source-only fixes
+and public observer/lane assertions remain UNRUN until a new distinct grant.
+
+Parent independently accepted the two real position red witnesses in
+REPORT65-APPLICATION1638-PARENT-CLOSED-RED-ACCEPTANCE-20261005
+(d719a61a), with original27795 and exact overlay identity. Reuse this qualified
+proof; do not replay its baseline/test. Parent16:58:37 resource closure also
+verified all known own groups/root/lease and31 unchanged home entries. The
+subsequent source corrections and observer/lane assertions are still UNRUN.

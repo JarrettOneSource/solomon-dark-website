@@ -60,8 +60,7 @@ export function nativePlayerRescueProtection(value: unknown, field: string): Nat
       throw new GameProtocolError(`${key} has invalid native Sparkle state`)
     }
     previousId = id
-    const painterRegistration = nativeWorldManagerRegistration(particle.painterRegistration, `${key}.painterRegistration`)
-    if (painterRegistration.managerLane !== 'transient') throw new GameProtocolError(`${key} must use the transient lane`)
+    const painterRegistration = nativeWorldManagerRegistration(particle.painterRegistration, `${key}.painterRegistration`, 'transient')
     return { alpha: unitInterval(particle.alpha, `${key}.alpha`), decay, id, painterRegistration,
       position: vector(particle.position, `${key}.position`), rotationDegrees, timer,
       worldKey: limitedString(particle.worldKey, `${key}.worldKey`, 256) }

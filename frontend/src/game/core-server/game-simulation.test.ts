@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { observeMlBotPolicyOwnEffects } from './ml-bot-policy/own-effects.ts'
 import { createBoneyardPresentationTimeline, isBoneyardGameSnapshot } from '../client/boneyard-presentation-timeline.ts'
 import { gameSnapshot, gameSnapshotFrame } from '../protocol/codecs/snapshot.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
@@ -7177,4 +7178,11 @@ test('the shared damage boundary births gameplay and participant feedback once p
   const repeat = damageGameSimulationPlayer(result, 'owner', 60, 1)
   assert.equal(repeat, result)
   assert.equal(result.playerEntities.progressions[0]!.hagathaRuntime.cheatDeathCharges, 0)
+  const observed = observeMlBotPolicyOwnEffects(result, {
+    playerId: 'owner', position: getPlayerCharacter(result, 'owner').position,
+    quickbar: [45], worldKey: `boneyard:${result.world.runId}`,
+  })
+  assert.equal(observed.blockR[0], 1)
+  assert.equal(observed.blockR[11], 1)
+  assert.equal(observed.secondaryEffectActive.some(Boolean), false)
 })

@@ -16,7 +16,7 @@ test('the rescue wire boundary retains zero alpha and validates particle identit
   assert.throws(() => nativePlayerRescueProtection(badIdentity, 'rescue'), /invalid native Sparkle state/)
   const badLane = { ...state, particles: [{ ...state.particles[0]!,
     painterRegistration: { managerLane: 'actor', registrationOrdinal: 0 } }] }
-  assert.throws(() => nativePlayerRescueProtection(badLane, 'rescue'), /transient lane/)
+  assert.throws(() => nativePlayerRescueProtection(badLane, 'rescue'), /managerLane must be transient/)
   assert.throws(() => nativePlayerRescueProtection({ ...state, fraction: .1 }, 'rescue'), /native float/)
   assert.throws(() => nativePlayerRescueProtection({ ...state, borrowedSkillId: 45 }, 'rescue'), /not allowed/)
 })
