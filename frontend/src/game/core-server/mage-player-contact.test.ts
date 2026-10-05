@@ -5,6 +5,7 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { createNativeBossNarration, enqueueNativeBossNarration } from '../core-kernels/native-boss-audio.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeScreenFlashes, createNativeScreenFlashWriter } from '../core-kernels/native-screen-flash.ts'
 import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeTutorialState } from '../core-kernels/native-tutorial.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
@@ -19,6 +20,47 @@ import type { GameSimulationExtensions, GameSimulationState } from './game-simul
 import { bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, gameSimulationPlayerRecords, getPlayerProgression, stepGameSimulationTick } from './game-simulation.ts'
 import { applyPlayerContacts } from './player-contact-system.ts'
 import { grantPlayerEntitySkillRanks, stepPlayerEntityOverlayLightingTick } from './player-entity-store.ts'
+
+test('accepted Cheat Death emits one participant cue and the shared white flash', () => {
+  for (const [charges, damage, rescued] of [[1, 60, true], [1, 1, false], [0, 60, false]] as const) {
+    const initial = mageContactState('FLAG_CASTFIRE')
+    const source = { ...initial, playerEntities: { ...initial.playerEntities,
+      progressions: initial.playerEntities.progressions.map(progression => ({
+        ...progression, currentHealth: 1,
+        hagathaRuntime: { ...progression.hagathaRuntime, cheatDeathCharges: charges },
+      })),
+    } }
+    if (source.world.kind !== 'boneyard') throw new Error('Boneyard required')
+    const flashes = createNativeScreenFlashWriter(createNativeScreenFlashes(), 1)
+    const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
+      actorId: 1, physicalDamage: damage, magicDamage: 0, playerId: 'local-player', eventId: 1,
+      coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
+    }], 1, undefined, undefined, flashes.write)
+    const cues = result.playerDamageSoundEvents.filter(event => event.type.startsWith('player-cheat-death'))
+    assert.equal(cues.length, rescued ? 1 : 0)
+    if (!rescued) continue
+    const cue = cues[0]!
+    assert.equal(cue.type, 'player-cheat-death')
+    assert.equal(cue.targetPlayerId, 'local-player')
+    assert.deepEqual(cue.sourcePosition, source.playerEntities.locomotions[0]!.position)
+    assert.equal(result.playerEntities.progressions[0]!.hagathaRuntime.cheatDeathCharges, 0)
+    assert.equal(result.playerEntities.progressions[0]!.lifeState, 'alive')
+    assert.deepEqual(flashes.state().writes.map(({ flash }) => flash), [{
+      alpha: 1, blue: 1, decayPerTick: 0.009999999776482582,
+      green: 1, pointAttenuated: false, red: 1,
+    }])
+    if (result.world.kind !== 'boneyard') throw new Error('Boneyard required')
+    const continued = { ...source, tick: 1, playerEntities: result.playerEntities,
+      secondaryAbilities: result.secondaryAbilities, screenFlashes: flashes.state(),
+      world: { ...result.world, enemyEvents: [...result.world.enemyEvents, ...result.playerDamageSoundEvents] },
+    }
+    assertWireRoundTrip(continued)
+    const next = stepGameSimulationTick(continued, {})
+    if (next.world.kind !== 'boneyard') throw new Error('Boneyard required')
+    assert.equal(next.world.enemyEvents.filter(event => event.type.startsWith('player-cheat-death')).length, 1)
+  }
+})
+
 test('a poison Mage impact poisons the player and lowers health', () => {
   let state = mageContactState('FLAG_CASTPOISON')
   for (let tick = 0; tick < 300; tick += 1) {

@@ -1289,6 +1289,39 @@ test('secondary one-shots and streams consume new authoritative events once with
   synchronizer.destroy()
 })
 
+test('mana overload plays its three full-gain native requests once regardless of distance', () => {
+  const initial = createGameSnapshot(simulation('air'), PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector, PLAYER_ID, initial,
+  )
+  const event: NativeSecondaryEventState = {
+    actorId: null, cameraDisplacement: null, cameraMagnitude: 0,
+    cue: 'fizzle', eventId: initial.secondaryAbilities.nextEventId, gain: 1,
+    kind: 'overload', ownerId: PLAYER_ID, pitch: 1, position: { x: 0, y: 0 },
+    screenFlash: null, skillId: 78, tick: initial.tick + 1, worldKey: AUDIO_WORLD_KEY,
+  }
+  const next = { ...initial, tick: initial.tick + 1, secondaryAbilities: {
+    ...initial.secondaryAbilities, events: [event], nextEventId: event.eventId + 1,
+  } }
+  synchronizer.update(next)
+  synchronizer.update(next)
+  assert.deepEqual(audio.sounds, ['fizzle', 'fizzle', 'fizzle'])
+  assert.deepEqual(audio.soundOptions, [
+    { playbackRate: 1, volume: 1 },
+    { playbackRate: 1.5, volume: 1 },
+    { playbackRate: 0.800000011920929, volume: 1 },
+  ])
+  synchronizer.destroy()
+  const joinedAudio = new RecordingAudio()
+  const joined = new PrimarySpellAudioSynchronizer(
+    joinedAudio as unknown as GameAudioDirector, PLAYER_ID, next,
+  )
+  joined.update(next)
+  assert.deepEqual(joinedAudio.sounds, [])
+  joined.destroy()
+})
+
 test('every persistent secondary audio owner starts and retires its exact native loop', () => {
   const state = simulation('air')
   const initial = createGameSnapshot(state, PLAYER_ID)

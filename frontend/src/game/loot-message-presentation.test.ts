@@ -35,6 +35,31 @@ test('a distinct message performs the native immediate four-unit insertion shift
   assert.equal(messages[0]?.tint, 0xffffff)
 })
 
+test('shared notices use the native two-decimal scale after insertion pressure', () => {
+  const presentation = new NativeLootMessagePresentation(0)
+  presentation.consume(event(1, 1, 'Health Potion', 'pickup-bag'))
+  presentation.consume(event(2, 2, 'DAMAGE x4'))
+  assert.equal(presentation.sample(2)[0]?.scale, 0.9800000190734863)
+})
+
+test('equal IDs from loot, rescue and overload keep the newest notice active', () => {
+  const presentation = new NativeLootMessagePresentation(0)
+  presentation.consume(event(1, 1, 'Health Potion', 'pickup-bag'))
+  const rescue: { eventId: number; tick: number; text: string; tint: number; source: 'combat' } = {
+    eventId: 1, tick: 2, text: 'CHEAT DEATH!', tint: 0xffffff, source: 'combat',
+  }
+  presentation.consumeText(rescue)
+  assert.deepEqual(presentation.sample(2).map(({ offset }) => offset), [4, -17])
+  const overload: { eventId: number; tick: number; text: string; tint: number; source: 'secondary' } = {
+    eventId: 1, tick: 3, text: 'Overloaded Mana!', tint: 0xffffff, source: 'secondary',
+  }
+  presentation.consumeText(overload)
+  assert.equal(presentation.sample(3).at(-1)?.offset, -17)
+  assert.deepEqual(presentation.sample(3).map(({ text }) => text), [
+    'Health Potion', 'CHEAT DEATH!', 'Overloaded Mana!',
+  ])
+})
+
 function event(
   eventId: number,
   tick: number,
