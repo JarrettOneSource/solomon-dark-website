@@ -1742,3 +1742,135 @@ teardown, then compare retained original audio with the current built cue.
 Successful recovery alone satisfies neither condition. Original video/audio
 decoding and current browser comparison need their own finite M5 phase after
 the native contract and parent-reviewed implementation package are ready.
+
+### Actual M5 native phase 0621, 2026-10-05
+
+The separate parent-reviewed native-only phase
+`report65-native-cheat-death-20261005-0621` admitted at
+`06:23:31.626819+00:00` on the exact a8542b6f/71ca50f0 ledger-only source
+identity and original retail PE. LLVM tool SHA-256 is
+`83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+All six known-entry ranges and the one qualified full-text CALL census exited
+zero. Native work finished at `06:23:38.176594+00:00`; automatic cleanup and
+exact lease release finished at `06:23:38.470793+00:00`, before interpretation.
+The 266,240-byte export, SHA-256
+`47e940329a7f8976d13fac8617cf3412bdc4792ea2b75a2bb618d34d867e8372`,
+was saved and acknowledged on M2. The owned native and SSH groups were empty,
+the M5 root was removed and the parent independently verified resource release.
+This is static instruction/data evidence, not stock runtime, media, Website
+execution or either text/sound acceptance. The phase and clocks are closed.
+
+The exact rescue suffix now proves four ordered overlapping requests, not
+four distinct samples. Region virtual `+0x100` is called once with the damaged
+Player position; its stored point gain is passed to all four requests.
+
+| Native site | Registry offset / sample | Playback rate | Existing current cue / asset |
+| --- | --- | --- | --- |
+| `0x005303F8` | `+0x61C`, registry 35, `sounds/flashspell.wav` | default 1 | `flash-spell`, exact current 159,454-byte WAV, SHA-256 `fda25c45eab0290011b1f3ba859757578586b30c3e7f1c905077f801af0ee5be` |
+| `0x0053041D` | same Sound object | float32 `0.800000011920929` from `0x00785368` | same asset and point gain |
+| `0x00530442` | same Sound object | float32 `0.5` from `0x007DE870` | same asset and point gain |
+| `0x0053045B` | `+0x5F0`, registry 34, `sounds/flash.wav` | default 1 | `flash`, current `enemy-flash.wav`, exact 65,836 bytes, SHA-256 `dfbee90531011a439650ee0bbf30a3c5ea9469ccd97a9979c05ba73f3db9c05c` |
+
+Both existing Website asset hashes were independently rechecked on M2 without
+decoding or playing audio. Reuse the existing director and assets. The client
+must compute native point attenuation for its own view; do not multiply it by
+an already attenuated authority gain or choose a synthetic replacement cue.
+
+Before those requests, `0x005303AC` calls Region setter `0x00448600` with
+white RGBA `(1,1,1,1)` and float32 loss `0.009999999776482582`. This setter
+receives no point-gain argument. The authoritative single Region overwrite
+lane and existing reduced-flash policy own the result. Recovery checks the
+HP writer's lethal return, Player `+0x204 <= 0`, enabled byte `+0x81C` and
+positive signed charge `+0x820`; the charge decrements at `0x0053034D`, and
+the restored HP is float32(maximum HP multiplied by exact double `0.5`).
+The semantic mapping of `+0x204` remains explicit rather than guessed.
+
+The literal at `0x0079402C` is instruction-associated with the PUSH at
+`0x005304A1`. White RGBA is constructed before CALL `0x005304B0` on manager
+`0x00808878`. No local-player equality branch surrounds this notification
+in the recovered suffix; visibility/replication must be reconciled with the
+existing multiplayer and native local-HUD contracts before a client policy is
+claimed. Player `+0x1D4` is unconditionally written to one at `0x00530538`;
+its precise reaction/renderer mapping is still unclaimed.
+
+The actual Shockwave customization differs from the existing smaller waves:
+
+| Field | Instruction/data | Exact rescue value |
+| --- | --- | --- |
+| radius `+0x30` | `0x005304DB/0x005304E8`, dword `0x007870F0` | 175 |
+| radius growth `+0x13C` | `0x005304EC/0x005304F2`, dword `0x007849F4` | 6 per update |
+| push/light scalar `+0x140` | `0x005304F8/0x005304FE`, dword `0x007DE9D0` | 2 |
+| life `+0x144` | `0x00530504/0x0053050A`, dword `0x00785564` | `0.3499999940395355` |
+| fade threshold `+0x148` | `0x00530510/0x00530516`, dword `0x00794028` | `0.03750000149011612` |
+| damage `+0x14C` | `FLDZ`, `0x0053051E` | zero |
+| source index `+0x150` | `0x00530524/0x00530528` | sign-extended Player `+0x5C` |
+| damage-context enrichment byte `+0x154` | `0x005304E1` | zero |
+| group, position, registration | copy Player `+0x60/+0x18/+0x1C`, `0x00530531 -> 0x0063E5B0` | damaged participant's Region/group/position |
+
+The shared tick grows radius first, requests a random unit vector and passes
+it through the largest-vector Region reducer before life subtraction and
+retirement. That vector is multiplied by current `+0x140` and the qword at
+`0x007DE910`; the qword value was not in the first nine-span data capture and
+is not guessed. The local source-index-zero branch queries hostiles every ten
+ticks, tracks each once, attaches 400-tick Dazzle and dispatches the zero-damage
+context. Even ages push tracked targets by the current scalar times growth
+through the collision resolver. The light callback divides radius by the
+retained native 140 and passes scalar as light intensity, with no directional
+shadow or independent main-pass sprite. Precise life/fade/jitter constants,
+first-update order and translation to the existing host authority remain
+separate closing checks. Current inspected shared wave cases and
+`nativeSecondaryWorldShake` contain no wave-vector producer; a shared repair
+must cover every actually affected wave instead of only this new seed.
+
+### Complete decoded notification CALL inventory and remaining closure
+
+The one accepted original `.text` pass returned these ten direct CALL sites.
+No preferred-address byte candidate for `0x005CA7C0` was found in any original
+PE section. The pass proves decoded CALL contexts; retained function boundaries
+and semantic evidence give the dispositions below. No row is silently omitted
+or declared finally ported before validation.
+
+| CALL site | Native owner / consumer | Current consequence and evidence status |
+| --- | --- | --- |
+| `0x005304B0` | Player damage `0x0052F540`, Cheat Death | exact literal/color insertion proved; current producer missing |
+| `0x0056D5E8` | inventory-use `0x0056D1B0`, skill-book rank `+1` | existing Hub/Boneyard consumer; retained entry 170 plus actual formatter/CALL |
+| `0x005D59D4` | Bonus apply `0x005D5910`, kind 2 DAMAGE x4 | existing consumer; retained entry 275 and following native 1,500-tick writer |
+| `0x005D5BB6` | same owner, kind 1 random skill `+1` | existing consumer; retained Bonus/Book eligibility and actual skill-name formatter |
+| `0x005D5CBE` | same owner, kind 0 bonus skill point | existing consumer; retained complete three-kind catalog and actual literal CALL |
+| `0x005E6A8D` | Gold tick `0x005E66B0`, `%d GOLD` | existing consumer; actual amount formatter and retained merge/credit contract |
+| `0x005E6D75` | item-drop/Sack tick `0x005E6B50`, held-item display name | existing consumer; actual held-item virtual and verified retained pseudo-source; `0x0061F4C0` in the initial inventory was not this insertion owner |
+| `0x00663AC1` | mana-overload owner `0x006639D0`, “Overloaded Mana!” | retained local-only text contract; current three overload result paths need a notification-producer sweep and exact color/gate closure |
+| `0x00684901` | retained helper entry `0x006847F0`, script/Trigger notification | actual formatter/CALL captured; exact semantics, authored membership, visibility and current reachability remain unresolved |
+| `0x00689E07` | verified GameplayAction dispatcher `0x00689750`, notification branch | actual string getter/copy/CALL captured; exact opcode/content/color and supported boundary remain unresolved |
+
+The true manager-list step is adjacent `0x005CABD0..0x005CAD28`, fully
+captured in the insertion range. `0x005D7EF0..0x005D8100`, although labelled
+“notification-update” in the diagnostic, is a Game tick prefix, not that list
+step. Do not replay a completed extraction to fix its label. The list's earlier
+pressure, life loss and removal behavior is recovered, but the instruction
+widths now identify qword constants requiring exact typed reconciliation
+against the older float32 implementation.
+
+Notification draw is complete through RET `0x005CF47D`. It uses Fonts root
+`0x008199A0 + 0xE7D98`, the retained body group 3, and separate black shadow/
+caller-color calls to `0x004F5620` at `0x005CF2B8/0x005CF3B0`. It requires a
+local actor at Game `+0x1358`, local actor `+0x160 == 0`, and combat/status HUD
+gate `+0x1AC4 != 0`; the last gate is the retained Tutorial stage-13-close
+contract. Current Boneyard notification rendering has no independent match
+for all of those gates, which must be closed through the shared owner.
+
+The draw rounds row offset `+0x20` through `0x00747360` and passes its float
+result in argument slot `+0x20` beside zero in `+0x1C`. This conflicts with
+the earlier evidence claim that offset enters only scale. Its spatial role is
+not inferred from the stack slot: neither worker nor parent found a retained
+`0x004F5620` ABI body, only function metadata. The smallest missing callee
+window is entry `0x004F5620` through the next retained entry `0x004F5710`.
+Entry 100 is reopened for this ABI question and shared-consumer geometry.
+
+No product port or new regression expectation is justified by unresolved
+callee/data/owner semantics. Audio/flash/rescue-wave values above are recovered
+pending port; notification precision, callee geometry and the two script
+consumers remain explicit extraction questions. The parent receives the full
+facts, source consequences and finite missing-window proposal before further
+resource admission or product implementation. Text and sound acceptance
+remain independently pending.

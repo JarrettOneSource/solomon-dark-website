@@ -1478,3 +1478,62 @@ currently interleaves selection/pricing and creates a plain recipe item on
 purchase. A separate correction must persist realized offer colors, preserve
 them on purchase, and fix RNG ordering across offer creation, save, and wire
 ownership. No Dowsing schema or behavior changes are included here.
+
+
+## 2026-10-05 — Report65 shared notification ABI reopening
+
+Report65's accepted native-only phase0621 extends the actual shared notification
+membership beyond loot. Its exact findings and per-CALL inventory are in
+[entry175](<175-2026-08-23-hagatha-charm-and-curse-gameplay-effect-parity-reopening.md#actual-m5-native-phase-0621-2026-10-05>).
+No product change or final parity claim is made in this reopening.
+
+Original PE SHA-256 remains
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The accepted 266240-byte export SHA-256 is
+`47e940329a7f8976d13fac8617cf3412bdc4792ea2b75a2bb618d34d867e8372`.
+Native and SSH exited zero; automatic owned-process/root/lease cleanup ended
+before M2 interpretation, and the parent independently verified release.
+These are exact instructions/captured data with qualified owner reconciliation,
+not stock runtime, new media decoding or current browser acceptance.
+
+The complete original .text linear pass found ten CALLs to notification
+insertion005CA7C0 and no preferred-address byte candidates in any PE section.
+The actual current/retained consumers are Cheat Death, skill-book rank+1,
+three Bonus kinds, Gold pickup, Sack/item-drop name, mana overload, one
+script/Trigger helper and a GameplayAction_Dispatch notification branch.
+The latter two still need exact opcode/content/visibility/reachability proof.
+Mana-overload gameplay was retained, but all current producer paths need a
+notification sweep before its text is called covered. All actual shared
+consumers must receive a supported final disposition before delivery.
+
+Insertion005CA7C0 ends at005CABC8; the adjacent005CABD0..005CAD28 is the true
+manager-list step and is already fully captured. The old005D7EF0 attribution
+is a Game tick owner, not the list-step body. No completed range or census
+needs replay merely to fix that label. The native list uses qword pressure/loss
+operands around005CAC18/005CAC1E/005CAC93; preserve exact load widths and close
+their values before using the existing float32 recipe as an arithmetic oracle.
+
+The previously stated claim that offset enters only the scale expression and
+never screen-Y is **reopened**. Full draw005CF000..005CF47D uses Fonts
+`DAT_008199A0+0xE7D98` (retained body group3), white/black shadow and caller
+color. It rounds row+20 via00747360 and passes the float result at argument+20
+of004F5620, next to zero atargument+1C, at both005CF2B8 and005CF3B0. Those
+stack-slot observations alone do not prove a screen coordinate or another
+argument meaning. Worker and parent found only4F5620 function-index metadata,
+not its ABI body. The smallest missing callee window is004F5620..004F5710.
+Until that actual body is read under a separate future grant, neither retain
+the old assertion as proved nor add a guessedY translation.
+
+Draw also requires an existing local Game+1358 actor, local actor+160==0 and
+combat/statusHUD Game+1AC4!=0. The last field already belongs to Tutorial's
+stage13-close visibility contract (entry186). Reconcile the shared message
+painter with the established HUD/lifecycle projection across local death,
+Tutorial, Hub/Boneyard, pause, reconnect and teardown instead of inventing a
+new timer or per-message special case.
+
+Current NativeLootMessagePresentation.consumeText is the reusable notification
+owner. Before a shared change, preserve GOLD merge/pressure, arbitrary item
+names, all three Bonus colors, skill-book IDs/feedback cursors, and the newly
+proved rescue/overload/script consumers. A new replicated notice cannot silently
+collide with independent positive Loot/enemy event IDs or negative book IDs.
+Current source/native comparison and actual text acceptance remain pending.
