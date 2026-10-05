@@ -11,7 +11,7 @@ export default function NativeLootBitmapText({ text, tint, scale }: NativeLootBi
   return (
     <NativeUiText
       className="boneyard-loot-bitmap-text"
-      font="body"
+      font="menu"
       align="center"
       placement="baseline"
       scale={scale}
