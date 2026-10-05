@@ -541,6 +541,7 @@ export async function createBoneyardWorldRenderer(
       })
     }
     const sampledFeedback = worldFeedback.sample(snapshot.tick)
+    secondaryScreenFeedback.consumeWorldCameraDisplacements(snapshot.secondaryAbilities.cameraDisplacements)
     const sampledSecondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
       snapshot.tick,
     )

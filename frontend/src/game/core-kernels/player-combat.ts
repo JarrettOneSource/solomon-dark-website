@@ -1,4 +1,5 @@
 import { createNativePuppetHit, nativePuppetHitAlpha, receiveNativePuppetHit, stepNativePuppetHit, type NativePuppetHitState } from './native-puppet-hit.ts'
+import { createNativePlayerRescueProtection, type NativePlayerRescueProtection } from './native-player-rescue.ts'
 import {
   NATIVE_COLD_MOVEMENT_SCALE,
   NATIVE_WRAITH_DAZZLE_TICKS,
@@ -29,6 +30,7 @@ export const PLAYER_LIFE_STATES = [
 export type PlayerLifeState = typeof PLAYER_LIFE_STATES[number]
 
 export interface PlayerCombatComponent {
+  readonly rescueProtection: NativePlayerRescueProtection
   readonly hitFeedback: NativePuppetHitState
   readonly circleSlowTicksRemaining: number
   readonly coldSlowTicksRemaining: number
@@ -70,6 +72,7 @@ export interface PlayerManaDebitResult<T extends PlayerCombatComponent> {
 
 export function createPlayerCombat(): PlayerCombatComponent {
   return {
+    rescueProtection: createNativePlayerRescueProtection(),
     hitFeedback: createNativePuppetHit(),
     circleSlowTicksRemaining: 0,
     coldSlowTicksRemaining: 0,
@@ -340,9 +343,9 @@ function stepLivingPlayerCombat<T extends PlayerCombatComponent>(
     source.currentMana + manaRecoveryPerTick,
   ))
   const poisonDamagePerTick = poisonTicksRemaining === 0 ? 0 : source.poisonDamagePerTick
-  const lifeState = currentHealth <= PLAYER_LETHAL_HEALTH
-    ? 'lethal-pending' as const
-    : 'alive' as const
+  // The accepted damage receiver owns the lethal suffix. Poison is capped;
+  // a blindness-rejected lethal suffix must not become death on a later base tick.
+  const lifeState = source.lifeState
   const combat = currentHealth === source.currentHealth
       && hitFeedback === source.hitFeedback
       && currentMana === source.currentMana
@@ -408,6 +411,7 @@ export function respawnPlayerCombat<T extends PlayerCombatComponent>(source: T):
   if (source.currentHealth > 0) return source
   return {
     ...source,
+    rescueProtection: createNativePlayerRescueProtection(),
     currentHealth: source.maximumHealth,
     currentMana: source.maximumMana,
     deathAgeTicks: 0,
@@ -477,6 +481,7 @@ export function playerDeathPresentationTickAtAge(deathAgeTicks: number): number 
 export function resetPlayerCombatForNewRun<T extends PlayerCombatComponent>(source: T): T {
   return {
     ...source,
+    rescueProtection: createNativePlayerRescueProtection(),
     hitFeedback: createNativePuppetHit(),
     circleSlowTicksRemaining: 0,
     coldSlowTicksRemaining: 0,

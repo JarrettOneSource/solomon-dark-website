@@ -712,6 +712,7 @@ export async function createHubWorldRenderer(
         )
         secondaryScreenFeedback.set(participant.region, screenFeedback)
       }
+      screenFeedback.consumeWorldCameraDisplacements(snapshot.secondaryAbilities.cameraDisplacements)
       screenFeedback.consumeScreenFlashes(snapshot.screenFlashes, {
         cameraCenter: { x: camera.x + visibleWorldWidth / 2,
           y: camera.y + viewport.height / baseCameraScale / 2 },

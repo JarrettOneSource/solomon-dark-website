@@ -1306,6 +1306,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
+    rescueProtection: { fraction: 0, nextParticleId: 1, particles: [] },
     corpseConsumed: false,
     advancedUnlocks: Array<boolean>(8).fill(false),
     weldBuildId: null,
@@ -5349,14 +5350,14 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   )
 
   const sortedOwner = structuredClone(message)
-  sortedOwner.frame.secondaryAbilities.actors[0]!.kind = 'shockwave'
+  sortedOwner.frame.secondaryAbilities.actors[0]!.kind = 'moving-fire'
   sortedOwner.frame.secondaryAbilities.actors[0]!.painterRegistrations = [{
     managerLane: 'transient',
     registrationOrdinal: 43,
   }]
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(sortedOwner)),
-    /only Earthquake preserves pointer-list order/,
+    /this actor has no native ordered pointer list/,
   )
 })
 

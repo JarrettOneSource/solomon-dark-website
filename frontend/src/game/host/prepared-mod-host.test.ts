@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   applyGameSimulationHubAction,
   createGameSimulation,
+  enterBoneyardWorld,
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
@@ -24,6 +25,7 @@ import type {
 } from '../protocol/codecs/lua.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 import { prepareModHost } from './prepared-mod-host.ts'
+import { materializeStockTutorial } from './boneyard-catalog.ts'
 
 const require = createRequire(import.meta.url)
 const wasmPath = require.resolve('wasmoon/dist/glue.wasm')
@@ -336,6 +338,37 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
   } finally {
     host.close()
   }
+})
+
+test('an authored damage intent propagates one accepted rescue through the shared gameplay boundary', async () => {
+  const content = await materialized()
+  let state = enterBoneyardWorld(createGameSimulation({ 'player-1': {
+    discipline: 'arcane', displayName: 'Tester', element: 'ether',
+  } }), materializeStockTutorial())
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: -5, hagathaRuntime: { ...progression.hagathaRuntime, cheatDeathCharges: 1 },
+    })) } }
+  const host = await prepareModHost({ content, state: {
+    read: () => state, write: candidate => { state = candidate },
+  }, wasmPath })
+  try {
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const runId = state.world.runId
+    const first = host.step([{ name: 'gold.changed', payload: {} }], 1, runId,
+      { participant_id: 'player-1' })
+    assert.equal(first.accepted, true, first.errors.join('; '))
+    assert.equal(getPlayerProgression(state, 'player-1').currentHealth, 25)
+    assert.equal(getPlayerProgression(state, 'player-1').rescueProtection.fraction, 1)
+    assert.equal(state.secondaryAbilities.actors.filter(actor => actor.kind === 'rescue-shockwave').length, 1)
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.equal(state.world.enemyEvents.filter(event => event.type === 'player-cheat-death').length, 1)
+    const repeated = host.step([{ name: 'gold.changed', payload: {} }], 2, runId,
+      { participant_id: 'player-1' })
+    assert.equal(repeated.accepted, true, repeated.errors.join('; '))
+    assert.equal(state.secondaryAbilities.actors.filter(actor => actor.kind === 'rescue-shockwave').length, 1)
+    assert.equal(state.world.enemyEvents.filter(event => event.type === 'player-cheat-death').length, 1)
+  } finally { host.close() }
 })
 
 async function materialized(): Promise<MaterializedWebSessionContent> {

@@ -37,6 +37,8 @@ import {
   stepPlayerCombatTick,
   tryDebitPlayerMana,
 } from '../core-kernels/player-combat.ts'
+import { nativeRescueDamage, stepNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import {
   applyNativeSkillAcquisitionOfferSeeds,
   applyNativeRevelationToStartingSkills,
@@ -1087,13 +1089,13 @@ export function damagePlayerEntityWithResult(
   }
   const appliedDamage = damageAlreadyScaled
     ? damage
-    : Math.fround(damage * playerSkillDerivedStats(
+    : nativeRescueDamage(Math.fround(damage * playerSkillDerivedStats(
         source.skillRuntimes[index]!,
         source.skillBooks[index]!,
         source.statBooks[index]!,
         source.progressions[index]!,
         source.economies[index]!,
-      ).incomingDamageFactor)
+      ).incomingDamageFactor), source.progressions[index]!.rescueProtection)
   const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick, recordHit, hitStrength)
   if (damaged === source.progressions[index]) {
     return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
@@ -1102,6 +1104,7 @@ export function damagePlayerEntityWithResult(
     damaged,
     source.economies[index]!,
     appliedDamage,
+    source.lightings[index]!.blindnessTicksRemaining,
   )
   const economies = [...source.economies]
   const progressions = [...source.progressions]
@@ -1372,6 +1375,7 @@ export function stepPlayerEntityCombatTick(
           result.combat,
           source.economies[index]!,
           poisonHealthDamage,
+          source.lightings[index]!.blindnessTicksRemaining,
         )
       : {
           autoHealthPotionUsed: false,
@@ -1388,11 +1392,11 @@ export function stepPlayerEntityCombatTick(
       || skillTick.runtime !== source.skillRuntimes[index]
 
     function resolvePoisonContact() {
-      const nativePoisonDamagePerTick = Math.fround(
+      const nativePoisonDamagePerTick = nativeRescueDamage(Math.fround(
         potionStepped.poisonDamagePerTick
           * derived.poisonDamageFactor
           * derived.incomingDamageFactor,
-      )
+      ), potionStepped.rescueProtection)
       const poisonActive = potionStepped.lifeState === 'alive' && potionStepped.poisonTicksRemaining > 0
       const contact = poisonActive ? resolvePlayerHarmfulContact(
         skillTick.runtime, derived, potionStepped, { physicalDamage: 0, magicDamage: 0 },
@@ -1562,6 +1566,27 @@ export function stepPlayerEntityOverlayLightingTick(
     return stepped
   })
   return changed ? { ...source, lightings } : source
+}
+
+export function stepPlayerEntityRescueProtectionTick(
+  source: PlayerEntityStore,
+  sourceRng: NativeRngState,
+  worldKey: (playerId: string) => string,
+  register: RegisterNativeWorldPainter,
+): PlayerEntityRngResult {
+  let rng = sourceRng
+  let changed = false
+  const progressions = source.progressions.map((progression, index) => {
+    const stepped = stepNativePlayerRescueProtection(
+      progression.rescueProtection, { position: source.locomotions[index]!.position,
+        register, worldKey: worldKey(source.identities[index]!.playerId) }, rng,
+    )
+    rng = stepped.rng
+    if (stepped.protection === progression.rescueProtection) return progression
+    changed = true
+    return { ...progression, rescueProtection: stepped.protection }
+  })
+  return { rng, store: changed ? { ...source, progressions } : source }
 }
 
 export function resetPlayerEntitiesForNewRun(
@@ -2081,6 +2106,7 @@ function resolveNativeHagathaDamage(
   source: PlayerProgressionComponent,
   sourceEconomy: HubEconomyState,
   remainingDamage: number,
+  blindnessTicksRemaining: number,
 ): Readonly<{
   autoHealthPotionUsed: boolean
   cheatDeathTriggered: boolean
@@ -2119,6 +2145,9 @@ function resolveNativeHagathaDamage(
     }
   }
   let cheatDeathTriggered = false
+  if (progression.lifeState === 'lethal-pending' && blindnessTicksRemaining > 0) {
+    progression = { ...progression, lifeState: 'alive' }
+  }
   if (progression.lifeState === 'lethal-pending') {
     const cheatDeath = consumeNativeHagathaCheatDeath(
       progression.hagathaRuntime,
@@ -2131,6 +2160,7 @@ function resolveNativeHagathaDamage(
         deathAgeTicks: 0,
         deathTick: 0,
         hagathaRuntime: cheatDeath.runtime,
+        rescueProtection: { ...progression.rescueProtection, fraction: 1 },
         lifeState: 'alive',
       }
       cheatDeathTriggered = true

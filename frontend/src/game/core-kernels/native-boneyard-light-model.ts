@@ -773,6 +773,7 @@ export function nativeSecondaryProviderLightSource(
   }
   if (
     actor.kind === 'shockwave'
+    || actor.kind === 'rescue-shockwave'
     || actor.kind === 'mindblast-shockwave'
     || actor.kind === 'freeze-wave'
   ) {

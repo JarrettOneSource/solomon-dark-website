@@ -1,4 +1,4 @@
-import { nativePuppetHit } from './native-state.ts'
+import { nativePlayerRescueProtection, nativePuppetHit } from './native-state.ts'
 import { NATIVE_MAGE_COLD_SLOW_TICKS, NATIVE_WRAITH_DAZZLE_TICKS } from '../../core-kernels/boneyard-enemy-modifiers.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../../core-kernels/native-secondary-ability-contract.ts'
 import type { PlayerLifeState } from '../../core-kernels/player-combat.ts'
@@ -9,6 +9,7 @@ import { GameProtocolError, array, boolean, finite, integer, integerWithin, limi
 export function playerProgression(value: unknown, field: string): ProtocolPlayerProgression {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'rescueProtection',
     'circleSlowTicksRemaining',
     'advancedUnlocks',
     'weldBuildId',
@@ -287,6 +288,7 @@ export function playerProgression(value: unknown, field: string): ProtocolPlayer
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
     hagathaRuntime,
+    rescueProtection: nativePlayerRescueProtection(source.rescueProtection, `${field}.rescueProtection`),
     hardenCoating: unitInterval(source.hardenCoating, `${field}.hardenCoating`),
     inventoryStats,
     learnedSkills,

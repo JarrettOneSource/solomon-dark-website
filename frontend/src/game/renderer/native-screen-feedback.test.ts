@@ -8,6 +8,18 @@ import { NativeSecondaryScreenFeedbackPresentation } from './native-screen-feedb
 
 const context = { cameraCenter: { x: 0, y: 0 }, localPlayerAlternate: false, visibleWorldWidth: 1000 }
 
+test('wave expiry proposals share strict maximum selection and never replay a snapshot tick', () => {
+  const lane = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:wave')
+  lane.consumeWorldCameraDisplacements([{ displacement: { x: 6, y: 0 }, tick: 1, worldKey: 'boneyard:wave' }])
+  lane.consumePrimaryCameraDisplacement({ displacement: { x: 0, y: 6 }, eventId: 1, tick: 1, worldKey: 'boneyard:wave' })
+  assert.deepEqual(lane.sampleCameraDisplacement(1), { x: 6, y: 0 })
+  assert.deepEqual(lane.sampleCameraDisplacement(2), { x: 4.5, y: 0 })
+  lane.consumeWorldCameraDisplacements([{ displacement: { x: 6, y: 0 }, tick: 1, worldKey: 'boneyard:wave' }])
+  assert.deepEqual(lane.sampleCameraDisplacement(2), { x: 4.5, y: 0 })
+  lane.consumeWorldCameraDisplacements([{ displacement: { x: 0, y: 10 }, tick: 2, worldKey: 'boneyard:other' }])
+  assert.deepEqual(lane.sampleCameraDisplacement(2), { x: 4.5, y: 0 })
+})
+
 const crow: BoneyardEnemyEventSnapshot = { actorId: 1, eventId: 4, runId: 'bosses', tick: 10,
   sourcePosition: { x: 0, y: 0 }, type: 'enemy-screen-flash', screenFlash: {
     alpha: 1, red: 0, green: 0, blue: 0, decayPerTick: Math.fround(.1), pointAttenuated: false,

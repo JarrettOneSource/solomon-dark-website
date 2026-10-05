@@ -1,3 +1,5 @@
+import { NATIVE_SPARKLE_TIMER, nativeSparkleScale, stepNativeSparkle, type NativeSparkleState } from '../core-kernels/native-sparkle.ts'
+
 export const NATIVE_GAME_TICKS_PER_SECOND = 100
 export const NATIVE_SKILL_PICKER_REVEAL_TICKS = 40
 export const NATIVE_LEVEL_UP_EFFECT_TICKS = 180
@@ -7,14 +9,12 @@ export const NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS = (
 ) * (1000 / NATIVE_GAME_TICKS_PER_SECOND)
 
 const NATIVE_TICK_MS = 1000 / NATIVE_GAME_TICKS_PER_SECOND
-const NATIVE_LEVEL_UP_PARTICLE_TIMER = 180
 const NATIVE_LEVEL_UP_PARTICLE_DECAY = 3
 const NATIVE_LEVEL_UP_PARTICLE_DECAY_RANGE = 2
 const NATIVE_LEVEL_UP_SPREAD = 30
 const NATIVE_RANDOM_FLOAT_BOUND = 100_001
 const NATIVE_RANDOM_FLOAT_DIVISOR = 100_000
 const NATIVE_RANDOM_FLOAT_MASK = 0x1ffff
-const NATIVE_SPARKLE_RISE_PER_TICK = Math.fround(0.1)
 
 export interface NativeSkillPickerReveal {
   readonly ambientAlpha: number
@@ -134,13 +134,14 @@ export function nativeLevelUpPresentationFrame(
           NATIVE_LEVEL_UP_PARTICLE_DECAY_RANGE,
         ),
     )
-    let remainingTimer = NATIVE_LEVEL_UP_PARTICLE_TIMER
-    let offsetY = spawnY
+    let sparkle: NativeSparkleState | null = { alpha: 0, decay, id: birthTick + 1,
+      position: { x: spawnX, y: spawnY }, painterRegistration: null,
+      rotationDegrees, timer: NATIVE_SPARKLE_TIMER, worldKey: '' }
     for (let ageTick = 0; ageTick < ageTicks; ageTick += 1) {
-      remainingTimer = Math.fround(remainingTimer - decay)
-      offsetY = Math.fround(offsetY - NATIVE_SPARKLE_RISE_PER_TICK)
+      if (sparkle === null) break
+      sparkle = stepNativeSparkle(sparkle)
     }
-    if (remainingTimer <= 0) continue
+    if (sparkle === null) continue
     const lateralFade = 1 - Math.abs(spawnX) / NATIVE_LEVEL_UP_SPREAD
     const emitterTimer = NATIVE_LEVEL_UP_EFFECT_TICKS - birthTick - 1
     const birthAlpha = Math.sin(
@@ -151,9 +152,9 @@ export function nativeLevelUpPresentationFrame(
       atlas: 'BadGuys',
       entry: 73,
       offsetX: spawnX,
-      offsetY,
+      offsetY: sparkle.position.y,
       rotationRadians,
-      scale: Math.sin(remainingTimer * Math.PI / 180),
+      scale: nativeSparkleScale(sparkle.timer),
     })
   }
   const emitterTimer = Math.max(0, NATIVE_LEVEL_UP_EFFECT_TICKS - tick - 1)

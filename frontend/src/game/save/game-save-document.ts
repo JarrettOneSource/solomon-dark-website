@@ -1,4 +1,5 @@
 import { nativeScreenFlashes } from '../protocol/codecs/screen-flash.ts'
+import { nativeSecondaryCameraDisplacements } from '../protocol/codecs/secondary.ts'
 import { createNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { hubActionFeedback } from '../protocol/codecs/economy.ts'
 import { createNativeStoneskinWarp } from '../core-kernels/native-stoneskin.ts'
@@ -7,7 +8,8 @@ import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-m
 import { boneyardMouthWorldTargets } from '../core-server/boneyard-world-targets.ts'
 import { normalizeSavedDiscorporeal } from './discorporeal-save.ts'
 import { createNativePuppetHit, nativePuppetHitAlpha, receiveNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
-import { nativePuppetHit, nativeWorldPainterRegistrations, nativeWorldPuppetHits, vector } from '../protocol/codecs/native-state.ts'
+import { nativePlayerRescueProtection, nativePuppetHit, nativeWorldPainterRegistrations, nativeWorldPuppetHits, vector } from '../protocol/codecs/native-state.ts'
+import { createNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import type { BoastSelection, ModBoastSelection } from '../core-kernels/boast.ts'
 import type { NativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
 import { assertNativeDemonArticulationState, createNativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
@@ -1721,6 +1723,8 @@ function normalizePlayerStore(
         poisonBeforeCold: sourceSchemaVersion < 31 ? false : progression.poisonBeforeCold,
         disciplineOfferBias: economy.ownedPerkSelectors.includes(14),
         hagathaRuntime,
+        rescueProtection: progression.rescueProtection === undefined ? createNativePlayerRescueProtection()
+          : nativePlayerRescueProtection(progression.rescueProtection, `game save player ${index} rescue protection`),
       } as unknown as GameSimulationState['playerEntities']['progressions'][number]
       if ((removedHagathaSelectors[index]?.length ?? 0) === 0) return normalized
       const derived = playerSkillDerivedStats(
@@ -1814,6 +1818,8 @@ function normalizeDemonSkullEncounter(value: unknown) {
 
 function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number, savedTick: number): GameSimulationState['secondaryAbilities'] {
   const source = record(value, 'game save secondary abilities')
+  const cameraDisplacements = source.cameraDisplacements === undefined ? []
+    : nativeSecondaryCameraDisplacements(source.cameraDisplacements, 'game save secondary camera displacements')
   const players = record(source.players, 'game save secondary players')
   let rng = parseNativeRng(source.rng, 'game save secondary RNG')
   const savedActors = array(source.actors, 'game save secondary actors')
@@ -1879,7 +1885,7 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number, sav
       phase: flyout.state.phaseDeg, rotationRadians: -Math.PI / 180, scale: 1, velocity: flyout.state.velocity }
   })
   return {
-    ...source, actors, rng,
+    ...source, actors, rng, cameraDisplacements,
     stoneskinWarp: sourceSchemaVersion < 46
       ? Object.values(players).some(value => Number(record(value, 'saved secondary player').stoneskinTicksRemaining) > 0)
         ? createNativeStoneskinWarp(rng).positions : null
@@ -3059,7 +3065,9 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
           economies[index]!.ownedPerkSelectors,
         )
       : parseHagathaRuntime(rawRuntime, index)
-    return { ...progression, hagathaRuntime }
+    return { ...progression, hagathaRuntime,
+      rescueProtection: progression.rescueProtection === undefined ? createNativePlayerRescueProtection()
+        : nativePlayerRescueProtection(progression.rescueProtection, `game save player ${index} rescue protection`) }
   })
   const skillBooks = (store.skillBooks as unknown[]).map((value, index) => {
     const skillBook = record(value, `game save player skill book ${index}`)

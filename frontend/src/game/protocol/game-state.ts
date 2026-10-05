@@ -28,6 +28,7 @@ import type { NativeWorldManagerRegistration } from '../core-kernels/native-worl
 import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
 import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
 import type { NativeWeldComponentRanks, PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
+import type { NativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import type { PrimarySpellProjectileState, PrimarySpellSimulationState, PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
@@ -129,6 +130,7 @@ export interface ProtocolPlayerPrimarySpellStats {
 }
 
 export interface ProtocolPlayerProgression {
+  rescueProtection: NativePlayerRescueProtection
   circleSlowTicksRemaining: number
   advancedUnlocks: readonly boolean[]
   coldSlowTicksRemaining: number

@@ -393,6 +393,8 @@ function protocolPlayerState(
       deathTick: progression.deathTick,
       experience: progression.experience,
       hagathaRuntime: { ...progression.hagathaRuntime },
+      rescueProtection: { ...progression.rescueProtection,
+        particles: progression.rescueProtection.particles.map(particle => ({ ...particle, position: { ...particle.position } })) },
       hardenCoating: skillRuntime.harden.coating,
       inventoryStats: {
         castSpeedPercent: Math.fround(derived.castProgressFactor * 100),

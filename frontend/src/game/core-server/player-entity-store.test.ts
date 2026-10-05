@@ -1103,6 +1103,52 @@ test('Drinker precedes Cheat Death and both clear until-hurt one-shots on real d
   assert.equal(playerProgressionAt(cheated.store, 'first')?.currentHealth, 25)
   assert.equal(playerProgressionAt(cheated.store, 'first')?.lifeState, 'alive')
   assert.equal(playerProgressionAt(cheated.store, 'first')?.hagathaRuntime.cheatDeathCharges, 0)
+  assert.equal(playerProgressionAt(cheated.store, 'first')?.rescueProtection.fraction, 1)
+  assert.equal(playerProgressionAt(drank.store, 'first')?.rescueProtection.fraction, 0)
+})
+
+test('Crow blindness gates the lethal suffix without spending a charge or scheduling death on expiry', () => {
+  let store = addPlayerEntity(createPlayerEntityStore(), 'first', FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!, ownedPerkSelectors: [7],
+  })
+  store = applyPlayerEntityHagathaPurchaseEffects(store, 'first', [7], createNativeRng(1)).store
+  store = { ...store, lightings: [{ ...store.lightings[0]!, blindnessTicksRemaining: 2 }] }
+  const blindHit = damagePlayerEntityWithResult(store, 'first', 60, 1)
+  assert.equal(blindHit.cheatDeathTriggered, false)
+  assert.equal(blindHit.store.progressions[0]!.currentHealth, -10)
+  assert.equal(blindHit.store.progressions[0]!.lifeState, 'alive')
+  assert.equal(blindHit.store.progressions[0]!.hagathaRuntime.cheatDeathCharges, 1)
+  store = blindHit.store
+  for (let tick = 2; tick <= 3; tick += 1) {
+    store = stepPlayerEntityOverlayLightingTick(store)
+    const result = stepPlayerEntityCombatTick(store, createNativeRng(1), new Set(), {}, tick)
+    assert.deepEqual(result.cheatDeathPlayerIds, [])
+    assert.deepEqual(result.beganDeathEpochPlayerIds, [])
+    store = result.store
+  }
+  assert.equal(store.lightings[0]!.blindnessTicksRemaining, 0)
+  const nextHit = damagePlayerEntityWithResult(store, 'first', 1, 4)
+  assert.equal(nextHit.cheatDeathTriggered, true)
+  assert.equal(nextHit.store.progressions[0]!.rescueProtection.fraction, 1)
+})
+
+test('poison uses the same rescue fraction before its health cap without becoming a lethal hit', () => {
+  let store = addPlayerEntity(createPlayerEntityStore(), 'first', FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
+  store = poisonPlayerEntity(store, 'first', 100, 1)
+  store = { ...store, progressions: store.progressions.map(progression => ({ ...progression,
+    rescueProtection: { ...progression.rescueProtection, fraction: .5 } })) }
+  const half = stepPlayerEntityCombatTick(store, createNativeRng(31)).store
+  assert.equal(half.progressions[0]!.currentHealth, 49.501)
+  assert.equal(half.progressions[0]!.lastDamageTick, null)
+  const protectedStore = { ...store, progressions: store.progressions.map(progression => ({ ...progression,
+    rescueProtection: { ...progression.rescueProtection, fraction: 1 } })) }
+  const protectedTick = stepPlayerEntityCombatTick(protectedStore, createNativeRng(31)).store
+  assert.equal(protectedTick.progressions[0]!.currentHealth, 50)
+  assert.equal(protectedTick.progressions[0]!.lifeState, 'alive')
+  assert.equal(protectedTick.progressions[0]!.poisonTicksRemaining, 99)
 })
 
 test('Drinker consumes one nested mana potion and retries the same debit once', () => {

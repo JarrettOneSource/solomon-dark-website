@@ -137,7 +137,7 @@ test('Golem publishes native foot anchors, alternating gait paths, bob, and atta
   assert.equal(attack.actor.golem.rightLimbMode, 1)
 })
 
-test('Golem acquires, follows, attacks at marker 37, and applies the 90-degree contact arc', () => {
+test('Golem acquires, follows and births its retained-budget area at marker37', () => {
   const target = { id: 1, position: { x: 0, y: -60 }, radius: 20 }
   const started = stepNativeSecondaryGolem(golem({
     ageTicks: 400,
@@ -169,7 +169,7 @@ test('Golem acquires, follows, attacks at marker 37, and applies the 90-degree c
   })
   assert.equal(impact.actor.golem.actionTick, 37)
   assert.deepEqual(impact.contact?.targetIds, [1])
-  assert.equal(impact.contact?.impulse, 120)
+  assert.equal(impact.contact?.movementBudget, 50)
   assert.ok((impact.contact?.damage ?? 0) >= 5)
   assert.ok((impact.contact?.damage ?? 0) <= 10)
 

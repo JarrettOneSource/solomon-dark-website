@@ -2169,3 +2169,47 @@ This entry still makes no application validation or whole-report acceptance
 claim. Current closed-cue source, latest-main/protocol integration, exact
 text/audio comparisons, all-mode gate, publication/live/archive and cleanup
 remain pending. No further native extraction is authorized.
+
+### Report65 M2 caller reconciliation: Staff is also a retained area consumer
+
+The previous source plan's blanket Staff exclusion is superseded. Retained
+Mod Loader `native-skills-and-spells.md` lines691–696 records Staff selectors
+1/3/4 creating `0x7E9` and using full Knockback tick `00600220`, with radius100,
+angular inputs80/60/365 and movement budgets150/50/50. The actual1128
+initializer gives those angular inputs their half-width/circle meaning; the
+shared retained Region cone uses the backward30 apex. This is retained caller
+reconciliation against the actual callee ABI, not a new Staff instruction read.
+WeldHail's `Mod_Knockback` and ordinary Staff contact modifiers are separate
+owners and remain outside this area actor's membership.
+
+Current `native-player-staff-action.ts` and `player-staff-combat-system.ts`
+already retain `player-staff-knockback` actors and terminal200-tick Dazzle plus
+signed Float45 perturbation. They omit the shared tick's one-word UnitVector*10
+Region proposal, temporary-radius zero-move/collision collection and dynamic
+list extension, and use25-back/half-of-angular-input query geometry. Port those
+members through the same area primitive and existing movement owner as Golem;
+preserve the Staff callback's existing contact/proc/input/authority contract.
+The retained signed Float45 proof is that same method paragraph. Exact qword
+`0078C6F0=0.6000000238418579`, bytes`000000403333e33f`, is retained in ledger010;
+ledger011 also retains `00785E50=45`. No new scalar extraction is necessary.
+
+Source inspection also found two direct mod damage wrappers in
+`host/prepared-mod-host.ts` that discarded the accepted-rescue result. Parent
+confirmed their cutover belongs in the complete implementation. Both route
+through the same authoritative simulation damage/rescue boundary; replicated
+feedback never creates gameplay. Stock Hub remains a noncombat exclusion and
+the wrappers retain their existing authored HP/input/authority behavior.
+
+All new source and regression assertions are authored on M2 and unvalidated.
+The original040/test-first84 and additional pre-port gameplay patch remain
+retained for actual M5 red proof. No new native or Website execution is claimed.
+
+The circular branch has a distinct retained narrow phase: Mod Loader
+`native-skills-and-spells.md:648` directly records `00642090` as
+`distanceSquared < radiusSquared + targetRadiusSquared`. Preserve that
+already-correct Whirl predicate; it is neither the cone's root-only radius nor
+linear radius padding. Actual0621 Shockwave CALL`005FFA56` and1052 FreezeWave
+CALL`005FFF42` both target this same circle helper. Reuse the established Region
+cell/traversal order with that exact predicate and preserve their retained
+pointer lists across later target movement, collision and expiry. This is
+retained predicate plus already-exported caller reconciliation, no new read.

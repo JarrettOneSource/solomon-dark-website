@@ -1,3 +1,4 @@
+import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import { copyNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { clamp, lerp } from './presentation-math.ts'
 import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
@@ -673,6 +674,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     progression: {
       ...player.progression,
       hagathaRuntime: { ...player.progression.hagathaRuntime },
+      rescueProtection: copyNativePlayerRescueProtection(player.progression.rescueProtection),
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
       secondaryManaCosts: player.progression.secondaryManaCosts.map((entry) => [...entry]),
       weldComponentRanks: player.progression.weldComponentRanks === null

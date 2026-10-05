@@ -13,6 +13,7 @@ import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schem
 import { findInventoryItem, reforgeModEquipment } from '../core-kernels/hub-economy.ts'
 import {
   GAME_TICK_RATE,
+  damageGameSimulationPlayer,
   failGameSimulationPlayerBoast,
   getPlayerCharacter,
   getPlayerEconomy,
@@ -27,7 +28,6 @@ import type {
 } from '../core-server/game-simulation.ts'
 import {
   creditPlayerEntityLootGold,
-  damagePlayerEntity,
   grantPlayerEntityInventoryItems,
   playerEntityIndex,
   replacePlayerEconomy,
@@ -1022,15 +1022,7 @@ export async function prepareModHost(options: Readonly<{
             statuses,
             skills,
           )
-          attackedState = {
-            ...attackedState,
-            playerEntities: damagePlayerEntity(
-              attackedState.playerEntities,
-              attack.playerId,
-              amount,
-              tick,
-            ),
-          }
+          attackedState = damageGameSimulationPlayer(attackedState, attack.playerId, amount, tick)
         }
         if (attackedState !== beforeAttacks) options.state.write(attackedState)
       }
@@ -1363,15 +1355,7 @@ function applyDamage(
   const playerTarget = damagePlayerTarget(source, target, context)
   if (playerTarget !== null) {
     const filtered = filterPlayerDamage(source, playerTarget, amount, context.tick, statuses, skills)
-    return {
-      ...source,
-      playerEntities: damagePlayerEntity(
-        source.playerEntities,
-        playerTarget,
-        filtered,
-        context.tick,
-      ),
-    }
+    return damageGameSimulationPlayer(source, playerTarget, filtered, context.tick)
   }
   const descriptor = damageEnemyTarget(target, context)
   const sourcePlayerId = typeof context.context.participant_id === 'string'

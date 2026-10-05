@@ -1,5 +1,7 @@
 import { actorHeadingFromVector } from './actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from './actor-physics.ts'
+import { stepNativeKnockbackArea } from './native-knockback-area.ts'
+import { nativePrimaryCircleTargets, nativePrimaryConeTargets } from './primary-spell-targeting.ts'
 import {
   advanceNativeRngWords,
   drawNativeFloat,
@@ -227,6 +229,7 @@ export interface NativeStaffTarget {
   readonly collisionRadius: number
   readonly id: string
   readonly position: Readonly<Vector2>
+  readonly registrationOrder?: number
 }
 
 export interface NativeStaffPhysicalTarget extends NativeStaffTarget {
@@ -254,6 +257,7 @@ export interface NativeStaffContactPresentation {
 }
 
 export interface NativeStaffKnockbackStep {
+  readonly cameraDisplacement: Readonly<Vector2>
   readonly actor: NativeStaffKnockbackActor | null
   readonly dazzledTargetIds: readonly string[]
   readonly displacements: readonly Readonly<{
@@ -493,30 +497,19 @@ export function nativeStaffKnockbackTargets<T extends NativeStaffTarget>(
   action: NativePlayerStaffAction,
   targets: readonly T[],
 ): readonly T[] {
-  const arcDegrees = nativeStaffKnockbackArc(action.outcome)
-  if (arcDegrees === null) return Object.freeze([])
-  if (arcDegrees >= 360) {
-    return Object.freeze(targets.filter((target) => circleContains(
-      action.origin,
-      NATIVE_STAFF_WHIRL_RADIUS,
-      target,
-    )))
-  }
+  const angularInput = nativeStaffKnockbackArc(action.outcome)
+  if (angularInput === null) return []
+  const queryTargets = targets.map((target, index) => ({ active: true, actorFlags: 2,
+    attachment: target.position, bodyRadius: target.collisionRadius, cellBindingOrder: target.registrationOrder ?? index,
+    id: target.id, kind: 'enemy' as const, nativePriority: 0, pendingRemove: false, position: target.position,
+    queryLane: 'grid' as const, registrationOrder: target.registrationOrder ?? index }))
   const radians = action.headingDegrees * Math.PI / 180
-  const angleOrigin = {
-    x: action.origin.x - Math.sin(radians) * 25,
-    y: action.origin.y + Math.cos(radians) * 25,
-  }
-  return Object.freeze(targets.filter((target) => {
-    const dx = target.position.x - action.origin.x
-    const dy = target.position.y - action.origin.y
-    if (dx * dx + dy * dy >= NATIVE_STAFF_WHIRL_RADIUS ** 2) return false
-    const heading = actorHeadingFromVector(
-      target.position.x - angleOrigin.x,
-      target.position.y - angleOrigin.y,
-    )
-    return absoluteHeadingDelta(action.headingDegrees, heading) < arcDegrees * 0.5
-  }))
+  const queried = angularInput >= 360
+    ? nativePrimaryCircleTargets({ actorMask: 2, origin: action.origin, radius: 100, targets: queryTargets })
+    : nativePrimaryConeTargets({ actorMask: 2, aimDirection: { x: Math.sin(radians), y: -Math.cos(radians) },
+        halfAngleDegrees: angularInput, hasLineOfSight: () => true, origin: action.origin, reach: 100, targets: queryTargets })
+  const byId = new Map(targets.map(target => [target.id, target]))
+  return queried.map(target => byId.get(target.id)!)
 }
 
 export function nativeStaffContactDamagePerTarget(
@@ -763,51 +756,20 @@ export function stepNativeStaffKnockback(
   source: NativeStaffKnockbackActor,
   positions: Readonly<Record<string, Readonly<Vector2>>>,
   sourceRng: NativeRngState,
+  move?: (id: string, delta: Vector2) => readonly string[],
 ): NativeStaffKnockbackStep {
-  const distance = Math.min(source.remainingDistance, NATIVE_STAFF_KNOCKBACK_STEP)
-  const displacements = source.targetIds.flatMap((targetId) => {
-    const target = positions[targetId]
-    if (target === undefined) return []
-    const deltaX = target.x - source.origin.x
-    const deltaY = target.y - source.origin.y
-    const length = Math.hypot(deltaX, deltaY)
-    return [{
-      delta: Object.freeze(length === 0
-        ? { x: 0, y: 0 }
-        : { x: deltaX / length * distance, y: deltaY / length * distance }),
-      targetId,
-    }]
+  const area = stepNativeKnockbackArea(source, sourceRng, {
+    position: id => positions[id] ?? null, move,
   })
-  const remainingDistance = source.remainingDistance - distance
-  if (remainingDistance > 0) {
-    return Object.freeze({
-      actor: Object.freeze({
-        ...source,
-        ageTicks: source.ageTicks + 1,
-        remainingDistance,
-      }),
-      dazzledTargetIds: Object.freeze([]),
-      displacements: Object.freeze(displacements),
-      headingPerturbations: Object.freeze([]),
-      rng: sourceRng,
-    })
+  return {
+    actor: area.terminal ? null : { ...source, ageTicks: source.ageTicks + 1,
+      remainingDistance: area.remainingDistance, targetIds: area.targetIds },
+    cameraDisplacement: area.cameraDisplacement,
+    dazzledTargetIds: area.terminal ? area.headingPerturbations.map(row => row.targetId) : [],
+    displacements: area.displacements,
+    headingPerturbations: area.headingPerturbations,
+    rng: area.rng,
   }
-  let rng = sourceRng
-  const headingPerturbations = source.targetIds.flatMap((targetId) => {
-    if (positions[targetId] === undefined) return []
-    const heading = drawNativeFloat(rng, 45, true)
-    rng = heading.state
-    return [{ headingDegrees: heading.value, targetId }]
-  })
-  return Object.freeze({
-    actor: null,
-    dazzledTargetIds: Object.freeze(source.targetIds.filter((targetId) => (
-      positions[targetId] !== undefined
-    ))),
-    displacements: Object.freeze(displacements),
-    headingPerturbations: Object.freeze(headingPerturbations),
-    rng,
-  })
 }
 
 function createNativeStaffSmoke(

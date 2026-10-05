@@ -33,6 +33,19 @@ export function nativeSecondaryActor(
   if (!players[ownerId] && kind !== 'golem-death') throw new GameProtocolError(`${field}.ownerId has no player snapshot`)
   const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
   const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
+  if (kind === 'rescue-shockwave' && (source.skillId !== null || source.damage !== 0
+    || source.quantity !== 6 || source.slowFactor !== Math.fround(.0375)
+    || source.golem !== null || source.freezeTicks !== 0 || lifetimeTicks !== 100
+    || nonnegativeFinite(source.radius, `${field}.radius`) < 175
+    || nonnegativeFinite(source.alpha, `${field}.alpha`) > 2
+    || positiveFinite(source.phase, `${field}.phase`) > Math.fround(.35))) {
+    throw new GameProtocolError(`${field} violates its participant rescue wave contract`)
+  }
+  if (kind === 'golem-knockback' && (source.skillId !== 45 || source.radius !== 120
+    || source.quantity !== 50 - ageTicks * 10 || ageTicks >= 5 || lifetimeTicks !== 6
+    || source.golem !== null || source.freezeTicks !== 0)) {
+    throw new GameProtocolError(`${field} violates its persistent Golem area contract`)
+  }
   if (ageTicks >= lifetimeTicks) {
     throw new GameProtocolError(`${field}.ageTicks is outside the live lifetime`)
   }
@@ -48,9 +61,11 @@ export function nativeSecondaryActor(
   const unsortedHitTargetIds = hitTargetIds.some((id, index) => (
     index > 0 && id < hitTargetIds[index - 1]!
   ))
-  if (duplicateHitTargetIds || (kind !== 'earthquake' && unsortedHitTargetIds)) {
+  const orderedPointerList = kind === 'earthquake' || kind === 'golem-knockback'
+    || kind === 'shockwave' || kind === 'rescue-shockwave' || kind === 'mindblast-shockwave' || kind === 'freeze-wave'
+  if (duplicateHitTargetIds || (!orderedPointerList && unsortedHitTargetIds)) {
     throw new GameProtocolError(
-      `${field}.hitTargetIds must be unique; only Earthquake preserves pointer-list order`,
+      `${field}.hitTargetIds must be unique; this actor has no native ordered pointer list`,
     )
   }
   const targetId = source.targetId === null
@@ -80,7 +95,8 @@ export function nativeSecondaryActor(
         ? 53
       : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
   const mindblast = kind === 'mindblast-burst' || kind === 'mindblast-shockwave'
-  if (kind !== 'electric-burn-flare' && kind !== 'electric-burn-arc' && mindblast !== (skillId === null)) {
+  if (kind !== 'electric-burn-flare' && kind !== 'electric-burn-arc' && kind !== 'rescue-shockwave'
+    && mindblast !== (skillId === null)) {
     throw new GameProtocolError(`${field}.skillId must be null exactly for Mindblast or primary-origin ElectricBurn flares`)
   }
   if (kind === 'electric-burn-flare' || kind === 'electric-burn-arc') {

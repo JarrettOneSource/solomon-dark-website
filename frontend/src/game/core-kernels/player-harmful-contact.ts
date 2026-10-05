@@ -1,4 +1,5 @@
 import { NATIVE_HARDEN_CHIP_THRESHOLD } from './native-harden.ts'
+import { nativeRescueDamage } from './native-player-rescue.ts'
 import { createNativeHardenChip, type NativeHardenChip } from './native-harden-effects.ts'
 import type { Vector2 } from './vector.ts'
 import {
@@ -39,7 +40,7 @@ export interface PlayerFlashResponse {
 export function resolvePlayerHarmfulContact(
   runtime: PlayerSkillRuntimeComponent,
   derived: PlayerSkillDerivedStats,
-  progression: Pick<PlayerProgressionComponent, 'mindChugTicksRemaining'>,
+  progression: Pick<PlayerProgressionComponent, 'mindChugTicksRemaining' | 'rescueProtection'>,
   damage: Readonly<{ physicalDamage: number; magicDamage: number }>,
   reflectionSourceInRange: boolean,
   sourceRng: NativeRngState,
@@ -82,9 +83,10 @@ export function resolvePlayerHarmfulContact(
     * derived.incomingDamageFactor)
   return Object.freeze({
     hardenChip,
-    physicalDamage: Math.max(0, Math.fround(physicalDamage - runtime.harden.armor)),
-    magicDamage,
-    shieldDamage: Math.fround(physicalDamage + magicDamage),
+    physicalDamage: nativeRescueDamage(Math.max(0, Math.fround(physicalDamage - runtime.harden.armor)), progression.rescueProtection),
+    magicDamage: nativeRescueDamage(magicDamage, progression.rescueProtection),
+    shieldDamage: Math.fround(nativeRescueDamage(physicalDamage, progression.rescueProtection)
+      + nativeRescueDamage(magicDamage, progression.rescueProtection)),
     deflectPitch: null,
     deflected: false,
     reflectedDamage: 0,

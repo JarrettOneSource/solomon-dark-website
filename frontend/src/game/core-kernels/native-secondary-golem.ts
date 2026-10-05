@@ -1,9 +1,10 @@
 import {
   drawNativeFloat,
+  drawNativeFloatRange,
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
-import { nativeHeadingTurnDirection } from './primary-spell-targeting.ts'
+import { nativeHeadingTurnDirection, nativePrimaryConeTargets } from './primary-spell-targeting.ts'
 import type { Vector2 } from './vector.ts'
 
 export const NATIVE_GOLEM_RADIUS = 30
@@ -18,9 +19,6 @@ const ATTACK_REACH_PADDING = 20
 const ATTACK_IMPACT_TICK = 37
 const ATTACK_DURATION_MAXIMUM = 90
 const ATTACK_DURATION_RANDOM_COUNT = 20
-const KNOCKBACK_RANGE = 50
-const KNOCKBACK_ARC_DEGREES = 90
-const KNOCKBACK_IMPULSE = 120
 const PROVOKE_ROLL_MAXIMUM = 70
 const POST_ATTACK_PROVOKE_ROLL_BOUND = 75
 const PROVOKE_ROLL_BOUND = 1_200
@@ -79,11 +77,14 @@ export interface NativeGolemKernelTarget {
   readonly id: number
   readonly position: Vector2
   readonly radius: number
+  readonly registrationOrder?: number
 }
 
 export interface NativeGolemContact {
   readonly damage: number
-  readonly impulse: number
+  readonly headingDegrees: number
+  readonly movementBudget: number
+  readonly origin: Vector2
   readonly targetIds: readonly number[]
 }
 
@@ -230,19 +231,18 @@ export function stepNativeSecondaryGolem(
     const actionTick = actor.golem.actionTick + 1
     let contact: NativeGolemContact | null = null
     if (actionTick === ATTACK_IMPACT_TICK) {
-      const damageDraw = drawNativeFloat(
-        rng,
-        actor.golem.damageMaximum - actor.damageMinimum,
-      )
+      const damageDraw = drawNativeFloatRange(rng, actor.damageMinimum, actor.golem.damageMaximum)
       rng = damageDraw.state
-      const targetIds = nativeGolemContactTargets(actor, context.targets)
-      if (targetIds.length > 0) {
-        contact = Object.freeze({
-          damage: actor.damageMinimum + damageDraw.value,
-          impulse: KNOCKBACK_IMPULSE,
-          targetIds,
-        })
+      const headingDegrees = Math.fround(actor.rotationRadians * 180 / Math.PI)
+      const backwardRadians = Math.fround(Math.fround(Math.PI) * Math.fround(headingDegrees + 180) / 180)
+      const origin = {
+        x: Math.fround(Math.fround((actor.golem.leftFoot.x + actor.golem.rightFoot.x) * .5)
+          + Math.fround(Math.fround(Math.sin(backwardRadians)) * 20)),
+        y: Math.fround(Math.fround((actor.golem.leftFoot.y + actor.golem.rightFoot.y) * .5)
+          + Math.fround(Math.fround(-Math.cos(backwardRadians)) * 20)),
       }
+      contact = Object.freeze({ damage: damageDraw.value, headingDegrees, movementBudget: 50,
+        origin, targetIds: nativeGolemContactTargets(origin, actor.rotationRadians, context.targets) })
     }
     if (actionTick < actor.golem.actionDurationTicks) {
       return activeResult(
@@ -435,26 +435,18 @@ function maybeStartProvoke(
 }
 
 function nativeGolemContactTargets(
-  actor: NativeGolemKernelActor,
+  origin: Vector2,
+  rotationRadians: number,
   targets: readonly NativeGolemKernelTarget[],
 ): readonly number[] {
-  const direction = {
-    x: Math.sin(actor.rotationRadians),
-    y: -Math.cos(actor.rotationRadians),
-  }
-  const origin = {
-    x: actor.position.x + direction.x * ATTACK_REACH_PADDING,
-    y: actor.position.y + direction.y * ATTACK_REACH_PADDING,
-  }
-  const minimumDot = Math.cos(KNOCKBACK_ARC_DEGREES * Math.PI / 360)
-  return Object.freeze(targets.filter((target) => {
-    const dx = target.position.x - origin.x
-    const dy = target.position.y - origin.y
-    const distance = Math.hypot(dx, dy)
-    if (distance > KNOCKBACK_RANGE + target.radius) return false
-    if (distance === 0) return true
-    return (dx / distance) * direction.x + (dy / distance) * direction.y >= minimumDot
-  }).map(({ id }) => id))
+  return nativePrimaryConeTargets({ actorMask: 2, aimDirection: {
+    x: Math.sin(rotationRadians), y: -Math.cos(rotationRadians),
+  }, halfAngleDegrees: 90, hasLineOfSight: () => true, origin, reach: 120,
+  targets: targets.map((target, index) => ({ active: true, actorFlags: 2, attachment: target.position,
+    bodyRadius: target.radius, cellBindingOrder: target.registrationOrder ?? index,
+    id: String(target.id), kind: 'enemy', nativePriority: 0, pendingRemove: false,
+    position: target.position, queryLane: 'grid', registrationOrder: target.registrationOrder ?? index,
+  })) }).map(target => Number(target.id))
 }
 
 function advanceGolemArticulation(

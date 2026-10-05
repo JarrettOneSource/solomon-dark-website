@@ -38,6 +38,7 @@ import type { NativeTreeOcclusionInput } from './boneyard-tree-occlusion.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
+import { NativeRescueSparkleViews } from './native-rescue-sparkle-view.ts'
 import { modConsumableEffectId as modEffectId } from './mod-consumable-effect-presentation.ts'
 import { ModConsumableEffectViews } from './mod-consumable-effect-view.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
@@ -86,6 +87,7 @@ export class BoneyardDynamicScene {
   readonly goodies: NativeGoodieViews
   readonly lights: BoneyardSceneLights
   readonly levelUp: NativeLevelUpWorldView
+  private readonly rescueSparkles: NativeRescueSparkleViews
   private readonly livePlayerIds = new Set<string>()
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
@@ -207,6 +209,7 @@ export class BoneyardDynamicScene {
     this.playerDeathBursts = new PlayerDeathBurstViews(root, textures, initialSnapshot)
     this.playerDeathWeapons = new PlayerDeathWeaponViews(root, textures, initialSnapshot)
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
+    this.rescueSparkles = new NativeRescueSparkleViews(root, textures.levelUpSparkle)
     root.addChild(this.levelUp.container)
     this.weather = new NativeBoneyardWeather({
       enhancedEffects: initialSnapshot.enhancedEffects,
@@ -352,6 +355,7 @@ export class BoneyardDynamicScene {
     const mageLightningPainterLayers = this.mageLightningPulses.painterLayers()
     this.playerDeathBursts.update(snapshot)
     this.playerDeathWeapons.update(snapshot)
+    this.rescueSparkles.update(snapshot.players, `boneyard:${snapshot.world.runId}`)
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
@@ -480,6 +484,7 @@ export class BoneyardDynamicScene {
     }
     const dynamicLayers = this.dynamicLayers
     dynamicLayers.length = 0
+    for (const layer of this.rescueSparkles.painterLayers()) dynamicLayers.push(layer)
     const enemyAuxiliaryPainterLayers = this.enemies.painterLayers()
     for (const playerId in snapshot.players) {
       if (materializingPlayerIds.has(playerId)) continue
@@ -805,6 +810,9 @@ export class BoneyardDynamicScene {
       localPlayer.position,
       localPlayerZIndex + 0.1,
     )
+    for (const layer of this.rescueSparkles.painterLayers()) {
+      this.rescueSparkles.setDepth(layer.id, positionedDynamics.get(layer.id)?.zIndex ?? 1)
+    }
     return {
       activeStaticPainterLayerCount: activeStaticPainterLayers.length,
       buildingBaseRoofColorMismatchCount,
@@ -911,6 +919,7 @@ export class BoneyardDynamicScene {
     this.playerDeathWeapons.destroy()
     this.root.removeChild(this.levelUp.container)
     this.levelUp.destroy()
+    this.rescueSparkles.destroy()
     this.gates.destroy()
     this.weatherView.destroy()
     this.solomon?.destroy()

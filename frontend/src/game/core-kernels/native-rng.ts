@@ -8,6 +8,16 @@ const NATIVE_RNG_MASK = 0x3fffffff
 const NATIVE_RNG_WORD_COUNT = 55
 export const NATIVE_FLOAT_DIVISOR = 100_000
 
+/** Retail `0x00410C50`: one unsigned draw from the supplied/default stream. */
+export function drawNativeUnitVector(source: NativeRngState): {
+  state: NativeRngState
+  value: Readonly<{ x: number; y: number }>
+} {
+  const angle = drawNativeFloat(source, 360)
+  const radians = Math.fround(Math.fround(Math.PI) * angle.value / 180)
+  return { state: angle.state, value: { x: Math.fround(Math.sin(radians)), y: Math.fround(-Math.cos(radians)) } }
+}
+
 export function createNativeRng(seed: number): NativeRngState {
   if (!Number.isSafeInteger(seed)) throw new RangeError('native RNG seed must be a safe integer')
   const words = new Array<number>(NATIVE_RNG_WORD_COUNT)

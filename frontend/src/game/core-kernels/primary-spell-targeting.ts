@@ -331,6 +331,16 @@ export function nativePrimaryConeTargets(
   })
 }
 
+export function nativePrimaryCircleTargets<T extends PrimarySpellTarget>(
+  query: Readonly<{ actorMask: number; origin: Vector2; radius: number; targets: readonly T[] }>,
+): T[] {
+  const radiusSquared = query.radius * query.radius
+  return nativeBroadphaseOrder(query.origin, query.radius, query.targets).filter(target => (
+    nativePrimaryTargetEligible(target, query.actorMask)
+    && squaredLength(subtract(target.position, query.origin)) < radiusSquared + target.bodyRadius ** 2
+  ))
+}
+
 export function nativePrimaryPolygonTargets<T extends PrimarySpellTarget>(
   query: NativePrimaryPolygonQuery<T>,
 ): T[] {
@@ -573,11 +583,11 @@ function nativeRegistrationOrder<T extends PrimarySpellTarget>(
   ))
 }
 
-function nativeBroadphaseOrder(
+function nativeBroadphaseOrder<T extends PrimarySpellTarget>(
   origin: Vector2,
   reach: number,
-  targets: readonly PrimarySpellTarget[],
-): PrimarySpellTarget[] {
+  targets: readonly T[],
+): T[] {
   const minX = Math.fround(origin.x - reach)
   const minY = Math.fround(origin.y - reach)
   const diameter = Math.fround(reach + reach)

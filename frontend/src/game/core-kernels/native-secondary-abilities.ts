@@ -23,6 +23,7 @@ import {
   drawNativeFloatRange,
   drawNativeInteger,
   drawNativeSign,
+  drawNativeUnitVector,
   type NativeRngState,
 } from './native-rng.ts'
 import {
@@ -86,6 +87,9 @@ import {
   type NativeFireEmberContact,
 } from './primary-spell-fire-effects.ts'
 import type { Vector2 } from './vector.ts'
+import { stepNativeExpandingWave } from './native-expanding-wave.ts'
+import { stepNativeKnockbackArea } from './native-knockback-area.ts'
+import { nativePrimaryCircleTargets } from './primary-spell-targeting.ts'
 
 export type {
   NativeGolemPhase,
@@ -112,6 +116,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'ring-fire-explosion', 'ring-fire-fragment',
   'acid-splash', 'ether-drain', 'ether-drain-cloud',
   'ether-drain-capture-flare', 'comet', 'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
+  'rescue-shockwave', 'golem-knockback',
 ] as const)
 
 export const NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS = Object.freeze([
@@ -323,6 +328,7 @@ export type NativeSecondaryTargetEffectPatch = Partial<Omit<
 >>
 
 export interface NativeSecondarySimulationState {
+  readonly cameraDisplacements: readonly NativeSecondaryCameraDisplacement[]
   readonly stoneskinWarp: readonly number[] | null
   readonly actors: readonly NativeSecondaryActorState[]
   readonly events: readonly NativeSecondaryEventState[]
@@ -334,6 +340,12 @@ export interface NativeSecondarySimulationState {
   readonly targetEffects: readonly NativeSecondaryTargetEffectState[]
 }
 
+export interface NativeSecondaryCameraDisplacement {
+  readonly displacement: Vector2
+  readonly tick: number
+  readonly worldKey: string
+}
+
 export interface NativeSecondaryTarget {
   readonly family: string
   readonly id: number
@@ -343,6 +355,7 @@ export interface NativeSecondaryTarget {
   readonly radius: number
   readonly scale: number
   readonly shieldHealth: number
+  readonly registrationOrder?: number
 }
 
 export interface NativeSecondarySceneryTarget {
@@ -468,6 +481,9 @@ export interface NativeSecondaryTickContext {
     radius: number,
   ) => readonly NativeSecondaryTarget[]
   readonly tick: number
+  readonly knockbackAreaMovement?: (
+    worldKey: string, targetId: number, delta: Vector2, sourceActorId: number,
+  ) => readonly number[]
 }
 
 export interface NativeSecondaryDamageContact {
@@ -606,11 +622,9 @@ const SHOCKWAVE_INITIAL_LIFE = Math.fround(1.155)
 const SHOCKWAVE_EXPLOSIVE_SHIELD_LIFE = Math.fround(0.35)
 const SHOCKWAVE_RADIUS_GROWTH_PER_TICK = Math.fround(6)
 const FREEZE_WAVE_INITIAL_LIFE = Math.fround(0.924)
-const WAVE_LIFE_PER_TICK = Math.fround(0.01)
 const SHOCKWAVE_FADE_THRESHOLD = Math.fround(0.12375)
 const SHOCKWAVE_EXPLOSIVE_SHIELD_FADE_THRESHOLD = Math.fround(0.0375)
 const FREEZE_WAVE_FADE_THRESHOLD = Math.fround(0.12375)
-const WAVE_FADE_FACTOR = Math.fround(0.899999976)
 const ACID_RAIN_INITIAL_SCALE = Math.fround(0.01)
 const STORM_QUERY_RADIUS = 500
 const STORM_FADE_PER_TICK = 0.01
@@ -890,6 +904,7 @@ function spawnFreezeWaveProgram(
 
 export function createNativeSecondarySimulation(seed = 0): NativeSecondarySimulationState {
   return {
+    cameraDisplacements: [],
     stoneskinWarp: null,
     actors: [],
     events: [],
@@ -1435,6 +1450,7 @@ export function stepNativeSecondaryAbilities(
       return hasTargetEffect(next) ? [next] : []
     }),
   }
+  state = { ...state, cameraDisplacements: [] }
   let rng = state.rng
   const actorsAtStepStart = state.actors
   const damage: NativeSecondaryDamageContact[] = []
@@ -1486,7 +1502,7 @@ export function stepNativeSecondaryAbilities(
     kind: NativeSecondaryDamageKind,
     hitStrength?: number,
   ): void => {
-    if (!(amount > 0)) return
+    if (!(amount > 0) && actor.kind !== 'rescue-shockwave' && actor.kind !== 'golem-knockback') return
     const effect = nativeSecondaryTargetEffect(state, actor.worldKey, target.id)
     damage.push({
       amount: kind === 'lightning' && (effect?.prismaticTicks ?? 0) > 0 ? amount * 2 : amount,
@@ -1502,9 +1518,18 @@ export function stepNativeSecondaryAbilities(
       targetId: target.id,
     })
   }
-  const candidates = (actor: NativeSecondaryActorState, radius = actor.radius) => (
-    stableTargets(context.targets(actor.worldKey, actor.position, radius))
-  )
+  const candidates = (actor: NativeSecondaryActorState, radius = actor.radius) => {
+    const targets = context.targets(actor.worldKey, actor.position, radius)
+    if (actor.kind !== 'shockwave' && actor.kind !== 'rescue-shockwave'
+      && actor.kind !== 'mindblast-shockwave' && actor.kind !== 'freeze-wave') return stableTargets(targets)
+    const byId = new Map(targets.map(target => [String(target.id), target]))
+    return nativePrimaryCircleTargets({ actorMask: 2, origin: actor.position, radius,
+      targets: targets.map((target, index) => ({ active: true, actorFlags: target.nativeFlags ?? 2,
+        attachment: target.position, bodyRadius: target.radius, cellBindingOrder: target.registrationOrder ?? index,
+        id: String(target.id), kind: 'enemy' as const, nativePriority: 0, pendingRemove: false,
+        position: target.position, queryLane: 'grid' as const, registrationOrder: target.registrationOrder ?? index,
+      })) }).map(target => byId.get(target.id)!)
+  }
 
   for (const effect of source.targetEffects) {
     if (effect.electricBurn !== null) {
@@ -1616,10 +1641,10 @@ export function stepNativeSecondaryAbilities(
     const scale = drawNativeFloat(rotation.state, 0.5)
     const radius = drawNativeFloat(scale.state, 10)
     const offsetDirection = drawNativeUnitVector(radius.state)
-    const vertical = drawNativeFloat(offsetDirection.rng, 35)
+    const vertical = drawNativeFloat(offsetDirection.state, 35)
     const speed = drawNativeFloat(vertical.state, 1)
     const velocityDirection = drawNativeUnitVector(speed.state)
-    const alpha = drawNativeFloat(velocityDirection.rng, 0.5)
+    const alpha = drawNativeFloat(velocityDirection.state, 0.5)
     rng = alpha.state
     state = spawn(state, actorSeed({
       alpha: Math.fround(1 - alpha.value),
@@ -1986,33 +2011,27 @@ export function stepNativeSecondaryAbilities(
         break
       }
       case 'shockwave':
+      case 'rescue-shockwave':
       case 'mindblast-shockwave': {
         const radiusGrowth = sourceActor.quantity
-        if (!(radiusGrowth > 0)) {
-          throw new Error(`${actor.kind} ${actor.id} lost its native radius growth`)
-        }
-        const remainingLife = Math.fround(sourceActor.phase - WAVE_LIFE_PER_TICK)
-        if (remainingLife <= 0) {
-          retain = false
-          break
-        }
-        const alpha = remainingLife < sourceActor.slowFactor
-          ? Math.fround(sourceActor.alpha * WAVE_FADE_FACTOR)
-          : sourceActor.alpha
-        actor = {
-          ...actor,
-          alpha,
-          phase: remainingLife,
-          radius: Math.fround(sourceActor.radius + radiusGrowth),
-          scale: Math.fround(1 + actor.ageTicks * 0.08),
-        }
+        if (!(radiusGrowth > 0)) throw new Error(`${actor.kind} ${actor.id} lost its native radius growth`)
+        const wave = stepNativeExpandingWave({ radius: sourceActor.radius, growth: radiusGrowth,
+          scalar: sourceActor.alpha, life: sourceActor.phase, fadeThreshold: sourceActor.slowFactor }, rng)
+        rng = wave.rng
+        state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, wave.displacement, context.tick)
+        actor = { ...actor, alpha: wave.scalar, phase: wave.life, radius: wave.radius,
+          velocity: wave.displacement, scale: Math.fround(1 + actor.ageTicks * .08) }
+        retain = wave.retain
+        if (!retain) break
         if (actor.ageTicks % 10 === 0) {
           const hit = new Set(actor.hitTargetIds)
           for (const target of candidates(actor)) {
             if (hit.has(target.id)) continue
             hit.add(target.id)
-            if (actor.kind === 'shockwave') {
+            if (actor.kind === 'shockwave' || actor.kind === 'rescue-shockwave') {
               addDamage(actor, target, actor.damage, 'fire')
+            }
+            if (actor.kind === 'shockwave') {
               fireBurnRequests.push({
                 actor,
                 damage: owner.fireBurnDamage,
@@ -2068,11 +2087,12 @@ export function stepNativeSecondaryAbilities(
               }
             }
           }
-          actor = { ...actor, hitTargetIds: Object.freeze([...hit].sort((a, b) => a - b)) }
+          actor = { ...actor, hitTargetIds: Object.freeze([...hit]) }
         }
         if (actor.ageTicks % 2 === 0) {
-          const tracked = new Set(actor.hitTargetIds)
-          for (const target of candidates(actor).filter(({ id }) => tracked.has(id))) {
+          for (const id of actor.hitTargetIds) {
+            const target = context.target(actor.worldKey, id)
+            if (target === null) continue
             const deltaX = Math.fround(target.position.x - actor.position.x)
             const deltaY = Math.fround(target.position.y - actor.position.y)
             const distance = Math.hypot(deltaX, deltaY)
@@ -2091,19 +2111,13 @@ export function stepNativeSecondaryAbilities(
         break
       }
       case 'freeze-wave': {
-        const life = Math.fround(sourceActor.phase - WAVE_LIFE_PER_TICK)
-        if (life <= 0) {
-          retain = false
-          break
-        }
-        actor = {
-          ...actor,
-          alpha: life < FREEZE_WAVE_FADE_THRESHOLD
-            ? Math.fround(sourceActor.alpha * WAVE_FADE_FACTOR)
-            : sourceActor.alpha,
-          phase: life,
-          radius: Math.fround(sourceActor.radius + FREEZE_WAVE_RADIUS_PER_TICK),
-        }
+        const wave = stepNativeExpandingWave({ radius: sourceActor.radius, growth: FREEZE_WAVE_RADIUS_PER_TICK,
+          scalar: sourceActor.alpha, life: sourceActor.phase, fadeThreshold: FREEZE_WAVE_FADE_THRESHOLD }, rng)
+        rng = wave.rng
+        state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, wave.displacement, context.tick)
+        actor = { ...actor, alpha: wave.scalar, phase: wave.life, radius: wave.radius, velocity: wave.displacement }
+        retain = wave.retain
+        if (!retain) break
         if (actor.ageTicks % 10 === 0) {
           const hit = new Set(sourceActor.hitTargetIds)
           for (const target of candidates(actor)) {
@@ -2130,7 +2144,7 @@ export function stepNativeSecondaryAbilities(
               })
             }
           }
-          actor = { ...actor, hitTargetIds: Object.freeze([...hit].sort((a, b) => a - b)) }
+          actor = { ...actor, hitTargetIds: Object.freeze([...hit]) }
         }
         break
       }
@@ -2330,7 +2344,7 @@ export function stepNativeSecondaryAbilities(
           for (let index = 0; index < drops; index += 1) {
             const distance = drawNativeFloat(rng, 200)
             const direction = drawNativeUnitVector(distance.state)
-            rng = direction.rng
+            rng = direction.state
             state = spawn(state, actorSeed({
               kind: 'storm-drop',
               lifetimeTicks: 64,
@@ -2394,10 +2408,10 @@ export function stepNativeSecondaryAbilities(
             if (target.value) {
               const sourceDistance = drawNativeFloat(rng, 100)
               const sourceDirection = drawNativeUnitVector(sourceDistance.state)
-              const midpointDistance = drawNativeFloat(sourceDirection.rng, 200)
+              const midpointDistance = drawNativeFloat(sourceDirection.state, 200)
               const midpointDirection = drawNativeUnitVector(midpointDistance.state)
               const damage = drawNativeFloat(
-                midpointDirection.rng,
+                midpointDirection.state,
                 Math.max(0, actor.phase - actor.damage),
               )
               rng = damage.state
@@ -2823,22 +2837,38 @@ export function stepNativeSecondaryAbilities(
         }
         if (stepped.contact !== null) {
           state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'knockback-golem', 'impact'))
-          for (const targetId of stepped.contact.targetIds) {
-            const target = context.target(actor.worldKey, targetId)
-            if (target === null) continue
-            addDamage(actor, target, stepped.contact.damage, 'physical')
-            const direction = unit(actor.position, target.position)
-            knockbacks.push(Object.freeze({
-              delta: {
-                x: direction.x * stepped.contact.impulse,
-                y: direction.y * stepped.contact.impulse,
-              },
-              sourceActorId: actor.id,
-              targetId,
-            }))
-          }
+          state = spawn(state, actorSeed({ kind: 'golem-knockback', skillId: 45,
+            ownerId: actor.ownerId, worldKey: actor.worldKey, position: stepped.contact.origin,
+            damage: stepped.contact.damage, quantity: stepped.contact.movementBudget,
+            rotationRadians: stepped.contact.headingDegrees * Math.PI / 180, radius: 120,
+            hitTargetIds: stepped.contact.targetIds, lifetimeTicks: 6,
+          }))
         }
         retain = true
+        break
+      }
+      case 'golem-knockback': {
+        const area = stepNativeKnockbackArea({ origin: actor.position,
+          remainingDistance: sourceActor.quantity, targetIds: sourceActor.hitTargetIds }, rng, {
+          position: id => context.target(actor.worldKey, id)?.position ?? null,
+          move: (id, delta) => {
+            if (context.knockbackAreaMovement === undefined) {
+              throw new Error('Golem Knockback requires the native world movement owner')
+            }
+            return context.knockbackAreaMovement(actor.worldKey, id, delta, actor.id)
+          },
+        })
+        rng = area.rng
+        state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, area.cameraDisplacement, context.tick)
+        actor = { ...actor, quantity: area.remainingDistance, hitTargetIds: area.targetIds }
+        retain = !area.terminal
+        if (area.terminal) for (const perturbation of area.headingPerturbations) {
+          const target = context.target(actor.worldKey, perturbation.targetId)
+          if (target === null) continue
+          addDamage(actor, target, actor.damage, 'physical')
+          state = mergeEffect(state, actor.worldKey, target.id, { dazzleTicks: 200 })
+          headingPerturbations.push({ deltaDegrees: perturbation.headingDegrees, targetId: target.id })
+        }
         break
       }
       case 'magic-circle':
@@ -3079,7 +3109,7 @@ export function stepNativeSecondaryAbilities(
         for (let index = 0; index < drops; index += 1) {
           const distance = drawNativeFloat(rng, 200)
           const direction = drawNativeUnitVector(distance.state)
-          rng = direction.rng
+          rng = direction.state
           state = spawn(state, actorSeed({
             kind: 'acid-drop',
             lifetimeTicks: 64,
@@ -3108,7 +3138,7 @@ export function stepNativeSecondaryAbilities(
           const splashScale = drawNativeFloat(rotation.state, Math.fround(0.75))
           const distance = drawNativeFloat(splashScale.state, 200)
           const direction = drawNativeUnitVector(distance.state)
-          rng = direction.rng
+          rng = direction.state
           state = spawn(state, actorSeed({
             alpha: ACID_RAIN_SPLASH_LIFE,
             kind: 'acid-splash',
@@ -3379,7 +3409,7 @@ export function stepNativeSecondaryAbilities(
             const rotation = drawNativeFloat(oscillation.state, 360)
             const radius = drawNativeFloat(rotation.state, 150)
             const direction = drawNativeUnitVector(radius.state)
-            rng = direction.rng
+            rng = direction.state
             const center = nativeEtherDrainLeafCenter(NATIVE_TREE_OCCLUSION_POLYGONS[secondaryVariant]!)
             const position = { x: Math.fround(target.position.x + Math.fround(center.x + direction.value.x * radius.value)),
               y: Math.fround(target.position.y + Math.fround(center.y + direction.value.y * radius.value)) }
@@ -4212,7 +4242,7 @@ function castAbility(
         const mirror = drawNativeSign(state.rng, 1); state = { ...state, rng: mirror.state }
         const jitter = drawNativeFloat(state.rng, 2, true); state = { ...state, rng: jitter.state }
         const radialJitter = drawNativeFloat(state.rng, 30); state = { ...state, rng: radialJitter.state }
-        const radialDirection = drawNativeUnitVector(state.rng); state = { ...state, rng: radialDirection.rng }
+        const radialDirection = drawNativeUnitVector(state.rng); state = { ...state, rng: radialDirection.state }
         const speedJitter = drawNativeFloat(state.rng, 0.025); state = { ...state, rng: speedJitter.state }
         const radians = (index * 12 + jitter.value) * Math.PI / 180
         const heading = {
@@ -4740,7 +4770,7 @@ function castAbility(
         const phase = drawNativeFloat(state.rng, FIRE_FRAME_COUNT); state = { ...state, rng: phase.state }
         const mirror = drawNativeSign(state.rng, 1); state = { ...state, rng: mirror.state }
         const jitterRadius = drawNativeFloat(state.rng, 10); state = { ...state, rng: jitterRadius.state }
-        const jitterDirection = drawNativeUnitVector(state.rng); state = { ...state, rng: jitterDirection.rng }
+        const jitterDirection = drawNativeUnitVector(state.rng); state = { ...state, rng: jitterDirection.state }
         spawnActor({
           damage: v.mDamage,
           enhanced: true,
@@ -5097,7 +5127,7 @@ function spawnEtherDrainCloud(
     : 10
   const direction = unit(position, parent.position)
   return {
-    rng: radialDirection.rng,
+    rng: radialDirection.state,
     state: spawn(source, actorSeed({
       alpha: Math.fround(0.1 + alpha.value),
       endpoint: parent.position,
@@ -5125,7 +5155,7 @@ function spawnEtherDrainDebris(
   const oscillationRotation = drawNativeFloat(sourceRng, 360)
   const spriteRotation = drawNativeFloat(oscillationRotation.state, 360)
   const radialDirection = drawNativeUnitVector(spriteRotation.state)
-  const record = drawNativeInteger(radialDirection.rng, 3)
+  const record = drawNativeInteger(radialDirection.state, 3)
   const position = {
     x: Math.fround(
       parent.position.x + radialDirection.value.x * ETHER_DRAIN_DEBRIS_DISTANCE,
@@ -5557,6 +5587,7 @@ export function nativeSecondaryLightDisposition(
     case 'ether-bolt':
     case 'moving-fire':
     case 'shockwave':
+    case 'rescue-shockwave':
     case 'mindblast-shockwave':
     case 'fire-patch':
     case 'ring-fire-fragment':
@@ -5962,7 +5993,7 @@ function spawnEarthquakeDust(
     worldKey: parent.worldKey,
   })
   return {
-    rng: direction.rng,
+    rng: direction.state,
     state: spawn(source, { ...dust, ...advanceEarthquakeDust(dust) }),
   }
 }
@@ -6609,32 +6640,52 @@ export function triggerNativePlayerMindblast(
 /** Advances Last Word's common Mindblast actors after the run enters Game Over. */
 export function stepNativeMindblastPresentation(
   source: NativeSecondarySimulationState,
+  tick: number,
 ): NativeSecondarySimulationState {
+  let state: NativeSecondarySimulationState = { ...source, cameraDisplacements: [] }
+  let rng = source.rng
   const actors = source.actors.flatMap((sourceActor): NativeSecondaryActorState[] => {
-    if (sourceActor.kind !== 'mindblast-burst' && sourceActor.kind !== 'mindblast-shockwave') {
-      return [sourceActor]
-    }
+    if (sourceActor.kind !== 'mindblast-burst' && sourceActor.kind !== 'mindblast-shockwave'
+      && sourceActor.kind !== 'rescue-shockwave') return [sourceActor]
     let actor = advanceActor(sourceActor)
-    if (actor.ageTicks >= actor.lifetimeTicks) return []
-    if (actor.kind === 'mindblast-shockwave') {
-      const remainingLife = Math.fround(sourceActor.phase - WAVE_LIFE_PER_TICK)
-      if (remainingLife <= 0) return []
-      actor = {
-        ...actor,
-        alpha: remainingLife < sourceActor.slowFactor
-          ? Math.fround(sourceActor.alpha * WAVE_FADE_FACTOR)
-          : sourceActor.alpha,
-        phase: remainingLife,
-        radius: Math.fround(sourceActor.radius + sourceActor.quantity),
-        scale: Math.fround(1 + actor.ageTicks * 0.08),
-      }
-    }
+    if (actor.kind === 'mindblast-burst') return actor.ageTicks < actor.lifetimeTicks ? [actor] : []
+    const wave = stepNativeExpandingWave({ radius: sourceActor.radius, growth: sourceActor.quantity,
+      scalar: sourceActor.alpha, life: sourceActor.phase, fadeThreshold: sourceActor.slowFactor }, rng)
+    rng = wave.rng
+    state = recordNativeSecondaryCameraDisplacement(state, actor.worldKey, wave.displacement, tick)
+    if (!wave.retain) return []
+    actor = { ...actor, radius: wave.radius, phase: wave.life, alpha: wave.scalar,
+      velocity: wave.displacement, scale: Math.fround(1 + actor.ageTicks * .08) }
     return [actor]
   })
-  return actors.length === source.actors.length
-      && actors.every((actor, index) => actor === source.actors[index])
-    ? source
-    : { ...source, actors: Object.freeze(actors) }
+  return { ...state, actors, rng }
+}
+
+export function recordNativeSecondaryCameraDisplacement(
+  source: NativeSecondarySimulationState,
+  worldKey: string,
+  displacement: Vector2,
+  tick: number,
+): NativeSecondarySimulationState {
+  const current = source.cameraDisplacements.find(proposal => proposal.worldKey === worldKey)
+  if (current !== undefined && displacement.x * displacement.x + displacement.y * displacement.y
+    <= current.displacement.x * current.displacement.x + current.displacement.y * current.displacement.y) return source
+  return { ...source, cameraDisplacements: [...source.cameraDisplacements.filter(proposal => proposal.worldKey !== worldKey),
+    { displacement, tick, worldKey }] }
+}
+
+/** An accepted player rescue owns this gameplay birth; feedback replication does not. */
+export function spawnNativePlayerRescueShockwave(
+  source: NativeSecondarySimulationState,
+  input: Readonly<{ lightRegistration: NativeWorldManagerRegistration; ownerId: string; position: Vector2; worldKey: string }>,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+): NativeSecondarySimulationState {
+  const register = registerWorldPainter
+    ?? createNativeWorldManagerOrder(nativeSecondaryWorldManagerOrderState(source)).register
+  return spawn(source, actorSeed({ kind: 'rescue-shockwave', skillId: null, ownerId: input.ownerId,
+    worldKey: input.worldKey, position: { ...input.position }, radius: 175, quantity: 6, alpha: 2,
+    phase: Math.fround(.35), slowFactor: Math.fround(.0375), damage: 0, lifetimeTicks: 100,
+    lightRegistration: input.lightRegistration, painterRegistrations: [register('transient')] }))
 }
 
 function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryTargetEffectState {
@@ -6785,19 +6836,6 @@ function shuffleFixedBound<T>(
     ]
   }
   return { rng, values }
-}
-
-function drawNativeUnitVector(
-  source: NativeRngState,
-): { rng: NativeRngState; value: Vector2 } {
-  const heading = drawNativeInteger(source, 100_001)
-  const degrees = Math.fround(
-    Math.fround(heading.value / 100_000) * 360,
-  )
-  return {
-    rng: heading.state,
-    value: nativeHeadingVector(degrees),
-  }
 }
 
 function nativeHeadingVector(degrees: number): Vector2 {

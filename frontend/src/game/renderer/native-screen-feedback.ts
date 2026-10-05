@@ -7,6 +7,7 @@ import {
 import type {
   NativeSecondaryActorState,
   NativeSecondaryEventState,
+  NativeSecondaryCameraDisplacement,
 } from '../core-kernels/native-secondary-abilities.ts'
 import type {
   PrimarySpellEtherBlastState,
@@ -78,6 +79,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
   private lastPrimaryFeedbackId = 0
   private lastPrimaryMagnitudeId = 0
   private lastTick: number
+  private lastWorldDisplacementTick: number
   private readonly flashes: NativeScreenFlashPresentation
   private readonly worldKey: string
 
@@ -86,6 +88,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
     worldKey: string,
   ) {
     this.lastTick = Math.max(0, Math.trunc(initialTick))
+    this.lastWorldDisplacementTick = this.lastTick - 1
     this.worldKey = worldKey
     this.flashes = new NativeScreenFlashPresentation(initialTick, worldKey)
   }
@@ -132,6 +135,15 @@ export class NativeSecondaryScreenFeedbackPresentation {
 
   consumeScreenFlashes(state: NativeScreenFlashState, context: NativeSecondaryScreenFeedbackContext): void {
     this.flashes.consume(state, context)
+  }
+
+  consumeWorldCameraDisplacements(proposals: readonly NativeSecondaryCameraDisplacement[]): void {
+    for (const proposal of proposals) {
+      if (proposal.worldKey !== this.worldKey || proposal.tick <= this.lastWorldDisplacementTick) continue
+      this.lastWorldDisplacementTick = proposal.tick
+      if (proposal.tick > this.lastTick) this.advanceTo(proposal.tick)
+      this.writeCameraDisplacement(proposal.displacement, proposal.tick)
+    }
   }
 
   consumePrimaryCameraDisplacement(input: Readonly<{

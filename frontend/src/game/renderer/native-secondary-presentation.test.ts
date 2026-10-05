@@ -75,6 +75,7 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'ring-fire-fragment', 'acid-splash', 'ether-drain',
   'ether-drain-cloud', 'ether-drain-capture-flare', 'comet',
   'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
+  'rescue-shockwave', 'golem-knockback',
 ]
 
 function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
@@ -327,7 +328,7 @@ test('only ring-fire explosions consume the sampled Region point gain', () => {
 
 test('the complete secondary light census stays split between providers and MiscLight writers', () => {
   const actorProviders = new Set<NativeSecondaryActorKind>([
-    'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'mindblast-shockwave', 'fire-patch',
+    'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'rescue-shockwave', 'mindblast-shockwave', 'fire-patch',
     'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
     'ether-drain', 'comet', 'ring-fire-fragment',
   ])

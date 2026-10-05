@@ -41,6 +41,8 @@ import {
   nativeSecondaryManaReserve,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
+  spawnNativePlayerRescueShockwave,
+  stepNativeMindblastPresentation,
   stepNativeSecondaryAbilities,
   triggerNativePlayerMindblast,
   type NativeSecondarySimulationState,
@@ -228,6 +230,95 @@ function cast(skillId: NativeSecondaryAbilityId): ReturnType<typeof stepNativeSe
   )
 }
 
+test('accepted rescue has its own zero-damage wave, contacts and final Region proposal', () => {
+  let state = spawnNativePlayerRescueShockwave(createNativeSecondarySimulation(31), {
+    ownerId: 'player', worldKey: 'boneyard:test', position: { x: 0, y: 0 },
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+  })
+  const born = state.actors[0]!
+  assert.equal(born.skillId, null)
+  assert.equal(born.radius, 175)
+  assert.equal(born.quantity, 6)
+  assert.equal(born.alpha, 2)
+  assert.equal(born.damage, 0)
+  const target = { family: 'ZOMBIE', id: 1, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    nativeFlags: 2, position: { x: 20, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
+  let contacts = 0
+  for (let tick = 1; tick <= 36; tick += 1) {
+    const result = stepNativeSecondaryAbilities(state, { ...context(35, tick, null),
+      target: () => target, targets: () => [target] })
+    contacts += result.damage.filter(row => row.sourceActorId === born.id && row.amount === 0).length
+    state = result.state
+    if (!state.actors.some(actor => actor.id === born.id)) {
+      assert.equal(state.cameraDisplacements.length, 1)
+      assert.ok(state.cameraDisplacements[0]!.displacement.x ** 2 + state.cameraDisplacements[0]!.displacement.y ** 2 > 0)
+      break
+    }
+  }
+  assert.equal(contacts, 1)
+  assert.ok(state.targetEffects.some(effect => effect.targetId === 1 && effect.dazzleTicks > 0))
+  assert.equal(state.actors.some(actor => actor.id === born.id), false)
+  assert.deepEqual(state.events, [])
+})
+
+test('Last Word Game Over uses the same wave RNG and expiry proposal', () => {
+  const mindblast = triggerNativePlayerMindblast(createNativeSecondarySimulation(31), {
+    ownerId: 'player', worldKey: 'boneyard:test', position: { x: 0, y: 0 }, element: 'water', level: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+  }).state
+  const wave = mindblast.actors.find(actor => actor.kind === 'mindblast-shockwave')!
+  const source = { ...mindblast, actors: [{ ...wave, phase: Math.fround(.01) }] }
+  const result = stepNativeMindblastPresentation(source, 2)
+  assert.deepEqual(result.actors, [])
+  assert.equal(result.cameraDisplacements[0]?.tick, 2)
+  assert.deepEqual(result.rng, advanceNativeRngWords(source.rng, 1))
+})
+
+test('Golem area keeps collision-appended targets for five moves before terminal damage', () => {
+  const castState = cast(45).state
+  const parent = castState.actors.find(actor => actor.kind === 'golem')!
+  if (parent.golem === null) throw new Error('Golem fixture has no articulation')
+  const targets = new Map([[1, { family: 'ZOMBIE', id: 1, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    nativeFlags: 2, position: { x: 0, y: 49 }, radius: 20, scale: 1, shieldHealth: 0 }],
+  [2, { family: 'ZOMBIE', id: 2, lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 2 },
+    nativeFlags: 2, position: { x: 0, y: 61 }, radius: 20, scale: 1, shieldHealth: 0 }]])
+  const source = { ...castState, actors: [{ ...parent, ageTicks: 400, position: { x: 0, y: 0 },
+    rotationRadians: 0, targetId: null, golem: { ...parent.golem, phase: 'attack' as const,
+      actionTick: 36, actionDurationTicks: 90, leftFoot: { x: 0, y: 0 }, rightFoot: { x: 0, y: 0 } } }] }
+  const targetContext = { ...context(45, 37, null), target: (_world: string, id: number) => targets.get(id) ?? null,
+    targets: () => [...targets.values()] }
+  const birth = stepNativeSecondaryAbilities(source, targetContext)
+  const area = birth.state.actors.find(actor => actor.kind === 'golem-knockback')!
+  assert.ok(area)
+  assert.deepEqual(area.hitTargetIds, [1])
+  assert.deepEqual(birth.damage, [])
+  let state: NativeSecondarySimulationState = { ...birth.state, actors: [area] }
+  let moves = 0
+  for (let tick = 38; tick <= 42; tick += 1) {
+    const result = stepNativeSecondaryAbilities(state, { ...targetContext, tick,
+      knockbackAreaMovement: (_world, id, delta) => {
+        const target = targets.get(id)!
+        targets.set(id, { ...target, position: {
+          x: Math.fround(target.position.x + delta.x), y: Math.fround(target.position.y + delta.y) } })
+        moves += 1
+        return id === 1 ? [2, 2] : []
+      } })
+    state = result.state
+    assert.equal(result.state.cameraDisplacements[0]?.tick, tick)
+    if (tick < 42) assert.deepEqual(result.damage, [])
+    else {
+      assert.deepEqual(result.damage.map(row => row.targetId), [1, 2])
+      assert.equal(result.headingPerturbations.length, 2)
+      assert.ok(result.headingPerturbations.every(row => Math.abs(row.deltaDegrees) <= 45))
+      assert.ok(state.targetEffects.every(effect => effect.dazzleTicks === 200))
+      assert.deepEqual(state.actors, [])
+    }
+  }
+  assert.equal(moves, 10)
+  assert.ok(Math.abs(targets.get(1)!.position.y - 99) < .0001)
+  assert.ok(Math.abs(targets.get(2)!.position.y - 111) < .0001)
+})
+
 test('secondary mana underflow is strict: cost greater than mana fails, exact zero succeeds', () => {
   const insufficient = stepNativeSecondaryAbilities(
     createNativeSecondarySimulation(123),
@@ -410,6 +501,7 @@ test('Mindblast Shockwave contacts every target once, Dazzles, pushes, and publi
   for (let tick = 1; tick <= 20; tick += 1) {
     const result = stepNativeSecondaryAbilities(state, {
       ...context(35, tick, null),
+      target: (_worldKey, id) => id === target.id ? target : null,
       targets: (_worldKey, _center, radius) => radius >= 150 ? [target] : [],
     })
     state = result.state

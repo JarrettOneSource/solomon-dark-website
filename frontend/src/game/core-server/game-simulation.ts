@@ -89,6 +89,12 @@ import type { PlayerEntityStore } from './player-entity-store.ts'
 import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, autofillPlayerEntitySkillSelections, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, refreshPlayerEntityHagathaSkillEffects, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
 import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
+import { stepPlayerEntityRescueProtectionTick } from './player-entity-store.ts'
+import { damagePlayerEntityWithResult } from './player-entity-store.ts'
+import { spawnNativePlayerRescueShockwave } from '../core-kernels/native-secondary-abilities.ts'
+import { recordNativeSecondaryCameraDisplacement, type NativeSecondaryCameraDisplacement } from '../core-kernels/native-secondary-abilities.ts'
+import { moveBoneyardKnockbackAreaTarget } from './boneyard-world-placement.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 export type PlayerId = string
 
 export type GameWorldState = HubWorldState | BoneyardWorldState
@@ -1984,15 +1990,18 @@ function stepGameSimulationTickWithScreenFlashes(
     }
     const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
     let playerEntities = stepPlayerEntityOverlayLightingTick(state.playerEntities)
+    const rescueProtection = stepPlayerEntityRescueProtectionTick(playerEntities, state.secondaryAbilities.rng,
+      playerId => gameWorldKey(state.world, playerId), worldManagerOrder.register)
+    playerEntities = rescueProtection.store
     const combat = stepPlayerEntityCombatTick(
       playerEntities,
-      state.secondaryAbilities.rng,
+      rescueProtection.rng,
       new Set(),
       playerCombatMutations(options.extensions, state.tick, state.secondaryAbilities),
       state.tick,
     )
     playerEntities = combat.store
-    let secondaryAbilities = stepNativeMindblastPresentation({ ...state.secondaryAbilities, rng: combat.rng })
+    let secondaryAbilities = stepNativeMindblastPresentation({ ...state.secondaryAbilities, rng: combat.rng }, state.tick + 1)
     for (const playerId of combat.deathBurstPlayerIds) {
       playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
       secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
@@ -2002,6 +2011,8 @@ function stepGameSimulationTickWithScreenFlashes(
     let gameRng = state.gameRng
     let world = state.world
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
+    secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
+      combat.cheatDeathPlayerIds, worldManagerOrder.register)
     const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
@@ -2366,6 +2377,9 @@ function finishGameSimulationTick(
     }
   }
   playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
+  const rescueProtection = stepPlayerEntityRescueProtectionTick(playerEntities, previous.secondaryAbilities.rng,
+    playerId => gameWorldKey(result.world, playerId), worldManagerOrder.register)
+  playerEntities = rescueProtection.store
   let world = result.world
   if (world.kind === 'boneyard' && world.tutorial !== null) {
     const tutorialPlayerId = playerEntities.identities[0]?.playerId
@@ -2393,7 +2407,7 @@ function finishGameSimulationTick(
         ),
       ]))
   let gameRng = previous.gameRng
-  let secondaryAbilities = previous.secondaryAbilities
+  let secondaryAbilities = { ...previous.secondaryAbilities, rng: rescueProtection.rng }
   let levelUpBarrier = previous.levelUpBarrier
   let nextLevelUpBarrierId = previous.nextLevelUpBarrierId
   const unsteppedSecondaryActorIds = new Set<number>()
@@ -2653,10 +2667,23 @@ function finishGameSimulationTick(
       : firstHubRegionLineObstruction(region, start, end)
   }
   let spellsBeforePrimary = previous.primarySpells
+  const knockbackPlayerCombat = () => Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [
+    playerId, { alive: playerEntities.progressions[index]!.lifeState === 'alive',
+      collisionEnabled: playerCollisionEnabledAfterCombatTick(playerEntities.progressions[index]!),
+      eligible: previous.run.eligiblePlayerIds.includes(playerId), movementScale: playerEntityMovementScale(playerEntities, playerId) },
+  ]))
+  let staffCameraDisplacements: readonly NativeSecondaryCameraDisplacement[] = []
   let staffActingPlayerIds: ReadonlySet<string> = new Set()
   let postStaffInputs = combatInputs
   if (world.kind === 'boneyard') {
     const staff = stepPlayerStaffCombatSystem({
+      moveKnockbackArea: (enemies, targetId, delta, sourceActorId) => {
+        if (world.kind !== 'boneyard') throw new Error('Staff area movement requires its Boneyard')
+        const moved = moveBoneyardKnockbackAreaTarget({ ...world, enemies }, resolvedPlayers,
+          targetId, delta, sourceActorId, knockbackPlayerCombat())
+        world = { ...world, lanternPosition: moved.world.lanternPosition }
+        return { enemies: moved.world.enemies, contactIds: moved.contactIds }
+      },
       enhancedEffects: previous.enhancedEffects,
       combatAdmissionEnabled,
       enemies: world.enemies,
@@ -2686,6 +2713,7 @@ function finishGameSimulationTick(
       worldKey: `boneyard:${world.runId}`,
     })
     playerEntities = staff.playerEntities
+    staffCameraDisplacements = staff.cameraDisplacements
     resolvedPlayers = staff.players
     secondaryAbilities = { ...secondaryAbilities, rng: staff.rng }
     spellsBeforePrimary = staff.spells
@@ -2814,6 +2842,16 @@ function finishGameSimulationTick(
     tick,
     previous.enhancedEffects,
     writeScreenFlash,
+    {
+      readWorld: () => world,
+      move: (worldKey, targetId, delta, sourceActorId) => {
+        if (world.kind !== 'boneyard' || worldKey !== `boneyard:${world.runId}`) return []
+        const moved = moveBoneyardKnockbackAreaTarget(world, resolvedPlayers,
+          targetId, delta, sourceActorId, knockbackPlayerCombat())
+        world = moved.world
+        return moved.contactIds
+      },
+    },
   ))
   secondaryAbilities = unsteppedSecondaryActors.length === 0
     ? secondaryResult.state
@@ -2824,6 +2862,12 @@ function finishGameSimulationTick(
           ...unsteppedSecondaryActors,
         ].sort((left, right) => left.id - right.id)),
       }
+  const secondaryCameraDisplacements = secondaryAbilities.cameraDisplacements
+  secondaryAbilities = { ...secondaryAbilities, cameraDisplacements: [] }
+  for (const proposal of [...staffCameraDisplacements, ...secondaryCameraDisplacements]) {
+    secondaryAbilities = recordNativeSecondaryCameraDisplacement(secondaryAbilities,
+      proposal.worldKey, proposal.displacement, proposal.tick)
+  }
   if (world.kind === 'boneyard' && secondaryResult.etherDrainWorldAnimationContacts.length > 0) {
     const moved = applyBoneyardEtherDrainWorldAnimationForces(world, spellsBeforePrimary, secondaryAbilities,
       secondaryResult.etherDrainWorldAnimationContacts)
@@ -3411,6 +3455,8 @@ function finishGameSimulationTick(
   secondaryAbilities = { ...secondaryAbilities, rng: combat.rng }
   if (world.kind === 'boneyard') {
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
+    secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
+      combat.cheatDeathPlayerIds, worldManagerOrder.register)
     const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
@@ -3815,8 +3861,17 @@ function createNativeSecondaryTickContext(
   tick: number,
   enhancedEffects: boolean,
   writeScreenFlash?: WriteNativeScreenFlash,
+  areaMovement?: Readonly<{
+    readWorld: () => GameWorldState
+    move: NonNullable<NativeSecondaryTickContext['knockbackAreaMovement']>
+  }>,
 ): NativeSecondaryTickContext {
   return {
+    knockbackAreaMovement: areaMovement === undefined ? undefined : (worldKey, targetId, delta, sourceActorId) => {
+      const ids = areaMovement.move(worldKey, targetId, delta, sourceActorId)
+      world = areaMovement.readWorld()
+      return ids
+    },
     worldKey: world.kind === 'boneyard' ? `boneyard:${world.runId}` : null,
     writeScreenFlash,
     enhancedEffects,
@@ -4636,6 +4691,47 @@ function gravestoneSourceIds(
     .map(({ id }) => id))
   GRAVESTONE_SOURCE_IDS.set(scenery, ids)
   return ids
+}
+
+function spawnAcceptedPlayerRescueWaves(
+  source: NativeSecondarySimulationState,
+  world: BoneyardWorldState,
+  playerEntities: PlayerEntityStore,
+  playerIds: readonly string[],
+  register: RegisterNativeWorldPainter,
+): NativeSecondarySimulationState {
+  let state = source
+  for (const playerId of playerIds) {
+    const character = playerCharacterAt(playerEntities, playerId)
+    if (character === null) continue
+    state = spawnNativePlayerRescueShockwave(state, {
+      lightRegistration: playerLightingAt(playerEntities, playerId)!.lightRegistration,
+      ownerId: playerId, position: character.position, worldKey: `boneyard:${world.runId}`,
+    }, register)
+  }
+  return state
+}
+
+/** All admitted direct damage callers propagate the authoritative rescue result here. */
+export function damageGameSimulationPlayer(
+  source: GameSimulationState,
+  playerId: string,
+  amount: number,
+  tick: number,
+): GameSimulationState {
+  const result = damagePlayerEntityWithResult(source.playerEntities, playerId, amount, tick)
+  if (!result.cheatDeathTriggered || source.world.kind !== 'boneyard') {
+    // Stock Hub admits no harmful contact; preserve authored mod HP semantics without a combat scene birth.
+    return result.store === source.playerEntities ? source : { ...source, playerEntities: result.store }
+  }
+  const order = createNativeWorldManagerOrder(source.worldManagerOrder)
+  const flashes = createNativeScreenFlashWriter(source.screenFlashes, tick)
+  const world = recordPlayerCheatDeathFeedback(source.world, result.store, [playerId], tick, flashes.write)
+  const secondaryAbilities = spawnAcceptedPlayerRescueWaves(source.secondaryAbilities, world,
+    result.store, [playerId], order.register)
+  return { ...source, playerEntities: result.store,
+    secondaryAbilities, world,
+    screenFlashes: flashes.state(), worldManagerOrder: order.state() }
 }
 
 function recordPlayerCheatDeathFeedback(

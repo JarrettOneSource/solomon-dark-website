@@ -111,6 +111,32 @@ test('concentrated Deflect reflects only physical contact within the native reac
   }
 })
 
+test('rescue protection scales the native damage lanes before Shield interception', () => {
+  const player = contactPlayer()
+  const progression = {
+    ...player.progression,
+    rescueProtection: { fraction: 0.75, nextParticleId: 1, particles: [] },
+  }
+  const result = resolvePlayerHarmfulContact(
+    { ...player.runtime, harden: { armor: 2, coating: 0 } },
+    { ...player.derived, damageResistance: 0.3, magicResistance: 0.2 },
+    progression,
+    { physicalDamage: 10, magicDamage: 10 },
+    false,
+    createNativeRng(15),
+    { x: 0, y: 0 },
+  )
+  assert.equal(result.physicalDamage, 1.25)
+  assert.equal(result.magicDamage, 2)
+  assert.equal(result.shieldDamage, 3.75)
+  const protectedResult = resolvePlayerHarmfulContact(
+    player.runtime, player.derived,
+    { ...progression, rescueProtection: { ...progression.rescueProtection, fraction: 1 } },
+    { physicalDamage: 10, magicDamage: 10 }, false, createNativeRng(15), { x: 0, y: 0 },
+  )
+  assert.equal(protectedResult.physicalDamage + protectedResult.magicDamage + protectedResult.shieldDamage, 0)
+})
+
 test('admitted Flash rejects percentile zero, truncates its chance and builds its complete response', () => {
   const disabled = resolvePlayerFlashResponse({ flashChancePercent: 0, flashDurationTicks: 400 }, createNativeRng(15))
   assert.equal(disabled.flash, null)

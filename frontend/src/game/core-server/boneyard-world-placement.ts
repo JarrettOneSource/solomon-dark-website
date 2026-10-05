@@ -297,6 +297,7 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
   players: Readonly<Record<string, PlayerCharacterState>>,
   knockbacks: readonly NativeSecondaryKnockbackContact[],
   playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+  area?: Readonly<{ onEnemyContact: (targetId: number) => void }>,
 ): BoneyardWorldState {
   if (knockbacks.length === 0) return world
   const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
@@ -306,7 +307,7 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
     const moverId = `enemy-${knockback.targetId}`
     if (!bodies.has(moverId)) continue
     enemies = releaseBoneyardSkeletonPike(enemies, knockback.targetId)
-    const resolved = resolveActorMotion(
+    let resolved = resolveActorMotion(
       [...bodies.values()].map((body) => ({
         ...body,
         delta: body.id === moverId ? { ...knockback.delta } : { x: 0, y: 0 },
@@ -327,8 +328,25 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
           radius,
         ),
       },
-      () => true,
+      () => area === undefined,
     )
+    if (area !== undefined) {
+      const originalRadius = bodies.get(moverId)!.radius
+      resolved = resolveActorMotion(resolved.map(body => ({ ...body, delta: { x: 0, y: 0 },
+        driven: body.id === moverId,
+        radius: body.id === moverId ? Math.fround(originalRadius * 0.6000000238418579) : body.radius,
+      })), {
+        canPlace: (_id, position, radius) => canPlaceBoneyardBody(position, world.bounds, collision, radius),
+        move: (_id, position, delta, radius) => resolveBoneyardMovement(position,
+          { x: Math.fround(position.x + delta.x), y: Math.fround(position.y + delta.y) }, world.bounds, collision, radius),
+      }, () => true, undefined, (rootId, otherId) => {
+        if (rootId !== moverId || !otherId.startsWith('enemy-')) return
+        const targetId = Number(otherId.slice(6))
+        const target = enemies.actors.find(actor => actor.id === targetId)
+        if (target && (boneyardEnemyActorFlags(target) & 2) !== 0
+          || enemies.maggots.some(actor => actor.id === targetId && actor.combatActive)) area.onEnemyContact(targetId)
+      }).map(body => body.id === moverId ? { ...body, radius: originalRadius } : body)
+    }
     bodies = new Map(resolved.map((body) => [body.id, body]))
   }
   return {
@@ -339,6 +357,20 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
       new Map([...bodies.values()].map((body) => [body.id, body.position])),
     ),
   }
+}
+
+export function moveBoneyardKnockbackAreaTarget(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  targetId: number,
+  delta: Vector2,
+  sourceActorId: number,
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+): Readonly<{ world: BoneyardWorldState; contactIds: readonly number[] }> {
+  const contactIds: number[] = []
+  const moved = applyBoneyardSecondaryEnemyKnockbacks(world, players,
+    [{ delta, sourceActorId, targetId }], playerCombat, { onEnemyContact: id => contactIds.push(id) })
+  return { world: moved, contactIds }
 }
 
 export function applyBoneyardEtherDrainForces(

@@ -48,6 +48,7 @@ export function nativeSecondaryState(
   const source = record(value, field)
   onlyKeys(source, field, [
     'actors', 'events', 'nextActorId', 'nextEventId', 'players', 'targetEffects', 'stoneskinWarp',
+    'cameraDisplacements',
   ])
   const stoneskinWarp = source.stoneskinWarp === null ? null
     : limitedArray(source.stoneskinWarp, `${field}.stoneskinWarp`, 200).map((value, index) => {
@@ -69,6 +70,7 @@ export function nativeSecondaryState(
   const events = limitedArray(source.events, `${field}.events`, MAX_SECONDARY_EVENTS)
     .map((event, index) => nativeSecondaryEvent(event, `${field}.events[${index}]`))
   uniqueAscendingIds(events, `${field}.events`)
+  const cameraDisplacements = nativeSecondaryCameraDisplacements(source.cameraDisplacements, `${field}.cameraDisplacements`)
   const rawPlayerStates = record(source.players, `${field}.players`)
   if (Object.keys(rawPlayerStates).length > MAX_PLAYERS) {
     throw new GameProtocolError(`${field}.players may contain at most ${MAX_PLAYERS} entries`)
@@ -119,6 +121,7 @@ export function nativeSecondaryState(
   }
   return {
     stoneskinWarp,
+    cameraDisplacements,
     actors,
     events,
     nextActorId,
@@ -126,6 +129,20 @@ export function nativeSecondaryState(
     players: playerStates,
     targetEffects,
   }
+}
+
+export function nativeSecondaryCameraDisplacements(value: unknown, field: string) {
+  const worlds = new Set<string>()
+  return limitedArray(value, field, MAX_SECONDARY_ACTORS).map((value, index) => {
+    const key = `${field}[${index}]`
+    const proposal = record(value, key)
+    onlyKeys(proposal, key, ['displacement', 'tick', 'worldKey'])
+    const worldKey = limitedString(proposal.worldKey, `${key}.worldKey`, 256)
+    if (worlds.has(worldKey)) throw new GameProtocolError(`${field} has duplicate Region proposals`)
+    worlds.add(worldKey)
+    return { displacement: vector(proposal.displacement, `${key}.displacement`),
+      tick: nonnegativeInteger(proposal.tick, `${key}.tick`), worldKey }
+  })
 }
 
 function nativeSecondaryEvent(

@@ -2,6 +2,8 @@ import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { failBoast } from '../core-kernels/boast.ts'
 import { nativeCrowBlindness } from '../core-kernels/native-crow-blindness.ts'
+import { nativeRescueDamage } from '../core-kernels/native-player-rescue.ts'
+import { spawnNativePlayerRescueShockwave } from '../core-kernels/native-secondary-abilities.ts'
 import { resolveNativeBoast } from '../core-kernels/native-hub-npc.ts'
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import { applyNativeSecondaryGolemDamage, applyNativeSecondaryPlayerDamage, materializeNativePlayerFlashResponse } from '../core-kernels/native-secondary-abilities.ts'
@@ -216,6 +218,10 @@ export function applyPlayerContacts(
       }, writeScreenFlash)
       world = { ...world, enemies: feedback.store }
       playerDamageSoundEvents.push(feedback.event)
+      secondaryAbilities = spawnNativePlayerRescueShockwave(secondaryAbilities, {
+        lightRegistration: playerEntities.lightings[playerIndex]!.lightRegistration,
+        ownerId: damage.playerId, position: character.position, worldKey: `boneyard:${world.runId}`,
+      }, registerWorldPainter)
     }
     const after = playerEntities.progressions[playerIndex]!
     playHurtResponse()
@@ -272,9 +278,9 @@ export function applyPlayerContacts(
       }
       const poisonContactDamage = progression.poisonImmunityTicksRemaining > 0
         ? 0
-        : Math.fround((damage.poisonContactDamage ?? 0)
+        : nativeRescueDamage(Math.fround((damage.poisonContactDamage ?? 0)
             * derived.poisonDamageFactor
-            * derived.incomingDamageFactor)
+            * derived.incomingDamageFactor), progression.rescueProtection)
       const filteredPoisonDamage = extensions && poisonContactDamage > 0
         ? extensions.filterDamage({
             amount: poisonContactDamage,

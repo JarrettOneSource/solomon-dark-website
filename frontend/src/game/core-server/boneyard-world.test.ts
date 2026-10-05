@@ -32,10 +32,12 @@ import { stepBoneyardWorldTick } from './boneyard-world.ts'
 import {
   applyBoneyardPlayerKnockbacks,
   applyBoneyardSecondaryEnemyKnockbacks,
+  moveBoneyardKnockbackAreaTarget,
   spawnPlayerCharacterInBoneyard,
 } from './boneyard-world-placement.ts'
 import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
+import { boneyardEnemyCollisionRadius } from './enemies/model.ts'
 import { BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE, NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS } from './enemies/programs.ts'
 import { NATIVE_BADGUY_NAVIGATION_CLEARANCE, findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { canPlaceBoneyardBody, resolveBoneyardMovement } from './boneyard-collision.ts'
@@ -2371,4 +2373,19 @@ test('a knocked-back enemy separates from the Lantern without pushing it', () =>
   assert.deepEqual(world.lanternPosition, { x: 220, y: 300 })
   assert.ok(world.enemies.actors[0]!.position.x > 170)
   assert.ok(world.enemies.actors[0]!.position.x < 212)
+})
+
+test('native area movement reports collided hostile roots and restores their configured radii', () => {
+  const initial = { ...createBoneyardWorld(gatedBoneyard()), lanternPosition: null }
+  const source = stepWorld(initial, {}, {}, 0, [
+    { enemyToken: 'SKELETON', flags: [], id: 1, locationPolicy: 'anywhere', nativeTypeId: 1001,
+      position: { x: 170, y: 300 }, spawnTick: 0, waveOrdinal: 1 },
+    { enemyToken: 'SKELETON', flags: [], id: 2, locationPolicy: 'anywhere', nativeTypeId: 1001,
+      position: { x: 193, y: 300 }, spawnTick: 0, waveOrdinal: 1 },
+  ]).world
+  const moved = moveBoneyardKnockbackAreaTarget(source, {}, 1, { x: 10, y: 0 }, 50, {})
+  assert.ok(moved.contactIds.includes(2))
+  assert.notDeepEqual(moved.world.enemies.actors[0]!.position, source.enemies.actors[0]!.position)
+  assert.deepEqual(moved.world.enemies.actors.map(boneyardEnemyCollisionRadius),
+    source.enemies.actors.map(boneyardEnemyCollisionRadius))
 })

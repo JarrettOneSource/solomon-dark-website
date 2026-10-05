@@ -3,6 +3,7 @@ import { NATIVE_WORLD_PUPPET_HIT_KINDS, type NativePuppetHitState, type NativeWo
 import type { BoneyardBounds, BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import type { NativeEnemyPathState } from '../../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
+import type { NativePlayerRescueProtection } from '../../core-kernels/native-player-rescue.ts'
 import {
   NATIVE_WORLD_MANAGER_LANES,
   type NativeWorldManagerLane,
@@ -38,6 +39,35 @@ export function vector(value: unknown, field: string): Vector2 {
     x: finite(source.x, `${field}.x`),
     y: finite(source.y, `${field}.y`),
   }
+}
+
+export function nativePlayerRescueProtection(value: unknown, field: string): NativePlayerRescueProtection {
+  const source = record(value, field)
+  onlyKeys(source, field, ['fraction', 'nextParticleId', 'particles'])
+  const fraction = unitInterval(source.fraction, `${field}.fraction`)
+  if (fraction !== Math.fround(fraction)) throw new GameProtocolError(`${field}.fraction must be a native float`)
+  const nextParticleId = nonnegativeInteger(source.nextParticleId, `${field}.nextParticleId`)
+  let previousId = 0
+  const particles = limitedArray(source.particles, `${field}.particles`, 60).map((value, index) => {
+    const key = `${field}.particles[${index}]`
+    const particle = record(value, key)
+    onlyKeys(particle, key, ['alpha', 'decay', 'id', 'position', 'painterRegistration', 'rotationDegrees', 'timer', 'worldKey'])
+    const id = nonnegativeInteger(particle.id, `${key}.id`)
+    const decay = positiveFinite(particle.decay, `${key}.decay`)
+    const timer = positiveFinite(particle.timer, `${key}.timer`)
+    const rotationDegrees = nonnegativeFinite(particle.rotationDegrees, `${key}.rotationDegrees`)
+    if (id <= previousId || id >= nextParticleId || decay < 3 || decay > 5 || timer > 180 || rotationDegrees > 360) {
+      throw new GameProtocolError(`${key} has invalid native Sparkle state`)
+    }
+    previousId = id
+    const painterRegistration = nativeWorldManagerRegistration(particle.painterRegistration, `${key}.painterRegistration`)
+    if (painterRegistration.managerLane !== 'transient') throw new GameProtocolError(`${key} must use the transient lane`)
+    return { alpha: unitInterval(particle.alpha, `${key}.alpha`), decay, id, painterRegistration,
+      position: vector(particle.position, `${key}.position`), rotationDegrees, timer,
+      worldKey: limitedString(particle.worldKey, `${key}.worldKey`, 256) }
+  })
+  if (nextParticleId < 1) throw new GameProtocolError(`${field}.nextParticleId must be positive`)
+  return { fraction, nextParticleId, particles }
 }
 
 export function nativeWorldManagerRegistration(

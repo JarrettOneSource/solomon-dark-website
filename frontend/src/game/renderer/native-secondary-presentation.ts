@@ -349,6 +349,8 @@ function buildNativeSecondaryPresentationPlan(
         scaleY: actor.scale,
       })])
     case 'shockwave':
+    case 'rescue-shockwave':
+    case 'golem-knockback':
     case 'mindblast-shockwave':
       return plan([])
     case 'mindblast-burst':

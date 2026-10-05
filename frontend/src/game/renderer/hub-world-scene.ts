@@ -70,6 +70,7 @@ import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
+import { NativeRescueSparkleViews } from './native-rescue-sparkle-view.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 import type { ProtocolHubSkorchaState } from '../protocol/game-state.ts'
 import {
@@ -122,6 +123,7 @@ export class HubWorldScene {
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly primarySpells: PrimarySpellWorldView
   private readonly levelUp: NativeLevelUpWorldView
+  private readonly rescueSparkles: NativeRescueSparkleViews
   private readonly secondaryAbilities: NativeSecondaryWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly students = new Map<number, HubStudentView>()
@@ -162,6 +164,7 @@ export class HubWorldScene {
       postWorldQueueDepth: HUB_WORLD_DEPTH.courtyardForeground - 0.5,
     })
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
+    this.rescueSparkles = new NativeRescueSparkleViews(this.world, textures.levelUpSparkle)
     this.world.addChild(this.levelUp.container)
     this.secondaryAbilities = new NativeSecondaryWorldView(this.world, textures, renderer)
     this.world.addChild(this.worldLayer(hub.courtyard, HUB_WORLD_DEPTH.courtyard))
@@ -293,6 +296,7 @@ export class HubWorldScene {
     this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
     this.updatePlayers(snapshot)
+    this.rescueSparkles.update(snapshot.players, 'hub:courtyard')
     this.primarySpells.update(
       snapshot.primarySpells,
       'hub:courtyard',
@@ -464,6 +468,7 @@ export class HubWorldScene {
     this.walkToTalk.destroy()
     this.world.removeChild(this.levelUp.container)
     this.levelUp.destroy()
+    this.rescueSparkles.destroy()
     this.primarySpells.destroy()
     this.secondaryAbilities.destroy()
     for (const view of this.retiredStudentViews) view.destroy()
@@ -695,6 +700,10 @@ export class HubWorldScene {
         visible: layer.visible,
         worldY: layer.worldY,
       })
+    }
+    for (const layer of this.rescueSparkles.painterLayers()) {
+      layers.push({ id: layer.id, registration: layer.registration,
+        sortBias: layer.sortBias, target: layer.target, worldY: layer.worldY })
     }
     this.lastPainterOrder = this.painterPlanner.apply(layers, referenceY)
     this.statueAura.zIndex = this.statueBody.zIndex - 0.25

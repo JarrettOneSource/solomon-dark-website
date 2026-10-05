@@ -1,3 +1,4 @@
+import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import {
   PLAYER_CHARACTER_INPUT_ACCELERATION,
   PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
@@ -1954,6 +1955,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     progression: {
       ...player.progression,
       hagathaRuntime: { ...player.progression.hagathaRuntime },
+      rescueProtection: copyNativePlayerRescueProtection(player.progression.rescueProtection),
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
       secondaryManaCosts: player.progression.secondaryManaCosts.map((entry) => [...entry]),
       weldComponentRanks: player.progression.weldComponentRanks === null

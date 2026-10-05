@@ -44,6 +44,7 @@ import type { HubWorldTextures } from './hub-textures.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
+import { NativeRescueSparkleViews } from './native-rescue-sparkle-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 import {
@@ -95,6 +96,7 @@ export class HubPrivateRoomScene {
   }
   private readonly primarySpells: Record<PrivateHubRegionId, PrimarySpellWorldView>
   private readonly levelUp: NativeLevelUpWorldView
+  private readonly rescueSparkles: Record<PrivateHubRegionId, NativeRescueSparkleViews>
   private readonly secondaryAbilities: Record<PrivateHubRegionId, NativeSecondaryWorldView>
   private readonly livePlayerIds = new Set<string>()
   private readonly mortuaryDynamicPaintings: HubMemorialPaintingView[] = []
@@ -148,6 +150,9 @@ export class HubPrivateRoomScene {
       }),
     ])) as Record<PrivateHubRegionId, PrimarySpellWorldView>
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
+    this.rescueSparkles = Object.fromEntries(PRIVATE_HUB_REGIONS.map(region => [
+      region, new NativeRescueSparkleViews(this.rooms[region], textures.levelUpSparkle),
+    ])) as Record<PrivateHubRegionId, NativeRescueSparkleViews>
     this.rooms.mortuary.addChild(this.levelUp.container)
     this.secondaryAbilities = Object.fromEntries(PRIVATE_HUB_REGIONS.map((region) => [
       region,
@@ -186,6 +191,7 @@ export class HubPrivateRoomScene {
       && snapshot.players[localPlayerId]?.economy.collegeIntroPending === true
     this.updatePlayers(snapshot, localParticipant.region)
     for (const region of PRIVATE_HUB_REGIONS) {
+      this.rescueSparkles[region].update(snapshot.players, `hub:${region}`)
       this.primarySpells[region].update(
         snapshot.primarySpells,
         `hub:${region}`,
@@ -290,6 +296,7 @@ export class HubPrivateRoomScene {
     this.painterPlanner.clear()
     this.levelUp.container.parent?.removeChild(this.levelUp.container)
     this.levelUp.destroy()
+    for (const view of Object.values(this.rescueSparkles)) view.destroy()
     for (const view of Object.values(this.primarySpells)) view.destroy()
     for (const view of Object.values(this.secondaryAbilities)) view.destroy()
     for (const view of this.mortuaryDynamicPaintings) view.destroy()
@@ -660,6 +667,10 @@ export class HubPrivateRoomScene {
         visible: layer.visible,
         worldY: layer.worldY,
       })
+    }
+    for (const layer of this.rescueSparkles[region].painterLayers()) {
+      layers.push({ id: layer.id, registration: layer.registration,
+        sortBias: layer.sortBias, target: layer.target, worldY: layer.worldY })
     }
     this.lastPainterOrder = this.painterPlanner.apply(
       layers,

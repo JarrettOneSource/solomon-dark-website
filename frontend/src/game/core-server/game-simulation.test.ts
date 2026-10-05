@@ -86,6 +86,7 @@ import {
   bindGameSimulationPlayerSkillQuickbar,
   confirmGameSimulationLoadout,
   createGameSimulation,
+  damageGameSimulationPlayer,
   declineGameSimulationTutorial,
   detachGameSimulationPlayer,
   enterBoneyardWorld,
@@ -110,6 +111,7 @@ import {
   stepGameSimulationTick,
   synchronizeDetachedGameSimulationPlayer,
 } from './game-simulation.ts'
+
 import type { GameSimulationExtensions, GameSimulationState } from './game-simulation.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
 import { positionBoneyardEnemy, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
@@ -7129,3 +7131,20 @@ for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
     }
   }
 }
+
+test('the shared damage boundary births gameplay and participant feedback once per accepted rescue', () => {
+  let state = enterBoneyardWorld(createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG }), emptyBoneyard())
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      hagathaRuntime: { ...progression.hagathaRuntime, cheatDeathCharges: 1 } })) } }
+  const result = damageGameSimulationPlayer(state, 'owner', 60, 1)
+  assert.equal(getPlayerProgression(result, 'owner').currentHealth, 25)
+  assert.equal(getPlayerProgression(result, 'owner').rescueProtection.fraction, 1)
+  assert.equal(result.secondaryAbilities.actors.filter(actor => actor.kind === 'rescue-shockwave').length, 1)
+  if (result.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(result.world.enemyEvents.filter(event => event.type === 'player-cheat-death')
+    .map(event => event.targetPlayerId), ['owner'])
+  const repeat = damageGameSimulationPlayer(result, 'owner', 60, 1)
+  assert.equal(repeat, result)
+  assert.equal(result.playerEntities.progressions[0]!.hagathaRuntime.cheatDeathCharges, 0)
+})

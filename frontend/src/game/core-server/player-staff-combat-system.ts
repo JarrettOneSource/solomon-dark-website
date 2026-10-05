@@ -61,6 +61,9 @@ import {
 import type { PlayerEntityStore } from './player-entity-store.ts'
 
 export interface PlayerStaffCombatSystemContext {
+  readonly moveKnockbackArea?: (
+    enemies: BoneyardEnemyStore, targetId: number, delta: Vector2, sourceActorId: number,
+  ) => Readonly<{ enemies: BoneyardEnemyStore; contactIds: readonly number[] }>
   readonly enhancedEffects?: boolean
   readonly combatAdmissionEnabled: boolean
   readonly enemies: BoneyardEnemyStore
@@ -85,6 +88,7 @@ export interface PlayerStaffCombatSystemContext {
 }
 
 export interface PlayerStaffCombatSystemResult {
+  readonly cameraDisplacements: readonly Readonly<{ displacement: Vector2; tick: number; worldKey: string }>[]
   readonly actingPlayerIds: ReadonlySet<string>
   readonly dazzleRequests: readonly Readonly<{
     durationTicks: number
@@ -122,6 +126,7 @@ export function stepPlayerStaffCombatSystem(
   context: PlayerStaffCombatSystemContext,
 ): PlayerStaffCombatSystemResult {
   let enemies = context.enemies
+  const cameraDisplacements: { displacement: Vector2; tick: number; worldKey: string }[] = []
   let playerEntities = context.playerEntities
   let players: Readonly<Record<string, PlayerCharacterState>> = context.players
   let rng = context.rng
@@ -187,11 +192,21 @@ export function stepPlayerStaffCombatSystem(
         target.id,
         target.position,
       ]))
-      const stepped = stepNativeStaffKnockback(transient, positions, rng)
+      const moveKnockbackArea = context.moveKnockbackArea
+      const stepped = stepNativeStaffKnockback(transient, positions, rng,
+        moveKnockbackArea === undefined ? undefined : (id, delta) => {
+          const actorId = parseEnemyTargetId(id)
+          if (actorId === null) return []
+          const moved = moveKnockbackArea(enemies, actorId, delta, transient.id)
+          enemies = moved.enemies
+          for (const target of staffCombatTargets(enemies)) positions[target.id] = target.position
+          return moved.contactIds.map(id => `enemy:${id}`)
+        })
       rng = stepped.rng
+      cameraDisplacements.push({ displacement: stepped.cameraDisplacement, tick: context.tick, worldKey: transient.worldKey })
       for (const displacement of stepped.displacements) {
         const actorId = parseEnemyTargetId(displacement.targetId)
-        if (actorId !== null) {
+        if (actorId !== null && context.moveKnockbackArea === undefined) {
           enemies = releaseBoneyardSkeletonPike(enemies, actorId)
           displacements.push({ actorId, delta: displacement.delta })
         }
@@ -414,6 +429,7 @@ export function stepPlayerStaffCombatSystem(
 
   return Object.freeze({
     actingPlayerIds,
+    cameraDisplacements,
     dazzleRequests: Object.freeze(dazzleRequests),
     displacements: Object.freeze(displacements),
     enemies,
@@ -524,6 +540,7 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
       (boneyardEnemyActorFlags(actor) & 0x2) !== 0
         ? [{
             actorId: actor.id,
+            registrationOrder: actor.nativeRegistrationOrder,
             collisionRadius: boneyardEnemyCollisionRadius(actor),
             headingDegrees: actor.headingDeg,
             id: `enemy:${actor.id}`,
@@ -538,6 +555,7 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
       maggot.lifeState === 'alive' && maggot.combatActive
         ? [{
             actorId: maggot.id,
+            registrationOrder: maggot.nativeRegistrationOrder,
             collisionRadius: maggot.collisionRadius,
             headingDegrees: maggot.headingDeg,
             id: `enemy:${maggot.id}`,

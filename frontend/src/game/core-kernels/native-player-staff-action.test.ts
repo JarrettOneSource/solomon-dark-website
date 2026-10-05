@@ -324,8 +324,8 @@ test('all three proc knockbacks retain their exact arc, radius, and distance', (
   const front = { collisionRadius: 0, id: 'front', position: { x: 0, y: -50 } }
   const side = { collisionRadius: 0, id: 'side', position: { x: 50, y: 0 } }
   const cases = [
-    ['knockback', 80, 150, ['front']],
-    ['critical-hit', 60, 50, ['front']],
+    ['knockback', 80, 150, ['front', 'side']],
+    ['critical-hit', 60, 50, ['front', 'side']],
     ['whirl', 365, 50, ['front', 'side']],
   ] as const
   for (const [outcome, arcDegrees, remainingDistance, targetIds] of cases) {
@@ -392,7 +392,7 @@ test('proc presentation owns exact RNG budgets, cue pitches, art, and recurrence
   assert.equal(stepNativePlayerStaffVfx(smoke)?.alpha, Math.fround(0.95))
 })
 
-test('terminal Knockback consumes two RNG words per surviving target and applies Dazzle once', () => {
+test('terminal Knockback proposes once then consumes two RNG words per surviving target and applies Dazzle once', () => {
   const action = actionForOutcome('knockback').action
   const actor = createNativeStaffKnockback(5, action, ['enemy:1', 'enemy:2'])!
   let current = { ...actor, remainingDistance: 10 }
@@ -403,9 +403,19 @@ test('terminal Knockback consumes two RNG words per surviving target and applies
   assert.equal(stepped.actor, null)
   assert.deepEqual(stepped.dazzledTargetIds, ['enemy:1', 'enemy:2'])
   assert.equal(stepped.headingPerturbations.length, 2)
-  assert.equal(stepped.rng.indexA, 4)
+  assert.equal(stepped.rng.indexA, 5)
+  assert.ok(Math.abs(Math.hypot(stepped.cameraDisplacement.x, stepped.cameraDisplacement.y) - 10) < .000001)
   assert.deepEqual(stepped.displacements, [
     { delta: { x: 10, y: 0 }, targetId: 'enemy:1' },
     { delta: { x: 0, y: 10 }, targetId: 'enemy:2' },
   ])
+})
+
+test('Whirl preserves the retained squared-radius predicate while cones ignore body radius', () => {
+  const widenedByBody = { collisionRadius: 20, id: 'wide', position: { x: 101.5, y: 0 } }
+  const outside = { collisionRadius: 20, id: 'outside', position: { x: 102, y: 0 } }
+  assert.deepEqual(nativeStaffKnockbackTargets(actionForOutcome('whirl').action,
+    [widenedByBody, outside]).map(target => target.id), ['wide'])
+  const large = { collisionRadius: 500, id: 'large', position: { x: 0, y: -100 } }
+  assert.deepEqual(nativeStaffKnockbackTargets(actionForOutcome('knockback').action, [large]), [])
 })

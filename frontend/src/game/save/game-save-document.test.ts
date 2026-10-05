@@ -41,6 +41,7 @@ import { createGameSnapshotFrame, createReplicatedEntityBaseline } from '../prot
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { MAX_WEB_GAME_SAVE_BYTES, MAX_WEB_GAME_SAVE_JSON_NODES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, readGameSaveSummary } from './game-save-contract.ts'
 import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile, retireGameSaveWizard } from './game-save-document.ts'
+import { stepPlayerEntityRescueProtectionTick } from '../core-server/player-entity-store.ts'
 const OWNER = {
   discipline: 'arcane',
   displayName: 'Helvidius',
@@ -75,6 +76,30 @@ const MOD_STATE = {
   'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
+
+test('continuations preserve rescue particles while old saves initialize an empty actor state', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      rescueProtection: { ...progression.rescueProtection, fraction: 1 } })) } }
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const stepped = stepPlayerEntityRescueProtectionTick(state.playerEntities, state.secondaryAbilities.rng,
+    () => 'hub:courtyard', order.register)
+  state = { ...state, playerEntities: stepped.store,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: stepped.rng }, worldManagerOrder: order.state() }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document).state
+  assert.deepEqual(restored.playerEntities.progressions[0]!.rescueProtection,
+    state.playerEntities.progressions[0]!.rescueProtection)
+  const historical = JSON.parse(document)
+  delete historical.continuation.simulation.playerEntities.progressions[0].rescueProtection
+  delete historical.continuation.simulation.secondaryAbilities.cameraDisplacements
+  const old = restoreGameSaveDocument(JSON.stringify(historical)).state
+  assert.deepEqual(old.playerEntities.progressions[0]!.rescueProtection,
+    { fraction: 0, nextParticleId: 1, particles: [] })
+  assert.deepEqual(old.secondaryAbilities.cameraDisplacements, [])
+})
 
 test('Enhanced Effects continuation preserves the world mode and old saves default On without RNG changes', () => {
   const options = { gameRngSeed: 123, enhancedEffects: false }
