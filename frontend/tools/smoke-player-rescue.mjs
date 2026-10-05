@@ -41,13 +41,12 @@ try {
         let tap = taps.get(this.context)
         if (!tap) {
           const context = this.context
-          const destination = context.createMediaStreamDestination()
           const processor = context.createScriptProcessor(2048, 2, 2)
           const silence = context.createGain()
           silence.gain.value = 0
           nativeConnect.call(processor, silence)
           nativeConnect.call(silence, context.destination)
-          tap = { destination, processor, chunks: null, sampleRate: context.sampleRate }
+          tap = { processor, chunks: null, sampleRate: context.sampleRate }
           processor.onaudioprocess = event => {
             if (!tap.chunks) return
             const left = event.inputBuffer.getChannelData(0)
@@ -61,32 +60,19 @@ try {
           }
           taps.set(context, tap)
         }
-        nativeConnect.call(this, tap.destination)
         nativeConnect.call(this, tap.processor)
       }
       return result
     }
     window.__rescueStartAudioCapture = () => {
-      const streams = [...taps.values()].map(tap => tap.destination.stream)
-      if (streams.length === 0) throw new Error('No real output audio graph')
-      const stream = new MediaStream(streams.flatMap(value => value.getAudioTracks()))
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
-      const chunks = []
-      recorder.ondataavailable = event => chunks.push(event.data)
-      recorder.start()
       if (taps.size !== 1) throw new Error('Capture requires one actual output context')
       const tap = [...taps.values()][0]
       tap.chunks = []
-      window.__rescueStopAudioCapture = () => new Promise(resolve => {
-        recorder.onstop = async () => {
-          const bytes = new Uint8Array(await new Blob(chunks, { type: recorder.mimeType }).arrayBuffer())
-          const pcm = tap.chunks
-          tap.chunks = null
-          resolve({ mimeType: recorder.mimeType, bytes: Array.from(bytes), sampleRate: tap.sampleRate,
-            pcm: pcm.flatMap(chunk => Array.from(chunk)) })
-        }
-        recorder.stop()
-      })
+      window.__rescueStopAudioCapture = () => {
+        const pcm = tap.chunks
+        tap.chunks = null
+        return { sampleRate: tap.sampleRate, pcm: pcm.flatMap(chunk => Array.from(chunk)) }
+      }
     }
   }, { runtime: { gameEndpoint: { kind: 'localhost', url: host.address.url, credential } },
     settings: { ...DEFAULT_GAME_SETTINGS, musicVolumePercent: 0, soundVolumePercent: 100 } })
@@ -153,9 +139,8 @@ try {
   assert.equal(repeat, host.state())
   await page.waitForTimeout(1000)
   const recording = await page.evaluate(() => window.__rescueStopAudioCapture())
-  assert.ok(recording.bytes.length > 100)
-  await writeFile(`${output}/cheat-death-audio.webm`, Buffer.from(recording.bytes))
   const pcm = Buffer.from(recording.pcm)
+  assert.ok(pcm.length > 100)
   assert.equal(pcm.length % 4, 0)
   let squared = 0
   let peak = 0
@@ -172,7 +157,7 @@ try {
   header.writeUInt16LE(4, 32); header.writeUInt16LE(16, 34); header.write('data', 36); header.writeUInt32LE(pcm.length, 40)
   await writeFile(`${output}/cheat-death-audio.s16le`, pcm)
   await writeFile(`${output}/cheat-death-audio.wav`, Buffer.concat([header, pcm]))
-  receipt.audioRecording = { mimeType: recording.mimeType, bytes: recording.bytes.length,
+  receipt.audioRecording = { mimeType: 'audio/wav', bytes: pcm.length + 44,
     pcmBytes: pcm.length, channels: 2, sampleRate: recording.sampleRate, pcmFormat: 's16le',
     peak, rms: Math.sqrt(squared / (pcm.length / 2)) }
   await page.keyboard.press('Escape')
