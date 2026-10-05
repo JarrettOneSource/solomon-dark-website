@@ -2375,3 +2375,45 @@ authored glyph dimensions and complete member/mask behavior. The prior exact
 `3b498031` ALL/quality/build results remain historical evidence. A changed
 candidate requires its own complete Website and public/built acceptance; none
 is claimed from this source audit or the failed browser phase.
+
+### 2026-10-05 — Arena acceptance must establish a clear return lane
+
+The exact `f1fae2c9` source passes the focused Hub asset contract and public
+ground-owner suites:66 rows,41 mask cases and allfive Arena variants. Its
+production-built wire/save, four College rooms and20-second Courtyard
+performance/pooling/policy substeps also pass. The Arena retirement smoke then
+fails its meaningful return-motion assertion before ALL. Parent receipts
+`REPORT56-F1FAE2C9-1133-PARENT-CLOSED-20261005.json` and
+`REPORT56-ARENA-1241-PARENT-CLOSED-20261005.json` independently close those
+phases; neither is complete candidate acceptance.
+
+The distinct bounded `12:41` observation preserves the original seed, two-second
+W input and every assertion. Its21 before/during/after samples show host ticks
+7671..7881, alive Player, no pause/grace/barrier/pending offer or browser input
+block, input112 acknowledged, and north velocity approaching90. Position remains
+`(952.5519296023333,1517.757341505318)`. Both existing world/combat collision
+resolvers reject the25-unit north move. The direct trace is856,302 bytes SHA
+`6fc1432cd2ab4266b94d15da63a0df252158423eae488656af60e1350cd689f0`;
+readonly sampling costs80ms total,6ms maximum within the unchanged window.
+
+Exact stock-bank template0/source`2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f`
+contains locked chest`object-138`, type2061, at
+`(936.56884765625,1475.88232421875)`. The established collision construction
+uses local rectangle`(-25.125,-8.625)..(25.875,16.875)` and Player radius25.
+Its expanded south edge is`1517.75732421875`, within`1.73e-5` of the held
+Player Y; Player X lies within its horizontal span. Type2061's collision shapes
+have no source ID, explaining the empty named-blocker list while the actual
+resolver still blocks. Parent's complete causal review
+`REPORT56-ARENA-1241-PARENT-CAUSAL-REVIEW-20261005.json` independently joins
+the trace, source geometry and retained screenshots.
+
+This is a driver precondition defect: its arbitrary post-escape X does not
+guarantee a clear straight return path. The product correctly prevents movement
+through the chest. Repair the smoke's setup using its existing collision/path
+planner and actual keyboard navigation to a nearby clear lane. Retain the
+required25/available movement, retired boundary and alive checks, fixed seed
+and two-second probe; do not teleport, remove enemies, alter health or geometry.
+Temporary observation code remains external evidence. Reuse the qualified
+unchanged product substeps, then run the corrected Arena journey and the final
+exact candidate's unchanged ALL/build-identity closure. Current-source complete
+acceptance, publication/live/archive and both-device cleanup remain pending.
