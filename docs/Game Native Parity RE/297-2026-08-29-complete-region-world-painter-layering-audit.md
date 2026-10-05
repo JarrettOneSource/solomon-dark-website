@@ -2326,3 +2326,52 @@ migrated together without a compatibility field. The public Golem cast and
 strict snapshot regression use a nonbank initial angle and confirm the native
 signed45 change survives the authoritative Player record. No new native
 recovery is needed; actual M5 execution remains pending.
+
+### 2026-10-05 — Hub ground asset loading owns the authored products
+
+The distinct `10:35` remaining acceptance phase reconstructed source
+`3b498031/703a22ae` with all126 fingerprints identical to the accepted `09:18`
+clean build. The real public Hub constructor then failed the Hagatha assertion
+`Hagatha authored products missing`; its retained receipt contains only the
+preceding Annalist container-placement row and no completed masks. This is
+direct browser evidence of missing products, not a member parity pass.
+`REMAINING-1035-TERMINAL-CLEANUP-READBACK-20261005.json` and parent
+`REPORT56-REMAINING-1035-PARENT-CLOSED-20261005.json` retain the terminal,
+export and complete resource closure. No bounds or runtime from that phase
+remain available.
+
+The maintained source identifies the loader cause with high confidence:
+`lib/assets.ts` exposes College5 as `hub.npcs.perkWitchGroundGlow` and College11
+as `hub.npcs.itemsGround`; `HubHagathaView` and `HubLuthacusView` read those
+keys from `textures.base`. Neither URL is in `hubRequestedAssetSources()` or
+the87 generated Hub visual originals. `loadHubWorldTextures()` populates base
+only from its declared physical loads and selected packed frames. Consequently
+these reads supply no texture to `actorSprite`; importing a PNG into the asset
+catalog alone does not establish scene loading ownership.
+
+The complete source-registration sweep also finds the shared raw
+`hub.npcs.teacher.shadow` (`actor-shadow.png`) missing from both lists. The
+Player/Student shadow is already requested as packed BadGuys67, but its packed
+key does not populate the separate raw URL used by Annalist, Hagatha, Skorcha,
+private-room NPC grounds and the existing Teacher. The preceding Annalist
+placement assertion does not establish that its glyph was loaded. No native
+geometry or asset fact changes.
+
+| Ground source | Existing loader owner / required correction |
+| --- | --- |
+| College5 / Hagatha50×46 | Add the existing raw URL to the canonical Hub requested sources. |
+| College11 / Luthacus67×54 | Add the existing raw URL to the canonical Hub requested sources. |
+| Shared actor shadow25×25 | Add the existing raw URL used by the Hub NPC/Teacher callers to the same requested sources. |
+| Player/Student BadGuys67 | Already requested through `playerWorldAssetSources()` and the combat atlas. |
+| College33 / Fomentius tent | Already registered in the generated Hub visual atlas; preserve its packed frame and absolute base. |
+| College41 / Statue aura | Already an explicit stock-framed Hub load; preserve its native frame and absolute base. |
+
+Implementation must restore the three raw registrations through the existing
+stock texture loading path, keeping the two exact exported PNGs, actor callers,
+native offsets, material programs and nonvacuous probe assertions intact. A
+regression through the public `hubWorldAssetSources()` contract must require
+each raw ground source once; real public scene loading must still prove the
+authored glyph dimensions and complete member/mask behavior. The prior exact
+`3b498031` ALL/quality/build results remain historical evidence. A changed
+candidate requires its own complete Website and public/built acceptance; none
+is claimed from this source audit or the failed browser phase.
