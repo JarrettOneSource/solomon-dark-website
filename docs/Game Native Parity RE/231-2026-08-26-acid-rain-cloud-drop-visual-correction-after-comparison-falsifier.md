@@ -538,8 +538,9 @@ before actual release at `2026-10-05T03:19:00.785751Z`; its SHA-256 is
 `bdbd90b1534d8ff9aba938dcc0f02e7a97a36b5303cb0918e959249a75e3bd85`.
 Owned process groups, image, mount, private link, task root and exact compute
 lease were removed. Independent readback at 03:25:10 confirmed their absence
-and no unexpected real-home changes. The known 40-byte Chrome settings file
-retained its bytes and mtime. Earlier launchd and Chrome-environment failures
+and no unexpected real-home changes. The sole real-home difference was a known
+40-byte Chrome settings mtime touch with identical bytes, which was preserved.
+Earlier launchd and Chrome-environment failures
 remain qualified historical attempts; this final gate resolves both.
 
 The October 5 release review re-read the original message and nearby discussion:
