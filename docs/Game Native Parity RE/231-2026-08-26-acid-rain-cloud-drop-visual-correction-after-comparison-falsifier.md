@@ -515,3 +515,37 @@ was copied, hash-verified and acknowledged before actual clean release at
 diagnostic changes were verified before/after/finally. This closes the focused
 diagnostic phase only. The clean production full all-mode gate, ordinary
 publication, managed deployment/live checks and report/device cleanup remain.
+
+### Clean production full-gate acceptance, 2026-10-05 UTC
+
+The unchanged all-mode Website gate passed on clean original candidate
+`cecff3b1bcca38ca8a93f0807c9a3096d57cddc4`, tree
+`3ad441ca8294c30927ecbbc661a45b62d8f35f82`, in the isolated M5 external-SSD
+phase. All 7,258 tracked entries, original commit, index, modes and blob bytes
+were verified before, after and finally; no diagnostic observer was present.
+The candidate differs from focused `40bbd515` only in this ledger.
+
+Canonical validation exited zero: 42 Python tests and 4,130 Node test executions
+across 22 TAP suites passed with no failures or skips. The configured eight-file
+quality scope reached 100% statements, branches, functions and lines; prohibited
+types, dead code and duplicate blocks were zero. Actual mutation results were
+603 killed, two timeouts, 198 compile errors and 24 pre-existing equivalent
+exclusions, with no survivors, uncovered mutants or errors. Quality failures
+were empty. The 126 production build fingerprints remained unchanged.
+
+The 19,691,520-byte output bundle was copied, SHA-256 verified and acknowledged
+before actual release at `2026-10-05T03:19:00.785751Z`; its SHA-256 is
+`bdbd90b1534d8ff9aba938dcc0f02e7a97a36b5303cb0918e959249a75e3bd85`.
+Owned process groups, image, mount, private link, task root and exact compute
+lease were removed. Independent readback at 03:25:10 confirmed their absence
+and no unexpected real-home changes. The known 40-byte Chrome settings file
+retained its bytes and mtime. Earlier launchd and Chrome-environment failures
+remain qualified historical attempts; this final gate resolves both.
+
+The October 5 release review re-read the original message and nearby discussion:
+text, edit timestamp, attachment identity and retained MP4 hash were unchanged.
+This acceptance entry is a ledger-only release derivative; runtime, tests and
+configuration retain the exact tested candidate bytes. The prior focused
+visual acceptance and its historical-input qualifications remain in force.
+Normal publication, managed deployment/live checks, original-message reaction
+and both-device task cleanup still require their separate operational receipts.
