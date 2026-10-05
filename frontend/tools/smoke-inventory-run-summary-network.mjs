@@ -150,7 +150,7 @@ try {
   await peer.page.getByRole('button', { name: 'Play', exact: true }).click()
   const rejoin = peer.page.waitForResponse(response => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/game/rejoin')
-  await peer.page.getByRole('button', { name: 'Last Game', exact: true }).click()
+  await peer.page.getByRole('button', { name: 'Last game', exact: true }).click()
   assert.equal((await rejoin).status(), 201)
   await Promise.all(clients.map(client => client.page.locator(
     '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })))
