@@ -2122,3 +2122,50 @@ guard; no new death-grace timer or setter read is needed. This is retained
 evidence plus new caller agreement, not a new direct-store observation. Only
 the bounded`005F3B50..005F3D30` initializer and four bytes at`0078606C` remain
 proposed; no Crow/Golem/Knockback caller or tick replay is admitted.
+
+### Actual initializer1128 closes argument roles
+
+The initializer-only phase admitted at`11:26:19.244083 UTC`, returned native/
+SSH/controller zero and released its exact lease/root at`11:26:24.269688`.
+Its30720-byte export SHA-256
+`f5f4145284bee5e80d2df751d41c8100137d1da988afcbc1c683552741e68836`
+binds six files, one range and exactly four data bytes. Parent independently
+verified all resource absence at`11:33:24`. All five native phase clocks are
+closed; no extra target, Crow setter or old caller/tick was replayed.
+
+`005F3B50` is now closed through both owned`RET 1C` paths at`005F3C1C` and
+`005F3C9C`. The branch`005F3BA3 -> 005F3C1F` owns the code after the first
+return. `005F3CA0` is a separate neighbor and its captured prefix is not used.
+Relative to the callee entry stack, the seven floats are X, Y, heading,
+angular half-width, query radius, remaining movement budget and damage.
+Position is stored at child`+18/+1C`; the sixth float stores`+13C` at
+`005F3B73`, and the seventh stores`+140` at`005F3B88`. The angular argument
+selects a circle when at least360, otherwise the ordered cone; both append
+the selected mask2 targets into the child's list`+144` once at initialization.
+
+Actual bytes`0000f042` at`0078606C` are float32 **120**. Combined with the
+captured Golem caller and this callee mapping, **120 is query radius and50
+is movement budget**, not the old immediate120 impulse. Golem supplies half-
+width90 and sampled damage. The retained Region`00641B10` contract measures
+strict120-unit range from the real origin, tests roots without target-radius
+padding and uses an angular apex30 units backward. Its argument is half-width,
+so90 is not the current45-degree half-angle. The real origin is the captured
+average-foot point plus the backward20 heading offset, not body+20 forward.
+
+Retained full Knockback tick`00600220` proposes UnitVector*10 before list work,
+moves each still-valid selected target by`min(remainingBudget,10)` through
+native collision handling, then subtracts10. Starting at50 gives five updates;
+the fifth still moves before retirement and terminal contact. The damage is
+applied at that terminal contact, with the retained200-tick Dazzle and heading
+perturbation in the captured owner-index-zero branch. Keep list membership,
+radius adjustment/restore, collision rebind, source index and authority policy;
+do not replace these with a one-shot displacement or omit zero-damage contacts.
+The retained tick also appends flags-2 roots collected during movement collision
+to that persistent list. Preserve its dynamic traversal/removal order rather
+than freezing the initializer's list or performing a new cone query each tick.
+
+The declared native facts now support a concrete protection/wave source plan.
+This entry still makes no application validation or whole-report acceptance
+claim. Current closed-cue source, latest-main/protocol integration, exact
+text/audio comparisons, all-mode gate, publication/live/archive and cleanup
+remain pending. No further native extraction is authorized.
