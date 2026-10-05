@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -56,6 +56,13 @@ try {
     }, { actualUrl: host.address.url, endpointOrigin })
     await context.route('**/api/game/hub', route => route.fulfill({ status: 201,
       json: endpoint(issueTicket({ content, leaderboardUserId: null })) }))
+    await context.route('**/api/game/run-performance', async route => {
+      assert.equal(route.request().method(), 'POST')
+      assert.ok(route.request().postDataJSON()?.performance)
+      receipts.push({ name: 'local-performance-receipt', element,
+        qualification: 'Local backend receipt fixture; no managed-service storage claim' })
+      await route.fulfill({ status: 201, json: { logId: randomUUID(), submittedAtUtc: new Date().toISOString() } })
+    })
     await context.route('**/api/game/rejoin', async route => {
       const token = route.request().postDataJSON()?.token
       const target = typeof token === 'string' ? host.partyRejoinTarget(token) : null

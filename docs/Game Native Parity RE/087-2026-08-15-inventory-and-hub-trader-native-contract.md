@@ -891,3 +891,12 @@ failed scene assertions. The ephemeral helper host uses the existing
 zero-player Tutorial tick, then stop the host. Error capture is unchanged and
 no console message is filtered. These scene observations are retained with that
 teardown qualification; stats/network and the final canonical gate remain open.
+
+The1955 run passed corrected Tutorial cleanup and existing desktop/touch stats
+with empty gameplay error lists. All11 real local connected-member/live/zero/
+saved-claim rejoin assertions completed, including current shared Wave8 and
+member isolation. Its final error list contained only the local static fixture's
+405 for automatic run-performance upload. The network fixture now acknowledges
+that existing backend receipt contract (201, UUID logId, submission time), as
+the existing run-performance test does; it remains a declared local HTTP fixture,
+not managed-service storage acceptance. No error is filtered or product changed.
