@@ -228,10 +228,12 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
     assert.equal(plan.root.x, 100, kind)
     assert.ok(['ordinary-dynamic', 'zanim'].includes(plan.queueFamily), kind)
     if (![
-      'shockwave', 'mindblast-shockwave', 'fire-burn', 'ether-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
+      'shockwave', 'rescue-shockwave', 'golem-knockback', 'mindblast-shockwave', 'fire-burn', 'ether-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
       'earthquake-scenery-wobble', 'electric-burn-arc',
     ].includes(kind)) {
       assert.ok(plan.draws.length + plan.underlayDraws.length + plan.backgroundDraws.length > 0, `${kind} unexpectedly became invisible`)
+    } else if (kind === 'rescue-shockwave' || kind === 'golem-knockback') {
+      assert.deepEqual([...plan.draws, ...plan.underlayDraws, ...plan.backgroundDraws], [], kind)
     }
   }
 })

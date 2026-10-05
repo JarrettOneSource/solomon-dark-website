@@ -406,7 +406,8 @@ test('terminal Knockback proposes once then consumes two RNG words per surviving
   assert.equal(stepped.rng.indexA, 5)
   assert.ok(Math.abs(Math.hypot(stepped.cameraDisplacement.x, stepped.cameraDisplacement.y) - 10) < .000001)
   assert.deepEqual(stepped.displacements, [
-    { delta: { x: 10, y: 0 }, targetId: 'enemy:1' },
+    // Retail stores reciprocal(30) as float32 before the final chained product.
+    { delta: { x: 10.000000953674316, y: 0 }, targetId: 'enemy:1' },
     { delta: { x: 0, y: 10 }, targetId: 'enemy:2' },
   ])
 })

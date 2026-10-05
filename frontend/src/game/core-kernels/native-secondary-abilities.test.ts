@@ -701,7 +701,7 @@ function consumeFreezeWaveConstruction(
 function drawUnitVectorForTest(source: NativeRngState) {
   const heading = drawNativeInteger(source, 100_001)
   const degrees = Math.fround(Math.fround(heading.value / 100_000) * 360)
-  const radians = degrees * Math.PI / 180
+  const radians = Math.fround(degrees * Math.fround(Math.PI) / 180)
   return {
     rng: heading.state,
     value: {
@@ -3060,6 +3060,7 @@ test('Shockwave applies the summed native damage lane and normalized displacemen
     const base = context(21, tick, null)
     result = stepNativeSecondaryAbilities(state, {
       ...base,
+      target: (_worldKey, targetId) => targetId === target.id ? target : null,
       targets: (_worldKey, _center, radius) => radius > 100 ? [target] : [],
     })
     state = result.state
@@ -5277,7 +5278,7 @@ test('distinct native movement modifiers multiply instead of selecting one minim
 test('FreezeWave selects ColdSlow for flag 0x40 and Frostburn adds exact damage and target flares', () => {
   const coldTarget = {
     family: 'OBJECT', lightRegistration: TARGET_LIGHT_REGISTRATION,
-    id: 51, nativeFlags: 0x40, position: { x: 100, y: 0 }, radius: 10,
+    id: 51, nativeFlags: 0x42, position: { x: 100, y: 0 }, radius: 10,
     scale: 1, shieldHealth: 0,
   }
   let cold = cast(35).state
@@ -5294,6 +5295,14 @@ test('FreezeWave selects ColdSlow for flag 0x40 and Frostburn adds exact damage 
   assert.equal(coldEffect.frozenTicks, 0)
   assert.equal(coldEffect.timeScale, 0.5)
   assert.equal(nativeSecondaryTargetMaterialTint(0xffffff, coldEffect), 0xbfffff)
+
+  let excluded = cast(35).state
+  for (let tick = 2; tick <= 11; tick += 1) {
+    excluded = stepNativeSecondaryAbilities(excluded, {
+      ...context(35, tick, null), targets: () => [{ ...coldTarget, nativeFlags: 0x40 }],
+    }).state
+  }
+  assert.deepEqual(excluded.targetEffects, [])
 
   const target = { ...coldTarget, family: 'ZOMBIE', id: 52, nativeFlags: 0x2 }
   const maximumContext = context(35, 1, 0)

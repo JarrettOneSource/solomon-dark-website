@@ -165,10 +165,14 @@ test('Golem acquires, follows and births its retained-budget area at marker37', 
     ownerPosition: null,
     resolveMovement: noMovement,
     rng: started.rng,
-    targets: [target, { id: 2, position: { x: 60, y: 0 }, radius: 1 }],
+    targets: [target, { id: 2, position: { x: 60, y: 0 }, radius: 1 },
+      { id: 3, position: { x: 0, y: 100 }, radius: 500 },
+      { id: 4, position: { x: 0, y: -200 }, radius: 500 }],
   })
   assert.equal(impact.actor.golem.actionTick, 37)
-  assert.deepEqual(impact.contact?.targetIds, [1])
+  // The foot/backward origin and 90-degree half-width include the side target;
+  // roots behind the angular apex or beyond reach stay excluded despite radius.
+  assert.deepEqual(impact.contact?.targetIds, [1, 2])
   assert.equal(impact.contact?.movementBudget, 50)
   assert.ok((impact.contact?.damage ?? 0) >= 5)
   assert.ok((impact.contact?.damage ?? 0) <= 10)

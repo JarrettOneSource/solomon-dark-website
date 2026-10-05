@@ -2268,3 +2268,27 @@ REPORT65-APPLICATION1638-PARENT-CLOSED-RED-ACCEPTANCE-20261005
 proof; do not replay its baseline/test. Parent16:58:37 resource closure also
 verified all known own groups/root/lease and31 unchanged home entries. The
 subsequent source corrections and observer/lane assertions are still UNRUN.
+
+### Report65 actual1758: strict fixture and oracle reconciliation
+
+Exact ddb TypeScript passed;600 focused tests ran with594 passes,6 failures and
+zero skips/cancellations. The phase released18:02:42.924824UTC with full
+184320-byte930b865d/11-file export,15 stage drains/preflight, all M2 transports,
+31 unchanged home entries/root/exactlease cleanup read before interpretation.
+Parent independently closed resources18:10:57. All clocks consumed; no replay.
+
+| Failure | Retained contract and final disposition before correction |
+| --- | --- |
+| Staff10 versus10.000000953 | Full retained00600220 decompile in ghidra_input_buffer_field_accesses_current.txt:2270 owns float sqrt/reciprocal storage and finalfloat budget*reciprocal*delta. For X30/budget10, reciprocal bits3D088889 yields final41200001 =10.000000953674316. Strict oracle correction from independently derived binary32 schedule; no epsilon or product change. |
+| Shockwave empty displacement | Actual0621 005FFC88..005FFD86 traverses retained pointer list+160/+16C every even age, removes dead targets, then moves live roots. Test targets callback supplies a hit but its singular resolver defaultsnull. Provide the same live target by ID and retain the exact6 movement assertion. |
+| Ether Drain cloud Y ULP | Actual1052 00410C7D..00410CAE stores integer, quotient, degrees and radians asfloat; Math-service pi is loaded asdword. Production shared vector already honors f32 pi/radians; the independent test helper used double radians. Correct that oracle's float boundary across all its callers, not its observedY golden. |
+| FreezeWave missingColdSlow | Actual005FFF1F pushes mask2 to00642090, then005FFFF0 tests bit40 on an admitted target. A fixture with flags40 alone never qualifies. Use eligibleflags42 and assert flags40-only rejection; preserve product mask2 and strict radius/list behavior. |
+| Golem targets1,2 versus1 | Accepted caller/initializer and retained00641B10 specify halfwidth90, radius120, average-foot origin plusbackward20, angular apexbackward30 and no targetradiuspadding. Existing point60,0 is valid under this recovered geometry. Correct expectedmembership, add behind-apex/outside-root negatives, preserve facing/source behavior. |
+| New rescue area invisible | Rescue Shockwave and Golem Knockback are shared gameplay/list areas with no direct sprite draws. Inventory these explicit no-sprite dispositions and assert empty draw lists. Wave-owned registered light/Region feedback remain separate and are not removed or reclassified. |
+
+Only four affected testfiles plus this ledger need correction. Preserve strict
+assertions and qualifying inputs/lookups; do not alter production to fit older
+oracles. New assertions remainUNRUN. Reuse qualified14 unchanged-file passes
+and original accepted wave red; next finite check is types/these four complete
+files, including every shared test-vector helper consumer. Whole finalALL and
+old040/84+5add red/text ANDsound/browser/publication/live/cleanup remain open.
