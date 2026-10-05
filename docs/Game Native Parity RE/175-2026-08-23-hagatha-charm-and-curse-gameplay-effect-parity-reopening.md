@@ -1628,3 +1628,117 @@ does not establish its historical run sequence. Native instruction evidence
 is reused, not a new retail runtime capture. NU1900 records unavailable remote
 vulnerability metadata; no live vulnerability audit is claimed. Publication,
 deployment and completion reaction remain separate pending authority.
+
+## 2026-10-05 — Report65: Cheat Death presentation recovery
+
+### Report and current evidence boundary
+
+Original Discord message `1554347368076550194` names two independent defects:
+missing `CHEAT DEATH!` text and a missing sound. The exact original and seven
+surrounding messages were read on the authorized account at
+`2026-10-05T05:35:50.354326+00:00`. Its edit remains September 29 at
+`04:44:11.070000+00:00`; neither clause is withdrawn or corrected in the
+surrounding discussion. The reporter identifies the second attachment as
+original. No completion reaction was changed.
+
+Both original attachment sizes and hashes still match intake. Intake's late
+original still shows `CHEAT DEATH!` below the bars, but its three sparse video
+samples and half-second audio sample do not establish complete text timing or
+absent web sound. No new media decoding, stock execution, Website checks or
+browser reproduction belongs to this initial M2 investigation.
+
+Fresh public `/deployment.json` and the title revision asset name the exact
+published source `d1161e0b97ae41659b5ea437f1c8000310a0cad0`, tree
+`ec0f6d0abfdcec184be1513c5bcdfff5b303fd7c`. Public HTML, entry and Game chunks
+were inspected as text only. Their absent literal is supporting source
+evidence, not a browser reproduction or either acceptance condition.
+
+The earlier Cheat Death dispositions above close participant-owned charge,
+lethal recovery and persistence. They did not trace this branch's downstream
+notification, four sound requests, Region flash and Shockwave. That skipped
+consumer trace reopens presentation without invalidating the retained health,
+purchase or save contracts.
+
+### Evidence and provenance
+
+| Class | Exact source | Finding and qualification | Confidence |
+| --- | --- | --- | --- |
+| Retained native state/instructions | This entry's `0x0052F540`, HP writer `0x0052AC80`, progression accessor `0x00529670`, purchase `0x0066EF70`; stock 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Drinker precedes the one-use half-maximum-HP recovery; the charge belongs to the damaged participant. These facts are reused, not newly observed in retail. | high, retained |
+| Retained decompiler | Outer workbench `Decompiled Game/refs_dat819978.log`, function heading line 23278, lethal suffix lines 24037–24143, next known function `0x005308D0` at line 24270 | Enabled byte `+0x81C` and positive charge `+0x820` gate recovery. The suffix contains Region setter `0x00448600`, four `Sound` starts, literal `CHEAT DEATH!` passed to `0x005CA7C0`, factory type `0x7E7`, registration `0x0063E5B0` and Player `+0x1D4 = 1`. Its damaged decompiler stack types do not prove Sound object pointers or every argument. | high for explicit calls/literal; pending instruction operands |
+| Settled notification contract | Entry 100, notification paragraph; read-only Mod Loader `native-loot-selector.md` and `native-items-equipment-and-loot.md` | Shared insertion/update/draw `0x005CA7C0/0x005D7EF0/0x005CF000`, life 1.5, float32 loss .005, initial scale-distance -18, insertion/list pressure, GOLD merging, body bitmap text at screen center/Y 67 with black +2 shadow and caller color. Reuse the owning manager. | high, retained |
+| Settled screen feedback | Entries 017/083 and read-only `native-projectiles-and-effects.md` | `0x00448600` overwrites Region RGBA/loss `+0x8E14..+0x8E24`; Region virtual `+0x100` separately computes point gain. Cheat Death's exact setter operands remain unverified. | high for shared owner; pending branch operands |
+| Settled factory/area effect | Read-only `native-factory-catalog.json`, row 2023; entries 083/084 and `native-projectiles-and-effects.md` | Type `0x7E7` is Shockwave, ctor `0x005E7A20`, tick `0x005FF8C0`, light callback `0x005E7AA0`, vtable `0x0079D92C`. It is a list-backed radial effect and Region light producer. Cheat Death customization is not yet instruction-closed. | high for class/lifecycle; pending payload |
+| Current published source | `player-entity-store.ts`, `player-contact-system.ts`, `game-simulation.ts`, `game-audio-native.ts`, notification owner and protocol codecs at d116 | Direct contacts discard `cheatDeathTriggered` by retaining only `.store`. Tick results expose `cheatDeathPlayerIds`, but neither simulation caller consumes them. No Cheat Death semantic event, notification or sound request reaches current client consumers. | high, static source |
+
+The retail reference clip is reporter-supplied original-game evidence. It is
+not a new, controlled, mod-disabled stock capture. No runtime PID, ASLR mapping
+or current native physical-device outcome is claimed.
+
+### System boundary and membership inventory
+
+Native system: accepted participant Cheat Death recovery through its shared
+gameplay notification, audio, Region screen-feedback and Shockwave consumers,
+then once-only client presentation and scene teardown. Existing shared kernels
+and authored catalogs remain the implementation authority. This is the initial
+inventory; unknown native xrefs and operands prevent implementation acceptance.
+
+| Member / branch / sibling | Native or current owner | Investigation disposition and required proof |
+| --- | --- | --- |
+| Enabled/charged lethal recovery; spent and disabled rejection | Progression `+0x81C/+0x820`, HP `+0x70/+0x74`, `0x0052F540` | Retained gameplay proof reused; preserve half-HP, one charge, native terminal threshold and participant isolation. Current end-to-end cue evidence pending. |
+| Drinker-before-Cheat-Death, potion unavailable, no charge | `0x0052AC80` and current `resolveNativeHagathaDamage` | Retained ordering reused; no Cheat Death cue for a Drinker rescue or untriggered hit. |
+| Direct physical/magic enemy contact, modifiers, defenses and rejected contacts | `0x00548150 -> 0x0052F540`; current `applyPlayerContacts` | Trigger result is dropped. Complete current producer matrix and native admission/output ordering are required before porting. |
+| Periodic combat/poison tick and terminal tick caller | Current `stepPlayerEntityCombatTick`, both simulation consumers | Advertised Cheat Death result list is unused. Establish reachable native/current rescue branches; do not invent poison lethality beyond the retained cap. |
+| `CHEAT DEATH!` notification | `0x005CA7C0` from the lethal suffix; shared list `0x00808878` | Recovered pending port; instruction-confirm caller color/owner gate and full manager xrefs before choosing event routing. |
+| Gold notification and consecutive GOLD merging | `0x005E66B0`, shared insertion/update/draw | Existing message kernel reused; validate pressure/merge behavior when rescue is interleaved. |
+| Sack item help/name text | `0x0061F4C0`, same manager | Existing message kernel reused; preserve owner filtering and arbitrary item names. |
+| Bonus point, random-skill `+1`, DAMAGE x4 text | `0x006039C0`, same manager | Existing three tint/outcome branches reused; cross-message ordering and expiry need coverage. |
+| Skill-book rank `+1` in Hub/Boneyard | Current `nativeSkillBookWorldMessage`, `use-skill-book-feedback`, Boneyard notification subscription | Existing shared consumer; negative feedback IDs must remain disjoint from replicated positive event IDs. |
+| Additional native notification callers | Every true xref of `0x005CA7C0` | Not yet enumerated in full; the bounded next extraction must retain decoded callers and distinguish raw byte candidates. |
+| Sound requests 1, 2, 3, 4 | `0x00407B70`, `0x00407CD0`, `0x00407CD0`, `0x00407B70` in native order | Pending exact registry object, pitch/gain, positional versus shared point-gain argument, and overlap semantics. Four calls are not proof of four distinct samples. |
+| Shared Sound registry/voice lifetime | Entry 019, retained 233-row `native-audio-catalog.json` | Reuse existing Web Audio director, exact stock assets and registry catalog; do not add a synthetic cue or new audio owner. Actual affected registry consumers depend on the pending operands. |
+| Region overwrite flash and point attenuation | Setter `0x00448600`; separate Region `+0x100` virtual | Pending branch RGBA/loss and owner/gain operands; preserve screen-feedback and accessibility policy across shared writers. |
+| Cheat Death Shockwave | Factory 2023, construction suffix, `0x0063E5B0` | Pending radius/growth/life/push/damage/group/flags; reuse list-backed collision and light behavior. |
+| Ring of Fire, Magic Shield break and Mindblast/Last Word wave consumers | Existing Shockwave/`mindblast-shockwave` kernels and entries 083/084 | Actual reusable sibling owners; no shared scalar or factory change without their native payload and affected-member proof. |
+| Player `+0x1D4` reaction, ordinary hurt/ouch continuation | Native lethal suffix then `LAB_00530570`; entry 096 | Pending exact rescue reaction and downstream order; do not infer presentation from HP interpolation. |
+| Purchase, Bargain Bundle, removal, save/restore, new actor/run | Existing Hagatha and progression/save owners | Retained contracts reused; consumed charges must not rearm or turn retained history into a new cue. |
+| Local owner, remote peers, reconnect and duplicate snapshots | Current authoritative events, run-scoped cursors and Boneyard scene lifetime | Pending rescue event projection and once-only text/audio consumption; late subscription must not replay history. |
+| Notebox, merchant modal, complete unrelated Hagatha/catalog systems | Distinct recovered owners | Out of this rescue presentation system: native uses the gameplay notification insertion helper, and the existing charge/catalog contracts remain separate evidence. |
+
+### Current causal trace and implementation consequence
+
+`damagePlayerEntityWithResult` already returns the actual rescue outcome after
+authoritative damage and Drinker resolution. `applyPlayerContacts` currently
+takes only its store. Fixed combat ticks likewise return rescue IDs that the
+main simulation and Game Over caller never consume. Neither path may be
+replaced with health-delta inference in the client.
+
+The existing `NativeLootMessagePresentation.consumeText` provides the shared
+list recurrence; `NativeLootBitmapText` owns its body font, and
+`BoneyardScene` already shares that list between loot and skill-book rank
+feedback. Existing event synchronizers suppress replay on construction and
+separate run identities. Reuse those owners once the native caller/visibility
+contract is proved. Exact native audio and wave payloads must be recorded here
+before adding producer/codec/audio/renderer behavior or regression expectations.
+
+No Website behavior or tests have changed in this initial investigation. No
+new platform approximation is declared. Required full validation remains the
+unchanged `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact final M5
+candidate plus a real built-browser journey.
+
+### Remaining evidence and independent acceptance conditions
+
+The smallest next native phase reads the original PE with the already proved,
+parent-approved LLVM tool. It closes the lethal suffix's actual arguments,
+notification xrefs/recurrence/teardown and Shockwave customization. Native
+reading is a finite, newly granted M5 diagnostic; no Website checkout, package
+dependencies, stock runtime or media decoder is needed for it.
+
+Text acceptance must separately compare the exact string, caller color,
+bitmap-font layout, native anchor/shadow, list insertion and pressure,
+clock/fade/expiry, owner visibility, duplicate suppression and scene cleanup.
+Sound acceptance must separately prove every actual sound request's asset,
+order, rate, gain/point attenuation, overlap, once-only replication and audio
+teardown, then compare retained original audio with the current built cue.
+Successful recovery alone satisfies neither condition. Original video/audio
+decoding and current browser comparison need their own finite M5 phase after
+the native contract and parent-reviewed implementation package are ready.
