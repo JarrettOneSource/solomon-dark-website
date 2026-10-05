@@ -1633,3 +1633,18 @@ rescue and overload. The two documented legacy CodeLine sources keep their
 existing out-of-system admission boundary. Current rendering and interface
 tests are authored but unrun; this is an implementation checkpoint, not native
 pixel, sound or all-mode acceptance.
+
+### Report65 built glyph acceptance boundary
+
+The 2017 M5 check built clean5e496225 successfully and decoded the unchanged
+second report clip through installed macOS AVFoundation (1600x900,8.026s,
+stereo48kHz PCM). At original7.0s, CHEAT DEATH! is visible at screen center
+above the player, using the recovered body bitmap text and fading native row.
+The real built client received the rescue notice with page/console/response
+errors empty. Its helper waited for the aria parent span to become visible and
+timed out: that span contains baseline-positioned absolute glyphs and has zero
+flow width by the existing NativeUiText contract. This is insufficient evidence
+of missing ink. Measure the foreground glyphs' real rectangles/visibility and
+record their union, body-font/baseline attributes, shadowY+2 and actual screenshot;
+preserve the baseline renderer. Text and sound acceptance remain separately
+pending until those observations and the output recording complete.

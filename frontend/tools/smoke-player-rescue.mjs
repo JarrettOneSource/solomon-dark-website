@@ -113,13 +113,30 @@ try {
   assert.equal(result.secondaryAbilities.actors.filter(value => value.kind === 'rescue-shockwave').length, 1)
   Object.assign(host.state(), result)
   const notice = page.locator('.boneyard-loot-messages > span[aria-label="CHEAT DEATH!"]')
-  await notice.waitFor({ state: 'visible', timeout: 15000 })
-  receipt.text = await notice.evaluate(node => ({ text: node.getAttribute('aria-label'), bounds: node.getBoundingClientRect().toJSON(),
-    top: getComputedStyle(node).top, opacity: getComputedStyle(node).opacity, html: node.innerHTML,
-    parentBounds: node.parentElement.getBoundingClientRect().toJSON(),
-    shadow: { left: getComputedStyle(node.firstElementChild).left, top: getComputedStyle(node.firstElementChild).top } }))
+  const foreground = notice.locator(':scope > [data-native-ui-font="body"]')
+  await foreground.locator('i').first().waitFor({ state: 'visible', timeout: 15000 })
+  await page.waitForTimeout(200)
+  receipt.text = await notice.evaluate(node => {
+    const foreground = node.querySelector(':scope > [data-native-ui-font="body"]')
+    const glyphs = [...foreground.querySelectorAll('i')].map(glyph => ({
+      codePoint: Number(glyph.dataset.nativeUiGlyph), bounds: glyph.getBoundingClientRect().toJSON(),
+      maskImage: getComputedStyle(glyph).maskImage,
+    })).filter(glyph => glyph.bounds.width > 0 && glyph.bounds.height > 0)
+    const left = Math.min(...glyphs.map(glyph => glyph.bounds.left))
+    const right = Math.max(...glyphs.map(glyph => glyph.bounds.right))
+    const top = Math.min(...glyphs.map(glyph => glyph.bounds.top))
+    const bottom = Math.max(...glyphs.map(glyph => glyph.bounds.bottom))
+    return { text: node.getAttribute('aria-label'), bounds: { left, right, top, bottom, width: right - left, height: bottom - top },
+      glyphs, font: foreground.dataset.nativeUiFont, placement: foreground.dataset.nativeUiPlacement,
+      top: getComputedStyle(node).top, opacity: getComputedStyle(node).opacity,
+      parentBounds: node.parentElement.getBoundingClientRect().toJSON(),
+      shadow: { left: getComputedStyle(node.firstElementChild).left, top: getComputedStyle(node.firstElementChild).top } }
+  })
   assert.equal(receipt.text.text, 'CHEAT DEATH!')
   assert.ok(receipt.text.bounds.width > 20 && receipt.text.bounds.height > 0)
+  assert.equal(receipt.text.font, 'body')
+  assert.equal(receipt.text.placement, 'baseline')
+  assert.ok(receipt.text.glyphs.every(glyph => glyph.maskImage !== 'none'))
   assert.deepEqual(receipt.text.shadow, { left: '0px', top: '2px' })
   await page.screenshot({ path: `${output}/cheat-death-text.png` })
   await page.waitForFunction(mark => window.__sdrAudioEvents.slice(mark).filter(event => event.type === 'buffer-start'
