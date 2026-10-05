@@ -860,3 +860,15 @@ local member/network/rejoin journeys remain in the next finite scope.
 The reusable scene receipt describes its actual built-client fixture generically;
 the phase receipt and fingerprints bind the specific served revision. Mode input
 is validated before acquiring the static server or browser.
+
+The closed1852 run verified original99 artifact125 fingerprints and the final
+e3ff source7270, then its Tutorial helper terminated from the host timer's
+exactly-one-player invariant. Restored and paused PNGs exist, but no scene
+receipt/wire trace survived, so Tutorial acceptance remains pending. The guard
+rejects both zero and multiple players; the actual count was not recorded.
+The additional-actor fixture already excludes Tutorial and is not the cause.
+Source permits a zero-player tick after disconnect when `resetWhenEmpty` is
+false. The helper now records read-only membership/publication checkpoints and
+existing host lifecycle events to recover the first failure, and stops the host
+timer before context teardown. This is a helper lifecycle repair and causal
+probe, not a native/product counter change or an accepted runtime conclusion.

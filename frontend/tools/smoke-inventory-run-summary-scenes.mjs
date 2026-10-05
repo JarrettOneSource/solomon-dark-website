@@ -85,7 +85,14 @@ async function journey(mode) {
     receipts.push({ mode, name: 'declared-restored-tutorial-lesson', stage: 12, nativeAccess: access,
       noSurvivalDirector: true, qualification: 'Restored later lesson/numerical fixture; no fresh movement/combat playthrough' })
   }
-  const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
+  const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20,
+    log: entry => {
+      if (['player.disconnected', 'gameplay.paused', 'gameplay.resumed', 'gameplay.pause_released',
+        'simulation.tick_failed', 'connection.closed_before_authentication'].includes(entry.event)) {
+        process.stderr.write(JSON.stringify({ report61Diagnostic: 'host-lifecycle', mode, entry }) + '\n')
+      }
+    },
+  })
   const context = await browser.newContext(tutorial
     ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
     : { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })
@@ -118,6 +125,7 @@ async function journey(mode) {
     await page.locator(hub ? '.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]'
       : '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
     assert.equal(host.hostPlayerId(), owner)
+    membership('restored')
     if (tutorial) {
       await page.locator('.tutorial-overlay[data-stage="12"]').waitFor()
       assert.equal(host.state().world.tutorial.stage, 12)
@@ -201,22 +209,32 @@ async function journey(mode) {
     receipts.push({ mode, failure: `${error.name}: ${error.message}`, body: await page.locator('body').innerText() })
     throw error
   } finally {
-    await context.close()
     await host.close()
+    await context.close()
     receipts.push({ mode, name: 'read-only-wire-trace', frames: wire.frames })
   }
 
   async function reopenPublished(name) {
+    membership(name + '-before-public-close')
     const previousSequence = wire.snapshotSequence()
     assert.equal(typeof previousSequence, 'number', 'An actual received snapshot must precede the fixture change')
     await activate(inventory.getByRole('button', { name: 'Close inventory', exact: true }), tutorial)
     await inventory.waitFor({ state: 'hidden' })
     await waitUntil(() => wire.snapshotSequence() > previousSequence,
       'Public pause release did not publish a fresh snapshot', 15_000)
+    membership(name + '-after-published-frame')
     await page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
     receipts.push({ mode, name, previousSequence, publishedSequence: wire.snapshotSequence(),
       authority: authority(), hostPlayerId: host.hostPlayerId() })
     await activate(page.getByRole('button', { name: /Open inventory/ }), tutorial)
+  }
+
+  function membership(point) {
+    const playerIds = host.state().playerEntities.identities.map(row => row.playerId)
+    const value = { mode, point, playerIds, humans: host.humanPlayerCount(),
+      hostPlayerId: host.hostPlayerId(), tick: host.state().tick, snapshotSequence: wire.snapshotSequence() }
+    process.stdout.write(JSON.stringify({ report61Diagnostic: 'membership-publication', ...value }) + '\n')
+    if (tutorial) assert.deepEqual(playerIds, [owner], 'The Tutorial fixture must retain exactly its restored owner')
   }
 
   function authority() {
@@ -240,6 +258,8 @@ async function journey(mode) {
     receipts.push({ mode, name, summary, lines, runId: host.state().world.runId ?? null, hostPlayerId: host.hostPlayerId() })
     assert.deepEqual(lines.map(line => line.text), texts)
     assert.deepEqual(lines.map(line => [line.x, line.y]), [...(summary.wave > 0 ? [[800, 329]] : []), [800, 344], [800, 364]])
+    await writeFile(join(output, 'partial-receipt.json'), JSON.stringify({ status: 'running', receipts,
+      errors, qualification: 'Completed capture checkpoints only; the scene journey is still running.' }, null, 2) + '\n')
   }
 }
 
