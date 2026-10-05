@@ -1936,3 +1936,88 @@ Recover them from retained proved data/instructions if available, otherwise
 propose a distinct smallest finite read. Current source behavior, tests, saves
 and protocol remain unchanged. Text and sound acceptance remain independently
 pending after full contract review and exact built/native comparison.
+
+### Actual protection0835: fraction and shared Sparkle primitive
+
+The separately granted `report65-rescue-protection-20261005-0835` phase used
+the same verified retail/LLVM identities. It admitted at
+`08:35:50.067494 UTC`, exported a 40,960-byte bundle with SHA-256
+`cfc1d782531e79e5025fbabf1e5b0f56f0ccda02af2902f80df1b43d5c08dcbe`,
+and released the exact lease and removed its SSD root at `08:35:52.123613`.
+Native, SSH and controller all returned zero; both whole process groups drained.
+The parent independently verified closure at `08:38:28`. This is static native
+evidence, not either text or sound acceptance.
+
+Only PlayerTick `0x00533520..0x00533810` (explicitly a partial function),
+Sparkle construction `0x00453980..0x00453A30`, and three declared eight-byte
+spans were read. The complete exported range hashes are
+`dbcb04f7afc5e6a855c96941621a4de8f52a2ce57369ab021f97415a3a55bed7`
+and `d0147774f699398239265d983ca8437fbaa62e328816f2366f1dd79bd286a01d`.
+Sparkle semantics stop at its actual `RET 8`, `0x00453A1F`; the remaining
+bytes before `0x00453A30` are padding. No previous tick/draw was replayed.
+
+| Operand/use | Actual captured instruction | Recovered contract |
+| --- | --- | --- |
+| fraction loss `0x00794088` | qword `FSUB` at `0x005336ED`, float32 store `0x00533704` | `0.0024999999441206455`; subtract and clamp zero only when the entry fraction is positive |
+| radial magnitude `0x007867F0` | dword `FLD` at `0x00533728`, unsigned `0x00401310` call `0x0053373A` | closed unsigned Float(60), stored float32 before direction multiplication |
+| birth Y offset `0x00785BB8` | qword `FSUB` at `0x00533782` | 35; birth center is `(PlayerX + 0, PlayerY - 35)` |
+| radial direction | `0x00410C50` at `0x0053374F` | retained random-unit-vector service, flag zero; both radius products are stored float32 before adding to the center |
+| birth alpha | Player `+0x1D4` loaded `0x005337BC`, stored child `+0x28` at `0x005337C4` | the updated protection fraction, fixed for that child, including zero on the final positive-entry tick |
+| decay addition | dword `0x007DE9D0`, unsigned Float call `0x005337DB`, add/store child `+0x24` | shared base decay 3 plus unsigned Float(2), with float32 stores |
+
+The accepted `0x0052F76C..0x0052F7BB` damage body uses the positive fraction
+to multiply each physical, magic and poison lane by `1 - fraction`; the rescue
+suffix writes one. The new state is therefore an actor-owned damage protection
+fraction, not a fixed invulnerability timer or the ordinary red redraw latch.
+The Tick branch is tested before subtraction and does not retest after zero:
+it still constructs and registers a particle with alpha zero on that last tick.
+Scalar arithmetic following the captured subtraction/store schedule gives
+`0.9975000023841858` after one tick, `8.828938007354736e-7` after 400, and zero
+after 401. These are derived arithmetic expectations, not a retail runtime
+observation; replacing the recurrence with a 400-tick closed form is incorrect.
+
+Fresh construction confirms position by value, zero initial position fields,
+timer `+0x20` from `0x00784738`, decay `+0x24` from `0x007DE8E0`, random angle
+`+0x1C` from unsigned Float(`0x0078453C`), and default alpha one. Retained
+entries 088/207 and Mod Loader `skill-picker-re.md` already prove timer 180,
+decay 3, angle 360, BadGuys record 73, fixed angle, upward `.1` per tick,
+stored float32 subtraction and sine-of-timer scale. Reuse that primitive;
+the rescue emitter has its own protection clock, radial geometry and alpha.
+It does not inherit the level-up emitter's 180 births, signed-X column,
+five-word schedule, visibility gate, or level-up light. The internal RNG word
+schedule of `0x00410C50` still needs retained closure before claiming an exact
+word count for this distinct emitter.
+
+### Remaining ownership reconciliation before a product change
+
+Player `+0x204` is not assigned a new death-grace meaning. Entry 301's retained
+Crow blindness closure maps the same countdown and Arena cover reads
+`0x004708A9/0x004708BA`; current `blindnessTicksRemaining` is authoritative,
+written after Crow contact and decremented by the existing player clock.
+This is a strong existing-field lead. The retained field-read index and current
+source do not independently prove the native upstream writer, so that mapping
+remains qualified. Preserve the captured `+0x204 <= 0` lethal-suffix guard;
+do not introduce another timer or modify unrelated Crow behavior by inference.
+
+The complete retained projectile-method index independently lists
+`0x00410C50` and Region setter `0x00448590` in FreezeWave `0x005FFDC0` and
+Knockback `0x00600220`, as well as Shockwave. Those calls require dispositions,
+not an assumption that every wave uses Shockwave's `3 * scalar` formula.
+The retained full Knockback body in
+`Mod Loader/runtime/ghidra_input_buffer_field_accesses_current.txt`, lines
+2274–2480, proposes a random unit vector multiplied by the retained double ten
+before list movement, subtracts ten from its remaining push budget, and owns
+terminal contact. Native Golem attack creates this area actor. Current Golem
+contact collapses it into an immediate impulse; absence of a `knockback` actor
+kind does not make that supported producer out of system. Its exact producer
+arguments and current disposition still require reconciliation.
+
+Supported expanding-wave callers are Ring of Fire, Magic Shield break,
+Mindblast (including level-up equipment and Last Word's separate Game Over
+tick), and Ring of Ice/Comet's shared FreezeWave. The current primary
+`water-freeze-wave` constructor has only a test caller in the static source
+sweep; classify its production reachability before changing it. FreezeWave's
+exact jitter multiplier/order and the unit-vector internals remain explicit
+unknowns where only an index, rather than a captured or retained body, exists.
+Text, sound, browser comparison, all-mode validation and publication remain
+separate pending boundaries. No product code or expectations changed.

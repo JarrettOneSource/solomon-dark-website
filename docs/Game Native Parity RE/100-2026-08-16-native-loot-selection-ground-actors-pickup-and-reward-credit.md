@@ -1598,3 +1598,14 @@ admission, with their presentation contracts still recorded for any future
 compatible producer. Do not invent a script source to exercise them. Gold,
 item-name, all three Bonuses, book-rank, Cheat Death and mana-overload remain
 actual current shared-system consumers needing final per-member acceptance.
+
+The final retained reconciliation clarifies two boundaries without another
+native read. The manager step's actual return in the accepted0621 text is
+`0x005CAD23`; the captured range through`0x005CAD28` also contains padding.
+Mod Loader `native-player-death-spectator.md`, its Local death transition and
+field table, assigns Player`+0x160` to the death/alternate-animation drive
+written by`0x00534120`. It is distinct from the earlier lethal-pending flag.
+The existing Tutorial combat-HUD projection in entry186 changes at stage13
+close, corresponding to the captured Game`+0x1AC4` visibility gate. Reuse
+those established owners for notification visibility, preserving book/loot
+pause and run teardown. Current product rendering remains unchanged here.
