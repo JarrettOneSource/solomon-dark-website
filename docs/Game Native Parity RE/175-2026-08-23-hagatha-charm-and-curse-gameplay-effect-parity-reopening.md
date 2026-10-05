@@ -2314,3 +2314,10 @@ behavior. Browser/original text/audio and finalALL acceptance remain pending.
 All three actual jobs exported their terminal evidence and drained their owned
 groups; roots/leases were released. These conclusions do not claim a build,
 browser or physical speaker result that did not run.
+
+The built sound helper must match the cue registry's actual asset names:
+flash-spell.wav (159454bytes/fda25c45...) and enemy-flash.wav
+(65836bytes/dfbee905...). The flash cue uses the latter existing import.
+Use the shared passive audio probe's hashed-source matcher; a regex expecting
+flash.wav would incorrectly omit the fourth real request. Record actual output
+PCM and nonzero sample energy separately from the request observations.

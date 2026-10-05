@@ -140,13 +140,13 @@ try {
   assert.deepEqual(receipt.text.shadow, { left: '0px', top: '2px' })
   await page.screenshot({ path: `${output}/cheat-death-text.png` })
   await page.waitForFunction(mark => window.__sdrAudioEvents.slice(mark).filter(event => event.type === 'buffer-start'
-    && /\/flash(?:-spell)?(?:-[\w-]+)?\.wav$/.test(new URL(event.src, location.href).pathname)).length >= 4,
+    && ['flash-spell.wav', 'enemy-flash.wav'].some(name => window.__sdrAudioSourceMatches(event.src, name))).length >= 4,
   soundMark, { timeout: 15000 })
   receipt.sound = await page.evaluate(mark => window.__sdrAudioEvents.slice(mark).filter(event => event.type === 'buffer-start'
-    && /\/flash(?:-spell)?(?:-[\w-]+)?\.wav$/.test(new URL(event.src, location.href).pathname)), soundMark)
+    && ['flash-spell.wav', 'enemy-flash.wav'].some(name => window.__sdrAudioSourceMatches(event.src, name)))
+    .map(event => ({ ...event, cue: window.__sdrAudioSourceMatches(event.src, 'flash-spell.wav') ? 'flash-spell' : 'flash' })), soundMark)
   assert.equal(receipt.sound.length, 4)
-  assert.deepEqual(receipt.sound.map(event => /\/flash-spell(?:-[\w-]+)?\.wav$/.test(new URL(event.src).pathname)),
-    [true, true, true, false])
+  assert.deepEqual(receipt.sound.map(event => event.cue), ['flash-spell', 'flash-spell', 'flash-spell', 'flash'])
   assert.deepEqual(receipt.sound.map(event => event.playbackRate), [1, Math.fround(.8), .5, 1])
   assert.ok(receipt.sound.every(event => event.volume > 0))
   const repeat = damageGameSimulationPlayer(host.state(), playerId, 100000, host.state().tick)
@@ -155,9 +155,26 @@ try {
   const recording = await page.evaluate(() => window.__rescueStopAudioCapture())
   assert.ok(recording.bytes.length > 100)
   await writeFile(`${output}/cheat-death-audio.webm`, Buffer.from(recording.bytes))
-  await writeFile(`${output}/cheat-death-audio.s16le`, Buffer.from(recording.pcm))
+  const pcm = Buffer.from(recording.pcm)
+  assert.equal(pcm.length % 4, 0)
+  let squared = 0
+  let peak = 0
+  for (let offset = 0; offset < pcm.length; offset += 2) {
+    const sample = pcm.readInt16LE(offset)
+    squared += sample * sample
+    peak = Math.max(peak, Math.abs(sample))
+  }
+  assert.ok(peak > 0, 'Actual output PCM must contain the audible cue')
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0); header.writeUInt32LE(pcm.length + 36, 4); header.write('WAVEfmt ', 8)
+  header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(2, 22)
+  header.writeUInt32LE(recording.sampleRate, 24); header.writeUInt32LE(recording.sampleRate * 4, 28)
+  header.writeUInt16LE(4, 32); header.writeUInt16LE(16, 34); header.write('data', 36); header.writeUInt32LE(pcm.length, 40)
+  await writeFile(`${output}/cheat-death-audio.s16le`, pcm)
+  await writeFile(`${output}/cheat-death-audio.wav`, Buffer.concat([header, pcm]))
   receipt.audioRecording = { mimeType: recording.mimeType, bytes: recording.bytes.length,
-    pcmBytes: recording.pcm.length, channels: 2, sampleRate: recording.sampleRate, pcmFormat: 's16le' }
+    pcmBytes: pcm.length, channels: 2, sampleRate: recording.sampleRate, pcmFormat: 's16le',
+    peak, rms: Math.sqrt(squared / (pcm.length / 2)) }
   await waitUntil(() => getPlayerProgression(host.state(), playerId).rescueProtection.fraction === 0,
     'Rescue protection did not retire', 10000)
   await waitUntil(() => getPlayerProgression(host.state(), playerId).rescueProtection.particles.length === 0,
