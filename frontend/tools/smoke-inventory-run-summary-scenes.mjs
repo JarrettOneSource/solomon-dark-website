@@ -85,14 +85,7 @@ async function journey(mode) {
     receipts.push({ mode, name: 'declared-restored-tutorial-lesson', stage: 12, nativeAccess: access,
       noSurvivalDirector: true, qualification: 'Restored later lesson/numerical fixture; no fresh movement/combat playthrough' })
   }
-  const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20,
-    log: entry => {
-      if (['player.disconnected', 'gameplay.paused', 'gameplay.resumed', 'gameplay.pause_released',
-        'simulation.tick_failed', 'connection.closed_before_authentication'].includes(entry.event)) {
-        process.stderr.write(JSON.stringify({ report61Diagnostic: 'host-lifecycle', mode, entry }) + '\n')
-      }
-    },
-  })
+  const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
   const context = await browser.newContext(tutorial
     ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
     : { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })
@@ -125,7 +118,7 @@ async function journey(mode) {
     await page.locator(hub ? '.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]'
       : '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
     assert.equal(host.hostPlayerId(), owner)
-    membership('restored')
+    assertTutorialOwner()
     if (tutorial) {
       await page.locator('.tutorial-overlay[data-stage="12"]').waitFor()
       assert.equal(host.state().world.tutorial.stage, 12)
@@ -145,14 +138,16 @@ async function journey(mode) {
       const restoredWave = tutorial ? host.state().world.tutorial.waveOrdinal : host.state().world.waves.waveOrdinal
       await capture('restored', { wave: restoredWave, monstersKilled: 17, awesomeness: 91 })
       const beforeMutation = { ...authority(), snapshotSequence: wire.snapshotSequence() }
-      Object.assign(host.state(), stageNumbers(host.state(), { wave: 7, monstersKilled: 19, awesomeness: 164 }))
+      // Stock Tutorial ordinals are0–6; the survival fixture has no such cap.
+      const liveSummary = { wave: tutorial ? 5 : 7, monstersKilled: 19, awesomeness: 164 }
+      Object.assign(host.state(), stageNumbers(host.state(), liveSummary))
       await capture('paused-last-published-values', { wave: restoredWave, monstersKilled: 17, awesomeness: 91 })
       assert.equal(host.state().tick, beforeMutation.tick, 'Standalone inventory must retain its authoritative pause')
       receipts.push({ mode, name: 'unpublished-authority-fixture', beforeMutation,
         authority: authority(),
         receivedSnapshotSequence: wire.snapshotSequence() })
       await reopenPublished('public-resume-publishes-current-values')
-      await capture('reopened-current-values', { wave: 7, monstersKilled: 19, awesomeness: 164 })
+      await capture('reopened-current-values', liveSummary)
       if (!tutorial) {
         Object.assign(host.state(), addPlayerCharacter(host.state(), 'report61-other-actor', { ...config, displayName: 'Other' }))
         const world = host.state().world
@@ -215,26 +210,23 @@ async function journey(mode) {
   }
 
   async function reopenPublished(name) {
-    membership(name + '-before-public-close')
+    assertTutorialOwner()
     const previousSequence = wire.snapshotSequence()
     assert.equal(typeof previousSequence, 'number', 'An actual received snapshot must precede the fixture change')
     await activate(inventory.getByRole('button', { name: 'Close inventory', exact: true }), tutorial)
     await inventory.waitFor({ state: 'hidden' })
     await waitUntil(() => wire.snapshotSequence() > previousSequence,
       'Public pause release did not publish a fresh snapshot', 15_000)
-    membership(name + '-after-published-frame')
+    assertTutorialOwner()
     await page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
     receipts.push({ mode, name, previousSequence, publishedSequence: wire.snapshotSequence(),
       authority: authority(), hostPlayerId: host.hostPlayerId() })
     await activate(page.getByRole('button', { name: /Open inventory/ }), tutorial)
   }
 
-  function membership(point) {
-    const playerIds = host.state().playerEntities.identities.map(row => row.playerId)
-    const value = { mode, point, playerIds, humans: host.humanPlayerCount(),
-      hostPlayerId: host.hostPlayerId(), tick: host.state().tick, snapshotSequence: wire.snapshotSequence() }
-    process.stdout.write(JSON.stringify({ report61Diagnostic: 'membership-publication', ...value }) + '\n')
-    if (tutorial) assert.deepEqual(playerIds, [owner], 'The Tutorial fixture must retain exactly its restored owner')
+  function assertTutorialOwner() {
+    if (tutorial) assert.deepEqual(host.state().playerEntities.identities.map(row => row.playerId),
+      [owner], 'The Tutorial fixture must retain exactly its restored owner')
   }
 
   function authority() {
@@ -258,8 +250,6 @@ async function journey(mode) {
     receipts.push({ mode, name, summary, lines, runId: host.state().world.runId ?? null, hostPlayerId: host.hostPlayerId() })
     assert.deepEqual(lines.map(line => line.text), texts)
     assert.deepEqual(lines.map(line => [line.x, line.y]), [...(summary.wave > 0 ? [[800, 329]] : []), [800, 344], [800, 364]])
-    await writeFile(join(output, 'partial-receipt.json'), JSON.stringify({ status: 'running', receipts,
-      errors, qualification: 'Completed capture checkpoints only; the scene journey is still running.' }, null, 2) + '\n')
   }
 }
 

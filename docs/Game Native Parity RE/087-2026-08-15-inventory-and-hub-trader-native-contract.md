@@ -872,3 +872,12 @@ false. The helper now records read-only membership/publication checkpoints and
 existing host lifecycle events to recover the first failure, and stops the host
 timer before context teardown. This is a helper lifecycle repair and causal
 probe, not a native/product counter change or an accepted runtime conclusion.
+
+The1915 probe established the first event: publishing the declared Tutorial
+Wave7 caused protocol rejection (`waveOrdinal` outside native0–6), close4008
+and the actual member transition1→0. The native singleton timer error was
+secondary; no extra actor was added. Restored and paused6/17/91 captures were
+valid. The Tutorial live-number fixture uses5/19/164 within its native range;
+the already-accepted survival fixture remains7/19/164. These are declared
+numerical inputs, not a natural Tutorial progression. Temporary lifecycle logs
+are removed; native singleton assertions and host-before-context teardown stay.
