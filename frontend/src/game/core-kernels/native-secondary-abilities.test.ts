@@ -58,6 +58,7 @@ import { createNativeWorldManagerOrder } from './native-world-manager-order.ts'
 import {
   createIdlePlayerCharacterInput,
   createPlayerCharacter,
+  playerCharacterFacing,
   type PlayerCharacterInput,
 } from './player-character.ts'
 import {
@@ -3381,9 +3382,9 @@ test('Raise Golem ignores aim and orders signed facing, placement, then construc
   const sourceRng = createNativeRng(123)
   const placementSign = drawNativeSign(sourceRng, 45)
   const base = context(45, 1, 0)
-  const character = base.players.player!.character
+  const character = { ...base.players.player!.character, ...playerCharacterFacing(22.25) }
   const placementHeading = Math.fround(
-    character.headingIndex * 15 + placementSign.value,
+    character.headingDegrees + placementSign.value,
   )
   const radians = placementHeading * Math.PI / 180
   const requested = {
@@ -3410,6 +3411,7 @@ test('Raise Golem ignores aim and orders signed facing, placement, then construc
       players: {
         player: {
           ...base.players.player!,
+          character,
           input: input(0, { x: 9_000, y: -9_000 }),
         },
       },
@@ -3427,8 +3429,8 @@ test('Raise Golem ignores aim and orders signed facing, placement, then construc
     ((((placementHeading + 180) * Math.PI / 180) % fullRotation)
       + fullRotation) % fullRotation,
   )
-  assert.deepEqual(result.facingHeadingIndexes, {
-    player: ((placementHeading / 15) % 24 + 24) % 24,
+  assert.deepEqual(result.facingHeadingDegreesByPlayer, {
+    player: placementHeading,
   })
   assert.deepEqual(result.state.rng, pose.state)
 })

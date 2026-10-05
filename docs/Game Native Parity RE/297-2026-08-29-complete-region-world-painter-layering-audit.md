@@ -2315,3 +2315,14 @@ whose contract supplies a discrete bank use that bank's fifteen-degree
 representative. Separate Hall-of-Fame portrait headings remain their discrete
 contract. This closes a concrete transport/NaN-ground caller gap before the
 current source is sealed; browser execution remains required on M5.
+
+The broader shorthand sweep also found the actual Golem facing outcome writer:
+`castAbility` already computes the continuous signed placement heading, but
+returned only `facingHeadingIndex`; `applySecondaryPlayerOutcomes` then changed
+the Player's bank alone. The existing internal outcome now returns canonical
+continuous degrees, and that single simulation commit derives the degree/index
+pair with `playerCharacterFacing`. Its type, tick/cast adapters and callers are
+migrated together without a compatibility field. The public Golem cast and
+strict snapshot regression use a nonbank initial angle and confirm the native
+signed45 change survives the authoritative Player record. No new native
+recovery is needed; actual M5 execution remains pending.

@@ -3707,12 +3707,12 @@ function applySecondaryPlayerOutcomes(
       secondaryPlayers[playerId],
     )
   }
-  for (const [playerId, headingIndex] of Object.entries(
-    secondaryResult.facingHeadingIndexes,
+  for (const [playerId, headingDegrees] of Object.entries(
+    secondaryResult.facingHeadingDegreesByPlayer,
   )) {
     const character = secondaryPlayers[playerId]
     if (!character) continue
-    secondaryPlayers[playerId] = { ...character, headingIndex }
+    secondaryPlayers[playerId] = { ...character, ...playerCharacterFacing(headingDegrees) }
     playerEntities = replacePlayerCharacter(
       playerEntities,
       playerId,

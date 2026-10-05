@@ -2039,6 +2039,27 @@ test('game simulation owns fixed-step accumulation independently of its world', 
   assert.equal(state.accumulatorSeconds, 0)
 })
 
+test('a public Golem cast commits its continuous facing and body bank as one Player invariant', () => {
+  let state = withPlayerSkillRank(etherDrainSimulation({ x: 400, y: 250 }), 'local-player', 45, 1)
+  for (let tick = 0; tick < 150; tick++) state = stepGameSimulationTick(state, {})
+  const initial = getPlayerCharacter(state)
+  state = { ...state, playerEntities: replacePlayerCharacter(
+    setPlayerEntityMana(state.playerEntities, 'local-player', 100), 'local-player', {
+      ...initial, headingDegrees: 22.25, headingIndex: 1, velocity: { x: 0, y: 0 },
+    },
+  ) }
+  state = stepGameSimulationTick(bindGameSimulationPlayerSkillQuickbar(state, 'local-player', 45, 1)!, {
+    'local-player': { ...gameplayInput(0, 0), cast: { primary: false, quickbar: 1 } },
+  })
+  assert.ok(state.secondaryAbilities.actors.some(actor => actor.kind === 'golem'))
+  const caster = getPlayerCharacter(state)
+  assert.ok([67.25, -22.75].includes(caster.headingDegrees))
+  assert.equal(caster.headingIndex, actorHeadingIndex(caster.headingDegrees))
+  const snapshot = gameSnapshot(JSON.parse(JSON.stringify(createGameSnapshot(state, 'local-player'))))
+  assert.equal(snapshot.players['local-player']!.headingDegrees, caster.headingDegrees)
+  assert.equal(snapshot.players['local-player']!.headingIndex, caster.headingIndex)
+})
+
 test('native Golem cooldown ticks map to 25 authoritative wall-clock seconds', () => {
   assert.equal(GAME_TICK_RATE, 100)
   assert.equal(NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS[45], 2_500)
