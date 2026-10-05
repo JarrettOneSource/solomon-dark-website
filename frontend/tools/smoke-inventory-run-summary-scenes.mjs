@@ -85,7 +85,8 @@ async function journey(mode) {
     receipts.push({ mode, name: 'declared-restored-tutorial-lesson', stage: 12, nativeAccess: access,
       noSurvivalDirector: true, qualification: 'Restored later lesson/numerical fixture; no fresh movement/combat playthrough' })
   }
-  const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
+  const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential },
+    resetWhenEmpty: true, snapshotRate: 20 })
   const context = await browser.newContext(tutorial
     ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
     : { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })
@@ -204,8 +205,8 @@ async function journey(mode) {
     receipts.push({ mode, failure: `${error.name}: ${error.message}`, body: await page.locator('body').innerText() })
     throw error
   } finally {
-    await host.close()
     await context.close()
+    await host.close()
     receipts.push({ mode, name: 'read-only-wire-trace', frames: wire.frames })
   }
 

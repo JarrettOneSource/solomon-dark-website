@@ -881,3 +881,13 @@ valid. The Tutorial live-number fixture uses5/19/164 within its native range;
 the already-accepted survival fixture remains7/19/164. These are declared
 numerical inputs, not a natural Tutorial progression. Temporary lifecycle logs
 are removed; native singleton assertions and host-before-context teardown stay.
+
+The1927 run completed valid Tutorial restored/paused/live5 and public12→13
+skills/book cases, plus Hub zeros and all four companion/result suppressions.
+Its final aggregate failed only because server-first helper teardown deliberately
+sent close1012 while the client error listener was still active. There were no
+failed scene assertions. The ephemeral helper host uses the existing
+`resetWhenEmpty` contract, so it can close the browser context first without a
+zero-player Tutorial tick, then stop the host. Error capture is unchanged and
+no console message is filtered. These scene observations are retained with that
+teardown qualification; stats/network and the final canonical gate remain open.
