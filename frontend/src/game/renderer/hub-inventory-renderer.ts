@@ -6,7 +6,8 @@ import { boastSelectionKey } from '../core-kernels/boast.ts'
 import { NATIVE_BOAST_PRESENTATION } from '../core-kernels/native-hub-npc.ts'
 import { nativeHudModalSlideOffset } from '../native-hud-layout.ts'
 import { nativeUiAtlasSource } from '../native-ui/assets.ts'
-import { destroyNativeUiPixiFor } from '../native-ui/pixi.ts'
+import { destroyNativeUiPixiFor, nativeUiPixiFor } from '../native-ui/pixi.ts'
+import { nativeApplicationTick } from '../native-application-tick.ts'
 import type {
   GameModAsset,
 } from '../protocol/game-mod-contract.ts'
@@ -44,7 +45,6 @@ import {
   hubNativeUiReveal,
   hubSackPageOffsets,
   hubShopSlideOffset,
-  hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
 import {
   buildDialogue,
@@ -73,6 +73,7 @@ import {
   loadModPresentationTextures,
 } from './mod-presentation-assets.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
+import { NativeUnforgeTargetView } from './native-unforge-target-view.ts'
 import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   PLAYER_CHARACTER_ATLAS_SOURCES,
@@ -159,7 +160,6 @@ export async function createHubInventoryRenderer(
   let inventoryCaption: Container | null = null
   let modalHud: NativeModalHudView | null = null
   let beltAvailability: NativeModalBeltAvailability | null = null
-  let unforgeTarget: Sprite | null = null
   let previousNoticeTitle: string | null = null
   let currentModel: HubInventoryRendererModel | null = null
 
@@ -178,11 +178,13 @@ export async function createHubInventoryRenderer(
   canvas.dataset.nativeTextureAddress = elementVfxTextures.fire[0]!.source.addressMode
   canvas.dataset.nativeTextureAlpha = elementVfxTextures.fire[0]!.source.alphaMode
 
+  const unforgeTarget = new NativeUnforgeTargetView((record) => nativeUiPixiFor(textures).texture('UI', record))
   const context: RenderContext = {
     elementVfxTextures,
     modTextures,
     playerCharacterAtlas,
     textures,
+    unforgeTarget: unforgeTarget.container,
   }
 
   function renderDowsing(nowMs: number): void {
@@ -281,10 +283,11 @@ export async function createHubInventoryRenderer(
     else delete canvas.dataset.nativeSackCaptionVisible
   }
 
-  function renderItemEffects(nowMs: number): void {
-    if (unforgeTarget) {
-      const tint = hubUnforgeTargetTint(nowMs / 10)
-      unforgeTarget.tint = tint
+  function renderItemEffects(nowMs: number, reveal: number): void {
+    if (unforgeTarget.container.parent) {
+      const tick = nativeApplicationTick(nowMs)
+      const frame = unforgeTarget.update(application.renderer, tick, reveal, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height)
+      const tint = frame.markerTint
       canvas.dataset.nativeUnforgeTint = tint.toString(16).padStart(6, '0')
     } else delete canvas.dataset.nativeUnforgeTint
     const dyeModal = currentModel?.kind === 'dialogue' ? null : currentModel?.dyeModal ?? null
@@ -479,7 +482,7 @@ export async function createHubInventoryRenderer(
     inventoryCaption = null
     delete canvas.dataset.nativeSackCaption
     modalHud = null
-    unforgeTarget = null
+    unforgeTarget.container.removeFromParent()
     surface.removeChildren().forEach((child) => child.destroy({ children: true }))
     if (model.kind === 'inventory') {
       const inventory = buildInventory(context, surface, model)
@@ -512,9 +515,6 @@ export async function createHubInventoryRenderer(
       dyeLayer = dye.layer
       dyeSelectedPulse = dye.selectedPulse
     }
-    unforgeTarget = surface.children.find(
-      (child): child is Sprite => child instanceof Sprite && child.label === 'native-unforge-target',
-    ) ?? null
     if (nextNotice) {
       buildNotice(
         context,
@@ -533,6 +533,7 @@ export async function createHubInventoryRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
+      unforgeTarget.destroy()
       gpu.destroy()
       playerCharacterAtlas.destroy()
       destroyNativeUiPixiFor(textures)
@@ -565,7 +566,7 @@ export async function createHubInventoryRenderer(
       renderItemSelection(nowMs)
       renderFlybys(nowMs)
       renderSackPages(nowMs)
-      renderItemEffects(nowMs)
+      renderItemEffects(nowMs, clampedReveal)
       renderNotices(nowMs)
       const chatComplete = renderChat(nowMs)
       application.renderer.render(application.stage)
@@ -578,6 +579,7 @@ export async function createHubInventoryRenderer(
       currentModel = model
       writeModelDiagnostics(model)
       rebuildSurface(model, nextNotice)
+      renderItemEffects(performance.now(), surface.alpha)
       application.renderer.render(application.stage)
     },
     setBeltAvailability(value) {

@@ -656,3 +656,37 @@ Absolute process-start phase remains the established browser constraint;
 there is no unextracted in-system fact justifying an approximation. Shipping
 dispositions await the public regression, integrated implementation, required
 M5 gate and actual built per-member visual/lifecycle acceptance.
+
+
+### Recovered Website presentation owner and regression
+
+The M5 initial regression ran against the exact two tracked source blobs of
+`aba0947f2c2860b9e359fafe58ed88119f643189`. All three public geometry, scroll
+and reveal assertions failed at the intentionally unimplemented contract;
+there was no import/tool failure. The private Node check released its root,
+lease and process groups at `19:38:21.820128 UTC`; the complete 20480-byte
+export was durably hash-ACKed and its M2 transport drained. This focused red
+establishes the recovered contract before its implementation; it is not a
+claim that the original renderer executed that missing program.
+
+`native-unforge-target.ts` now projects the actual UI records and signed
+application tick into the two image centers, integer clip, viewport/reveal
+anchor and existing marker pulse. `NativeUnforgeTargetView` owns one private
+256-square non-premultiplied linear target and two UI77 source sprites. It
+clears transparent black, applies the exact rectangle clip, paints UI76 with
+the existing native multiply pipeline, then presents the normal target before
+UI75. Its composite uses the retained RenderToSprite half-pixel quad bias.
+The capture is redrawn on every visible root draw, so context restoration
+and model changes cannot leave cached blank target contents.
+
+The inventory renderer owns that view across surface rebuilds. Each shared
+`buildInventory` invocation attaches the same retained presentation after the
+belt and before flybys, item inspection and dragger; standalone and all four
+service companions therefore use the same complete program. Rebuild detaches
+it before destroying the previous surface; dialogue leaves it detached.
+Current application time is sampled on model and render updates, and surface
+reveal is applied once to both target and marker. Final renderer teardown
+releases the view's containers and target before borrowed UI atlas textures.
+Inventory input, drop geometry, unforge transactions and Sack behavior retain
+their existing contracts. Shipping dispositions remain pending actual M5
+type/focused checks, unchanged canonical gate and built per-member journeys.

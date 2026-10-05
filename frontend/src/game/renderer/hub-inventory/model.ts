@@ -169,6 +169,7 @@ export interface RenderContext {
   readonly modTextures: ModPresentationTextures
   readonly playerCharacterAtlas: PlayerCharacterAtlas
   readonly textures: GameTextureMap
+  readonly unforgeTarget: Container
 }
 
 export interface ChatRenderState {

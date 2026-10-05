@@ -21,7 +21,6 @@ import {
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ROOT_CHROME,
   HUB_SACK_PAGE_CLIP,
-  HUB_UNFORGE_TARGET,
   hubInventoryFlybyFrame,
   hubInventoryFlybyPoint,
   hubInventorySlotPosition,
@@ -151,14 +150,7 @@ export function buildInventory(
     progression,
     model.config.element,
   )
-  const unforgeTarget = addCenteredAtlasSprite(
-    context,
-    layer,
-    'UI',
-    75,
-    ...HUB_UNFORGE_TARGET.center,
-  )
-  unforgeTarget.label = 'native-unforge-target'
+  layer.addChild(context.unforgeTarget)
 
   const flybyViews = flybys.map((flyby) => (
     addInventoryFlyby(context, layer, flyby, model.config.element)
