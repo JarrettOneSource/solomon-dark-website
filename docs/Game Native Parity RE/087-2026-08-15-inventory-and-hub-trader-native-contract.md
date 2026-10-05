@@ -2,7 +2,7 @@
 
 ## 2026-10-04 — Report61: InventoryScreen Game-owned run-stat preview recovery
 
-### Reported smell and current evidence
+### Reported smell and 2026-10-04 intake evidence
 
 The reported missing Wave line reopens the central wizard/run-stat preview,
 not the gameplay HUD or the left SwipePages statistics. The earlier Inventory
@@ -25,8 +25,8 @@ Report84's separate menu-XP allegation is not adopted by this investigation.
 
 | Evidence class | Exact source | Observation and qualification | Confidence |
 | --- | --- | --- | --- |
-| Current published source | clean Website `59443b078bf72ee729b4cf982933d8fa236aa605`, tree `c3352f924e24710d310b8ee5f76b8deb881535b1`; HEAD, fresh origin/main, and FETCH_HEAD agree | `renderer/hub-inventory/equipment.ts::addPlayerPreview` paints fixed `KILLS: 0` at `(800,337)` and `AWESOMENESS: 0` at `(800,359)`, tint `0xe7cc71`; no run-stat input exists | high |
-| Current published build | no-store live `deployment.json` returns the same `59443b0`; `/game` entry `index-CIvEDLQF.js`; actual shared `use-coarse-pointer-C8mK_mXH.js`, 383003 bytes, SHA-256 `33ae944b845bbb029f9c6f50ff297111e879d71f2af1ef01ba8c0e6998cd09c1` | compiled preview contains those same two fixed strings/coordinates/tint in one painter body; this is static served-byte proof, not browser acceptance | high |
+| Published source at intake | clean Website `59443b078bf72ee729b4cf982933d8fa236aa605`, tree `c3352f924e24710d310b8ee5f76b8deb881535b1`; HEAD, fresh origin/main, and FETCH_HEAD agreed at intake | `renderer/hub-inventory/equipment.ts::addPlayerPreview` paints fixed `KILLS: 0` at `(800,337)` and `AWESOMENESS: 0` at `(800,359)`, tint `0xe7cc71`; no run-stat input exists | high |
+| Published build at intake | no-store live `deployment.json` returned the same `59443b0`; `/game` entry `index-CIvEDLQF.js`; actual shared `use-coarse-pointer-C8mK_mXH.js`, 383003 bytes, SHA-256 `33ae944b845bbb029f9c6f50ff297111e879d71f2af1ef01ba8c0e6998cd09c1` | compiled preview contains those same two fixed strings/coordinates/tint in one painter body; this is static served-byte proof, not browser acceptance | high |
 | Retained decompiler evidence | read-only Mod Loader `runtime/ghidra_progression_derived_offsets_current.txt`, SHA-256 `880c9b09d086db36561dcac7aeb4b42a47112a88eb8a6483bc0c39556b84638d`, `FUN_00568b90` block at lines 21559–22687 | Inventory root painter gates the live wizard preview on `InventoryScreen+0x160 == 0` and non-null `Game+0x1358`. It draws cached strings at `Game+0x1C3C/+0x1C58/+0x1C74`; the first additionally requires signed short `Game+0x1C30 > 0`. Decompiled font/call arguments remain incomplete | high for retained branch/field leads; raw-instruction verification pending |
 | Retained native font-wrapper lead | `Decompiled Game/callers_text_render.log`, `FUN_004a58b0` | the three summary calls use this common wrapper after copying the corresponding Game string; the export loses material argument flow, so font/alignment/scale must be verified from instructions | incomplete |
 | Immutable native binary/data | retail executable, 4723200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`; standard-library PE section reads | exact literals are `Wave: %d` at `0x0079B180`, `Kills: %d` at `0x0079B18C`, and `Awesomeness: %d` at `0x0079964C`. Referenced double offsets are `0x00785690 = 80`, `0x00791480 = 95`, `0x007948F0 = 115`; referenced RGB floats are `.85`, `.73`, `.44`. These bytes establish data, not a complete instruction/placement contract | high for literal/scalar bytes |
@@ -38,7 +38,7 @@ must not be reclassified as a new clean-stock observation. The manually
 simplified `00560380__InventoryScreen_Ctor.c` is marked inferred/manual and
 omits the preview rectangle, so it cannot settle rectangle or mode semantics.
 
-### System boundary and checkable membership
+### Initial system boundary and provisional membership
 
 Native system: the standalone InventoryScreen's central local-wizard preview
 and three Game-owned run-summary strings, from Game value/cache production to
@@ -46,7 +46,7 @@ the optional book's shared painter and teardown. The owning root is
 `0x00568B90`; `0x00562520` is the separate left STATS painter. Recover the
 cache writers and every native branch before treating this inventory as closed.
 
-| Member or branch | Owner/source | Current disposition | Required proof |
+| Member or branch | Owner/source | Intake disposition | Required proof |
 | --- | --- | --- | --- |
 | Wave literal/value/cache and positive-value visibility | Game `+0x1C30/+0x1C3C`; root `0x00568B90` | retained-recovery pending instruction verification and port | all cache writers/xrefs, zero/positive wave branch, exact current wave source |
 | Kills literal/value/cache | Game `+0x1C58`; native kill producer `0x005C9430` | retained-recovery pending cache-writer verification and port | independent nonzero kills and live updates |
@@ -59,9 +59,10 @@ cache writers and every native branch before treating this inventory as closed.
 | Nested Sack, selection, notices and Painting child lifetime | established parent InventoryScreen model | existing behavior to preserve; no separate statistic owner found | parent stat values survive child overlays; close/replacement tears down the model |
 | Left identity/primary/attribute/perk SwipePages, menu XP, HUD and completed Hall row | separate painters and existing entries295/118/164/051 | out-of-system: this pass changes the central preview consumer only | preserve established contracts; shared upstream facts may be reused without reopening their implementation |
 
-This is a provisional inventory, not a completion disposition. No member is
-claimed `exact-ported`, and no platform constraint has been found. A complete
-xref/caller sweep can still add members before implementation.
+This was the provisional intake inventory. The instruction and retained-evidence
+reconciliation below supersede its native recovery questions; the subsequent
+parent review accepted the eleven-member implementation boundary. No member is
+claimed `exact-ported` before candidate execution and observable acceptance.
 
 ### Actual native-only instruction phase — 2026-10-04 21:47 UTC
 
@@ -156,30 +157,31 @@ save/authority behaviour for a display defect. Final Game-generation mapping,
 constructor/caller mapping and observable final display/lifetime acceptance
 remain the proof frontier; source recovery does not waive browser acceptance.
 
-### Current causal trace and next falsifying evidence
+### Historical baseline causal trace and closed native follow-up
 
-`BoneyardScene` subscribes to current authoritative snapshots, while its
-initial snapshot is retained for scene setup. Neither it nor `HubScene` passes
+At the original `59443b0` baseline, `BoneyardScene` subscribes to current
+authoritative snapshots, while its initial snapshot is retained for scene setup.
+Neither it nor `HubScene` passes
 run-summary values into `HubInventoryUi` → `NativeHubSurface` →
 `HubInventoryRendererModel` → `pages.ts::buildInventory` → `addPlayerPreview`.
 The last function always substitutes two zero strings. Companion pages skip
 that function. `useHubInventoryRenderer` already rebuilds on model changes,
-so the implementation should reuse current snapshot values and this existing
-presentation invalidation path once native semantics are proved.
+so the accepted candidate below reuses current snapshot values and this existing
+presentation invalidation path.
 
-Existing Boneyard snapshot fields establish available values, not their complete
-native lifetime. Hub, Tutorial-to-College, new-Game, return, and restore semantics
-remain unresolved until the Game cache writers and reset paths are recovered.
-Do not assume the final change is presentation-only or synthesize zero values
-for a scene whose native counter lifetime has not been proved.
+The closed 2145 instruction phase and retained-evidence reconciliation established
+the Game cache writers, constructor/restore boundaries, font, geometry, caller
+membership and existing scene-generation mapping before implementation. The
+accepted eleven-member contract governs the shared projection below; no additional
+native extraction is pending for these already reviewed facts.
 
 Raw little-endian address-byte matches in the exact PE provide finite leads,
 not proven xrefs: Wave at `0x005C93B0/0x005CD156/0x005CEE05`, Kills at
 `0x005C946D/0x005CD209/0x005CEECC`, Awesomeness at `0x005C95F6` (plus the
-separate Hall consumer at `0x005A1C76`). The next bounded native diagnostic
-must resolve their containing functions and references, export the owning
-cache writers, and verify raw root/wrapper/constructor instructions. No new
-product code or test based on guessed semantics has been written.
+separate Hall consumer at `0x005A1C76`). The closed native phase resolved the
+in-system instruction associations described above. These initial byte leads
+remain historical evidence and do not assign a new diagnostic or waive browser
+acceptance.
 
 ### Shared implementation and public regression preparation (unrun)
 
@@ -208,8 +210,9 @@ The tests were prepared first in the existing public presentation/renderer
 contract suites. They cover exact owner versus peer, independent nonzero
 changes, Tutorial with no survival director, retired actor/run, new generation,
 restored numerical input, zero/negative wave omission, null/companion suppression,
-and native case/positions/font/tint. Actual M5 execution is still ungranted.
-Source preparation is not a red/green test result or a verified fix.
+and native case/positions/font/tint. Candidate checks and browser acceptance
+remain unexecuted. Source preparation is not a red/green test result or a
+verified fix.
 
 The maintained `smoke-inventory-run-summary.mjs` drives the production book
 painter in a declared read-only renderer-model fixture, saving actual PNG and
@@ -240,6 +243,16 @@ remain in the executable desktop/touch acceptance plan. None is recorded as
 passing before actual execution and retained-image review.
 
 ### Validation contract (unrun)
+
+On 2026-10-05 the accepted Report61 changes were reconciled onto fetched
+published main `d1161e0b97ae41659b5ea437f1c8000310a0cad0`. Report60 changed
+only its Acid Rain presentation, tests and ledger; its files are disjoint from
+this implementation. The original `59443b0` baseline and corrected external
+helper remain sealed for the genuine pre-fix pixel comparison. The earlier 0141
+phase admitted that baseline and built it successfully, then stopped on a helper
+syntax error before Chrome, PNG or behavior receipt. That failure is unqualified
+as a red; the one-parenthesis correction and early private Node parser gate have
+only been prepared. No candidate test/build/browser result is claimed.
 
 - Meaningful public presentation regressions: zero/positive wave; independent
   nonzero kills and score; addressed-owner projection; open-book snapshot
