@@ -1,4 +1,4 @@
-import { nativeUiRecord } from '../native-ui/native-ui-catalog.ts'
+import { nativeUiRecord } from '../native-ui/core.ts'
 import { hubUnforgeTargetTint } from './hub-inventory-render-contract.ts'
 
 export const NATIVE_UNFORGE_TARGET_RECORDS = { image: 77, marker: 75, mask: 76 } as const
