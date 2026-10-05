@@ -190,9 +190,13 @@ Tutorial chooses its authored `waveOrdinal`; survival chooses its wave
 snapshot; an absent actor/run record or replaced run yields no stale summary.
 Fresh Hub is the already established new-generation zero state. No numeric
 counter, save string/cache, authority mutation, protocol or art change is added.
+Both scene subscribers also clear the projected preview when the addressed
+actor disappears or that scene's world/run is replaced; retained economy data
+cannot keep the central actor and summary visible after that boundary.
 
 Affected source callers are `BoneyardScene` current subscription and initial
-snapshot, `HubScene` fresh generation, `HubInventoryUi`, `NativeHubSurface`,
+snapshot, `HubScene` fresh generation/subscription, `HubInventoryUi`,
+`NativeHubSurface` in `HubInventorySurface.tsx`,
 both inventory/service renderer model variants, shared `buildInventory`, and
 `addPlayerPreview`. The projector/equality keep unrelated snapshots from
 rebuilding the book; every relevant wave/kill/score change invalidates the model.
@@ -217,6 +221,23 @@ imports missing on an old revision do not prove the old behavior. Candidate
 checks repeat nonzero/live/zero/restored/retired display states. This fixture
 cannot replace real current-built scene/subscription, save/restoration,
 Tutorial, party-owner and desktop/touch journeys, nor the unchanged full gate.
+
+The baseline helper now samples opaque glyph ink from the existing native font
+atlas and compares the actual PNG pixels with independently specified native
+strings, anchors and gold. The first nonzero case must fail those pixels before
+new candidate diagnostics are checked. Candidate cases also test actual absence
+of the retired Wave/actor text. All PNGs and raw pixel observations are retained
+before assertions; this preparation has not executed on M2.
+
+`smoke-inventory-run-summary-scenes.mjs` prepares an exact built-client and real
+host/save/UI journey for restored survival and Tutorial values, updates while
+the book stays open, a second actor with different counters, zero Wave,
+Skills-to-Inventory replacement, fresh Hub and three merchant companions.
+It declares its numerical fixtures and Mac Chrome touch emulation. The second
+actor fixture proves addressed-state isolation; it does not claim a network
+party or physical-device journey. The existing built inventory-stat journeys
+remain in the executable desktop/touch acceptance plan. None is recorded as
+passing before actual execution and retained-image review.
 
 ### Validation contract (unrun)
 

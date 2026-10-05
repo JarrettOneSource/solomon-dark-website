@@ -73,6 +73,7 @@ document.body.dataset.ready='true'
 </script>` })))
   await page.goto(new URL('__report61_inventory', origin).href)
   await page.locator('body[data-ready="true"]').waitFor({ timeout: 90_000 })
+  let previousInkLines = []
   for (const [name, summary, expected] of [
     ['survival-nonzero', { wave: 6, monstersKilled: 17, awesomeness: 91 }, ['Wave: 6', 'Kills: 17', 'Awesomeness: 91']],
     ['live-update', { wave: 7, monstersKilled: 19, awesomeness: 164 }, ['Wave: 7', 'Kills: 19', 'Awesomeness: 164']],
@@ -88,8 +89,11 @@ document.body.dataset.ready='true'
     const diagnostic = await canvas.getAttribute('data-native-inventory-run-summary')
     const anchors = summary === null ? [] : summary.wave > 0
       ? [[800, 329], [800, 344], [800, 364]] : [[800, 344], [800, 364]]
-    const pixelWitness = await page.evaluate(async ({ encoded, lines }) => {
+    const inkLines = expected.map((text,index) => [text,...anchors[index]])
+    const forbiddenLines = summary === null ? previousInkLines : summary.wave <= 0 ? [['Wave: 7', 800, 329]] : []
+    const pixelWitness = await page.evaluate(async ({ encoded, lines, forbidden }) => {
       const points = await window.report61.expectedInk(lines)
+      const forbiddenPoints = await window.report61.expectedInk(forbidden)
       const image = new Image()
       image.src = 'data:image/png;base64,' + encoded
       await image.decode()
@@ -98,13 +102,17 @@ document.body.dataset.ready='true'
       const context=decoded.getContext('2d')
       context.drawImage(image,0,0)
       const data=context.getImageData(0,0,image.width,image.height).data
-      const matched = points.filter(([x,y]) => {
+      const gold = ([x,y]) => {
         const at=(y*image.width+x)*4
         return Math.abs(data[at]-217)<=2 && Math.abs(data[at+1]-186)<=2 && Math.abs(data[at+2]-112)<=2
-      }).length
+      }
+      const matched = points.filter(gold).length
+      const forbiddenMatched = forbiddenPoints.filter(gold).length
       return { expectedOpaqueInk: points.length, matchedNativeGoldInk: matched,
-        fraction: points.length===0 ? null : matched/points.length }
-    }, { encoded: image.toString('base64'), lines: expected.map((text,index) => [text,...anchors[index]]) })
+        fraction: points.length===0 ? null : matched/points.length,
+        forbiddenOpaqueInk: forbiddenPoints.length, forbiddenNativeGoldInk: forbiddenMatched,
+        forbiddenFraction: forbiddenPoints.length===0 ? null : forbiddenMatched/forbiddenPoints.length }
+    }, { encoded: image.toString('base64'), lines: inkLines, forbidden: forbiddenLines })
     const observation = { name, requestedSummary: summary, diagnostic, pixelWitness }
     observations.push(observation)
     await writeFile(join(output, 'observations.json'), JSON.stringify({ observations, errors }, null, 2) + '\n')
@@ -113,12 +121,15 @@ document.body.dataset.ready='true'
       assert.ok(pixelWitness.fraction >= 0.9,
         `${name}: actual painted text fails recovered native value/case/position/gold contract; retained PNG and pixel witness are the baseline evidence`)
     }
+    if (forbiddenLines.length > 0) assert.ok(pixelWitness.forbiddenFraction < 0.05,
+      `${name}: retired Wave/actor text still appears in the actual pixels`)
     // Diagnostics are checked only after actual pixels. Missing new APIs are
     // never the reason classified as the baseline behavior regression.
     assert.ok(diagnostic !== null, 'Candidate production summary diagnostics are unavailable')
     const lines = JSON.parse(diagnostic)
     assert.deepEqual(lines.map(line => line.text), expected)
     assert.deepEqual(lines.map(line => [line.x, line.y]), anchors)
+    previousInkLines = inkLines
   }
   assert.deepEqual(errors, { console: [], page: [], responses: [] })
 } catch (error) {
