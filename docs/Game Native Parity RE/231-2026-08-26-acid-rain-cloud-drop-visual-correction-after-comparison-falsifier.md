@@ -491,3 +491,27 @@ to a fading cloud and cleared presentation. Relevant kernel child/pulse/radius/
 expiry contracts are selected for focused verification. No test, typecheck,
 lint, build, new browser control or full acceptance has run for this correction
 yet; the actual before diagnostic remains the archived `29034f3d` evidence.
+
+### Focused correction acceptance, 2026-10-05 UTC
+
+The isolated M5 focused phase on candidate `40bbd515`, tree `9c8cf2e9`, passed.
+The exact original owner plus the new public regression failed its intended
+broad-X assertion with one TAP failure; after restoring the candidate, all 51
+renderer tests and five selected Acid/native-RNG kernel contracts passed.
+Test types, unchanged lint and diagnostic production build also passed.
+
+The same low/near-one controls produced six actual observations and six age
+PNGs. Every center had actual local X/Y row norms `(7.5,6)`, with authored
+coefficient differences at most `1.3322676295501878e-15`. Stock-derived expected
+coefficients were retained separately and intentionally differ. All six images
+were inspected: low phase now has a broad glow rather than the prior thin
+vertical center; near one remains broad. Pose/PNG time brackets and original
+clip phase/build qualifications still apply; no native recovery is falsified.
+
+Output bundle SHA-256
+`f776d63747fc27c64a7ab49a2fbed1783a45d3add95e7259242d2afab4aa0c1c`
+was copied, hash-verified and acknowledged before actual clean release at
+`2026-10-05T00:00:27.505214Z`. The original candidate Git identity and allowed
+diagnostic changes were verified before/after/finally. This closes the focused
+diagnostic phase only. The clean production full all-mode gate, ordinary
+publication, managed deployment/live checks and report/device cleanup remain.
