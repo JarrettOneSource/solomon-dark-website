@@ -1,14 +1,25 @@
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 import { unforgeBrowserReceipt } from './unforge-browser-receipt.mjs'
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startGameHost } from '../src/game/host/game-host.ts'
 
 import {
   DEFAULT_GAME_SETTINGS,
   GAME_SETTINGS_STORAGE_KEY,
 } from '../src/game/game-settings.ts'
 
-const baseUrl = process.env.SDR_GAME_BOOK_SMOKE_URL || 'http://127.0.0.1:4191'
+let baseUrl = process.env.SDR_GAME_BOOK_SMOKE_URL || 'http://127.0.0.1:4191'
+let staticServer = null
+let gameHost = null
+const gameCredential = 'inventory-book-browser-acceptance'
+if (process.env.SDR_GAME_BOOK_PRODUCTION === '1' && !process.env.SDR_GAME_BOOK_SMOKE_URL) {
+  staticServer = await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
+  gameHost = await startGameHost({ allowedOrigins: [staticServer.origin], authentication: { kind: 'shared', credential: gameCredential } })
+  baseUrl = staticServer.origin
+}
 const screenshotRoot = process.env.SDR_GAME_BOOK_SMOKE_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-inventory-skill-book'
 const mobile = process.env.SDR_GAME_BOOK_SMOKE_MOBILE === '1'
@@ -20,6 +31,9 @@ const page = await browser.newPage({
   ...(mobile ? { hasTouch: true, isMobile: true } : {}),
   viewport: mobile ? { width: 844, height: 390 } : { width: 1600, height: 900 },
 })
+if (gameHost) await page.addInitScript(({ credential, url }) => {
+  window.solomonDarkRuntime = { gameEndpoint: { credential, kind: 'localhost', url } }
+}, { credential: gameCredential, url: gameHost.address.url })
 const consoleErrors = []
 const pageErrors = []
 const failedResponses = []
@@ -197,6 +211,8 @@ try {
   })}\n`)
 } finally {
   await browser.close()
+  await gameHost?.close()
+  await staticServer?.close()
 }
 
 async function enterHub(target) {

@@ -19,6 +19,6 @@ with Image.open(atlas) as image:
         x, y, width, height = record['frame']
         result[str(number)] = {
             'record': record,
-            'rgba': base64.b64encode(rgba.crop((x, y, x + width, y + height)).tobytes()).decode(),
+            'rgba': base64.b64encode(rgba.crop((x, y, x + width + 1, y + height + 1)).tobytes()).decode(),
         }
 print(json.dumps({'atlas_sha256': hashlib.sha256(atlas.read_bytes()).hexdigest(), 'records': result}))

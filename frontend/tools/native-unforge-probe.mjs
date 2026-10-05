@@ -90,7 +90,8 @@ function recordPixel(record, x, y, centerX, centerY) {
   const relativeX = x - centerX + width / 2
   const relativeY = y - centerY + height / 2
   if (relativeX < 0 || relativeX >= width || relativeY < 0 || relativeY >= height) return null
-  return linear(record.pixels, width, height, relativeX * (width - 1) / width, relativeY * (height - 1) / height)
+  // SpriteBundle UVs span origin+.5 through origin+extent+.25 on the full page.
+  return linear(record.pixels, width + 1, height + 1, relativeX * (width - 0.25) / width, relativeY * (height - 0.25) / height)
 }
 
 function linear(pixels, width, height, x, y) {
