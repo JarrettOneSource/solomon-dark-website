@@ -1816,6 +1816,12 @@ async function navigateRegion(page, canvas, region, target, arrivalRadius = 20) 
   let nudgeCount = 0
   let pulseCount = 0
   while (Date.now() < deadline) {
+    const incidentalDialogue = page.getByRole('button', { name: /^Close Talking to / })
+    if (await incidentalDialogue.isVisible()) {
+      await incidentalDialogue.click()
+      await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 10_000 })
+      continue
+    }
     assert.equal(await canvas.getAttribute('data-hub-region'), region)
     const current = await playerPosition(canvas)
     const remaining = distance(current, target)

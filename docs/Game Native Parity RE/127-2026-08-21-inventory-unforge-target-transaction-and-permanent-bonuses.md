@@ -824,3 +824,15 @@ could incorrectly pass its start wait. No input rule or timeout changed.
 Confirmation/cancel/result acceptance remains pending. Phase cleanup released
 at `03:03:45.821365 UTC`; all six stage/native/M2 groups were absent, source
 clean and home only had the qualified same-byte timestamp change.
+
+The `2b772403` trader-only build passed, but its route to Luthacus crossed
+Skorcha and opened her native conversation. The failure dump showed the active
+Skorcha speech and blocked input at a stationary world position; browser,
+request/response and context-loss arrays were empty. The navigation helper now
+closes an incidental conversation through its existing close control before
+continuing the intended route. Its original 180-second route deadline is
+unchanged. This stop did not reach the newly enabled drag or unforge result
+checks. Cleanup released at `03:18:57.039222 UTC`; all five stage/native/M2
+groups were absent, source clean and home qualified. A subsequently observed
+foreign CMake/Ninja build was preserved; its sampled whole parent/PGID exited
+before another admission was attempted.
