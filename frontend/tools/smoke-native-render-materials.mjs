@@ -120,6 +120,14 @@ try {
     assert.equal(puppetHits.leviathan.retiredChildren, 0)
     assert.ok(puppetHits.leviathan.targetsDestroyed && puppetHits.leviathan.sourceTexturesAlive)
     assert.equal(puppetHits.leviathan.captureSamples.length, 1)
+    assert.equal(puppetHits.leviathan.clipping.length, 15)
+    for (const { quantity, scale, ordinary, hits } of puppetHits.leviathan.clipping) {
+      for (const sample of [ordinary, ...hits]) {
+        assert.ok(sample.above > 0 && sample.inside > 0, JSON.stringify({ quantity, scale, sample }))
+        assert.equal(sample.outside, 0, `Leviathan ${quantity}/${scale} must clip the lower mouth: ${JSON.stringify(sample)}`)
+        assert.equal(sample.overflow, 0, `Leviathan ${quantity}/${scale} must erase lower overflow: ${JSON.stringify(sample)}`)
+      }
+    }
     const captured = puppetHits.leviathan.captureSamples[0]
     for (const [field, rgb, alpha] of [['ordinary', [60, 120, 30], 128 / 255], ['hit', [165, 0, 0], 64 / 255]]) {
       const expected = [...saturate(rgb, 'arena').map(channel => channel * alpha), 255 * alpha * alpha]

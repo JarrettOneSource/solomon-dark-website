@@ -689,3 +689,46 @@ additive blends, masks, and render-to-texture ownership.
   that it was implemented. No other member or unknown remains inside the
   declared plane-galaxy portal boundary. No commit, push, deployment,
   production restart, or live-service claim is made.
+
+## 2026-10-06 — Report76 lower-mouth clipping consumer correction
+
+The original Discord report `1554709846186528819` and image follow-up
+`1554709891866955817` were re-read with nearby discussion on October 6. Both
+remain unedited and in scope. Their retained screenshots show appendage bases
+below the purple mouth. They are Website evidence, not clean-stock captures.
+
+This reopens the Leviathan mask consumer within the already recovered portal
+system above. The September 2 implementation selected the native mask and
+clear but accepted their plan without testing destination pixels. Pixi's
+Sprite alpha mask sends the multiply draw through a cleared intermediate
+target, so it cannot multiply the existing appendage pixels. The overflow
+Sprite also uses opaque `Texture.WHITE` with black tint: the recovered
+`ZERO/SRC_ALPHA` alpha factors retain destination alpha when source alpha is
+one. Neither path implements the recovered transparent erasure.
+
+| Evidence | Recovered rule / consequence | Confidence |
+| --- | --- | --- |
+| Retail `0x006151D0` painter, mask `0x00615913..0x006159E1`, clear `0x006159E1..0x00615A49`; executable and instruction provenance above | Record 39 multiplies existing target RGBA only below y 128; the subsequent rectangle is transparent black. Geometry, authoritative scale, and two output passes remain as recovered. | high |
+| PixiJS 8.19.0 `AlphaMaskPipe`, `StencilMaskPipe`; Website native blend map `[ZERO,SRC_COLOR,ZERO,SRC_ALPHA]` | Geometric stencil clipping preserves the destination for the multiply draw. A transparent empty texture supplies zero alpha for overflow erasure without making the display object invisible. | high, installed source |
+| Exact base `d6d48efda8bba8adfe6aa88892bb2e08fcc45487`, M5 Chrome/WebGL regression on October 6 at 18:15 UTC | A controlled opaque appendage target retains alpha255 outside the lower mask and below the overflow clear. The new GPU assertion fails on the existing consumer, independently of the diagnostic plan. | high, failing renderer regression |
+
+Membership is the complete existing Leviathan composite consumer: all one-to-five
+appendage layouts, scale-in/steady/scale-out, ordinary and Enhanced Effects,
+both hit-redraw lighting branches, normal/additive output, owner/observer
+submission, and teardown. The test fills the actual appendage target to expose
+the mask boundary deterministically; it is a renderer fixture rather than a
+new native observation. No stock asset, gameplay constant, or clock is inferred.
+
+| Member | Disposition | Acceptance |
+| --- | --- | --- |
+| Lower-half record 39 multiply and overflow clear, including hit redraw | `exact-ported` | M5 GPU regression passes 45 ordinary/complex-hit/simple-hit samples: actual target alpha is zero outside the lower mouth and below overflow; upper appendages and mouth interior remain visible at .25/.75/1 scale with all five layout counts |
+| Parent record75/38, authored appendage records and placement, target size/order, two outputs, authority/audio/light/lifetime, local/peer snapshots and retirement | `verified-already-at-parity` from the existing recovery, with renderer retirement regression retained | focused presentation/Leviathan tests and actual built Boneyard cast |
+| Plane Orb, Ether Drain, Hub rejection and non-painter atlas/xref entries | Existing final dispositions above remain supported; `out-of-system` for this Leviathan-only consumer defect | no shared mask consumer in those painters |
+
+Implementation reuses Pixi's existing geometric `Graphics` stencil mask with
+the same clip bounds and `Texture.EMPTY` for the overflow rectangle. There is no browser platform
+limitation or remaining native unknown in this correction. The existing M5
+native render-material GPU suite passed on October 6 at 18:16 UTC, including
+the new clipping cases and existing target/resource retirement checks. Full
+canonical M5 and built/live browser acceptance are recorded with Report76's
+archive completion receipt.

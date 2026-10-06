@@ -1,6 +1,7 @@
 import {
   ColorMatrixFilter,
   Container,
+  Graphics,
   Matrix,
   MeshSimple,
   RenderTexture,
@@ -841,7 +842,7 @@ class NativeLeviathanCompositeView {
   private readonly compositeGlow: Sprite
   private readonly compositeNormal: Sprite
   private readonly mask: Sprite
-  private readonly maskClip: Sprite
+  private readonly maskClip: Graphics
   private readonly memberViews = new Map<number, NativeSecondaryActorView>()
   private plan = nativeLeviathanCompositePlan(0)
   private readonly renderTexture: RenderTexture
@@ -896,11 +897,12 @@ class NativeLeviathanCompositeView {
       NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2,
     )
     this.mask.zIndex = 1
-    this.maskClip = new Sprite(Texture.WHITE)
+    this.maskClip = new Graphics().rect(0, 0, 1, 1).fill(0xffffff)
     this.maskClip.eventMode = 'none'
     this.maskClip.label = 'leviathan-appendage-mask-clip'
+    // Geometry keeps this multiply draw on the appendage target.
     this.mask.mask = this.maskClip
-    this.clear = new Sprite(Texture.WHITE)
+    this.clear = new Sprite(Texture.EMPTY)
     this.clear.blendMode = 'multiply'
     this.clear.eventMode = 'none'
     this.clear.label = 'leviathan-appendage-lower-clear'

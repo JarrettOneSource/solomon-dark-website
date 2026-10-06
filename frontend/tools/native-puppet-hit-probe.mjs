@@ -116,11 +116,48 @@ export async function inspectNativePuppetHits() {
     view.setPuppetHits(new Map(), true)
     view.update(state, parent.worldKey, 100)
     const restored = equalPixels(original, render())
+    // Fill the appendage target so every mask and overflow boundary has pixels to remove.
+    const coverage = new Sprite(texture)
+    coverage.width = coverage.height = 256
+    coverage.zIndex = 1_000
+    composite.appendageSource.addChild(coverage)
+    const maskPixels = new Uint8Array(74 * 64 * 4)
+    for (let y = 0; y < 64; y += 1) for (let x = 18; x < 56; x += 1) {
+      maskPixels.set([255, 255, 255, 255], (y * 74 + x) * 4)
+    }
+    const clipTexture = new Texture({ source: new BufferImageSource({ width: 74, height: 64,
+      resource: maskPixels, alphaMode: 'no-premultiply-alpha', scaleMode: 'nearest' }) })
+    textures.set('clip-test', clipTexture)
+    composite.mask.texture = clipTexture
+    const clipping = []
+    for (const quantity of [1, 2, 3, 4, 5]) for (const scale of [.25, .75, 1]) {
+      const actors = [{ ...parent, quantity, scale }, ...Array.from({ length: quantity }, (_, index) => ({
+        ...appendage, id: index + 2, scale,
+      }))]
+      view.setPuppetHits(new Map(), true)
+      view.update({ actors }, parent.worldKey, 100)
+      const sample = pixels => {
+        const alphaAt = (x, y) => pixels[(Math.floor(y) * 256 + Math.floor(x)) * 4 + 3]
+        return {
+          above: alphaAt(128 - 30 * scale, 128 - 12 * scale),
+          inside: alphaAt(128, 128 + 12 * scale),
+          outside: alphaAt(128 - 30 * scale, 128 + 12 * scale),
+          overflow: alphaAt(128, Math.ceil(128 + 64 * scale) + 1),
+        }
+      }
+      const ordinary = sample(readTarget(composite.renderTexture))
+      const hits = []
+      for (const complex of [true, false]) {
+        view.setPuppetHits(new Map([['secondary:1', hit('leviathan', 'secondary:1')]]), complex)
+        hits.push(sample(readTarget(composite.hitRenderTexture)))
+      }
+      clipping.push({ quantity, scale, ordinary, hits })
+    }
     const normalTarget = composite.renderTexture
     const hitTarget = composite.hitRenderTexture
     view.update({ actors: [] }, parent.worldKey, 100)
     const leviathan = { visibleHit: !equalPixels(original, withHit), normalTargetPreserved, restored,
-      captureSamples, retiredChildren: root.children.length,
+      captureSamples, clipping, retiredChildren: root.children.length,
       targetsDestroyed: normalTarget.destroyed && hitTarget.destroyed,
       sourceTexturesAlive: [...textures.values()].every(texture => !texture.destroyed) }
     view.destroy()
