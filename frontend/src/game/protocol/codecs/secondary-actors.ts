@@ -408,7 +408,7 @@ function nativeSecondaryGolemState(
     phase,
     poseVariant: boundedInteger(source.poseVariant, `${field}.poseVariant`, 0, 1) as 0 | 1,
     provokeRollBound: boundedInteger(source.provokeRollBound, `${field}.provokeRollBound`, 0, 1_200),
-    reflectFactor: unitInterval(source.reflectFactor, `${field}.reflectFactor`),
+    reflectFactor: nonnegativeFinite(source.reflectFactor, `${field}.reflectFactor`),
     rightConnectorOffset: vector(source.rightConnectorOffset, `${field}.rightConnectorOffset`),
     rightFoot: vector(source.rightFoot, `${field}.rightFoot`),
     rightFootBob: vector(source.rightFootBob, `${field}.rightFootBob`),

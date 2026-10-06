@@ -1,11 +1,8 @@
 import { actorHeadingIndex } from '../../core-kernels/actor-heading.ts'
-import type { PlayerCharacterConfig } from '../../core-kernels/player-character.ts'
 import {
   NATIVE_PLAYER_MAX_LIGHT_OVERLAY,
   playerLightDriveActive,
 } from '../../core-kernels/player-lighting.ts'
-import { SPELL_WELDING_SKILL_ID } from '../../core-kernels/player-progression.ts'
-import { primaryCastActionEndTick } from '../../core-kernels/primary-spells.ts'
 import type { ProtocolPlayerSnapshotFrame, ProtocolPlayerState } from '../game-state.ts'
 import { playerBelt, playerEconomy } from './economy.ts'
 import { playerCharacterConfig } from './input.ts'
@@ -63,7 +60,6 @@ export function playerSnapshotFrame(value: unknown, field: string): ProtocolPlay
   const primaryCast = playerPrimaryCastState(
     source.primaryCast,
     `${field}.primaryCast`,
-    config.element,
     progression.selectedPrimarySkillId,
     progression.weldBuildId,
   )
@@ -130,7 +126,6 @@ function playerLighting(
 function playerPrimaryCastState(
   value: unknown,
   field: string,
-  element: PlayerCharacterConfig['element'],
   selectedPrimarySkillId: number,
   weldBuildId: number | null,
 ): ProtocolPlayerState['primaryCast'] {
@@ -157,11 +152,12 @@ function playerPrimaryCastState(
   ])
   const actionTick = finite(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
-  const castElement = primaryCastClockElement(selectedPrimarySkillId, element)
   if (channelActive && (actionTick < 0 || actionTick > 1)) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Constant program`)
   }
-  if (!channelActive && (actionTick < -1 || actionTick >= primaryCastActionEndTick(castElement))) {
+  // Cast 1 retains its first speed-dependent overshoot. Current equipment
+  // speed cannot bound progress accumulated before an equipment change.
+  if (!channelActive && actionTick < -1) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Cast 1 program`)
   }
   const targetId = source.targetId === null
@@ -272,15 +268,3 @@ function playerPrimaryCastState(
   }
 }
 
-function primaryCastClockElement(
-  skillId: number,
-  fallback: PlayerCharacterConfig['element'],
-): PlayerCharacterConfig['element'] {
-  if (skillId === SPELL_WELDING_SKILL_ID) return 'fire'
-  if (skillId === 8) return 'ether'
-  if (skillId === 16) return 'fire'
-  if (skillId === 24) return 'air'
-  if (skillId === 32) return 'water'
-  if (skillId === 40) return 'earth'
-  return fallback
-}

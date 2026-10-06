@@ -2986,7 +2986,7 @@ test('protocol validates active primary and concentration selections against eff
   )
 })
 
-test('protocol gives every welded one-shot the shared Fire-rate Cast 1 clock', () => {
+test('protocol preserves finite Cast 1 progress for every welded build and base element', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -3018,21 +3018,23 @@ test('protocol gives every welded one-shot the shared Fire-rate Cast 1 clock', (
       assert.equal(decoded.type, 'server-snapshot', `${buildId}:${element}:tick-72`)
 
       player.primaryCast.actionTick = 73
-      assert.throws(
-        () => decodeServerGameMessage(JSON.stringify(message(frame))),
-        /outside the Staff Cast 1 program/,
-        `${buildId}:${element}:tick-73`,
-      )
+      const tail = decodeServerGameMessage(JSON.stringify(message(frame)))
+      assert.equal(tail.type, 'server-snapshot', `${buildId}:${element}:tick-73`)
+      assert.equal(tail.frame.players['player-1']!.primaryCast.actionTick, 73)
     }
   }
 
   const pureEther = JSON.parse(JSON.stringify(baseFrame))
   pureEther.players['player-1'].lighting.driveActive = true
   pureEther.players['player-1'].primaryCast.actionTick = 55
-  assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(message(pureEther))),
-    /outside the Staff Cast 1 program/,
-  )
+  const tail = decodeServerGameMessage(JSON.stringify(message(pureEther)))
+  assert.equal(tail.type, 'server-snapshot')
+  assert.equal(tail.frame.players['player-1']!.primaryCast.actionTick, 55)
+  for (const invalid of [-2, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const player = { ...baseFrame.players['player-1']!,
+      primaryCast: { ...baseFrame.players['player-1']!.primaryCast, actionTick: invalid } }
+    assert.throws(() => playerSnapshotFrame(player, 'player'), /actionTick/)
+  }
 })
 
 test('every authored Iron Golem reflection rank survives summon and snapshot decoding', () => {
@@ -4323,7 +4325,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       ...frame.players,
       'player-1': {
         ...frame.players['player-1'],
-        primaryCast: { ...frame.players['player-1'].primaryCast, actionTick: 56 },
+        primaryCast: { ...frame.players['player-1'].primaryCast, actionTick: -2 },
       },
     },
   }), /outside the Staff Cast 1 program/)
