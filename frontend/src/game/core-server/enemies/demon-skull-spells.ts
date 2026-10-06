@@ -1,3 +1,4 @@
+import { NATIVE_FADE_ALPHA_LOSS } from '../boneyard-transient-effects.ts'
 import { boneyardMouthTargets, hitBoneyardPuppet } from './puppet-hits.ts'
 import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
@@ -64,10 +65,10 @@ export function biteDemonSkull(work: WorkingStep, source: BoneyardDemonSkullActo
   const gap = Math.max(0, distance - target.collisionRadius - actor.config.collisionRadius)
   if (gap > 0) {
     const delta = { x: dx / distance * gap / 10, y: dy / distance * gap / 10 }
-    const entry = 99 + actor.brain.bodyPose * 24 + nativeDemonSkullFacing(actor.headingDeg)
+    const entry = 99 + actor.brain.bodyPose * 24 + nativeDemonSkullFacing(actor.brain.bodyHeadingDeg)
     for (let index = 0; index < 10; index += 1) {
-      const alpha = Math.fround(.1 + index * .1)
-      spawnSimpleDeathEffect(work, actor, context.tick, { alpha, alphaLossPerTick: Math.fround(.02) * Math.fround(.35),
+      const alpha = Math.fround(Math.fround(.1) * (index + 1))
+      spawnSimpleDeathEffect(work, actor, context.tick, { alpha, alphaLossPerTick: Math.fround(NATIVE_FADE_ALPHA_LOSS * Math.fround(.35)),
         atlas: 'Unholy', entry, blendMode: 'normal', kind: 'fade', lifetimeTicks: 1000,
         position: { x: actor.position.x + actor.brain.bodyOffset.x,
           y: actor.position.y + actor.brain.bodyOffset.y + nativeDemonSkullBob(actor.brain.bodyPhaseDeg) },

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { demonSkullPresentation } from '../renderer/native-demon-skull-presentation.ts'
+import { biteDemonSkull } from './enemies/demon-skull-spells.ts'
 import { spawnUnholyEyeTrail } from './enemies/demon-skull-effects.ts'
 import { createNativeDemonSkullAction, type NativeDemonSkullAction } from '../core-kernels/native-demon-skull.ts'
 import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
@@ -33,10 +35,10 @@ const context: BoneyardEnemyStoreStepContext = {
     headingDeg: 0, position: { x: 0, y: -200 }, velocityPerTick: { x: 0, y: 0 } } },
   resolveMovement: ({ requestedPosition }) => requestedPosition, resolveSpawnIntents: () => [],
 }
-function spawned(): BoneyardEnemyStore {
+function spawned(sourceSha256 = sha): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('discorporeal'), { ...context,
     resolveSpawnIntents: () => [{ enemyToken: 'DEMONSKULL', nativeTypeId: 1008, flags: [], id: 1,
-      authoredRecipe: nativeDiscorporealRecipe(sha), enableDiscorporealHealthGates: true,
+      authoredRecipe: nativeDiscorporealRecipe(sourceSha256), enableDiscorporealHealthGates: true,
       locationPolicy: 'anywhere', position: { x: 0, y: 0 }, spawnTick: 0, waveOrdinal: 38 }],
   }).store
 }
@@ -336,5 +338,78 @@ test('every Discorporeal and UltraBanish ring uses the inherited quarter-loss th
       }
     }
     assert.deepEqual(effects, [])
+  }
+})
+
+test('Bite snapshots capture the delayed displayed body facing for Hero and Golem targets', () => {
+  const bite = action('bite')
+  if (bite.kind !== 'bite') throw new Error('expected Bite')
+  for (const recipe of NATIVE_SURVIVAL_BOSS_SOURCES) {
+    for (const summoned of [false, true]) {
+      for (let facing = 0; facing < 24; facing += 1) {
+        const source = editActor(setActions(spawned(recipe.sourceSha256), [{ ...bite, progress: 3.9 }]), actor => ({
+          ...actor, headingDeg: ((facing + 6) % 24) * 15,
+          brain: { ...actor.brain, bodyHeadingDeg: facing * 15, headingDelayTicks: 0 },
+        }))
+        const result = step(source, { players: { player: { ...context.players.player!, summoned } } }).store
+        const trails = result.deathEffects.filter(effect => effect.role === 'discorporeal-bite-trail')
+        assert.equal(trails.length, 10)
+        const snapshot = projectBoneyardEnemies(result, result.lastStepTick)[0]!
+        const body = demonSkullPresentation(snapshot, result.lastStepTick).body.find(layer => layer.role === 'discorporeal-body')!
+        assert.equal(body.entry, 99 + facing)
+        assert.ok(trails.every(effect => effect.entry === body.entry), `${summoned}/${facing} copied motion instead of displayed body heading`)
+        assert.deepEqual(trails.map(effect => effect.alpha),
+          Array.from({ length: 10 }, (_, index) => Math.fround(Math.fround(.1) * (index + 1))))
+        assert.ok(trails.every(effect => effect.alphaLossPerTick === Math.fround(Math.fround(.1) * Math.fround(.35))))
+        assert.ok(trails.every(effect => effect.scale === source.actors[0]!.config.scale * 2
+          && effect.blendMode === 'normal' && effect.presentationOwner === 'world-sorted'))
+      }
+    }
+  }
+})
+
+test('Bite keeps ten collision-stepped snapshots and their independent native fade lifetime', () => {
+  const bite = action('bite')
+  if (bite.kind !== 'bite') throw new Error('expected Bite')
+  const source = setActions(spawned(), [{ ...bite, progress: 3.9 }])
+  const starts: number[] = []
+  const result = step(source, {
+    players: { player: { ...context.players.player!, summoned: true, position: { x: 200, y: 0 } } },
+    resolveMovement: request => {
+      starts.push(request.position.x)
+      return { ...request.requestedPosition, x: Math.min(75, request.requestedPosition.x) }
+    },
+  }).store
+  const birth = result.deathEffects.filter(effect => effect.role === 'discorporeal-bite-trail')
+  assert.equal(starts.length, 10)
+  assert.equal(birth.length, 10)
+  assert.deepEqual(birth.map(effect => effect.position.x), starts)
+  assert.equal(result.actors[0]!.position.x, 75)
+  const register = () => ({ managerLane: 'transient' as const, registrationOrdinal: 1000 })
+  let effects = birth
+  for (let tick = result.lastStepTick + 1; tick <= result.lastStepTick + 40; tick += 1) {
+    effects = stepBoneyardTransientEffects(effects, [], tick, () => .5, 1000, register).deathEffects
+    assert.ok(effects.every(effect => effect.entry === birth[0]!.entry), 'afterimages cannot follow later body poses')
+    assert.ok(effects.every(effect => birth.some(original => original.id === effect.id
+      && original.position.x === effect.position.x && original.position.y === effect.position.y)))
+    if (tick === result.lastStepTick + 1) assert.equal(effects.length, 10, 'snapshots survive independently of an actor owner')
+    if (tick === result.lastStepTick + 30) assert.equal(effects.length, 0, 'native fade must retire by tick30')
+  }
+  assert.deepEqual(effects, [])
+})
+
+test('Bite snapshot art preserves both native body poses in every facing cell', () => {
+  const source = spawned(), original = source.actors[0]!
+  if (original.brain.family !== 'demon-skull' || original.config.enemyToken !== 'DEMONSKULL') throw new Error('expected DemonSkull')
+  for (const bodyPose of [0, 1] as const) {
+    for (let facing = 0; facing < 24; facing += 1) {
+      const actor: BoneyardDemonSkullActor = { ...original, config: original.config,
+        headingDeg: ((facing + 6) % 24) * 15, targetPlayerId: 'player',
+        brain: { ...original.brain, bodyPose, bodyHeadingDeg: facing * 15 } }
+      const work = createEnemyWork(source, context, true)
+      biteDemonSkull(work, actor, context)
+      assert.equal(work.deathEffects.length, 10)
+      assert.ok(work.deathEffects.every(effect => effect.entry === 99 + bodyPose * 24 + facing))
+    }
   }
 })

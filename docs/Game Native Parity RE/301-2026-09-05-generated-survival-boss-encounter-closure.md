@@ -2241,3 +2241,26 @@ not a universal 60 FPS guarantee under arbitrary concurrent load.
 
 Only this acceptance receipt follows the validated code commit. Publication and
 task cleanup are recorded separately in the archive release receipt.
+
+## 2026-10-06 — Report 85: Discorporeal Bite snapshot heading
+
+Original `1555271346332897370` and nearby messages were freshly re-read by the coordinating agent at 22:17 UTC, unchanged. The reporter calls the effect tentative and points to about 11 seconds. A bounded M5 Chrome read of the retained 15.346544-second clip inspected thirteen decoded timestamps from 10.008622 through approximately 15.1 seconds. The sequence shows fading unlit head silhouettes alongside the green-lit boss during Golem contact and a larger trail as the Golem dies. This supports the report's scene; it does not establish that the silhouettes themselves are unintended or reconstruct exact historical headings.
+
+Read-only Intel instructions at `0x00498826..0x00498ACE`, from the same immutable retail 0.72.5 image pinned for Report82 (SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`), close the Bite snapshot owner:
+
+- Event24 admits the current target at `0x00498826..0x0049883B`, computes the gap after both collision radii, and divides its movement vector into ten steps.
+- `0x004988E2` reads **displayed body heading `+0x21C`**, not motion heading `+0x6C`. The rounded 24-facing index and body pose `+0x224` select the existing Unholy body cell. Current rendering uses the same delayed body heading, which follows after eleven differing outer ticks.
+- `0x00498964..0x00498ACE` intentionally constructs **ten independent Anim_Fade snapshots**, queuing each before a collision-resolved lunge step. All retain the birth body cell; they do not track later headings or poses. The snapshots use body offset `+0x228/+0x22C` and bob `sin(+0x214)*10-25`, zero added X offset, scale `+0x74*2`, normal blending and no copied flair rotation/jitter.
+- PE data confirms the double at `0x007849E8` is the lifted float32 `0.10000000149011612`, and `0x007848A8` is `0.3499999940395355`. Birth alpha is the float32 store of `(index+1)*float32(.1)`; Constructor `0x00452E20` writes `+0x24` at `0x00452E7F..0x00452E87` from `0x007845E8`, independently read as float32 `0.10000000149011612`. Bite multiplies that inherited **float32 `.1`** fade by lifted float32 `.35` and stores back to float32: approximately **.035 per tick**, not the current web `.007`. The current trails therefore linger approximately five times too long. The shared Fade owner retires at zero alpha and preserves trail lifetime independently of the boss.
+
+The earlier closure covered the ten-snapshot effect but missed its displayed-heading producer and exact float stores. `biteDemonSkull` currently chooses art from `actor.headingDeg` while the body renderer uses `brain.bodyHeadingDeg`, so a heading delay can make a snapshot depict a different head facing. Correct the shared snapshot producer, reuse the existing `NATIVE_FADE_ALPHA_LOSS` constructor constant and preserve the exact float stores; preserve all ten intentional heads, their geometry, collision, queue, pose, scale and independent lifetime.
+
+| Member | Disposition before implementation | Acceptance |
+| --- | --- | --- |
+| All twelve admitted Discorporeal recipe sources; 24 facing cells and both body poses | recovered-pending-port | current visible body heading/cell is captured at Bite birth; no motion-heading substitution |
+| Hero and summoned Golem targets, ten collision-stepped positions | verified-already-at-parity | complete batch remains; collision owns each lunge placement and contact |
+| Native alpha ladder and fade factor | recovered-pending-port | exact recovered float32 birth/store values and independent zero-alpha retirement |
+| Shared body renderer, eleven-update heading delay, normal world-sorted Fade ownership | verified-already-at-parity | existing owner/clock remains; snapshots do not follow later body changes |
+| Eye, Mouth, Spit, Scream, Flair and death programs | out-of-system | separate action/effect producers; existing Discorporeal suite remains the gate |
+
+Acceptance is a genuine existing enemy-store/renderer regression before the correction, complete facing/target coverage, collision and independent fade checks, plus an actual built/live Bite journey. No authored table changes or removal of intended trails are justified.
