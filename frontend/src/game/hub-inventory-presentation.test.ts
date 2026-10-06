@@ -368,6 +368,7 @@ test('ordinary and companion Stats inspect every owned charm without offering re
       export const renderStats = props => renderToStaticMarkup(createElement(InventoryStatsActions, props));`,
       loader: 'tsx', resolveDir: import.meta.dirname },
     bundle: true, format: 'esm', platform: 'node', jsx: 'automatic', write: false,
+    // Semantic controls are checked here; browser acceptance covers their art and CSS.
     loader: { '.css': 'empty', '.png': 'empty' },
     banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(import.meta.url)});` },
   })

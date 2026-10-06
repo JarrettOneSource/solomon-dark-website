@@ -9,7 +9,7 @@ import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { canPlaceBoneyardBody } from './boneyard-collision.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
 import { dampenBoneyardCasters } from './enemies/dampen.ts'
-import type { BoneyardEnemyActor, BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore } from './enemies/model.ts'
+import type { BoneyardEnemyActor, BoneyardEnemyLethalObserver, BoneyardEnemySemanticEvent, BoneyardEnemyStore, BoneyardMaggotActor } from './enemies/model.ts'
 import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
 const NATIVE_TELEPORT_GRID_STEP = 100
 const NATIVE_TELEPORT_GRID_INSET = 100
@@ -343,37 +343,38 @@ function applySecondaryTargetHeadings(
   changes: readonly NativeSecondaryTargetHeadingChange[],
 ): BoneyardEnemyStore {
   if (changes.length === 0) return source
-  let actors = source.actors
-  let maggots = source.maggots
+  // Heading commands preserve ordering; copy each store lane once per batch.
+  let actors: BoneyardEnemyActor[] | null = null
+  let maggots: BoneyardMaggotActor[] | null = null
   for (const change of changes) {
-    const actorIndex = actors.findIndex(({ id }) => id === change.targetId)
+    const actorIndex = source.actors.findIndex(({ id }) => id === change.targetId)
     if (actorIndex >= 0) {
-      const next = [...actors]
-      const actor = next[actorIndex]!
-      next[actorIndex] = {
+      actors ??= [...source.actors]
+      const actor = actors[actorIndex]!
+      actors[actorIndex] = {
         ...actor,
         path: change.mode === 'absolute'
           ? { ...actor.path, wanderHeadingDeg: normalizeDegrees(change.degrees) } : actor.path,
         headingDeg: normalizeDegrees(change.mode === 'absolute'
           ? change.degrees : actor.headingDeg + change.degrees),
       }
-      actors = Object.freeze(next)
       continue
     }
-    const maggotIndex = maggots.findIndex(({ id }) => id === change.targetId)
+    const maggotIndex = source.maggots.findIndex(({ id }) => id === change.targetId)
     if (maggotIndex < 0) continue
-    const next = [...maggots]
-    const maggot = next[maggotIndex]!
-    next[maggotIndex] = {
+    maggots ??= [...source.maggots]
+    const maggot = maggots[maggotIndex]!
+    maggots[maggotIndex] = {
       ...maggot,
       headingDeg: normalizeDegrees(change.mode === 'absolute'
         ? change.degrees : maggot.headingDeg + change.degrees),
     }
-    maggots = Object.freeze(next)
   }
-  return actors === source.actors && maggots === source.maggots
-    ? source
-    : { ...source, actors, maggots }
+  return actors === null && maggots === null ? source : {
+    ...source,
+    actors: actors === null ? source.actors : Object.freeze(actors),
+    maggots: maggots === null ? source.maggots : Object.freeze(maggots),
+  }
 }
 
 function normalizeDegrees(value: number): number {
