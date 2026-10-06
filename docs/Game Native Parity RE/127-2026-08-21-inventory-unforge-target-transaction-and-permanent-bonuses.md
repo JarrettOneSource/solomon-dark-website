@@ -785,3 +785,19 @@ installed Wasmoon WASM path as the other private browser fixtures. No runtime
 product or dependency changed. Actual cleanup released at
 `02:40:13.329161 UTC`, with all stage/native/M2 groups and the exact lease
 closed, clean source and the same qualified home timestamp-only change.
+
+The configured `18618c96` private host passed funding, potion use, drag/invalid
+release, protected equipment, Fomentius purchases, Luthacus transfers, Hagatha
+purchases and Shlorio purchase/equip. The flame also animated before and after
+Dowsing. Full-browser error/request/response/context-loss arrays were empty.
+Reopened Shlorio dialogue then already displayed Dowse/Prices/Done, while the
+helper unconditionally waited for Skip. It now skips only an existing speech
+button and retains the required Done state. Independently, the book helper
+passed Boneyard entry and both book switches, then queried its scene through a
+locator still requiring input-unblocked while asserting input-blocked. The
+entry-only wait is now separate from the retained scene locator. Neither
+failure was a source effect, native contract or timeout issue. Transaction
+completion and the Boneyard flame receipt still require the corrected run.
+This phase released its lease at `02:47:57.745612 UTC`; all six stage groups,
+native registration and M2 groups were drained, source clean, with the same
+qualified home timestamp change.

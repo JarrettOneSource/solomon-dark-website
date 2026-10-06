@@ -1754,7 +1754,8 @@ async function waitForNativeNoticeSettled(dialog) {
 }
 
 async function advanceDialogue(dialog) {
-  await dialog.getByRole('button', { name: 'Skip' }).click()
+  // Reopened dialogue can already be complete; skip only current speech.
+  await dialog.getByRole('button', { name: 'Skip' }).evaluateAll(buttons => buttons[0]?.click())
   await dialog.getByRole('button', { name: 'Done' }).waitFor()
   assert.equal(await dialog.getAttribute('data-native-chat-phase'), 'choices')
 }

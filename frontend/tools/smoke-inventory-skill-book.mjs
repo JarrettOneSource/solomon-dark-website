@@ -138,8 +138,8 @@ try {
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
   if (await picker.count()) await picker.getByRole('button').first().click()
-  const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]')
-  await boneyard.waitFor({ timeout: 90_000 })
+  const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  await boneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
 
   await activate(page, page.getByRole('button', { name: /Open inventory/ }))
   const matchInventory = page.getByRole('dialog', { name: 'Inventory' })
