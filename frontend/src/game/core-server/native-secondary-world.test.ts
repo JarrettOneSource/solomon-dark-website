@@ -12,6 +12,7 @@ import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-bo
 import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skeleton-bosses.ts'
 import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
 import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
+import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from '../protocol/boneyard-enemy-replication.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import type { BoneyardEnemyProjectile, BoneyardEnemyStoreStepContext } from './enemies/model.ts'
@@ -277,6 +278,7 @@ test('Dampen interrupts Mage and Faculty casts while their walking and casting-d
   }
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('dampen-casters'), context).store
   const casting = { ...spawned, actors: spawned.actors.map(actor => ({ ...actor, bodyPose: 2,
+    headFacingOffset: actor.brain.family === 'mage' ? -1 as const : 0 as const,
     brain: actor.brain.family === 'mage' ? { ...actor.brain, actionProgress: 4, phase: 'cast' as const }
       : actor.brain.family === 'faculty' ? { ...actor.brain,
           action: createNativeFacultyAction('lightning', createNativeRng(2)).action,
@@ -288,6 +290,10 @@ test('Dampen interrupts Mage and Faculty casts while their walking and casting-d
     damage: [], dampenedCasterTargetIds: candidates.casterTargetIds,
     dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
   }, 0).enemies
+  for (const enemy of projectBoneyardEnemies(dampened, 0)) {
+    const replicated = materializeBoneyardEnemy(boneyardEnemyDescriptor(enemy), boneyardEnemySample(enemy))
+    assert.equal(replicated.animation.headFacingOffset, 0)
+  }
   for (const actor of dampened.actors) {
     if (actor.brain.family !== 'mage' && actor.brain.family !== 'faculty') throw new Error('caster required')
     assert.equal(actor.brain.phase, 'range-control')

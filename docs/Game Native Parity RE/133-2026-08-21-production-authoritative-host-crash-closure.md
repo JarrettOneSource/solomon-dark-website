@@ -507,3 +507,33 @@ optimized pending-picker checkpoint/restore/selection journey. Detailed
 receipts and artifact hashes are recorded in entries 081 and 249. The receipt
 lines are the only tracked post-gate change; final exact-tree repetition,
 publication identity, and cleanup remain required before closure.
+
+## 2026-10-06 — Report 77: Dampen cast interruption and head-facing ownership
+
+Report 77's original Discord message `1554719398126682142` was re-read with nearby discussion on October 6; it still reports two unclean disconnects while using Dampen on a mage horde, with no edit or withdrawal. Its image shows the horde and a second player, but no error dialog. Read-only production evidence independently identifies the matching two-player sessions immediately before the report: at September 30 04:57:23.056 UTC (tick 627940) and 04:58:22.038 UTC (tick 629420), `simulation.tick_failed` reports `Boneyard enemy head-facing offset requires an active Skeleton or Mage` in `boneyardEnemySample -> createGameSnapshotProjection -> broadcastSnapshot`. The session supervisor then exits, and both peers submit WebSocket 1006 diagnostics. Diagnostic IDs include `bf48b4ba-ff0d-4f9d-ab0e-6c171bb6b11f`, `babc11b5-e48d-46ab-80a1-051595efaa7b`, `5e0dc9b9-3d15-4295-a88b-085c7f301ed1`, and `15f5b0c1-a6cf-495f-86fd-a5453d5b3a60`. A third occurrence at 05:02:04.183 UTC has the same stack. Raw account diagnostics and journals remain private task scratch; no player credentials or saves are published.
+
+This reopens system C above. The earlier interruption inventory missed the later direct Dampen callback, which runs after normal enemy stepping. The ordinary step finalizer cannot repair that callback's stale selector before the same-tick snapshot. The August lethal-transition correction remains valid; the later Dampen implementation recreated the same ownership error at a different action-removal edge.
+
+### Recovered contract and boundary
+
+The existing instruction evidence in [entry 105](105-2026-08-20-skeleton-family-independent-head-facing-animation-reopened-audit.md) establishes the signed `+0x224` selector and its missing-action reset at `0x00484DA7..0x00484DBA`. [Entry 301](301-2026-09-05-generated-survival-boss-encounter-closure.md#dampen-caster-and-canceled-projectile-reopening) establishes that Mage Dampen callback `0x0048AE50` clears the cast action and sets `+0x278` to 600, while Faculty callback `0x0048B5E0` clears its distinct action and sets 500. Both use the same retail 0.72.5 executable identity already recorded in those entries. No new native extraction or invented constant is required.
+
+The reopened boundary is the authoritative Skeleton-family action selector through cast interruption, immediate snapshot encoding, and read-only head rendering. Dampen's native caster admission, projectile cancellation, smoke, shield chance, movement, and suppression clocks retain their recovered contracts. Clearing the action's head selector belongs to the same authoritative transition; the protocol encoder remains a strict boundary rather than normalizing invalid state.
+
+| Member | Contract / evidence | Disposition | Acceptance |
+| --- | --- | --- | --- |
+| Dampen on active Mage, either signed head turn, every element/cloak/headgear | `0x0048AE50` removes the owner of `+0x224`; all Mage recipes share `dampenBoneyardCasters` | recovered-pending-port | same-tick Dampen → project → encode/decode must produce zero, without another enemy step |
+| Dampen on resting or already suppressed Mage | same callback; refresh 600 ticks, retain walking and authored visual program | verified-already-at-parity | existing caster movement/suppression test and repeated-cast journey |
+| Dampen on DireFaculty | separate action/body/hand owner, 500 ticks, no Skeleton head-turn writer | verified-already-at-parity | existing sibling caster test retains its action, hand-mask, and heading-lock semantics |
+| Skeleton/Mage normal completion and lost target | step finalizer clears after the ordinary action owner exits | verified-already-at-parity | existing store head-facing tests |
+| Skeleton/Mage disrupted and fleeing actions | explicit clear around `interruptNativeSecondaryAction` in the living-actor owner | verified-already-at-parity | existing interruption paths and focused store suite |
+| Lethal transitions, falling Pike and Pike detach | damage/handoff/detach already clear the selector atomically | verified-already-at-parity | existing lethal and Pike regressions |
+| Archer and other enemy families | no dynamic Skeleton/Mage selector writer | out-of-system | existing family admission assertions remain strict |
+| Snapshot, replication, decoder and renderer | encode the already-valid action state; render only headgear at wrapped body-plus-offset | verified-already-at-parity | strict negative protocol tests and positive immediate Dampen round trip |
+| Dampen projectiles, shield removal, particles and audio | no ownership of the Mage action-only selector | out-of-system | established entries 083/301 remain unchanged; browser journey checks the affected cast |
+
+Confidence is high for the production failure and invalid-state producer. No original continuation was attached, so the exact private inventory and full horde are not reconstructed. The regression reproduces the production exception at its direct cause, and the browser acceptance will exercise the actual cast with an active Mage horde. No new browser limitation or parity approximation is introduced.
+
+### Validation plan
+
+Strengthen the existing Dampen caster integration test with a live nonzero Mage head turn and immediate real snapshot encode/decode. Confirm the exact production exception before the fix; then clear only the discarded Mage action's selector in its Dampen callback. Run the focused enemy, secondary, replication and protocol suites plus the canonical Website gate on M5. Verify repeated Dampen casts through the built browser and then the published service, with Mage cast/suppression state, continuing snapshots and empty fatal/transport error arrays.
