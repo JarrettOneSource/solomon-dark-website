@@ -363,7 +363,7 @@ test('Golem area keeps collision-appended targets for five moves before terminal
     else {
       assert.deepEqual(result.damage.map(row => row.targetId), [1, 2])
       assert.equal(result.targetHeadingChanges.length, 2)
-      assert.ok(result.targetHeadingChanges.every(row => Math.abs(row.deltaDegrees) <= 45))
+      assert.ok(result.targetHeadingChanges.every(row => row.mode === 'relative' && Math.abs(row.degrees) <= 45))
       assert.ok(state.targetEffects.every(effect => effect.dazzleTicks === 200))
       assert.deepEqual(state.actors, [])
     }
