@@ -704,3 +704,30 @@ retains the established transparent-canvas contract; shared renderer setup
 and other scratch consumers are unchanged. The independent stock-record GPU
 oracle checks all 55 scroll steps, wrap, composed marker/reveal, clipping and
 state restoration, plus retained target/borrowed texture ownership.
+
+
+### First exact candidate GPU verification — October 6
+
+The `15b39638` candidate, cleanly based on published `aa27c24a`, passed its
+M5 type check, all 40 focused contracts, frontend lint and production build.
+The independent stock-record GPU oracle compared all 55 strip positions plus
+wrap, all intermediate RGBA channels and five composed marker/reveal cases.
+No channel exceeded the two-byte rounding tolerance (maximum error 2), every
+strip position contained 1049–1050 visible pixels, clipping/state restoration
+passed, the target remained identical across reparenting, teardown destroyed
+it and all three borrowed UI textures remained alive. Chrome page/console/
+request/response error arrays were empty. This validates the recovered source
+program against the exact stock atlas data, not an absolute stock-video phase.
+
+The built scene run reached Hub, Hagatha and Fomentius but stopped on a helper
+readiness assertion: the retained canvas still exposed its preceding model's
+settled marker when the next model began opening. The first Fomentius corner
+capture was black; later captures changed 3078 green/blue pixels, with browser
+error arrays empty. The helper now lets the new model receive its presentation
+frames before awaiting settled reveal, so an opening frame cannot serve as its
+stationary motion baseline. The source effect was not tuned to that transient.
+Remaining built member/interaction journeys and the canonical final gate are
+still pending. Actual lease/group/native-registration cleanup closed at
+`00:41:24.899185 UTC`; source remained clean and home metadata changed only the
+known same-byte 40-byte Crashpad setting timestamp. Task-owned source and
+private tools/cache are retained across checks under standing authority.

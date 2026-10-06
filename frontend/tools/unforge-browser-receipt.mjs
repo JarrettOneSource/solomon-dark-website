@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 
 /** Green/blue motion distinguishes the scrolling capture from the red-only marker pulse. */
 export async function unforgeBrowserReceipt(page, dialog, label) {
-  const bounds = await dialog.locator('canvas.hub-inventory-native-canvas').boundingBox()
+  const surface = dialog.locator('canvas.hub-inventory-native-canvas')
+  // The retained canvas can still carry its previous model's settled flag
+  // until the new surface has received its first presentation frame.
+  await surface.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  await dialog.locator('canvas.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({ timeout: 10_000 })
+  const bounds = await surface.boundingBox()
   assert.ok(bounds, `${label} has no painted inventory canvas`)
   const clip = {
     x: bounds.x + bounds.width * 1524 / 1600,
