@@ -2774,3 +2774,15 @@ clear a healthy Cocoon. Retain one painter stream and the highest strict transpo
 and save contracts. No unpublished sibling branch is adopted by these receipts.
 The final immutable current-main canonical gate and normal deployment remain the
 next boundary after the coordinator's actual publication-lock handoff.
+
+
+### Focused validation, 2026-10-06
+
+The exact M5 red fixture `4bbfee83` failed with the reported reflectFactor
+message on the first stock factor above one. The corrected `acb92ee6` passed
+all nine actual summon-to-snapshot factors, with negative/nonfinite rejection.
+The Golem admission members marked recovered-pending-port above are now
+`exact-ported` through the canonical shared decoder. Existing summon/contact,
+life, visual and audio producers remain unchanged. The full repository gate,
+built browser maximum-rank assembly journey and live publication remain pending
+at this focused validation checkpoint.

@@ -248,3 +248,18 @@ finite Cast 1 clock.
   receipt is the sole post-validation documentation write; no runtime, test,
   build, asset, or protocol byte changed afterward. Push verification and
   production deployment remain separate receipts.
+
+
+### Focused validation, 2026-10-06
+
+The exact M5 red fixture `4bbfee83` failed with the reported Staff Cast 1
+message on the actual Ether tail from two stock Fleetfinger rings and Faster
+Caster. Corrected `acb92ee6` passed all 22 pure/welded/base-element cases:
+440% speed produces Ether57.2 and Fire/weld74.8; removing the rings preserves
+that occupied tail while the current stat returns to110%, and the following
+released update retires it to-1. The pending Cast1 and same-primary equipment
+admission members above are now `exact-ported` through the shared finite domain;
+Constant/lifecycle/identity boundaries are unchanged. No dependency installation
+was needed for these two public-interface Node regressions. The full gate,
+ordinary built/live browser journeys and publication remain pending at this
+focused validation checkpoint.
