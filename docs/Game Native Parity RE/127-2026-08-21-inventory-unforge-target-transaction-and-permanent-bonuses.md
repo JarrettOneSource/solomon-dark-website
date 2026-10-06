@@ -773,3 +773,15 @@ Actual phase cleanup released the lease at `02:31:28.286308 UTC`; five M5
 stage groups, native registration and all eight M2 transport groups plus the
 runner were absent, source was clean and only the qualified same-byte Crashpad
 setting timestamp changed.
+
+The subsequent `2b5c0fc0` build passed and immediately emitted all five Hub/
+service pixel receipts: 2058–2159 painted pixels and 1039–1048 changing green/
+blue pixels. The full trader journey then stopped before its bankroll setup:
+its newly added private production host had no Lua runtime configured, while
+`fundTraderSmoke` explicitly invokes the existing Lua gold setter. This is a
+host fixture omission, with the reported browser Lua error; no transaction or
+Boneyard acceptance is claimed from that phase. The host now uses the same
+installed Wasmoon WASM path as the other private browser fixtures. No runtime
+product or dependency changed. Actual cleanup released at
+`02:40:13.329161 UTC`, with all stage/native/M2 groups and the exact lease
+closed, clean source and the same qualified home timestamp-only change.

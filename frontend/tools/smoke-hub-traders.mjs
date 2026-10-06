@@ -57,6 +57,7 @@ if (productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
   gameHost = await startGameHost({
     allowedOrigins: [staticServer.origin],
     authentication: { kind: 'shared', credential: gameCredential },
+    luaWasmPath: fileURLToPath(new URL('../node_modules/wasmoon/dist/glue.wasm', import.meta.url)),
     snapshotRate: 20,
   })
   baseUrl = staticServer.origin
