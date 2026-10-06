@@ -133,7 +133,11 @@ class MacInstallationTests(unittest.TestCase):
                     time.sleep(0.02)
                 else:
                     self.fail('owned waiting compiler did not become ready')
-                with patch.object(runner, 'LEASE', Path(directory) / 'lease'):
+                scanner = runner.active_compilers
+                with patch.object(runner, 'LEASE', Path(directory) / 'lease'), patch.object(
+                    runner, 'active_compilers',
+                    lambda: [entry for entry in scanner() if entry['pid'] == compiler.pid],
+                ):
                     self.assertEqual(runner.run_once(root), 0)
                     self.assertFalse(marker.exists(), 'CI work started alongside the compiler')
                     self.assertIsNone(compiler.poll(), 'CI touched the foreign compiler')
@@ -159,7 +163,11 @@ class MacInstallationTests(unittest.TestCase):
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 self.assertEqual(server.stdout.readline(), b'ready\n')
-                with patch.object(runner, 'LEASE', Path(directory) / 'lease'):
+                scanner = runner.active_compilers
+                with patch.object(runner, 'LEASE', Path(directory) / 'lease'), patch.object(
+                    runner, 'active_compilers',
+                    lambda: [entry for entry in scanner() if entry['pid'] == server.pid],
+                ):
                     self.assertEqual(runner.run_once(root), 0)
                 self.assertTrue(marker.exists())
                 self.assertIsNone(server.poll(), 'CI stopped an unrelated idle server')
@@ -260,6 +268,7 @@ class MacInstallationTests(unittest.TestCase):
                     's=importlib.util.spec_from_file_location("runner",sys.argv[1]); '
                     'm=importlib.util.module_from_spec(s);s.loader.exec_module(m); '
                     'm.LEASE=pathlib.Path(sys.argv[3]); '
+                    'm.active_compilers=lambda: []; '
                     'raise SystemExit(m.run_once(pathlib.Path(sys.argv[2])))')
             child = subprocess.Popen([sys.executable, '-c', code, str(OPS / 'run-worker.py'), str(root), str(lease)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
@@ -290,7 +299,7 @@ class MacInstallationTests(unittest.TestCase):
             worker = worker_fixture(root)
             worker.write_text('sleep 300 &\necho $$ > "$SDR_DEPLOY_ROOT/group.pid"\nexit 0\n')
             lease = Path(directory) / 'lease'
-            with patch.object(runner, 'LEASE', lease):
+            with patch.object(runner, 'LEASE', lease), patch.object(runner, 'active_compilers', return_value=[]):
                 self.assertEqual(runner.run_once(root), 0)
             self.assertFalse(runner.group_active(int((root / 'group.pid').read_text())))
             self.assertFalse(lease.exists())
@@ -304,7 +313,7 @@ class MacInstallationTests(unittest.TestCase):
             worker = worker_fixture(root)
             worker.write_text('for ((i=0;i<100;i++)); do printf "%3000s\\n" error; done\nexit 7\n')
             lease = Path(directory) / 'lease'
-            with patch.object(runner, 'LEASE', lease):
+            with patch.object(runner, 'LEASE', lease), patch.object(runner, 'active_compilers', return_value=[]):
                 self.assertEqual(runner.run_once(root), 7)
             self.assertFalse(lease.exists())
             status = json.loads((root / 'state/status.json').read_text())
