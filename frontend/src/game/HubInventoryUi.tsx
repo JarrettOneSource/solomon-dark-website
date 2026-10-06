@@ -436,7 +436,6 @@ export default function HubInventoryUi({
       onNotebox={showInstructionNotebox}
       onSurfaceChange={onSurfaceChange}
       onUnassignBeltEntry={onUnassignBeltEntry}
-      perkRemovalEnabled={interactionsEnabled}
       progression={progression}
       runSummary={runSummary}
       secondaryPlayerState={secondaryPlayerState}

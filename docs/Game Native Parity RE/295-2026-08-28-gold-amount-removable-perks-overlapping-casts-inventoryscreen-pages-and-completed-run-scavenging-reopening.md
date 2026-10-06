@@ -1386,3 +1386,21 @@ purchase/archive contracts.
   intentional extensions are no-refund ordinary-perk removal and clickable
   stats arrows; retail itself provides neither action. Publication and
   deployment remain separate and were not requested.
+
+## 2026-10-06 — Report 89: Hagatha owns charm removal; Stats owns inspection
+
+Original `1555411454063026238`, including its October 3 clarification that the click occurs outside Hagatha's menu, was freshly re-read with nearby discussion by the coordinating agent at 22:17 UTC. The source remains unchanged. Its screenshot shows the Stats Charms/Curses page and Disfiguring Curse hover text; it does not capture a removal sequence. The user's current decision explicitly narrows the earlier removable-perks extension recorded above: removal is available **only inside Hagatha's shop**. Ordinary College Stats, other merchants' companion Stats and Boneyard Stats are inspection-only. Retail already supplies the owned-cell hover/inspection contract; this scope change does not claim a new retail removal control.
+
+The causal trace finds two web producers. `HubServiceActions` already owns the real Hagatha owned-charm grid and its `remove-hagatha` action, preserving inspection-only Tonic selector 27. Separately, `HubInventoryUi` passes general `interactionsEnabled` as `perkRemovalEnabled` to `NativeHubSurface`, which gives the common Stats footer an `onRemove` callback. `InventoryStatsActions` turns ordinary charm inspection cells into removal buttons whenever that callback is present. General College interaction availability is therefore incorrectly granting a Hagatha action to Stats.
+
+Hagatha's shop explicitly omits the common Stats footer and renders its own owned-charm section. The smallest complete correction removes the Stats removal callback and its now-unused enabling prop through all three callers. The existing Hagatha action remains the sole UI removal producer. The host already treats `remove-hagatha` as a Hagatha trader action, using the shared Hub service/transition admission and rejecting Boneyard use. Client menu surfaces are not authoritative host state; this correction preserves the established remote HUD shop contract and adds no speculative menu-session protocol.
+
+| Member | Disposition before implementation | Acceptance |
+| --- | --- | --- |
+| College standalone Stats, all ordinary selectors 0..26 and Tonic 27 | recovered-pending-port | hover/focus retains native descriptions; pointer/keyboard inspection cannot remove a charm |
+| Fomentius, Luthacus and Shlorio companion Stats | recovered-pending-port | same shared inspection owner; no removal callback or removal-labelled button |
+| Boneyard Stats, modal close/reopen and page transitions | verified-already-at-parity; shared producer removal will make inspection structural | preserve owned selectors and native scrolling/tooltip behavior |
+| Hagatha's owned-charm grid, ordinary selectors 0..26 | verified-already-at-parity | existing pointer removal and authoritative derived-stat refresh continue |
+| Tonic 27, unknown/unowned selectors, Hub transition and Boneyard authority rejection | verified-already-at-parity | existing bounded `removeHagathaPerk` and Hub service admission remain |
+
+Acceptance uses a genuine rendered-component regression before removing the invalid producer, existing host/Hagatha contracts, and actual built/live College Stats and Hagatha shop journeys. No authored native table or new extraction is required; the earlier evidence for the complete selector inventory and native inspection semantics is reused.

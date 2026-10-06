@@ -82,7 +82,6 @@ export function InventoryStatsActions({
   onInspectionFocus,
   onInspectionHover,
   onPage,
-  onRemove,
   offset,
   page,
 }: {
@@ -91,7 +90,6 @@ export function InventoryStatsActions({
   onInspectionFocus: (inspection: HubServiceInspectionModel | null) => void
   onInspectionHover: (inspection: HubServiceInspectionModel | null) => void
   onPage: (page: number) => void
-  onRemove: ((selector: number) => void) | null
   offset: number
   page: number
 }) {
@@ -200,12 +198,9 @@ export function InventoryStatsActions({
           <NativeAction
             key={`${selector}-${index}`}
             data={{ 'data-owned-hagatha-selector': selector }}
-            label={selector === 27 || onRemove === null
-              ? `Inspect ${HAGATHA_PERKS[selector]!.name}`
-              : `Remove ${HAGATHA_PERKS[selector]!.name}`}
+            label={`Inspect ${HAGATHA_PERKS[selector]!.name}`}
             rect={rect}
             onBlur={() => onInspectionFocus(null)}
-            onClick={selector === 27 || onRemove === null ? undefined : () => onRemove(selector)}
             onFocus={() => onInspectionFocus(inspection)}
             onPointerEnter={() => onInspectionHover(inspection)}
             onPointerLeave={() => onInspectionHover(null)}

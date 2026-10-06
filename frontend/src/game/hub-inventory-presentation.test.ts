@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { build } from 'esbuild'
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import { projectInventoryRunSummary, sameInventoryRunSummary } from './hub-inventory-ui-model.ts'
@@ -357,4 +358,28 @@ test('inventory summary clears retired run/actor values and reads restored state
   assert.equal(sameInventoryRunSummary(restored, null), false)
   assert.equal(sameInventoryRunSummary(null, restored), false)
   assert.equal(sameInventoryRunSummary(null, null), true)
+})
+
+test('ordinary and companion Stats inspect every owned charm without offering removal', async () => {
+  const built = await build({
+    stdin: { contents: `import { createElement } from 'react';
+      import { renderToStaticMarkup } from 'react-dom/server';
+      import { InventoryStatsActions } from './HubInventoryControls.tsx';
+      export const renderStats = props => renderToStaticMarkup(createElement(InventoryStatsActions, props));`,
+      loader: 'tsx', resolveDir: import.meta.dirname },
+    bundle: true, format: 'esm', platform: 'node', jsx: 'automatic', write: false,
+    loader: { '.css': 'empty', '.png': 'empty' },
+    banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(import.meta.url)});` },
+  })
+  const { renderStats } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0]!.text).toString('base64')}`)
+  const economy = createGameSnapshot(createGameSimulation(), 'local-player').players['local-player']!.economy
+  for (const companion of [false, true]) {
+    for (let selector = 0; selector <= 27; selector += 1) {
+      const html = renderStats({ companion, economy: { ...economy, ownedPerkSelectors: [selector] },
+        page: 2, offset: 640, onPage: () => {}, onInspectionFocus: () => {}, onInspectionHover: () => {} })
+      assert.match(html, /aria-label="Inspect [^"]+"/, `${companion}/${selector} must remain inspectable`)
+      assert.doesNotMatch(html, /aria-label="Remove [^"]+"/)
+      assert.match(html, new RegExp(`data-owned-hagatha-selector="${selector}"`))
+    }
+  }
 })

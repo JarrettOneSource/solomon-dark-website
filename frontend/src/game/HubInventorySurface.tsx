@@ -116,7 +116,6 @@ export function NativeHubSurface({
   onOpenSkills,
   onSurfaceChange,
   onUnassignBeltEntry,
-  perkRemovalEnabled,
   progression,
   runSummary,
   secondaryPlayerState,
@@ -152,7 +151,6 @@ export function NativeHubSurface({
   onOpenSkills: () => void
   onSurfaceChange: (surface: HubUiSurface) => void
   onUnassignBeltEntry?: (slot: number) => void
-  perkRemovalEnabled: boolean
   progression: ProtocolPlayerProgression
   runSummary: InventoryRunSummary | null
   secondaryPlayerState: NativeSecondaryPlayerState | undefined
@@ -941,10 +939,6 @@ export function NativeHubSurface({
                 setServiceHoverInspection(null)
                 setStatsPage(nextPage)
               },
-              onRemove: perkRemovalEnabled ? (selector) => {
-                audio.playSound('click')
-                onAction({ type: 'remove-hagatha', selector })
-              } : null,
             }}
             belt={{
               audio, belt,

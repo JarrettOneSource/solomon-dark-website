@@ -1549,6 +1549,13 @@ test('requested Hagatha removal deactivates runtime and reactivation does not re
     (rank, skillId) => rank > 0
       && NATIVE_SECONDARY_ABILITY_IDS.includes(skillId as NativeSecondaryAbilityId),
   ).length, secondaryCount)
+  const combat = enterBoneyardWorld(state, emptyBoneyard())
+  const denied = applyGameSimulationHubAction(combat, 'owner', { type: 'remove-hagatha', selector: 14 })
+  assert.equal(denied.accepted, false)
+  assert.equal(denied.reason, 'service-unavailable')
+  assert.deepEqual(getPlayerEconomy(denied.state, 'owner').ownedPerkSelectors,
+    getPlayerEconomy(combat, 'owner').ownedPerkSelectors)
+
 })
 
 test('unforge is participant-owned and applies full rejuvenation plus Mind Dredge authoritatively', () => {
