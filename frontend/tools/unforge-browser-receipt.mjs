@@ -44,5 +44,7 @@ export async function unforgeBrowserReceipt(page, dialog, label) {
   }, frames)
   assert.ok(receipt.nonBlackPixels > 20, JSON.stringify({ label, ...receipt }))
   assert.ok(receipt.changedGreenBluePixels > 5, JSON.stringify({ label, ...receipt }))
-  return { label, ...receipt }
+  const result = { label, ...receipt }
+  process.stdout.write(`${JSON.stringify({ unforgeBrowserReceipt: result })}\n`)
+  return result
 }

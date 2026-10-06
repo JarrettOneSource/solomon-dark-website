@@ -752,3 +752,24 @@ brief shared lifetime. Boneyard/book and complete transaction/notice journeys
 remain pending. This phase released its exact lease/groups at
 `01:20:10.832148 UTC`, with native registration cleaned and the candidate
 worktree clean. Task-owned worktree/tools/cache remain inactive for reuse.
+
+
+### Integrated book helper readiness
+
+The clean `60fccbc9` candidate integrates published `221a03e0`. Its M5
+production build passed. Hub standalone and resized inventory pixel receipts,
+both Hub Inventory/Skills overlap observations, and potion consumption passed
+before the Boneyard inventory activation timed out. The mutation observer
+correction therefore closes the earlier missed Hub overlap; this new stop is
+at a separate entry action. `BoneyardScene` guards the belt inventory callback
+with `!inputBlocked` and publishes `data-gameplay-input-blocked`. The helper
+was clicking at renderer readiness alone, without establishing that the input
+guard had cleared. It now awaits both established readiness attributes using the existing
+90-second scene bound, as other Boneyard acceptance tools already do. No
+product behavior, effect parameter or timeout was changed. Pixel receipts are
+emitted as each member completes so a later independent failure preserves
+completed observations. Boneyard and the full trader journey remain pending.
+Actual phase cleanup released the lease at `02:31:28.286308 UTC`; five M5
+stage groups, native registration and all eight M2 transport groups plus the
+runner were absent, source was clean and only the qualified same-byte Crashpad
+setting timestamp changed.
