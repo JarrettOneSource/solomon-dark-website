@@ -706,133 +706,64 @@ oracle checks all 55 scroll steps, wrap, composed marker/reveal, clipping and
 state restoration, plus retained target/borrowed texture ownership.
 
 
-### First exact candidate GPU verification — October 6
+### Final recovered membership and built acceptance — October 6
 
-The `15b39638` candidate, cleanly based on published `aa27c24a`, passed its
-M5 type check, all 40 focused contracts, frontend lint and production build.
-The independent stock-record GPU oracle compared all 55 strip positions plus
-wrap, all intermediate RGBA channels and five composed marker/reveal cases.
-No channel exceeded the two-byte rounding tolerance (maximum error 2), every
-strip position contained 1049–1050 visible pixels, clipping/state restoration
-passed, the target remained identical across reparenting, teardown destroyed
-it and all three borrowed UI textures remained alive. Chrome page/console/
-request/response error arrays were empty. This validates the recovered source
-program against the exact stock atlas data, not an absolute stock-video phase.
+The recovered program passed M5 type checking, all 40 focused contracts,
+frontend lint and production builds. The independent stock-record GPU oracle
+compared all 55 strip positions plus wrap, intermediate RGBA and five composed
+marker/reveal cases. Maximum channel error was 2 bytes, every strip position
+contained 1049–1050 visible pixels, and clipping/blend-state restoration passed.
+The target remained identical across reparenting; teardown destroyed it while
+all three borrowed UI textures remained alive. Error arrays were empty.
 
-The built scene run reached Hub, Hagatha and Fomentius but stopped on a helper
-readiness assertion: the retained canvas still exposed its preceding model's
-settled marker when the next model began opening. The first Fomentius corner
-capture was black; later captures changed 3078 green/blue pixels, with browser
-error arrays empty. The helper now lets the new model receive its presentation
-frames before awaiting settled reveal, so an opening frame cannot serve as its
-stationary motion baseline. The source effect was not tuned to that transient.
-Remaining built member/interaction journeys and the canonical final gate are
-still pending. Actual lease/group/native-registration cleanup closed at
-`00:41:24.899185 UTC`; source remained clean and home metadata changed only the
-known same-byte 40-byte Crashpad setting timestamp. Task-owned source and
-private tools/cache are retained across checks under standing authority.
+The completed production trader journey passed the Hub inventory and all four
+service companions, retaining one painted native renderer and backpack resume
+control. Nine physical receipts covered these five owners, Shlorio before and
+after Dowsing, inventory after service changes and the inert corner click.
+They measured 2058–2150 painted pixels and 1031–1048 changing green/blue pixels.
+The red-only marker cannot produce this motion. Potion use, purchases,
+transfers, inspection, selection, equip/displacement, protected equipment,
+invalid drops, inert click, unforge confirmation/cancellation, destruction,
+success/result and the `unforge.wav` cue all passed. Browser page/console/
+request/response and context-loss arrays were empty.
 
+The complete Book journey passed both Hub and paused Boneyard inventories,
+all four Inventory/Skills overlap observations, both potion consumptions,
+viewport/curtain ownership, Title/Skills negative consumers and final input
+resume. Physical receipts measured Hub 2094 painted/1045 changing green-blue
+pixels, resized 1200x700 1201/612, and paused Boneyard 2168/1047. The paused
+match confirms the fill continues on application time independently of world
+pause. Page/console/response error arrays were empty.
 
-### Built shared inventory ownership verified
+The acceptance helpers use the existing input-unblocked/settled presentation
+and enabled-button contracts, arm short-lifetime observations before actions,
+configure the installed Lua runtime for the private fixture, accept already
+completed dialogue and close incidental conversations during travel. These
+changes preserve physical purchase/drag/drop gestures and the native input
+rules. No effect parameter, dependency, quality gate or timeout was relaxed.
+Each pixel receipt is emitted immediately. The final trader phase released at
+`03:33:18.216978 UTC`; every owned stage/native-registration/M2 group drained,
+the exact lease was removed, source remained clean, and home only showed the
+qualified same-byte Crashpad timestamp change.
 
-After the paint-readiness correction, the exact `0341b06a` production build
-passed the GPU oracle again and the built Hub inventory plus all four service
-companions. Each had 2058–2148 painted corner pixels and 1041–1046 changing
-green/blue pixels across six samples. The red-only UI75 pulse cannot produce
-that motion. Hagatha, Fomentius, Luthacus and Shlorio also retained the same
-scene renderer and native backpack resume control; no browser page/console/
-request/response errors or context losses were observed.
+| Final member / variant | Disposition | Evidence and implementation consequence |
+| --- | --- | --- |
+| Authored UI77 scrolling image | `port-complete` | Exact record/55-step and wrap GPU comparisons; two source images with the recovered one-pixel overlap |
+| Authored UI76 multiply mask and integer clip | `port-complete` | Exact record, intermediate RGBA, scissor and state-restoration comparisons |
+| Authored UI75 marker after completed target | `port-complete` | Existing red sine pulse, half-pixel target quad and five composed/reveal cases |
+| Specific target lifecycle, create/reset/ordinary/deleting teardown | `port-complete` | Complete native bodies/xrefs; private retained target, per-draw refresh, reparent identity and owned-vs-borrowed teardown verified |
+| Hub standalone Inventory | `port-complete` | Actual animation, resize, book replace/reopen, input/transaction journey |
+| Boneyard standalone Inventory | `port-complete` | Paused application-clock animation, both book replacements and potion/input resume |
+| Hagatha, Fomentius, Luthacus and Shlorio companion inventories | `port-complete` | All four physical receipts and retained renderer ownership; purchases/transfers inspected and activated |
+| Shlorio before/after Dowsing | `port-complete` | Both physical receipts and purchase/equip within the same native companion owner |
+| Selection/hover, held drag, invalid/eligible release, confirm/cancel/result | `port-complete` | No native algorithm branch on these states; actual pointer and transaction journey preserves existing rules |
+| Sack depth, dye/notice overlays and enhanced-effects setting | `port-complete` | Complete root has no fill-algorithm branch; shared inventory owner places the capture outside the Sack clip and before later overlays; existing input/mod rules remain intact |
+| Title, dialogue and Skills without Inventory | `out-of-system` | Native census/branches and actual negative consumers; detached view has no fill draw |
+| Fire helper/core flame bank and all other shared scratch consumers | `out-of-system` | Complete caller/reference census; their existing algorithms and resource ownership remain unchanged |
+| Absolute native/browser process-start phase | `blocked-by-platform` | Separate process clocks cannot share a recording's absolute phase; the same 100 Hz application-clock progression, periods, geometry and blend behavior are preserved |
 
-The subsequent book journey stopped at the helper's polling observer for the
-short Inventory/Skills overlap. That observer is now armed as a DOM mutation
-observer before the switch action; it retains the same actual simultaneous
-surface and native target assertions, without increasing its timeout. This
-preserves the transition evidence rather than relying on polling to see a
-brief shared lifetime. Boneyard/book and complete transaction/notice journeys
-remain pending. This phase released its exact lease/groups at
-`01:20:10.832148 UTC`, with native registration cleaned and the candidate
-worktree clean. Task-owned worktree/tools/cache remain inactive for reuse.
-
-
-### Integrated book helper readiness
-
-The clean `60fccbc9` candidate integrates published `221a03e0`. Its M5
-production build passed. Hub standalone and resized inventory pixel receipts,
-both Hub Inventory/Skills overlap observations, and potion consumption passed
-before the Boneyard inventory activation timed out. The mutation observer
-correction therefore closes the earlier missed Hub overlap; this new stop is
-at a separate entry action. `BoneyardScene` guards the belt inventory callback
-with `!inputBlocked` and publishes `data-gameplay-input-blocked`. The helper
-was clicking at renderer readiness alone, without establishing that the input
-guard had cleared. It now awaits both established readiness attributes using the existing
-90-second scene bound, as other Boneyard acceptance tools already do. No
-product behavior, effect parameter or timeout was changed. Pixel receipts are
-emitted as each member completes so a later independent failure preserves
-completed observations. Boneyard and the full trader journey remain pending.
-Actual phase cleanup released the lease at `02:31:28.286308 UTC`; five M5
-stage groups, native registration and all eight M2 transport groups plus the
-runner were absent, source was clean and only the qualified same-byte Crashpad
-setting timestamp changed.
-
-The subsequent `2b5c0fc0` build passed and immediately emitted all five Hub/
-service pixel receipts: 2058–2159 painted pixels and 1039–1048 changing green/
-blue pixels. The full trader journey then stopped before its bankroll setup:
-its newly added private production host had no Lua runtime configured, while
-`fundTraderSmoke` explicitly invokes the existing Lua gold setter. This is a
-host fixture omission, with the reported browser Lua error; no transaction or
-Boneyard acceptance is claimed from that phase. The host now uses the same
-installed Wasmoon WASM path as the other private browser fixtures. No runtime
-product or dependency changed. Actual cleanup released at
-`02:40:13.329161 UTC`, with all stage/native/M2 groups and the exact lease
-closed, clean source and the same qualified home timestamp-only change.
-
-The configured `18618c96` private host passed funding, potion use, drag/invalid
-release, protected equipment, Fomentius purchases, Luthacus transfers, Hagatha
-purchases and Shlorio purchase/equip. The flame also animated before and after
-Dowsing. Full-browser error/request/response/context-loss arrays were empty.
-Reopened Shlorio dialogue then already displayed Dowse/Prices/Done, while the
-helper unconditionally waited for Skip. It now skips only an existing speech
-button and retains the required Done state. Independently, the book helper
-passed Boneyard entry and both book switches, then queried its scene through a
-locator still requiring input-unblocked while asserting input-blocked. The
-entry-only wait is now separate from the retained scene locator. Neither
-failure was a source effect, native contract or timeout issue. Transaction
-completion and the Boneyard flame receipt still require the corrected run.
-This phase released its lease at `02:47:57.745612 UTC`; all six stage groups,
-native registration and M2 groups were drained, source clean, with the same
-qualified home timestamp change.
-
-### Built Boneyard and Book membership closed
-
-The exact `838fe47b` production build and complete Book journey passed. Hub
-standalone measured 2094 painted/1045 changing green-blue pixels; resized
-1200x700 measured 1201/612; paused Boneyard after both Skills switches measured
-2168/1047. Both potion consumptions, all four simultaneous book-overlap
-observations, viewport/curtain ownership, Title/Skills absence, final input
-resume and empty page/console/response error arrays passed. The paused match
-therefore confirms the application-clock fill continues independently of
-world pause. Source effect parameters remain unchanged.
-
-The independent trader path reached Shlorio before/after Dowsing, service
-changes and the inert corner click with physical flame receipts. Its second
-invalid-drop gesture then waited for a drag that never began. Inventory
-restore flybys disable source buttons through `inventoryTransitionLocked`,
-but the helper was starting its next press after visibility alone. It now
-awaits that existing enabled-button contract before physical mouse down and
-requires a real nonempty drag diagnostic; the former missing-node expression
-could incorrectly pass its start wait. No input rule or timeout changed.
-Confirmation/cancel/result acceptance remains pending. Phase cleanup released
-at `03:03:45.821365 UTC`; all six stage/native/M2 groups were absent, source
-clean and home only had the qualified same-byte timestamp change.
-
-The `2b772403` trader-only build passed, but its route to Luthacus crossed
-Skorcha and opened her native conversation. The failure dump showed the active
-Skorcha speech and blocked input at a stationary world position; browser,
-request/response and context-loss arrays were empty. The navigation helper now
-closes an incidental conversation through its existing close control before
-continuing the intended route. Its original 180-second route deadline is
-unchanged. This stop did not reach the newly enabled drag or unforge result
-checks. Cleanup released at `03:18:57.039222 UTC`; all five stage/native/M2
-groups were absent, source clean and home qualified. A subsequently observed
-foreign CMake/Ninja build was preserved; its sampled whole parent/PGID exited
-before another admission was attempted.
+There is no remaining extractable in-system fact or partial implementation.
+Publication is gated by the unchanged `scripts/validate.sh` and actual built
+member checks on the final source; delivery uses the maintained main worker.
+Report22's bag behavior and renewed decision hold remain separate. Completing
+Report67 does not authorize a reaction on their shared source message.
