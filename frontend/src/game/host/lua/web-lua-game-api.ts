@@ -1,5 +1,7 @@
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
+  canSpawnNextBoneyardWave,
+  spawnNextBoneyardWave,
   type BoneyardEnemySpawnIntent,
 } from '../../core-kernels/boneyard-wave-director.ts'
 import type { BoastResolver } from '../../core-kernels/boast.ts'
@@ -105,6 +107,7 @@ export function createWebLuaFrameState(
           pending_spawn_budget: state.world.waves.pendingSpawnBudget,
           phase: state.world.waves.phase,
           schedule_index: state.world.waves.scheduleIndex,
+          spawn_next_available: nextWaveAvailable(state),
           wave_event_id: state.world.waves.waveEventId,
           wave_ordinal: state.world.waves.waveOrdinal,
         }
@@ -238,6 +241,15 @@ export function applyWebLuaCommands(
       case 'set-next-run-seed':
         nextRunSeed = command.seed
         break
+      case 'spawn-next-wave':
+        if (!nextWaveAvailable(state) || state.world.kind !== 'boneyard'
+          || state.world.waves === null || state.run.runId !== command.runId
+          || state.world.waves.waveEventId !== command.waveEventId) break
+        state = {
+          ...state,
+          world: { ...state.world, waves: spawnNextBoneyardWave(state.world.waves) },
+        }
+        break
       case 'spawn-enemy':
         if (state.world.kind !== 'boneyard') break
         enemySpawnIntents.push({
@@ -254,6 +266,15 @@ export function applyWebLuaCommands(
     }
   }
   return { enemySpawnIntents, nextRunSeed, state }
+}
+
+function nextWaveAvailable(state: GameSimulationState): boolean {
+  return state.world.kind === 'boneyard'
+    && state.run.phase === 'active'
+    && state.levelUpBarrier === null
+    && state.world.tutorial === null
+    && state.world.waves !== null
+    && canSpawnNextBoneyardWave(state.world.waves)
 }
 
 export function deriveWebLuaEvents(

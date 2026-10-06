@@ -43,6 +43,10 @@ test('fixed cheat controls compile bounded literal Lua without accepting raw cod
     compileCheatMenuAction({ kind: 'set-run-seed', seed: 42 }),
     'return sd.rng.set_seed(42)',
   )
+  assert.equal(
+    compileCheatMenuAction({ kind: 'spawn-next-wave' }),
+    'return sd.waves.spawn_next()',
+  )
   assert.match(
     compileCheatMenuAction({ count: 8, enemyKey: 'skeleton', kind: 'spawn-enemy', playerId: 'player-1' }),
     /sd\.enemies\.spawn\('skeleton',\s*\{\s*x = player\.x \+ 80/,

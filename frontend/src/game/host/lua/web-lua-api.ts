@@ -224,6 +224,7 @@ export class WebLuaApi {
       },
       waves: {
         get_state: () => this.#bindings.getFrame().waves,
+        spawn_next: () => this.#spawnNextWave(),
       },
       world: {
         get_scene: () => webLuaSceneState(this.#bindings.getFrame()),
@@ -357,6 +358,20 @@ export class WebLuaApi {
       buildId: id,
       playerId: player.id,
       type: 'grant-weld',
+    })
+    return true
+  }
+
+  #spawnNextWave(): boolean {
+    const frame = this.#bindings.getFrame()
+    if (frame.world !== 'boneyard' || frame.phase !== 'active'
+      || frame.runId === null || frame.waves?.spawn_next_available !== true) {
+      throw new Error('Next wave requires an active survival wave with no pending spawns, level-up barrier or boss hold.')
+    }
+    this.#bindings.queueCommand({
+      runId: frame.runId,
+      type: 'spawn-next-wave',
+      waveEventId: requireNonnegativeSafeInteger(frame.waves.wave_event_id, 'wave event id'),
     })
     return true
   }

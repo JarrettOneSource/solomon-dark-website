@@ -9,6 +9,7 @@ import {
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
+  type GameSimulationState,
 } from '../../core-server/game-simulation.ts'
 import { DEFAULT_PLAYER_CHARACTER_CONFIG } from '../../core-server/game-simulation.ts'
 import {
@@ -17,6 +18,14 @@ import {
 } from '../../core-kernels/hub-economy.ts'
 import { playerSkillBookAt } from '../../core-server/player-entity-store.ts'
 import type { LoadedBoneyard } from '../../core-kernels/boneyard.ts'
+import {
+  createBoneyardWaveDirector,
+  stepBoneyardWaveDirector,
+} from '../../core-kernels/boneyard-wave-director.ts'
+import type { WaveDef } from '../../core-kernels/boneyard-wave-schema.ts'
+import type { BoneyardWaveDirectorState } from '../../core-kernels/boneyard-wave-types.ts'
+import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../../core-kernels/native-survival-boss-catalog.ts'
+import { createNativeTutorialState } from '../../core-kernels/native-tutorial.ts'
 import {
   applyWebLuaCommands,
   createWebLuaFrameState,
@@ -105,6 +114,141 @@ test('web Lua frame and commands use existing authoritative player and enemy own
     waveOrdinal: 0,
   }])
 })
+
+test('next-wave requests start the authored row once and leave existing world actors intact', () => {
+  const hub = createGameSimulation({ 'player-1': DEFAULT_PLAYER_CHARACTER_CONFIG })
+  const active = enterBoneyardWorld(hub, loaded)
+  assert.equal(active.world.kind, 'boneyard')
+  if (active.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const director: BoneyardWaveDirectorState = {
+    ...createBoneyardWaveDirector('report58', nextWaveSchedule),
+    phase: 'opening-threshold',
+  }
+  const source = { ...active, world: { ...active.world, waves: director } }
+  const request = { runId: loaded.runId, type: 'spawn-next-wave' as const, waveEventId: 0 }
+  const result = applyWebLuaCommands(source, [request, request])
+  assert.equal(result.state.world.kind, 'boneyard')
+  if (result.state.world.kind !== 'boneyard' || result.state.world.waves === null) {
+    throw new Error('Expected scheduled Boneyard')
+  }
+  const wave = result.state.world.waves
+  assert.equal(wave.scheduleIndex, 0)
+  assert.equal(wave.waveOrdinal, 1)
+  assert.equal(wave.waveEventId, 1)
+  assert.equal(wave.phase, 'spawning')
+  assert.equal(wave.pendingSpawnBudget, 8)
+  assert.equal(wave.spawnCountdown, director.compiledSchedule[0]!.bursts[0]!.startDelayTicks)
+  assert.equal(result.state.tick, source.tick)
+  assert.equal(result.state.playerEntities, source.playerEntities)
+  assert.equal(result.state.world.enemies, source.world.enemies)
+  assert.equal(result.state.world.encounter, source.world.encounter)
+  assert.deepEqual(result.enemySpawnIntents, [])
+  assert.deepEqual(deriveWebLuaEvents(source, result.state).map(({ name }) => name), ['wave.started'])
+  let spawning = wave
+  const births = []
+  for (let tick = 1; tick <= 500; tick += 1) {
+    const step = stepBoneyardWaveDirector(spawning, {
+      bounds: loaded.scene.bounds,
+      liveEnemyCount: 100,
+      liveZombieCount: 0,
+      players: { 'player-1': { position: loaded.scene.spawn } },
+      tick,
+    })
+    spawning = step.director
+    births.push(...step.spawnIntents)
+  }
+  assert.equal(births.length, 8)
+  assert.ok(births.every(({ enemyToken, waveOrdinal }) => enemyToken === 'SKELETON' && waveOrdinal === 1))
+  assert.equal(spawning.pendingSpawnBudget, 0)
+})
+
+test('next-wave requests preserve signed NEXT and an already selected interwave edge', () => {
+  const active = enterBoneyardWorld(createGameSimulation({ 'player-1': DEFAULT_PLAYER_CHARACTER_CONFIG }), loaded)
+  if (active.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  for (const phase of ['wave-threshold', 'wave-lull-delay', 'wave-lull', 'interwave'] as const) {
+    const director: BoneyardWaveDirectorState = {
+      ...createBoneyardWaveDirector('report58', nextWaveSchedule),
+      phase,
+      scheduleIndex: 1,
+      waveEventId: 9,
+      waveOrdinal: 9,
+    }
+    const result = applyWebLuaCommands({ ...active, world: { ...active.world, waves: director } }, [{
+      runId: loaded.runId, type: 'spawn-next-wave', waveEventId: 9,
+    }])
+    if (result.state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+    assert.equal(result.state.world.waves?.scheduleIndex, 0, phase)
+    assert.equal(result.state.world.waves?.waveOrdinal, 10, phase)
+    assert.equal(result.state.world.waves?.waveEventId, 10, phase)
+  }
+  const preselected: BoneyardWaveDirectorState = {
+    ...createBoneyardWaveDirector('report58', nextWaveSchedule),
+    nextScheduleIndex: 0,
+    phase: 'interwave',
+    scheduleIndex: 1,
+    waveEventId: 2,
+    waveOrdinal: 2,
+  }
+  const result = applyWebLuaCommands({ ...active, world: { ...active.world, waves: preselected } }, [{
+    runId: loaded.runId, type: 'spawn-next-wave', waveEventId: 2,
+  }])
+  if (result.state.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  assert.equal(result.state.world.waves?.scheduleIndex, 0)
+  assert.deepEqual(result.state.world.waves?.rngState, preselected.rngState)
+})
+
+test('next-wave requests reject pending births, native script holds, stale generations and unsupported worlds', () => {
+  const hub = createGameSimulation({ 'player-1': DEFAULT_PLAYER_CHARACTER_CONFIG })
+  const active = enterBoneyardWorld(hub, loaded)
+  if (active.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  const request = { runId: loaded.runId, type: 'spawn-next-wave' as const, waveEventId: 0 }
+  const director = createBoneyardWaveDirector('report58', nextWaveSchedule, {
+    sourceSha256: NATIVE_SURVIVAL_BOSS_SOURCES[0]!.sourceSha256,
+  })
+  const ready: BoneyardWaveDirectorState = { ...director, phase: 'opening-threshold' }
+  const skeletonBosses = ready.skeletonBosses
+  assert.ok(skeletonBosses)
+  const blocked: BoneyardWaveDirectorState[] = [
+    director,
+    { ...ready, phase: 'opening' },
+    { ...ready, phase: 'spawning' },
+    { ...ready, pendingSpawnBudget: 1 },
+    { ...ready, portalTimelinePaused: true },
+    { ...ready, spiderState: { ...ready.spiderState, timelinePaused: true } },
+    ...ready.bossEncounters.map((encounter) => ({
+      ...ready, bossEncounters: [{ ...encounter, phase: 'boss-wait' as const }],
+    })),
+    ...(['reinforcements', 'boss-wait'] as const).map((foulshaftPhase) => ({
+      ...ready, skeletonBosses: { ...skeletonBosses, foulshaftPhase },
+    })),
+  ]
+  for (const waves of blocked) {
+    const state: GameSimulationState = { ...active, world: { ...active.world, waves } }
+    assert.equal(applyWebLuaCommands(state, [request]).state, state)
+    assert.equal(createWebLuaFrameState(state, 'player-1', loaded).waves?.spawn_next_available, false)
+  }
+  const readyState = { ...active, world: { ...active.world, waves: ready } }
+  assert.equal(createWebLuaFrameState(readyState, 'player-1', loaded).waves?.spawn_next_available, true)
+  const leveling = grantGameSimulationPlayerExperience(readyState, 'player-1', 1000)
+  assert.ok(leveling.levelUpBarrier)
+  for (const state of [
+    hub,
+    active,
+    leveling,
+    { ...readyState, run: { ...readyState.run, phase: 'game-over' as const } },
+    { ...readyState, world: { ...readyState.world, tutorial: createNativeTutorialState(loaded.scene.spawn, 0, loaded.seed) } },
+  ]) {
+    assert.equal(applyWebLuaCommands(state, [request]).state, state)
+  }
+  for (const stale of [{ ...request, runId: 'previous-run' }, { ...request, waveEventId: 1 }]) {
+    assert.equal(applyWebLuaCommands(readyState, [stale]).state, readyState)
+  }
+})
+
+const nextWaveSchedule: readonly WaveDef[] = [
+  { groups: [{ entries: [{ enemy: 'SKELETON', flags: [] }] }], maxEnemies: 40, next: [1], spawn: 3, spawnDelay: [0, 0], waveDelay: [0, 0] },
+  { groups: [{ entries: [{ enemy: 'ZOMBIE', flags: [] }] }], maxEnemies: 40, next: [-1], spawn: 2, spawnDelay: [0, 0], waveDelay: [0, 0] },
+]
 
 test('developer grants use complete stock catalogs and survive Hub-to-run transfer', () => {
   assert.equal(WEB_LUA_DEVELOPER_ITEMS.length, 58)

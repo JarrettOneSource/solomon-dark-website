@@ -61,6 +61,7 @@ export const WEB_LUA_CAPABILITIES = [
   'timer.local.scheduler',
   'timer.session',
   'waves.read',
+  'waves.spawn',
   'world.read',
 ] as const
 
@@ -152,6 +153,7 @@ export type WebLuaCommand =
   | Readonly<{ playerId: string; type: 'set-gold'; value: number }>
   | Readonly<{ playerId: string; type: 'set-mana'; value: number }>
   | Readonly<{ seed: number; type: 'set-next-run-seed' }>
+  | Readonly<{ runId: string; type: 'spawn-next-wave'; waveEventId: number }>
   | Readonly<{
       requestId: number
       token: BoneyardWaveEnemyToken

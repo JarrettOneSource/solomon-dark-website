@@ -1991,6 +1991,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   logs.length = 0
   runtimeEvents.length = 0
   let pauseCheckpointCount = 0
+  const resumeBarriers: string[] = []
   const welcomeReceiver = new GameWelcomeReceiver()
   first.socket.on('close', () => welcomeReceiver.close())
   const countPauseCheckpoint = (data: WebSocket.RawData) => {
@@ -1998,6 +1999,8 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
     if (receivedMessage === null) return
     const message = materializeServerMessage(first.socket, receivedMessage)
     if (message.type === 'server-save-checkpoint') pauseCheckpointCount += 1
+    if (message.type === 'server-gameplay-pause' && message.pause === null) resumeBarriers.push('pause-released')
+    if (message.type === 'server-gameplay-resume-grace' && message.grace !== null) resumeBarriers.push('resume-held')
   }
   first.socket.on('message', countPauseCheckpoint)
   second.socket.on('message', countPauseCheckpoint)
@@ -2078,6 +2081,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   ])
   assert.equal(resumedA.type, 'server-gameplay-resume-grace')
   assert.equal(resumedB.type, 'server-gameplay-resume-grace')
+  assert.equal(resumeBarriers[0], 'resume-held', 'The replacement hold must exist before clients observe Pause released')
   assert.equal(resumedA.grace?.reason, 'skill-book-closed')
   assert.ok((resumedA.grace?.remainingMs ?? 0) > 1_900)
   assert.ok((resumedA.grace?.remainingMs ?? Infinity) <= 2_000)

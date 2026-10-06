@@ -176,6 +176,28 @@ export function stepBoneyardWaveDirector(
   }
 }
 
+export function canSpawnNextBoneyardWave(source: BoneyardWaveDirectorState): boolean {
+  return source.pendingSpawnBudget === 0
+    && source.phase !== 'dormant'
+    && source.phase !== 'opening'
+    && source.phase !== 'spawning'
+    && !boneyardWaveTimelinePaused(source)
+}
+
+export function spawnNextBoneyardWave(source: BoneyardWaveDirectorState): BoneyardWaveDirectorState {
+  if (!canSpawnNextBoneyardWave(source)) return source
+  return source.waveOrdinal === 0
+    ? beginScheduleRow(source, 0)
+    : stepInterwave({ ...source, interwaveDelayTicks: 0, phase: 'interwave' })
+}
+
+function boneyardWaveTimelinePaused(source: BoneyardWaveDirectorState): boolean {
+  return source.bossEncounters.some(nativeBossEncounterTimelinePaused)
+    || source.portalTimelinePaused
+    || nativeSkeletonBossTimelinePaused(source.skeletonBosses)
+    || source.spiderState.timelinePaused
+}
+
 function stepGeneratedBossEncounters(
   source: BoneyardWaveDirectorState,
   context: BoneyardWaveDirectorTickContext,

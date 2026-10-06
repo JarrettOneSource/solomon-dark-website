@@ -291,6 +291,46 @@ test('web Lua exposes state, timers, events, semantic reads, and bounded command
   }
 })
 
+test('next-wave Lua queues the current run generation and rejects unavailable scenes', async () => {
+  const harness = await runtimeHarness(frame({
+    phase: 'active',
+    runId: 'run-lua',
+    waves: {
+      spawn_next_available: true,
+      wave_event_id: 7,
+      wave_ordinal: 4,
+    },
+    world: 'boneyard',
+  }))
+  try {
+    assert.deepEqual(harness.execute('return sd.waves.spawn_next()').values, [true])
+    assert.deepEqual(harness.runtime.drainCommands(), [{
+      runId: 'run-lua',
+      type: 'spawn-next-wave',
+      waveEventId: 7,
+    }])
+    for (const unavailable of [
+      frame(),
+      frame({ phase: 'game-over', world: 'boneyard' }),
+      frame({ phase: 'active', world: 'boneyard' }),
+      frame({
+        phase: 'active',
+        runId: 'run-lua',
+        waves: { spawn_next_available: false, wave_event_id: 7 },
+        world: 'boneyard',
+      }),
+    ]) {
+      harness.setFrame(unavailable)
+      const rejected = harness.execute('return sd.waves.spawn_next()')
+      assert.equal(rejected.ok, false)
+      assert.match(rejected.error ?? '', /active survival wave/)
+      assert.deepEqual(harness.runtime.drainCommands(), [])
+    }
+  } finally {
+    harness.runtime.close()
+  }
+})
+
 test('web Lua retires failing callbacks and pending requests without harming the host', async () => {
   const harness = await runtimeHarness()
   try {

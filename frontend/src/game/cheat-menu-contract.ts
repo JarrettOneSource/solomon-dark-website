@@ -71,6 +71,7 @@ export type CheatMenuAction =
   | Readonly<{ gold: number; kind: 'set-gold'; playerId: string }>
   | Readonly<{ amount: number; kind: 'grant-experience'; playerId: string }>
   | Readonly<{ kind: 'set-run-seed'; seed: number }>
+  | Readonly<{ kind: 'spawn-next-wave' }>
   | Readonly<{
       count: number
       enemyKey: string
@@ -127,6 +128,8 @@ export function compileCheatMenuAction(action: CheatMenuAction): string {
         1,
         CHEAT_MENU_RUN_SEED_MAX,
       )})`
+    case 'spawn-next-wave':
+      return 'return sd.waves.spawn_next()'
     case 'spawn-enemy': {
       const count = integerWithin(
         action.count,

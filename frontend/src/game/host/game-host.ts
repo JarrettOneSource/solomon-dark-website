@@ -6955,7 +6955,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       stopAllClientInputs()
       resetNextTickDeadline()
     }
-    broadcastGameplayPause(playerId, scope)
     if (source === 'owner-resumed') {
       const reason = gameplayResumeGraceReasonForPauseSource(released.source)
       if (reason === null) {
@@ -6966,6 +6965,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     } else {
       maybeStartGameplayResumeGrace(released.ownerPlayerId, scope)
     }
+    broadcastGameplayPause(playerId, scope)
     broadcastSnapshot()
     const heldByGrace = gameplayResumeGraceRecord(scope) !== null
     logGameServerEvent(

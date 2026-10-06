@@ -250,3 +250,121 @@ members of this presentation extension.
 - No member is browser-blocked and no material unknown remains. This receipt
   claims no deployment, production restart, or live-site mutation; Git
   publication is tracked separately by verified repository SHAs.
+
+## 2026-10-06 — Report58 Next Wave Spawn control
+
+The fresh original request asks for a `NEXT WAVE SPAWN` button or Set Wave
+command. The authorized brief selects the button. This is a Website testing
+extension; retail 0.72.5 has no corresponding Lua/debug-panel control.
+
+### Evidence and ownership
+
+At main `221a03e0`, `CheatMenu` generates bounded commands for the existing
+`GameClientSession.executeLua` lane. `game-host.ts` admits the current private
+College host or sealed developer, rejects ordinary shared-Hub/guest execution
+and gameplay Pause, and drains commands before the authoritative simulation
+tick. The menu stays a live local modal with input blocked below it.
+
+Entry 051 retains retail executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+Arena `0x00465C00/0x00465D70/0x004625F0`, generator `0x006388B0`, and
+the complete 42-row `data/wave.txt` extraction. Its authored signed `NEXT`
+edges, compiled budgets/delays, fixed-tick placement and enemy ownership
+remain the oracle. No new native extraction is needed for this explicit
+control over those recovered owners.
+
+Current `boneyard-wave-director.ts` starts opening-to-Wave1 at row0.
+Subsequent starts select the current row's seeded signed `NEXT` edge; an
+interwave may already own `nextScheduleIndex`. `beginScheduleRow` owns the
+one ordinal/event increment, burst budget, label-to-birth delay and threshold
+reset. The ordinary timeline also yields to generated boss, skeleton boss,
+Spider and Portal programs. Replacing a spawning section would discard its
+unborn enemies; advancing a held timeline would conflict with that script's
+later release. Both are invalid testing-control boundaries.
+
+### Boundary and membership
+
+The new control covers admission, one typed Lua request, the canonical wave
+start, replicated live observation and ordinary menu teardown. It changes no
+schedule data, enemy actor, combat, respawn, save or protocol owner.
+
+| Member | Final disposition | Acceptance |
+| --- | --- | --- |
+| Ordinary cheats-on private host; sealed developer | exact-ported | existing menu/admission, one fixed command, no protected grant requirement |
+| Cheats-off ordinary player; ordinary guest/shared Hub | verified-already-at-parity | existing unavailable/rejected execution surface |
+| Hub, no schedule, dormant encounter, Tutorial scripted waves, non-active run | exact-ported | disabled button and authoritative rejection; no fabricated wave state |
+| Opening population threshold | exact-ported | first authored row0 becomes ordinal1/event1; living enemies remain |
+| Wave threshold, lull delay, lull | exact-ported | skip only population/wait gates after scheduled births finish |
+| Interwave before/after seeded edge selection | exact-ported | choose once or preserve the preselected row and RNG |
+| Pending opening/ordinary scheduled births | exact-ported | reject without discarding or replacing any pending birth |
+| Generated boss, skeleton boss, Spider, Portal timeline holds | exact-ported | reject until the recovered script releases its timeline |
+| Repeated queued request; stale wave event or run identity | exact-ported | at most one start per observed generation; no mutation of a replacement run |
+| Native authored delays, actors/Maggots, recipes and background programs | verified-already-at-parity | canonical start/step owners, no direct spawn or actor deletion |
+| Pause, local input, authority loss/cheat disable/disconnect | exact-ported | replacement resume hold published before Pause release; existing queue/teardown owners retained |
+| Active level-up barrier | exact-ported | no wave transition behind the native progression clock barrier |
+| Stock/custom schedules attached to the director | exact-ported | same compiled rows and signed edges, no default-schedule substitution |
+| Set Wave, arbitrary raw edits, retail cheat implementation | out-of-system | button selected; unsupported mutation/retail claims are unnecessary |
+
+### Implementation and validation contract
+
+Add `NEXT WAVE SPAWN` to the existing World group and the typed menu command
+compiler. `sd.waves.spawn_next()` validates the current semantic frame and
+queues its run identity and wave event. Applying it rechecks that generation
+and the wave owner before calling the canonical start. Opening starts row0;
+later starts preserve a preselected edge or draw exactly once. The caller
+receives queue acceptance; the live snapshot proves the resulting start.
+
+Availability requires an active scheduled survival Boneyard with completed
+current births and no script hold. Keep native delays after the new label:
+the requested spawn starts the next authored wave, rather than dumping every
+enemy into one tick. The World button uses its existing single-flight/result
+lane; authoritative rejection remains visible if snapshot eligibility races.
+
+The actual untouched-baseline M5 RED passed 45/50 checks and failed the five
+new next-wave witnesses. Focused GREEN passed all 50 checks, test TypeScript
+and lint. These public interfaces cover row0, signed NEXT, preselection,
+pending/held/unsupported branches, generation binding, ordinary Lua admission
+and generated action text.
+
+The real production-build Chrome journey at `3d14db22` passed both desktop
+`1600x900` and coarse-pointer touch `844x390`. Each journey enabled ordinary
+cheats in Settings, verified Hub/dormant rejection, requested row0 and the next
+signed edge, observed one replicated start per click, preserved 13 then 48
+living actors, retained authored spawn delays, and disabled the button while
+births remained. It also passed Pause-to-menu admission, Settings disable,
+panel/API teardown and empty page/console/request/host/protocol error arrays.
+The two World controls were inspected at both viewports. Local fixtures use an
+exact-source host, authentic Solomon release after player positioning and
+admitted health restoration; they claim no health or positioning parity.
+
+The final dispositions describe the retained native owners and the explicitly
+authorized Website control contract; they do not claim a retail debug control.
+The unchanged canonical gate and separate managed production/browser proof
+remain required for publication and delivery.
+
+Confidence is high for retained native/source owners. The button policy is
+explicitly designed Website behavior. No required native fact is guessed, no
+new browser approximation is introduced, and no material unknown remains.
+
+The first actual M5 focused run passed 49/50 checks. Its remaining failure was
+the new test fixture's literal-count expectation, not the wave start:
+`SPAWN 3` compiles to eight Skeleton births for this seed/row. Entry 051 and
+`compileBoneyardWaveSection` already prove that SPAWN is an expanded group-cost
+budget; four single-member selections each emit two actors at ordinal1. The
+fixture now pins that eight-actor result. The implementation and compiler are
+unchanged. The original RED's ordinal0-versus1 and missing-command witnesses
+occur before this count assertion and remain genuine.
+
+The built Pause-row journey exposed an existing input-owner gap. The diagnostic
+proved an active run, a living player at 50HP, no level barrier, cheats on and
+no application errors. `clearGameplayPause` broadcast `pause=null` before
+publishing the replacement surface resume hold, so the pending-menu owner
+could consume an intermediate unblocked state and then retire when grace
+arrived. The actual M5 public-host regression at `d77d8264` failed with
+`pause-released` before `resume-held`; `30d17443` passed after reversing those
+two publications. Both complete desktop/touch journeys then passed the actual
+handoff. Authoritative Pause still clears before grace construction. The shared
+owner covers private and party-scoped pauses and the existing Pause, inventory
+and Skills surfaces; no protocol field, clock delay or client timer is added.
+The ordinary native wave timeline's intermediate script hold checks remain
+unchanged.

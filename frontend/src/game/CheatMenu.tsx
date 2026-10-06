@@ -110,6 +110,13 @@ export default function CheatMenu({
   const hubSeedAvailable = snapshot.world.kind === 'hub' && snapshot.run.phase === 'hub'
   const enemySpawnAvailable = snapshot.world.kind === 'boneyard'
     && snapshot.run.phase === 'active'
+  const nextWaveSpawnAvailable = snapshot.world.kind === 'boneyard'
+    && snapshot.run.phase === 'active'
+    && snapshot.levelUpBarrier === null
+    && snapshot.world.tutorial === null
+    && snapshot.world.waves !== null
+    && snapshot.world.waves.pendingSpawnBudget === 0
+    && !['dormant', 'opening', 'spawning'].includes(snapshot.world.waves.phase)
   const botSummonAvailable = developer
     && session.sessionKind === 'global-hub'
     && snapshot.world.kind === 'hub'
@@ -397,6 +404,12 @@ export default function CheatMenu({
               </CheatGroup>
 
               <CheatGroup title="WORLD">
+                <ActionButton
+                  disabled={actionBusy || !nextWaveSpawnAvailable}
+                  label="NEXT WAVE SPAWN"
+                  onClick={() => { void runAction('Next wave spawn queued', { kind: 'spawn-next-wave' }) }}
+                />
+                {!nextWaveSpawnAvailable ? <small>Available between spawns in an active survival Boneyard.</small> : null}
                 <InlineAction
                   button="SET NEXT SEED"
                   disabled={actionBusy || !hubSeedAvailable}

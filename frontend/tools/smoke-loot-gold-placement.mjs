@@ -23,9 +23,9 @@ import {
 
 export function observeGoldPlacementWire(page, endpoint) {
   const reconstructor = new EntityReplicationReconstructor()
-  const receipt = { errors: [], snapshot: null }
+  const receipt = { boneyard: null, errors: [], snapshot: null }
   page.on('websocket', (socket) => {
-    if (new URL(socket.url()).href !== new URL(endpoint).href) return
+    if (endpoint && new URL(socket.url()).href !== new URL(endpoint).href) return
     const welcomeReceiver = new GameWelcomeReceiver()
     socket.on('close', () => welcomeReceiver.close())
     socket.on('framereceived', ({ payload }) => {
@@ -37,6 +37,8 @@ export function observeGoldPlacementWire(page, endpoint) {
           receipt.snapshot = message.snapshot
         } else if (message.type === 'server-snapshot') {
           receipt.snapshot = reconstructor.apply(message.frame, message.sequence)
+        } else if (message.type === 'server-boneyard-loaded') {
+          receipt.boneyard = message.boneyard
         }
       } catch (error) {
         receipt.errors.push(error.message)
