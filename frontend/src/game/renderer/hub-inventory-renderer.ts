@@ -5,6 +5,11 @@ import {
 import { boastSelectionKey } from '../core-kernels/boast.ts'
 import { NATIVE_BOAST_PRESENTATION } from '../core-kernels/native-hub-npc.ts'
 import { nativeHudModalSlideOffset } from '../native-hud-layout.ts'
+import {
+  createNativeInventoryStatsScroll,
+  nativeInventoryStatsScrollOffset,
+  retargetNativeInventoryStatsScroll,
+} from '../native-inventory-stats-scroll.ts'
 import { nativeUiAtlasSource } from '../native-ui/assets.ts'
 import { destroyNativeUiPixiFor, nativeUiPixiFor } from '../native-ui/pixi.ts'
 import { nativeApplicationTick } from '../native-application-tick.ts'
@@ -26,10 +31,12 @@ import {
 import {
   HUB_CHAT_PANEL,
   hubNpcSelectorClampScroll,
+  intersectNativeUiRects,
 } from '../native-ui/core.ts'
 import {
   HUB_INVENTORY_INTERACTION,
   HUB_INVENTORY_PARENT_HOLDER,
+  HUB_INVENTORY_STATS_PAGES,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_TIMING,
   hubDowsingFieldTint,
@@ -43,6 +50,7 @@ import {
   hubInventoryRunSummaryLines,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
+  hubOwnedPerkSlotRect,
   hubSackPageOffsets,
   hubShopSlideOffset,
 } from './hub-inventory-render-contract.ts'
@@ -60,6 +68,7 @@ import type {
   RenderContext,
 } from './hub-inventory/model.ts'
 import { buildNotice } from './hub-inventory/notices.ts'
+import type { NativeContextualHoverBox } from './hub-inventory/items.ts'
 import {
   buildInventory,
   updateInventoryFlybyView,
@@ -89,9 +98,12 @@ import {
 
 export interface HubInventoryRenderer extends NativeUiCanvas {
   moveDrag(pointer: { readonly x: number; readonly y: number }): void
-  render(nowMs: number, reveal: number, hudProgress?: number): { readonly chatComplete: boolean }
+  render(nowMs: number, reveal: number, hudProgress?: number): {
+    readonly chatComplete: boolean
+    readonly statsOffset: number | null
+  }
   setBeltAvailability(value: NativeModalBeltAvailability): void
-  setModel(model: HubInventoryRendererModel): void
+  setModel(model: HubInventoryRendererModel): number | null
 }
 
 export async function createHubInventoryRenderer(
@@ -162,6 +174,35 @@ export async function createHubInventoryRenderer(
   let beltAvailability: NativeModalBeltAvailability | null = null
   let previousNoticeTitle: string | null = null
   let currentModel: HubInventoryRendererModel | null = null
+  let statsContent: Container | null = null
+  let statsInspection: NativeContextualHoverBox | null = null
+  let statsOffset: number | null = null
+  let statsScroll = createNativeInventoryStatsScroll(0, 0)
+
+  function renderStats(nowMs: number): number | null {
+    if (!statsContent) {
+      statsOffset = null
+      delete canvas.dataset.nativeStatsOffsetY
+      return null
+    }
+    const offset = nativeInventoryStatsScrollOffset(statsScroll, nowMs)
+    statsOffset = offset
+    statsContent.y = -offset
+    canvas.dataset.nativeStatsOffsetY = `${offset}`
+    if (statsInspection && currentModel && currentModel.kind !== 'dialogue'
+        && currentModel.inspection?.kind === 'owned-perk') {
+      const companion = currentModel.kind === 'service'
+      const [left, top, width, height] = hubOwnedPerkSlotRect(currentModel.inspection.index)
+      const source = { left: left - (companion ? 0 : 53), top: top + 640 - offset, width, height }
+      const clip = companion ? HUB_INVENTORY_STATS_PAGES.companionClipRect
+        : HUB_INVENTORY_STATS_PAGES.standaloneClipRect
+      statsInspection.visible = intersectNativeUiRects(source, {
+        left: clip[0], top: clip[1], width: clip[2], height: clip[3],
+      }) !== null
+      statsInspection.setSourceCenter(source.left + width / 2, source.top + height / 2)
+    }
+    return offset
+  }
 
   const texture = (source: string) => textureFrom(textures.textures, source)
   const combatAtlas = createBoneyardCombatAtlas(texture)
@@ -479,6 +520,8 @@ export async function createHubInventoryRenderer(
     inventoryFlybys = []
     inventoryItemInfo = null
     inventorySackPages = null
+    statsContent = null
+    statsInspection = null
     inventoryCaption = null
     delete canvas.dataset.nativeSackCaption
     modalHud = null
@@ -491,6 +534,8 @@ export async function createHubInventoryRenderer(
       inventoryFlybys = inventory.flybys
       inventoryItemInfo = inventory.itemInfo
       inventorySackPages = inventory.sackPages
+      statsContent = inventory.statsContent
+      statsInspection = inventory.statsInspection
       inventoryCaption = inventory.caption
       canvas.dataset.nativeSackCaption = inventory.captionText
       modalHud = inventory.modalHud
@@ -503,6 +548,8 @@ export async function createHubInventoryRenderer(
       inventoryFlybys = service.flybys
       inventoryItemInfo = service.itemInfo
       inventorySackPages = service.sackPages
+      statsContent = service.statsContent
+      statsInspection = service.statsInspection
       inventoryCaption = service.caption
       canvas.dataset.nativeSackCaption = service.captionText
       modalHud = service.modalHud
@@ -525,11 +572,19 @@ export async function createHubInventoryRenderer(
     }
     if (modalHud && beltAvailability) modalHud.updateAvailability(beltAvailability)
     renderSackPages(performance.now())
+    renderStats(performance.now())
   }
 
   return {
     canvas,
-    mount: gpu.mount,
+    mount(host) {
+      const page = currentModel?.kind === 'inventory' || currentModel?.kind === 'service'
+        ? currentModel.statsPage : 0
+      statsScroll = createNativeInventoryStatsScroll(page, performance.now())
+      renderStats(performance.now())
+      application.renderer.render(application.stage)
+      return gpu.mount(host)
+    },
     destroy() {
       if (destroyed) return
       destroyed = true
@@ -549,7 +604,7 @@ export async function createHubInventoryRenderer(
       inventoryDragger.position.set(pointer.x, pointer.y)
     },
     render(nowMs, reveal, hudProgress = reveal) {
-      if (destroyed) return { chatComplete: false }
+      if (destroyed) return { chatComplete: false, statsOffset: null }
       const clampedReveal = Math.max(0, Math.min(1, reveal))
       const clampedHudProgress = Math.max(0, Math.min(1, hudProgress))
       canvas.dataset.nativeReveal = clampedReveal >= 1 ? 'settled' : 'revealing'
@@ -566,14 +621,18 @@ export async function createHubInventoryRenderer(
       renderItemSelection(nowMs)
       renderFlybys(nowMs)
       renderSackPages(nowMs)
+      const statsOffset = renderStats(nowMs)
       renderItemEffects(nowMs, clampedReveal)
       renderNotices(nowMs)
       const chatComplete = renderChat(nowMs)
       application.renderer.render(application.stage)
-      return { chatComplete }
+      return { chatComplete, statsOffset }
     },
     setModel(model) {
-      if (scrollExistingSelector(model)) return
+      if (scrollExistingSelector(model)) return null
+      if (model.kind !== 'dialogue') {
+        statsScroll = retargetNativeInventoryStatsScroll(statsScroll, model.statsPage, performance.now())
+      }
       const nextNotice = beginModelTransition(model)
       currentKind = model.kind
       currentModel = model
@@ -581,6 +640,7 @@ export async function createHubInventoryRenderer(
       rebuildSurface(model, nextNotice)
       renderItemEffects(performance.now(), surface.alpha)
       application.renderer.render(application.stage)
+      return statsOffset
     },
     setBeltAvailability(value) {
       beltAvailability = value

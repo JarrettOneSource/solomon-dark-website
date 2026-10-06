@@ -1,4 +1,187 @@
 # 2026-08-28 — Gold amount, removable perks, overlapping casts, InventoryScreen pages, and completed-run scavenging reopening
+## 2026-10-05 — Report68 SwipePages motion and input reopening
+
+The corrected report identifies its video as stock footage and says the web
+side-stat menu is faster and lacks the animation. The earlier slower-web
+claim is superseded. The fresh original and eleven-message context window were
+read at 2026-10-05T23:18:47Z. Its separate Sack/forge comparison remains Report22/67
+work; this change does not resolve that shared message or Report22's hold.
+
+The earlier three-page closure reached the settled offsets but never recovered
+`SwipePages::Tick`. Calling its motion and drag contract exact was wrong. The
+web painter assigns `content.y = -page * 320` and its pointer controller waits
+until release, then uses a guessed ten-pixel vertical threshold. These are the
+shared causes to replace across every Stats consumer.
+
+### Evidence and ownership
+
+- Retail 0.72.5 `SolomonDark.exe`,4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred image base`0x00400000`; static evidence uses the pinned read-only
+  LLVM binary `83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+- M5 phase`report68-native-media-20261006t004504z` fully decoded the base
+  `0x00431400..0x00431EE0`, subtype`0x0043A0D0..0x0043A600`, and the complete
+  original`.text` caller census before an owned Swift frontend was misclassified
+  because it starts a separate process group. Both completed instruction spans
+  and the census are retained as valid evidence; no replay was needed.
+- Phase`report68-media-tail-20261006t005354z` completed the wheel tail, the full
+  200-byte/50-row vtable, all 121 video frames at 1600x900 and 30fps, and 771,264
+  bytes of native 48kHz stereo PCM. The existing AVFoundation decoder was reused.
+  The 30.7MB export exceeded its original transfer boundary; output-only recovery
+  preserved the passed results and all owned groups/lease were actually released.
+  No Website check or new stock runtime was part of either phase.
+- The original clip SHA-256 is
+  `0f3a745d33f778f8bd2aa3c53d7d5d703a377051377de4fa57c7845881fa561a`.
+  Original-game observation shows page 0, ATTRIBUTES/RESISTANCES at 2.5s,
+  CHARMS/CURSES at 3.0s, then a return through page 1 to page 0.
+  This is reporter-supplied stock observation, distinct from static instructions.
+- InventoryScreen constructor`0x00560380` embeds SwipePages at`+0x78`, calls
+  `SwipeBox` at`0x005603C1`, then installs vtable`0x0079457C` at`0x005603CE`.
+  Extra fields`SwipePages+0xC4/+0xC8` are page-step overrides, initially zero
+  (use viewport width/height);`+0xCC/+0xD0` are target offsets, initially zero.
+  Actual offsets are`+0x84/+0x88`. Constructor/layout/destructor evidence from
+  Report67's1751 pass is reused against the same retail image.
+- The full vtable reaches`+0xC4 -> 0x004315F0`; the historical derived-class
+  catalog stopped at`+0xB8`, omitting inherited`+0xBC/+0xC0/+0xC4`. The complete
+  recovered data corrects that truncation. The base catalog already names all
+  50 slots. No new binary table is substituted by guessed browser data.
+
+### Recovered contract
+
+`SwipePages::Tick` is vtable`+0x20 -> 0x0043A0D0`. It calls the 100Hz base
+UI tick, computes float32 target-minus-current on both axes, and, when an axis
+error has absolute value greater than 1, stores float32
+`error * 0.15000000596046448`. The exact binary64 coefficient at`0x007DE918`
+is`000000403333c33f`. An error at most 1 is consumed in full. Adding the step
+to the current offset stores float32 again, then virtual`+0xC4` applies/clamps
+the offset through`0x004315F0/0x004316D0` and moves descendants by the actual
+offset difference. This is a recurrence, not a CSS duration or linear tween.
+A 320-pixel page step reaches its exact target on tick 37; interruptions start
+from the displayed float32 offset. Equal-target model refreshes preserve motion.
+
+The inherited scissor/negative content translation is`0x00431860`. Inventory
+uses a 320x320 viewport over 960 pixels: standalone`[50,89,320,320]`, ordinary
+companions`[103,89,320,320]`; target offsets are0/320/640. Header, outer chain
+chrome, equipment, backpack, and HUD remain outside this local transform.
+
+Pointer down`0x00431C80` stores the pointer origin and sets`+0xA0`. Derived
+move`0x0043A1E0` tests float32 squared two-axis displacement strictly greater
+than 3 (`0x007DE8E0 = 3.0`). Once crossed, its signed displacement adds or
+subtracts one viewport/page step on each applicable axis, clamps the target
+to content-minus-viewport, and clears`+0xA0`. One press therefore admits one
+step while held; release/cancel cannot invent a second step. The horizontal
+content range is zero for Inventory. The shared scroll-coordinate resolver and
+clipped visible action rectangles must follow the actual displayed offset.
+
+The same coordinate resolver also moves a perk HoverBox's source centre with
+its cell. Scissoring clips the hit area without changing that full cell centre.
+The popup stays above the outer chrome and uses the existing viewport clamps.
+The settled-page-only web inspection gate and fixed source Y therefore need to
+follow visible content during motion. The renderer and semantic hit rectangles
+must publish the same presentation frame; ordinary delayed React state cannot
+be the authority for a moving hit rectangle.
+
+The inherited wheel handler`0x00431E60` normalizes its argument's sign and
+uses axis directions`+0xAC/+0xB0` and scalar`+0xB4 = 25` before the same actual
+offset setter. Base construction initializes both directions to zero; the
+Inventory constructor retains them. Its triangle sprites are content indicators,
+not native Button callbacks. The existing Website one-page wheel, clickable
+indicator and keyboard actions are retained as explicit accessible extensions;
+they must use the recovered shared motion instead of snapping.
+
+State is local to the InventoryScreen instance. Live economy/stat refresh,
+Sack navigation, and notices preserve that instance's offset and target. New
+InventoryScreen construction resets both to zero; close/replacement ends its
+presentation subscription. No motion state enters saves, protocol or simulation
+pauses. Native pointer/wheel/scroll callbacks own no sound cue or RNG.
+
+### System boundary and membership
+
+Native system: InventoryScreen's embedded SwipePages, from input/target writers
+through fixed ticks, local clipping/coordinate transforms, presentation, reset
+and teardown. The complete shared-base caller census has 12 sites:
+`00436842`, `004A54B3`, `004CE54D`, `004F6C03`, `004F6DE3`, `004F6FA3`,
+`0055C13D`, `0055C76D`, `005603C1`, `0058F146`, `00597FF3`, `00657733`.
+Only `005603C1` installs SwipePages; the other 11 use independent continuous
+SwipeBox owners (the existing entry194 family), so their motion is out of system.
+
+| Member | Native source | Disposition | Acceptance |
+| --- | --- | --- | --- |
+| Hub standalone, pages0/1/2 | InventoryScreen/SwipePages,320x320 over 960 | exact-ported | each page, both directions, exact target and intermediate pixels |
+| Boneyard standalone, pages0/1/2 | same local screen and presentation clock | exact-ported | motion continues while simulation is paused |
+| Fomentius companion, pages0/1/2 | service dispatcher/common InventoryScreen | exact-ported | same curve at53-pixel horizontal shift |
+| Luthacus companion, pages0/1/2 | same class | exact-ported | same curve while live inventory refreshes |
+| Shlorio pre-roll/result companions, pages0/1/2 | same class/owner | exact-ported | both states preserve shared motion |
+| Hagatha fixed replacement pane | PerkShop replaces the left contents | out-of-system | no Stats scroller is introduced |
+| Tick, retarget/reversal, exact settle |43A0D0, actual setter4315F0 | exact-ported | float32 checkpoints, idempotent equal-target refresh, interruption |
+| Press/move/release/cancel and disabled horizontal axis |431C80/43A1E0/431DA0 | exact-ported | strict squared3 threshold, one held-press step, capture cleanup |
+| Wheel/click/keyboard page extensions | existing authorized Website controls | exact-ported | preserve admission; same motion and visible geometry |
+| All 4 indicator rows and 9 perk-slot actions under motion | Inventory record 13 at379/699/439/759; shared coordinate transform | exact-ported | clipping and hit regions follow the displayed offset |
+| Live equipment/stat/economy refresh, Sack and notices | unchanged InventoryScreen lifetime | exact-ported | preserve offset/target, no phantom reset |
+| Entry, close, inventory/skills replacement, owner teardown | constructor/destructor and existing modal subscription | exact-ported | reopen resets0, no continuing old subscription |
+| Page contents, glyphs, inner/outer frames, page 2 perks | established complete entry295/175 data | verified-already-at-parity | existing assertions and visual composition retained |
+| Remaining11 SwipeBox ctor consumers | complete12-site census, separate vtables | out-of-system | no inherited continuous-scroll behavior change |
+| Simulation, network, saves, item transactions and Report22 return control | separately owned systems | out-of-system | no new wire or persistent state |
+
+No browser representation limit requires an approximation. Complete desktop
+and touch browser acceptance passed; final canonical and delivery acceptance
+are recorded separately for the sealed current-main candidate. Native static/data conclusions above are
+instruction-derived; sampled video appearance is direct supplied-stock evidence.
+
+### Implementation boundary and validation
+
+The shared renderer owns the float32 motion state and Stats content container.
+`stats.ts` returns that existing container through `pages.ts` and `services.ts`;
+`useHubInventoryRenderer` publishes its actual offset to the semantic controls.
+`HubInventoryControls` keeps capture/admission and positions only visible arrows
+and perk actions in that same clipped space. The existing presentation loop,
+rectangle intersection and offset clamp are reused. No alternate animation path,
+arbitrary delay, dependency or flag is added.
+
+The real browser found that React's delegated wheel listener is passive. The
+Stats extension uses the native DOM nonpassive listener so it can consume the
+wheel without a console error. Its listener is removed with the control. The
+actual Hub trace settled wheel and keyboard steps in 366.7 ms and kept every
+sampled semantic offset equal to the painted offset. Gesture acceptance starts
+on the free viewport margin, avoiding the occupied perk actions.
+
+Acceptance requires a meaningful before/after snap regression, fixed-tick and
+interruption/lifetime coverage, all enumerated browser scenes/inputs including
+touch, exact current-main M5 canonical validation, deployment, original-only
+reaction/archive update, and both-device task cleanup.
+
+
+### Executed behavior acceptance
+
+On 2026-10-06, the actual unchanged 221a renderer failed the zero-tick pixel
+retention assertion. The earlier motion-only 4ef renderer separately failed
+moving perk tooltip placement. The corrected public renderer passed both
+contracts: seven pixel states, all nine perk cells in standalone and companion
+layouts, reversal while cells remain visible, and no stale tooltip outside the
+clip (22 hover probes). Page/console/response/request arrays were empty. The
+clock is explicitly numeric for this renderer contract; it is not stock runtime
+observation.
+
+The exact integrated a8c95 candidate then passed both real built journeys on M5
+Chrome 153.0.8010.12: desktop 1600x900 and touch 896x414 at device scale 2. Each
+returned 46 receipts and 24 measured page transitions across Hub, Boneyard,
+Fomentius, Luthacus, Shlorio pre-roll and Shlorio result. All four indicator
+rows and all nine perk hit rectangles were checked, held mouse/touch presses
+admitted only one step, every sampled semantic offset equalled the actual
+painted offset, and measured first-motion-to-settle intervals were 349.9–366.8 ms
+(the first sampled frame follows the first native tick). Both error arrays were
+empty. Hagatha retained its fixed pane; Inventory→Skills→Inventory reopened at
+zero. Ring and weapon removal/re-equipping refreshed the open statistics in all
+five scenes.
+
+The fixture seeds a valid nine-perk profile through the normal save loader and
+scene transfer; it does not mutate the paused Boneyard worker from the host.
+This corrects an acceptance-harness limitation, not an application timing bug.
+The owned native image, all descendant/browser groups, M2 transport groups,
+source status, home footprint and exact compute lease were closed after each
+phase. The separate final canonical and live publication boundaries remain
+required before the report is closed.
+
 
 > **Partial supersession, 2026-08-31:** the Tonic capacity-affordance reopening
 > in entry 175 corrects this entry's unconditional `DRINK TONIC` decoration

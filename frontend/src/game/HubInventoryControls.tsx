@@ -1,5 +1,7 @@
 import { pointerStagePosition } from './hub-inventory-pointer.ts'
 import {
+  useCallback,
+  useEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -12,12 +14,13 @@ import type { GameAudioDirector } from './game-audio-director.ts'
 import type { NativeHudRect } from './native-hud-layout.ts'
 import type { ProtocolPlayerEconomy } from './protocol/game-state.ts'
 import { nativeBeltPullOffStarted } from './skill-book-model.ts'
+import { nativeInventoryStatsDragStep } from './native-inventory-stats-scroll.ts'
+import { intersectNativeUiRects } from './native-ui/core.ts'
 import type {
   HubServiceInspectionModel,
 } from './renderer/hub-inventory/model.ts'
 import {
   HUB_INVENTORY_STATS_PAGES,
-  hubInventoryStatsArrowRect,
   hubOwnedPerkSlotRect,
 } from './renderer/hub-inventory-render-contract.ts'
 import { NativeAction } from './HubNativeAction.tsx'
@@ -80,6 +83,7 @@ export function InventoryStatsActions({
   onInspectionHover,
   onPage,
   onRemove,
+  offset,
   page,
 }: {
   companion: boolean
@@ -88,16 +92,29 @@ export function InventoryStatsActions({
   onInspectionHover: (inspection: HubServiceInspectionModel | null) => void
   onPage: (page: number) => void
   onRemove: ((selector: number) => void) | null
+  offset: number
   page: number
 }) {
   const pressRef = useRef<StatsPointerPress | null>(null)
+  const swipeRef = useRef<HTMLButtonElement>(null)
   const clipRect = companion
     ? HUB_INVENTORY_STATS_PAGES.companionClipRect
     : HUB_INVENTORY_STATS_PAGES.standaloneClipRect
-  const step = (delta: -1 | 1) => {
+  const step = useCallback((delta: -1 | 1) => {
     const next = Math.max(0, Math.min(HUB_INVENTORY_STATS_PAGES.pageCount - 1, page + delta))
     if (next !== page) onPage(next)
-  }
+  }, [onPage, page])
+  useEffect(() => {
+    const swipe = swipeRef.current
+    if (!swipe) return
+    const wheel = (event: WheelEvent) => {
+      if (event.deltaY === 0) return
+      event.preventDefault()
+      step(event.deltaY > 0 ? 1 : -1)
+    }
+    swipe.addEventListener('wheel', wheel, { passive: false })
+    return () => swipe.removeEventListener('wheel', wheel)
+  }, [step])
   const clearPress = (event?: ReactPointerEvent<HTMLButtonElement>) => {
     const press = pressRef.current
     if (!press || (event && event.pointerId !== press.pointerId)) return
@@ -106,18 +123,25 @@ export function InventoryStatsActions({
     }
     pressRef.current = null
   }
-  const finish = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const move = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const press = pressRef.current
     if (!press || press.pointerId !== event.pointerId) return
-    const point = pointerStagePosition(event)
-    const deltaY = point.y - press.start.y
+    const delta = nativeInventoryStatsDragStep(press.start, pointerStagePosition(event))
+    if (delta === null) return
     clearPress(event)
-    if (Math.abs(deltaY) <= HUB_INVENTORY_STATS_PAGES.dragThresholdPixels) return
-    step(deltaY < 0 ? 1 : -1)
+    if (delta !== 0) step(delta)
+  }
+  const clipped = ([left, top, width, height]: readonly [number, number, number, number]) => {
+    const visible = intersectNativeUiRects(
+      { left, top: top - offset, width, height },
+      { left: clipRect[0], top: clipRect[1], width: clipRect[2], height: clipRect[3] },
+    )
+    return visible ? [visible.left, visible.top, visible.width, visible.height] as const : null
   }
   return (
-    <section aria-label="Player Stats Pages" data-native-stats-page={page}>
+    <section aria-label="Player Stats Pages" data-native-stats-page={page} data-native-stats-offset={offset}>
       <NativeAction
+        buttonRef={swipeRef}
         data={{ 'data-native-stats-swipe': 'true' }}
         label="Scroll player stats"
         rect={clipRect}
@@ -143,28 +167,35 @@ export function InventoryStatsActions({
             start: pointerStagePosition(event),
           }
         }}
-        onPointerUp={finish}
-        onWheel={(event) => {
-          if (event.deltaY === 0) return
-          event.preventDefault()
-          step(event.deltaY > 0 ? 1 : -1)
-        }}
+        onPointerMove={move}
+        onPointerUp={clearPress}
       />
-      {(['up', 'down'] as const).map((direction) => {
-        const rect = hubInventoryStatsArrowRect(page, direction, companion)
+      {([
+        { direction: 'down', target: 1, y: 379 },
+        { direction: 'down', target: 2, y: 699 },
+        { direction: 'up', target: 0, y: 439 },
+        { direction: 'up', target: 1, y: 759 },
+      ] as const).map(({ direction, target, y }) => {
+        const x = companion
+          ? HUB_INVENTORY_STATS_PAGES.companionIndicatorX
+          : HUB_INVENTORY_STATS_PAGES.standaloneIndicatorX
+        const size = HUB_INVENTORY_STATS_PAGES.actionSize
+        const rect = clipped([x - size / 2, y - size / 2, size, size])
         return rect ? (
           <NativeAction
-            key={direction}
+            key={`${direction}-${target}`}
             data={{ 'data-native-stats-arrow': direction }}
             label={`${direction === 'up' ? 'Previous' : 'Next'} player stats page`}
             rect={rect}
-            onClick={() => step(direction === 'up' ? -1 : 1)}
+            onClick={() => { if (target !== page) onPage(target) }}
           />
         ) : null
       })}
-      {page === 2 ? economy.ownedPerkSelectors.slice(0, 9).map((selector, index) => {
+      {economy.ownedPerkSelectors.slice(0, 9).map((selector, index) => {
         const [left, top, width, height] = hubOwnedPerkSlotRect(index)
         const inspection = { index, kind: 'owned-perk' as const, selector }
+        const rect = clipped([left - (companion ? 0 : 53), top + 640, width, height])
+        if (!rect) return null
         return (
           <NativeAction
             key={`${selector}-${index}`}
@@ -172,7 +203,7 @@ export function InventoryStatsActions({
             label={selector === 27 || onRemove === null
               ? `Inspect ${HAGATHA_PERKS[selector]!.name}`
               : `Remove ${HAGATHA_PERKS[selector]!.name}`}
-            rect={[left - (companion ? 0 : 53), top, width, height]}
+            rect={rect}
             onBlur={() => onInspectionFocus(null)}
             onClick={selector === 27 || onRemove === null ? undefined : () => onRemove(selector)}
             onFocus={() => onInspectionFocus(inspection)}
@@ -180,7 +211,7 @@ export function InventoryStatsActions({
             onPointerLeave={() => onInspectionHover(null)}
           />
         )
-      }) : null}
+      })}
     </section>
   )
 }

@@ -57,6 +57,7 @@ import {
 import {
   addClippedItemIcon,
   addNativeContextualHoverBox,
+  type NativeContextualHoverBox,
 } from './items.ts'
 import {
   type FontName,
@@ -87,6 +88,8 @@ export function buildService(
   readonly modalHud: NativeModalHudView
   readonly overlay: Container
   readonly sackPages: InventorySackPages | null
+  readonly statsContent: Container | null
+  readonly statsInspection: NativeContextualHoverBox | null
 } {
   const inventory = buildInventory(context, layer, {
     belt: model.belt,
@@ -136,7 +139,7 @@ export function buildService(
       model.pressedControl === 'dowsing',
     )
     addDoneControl(context, overlay)
-    addServiceInspection(context, layer, model)
+    const statsInspection = addServiceInspection(context, layer, model)
     if (inventory.dragger) layer.addChild(inventory.dragger)
     for (const flyby of inventory.flybys) layer.addChild(flyby.container)
     return {
@@ -148,6 +151,8 @@ export function buildService(
       modalHud: inventory.modalHud,
       overlay,
       sackPages: inventory.sackPages,
+      statsContent: inventory.statsContent,
+      statsInspection,
     }
   }
 
@@ -165,7 +170,7 @@ export function buildService(
     addStoreGrid(context, overlay, serviceItems(model), model, null)
   }
   addDoneControl(context, overlay)
-  addServiceInspection(context, layer, model)
+  const statsInspection = addServiceInspection(context, layer, model)
   if (inventory.dragger) layer.addChild(inventory.dragger)
   for (const flyby of inventory.flybys) layer.addChild(flyby.container)
   return {
@@ -177,6 +182,8 @@ export function buildService(
     modalHud: inventory.modalHud,
     overlay,
     sackPages: inventory.sackPages,
+    statsContent: inventory.statsContent,
+    statsInspection,
   }
 }
 
@@ -489,23 +496,18 @@ function addServiceInspection(
   context: RenderContext,
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
-): void {
+): NativeContextualHoverBox | null {
   const inspection = model.inspection
-  if (!inspection || model.notice) return
+  if (!inspection || model.notice) return null
   if (inspection.kind === 'owned-perk') {
-    if (
-      (model.trader !== 'hagatha' && model.statsPage !== 2)
-      || model.economy.ownedPerkSelectors[inspection.index] !== inspection.selector
-    ) return
-    addOwnedPerkInspection(context, layer, model.economy, inspection, true)
-    return
+    return addOwnedPerkInspection(context, layer, model.economy, inspection, true)
   }
   if (model.trader === 'hagatha') {
     const index = model.economy.hagathaOffers.findIndex(
       ({ selector }) => selector === inspection.id,
     )
     const offer = model.economy.hagathaOffers[index]
-    if (!offer || inspection.owner !== null) return
+    if (!offer || inspection.owner !== null) return null
     const { x, y } = hubHagathaOfferSlotPosition(index)
     addNativeContextualHoverBox(
       context,
@@ -521,10 +523,11 @@ function addServiceInspection(
       y + HUB_SHOP_GRID.cellSize / 2,
       HUB_HOVER_BOX.shopSourceGap,
     )
-    return
+    return null
   }
 
   addShopItemInspection(context, layer, model, inspection)
+  return null
 }
 
 function addShopItemInspection(
@@ -573,11 +576,11 @@ export function addOwnedPerkInspection(
   economy: ProtocolPlayerEconomy,
   inspection: Extract<HubServiceInspectionModel, { kind: 'owned-perk' }>,
   companion: boolean,
-): void {
-  if (economy.ownedPerkSelectors[inspection.index] !== inspection.selector) return
+): NativeContextualHoverBox | null {
+  if (economy.ownedPerkSelectors[inspection.index] !== inspection.selector) return null
   const [baseLeft, top, width, height] = hubOwnedPerkSlotRect(inspection.index)
   const left = baseLeft - (companion ? 0 : 53)
-  addNativeContextualHoverBox(
+  return addNativeContextualHoverBox(
     context,
     layer,
     hubHagathaTooltipLines({

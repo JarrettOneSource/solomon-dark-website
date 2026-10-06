@@ -614,7 +614,7 @@ export function NativeHubSurface({
     surface,
   ])
 
-  const { hostRef, rendererRef, rendererState } = useHubInventoryRenderer({
+  const { hostRef, rendererRef, rendererState, statsOffset } = useHubInventoryRenderer({
     rendererOwner, model, closing, forceModalHudSettled, onInventoryCloseComplete,
     chatCompletionHandledRef, advanceChatRef,
     beltAvailability: { mode, progression, playerState: secondaryPlayerState },
@@ -933,7 +933,7 @@ export function NativeHubSurface({
             blocked={notice !== null || dyeModal !== null}
             surface={surface}
             stats={{
-              companion: surface.kind === 'service', economy, page: statsPage,
+              companion: surface.kind === 'service', economy, page: statsPage, offset: statsOffset,
               onInspectionFocus: setServiceFocusInspection,
               onInspectionHover: setServiceHoverInspection,
               onPage: (nextPage) => {

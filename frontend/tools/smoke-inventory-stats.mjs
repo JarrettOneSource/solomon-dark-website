@@ -15,7 +15,7 @@ import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
-import { HUB_INVENTORY_GRID, HUB_PRIMARY_SPELL_PANE, hubInventorySlotPosition } from '../src/game/renderer/hub-inventory-render-contract.ts'
+import { HUB_INVENTORY_GRID, HUB_PRIMARY_SPELL_PANE, hubInventorySlotPosition, hubOwnedPerkSlotRect } from '../src/game/renderer/hub-inventory-render-contract.ts'
 
 const screenshotRoot = process.env.SDR_INVENTORY_STATS_SCREENSHOT_ROOT
   || await mkdtemp(join(tmpdir(), 'solomon-inventory-stats-'))
@@ -24,6 +24,7 @@ const receipts = []
 const mobile = process.env.SDR_INVENTORY_STATS_MOBILE === '1'
 const playerId = 'inventory-stats-owner'
 const ringId = 40_001
+const ownedPerks = [27, 6, 27, 0, 1, 2, 3, 4, 5]
 const weapons = ['wand', 'staff'].map((type, index) => {
   const generated = generateNativeRandomEquipmentEffects(createNativeRng(252), type, 1, {
     advancedUnlocks: new Array(8).fill(false),
@@ -66,13 +67,16 @@ const document = createGameSaveDocument({
       ))),
     },
     playerEntities: replacePlayerEconomy(initial.playerEntities, playerId, {
-      ...economy, backpack: weapons, collegeIntroPending: false, tutorialPending: false,
+      ...economy, backpack: weapons, gold: 30_000, collegeIntroPending: false, tutorialPending: false,
+      ownedPerkSelectors: ownedPerks, tonicPurchases: 2, charmCapacity: 9,
       equipment: { ...economy.equipment, rings: [ring, null, null] },
       nextItemId: 50_000,
     }),
   },
 })
-const server = await startClientServer()
+const liveOrigin = process.env.SDR_INVENTORY_STATS_LIVE_URL
+  ? new URL(process.env.SDR_INVENTORY_STATS_LIVE_URL).origin : null
+const server = liveOrigin ? { origin: liveOrigin, close: async () => {} } : await startClientServer()
 const credential = 'inventory-stats-browser-acceptance'
 const host = await startGameHost({
   allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20,
@@ -97,7 +101,7 @@ await page.addInitScript(({ credential: gameCredential, url }) => {
 }, { credential, url: host.address.url })
 try {
   await page.route('**/__inventory_seed', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Inventory fixture</title>' }))
-  await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+  if (!liveOrigin) await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
   await page.goto(`${server.origin}/__inventory_seed`)
   await page.evaluate(record => new Promise((resolve, reject) => {
     const open = indexedDB.open('solomon-dark-game-saves', 1)
@@ -117,6 +121,16 @@ try {
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
   await exerciseInventory(inventory, 'hub')
+  await inventory.getByRole('button', { name: 'Scroll player stats', exact: true }).focus()
+  await page.keyboard.press('ArrowDown')
+  await waitForStatsOffset(320)
+  await inventory.getByRole('button', { name: 'Open skills', exact: true }).click()
+  const skills = page.getByRole('dialog', { name: 'Skills', exact: true })
+  await skills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor()
+  await skills.getByRole('button', { name: 'Open inventory', exact: true }).click()
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  await waitForStatsOffset(0)
+  receipts.push({ scene: 'hub', replacement: 'inventory-skills-inventory', reopenedOffset: 0 })
   await closeInventory(inventory)
   for (const [trader, title] of [
     ['Fomentius', "FOMENTIUS' USEFUL THYNGS"],
@@ -126,10 +140,25 @@ try {
     await page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }).click()
     const service = page.getByRole('dialog', { name: title, exact: true })
     await exerciseInventory(service, trader.toLowerCase())
+    if (trader === 'Shlorio') {
+      const dowse = service.getByRole('button', { name: /^DOWSE/ })
+      if (mobile) await dowse.tap(); else await dowse.click()
+      await dowse.waitFor({ state: 'detached' })
+      assert.equal(getPlayerEconomy(host.state(), host.hostPlayerId()).dowsingRolled, true)
+      await exerciseStatsScroll(service, 'shlorio-result')
+    }
     await service.getByRole('button', { name: 'Done', exact: true }).click()
     await service.waitFor({ state: 'hidden' })
     await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
   }
+  await page.getByRole('button', { name: 'Open Hagatha interaction', exact: true }).click()
+  const hagatha = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES", exact: true })
+  await hagatha.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  assert.equal(await hagatha.getByRole('button', { name: 'Scroll player stats', exact: true }).count(), 0)
+  assert.equal(await hagatha.locator('.hub-inventory-native-canvas').getAttribute('data-native-stats-offset-y'), null)
+  await hagatha.getByRole('button', { name: 'Done', exact: true }).click()
+  await hagatha.waitFor({ state: 'hidden' })
+  receipts.push({ scene: 'hagatha', fixedPane: true })
   await page.getByRole('button', { name: 'Enter the Boneyard', exact: true }).click()
   const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
   if (await picker.count()) await picker.getByRole('button').first().click()
@@ -138,7 +167,8 @@ try {
   await exerciseInventory(inventory, 'boneyard')
   await closeInventory(inventory)
   assert.deepEqual(errors, { console: [], page: [], responses: [] })
-  console.log(JSON.stringify({ receipts, errors, screenshotRoot, status: 'ok', mobile, browser: browser.version() }))
+  console.log(JSON.stringify({ receipts, errors, screenshotRoot, status: 'ok', mobile, browser: browser.version(),
+    clientOrigin: server.origin, gameHost: 'isolated local fixture' }))
 } catch (error) {
   console.log(JSON.stringify({ body: await page.locator('body').innerText(), errors }))
   await page.screenshot({ path: join(screenshotRoot, 'failure.png') })
@@ -152,6 +182,7 @@ try {
 async function exerciseInventory(inventory, scene) {
   const canvas = inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]')
   await canvas.waitFor()
+  await exerciseStatsScroll(inventory, scene)
   await waitForRecovery(canvas, 11)
   const equippedRing = inventory.locator(`[data-inventory-owner="equipment"][data-inventory-item-id="${ringId}"]`)
   const backpackRing = inventory.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${ringId}"]`)
@@ -208,6 +239,94 @@ async function exerciseInventory(inventory, scene) {
     receipts.push({ scene, weapon: weapon.name, equippedMelee: [5.5, 6], removedMelee: [0.5, 1] })
     console.log(`${scene}: ${weapon.name} displayed, equipped and removed`)
   }
+}
+
+async function exerciseStatsScroll(inventory, scene) {
+  const canvas = inventory.locator('.hub-inventory-native-canvas')
+  const swipe = inventory.getByRole('button', { name: 'Scroll player stats', exact: true })
+  const selector = '.hub-inventory-native-canvas'
+  const readOffset = async () => Number(await canvas.getAttribute('data-native-stats-offset-y'))
+  for (const [from, to, gesture] of [[0, 1, 'wheel'], [1, 2, 'keyboard'], [2, 1, 'held-drag'], [1, 0, 'arrow']]) {
+    assert.equal(await readOffset(), from * 320, `${scene}: start at settled page ${from}`)
+    if (gesture === 'wheel') await swipe.hover()
+    else if (gesture === 'keyboard') await swipe.focus()
+    else if (gesture === 'arrow') await inventory.getByRole('button', { name: 'Previous player stats page', exact: true }).click({ trial: true })
+    const measurement = page.evaluate(({ selector, origin, target }) => new Promise(resolve => {
+      const samples = []
+      const start = performance.now()
+      let changedAt = null
+      function sample(now) {
+        const canvas = document.querySelector(selector)
+        const offset = Number(canvas?.getAttribute('data-native-stats-offset-y'))
+        const semanticOffset = Number(document.querySelector('[aria-label="Player Stats Pages"]')?.getAttribute('data-native-stats-offset'))
+        samples.push({ elapsedMs: now - start, offset, semanticOffset })
+        if (offset !== origin && changedAt === null) changedAt = now
+        if (changedAt !== null && offset === target) resolve({ completed: true, samples, durationMs: now - changedAt })
+        else if (now - start > 3_000) resolve({ completed: false, samples, durationMs: null })
+        else requestAnimationFrame(sample)
+      }
+      requestAnimationFrame(sample)
+    }), { selector, origin: from * 320, target: to * 320 })
+    if (gesture === 'wheel') {
+      await page.mouse.wheel(0, 120)
+    } else if (gesture === 'keyboard') {
+      await page.keyboard.press('ArrowDown')
+    } else if (gesture === 'held-drag') {
+      const bounds = await swipe.boundingBox()
+      assert.ok(bounds)
+      const point = { x: bounds.x + bounds.width * 0.98, y: bounds.y + bounds.height / 2 }
+      if (touchSession) {
+        await touchSession.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...point, id: 1 }] })
+        await touchSession.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, y: point.y + bounds.height * 0.06, id: 1 }] })
+      } else {
+        await page.mouse.move(point.x, point.y)
+        await page.mouse.down()
+        await page.mouse.move(point.x, point.y + bounds.height * 0.06)
+      }
+      await page.waitForFunction(selector => document.querySelector(selector)?.getAttribute('data-native-stats-page') === '1', '[aria-label="Player Stats Pages"]')
+      if (touchSession) {
+        await touchSession.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, y: point.y + bounds.height * 0.15, id: 1 }] })
+        await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      } else {
+        await page.mouse.move(point.x, point.y + bounds.height * 0.15)
+        await page.mouse.up()
+      }
+      assert.equal(await inventory.locator('[aria-label="Player Stats Pages"]').getAttribute('data-native-stats-page'), '1', `${scene}: one held press must advance only one page`)
+    } else await inventory.getByRole('button', { name: 'Previous player stats page', exact: true }).click()
+    const result = await measurement
+    console.log(JSON.stringify({ scene, gesture, from, to, ...result }))
+    assert.equal(result.completed, true, `${scene}: ${gesture} must reach its exact target within the original observation bound`)
+    assert.ok(result.samples.every(({ offset, semanticOffset }) => offset === semanticOffset), `${scene}: painted content and hit rectangles share their offset`)
+    assert.ok(result.samples.some(({ offset }) => offset > Math.min(from, to) * 320 && offset < Math.max(from, to) * 320), `${scene}: visible intermediate offset`)
+    assert.ok(result.durationMs >= 280 && result.durationMs <= 500, `${scene}: native recurrence duration ${result.durationMs}`)
+    assert.equal(await readOffset(), to * 320)
+    const arrows = await inventory.locator('[data-native-stats-arrow]').evaluateAll(nodes => nodes.map(node => ({
+      direction: node.dataset.nativeStatsArrow,
+      top: Number.parseFloat(node.style.top),
+    })))
+    assert.deepEqual(arrows, to === 0 ? [{ direction: 'down', top: 361 }]
+      : to === 1 ? [{ direction: 'down', top: 361 }, { direction: 'up', top: 101 }]
+        : [{ direction: 'up', top: 101 }], `${scene}: all indicator rows follow their page`)
+    if (to === 2) {
+      await page.waitForFunction(expected => [...document.querySelectorAll('[aria-label="Player Stats Pages"] [data-owned-hagatha-selector]')]
+        .map(node => Number(node.dataset.ownedHagathaSelector)).join(',') === expected.join(','), ownedPerks)
+      const cells = await inventory.locator('[aria-label="Player Stats Pages"] [data-owned-hagatha-selector]').evaluateAll(nodes => nodes.map(node => [
+        Number.parseFloat(node.style.left), Number.parseFloat(node.style.top),
+        Number.parseFloat(node.style.width), Number.parseFloat(node.style.height),
+      ]))
+      const companion = scene !== 'hub' && scene !== 'boneyard'
+      assert.deepEqual(cells, ownedPerks.map((_, index) => {
+        const [left, top, width, height] = hubOwnedPerkSlotRect(index)
+        return [left - (companion ? 0 : 53), top, width, height]
+      }), `${scene}: all nine perk hit rectangles match the displayed cells`)
+    }
+    await canvas.screenshot({ path: join(screenshotRoot, `${scene}-stats-page-${to}.png`) })
+    receipts.push({ scene, gesture, from, to, ...result })
+  }
+}
+
+async function waitForStatsOffset(offset) {
+  await page.waitForFunction(expected => Number(document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeStatsOffsetY) === expected, offset)
 }
 
 async function captureRecovery(canvas, scene, name, melee = false) {

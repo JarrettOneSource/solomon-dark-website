@@ -412,7 +412,6 @@ export const HUB_INVENTORY_STATS_PAGES = {
   companionClipRect: [103, 89, 320, 320] as const,
   companionIndicatorX: 391,
   contentHeight: 960,
-  dragThresholdPixels: 10,
   indicatorRecord: 13,
   pageCount: 3,
   pageHeight: 320,

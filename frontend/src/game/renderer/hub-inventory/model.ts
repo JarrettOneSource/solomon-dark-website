@@ -18,6 +18,7 @@ import {
   type ProtocolPlayerProgression,
 } from '../../protocol/game-state.ts'
 import { type GameTextureMap } from '../game-webgl.ts'
+import type { NativeContextualHoverBox } from './items.ts'
 import {
   type HubSackPageDirection,
   type HubStandardNotice,
@@ -186,6 +187,8 @@ export interface InventoryBuildState {
   readonly modalHud: NativeModalHudView
   readonly playerPreview: NativeElementVfxView | null
   readonly sackPages: InventorySackPages | null
+  readonly statsContent: Container | null
+  readonly statsInspection: NativeContextualHoverBox | null
 }
 
 export interface NativeModalBeltAvailability {

@@ -877,7 +877,6 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
     companionClipRect: [103, 89, 320, 320],
     companionIndicatorX: 391,
     contentHeight: 960,
-    dragThresholdPixels: 10,
     indicatorRecord: 13,
     pageCount: 3,
     pageHeight: 320,
@@ -972,7 +971,7 @@ test('InventoryScreen root chrome retains exact case-sensitive titles, shaded ra
   assert.match(hubInventoryRendererSource, /chrome\.horizontalChain\.record/)
   assert.match(hubInventoryRendererSource, /chrome\.verticalChain\.record/)
   const backdropIndex = hubInventoryRendererSource.indexOf("addInventorySidePanelBackdrop(context, layer, 'left'")
-  const contentIndex = hubInventoryRendererSource.indexOf('else addStats(context, layer, model, companion, model.statsPage)')
+  const contentIndex = hubInventoryRendererSource.indexOf('addStats(context, layer, model, companion, model.statsPage)')
   const chromeIndex = hubInventoryRendererSource.indexOf("addInventorySidePanelChrome(context, layer, 'left'")
   assert.ok(backdropIndex >= 0 && backdropIndex < contentIndex && contentIndex < chromeIndex)
   assert.doesNotMatch(hubInventoryRendererSource, /function addInventoryPaneCorners/)

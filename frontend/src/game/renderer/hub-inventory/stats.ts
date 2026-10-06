@@ -36,7 +36,7 @@ export function addStats(
   },
   companion: boolean,
   page: number,
-): void {
+): Container {
   if (!Number.isInteger(page) || page < 0 || page >= HUB_INVENTORY_STATS_PAGES.pageCount) {
     throw new RangeError('native InventoryScreen stats page must be within [0,2]')
   }
@@ -227,6 +227,7 @@ export function addStats(
 
   addInventoryAttributePage(context, content, model.progression, contentShift)
   addHagathaInventoryPane(context, content, model.economy, decorationShift, 640)
+  return content
 }
 
 function addInventoryAttributePage(

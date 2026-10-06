@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
 import { nativeOptionalBookHudProgress } from './native-optional-book.ts'
@@ -52,6 +53,8 @@ export function useHubInventoryRenderer({
   const onInventoryCloseCompleteRef = useRef(onInventoryCloseComplete)
 
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
+  const [statsOffset, setStatsOffset] = useState(0)
+  const statsOffsetRef = useRef(0)
 
   closingRef.current = closing
 
@@ -73,7 +76,11 @@ export function useHubInventoryRenderer({
 
   useLayoutEffect(() => {
     modelRef.current = model
-    rendererRef.current?.setModel(model)
+    const offset = rendererRef.current?.setModel(model)
+    if (offset !== undefined) {
+      statsOffsetRef.current = offset ?? 0
+      setStatsOffset(offset ?? 0)
+    }
   }, [model])
 
   const { mode, playerState, progression } = beltAvailability
@@ -128,6 +135,11 @@ export function useHubInventoryRenderer({
           ? nativeOptionalBookHudProgress(reveal, forceModalHudSettledRef.current)
           : reveal,
       )
+      const offset = frame.statsOffset ?? 0
+      if (offset !== statsOffsetRef.current) {
+        statsOffsetRef.current = offset
+        flushSync(() => setStatsOffset(offset))
+      }
       if (
         currentKind === 'inventory'
         && closingRef.current
@@ -151,5 +163,5 @@ export function useHubInventoryRenderer({
       detachCanvas?.()
     }
   }, [rendererOwner, chatCompletionHandledRef, advanceChatRef])
-  return { hostRef, rendererRef, rendererState }
+  return { hostRef, rendererRef, rendererState, statsOffset }
 }

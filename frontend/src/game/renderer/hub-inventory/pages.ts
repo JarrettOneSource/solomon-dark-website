@@ -114,8 +114,10 @@ export function buildInventory(
 
   addInventorySidePanelBackdrop(context, layer, 'left', companion)
   addInventorySidePanelBackdrop(context, layer, 'right', companion)
+  const statsContent = model.leftPane === 'hagatha'
+    ? null
+    : addStats(context, layer, model, companion, model.statsPage)
   if (model.leftPane === 'hagatha') addHagathaInventoryPane(context, layer, economy)
-  else addStats(context, layer, model, companion, model.statsPage)
   const playerPreview = companion || model.runSummary === null ? null
     : addPlayerPreview(context, layer, model.config.element, model.economy, model.runSummary)
   addEquipment(
@@ -178,14 +180,13 @@ export function buildInventory(
         },
       )
     : null
-  if (!companion && model.leftPane !== 'hagatha' && model.statsPage === 2
-      && model.inspection?.kind === 'owned-perk') {
-    addOwnedPerkInspection(context, layer, economy, model.inspection, companion)
-  }
+  const statsInspection = !companion && model.leftPane !== 'hagatha'
+    && model.inspection?.kind === 'owned-perk'
+    ? addOwnedPerkInspection(context, layer, economy, model.inspection, companion) : null
   const dragger = dragging
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
     : null
-  return { caption, captionText, dragger, flybys: flybyViews, itemInfo, modalHud, playerPreview, sackPages }
+  return { caption, captionText, dragger, flybys: flybyViews, itemInfo, modalHud, playerPreview, sackPages, statsContent, statsInspection }
 }
 
 function buildSackPages(

@@ -4,11 +4,13 @@ import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode,
+  Ref,
   WheelEvent as ReactWheelEvent,
 } from 'react'
 
 export function NativeAction({
   children,
+  buttonRef,
   data,
   disabled = false,
   gameBack = false,
@@ -30,6 +32,7 @@ export function NativeAction({
   tabIndex,
 }: {
   children?: ReactNode
+  buttonRef?: Ref<HTMLButtonElement>
   data?: Record<string, number | string>
   disabled?: boolean
   gameBack?: boolean
@@ -52,6 +55,7 @@ export function NativeAction({
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       className="hub-native-ui-action"
       aria-label={label}

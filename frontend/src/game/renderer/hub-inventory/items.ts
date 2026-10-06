@@ -128,6 +128,10 @@ export function addInventoryItemInfo(
   return info
 }
 
+export type NativeContextualHoverBox = Container & {
+  setSourceCenter(x: number, y: number): void
+}
+
 export function addNativeContextualHoverBox(
   context: RenderContext,
   layer: Container,
@@ -135,7 +139,7 @@ export function addNativeContextualHoverBox(
   sourceCenterX: number,
   sourceCenterY: number,
   sourceGap: number,
-): Container {
+): NativeContextualHoverBox {
   const rendered = lines.map((line) => {
     const font = nativeUiFont(line.font)
     const wrapped = wrapNativeUiText(line.text, line.font, HUB_HOVER_BOX.contentMaxWidth)
@@ -152,17 +156,20 @@ export function addNativeContextualHoverBox(
   const width = contentWidth + HUB_HOVER_BOX.contentMargin * 2
   const height = contentHeight + HUB_HOVER_BOX.contentMargin * 2
   const margin = HUB_HOVER_BOX.viewportMargin
-  let x = sourceCenterX + sourceGap
-  if (x + width > HUB_NATIVE_UI_SIZE.width - margin) x = sourceCenterX - sourceGap - width
-  x = Math.max(margin, Math.min(HUB_NATIVE_UI_SIZE.width - margin - width, x))
-  const y = Math.max(
-    margin,
-    Math.min(HUB_NATIVE_UI_SIZE.height - margin - height, sourceCenterY - height / 2),
-  )
-
-  const info = new Container()
+  const info: NativeContextualHoverBox = Object.assign(new Container(), {
+    setSourceCenter(sourceX: number, sourceY: number) {
+      let x = sourceX + sourceGap
+      if (x + width > HUB_NATIVE_UI_SIZE.width - margin) x = sourceX - sourceGap - width
+      x = Math.max(margin, Math.min(HUB_NATIVE_UI_SIZE.width - margin - width, x))
+      const y = Math.max(
+        margin,
+        Math.min(HUB_NATIVE_UI_SIZE.height - margin - height, sourceY - height / 2),
+      )
+      info.position.set(x, y)
+    },
+  })
   info.label = 'native-contextual-hover-box'
-  info.position.set(x, y)
+  info.setSourceCenter(sourceCenterX, sourceCenterY)
   info.addChild(new Graphics()
     .rect(0, 0, width, height)
     .fill({ color: 0x000000 })
