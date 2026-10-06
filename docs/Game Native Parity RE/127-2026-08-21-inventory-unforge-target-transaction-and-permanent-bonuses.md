@@ -731,3 +731,24 @@ still pending. Actual lease/group/native-registration cleanup closed at
 `00:41:24.899185 UTC`; source remained clean and home metadata changed only the
 known same-byte 40-byte Crashpad setting timestamp. Task-owned source and
 private tools/cache are retained across checks under standing authority.
+
+
+### Built shared inventory ownership verified
+
+After the paint-readiness correction, the exact `0341b06a` production build
+passed the GPU oracle again and the built Hub inventory plus all four service
+companions. Each had 2058–2148 painted corner pixels and 1041–1046 changing
+green/blue pixels across six samples. The red-only UI75 pulse cannot produce
+that motion. Hagatha, Fomentius, Luthacus and Shlorio also retained the same
+scene renderer and native backpack resume control; no browser page/console/
+request/response errors or context losses were observed.
+
+The subsequent book journey stopped at the helper's polling observer for the
+short Inventory/Skills overlap. That observer is now armed as a DOM mutation
+observer before the switch action; it retains the same actual simultaneous
+surface and native target assertions, without increasing its timeout. This
+preserves the transition evidence rather than relying on polling to see a
+brief shared lifetime. Boneyard/book and complete transaction/notice journeys
+remain pending. This phase released its exact lease/groups at
+`01:20:10.832148 UTC`, with native registration cleaned and the candidate
+worktree clean. Task-owned worktree/tools/cache remain inactive for reuse.

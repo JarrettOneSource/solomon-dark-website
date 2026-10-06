@@ -93,9 +93,9 @@ try {
   await hubInventory.waitFor({ timeout: 5_000 })
   await waitForInventory(hubInventory)
   unforgeReceipts.push(await unforgeBrowserReceipt(page, hubInventory, 'Hub standalone Inventory'))
-  const inventoryToSkills = observeOptionalBookOverlap(page, 'skills')
+  const inventoryToSkills = await observeOptionalBookOverlap(page, 'skills')
   await hubInventory.getByRole('button', { name: 'Open skills' }).click()
-  optionalBookReceipts.push(await inventoryToSkills)
+  optionalBookReceipts.push(await inventoryToSkills.result)
   const hubSkills = page.getByRole('dialog', { name: 'Skills' })
   await hubSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
     timeout: 10_000,
@@ -104,9 +104,9 @@ try {
   await hubInventory.waitFor({ state: 'hidden', timeout: 10_000 })
   assert.equal(await page.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
   await page.screenshot({ path: `${screenshotRoot}-hub-skills.png` })
-  const skillsToInventory = observeOptionalBookOverlap(page, 'inventory')
+  const skillsToInventory = await observeOptionalBookOverlap(page, 'inventory')
   await hubSkills.getByRole('button', { name: 'Open inventory' }).click()
-  optionalBookReceipts.push(await skillsToInventory)
+  optionalBookReceipts.push(await skillsToInventory.result)
   await hubSkills.waitFor({ state: 'hidden', timeout: 10_000 })
   await hubInventory.waitFor({ timeout: 10_000 })
   await waitForInventory(hubInventory)
@@ -142,9 +142,9 @@ try {
   const matchInventory = page.getByRole('dialog', { name: 'Inventory' })
   await matchInventory.waitFor()
   await waitForInventory(matchInventory)
-  const matchInventoryToSkills = observeOptionalBookOverlap(page, 'skills')
+  const matchInventoryToSkills = await observeOptionalBookOverlap(page, 'skills')
   await page.keyboard.press('v')
-  optionalBookReceipts.push(await matchInventoryToSkills)
+  optionalBookReceipts.push(await matchInventoryToSkills.result)
   const matchSkills = page.getByRole('dialog', { name: 'Skills' })
   await matchSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
     timeout: 10_000,
@@ -155,9 +155,9 @@ try {
     'Boneyard',
   ))
   await matchInventory.waitFor({ state: 'hidden', timeout: 10_000 })
-  const matchSkillsToInventory = observeOptionalBookOverlap(page, 'inventory')
+  const matchSkillsToInventory = await observeOptionalBookOverlap(page, 'inventory')
   await page.keyboard.press('b')
-  optionalBookReceipts.push(await matchSkillsToInventory)
+  optionalBookReceipts.push(await matchSkillsToInventory.result)
   await matchSkills.waitFor({ state: 'hidden', timeout: 10_000 })
   await matchInventory.waitFor({ timeout: 10_000 })
   await waitForInventory(matchInventory)
@@ -239,23 +239,34 @@ async function waitForInventory(inventory) {
 }
 
 async function observeOptionalBookOverlap(page, target) {
-  const receipt = await page.waitForFunction((replacementTarget) => {
-    const inventory = document.querySelector('.hub-native-ui-overlay[data-surface-kind="inventory"]')
-    const skills = document.querySelector('.skill-book-stage')
-    if (!inventory || !skills) return false
-    if (replacementTarget === 'skills') {
-      if (inventory.getAttribute('data-replacement-target') !== 'skills') return false
-    } else if (skills.getAttribute('data-transition-target') !== 'inventory') return false
-    return {
-      inventoryReveal: inventory.querySelector('.hub-inventory-native-canvas')
-        ?.getAttribute('data-native-reveal-progress') ?? null,
-      inventoryTarget: inventory.getAttribute('data-replacement-target'),
-      skillsProgress: skills.getAttribute('data-open-progress'),
-      skillsTarget: skills.getAttribute('data-transition-target'),
-      target: replacementTarget,
+  // Arm before the action; a polling task can miss the short shared lifetime.
+  await page.evaluate((replacementTarget) => {
+    window.__sdrOptionalBookOverlap = null
+    const inspect = () => {
+      const inventory = document.querySelector('.hub-native-ui-overlay[data-surface-kind="inventory"]')
+      const skills = document.querySelector('.skill-book-stage')
+      if (!inventory || !skills) return
+      if (replacementTarget === 'skills') {
+        if (inventory.getAttribute('data-replacement-target') !== 'skills') return
+      } else if (skills.getAttribute('data-transition-target') !== 'inventory') return
+      window.__sdrOptionalBookOverlap = {
+        inventoryReveal: inventory.querySelector('.hub-inventory-native-canvas')
+          ?.getAttribute('data-native-reveal-progress') ?? null,
+        inventoryTarget: inventory.getAttribute('data-replacement-target'),
+        skillsProgress: skills.getAttribute('data-open-progress'),
+        skillsTarget: skills.getAttribute('data-transition-target'),
+        target: replacementTarget,
+      }
+      observer.disconnect()
     }
-  }, target, { timeout: 5_000 })
-  return receipt.jsonValue()
+    const observer = new MutationObserver(inspect)
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true })
+    inspect()
+  }, target)
+  return {
+    result: page.waitForFunction(() => window.__sdrOptionalBookOverlap, null, { timeout: 5_000 })
+      .then(receipt => receipt.jsonValue()),
+  }
 }
 
 async function skillBookViewportReceipt(page, book, scene) {
