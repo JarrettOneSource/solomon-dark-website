@@ -1740,6 +1740,9 @@ async function waitForNativeSurfaceSettled(dialog) {
     state: 'attached',
     timeout: 10_000,
   })
+  if (await dialog.getAttribute('data-surface-kind') === 'dialogue') {
+    assert.equal(await dialog.locator('.hub-inventory-native-canvas').getAttribute('data-native-unforge-tint'), null)
+  }
 }
 
 async function waitForNativeNoticeSettled(dialog) {

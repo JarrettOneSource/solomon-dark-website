@@ -93,6 +93,9 @@ try {
   await hubInventory.waitFor({ timeout: 5_000 })
   await waitForInventory(hubInventory)
   unforgeReceipts.push(await unforgeBrowserReceipt(page, hubInventory, 'Hub standalone Inventory'))
+  await page.setViewportSize({ width: 1200, height: 700 })
+  unforgeReceipts.push(await unforgeBrowserReceipt(page, hubInventory, 'Resized Hub Inventory'))
+  await page.setViewportSize({ width: 1600, height: 900 })
   const inventoryToSkills = await observeOptionalBookOverlap(page, 'skills')
   await hubInventory.getByRole('button', { name: 'Open skills' }).click()
   optionalBookReceipts.push(await inventoryToSkills.result)
@@ -155,6 +158,7 @@ try {
     'Boneyard',
   ))
   await matchInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  assert.equal(await page.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
   const matchSkillsToInventory = await observeOptionalBookOverlap(page, 'inventory')
   await page.keyboard.press('b')
   optionalBookReceipts.push(await matchSkillsToInventory.result)
@@ -218,6 +222,7 @@ try {
 async function enterHub(target) {
   await target.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await target.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  assert.equal(await target.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
   const tutorialPrompt = target.getByRole('dialog', { name: 'Play the Tutorial?' })
   if (await tutorialPrompt.isVisible()) {
     await tutorialPrompt.getByRole('button', { exact: true, name: 'NO' }).click()
