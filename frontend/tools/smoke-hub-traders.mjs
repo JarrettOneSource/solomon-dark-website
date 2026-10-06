@@ -2074,6 +2074,8 @@ function parsePurchaseLabel(label) {
 }
 
 async function dragInventoryPointer(page, inventory, source, destination, whileHeld) {
+  // Item restore/transfer flybys keep the source visible but disable new presses.
+  await source.locator('xpath=self::*[not(@disabled)]').waitFor()
   const sourceBox = await source.boundingBox()
   const stageBox = await inventory.boundingBox()
   assert.ok(sourceBox, 'native inventory drag source has no browser geometry')
@@ -2100,8 +2102,8 @@ async function dragInventoryPointer(page, inventory, source, destination, whileH
   await page.mouse.down()
   await page.mouse.move(sourcePoint.x + 15, sourcePoint.y, { steps: 3 })
   await page.waitForFunction(() => (
-    document.querySelector('.hub-native-ui-stage')
-      ?.dataset.nativeInventoryDragging !== ''
+    Boolean(document.querySelector('.hub-native-ui-stage')
+      ?.dataset.nativeInventoryDragging)
   ))
   await page.mouse.move(destinationPoint.x, destinationPoint.y, { steps: 6 })
   if (whileHeld) await whileHeld()

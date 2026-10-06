@@ -801,3 +801,26 @@ completion and the Boneyard flame receipt still require the corrected run.
 This phase released its lease at `02:47:57.745612 UTC`; all six stage groups,
 native registration and M2 groups were drained, source clean, with the same
 qualified home timestamp change.
+
+### Built Boneyard and Book membership closed
+
+The exact `838fe47b` production build and complete Book journey passed. Hub
+standalone measured 2094 painted/1045 changing green-blue pixels; resized
+1200x700 measured 1201/612; paused Boneyard after both Skills switches measured
+2168/1047. Both potion consumptions, all four simultaneous book-overlap
+observations, viewport/curtain ownership, Title/Skills absence, final input
+resume and empty page/console/response error arrays passed. The paused match
+therefore confirms the application-clock fill continues independently of
+world pause. Source effect parameters remain unchanged.
+
+The independent trader path reached Shlorio before/after Dowsing, service
+changes and the inert corner click with physical flame receipts. Its second
+invalid-drop gesture then waited for a drag that never began. Inventory
+restore flybys disable source buttons through `inventoryTransitionLocked`,
+but the helper was starting its next press after visibility alone. It now
+awaits that existing enabled-button contract before physical mouse down and
+requires a real nonempty drag diagnostic; the former missing-node expression
+could incorrectly pass its start wait. No input rule or timeout changed.
+Confirmation/cancel/result acceptance remains pending. Phase cleanup released
+at `03:03:45.821365 UTC`; all six stage/native/M2 groups were absent, source
+clean and home only had the qualified same-byte timestamp change.
