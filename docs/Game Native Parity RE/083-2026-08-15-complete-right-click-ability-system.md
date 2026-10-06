@@ -2786,3 +2786,20 @@ The Golem admission members marked recovered-pending-port above are now
 life, visual and audio producers remain unchanged. The full repository gate,
 built browser maximum-rank assembly journey and live publication remain pending
 at this focused validation checkpoint.
+
+
+### Canonical and built acceptance, 2026-10-06
+
+Exact M2/M5 candidate `64edfbaa` on current main `b5294e18` passed the unchanged
+Drive-pinned all-mode `scripts/validate.sh` at23:19:17 UTC:42 Python tests,
+4,210 Node executions in22 batches and every configured quality gate, with
+no mutation survivors. Chrome153 / WebGL2 / Apple M5 Pro then used the normal
+Solomon entrance, two legal stock ring equips and ordinary belt input. The
+maximum-rank Iron Golem decoded factor2.5 from assembly age28 through active
+age400, then continued attack/provoke and the final age793 snapshot. All page,
+console, request, response, host and wire error arrays were empty; the rendered
+Golem was inspected. A fixture-only robe-versus-staff selection mistake was
+corrected to Combinator's Club before the successful second browser run; no
+product or passed gate replay occurred. The source matches the recovered
+multiplier domain with no platform exception. Publication/live receipts are
+separate from this built acceptance.

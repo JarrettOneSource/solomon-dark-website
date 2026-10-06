@@ -263,3 +263,22 @@ Constant/lifecycle/identity boundaries are unchanged. No dependency installation
 was needed for these two public-interface Node regressions. The full gate,
 ordinary built/live browser journeys and publication remain pending at this
 focused validation checkpoint.
+
+
+### Canonical and built acceptance, 2026-10-06
+
+The unchanged all-mode M5 gate on `64edfbaa` passed at23:19:17 UTC:42 Python,
+4,210 Node executions /22 batches, all configured quality failures empty and
+no mutation survivors. The ordinary built Chrome153/WebGL2/Metal journey used
+native XP/stock grants, normal level choices and two legal Fleetfinger equips,
+then passed the Solomon encounter through actual keyboard input. Magic Missile,
+More Missiles and Smart Missiles were each rank4. Five emissions before and
+five after a normal inventory replacement with Combinator's Club both decoded
+occupied Ether progress57.2 beyond the old55 limit; up to45 simultaneous missile
+actors were observed, not asserted as a historical per-cast count. Release
+retired to-1 and more than200 further authoritative ticks arrived. All captured
+browser/host/wire errors were empty, and the rendered fan was inspected.
+This closes the admission repair through the shared producer, full/incremental
+wire and real renderer; native cadence, quantity and lifecycle stay unchanged.
+The original staff/save and exact failing tick remain unknown. Publication/live
+verification remains a separate result.
