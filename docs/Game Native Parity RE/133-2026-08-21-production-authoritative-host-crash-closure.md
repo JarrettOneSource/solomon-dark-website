@@ -522,7 +522,7 @@ The reopened boundary is the authoritative Skeleton-family action selector throu
 
 | Member | Contract / evidence | Disposition | Acceptance |
 | --- | --- | --- | --- |
-| Dampen on active Mage, either signed head turn, every element/cloak/headgear | `0x0048AE50` removes the owner of `+0x224`; all Mage recipes share `dampenBoneyardCasters` | recovered-pending-port | same-tick Dampen → project → encode/decode must produce zero, without another enemy step |
+| Dampen on active Mage, either signed head turn, every element/cloak/headgear | `0x0048AE50` removes the owner of `+0x224`; all Mage recipes share `dampenBoneyardCasters` | exact-ported | same-tick Dampen → project → encode/decode produces zero; built casts cover both signed turns and short/long Mage actions |
 | Dampen on resting or already suppressed Mage | same callback; refresh 600 ticks, retain walking and authored visual program | verified-already-at-parity | existing caster movement/suppression test and repeated-cast journey |
 | Dampen on DireFaculty | separate action/body/hand owner, 500 ticks, no Skeleton head-turn writer | verified-already-at-parity | existing sibling caster test retains its action, hand-mask, and heading-lock semantics |
 | Skeleton/Mage normal completion and lost target | step finalizer clears after the ordinary action owner exits | verified-already-at-parity | existing store head-facing tests |
@@ -541,3 +541,13 @@ Strengthen the existing Dampen caster integration test with a live nonzero Mage 
 ### Focused implementation evidence
 
 On October 6 at 19:24 UTC, the strengthened Dampen integration test failed on M5 with the exact production `boneyardEnemySample` exception. Adding `headFacingOffset: 0` to the Mage-only Dampen transition made the immediate snapshot round trip valid. All 223 tests in `native-secondary-world`, `boneyard-enemy-store`, `entity-replication`, and `game-protocol` passed, with no skipped or canceled tests. This includes the distinct Faculty callback and retained strict rejection of invalid non-action head offsets. The correction changes neither the protocol schema nor its validation. Canonical and browser/live acceptance remain pending.
+
+### Configured Mac and built-browser acceptance
+
+The clean rebased candidate `0730162d` passed the unchanged M5 all-mode `scripts/validate.sh` at 21:59:49 UTC: 42 Python tests and 4,208 Node executions across 22 batches, with no test failures. Configured eight-file renderer coverage is 100%; mutation results are 603 killed, 198 compile errors, two timeouts, the 24 existing reviewed equivalent exclusions, and zero survivors/quality failures. The installed Drive Bash runs the canonical script because the old Homebrew Bash path is absent on this machine.
+
+At 22:01:26 UTC, the production-built Chrome 153 journey passed three ordinary 150 ms belt casts against 40 live stock Mage spawns. The journey walks the real collision-safe Solomon encounter through combat release. Before casts it observes naturally occurring +1/-1 head turns and both short/long Mage actions; afterward 38/40/40 in-range suppressed Mages have zero head offsets and null actions. Snapshots continue from the third cast's tick 8890 through 9090, with all 40 Mages still present. All captured page, console, failed-request, HTTP-response, local-host, wire and transport errors are empty. The 3,322 recorded values are repeated wire-state samples, not a count of unique snapshots.
+
+The isolated developer workload uses stock grants for Dampen, health/mana restoration and native Mage spawns; it does not reconstruct the original private inventory or claim reporter-hardware performance. The shared callback supplies the same reset for every admitted Mage recipe. No new browser approximation is introduced. Publication and production live acceptance remain separately owned delivery steps.
+
+The same gate includes a narrow adjacent deployment-test repair: two admission fixtures observe only their owned process IDs, and three unrelated lifecycle paths supply a controlled empty compiler input. With an extra passive Clang process, the original 18-test fixture suite reproduced four failures plus a missing worker-output error; all 18 repaired tests then passed. Production storage identity, compiler admission, process shutdown and deployment behavior are unchanged.
