@@ -125,6 +125,7 @@ try {
       for (const sample of [ordinary, ...hits]) {
         assert.ok(sample.above > 0 && sample.inside > 0, JSON.stringify({ quantity, scale, sample }))
         assert.equal(sample.outside, 0, `Leviathan ${quantity}/${scale} must clip the lower mouth: ${JSON.stringify(sample)}`)
+        assert.equal(sample.outsideRight, 0, `Leviathan ${quantity}/${scale} must clip the full mouth width: ${JSON.stringify(sample)}`)
         assert.equal(sample.overflow, 0, `Leviathan ${quantity}/${scale} must erase lower overflow: ${JSON.stringify(sample)}`)
       }
     }

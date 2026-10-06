@@ -947,8 +947,8 @@ class NativeLeviathanCompositeView {
     this.mask.blendMode = plan.mask.blend
     this.mask.scale.set(plan.mask.scale)
     this.maskClip.position.set(0, plan.mask.clipTop)
-    this.maskClip.width = plan.clear.height
-    this.maskClip.height = plan.clear.height
+    this.maskClip.width = plan.mask.clipSize
+    this.maskClip.height = plan.mask.clipSize
     this.clear.blendMode = plan.clear.blend
     this.clear.position.set(plan.clear.x, plan.clear.y)
     this.clear.tint = plan.clear.color

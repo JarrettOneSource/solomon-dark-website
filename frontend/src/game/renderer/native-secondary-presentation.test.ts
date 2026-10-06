@@ -452,13 +452,14 @@ test('Leviathan owns the portal redraw, authored appendage bank, EtherBolt, Fade
     clear: {
       blend: 'multiply',
       color: 0x000000,
-      height: 1_000,
+      height: 128,
       width: 256,
       x: 0,
-      y: 128 + 64 * 0.75,
+      y: 128 + 32 * 0.75,
     },
     mask: {
       blend: 'multiply',
+      clipSize: 1_000,
       clipTop: 128,
       entry: 39,
       scale: 0.75,

@@ -480,7 +480,7 @@ not shipped game behavior.
 | Plane Orb instructions | draw `0x005E8720`; special mesh `0x00601910`; loose-texture global `0x00B3BC0C` | Draw uses additive BadGuys record 75. The mesh writes opaque white at its center and every 25-unit inner vertex, literal zero at every 50-unit outer vertex, then submits the exact 7/15-segment triangle set. | high |
 | Loose-texture xref census | `0x00B3BC0C` references at `0x0060199E` and `0x005475AF` only | Plane Orb and the separate PlayerWizard Planewalker-material branch are the complete post-load consumers of `etherplane`. | high |
 | Shared galaxy-record census | BadGuys inline offsets record 75 `+0x39A4`, record 38 `+0x1D50`, record 39 `+0x1E14`; scalar-access census plus raw instructions | Runtime painters are Plane Orb `0x005E8720`, Leviathan `0x006151D0`, and Ether Drain `0x005EE120`; the remaining offset hits are atlas construction, copy/destruction, inventory teardown, or unwind metadata. | high |
-| Leviathan instructions | tick `0x006145D0`; draw `0x006151D0`, especially `0x00615210..0x00615C57`; target `0x00B3BEFC` | Parent draws additive record 75 tinted `(1,.5,1,1)` at rotation `globalTick*3`, scale `(-.8s,.64s)`, then source-over record 38 at scale `s`. Appendages alone enter the transparent 256x256 target. Record 39 is a lower-half multiply mask, followed by a black clear below `128 + logicalHeight(39)*s`; the target is composited source-over at full alpha and again additive at alpha `.5`. | high |
+| Leviathan instructions | tick `0x006145D0`; draw `0x006151D0`, especially `0x00615210..0x00615C57`; target `0x00B3BEFC` | Parent draws additive record 75 tinted `(1,.5,1,1)` at rotation `globalTick*3`, scale `(-.8s,.64s)`, then source-over record 38 at scale `s`. Appendages alone enter the transparent 256x256 target. Record 39 is a lower-half multiply mask, followed by a black clear below `128 + 0.5*logicalHeight(39)*s`; the target is composited source-over at full alpha and again additive at alpha `.5`. | high |
 | Ether Drain instructions/current Website | `0x005EE120`; `native-secondary-presentation.ts` | Four record-75 layers and both record-38 shimmer branches already preserve the recovered rotations, scales, offsets, tints, alpha, and blend changes. | high |
 | Current Website failure path | base `8ac56e987ae98437b3e4320fc6a59672c017a08b`; `native-secondary-presentation.ts`, `native-secondary-world-view.ts` | Plane Orb emits no vertex-color array, so Pixi uses one uniform mesh color. Leviathan draws visible record 39 twice, omits records 75/38, moves the parent into the appendage target, applies no mask/clear, and composites the target only once. | high |
 | Ghidra provenance | canonical project `SolomonDark`, program `SolomonDark.exe`, Ghidra 12.0.3 replica pool; read-only Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b0253061...e9d49`; decompile `899167ca...e97465`; instruction-window `79249e8e...632b40`; float dump `925d7d6f...0b15a`; offset census `b66a0ddd...93738`; xref script `c6844b84...8c4b` | Fresh replica queries reproduced the direct resources, literal vertex colors, transforms, target mask, clear, and output passes without changing Mod Loader. | high |
@@ -510,7 +510,7 @@ quality branches, scene submission, observer rendering, and teardown.
 | Leviathan ordinary/max appendage membership | records `343..357` / `343..372` and existing quantity/set owner | `verified-already-at-parity` | one through five authored appendages and existing internal effective-Y order |
 | Leviathan target clear and member ownership | `0x006154E0..0x00615913`, target `0x00B3BEFC` | `exact-ported` by this reopening | transparent 256x256 NPM target; appendages enter it, parent galaxy/shimmer remain direct |
 | Leviathan record-39 lower-half mask | `0x00615913..0x006159E1`, BadGuys `+0x1E14` | `exact-ported` by this reopening | multiply-only, centered, scale `s`, clipped from target y 128 downward; never visible white art |
-| Leviathan lower overflow clear | `0x006159E1..0x00615A49` | `exact-ported` by this reopening | transparent-black multiply rectangle begins at `128 + record39 logical height*s` and covers the remaining lower target |
+| Leviathan lower overflow clear | `0x006159E1..0x00615A49` | `exact-ported` by this reopening | transparent-black multiply rectangle begins at `128 + 0.5*record39 logical height*s` and covers the remaining lower target |
 | Leviathan target output | `0x00615B76..0x00615C57` | `exact-ported` by this reopening | one source-over full-alpha pass then one additive half-alpha pass at the parent point |
 | Leviathan light, flash, roar/PlaneCross, EtherBolt, damage, target lane, lifetime, and teardown | `0x006145D0` plus existing kernel/audio owners | `verified-already-at-parity` | presentation correction does not alter authority or clocks |
 | Ether Drain four galaxies | `0x005EE120`, record 75 | `verified-already-at-parity` | exact purple near layer and three white farther layers with native rotation/scale/offset/alpha |
@@ -708,7 +708,7 @@ one. Neither path implements the recovered transparent erasure.
 
 | Evidence | Recovered rule / consequence | Confidence |
 | --- | --- | --- |
-| Retail `0x006151D0` painter, mask `0x00615913..0x006159E1`, clear `0x006159E1..0x00615A49`; executable and instruction provenance above | Record 39 multiplies existing target RGBA only below y 128; the subsequent rectangle is transparent black. Geometry, authoritative scale, and two output passes remain as recovered. | high |
+| Retail `0x006151D0` painter, mask `0x00615913..0x006159E1`, clear `0x006159E1..0x00615A49`; executable and instruction provenance above | Record 39 multiplies existing target RGBA only below y 128; the subsequent rectangle is transparent black. The final native instruction check below corrects the earlier omitted half-height factor; authoritative scale and the two output passes remain as recovered. | high |
 | PixiJS 8.19.0 `AlphaMaskPipe`, `StencilMaskPipe`; Website native blend map `[ZERO,SRC_COLOR,ZERO,SRC_ALPHA]` | Geometric stencil clipping preserves the destination for the multiply draw. A transparent empty texture supplies zero alpha for overflow erasure without making the display object invisible. | high, installed source |
 | Exact base `d6d48efda8bba8adfe6aa88892bb2e08fcc45487`, M5 Chrome/WebGL regression on October 6 at 18:15 UTC | A controlled opaque appendage target retains alpha255 outside the lower mask and below the overflow clear. The new GPU assertion fails on the existing consumer, independently of the diagnostic plan. | high, failing renderer regression |
 
@@ -721,7 +721,7 @@ new native observation. No stock asset, gameplay constant, or clock is inferred.
 
 | Member | Disposition | Acceptance |
 | --- | --- | --- |
-| Lower-half record 39 multiply and overflow clear, including hit redraw | `exact-ported` | M5 GPU regression passes 45 ordinary/complex-hit/simple-hit samples: actual target alpha is zero outside the lower mouth and below overflow; upper appendages and mouth interior remain visible at .25/.75/1 scale with all five layout counts |
+| Lower-half record 39 multiply and overflow clear, including hit redraw | `exact-ported` by the corrected M5 GPU regression | M5 GPU regression passes 45 ordinary/complex-hit/simple-hit samples: actual target alpha is zero outside the lower mouth and below overflow; upper appendages and mouth interior remain visible at .25/.75/1 scale with all five layout counts |
 | Parent record75/38, authored appendage records and placement, target size/order, two outputs, authority/audio/light/lifetime, local/peer snapshots and retirement | `verified-already-at-parity` from the existing recovery, with renderer retirement regression retained | focused presentation/Leviathan tests and actual built Boneyard cast |
 | Plane Orb, Ether Drain, Hub rejection and non-painter atlas/xref entries | Existing final dispositions above remain supported; `out-of-system` for this Leviathan-only consumer defect | no shared mask consumer in those painters |
 
@@ -732,3 +732,40 @@ native render-material GPU suite passed on October 6 at 18:16 UTC, including
 the new clipping cases and existing target/resource retirement checks. Full
 canonical M5 and built/live browser acceptance are recorded with Report76's
 archive completion receipt.
+
+### Full portal capture and native clear geometry
+
+The final 1600x900 built Boneyard capture on October 6 at 18:46 UTC still
+showed appendage bases beneath the void on private candidate `88906105`.
+Its full gate and renderer fixture had passed, but the fixture's overflow
+assertion followed the same incorrect full-height boundary. This observation
+reopens that boundary before publication; the candidate was not pushed.
+
+| Evidence | Recovered rule / consequence | Confidence |
+| --- | --- | --- |
+| Read-only canonical `0x006151D0` decompile returned by the maintained M2 replica wrapper; retail identity above; current read-only Mod Loader revision `3f8cacc4a377db5f2e5d9797a422b4f916d05662`; decompiler script SHA256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465` | Mask remains centered with scale `s`. Clear Y is `targetHeight*0.5 + record39Height*0.5*s`; its width is the target width and its height is half the target height. The earlier ledger omitted the second `0.5`. | high, decompile with raw confirmation |
+| M5 external-Drive LLVM objdump, immutable stock image, exact `0x00615913..0x00615A49` window; named light operation coordinated under Report74's unchanged final lease | `0x00615A20` loads record39 height at BadGuys `+0x1EAC`; `0x00615A26` multiplies it by the previously recovered double `0.5` at `0x007DE808`; `0x00615A32..0x00615A36` multiply by scale and add target half-height. Clear arguments are `(0,128+32*s,256,128)`. | high, raw instructions |
+| Same window `0x0061592B..0x00615965`; recovered float `0x00786C80 = 1000` | The lower-half geometric clip remains `(0,128,1000,1000)`. Its extent has independent ownership from the clear rectangle's height; using clear height for both clip dimensions was brittle. | high, existing constant and raw call arguments |
+
+The instruction result corrects every clear-boundary statement above. Extend
+the public plan regression and GPU target check to the native half-height
+boundary, keep all one-to-five layouts/scales/hit branches in the same owner,
+and verify the full visible portal again. No new stock data or browser
+approximation is needed. The returned decompile ran once on M2; additional
+raw verification ran on M5 Drive under the coordinated lease. Neither the
+canonical project nor the Mod Loader checkout was changed.
+
+The corrected-boundary fixture failed on the previous consumer on M5 at
+19:14 UTC with alpha 255 in the gap. Candidate `879b2bab` passed type
+checking, all 55 focused Leviathan/presentation tests, and all 45 ordinary/
+complex-hit/simple-hit target samples at 19:16 UTC. Both sides of the mouth
+are covered, protecting the independent clip extent from the clear-height
+change. The reported full portal view, canonical gate and live deployment
+remain the final acceptance checks recorded in the report archive.
+
+The corrected 1600x900 built Boneyard journey passed on M5 at 19:19 UTC
+with five appendages and empty page, console and failed-response arrays.
+Visual inspection confirms all bases end inside the purple void. No
+appendage protrudes below it. This validates the reported outcome rather
+than only the diagnostic plan; final publication/live receipts stay in the
+report archive.

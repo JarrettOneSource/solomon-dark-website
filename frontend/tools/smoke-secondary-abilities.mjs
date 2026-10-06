@@ -1918,6 +1918,7 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       assert.ok(portal)
       assert.deepEqual(portal.mask, {
         blend: 'multiply',
+        clipSize: 1_000,
         clipTop: 128,
         entry: 39,
         scale: portal.mask.scale,
@@ -1925,8 +1926,8 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       assert.equal(portal.clear.blend, 'multiply')
       assert.equal(portal.clear.color, 0x000000)
       assert.equal(portal.clear.width, 256)
-      assert.equal(portal.clear.height, 1_000)
-      assert.equal(portal.clear.y, 128 + 64 * portal.mask.scale)
+      assert.equal(portal.clear.height, 128)
+      assert.equal(portal.clear.y, 128 + 32 * portal.mask.scale)
       assert.deepEqual(portal.outputs, [
         { alpha: 1, blend: 'normal' },
         { alpha: 0.5, blend: 'add' },

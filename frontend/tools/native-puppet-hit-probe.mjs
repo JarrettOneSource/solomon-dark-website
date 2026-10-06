@@ -142,7 +142,8 @@ export async function inspectNativePuppetHits() {
           above: alphaAt(128 - 30 * scale, 128 - 12 * scale),
           inside: alphaAt(128, 128 + 12 * scale),
           outside: alphaAt(128 - 30 * scale, 128 + 12 * scale),
-          overflow: alphaAt(128, Math.ceil(128 + 64 * scale) + 1),
+          outsideRight: alphaAt(128 + 30 * scale, 128 + 12 * scale),
+          overflow: alphaAt(128, Math.ceil(128 + 32 * scale) + 1),
         }
       }
       const ordinary = sample(readTarget(composite.renderTexture))

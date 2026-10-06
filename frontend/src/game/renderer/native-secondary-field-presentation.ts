@@ -41,13 +41,14 @@ export function nativeLeviathanCompositePlan(scale: number): NativeLeviathanComp
     clear: {
       blend: 'multiply',
       color: 0x000000,
-      height: 1_000,
+      height: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2,
       width: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
       x: 0,
-      y: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2 + 64 * scale,
+      y: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2 + 32 * scale,
     },
     mask: {
       blend: 'multiply',
+      clipSize: 1_000,
       clipTop: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2,
       entry: 39,
       scale,

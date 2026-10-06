@@ -52,6 +52,7 @@ export interface NativeLeviathanCompositePlan {
   }>
   readonly mask: Readonly<{
     blend: 'multiply'
+    clipSize: number
     clipTop: number
     entry: 39
     scale: number
