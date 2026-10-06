@@ -5,12 +5,15 @@ import {
   nativeEquipmentMeetsLevelRequirement,
   nativeEquipmentRequiredLevel,
   type HubInventoryItem,
+  type HubEquipmentState,
   type NativeEquipmentEffect,
 } from '../core-kernels/hub-economy.ts'
 import {
   nativeEquipmentRecipeDescription,
   nativeEquipmentRecipeEffects,
   nativeEquipmentTooltipSetForRecipe,
+  nativeEquipmentCompletedSets,
+  equippedNativeEffectSources,
 } from '../core-kernels/native-equipment-effects.ts'
 import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
@@ -273,6 +276,22 @@ export function hubItemTooltipLines(
   return Object.freeze(lines)
 }
 
+export function hubActiveSetBonusLines(equipment: HubEquipmentState): readonly HubTooltipLine[] {
+  const equippedRecipes = equippedNativeEffectSources(equipment).flatMap(({ recipeIndex }) => (
+    recipeIndex === null ? [] : [recipeIndex]
+  ))
+  const sets = nativeEquipmentCompletedSets(equippedRecipes)
+  if (sets.length === 0) return []
+  return [
+    tooltipGold('Set Bonus Active:'),
+    ...sets.flatMap((set, index) => [
+      ...(index === 0 ? [] : [tooltipBody('')]),
+      { ...tooltipBody(set.name), tint: HUB_TOOLTIP_TINT.setName },
+      ...set.effects.map(effect => tooltipBody(hubNativeEquipmentEffectText(effect))),
+    ]),
+  ]
+}
+
 export function hubNativeEquipmentEffectText(effect: NativeEquipmentEffect): string {
   if (!Number.isInteger(effect.kind) || effect.kind < 1 || effect.kind > 39) {
     throw new RangeError(`unknown native equipment effect kind ${effect.kind}`)
@@ -395,4 +414,3 @@ function tooltipBody(text: string): HubTooltipLine {
 function tooltipGold(text: string): HubTooltipLine {
   return { font: 'body', text, tint: HUB_TOOLTIP_TINT.gold }
 }
-

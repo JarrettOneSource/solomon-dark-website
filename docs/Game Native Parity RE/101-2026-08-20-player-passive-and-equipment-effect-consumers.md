@@ -1132,3 +1132,134 @@ GPU configuration and exact transient frame were not captured by the save;
 this audit does not claim that the experienced spike did not occur. The
 canonical Website gate already passed on this exact runtime commit for Report
 51 (3,957 Node and 24 Python tests, renderer quality without failures).
+
+
+## 2026-10-06 — Report63 active equipped-set inventory indicator
+
+Report63 (`1554346804991107122`) explicitly requests an additional inventory
+indicator and the active bonus description. The original and a five-message
+nearby Discord window were rechecked on October6; the September29 edit is
+unchanged, with no withdrawal or related correction. Both retained screenshots
+were inspected. Their ItemInfo displays describe membership and potential
+bonuses; they do not establish a gameplay failure. Report54's orange set-name
+text and the existing tooltips remain the presentation contract.
+
+This is an authorized web presentation feature, not a recovered stock widget.
+The native owning system and complete data table remain the Report07 closure
+above: stock 0.72.5 executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`; completion `0x00555DA0`, equipment sinks
+`scene+0x1428..0x1440`, refresh `0x0066F020/0x0065F9A0/0x0065F5B0`, and
+set-FX walker/application `0x00579D10/0x00576AA0`. The Website-owned
+`native-equipment-effects-catalog.json` already retains all seven sets, 29
+members, and 13 effects. No new binary extraction or runtime claim is made.
+
+### Boundary, ownership, and implementation contract
+
+The read-only card belongs to standalone InventoryScreen, including Hub,
+Boneyard, and nested Sack pages. It reads the current replicated equipment
+snapshot each time the book model changes. It has no cached activation state,
+new timer, authority action, save field, protocol field, or gameplay effect.
+Backpack/storage ownership, duplicate recipes, generated lookalikes, and
+recipe-less equipment cannot satisfy a missing equipped member. Distinct
+compatible completed sets appear once each, in authored catalog order.
+
+Expose the existing completion predicate as one shared catalog projection and
+keep the gameplay effect walker routed through it. Reuse the existing ItemInfo
+effect formatter and contextual-box painter for a persistent card immediately
+left of the equipped slots. Use the existing semantic-text convention for its
+accessible equivalent. The card exists only while at least one set is complete;
+replacing, unequipping, re-equipping, closing/reopening, and changing Sack roots
+must reflect the current equipment. Tooltips keep their existing name,
+membership, potential-bonus copy, and colors.
+
+| Member | Evidence / recovered contract | Final disposition / proof |
+| --- | --- | --- |
+| Arcanus recipes0..5; FX21 | Report07 full table, recharge x3 | exact-ported: active name/effect, every missing member |
+| Combinator recipes6..10; FX37/38 | energize unlearned weld components, enhance weld effects +20% | exact-ported: both effect descriptions |
+| Bug-Master recipes11..15; FX26/25 | max tentacles, Call Leviathan damage x2 | exact-ported: both effect descriptions |
+| Tempest recipes16..19; FX27/7/11 | double Storm duration, Hurricane +1, Air mana cost -20% | exact-ported: all three descriptions |
+| Burning Man recipes20..21; FX28 | Ring of Fire explosions | exact-ported: full/incomplete and compatible combination |
+| Frostburn recipes22..24; FX30/13 | Ring of Ice FrostBurn, Water cast speed +10% | exact-ported: both descriptions and compatible combination |
+| Fete of Clay recipes25..28; FX29/13 | two Golems, Earth cast speed +10% | exact-ported: both descriptions |
+| Seven equipment sinks, including third ring and Staff/Wand aliases | shared equipped-native source projection; Report07 sink closure | exact-ported: exact equipment identity and real transactions |
+| Inventory Hub/run, root/nested Sack, replacement/removal/reopen | current replicated economy; no independent set lifetime | exact-ported: real built browser journey and semantic text |
+| Partial/backpack/storage-only, duplicate, recipe-less, simultaneous sets | same native predicate and canonical effect catalog | exact-ported: public projection regressions and browser transitions |
+| Gameplay modifiers, spell lifetimes, save/protocol | settled Report07 authoritative refresh and consumer closure | verified-already-at-parity; existing regression gates retained |
+| Trader companion inventory presentation | separate service owner/pane; existing ItemInfo still describes bonuses | out-of-system: request adds a standalone inventory card; covering the shop pane would obscure its controls |
+| Report54 set-name color / existing potential-bonus tooltips | accepted orange name, current body copy and ItemInfo painter | verified-already-at-parity; unchanged output regression retained |
+
+Confidence is high for native set ownership, membership, effect text, and
+replication from the retained instruction/data closure and current source trace.
+Card placement is an explicit web UI choice. No native widget, new native
+animation, or approximation of set mechanics is claimed. No unresolved native
+fact is needed to display this existing state.
+
+Acceptance requires a genuine missing-indicator browser baseline where
+practical; all seven sets and each missing recipe through the public projection;
+real equip/removal/restoration and compatible sets in the built Inventory;
+readable unclipped card text at desktop and touch sizes; Sack/reopen lifetimes;
+empty browser error arrays; the exact M5 candidate's unchanged canonical gate;
+then normal main publication, managed live/browser evidence, eligible original
+reaction readback, and task-owned cleanup on both devices. M2 performs only
+light source/Git/API work; all execution uses M5 and external Drive under the
+single heavy lease. Final dispositions and actual receipts follow validation.
+
+
+### Actual M5 baseline and focused acceptance — 2026-10-06
+
+The preserved pre-feature production tree (entry67/current718 inventory) with
+only acceptance fixtures reproduced the absent active-set status after real
+set completion on built Chrome153.0.8010.12. Final baseline fixture commit
+`f065f30a` failed specifically waiting for `Active set bonuses`; console,
+page, and failed-response arrays were empty. The first attempt was rejected
+as evidence because the new fixture caller omitted the shared wait helper's
+required timeout; correcting that caller changed no production behavior.
+
+Candidate `ce95c797`, rebased onto published entry68/currentd97 inventory,
+passed all108 focused equipment/economy/render-contract tests, test TypeScript,
+and the unchanged configured frontend lint on M5. This includes all seven
+active descriptions, every missing member, recipe-less lookalikes, and
+compatible sets through the public projection, with existing modifier and
+ItemInfo regressions intact. Source/helper/changed-file bytes and private
+pinned tools matched; each job's own process groups, native registration,
+real-home footprint, and compute lease closed cleanly.
+
+The full built desktop/touch journey, visible-card bounds/colors, final exact
+canonical gate, publication, and live acceptance remain pending. Current
+browser fixtures observe the unchanged production Pixi stage and screenshot
+pixels in addition to current accessible text. The existing member inventory
+was provisional at that checkpoint; the final browser closure below supersedes it.
+
+
+### Complete requested card closure — 2026-10-06
+
+Exact candidate `c3738869` passed real built Chrome desktop1600×900 and
+touch896×414/DPR2 journeys in Hub and Boneyard. Each exercised all seven sets,
+all29 real equipped members, partial activation, replacement/removal/re-equip,
+permanent-rank isolation, unchanged ItemInfo, and compatible Burning Man plus
+Frostburn. The compatible card survived nested Sack entry/first-cell return and
+closing/reopening in both scenes. Across28 individual and four compatible
+cards, real Pixi bounds, current accessible text and screenshot pixels passed;
+maximum card size was348×202, with at least249 desktop and236 touch matching
+heading/name/effect pixels. The desktop/touch pair captures were inspected.
+Each browser's console/page/failed-response arrays was empty.
+
+Fixture inspection retained the normal tooltip-on-top painter rule: selected
+ItemInfo may cover the card temporarily, and its public background dismissal
+exposes the persistent card. The input journey now admits Inventory through
+the current unblocked scene rather than dispatching during resume grace; it
+also addresses the two existing parent-return controls distinctly. These are
+acceptance-fixture corrections; no stock tooltip, pause, navigation, spell,
+save, or protocol behavior was changed. Real M5 groups/native registration,
+home footprint and lease closed at09:49:40.817917UTC.
+
+All card members in the table are exact-ported for this authorized web feature;
+the underlying native rules and untouched siblings retain their stated parity
+dispositions. The shared standalone Inventory factory covers run inventories
+without a Tutorial-specific card branch. Trader companion panes remain outside
+the requested card scope and retain their existing potential-bonus tooltips.
+No native approximation, unresolved state rule or blocked platform member
+remains. Touch is Chrome emulation, not a physical-device claim. Final canonical,
+publication/live and cleanup receipts belong to the task/archive completion
+record; no unrun gate or production outcome is claimed here.

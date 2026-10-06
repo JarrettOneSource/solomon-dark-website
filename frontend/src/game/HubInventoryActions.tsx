@@ -43,6 +43,7 @@ import type { InventoryActionHandler, InventoryMoveAction } from './hub-inventor
 import type { InventoryFlybyRequest } from './use-hub-inventory-flybys.ts'
 import { pointerStagePosition, pointInRect } from './hub-inventory-pointer.ts'
 import { NativeAction } from './HubNativeAction.tsx'
+import { hubActiveSetBonusLines } from './renderer/hub-inventory-item-text.ts'
 import {
   itemAtEquipmentSlot,
   EQUIPMENT_SLOT_ORDER,
@@ -103,6 +104,7 @@ export function InventoryActions({
   transitionLocked: boolean
 }) {
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
+  const activeSetBonusLines = companion ? [] : hubActiveSetBonusLines(economy.equipment)
   const activeRoot = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
   const parentSackId = sackPath.at(-1) ?? null
   const projectedBackpack = projectInventoryRootSlots(activeRoot)
@@ -376,6 +378,19 @@ export function InventoryActions({
 
   return (
     <>
+      {activeSetBonusLines.length > 0 && (
+        <section
+          className="hub-native-ui-semantic"
+          role="status"
+          aria-label="Active set bonuses"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {activeSetBonusLines.filter(line => line.text).map((line, index) => (
+            <p key={index}>{line.text}</p>
+          ))}
+        </section>
+      )}
       <NativeAction
         data={{ 'data-inventory-empty-space': 'true' }}
         label="Deselect inventory item"

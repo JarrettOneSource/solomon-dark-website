@@ -17,6 +17,7 @@ import {
   equippedNativeEffectSources,
   nativeEquipmentHasFeature,
   nativeEquipmentRecipeEffects,
+  nativeEquipmentCompletedSets,
   nativeEquipmentSetEffects,
   nativeEquipmentTooltipSets,
   resolveEquippedNativeEffects,
@@ -258,10 +259,13 @@ test('all seven sets require every distinct equipped recipe and contribute each 
   for (const [members, rows] of cases) {
     const expected = rows.map(([kind, magnitude, operator, target]) => ({ kind, magnitude, operator, target }))
     assert.deepEqual(nativeEquipmentSetEffects(members), expected)
+    assert.deepEqual(nativeEquipmentCompletedSets(members).map(set => set.memberRecipeIndices), [members])
+    assert.equal(nativeEquipmentCompletedSets([...members, ...members]).length, 1)
     assert.deepEqual(nativeEquipmentSetEffects([...members, ...members]), expected, 'no duplicate set application')
     for (const missing of members) {
       const partial = members.filter(index => index !== missing)
       assert.deepEqual(nativeEquipmentSetEffects(partial), [], `missing recipe ${missing}`)
+      assert.deepEqual(nativeEquipmentCompletedSets([...partial, partial[0]!]), [], `missing recipe ${missing}`)
       assert.deepEqual(nativeEquipmentSetEffects([...partial, partial[0]!]), [], 'a duplicate cannot substitute')
       const sources = members.map(recipeIndex => ({
         recipeIndex: recipeIndex === missing ? null : recipeIndex,
@@ -276,4 +280,7 @@ test('all seven sets require every distinct equipped recipe and contribute each 
     { kind: 30, magnitude: 0, operator: 0, target: 0 },
     { kind: 13, magnitude: 10, operator: 2, target: 3 },
   ], 'compatible complete sets compose')
+  assert.deepEqual(nativeEquipmentCompletedSets([20, 21, 22, 23, 24]).map(set => set.name), [
+    'Burning Man', 'Frostburn Jewels',
+  ])
 })

@@ -193,11 +193,17 @@ export function nativeEquipmentTooltipSetForRecipe(
 export function nativeEquipmentSetEffects(
   equippedRecipeIndices: readonly number[],
 ): readonly NativeEquipmentEffect[] {
+  return Object.freeze(nativeEquipmentCompletedSets(equippedRecipeIndices).flatMap(({ effects }) => (
+    effects.map((effect) => Object.freeze({ ...effect }))
+  )))
+}
+
+export function nativeEquipmentCompletedSets(
+  equippedRecipeIndices: readonly number[],
+): readonly NativeEquipmentTooltipSet[] {
   const equipped = new Set(equippedRecipeIndices)
-  return Object.freeze(CATALOG.sets.flatMap((set) => (
+  return Object.freeze(nativeEquipmentTooltipSets().filter((set) => (
     set.memberRecipeIndices.every((recipeIndex) => equipped.has(recipeIndex))
-      ? set.effects.map((effect) => Object.freeze({ ...effect }))
-      : []
   )))
 }
 

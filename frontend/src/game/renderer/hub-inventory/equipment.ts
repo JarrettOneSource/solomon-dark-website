@@ -11,6 +11,7 @@ import { nativeBeltSkillAvailability, nativeCooldownSectorPoints } from '../../s
 import { equipmentSlotsForItem, hubEquipmentItemForAlias } from '../../hub-inventory-presentation.ts'
 import { EQUIPMENT_SLOT_ORDER, itemAtEquipmentSlot } from '../../hub-inventory-equipment.ts'
 import { addPlayerEquipmentPreview } from '../player-equipment-preview.ts'
+import { hubActiveSetBonusLines } from '../hub-inventory-item-text.ts'
 import {
   NATIVE_HUD_BACKBUFFER,
   type NativeHudControlLayout,
@@ -39,6 +40,7 @@ import {
   addClippedItemIcon,
   addInventorySelection,
   addItemIcon,
+  addNativeContextualHoverBox,
 } from './items.ts'
 import {
   type HubInventoryDragModel,
@@ -104,6 +106,14 @@ export function addEquipment(
         || (selection?.owner === 'equipment' && selection.equipmentSlot === slot
           && selection.id === displayedItem?.id)
       addEquipmentSlot(context, layer, rect, displayedItem, held, selected, element)
+    }
+  }
+  if (!companion) {
+    const bonuses = hubActiveSetBonusLines(economy.equipment)
+    if (bonuses.length > 0) {
+      const card = addNativeContextualHoverBox(context, layer, bonuses, 1215, 110, 0)
+      card.label = 'active-equipped-set-bonus'
+      card.position.set(1215 - card.width, 110)
     }
   }
 }

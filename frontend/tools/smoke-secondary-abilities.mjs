@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { acceptItemSets } from './item-set-smoke-acceptance.mjs'
+import { acceptItemSets, installActiveSetBonusProbe } from './item-set-smoke-acceptance.mjs'
 import { acceptLanternAndCursor } from './lantern-cursor-smoke-acceptance.mjs'
 import { acceptEtherDrain } from './ether-drain-smoke-acceptance.mjs'
 import { acceptEtherDrainGameplay } from './ether-drain-gameplay-smoke-acceptance.mjs'
@@ -163,6 +163,7 @@ const responseErrors = []
 
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  if (process.env.SDR_ITEM_SET_ACCEPTANCE === '1') await page.addInitScript(installActiveSetBonusProbe)
   const wireSecondarySamples = []
   page.on('websocket', (socket) => {
     if (new URL(socket.url()).href !== new URL(host.address.url).href) return

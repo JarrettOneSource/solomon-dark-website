@@ -7,6 +7,7 @@ import { HUB_INVENTORY_RUN_SUMMARY_STYLE, hubInventoryRunSummaryLines } from './
 import nativeAssetsJson from '../../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
   createEquipmentInventoryItem,
+  type HubEquipmentState,
   DOWSING_EQUIPMENT_RECIPES,
   FOMENTIUS_STOCK_DEFINITIONS,
   type HubInventoryItem,
@@ -44,6 +45,7 @@ import {
 import {
   HAGATHA_NATIVE_TOOLTIP_LINES,
   hubInventoryItemInfoText,
+  hubActiveSetBonusLines,
   hubHagathaTooltipLines,
   hubItemTooltipLines,
   hubNativeEquipmentEffectText,
@@ -1442,4 +1444,59 @@ test('native inventory paints live run values with mixed-case gold centred at th
   ])
   assert.deepEqual(hubInventoryRunSummaryLines(null), [])
   assert.deepEqual(hubInventoryRunSummaryLines({ wave: 6, monstersKilled: 17, awesomeness: 91 }, true), [])
+})
+
+
+test('active equipped-set inventory text covers every bonus and retires on member removal', () => {
+  const expectedEffects = [
+    ['Spell Recharge x3.0'],
+    ['Weld +unlearned components', 'Enhance weld effects +20.0%'],
+    ['Always summon max Leviathan tentacles', 'Call Leviathan Damage x2.0'],
+    ['Double the duration of magic storms', 'Hurricane + 1', 'Air Mana Cost -20%'],
+    ['Ring of fire explodes enemies'],
+    ['Ring of Ice does frostburn damage', 'Water Cast Speed +10.0%'],
+    ['Allows control of two golems', 'Earth Cast Speed +10.0%'],
+  ]
+  const equipment = (recipes: readonly number[]): HubEquipmentState => {
+    const items = recipes.map(recipe => createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[recipe]!, recipe + 100))
+    const rings = items.filter(item => item.equipmentType === 'ring')
+    return {
+      amulet: items.find(item => item.equipmentType === 'amulet') ?? null,
+      hat: items.find(item => item.equipmentType === 'hat') ?? null,
+      rings: [rings[0] ?? null, rings[1] ?? null, rings[2] ?? null],
+      robe: items.find(item => item.equipmentType === 'robe') ?? null,
+      weapon: items.find(item => item.equipmentType === 'staff' || item.equipmentType === 'wand') ?? null,
+    }
+  }
+  assert.deepEqual(hubActiveSetBonusLines(equipment([])), [])
+  for (const [index, set] of nativeEquipmentTooltipSets().entries()) {
+    const full = equipment(set.memberRecipeIndices)
+    assert.deepEqual(hubActiveSetBonusLines(full), [
+      { font: 'body', text: 'Set Bonus Active:', tint: 0xd9ba70 },
+      { font: 'body', text: set.name, tint: 0xffbf80 },
+      ...expectedEffects[index]!.map(text => ({ font: 'body', text, tint: 0xbfbfbf })),
+    ])
+    for (const missing of set.memberRecipeIndices) {
+      assert.deepEqual(hubActiveSetBonusLines(equipment(set.memberRecipeIndices.filter(recipe => recipe !== missing))), [],
+        `${set.name}: missing ${missing}`)
+    }
+    const generated: HubEquipmentState = {
+      ...full,
+      amulet: full.amulet && { ...full.amulet, recipeIndex: null },
+      hat: full.hat && { ...full.hat, recipeIndex: null },
+      rings: [
+        full.rings[0] && { ...full.rings[0], recipeIndex: null },
+        full.rings[1] && { ...full.rings[1], recipeIndex: null },
+        full.rings[2] && { ...full.rings[2], recipeIndex: null },
+      ],
+      robe: full.robe && { ...full.robe, recipeIndex: null },
+      weapon: full.weapon && { ...full.weapon, recipeIndex: null },
+    }
+    assert.deepEqual(hubActiveSetBonusLines(generated), [], 'recipe-less lookalikes are inactive')
+    assert.deepEqual(hubActiveSetBonusLines(full).map(line => line.text).slice(2), expectedEffects[index])
+  }
+  assert.deepEqual(hubActiveSetBonusLines(equipment([20, 21, 22, 23, 24])).map(line => line.text), [
+    'Set Bonus Active:', 'Burning Man', 'Ring of fire explodes enemies', '',
+    'Frostburn Jewels', 'Ring of Ice does frostburn damage', 'Water Cast Speed +10.0%',
+  ])
 })
