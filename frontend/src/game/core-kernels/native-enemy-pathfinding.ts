@@ -1,3 +1,4 @@
+import { actorHeadingFromVector } from './actor-heading.ts'
 import type { BoneyardPoint } from './boneyard.ts'
 import {
   drawNativeFloat,
@@ -38,6 +39,8 @@ export interface NativeEnemySteeringRequest {
   readonly actorPosition: Readonly<BoneyardPoint>
   readonly cadenceTicks: number
   readonly goalPosition?: Readonly<BoneyardPoint>
+  // The inherited cadence vector keeps body heading; full movement refreshes it.
+  readonly fullMovement?: boolean
   readonly movementPerTick: number
   readonly radialDirection: -1 | 0 | 1
   readonly statusFactor: number
@@ -112,6 +115,7 @@ export const NATIVE_ENEMY_REORIENTATION_TICKS = Object.freeze({
   minimum: 50,
   randomCount: 50,
 })
+export const NATIVE_ENEMY_FLEE_DISTANCE = 10
 export const NATIVE_ENEMY_WANDER_DISTANCE = 10_000
 export const NATIVE_ENEMY_APPROACH_OFFSET_DISTANCE = 300
 export const NATIVE_ENEMY_APPROACH_OFFSET_FULL_DISTANCE = 500
@@ -234,7 +238,9 @@ export function buildNativeEnemySteering(
   if (!Number.isSafeInteger(request.cadenceTicks) || request.cadenceTicks < 1) {
     throw new RangeError('enemy steering cadence must be a positive safe integer')
   }
+  const fleeing = request.radialDirection === -1 && request.tangentDirection === 0
   let headingDeg = request.actorHeadingDeg
+  let wanderHeadingDeg = source.wanderHeadingDeg
   let flankTicksRemaining = source.flankTicksRemaining
   let x = 0
   let y = 0
@@ -245,25 +251,31 @@ export function buildNativeEnemySteering(
     }
     const goal = nativeEnemySteeringGoal(
       { ...source, flankTicksRemaining },
-      { ...request, actorPosition },
+      { ...request, actorHeadingDeg: headingDeg, actorPosition },
     )
     const desiredHeading = headingTo(actorPosition, goal, headingDeg)
-    headingDeg = turnTowardHeading(
-      headingDeg,
-      desiredHeading,
-      source.baseTurnRate * source.turnFactor * request.statusFactor,
-    )
+    headingDeg = fleeing
+      ? desiredHeading
+      : turnTowardHeading(
+        headingDeg,
+        desiredHeading,
+        source.baseTurnRate * source.turnFactor * request.statusFactor,
+      )
     const radians = headingDeg * Math.PI / 180
     x += Math.sin(radians) * request.movementPerTick
     y -= Math.cos(radians) * request.movementPerTick
-    if (flankTicksRemaining > 0) flankTicksRemaining -= 1
+    if (fleeing && request.fullMovement !== false && request.targetPosition !== null) {
+      wanderHeadingDeg = headingDeg
+    }
+    if (!fleeing && flankTicksRemaining > 0) flankTicksRemaining -= 1
   }
   return {
     delta: Object.freeze({ x, y }),
     headingDeg,
     state: flankTicksRemaining === source.flankTicksRemaining
+      && wanderHeadingDeg === source.wanderHeadingDeg
       ? source
-      : Object.freeze({ ...source, flankTicksRemaining }),
+      : Object.freeze({ ...source, flankTicksRemaining, wanderHeadingDeg }),
   }
 }
 
@@ -402,6 +414,13 @@ export function nativeEnemySteeringGoal(
   state: NativeEnemyPathState,
   request: NativeEnemySteeringRequest,
 ): BoneyardPoint {
+  if (request.radialDirection === -1 && request.tangentDirection === 0) {
+    const target = request.targetPosition
+    const headingDeg = request.fullMovement === false || target === null
+      ? request.actorHeadingDeg
+      : actorHeadingFromVector(request.actorPosition.x - target.x, request.actorPosition.y - target.y)
+    return offsetPoint(request.actorPosition, headingDeg, NATIVE_ENEMY_FLEE_DISTANCE)
+  }
   if (request.goalPosition !== undefined) return { ...request.goalPosition }
   const target = request.targetPosition
   if (target === null) {

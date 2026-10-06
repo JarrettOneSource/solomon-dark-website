@@ -362,8 +362,8 @@ test('Golem area keeps collision-appended targets for five moves before terminal
     if (tick < 42) assert.deepEqual(result.damage, [])
     else {
       assert.deepEqual(result.damage.map(row => row.targetId), [1, 2])
-      assert.equal(result.headingPerturbations.length, 2)
-      assert.ok(result.headingPerturbations.every(row => Math.abs(row.deltaDegrees) <= 45))
+      assert.equal(result.targetHeadingChanges.length, 2)
+      assert.ok(result.targetHeadingChanges.every(row => Math.abs(row.deltaDegrees) <= 45))
       assert.ok(state.targetEffects.every(effect => effect.dazzleTicks === 200))
       assert.deepEqual(state.actors, [])
     }
@@ -2722,12 +2722,55 @@ test('Turn Undead filters the four native families and installs exact flee and w
       weakenFactor: Math.max(0, 1 - stats.mWeaken / 100),
     })),
   )
+  assert.deepEqual(result.targetHeadingChanges, [1, 2, 3, 4].map(targetId => ({
+    degrees: 90, mode: 'absolute', targetId,
+  })))
   assert.deepEqual(
     result.state.events.filter(({ cue }) => cue === 'level-up')
       .map(({ pitch }) => pitch),
     [2, 3],
   )
   assert.equal(result.state.actors.filter(({ kind }) => kind === 'turn-undead').length, 35)
+})
+
+test('Turn Undead recast replaces the flee clock and faces away from the new caster', () => {
+  const base = context(77, 1, 0)
+  const target = { family: 'SKELETON', lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 7, position: { x: 40, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
+  const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(123),
+    'boneyard:test', 7, { fleeTicks: 2_000, weakenFactor: 0.5 })
+  const result = stepNativeSecondaryAbilities(source, { ...base, targets: () => [target],
+    players: { player: { ...base.players.player!,
+      character: createPlayerCharacter(CONFIG, { x: 100, y: 0 }) } } })
+  assert.equal(result.state.targetEffects[0]!.fleeTicks,
+    Math.round(effectiveSecondaryAbilityRankStats(base.players.player!.skillBook, 77).values.mFlee * 100))
+  assert.equal(result.state.targetEffects[0]!.weakenFactor, 0.5)
+  assert.deepEqual(result.targetHeadingChanges, [{ degrees: 270, mode: 'absolute', targetId: 7 }])
+  const aged = stepNativeSecondaryAbilities(result.state, { ...base, tick: 2,
+    players: { player: { ...base.players.player!, input: input(null) } }, targets: () => [target] })
+  assert.equal(aged.state.targetEffects[0]!.fleeTicks, result.state.targetEffects[0]!.fleeTicks - 1)
+  assert.deepEqual(aged.targetHeadingChanges, [])
+  const ending = applyNativeSecondaryTargetEffect(aged.state, 'boneyard:test', 7, { fleeTicks: 1 })
+  const ended = stepNativeSecondaryAbilities(ending, { ...base, tick: 3,
+    players: { player: { ...base.players.player!, input: input(null) } } })
+  assert.equal(ended.state.targetEffects[0]!.fleeTicks, 0)
+  assert.equal(ended.state.targetEffects[0]!.weakenFactor, 0.5)
+  assert.deepEqual(ended.targetHeadingChanges, [])
+})
+
+test('Turn Undead simultaneous casts retain ordered absolute target headings', () => {
+  const base = context(77, 1, 0)
+  const target = { family: 'SKELETON', lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 7, position: { x: 200, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
+  const result = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...base, targets: () => [target], players: { player: base.players.player!,
+      peer: { ...base.players.player!, character: createPlayerCharacter(CONFIG, { x: 400, y: 0 }) } },
+  })
+  assert.deepEqual(result.targetHeadingChanges, [
+    { degrees: 270, mode: 'absolute', targetId: 7 },
+    { degrees: 90, mode: 'absolute', targetId: 7 },
+  ])
+  assert.equal(result.state.targetEffects.length, 1)
 })
 
 test('Mindstar and Regenerate share their toggle stream while Regenerate restores native health per tick', () => {
@@ -3216,7 +3259,7 @@ test('Earthquake keys its strict hostile pulse to post-decrement remaining and c
   const quakeRotation = drawNativeFloat(rng, 360); rng = quakeRotation.state
   const quakeScale = drawNativeInteger(rng, 4); rng = quakeScale.state
   const shuffled = fixedBoundShuffleForTest(targets.slice(0, 4), rng); rng = shuffled.rng
-  const expectedHeadings: { deltaDegrees: number; targetId: number }[] = []
+  const expectedHeadings: { degrees: number; mode: 'relative'; targetId: number }[] = []
   const expectedPauses = new Map<number, number>()
   for (const target of shuffled.values.slice(0, 2)) {
     const pauseGate = drawNativeInteger(rng, 2); rng = pauseGate.state
@@ -3226,13 +3269,13 @@ test('Earthquake keys its strict hostile pulse to post-decrement remaining and c
       pauseTicks = 50 + pause.value
     }
     const heading = drawNativeSign(rng, 15); rng = heading.state
-    expectedHeadings.push({ deltaDegrees: heading.value, targetId: target.id })
+    expectedHeadings.push({ degrees: heading.value, mode: 'relative', targetId: target.id })
     expectedPauses.set(target.id, pauseTicks)
   }
   const debrisGate = drawNativeInteger(rng, 15); rng = debrisGate.state
   assert.notEqual(debrisGate.value, 1)
   assert.deepEqual(result.state.rng, rng)
-  assert.deepEqual(result.headingPerturbations, expectedHeadings)
+  assert.deepEqual(result.targetHeadingChanges, expectedHeadings)
   assert.deepEqual(result.disruptedTargetIds, [...expectedPauses.keys()].sort((a, b) => a - b))
   assert.equal(result.disruptedTargetIds.includes(5), false)
   for (const [targetId, disruptedTicks] of expectedPauses) {

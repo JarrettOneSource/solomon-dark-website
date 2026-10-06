@@ -2,7 +2,7 @@ import { actorHeadingFromVector } from '../../core-kernels/actor-heading.ts'
 import { NATIVE_BADGUY_GAIT_PHASE_DIVISOR, NATIVE_BADGUY_GAIT_PHASE_PERIOD, NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR, NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD, advanceNativeEnemyLocomotionPhase, advanceNativeEnemyStridePhase, nativeSkeletonBodyGaitPose } from '../../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardPoint } from '../../core-kernels/boneyard.ts'
 import { lineBoundsExitObstruction } from '../../core-kernels/line-obstruction.ts'
-import { buildNativeEnemySteering, clearNativeEnemyRoute, nativeEnemySteeringGoal, nativeEnemyTargetRefreshTicks, resolveNativeEnemyPathGoal, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
+import { buildNativeEnemySteering, clearNativeEnemyRoute, nativeEnemyMovementClock, nativeEnemySteeringGoal, nativeEnemyTargetRefreshTicks, resolveNativeEnemyPathGoal, stepNativeEnemyPathRecovery } from '../../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeSecondaryTargetEffectState } from '../../core-kernels/native-secondary-abilities.ts'
 import { resetDemon } from './demon.ts'
 import type { BoneyardEnemyActor, BoneyardEnemyBrain, BoneyardEnemyStoreStepContext, WorkingStep } from './model.ts'
@@ -19,14 +19,29 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   radialDirection: -1 | 0 | 1,
   tangentDirection: -1 | 0 | 1 = 0,
 ): BoneyardEnemyActor {
-  if (context.tick < actor.nextMovementTick) return actor
+  const fleeing = radialDirection === -1 && tangentDirection === 0
+  let cadenceTicks = NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
+  let fullMovement = true
+  if (fleeing) {
+    if ((work.pathStatusFactors.get(actor.id) ?? 1) <= Math.fround(0.0001)) return actor
+    const view = context.nativeMovementView
+    const visible = view === undefined || view.cameras.some(camera => (
+      actor.position.x + 100 >= camera.x && actor.position.x - 100 <= camera.x + camera.w
+      && actor.position.y + 100 >= camera.y && actor.position.y - 100 <= camera.y + camera.h
+    ))
+    const clock = nativeEnemyMovementClock(actor.id, context.tick, visible,
+      context.nativeVisibility?.(actor.position).admitted ?? true, view?.enhancedEffects ?? true)
+    if (!clock.due) return actor
+    cadenceTicks = clock.cadence
+    fullMovement = clock.full
+  } else if (context.tick < actor.nextMovementTick) return actor
   if (
     skeletonFamilyMovementPausedByHit(actor)
     && actor.hitReactionTimer > 0
   ) {
     return {
       ...actor,
-      nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+      nextMovementTick: context.tick + cadenceTicks,
     }
   }
   const target = actor.targetPlayerId === null
@@ -45,7 +60,8 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   const steeringRequest = {
     actorHeadingDeg: actor.headingDeg,
     actorPosition: actor.position,
-    cadenceTicks: NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    cadenceTicks,
+    fullMovement,
     movementPerTick: 0.25 * movementScalar,
     radialDirection,
     statusFactor: work.pathStatusFactors.get(actor.id) ?? 1,
@@ -60,7 +76,7 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   const rawGoal = nativeEnemySteeringGoal(path, steeringRequest)
   let actorHeadingDeg = actor.headingDeg
   let goalPosition: Readonly<BoneyardPoint> = rawGoal
-  if (context.navigation) {
+  if (context.navigation && !fleeing) {
     const navigationClearance = enemyNavigationClearance(actor)
     const routed = resolveNativeEnemyPathGoal(path, {
       actorPosition: actor.position,
@@ -123,14 +139,14 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
   const gaitPose = advanceNativeEnemyLocomotionPhase(
     actor.gaitPose,
     movementScalar,
-    NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    cadenceTicks,
     NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
     NATIVE_BADGUY_GAIT_PHASE_PERIOD,
   )
   const bodyGaitPhase = advanceNativeEnemyLocomotionPhase(
     actor.bodyGaitPhase,
     movementScalar,
-    NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    cadenceTicks,
     NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
     NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
   )
@@ -155,13 +171,13 @@ export function moveTowardTarget<B extends BoneyardEnemyBrain>(
     gaitPose,
     headingDeg: steering.headingDeg,
     lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
-    nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    nextMovementTick: context.tick + cadenceTicks,
     path: recovery.state,
     position: Object.freeze({ ...position }),
     stridePhaseDeg: advanceNativeEnemyStridePhase(
       actor.stridePhaseDeg,
       movementScalar,
-      NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+      cadenceTicks,
     ),
   }
 }

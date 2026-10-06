@@ -170,6 +170,107 @@ test('Badguy Hurricane cooldown is constructor-randomized, target-owned, and dro
   assert.equal(threeTicks.store.actors[0]!.hurricaneContactCooldown, 70)
 })
 
+test('Turn Undead families flee continuously without navigating their escape vector', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'ZOMBIE'] as const) {
+    const spawned = spawnOne(`flee-${token}`, token, { x: 100, y: 0 }, FAR_PLAYERS).store
+    let store: BoneyardEnemyStore = { ...spawned, actors: spawned.actors.map(actor => ({ ...actor, headingDeg: 90, nextMovementTick: 1 })) }
+    const start = store.actors[0]!.position.x
+    for (let tick = 1; tick <= 20; tick += 1) {
+      const before = store.actors[0]!.position.x
+      store = stepBoneyardEnemyStore(store, {
+        abilityEffects: { 1: targetEffect(1, { fleeTicks: 100 }) },
+        clipSpellSegment: CLEAR_SPELL_SEGMENT, projectileWorldBlocked: NO_WORLD_CONTACT,
+        lightAt: () => 1, players: FAR_PLAYERS, resolveMovement: DIRECT_MOVEMENT,
+        resolveSpawnIntents: () => [], tick,
+        navigation: { isPathClear: () => false, findRoute: () => assert.fail('flee vector entered navigation') },
+      }).store
+      const actor = store.actors[0]!
+      assert.ok(actor.position.x <= before, `${token} moved back toward the player`)
+      assert.equal(actor.headingDeg, 270)
+      assert.equal(actor.headFacingOffset, 0)
+    }
+    assert.ok(store.actors[0]!.position.x < start - 1, `${token} did not escape`)
+  }
+})
+
+test('Turn Undead full movement follows current targets and retains heading on target loss', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'ZOMBIE'] as const) {
+    let store = spawnOne(`flee-target-${token}`, token, { x: 100, y: 0 }, FAR_PLAYERS).store
+    let routed = 0
+    const advance = (tick: number, players: BoneyardEnemyTargets, fleeTicks = 100) => {
+      store = stepBoneyardEnemyStore(store, {
+        abilityEffects: { 1: targetEffect(1, { fleeTicks }) }, players, tick,
+        projectileWorldBlocked: NO_WORLD_CONTACT, resolveMovement: DIRECT_MOVEMENT,
+        resolveSpawnIntents: () => [], lightAt: () => 1,
+        navigation: { isPathClear: () => { routed += 1; return true }, findRoute: () => assert.fail('unexpected route') },
+      }).store
+      return store.actors[0]!
+    }
+    assert.equal(advance(1, FAR_PLAYERS).headingDeg, 270)
+    const movedPlayer = { player: { ...FAR_PLAYERS.player!, position: { x: 0, y: 0 } } }
+    assert.equal(advance(2, movedPlayer).headingDeg, 270, 'no movement between UID epochs')
+    assert.equal(advance(3, movedPlayer).headingDeg, 90)
+    const beforeLoss = store.actors[0]!.position.x
+    assert.equal(advance(5, {}).headingDeg, 90)
+    assert.ok(store.actors[0]!.position.x > beforeLoss)
+    assert.equal(advance(7, FAR_PLAYERS).headingDeg, 270)
+    assert.equal(routed, 0)
+    advance(9, FAR_PLAYERS, 0)
+    assert.ok(routed > 0, `${token} did not resume ordinary pursuit routing after expiry`)
+  }
+})
+
+test('Turn Undead movement uses native full and degraded UID clocks without bypassing collision', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'ZOMBIE'] as const) {
+    for (const mode of [
+      { cadence: 2, enhanced: true, visible: true, admitted: true, heading: 270 },
+      { cadence: 5, enhanced: false, visible: true, admitted: true, heading: 270 },
+      { cadence: 10, enhanced: true, visible: true, admitted: false, heading: 90 },
+      { cadence: 15, enhanced: true, visible: false, admitted: true, heading: 90 },
+    ]) {
+      const spawned = spawnOne(`flee-clock-${token}`, token, { x: 100, y: 0 }, FAR_PLAYERS).store
+      let store: BoneyardEnemyStore = { ...spawned, actors: spawned.actors.map(actor => ({ ...actor, headingDeg: 90 })) }
+      let submissions = 0
+      const step = (tick: number) => stepBoneyardEnemyStore(store, {
+        abilityEffects: { 1: targetEffect(1, { fleeTicks: 100 }) }, players: FAR_PLAYERS, tick,
+        projectileWorldBlocked: NO_WORLD_CONTACT, resolveSpawnIntents: () => [], lightAt: () => 1,
+        nativeVisibility: () => ({ admitted: mode.admitted, intensity: Number(mode.admitted) }),
+        nativeMovementView: { arenaBounds: { x: -1000, y: -1000, w: 2000, h: 2000 },
+          cameras: mode.visible ? [{ x: 0, y: -100, w: 1000, h: 200 }] : [], enhancedEffects: mode.enhanced },
+        navigation: { isPathClear: () => assert.fail('flee checked navigation'), findRoute: () => assert.fail('flee routed') },
+        resolveMovement: request => { submissions += 1; return request.position },
+      }).store
+      for (let tick = 1; tick <= mode.cadence + 1; tick += 1) {
+        store = step(tick)
+        assert.deepEqual(store.actors[0]!.position, { x: 100, y: 0 }, 'collision must still own final placement')
+        assert.equal(submissions, tick === mode.cadence + 1 ? 2 : 1)
+      }
+      assert.equal(store.actors[0]!.headingDeg, mode.heading)
+      assert.equal(store.actors[0]!.nextMovementTick, mode.cadence * 2 + 1)
+      assert.strictEqual(store.actors[0]!.config, spawned.actors[0]!.config)
+    }
+  }
+})
+
+test('Turn Undead retains native speed scaling and stasis across all admitted families', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'ZOMBIE'] as const) {
+    const source = spawnOne(`flee-status-${token}`, token, { x: 100, y: 0 }, FAR_PLAYERS).store
+    const move = (factor: number) => stepBoneyardEnemyStore(source, {
+      abilityEffects: { 1: targetEffect(1, { fleeTicks: 100, stunTicks: 100, stunFactor: factor }) },
+      players: FAR_PLAYERS, tick: 1, projectileWorldBlocked: NO_WORLD_CONTACT,
+      resolveSpawnIntents: () => [], resolveMovement: DIRECT_MOVEMENT, lightAt: () => 1,
+    }).store.actors[0]!
+    const ordinary = move(1), slowed = move(0.5)
+    assert.ok(Math.abs((100 - ordinary.position.x) / 2 - (100 - slowed.position.x)) < 1e-8)
+    for (const factor of [0, 0.00005]) {
+      const stopped = move(factor)
+      assert.deepEqual(stopped.position, source.actors[0]!.position)
+      assert.equal(stopped.gaitPose, source.actors[0]!.gaitPose)
+    }
+    assert.strictEqual(slowed.config, source.actors[0]!.config)
+  }
+})
+
 test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', () => {
   const effect = {
     circleSlowFactor: 1,
@@ -5717,6 +5818,10 @@ test('Pike attachment releases on target loss, control effects, break and death,
     assert.equal(brain.pike, null)
     assert.deepEqual(next.playerPositions, {})
   }
+  const fleeing = stepWithEffects(source.store, 18, players, { [actor.id]: targetEffect(actor.id, { fleeTicks: 100 }) })
+  const fleeingBrain = fleeing.store.actors[0]!.brain
+  if (fleeingBrain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.ok(fleeingBrain.pike)
   const frozen = stepWithEffects(source.store, 18, players, {
     [actor.id]: targetEffect(actor.id, { frozenTicks: 10, frozenTimeScale: 0 }),
   })
@@ -5816,7 +5921,7 @@ test('Maggot periodic contacts retain zero and fractional native hit strengths',
     const result = resolveBoneyardNativeSecondaryCombat(ready, {
       damage: [{ amount: 0.01, kind: 'fire', ownerId: 'player', sourceActorId: 1,
         targetId: maggot.id, hitStrength, suppressHurtSound: true }],
-      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [],
     }, source.lastStepTick)
     const damaged = result.enemies.maggots[0]!
     assert.ok(damaged.currentHealth < maggot.currentHealth)

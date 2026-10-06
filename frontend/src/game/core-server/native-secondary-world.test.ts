@@ -68,7 +68,7 @@ test('native flag-8 contacts clear movement reaction independently of strength a
           targetId: original.id, hitStrength, suppressHurtSound }
         const apply = (store: typeof spawned, tick: number, suppressHitReaction: boolean) => (
           resolveBoneyardNativeSecondaryCombat(store, { damage: [{ ...contact, suppressHitReaction }],
-            dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [] }, tick).enemies
+            dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [] }, tick).enemies
         )
         const direct = apply(spawned, 0, false)
         assert.equal(direct.actors[0]!.hitReactionTimer, 1, 'Ordinary zero-strength/quiet damage still reacts')
@@ -253,7 +253,7 @@ test('Dampen cancels all five native magic variants without calling their impact
     'firebolt', 'guided-missile', 'guided-missile', 'skull-missile', 'dark-fireball',
   ])
   const canceled = resolveBoneyardNativeSecondaryCombat(source, {
-    damage: [], dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [],
+    damage: [], dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], targetHeadingChanges: [],
     removedProjectileIds: candidates.projectiles.map(({ id }) => id),
   }, 0)
   assert.deepEqual(canceled.enemies.projectiles.map(({ id }) => id), [1, 4, 5])
@@ -288,7 +288,7 @@ test('Dampen interrupts Mage and Faculty casts while their walking and casting-d
   assert.deepEqual(candidates.casterTargetIds, [1, 2])
   const dampened = resolveBoneyardNativeSecondaryCombat(casting, {
     damage: [], dampenedCasterTargetIds: candidates.casterTargetIds,
-    dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+    dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [],
   }, 0).enemies
   for (const enemy of projectBoneyardEnemies(dampened, 0)) {
     const replicated = materializeBoneyardEnemy(boneyardEnemyDescriptor(enemy), boneyardEnemySample(enemy))
@@ -359,11 +359,29 @@ test('Earthquake applies its exact signed heading perturbation at the enemy-stor
     damage: [],
     dampenedCasterTargetIds: [],
     dispelledShieldTargetIds: [],
-    headingPerturbations: [{ deltaDegrees: -15, targetId: actor.id }],
+    targetHeadingChanges: [{ degrees: -15, mode: 'relative', targetId: actor.id }],
     removedProjectileIds: [],
   }, 1)
 
   assert.equal(result.enemies.actors[0]!.headingDeg, Math.fround(350))
+})
+
+test('Turn Undead absolute headings replace both native heading lanes in cast order', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('cast-headings'), {
+    players: {}, projectileWorldBlocked: () => false, resolveMovement: request => request.position,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1, locationPolicy: 'anywhere',
+      nativeTypeId: 1001, position: { x: 100, y: 100 }, spawnTick: 0, waveOrdinal: 1 }], tick: 0,
+  }).store
+  const source = spawned.actors[0]!
+  const changed = resolveBoneyardNativeSecondaryCombat(spawned, {
+    damage: [], dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], removedProjectileIds: [],
+    targetHeadingChanges: [{ targetId: source.id, degrees: 90, mode: 'absolute' },
+      { targetId: source.id, degrees: 270, mode: 'absolute' }],
+  }, 0).enemies.actors[0]!
+  assert.equal(changed.headingDeg, 270)
+  assert.equal(changed.path.wanderHeadingDeg, 270)
+  assert.deepEqual(changed.position, source.position)
+  assert.strictEqual(changed.config, source.config)
 })
 
 function enemyProjectile(
@@ -440,7 +458,7 @@ test('Spider Ether Drain capture preserves rewards while suppressing sound and c
     const spider = spawned.actors[0]!
     const hit = resolveBoneyardNativeSecondaryCombat(spawned, {
       damage: [{ amount: 100, etherDrain, kind: 'magic', ownerId: 'player', sourceActorId: 1, targetId: spider.id }],
-      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [],
     }, 1, undefined, undefined, undefined, [{ x: spider.position.x + distance, y: spider.position.y }])
     assert.equal(projectBoneyardEnemies(hit.enemies, 1).length, captured ? 0 : 1)
     const retired = stepBoneyardEnemyStore(hit.enemies, context)
@@ -470,7 +488,7 @@ test('periodic zero-strength contacts damage every common enemy receiver without
     const contact = { amount: 0.01, kind: 'fire' as const, ownerId: 'player', sourceActorId: 1,
       targetId: actor.id, hitStrength: 0, suppressHurtSound: true }
     const result = resolveBoneyardNativeSecondaryCombat(source, { damage: [contact],
-      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [] }, 0)
+      dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [] }, 0)
     const burned = result.enemies.actors[0]!
     assert.ok(burned.currentHealth < actor.currentHealth, `${enemyToken}: HP loss`)
     assert.equal(nativePuppetHitAlpha(burned.hitFeedback, 0), 0, `${enemyToken}: zero red alpha`)
@@ -478,7 +496,7 @@ test('periodic zero-strength contacts damage every common enemy receiver without
     assert.equal(result.events.filter(event => event.type === 'enemy-damage-sound').length, 0)
     const direct = resolveBoneyardNativeSecondaryCombat(source, { damage: [{ ...contact,
       hitStrength: 1, suppressHurtSound: false }], dampenedCasterTargetIds: [],
-      dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [] }, 0)
+      dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [] }, 0)
     assert.equal(nativePuppetHitAlpha(direct.enemies.actors[0]!.hitFeedback, 0), 1,
       `${enemyToken}: ordinary hit remains visible`)
   }
@@ -496,7 +514,7 @@ test('quiet periodic damage keeps shield absorption and break separate from body
     shieldHealth: 0.001, shieldMaximumHealth: 0.001 }] }, {
     damage: [{ amount: 0.01, kind: 'fire', ownerId: 'player', sourceActorId: 1,
       targetId: actor.id, hitStrength: 0, suppressHurtSound: true }],
-    dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], headingPerturbations: [], removedProjectileIds: [],
+    dampenedCasterTargetIds: [], dispelledShieldTargetIds: [], targetHeadingChanges: [], removedProjectileIds: [],
   }, 0)
   assert.equal(result.enemies.actors[0]!.currentHealth, actor.currentHealth)
   assert.equal(result.enemies.actors[0]!.shieldHealth, 0)

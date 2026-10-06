@@ -1,5 +1,5 @@
 import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
-import { actorHeadingVector } from './actor-heading.ts'
+import { actorHeadingFromVector, actorHeadingVector } from './actor-heading.ts'
 import type { PlayerBeltComponent } from './native-belt.ts'
 import { createNativeDampenedSpell, stepNativeDampenedSpell } from './native-dampened-spell.ts'
 import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
@@ -504,8 +504,9 @@ export interface NativeSecondaryKnockbackContact {
   readonly targetId: number
 }
 
-export interface NativeSecondaryHeadingPerturbation {
-  readonly deltaDegrees: number
+export interface NativeSecondaryTargetHeadingChange {
+  readonly degrees: number
+  readonly mode: 'absolute' | 'relative'
   readonly targetId: number
 }
 
@@ -531,7 +532,7 @@ export interface NativeSecondaryTickResult {
   readonly manaUnderflowPlayerIds: readonly string[]
   readonly manaSpent: Readonly<Record<string, number>>
   readonly healthRecovered: Readonly<Record<string, number>>
-  readonly headingPerturbations: readonly NativeSecondaryHeadingPerturbation[]
+  readonly targetHeadingChanges: readonly NativeSecondaryTargetHeadingChange[]
   readonly facingHeadingDegreesByPlayer: Readonly<Record<string, number>>
   readonly knockbacks: readonly NativeSecondaryKnockbackContact[]
   readonly relocatedPlayers: Readonly<Record<string, Vector2>>
@@ -1462,7 +1463,7 @@ export function stepNativeSecondaryAbilities(
   const manaRecovered: Record<string, number> = {}
   const manaSpent: Record<string, number> = {}
   const healthRecovered: Record<string, number> = {}
-  const headingPerturbations: NativeSecondaryHeadingPerturbation[] = []
+  const targetHeadingChanges: NativeSecondaryTargetHeadingChange[] = []
   const steamedPulses: NativeSecondarySteamedPulse[] = []
   const facingHeadingDegreesByPlayer: Record<string, number> = {}
   const relocatedPlayers: Record<string, Vector2> = {}
@@ -2596,8 +2597,8 @@ export function stepNativeSecondaryAbilities(
               }
               const heading = drawNativeSign(rng, 15)
               rng = heading.state
-              headingPerturbations.push(Object.freeze({
-                deltaDegrees: heading.value,
+              targetHeadingChanges.push(Object.freeze({
+                degrees: heading.value, mode: 'relative',
                 targetId: target.id,
               }))
               state = mergeEffect(state, actor.worldKey, target.id, {
@@ -2867,7 +2868,7 @@ export function stepNativeSecondaryAbilities(
           if (target === null) continue
           addDamage(actor, target, actor.damage, 'physical')
           state = mergeEffect(state, actor.worldKey, target.id, { dazzleTicks: 200 })
-          headingPerturbations.push({ deltaDegrees: perturbation.headingDegrees, targetId: target.id })
+          targetHeadingChanges.push({ degrees: perturbation.headingDegrees, mode: 'relative', targetId: target.id })
         }
         break
       }
@@ -3866,6 +3867,7 @@ export function stepNativeSecondaryAbilities(
         if (cast.facingHeadingDegrees !== null) {
           facingHeadingDegreesByPlayer[playerId] = cast.facingHeadingDegrees
         }
+        targetHeadingChanges.push(...cast.targetHeadingChanges)
         cast.removedProjectileIds.forEach((id) => removedProjectileIds.add(id))
         cast.dampenedCasterTargetIds.forEach((id) => dampenedCasterTargetIds.add(id))
         cast.dispelledShieldTargetIds.forEach((id) => dispelledShieldTargetIds.add(id))
@@ -3901,7 +3903,7 @@ export function stepNativeSecondaryAbilities(
     dispelledShieldTargetIds: Object.freeze([...dispelledShieldTargetIds].sort((a, b) => a - b)),
     disruptedTargetIds: Object.freeze([...disruptedTargetIds].sort((a, b) => a - b)),
     facingHeadingDegreesByPlayer: Object.freeze(facingHeadingDegreesByPlayer),
-    headingPerturbations: Object.freeze(headingPerturbations),
+    targetHeadingChanges: Object.freeze(targetHeadingChanges),
     healthRecovered: Object.freeze(healthRecovered),
     knockbacks: Object.freeze(knockbacks),
     manaRecovered: Object.freeze(manaRecovered),
@@ -3924,6 +3926,7 @@ interface CastResult {
   readonly manaUnderflow: boolean
   readonly manaSpent: number
   readonly facingHeadingDegrees: number | null
+  readonly targetHeadingChanges: readonly NativeSecondaryTargetHeadingChange[]
   readonly player: NativeSecondaryPlayerState
   readonly relocated: Vector2 | null
   readonly removedProjectileIds: readonly number[]
@@ -3975,7 +3978,7 @@ export function activateNativeSecondaryBeltSkill(
     disruptedTargetIds: [],
     facingHeadingDegreesByPlayer: cast.facingHeadingDegrees === null
       ? {} : { [playerId]: cast.facingHeadingDegrees },
-    headingPerturbations: [],
+    targetHeadingChanges: cast.targetHeadingChanges,
     healthRecovered: {},
     knockbacks: [],
     manaRecovered: cast.manaRecovered > 0 ? { [playerId]: cast.manaRecovered } : {},
@@ -4047,7 +4050,7 @@ function castAbility(
   ): CastResult => ({
     dispelledShieldTargetIds: [], dampenedCasterTargetIds: [], manaRecovered: 0, manaUnderflow,
     manaSpent: 0, player: nextPlayer,
-    facingHeadingDegrees: null, relocated: null, removedProjectileIds: [], state,
+    facingHeadingDegrees: null, relocated: null, removedProjectileIds: [], targetHeadingChanges: [], state,
   })
   if (!authority.eligible) {
     return none(fizzle(source, playerId, skillId, authority, context.tick), {
@@ -4093,6 +4096,7 @@ function castAbility(
   let castManaRecovered = 0
   let relocated: Vector2 | null = null
   let facingHeadingDegrees: number | null = null
+  const targetHeadingChanges: NativeSecondaryTargetHeadingChange[] = []
   let removedProjectileIds: readonly number[] = []
   let dampenedCasterTargetIds: readonly number[] = []
   let dispelledShieldTargetIds: readonly number[] = []
@@ -4208,6 +4212,7 @@ function castAbility(
           dispelledShieldTargetIds,
           dampenedCasterTargetIds,
           facingHeadingDegrees: null,
+          targetHeadingChanges,
           manaRecovered: castManaRecovered,
           manaUnderflow: false,
           manaSpent,
@@ -4846,6 +4851,9 @@ function castAbility(
     case 77:
       for (const target of stableTargets(context.targets(authority.worldKey, origin, 250))) {
         if (!['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'ZOMBIE'].includes(target.family)) continue
+        targetHeadingChanges.push({ degrees: actorHeadingFromVector(
+          target.position.x - origin.x, target.position.y - origin.y,
+        ), mode: 'absolute', targetId: target.id })
         state = mergeEffect(state, authority.worldKey, target.id, {
           fleeTicks: Math.round(v.mFlee * 100),
           weakenFactor: Math.max(0, 1 - v.mWeaken / 100),
@@ -4919,6 +4927,7 @@ function castAbility(
     dispelledShieldTargetIds,
     dampenedCasterTargetIds,
     facingHeadingDegrees,
+    targetHeadingChanges: Object.freeze(targetHeadingChanges),
     manaRecovered: castManaRecovered,
     manaUnderflow: false,
     manaSpent,
@@ -6393,7 +6402,7 @@ function mergeEffect(
     dazzleTicks: Math.max(current.dazzleTicks, patch.dazzleTicks ?? 0),
     disruptedTicks: Math.max(current.disruptedTicks, patch.disruptedTicks ?? 0),
     electricBurn: mergeElectricBurnEffect(current.electricBurn, patch.electricBurn),
-    fleeTicks: Math.max(current.fleeTicks, patch.fleeTicks ?? 0),
+    fleeTicks: Math.max(0, patch.fleeTicks ?? current.fleeTicks),
     frostBurnDamagePerTick: frostBurnTicks > current.frostBurnTicks
       ? patch.frostBurnDamagePerTick ?? current.frostBurnDamagePerTick
       : Math.max(current.frostBurnDamagePerTick, patch.frostBurnDamagePerTick ?? 0),

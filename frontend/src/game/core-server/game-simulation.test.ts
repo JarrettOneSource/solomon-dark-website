@@ -3708,6 +3708,67 @@ test('every secondary Inventory belt action commits without stepping the frozen 
   }
 })
 
+test('Turn Undead cast headings commit before motion and survive party save continuation', () => {
+  const loadedBoneyard = combatBoneyard('turn-undead-party-save')
+  const config = { discipline: 'body', displayName: 'Turn Undead caster', element: 'fire' } as const
+  let state = enterBoneyardWorld(createGameSimulation({ caster: config, peer: config }), loadedBoneyard)
+  state = withPlayerSkillRank(state, 'caster', 77, 1)
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', 77, 0)!
+  state = { ...state, playerEntities: replacePlayerCharacter(
+    replacePlayerCharacter(state.playerEntities, 'caster', { ...getPlayerCharacter(state, 'caster'),
+      position: { x: 100, y: 250 } }), 'peer', { ...getPlayerCharacter(state, 'peer'), position: { x: 375, y: 250 } }) }
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const managers = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const tokens = ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE', 'ZOMBIE'] as const
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    players: {}, projectileWorldBlocked: () => false, resolveMovement: request => request.position,
+    registerWorldPainter: managers.register, tick: state.tick,
+    resolveSpawnIntents: () => tokens.map((enemyToken, index) => ({
+      enemyToken, flags: [], id: index + 1, locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+      position: { x: 300, y: 160 + index * 60 }, spawnTick: state.tick, waveOrdinal: 1,
+    })),
+  }).store
+  state = { ...state, worldManagerOrder: managers.state(), world: { ...state.world,
+    enemies: { ...spawned, actors: spawned.actors.map(actor => ({ ...actor,
+      headingDeg: 180, nextMovementTick: Number.MAX_SAFE_INTEGER })) } } }
+  const cast = applyGameSimulationHubAction(state, 'caster', { type: 'activate-belt-slot', slot: 0 })
+  assert.equal(cast.accepted, true)
+  assert.equal(cast.state.tick, state.tick)
+  assert.equal(cast.state.secondaryAbilities.players.caster!.castSequence, 1)
+  if (cast.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  for (const actor of cast.state.world.enemies.actors) {
+    const expectedHeading = Math.fround((Math.atan2(actor.position.x - 100, 250 - actor.position.y) * 180 / Math.PI + 360) % 360)
+    assert.equal(actor.headingDeg, expectedHeading, `${actor.config.enemyToken} must immediately face away from the caster`)
+    assert.equal(actor.path.wanderHeadingDeg, expectedHeading)
+    assert.equal(actor.position.x, 300)
+    assert.ok(cast.state.secondaryAbilities.targetEffects.find(effect => effect.targetId === actor.id)!.fleeTicks > 0)
+  }
+  let direct = cast.state
+  for (let tick = 0; tick < 4; tick += 1) direct = stepGameSimulationTick(direct, {})
+  if (direct.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  for (const actor of direct.world.enemies.actors) {
+    assert.equal(actor.targetPlayerId, 'peer')
+    assert.ok(actor.position.x < 300, `${actor.config.enemyToken} must flee its current party target`)
+  }
+  // A solo continuation removes other party members through this same public owner.
+  direct = removePlayerCharacter(direct, 'peer')
+  const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only',
+    loadedBoneyard, mods: [], modState: {}, playerId: 'caster', state: direct })).state
+  if (restored.world.kind !== 'boneyard' || direct.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(restored.world.enemies.actors, direct.world.enemies.actors)
+  assert.deepEqual(restored.secondaryAbilities.targetEffects, direct.secondaryAbilities.targetEffects)
+  let resumed = restored
+  for (let tick = 0; tick < 4; tick += 1) {
+    direct = stepGameSimulationTick(direct, {})
+    resumed = stepGameSimulationTick(resumed, {})
+  }
+  if (direct.world.kind !== 'boneyard' || resumed.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(resumed.world.enemies.actors, direct.world.enemies.actors)
+  assert.deepEqual(resumed.secondaryAbilities.targetEffects, direct.secondaryAbilities.targetEffects)
+  assert.ok(direct.world.enemies.actors.every(actor => actor.targetPlayerId === 'caster'))
+})
+
 test('Inventory belt preserves aimed placement and Teleport relocation without a world step', () => {
   const target = { x: 350, y: 250 }
   const circle = staffSecondaryState(49, 'player-staff-melee')

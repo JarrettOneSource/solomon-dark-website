@@ -2,7 +2,7 @@ import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { nativeEtherDrainCapturesFamily } from '../core-kernels/native-ether-drain.ts'
-import type { NativeSecondaryDamageContact, NativeSecondaryDampenCandidates, NativeSecondaryDampenProjectileCandidate, NativeSecondaryHeadingPerturbation, NativeSecondaryPositionResult, NativeSecondaryTarget, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondaryDamageContact, NativeSecondaryDampenCandidates, NativeSecondaryDampenProjectileCandidate, NativeSecondaryTargetHeadingChange, NativeSecondaryPositionResult, NativeSecondaryTarget, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
@@ -282,7 +282,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   source: BoneyardEnemyStore,
   result: Pick<
     NativeSecondaryTickResult,
-    'damage' | 'dampenedCasterTargetIds' | 'dispelledShieldTargetIds' | 'headingPerturbations' | 'removedProjectileIds'
+    'damage' | 'dampenedCasterTargetIds' | 'dispelledShieldTargetIds' | 'targetHeadingChanges' | 'removedProjectileIds'
   >,
   tick: number,
   lethalObserver?: BoneyardEnemyLethalObserver,
@@ -334,36 +334,40 @@ export function resolveBoneyardNativeSecondaryCombat(
     events.push(...damaged.events)
     captures.push(...damaged.captures)
   }
-  enemies = applyEarthquakeHeadingPerturbations(enemies, result.headingPerturbations)
+  enemies = applySecondaryTargetHeadings(enemies, result.targetHeadingChanges)
   return { captures: Object.freeze(captures), enemies, events: Object.freeze(events) }
 }
 
-function applyEarthquakeHeadingPerturbations(
+function applySecondaryTargetHeadings(
   source: BoneyardEnemyStore,
-  perturbations: readonly NativeSecondaryHeadingPerturbation[],
+  changes: readonly NativeSecondaryTargetHeadingChange[],
 ): BoneyardEnemyStore {
-  if (perturbations.length === 0) return source
+  if (changes.length === 0) return source
   let actors = source.actors
   let maggots = source.maggots
-  for (const perturbation of perturbations) {
-    const actorIndex = actors.findIndex(({ id }) => id === perturbation.targetId)
+  for (const change of changes) {
+    const actorIndex = actors.findIndex(({ id }) => id === change.targetId)
     if (actorIndex >= 0) {
       const next = [...actors]
       const actor = next[actorIndex]!
       next[actorIndex] = {
         ...actor,
-        headingDeg: normalizeDegrees(actor.headingDeg + perturbation.deltaDegrees),
+        path: change.mode === 'absolute'
+          ? { ...actor.path, wanderHeadingDeg: normalizeDegrees(change.degrees) } : actor.path,
+        headingDeg: normalizeDegrees(change.mode === 'absolute'
+          ? change.degrees : actor.headingDeg + change.degrees),
       }
       actors = Object.freeze(next)
       continue
     }
-    const maggotIndex = maggots.findIndex(({ id }) => id === perturbation.targetId)
+    const maggotIndex = maggots.findIndex(({ id }) => id === change.targetId)
     if (maggotIndex < 0) continue
     const next = [...maggots]
     const maggot = next[maggotIndex]!
     next[maggotIndex] = {
       ...maggot,
-      headingDeg: normalizeDegrees(maggot.headingDeg + perturbation.deltaDegrees),
+      headingDeg: normalizeDegrees(change.mode === 'absolute'
+        ? change.degrees : maggot.headingDeg + change.degrees),
     }
     maggots = Object.freeze(next)
   }

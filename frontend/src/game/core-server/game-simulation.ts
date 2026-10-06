@@ -4473,7 +4473,8 @@ function activateGameSimulationBeltSkill(
     state.tick,
     extensions,
   )
-  const affectsEnemies = secondaryResult.dampenedCasterTargetIds.length > 0
+  const affectsEnemies = secondaryResult.targetHeadingChanges.length > 0
+    || secondaryResult.dampenedCasterTargetIds.length > 0
     || secondaryResult.dispelledShieldTargetIds.length > 0
     || secondaryResult.removedProjectileIds.length > 0
   const combat = affectsEnemies

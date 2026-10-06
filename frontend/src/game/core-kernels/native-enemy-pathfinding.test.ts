@@ -5,6 +5,7 @@ import {
   buildNativeEnemySteering,
   clearNativeEnemyRoute,
   createNativeEnemyPathState,
+  nativeEnemySteeringGoal,
   resolveNativeEnemyPathGoal,
 } from './native-enemy-pathfinding.ts'
 import { createNativeRng } from './native-rng.ts'
@@ -137,4 +138,41 @@ test('ordinary turning uses native sign/deadband instead of clamping to the rema
   assert.equal(steer(step / 2 + 1), step)
   assert.equal(steer(359), 0)
   assert.equal(steer(358.999), (360 - step) % 360)
+})
+
+test('native fleeing immediately faces away and retains its flank clock', () => {
+  const source = { ...createNativeEnemyPathState(createNativeRng(3)).state, flankTicksRemaining: 42 }
+  const request = {
+    actorHeadingDeg: 270, actorPosition: { x: 100, y: 0 }, cadenceTicks: 2,
+    movementPerTick: 1, radialDirection: -1 as const, statusFactor: 1,
+    tangentDirection: 0 as const, targetHeadingDeg: 0, targetPosition: { x: 0, y: 0 },
+  }
+  const goal = nativeEnemySteeringGoal(source, request)
+  assert.equal(goal.x, 110)
+  assert.ok(Math.abs(goal.y) < 1e-12)
+  const fled = buildNativeEnemySteering(source, request)
+  assert.equal(fled.headingDeg, 90)
+  assert.equal(fled.delta.x, 2)
+  assert.ok(Math.abs(fled.delta.y) < 1e-12)
+  assert.equal(fled.state.flankTicksRemaining, 42)
+  const targetless = buildNativeEnemySteering(source, { ...request, actorHeadingDeg: 180, targetPosition: null })
+  assert.equal(targetless.headingDeg, 180)
+  assert.ok(Math.abs(targetless.delta.x) < 1e-12)
+  assert.equal(targetless.delta.y, 2)
+})
+
+test('degraded fleeing retains its current heading across every native cadence', () => {
+  const source = { ...createNativeEnemyPathState(createNativeRng(3)).state, flankTicksRemaining: 42 }
+  for (const cadenceTicks of [2, 5, 10, 15]) {
+    const result = buildNativeEnemySteering(source, {
+      actorHeadingDeg: 270, actorPosition: { x: 100, y: 0 }, cadenceTicks,
+      fullMovement: false, goalPosition: { x: 0, y: 500 }, movementPerTick: 1,
+      radialDirection: -1, statusFactor: 0.5, tangentDirection: 0,
+      targetHeadingDeg: 0, targetPosition: { x: 0, y: 0 },
+    })
+    assert.equal(result.headingDeg, 270)
+    assert.equal(result.delta.x, -cadenceTicks)
+    assert.ok(Math.abs(result.delta.y) < 1e-12)
+    assert.strictEqual(result.state, source)
+  }
 })
