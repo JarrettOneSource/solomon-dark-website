@@ -1,5 +1,65 @@
 # 2026-08-21 — Shared-Hub edge routing and diagnostic correlation closure
 
+## 2026-10-06 — Report 74 proxy reload and close diagnosis
+
+Report 74's current original messages were rechecked on October 6: the report
+and attachment remain unchanged. The screenshot's diagnostic reference
+`807e2d60-733a-4151-927e-84d282ef7c7d` matches the private Website diagnostic
+archive, captured September 30 at 03:28:54.675 UTC on protocol 142. The client
+resumed a private College at 03:18:52.613 and received a clean WebSocket close
+`1001`, without a reason, at 03:28:50.718. There is no client gameplay exception.
+
+The matching server journal identifies a global Caddy configuration reload at
+03:28:52.249–03:28:52.288 UTC. The same private session loses its proxy at
+03:28:52.285, then records its final player leaving with transport loss and
+normal `empty-after-use` teardown at 03:28:52.298–03:28:52.300. Inventory pause,
+two quickbar writes, resume grace, and periodic checkpoints all completed
+before that edge. No simulation/process failure or deployment drain is present
+in that window. The roughly ten-minute socket lifetime is incidental; the
+retained evidence identifies the reload, not a ten-minute timeout or a Solomon
+conversation failure. Browser and server timestamps are separate clocks.
+
+This reopens the browser transport diagnosis boundary. The previous entry
+documented that a Caddy reload does not recreate the supervisor, but did not
+test its effect on already-upgraded tunnels. Installed Caddy is 2.6.2. Its
+[upgrade cleanup](https://github.com/caddyserver/caddy/blob/v2.6.2/modules/caddyhttp/reverseproxy/streaming.go)
+closes old tunnels with an empty-reason `1001` control message. It has neither
+`stream_close_delay` nor `stream_detached`; preserving tunnels requires a
+separate shared-proxy upgrade, not a supported setting in the current route.
+
+| Member | Disposition | Contract and consequence |
+| --- | --- | --- |
+| Player/observer/connection-attempt close `1001` | exact-ported | Going away identifies a transport closure, not which peer restarted; use the shared connection-loss explanation and retain exact technical details. |
+| Explicit `1012` restart and `game updating` | verified-already-at-parity | Retain announced restart/update copy and existing checkpoint/reload ownership. |
+| Other close codes and submitted logs | verified-already-at-parity | Keep their existing distinct causes, server details, and bounded diagnostics. |
+| Shared-Hub and private-session tunnels on Caddy 2.6.2 reload | blocked-by-platform | The current proxy closes upgraded connections. A reload can still interrupt play; the application must not mislabel that as a confirmed game-server restart. |
+| Final-player private teardown and saved continuation | verified-already-at-parity | Host closes after transport loss because the private session is empty; existing owner checkpoints supply normal Resume Game recovery. |
+| Solomon conversation, Boneyard hotbar bindings, native gameplay constants | out-of-system | The report's proposed gameplay cause is contradicted by the matching proxy/host lifecycle. No native behavior change is justified. |
+
+The correction removes `1001` from the explicit restart branch and adds a
+public regression for player and connection-attempt diagnosis, preserving the
+close code, cleanliness and reason. On M5, the regression failed against the
+previous classification, then all four focused tests passed. The exact
+`88ed4943` source passed the unchanged all-mode `scripts/validate.sh`, including
+the configured renderer gates. A built Chrome journey pulled the first belt
+entry off through Inventory, reached native Solomon speaking and opening-wave
+release, then received a real peer's empty-reason clean `1001`. The rendered
+explanation was `The connection to the game server ended unexpectedly.`; the
+technical detail remained `WebSocket closed with code 1001 (clean).`
+
+An additional recovery probe retained the fixture's standalone authority and
+correctly hit `A save may load only on a fresh host owner`. That extra probe
+does not qualify production save recovery and was excluded from this bounded
+diagnostic change. The successful conversation/close assertions and canonical
+gate are retained; this acceptance note changes no product code. Publication
+and the scoped deployed-client check follow through the maintained main worker.
+
+The proxy interruption remains unresolved and the original messages remain
+unchecked. No retail networking mechanism is invented; native interaction/save
+ownership remains under the existing ledgers. The original browser-held save
+and exact conversation state were not attached, so the historical hotbar
+arrangement cannot be replayed.
+
 ## 2026-09-30 — Report 71 saved-game welcome delivery
 
 Task `4fcac09e` starts from submitted diagnostic

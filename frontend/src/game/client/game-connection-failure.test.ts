@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   GameConnectionFailure,
   failureFromServerDisconnect,
+  failureFromTransportAttempt,
   failureFromTransportClose,
 } from './game-connection-failure.ts'
 import {
@@ -86,4 +87,20 @@ test('unknown client failures stay useful without inventing a server cause', () 
   assert.equal(failure.code, 'client-error')
   assert.equal(failure.message, 'The welcome snapshot omitted player-7.')
   assert.equal(failure.technicalDetail, null)
+})
+
+test('a peer going away does not assert that the game server restarted', () => {
+  for (const reason of ['', 'proxy reloaded']) {
+    const closed = { code: 1001, reason, wasClean: true }
+    for (const failure of [
+      failureFromTransportClose(closed),
+      failureFromTransportAttempt('wss://solomondarker.com/game-hub', closed),
+    ]) {
+      assert.equal(failure.code, 'connection-lost')
+      assert.equal(failure.message, 'The connection to the game server ended unexpectedly.')
+      assert.deepEqual(failure.transport, closed)
+      assert.equal(failure.technicalDetail,
+        `WebSocket closed with code 1001 (clean)${reason ? `: ${reason}` : '.'}`)
+    }
+  }
 })

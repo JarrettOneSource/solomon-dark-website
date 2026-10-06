@@ -101,7 +101,7 @@ export function failureFromTransportClose(
       transport,
     })
   }
-  if (transport.code === 1001 || transport.code === 1012) {
+  if (transport.code === 1012) {
     return new GameConnectionFailure({
       code: 'server-restart',
       explanation: transport.reason === 'game updating'
