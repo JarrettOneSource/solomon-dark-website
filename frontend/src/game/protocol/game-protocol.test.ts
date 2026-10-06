@@ -7,7 +7,7 @@ import { NATIVE_HAIL_MINIMUM_HEIGHT, createNativeWaterHailActor, nativeWaterHail
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { GAME_OVER_AUTOMATIC_ACCEPT_TICK, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS, gameRunWorldTick } from '../core-kernels/game-run.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
-import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createHubEconomy, hagathaOffers } from '../core-kernels/hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createEquipmentInventoryItem, createHubEconomy, hagathaOffers } from '../core-kernels/hub-economy.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import { NATIVE_ENEMY_WORLD_FEEDBACK, applyNativeEnemyWorldFeedback } from '../core-kernels/native-enemy-world-feedback.ts'
@@ -25,8 +25,8 @@ import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/enemies/model.ts'
 import type { GameSimulationState } from '../core-server/game-simulation.ts'
-import { confirmGameSimulationLoadout, createGameSimulation, enterBoneyardWorld, stepGameSimulationTick } from '../core-server/game-simulation.ts'
-import { coldSlowPlayerEntity, dazzlePlayerEntity } from '../core-server/player-entity-store.ts'
+import { bindGameSimulationPlayerSkillQuickbar, confirmGameSimulationLoadout, createGameSimulation, enterBoneyardWorld, stepGameSimulationTick } from '../core-server/game-simulation.ts'
+import { coldSlowPlayerEntity, dazzlePlayerEntity, grantPlayerEntitySkillRanks, grantPlayerEntityWeldBuild, replacePlayerEconomy, selectPlayerEntityPrimarySkill } from '../core-server/player-entity-store.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { GameProtocolError } from './codecs/values.ts'
@@ -3033,6 +3033,92 @@ test('protocol gives every welded one-shot the shared Fire-rate Cast 1 clock', (
     () => decodeServerGameMessage(JSON.stringify(message(pureEther))),
     /outside the Staff Cast 1 program/,
   )
+})
+
+test('every authored Iron Golem reflection rank survives summon and snapshot decoding', () => {
+  const factors = [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2.5]
+  for (const [rank, expected] of factors.entries()) {
+    let state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), loadedBoneyardFixture(`golem-${rank}`))
+    for (const [skillId, ranks] of [[45, 1], [75, rank]]) {
+      if (ranks === 0) continue
+      const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'player-1', skillId!, ranks!, state.gameRng)
+      state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+    }
+    state = bindGameSimulationPlayerSkillQuickbar(state, 'player-1', 45, 0)!
+    state = stepGameSimulationTick(state, { 'player-1': {
+      aim: { x: 500, y: 150 }, cast: { primary: false, quickbar: 0 }, movement: { x: 0, y: 0 },
+      viewportWidth: 1600, viewportHeight: 900,
+    } })
+    const snapshot = createGameSnapshot(state, 'player-1')
+    const golem = snapshot.secondaryAbilities.actors.find(actor => actor.kind === 'golem')
+    assert.ok(golem?.golem, `rank${rank}: summoned Golem`)
+    assert.equal(golem.golem.reflectFactor, expected)
+    const message = { type: 'server-snapshot' as const, acknowledgedInputSequence: 0, sequence: 1,
+      frame: createGameSnapshotFrame(snapshot, 0, undefined, true) }
+    const decoded = decodeServerGameMessage(encodeGameMessage(message))
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.equal(decoded.frame.secondaryAbilities.actors.find(actor => actor.kind === 'golem')?.golem?.reflectFactor, expected)
+    for (const invalid of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const malformed = JSON.parse(encodeGameMessage(message))
+      const actor = malformed.frame.secondaryAbilities.actors.find((actor: { kind: string }) => actor.kind === 'golem')
+      actor.golem.reflectFactor = invalid
+      assert.throws(() => decodeServerGameMessage(JSON.stringify(malformed)), /reflectFactor/)
+    }
+  }
+})
+
+test('Cast 1 tails from composed stock cast-speed effects decode across equipment changes', () => {
+  const fleetfinger = DOWSING_EQUIPMENT_RECIPES.find(recipe => recipe.sourceIndex === 36)!
+  for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
+    const builds = element === 'ether' ? [8, 1000, 1001, 1002, 1009]
+      : element === 'fire' ? [16, 1000, 1001, 1002, 1009]
+        : [1000, 1001, 1002, 1009]
+    for (const primaryId of builds) {
+      let state = enterBoneyardWorld(createGameSimulation({ 'player-1': { ...CHARACTER, element } }), loadedBoneyardFixture(`cast-${element}-${primaryId}`))
+      if (primaryId >= 1000) {
+        const granted = grantPlayerEntityWeldBuild(state.playerEntities, 'player-1', primaryId, state.gameRng)
+        state = { ...state, playerEntities: selectPlayerEntityPrimarySkill(granted.store, 'player-1', 52), gameRng: granted.rng }
+      }
+      const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'player-1', 70, 1, state.gameRng)
+      state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+      const economy = state.playerEntities.economies[0]!
+      const rings = [1, 2].map(id => createEquipmentInventoryItem(fleetfinger, 90_000 + id))
+      state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'player-1', {
+        ...economy, equipment: { ...economy.equipment, rings: [rings[0]!, rings[1]!, null] },
+        nextItemId: 90_003, revision: economy.revision + 1,
+      }) }
+      state = stepGameSimulationTick(state, { 'player-1': {
+        aim: { x: 500, y: 150 }, cast: { primary: true, quickbar: null }, movement: { x: 0, y: 0 },
+        viewportWidth: 1600, viewportHeight: 900,
+      } })
+      assert.equal(state.playerEntities.primaryCasts[0]!.castSequence, 1)
+      const neutralEnd = primaryId === 8 ? 55 : 73
+      for (let tick = 0; tick < 20 && state.playerEntities.primaryCasts[0]!.actionTick < neutralEnd; tick += 1) {
+        state = stepGameSimulationTick(state, {})
+      }
+      const tail = state.playerEntities.primaryCasts[0]!.actionTick
+      assert.ok(tail >= neutralEnd, `${element}:${primaryId}: native occupied overshoot`)
+      const snapshot = createGameSnapshot(state, 'player-1')
+      assert.equal(snapshot.players['player-1']!.progression.inventoryStats.castSpeedPercent, 440)
+      const roundTrip = (state: GameSimulationState) => {
+        const message = { type: 'server-snapshot' as const, acknowledgedInputSequence: 0, sequence: 1,
+          frame: createGameSnapshotFrame(createGameSnapshot(state, 'player-1'), 0, undefined, true) }
+        const decoded = decodeServerGameMessage(encodeGameMessage(message))
+        assert.equal(decoded.type, 'server-snapshot')
+        assert.equal(decoded.frame.players['player-1']!.primaryCast.actionTick, tail)
+      }
+      roundTrip(state)
+      const fastEconomy = state.playerEntities.economies[0]!
+      state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'player-1', {
+        ...fastEconomy, equipment: { ...fastEconomy.equipment, rings: [null, null, null] },
+        revision: fastEconomy.revision + 1,
+      }) }
+      assert.equal(createGameSnapshot(state, 'player-1').players['player-1']!.progression.inventoryStats.castSpeedPercent, 110)
+      roundTrip(state)
+      state = stepGameSimulationTick(state, {})
+      assert.equal(state.playerEntities.primaryCasts[0]!.actionTick, -1)
+    }
+  }
 })
 
 test('protocol rejects legacy, malformed, and unsupported discriminated payloads', () => {

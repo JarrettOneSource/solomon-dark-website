@@ -1,5 +1,73 @@
 # 2026-08-27 — Welded Cast 1 protocol clock validation
 
+## 2026-10-06 — Report 91: occupied Cast 1 overshoot domain
+
+The old `0..54` Ether / `0..72` Fire wire limits below describe neutral-speed
+samples, not the complete action domain. The August pass reconciled the clock
+element but skipped the live speed writer and equipment changes during an
+occupied action. Report 91 reopens that shared validation boundary.
+
+Evidence and recovered contract:
+
+- Fresh original Discord messages `1556176611571798096` and
+  `1556176915478487171` retain the staff-switch report and its edited
+  temporary/non-recurring qualification. The screenshot names
+  `primaryCast.actionTick` outside Staff Cast 1. The reporter's missile-count
+  hypothesis does not establish a cause.
+- Read-only production diagnostics `841b4de2-a8d4-459a-892b-1c20e96a3ecd` and
+  `3e4e403f-4dd0-4163-8239-cb59312da1a1`, protocol 145, independently record
+  that exact failure at 2026-10-04 `05:28:52.228Z` and `05:30:37.281Z`, then
+  code 4008 closure. They contain no failing frame value or original save.
+- The same-session performance companion `ddf962c0-bcf7-4f85-a59f-d1a3b0a83b41`
+  pins deployed revision `ae26c65e`. Its historical `primary-spells.ts`
+  already retains the speed-dependent overshoot, while `players.ts` rejects
+  the nominal action end. This establishes the same domain contradiction in
+  the deployed source without inferring the original numeric tick.
+- Native instructions and fixed-tick golden in entry 185 already establish
+  Cast1 `0x0044B170/0x0044B370`, progress `0x004486E0`, strict end 4, and
+  retention of the first threshold-crossing update. The current authority
+  implements that lifetime in `advancePrimaryCast`: progress in neutral-rate
+  units advances by the live finite, nonnegative `castProgressFactor` while
+  the previous value is at or below `4/baseRate`; the next update retires it.
+- `playerSkillDerivedStats` supplies that factor from all Faster Caster rank
+  rows and concentration, global/class equipment lanes, and Hagatha. Authored
+  Fleetfinger recipe 36 alone doubles cast speed; equipment and skill effects
+  can compose. A neutral capture duration cannot bound the first overshoot.
+- `replacePlayerEconomy` refreshes those factors without resetting an action
+  when primary/build identity stays the same. The projected cast-speed stat
+  is the current rounded factor, not the factor that produced the retained
+  tail. A bound derived from that current stat would reject valid tails after
+  a speed reduction. There is no universal finite upper actionTick limit in
+  the present state contract; finite validation and the idle sentinel remain
+  meaningful boundaries.
+
+System boundary: shared primary-action wire admission, from authoritative
+Cast1/Constant state through full/welcome/incremental player projection and
+ordinary-player/observer decoding. No cast timing, missile quantity, equipment
+stat, native rate, or animation producer changes are required.
+
+| Member | Disposition before execution | Required proof |
+| --- | --- | --- |
+| Ether 8 and Fire 16 Cast1 | recovered-pending-port | real simulation tail above old 55/73 limits decodes unchanged and retires on the following update |
+| Welded Cast1 1000/1001/1002/1009, every base element | recovered-pending-port | same shared admission; prior Fire clock identity remains correct |
+| Faster Caster 70 ranks 0..10, concentration 25%, equipment FX 12/13, Hagatha speed | verified-already-at-parity producers | existing derived-stat/native-clock suites; composed stock equipment reproduction |
+| Same-primary equipment/stat changes while occupied | recovered-pending-port | retained tail decodes after a speed reduction; no fabricated action reset |
+| Air 24, Water 32, Earth 40 and welded Constant 1003..1008 | verified-already-at-parity | channel domain 0..1 and inactive sentinel -1 remain enforced |
+| Idle, insertion, release, repeat, primary/build selection, death and world replacement | verified-already-at-parity | existing lifecycle and identity checks remain intact |
+| Secondary Cast2/Dampen and enemy casts | out-of-system | separate state owners; no primaryCast decoder dependency |
+
+Implementation consequence: accept finite Cast1 progress at or above -1;
+retain the Constant 0..1 bound, selected-primary/build identities and every
+other field validator. Remove the obsolete neutral-clock upper check and its
+now-unused element resolver. Add regression coverage through simulation,
+snapshot projection and the production decoder before applying this change.
+
+Confidence: high for the domain mismatch and recovered lifetime. Unknown:
+the original staff's effects, exact failing actionTick and save are unavailable;
+neither diagnostics nor the screenshot proves the historical missile count.
+No browser platform constraint prevents this repair. Final dispositions and
+M5/browser acceptance are recorded after execution.
+
 ## Reported smell and parity question
 
 - Reported web behavior: inspect production server logs for crashes/errors and

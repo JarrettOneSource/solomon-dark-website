@@ -1,5 +1,49 @@
 # 2026-08-15 — Complete right-click ability system
 
+## 2026-10-06 — Report 90: Iron Golem reflection multiplier wire domain
+
+Report 90 reopens the Golem projection boundary. Earlier summon/contact recovery
+correctly modeled a damage multiplier but the wire decoder incorrectly treated
+it as a probability. The original message 1555582144053518459 is unchanged;
+its screenshot names `golem.reflectFactor must be between zero and one`.
+Six read-only production diagnostic records on 2026-10-02, protocol 143, confirm
+the same failure class, including `d112b9d2-bea2-4b2b-8596-7014be509953`
+at 14:06:02.951Z. Its same-session performance companion
+`35d8d7e1-f132-4d4d-af2c-5abded6e1757` pins deployed revision `a8480b82`.
+That historical revision already has the same `mReflect/100` producer and
+`unitInterval` decoder, establishing the mismatch at the recorded failure.
+The original failing frame/rank is unavailable.
+
+Existing native evidence: Raise Golem branch `0x0054CC50` creates factory `0x7F4`;
+learned Iron Golem 75 writes byte +0x210 and `mReflect/100` to +0x214. Contact
+`0x00607F60` reflects physical incoming primary damage multiplied by +0x214
+to a qualifying nearby actor source after age 400. The complete checked-in
+native skill catalog row 75 is `mReflect = [0,25,50,75,100,125,150,175,250]`,
+ranks 0..8; the legal stock factors are 0/.25/.5/.75/1/1.25/1.5/1.75/2.5.
+These are retained extraction facts, not a new binary extraction. The current
+authority in `game-simulation.ts` already divides the effective value by100,
+and Golem construction/contact preserve it. The contradiction is confined to
+the `unitInterval` decoder.
+
+Boundary: Golem birth and lifetime state through secondary-actor projection,
+welcome/full/incremental decode and save hydration. Physical reflection
+ownership, assembly timing, contact eligibility, visuals/audio and cap rules
+remain as recovered above.
+
+| Member | Disposition before execution | Required proof |
+| --- | --- | --- |
+| Iron Golem 75 ranks 0..8 | recovered-pending-port | all nine authored factors survive actual summon-to-snapshot decode; factors above 1 retain their damage multiplier |
+| Ordinary/iron summon, assembly/active/attack/provoke, one/two-Golem caps | verified-already-at-parity producers | existing Golem/secondary world tests; no lifecycle or painter changes |
+| Physical reflection versus magic channel; near/source flag; age 400/death | verified-already-at-parity | existing native Golem/contact tests retain physical-only damage scaling |
+| Player and observer full/incremental frames and save-derived snapshots | recovered-pending-port | same canonical secondary actor decoder; malformed negative/nonfinite factors still reject |
+
+Implementation consequence: use existing `nonnegativeFinite` for reflectFactor,
+as for the other damage scalars; preserve `unitInterval` for limb progress.
+Do not clamp factors to 1 or change the authored ranks. Confidence is high for
+the native/producer/decoder contradiction; original effective rank is unknown.
+No browser constraint prevents exact admission. Record final dispositions and
+M5/browser evidence after execution.
+
 ## 2026-09-30 — Conditional suppression survives anchor expiry
 
 Task `87f1ead8` closeout review identified and reproduced one missed retirement
