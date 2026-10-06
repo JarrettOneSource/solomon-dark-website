@@ -1682,3 +1682,37 @@ absolute invulnerability. Check no duplicate accepted birth immediately at
 fraction1, before yielding the host clock; keep the fraction/retirement tests.
 OutputPCM/pause/teardown remained unrun after that helper failure. All owned
 phase groups/native registration/export/roots/exactlease were actually closed.
+
+### Report65 corrected built text and sound acceptance
+
+The actual0110 cached-source M5 check admitted clean c62fd2d0, cloned the
+maintained AA27 Git cache read-only into an owned bare repository, fetched a
+146213-byte original-commit delta and verified HEAD/tree/clean status. The
+clean production build and realclient/host cue journey passed. At1600x900 the
+foreground atlas rectangles were exactlyX698.5..900.5/Y49..69 (202x20),
+menu group3, baseline placement and black Y+2 shadow. Visual review against
+the unchanged original second clip confirms the serif face, center and row
+geometry; different combat/flash phases are not claimed identical pixels.
+The prior109x11 body-face screenshot remains the actual regression red.
+
+Sound acceptance is separate: actualbuffer starts were flash-spell three times
+at1/0.800000011920929/0.5, then flash once at1; all gains were1. The lossless
+actual browser output capture was stereo48kHz PCM,262144bytes, peak32767,
+RMS9954.845742131507. This proves real audible output in the browser graph,
+not physical-speaker/loopback hardware. SourceWAVs remain byte-identical to
+the recovered native assets. Original mixed-combat/AAC comparison produced
+normalized first-difference correlation0.08830049269220153 at3.55s; this
+weak supporting result does not establish waveform equivalence and is not
+used as an acceptance threshold. No synthetic substitute sound is introduced.
+
+The same journey held the host at tick1023/protection0.5525004267692566 and
+notice opacity0.780001 while paused, then resumed and observed retirement by
+tick1300 after trigger844. Charge stayed0, the immediate repeated contact
+created no second wave/event, the notice vanished, and realowner leave released
+the renderer. Page/console/HTTPerror arrays were empty. All15 stage groups and
+12 M2 transport groups were drained; exactlease released01:12:49.355578.
+Only known same40-byte Crashpad settingsmtime changed. The owned detached
+worktree/private tools/cache are retained for finalvalidation and removed after
+publication. The earlier4b configuredALL42Python/4195Node/qualitypass remains
+qualified; the exact deliverycandidate still requires its finalunchangedALL,
+normalpublication/liveverification and allownedcleanup.
