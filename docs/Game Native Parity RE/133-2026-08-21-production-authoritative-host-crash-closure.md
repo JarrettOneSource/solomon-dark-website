@@ -537,3 +537,7 @@ Confidence is high for the production failure and invalid-state producer. No ori
 ### Validation plan
 
 Strengthen the existing Dampen caster integration test with a live nonzero Mage head turn and immediate real snapshot encode/decode. Confirm the exact production exception before the fix; then clear only the discarded Mage action's selector in its Dampen callback. Run the focused enemy, secondary, replication and protocol suites plus the canonical Website gate on M5. Verify repeated Dampen casts through the built browser and then the published service, with Mage cast/suppression state, continuing snapshots and empty fatal/transport error arrays.
+
+### Focused implementation evidence
+
+On October 6 at 19:24 UTC, the strengthened Dampen integration test failed on M5 with the exact production `boneyardEnemySample` exception. Adding `headFacingOffset: 0` to the Mage-only Dampen transition made the immediate snapshot round trip valid. All 223 tests in `native-secondary-world`, `boneyard-enemy-store`, `entity-replication`, and `game-protocol` passed, with no skipped or canceled tests. This includes the distinct Faculty callback and retained strict rejection of invalid non-action head offsets. The correction changes neither the protocol schema nor its validation. Canonical and browser/live acceptance remain pending.

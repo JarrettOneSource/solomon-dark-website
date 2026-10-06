@@ -49,7 +49,7 @@ export function dampenBoneyardCasters(source: BoneyardEnemyStore, targetIds: rea
     return actor.brain.family === 'faculty'
       ? { ...actor, bodyPose: 0, brain: { ...actor.brain, action: null, bodyPose: 0,
           disabledPrimaryTicks: 500, handMask: 0, lightningActive: false, phase: 'range-control' as const } }
-      : { ...actor, brain: { ...actor.brain, actionProgress: 0, disabledPrimaryTicks: 600,
+      : { ...actor, headFacingOffset: 0, brain: { ...actor.brain, actionProgress: 0, disabledPrimaryTicks: 600,
           markerEmitted: false, phase: 'range-control' as const } }
   })
   return { ...source, actors, deathEffects: work.deathEffects, nextDeathEffectId: work.nextDeathEffectId,
