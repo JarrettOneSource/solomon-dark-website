@@ -938,7 +938,6 @@ export function NativeHubSurface({
               disabled={inputSuspended || closing || inventoryTransitionLocked} />
           ) : null}
           <HubInventoryFooter
-            key={bank}
             blocked={notice !== null || dyeModal !== null}
             surface={surface}
             stats={{
@@ -952,7 +951,7 @@ export function NativeHubSurface({
               },
             }}
             belt={{
-              audio, belt,
+              audio, bank, belt,
               disabled: inventoryTransitionLocked || !onUnassignBeltEntry,
               onActivate: onBeltActivate,
               onPullOff: (slot) => onUnassignBeltEntry?.(bank * 8 + slot),

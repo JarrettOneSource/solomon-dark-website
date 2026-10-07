@@ -50,7 +50,7 @@ export function HubInventoryFooter({
     <>
       {inventoryControlsVisible && !(surface.kind === 'service' && surface.trader === 'hagatha')
         ? <InventoryStatsActions {...stats} /> : null}
-      {inventoryControlsVisible ? <InventoryBeltActions {...belt} /> : null}
+      {inventoryControlsVisible ? <InventoryBeltActions key={belt.bank} {...belt} /> : null}
       {semanticTooltip ? (
         <span className="hub-native-ui-semantic" role="tooltip">{semanticTooltip}</span>
       ) : null}
@@ -220,6 +220,7 @@ export function InventoryBeltActions({
   rects,
 }: {
   audio: GameAudioDirector
+  bank: number
   belt: PlayerBeltComponent
   disabled: boolean
   onActivate: (slot: number, pointer: Vector2) => void
