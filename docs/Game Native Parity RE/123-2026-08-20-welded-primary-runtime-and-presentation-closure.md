@@ -1351,3 +1351,87 @@ failed-request, and host-error arrays were empty. The four slow cases still
 lasted exactly 150 ticks with factor `.5`; all outside targets stayed untouched.
 The sound enum uses protocol 130 (published base 129). The final rebased
 candidate's canonical gate and repeat browser receipt remain publication gates.
+
+## 2026-10-07 — Report 81: released Boulder painter identity
+
+The report described a shared freeze when a welded spell was released. The clip
+shows a rotating purple four-rock assembly and red/orange breakup, matching
+build 1006's recovered rendering contract. This identifies the strongest
+representative case, not the historical save or exact component ranks, which
+were unavailable. The original was re-read unchanged before investigation.
+
+### Evidence and recovered ownership
+
+The existing stock contract above already records EBoulder as a retained actor
+plus recursively constructed, separately registered children. Entry 134 pins
+its stock handler at `0x00545360` and independent-child release at `0x005FA6D0`
+(retail SHA-256 recorded above). This investigation reuses those established
+instruction receipts rather than rerunning native extraction. Its recovered
+split templates, geometry, light provider and actor lifetime are unchanged.
+Entry 297's Region manager model assigns each concrete actor its own root;
+`enrollPrimarySpellPainterRegistrations` correctly reuses that actor's light
+registration when the one-root actor contract applies.
+
+On unchanged main `2b9f5e17`, two M5 Chrome clients releasing a four-piece build
+1006 in a prepared Slumpgut encounter both threw duplicate actor-registration
+errors. A second two-client run without any enemy produced the same exception.
+The authoritative host advanced normally and browser rAF callbacks continued,
+but completed gameplay frames stopped while cloned registrations coexisted.
+This is directly observed web behavior; no historical latency or reporter
+hardware diagnosis is claimed.
+
+The release helper spread the parent actor into every child. Since the earlier
+Region cutover had enrolled a `painterRegistrations` array on that parent, the
+new children inherited it while receiving distinct `lightRegistration` roots.
+Final enrollment preserved the inherited one-root array after structural checks,
+then the renderer correctly rejected duplicate manager membership. Earlier
+release regressions checked actors, light roots and trajectories but omitted
+painter identity after the full public tick enrollment.
+
+### Narrow system boundary and membership
+
+Boundary: painter identity at retained-primary release, including public tick
+enrollment and both client projections. No authored spell values, rates,
+collision rules, debris, assets, or network format are being changed.
+
+| Member | Disposition | Contract |
+| --- | --- | --- |
+| Build 1006 original retained actor, quantities 1–4 | exact-ported | Preserve its actor ID and existing painter/light root on release |
+| Build 1006 newly split actors, quantities 2–4 | exact-ported | Each new child enrolls from its own newly assigned light root, never the parent's painter array |
+| Repeated release and forced/owner release through the shared helper | exact-ported | Same identity rule; no renderer workaround or new root allocation |
+| Build 1008 Hail carrier and separate release fade | verified-already-at-parity | Carrier remains one actor; fade is a fresh literal without inherited painter metadata |
+| Build 1007 Meteor channel owner | verified-already-at-parity | Release removes the retained owner and creates no split copy |
+| Ordinary Earth, primary one-shots, beams and other actor births | out-of-system | Do not clone this retained multi-child release owner |
+
+Implementation belongs in `releaseNativeWeldPersistentActor`: clear inherited
+painter metadata only on genuinely new 1006 children so existing final enrollment
+reuses their unique light registrations. Keep the original actor's registrations,
+allocation order, RNG, release template and all native lifetimes intact.
+
+Validation: public `stepPrimarySpells` quantities 1–4 and repeated releases;
+existing sibling/native renderer suites; repeated two-client Slumpgut release
+with no duplicate errors and continuously completed rendering; required final
+Mac gate and deployed check. Prepared ranks, health/mana safety values, seed and
+no original save remain explicit fixture qualifications.
+
+### Focused and built-browser acceptance
+
+The new public-tick regression failed on unmodified main with two simultaneous
+actors sharing one ordinal. It now passes for all quantities 1–4, repeated casts,
+original-root retention, child painter/light identity and next-tick stability.
+The focused primary/native-weld/debris/renderer/Region group passed all 130 tests.
+
+The built M5 Chrome Slumpgut journey then completed four actual charge/releases
+across 1,406 server ticks. Caster and observer completed 853 and 844 rendered
+frames respectively; both had a 16.8 ms maximum measured render-progress interval,
+no long tasks, and no page, console or HTTP errors. Both rendered views were
+inspected after the releases. The source fixture used two isolated browser
+contexts, build 1006 ranks `[3,3,3,2,3,3]`, generated seed 42, authored Slumpgut
+plus five Zombies, and 10,000 health/mana safety values. It is a controlled
+reproduction rather than the unavailable historical save, hardware or network.
+The earlier reproduction runs are causal evidence, not passing acceptance;
+one initial setup attempt used the wrong case-sensitive New Game label.
+
+No native spell parameter, protocol field, renderer duplicate-root invariant,
+spell-effect quality setting or gameplay rate was relaxed. Final repository-gate
+and publication receipts are tracked by the report's completion record.

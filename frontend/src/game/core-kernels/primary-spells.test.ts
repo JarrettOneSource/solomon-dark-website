@@ -2871,6 +2871,38 @@ test('all welded sustained families use one latch and run their native release v
   }
 })
 
+test('Ethereal Boulder split children enroll their own painter roots across repeated releases', () => {
+  for (const quantity of [1, 2, 3, 4]) {
+    const profile = weldedProfile(1006, 'persistent', [8, 10, quantity, 1.1, 1.5, 1.2])
+    let state = { ...directSpellHarness('earth'), primarySkill: profile }
+    for (let cast = 0; cast < 2; cast += 1) {
+      state = stepSpellKernel(state, true, 100, true, () => true, profile).state
+      const held = state.spells.transients.find((effect) => (
+        effect.kind === 'weld-persistent' && effect.buildId === 1006 && effect.phase === 'held'
+      ))
+      assert.ok(held?.kind === 'weld-persistent' && held.buildId === 1006)
+      const retainedRoot = held.painterRegistrations
+      state = stepSpellKernel(state, false, 100, true, () => true, profile).state
+      const released = state.spells.transients.filter((effect) => (
+        effect.kind === 'weld-persistent' && effect.buildId === 1006
+      ))
+      assert.equal(released.length, quantity * (cast + 1))
+      assert.strictEqual(released.find((effect) => effect.id === held.id)?.painterRegistrations, retainedRoot)
+      const roots = released.flatMap((effect) => effect.painterRegistrations ?? [])
+      assert.equal(roots.length, released.length)
+      assert.equal(new Set(roots.map((root) => root.registrationOrdinal)).size, released.length)
+      for (const actor of released) {
+        assert.deepEqual(actor.painterRegistrations, [actor.lightRegistration])
+      }
+      const identities = released.map((actor) => [actor.id, actor.painterRegistrations])
+      state = stepSpellKernel(state, false, 100, true, () => true, profile).state
+      assert.deepEqual(state.spells.transients.filter((effect) => (
+        effect.kind === 'weld-persistent' && effect.buildId === 1006
+      )).map((actor) => [actor.id, actor.painterRegistrations]), identities)
+    }
+  }
+})
+
 test('Hail release removes only its own retained rock-birth fades', () => {
   const profile = weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5])
   let state = { ...directSpellHarness('earth'), primarySkill: profile }

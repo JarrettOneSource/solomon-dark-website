@@ -1212,6 +1212,8 @@ export function releaseNativeWeldPersistentActor(input: {
   return {
     actors: Object.freeze(split.map((piece, index) => Object.freeze({
       ...actor,
+      // New children enroll from their own light root, not the retained parent's.
+      ...(index === 0 ? {} : { painterRegistrations: undefined }),
       direction: piece.direction,
       hitTargetIds: Object.freeze([]),
       id: index === 0 ? actor.id : input.firstChildId + index - 1,
