@@ -126,6 +126,8 @@ export default function Boneyard() {
   const [wavesOpen, setWavesOpen] = useState(false)
   const [annalsBusy, setAnnalsBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [localSaveFailedFor, setLocalSaveFailedFor] = useState<EditorDoc | null>(null)
+  const localSaveFailed = localSaveFailedFor === state.doc
   const [deskOpen, setDeskOpen] = useState(false)
   const [leftW, setLeftW] = useState<number>(() => storedRailWidth(RAIL_L_KEY, RAIL_L_DEFAULT))
   const [rightW, setRightW] = useState<number>(() => storedRailWidth(RAIL_R_KEY, RAIL_R_DEFAULT))
@@ -193,8 +195,14 @@ export default function Boneyard() {
   useEffect(() => {
     if (!state.dirty) return
     const t = setTimeout(() => {
-      saveDraft(state.draftId, state.doc, countResidents(state.doc))
-      dispatch({ type: 'mark-saved', at: Date.now() })
+      try {
+        saveDraft(state.draftId, state.doc, countResidents(state.doc))
+        setLocalSaveFailedFor(null)
+        dispatch({ type: 'mark-saved', at: Date.now() })
+      } catch {
+        setLocalSaveFailedFor(state.doc)
+        setNotice('Local autosave is unavailable. Save to cloud or export a copy before leaving.')
+      }
     }, 800)
     return () => clearTimeout(t)
   }, [state.doc, state.dirty, state.draftId])
@@ -420,9 +428,9 @@ export default function Boneyard() {
             className={`font-mono text-[10px] uppercase tracking-wider ${
               state.dirty ? 'text-gold/80' : 'text-bone-dim/50'
             }`}
-            title={state.savedAt ? `Saved locally at ${new Date(state.savedAt).toLocaleTimeString()}` : 'Not saved'}
+            title={localSaveFailed ? 'Save to cloud or export a copy before leaving.' : state.savedAt ? `Saved locally at ${new Date(state.savedAt).toLocaleTimeString()}` : 'Not saved'}
           >
-            {state.dirty ? 'Saving…' : state.savedAt ? 'Saved locally' : 'Not saved'}
+            {localSaveFailed ? 'Local save unavailable' : state.dirty ? 'Saving…' : state.savedAt ? 'Saved locally' : 'Not saved'}
           </span>
         </div>
 

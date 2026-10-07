@@ -1,7 +1,7 @@
 // Editor state: one reducer, snapshot history, and the local draft drawer.
 // Pure module; the page owns it through useReducer.
 
-import { exportDocJson, importDocJson } from './io.ts'
+import { docFileValue, importDocJson } from './io.ts'
 import type { Rect } from './model'
 import type { EditorDoc, PlacedObject, PlayerSpawn, Polyline, SelEntry, Selection, StaticSprite, TerrainPatch, Vec2 } from './model.ts'
 import { createDoc, eid, entryKey, selectionSet } from './model.ts'
@@ -471,8 +471,9 @@ export function saveDraft(id: string, doc: EditorDoc, residents: number) {
   const meta: DraftMeta = { id, name: doc.meta.name, updatedAt: Date.now(), residents }
   const index = listDrafts().filter((d) => d.id !== id)
   index.unshift(meta)
+  // Download formatting wastes the browser's limited draft storage quota.
+  localStorage.setItem(DRAFT_PREFIX + id, JSON.stringify(docFileValue(doc)))
   localStorage.setItem(INDEX_KEY, JSON.stringify(index.slice(0, 40)))
-  localStorage.setItem(DRAFT_PREFIX + id, exportDocJson(doc))
 }
 
 export function loadDraft(id: string): EditorDoc | null {
@@ -493,8 +494,10 @@ export function deleteDraft(id: string) {
 // ---------- local draft -> Annals (cloud) mapping ----------
 
 const CLOUD_MAP_KEY = 'sdr:boneyard:cloudmap'
+let unsavedCloudMap: Record<string, number> | null = null
 
 function cloudMap(): Record<string, number> {
+  if (unsavedCloudMap) return unsavedCloudMap
   try {
     return JSON.parse(localStorage.getItem(CLOUD_MAP_KEY) ?? '{}') as Record<string, number>
   } catch {
@@ -510,5 +513,11 @@ export function setCloudId(draftId: string, cloudId: number | null) {
   const map = cloudMap()
   if (cloudId === null) delete map[draftId]
   else map[draftId] = cloudId
-  localStorage.setItem(CLOUD_MAP_KEY, JSON.stringify(map))
+  try {
+    localStorage.setItem(CLOUD_MAP_KEY, JSON.stringify(map))
+    unsavedCloudMap = null
+  } catch {
+    // A full browser must not prevent saving the document to its cloud draft.
+    unsavedCloudMap = map
+  }
 }

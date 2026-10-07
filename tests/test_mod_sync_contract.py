@@ -554,13 +554,52 @@ doc.sprites = Array.from({ length: 8500 }, (_, i) => ({
   rotationDeg: 0, scale: 1, alpha: 1, flags: 0,
 }));
 const bytes = serializeBoneyard(doc);
+const { default: assert } = await import('node:assert/strict');
+const { createServer } = await import('./frontend/node_modules/vite/dist/node/index.js');
+const vite = await createServer({ root: 'frontend', server: { middlewareMode: true }, logLevel: 'silent' });
+try {
+  const io = await vite.ssrLoadModule('/src/editor/io.ts');
+  const store = await vite.ssrLoadModule('/src/editor/store.ts');
+  const values = new Map();
+  let quota = 5 * 1024 * 1024;
+  globalThis.localStorage = {
+    getItem: key => values.get(key) ?? null,
+    setItem(key, value) {
+      if (value.length > quota) throw new DOMException('Full', 'QuotaExceededError');
+      values.set(key, value);
+    },
+  };
+  const hydrated = io.importNative(bytes);
+  assert.ok(io.exportDocJson(hydrated).length > 5 * 1024 * 1024);
+  store.saveDraft('resized', hydrated, 8500);
+  assert.deepEqual(store.loadDraft('resized'), hydrated);
+  assert.equal(store.listDrafts()[0].id, 'resized');
+  // Existing pretty-printed drafts remain readable under the same keys.
+  values.set('sdr:boneyard:draft:legacy', io.exportDocJson(hydrated));
+  assert.deepEqual(store.loadDraft('legacy'), hydrated);
+  const previous = values.get('sdr:boneyard:draft:resized');
+  quota = 0;
+  assert.throws(() => store.saveDraft('resized', hydrated, 8500), {name: 'QuotaExceededError'});
+  assert.equal(values.get('sdr:boneyard:draft:resized'), previous);
+  assert.throws(() => store.saveDraft('blocked', hydrated, 8500), {name: 'QuotaExceededError'});
+  assert.deepEqual(store.listDrafts().map(draft => draft.id), ['resized']);
+  store.setCloudId('resized', 123);
+  assert.equal(store.cloudIdFor('resized'), 123);
+  quota = 5 * 1024 * 1024;
+  store.setCloudId('resized', 456);
+  assert.equal(JSON.parse(values.get('sdr:boneyard:cloudmap')).resized, 456);
+} finally {
+  delete globalThis.localStorage;
+  await vite.close();
+}
 console.log(JSON.stringify({
   document: { format: 'sdr-boneyard-doc', version: 1, doc: parseBoneyard(bytes) },
   compiledBoneyard: Buffer.from(bytes).toString('base64'),
 }));
 """,
-            cwd=ROOT, text=True, capture_output=True, check=True,
+            cwd=ROOT, text=True, capture_output=True, check=False,
         )
+        self.assertEqual(generated.returncode, 0, generated.stderr)
         payload = json.loads(generated.stdout)
         self.assertEqual(len(base64.b64decode(payload["compiledBoneyard"])), 360_913)
         self.assertGreater(len(json.dumps(payload["document"]).encode()), 2 * 1024 * 1024)
