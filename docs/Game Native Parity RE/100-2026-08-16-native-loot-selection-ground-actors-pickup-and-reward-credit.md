@@ -1716,3 +1716,34 @@ worktree/private tools/cache are retained for finalvalidation and removed after
 publication. The earlier4b configuredALL42Python/4195Node/qualitypass remains
 qualified; the exact deliverycandidate still requires its finalunchangedALL,
 normalpublication/liveverification and allownedcleanup.
+
+
+## 2026-10-07 — Report 94 notification scale-distance is not screen Y
+
+Current original message 1557199659129114636 and its retained video show new notifications
+overlapping health/mana/concentration. The shared NativeWorldNotifications
+component adds `message.offset` to its screen position. This misreads the
+already-recovered manager's scale-distance lane as vertical motion: each new
+row begins at -18 and therefore draws 18px above the accepted native origin.
+
+The retained retail contract in Mod Loader native-items-equipment-and-loot.md,
+manager 0x00808878 / insertion 0x005CA7C0 / draw 0x005CF000, explicitly establishes
+that the distance lane affects scale only. Each row remains at the shared
+center/origin and separates through its own scale and alpha. Existing Fonts
+group 3, baseline 67, shadow Y+2 and the life/merge/stack rules above remain valid.
+No fresh stock playback or change to native timing is claimed.
+
+Boundary: every member rendered through NativeWorldNotifications (loot,
+book, combat and secondary sources), including first frame, current row,
+receding rows and Hub SkillBookFeedback. Remove the erroneous Y translation;
+retain the same scale, alpha, visibility and lifetime inputs. The reporter's
+suggested slower fade is unnecessary for this recovered placement correction.
+
+Actual rendered-JSX regression fails on the unchanged component at the newborn
+Mana Potion row. Candidate acceptance will include representative names,
+multiple ages and stacked rows, plus the combined built/live HUD journey.
+
+All 63 focused notification, Inventory presentation and render-contract tests
+pass, including actual React-rendered newborn/older/stacked rows. This verifies
+the correction's component contract; real built/live HUD overlap acceptance and
+the full combined gate remain pending.

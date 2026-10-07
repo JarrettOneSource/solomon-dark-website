@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { build } from 'esbuild'
 
 import { NativeLootMessagePresentation, nativeWorldNotificationsVisible } from './loot-message-presentation.ts'
 import type { BoneyardLootEventSnapshot } from './protocol/game-state.ts'
@@ -89,3 +90,34 @@ function event(
 }
 
 import './skill-book-feedback.test.ts'
+
+
+test('notification scale-distance never shifts the shared native screen origin', async () => {
+  const built = await build({
+    stdin: { contents: `import { createElement } from 'react';
+      import { renderToStaticMarkup } from 'react-dom/server';
+      import Notifications from './NativeWorldNotifications.tsx';
+      export const render = props => renderToStaticMarkup(createElement(Notifications, props));`,
+      loader: 'tsx', resolveDir: import.meta.dirname },
+    bundle: true, format: 'esm', platform: 'node', jsx: 'automatic', write: false,
+    loader: { '.css': 'empty', '.png': 'empty' },
+    banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(import.meta.url)});` },
+  })
+  const { render } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0]!.text).toString('base64')}`)
+  for (const text of ['MANA POTION', 'DOUBLE DAMAGE', 'CHEAT DEATH!', '42 GOLD']) {
+    const presentation = new NativeLootMessagePresentation(0)
+    presentation.consumeText({ eventId: 1, source: 'loot', tick: 0, text, tint: 0xffffff })
+    for (const tick of [0, 1, 9, 18, 30]) {
+      const messages = presentation.sample(tick)
+      const html = render({ messages })
+      assert.ok(html.includes(`aria-label="${text}" style="opacity:1;top:0"`),
+        `${text} at tick ${tick} must remain at the notification origin`)
+    }
+    presentation.consumeText({ eventId: 2, source: 'combat', tick: 30, text: 'SECOND NOTICE', tint: 0xffffff })
+    const messages = presentation.sample(34)
+    assert.ok(messages.some(message => message.offset > 0 && message.scale < 1))
+    const html = render({ messages })
+    assert.equal((html.match(/aria-label="[^"]+" style="opacity:[^;]+;top:0"/g) ?? []).length, 2,
+      'new and receding rows share the origin while retaining their own scale/alpha')
+  }
+})
