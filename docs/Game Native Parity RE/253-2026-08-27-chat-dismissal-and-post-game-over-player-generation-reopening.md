@@ -229,3 +229,16 @@ new progression and current ownership at this boundary. Keep regular refresh,
 existing-run entry, continuation save/resume and rejoin separate: they preserve
 spent effects. Retain Report73's Weird Caster refresh, selector order, Tonic
 capacity, gold and first-mix history without repeating economic purchases.
+
+
+### Report88 generation acceptance, 2026-10-07
+
+The fresh retained-runtime boundary is now `exact-ported` to the user-approved
+retained-charm policy. All purchasable rows and repeated generations passed
+focused tests, including ordinary refresh, continuation/profile resume and
+unchanged ownership/economic state. The actual combined built enemy-damage,
+Cheat Death, Game Over and different-element Create journey spent the old
+runtime, then produced a level1 wizard with charge1 and both until-hurt flags
+active while retaining ownership, gold, Tonic count and capacity. Ledger175
+records the real rescue integration correction and free-Shield checks. Other
+generation members retain their existing dispositions.

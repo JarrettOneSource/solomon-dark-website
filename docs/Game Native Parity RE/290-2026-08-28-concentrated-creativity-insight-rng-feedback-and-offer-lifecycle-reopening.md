@@ -347,3 +347,17 @@ A-or-B admission at `markPlayerCreativityInsight`. Reuse the current valid
 runtime and canonical finalizer. Add a failing same-seed public progression
 regression before implementation, then verify both normal browser slot/offer
 journeys. No platform constraint or approximation is needed.
+
+
+### Report83 built acceptance, 2026-10-07
+
+The either-slot admission row is now `exact-ported` to the explicitly approved
+Website policy; unchanged offer/RNG/selection/save siblings retain their prior
+dispositions. This does not relabel the native first-slot-only fact. Focused
+valid Split Mind and continuation tests passed. In real Chrome153/M5 WebGL2
+on combined artifact `9b11159f`, ordinary marked-card selections gained two
+ranks in Hub slotA (skill49,2->4), Hub slotB (skill10,3->5), and Boneyard
+slotB (skill64,3->5), with the marked card/detail feedback verified. Empty
+concentrations are initialized through normal Skills-book selection; the
+fixture waits for picker dismissal before another gameplay command. The
+combined full gate passed44 Python/4271 Node executions and every quality gate.

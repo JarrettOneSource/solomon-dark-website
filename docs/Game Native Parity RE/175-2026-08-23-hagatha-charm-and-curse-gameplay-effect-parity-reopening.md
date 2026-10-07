@@ -2475,3 +2475,30 @@ The built browser had already passed current-XP consumers, both Hub Insight
 slots and Boneyard slotB, plus normal combat-earned level-up preserving all
 three toggles. Normal enemy damage, Cheat Death and new-wizard/free-Shield
 acceptance continue on the corrected combined artifact.
+
+
+### Reports88/93 combined built acceptance, 2026-10-07
+
+All recovered-pending-port rows in the Report88 new-wizard and Report93 cost
+tables are now `exact-ported` to their explicitly approved Website policies.
+Verified-already-at-parity and out-of-system rows retain those dispositions.
+The zero-debit contact sink and its finite-zero/multiplier siblings are now
+`exact-ported`; emitted contacts, Dazzle, collision movement, headings and
+positive/invalid damage semantics remain intact. The actual ordinary enemy
+rescue no longer crashes, and the same journey reaches Game Over and fresh
+Create with retained ownership/economy, charge1 and both active until-hurt flags.
+
+Combined source `9b11159f` passed the unchanged canonical gate at05:07 UTC:
+44 Python tests,4271 Node test executions, production builds and every
+configured renderer quality gate. The real browser passed normal enemy damage,
+Cheat Death, Game Over/Create and all retained-runtime/economic assertions.
+The final Shield check initially pressed a combat-only skill in College, then
+during the pre-Solomon Boneyard phase; both deliberately reject combat input.
+Only that fixture ordering was corrected. A bounded normal purchase/removal/
+repurchase and Solomon-entry follow-on passed at05:20 UTC: Shield absorption
+0->25, mana100->100, health50->50, lastDamageTick null->null, resolved cost0
+and Reverie still active. Removing Reverie restored positive Shield cost;
+repurchasing it cost1000 after the initial3000 and restored zero cost.
+Chrome153.0.8010.12 used WebGL2/Apple M5 Pro; all page, console, HTTP, host
+and transport error arrays were empty. No platform exception is required.
+Live verification and release closeout remain owned by the combined publisher.

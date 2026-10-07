@@ -569,3 +569,19 @@ into one small shared renderer and call it from both consumers. Feed Inventory
 updates through its existing availability callback. Keep UI records, numeric
 fraction, threshold authority, inventory interactions and run summary intact.
 Record final dispositions and exact M5/browser receipts after validation.
+
+
+### Report84 built acceptance, 2026-10-07
+
+All reopened current-XP rows above are now `exact-ported`; already-at-parity
+and out-of-system rows retain those dispositions. On combined artifact
+`9b11159f`, the real Chrome153/M5 WebGL2 journey measured zero fill at0XP,
+24 native texture rows at45/90XP, and36 at67/90XP. The same current fraction
+persisted through root Inventory, nested sacks, parent returns and each of
+Fomentius/Hagatha/Luthacus/Shlorio, then Skills and Boneyard before/after level
+change. The shared renderer contract verifies frame/fill/mask geometry and
+0..15 modal movement without rebuilding. The initial browser classifier was
+corrected to include the native texture's pale upper gradient, and the helper
+now waits for stable reveal frames; these were fixture changes, not product
+changes. The combined canonical gate passed44 Python/4271 Node executions
+and all configured builds/quality gates. Live publication remains separate.

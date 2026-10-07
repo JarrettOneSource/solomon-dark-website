@@ -2865,3 +2865,18 @@ cast authority, use it for both toggle-lifetime predicates, and retain every
 restoration, save schema or client-owned lifetime is needed. Add the public
 reward-tick regression before changing production code; record final member
 and exact M5/browser receipts after validation.
+
+
+### Report86 built acceptance, 2026-10-07
+
+Every reopened Report86 lifetime/admission row is now `exact-ported`; existing
+overload, teardown, world, save and admission owners retain their recorded
+dispositions. Focused public enemy-reward tests cover each toggle in solo and
+party pickers, held input and resume, while kernel tests retain strict overload
+and nonalive teardown. Combined artifact `9b11159f` passed the canonical
+44 Python/4271 Node gate and real Chrome153/M5 WebGL2 combat: Firewalker,
+Mindstar and Regenerate remained active with reserve94 across the earned
+level13->14 picker, frozen tick6111 and resumed tick6135. All three could then
+be toggled off normally. Report88's actual death/new-generation journey also
+passed after the zero-debit rescue sink correction documented in ledger175.
+No new native timing or browser approximation is claimed.
