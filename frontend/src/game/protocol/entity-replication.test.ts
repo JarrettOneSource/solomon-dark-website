@@ -280,6 +280,9 @@ test('entity frame admission covers all family capacities and rejects rows beyon
       entities: { ...frame.world.entities, [field]: [...rows, rows[0]] } } }),
     new RegExp(`frame.world.entities.${field} may contain at most ${MAX_REPLICATED_ENTITIES} entries`))
   }
+  assert.throws(() => gameSnapshot({ ...source, world: { ...source.world,
+    enemies: [...source.world.enemies, { ...enemySnapshot(), id: MAX_BONEYARD_ENEMIES + 1 }] } }),
+  /replicated population.*at most/)
   const overflowingDeathEffects = [...source.world.deathEffects, enemyDeathEffectSnapshot()]
   assert.throws(() => gameSnapshot({ ...source, world: { ...source.world,
     deathEffects: overflowingDeathEffects } }),
@@ -1975,4 +1978,50 @@ test('Lantern position survives guest keyframes and deltas without aliasing auth
   assert.deepEqual(second.world.lanternPosition, moved.world.lanternPosition)
   assert.notEqual(second.world.lanternPosition, moved.world.lanternPosition)
   assert.deepEqual(first.world.lanternPosition, { x: 100, y: 200 })
+})
+
+
+test('crowded continuations admit the retained population through full, compact and retirement handoffs', () => {
+  const source = boneyardSnapshot('retained-coffin-population')
+  if (source.world.kind !== 'boneyard') throw new Error('Expected Boneyard')
+  source.world.enemies = Array.from({ length: 613 }, (_, index) => ({ ...enemySnapshot(), id: index + 1 }))
+  source.world.maggots = Array.from({ length: 3_199 }, (_, index) => ({ ...maggotSnapshot(), id: index + 1 }))
+  const full = gameSnapshot(JSON.parse(JSON.stringify(source)))
+  if (full.world.kind !== 'boneyard') throw new Error('Expected full Boneyard')
+  assert.equal(full.world.enemies.length, 613)
+  assert.equal(full.world.maggots.length, 3_199)
+  const keyframe = createGameSnapshotFrame(source, 0, undefined, true)
+  const keyframeReconstructor = new EntityReplicationReconstructor()
+  const keyframeSnapshot = keyframeReconstructor.apply(gameSnapshotFrame(JSON.parse(JSON.stringify(keyframe))), 1)
+  if (keyframeSnapshot.world.kind !== 'boneyard') throw new Error('Expected keyframe Boneyard')
+  assert.deepEqual(keyframeSnapshot.world.enemies.map(enemy => enemy.id), full.world.enemies.map(enemy => enemy.id))
+  assert.deepEqual(keyframeSnapshot.world.maggots.map(maggot => maggot.id), full.world.maggots.map(maggot => maggot.id))
+  const reconstructor = new EntityReplicationReconstructor()
+  reconstructor.reset(full, 1)
+  const frame = createGameSnapshotFrame(source, 1, createReplicatedEntityBaseline(full))
+  const received = gameSnapshotFrame(JSON.parse(JSON.stringify(frame)))
+  const compact = reconstructor.apply(received, 2)
+  if (compact.world.kind !== 'boneyard') throw new Error('Expected compact Boneyard')
+  assert.deepEqual(compact.world.enemies.map(enemy => enemy.id), full.world.enemies.map(enemy => enemy.id))
+  assert.deepEqual(compact.world.maggots.map(maggot => maggot.id), full.world.maggots.map(maggot => maggot.id))
+  const empty = { ...source, world: { ...source.world, enemies: [], maggots: [] } }
+  const retired = createGameSnapshotFrame(empty, 2, createReplicatedEntityBaseline(source))
+  if (retired.world.kind !== 'boneyard') throw new Error('Expected retirement Boneyard')
+  assert.equal(retired.world.entities.retired.length, 613 + 3_199)
+  assert.deepEqual(new Set(retired.world.entities.retired.map(key => JSON.stringify(key))),
+    new Set(keyframe.world.entities.spawned
+      .filter(([type]) => type === REPLICATED_ENTITY_TYPES.boneyardEnemy || type === REPLICATED_ENTITY_TYPES.boneyardMaggot)
+      .map(([type, id]) => JSON.stringify([type, id]))))
+  const cleared = reconstructor.apply(gameSnapshotFrame(JSON.parse(JSON.stringify(retired))), 3)
+  if (cleared.world.kind !== 'boneyard') throw new Error('Expected retired Boneyard')
+  assert.equal(cleared.world.enemies.length, 0)
+  assert.equal(cleared.world.maggots.length, 0)
+  for (const field of ['enemies', 'maggots'] as const) {
+    const duplicate = JSON.parse(JSON.stringify(source))
+    duplicate.world[field][1].id = duplicate.world[field][0].id
+    assert.throws(() => gameSnapshot(duplicate), /duplicates id/)
+    const malformed = JSON.parse(JSON.stringify(source))
+    malformed.world[field][0].position.x = null
+    assert.throws(() => gameSnapshot(malformed), /must be finite/)
+  }
 })

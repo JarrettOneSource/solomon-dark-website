@@ -6,7 +6,7 @@ import { NATIVE_HALL_OF_FAME_SCORE } from '../../core-kernels/hall-of-fame-score
 import type { NativeEnemyWorldFeedbackKernelState } from '../../core-kernels/native-enemy-world-feedback.ts'
 import { NATIVE_ENEMY_WORLD_FEEDBACK } from '../../core-kernels/native-enemy-world-feedback.ts'
 import { REPLICATED_ENTITY_TYPE_REGISTRY } from '../entity-replication.ts'
-import { MAX_BONEYARD_ENEMIES, MAX_BONEYARD_ENEMY_DEATH_EFFECTS, MAX_BONEYARD_ENEMY_PROJECTILES, MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS, MAX_BONEYARD_GOODIES, MAX_BONEYARD_LOOT, MAX_BONEYARD_MAGGOTS, MAX_BONEYARD_STRUCTURES, MAX_PLAYERS, MAX_REPLICATED_COMPONENTS, MAX_REPLICATED_ENTITIES } from '../game-protocol-limits.ts'
+import { MAX_BONEYARD_ENEMY_DEATH_EFFECTS, MAX_BONEYARD_ENEMY_PROJECTILES, MAX_BONEYARD_ENEMY_PROJECTILE_EFFECTS, MAX_BONEYARD_GOODIES, MAX_BONEYARD_LOOT, MAX_BONEYARD_STRUCTURES, MAX_PLAYERS, MAX_REPLICATED_COMPONENTS, MAX_REPLICATED_ENTITIES } from '../game-protocol-limits.ts'
 import type { GameSnapshot, GameSnapshotFrame, NativeHallOfFameRunSnapshot, ProtocolHubParticipantState } from '../game-state.ts'
 import type { ReplicatedEntityDescriptor, ReplicatedEntityFrame, ReplicatedEntityKey, ReplicatedEntitySample } from '../replicated-entity-types.ts'
 import { nativeBossNarration } from './boss-narration.ts'
@@ -243,7 +243,7 @@ export function gameWorldSnapshot(
     const enemies = limitedArray(
       source.enemies,
       `${field}.enemies`,
-      MAX_BONEYARD_ENEMIES,
+      MAX_REPLICATED_ENTITIES,
     ).map((enemy, index) => {
       const decoded = boneyardEnemySnapshot(enemy, `${field}.enemies[${index}]`)
       if (enemyIds.has(decoded.id)) {
@@ -312,7 +312,7 @@ export function gameWorldSnapshot(
     const maggots = limitedArray(
       source.maggots,
       `${field}.maggots`,
-      MAX_BONEYARD_MAGGOTS,
+      MAX_REPLICATED_ENTITIES,
     ).map((maggot, index) => {
       const decoded = boneyardMaggotSnapshot(maggot, `${field}.maggots[${index}]`)
       if (maggotIds.has(decoded.id)) {
@@ -344,6 +344,13 @@ export function gameWorldSnapshot(
       goodieIds.add(decoded.id)
       return decoded
     })
+    // Welcome/keyframes and compact deltas share one population envelope.
+    // Native groups and retained saves do not impose per-family live actor caps.
+    const replicatedPopulation = enemies.length + maggots.length + deathEffects.length
+      + enemyProjectiles.length + enemyProjectileEffects.length + loot.length + goodies.length
+    if (replicatedPopulation > MAX_REPLICATED_ENTITIES) {
+      throw new GameProtocolError(`${field} replicated population may contain at most ${MAX_REPLICATED_ENTITIES} entries`)
+    }
     return {
       ...spiderWorldFields(source, field, snapshotTick),
       arenaTransition,

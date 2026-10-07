@@ -1294,13 +1294,13 @@ groups are `(row,group,members)` `(15,6,3)`, `(19,7,1)`, `(25,6,3)`, `(33,5,3)`,
 
 | Member | Current disposition | Validation contract |
 | --- | --- | --- |
-| All 42 rows/205 groups/eight enemy families | recovered-pending-port | Exhaustive authored membership census and seeded compiler sweep |
-| Eight Coffin groups, original identity and ordered removal | recovered-pending-port | Each selected at most once; every member exercised |
-| Early Zombie, Demon, early unsplit Imp reductions | recovered-pending-port | Final group emits its pre-reduction cost |
-| First-entry Pike/split-Imp resets, later-entry controls | recovered-pending-port | Only first entry controls the budget |
-| Constant-one and random 2..4 bonus/RNG continuation | recovered-pending-port | Instruction-derived draw/count/spread checks |
-| Burst merge, original group indices, flags, policies and delays | recovered-pending-port | Existing tests plus ordered-removal regression |
-| Custom exhausted pool | recovered-pending-port | Explicit invalid-schedule error; no gameplay cap/fallback |
+| All 42 rows/205 groups/eight enemy families | exact-ported | Exhaustive authored membership census and seeded compiler sweep |
+| Eight Coffin groups, original identity and ordered removal | exact-ported | Each selected at most once; every member exercised |
+| Early Zombie, Demon, early unsplit Imp reductions | exact-ported | Final group emits its pre-reduction cost |
+| First-entry Pike/split-Imp resets, later-entry controls | exact-ported | Only first entry controls the budget |
+| Constant-one and random 2..4 bonus/RNG continuation | exact-ported | Instruction-derived draw/count/spread checks |
+| Burst merge, original group indices, flags, policies and delays | exact-ported | Existing tests plus ordered-removal regression |
+| Custom exhausted pool | exact-ported | Explicit invalid-schedule error; no gameplay cap/fallback |
 | Already compiled saved schedules/emitted actors | verified-already-at-parity | Compilation is run construction only; restore retains serialized world/director |
 | Coffin rise/open/death and Maggot offspring | out-of-system | Entry 254 owns actor lifecycle; recorded excess already exists in schedule |
 | Cross-run College lag (Report 79) | out-of-system for compiler | Independent lifetime and timing measurement remains required |
@@ -1342,4 +1342,76 @@ large first groups that consume SPAWN in their first selection remain valid.
 This is an exact arithmetic proof from the already recovered reset/decrement
 instructions, not an iteration limit or actor cap. Pike-only, both early split
 flags, a Coffin-to-Pike pool, spawn-one and large-first-group controls share the
-same admission check; their disposition is recovered-pending-port until checked.
+same admission check; their disposition is exact-ported after the focused compiler controls.
+
+
+### Retained-population admission defect
+
+The first actual built browser/Node-client journey on the rebased candidate
+failed before the old peer could enter: the full welcome decoder rejected the
+preserved 613 ordinary actors at its 512-entry enemy bound. Its separate
+2,048-entry Maggot bound also excludes the captured 3,199 Maggots. The captured
+world is valid retained authority state, and native TimeLine/Spawner has no
+such live-population caps. This is a proved continuation admission defect;
+it does not itself identify Report 79's historical College lag.
+
+The existing compact replication contract already has one finite combined
+`MAX_REPLICATED_ENTITIES` budget of 77,259 rows across the seven replicated
+Boneyard collections. Full welcome admission must use that same combined
+budget for ordinary actors and Maggots rather than unrelated narrower family
+shares. The complete membership is ordinary actors, Maggots, death effects,
+enemy projectiles, projectile effects, loot, goodies, plus full/keyframe/delta
+handoffs, retirement, duplicate identities and malformed fields. Existing
+finite effect/projectile/loot bounds and the transport byte budget remain
+validation constraints. The combined full-state count must also be checked,
+so broadening the two live collections cannot produce a world that its next
+compact frame rejects. No actor, Maggot, compiled schedule or emitted effect
+is capped or removed from authority or a save.
+
+A public full/compact/retirement regression will exercise the captured
+613+3,199 population and malformed identity controls before this change.
+The current status is recovered-pending-port until that test and the real
+browser admission pass. Fresh College control on M5 was 60.04 FPS, 99.94
+fixed ticks/s and mean 2 ms ping, with empty error arrays. The initial runner
+called this built probe `live-coffins` in its log name, but no `--live` argument
+was passed and its receipt explicitly has `live:false`; there was no live
+publication or acceptance.
+
+
+### October 7 retained-state and College checks
+
+The complete protocol regression suite passes 29 tests. The new preserved-size
+fixture admits 613 ordinary enemies and 3,199 Maggots through the full snapshot,
+forced compact keyframe and subsequent delta, then verifies all 3,812 retirement
+keys and empty reconstructed populations. Duplicate IDs, invalid numeric fields,
+the combined 77,259-row envelope, and the unchanged finite effect bounds remain
+rejected. All seven replicated family admission paths are exact-ported to the
+shared compact envelope; their existing codecs and retirement owner are
+verified-already-at-parity. The actual original archive now enters a real
+browser and a Node peer without losing actors or changing its compiled schedule.
+
+The compiler's prior 41 focused checks and schema47 continuation regression
+remain valid on the rebased product. The 42-row authored catalog and all 205
+groups are unchanged. Fresh October7 source reads include the reporter's three
+timeline screenshots; the focused image shows an authored five-Coffin event.
+Those editor observations do not contradict native group removal or prove an
+infinite authored-loop cause. No wave rebalance or timeline extension is made.
+
+A built M5 Chrome journey measured fresh College at60.04 FPS,99.93 fixed ticks/s
+and3.54ms mean ping. While a separate original-overload peer stayed alive,
+College remained59.98 FPS/99.02 ticks/s with61.14ms mean ping; after it left,
+College recovered99.92 ticks/s. The browser then admitted the original crowd,
+ran its ordinary damage/death/Game Over/Create transition, created another
+wizard and reached College without a transition reload:60.03 FPS,99.89 ticks/s,
+1.45ms mean ping and no Boneyard canvas. This independently checks Report79's
+current outcome; it does not establish the historical machine/network cause,
+prove a memory leak, or imply that Report78's compiler change alone fixed79.
+The old peer uses a disclosed developer health-restore callback during its
+contention window only. Historical multiplayer is not replayed.
+
+The first completed browser path caught three `net::ERR_ABORTED` music streams
+at scene teardown; the existing audio owner clears/reloads streaming sources.
+These match existing repository smoke classification and are retained separately
+from unexpected request errors in the final driver. Page, console, response,
+host and transport errors were empty. The full repository gate, final browser
+receipt, publication and live verification remain pending at this checkpoint.
