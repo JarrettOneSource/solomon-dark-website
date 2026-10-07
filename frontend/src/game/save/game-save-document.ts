@@ -3112,6 +3112,7 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     index,
     skillBooks[index] as unknown as PlayerSkillBookComponent,
     economies[index]!,
+    WEB_GAME_SAVE_SCHEMA_VERSION,
   ))
   return {
     ...store,
