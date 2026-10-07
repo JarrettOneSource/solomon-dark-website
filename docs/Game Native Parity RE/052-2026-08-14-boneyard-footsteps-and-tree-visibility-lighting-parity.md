@@ -215,3 +215,114 @@ warnings/errors, 23 backend/Website contracts, all 366 frontend tests, all 5
 desktop tests, production frontend and game-host builds, and the deployment
 media/CSP policy. Its only build diagnostic was the existing Vite chunk-size
 warning.
+
+## 2026-10-07 imported Terrain surface reopening
+
+The editor can now import nonempty Terrain, invalidating this entry's historical
+empty-generated-bank scope. This reopening owns the pure geometry consumed by
+Arena `004677A0`: style-zero Terrain registration, inner river cross-sections,
+first-crossing Road bridge subtraction, and their precedence over the existing
+compact 25..29/DeadSpider surface grid. It does not change Terrain painting,
+movement, footstep routing, or the style-one bank renderer.
+
+Membership and pre-port dispositions:
+
+- `006534B0` constructs a QuickSpline from Terrain control points in authored
+  order. `0064FA90` style-zero mesh seeds a private native RNG from serialized
+  UID `+CC`; four inclusive `[0,16.25]` draws per selected sample interval feed
+  its six-vertex cross-section. The two surface vertices use draws two/three,
+  width `32.5 + draw * 0.5`. The first two sections share the first four draws.
+  Recovered, pending port and Mac tests.
+- `0062B520` builds native arc-length lookup with float32 cursor step `0.025`
+  and minimum chord `2.5`; `0062B8E0` maps requested length to spline cursor.
+  `0062BFF0` selects sections with cosine threshold float32 `0.995`, length
+  step `20`, and maximum gap `120`. Normal `00529010` uses the backward
+  float32 `0.001` finite difference and rotates `(dx,dy)` to `(dy,-dx)`.
+  Recovered, pending port and Mac tests.
+- `00651DF0` registers quads `[8,9,2,3]` at mesh stride six, only for style 0
+  and at least twelve vertices. Style 1 and all other styles cannot enter
+  this query. Profile samples and sideSign are serialized/normalized by
+  `00651720`, but never read by style-zero mesh generation; retaining them
+  does not change this surface. Recovered, pending port and exclusion tests.
+- `00653BF0` and `00651BF0` derive bridge subtraction from Roads and the first
+  intersecting Terrain inner quad in native order. Exact bridge placement and
+  transform remain under extraction before implementation.
+- `004677A0` queries Terrain grid first. A Terrain hit followed by a bridge's
+  strict bounds and quad hit returns false immediately, even if compact ground
+  also covers the point. Otherwise a Terrain hit returns true; only a miss
+  reaches compact ground. `004118B0` uses triangles `[0,1,2]` and `[1,3,2]`
+  and `004119C0` compares three signed cross-product `<0` results, including
+  native winding-dependent boundary behavior. Recovered, pending port/tests.
+- Existing compact 25..29 and dynamic DeadSpider record membership is already
+  covered by `native-compact-ground-surface.test.ts`; preserve it unchanged.
+
+Evidence: retail SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+read-only canonical Ghidra replica extraction on 2026-10-07. Function addresses
+above and raw PE constants are direct binary evidence. Focused tests must cover
+native sample order, private RNG width, style/profile/sideSign gates, triangle
+boundaries, first crossing, subtraction precedence, and compact/remains fallback.
+
+### Recovered dependency corrections
+
+Direct `00629EF0`/`0062A9E0` extraction establishes that Terrain uses QuickSpline's
+fixed-quarter tangent recurrence, not the generic natural cubic solver. For each
+axis and more than two controls, the forward values are `3*(p1-p0)/4`, interior
+`(3*(p[i+1]-p[i-1])-forward[i-1])/4`, and the analogous one-sided final value;
+back substitution subtracts a quarter of the next tangent. Hermite polynomial
+coefficients and stored intermediates are float32. Two controls are linear.
+This is isolated in `core-kernels/native-terrain-surface.ts`; unrelated spline
+consumers are outside this surface-query reopening.
+
+Bridge recovery is complete: loop Terrain then Roads, admit each Road's first
+quad only, compare both endpoints against triangles 012/132 and then strict
+segment/triangle edge crossing (`00411BF0`, `00411A70`, `00410820`). Intersections
+use `00410900`, scanning quad edges 01,23,02,13. Nearest intersections to each
+Road endpoint use strict `<` updates with distance sentinel `1e9` and midpoint
+fallback. The mean gives center; equal nearest-distance values instead use the
+nearest-start point plus 15 times the normalized Road direction. Always add
+another 5 times that direction. DeadHawg319 local quad is 72x135. The Road angle
+is float32 atan2(dx,-dy) converted through native PI to degrees; the matrix
+rotates, scales world Y by float32 0.9, then translates. Only the resulting
+`+20` quad and strict `+10` bounds subtract from this surface query. The lower
+bridge decorative/collision quads are out-of-system for this predicate.
+
+Triangle instruction stores (`004119C0`) round each of the three cross products
+to float32 before comparing `<0`. All-zero degenerate triangles therefore
+accept; ordinary boundaries depend on winding. The compact-grid border mapping
+and compact/DeadSpider contours retain their existing implementation.
+
+
+Final bounds audit: `00403DA0` instructions `403DA8..403DDE` prove half-open
+rectangles: left/top inclusive, right/bottom exclusive, with upper-coordinate
+sums retained in x87 precision until comparison. The earlier word "strict"
+above refers only to the upper limits. The dedicated bridge-boundary regression
+pins all four edges and a sum lying between representable float32 coordinates.
+`0040FD90` stores min XY and float32(max-min) WH without padding.
+
+The actual imported Shrike Gardens 2 fixture was independently parsed and
+projected on M5: it has zero Terrain and 59 Roads, so no river/derived-bridge
+surfaces and no change to that map's compact-only classification. Original
+fixture bytes were read only. Curved, long/short straight, and style-variant
+contracts exercise the newly supported nonempty Terrain path separately.
+
+### Focused implementation receipt
+
+`native-terrain-surface.ts` now owns recovered style-zero QuickSpline selection,
+private UID RNG width, inner quad registration geometry, exact triangle signs,
+Road bridge derivation, and half-open subtraction bounds. The renderer's shared
+`NativeCompactGroundSurface` applies these before its unchanged compact and
+DeadSpider grid. Profiles, sideSign, and unsupported Terrain styles have explicit
+exclusion assertions; no fixed-width stroke or geometric tolerance is used.
+
+Mac mini M5, 2026-10-07 22:28 UTC: 14/14 focused Node contracts passed across
+`native-terrain-surface.test.ts` and `native-compact-ground-surface.test.ts`.
+Targeted oxlint passed with zero warnings/errors before the final half-open-bound
+helper/test addition. The new pure suite is in `test:arena-render`, already part
+of canonical validation. Full combined application type/build/gate and real
+editor browser acceptance remain with the integration coordinator; this receipt
+is not a native-versus-browser pixel comparison or a publication claim.
+
+Current membership disposition: recovered geometry and query branches are
+implemented and focused-validated; the integration acceptance boundary remains
+pending. Terrain paint, style-one bank visuals, bridge decorative/collision
+extras, and unrelated spline users remain explicitly outside this query's scope.

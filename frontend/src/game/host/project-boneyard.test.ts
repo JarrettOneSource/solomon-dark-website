@@ -1,3 +1,7 @@
+import { createDoc } from '../../editor/model.ts'
+import { buildNativeRenderPlan } from '../../editor/native-render-plan.ts'
+import { nativeBoneyardMainLayerShadowCaster } from '../renderer/boneyard-shadow-casters.ts'
+import { boneyardBodyCollides, createBoneyardCollisionWorld } from '../core-server/boneyard-collision.ts'
 import { createNativePuppetHit, receiveNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -13,7 +17,7 @@ import type { BoneyardEnemyDeathEffect, BoneyardMaggotActor } from '../core-serv
 import { NATIVE_IMP_BODY_POSE_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
-import { materializeOpeningSolomonSetPiece, projectBoneyard } from './project-boneyard.ts'
+import { materializeNativeBoneyardScenery, materializeOpeningSolomonSetPiece, projectBoneyard } from './project-boneyard.ts'
 import {
   projectBoneyardEnemies,
   projectBoneyardEnemyDeathEffect,
@@ -807,3 +811,73 @@ function projectedMaggot(
     maggots: [maggot],
   }, tick)[0]!
 }
+
+
+test('native post-load retires all four stored scrub Trees and appends fresh Scrub residents', () => {
+  const authored = solomonSelectionScene([
+    { eid: 'tree-0', typeId: 2001, variant: 0, pos: { x: 1, y: 2 } },
+    ...[15, 16, 17, 18].map(variant => ({
+      eid: `stored-${variant}`, typeId: 2001, variant, pos: { x: variant, y: 2 },
+      rot: 45, scale: 2, sortBias: 300, atlasEntry: 999,
+      secondaryVariant: 7, secondaryVisible: true, overlayAtlasEntry: 999,
+    })),
+    { eid: 'tree-14', typeId: 2001, variant: 14, pos: { x: 2, y: 2 } },
+  ])
+  const before = structuredClone(authored)
+  const result = materializeNativeBoneyardScenery(authored)
+  assert.deepEqual(result.objects.map(object => object.eid), ['tree-0', 'tree-14', 'stored-15', 'stored-16', 'stored-17', 'stored-18'])
+  assert.deepEqual(result.objects.slice(2), [15, 16, 17, 18].map(variant => ({
+    eid: `stored-${variant}`, typeId: 2062, variant, pos: { x: variant, y: 2 }, atlasEntry: 264 + variant,
+  })))
+  assert.strictEqual(result.objects[0], authored.objects[0])
+  assert.deepEqual(authored, before)
+  assert.strictEqual(materializeNativeBoneyardScenery(result), result)
+  for (let variant = 0; variant < 15; variant += 1) {
+    const normal = solomonSelectionScene([{ eid: 'tree', typeId: 2001, variant, pos: { x: 0, y: 0 } }])
+    assert.strictEqual(materializeNativeBoneyardScenery(normal), normal)
+  }
+})
+
+test('native file projection applies Scrub ownership while keeping stored Tree records unchanged', () => {
+  const doc = parseBoneyard(readFileSync(storyFixture))
+  const template = doc.objects.find(object => object.typeId === 2001)!
+  assert.ok(template)
+  doc.objects = [15, 16, 17, 18].map(variant => ({ ...template, eid: `variant-${variant}`, variant, atlasEntry: 264 + variant }))
+  const projected = projectBoneyard(doc)
+  assert.deepEqual(projected.objects.map(object => [object.typeId, object.variant, object.atlasEntry]), [15, 16, 17, 18].map(variant => [2062, variant, 264 + variant]))
+  assert.ok(doc.objects.every(object => object.typeId === 2001))
+})
+
+
+test('every materialized Scrub renders its authored main sprite without a Tree collider or complex caster', () => {
+  for (const variant of [15, 16, 17, 18]) {
+    const scene = materializeNativeBoneyardScenery(solomonSelectionScene([
+      { eid: 'plant', typeId: 2001, variant, pos: { x: 0, y: 0 } },
+    ]))
+    assert.equal(boneyardBodyCollides({ x: 0, y: 0 }, createBoneyardCollisionWorld(scene), 1), false)
+    const doc = createDoc('Scrub family')
+    doc.objects = [...scene.objects]
+    const plan = buildNativeRenderPlan(doc)
+    assert.equal(plan.main.length, 1)
+    assert.equal(plan.proxies.length, 0)
+    const layer = plan.main[0]!
+    assert.equal(layer.kind, 'object')
+    if (layer.kind !== 'object') throw new Error('expected Scrub object')
+    assert.equal(layer.atlasEntry, 264 + variant)
+    assert.equal(nativeBoneyardMainLayerShadowCaster(doc, layer, 0), null)
+  }
+})
+
+
+test('runtime Terrain retains the native border profile and side sign', () => {
+  const doc = parseBoneyard(readFileSync(storyFixture))
+  doc.terrain = [{
+    typeId: 3009, eid: 'authored-terrain', pos: { x: 0, y: 0 }, style: 1,
+    points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }],
+    profileSamples: [0, 3.5, -2, 0], sideSign: -1, uid: 42001,
+  }]
+  const terrain = projectBoneyard(doc).terrain[0]!
+  assert.deepEqual(terrain.profileSamples, [0, 3.5, -2, 0])
+  assert.equal(terrain.sideSign, -1)
+  assert.equal(terrain.uid, 42001)
+})

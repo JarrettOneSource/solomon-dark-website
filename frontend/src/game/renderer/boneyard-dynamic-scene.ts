@@ -1,3 +1,4 @@
+import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { NativeSceneryHitView } from './native-scenery-hit-view.ts'
 import type { ContainerChild } from 'pixi.js'
@@ -22,6 +23,7 @@ import type { BoneyardEnemyEventSnapshot, BoneyardEnemySnapshot, GameSnapshot } 
 import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import type { BoneyardComplexShadowStaticCaster } from './boneyard-complex-shadow-presentation.ts'
 import { BoneyardComplexShadowPresentation } from './boneyard-complex-shadow-presentation.ts'
+import { BoneyardScrubShadowPresentation } from './boneyard-scrub-shadow-presentation.ts'
 import { nativeBoneyardComplexShadowRecords } from './boneyard-complex-shadows.ts'
 import { BoneyardGateViews } from './boneyard-gate-views.ts'
 import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeBoneyardLightScalar, nativeBoneyardLightTint, nativeBoneyardWeatherLightingOrder, nativeSolomonSetPieceLighting } from './boneyard-lighting.ts'
@@ -74,6 +76,7 @@ export class BoneyardDynamicScene {
   readonly boneyard: LoadedBoneyard
   private readonly buildingResidents: ReadonlyMap<string, BuildingResidents>
   private readonly complexShadows: BoneyardComplexShadowPresentation
+  private readonly scrubShadows: BoneyardScrubShadowPresentation
   private readonly collisionWorld: BoneyardCollisionWorld
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   readonly enemies: NativeEnemyViews
@@ -151,6 +154,10 @@ export class BoneyardDynamicScene {
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
     this.complexShadows = new BoneyardComplexShadowPresentation(root, shadowCasters)
+    this.scrubShadows = new BoneyardScrubShadowPresentation(
+      root, mainLayers, mainResidents, gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
+      textures.base[nativeEnemySpriteRecord('DeadHawg', 21).source]!,
+    )
     this.staticLighting = new BoneyardStaticLighting(
       boneyard, mainLayers, buildingResidents, wallResidents, treeResidents,
       treeInputs, gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
@@ -811,6 +818,11 @@ export class BoneyardDynamicScene {
       visibleShadowDepthOwners,
       settings.complexLighting && settings.complexShadows,
     )
+    const scrubShadows = this.scrubShadows.render(
+      this.lights.index, presentationFrame, worldTick, visibleMainResidents,
+      settings.complexShadows, settings.complexLighting,
+      point => this.compactMasks.specialSurfaceAt(point, snapshot.world.spiderRemains),
+    )
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1
     this.levelUp.update(
@@ -830,13 +842,13 @@ export class BoneyardDynamicScene {
         ? buildingVertexLightMinimum
         : 0,
       buildingVisibleCount,
-      complexShadowActiveMeshCount: complexShadows.activeMeshCount,
-      complexShadowAllocatedQuadCapacity: complexShadows.allocatedQuadCapacity,
-      complexShadowCasterCount: complexShadows.casterCount,
-      complexShadowPooledMeshCount: complexShadows.pooledMeshCount,
-      complexShadowQuadCount: complexShadows.quadCount,
-      complexShadowRecordCount: complexShadows.recordCount,
-      complexShadowZOrderMismatchCount: complexShadows.zOrderMismatchCount,
+      complexShadowActiveMeshCount: complexShadows.activeMeshCount + scrubShadows.activeMeshCount,
+      complexShadowAllocatedQuadCapacity: complexShadows.allocatedQuadCapacity + scrubShadows.allocatedQuadCapacity,
+      complexShadowCasterCount: complexShadows.casterCount + scrubShadows.casterCount,
+      complexShadowPooledMeshCount: complexShadows.pooledMeshCount + scrubShadows.pooledMeshCount,
+      complexShadowQuadCount: complexShadows.quadCount + scrubShadows.quadCount,
+      complexShadowRecordCount: complexShadows.recordCount + scrubShadows.recordCount,
+      complexShadowZOrderMismatchCount: complexShadows.zOrderMismatchCount + scrubShadows.zOrderMismatchCount,
       fadedTreeCount,
       foregroundZIndex: order.foregroundZIndex,
       localPlayerPainterRow: localPainter?.row ?? 0,
@@ -906,6 +918,7 @@ export class BoneyardDynamicScene {
     this.sceneryHits.destroy()
     this.painterOrderPlanner.clear()
     this.complexShadows.destroy()
+    this.scrubShadows.destroy()
     this.primarySpells.destroy()
     this.secondaryAbilities.destroy()
     this.compactMasks.destroy()

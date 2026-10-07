@@ -65,7 +65,7 @@ const requiredBadGuysRanges = [
   [2365, 2508],
 ] as const
 const requiredDeadHawgRanges = [
-  [0, 1], [9, 9], [14, 14], [16, 16], [18, 19], [22, 22], [28, 31], [46, 77],
+  [0, 1], [9, 9], [14, 14], [16, 16], [18, 19], [21, 22], [28, 31], [46, 77],
   [114, 144], [180, 199], [208, 227],
 ] as const
 const requiredDemonRanges = [[1, 115]] as const

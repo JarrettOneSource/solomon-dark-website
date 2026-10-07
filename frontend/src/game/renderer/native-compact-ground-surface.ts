@@ -1,5 +1,6 @@
 import type { BoneyardBounds, BoneyardPoint, BoneyardScene } from '../core-kernels/boneyard.ts'
 import { nativeCompactSurfaceContains } from '../core-kernels/native-ground-auxiliary.ts'
+import { buildNativeBridgeSurfaces, buildNativeTerrainSurface, nativeBridgeSurfaceContains, nativeSurfaceQuadBounds, nativeSurfaceQuadContains, type NativeBridgeSurface, type NativeSurfaceQuad } from '../core-kernels/native-terrain-surface.ts'
 import type { BoneyardSpiderRemainsSnapshot } from '../protocol/spider-state.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { compactGridCells } from './native-compact-grid.ts'
@@ -10,17 +11,34 @@ interface SurfaceRecord {
   readonly bounds: Readonly<BoneyardBounds>
 }
 
-/** The active authored/DeadSpider +8F84 branch of Arena::QuerySurface. */
+/** Arena 004677A0: Terrain +8F24, bridge subtraction, then compact +8F84. */
 export class NativeCompactGroundSurface {
   private readonly maximumColumn: number
   private readonly maximumRow: number
   private readonly authored = new Map<number, SurfaceRecord[]>()
   private readonly dynamic = new Map<number, SurfaceRecord[]>()
+  private readonly terrain = new Map<number, NativeSurfaceQuad[]>()
+  private readonly bridges: readonly NativeBridgeSurface[]
   private lastRemains: readonly BoneyardSpiderRemainsSnapshot[] | null = null
 
   constructor(scene: BoneyardScene) {
     this.maximumColumn = Math.trunc(Math.trunc(scene.bounds.w) / 50 + 0.5)
     this.maximumRow = Math.trunc(Math.trunc(scene.bounds.h) / 50 + 0.5)
+    const surfaces = scene.terrain.map(buildNativeTerrainSurface)
+    this.bridges = buildNativeBridgeSurfaces(surfaces, scene.roads)
+    for (const { quads } of surfaces) {
+      for (const quad of quads) {
+        const cells = compactGridCells(nativeSurfaceQuadBounds(quad), this.maximumColumn, this.maximumRow)
+        for (let row = cells.top; row <= cells.bottom; row += 1) {
+          for (let column = cells.left; column <= cells.right; column += 1) {
+            const key = this.key(column, row)
+            const entries = this.terrain.get(key)
+            if (entries) entries.push(quad)
+            else this.terrain.set(key, [quad])
+          }
+        }
+      }
+    }
     for (const sprite of scene.sprites) {
       if (sprite.atlasEntry >= 25 && sprite.atlasEntry <= 29) {
         this.insert(this.authored, this.record(sprite.atlasEntry, sprite.pos))
@@ -39,6 +57,13 @@ export class NativeCompactGroundSurface {
     const nativePoint = { x: Math.fround(point.x), y: Math.fround(point.y) }
     const cell = compactGridCells({ ...nativePoint, w: 0, h: 0 }, this.maximumColumn, this.maximumRow)
     const key = this.key(cell.left, cell.top)
+    for (const quad of this.terrain.get(key) ?? []) {
+      if (!nativeSurfaceQuadContains(quad, nativePoint)) continue
+      for (const bridge of this.bridges) {
+        if (nativeBridgeSurfaceContains(bridge, nativePoint)) return false
+      }
+      return true
+    }
     return this.containsRecords(this.authored.get(key), nativePoint)
       || this.containsRecords(this.dynamic.get(key), nativePoint)
   }

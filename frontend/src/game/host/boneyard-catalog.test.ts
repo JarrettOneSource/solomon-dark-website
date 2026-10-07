@@ -296,3 +296,20 @@ function openingGroundClutterContains(
   return Math.abs(localX) <= size[0] * scaleX / 2
     && Math.abs(localY) <= size[1] * scaleY / 2
 }
+
+
+test('saved imported scenes recover native Tree-to-Scrub ownership with a matching runtime hash', () => {
+  const loaded = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))!
+  const scene = { ...loaded.scene, objects: [15, 16, 17, 18].map(variant => ({
+    eid: `saved-${variant}`, typeId: 2001, variant, pos: { x: variant, y: 0 },
+    rot: 90, scale: 3, secondaryVariant: 4,
+  })) }
+  const saved = { ...loaded, scene, geometrySha256: boneyardGeometrySha256(scene) }
+  const recovered = recoverSavedBoneyardRoadLinks(createBoneyardCatalog(), saved)
+  assert.deepEqual(recovered.scene.objects.map(object => object.typeId), [2062, 2062, 2062, 2062])
+  assert.equal(recovered.geometrySha256, boneyardGeometrySha256(recovered.scene))
+  assert.notEqual(recovered.geometrySha256, saved.geometrySha256)
+  assert.equal(recovered.runId, saved.runId)
+  assert.ok(saved.scene.objects.every(object => object.typeId === 2001))
+  assert.strictEqual(recoverSavedBoneyardRoadLinks(createBoneyardCatalog(), recovered), recovered)
+})

@@ -71,6 +71,11 @@ export interface BoneyardTerrain {
   points?: readonly BoneyardPoint[]
   style?: number
   entry?: number
+  /** Native Terrain UID also seeds its authored mesh RNG. */
+  uid?: number
+  /** Native authored border profile and orientation, needed by surface membership. */
+  profileSamples?: readonly number[]
+  sideSign?: number
 }
 
 export interface SolomonDigState {

@@ -53,3 +53,23 @@ test('the current Spider cohort is admitted and removed in the same presentation
   assert.equal(query.contains(state.position, remains), true)
   assert.equal(query.contains(state.position, []), false)
 })
+
+test('native Terrain inner strips take precedence over compact and Spider overlays', () => {
+  const source = scene(25, 200, 200)
+  const terrain = [{ eid: 'river', pos: { x: 0, y: 0 }, style: 0, uid: 42001,
+    points: [{ x: 100, y: 200 }, { x: 300, y: 200 }] }]
+  const wet = new NativeCompactGroundSurface({ ...source, sprites: [], terrain })
+  assert.equal(wet.contains({ x: 150, y: 200 }, []), true)
+  assert.equal(wet.contains({ x: 150, y: 246 }, []), false)
+  const crossing = { eid: 'road', typeId: 3007, linkMask: 0 as const, points: [{ x: 200, y: 100 }, { x: 200, y: 300 }] }
+  const bridged = new NativeCompactGroundSurface({ ...source, terrain, roads: [crossing] })
+  assert.equal(bridged.contains({ x: 200, y: 200 }, []), false)
+  assert.equal(bridged.contains({ x: 150, y: 200 }, []), true)
+  const state = createNativeDeadSpider({ x: 200, y: 200 }, 0)
+  const remains: BoneyardSpiderRemainsSnapshot[] = [{ id: 1, spawnTick: 0, state: { ...state,
+    decal: { entry: 140, position: state.position, rotationDeg: 0, scale: 1, alpha: 1 },
+  } }]
+  assert.equal(bridged.contains({ x: 200, y: 200 }, remains), false)
+  const excluded = new NativeCompactGroundSurface({ ...source, terrain: terrain.map((t) => ({ ...t, style: 1 })), roads: [crossing] })
+  assert.equal(excluded.contains({ x: 200, y: 200 }, []), true)
+})

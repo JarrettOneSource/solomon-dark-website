@@ -1,4 +1,4 @@
-import { spriteRefFor } from '../../editor/assets.ts'
+import { spriteImage, spriteRefFor } from '../../editor/assets.ts'
 import { type EditorDoc, NATIVE, type Vec2 } from '../../editor/model.ts'
 import type { MainLayer, ObjectSpriteLayer } from '../../editor/native-render-plan.ts'
 import {
@@ -115,7 +115,11 @@ export async function buildStaticWorld(
   let cleanupPlan: ReturnType<typeof boneyardOffCameraCleanupPlan> | null = null
   const mainLayers = nativeBoneyardMainLayers(document)
   const wallLayers = nativeBoneyardPreMainWallLayers(document)
-  const wallSourceKeys = new Set(wallLayers.map((layer) => `fence:${layer.fence.eid}`))
+  const baseSkippedSourceKeys = new Set([
+    ...wallLayers.map((layer) => `fence:${layer.fence.eid}`),
+    // Scrub owns both shadow branches at its painter slot, never the editor oval.
+    ...document.objects.filter(object => object.typeId === 2062).map(object => `object:${object.eid}`),
+  ])
   try {
     fullBaseResidents = await buildTiledStaticLayer(
       document,
@@ -129,7 +133,7 @@ export async function buildStaticWorld(
           camera,
           document,
           [],
-          wallSourceKeys,
+          baseSkippedSourceKeys,
         )
         staticPaintCount += 1
       },
@@ -319,7 +323,7 @@ export async function buildStaticWorld(
       repaintCleanedBase(
         document,
         fullBaseResidents,
-        new Set([...wallSourceKeys, ...cleanupPlan.retiredSourceKeys]),
+        new Set([...baseSkippedSourceKeys, ...cleanupPlan.retiredSourceKeys]),
       )
       surface.applyOffCameraCleanup(cleanupPlan.retiredSourceKeys)
       let retiredStaticResidentCount = 0
@@ -459,6 +463,18 @@ function buildMainLayerResident(
   canvas: HTMLCanvasElement,
   enhancedEffects: boolean,
 ): ResidentTexture | null {
+  // Scrub::Render006200B0 uses the untransformed glyph. Keep its complete
+  // registered rectangle: shadow00620120 samples the original glyph UVs.
+  if (layer.kind === 'object' && layer.object.typeId === 2062) {
+    const ref = spriteRefFor('DeadHawg', 264 + (layer.object.variant ?? 0))
+    if (!ref) throw new Error(`Scrub ${layer.object.eid} has no native glyph.`)
+    resizeCanvas(canvas, ref.w, ref.h)
+    const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
+    if (!context) throw new Error('Scrub glyph could not acquire Canvas2D.')
+    context.drawImage(spriteImage(ref.src), 0, 0)
+    const pixels = consumePaintedCanvas(canvas, false)!
+    return residentTexture(pixels, layer.pos.x - ref.anchorX, layer.pos.y - ref.anchorY, layerIndex)
+  }
   const bounds = mainLayerCaptureBounds(layer)
   resizeCanvas(canvas, bounds.w, bounds.h)
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })

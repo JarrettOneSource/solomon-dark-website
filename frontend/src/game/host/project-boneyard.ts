@@ -52,11 +52,32 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
     roads: doc.roads.map(projectRoad),
     fences: doc.fences.map(projectFence),
     terrain: doc.terrain.map((terrain) => compact(terrain, [
-      'eid', 'pos', 'points', 'style', 'entry',
+      'eid', 'pos', 'points', 'style', 'entry', 'uid', 'profileSamples', 'sideSign',
     ])),
     solomonDig: null,
   } as unknown as BoneyardScene
-  return materializeOpeningSolomonSetPiece(scene)
+  return materializeOpeningSolomonSetPiece(materializeNativeBoneyardScenery(scene))
+}
+
+
+/** Native RegionLayout006531B0 retires stored Tree15..18 and appends new Scrubs. */
+export function materializeNativeBoneyardScenery(scene: BoneyardScene): BoneyardScene {
+  const retained: BoneyardScene['objects'][number][] = []
+  const replacements: BoneyardScene['objects'][number][] = []
+  for (const object of scene.objects) {
+    const variant = object.variant ?? 0
+    if (object.typeId !== 2001 || !Number.isInteger(variant) || variant < 15 || variant > 18) {
+      retained.push(object)
+      continue
+    }
+    // Native replacement copies only position and main variant. It does not
+    // inherit Tree collider, tint, transform, canopy or authored caster shape.
+    replacements.push({
+      eid: object.eid, typeId: 2062, pos: { ...object.pos }, variant,
+      atlasEntry: 264 + variant,
+    })
+  }
+  return replacements.length === 0 ? scene : { ...scene, objects: [...retained, ...replacements] }
 }
 
 function projectRoad(road: BoneyardDoc['roads'][number]): Record<string, unknown> {

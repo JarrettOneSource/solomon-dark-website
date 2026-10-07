@@ -13,6 +13,7 @@ import { STOCK_TUTORIAL_BONEYARD } from './stock-tutorial-boneyard.ts'
 import { STOCK_TUTORIAL_BONEYARD_ID } from '../core-kernels/native-tutorial.ts'
 import {
   boneyardGeometrySha256,
+  materializeNativeBoneyardScenery,
   projectBoneyard,
 } from './project-boneyard.ts'
 
@@ -94,6 +95,12 @@ export function recoverSavedBoneyardRoadLinks(
   catalog: BoneyardCatalog,
   loaded: LoadedBoneyard,
 ): LoadedBoneyard {
+  // Older web saves can contain editor Tree definitions which stock replaces
+  // after load. Normalize after save validation and refresh the runtime hash.
+  const materializedScene = materializeNativeBoneyardScenery(loaded.scene)
+  if (materializedScene !== loaded.scene) {
+    loaded = { ...loaded, scene: materializedScene, geometrySha256: boneyardGeometrySha256(materializedScene) }
+  }
   if (loaded.scene.roads.every(road => nativeRoadLinkMask(road.linkMask))) {
     return loaded
   }

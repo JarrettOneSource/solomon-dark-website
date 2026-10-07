@@ -125,3 +125,165 @@ The exact object-local Tree polygons are:
   and generated-scene receipts are
   `/tmp/solomon-dark-tree-shadow-main-right-20260814.png` and
   `/tmp/solomon-dark-tree-shadow-main-generated-20260814.png`.
+
+## October 7 editor preview: missing post-load materialization
+
+An actual imported Shrike Gardens2 file reached the Tree caster with main
+variant17 and failed closed. The existing fifteen-shape table was correct; the
+imported runtime projection had skipped the lifecycle rule already recorded
+above. This reopens the materialization member, not Tree shadow geometry.
+
+Fresh full006531B0 extraction from the same retail binary confirms: class2001
+with signed short main selector15..18 creates a NEW class2062 Scrub, copies only
+position, writes the same selector to its i32 variant field, assigns world
+ownership and clears byte+36. The original Tree is retired through virtual+18.
+The replacement is appended through the region object manager+2B4 virtual+10;
+other original residents retain order and Scrubs append in original Tree
+encounter order. Do not clamp selectors or reuse a Tree polygon.
+
+Scrub constructor005E4040 has zero body radius and zero+13C/+144, false+14C,
+ordinary white/unit Puppet appearance, and independent randomized phase+134.
+Old Tree rotation, scale, tint, secondary art and other fields do not transfer.
+Main sprite function006200B0 uses the same variant and DeadHawg bank264..282
+with a position-only Glyph_Draw. Native editor storage remains class2001; only
+the runtime projection changes. Runtime Scrub shadow function00620120 is a
+separate branch, not permission to assume Tree complex shadows.
+
+The correction must cover all four replacement variants, intact0..14 Trees,
+ordering, non-mutation of authored data, no inherited Tree collision or primary
+spell target, stable runtime hashes, imported maps, private tests and older web
+save scene projections. Existing shadow polygons and invalid-Tree guards stay.
+
+The exact Scrub function and raw PE constant evidence is retained in
+[editor-native-scrub-projection-2026-10-07.json](editor-native-scrub-projection-2026-10-07.json).
+Fresh00620120 confirms a dedicated same-glyph shadow family: a black flattened
+sprite when Complex Shadows is off; otherwise per-ShadowData textured quads,
+with lazy glyph-height initialization, a three-position surface predicate and
+presentation-only sway. Class2062 must not be treated as a shadowless Tree fix.
+
+### Scrub renderer ownership and freshly verified shadow facts
+
+`0x00B3BCA9` is the Complex Shadows setting (entry130), independent of
+Enhanced Effects. Scrub must preserve its basic class-shadow branch when this
+setting is off. It must not retain the editor's generic baked oval, any Tree
+caster polygon, or a Tree canopy/proxy. Runtime main art retains the full
+registered glyph rectangle so the directional shadow samples original UVs
+without a second alpha crop.
+
+Fresh helper/assembly recovery confirms the advanced branch initializes+144
+from UV height times float0.20000000298023224. For each 0x24-byte record it
+starts a matrix, applies Scale(min(10*record+18,1),1,1), rotates by the source
+vector heading, then applies Scale(1,0.800000011920929,1). It transforms only
+glyph corners2/3. Their UV-y values lose+144. Each transformed near corner
+receives20*direction; farcorners0/1 equal corresponding nearcorners2/3 plus
+(10*record+18*record+18*record+1C)*direction. The helper0041EAE0 takes
+transparent black for farcorners0/1 and opaque black for nearcorners2/3.
+The subsequently recovered matrix composition, heading convention and
+record-field mappings are recorded below and implemented without hulls.
+
+Constructor005E4040 initializes phase+134 with Int(360); tick005E40D0 adds
+Int(3) once per native tick after the common Puppet tick. This phase is visual
+state, with no gameplay authority. Website may use its existing independent
+presentation RNG convention, preserving the exact native integer draw kernel,
+phase progression, fixed-tick freeze, and lifetime; matching the global retail
+presentation stream is the existing explicit bounded difference.
+
+Fresh0057F0E0 maps record+18 to distanceFraction and+1C to
+projectionDistance.00402D40 pre-multiplies matrices and004031E0 applies
+column-vector XY. With k=min(10*distanceFraction,1) and
+θ=atan2(direction.x,-direction.y), normalized to0..360 degrees, an original
+bottom glyph corner(x,y) becomes:
+
+- nearX=cos(θ)*k*x-sin(θ)*y+20*direction.x
+- nearY=0.800000011920929*(sin(θ)*k*x+cos(θ)*y)+20*direction.y
+- far=near+10*distanceFraction²*projectionDistance*direction
+
+Basic00417060 offsets only topcorners0/1 by(height*.25,height*.3125),
+keeping bottomcorners2/3 and all original UVs. The three lazy cached surface
+queries are position,(x,y+10),(x,y-10):007DE840 is exactlyzero. Reflection
+uses a separate glyph (manager+104C), white alpha0.3499999940395355, and
+uniformscale0.25*lookup00452C00(phase/3)+0.6000000238418579. The exact glyph mapping is closed below. Arena004677A0 Terrain production
+and bridge subtraction are tracked separately by the shared surface port;
+compact-only queries alone do not establish imported Terrain parity.
+
+
+### Completed Scrub reflection recovery (October 7)
+
+The exact bundle-stream trace of `004E8A90` through the read-only replica
+wrapper maps call `004E8E93`, manager inline glyph `+104C`, to DeadHawg
+record **21**, independent of the Scrub variant. The trace drains all 348
+DeadHawg records and confirms the main bank `+1AB0` is records264..282.
+`00452C00` returns the absolute value of float32 `_CIsin 007470D0`
+(the sine identification and FSIN instruction are already independently
+retained in ledger219). The input `006202EE..0062030B` is float32 of
+integer phase divided by3, in radians. Reflection scale is
+float32(abs(float32(sin(float32(phase/3))))*.25 + float32(.6));
+alpha is float32(.35), tint white, position the owning Scrub origin.
+The dedicated reflection plan and borrowed-texture delivery are exact-ported
+and verified in the focused real-WebGL proof below.
+
+`004677A0` first tests the Terrain quad grid `+8F24` with `004118B0`
+(two triangles0/1/2 and1/3/2). On a hit, any admitted subtraction
+quad from Arena `+8B54` (count+8B5C, buffer+8B68) returns false
+immediately, otherwise true. Only without a Terrain hit does it test
+compact grid `+8F84`. Existing compact contours remain exact. The
+Terrain/subtraction producer and imported scene projection are being
+closed before this wider surface query can claim parity.
+
+
+The runtime projection also retains Terrain's already-decoded profileSamples
+and sideSign. Dropping these native wire fields prevents exact shared surface
+membership for the Scrub reflection predicate. Forwarding them does not itself
+close the separate Terrain construction/subtraction recovery or visual gate.
+
+
+### Scrub renderer verification (October 7, 22:16 UTC)
+
+The dedicated `NativeScrubShadowState`/`BoneyardScrubShadowPresentation`
+owns this complete branch inventory:
+
+| Member | Disposition | Evidence |
+| --- | --- | --- |
+| Replacement variants15,16,17,18 / glyphs279..282 | exact-ported | Four explicit geometry/anchor/UV tests; all four actual textures in WebGL |
+| Complex Shadows off, either lighting setting | exact-ported | Flat glyph corners/black opaque vertex colors; native top-corner offsets; screenshot `scrub-flat.png` |
+| Complex Shadows on / accepted light records | exact-ported | Exact float32 directional transform, five source directions, near compression, opposing-light WebGL images |
+| Zero lights / Complex Lighting off | exact-ported | Empty directional cohort; independently cached surface reflection remains |
+| Lazy three-point query | exact-ported | All three points called once, cached across settings, exact center/(0,+10)/(0,-10) offsets |
+| Native reflection record21 / scale / alpha | exact-ported | Independent glyph geometry, radians sine/f32 tests, frozen-tick and moving-tick tests, actual WebGL |
+| Off-camera/retired owner / painter adjacency | exact-ported | Detach/restore with zero depth mismatches; no stale shadow source or generic oval |
+| Teardown | exact-ported | Actual mesh destruction plus GPU unload then geometry destroy; all owned buffers destroyed, borrowed textures retained |
+| Imported Terrain/bridge predicate | recovered-pending-port | Separate shared surface implementation owns exact production and acceptance; no fixed-width editor-stroke inference |
+
+The exact M5 working tree passed24/24 focused Scrub/presentation/asset
+contracts and `tsc -p tsconfig.app.json --noEmit`. The real Chrome-for-Testing
+WebGL proof produced four directional quads plus one independent reflection,
+then four flat quads when the setting was disabled, one reflection after all
+light sources were removed, and zero quads when culled. Restoring visibility
+reused the retained allocation with zero painter-order mismatches. Page,
+console and failed-response arrays were all empty. Both directional and flat
+screenshots were visually inspected; the projected images retain glyph alpha
+silhouettes and contain no invented root/canopy hull.
+
+Disposable evidence on M5 lives under the parent task's `browser/` directory:
+`scrub-proof.json`, `scrub-complex-left.png`, `scrub-complex-right.png`, and
+`scrub-flat.png`. Browser job `job_20261007T221541Z_3bdf799974` completed
+exit0 at22:15:58UTC; its task-owned server and heavy lease were released.
+A first harness attempt loaded Pixi twice via mismatched versioned URLs; it
+was corrected in the disposable harness only, then the complete proof and
+type gate passed. The parent owns the final integrated imported-map journey,
+canonical gate and publication; this focused receipt does not claim those.
+
+### Imported-map integration acceptance (2026-10-07)
+
+The built editor loaded the original `Shrike Gardens 2 by soggy.boneyard` without
+modifying its bytes:307 objects,351 sprites,59 roads,20 fences, no Terrain. Private
+Test reached the ready renderer with geometry SHA
+`430ff44c91c23e5a52836f8bc5f9a11210fd19bd801377c14fd584c6e0f2e705`,
+then Return restored the complete draft exactly. The same built browser also
+passed placement, movement, repeated Test/Return, admission cancel, service
+failure, retained camera/history, narrow and short viewports, and quota-safe
+export. The desktop editor and live imported-map screenshots were inspected.
+Focused projection/catalog/Scrub/Terrain/asset tests, test TypeScript, frontend
+lint, production frontend build and Release backend build passed together.
+This verifies the disposable layout preview; full authored script/recipe/timeline
+execution remains a separate active implementation slice.
