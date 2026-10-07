@@ -20,6 +20,7 @@ export interface NativeOffensiveSpellFactors {
   readonly globalFlatDamage?: number
   readonly globalManaReduction?: number
   readonly manaCost: number
+  readonly manaCostWaived?: boolean
 }
 
 export interface NativeDamageResolutionLanes {
@@ -116,7 +117,7 @@ export function resolveNativeSkillManaCost(
     * valueOr(lanes.elementMultiplier, 1, 'element mana multiplier')
     * (equipment?.globalManaCostMultiplier ?? 1)
     * (equipment?.classManaCostMultiplier[classId] ?? 1)
-  return Math.max(0, cost)
+  return factors.manaCostWaived ? 0 : Math.max(0, cost)
 }
 
 export function resolveNativeSkillDamageValue(
@@ -141,6 +142,9 @@ export function resolveNativeSkillManaCostValue(
 }
 
 export function validateOffensiveFactors(factors: NativeOffensiveSpellFactors): void {
+  if (factors.manaCostWaived !== undefined && typeof factors.manaCostWaived !== 'boolean') {
+    throw new TypeError('mana cost waiver must be boolean')
+  }
   if (!Number.isFinite(factors.damage) || factors.damage < 0) {
     throw new RangeError('offensive damage factor must be finite and non-negative')
   }

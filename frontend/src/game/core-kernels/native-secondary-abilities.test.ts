@@ -5904,3 +5904,20 @@ test('Leviathan resolves Bug-Master damage once per shot and responds to equipme
       'already emitted bolts retain their payload after gear changes')
   }
 })
+
+
+test('Reverie waives all secondary dispatch debits including aggregate child and equipment costs', () => {
+  const equipment = resolveNativeEquipmentEffects(new Array(83).fill(0), [{
+    effects: [{ kind: 10, magnitude: 7, operator: 0, target: 0 }], recipeIndex: null,
+  }]).modifiers
+  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+    const source = context(skillId, 1, 0, 100, [28, 55, 75])
+    const result = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+      ...source, players: { player: { ...source.players.player!,
+        offensiveFactors: { damage: 1, equipment, manaCost: 1, manaCostWaived: true },
+      } },
+    })
+    assert.deepEqual(result.manaSpent, {}, `spell ${skillId}`)
+    assert.equal(result.state.players.player!.castSequence, 1, `spell ${skillId}`)
+  }
+})

@@ -284,6 +284,7 @@ function protocolPlayerState(
     globalFlatDamage: derived.offensiveDamageFlat,
     globalManaReduction: derived.offensiveManaCostReduction,
     manaCost: derived.offensiveManaCostFactor,
+    manaCostWaived: progression.hagathaRuntime.reverieActive,
   }
   const primarySpell = nativePrimarySpellSummary(skillBook, statBook, offensiveFactors)
   const learnedSkills: Array<readonly [number, number, number]> = []

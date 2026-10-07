@@ -2424,3 +2424,16 @@ existing offensive factor remains unchanged for native policy observations;
 its zero value alone never makes nonoffensive spells free. Add all-member
 resolver/secondary coverage and a public purchase, Shield cast and hurt test;
 verify Shield cost/debit in the same built/live browser journey.
+
+
+### Report93 focused acceptance
+
+The exact test-first baseline reproduced three behavioral failures: late cost
+lanes produced2040 instead of zero; a secondary dispatch spent82 mana; and the
+public combined Shield cost snapshot was100 instead of zero. With the final
+waiver all three regressions pass, covering every secondary and every primary
+cost family, late equipment costs, public purchase/Shield activation, replicated
+cost, bot affordability and restoration after health damage. Test TypeScript
+also passed on M5 at03:15 UTC. One import path in the new observer integration
+was corrected before the successful focused run; the behavioral reds are
+unchanged. Full canonical/built/live acceptance remains pending.

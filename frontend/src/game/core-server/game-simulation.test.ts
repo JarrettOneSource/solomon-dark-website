@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { observeMlBotPolicyPlayerState } from './ml-bot-policy/player-state.ts'
 import { observeMlBotPolicyOwnEffects } from './ml-bot-policy/own-effects.ts'
 import { createBoneyardPresentationTimeline, isBoneyardGameSnapshot } from '../client/boneyard-presentation-timeline.ts'
 import { gameSnapshot, gameSnapshotFrame } from '../protocol/codecs/snapshot.ts'
@@ -7447,6 +7448,11 @@ test('Reverie purchase makes the public Magic Shield cast free until health dama
     .players.caster!.progression.secondaryManaCosts.find(row => row[0] === 54)![1]
   assert.equal(cost(state), 0)
   const poor = { ...state, playerEntities: setPlayerEntityMana(state.playerEntities, 'caster', 1) }
+  const observed = observeMlBotPolicyPlayerState(poor, 'caster', {
+    primaryEffectActive: false, secondaryEffectActive: [],
+  })
+  assert.equal(observed.secondarySlots[0]!.affordable, true)
+  assert.equal(observed.blockC[7], 0)
   const cast = applyGameSimulationHubAction(poor, 'caster', { type: 'activate-belt-slot', slot: 0 })
   assert.equal(cast.accepted, true)
   assert.ok(cast.state.secondaryAbilities.players.caster!.magicShieldAbsorb > 0)
@@ -7455,6 +7461,9 @@ test('Reverie purchase makes the public Magic Shield cast free until health dama
   const hurt = damageGameSimulationPlayer(state, 'caster', 1, state.tick)
   assert.equal(getPlayerProgression(hurt, 'caster').hagathaRuntime.reverieActive, false)
   assert.ok(cost(hurt) > 0)
+  assert.ok(observeMlBotPolicyPlayerState(hurt, 'caster', {
+    primaryEffectActive: false, secondaryEffectActive: [],
+  }).blockC[7]! > 0)
   const charged = applyGameSimulationHubAction(hurt, 'caster', { type: 'activate-belt-slot', slot: 0 })
   assert.equal(charged.accepted, true)
   assert.equal(getPlayerProgression(charged.state, 'caster').currentMana,

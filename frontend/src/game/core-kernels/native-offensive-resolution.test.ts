@@ -124,4 +124,5 @@ test('Reverie waives every spell after late cost lanes without changing offensiv
   assert.equal(resolveNativeSkillManaCost(54, { damage: 1, manaCost: 0 }, { baseManaCost: 20 }), 20)
   assert.equal(nativeSkillIsOffensive(54), false)
   assert.throws(() => resolveNativeSkillManaCost(54, factors, { baseManaCost: Number.NaN }), /finite/)
+  assert.throws(() => resolveNativeSkillManaCost(54, { ...factors, manaCostWaived: 1 as unknown as boolean }, lanes), /boolean/)
 })

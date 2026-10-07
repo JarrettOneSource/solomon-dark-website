@@ -3043,6 +3043,7 @@ function finishGameSimulationTick(
           equipment: runtime.equipmentModifiers,
           globalFlatDamage: derived.offensiveDamageFlat,
           globalManaReduction: derived.offensiveManaCostReduction,
+          manaCostWaived: progression.hagathaRuntime.reverieActive,
           manaCost: derived.offensiveManaCostFactor,
         },
       )
@@ -4032,6 +4033,7 @@ function createNativeSecondaryTickContext(
         equipment: runtime.equipmentModifiers,
         globalFlatDamage: derived.offensiveDamageFlat,
         globalManaReduction: derived.offensiveManaCostReduction,
+        manaCostWaived: progression.hagathaRuntime.reverieActive,
         manaCost: derived.offensiveManaCostFactor,
       }
       return [playerId, {

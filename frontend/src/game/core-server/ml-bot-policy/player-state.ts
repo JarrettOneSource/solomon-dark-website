@@ -5,13 +5,14 @@ import {
 import {
   NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
   createNativeSecondaryPlayerState,
+  nativeSecondaryAbilityManaCost,
 } from '../../core-kernels/native-secondary-abilities.ts'
+import { effectiveSkillNumericValue } from '../../core-kernels/player-skill-runtime.ts'
 import { nativePrimarySkillProfile } from '../../core-kernels/native-primary-skill-profile.ts'
 import { playerCanCast, playerMovementScale } from '../../core-kernels/player-combat.ts'
 import {
   MAX_PLAYER_LEVEL,
   NATIVE_WELD_BUILDS,
-  effectiveSecondaryAbilityRankStats,
   type NativePlayerPrimarySkillId,
 } from '../../core-kernels/player-progression.ts'
 import {
@@ -81,13 +82,22 @@ export function observeMlBotPolicyPlayerState(
     && !castActive
     && secondary.globalCooldownTicks === 0
   const availableMana = progression.currentMana
-  const primaryProfile = nativePrimarySkillProfile(skillBook, statBook, {
+  const offensiveFactors = {
     damage: derived.offensiveDamageFactor,
     equipment: runtime.equipmentModifiers,
     globalFlatDamage: derived.offensiveDamageFlat,
     globalManaReduction: derived.offensiveManaCostReduction,
     manaCost: derived.offensiveManaCostFactor,
-  })
+    manaCostWaived: progression.hagathaRuntime.reverieActive,
+  }
+  const primaryProfile = nativePrimarySkillProfile(skillBook, statBook, offensiveFactors)
+  const secondaryCostAuthority = {
+    skillBook,
+    offensiveFactors,
+    explosiveShieldRawManaCost: effectiveSkillNumericValue(skillBook, statBook, 55, 'mManaCost'),
+    golemRawManaCost: effectiveSkillNumericValue(skillBook, statBook, 75, 'mManaCost'),
+    magicStormRawManaCost: effectiveSkillNumericValue(skillBook, statBook, 28, 'mManaCost'),
+  }
   const primaryRange = primaryProfile.kind === 'air'
     ? PRIMARY_SPELL_AIR_REACH
     : primaryProfile.kind === 'water'
@@ -158,12 +168,12 @@ export function observeMlBotPolicyPlayerState(
   for (let slot = 0; slot < 8; slot += 1) {
     const start = slot * 15
     const skillId = quickbar[slot]
-    const occupied = skillId !== null
-      && (NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)
+    const secondarySkillId = NATIVE_SECONDARY_ABILITY_IDS.find(id => id === skillId)
+    const occupied = secondarySkillId !== undefined
     const isPrimaryBinding = skillId !== null && PRIMARY_SKILL_IDS.has(skillId)
-    const manaCost = occupied
-      ? effectiveSecondaryAbilityRankStats(skillBook, skillId).values.mManaCost ?? 0
-      : 0
+    const manaCost = secondarySkillId === undefined
+      ? 0
+      : nativeSecondaryAbilityManaCost(secondaryCostAuthority, secondarySkillId)
     const cooldown = skillId === null ? 0 : secondary.cooldownTicksBySkill[skillId] ?? 0
     const cooldownMaximum = skillId === null
       ? 0
