@@ -3653,3 +3653,41 @@ test('schema 43 repairs stalled Wraith flight without changing identity, cooldow
   actor.brain.baseFlybySpeed = 0
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /legacy Wraith base speed/)
 })
+
+
+test('continuations retain already compiled repeated Coffin bursts and their emitted actor', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 78))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.waves === null) throw new Error('expected survival Boneyard')
+  const waves = state.world.waves
+  const section = waves.compiledSchedule[35]
+  const entries = waves.schedule[35].groups[6].entries
+  const legacyBursts = [121, 129].map((count, index) => ({
+    afterDelayTicks: 100, count, entries, groupIndex: 6 + index,
+    locationPolicy: 'near-player' as const, positionPolicy: 'light' as const,
+    spreadTicks: 25, startDelayTicks: index === 0 ? 10 : 0, steady: true,
+  }))
+  const compiledSchedule = waves.compiledSchedule.map((value, index) => index === 35
+    ? { ...section, bursts: legacyBursts } : value)
+  const emitted = stepBoneyardEnemyStore(state.world.enemies, {
+    projectileWorldBlocked: () => false, players: {},
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'COFFIN', flags: [], id: 1,
+      locationPolicy: 'near-player', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 53 }],
+    tick: state.tick,
+  })
+  state = { ...state, world: { ...state.world, enemies: emitted.store,
+    waves: { ...waves, compiledSchedule } } }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state })
+  for (const schemaVersion of [47, WEB_GAME_SAVE_SCHEMA_VERSION]) {
+    const saved = JSON.parse(document)
+    if (schemaVersion === 47) downgradeSaveSchema(saved, 47)
+    const restored = restoreGameSaveDocument(JSON.stringify(saved)).state
+    if (restored.world.kind !== 'boneyard' || restored.world.waves === null) throw new Error('expected continuation')
+    assert.deepEqual(restored.world.waves.compiledSchedule, compiledSchedule)
+    assert.deepEqual(restored.world.enemies.actors, emitted.store.actors)
+  }
+})

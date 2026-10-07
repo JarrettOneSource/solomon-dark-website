@@ -1247,3 +1247,99 @@ Only this ledger closeout changed after the gate; runtime, tests and browser
 harness bytes remained identical. No member is blocked by the browser
 platform. Publication, new completion reaction and cleanup are recorded in
 the private archive receipt.
+
+
+## 2026-10-06 — Reports 78/79: mutable Coffin selection pool reopening
+
+The original September 30 Wave 53 capture contains 250 scheduled Coffins:
+group 6 was selected in 21 separate bursts (121 Coffins), group 7 in 27 bursts
+(129 Coffins). Three retained checkpoints have the same compiled section;
+the worst has 613 ordinary actors, 87 Coffins and 3,199 Maggots. The native
+Coffin terminal path emits Maggots, not Coffins. Repeated compiler selection,
+not death-triggered cloning, explains the recorded excess. This reopens the
+compiler boundary that earlier passes did not follow through its group-pool
+removal dispatch. Report 44's five births over ticks 0/7/13/19/25 and earlier
+qualified Report 09 results remain valid; their whole-wave-selection parity
+claim is superseded where a Coffin group could be reselected.
+
+Evidence is instruction-derived from retail 0.72.5 (4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`). The existing `WaveData_Parse 0x00632730` instruction listing
+and fresh bounded M5 objdump extraction establish the actual compiler caller:
+
+- `0x00633664..0x00633678` selects through `0x00632690` from the current pool.
+- `0x0063368D..0x0063369B` snapshots `min(remaining budget, member count)`
+  before Zombie/Demon budget reductions and Coffin/Pike/split-Imp resets.
+- `0x006336E9..0x00633717` resets Coffin budget to authored SPAWN, sets Coffin
+  mode and removes that group through `0x006324C0`. Pool vtable `0x0079E774`
+  slot `+0x1C` dispatches to `0x00632430`, identity search to `0x00632530`, and
+  ordered erase to `0x00632310`; later entries shift down and count decreases.
+- Pike and split-Imp predicates read the first entry's flags, not later entries.
+- `0x006337D9..0x00633813` uses constant bonus 1 without an RNG draw when the
+  ordinal-derived bound is 1; bounds 2..4 consume one integer draw plus 1.
+- `0x00633EF4..0x00633F44` subtracts the snapshotted cost after emission and
+  loops only while the mutated budget remains positive.
+- Exhaustion has no native successful fallback: integer bound 0 returns 0 at
+  `0x00401177..0x0040117F`, `0x004F9320` returns a null out-of-range group,
+  and `0x0063367F` dereferences it. All retail rows retain ordinary groups.
+  The Website custom-wave contract will report exhausted selection explicitly
+  instead of copying a native null dereference or resampling removed groups.
+
+System boundary: parsed row to compiled ordinary TimeLine. All 42 rows and
+205 groups remain the unchanged complete authored catalog in
+`native-retail-wave-schedule.ts`. Eight enemy families share this compiler:
+Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon and Coffin. The eight Coffin
+groups are `(row,group,members)` `(15,6,3)`, `(19,7,1)`, `(25,6,3)`, `(33,5,3)`,
+`(34,11,1)`, `(34,12,2)`, `(35,6,1)` and `(35,7,1)`.
+
+| Member | Current disposition | Validation contract |
+| --- | --- | --- |
+| All 42 rows/205 groups/eight enemy families | recovered-pending-port | Exhaustive authored membership census and seeded compiler sweep |
+| Eight Coffin groups, original identity and ordered removal | recovered-pending-port | Each selected at most once; every member exercised |
+| Early Zombie, Demon, early unsplit Imp reductions | recovered-pending-port | Final group emits its pre-reduction cost |
+| First-entry Pike/split-Imp resets, later-entry controls | recovered-pending-port | Only first entry controls the budget |
+| Constant-one and random 2..4 bonus/RNG continuation | recovered-pending-port | Instruction-derived draw/count/spread checks |
+| Burst merge, original group indices, flags, policies and delays | recovered-pending-port | Existing tests plus ordered-removal regression |
+| Custom exhausted pool | recovered-pending-port | Explicit invalid-schedule error; no gameplay cap/fallback |
+| Already compiled saved schedules/emitted actors | verified-already-at-parity | Compilation is run construction only; restore retains serialized world/director |
+| Coffin rise/open/death and Maggot offspring | out-of-system | Entry 254 owns actor lifecycle; recorded excess already exists in schedule |
+| Cross-run College lag (Report 79) | out-of-system for compiler | Independent lifetime and timing measurement remains required |
+
+Implementation belongs in `boneyard-wave-timeline.ts`, using a private ordered
+array of original group indices. Authored rows, schedule/save/wire schemas,
+existing compiled continuations, burst merging, placement and host ownership
+remain their existing contracts. Regression tests will fail before the change.
+No actor limit or purge is justified. Report 79's video shows 60 rendered FPS
+with changing ping; it does not prove retained assets or a client heap leak.
+The original run archive has no College checkpoint, so neither its cause nor
+its resolution follows from this compiler correction.
+
+
+The final initial-loop sweep also resolves its complete draw sequence.
+`0x006335CF` samples the scalar SPAWN text through `0x00429520`,
+`0x006335EF` draws exactly `trunc(SPAWN/2)`, `0x00633612` samples WAVEDELAY,
+and `0x0063362A` samples SPAWN again. Sampler `0x00429520` builds the parsed
+integer-value list and always calls `RandomInt(list length)` at `0x004295C6`,
+including a one-value list. Thus both scalar SPAWN samples consume a word;
+the first was absent in the Website. The half-budget bound is not clamped:
+custom SPAWN 1 uses bound 0's no-draw return, while both singleton text samples
+still draw. This supersedes the earlier single-SPAWN-draw description above.
+A crafted public five-member-group regression pins the initial order: SPAWN 8,
+then a half-budget result 3, gives 15 consumed members, one merged 18-actor
+burst, 375 spread ticks and 24 total RNG words at ordinal 1. The full compiler
+boundary includes this draw sequence in addition to group removal and bonus
+fast paths; saved compiled schedules still do not recompile.
+
+
+Custom recurring-reset pools have a second finite-input boundary. Once
+`0 < remainingBudget < SPAWN`, if every selectable group begins with Pike
+Skeleton or an Imp split flag before ordinal 37, every choice sets the budget
+to SPAWN and subtracts at most the former remaining budget. The result stays
+strictly positive and the pool never changes: stock would loop forever.
+The Website must reject that proven nonterminating input at the compiler.
+A Coffin is excluded from this predicate because selecting it removes a group;
+large first groups that consume SPAWN in their first selection remain valid.
+This is an exact arithmetic proof from the already recovered reset/decrement
+instructions, not an iteration limit or actor cap. Pike-only, both early split
+flags, a Coffin-to-Pike pool, spawn-one and large-first-group controls share the
+same admission check; their disposition is recovered-pending-port until checked.

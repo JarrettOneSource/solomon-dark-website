@@ -112,10 +112,11 @@ export function compileBoneyardWaveSection(
     throw new Error('wave ordinal must be a positive integer')
   }
 
-  let rngState = sourceRngState
+  // Parsing scalar SPAWN consumes a singleton draw before budget expansion.
+  const initialSpawnDraw = drawNativeInteger(sourceRngState, 1)
   const halfBudget = Math.trunc(wave.spawn / 2)
-  const budgetRoll = drawNativeInteger(rngState, Math.max(halfBudget, 1))
-  rngState = budgetRoll.state
+  const budgetRoll = drawNativeInteger(initialSpawnDraw.state, halfBudget)
+  let rngState = budgetRoll.state
   let remainingBudget = wave.spawn + halfBudget + budgetRoll.value
 
   // The retail compiler samples these parsed ranges before selecting groups.
@@ -127,37 +128,42 @@ export function compileBoneyardWaveSection(
   rngState = singletonSpawnDraw.state
 
   const bursts: BoneyardCompiledSpawnBurst[] = []
+  const selectableGroups = wave.groups.map((_, index) => index)
   while (remainingBudget > 0) {
-    const groupDraw = drawNativeInteger(rngState, wave.groups.length)
+    if (selectableGroups.length === 0) {
+      throw new Error(`wave ${waveOrdinal} exhausted its selectable groups before consuming the spawn budget`)
+    }
+    if (remainingBudget < wave.spawn && selectableGroups.every(index => (
+      recurringGroupResetsBudget(wave.groups[index].entries[0], waveOrdinal)
+    ))) {
+      throw new Error(`wave ${waveOrdinal} cannot consume its spawn budget because every remaining group resets it`)
+    }
+    const groupDraw = drawNativeInteger(rngState, selectableGroups.length)
     rngState = groupDraw.state
-    const groupIndex = groupDraw.value
+    const groupIndex = selectableGroups[groupDraw.value]
     const group = wave.groups[groupIndex]
     const first = group.entries[0]
+    // Native snapshots this cost before enemy-specific budget mutations.
+    const groupCost = Math.min(remainingBudget, group.entries.length)
 
     if (waveOrdinal < 28 && first.enemy === 'ZOMBIE') remainingBudget -= 2
     const coffinMode = first.enemy === 'COFFIN'
     if (coffinMode) {
       remainingBudget = wave.spawn
+      selectableGroups.splice(groupDraw.value, 1)
     }
     if (first.enemy === 'DEMON') remainingBudget -= 2
-    if (first.enemy === 'SKELETON' && group.entries.some((entry) => (
-      entry.flags.includes('FLAG_PIKE')
-    ))) remainingBudget = wave.spawn
-    if (waveOrdinal < 37 && first.enemy === 'IMP') {
-      const splits = group.entries.some((entry) => (
-        entry.flags.includes('FLAG_SPLIT') || entry.flags.includes('FLAG_SPLITMANY')
-      ))
-      if (splits) remainingBudget = wave.spawn
-      else remainingBudget -= 2
-    }
-
-    const groupCost = Math.min(remainingBudget, group.entries.length)
-    if (groupCost <= 0) break
+    if (recurringGroupResetsBudget(first, waveOrdinal)) remainingBudget = wave.spawn
+    else if (waveOrdinal < 37 && first.enemy === 'IMP') remainingBudget -= 2
 
     const bonusBound = clampInteger(Math.trunc(waveOrdinal / 3), 1, 4)
-    const bonusDraw = drawNativeInteger(rngState, bonusBound)
-    rngState = bonusDraw.state
-    let count = groupCost + bonusDraw.value + 1
+    let bonus = 1
+    if (bonusBound > 1) {
+      const bonusDraw = drawNativeInteger(rngState, bonusBound)
+      rngState = bonusDraw.state
+      bonus += bonusDraw.value
+    }
+    let count = groupCost + bonus
     if (waveOrdinal >= 4) count += Math.trunc(count / 3)
     if (waveOrdinal >= 9) count += Math.trunc(count / 3)
     if (coffinMode) count = Math.min(count, Math.trunc(waveOrdinal / 5))
@@ -219,6 +225,12 @@ export function compileBoneyardWaveSection(
       releaseThreshold: releaseDraw.value,
     },
   }
+}
+
+function recurringGroupResetsBudget(first: WaveGroupEntry, waveOrdinal: number): boolean {
+  return (first.enemy === 'SKELETON' && first.flags.includes('FLAG_PIKE'))
+    || (waveOrdinal < 37 && first.enemy === 'IMP'
+      && (first.flags.includes('FLAG_SPLIT') || first.flags.includes('FLAG_SPLITMANY')))
 }
 
 export function seedBoneyardWaveRng(seed: string): number {
