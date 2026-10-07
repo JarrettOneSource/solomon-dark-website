@@ -933,8 +933,10 @@ export function NativeHubSurface({
               transitionLocked={inventoryTransitionLocked}
             />
           )}
-          <HotbarControls rects={inventoryBeltRects}
-            disabled={inputSuspended || closing || inventoryTransitionLocked || notice !== null || dyeModal !== null} />
+          {surface.kind !== 'dialogue' && notice === null && dyeModal === null ? (
+            <HotbarControls rects={inventoryBeltRects}
+              disabled={inputSuspended || closing || inventoryTransitionLocked} />
+          ) : null}
           <HubInventoryFooter
             key={bank}
             blocked={notice !== null || dyeModal !== null}
