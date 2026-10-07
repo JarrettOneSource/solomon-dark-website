@@ -308,3 +308,42 @@ font and shared notification renderer can represent every stock surface.
   ledger 069's 2026-08-31 implementation receipt. The three reopened
   presentation/detail rows are now `exact-ported`; every gameplay/protocol row
   retains its prior disposition.
+
+
+## 2026-10-06 — Report 83: authorized Insight in either Split Mind slot
+
+The original `1555080445312368681` is freshly reread, unedited and unchecked;
+its HUD crop is not an offer/selection reproduction. Current bounded public
+simulation over seeds 0..31 yielded 12 marked first-slot offers (each chosen
+card gained two ranks) and zero second-slot markers in valid owned Split Mind
+states. This confirms the current implementation's slot-A admission.
+
+The native fact above remains unchanged: retail `0x0066FB55..0x0066FCCD`
+checks only concentration index16/A for row63, then performs `RandomInt(5)==1`.
+Index20/B and Mind Chug do not enter that branch. On October6 the user explicitly
+requested “Fix 83 to work in both slots”; the parent clarified the stock rule
+and confirmed authorization to improve this behavior. Second-slot admission
+is therefore a deliberate Website gameplay extension, not a new native claim.
+
+Boundary: existing shared new-offer Insight finalizer and all its enumerated
+initial/queued/reroll/deferred/bonus/automatic/party/reconnect/save callers.
+Only concentration admission changes. Runtime refresh already requires owned
+Split Mind21 for a valid B selection; it clears B when that ownership is absent.
+All authored candidate rows, eligibility, exact 20-percent chance, single marker,
+active gameplay RNG order, two acquisition reseeds, rank limits, presentation,
+replication and pending-offer persistence retain their recovered contracts.
+
+| Member / branch | Initial disposition | Acceptance |
+| --- | --- | --- |
+| Creativity63 in A, with one or two concentrations | verified-already-at-parity | identical native chance/candidate draws, marker and +2 selection |
+| Creativity63 in valid owned Split Mind B | recovered-pending-port (authorized extension) | same offer/marker/RNG result as A for the same seed; normal selection gains two legal ranks |
+| Learned63 absent from both slots, unowned/invalid B, Mind Chug alone | verified-already-at-parity | no extra Insight word; existing concentration validity remains the admission owner |
+| Every existing initial/queued/reroll/defer/bonus/automatic/party/reconnect/save offer producer | recovered-pending-port through shared finalizer | all callers consume the same either-slot predicate; no second roll or fixed stream |
+| Candidate-empty/miss, rank cap, marked card/detail/feedback, pending-offer save/resume | verified-already-at-parity | unchanged existing focused contracts plus actual both-slot browser selection |
+| Separate Insight ability or timer | out-of-system | no authored skill exists; no new skill or proc timer is introduced |
+
+Implementation consequence: replace the one-use slot-A wrapper with an inline
+A-or-B admission at `markPlayerCreativityInsight`. Reuse the current valid
+runtime and canonical finalizer. Add a failing same-seed public progression
+regression before implementation, then verify both normal browser slot/offer
+journeys. No platform constraint or approximation is needed.

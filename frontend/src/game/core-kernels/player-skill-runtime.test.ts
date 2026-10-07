@@ -377,7 +377,7 @@ test('Mindstar effective ranks refresh both maximum-vital skills', () => {
   assert.deepEqual([derive().maximumHealth, derive().maximumMana], [100, 200])
 })
 
-test('Mind Chug concentrates every direct branch while Creativity remains slot-A only', () => {
+test('Mind Chug concentrates direct branches without selecting Creativity for Insight', () => {
   const book = rankedBook({ 57: 1, 58: 1, 59: 1, 60: 1, 61: 1, 63: 1, 66: 1 })
   const statBook = playerStatBook()
   const economy = createHubEconomy(1)
@@ -400,7 +400,7 @@ test('Mind Chug concentrates every direct branch while Creativity remains slot-A
   assert.equal(created.runtime.concentrationSkillIdA, null)
 })
 
-test('Creativity Insight uses fixed slot A, exact RNG order, and one eligible card', () => {
+test('Creativity Insight recognizes either concentration slot with one exact RNG roll', () => {
   const book = rankedBook({ 57: 1, 63: 1 })
   const statBook = playerStatBook()
   const economy = createHubEconomy(1)
@@ -423,13 +423,30 @@ test('Creativity Insight uses fixed slot A, exact RNG order, and one eligible ca
   assert.equal(result.rng.indexA, 2)
 
   const slotBOnly = markPlayerCreativityInsight(
-    { concentrationSkillIdA: null },
-    result.offer,
+    { concentrationSkillIdA: null, concentrationSkillIdB: 63 },
+    { ...result.offer, options: [{ skillId: 57, targetRank: 2 }] },
     state.skillBook,
     statBook,
     createNativeRng(seed),
   )
-  assert.equal(slotBOnly.rng.indexA, 0)
+  assert.deepEqual(slotBOnly, result)
+  const unconcentrated = markPlayerCreativityInsight(
+    { concentrationSkillIdA: null, concentrationSkillIdB: null },
+    { ...result.offer, options: [{ skillId: 57, targetRank: 2 }] },
+    state.skillBook,
+    statBook,
+    createNativeRng(seed),
+  )
+  assert.equal(unconcentrated.rng.indexA, 0)
+  assert.equal(unconcentrated.offer.options[0]!.insight, undefined)
+  const withoutSplitMind = refreshPlayerSkillRuntime({
+    ...state.runtime, concentrationSkillIdA: 57, concentrationSkillIdB: 63,
+  }, state.skillBook, statBook, economy)
+  assert.equal(withoutSplitMind.runtime.concentrationSkillIdB, null)
+  const invalidated = markPlayerCreativityInsight(withoutSplitMind.runtime,
+    unconcentrated.offer, withoutSplitMind.skillBook, statBook, createNativeRng(seed))
+  assert.equal(invalidated.rng.indexA, 0)
+  assert.equal(invalidated.offer.options[0]!.insight, undefined)
 })
 
 test('Split Mind owns two distinct selections and replacement alternates A then B', () => {

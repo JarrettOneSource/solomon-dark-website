@@ -126,7 +126,7 @@ identity; they do not authorize any old character-owned component to survive.
 | active backpack/equipment | starter `0x005CFA80`, separate from Luthacus archival | `verified-already-at-parity`, color handoff corrected here | only Hat, Robe, Staff, Health Potion, and Mana Potion; archived dyed or run-looted items remain storage-only |
 | ordinary post-run Hat/Robe primary and white trim | selected-primary branch in `0x005CFA80` | `exact-ported` by this reopening | fresh generation seed and newly confirmed element own both identical starter tints; economy revision advances |
 | post-Tutorial College-green Hat/Robe | `DAT_00B3BCA0` override plus `Game+0x86` one-shot guard | `verified-already-at-parity` | preserve the authored College colors through that first Create; do not apply the ordinary post-run reroll |
-| gold, Luthacus storage, owned Hagatha selectors/runtime, unforge bonuses, Tutorial/College flags, NPC/profile state | durable participant/profile owner | `verified-already-at-parity` | survive without becoming old active inventory or learned spell state |
+| gold, Luthacus storage, owned Hagatha selectors, unforge bonuses, Tutorial/College flags, NPC/profile state | durable participant/profile owner | `verified-already-at-parity` | survive without becoming old active inventory or learned spell state |
 | Last Word ground Sack/Gold recovery | selector 12 and archive scan | `verified-already-at-parity` | durable ground recovery composes with the ordinary carried archive; neither restores old gear or spells to the active wizard |
 | completed Hall/Memorial portrait | death-tick-300 immutable archive before run retirement | `verified-already-at-parity` | keep the dead generation's frozen equipment colors/config/score in its portrait; later active-wizard replacement cannot recolor history |
 | solo, multiplayer per-member confirmation, disconnect during loadout | host run/loadout barrier | `verified-already-at-parity` | replace each accepted participant exactly once; final current member releases Hub |
@@ -208,3 +208,24 @@ front-end/profile lineage; carried-item archival now follows retail.
   ./scripts/validate.sh`; run Mod Loader `python3
   tests/re/run_static_re_tests.py --ci`; compare local/Mac changed-file
   manifests byte-for-byte before publication.
+
+
+## 2026-10-06 — Report 88: fresh effects for retained charm ownership
+
+The durable profile membership above retains owned Hagatha selectors and
+purchase history. Spent actor-private runtime does not cross new-wizard
+confirmation. The user explicitly confirmed Soggy's clarified retained-charms
+rule, superseding the earlier keep-spent answer: each new wizard gets the
+owned charms' fresh effects, including until-hurt effects and Cheat Death.
+
+Retail fresh progression clears ownership/runtime (`Skills 0x006594E0`, called
+at `0x00674F19`); its later Bundle/direct purchase calls `0x0066EF70` to arm
+the purchased effects. Ledger175 records the exact trace, complete 28-row
+membership and the authorized Website retained-ownership distinction.
+
+Both College and post-run confirmation already share `replacePlayerLoadout`
+and the canonical Hagatha skill refresh. Rebuild one-shot runtime from that
+new progression and current ownership at this boundary. Keep regular refresh,
+existing-run entry, continuation save/resume and rejoin separate: they preserve
+spent effects. Retain Report73's Weird Caster refresh, selector order, Tonic
+capacity, gold and first-mix history without repeating economic purchases.

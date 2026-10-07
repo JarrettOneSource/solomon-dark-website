@@ -33,6 +33,7 @@ import {
 } from '../core-kernels/native-weld-primary-runtime.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  HAGATHA_PERKS,
   NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   createEquipmentInventoryItem,
   findInventoryItem,
@@ -124,6 +125,7 @@ import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
   damagePlayerEntity,
   dazzlePlayerEntity,
+  grantPlayerEntitySkillRanks,
   grantPlayerEntityWeldBuild,
   playerCharacterRecords,
   playerLightingAt,
@@ -136,6 +138,7 @@ import {
   selectPlayerEntityConcentration,
   setPlayerDeathWeaponPainterRegistration,
   setPlayerEntityMana,
+  setPlayerEntitySkillRuntime,
   unlockPlayerEntityAdvancedSkill,
 } from './player-entity-store.ts'
 
@@ -154,6 +157,69 @@ test('a level-up barrier preserves the unchanged authority and flash owner for s
   assert.ok(state.levelUpBarrier)
   assert.equal(stepGameSimulationTick(state, {}), state)
 })
+
+for (const [skillId, toggle] of [[23, 'firewalker'], [78, 'mindstar'], [79, 'regenerate']] as const) {
+  for (const party of [false, true]) {
+    test(`${toggle} survives a real enemy-reward level-up and its ${party ? 'party' : 'solo'} picker`, () => {
+      const heldInput = { ...gameplayInput(0, 0), cast: { primary: false, quickbar: 0 } }
+      let state = createGameSimulation({ caster: { ...DEFAULT_PLAYER_CHARACTER_CONFIG, element: 'fire' },
+        ...(party ? { peer: DEFAULT_PLAYER_CHARACTER_CONFIG } : {}),
+      })
+      const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'caster', skillId, 1, state.gameRng)
+      state = enterBoneyardWorld({ ...state, playerEntities: granted.store, gameRng: granted.rng },
+        combatBoneyard(`level-toggle-${skillId}-${party}`))
+      state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', skillId, 0)!
+      state = grantGameSimulationPlayerExperience(state, 'caster', 89)
+      assert.equal(state.levelUpBarrier, null)
+      const activated = applyGameSimulationHubAction(state, 'caster', { type: 'activate-belt-slot', slot: 0 })
+      assert.equal(activated.accepted, true)
+      state = activated.state
+      assert.equal(state.secondaryAbilities.players.caster![toggle], true)
+      const reservedMana = state.secondaryAbilities.players.caster!.reservedMana
+      assert.ok(reservedMana > 0)
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+      const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+        projectileWorldBlocked: () => false, players: {},
+        resolveMovement: ({ requestedPosition }) => requestedPosition,
+        registerWorldPainter: order.register,
+        resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1,
+          locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+          position: { x: 300, y: 140 }, spawnTick: state.tick, waveOrdinal: 1 }], tick: state.tick,
+      }).store
+      const killed = damageBoneyardEnemy(spawned, { actorId: 1, amount: 10_000,
+        sourcePlayerId: 'caster', tick: state.tick, registerWorldPainter: order.register })
+      assert.equal(killed.killed, true)
+      state = { ...state, worldManagerOrder: order.state(), world: { ...state.world, enemies: killed.store } }
+      state = stepGameSimulationTick(state, { caster: heldInput })
+      assert.equal(getPlayerProgression(state, 'caster').level, 2)
+      assert.equal(getPlayerProgression(state, 'caster').experience, party ? 97.5 : 93.25)
+      assert.ok(state.levelUpBarrier)
+      assert.equal(state.secondaryAbilities.players.caster![toggle], true)
+      assert.equal(state.secondaryAbilities.players.caster!.reservedMana, reservedMana)
+      assert.equal(state.secondaryAbilities.players.caster!.heldSlot, 0)
+      assert.equal(playerSkillRuntimeAt(state.playerEntities, 'caster')!.mindstarActive, toggle === 'mindstar')
+      assert.equal(stepGameSimulationTick(state, { caster: heldInput }), state)
+      const rejected = applyGameSimulationHubAction(state, 'caster', { type: 'activate-belt-slot', slot: 0 })
+      assert.equal(rejected.accepted, false)
+      assert.equal(rejected.state, state)
+      for (const playerId of party ? ['caster', 'peer'] : ['caster']) {
+        const offer = getPlayerProgression(state, playerId).pendingOffer!
+        state = selectGameSimulationPlayerSkill(state, playerId, {
+          choiceIndex: 0, offerSequence: offer.sequence, skillId: offer.options[0]!.skillId,
+        })!
+        assert.equal(state.secondaryAbilities.players.caster![toggle], true)
+        if (party && playerId === 'caster') assert.equal(stepGameSimulationTick(state, {}), state)
+      }
+      assert.equal(state.levelUpBarrier, null)
+      const castSequence = state.secondaryAbilities.players.caster!.castSequence
+      state = stepGameSimulationTick(state, { caster: heldInput })
+      assert.equal(state.secondaryAbilities.players.caster![toggle], true)
+      assert.equal(state.secondaryAbilities.players.caster!.castSequence, castSequence)
+      assert.equal(playerSkillRuntimeAt(state.playerEntities, 'caster')!.mindstarActive, toggle === 'mindstar')
+    })
+  }
+}
 
 function equipMindblowingRing(
   state: GameSimulationState,
@@ -2191,6 +2257,59 @@ test('concentrated Creativity rolls Insight on active gameplay RNG and applies i
   )
   assert.deepEqual(state.gameRng, advanceNativeRngWords(beforeChoiceRng, 2))
   assert.strictEqual(state.secondaryAbilities.rng, secondaryRng)
+})
+
+test('owned Split Mind produces identical Insight offers and selections in either concentration slot', () => {
+  let hits = 0
+  for (let seed = 0; seed < 32; seed += 1) {
+    const states = ([0, 1] as const).map(slot => {
+      let state = createGameSimulation({ first: { discipline: 'mind', displayName: 'Split Insight', element: 'ether' } })
+      for (const skillId of [57, 63]) {
+        const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'first', skillId, 1, state.gameRng)
+        state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+      }
+      state = selectGameSimulationPlayerPrimarySkill(state, 'first', 8)!
+      const economy = getPlayerEconomy(state, 'first')
+      state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'first', {
+        ...economy, ownedPerkSelectors: [21],
+      }) }
+      const runtime = playerSkillRuntimeAt(state.playerEntities, 'first')!
+      state = { ...state, gameRng: createNativeRng(seed),
+        playerEntities: setPlayerEntitySkillRuntime(state.playerEntities, 'first', { ...runtime,
+          concentrationSkillIdA: slot === 0 ? 63 : 57,
+          concentrationSkillIdB: slot === 0 ? 57 : 63,
+        }),
+      }
+      return grantGameSimulationPlayerExperience(state, 'first', 91)
+    })
+    const first = states[0]!
+    const second = states[1]!
+    const offer = getPlayerProgression(first, 'first').pendingOffer!
+    assert.deepEqual(getPlayerProgression(second, 'first').pendingOffer, offer, `seed ${seed}`)
+    assert.deepEqual(second.gameRng, first.gameRng, `seed ${seed} active RNG`)
+    const choiceIndex = offer.options.findIndex(option => option.insight)
+    if (choiceIndex < 0) continue
+    hits += 1
+    const skillId = offer.options[choiceIndex]!.skillId
+    for (const current of states) {
+      const state = hits === 1 ? restoreGameSaveDocument(createGameSaveDocument({
+        integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'first', state: current,
+      })).state : current
+      assert.deepEqual(getPlayerProgression(state, 'first').pendingOffer, offer)
+      // Hub reconstruction owns one seed draw; a saved pending offer does not reroll Insight.
+      assert.deepEqual(state.gameRng, hits === 1 ? advanceNativeRngWords(current.gameRng, 1) : current.gameRng)
+      assert.equal(playerSkillRuntimeAt(state.playerEntities, 'first')!.concentrationSkillIdB,
+        playerSkillRuntimeAt(current.playerEntities, 'first')!.concentrationSkillIdB)
+      const before = getPlayerSkillBook(state, 'first').permanentRanks[skillId]!
+      const selected = selectGameSimulationPlayerSkill(state, 'first', {
+        choiceIndex, offerSequence: offer.sequence, skillId,
+      })!
+      assert.equal(getPlayerSkillBook(selected, 'first').permanentRanks[skillId], before + 2)
+      assert.deepEqual(selected.gameRng, advanceNativeRngWords(state.gameRng, 2))
+      assert.equal(selected.secondaryAbilities.rng, state.secondaryAbilities.rng)
+    }
+  }
+  assert.ok(hits > 0)
 })
 
 test('mod skill replacement finalizes its queued native Insight offer on gameplay RNG', () => {
@@ -7230,6 +7349,62 @@ for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
     }
   }
 }
+
+test('every retained charm initializes its new wizard without replaying economic purchases', () => {
+  const cases = [[], ...HAGATHA_PERKS.filter(row => row.selector !== 8).map(row => [row.selector]),
+    [7, 24, 25], [27, 27, 7, 24, 25, 6, 14],
+  ]
+  for (const selectors of cases) {
+    let state = createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG })
+    state = { ...state, playerEntities: replacePlayerCharacter(
+      replacePlayerEconomy(state.playerEntities, 'owner', { ...getPlayerEconomy(state, 'owner'), gold: 50_000 }),
+      'owner', { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
+    ) }
+    for (const selector of selectors) {
+      const purchase = applyGameSimulationHubAction(state, 'owner', { type: 'buy-hagatha', selector })
+      assert.equal(purchase.accepted, true, `purchase ${selectors}`)
+      state = purchase.state
+    }
+    state = damageGameSimulationPlayer(state, 'owner', 1, state.tick)
+    if (selectors.includes(7)) state = damageGameSimulationPlayer(state, 'owner', 10_000, state.tick)
+    const spent = { cheatDeathCharges: 0, reverieActive: false, serendipityActive: false }
+    assert.deepEqual(getPlayerProgression(state, 'owner').hagathaRuntime, spent)
+    const restored = restoreGameSaveDocument(createGameSaveDocument({
+      integrity: 'local-only', mods: [], modState: {}, loadedBoneyard: null, playerId: 'owner', state,
+    })).state
+    assert.deepEqual(getPlayerProgression(restored, 'owner').hagathaRuntime, spent, `same-run resume ${selectors}`)
+    const profile = restoreGameSaveProfile(createGameProfileSaveDocument({
+      integrity: 'local-only', mods: [], modState: {}, playerId: 'owner', state,
+    }))
+    const hydrated = hydrateGameSaveProfile(createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG }), 'owner', profile)
+    assert.deepEqual(getPlayerProgression(hydrated, 'owner').hagathaRuntime, spent, `profile resume ${selectors}`)
+    const economy = getPlayerEconomy(state, 'owner')
+    for (let generation = 0; generation < 2; generation += 1) {
+      const loadout: GameSimulationState = { ...state,
+        run: { ...state.run, eligiblePlayerIds: ['owner'], loadoutReadyPlayerIds: [], phase: 'loadout' },
+      }
+      const fresh = confirmGameSimulationLoadout(loadout, 'owner', {
+        discipline: 'body', displayName: `Fresh Charm Wizard ${generation}`, element: 'air',
+      })!
+      assert.deepEqual(getPlayerProgression(fresh, 'owner').hagathaRuntime, {
+        cheatDeathCharges: selectors.includes(7) ? 1 : 0,
+        reverieActive: selectors.includes(25),
+        serendipityActive: selectors.includes(24),
+      }, `fresh generation ${selectors}`)
+      const freshEconomy = getPlayerEconomy(fresh, 'owner')
+      for (const key of ['ownedPerkSelectors', 'firstMixedSelectors', 'gold', 'tonicPurchases', 'charmCapacity'] as const) {
+        assert.deepEqual(freshEconomy[key], economy[key], `${selectors} ${key}`)
+      }
+      const book = getPlayerSkillBook(fresh, 'owner')
+      assert.equal(NATIVE_SECONDARY_ABILITY_IDS.filter(id => book.permanentRanks[id]! > 0).length,
+        selectors.includes(14) ? 2 : 1)
+      assert.equal(book.permanentRanks[book.primarySkillId], selectors.includes(6) ? 2 : 1)
+      state = damageGameSimulationPlayer(fresh, 'owner', 1, fresh.tick)
+      if (selectors.includes(7)) state = damageGameSimulationPlayer(state, 'owner', 10_000, fresh.tick)
+      assert.deepEqual(getPlayerProgression(state, 'owner').hagathaRuntime, spent)
+    }
+  }
+})
 
 test('the shared damage boundary births gameplay and participant feedback once per accepted rescue', () => {
   let state = enterBoneyardWorld(createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG }), emptyBoneyard())

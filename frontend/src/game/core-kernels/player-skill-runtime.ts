@@ -729,20 +729,16 @@ export function isPlayerSkillConcentrated(
     || source.concentrationSkillIdB === skillId
 }
 
-function creativityRecognizesConcentration(
-  source: Pick<PlayerSkillRuntimeComponent, 'concentrationSkillIdA'>,
-): boolean {
-  return source.concentrationSkillIdA === 63
-}
-
 export function markPlayerCreativityInsight(
-  source: Pick<PlayerSkillRuntimeComponent, 'concentrationSkillIdA'>,
+  source: Pick<PlayerSkillRuntimeComponent, 'concentrationSkillIdA' | 'concentrationSkillIdB'>,
   offer: PlayerSkillOffer,
   skillBook: PlayerSkillBookComponent,
   statBook: PlayerStatBookComponent,
   sourceRng: NativeRngState,
 ): PlayerCreativityInsightResult {
-  if (!creativityRecognizesConcentration(source)) return { offer, rng: sourceRng }
+  if (source.concentrationSkillIdA !== 63 && source.concentrationSkillIdB !== 63) {
+    return { offer, rng: sourceRng }
+  }
   const chance = drawNativeInteger(sourceRng, 5)
   if (chance.value !== 1) return { offer, rng: chance.state }
   const candidateIds = offer.options.flatMap((option, optionIndex) => {

@@ -523,3 +523,49 @@ backend build with zero warnings and errors, all `22` backend contracts, the
 canonical lint/boundary gate, all `89` frontend tests, and both production
 frontend builds. The seven Fast Refresh lint notices predate this work and
 remain warnings rather than gate failures.
+
+
+## 2026-10-06 — Report 84: current XP and modal HUD ownership
+
+The freshly reread original `1555082661624684624` is unedited and unchecked.
+Its two retained images show an empty Inventory frame and a partial gameplay
+fill; they supply no historical numeric XP. Report 61's run-summary/wave owner
+is separate. This reopens the prior HUD pass because it never checked the
+current-XP consumer and motion owner across optional Inventory lifetimes.
+
+Native evidence is the retained complete `Game::RenderInventory 0x005C8740`
+recovery above: `UI.81` is 4x48, `UI.82` is 12x56, progress is
+`(current-lower)/(upper-lower)` from +0x34/+0x38/+0x3C, frame origin is backpack
++(64,4), and fill origin is frame +(3.5,4). `0x005C7200` moves the shared
+bottom-control owner by 15 times modal progress (see the retained HUD layout
+contract). Confidence is high; no new native extraction is needed.
+
+Current source at `1e298039`: GameHud and `skill-book-renderer.ts` already use
+`playerExperienceProgress`; the latter has the exact bottom-clipped fill.
+`hub-inventory/equipment.ts::addBelt` emits only UI.82 at settled coordinates
+into the outer Inventory layer. Its actual bottom controls instead live in
+`native-modal-hud`, moved by `nativeHudModalSlideOffset`. `updateAvailability`
+already receives authoritative current progression. The missing fill and
+misowned frame share this producer.
+
+Boundary: the local current-XP meter through gameplay and modal HUD painting,
+including every Inventory builder consumer and shared modal motion. Authored
+XP thresholds and UI records are already fully extracted. No approximation or
+browser constraint is required.
+
+| Member / branch | Initial disposition | Acceptance |
+| --- | --- | --- |
+| Inventory root in Hub and Boneyard | recovered-pending-port | partial fill equals current authoritative XP; frame and fill share bottom-control motion |
+| Nested Item_Sack pages, parent return and reentry | recovered-pending-port | same `buildInventory -> addBelt` meter; current XP survives surface rebuild |
+| All four `buildService -> buildInventory` companion panes (Hagatha, Fomentius, Luthacus, Shlorio), their item/storage views and Unforge/Dye overlays | recovered-pending-port | canonical meter under the same modal owner; service overlay does not own XP |
+| Optional Skills book | verified-already-at-parity | reuse its exact geometry/mask program as the shared Pixi meter; preserve current progression and modal origin |
+| Gameplay GameHud, including responsive/mobile layouts | verified-already-at-parity | existing fraction and UI.81/UI.82 projection; unchanged public fraction tests and browser comparison |
+| Zero, partial, full, new-threshold and nonpositive-span values | recovered-pending-port | existing canonical fraction clamp; render follows changed current progression without rebuilding or mirrored XP state |
+| Reveal, settled, close and service/sack rebuild | recovered-pending-port | meter attaches once under the HUD owner and follows the same 0..15 displacement as backpack/tome |
+| MobileUiEditor sample, run-summary/wave lines, ally/nameplate and MP/HP meters | out-of-system | editor is a static layout preview; the other owners do not consume current XP |
+
+Implementation consequence: extract the existing skill-book Pixi XP program
+into one small shared renderer and call it from both consumers. Feed Inventory
+updates through its existing availability callback. Keep UI records, numeric
+fraction, threshold authority, inventory interactions and run summary intact.
+Record final dispositions and exact M5/browser receipts after validation.

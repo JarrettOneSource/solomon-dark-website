@@ -23,6 +23,7 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import {
+  activateNativeSecondaryBeltSkill,
   applyNativeSecondaryEtherBurn,
   applyNativeSecondaryFireBurn,
   applyNativeSecondaryGolemDamage,
@@ -179,6 +180,7 @@ function context(
     phasingDestination: () => ({ x: 20, y: 0 }),
     players: {
       player: {
+        alive: true,
         weaponKind: 'staff',
         belt: bindNativeBeltSkill(
           createNativePlayerBelt(skillBook),
@@ -4239,6 +4241,65 @@ test('late pure-primary Burn parents enroll once in shared transient birth order
   state = enrollNativeSecondaryPainterOwners(state, order.register)
   assert.strictEqual(state.actors[0]!.painterRegistrations, fireRegistration)
   assert.deepEqual(order.state().nextRegistrationOrdinal, { actor: 0, transient: 2 })
+})
+
+
+test('blocked admission preserves mana toggles while death clears them on both activation paths', () => {
+  for (const [skillId, toggle] of [[23, 'firewalker'], [78, 'mindstar'], [79, 'regenerate']] as const) {
+    const source = cast(skillId).state
+    const base = context(skillId, 10, 0)
+    const blocked = { ...base, players: { player: { ...base.players.player!, alive: true, eligible: false } } }
+    const stepped = stepNativeSecondaryAbilities(source, blocked)
+    assert.equal(stepped.state.players.player![toggle], true)
+    assert.equal(stepped.state.players.player!.reservedMana, source.players.player!.reservedMana)
+    assert.equal(stepped.state.players.player!.heldSlot, 0)
+    assert.equal(stepped.state.players.player!.castSequence, source.players.player!.castSequence)
+    assert.deepEqual(stepped.healthRecovered, {})
+    assert.equal(stepped.state.actors.length, source.actors.length)
+    assert.deepEqual(stepped.overloadedPlayerIds, [])
+    const activated = activateNativeSecondaryBeltSkill(stepped.state, 'player', skillId, 0, blocked)
+    assert.equal(activated.state.players.player![toggle], true)
+    assert.equal(activated.state.players.player!.castSequence, source.players.player!.castSequence)
+    assert.deepEqual(activated.overloadedPlayerIds, [])
+    for (const dead of [
+      stepNativeSecondaryAbilities(source, { ...blocked,
+        players: { player: { ...blocked.players.player!, alive: false } } }),
+      activateNativeSecondaryBeltSkill(source, 'player', skillId, 0, { ...blocked,
+        players: { player: { ...blocked.players.player!, alive: false } } }),
+    ]) {
+      assert.equal(dead.state.players.player!.firewalker, false)
+      assert.equal(dead.state.players.player!.mindstar, false)
+      assert.equal(dead.state.players.player!.regenerate, false)
+      assert.equal(dead.state.players.player!.reservedMana, 0)
+      assert.deepEqual(dead.overloadedPlayerIds, [])
+    }
+  }
+})
+
+test('real mana overload remains authoritative while cast admission is blocked', () => {
+  const source = createNativeSecondarySimulation(2)
+  const active = { ...source, players: { player: { ...createNativeSecondaryPlayerState(),
+    firewalker: true, mindstar: true, regenerate: true,
+  } } }
+  const base = context(23, 10, null, 100, [78, 79])
+  const blocked = { ...base, players: { player: { ...base.players.player!, eligible: false } } }
+  for (const result of [
+    stepNativeSecondaryAbilities(active, blocked),
+    activateNativeSecondaryBeltSkill(active, 'player', 23, 0, blocked),
+  ]) {
+    assert.equal(result.state.players.player!.firewalker, false)
+    assert.equal(result.state.players.player!.mindstar, false)
+    assert.equal(result.state.players.player!.regenerate, false)
+    assert.equal(result.state.players.player!.reservedMana, 0)
+    assert.deepEqual(result.overloadedPlayerIds, ['player'])
+    assert.equal(result.state.events.filter(({ kind }) => kind === 'overload').length, 1)
+  }
+  const atMaximum = { ...base, players: { player: { ...base.players.player!, eligible: false, maximumMana: 50 } } }
+  const fire = { ...source, players: { player: { ...createNativeSecondaryPlayerState(), firewalker: true } } }
+  const legal = stepNativeSecondaryAbilities(fire, atMaximum)
+  assert.equal(legal.state.players.player!.firewalker, true)
+  assert.equal(legal.state.players.player!.reservedMana, 50)
+  assert.deepEqual(legal.overloadedPlayerIds, [])
 })
 
 test('toggle reserves stack, release immediately, and overload clears the full set', () => {

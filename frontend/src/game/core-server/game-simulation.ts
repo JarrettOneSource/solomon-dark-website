@@ -4035,6 +4035,7 @@ function createNativeSecondaryTickContext(
         manaCost: derived.offensiveManaCostFactor,
       }
       return [playerId, {
+        alive: progression.lifeState === 'alive',
         weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
         belt: playerEntities.belts[index]!,
         character,

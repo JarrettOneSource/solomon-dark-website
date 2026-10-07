@@ -8,6 +8,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
+    "src/game/renderer/native-hud-experience-meter.test.ts",
     "src/game/renderer/native-mesh-lifetime.test.ts",
     "src/game/renderer/primary-spell-air-native.test.ts",
     "src/game/renderer/primary-spell-water-mesh-runs.test.ts",

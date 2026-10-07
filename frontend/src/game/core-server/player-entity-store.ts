@@ -888,10 +888,13 @@ export function replacePlayerLoadout(
     economy.ownedPerkSelectors,
     NATIVE_HAGATHA_SELECTORS.weirdCaster,
   )
+  const initialProgression = createPlayerProgression(offerSeed)
   const freshProgression = {
-    ...createPlayerProgression(offerSeed),
+    ...initialProgression,
     disciplineOfferBias,
-    hagathaRuntime: previousProgression.hagathaRuntime,
+    hagathaRuntime: applyNativeHagathaPurchaseRuntime(
+      initialProgression.hagathaRuntime, economy.ownedPerkSelectors,
+    ),
     revision: previousProgression.revision + 1,
     weldingOfferBias,
   }

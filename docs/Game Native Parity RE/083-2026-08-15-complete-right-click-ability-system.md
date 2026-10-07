@@ -2803,3 +2803,65 @@ corrected to Combinator's Club before the successful second browser run; no
 product or passed gate replay occurred. The source matches the recovered
 multiplier domain with no platform exception. Publication/live receipts are
 separate from this built acceptance.
+
+
+## 2026-10-06 — Report 86: level-up admission versus toggle lifetime
+
+Original `1555285473692221533` is freshly reread, unedited and unchecked; the
+still cannot establish its before/after transition. Accepted Report 48 purchase
+retention is a separate contract. This reopens the secondary lifetime boundary:
+the earlier pass conflated blocked cast admission with actor teardown.
+
+The retained public simulation reproducer grants legal Firewalker 23, Mindstar
+78 or Regenerate 79 separately, activates its normal belt slot at 89 XP, kills
+a producer-created Skeleton with caster identity, then takes one ordinary tick.
+All three active toggles clear on that real reward tick: level 1->2, XP
+89->93.25, mandatory offer/barrier present. An external XP grant alone misses
+this path because an existing barrier returns before secondary processing.
+
+Native provenance: unchanged retail 0.72.5, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Retained bounded M5 LLVM reads in `solomon-next-triage-20261006` establish:
+`0x0067C250..0x0067C311` refills HP/MP, advances thresholds/pending counts,
+builds the offer at `0x0065F480`, then hands off through `0x005C88B0`, without
+writing the toggle bytes. The complete selected-card handler
+`0x00671470..0x00671807` calls acquisition `0x00660320` at `0x0067172B`
+(and `0x00671749` for Insight), then refresh `0x0065F9A0` at `0x006717B9`,
+again with no direct toggle writes. Cache rebuild reads +0x8DC/+0x8DD/+0x8DE
+at `0x006637A0/0x0066383C/0x006638EA` and clears them only through strict
+reserve>maximum overload `0x00663998..0x006639E6`. Ledger 103's complete
+modal xref recovery records `0x005CBD40`, Region+0x68=-1 and level-up
+siblings `0x0066F920/0x0067CAC0`: the picker suspends world work rather than
+killing the actor. These reads support the existing complete hoard contract;
+they are not a whole-executable write census. Confidence is high for these
+producer, refresh, overload and modal contracts.
+
+Current cause: `createNativeSecondaryTickContext` combines alive and
+`pendingOffer===null` into `eligible`; both recurring secondary maintenance
+and immediate belt activation clear toggles on `!eligible`. Enemy rewards
+create the offer before that same tick's secondary maintenance. Cast admission
+must stay blocked; its boolean cannot own the three toggles' lifetime.
+
+Boundary: all three persistent mana toggles across secondary recurring and
+immediate activation, in-tick reward admission, modal suspension, refreshed
+reserve/Mindstar effective ranks, and real lifecycle teardown. Every authored
+23/78/79 hoard row is already extracted above.
+
+| Member / branch | Initial disposition | Acceptance |
+| --- | --- | --- |
+| Firewalker 23, Mindstar 78, Regenerate 79, all ranks and legal combinations | recovered-pending-port | separate alive state preserves booleans/reserve across actual reward-created offers and normal choice |
+| Recurring maintenance and immediate belt activation | recovered-pending-port | both lifetime predicates use actor life; `eligible` continues rejecting casts |
+| Regenerate healing, Firewalker trail, Planewalker input/motes and staff pulse | verified-already-at-parity admission | retain existing eligibility gates; the picker does not create effects or heal from rejected input |
+| Held secondary input at the opening reward tick | recovered-pending-port | retain actual `heldSlot` observation; no neutral replacement that manufactures a fresh edge after close |
+| Strict overload, including refresh/max-MP changes | verified-already-at-parity | reserve>max clears all three/hoard and emits the real overload outcome; equality stays legal |
+| Dying/spectating actor and owner removal/disconnect | verified-already-at-parity teardown | clear toggles for nonalive actor; existing owner removal retires actor/state |
+| Hub/Boneyard/Tutorial, new run, return/Game Over and save/resume | verified-already-at-parity owners | existing reset and saved-secondary owners retain their current contracts |
+| Whole-party mandatory barrier and host cast rejection | verified-already-at-parity | constant simulation state while any pending participant remains; normal choices release only the owning barrier |
+| Purchase retention, Report 83 Creativity slot choice, primary cast behavior | out-of-system | separate progression/gameplay decisions; no changes to these owners |
+
+Implementation consequence: add the existing actor-alive fact to secondary
+cast authority, use it for both toggle-lifetime predicates, and retain every
+`eligible` admission consumer and held input. No new picker state, toggle
+restoration, save schema or client-owned lifetime is needed. Add the public
+reward-tick regression before changing production code; record final member
+and exact M5/browser receipts after validation.

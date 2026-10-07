@@ -366,6 +366,7 @@ export interface NativeSecondarySceneryTarget {
 }
 
 export interface NativeSecondaryPlayerAuthority {
+  readonly alive: boolean
   readonly weaponKind: NativeSecondaryCastAction['weaponKind']
   readonly belt: PlayerBeltComponent
   readonly character: PlayerCharacterState
@@ -3773,10 +3774,10 @@ export function stepNativeSecondaryAbilities(
         worldKey: authority.worldKey,
       })
     }
-    if (!authority.eligible || player.reservedMana > authority.maximumMana) {
+    if (!authority.alive || player.reservedMana > authority.maximumMana) {
       const overloaded = player.firewalker || player.mindstar || player.regenerate
       player = clearPlayerToggles(player)
-      if (overloaded && authority.eligible) {
+      if (overloaded && authority.alive) {
         overloadedPlayerIds.add(playerId)
         state = emitNativeManaOverload(state, playerId, player, authority, context.tick)
       }
@@ -3948,10 +3949,10 @@ export function activateNativeSecondaryBeltSkill(
   )
   let state = source
   const overloadedPlayerIds: string[] = []
-  if (!authority.eligible || player.reservedMana > authority.maximumMana) {
+  if (!authority.alive || player.reservedMana > authority.maximumMana) {
     const overloaded = player.firewalker || player.mindstar || player.regenerate
     player = clearPlayerToggles(player)
-    if (overloaded && authority.eligible) {
+    if (overloaded && authority.alive) {
       overloadedPlayerIds.push(playerId)
       state = emitNativeManaOverload(state, playerId, player, authority, context.tick)
     }

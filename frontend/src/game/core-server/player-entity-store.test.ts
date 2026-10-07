@@ -191,7 +191,9 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
   assert.equal(replaced.progressions[0]!.experience, 0)
   assert.equal(replaced.progressions[0]!.offerSeed, 123_456)
   assert.equal(replaced.progressions[0]!.revision, 20)
-  assert.deepEqual(replaced.progressions[0]!.hagathaRuntime, hagathaRuntime)
+  assert.deepEqual(replaced.progressions[0]!.hagathaRuntime, {
+    cheatDeathCharges: 0, reverieActive: false, serendipityActive: false,
+  })
   assert.equal(replaced.skillBooks[0]!.permanentRanks[51], 0)
   assert.equal(replaced.skillBooks[0]!.permanentRanks[24], 1)
   assert.equal(replaced.skillBooks[0]!.permanentRanks[27], 1)

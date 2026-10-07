@@ -2321,3 +2321,61 @@ flash-spell.wav (159454bytes/fda25c45...) and enemy-flash.wav
 Use the shared passive audio probe's hashed-source matcher; a regex expecting
 flash.wav would incorrectly omit the fourth real request. Record actual output
 PCM and nonzero sample energy separately from the request observations.
+
+
+## 2026-10-06 — Report 88: retained charms apply afresh on a new wizard
+
+Original `1555410068961234995` is freshly reread, unedited and unchecked.
+The tooltip establishes Reverie's until-hurt effect but supplies no generation
+sequence. The user confirmed Soggy's clarified rule: ownership persists, each
+new wizard receives every retained charm's fresh effect, and removal permits
+lower-price repurchase. This explicitly includes Serendipity and Cheat Death.
+It supersedes the earlier keep-spent response. Same-run refresh, continuation
+save/resume and a spent effect within that existing wizard retain their state.
+
+Fresh bounded M5 LLVM reads of the same verified retail image clarify the
+native distinction. `Skills` constructor `0x006594E0` clears selector
+pointer/count at `0x006595AE/0x006595B4`, clears 50 ownership bytes through
+`0x006596E9..0x006597A1`, and clears both until-hurt bytes with the word
+store at `0x00659717`; Wizard calls it at `0x00674F19`. Literal retail new
+wizards do not inherit prior ownership. PerkShop close `0x0056C230` instead
+remembers ordered selectors in profile Bargain Bundle `0x0081A390/+4`.
+Bundle purchase `0x0056C86F` and direct purchase `0x0056CA0A` call apply
+`0x0066EF70`, which arms Cheat Death7 at `0x0066EFD0`, Serendipity24 at
+`0x0066EFED` (+0x73C), and Reverie25 at `0x0066F005` (+0x73D).
+An existing non-Tonic duplicate returns before initialization. Confidence is
+high for these called branches; bounded constructor reads are not a complete
+binary writer census. The Website's retained ownership plus fresh effects is
+an authorized profile policy, with native purchase effects as the oracle.
+
+Current cause: `replacePlayerLoadout` constructs fresh progression but
+explicitly copies the old `hagathaRuntime`. Both College and post-run
+confirmation already call the canonical Hagatha skill refresh afterward.
+That shared owner applies Revelation and Weird Caster without replaying
+purchase-only runtime. Report73's settled refresh behavior must be preserved.
+
+Boundary: the complete 28-row retained Hagatha list at new-wizard confirmation,
+through fresh state/derived effects, regular refresh, purchase/removal and
+continuation persistence. Catalog/effect tables above are already extracted.
+
+| Retained selector / branch | Initial disposition | Acceptance |
+| --- | --- | --- |
+| 7 Cheat Death | recovered-pending-port | new wizard gets one charge; a spent same-run charge remains spent through refresh and resume |
+| 24 Serendipity, 25 Reverie | recovered-pending-port | owned rows arm on a new wizard, hurt still spends them, ordinary refresh/save/resume does not rearm |
+| 6 Revelation, 14 Weird Caster | verified-already-at-parity shared skill owner | existing confirmation refresh applies fresh starting ranks/secondary once; preserve Report73's no-rearm ordinary refresh |
+| 0,1,2,3,4,5,9,10,11,12,13,15,16,17,18,19,20,21,22,23,26 | verified-already-at-parity owned/derived owners | new skill/stat/runtime construction consumes retained ownership; fresh death and reroll state belongs to the new actor |
+| 27 Tonic, including both ordered purchases | verified-already-at-parity economic owner | capacity and purchased rows survive; birth never raises capacity, appends selectors, spends gold or changes first-mix history |
+| 8 Perky | out-of-system | dormant catalog row is excluded by retail/web purchase builders; no new effect is invented |
+| College and post-run new-wizard confirmation | recovered-pending-port | both use the same loadout boundary; fresh runtime derives only from currently owned rows |
+| Existing actor refresh, Boneyard entry, save/resume/rejoin | verified-already-at-parity | retain spent runtime and economic ownership; these are not new-wizard confirmation |
+| Removal, direct repurchase, Bargain Bundle | verified-already-at-parity purchase owner | removing clears that row's runtime; accepted purchase arms it; first-mix history retains lower price (Reverie3000 ->1000) |
+| Unowned or stale former actor flags/charges | recovered-pending-port | a fresh wizard does not inherit effects for unowned rows |
+
+Implementation consequence: pass the fresh progression's empty runtime and
+retained ordered selectors through existing `applyNativeHagathaPurchaseRuntime`
+at `replacePlayerLoadout`. Leave the common skill-refresh and all economic
+purchase/removal owners unchanged. This adds no duplicate Tonic/capacity or
+irreversible purchases. Add public fresh-generation red/green coverage for all
+purchasable rows, owned one-shots, economic preservation and same-run resume;
+verify an actual new-wizard and lower-price repurchase browser journey.
+No platform constraint or approximation is needed.

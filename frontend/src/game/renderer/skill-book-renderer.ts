@@ -61,6 +61,7 @@ import {
   nativeSkillScreenTick,
 } from './skill-book-render-contract.ts'
 import { drawNativeSkillHoverBox } from './native-skill-hover-box.ts'
+import { addNativeHudExperienceMeter } from './native-hud-experience-meter.ts'
 import {
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
@@ -782,16 +783,10 @@ function drawInventoryHud(
   }
   const { backpack, tome } = hudLayout
   image(hub.hud.backpack, backpack.x, backpack.y, backpack.width, backpack.height)
-  const xpFillX = backpack.x + 67.5
-  const xpFillY = backpack.y + 8
-  const xpFill = image(hub.hud.xpFill, xpFillX, xpFillY, 4, 48)
-  const xpProgress = playerExperienceProgress(progression)
-  const xpMask = new Graphics()
-    .rect(xpFillX, xpFillY + (1 - xpProgress) * 48, 4, xpProgress * 48)
-    .fill(0xffffff)
-  layer.addChild(xpMask)
-  xpFill.mask = xpMask
-  image(hub.hud.xpFrame, backpack.x + 64, backpack.y + 4, 12, 56)
+  addNativeHudExperienceMeter(layer, {
+    fill: textureFrom(textures.textures, hub.hud.xpFill),
+    frame: textureFrom(textures.textures, hub.hud.xpFrame),
+  }, backpack, playerExperienceProgress(progression))
   image(hub.hud.tome, tome.x, tome.y, tome.width, tome.height)
 }
 

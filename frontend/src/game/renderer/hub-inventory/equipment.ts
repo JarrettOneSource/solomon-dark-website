@@ -6,7 +6,7 @@ import {
 } from '../../core-kernels/native-belt.ts'
 import { type WizardElement } from '../../core-kernels/player-character.ts'
 import type { InventoryRunSummary } from '../../hub-inventory-ui-model.ts'
-import { nativeSkillIconRecord } from '../../core-kernels/player-progression.ts'
+import { nativeSkillIconRecord, playerExperienceProgress } from '../../core-kernels/player-progression.ts'
 import { nativeBeltSkillAvailability, nativeCooldownSectorPoints } from '../../skill-quickbar.ts'
 import { equipmentSlotsForItem, hubEquipmentItemForAlias } from '../../hub-inventory-presentation.ts'
 import { EQUIPMENT_SLOT_ORDER, itemAtEquipmentSlot } from '../../hub-inventory-equipment.ts'
@@ -30,6 +30,8 @@ import {
   hubInventoryEquipmentSlotRects,
 } from '../hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from '../native-element-vfx-view.ts'
+import { addNativeHudExperienceMeter } from '../native-hud-experience-meter.ts'
+import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
 import { addPrimitiveFrame } from './chrome.ts'
 import {
   addAtlasSprite,
@@ -217,10 +219,14 @@ export function addBelt(
       tint: 0xf4e5b4,
     })
   })
-  addCenteredAtlasSprite(context, layer, 'UI', 82, 800.5, 872)
+  const ui = nativeUiPixiFor(context.textures)
+  const updateExperience = addNativeHudExperienceMeter(hudLayer, {
+    fill: ui.texture('UI', 81), frame: ui.texture('UI', 82),
+  }, hud.backpack, playerExperienceProgress(progression))
   return {
     layer: hudLayer,
     updateAvailability({ mode, playerState, progression }) {
+      updateExperience(playerExperienceProgress(progression))
       for (const { icon, sector, skillId, slot, x, y } of skillViews) {
         const availability = nativeBeltSkillAvailability({
           currentMana: progression.currentMana,
