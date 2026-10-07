@@ -65,7 +65,7 @@ import type {
   ServerWelcomeMessage,
 } from '../protocol/game-server-messages.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
-import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
+import { PLAYER_BELT_SLOT_COUNT, freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import type { GameSaveCheckpoint, GameSaveIntent } from '../save/game-save-contract.ts'
 import type {
   ProtocolHubParticipantState,
@@ -786,7 +786,7 @@ export function connectGameClientSession(
         if (
           !Number.isInteger(slot)
           || slot < 0
-          || slot > 7
+          || slot >= PLAYER_BELT_SLOT_COUNT
           || (skillId !== null && !isNativeBeltSkill(skillId))
           || (skillId !== null
             && (progression?.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1)
@@ -1148,7 +1148,7 @@ export function connectGameClientSession(
             && (
               !Number.isInteger(requestedInput.cast.quickbar)
               || requestedInput.cast.quickbar < 0
-              || requestedInput.cast.quickbar > 7
+              || requestedInput.cast.quickbar >= PLAYER_BELT_SLOT_COUNT
             )
           )
         ) throw new Error('game input must contain a primary level and native skill quickbar slot')

@@ -1325,6 +1325,47 @@ test('client submits native quickbar bindings and primary selection against lear
   session.destroy()
 })
 
+for (const action of ['binding', 'casting'] as const) {
+  test(`client admits ${action} across all three hotbars and rejects invalid absolute slots`, async () => {
+    const transport = new MemoryTransport()
+    const connecting = connectGameClientSession({
+      character: CHARACTER,
+      profile: NULL_PROFILE,
+      credential: 'spawn-secret',
+      transport,
+    })
+    receiveWelcome(transport, createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'))
+    const session = await connecting
+    try {
+      for (let slot = 0; slot < 24; slot += 1) {
+        if (action === 'binding') {
+          for (const skillId of [11, null]) {
+            session.bindSkillQuickbar(skillId, slot)
+            assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+              type: 'client-skill-quickbar-bind', skillId, slot,
+            })
+          }
+        } else {
+          session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 100, y: 100 }, false, slot))
+          const message = decodeClientGameMessage(transport.sent.at(-1)!)
+          assert.equal(message.type, 'client-input')
+          assert.ok(message.type === 'client-input')
+          assert.equal(message.input.cast.quickbar, slot)
+        }
+      }
+      for (const slot of [-1, 24, 1.5, Number.NaN]) {
+        const sentCount = transport.sent.length
+        assert.throws(() => action === 'binding'
+          ? session.bindSkillQuickbar(11, slot)
+          : session.sendInput(gameplayInput({ x: 0, y: 0 }, null, false, slot)))
+        assert.equal(transport.sent.length, sentCount)
+      }
+    } finally {
+      session.destroy()
+    }
+  })
+}
+
 test('client submits the exact Sorceror action for the current offer only', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
