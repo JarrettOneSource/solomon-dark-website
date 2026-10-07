@@ -106,12 +106,21 @@ the editor's semantic model.
 
 Limits:
 
-- `document`: 2 MiB as stored UTF-8 JSON
+- `document`: 16 MiB as stored UTF-8 JSON
 - `compiledBoneyard`: 4 MiB after base64 decoding
+- Entire update request: 22 MiB, including base64 expansion and JSON overhead
 
-An invalid base64 value or an over-limit body returns `400` in the standard
+The editable document retains native bytes and decoded records, so it can be
+much larger than the downloaded `.boneyard` file. Report 97 exposed the old
+2 MiB document cap: a representative resized/imported 360,913-byte native yard
+with 8,500 static sprites produces 3,489,211 bytes of editable JSON before sprite
+hydration. The reporter's own file was not attached; this is a representative
+reproduction. Resizing changes bounds, not the upload's representation.
+
+An invalid base64 value or an over-limit document/compiled body returns `400` in the standard
 error shape. Native container validation is deferred until publication so an
 editor may retain a failed compile while it is being corrected.
+Requests exceeding the HTTP body limit return `413`.
 
 ## Delete a draft
 

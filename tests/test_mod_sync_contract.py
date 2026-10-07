@@ -541,6 +541,91 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=headers,
         )
 
+    def test_resized_boneyard_draft_saves_reloads_and_publishes_expanded_document(self) -> None:
+        generated = subprocess.run(
+            ["node", "--experimental-strip-types", "--input-type=module"],
+            input="""
+import { readFileSync } from 'node:fs';
+import { parseBoneyard, serializeBoneyard } from './frontend/src/editor/format/boneyard.ts';
+const doc = parseBoneyard(readFileSync('tests/fixtures/flat_multiplayer_test.boneyard'));
+doc.meta.bounds = { ...doc.meta.bounds, x: -4096, y: -4096, w: 8192, h: 8192 };
+doc.sprites = Array.from({ length: 8500 }, (_, i) => ({
+  eid: `sprite-${i}`, atlasEntry: 0, pos: { x: i % 100 * 20, y: Math.floor(i / 100) * 20 },
+  rotationDeg: 0, scale: 1, alpha: 1, flags: 0,
+}));
+const bytes = serializeBoneyard(doc);
+console.log(JSON.stringify({
+  document: { format: 'sdr-boneyard-doc', version: 1, doc: parseBoneyard(bytes) },
+  compiledBoneyard: Buffer.from(bytes).toString('base64'),
+}));
+""",
+            cwd=ROOT, text=True, capture_output=True, check=True,
+        )
+        payload = json.loads(generated.stdout)
+        self.assertEqual(len(base64.b64decode(payload["compiledBoneyard"])), 360_913)
+        self.assertGreater(len(json.dumps(payload["document"]).encode()), 2 * 1024 * 1024)
+        headers = {"Authorization": f"Bearer {self.token}"}
+        status, draft = self.request("POST", "/api/boneyards", json_body={"name": "Resized Yard"}, headers=headers)
+        self.assertEqual(status, 201, draft)
+        path = f"/api/boneyards/{draft['id']}"
+        try:
+            status, saved = self.request("PUT", path, json_body=payload, headers=headers)
+            self.assertEqual(status, 200, saved)
+            self.assertEqual(saved["document"], payload["document"])
+            status, loaded = self.request("GET", path, headers=headers)
+            self.assertEqual(status, 200, loaded)
+            self.assertEqual(loaded["document"], payload["document"])
+            self.assertEqual(loaded["compiledBoneyard"], payload["compiledBoneyard"])
+            self.assertEqual(loaded["document"]["doc"]["meta"]["bounds"]["w"], 8192)
+            status, published = self.request("POST", path + "/publish", headers=headers, json_body={
+                "name": "Resized Yard", "summary": "Resized native fixture",
+                "description": "Expanded editor document regression", "visibility": "private",
+            })
+            self.assertEqual(status, 201, published)
+            self.assertEqual(published["visibility"], "private")
+            other = {"Authorization": f"Bearer {self.dev_token}"}
+            self.assertEqual(self.request("PUT", path, json_body=payload)[0], 401)
+            self.assertEqual(self.request("PUT", path, json_body=payload, headers=other)[0], 404)
+            self.assertEqual(self.request("GET", path, headers=other)[0], 404)
+            self.assertEqual(self.request("POST", path + "/publish", headers=other, json_body={
+                "name": "Not mine", "summary": "Private", "description": "Private",
+            })[0], 404)
+        finally:
+            self.assertEqual(self.request("DELETE", path, headers=headers)[0], 204)
+
+    def test_boneyard_upload_limits_remain_finite_and_allow_combined_maximum(self) -> None:
+        mib = 1024 * 1024
+        headers = {"Authorization": f"Bearer {self.token}"}
+        status, draft = self.request("POST", "/api/boneyards", json_body={"name": "Upload Limits"}, headers=headers)
+        self.assertEqual(status, 201, draft)
+        path = f"/api/boneyards/{draft['id']}"
+        try:
+            # A JSON string includes two quotes; document size is UTF-8 bytes.
+            document = "x" * (16 * mib - 2)
+            compiled = base64.b64encode(bytes(4 * mib)).decode()
+            status, saved = self.request("PUT", path, headers=headers, json_body={
+                "document": document, "compiledBoneyard": compiled,
+            })
+            self.assertEqual(status, 200, saved if status != 200 else None)
+            self.assertEqual(saved["documentSize"], 16 * mib)
+            self.assertEqual(saved["compiledSize"], 4 * mib)
+            status, error = self.request("PUT", path, headers=headers, json_body={"document": document + "x"})
+            self.assertEqual(status, 400)
+            self.assertIn("editable", json.dumps(error))
+            self.assertIn("16 MiB", json.dumps(error))
+            status, error = self.request("PUT", path, headers=headers, json_body={
+                "compiledBoneyard": base64.b64encode(bytes(4 * mib + 1)).decode(),
+            })
+            self.assertEqual(status, 400)
+            self.assertIn("4 MiB", json.dumps(error))
+            # Kestrel rejects the declared size before consuming a large body.
+            status, _, _ = self.request_bytes("PUT", path, body=b"{}", headers={
+                **headers, "Content-Type": "application/json", "Content-Length": str(22 * mib + 1),
+            })
+            self.assertEqual(status, 413)
+        finally:
+            self.assertEqual(self.request("DELETE", path, headers=headers)[0], 204)
+
     def test_game_session_provisioning_fails_closed_when_supervisor_rejects(self) -> None:
         status, response = self.request("POST", "/api/game/sessions")
         self.assertEqual(status, 400)

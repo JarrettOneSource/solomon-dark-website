@@ -11,9 +11,11 @@ public static class BoneyardEndpoints
 {
     private const int MaxDraftsPerUser = 32;
     private const int MaxDraftNameLength = 80;
-    private const int MaxDocumentBytes = 2 * 1024 * 1024;
+    // Editable JSON retains native bytes alongside decoded records and is larger than the compiled file.
+    private const int MaxDocumentBytes = 16 * 1024 * 1024;
     private const int MaxCompiledBytes = 4 * 1024 * 1024;
-    private const long UpdateRequestLimit = 9L * 1024 * 1024;
+    // Accommodate both limits together, including base64 and JSON overhead.
+    private const long UpdateRequestLimit = 22L * 1024 * 1024;
 
     public static void Map(IEndpointRouteBuilder app)
     {
@@ -186,7 +188,7 @@ public static class BoneyardEndpoints
             document = Encoding.UTF8.GetBytes(documentProperty.GetRawText());
             if (document.Length > MaxDocumentBytes)
             {
-                return ApiErrors.BadRequest("Boneyard draft documents may not exceed 2 MiB.");
+                return ApiErrors.BadRequest("Boneyard editable draft data may not exceed 16 MiB. This can be larger than the .boneyard file.");
             }
         }
 
