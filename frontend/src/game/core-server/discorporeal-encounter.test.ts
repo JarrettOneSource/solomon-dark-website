@@ -35,7 +35,7 @@ const context: BoneyardEnemyStoreStepContext = {
     headingDeg: 0, position: { x: 0, y: -200 }, velocityPerTick: { x: 0, y: 0 } } },
   resolveMovement: ({ requestedPosition }) => requestedPosition, resolveSpawnIntents: () => [],
 }
-function spawned(sourceSha256 = sha): BoneyardEnemyStore {
+function spawned(sourceSha256: (typeof NATIVE_SURVIVAL_BOSS_SOURCES)[number]['sourceSha256'] = sha): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('discorporeal'), { ...context,
     resolveSpawnIntents: () => [{ enemyToken: 'DEMONSKULL', nativeTypeId: 1008, flags: [], id: 1,
       authoredRecipe: nativeDiscorporealRecipe(sourceSha256), enableDiscorporealHealthGates: true,
@@ -351,7 +351,7 @@ test('Bite snapshots capture the delayed displayed body facing for Hero and Gole
           ...actor, headingDeg: ((facing + 6) % 24) * 15,
           brain: { ...actor.brain, bodyHeadingDeg: facing * 15, headingDelayTicks: 0 },
         }))
-        const result = step(source, { players: { player: { ...context.players.player!, summoned } } }).store
+        const result = step(source, { players: { player: summoned ? { ...context.players.player!, summoned: true } : context.players.player! } }).store
         const trails = result.deathEffects.filter(effect => effect.role === 'discorporeal-bite-trail')
         assert.equal(trails.length, 10)
         const snapshot = projectBoneyardEnemies(result, result.lastStepTick)[0]!
