@@ -1415,3 +1415,28 @@ These match existing repository smoke classification and are retained separately
 from unexpected request errors in the final driver. Page, console, response,
 host and transport errors were empty. The full repository gate, final browser
 receipt, publication and live verification remain pending at this checkpoint.
+
+### Final built acceptance, October 7
+
+The complete canonical `./scripts/validate.sh` gate passed at02:18:40 UTC on
+product234a97fe, including backend/integration, lint, all frontend/desktop suites,
+production/media and renderer quality/mutation gates. Test concurrency was at
+most2; the repository-supported4-worker mutation setting was retained with
+verified host headroom. The first gate's TypeScript-only fixture narrowing error
+was corrected without changing assertions, then the entire gate was rerun.
+
+The final Chrome153 journey passed at02:21:24 UTC. Fresh College measured
+60.05 FPS/99.93 ticks/s; after the preserved crowd's natural terminal transition,
+College measured60.00 FPS/99.91 ticks/s,1ms mean/max ping and128ms movement
+response. The separately retained peer raised mean College ping to157ms while
+active, then recovery measured7ms after disconnect. This demonstrates transient
+contention, not a persistent post-terminal simulation or renderer. Fresh-run
+compilation admitted each Coffin group once across the whole42-row schedule.
+The original compiled250-Coffin continuation remained intact. After GC the
+browser heap was72.6MB; this single journey is not a general memory-leak proof.
+All page/console/unexpected-request/HTTP-response/host/transport error arrays
+were empty; three expected cancelled scene-music requests were separately
+recorded. Report79's current lifecycle is verified-already-at-parity within this
+measured transition, with its historical hardware/network cause unproved.
+No platform-blocked members were introduced. Normal publication and the live
+route/service/browser result are recorded in the report archive at completion.
