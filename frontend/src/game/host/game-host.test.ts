@@ -238,7 +238,7 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
     skillBook: { skillQuickbar?: Array<number | null> },
     index: number,
   ) => {
-    skillBook.skillQuickbar = legacyPlayerStore.belts[index].map((
+    skillBook.skillQuickbar = legacyPlayerStore.belts[index].slice(0, 8).map((
       entry: { kind?: string, skillId?: number } | null,
     ) => (
       entry?.kind === 'skill' && typeof entry.skillId === 'number' ? entry.skillId : null
@@ -2770,6 +2770,7 @@ test('game host authoritatively binds and replicates a native primary belt entry
     { kind: 'skill', skillId: 11 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null,
     { kind: 'skill', skillId: 8 },
+    ...Array(16).fill(null),
   ])
 
   const unbound = nextMessage(client.socket, (message) => (
@@ -3186,6 +3187,7 @@ test('game host keeps unavailable skill edits nonfatal and authoritative', async
       { kind: 'skill', skillId: 11 }, null, null,
       { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null,
       { kind: 'skill', skillId: 11 },
+      ...Array(16).fill(null),
     ],
   )
   assert.deepEqual(
@@ -3193,6 +3195,7 @@ test('game host keeps unavailable skill edits nonfatal and authoritative', async
     [
       { kind: 'skill', skillId: 35 }, null, null,
       { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+      ...Array(16).fill(null),
     ],
   )
 

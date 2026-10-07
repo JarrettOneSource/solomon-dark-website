@@ -9,6 +9,7 @@ import {
   type NativeEquipmentEffect,
 } from '../core-kernels/hub-economy.ts'
 import {
+  PLAYER_BELT_SLOT_COUNT,
   bindNativeBeltSkill,
   freezeNativeBelt,
 } from '../core-kernels/native-belt.ts'
@@ -229,7 +230,7 @@ test('grant refresh respects manual placement, a full belt, and removal of the f
   assert.deepEqual(state.playerEntities.belts[0]![1], { kind: 'skill', skillId: 11 })
 
   const fresh = fixture()
-  const full = freezeNativeBelt(Array.from({ length: 8 }, () => ({ kind: 'skill', skillId: 21 } as const)))
+  const full = freezeNativeBelt(Array.from({ length: PLAYER_BELT_SLOT_COUNT }, () => ({ kind: 'skill', skillId: 21 } as const)))
   const filled = equip({ ...fresh, playerEntities: { ...fresh.playerEntities, belts: [full] } }, namedItem(15))
   assert.deepEqual(filled.playerEntities.belts[0], full)
   assert.ok(filled.playerEntities.skillBooks[0]!.learnedSkillOrder.includes(11))
