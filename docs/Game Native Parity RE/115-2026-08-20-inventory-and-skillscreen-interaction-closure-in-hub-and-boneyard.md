@@ -511,3 +511,40 @@ journey on both 1600×900 mouse and 844×390 touch viewports. Source manifests,
 full-gate exit/counts, final browser receipts, verified main SHA, Discord
 completion reaction and task cleanup are recorded in report 32's archive
 status/implementation receipt, outside the immutable original report files.
+
+
+## 2026-10-07 — Report 80 approved three-hotbar web extension
+
+The October 6 product decision deliberately extends the stock eight-slot belt:
+three banks of eight slots, a rebindable cycling key, compact left/right arrows,
+and three indicator dots. The approved compact-arrows concept excludes its
+`Cycle` pill and `1/3` caption. This is a web feature, not a newly inferred native
+contract; the recovered stock slot layout, bag/book controls, binding labels,
+item ownership, cooldowns and duplicate-skill behavior above remain authoritative.
+The original request and nearby three-bank follow-ups were rechecked unchanged
+on October 7 before implementation.
+
+The existing actor-owned belt contains 24 independently validated entries.
+Hub, Boneyard, Inventory and Skills select the same local presentation bank;
+assignment, removal, consumables and casting address the absolute slot, while
+the visible controls retain the eight-slot geometry. R cycles forward by default
+(Shift reverses), with rebinding through the existing settings. Repeated keydown
+and text entry do not cycle. A held cast retains its original slot until release,
+so changing banks cannot start a different spell accidentally. The bank choice
+is local presentation state and starts at the first bank on page load; all
+assignments persist in the authoritative save.
+
+Protocol 149 carries 24 belt entries and accepts slots 0–23. Save schema 50 keeps
+current saves strict and expands the previous eight-slot belt into bank one,
+leaving the other banks empty. Original assignments, potion aliases, duplicate
+skills, equipped/nested item identity and same-run continuation are preserved.
+New learned skills use the first free slot across the banks. Refresh removes
+stale item/skill references from all banks. Retail exports retain the first bank
+and warn when the other two contain entries; the fixed eight-action bot policy
+continues reading that original bank. No policy/action-space expansion is made.
+
+Acceptance covers all slot boundaries and invalid commands, old-save migration,
+new-save round-trip, configured input edges and held-input release; built/live
+browser verification covers cycling and assigning in both books, gameplay
+activation, scene transitions, and reload persistence. Validation and delivery
+results are recorded after the final candidate passes.

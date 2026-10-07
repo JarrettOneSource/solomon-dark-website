@@ -1,3 +1,4 @@
+import { useHotbar } from './HotbarControls.tsx'
 import {
   useEffect,
   useLayoutEffect,
@@ -220,6 +221,7 @@ export default function HubScene({
   subscribe,
   worldSpeeches,
 }: HubSceneProps) {
+  const { slot: hotbarSlot } = useHotbar()
   const [hubInitialSnapshot] = useState<HubGameSnapshot>(() => {
     if (!isHubGameSnapshot(initialSnapshot)) {
       throw new Error('Hub scene requires a Hub snapshot')
@@ -611,6 +613,7 @@ export default function HubScene({
         : nextInput,
     )
     const input = createBrowserGameplayInput({
+      resolveQuickbarSlot: hotbarSlot,
       claimQuickbarPress: (slot) => {
         if (gameplayHudHiddenRef.current) return true
         const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
@@ -830,7 +833,7 @@ export default function HubScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [audio, hubInitialSnapshot, modAssets, onHubAction, onInput, playerId, samplePresentation])
+  }, [audio, hotbarSlot, hubInitialSnapshot, modAssets, onHubAction, onInput, playerId, samplePresentation])
 
   const isHost = hostPlayerId === playerId
   const beginMatch = () => {

@@ -26,6 +26,7 @@ export const GAME_BINDING_ACTIONS = Object.freeze([
   'belt6',
   'belt7',
   'belt8',
+  'cycleHotbar',
 ] as const)
 
 export type GameBindingAction = typeof GAME_BINDING_ACTIONS[number]
@@ -69,6 +70,7 @@ export const DEFAULT_GAME_CONTROL_BINDINGS: GameControlBindings = Object.freeze(
   belt6: 'Digit5',
   belt7: 'Digit6',
   belt8: 'Digit7',
+  cycleHotbar: 'KeyR',
   moveDown: 'KeyS',
   moveLeft: 'KeyA',
   moveRight: 'KeyD',
@@ -378,22 +380,26 @@ function validControls(value: unknown): value is GameControlBindings {
   return codes.every(validBindingCode) && new Set(codes).size === codes.length
 }
 
-const PRE_CHEAT_MENU_BINDING_ACTIONS = GAME_BINDING_ACTIONS.filter((action) => (
-  action !== 'openCheats'
-))
-
 function migrateGameControls(value: unknown): GameControlBindings | null {
   if (validControls(value)) return value
-  if (
-    !record(value)
-    || !sameKeys(Object.keys(value).sort(), PRE_CHEAT_MENU_BINDING_ACTIONS)
-  ) return null
-  const codes = PRE_CHEAT_MENU_BINDING_ACTIONS.map((action) => value[action])
+  if (!record(value)) return null
+  const missing = ['openCheats', 'cycleHotbar'].filter(action => !Object.hasOwn(value, action))
+  const expected = GAME_BINDING_ACTIONS.filter(action => !missing.includes(action))
+  if (!sameKeys(Object.keys(value).sort(), expected)) return null
+  const codes = expected.map(action => value[action])
   if (!codes.every(validBindingCode) || new Set(codes).size !== codes.length) return null
+  const migrated = { ...value }
   const used = new Set(codes)
-  const openCheats = ['Backquote', 'F1', 'F2', 'F3'].find((code) => !used.has(code))
-  if (!openCheats) return null
-  return Object.freeze({ ...value, openCheats }) as unknown as GameControlBindings
+  for (const action of missing) {
+    const candidates = action === 'openCheats'
+      ? ['Backquote', 'F1', 'F2', 'F3']
+      : ['KeyR', 'KeyV', 'F4', 'F5']
+    const code = candidates.find(candidate => !used.has(candidate))
+    if (!code) return null
+    migrated[action] = code
+    used.add(code)
+  }
+  return validControls(migrated) ? Object.freeze(migrated) : null
 }
 
 function validBindingCode(value: unknown): value is string {

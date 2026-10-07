@@ -1,0 +1,80 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { NATIVE_BELT_SLOT_COUNT, PLAYER_HOTBAR_COUNT } from './core-kernels/native-belt.ts'
+import type { GameControlBindings } from './game-settings.ts'
+import type { NativeHudRect } from './native-hud-layout.ts'
+import './hotbar-controls.css'
+
+interface HotbarSelection {
+  readonly bank: number
+  cycle(direction: number): void
+  slot(index: number): number
+}
+
+const HotbarContext = createContext<HotbarSelection | null>(null)
+
+/** Bank selection is presentation state; all 24 assignments belong to the player authority. */
+export function HotbarProvider({ children }: { children: ReactNode }) {
+  const [bank, setBank] = useState(0)
+  const bankRef = useRef(0)
+  const cycle = useCallback((direction: number) => {
+    bankRef.current = (bankRef.current + direction + PLAYER_HOTBAR_COUNT) % PLAYER_HOTBAR_COUNT
+    setBank(bankRef.current)
+  }, [])
+  const slot = useCallback((index: number) => bankRef.current * NATIVE_BELT_SLOT_COUNT + index, [])
+  const value = useMemo(() => ({ bank, cycle, slot }), [bank, cycle, slot])
+  return <HotbarContext.Provider value={value}>{children}</HotbarContext.Provider>
+}
+
+export function useHotbar(): HotbarSelection {
+  const selection = useContext(HotbarContext)
+  if (!selection) throw new Error('hotbar selection requires its gameplay provider')
+  return selection
+}
+
+export function useHotbarShortcut(controls: GameControlBindings, enabled: boolean): void {
+  const { cycle } = useHotbar()
+  useEffect(() => {
+    if (!enabled) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== controls.cycleHotbar || event.repeat || event.defaultPrevented
+        || event.altKey || event.ctrlKey || event.metaKey
+        || (event.target instanceof HTMLElement
+          && event.target.closest('input, textarea, [contenteditable="true"]'))) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      cycle(event.shiftKey ? -1 : 1)
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [controls.cycleHotbar, cycle, enabled])
+}
+
+export default function HotbarControls({ disabled = false, rects }: {
+  disabled?: boolean
+  rects?: readonly NativeHudRect[]
+}) {
+  const { bank, cycle } = useHotbar()
+  const style = rects ? {
+    '--hotbar-top': `${rects[0]!.y + 10}px`,
+    '--hotbar-left': `${rects[0]!.x - 46}px`,
+    '--hotbar-right': `${rects[7]!.x + rects[7]!.width + 12}px`,
+    '--hotbar-dots-top': `${rects[0]!.y - 19}px`,
+  } as CSSProperties : undefined
+  return (
+    <div className="hotbar-controls" data-hotbar-bank={bank} data-modal={rects ? true : undefined} style={style}>
+      <button type="button" className="hotbar-arrow hotbar-previous" aria-label="Previous hotbar"
+        title="Previous hotbar" disabled={disabled} onClick={() => cycle(-1)}>
+        <span aria-hidden />
+      </button>
+      <span className="hotbar-dots" role="img" aria-label={`Hotbar ${bank + 1} of ${PLAYER_HOTBAR_COUNT}`}>
+        {Array.from({ length: PLAYER_HOTBAR_COUNT }, (_, index) => (
+          <span key={index} data-active={bank === index} />
+        ))}
+      </span>
+      <button type="button" className="hotbar-arrow hotbar-next" aria-label="Next hotbar"
+        title="Next hotbar" disabled={disabled} onClick={() => cycle(1)}>
+        <span aria-hidden />
+      </button>
+    </div>
+  )
+}

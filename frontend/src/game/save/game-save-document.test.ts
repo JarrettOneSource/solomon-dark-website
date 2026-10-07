@@ -3195,7 +3195,7 @@ function downgradePlayerBeltsToLegacyQuickbar(playerStore: {
   if (!Array.isArray(playerStore.belts)) return
   for (let index = 0; index < playerStore.skillBooks.length; index += 1) {
     const belt = playerStore.belts[index] ?? []
-    playerStore.skillBooks[index]!.skillQuickbar = belt.map((entry) => (
+    playerStore.skillBooks[index]!.skillQuickbar = belt.slice(0, 8).map((entry) => (
       entry?.kind === 'skill' && typeof entry.skillId === 'number'
         ? entry.skillId
         : null
@@ -3690,4 +3690,24 @@ test('continuations retain already compiled repeated Coffin bursts and their emi
     assert.deepEqual(restored.world.waves.compiledSchedule, compiledSchedule)
     assert.deepEqual(restored.world.enemies.actors, emitted.store.actors)
   }
+})
+
+test('three hotbars round-trip while pre-expansion saves retain their first eight assignments', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  for (const slot of [7, 8, 15, 16, 23]) {
+    state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 11, slot)!
+  }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  assert.deepEqual(restoreGameSaveDocument(document).state.playerEntities.belts[0],
+    state.playerEntities.belts[0])
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 49
+  const entries = legacy.continuation.simulation.playerEntities.belts[0].slice(0, 8)
+  legacy.continuation.simulation.playerEntities.belts[0] = entries
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state.playerEntities.belts[0]!
+  assert.deepEqual(restored.slice(0, 8), entries)
+  assert.deepEqual(restored.slice(8), Array(16).fill(null))
+  legacy.schemaVersion = 50
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /player belt 0 is invalid/)
 })

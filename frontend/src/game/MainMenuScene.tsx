@@ -1,3 +1,4 @@
+import { HotbarProvider, useHotbarShortcut } from './HotbarControls.tsx'
 import { sameRuntimeScene } from './runtime-scene-identity.ts'
 import {
   Suspense,
@@ -393,7 +394,7 @@ export default function MainMenuScene(props: MainMenuSceneProps) {
     setAudio(director)
     return () => director.destroy()
   }, [])
-  return audio ? <MainMenuContent {...props} audio={audio} /> : null
+  return audio ? <HotbarProvider><MainMenuContent {...props} audio={audio} /></HotbarProvider> : null
 }
 
 function MainMenuContent({
@@ -1711,6 +1712,11 @@ function MainMenuContent({
     || (gameplayPause !== null && !ownsActiveInventoryPause)
     || gameplayResumeGrace !== null
     || socialModalOpen
+  useHotbarShortcut(gameSettings.controls, session !== null
+    && !chatOpen && !cheatMenuOpen && loading === null && !levelUpModalActive
+    && hudSkillSelector === null && !hubPauseMenuOpen && !gameplaySettingsOpen
+    && gameplayResumeGrace === null && !socialModalOpen && !tutorialPreludeVisible
+    && (gameplayPause === null || ownsModalPause))
   const desiredModalPauseSource: GameplayPauseSource | null =
     runtimeSnapshot?.world.kind === 'boneyard'
       ? skillBookOpen

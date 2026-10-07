@@ -85,7 +85,7 @@ test('complete Settings defaults retain native presentation and enable online ex
   assert.deepEqual(GAME_BINDING_ACTIONS, [
     'moveUp', 'moveDown', 'moveLeft', 'moveRight',
     'openMenu', 'openInventory', 'openSkills', 'openChat', 'openCheats',
-    'belt1', 'belt2', 'belt3', 'belt4', 'belt5', 'belt6', 'belt7', 'belt8',
+    'belt1', 'belt2', 'belt3', 'belt4', 'belt5', 'belt6', 'belt7', 'belt8', 'cycleHotbar',
   ])
 })
 
@@ -347,4 +347,17 @@ test('browser Lua console installs only for enabled host and rechecks both gates
   assert.ok(developerTarget.solomonDark)
   assert.equal((await developerTarget.solomonDark.lua.execute('return 7')).ok, true)
   developerCleanup()
+})
+
+
+test('old control settings gain a conflict-free hotbar cycle key without losing bindings', () => {
+  const controls = { ...DEFAULT_GAME_CONTROL_BINDINGS, belt8: 'KeyR' }
+  const legacy = Object.fromEntries(Object.entries(controls).filter(([key]) => key !== 'cycleHotbar'))
+  const storage = { getItem: () => JSON.stringify({ ...DEFAULT_GAME_SETTINGS, controls: legacy }), setItem() {} }
+  const migrated = readGameSettings(storage)
+  assert.equal(migrated.controls.belt8, 'KeyR')
+  assert.equal(migrated.controls.cycleHotbar, 'KeyV')
+  const rebound = rebindGameControl(migrated.controls, 'cycleHotbar', 'Digit1')
+  assert.equal(rebound.cycleHotbar, 'Digit1')
+  assert.equal(rebound.belt2, 'KeyV')
 })

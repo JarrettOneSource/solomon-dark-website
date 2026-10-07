@@ -1,3 +1,4 @@
+import { PLAYER_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from './game-protocol-contract.ts'
 import { NATIVE_TUTORIAL_SURFACE_ACTIONS } from '../core-kernels/native-tutorial.ts'
 import { isWizardDiscipline, isWizardElement } from '../core-kernels/player-character.ts'
@@ -296,7 +297,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     if (skillId !== null && !isNativeBeltSkill(skillId)) {
       throw new GameProtocolError('skillId is not a native quickbar skill')
     }
-    if (slot > 7) throw new GameProtocolError('slot is out of range')
+    if (slot >= PLAYER_BELT_SLOT_COUNT) throw new GameProtocolError('slot is out of range')
     return { type: 'client-skill-quickbar-bind', skillId, slot }
   }
   if (value.type === 'client-select-primary-skill') {

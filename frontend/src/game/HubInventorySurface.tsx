@@ -1,3 +1,4 @@
+import HotbarControls, { useHotbar } from './HotbarControls.tsx'
 import type { InventoryRunSummary } from './hub-inventory-ui-model.ts'
 import {
   hubInventorySurfaceDiagnostics,
@@ -94,7 +95,7 @@ import { type HubInventoryUiNotice, unforgeResultNotice } from './hub-inventory-
 
 export function NativeHubSurface({
   audio,
-  belt,
+  belt: allBeltEntries,
   beltBindings,
   closing,
   config,
@@ -107,7 +108,7 @@ export function NativeHubSurface({
   memorial,
   modContent,
   onAction,
-  onBeltActivate,
+  onBeltActivate: onAbsoluteBeltActivate,
   onClose,
   onInventoryCloseComplete,
   onInventoryBack,
@@ -163,6 +164,11 @@ export function NativeHubSurface({
   surface: Exclude<HubUiSurface, null>
   storyOffice: boolean
 }) {
+  const { bank } = useHotbar()
+  const belt = useMemo(() => allBeltEntries.slice(bank * 8, bank * 8 + 8), [allBeltEntries, bank])
+  const onBeltActivate = useCallback((slot: number, pointer: Vector2 | null) => {
+    onAbsoluteBeltActivate(bank * 8 + slot, pointer)
+  }, [bank, onAbsoluteBeltActivate])
   const collegeIntroAcknowledgedRef = useRef(false)
   const chatCompletionHandledRef = useRef(false)
   const advanceChatRef = useRef<() => void>(() => undefined)
@@ -860,7 +866,7 @@ export function NativeHubSurface({
               }}
               onBeltBind={(itemId, slot) => {
                 audio.playSound('pick-skill')
-                onAction({ itemId, slot, type: 'bind-belt-item' })
+                onAction({ itemId, slot: bank * 8 + slot, type: 'bind-belt-item' })
               }}
               onOpenSack={onOpenSack}
               onInventoryBack={onInventoryBack}
@@ -909,7 +915,7 @@ export function NativeHubSurface({
               }}
               onBeltBind={(itemId, slot) => {
                 audio.playSound('pick-skill')
-                onAction({ itemId, slot, type: 'bind-belt-item' })
+                onAction({ itemId, slot: bank * 8 + slot, type: 'bind-belt-item' })
               }}
               onDragChange={setInventoryDrag}
               onDragMove={(point) => rendererRef.current?.moveDrag(point)}
@@ -927,7 +933,10 @@ export function NativeHubSurface({
               transitionLocked={inventoryTransitionLocked}
             />
           )}
+          <HotbarControls rects={inventoryBeltRects}
+            disabled={inputSuspended || closing || inventoryTransitionLocked || notice !== null || dyeModal !== null} />
           <HubInventoryFooter
+            key={bank}
             blocked={notice !== null || dyeModal !== null}
             surface={surface}
             stats={{
@@ -944,7 +953,7 @@ export function NativeHubSurface({
               audio, belt,
               disabled: inventoryTransitionLocked || !onUnassignBeltEntry,
               onActivate: onBeltActivate,
-              onPullOff: (slot) => onUnassignBeltEntry?.(slot),
+              onPullOff: (slot) => onUnassignBeltEntry?.(bank * 8 + slot),
               rects: inventoryBeltRects,
             }}
             skillsRect={inventorySkillsRect}

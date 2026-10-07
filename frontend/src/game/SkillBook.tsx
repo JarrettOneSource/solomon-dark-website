@@ -1,3 +1,4 @@
+import HotbarControls, { useHotbar } from './HotbarControls.tsx'
 import {
   useEffect,
   useLayoutEffect,
@@ -99,7 +100,7 @@ export default function SkillBook(props: SkillBookProps) {
 
 function SkillBookSurface({
   audio,
-  model: { belt: beltEntries, economy, element, progression },
+  model: { belt: allBeltEntries, economy, element, progression },
   inputSuspended,
   inventoryKeyCode,
   inventoryScreenOpen,
@@ -116,6 +117,8 @@ function SkillBookSurface({
   style,
   topMost,
 }: SkillBookProps & { model: SkillBookModel }) {
+  const { bank } = useHotbar()
+  const beltEntries = useMemo(() => allBeltEntries.slice(bank * 8, bank * 8 + 8), [allBeltEntries, bank])
   const pages = useMemo(() => nativeSkillBookPages(progression), [progression])
   const layout = useMemo(() => nativeSkillBookPageLayout(pages), [pages])
   const placements = layout.placements
@@ -231,7 +234,7 @@ function SkillBookSurface({
   }, [presentation, rendererState])
 
   const assign = (skillId: number, slot: number) => {
-    onAssignQuickbarSkill(skillId, slot)
+    onAssignQuickbarSkill(skillId, bank * 8 + slot)
     audio.playSound('pick-skill')
     setTargetQuickbarSlot(null)
     setDrag(null)
@@ -478,14 +481,16 @@ function SkillBookSurface({
           Hover over a skill icon for more information about a skill.
           Skills with a gold or green border can be dragged into your belt.
         </span>
+        <HotbarControls rects={belt} disabled={inputSuspended || phase === 'closing'} />
         <SkillQuickbarEditor
+          key={bank}
           beltEntries={beltEntries}
           beltRects={belt}
           draggedSkillId={drag?.skillId ?? null}
           economy={economy}
           nativePointForClient={nativePointForClient}
           onPullOff={(slot) => {
-            onUnassignQuickbarSkill(slot)
+            onUnassignQuickbarSkill(bank * 8 + slot)
             audio.playSound('poof')
             setPullOffBurst((current) => ({ sequence: (current?.sequence ?? 0) + 1, slot }))
             setTargetQuickbarSlot(null)

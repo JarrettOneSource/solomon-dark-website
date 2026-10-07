@@ -19,6 +19,7 @@ import {
 } from '../../core-kernels/hub-economy.ts'
 import {
   NATIVE_BELT_ITEM_TYPE_IDS,
+  PLAYER_BELT_SLOT_COUNT,
   type PlayerBeltComponent,
   nativeInventoryItemCanBindToBelt,
 } from '../../core-kernels/native-belt.ts'
@@ -106,7 +107,7 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type', 'slot', 'aim'])
     return {
       type,
-      slot: integerWithin(source.slot, 'action.slot', 0, 7),
+      slot: integerWithin(source.slot, 'action.slot', 0, PLAYER_BELT_SLOT_COUNT - 1),
       ...(Object.hasOwn(source, 'aim')
         ? { aim: source.aim === null ? null : vector(source.aim, 'action.aim') }
         : {}),
@@ -117,7 +118,7 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
     return {
       type,
       itemId: positiveInteger(source.itemId, 'action.itemId'),
-      slot: integerWithin(source.slot, 'action.slot', 0, 7),
+      slot: integerWithin(source.slot, 'action.slot', 0, PLAYER_BELT_SLOT_COUNT - 1),
     }
   }
   if (type === 'read-librarian-book') {
@@ -263,7 +264,7 @@ export function playerBelt(
   progression: ProtocolPlayerProgression,
   economy: ProtocolPlayerEconomy | undefined,
 ): PlayerBeltComponent {
-  const entries = limitedArray(value, field, 8).map((value, index) => {
+  const entries = limitedArray(value, field, PLAYER_BELT_SLOT_COUNT).map((value, index) => {
     if (value === null) return null
     const entryField = `${field}[${index}]`
     const source = record(value, entryField)
@@ -303,7 +304,7 @@ export function playerBelt(
     }
     throw new GameProtocolError(`${entryField}.kind is not supported`)
   })
-  if (entries.length !== 8) throw new GameProtocolError(`${field} must contain exactly eight slots`)
+  if (entries.length !== PLAYER_BELT_SLOT_COUNT) throw new GameProtocolError(`${field} must contain exactly 24 slots`)
   return Object.freeze(entries) as PlayerBeltComponent
 }
 

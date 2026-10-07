@@ -54,6 +54,7 @@ export interface BrowserGameplayInput {
 type QuickbarInputSource = 'gamepad' | `mouse:${number}` | `keyboard:${number}` | `touch:${number}`
 
 interface HeldQuickbarInput {
+  bindingSlot: number
   source: QuickbarInputSource
   slot: number
 }
@@ -61,6 +62,7 @@ interface HeldQuickbarInput {
 interface BrowserGameplayInputOptions {
   claimMouseCastStart?: (lane: GameplayMouseCastLane) => boolean
   claimQuickbarPress?: (slot: number) => boolean
+  resolveQuickbarSlot?: (slot: number) => number
   controls?: GameControlBindings
   gamepadSampling?: GamepadSampling
   getGamepads?: () => readonly (GamepadLike | null)[]
@@ -83,6 +85,7 @@ interface BrowserGameplayInputOptions {
 export function createBrowserGameplayInput({
   claimMouseCastStart = () => false,
   claimQuickbarPress = () => false,
+  resolveQuickbarSlot = (slot) => slot,
   controls: initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
   gamepadSampling = browserGamepadSampling,
   getGamepads,
@@ -218,7 +221,7 @@ export function createBrowserGameplayInput({
     const quickbarSlot = lane === 'secondary'
       ? quickbarSlotForBinding(controls, `Mouse${mouse.button}`)
       : null
-    if (quickbarSlot !== null && claimQuickbarPress(quickbarSlot)) {
+    if (quickbarSlot !== null && claimQuickbarPress(resolveQuickbarSlot(quickbarSlot))) {
       event.preventDefault()
       return
     }
@@ -280,7 +283,7 @@ export function createBrowserGameplayInput({
     const keyboard = keyboardEvent(event)
     const slot = keyboard && quickbarSlotForBinding(controls, keyboard.code)
     if (slot === null || keyboard!.repeat || quickbarInputHeld(`keyboard:${slot}`, slot)) return
-    if (claimQuickbarPress(slot)) {
+    if (claimQuickbarPress(resolveQuickbarSlot(slot))) {
       event.preventDefault()
       return
     }
@@ -299,19 +302,19 @@ export function createBrowserGameplayInput({
   }
 
   function quickbarInputHeld(source: QuickbarInputSource, slot: number): boolean {
-    return heldQuickbarInputs.some((entry) => entry.source === source && entry.slot === slot)
+    return heldQuickbarInputs.some((entry) => entry.source === source && entry.bindingSlot === slot)
   }
 
   function holdQuickbarInput(source: QuickbarInputSource, slot: number): void {
     heldQuickbarInputs = [
       ...heldQuickbarInputs.filter((entry) => entry.source !== source),
-      { source, slot },
+      { source, slot: resolveQuickbarSlot(slot), bindingSlot: slot },
     ]
   }
 
   function releaseQuickbarInput(source: QuickbarInputSource, slot: number): void {
     heldQuickbarInputs = heldQuickbarInputs.filter((entry) => (
-      entry.source !== source || entry.slot !== slot
+      entry.source !== source || entry.bindingSlot !== slot
     ))
   }
 
@@ -324,11 +327,11 @@ export function createBrowserGameplayInput({
   function syncGamepadQuickbar(slot: number | null): void {
     const held = heldQuickbarInputs.find(({ source }) => source === 'gamepad')
     if (slot === null) {
-      if (held) releaseQuickbarInput('gamepad', held.slot)
+      if (held) releaseQuickbarInput('gamepad', held.bindingSlot)
       return
     }
-    if (held?.slot === slot) return
-    if (held) releaseQuickbarInput('gamepad', held.slot)
+    if (held?.bindingSlot === slot) return
+    if (held) releaseQuickbarInput('gamepad', held.bindingSlot)
     holdQuickbarInput('gamepad', slot)
   }
 
@@ -381,7 +384,7 @@ export function createBrowserGameplayInput({
       const source = `touch:${slot}` as const
       if (pressed) {
         if (quickbarInputHeld(source, slot)) return
-        if (claimQuickbarPress(slot)) return
+        if (claimQuickbarPress(resolveQuickbarSlot(slot))) return
         if (aim === null && fallbackDirection) {
           const direction = primaryDirection(fallbackDirection)
           if (direction) {

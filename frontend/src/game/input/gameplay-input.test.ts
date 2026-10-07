@@ -880,3 +880,49 @@ for (const interruption of ['blur', 'blocked'] as const) {
     input.destroy()
   })
 }
+
+
+test('bank changes map fresh keyboard, mouse and touch presses without retargeting held casts', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  let bank = 0
+  const claimed: number[] = []
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    claimQuickbarPress: slot => { claimed.push(slot); return slot === 19 },
+    resolveQuickbarSlot: slot => bank * 8 + slot,
+    getGamepads: () => [], mouseTarget, target,
+    visibilityTarget: new FakeVisibilityTarget(),
+    onInput: state => published.push(state),
+    projectDirection: point => point, projectPointer: point => point,
+  })
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit7'))
+  assert.equal(published.at(-1)?.cast.quickbar, 7)
+  bank = 1
+  assert.equal(input.sample().input.cast.quickbar, 7)
+  target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit7'))
+  assert.equal(published.at(-1)?.cast.quickbar, null)
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit7'))
+  assert.equal(published.at(-1)?.cast.quickbar, 15)
+  target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit7'))
+  bank = 2
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 20, 30))
+  assert.equal(published.at(-1)?.cast.quickbar, 16)
+  bank = 0
+  target.dispatchEvent(new FakeMouseEvent('mouseup', 2, 20, 30))
+  assert.equal(published.at(-1)?.cast.quickbar, null)
+  bank = 2
+  input.setTouchQuickbar(7, true)
+  assert.equal(published.at(-1)?.cast.quickbar, 23)
+  bank = 1
+  input.setTouchQuickbar(7, false)
+  assert.equal(published.at(-1)?.cast.quickbar, null)
+  bank = 2
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit3'))
+  assert.equal(claimed.at(-1), 19)
+  assert.equal(input.sample().input.cast.quickbar, null)
+  input.setBlocked(true)
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit7'))
+  assert.equal(input.sample().input.cast.quickbar, null)
+  input.destroy()
+})

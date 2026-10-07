@@ -42,22 +42,27 @@ test('a native player starts with one element secondary in right-mouse slot zero
   assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook(ETHER_ARCANE)), [
     { kind: 'skill', skillId: 11 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'fire' })), [
     { kind: 'skill', skillId: 21 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'air' })), [
     { kind: 'skill', skillId: 27 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'water' })), [
     { kind: 'skill', skillId: 35 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'earth' })), [
     { kind: 'skill', skillId: 45 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
 })
 
@@ -72,6 +77,7 @@ test('learning a secondary fills one empty slot while rank-ups never duplicate i
   assert.deepEqual(belt, [
     { kind: 'skill', skillId: 11 }, { kind: 'skill', skillId: 48 }, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
 
   const ranked = choose(learned, 48, 2)
@@ -90,7 +96,7 @@ test('binding overwrites only the destination and preserves native duplicates', 
   assert.equal(belt[2], null)
 
   assert.throws(() => bindNativeBeltSkill(belt, learned, 50, 4), /not learned/)
-  assert.throws(() => bindNativeBeltSkill(belt, learned, 48, 8), /slot/)
+  assert.throws(() => bindNativeBeltSkill(belt, learned, 48, 24), /slot/)
 })
 
 test('belt snapshot equality distinguishes exact item identity without rerendering stable aliases', () => {
@@ -327,3 +333,44 @@ function withLearnedRank(
     effectiveRanks: Object.freeze(effectiveRanks),
   }
 }
+
+
+test('three hotbars preserve every independent assignment, aliases and exact item identities', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const economy = createHubEconomy(1)
+  const original = createNativePlayerBelt(skillBook)
+  assert.equal(original.length, 24)
+  assert.deepEqual(original.slice(8), Array(16).fill(null))
+  let belt = original
+  for (let slot = 0; slot < 24; slot += 1) {
+    belt = bindNativeBeltSkill(belt, skillBook, 11, slot)
+    assert.deepEqual(belt[slot], { kind: 'skill', skillId: 11 })
+  }
+  assert.equal(belt.filter(entry => entry?.kind === 'skill').length, 24)
+  for (const slot of [7, 8, 15, 16, 23]) {
+    const assigned = bindNativeBeltItem(belt, economy, economy.backpack[0]!.id, slot)
+    assert.deepEqual(assigned[slot], { kind: 'health-potion' })
+    assert.equal(assigned.filter(entry => entry?.kind === 'skill').length, 23)
+    assert.deepEqual(bindNativeBeltSkill(assigned, skillBook, null, slot)[slot], null)
+  }
+  for (const slot of [-1, 24, 1.5, NaN]) {
+    assert.throws(() => bindNativeBeltSkill(belt, skillBook, 11, slot), /slot/)
+    assert.throws(() => bindNativeBeltItem(belt, economy, economy.backpack[0]!.id, slot), /slot/)
+  }
+  const legacy = freezeNativeBelt(original.slice(0, 8))
+  assert.deepEqual(legacy, original)
+  assert.throws(() => freezeNativeBelt(original.slice(0, 16)), /three eight-slot/)
+})
+
+test('autofill reaches the next hotbar and rank loss clears matching entries in every bank', () => {
+  const initial = createPlayerSkillBook(ETHER_ARCANE)
+  const learned = choose(initial, 48, 1)
+  let belt = freezeNativeBelt(Array(8).fill({ kind: 'skill', skillId: 11 }))
+  belt = autofillNewlyLearnedNativeBeltSkills(belt, initial, learned)
+  assert.deepEqual(belt[8], { kind: 'skill', skillId: 48 })
+  belt = bindNativeBeltSkill(belt, learned, 48, 23)
+  const refreshed = refreshNativePlayerBelt(belt, initial, createHubEconomy(1))
+  assert.equal(refreshed[8], null)
+  assert.equal(refreshed[23], null)
+  assert.deepEqual(refreshed.slice(0, 8), belt.slice(0, 8))
+})

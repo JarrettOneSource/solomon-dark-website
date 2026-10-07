@@ -667,7 +667,7 @@ test('protocol accepts authoritative inventory and NPC actions and rejects malfo
     { type: 'acknowledge-npc-hint', interactionId: 'painting-0' },
     { type: 'buy-hagatha', selector: 8 },
     { type: 'buy-teacher-spell', skillId: 71 },
-    { type: 'activate-belt-slot', slot: 8 },
+    { type: 'activate-belt-slot', slot: 24 },
     { type: 'activate-belt-slot', slot: 0, aim: { x: Infinity, y: 1 } },
     { type: 'activate-belt-slot', slot: 0, aim: { x: 1 } },
     { type: 'activate-belt-slot', slot: 0, aim: { x: 1, y: 2, z: 3 } },
@@ -1324,6 +1324,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.players['player-1'].belt, [
     { kind: 'skill', skillId: 11 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
     rescueProtection: { fraction: 0, nextParticleId: 1, particles: [] },
@@ -7482,4 +7483,22 @@ test('social protocol resolves current Player Cards and carries bounded College 
     profile: { ...profile, gold: -1 },
     requestId: 1,
   })), /gold/)
+})
+
+
+test('hotbar commands accept all 24 slots and reject out-of-range bank addresses', () => {
+  for (let slot = 0; slot < 24; slot += 1) {
+    for (const message of [
+      { type: 'client-skill-quickbar-bind', skillId: 11, slot },
+      { type: 'client-hub-action', action: { type: 'activate-belt-slot', slot } },
+      { type: 'client-hub-action', action: { type: 'bind-belt-item', itemId: 1, slot } },
+    ]) assert.deepEqual(decodeClientGameMessage(JSON.stringify(message)), message)
+  }
+  for (const slot of [-1, 24, 1.5]) {
+    for (const message of [
+      { type: 'client-skill-quickbar-bind', skillId: 11, slot },
+      { type: 'client-hub-action', action: { type: 'activate-belt-slot', slot } },
+      { type: 'client-hub-action', action: { type: 'bind-belt-item', itemId: 1, slot } },
+    ]) assert.throws(() => decodeClientGameMessage(JSON.stringify(message)))
+  }
 })

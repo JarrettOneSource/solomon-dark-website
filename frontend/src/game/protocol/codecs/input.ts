@@ -1,3 +1,4 @@
+import { PLAYER_BELT_SLOT_COUNT } from '../../core-kernels/native-belt.ts'
 import {
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
@@ -30,8 +31,8 @@ import {
 function skillQuickbarSlot(value: unknown, field: string): number | null {
   if (value === null) return null
   const slot = integer(value, field)
-  if (slot < 0 || slot > 7) {
-    throw new GameProtocolError(`${field} must be null or an integer from 0 through 7`)
+  if (slot < 0 || slot >= PLAYER_BELT_SLOT_COUNT) {
+    throw new GameProtocolError(`${field} must be null or an integer from 0 through 23`)
   }
   return slot
 }

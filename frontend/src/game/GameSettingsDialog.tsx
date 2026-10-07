@@ -100,11 +100,12 @@ const BINDING_GROUPS = Object.freeze([
   }),
   Object.freeze({
     label: 'BELT HOTKEYS',
-    rows: Object.freeze(GAME_BINDING_ACTIONS.filter((action) => (
-      action.startsWith('belt')
-    )).map((action, index) => (
-      [action, `BELT SLOT ${index + 1}`] as const
-    ))),
+    rows: Object.freeze([
+      ...GAME_BINDING_ACTIONS.filter(action => action.startsWith('belt')).map((action, index) => (
+        [action, `BELT SLOT ${index + 1}`] as const
+      )),
+      ['cycleHotbar', 'CYCLE HOTBAR'] as const,
+    ]),
   }),
 ])
 

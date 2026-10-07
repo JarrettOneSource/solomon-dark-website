@@ -1,3 +1,4 @@
+import { PLAYER_BELT_SLOT_COUNT } from '../../core-kernels/native-belt.ts'
 import {
   NATIVE_SECONDARY_AUDIO_CUES,
   NATIVE_SECONDARY_EVENT_KINDS,
@@ -293,7 +294,7 @@ export function nativeSecondaryPlayer(value: unknown, field: string): NativeSeco
   const heldSlot = source.heldSlot === null
     ? null
     : nonnegativeInteger(source.heldSlot, `${field}.heldSlot`)
-  if (heldSlot !== null && heldSlot >= 8) {
+  if (heldSlot !== null && heldSlot >= PLAYER_BELT_SLOT_COUNT) {
     throw new GameProtocolError(`${field}.heldSlot is outside the skill quickbar`)
   }
   const lastSkillId = source.lastSkillId === null

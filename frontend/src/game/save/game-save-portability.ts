@@ -467,6 +467,9 @@ export async function createPortableGameProfileFromWebSave(
       || profile.economy.unforgeBonuses.maximumMana !== 0
       ? ['Web Unforge maximum-health/maximum-mana base bonuses have no retail disk fields and reset after stock reload.']
       : []),
+    ...(belt.slice(8).some(entry => entry !== null)
+      ? ['Retail has only eight belt slots; hotbars 2 and 3 remain in the web save and are not included in the stock export.']
+      : []),
     ...(skillBook.primarySkillId === 52 || beltSkills.includes(52)
       ? ['Retail does not serialize the active synthetic Weld build ID; selected or belted Spell Welding resets to the creation-element primary on stock export.']
       : []),

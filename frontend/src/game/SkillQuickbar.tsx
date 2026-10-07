@@ -1,5 +1,7 @@
+import HotbarControls, { useHotbar } from './HotbarControls.tsx'
 import { NativeUiTextGlyphs } from './native-ui/react-raw.ts'
 import {
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -106,31 +108,35 @@ export default function SkillQuickbar({
   viewportWidth,
   weldBuildId,
 }: SkillQuickbarProps) {
+  const { bank } = useHotbar()
+  const visibleBelt = belt.slice(bank * 8, bank * 8 + 8)
   const mobileBank = mobileQuickbarBankLayout(viewportWidth, uiScale)
   return (
     <div
       className="hub-hud-skill-quickbar"
       data-mode={mode}
       aria-label="Item belt"
+      data-hotbar-bank={bank}
     >
+      <HotbarControls />
       {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => (
         <SkillQuickbarSlot
           bindingCode={controls[`belt${slot + 1}` as GameBindingAction]}
           economy={economy}
           element={element}
-          entry={belt[slot] ?? null}
+          entry={visibleBelt[slot] ?? null}
           concentrationSkillIds={concentrationSkillIds}
           controllerSelected={controllerQuickbarSlot === slot}
           currentMana={currentMana}
           inputScale={displayScale * uiScale}
-          key={slot}
+          key={`${bank}:${slot}`}
           mobilePlacement={mobileQuickbarSlotPlacement(slot, mobileBank)}
           mobileUi={mobileUi}
-          mobileUiId={mobileUiBeltElementId(belt, slot)}
+          mobileUiId={mobileUiBeltElementId(visibleBelt, slot)}
           mode={mode}
           offset={offset}
           onInput={onInput}
-          onUnassign={onUnassign}
+          onUnassign={onUnassign ? (slot) => onUnassign(bank * 8 + slot) : undefined}
           playerState={playerState}
           secondaryManaCosts={secondaryManaCosts}
           selectedPrimarySkillId={selectedPrimarySkillId}
@@ -213,6 +219,9 @@ function SkillQuickbarSlot({
     secondaryManaCosts,
     skillId,
   })
+  const inputRef = useRef(onInput)
+  inputRef.current = onInput
+  useEffect(() => () => inputRef.current?.(slot, false), [slot])
   const bindingLabel = gameBindingLabel(bindingCode)
   const input = bindingCode.startsWith('Mouse')
     ? `${bindingLabel.toLowerCase()} button`

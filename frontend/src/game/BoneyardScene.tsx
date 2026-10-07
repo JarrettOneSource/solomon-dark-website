@@ -1,3 +1,4 @@
+import { useHotbar } from './HotbarControls.tsx'
 import { NativeSkillBookFeedbackCursor, nativeSkillBookWorldMessage } from './skill-book-feedback.ts'
 import {
   useEffect,
@@ -226,6 +227,7 @@ export default function BoneyardScene({
   subscribe,
   worldSpeeches,
 }: BoneyardSceneProps) {
+  const { slot: hotbarSlot } = useHotbar()
   const [boneyardInitialSnapshot] = useState<BoneyardGameSnapshot>(() => {
     if (!isBoneyardGameSnapshot(initialSnapshot)) {
       throw new Error('Boneyard scene requires a Boneyard snapshot')
@@ -715,6 +717,7 @@ export default function BoneyardScene({
     const enemyAmbientAudio = new BoneyardEnemyAmbientAudioSynchronizer(audio)
     const weatherAudio = new BoneyardWeatherAudioSynchronizer(audio)
     const input = createBrowserGameplayInput({
+      resolveQuickbarSlot: hotbarSlot,
       claimQuickbarPress: (slot) => {
         const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
         if (entry === null || entry.kind === 'skill') return false
@@ -1052,6 +1055,7 @@ export default function BoneyardScene({
     audio,
     boneyardInitialSnapshot,
     digPosition,
+    hotbarSlot,
     loaded,
     modAssets,
     modCatalog,

@@ -1,3 +1,4 @@
+import { PLAYER_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { createNativeScreenFlashes, createNativeScreenFlashWriter, resetNativeScreenFlashes, type NativeScreenFlashState, type WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
 import { finalizeBoneyardPuppetQueries } from './enemies/puppet-hits.ts'
@@ -4307,7 +4308,7 @@ function activateGameSimulationBeltSlot(
   aim: Vector2 | null,
   extensions?: GameSimulationExtensions,
 ): GameSimulationInventoryActionResult {
-  if (!Number.isInteger(slot) || slot < 0 || slot >= 8
+  if (!Number.isInteger(slot) || slot < 0 || slot >= PLAYER_BELT_SLOT_COUNT
     || !gameSimulationPlayerCanEditBooks(state, playerId)) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }

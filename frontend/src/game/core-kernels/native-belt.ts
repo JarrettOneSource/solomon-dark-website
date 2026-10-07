@@ -13,6 +13,8 @@ import {
 } from './player-progression.ts'
 
 export const NATIVE_BELT_SLOT_COUNT = 8
+export const PLAYER_HOTBAR_COUNT = 3
+export const PLAYER_BELT_SLOT_COUNT = NATIVE_BELT_SLOT_COUNT * PLAYER_HOTBAR_COUNT
 export const NATIVE_HEALTH_BELT_SLOT = 3
 export const NATIVE_MANA_BELT_SLOT = 4
 
@@ -42,16 +44,7 @@ export type NativeBeltEntry =
   | NativeBeltPotionAliasEntry
   | NativeBeltSkillEntry
 
-export type PlayerBeltComponent = readonly [
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-  NativeBeltEntry | null,
-]
+export type PlayerBeltComponent = readonly (NativeBeltEntry | null)[]
 
 export interface NativeBeltPotionProjection {
   readonly count: number
@@ -67,7 +60,7 @@ export function createNativePlayerBelt(
   if (secondarySkillId === undefined || !isNativeBeltSkill(secondarySkillId)) {
     throw new Error('fresh native belt requires one learned secondary skill')
   }
-  const entries: Array<NativeBeltEntry | null> = new Array(NATIVE_BELT_SLOT_COUNT).fill(null)
+  const entries: Array<NativeBeltEntry | null> = new Array(PLAYER_BELT_SLOT_COUNT).fill(null)
   entries[0] = skillEntry(secondarySkillId)
   entries[NATIVE_HEALTH_BELT_SLOT] = Object.freeze({ kind: 'health-potion' })
   entries[NATIVE_MANA_BELT_SLOT] = Object.freeze({ kind: 'mana-potion' })
@@ -231,7 +224,9 @@ export function nativeBeltPotionProjection(
 export function nativeBeltSkillProjection(
   source: PlayerBeltComponent,
 ): readonly (NativeBeltSkillId | null)[] {
-  return Object.freeze(source.map((entry) => entry?.kind === 'skill' ? entry.skillId : null))
+  // Retail export and the fixed eight-action bot policy consume the original bank only.
+  return Object.freeze(source.slice(0, NATIVE_BELT_SLOT_COUNT)
+    .map((entry) => entry?.kind === 'skill' ? entry.skillId : null))
 }
 
 export function nativeBeltEquipmentSlots(
@@ -254,17 +249,20 @@ export function nativeBeltEquipmentSlots(
 export function freezeNativeBelt(
   entries: readonly (NativeBeltEntry | null)[],
 ): PlayerBeltComponent {
-  if (entries.length !== NATIVE_BELT_SLOT_COUNT) {
-    throw new RangeError('native belt requires exactly eight slots')
+  if (entries.length !== NATIVE_BELT_SLOT_COUNT && entries.length !== PLAYER_BELT_SLOT_COUNT) {
+    throw new RangeError('player belt requires eight legacy slots or three eight-slot hotbars')
   }
-  return Object.freeze([...entries]) as PlayerBeltComponent
+  return Object.freeze([
+    ...entries,
+    ...new Array<null>(PLAYER_BELT_SLOT_COUNT - entries.length).fill(null),
+  ])
 }
 
 export function nativePlayerBeltsEqual(
   left: PlayerBeltComponent,
   right: PlayerBeltComponent,
 ): boolean {
-  return left === right || left.every((entry, index) => {
+  return left === right || left.length === right.length && left.every((entry, index) => {
     const other = right[index]
     if (entry === other) return true
     if (entry === null || other === null || entry.kind !== other.kind) return false
@@ -281,8 +279,8 @@ function skillEntry(skillId: NativeBeltSkillId): NativeBeltSkillEntry {
 }
 
 function assertBeltSlot(slot: number): void {
-  if (!Number.isInteger(slot) || slot < 0 || slot >= NATIVE_BELT_SLOT_COUNT) {
-    throw new RangeError(`native belt slot ${slot} is outside 0..7`)
+  if (!Number.isInteger(slot) || slot < 0 || slot >= PLAYER_BELT_SLOT_COUNT) {
+    throw new RangeError(`native belt slot ${slot} is outside 0..23`)
   }
 }
 

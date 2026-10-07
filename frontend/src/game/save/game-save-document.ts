@@ -1,3 +1,4 @@
+import { PLAYER_BELT_SLOT_COUNT, NATIVE_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { nativeScreenFlashes } from '../protocol/codecs/screen-flash.ts'
 import { nativeSecondaryCameraDisplacements } from '../protocol/codecs/secondary.ts'
 import { createNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
@@ -1679,6 +1680,7 @@ function normalizePlayerStore(
           index,
           refreshed.skillBook,
           economy,
+          sourceSchemaVersion,
         )
       : migrateSkillQuickbarToNativeBelt(legacyQuickbar!.map((entry) => (
           entry === null ? null : finiteNumber(entry, 'game save skill quickbar entry')
@@ -2098,9 +2100,13 @@ function normalizeSavedBelt(
   playerIndex: number,
   skillBook: PlayerSkillBookComponent,
   economy: HubEconomyState,
+  sourceSchemaVersion: number,
 ): PlayerBeltComponent {
   const entries = array(value, `game save player belt ${playerIndex}`)
-  if (entries.length !== 8) throw new Error(`game save player belt ${playerIndex} is invalid`)
+  if (entries.length !== PLAYER_BELT_SLOT_COUNT
+    && !(sourceSchemaVersion < 50 && entries.length === NATIVE_BELT_SLOT_COUNT)) {
+    throw new Error(`game save player belt ${playerIndex} is invalid`)
+  }
   return freezeNativeBelt(entries.map((value, slot): NativeBeltEntry | null => {
     if (value === null) return null
     const field = `game save player belt ${playerIndex} slot ${slot}`

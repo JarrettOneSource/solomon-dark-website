@@ -677,7 +677,7 @@ function drawSkillQuickbar(
   presentation: SkillBookRendererPresentation,
   hudLayout: NativeHudControlLayout,
 ): void {
-  presentation.belt.forEach((entry, slot) => {
+  presentation.belt.slice(0, 8).forEach((entry, slot) => {
     const rect = hudLayout.belt[slot]!
     const { height, width, x, y } = rect
     const skillId = entry?.kind === 'skill' ? entry.skillId : null
