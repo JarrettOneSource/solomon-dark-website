@@ -1415,3 +1415,29 @@ Acceptance uses a genuine rendered-component regression before removing the inva
 | Native descriptions, Tonic 27, invalid/unowned selectors and authoritative Hub/transition/Boneyard admission | verified-already-at-parity | genuine rendered-component red/green, existing Hagatha contracts and Boneyard removal refusal |
 
 The Stats removal callback and enabling prop are removed through every caller; Hagatha's owned grid remains the sole UI removal producer. The actual built flow purchased selectors 0 and 19, opened standalone College Stats twice, inspected both charms with pointer and Enter in all three other merchant companions, then removed only 0 in Hagatha's shop. Boneyard Stats inspection retained 19. Exact runtime/test candidate `6ecd9247` passed the unchanged M5 all-mode `scripts/validate.sh` at 2026-10-07T00:20:16Z: 42 Python tests, 4,226 Node executions across 22 batches, no failed/cancelled/skipped tests, production builds and configured renderer quality gates with final failures empty. The built production-client/authoritative-host journey passed at 2026-10-07T00:29:02Z with all captured client, host, transport and wire error arrays empty. Five representative screenshots were inspected. Developer setup grants, native-family spawns and ordinary browser input qualify this private fixture; the original save and historical exact trajectory remain unavailable. Publication and live outcomes are recorded separately in the report archive. This acceptance addition changes documentation only.
+
+
+## 2026-10-07 — Report95 synchronous Inventory repaint
+
+The current original1557199809168019476 praises the accepted Stats scroll speed
+and reports a brief hotbar/wizard-circle jump. Its four-second video is retained
+in the private report archive. Reopening concerns the Website's shared repaint
+owner, not the recovered SwipePages motion or native timings above.
+
+`setModel` rebuilds children and immediately submits a GPU frame. The new belt
+container initially has y0; the new wizard seal has rotation0 and the preview
+has its constructor pose. Only the next animation-frame `render` restores the
+current HUD slide offset and time-driven seal/preview state. A Stats page change
+therefore submits one inconsistent frame, matching the paired reported jumps.
+
+Boundary: all draw paths after a child rebuild, including initial mount,
+Inventory/Skills/merchant transitions and model updates during an active reveal.
+The existing reveal progress, HUD slide function, animation clock, SwipePages
+state and contextual-hover ownership remain unchanged. Restore continuous
+presentation before every direct draw through the same helper used by normal
+animation frames. Native source values and recovered stock motion are reused;
+no new native behavior or fresh retail runtime is claimed.
+
+The candidate is pending combined Report80/96 validation and real built/live
+Stats paging, repeated menu transitions and interrupted reveal checks. No
+completion claim or reaction is made by this source correction alone.

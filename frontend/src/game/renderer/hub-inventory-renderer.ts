@@ -178,6 +178,7 @@ export async function createHubInventoryRenderer(
   let statsInspection: NativeContextualHoverBox | null = null
   let statsOffset: number | null = null
   let statsScroll = createNativeInventoryStatsScroll(0, 0)
+  let modalHudProgress = 0
 
   function renderStats(nowMs: number): number | null {
     if (!statsContent) {
@@ -373,6 +374,15 @@ export async function createHubInventoryRenderer(
         child.rotation = Number(child.label.slice('native-seal:'.length)) + nowMs / 60_000
       }
     }
+  }
+
+  function updateContinuousPresentation(nowMs: number): void {
+    if (modalHud) modalHud.layer.position.y = nativeHudModalSlideOffset(modalHudProgress)
+    if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
+      ? hubShopSlideOffset(surface.alpha)
+      : 0
+    playerPreviewVfx?.update(nowMs / 10, 1.25)
+    renderNotices(nowMs)
   }
 
   function renderChat(nowMs: number): boolean {
@@ -582,6 +592,7 @@ export async function createHubInventoryRenderer(
         ? currentModel.statsPage : 0
       statsScroll = createNativeInventoryStatsScroll(page, performance.now())
       renderStats(performance.now())
+      updateContinuousPresentation(performance.now())
       application.renderer.render(application.stage)
       return gpu.mount(host)
     },
@@ -606,24 +617,19 @@ export async function createHubInventoryRenderer(
     render(nowMs, reveal, hudProgress = reveal) {
       if (destroyed) return { chatComplete: false, statsOffset: null }
       const clampedReveal = Math.max(0, Math.min(1, reveal))
-      const clampedHudProgress = Math.max(0, Math.min(1, hudProgress))
+      modalHudProgress = Math.max(0, Math.min(1, hudProgress))
       canvas.dataset.nativeReveal = clampedReveal >= 1 ? 'settled' : 'revealing'
       canvas.dataset.nativeRevealProgress = `${clampedReveal}`
       dimmer.alpha = curtainAlpha * clampedReveal
       surface.alpha = clampedReveal
       surface.y = 0
-      if (modalHud) modalHud.layer.position.y = nativeHudModalSlideOffset(clampedHudProgress)
-      if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
-        ? hubShopSlideOffset(clampedReveal)
-        : 0
       renderDowsing(nowMs)
-      playerPreviewVfx?.update(nowMs / 10, 1.25)
       renderItemSelection(nowMs)
       renderFlybys(nowMs)
       renderSackPages(nowMs)
       const statsOffset = renderStats(nowMs)
       renderItemEffects(nowMs, clampedReveal)
-      renderNotices(nowMs)
+      updateContinuousPresentation(nowMs)
       const chatComplete = renderChat(nowMs)
       application.renderer.render(application.stage)
       return { chatComplete, statsOffset }
@@ -638,7 +644,9 @@ export async function createHubInventoryRenderer(
       currentModel = model
       writeModelDiagnostics(model)
       rebuildSurface(model, nextNotice)
-      renderItemEffects(performance.now(), surface.alpha)
+      const nowMs = performance.now()
+      renderItemEffects(nowMs, surface.alpha)
+      updateContinuousPresentation(nowMs)
       application.renderer.render(application.stage)
       return statsOffset
     },
