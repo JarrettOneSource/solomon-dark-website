@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { PlayerBeltComponent } from './core-kernels/native-belt.ts'
+import { NATIVE_BELT_SLOT_COUNT, type PlayerBeltComponent } from './core-kernels/native-belt.ts'
 
 import { UI_SCALE_MAX_PERCENT, UI_SCALE_MIN_PERCENT } from './game-settings.ts'
 import {
@@ -55,7 +55,7 @@ export type MobileUiElementId = typeof MOBILE_UI_ELEMENT_IDS[number]
 export type MobileUiResizeHandle = typeof MOBILE_UI_RESIZE_HANDLES[number]
 
 export function mobileUiBeltElementId(belt: PlayerBeltComponent, slot: number): MobileUiElementId {
-  if (!Number.isInteger(slot) || slot < 0 || slot >= belt.length) {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= NATIVE_BELT_SLOT_COUNT || slot >= belt.length) {
     throw new RangeError('mobile belt slot must be an integer in 0..7')
   }
   const kind = belt[slot]?.kind

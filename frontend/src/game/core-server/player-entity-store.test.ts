@@ -200,6 +200,7 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
     [
       { kind: 'skill', skillId: 27 }, null, null,
       { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+      ...Array(16).fill(null),
     ],
   )
   assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdA, null)
@@ -353,6 +354,7 @@ test('all fifteen post-Game-Over Create choices build a fresh complete generatio
       assert.deepEqual(store.belts[0], [
         { kind: 'skill', skillId: secondarySkillId }, null, null,
         { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+        ...Array(16).fill(null),
       ])
       assert.equal(book.advancedUnlocks.some(Boolean), false)
       assert.equal(progression.level, 1)

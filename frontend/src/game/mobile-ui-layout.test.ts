@@ -55,7 +55,9 @@ test('duplicate potion aliases retain distinct mobile slot positions', () => {
     { kind: 'health-potion' }, { kind: 'mana-potion' }, { kind: 'mana-potion' },
     { kind: 'health-potion' }, { kind: 'mana-potion' },
   ])
-  const owners = belt.map((_, slot) => mobileUiBeltElementId(belt, slot))
+  const visibleBelt = belt.slice(0, 8)
+  const owners = visibleBelt.map((_, slot) => mobileUiBeltElementId(visibleBelt, slot))
+  assert.throws(() => mobileUiBeltElementId(belt, 8), /0..7/)
   assert.deepEqual(owners, ['slot1', 'slot2', 'healthPotion', 'slot4', 'manaPotion', 'slot6', 'slot7', 'slot8'])
   assert.equal(new Set(owners).size, 8)
 })
