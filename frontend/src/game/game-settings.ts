@@ -390,10 +390,11 @@ function migrateGameControls(value: unknown): GameControlBindings | null {
   if (!codes.every(validBindingCode) || new Set(codes).size !== codes.length) return null
   const migrated = { ...value }
   const used = new Set(codes)
+  const functionKeys = Array.from({ length: 24 }, (_, index) => `F${index + 1}`)
   for (const action of missing) {
     const candidates = action === 'openCheats'
-      ? ['Backquote', 'F1', 'F2', 'F3']
-      : ['KeyR', 'KeyV', 'F4', 'F5']
+      ? ['Backquote', ...functionKeys]
+      : ['KeyR', 'KeyV', ...functionKeys]
     const code = candidates.find(candidate => !used.has(candidate))
     if (!code) return null
     migrated[action] = code

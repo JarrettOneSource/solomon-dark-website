@@ -361,3 +361,15 @@ test('old control settings gain a conflict-free hotbar cycle key without losing 
   assert.equal(rebound.cycleHotbar, 'Digit1')
   assert.equal(rebound.belt2, 'KeyV')
 })
+
+
+test('hotbar migration preserves old settings when its usual fallback keys are all occupied', () => {
+  const controls = { ...DEFAULT_GAME_CONTROL_BINDINGS,
+    moveUp: 'KeyR', moveDown: 'KeyV', moveLeft: 'F4', moveRight: 'F5' }
+  const legacy = Object.fromEntries(Object.entries(controls).filter(([key]) => key !== 'cycleHotbar'))
+  const storage = { getItem: () => JSON.stringify({ ...DEFAULT_GAME_SETTINGS, musicVolumePercent: 23, controls: legacy }), setItem() {} }
+  const migrated = readGameSettings(storage)
+  assert.equal(migrated.musicVolumePercent, 23)
+  assert.equal(migrated.controls.cycleHotbar, 'F1')
+  for (const [action, binding] of Object.entries(legacy)) assert.equal(migrated.controls[action], binding)
+})
