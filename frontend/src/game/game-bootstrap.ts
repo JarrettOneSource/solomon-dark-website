@@ -91,6 +91,25 @@ async function resolveGameEndpoint(
   return decodeProvisionedGameEndpoint(payload)
 }
 
+export async function admitEditorTest(
+  document: { readonly name: string; readonly bytesBase64: string },
+  token: string | null,
+  request: typeof fetch = fetch,
+): Promise<GameEndpoint> {
+  const headers = new Headers({
+    accept: 'application/json',
+    'content-type': 'application/json',
+    'x-solomon-dark-session': 'editor-test',
+  })
+  if (token) headers.set('authorization', `Bearer ${token}`)
+  const response = await request('/api/game/editor-test', {
+    method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify(document),
+  })
+  const payload = await readJson(response)
+  if (!response.ok) throw new Error(apiError(payload, 'The private test could not be started. Your draft is still here.'))
+  return decodeProvisionedGameEndpoint(payload)
+}
+
 export async function admitSharedHubPlayer(
   token: string | null,
   request: typeof fetch = fetch,

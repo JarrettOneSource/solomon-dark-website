@@ -90,6 +90,7 @@ export type GameHostAuthentication =
     }
 
 export interface GameHostAdmission {
+  readonly editorTest?: import('./boneyard-catalog.ts').ModBoneyardEntry
   readonly content: MaterializedWebSessionContent
   readonly developerAccess?: boolean
   readonly leaderboardUserId: number | null
@@ -127,6 +128,8 @@ interface PartyModRuntimeScope {
 }
 
 export interface GameHostOptions {
+  /** Disposable, isolated editor preview: no profile import, saves, social access or scores. */
+  editorTest?: boolean
   archiveRun?: (archive: RunArchive) => void
   allowedOrigins?: readonly string[]
   authentication: GameHostAuthentication
@@ -520,13 +523,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     })),
   }
   const sharedHub = options.sharedHub ?? false
-  const runArchives = options.archiveRun ? new RunArchiveRecorder({
+  const runArchives = options.archiveRun && !options.editorTest ? new RunArchiveRecorder({
     content,
     revision: partyRecoveryRevision ?? '0'.repeat(40),
     sessionId: String(options.logContext?.sessionId ?? 'standalone'),
     write: options.archiveRun,
   }) : null
   const sessionKind = options.sessionKind ?? (sharedHub ? 'global-hub' : 'standalone')
+  if (options.editorTest && (sessionKind !== 'standalone' || options.socialBroker || maxPlayers !== 1)) {
+    throw new Error('Editor tests require an isolated single-player authority')
+  }
   const socialHostId = options.socialHostId
     ?? `game-host-${randomBytes(18).toString('base64url')}`
   if (sharedHub !== (sessionKind === 'global-hub')) {
@@ -1043,6 +1049,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const authenticated = authenticate(message.credential, options.authentication)
         if (!authenticated) {
           disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
+          return
+        }
+        if (options.editorTest && (message.save !== undefined || message.resumeToken !== undefined
+            || message.beginCollegeIntro || authenticated.partyId !== null)) {
+          disconnect(socket, 'authentication-failed', 'Editor tests always use a fresh disposable wizard.')
           return
         }
         if (authenticated.observer !== null) {
@@ -3192,6 +3203,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-start-match') {
+        const catalog = boneyardCatalogForPlayer(client.playerId)
+        // Generic materialization synthesizes default-random even when absent
+        // from choices. An editor host only admits its configured authored map.
+        if (options.editorTest && (
+          !catalog.modEntries.has(message.boneyardId)
+          || !catalog.choices.some(choice => choice.id === message.boneyardId)
+        )) {
+          disconnect(socket, 'invalid-message', 'The selected Boneyard is unavailable.')
+          return
+        }
         const activeState = stateForPlayer(client.playerId)
         if (
           client.playerId !== authorityForPlayer(client.playerId)
@@ -3203,7 +3224,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           || activeState.world.participants[client.playerId]?.transition !== null
         ) return
         const selected = materializeBoneyard(
-          boneyardCatalogForPlayer(client.playerId),
+          catalog,
           message.boneyardId,
           consumeBoneyardSeed(),
         )
@@ -3229,6 +3250,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         return
       }
+      if (options.editorTest && message.type === 'client-start-tutorial') return
       if (message.type === 'client-start-tutorial') {
         const activeState = stateForPlayer(client.playerId)
         if (
@@ -4029,6 +4051,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   partyAccessTimer.unref()
 
   function scheduleSaveCheckpoint(source: string): void {
+    if (options.editorTest) return
     saveCheckpointScheduler.enqueue(
       [...clients.values()].map(client => client.playerId),
       source,
@@ -4036,6 +4059,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function scheduleSaveCheckpointForClient(client: HostClient, source: string): void {
+    if (options.editorTest) return
     saveCheckpointScheduler.enqueue([client.playerId], source)
   }
 
@@ -4077,6 +4101,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     includeTerminalProfile = false,
     targetRevision: string | null = partyRecoveryRevision,
   ): number {
+    if (options.editorTest) return 0
     if (force || includeTerminalProfile) saveCheckpointScheduler.cancel(client.playerId)
     if (client.socket.readyState !== WebSocket.OPEN) return 0
     if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
@@ -7011,7 +7036,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     completed: GameSimulationState,
   ): void {
     if (
-      !options.leaderboardReceiptSecret
+      options.editorTest
+      || !options.leaderboardReceiptSecret
       || previous.world.kind !== 'boneyard'
       || completed.world.kind !== 'boneyard'
       || previous.world.runId !== completed.world.runId

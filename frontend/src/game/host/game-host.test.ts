@@ -1,3 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { parseBoneyard, serializeBoneyard } from '../../editor/format/boneyard.ts'
+import {
+  EDITOR_TEST_BONEYARD_ID,
+  MAX_EDITOR_TEST_BYTES,
+  materializeEditorTestBoneyard,
+} from './editor-test-boneyard.ts'
 import { GAME_STRING_CHUNK_WINDOW } from '../protocol/game-string-transfer.ts'
 import { GameWelcomeReceiver } from '../protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
@@ -161,6 +168,157 @@ interface TestReplicationState {
 }
 
 const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
+
+function editorTestFixture(): ModBoneyardEntry {
+  const doc = parseBoneyard(readFileSync(new URL('../../../../tests/fixtures/flat_multiplayer_test.boneyard', import.meta.url)))
+  doc.geometry.playerSpawn = { x: 123.5, y: -456.25 }
+  doc.geometry.playerSpawnFacingDeg = 90
+  return materializeEditorTestBoneyard({
+    name: '  Authored editor test  ',
+    bytesBase64: Buffer.from(serializeBoneyard(doc)).toString('base64'),
+  })
+}
+
+function editorTestCatalog(entry = editorTestFixture()) {
+  return { choices: [entry.choice], modEntries: new Map([[entry.choice.id, entry]]) }
+}
+
+test('editor test admission rejects malformed native files and noncanonical base64', () => {
+  const fixture = readFileSync(new URL('../../../../tests/fixtures/flat_multiplayer_test.boneyard', import.meta.url))
+  const valid = { name: 'Editor map', bytesBase64: fixture.toString('base64') }
+  for (const value of [null, [], {}, { ...valid, name: '' }, { ...valid, name: ' ' },
+    { ...valid, name: 'x'.repeat(161) }, { ...valid, bytesBase64: 42 }]) {
+    assert.throws(() => materializeEditorTestBoneyard(value))
+  }
+  for (const bytesBase64 of ['', 'a', '!!!!', 'AA=A', 'AB==', 'AAA=', 'AA==\n',
+    Buffer.from('not a native Boneyard').toString('base64'), fixture.subarray(0, 32).toString('base64')]) {
+    assert.throws(() => materializeEditorTestBoneyard({ ...valid, bytesBase64 }))
+  }
+})
+
+test('editor test admission handles near-limit bytes without recursive-regexp failure and rejects oversize', () => {
+  for (const length of [MAX_EDITOR_TEST_BYTES - 1, MAX_EDITOR_TEST_BYTES]) {
+    const bytesBase64 = Buffer.alloc(length).toString('base64')
+    assert.throws(() => materializeEditorTestBoneyard({ name: 'Large malformed map', bytesBase64 }), error => {
+      assert.ok(error instanceof Error)
+      assert.doesNotMatch(error.message, /call stack|regular expression/i)
+      return true
+    })
+  }
+  for (const length of [MAX_EDITOR_TEST_BYTES + 1, MAX_EDITOR_TEST_BYTES + 4]) {
+    assert.throws(() => materializeEditorTestBoneyard({
+      name: 'Oversized', bytesBase64: Buffer.alloc(length).toString('base64'),
+    }), /encoding is invalid|smaller than 8 MiB/)
+  }
+})
+
+test('editor test admission retains authored spawn and exact projected geometry', () => {
+  const bytes = readFileSync(new URL('../../../public/samples/story0.boneyard', import.meta.url))
+  const baseline = materializeEditorTestBoneyard({ name: 'Authored geometry', bytesBase64: bytes.toString('base64') })
+  const native = parseBoneyard(bytes)
+  native.geometry.playerSpawn = { x: 123.5, y: -456.25 }
+  native.geometry.playerSpawnFacingDeg = 90
+  const entry = materializeEditorTestBoneyard({
+    name: '  Authored geometry  ', bytesBase64: Buffer.from(serializeBoneyard(native)).toString('base64'),
+  })
+  assert.equal(entry.choice.id, EDITOR_TEST_BONEYARD_ID)
+  assert.equal(entry.choice.name, 'Authored geometry')
+  assert.deepEqual(entry.scene.spawn, { x: 123.5, y: -456.25, facingDeg: 90 })
+  for (const key of ['bounds', 'objects', 'roads', 'fences', 'terrain', 'sprites'] as const) {
+    assert.deepEqual(entry.scene[key], baseline.scene[key], key)
+  }
+  assert.equal(entry.geometrySha256, boneyardGeometrySha256(entry.scene))
+  assert.notEqual(entry.sourceSha256, baseline.sourceSha256)
+})
+
+test('editor test hosts reject generated, tutorial and unregistered match selections', async context => {
+  for (const boneyardId of ['default-random', 'stock-tutorial', 'other-editor-map']) {
+    await context.test(boneyardId, async child => {
+      const host = await startGameHost({ authentication: SHARED_AUTHENTICATION,
+        editorTest: true, maxPlayers: 1, boneyards: editorTestCatalog(), snapshotRate: 100 })
+      child.after(() => host.close())
+      const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+      child.after(() => closeSocket(client.socket))
+      const disconnected = nextMessage(client.socket, message => message.type === 'server-disconnect')
+      client.socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId }))
+      const result = await disconnected
+      assert.equal(result.type, 'server-disconnect')
+      assert.equal(result.code, 'invalid-message')
+      assert.equal(host.state().world.kind, 'hub')
+    })
+  }
+})
+
+test('editor test hosts reject save import, resume tokens and College intro before creating a wizard', async context => {
+  const save = createGameProfileSaveDocument({
+    integrity: 'global-clean', mods: [], modState: {},
+    playerId: 'owner', state: createGameSimulation({ owner: FIRST_CHARACTER }),
+  })
+  for (const extra of [{ save, saveIntent: 'resume' as const },
+    { resumeToken: 'existing-session-resume-token' }, { beginCollegeIntro: true }]) {
+    await context.test(Object.keys(extra)[0]!, async child => {
+      const host = await startGameHost({ authentication: SHARED_AUTHENTICATION,
+        editorTest: true, maxPlayers: 1, boneyards: editorTestCatalog(), snapshotRate: 100 })
+      child.after(() => host.close())
+      const socket = await openSocket(host.address.url)
+      child.after(() => closeSocket(socket))
+      const disconnected = nextMessage(socket, message => message.type === 'server-disconnect')
+      socket.send(encodeGameMessage({ type: 'client-hello', enhancedEffects: true,
+        onlinePreferences: ONLINE_PREFERENCES, profile: EMPTY_PLAYER_PROFILE,
+        cheatsEnabled: false, protocolVersion: GAME_PROTOCOL_VERSION,
+        credential: 'test-secret', character: FIRST_CHARACTER, ...extra }))
+      const result = await disconnected
+      assert.equal(result.type, 'server-disconnect')
+      assert.equal(result.code, 'authentication-failed')
+      assert.match(result.reason, /fresh disposable wizard/)
+      assert.deepEqual(gameSimulationPlayerRecords(host.state()), {})
+    })
+  }
+})
+
+test('editor test host plays the authored map without checkpoints, leaderboard receipts or run archives', async context => {
+  const entry = editorTestFixture()
+  const archives: RunArchive[] = []
+  const host = await startGameHost({
+    authentication: { kind: 'shared', credential: 'test-secret', leaderboardUserId: 42 },
+    archiveRun: archive => archives.push(archive),
+    editorTest: true, maxPlayers: 1, boneyards: editorTestCatalog(entry), snapshotRate: 100,
+    leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
+  })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  context.after(() => closeSocket(socket))
+  const messageTypes: string[] = []
+  socket.on('message', data => messageTypes.push((JSON.parse(data.toString()) as { type: string }).type))
+  const welcoming = nextMessage(socket, message => message.type === 'server-welcome')
+  socket.send(encodeGameMessage({ type: 'client-hello', enhancedEffects: true,
+    onlinePreferences: ONLINE_PREFERENCES, profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false, protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret', character: FIRST_CHARACTER }))
+  const welcome = await welcoming
+  assert.equal(welcome.type, 'server-welcome')
+  assert.deepEqual(welcome.boneyards, [entry.choice])
+  installSnapshotAcknowledgements(socket)
+  socket.send(encodeGameMessage({ type: 'client-save-before-leave', requestId: 1 }))
+  socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: false }))
+  const loading = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
+  const ready = completeInitialGameplayReadiness([socket])
+  socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId: EDITOR_TEST_BONEYARD_ID }))
+  const loaded = await loading
+  assert.equal(loaded.type, 'server-boneyard-loaded')
+  assert.deepEqual(loaded.boneyard.scene, entry.scene)
+  await ready
+  socket.send(encodeGameMessage({ type: 'client-save-before-leave', requestId: 2 }))
+  const archived = nextMessage(socket, message => message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'boneyard'
+    && message.snapshot.world.hallOfFameRuns[welcome.playerId]?.elapsedTicks !== null)
+  forceHallArchive(host)
+  await archived
+  await closeSocket(socket)
+  assert.equal(messageTypes.some(type => type.startsWith('server-save-checkpoint')), false)
+  assert.equal(messageTypes.includes('server-leaderboard-receipt'), false)
+  assert.deepEqual(archives, [])
+})
 
 test('party recovery claim seals the exact owner checkpoint and deployment target', () => {
   const loaded = materializeBoneyard(

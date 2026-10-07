@@ -386,7 +386,7 @@ export default memo(function Toolbar(p: Props) {
   return (
     <>
       {/* the tool rail, riding the stage's left edge */}
-      <div className={`absolute left-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 p-1 ${PANEL}`}>
+      <div className={`editor-tool-rail absolute left-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 p-1 ${PANEL}`}>
         {HAND_TOOLS.map((t) => (
           <RailButton key={t.tool} icon={t.icon} label={t.label} active={p.tool === t.tool} onClick={() => p.onTool(t.tool)} />
         ))}

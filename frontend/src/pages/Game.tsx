@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
 import {
   GameConnectionFailure,
@@ -60,6 +60,8 @@ import {
 } from '../lib/api.ts'
 import { useAuth } from '../lib/auth.tsx'
 
+const Boneyard = lazy(() => import('./Boneyard.tsx'))
+
 type Readiness = 'loading' | 'ready'
 
 interface DeploymentRestartState {
@@ -69,6 +71,7 @@ interface DeploymentRestartState {
 
 export default function Game() {
   const { user, loading: authLoading, logout } = useAuth()
+  const [editorOpen, setEditorOpen] = useState(false)
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
   const diagnosticsRef = useRef<ReturnType<typeof createGameClientDiagnostics> | null>(null)
   diagnosticsRef.current ??= createGameClientDiagnostics()
@@ -439,6 +442,11 @@ export default function Game() {
     }
   }, [diagnostics, user])
 
+  if (editorOpen) {
+    return <Suspense fallback={<NativeLoader progress={0} stage="Opening the Boneyard workshop" />}>
+      <Boneyard onBack={() => setEditorOpen(false)} />
+    </Suspense>
+  }
   if (fatal && !deploymentRestart) {
     return (
       <GameRuntimeError
@@ -464,6 +472,7 @@ export default function Game() {
               modLoadError={modLoadError}
               onCancelCreate={cancelCreate}
               onKillWizard={killWizard}
+              onOpenEditor={() => setEditorOpen(true)}
               onSaveCheckpoint={persistCheckpoint}
               onSignOut={logout}
               persistSaveCheckpoint={persistCheckpointAndWait}

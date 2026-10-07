@@ -24,6 +24,7 @@ export interface StageHandle {
 }
 
 interface Props {
+  active?: boolean
   doc: EditorDoc
   selection: Selection
   tool: Tool
@@ -59,9 +60,11 @@ type Gesture =
   | null
 
 export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
-  { doc, selection, tool, activeItem, snap, showGrid, styles, dispatch, onPlaced, onDeleted, onExitPlace },
+  { doc, selection, tool, activeItem, snap, showGrid, styles, dispatch, onPlaced, onDeleted, onExitPlace, active = true },
   ref,
 ) {
+  const activeRef = useRef(active)
+  activeRef.current = active
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const coordsRef = useRef<HTMLSpanElement>(null)
@@ -178,6 +181,11 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
 
   // Spacebar: temporary survey from any tool, back the moment it lifts.
   useEffect(() => {
+    if (!active) {
+      spaceRef.current = false
+      setSpaceHeld(false)
+      return
+    }
     const down = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return
       const t = e.target as HTMLElement | null
@@ -199,7 +207,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [])
+  }, [active])
 
   // Resize, then render loop.
   useEffect(() => {
@@ -232,7 +240,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     let raf = 0
     const loop = () => {
       raf = requestAnimationFrame(loop)
-      if (!dirty.current) return
+      if (!activeRef.current || !dirty.current) return
       dirty.current = false
       const s = live.current
       drawStage(ctx, size.current.w, size.current.h, cam.current, s.doc, {
@@ -602,6 +610,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
 
   // Draft-line keys live here; the page owns the rest of the keyboard.
   useEffect(() => {
+    if (!active) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (draft.current) {
@@ -615,7 +624,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [finishDraft, markDirty])
+  }, [active, finishDraft, markDirty])
 
   const cursor =
     spaceHeld || tool === 'pan'

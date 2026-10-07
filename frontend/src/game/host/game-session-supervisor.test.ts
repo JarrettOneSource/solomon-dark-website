@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { EDITOR_TEST_BONEYARD_ID, MAX_EDITOR_TEST_BYTES, materializeEditorTestBoneyard } from './editor-test-boneyard.ts'
 import { GameWelcomeReceiver } from '../protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -54,6 +56,90 @@ const MOD_CONTENT = {
     version: '1.0.0',
   }],
 } as const
+
+
+function editorTestRequest() {
+  return { name: 'Private authored test', bytesBase64: readFileSync(new URL(
+    '../../../../tests/fixtures/flat_multiplayer_test.boneyard', import.meta.url,
+  )).toString('base64') }
+}
+
+async function provisionEditorTest(supervisorUrl: string): Promise<ProvisionedEndpoint> {
+  const response = await fetch(`${supervisorUrl}/admin/editor-test`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ADMIN_SECRET}`, 'content-type': 'application/json' },
+    body: JSON.stringify(editorTestRequest()),
+  })
+  assert.equal(response.status, 201)
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  return await response.json() as ProvisionedEndpoint
+}
+
+test('editor test supervisor admission rejects unauthorized, malformed and oversized native requests without allocating hosts', async context => {
+  const supervisor = await startGameSessionSupervisor({ adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN] })
+  context.after(() => supervisor.close())
+  const unauthorized = await fetch(`${supervisor.address.url}/admin/editor-test`, { method: 'POST' })
+  assert.equal(unauthorized.status, 401)
+  for (const body of [null, {}, { name: 'Malformed', bytesBase64: '!!!!' },
+    { name: 'Truncated', bytesBase64: Buffer.alloc(32).toString('base64') },
+    { name: 'Oversized', bytesBase64: Buffer.alloc(MAX_EDITOR_TEST_BYTES + 1).toString('base64') }]) {
+    const response = await fetch(`${supervisor.address.url}/admin/editor-test`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ADMIN_SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    assert.equal(response.status, 400)
+    assert.equal(supervisor.sessionCount(), 0)
+  }
+})
+
+test('editor test supervisor keeps socket sessions private, reaps them on return and leaves normal sessions unchanged', async context => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN], snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const endpoint = await provisionEditorTest(supervisor.address.url)
+  const client = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  context.after(() => closeSocket(client.socket))
+  const expected = materializeEditorTestBoneyard(editorTestRequest())
+  assert.deepEqual(client.welcome.boneyards, [expected.choice])
+  assert.deepEqual(await readPresence(supervisor.address.url), [])
+  assert.deepEqual(await readPublicParties(supervisor.address.url), [])
+  client.socket.send(encodeGameMessage({ type: 'client-party-settings', visibility: 'public' }))
+  const loaded = client.next(message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId: EDITOR_TEST_BONEYARD_ID }))
+  const run = await loaded
+  assert.equal(run.type, 'server-boneyard-loaded')
+  assert.deepEqual(run.boneyard.scene, expected.scene)
+  const matches = await fetch(`${supervisor.address.url}/admin/matches`, {
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })
+  assert.equal(matches.status, 200)
+  assert.deepEqual(await matches.json(), { items: [] })
+  assert.deepEqual(await readPresence(supervisor.address.url), [])
+  assert.deepEqual(await readPublicParties(supervisor.address.url), [])
+
+  const normal = await join(supervisor.address.url, await provision(supervisor.address.url), BROWSER_ORIGIN)
+  context.after(() => closeSocket(normal.socket))
+  assert.ok(normal.welcome.boneyards.some(choice => choice.id === 'default-random'))
+  const checkpoint = normal.next(message => message.type === 'server-save-checkpoint')
+  normal.socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: false }))
+  assert.equal((await checkpoint).type, 'server-save-checkpoint')
+  assert.equal((await readPresence(supervisor.address.url)).length, 1)
+  assert.equal(supervisor.sessionCount(), 2)
+  await closeSocket(client.socket)
+  await waitFor(() => supervisor.sessionCount() === 1)
+  assert.equal(normal.socket.readyState, WebSocket.OPEN)
+  const second = await provisionEditorTest(supervisor.address.url)
+  assert.notEqual(second.credential, endpoint.credential)
+  assert.notEqual(second.path, endpoint.path)
+  const repeated = await join(supervisor.address.url, second, BROWSER_ORIGIN)
+  assert.equal(repeated.welcome.snapshot.world.kind, 'hub')
+  await closeSocket(repeated.socket)
+  await waitFor(() => supervisor.sessionCount() === 1)
+  await closeSocket(normal.socket)
+  await waitFor(() => supervisor.sessionCount() === 0)
+})
 
 test('runtime event publisher retries and posts bounded activity to the loopback outbox', async (context) => {
   const requests: Array<{ authorization: string; body: Record<string, unknown> }> = []

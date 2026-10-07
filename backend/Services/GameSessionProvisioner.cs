@@ -53,6 +53,27 @@ public sealed partial class GameSessionProvisioner
             GameSessionPath());
     }
 
+    public async Task<ProvisionedGameEndpoint> ProvisionEditorTestAsync(
+        string name,
+        string bytesBase64,
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Post, "/admin/editor-test");
+        request.Content = JsonContent.Create(new { name, bytesBase64 });
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+        {
+            throw new ArgumentException("The Boneyard could not be tested. Check its native file, bounds and spawn.");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GameSessionUnavailableException("The private editor test could not be started.");
+        }
+        var provisioned = await ReadPrivateProvisionResponseAsync(response, cancellationToken);
+        return BuildEndpoint(provisioned.Path, provisioned.Credential, "private-college", GameSessionPath());
+    }
+
     public async Task<ProvisionedGameEndpoint> AdmitSharedHubAsync(
         WebSessionContent content,
         int? leaderboardUserId,

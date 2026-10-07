@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   admitBrowserGame,
+  admitEditorTest,
   admitGameObserver,
   admitPartyRejoin,
   admitPartyJoin,
@@ -185,4 +186,34 @@ test('developer observer admission is explicit, authenticated, and read-only typ
     sessionKind: 'global-hub',
     url: 'wss://solomondarker.com/game-hub',
   })
+})
+
+
+test('editor test uses dedicated admission with compiled bytes and no wizard save', async () => {
+  for (const token of [null, 'editor-account-token']) {
+    const document = { name: 'Private garden', bytesBase64: 'AQID' }
+    const endpoint = await admitEditorTest(document, token, async (input, init) => {
+      assert.equal(input, '/api/game/editor-test')
+      assert.equal(init?.method, 'POST')
+      assert.equal(init?.credentials, 'same-origin')
+      const headers = new Headers(init?.headers)
+      assert.equal(headers.get('x-solomon-dark-session'), 'editor-test')
+      assert.equal(headers.get('authorization'), token ? `Bearer ${token}` : null)
+      assert.deepEqual(JSON.parse(String(init?.body)), document)
+      return Response.json({
+        kind: 'remote', sessionKind: 'private-college',
+        url: 'wss://solomondarker.com/game-sessions/editor-test', credential: 'disposable-ticket',
+      })
+    })
+    assert.equal(endpoint.url, 'wss://solomondarker.com/game-sessions/editor-test')
+  }
+})
+
+test('editor test surfaces admission errors without falling back to a normal session', async () => {
+  let requests = 0
+  await assert.rejects(() => admitEditorTest({ name: 'Garden', bytesBase64: 'AQID' }, null, async () => {
+    requests += 1
+    return Response.json({ error: 'The private test is unavailable.' }, { status: 503 })
+  }), /private test is unavailable/)
+  assert.equal(requests, 1)
 })

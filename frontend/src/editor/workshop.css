@@ -1,0 +1,56 @@
+.boneyard-workshop { min-height: 0; background: #101211; }
+.editor-workflow-strip { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #b89b5830; color: #c8c3ad; background: linear-gradient(90deg,#24261e,#151b1b); font: 12px 'Alegreya',serif; letter-spacing: .03em; }
+.editor-workflow-strip b { font: 9px 'JetBrains Mono',monospace; color: #b99c5c; margin-right: 6px; }
+.editor-workflow-strip i { color: #b99c5c70; font-style: normal; }
+.editor-workflow-strip small { margin-left: auto; color: #88968c; }
+.editor-test-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px!important; font-size: 11px!important; }
+.editor-test-runtime { position: fixed; inset: 0; z-index: 100; background: #080d0e; }
+.editor-test-bar { position: absolute; z-index: 10000; top: 58px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; justify-content: space-between; gap: 28px; width: min(820px,calc(100% - 32px)); border: 1px solid #b59b5960; border-radius: 10px; padding: 10px 12px 10px 18px; background: #10191aed; box-shadow: 0 8px 32px #0008; }
+.editor-test-bar > div { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }
+.editor-test-bar strong { color: #dfcf9c; font: 12px 'Cinzel',serif; letter-spacing: .08em; }
+.editor-test-dot { width: 6px; height: 6px; border-radius: 50%; background: #9cccaa; box-shadow: 0 0 12px #82c39b60; }
+.editor-test-map-name { color: #b2b6a9; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.editor-test-bar small { color: #829c91; font-size: 11px; }
+.editor-test-bar .btn { flex-shrink: 0; font-size: 11px; padding: 9px 14px; }
+.editor-test-loading { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; padding: 96px 24px 32px; color: #dcd7c2; background: radial-gradient(ellipse at 50% 40%,#243330 0%,#111918 42%,#080d0e 100%); }
+.editor-test-card { width: min(520px,100%); text-align: center; }
+.editor-test-kicker { font: 10px 'Cinzel',serif; letter-spacing: .2em; color: #bca86f; }
+.editor-test-card h2 { font: 30px 'Cinzel',serif; color: #eadbaa; margin: 20px 0 12px; overflow-wrap: anywhere; }
+.editor-test-card p { font-size: 17px; line-height: 1.5; }
+.editor-test-card .editor-test-detail { margin-top: 26px; color: #a4b4a9; font-size: 15px; }
+.editor-test-card .editor-test-limit { margin-top: 20px; padding-top: 16px; border-top: 1px solid #af9c6630; color: #7f9188; font-size: 13px; }
+.editor-test-progress { width: 160px; height: 2px; margin: 24px auto; overflow: hidden; background: #af9c6630; }
+.editor-test-progress span { display: block; height: 100%; width: 60%; background: #c8b779; animation: editor-test-loading 1.4s ease-in-out infinite alternate; }
+@keyframes editor-test-loading { from { transform: translateX(-60%); } to { transform: translateX(130%); } }
+@media(prefers-reduced-motion:reduce) { .editor-test-progress span { animation: none; width: 100%; } }
+@media(max-width:1050px) { .editor-workflow-strip small { display: none; } .boneyard-workshop > div:first-child { flex-wrap: wrap; gap: 8px; } .editor-test-bar { gap: 10px; } .editor-test-map-name { max-width: 150px; } }
+@media(max-width:600px) { .editor-test-bar small,.editor-test-map-name { display: none; } .editor-workflow-strip { gap: 6px; font-size: 11px; padding: 8px; } }
+
+.editor-palette-slot,.editor-inspector-slot { display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #101211; }
+.editor-palette-slot > *,.editor-inspector-slot > * { flex: 1; min-height: 0; }
+.editor-compact-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #b89b5830; background: #151b1b; }
+.editor-compact-tools button { padding: 7px 10px; border: 1px solid #b89b583d; border-radius: 5px; color: #d6c596; font: 11px 'Cinzel',serif; background: #23291f; }
+.editor-compact-tools button[aria-expanded=true] { border-color: #c8ad6b; background: #363b29; }
+.editor-compact-tools span { color: #94a295; font-size: 12px; }
+.editor-rail-backdrop { position: absolute; inset: 0; z-index: 20; background: #0006; }
+@media(max-width:1050px) {
+  .editor-workspace { grid-template-columns: minmax(0,1fr)!important; }
+  .editor-stage-slot { grid-column: 1; grid-row: 1; }
+  .editor-rail-divider { display: none; }
+  .editor-palette-slot,.editor-inspector-slot { display: none; position: absolute; top: 0; bottom: 0; width: min(320px,85vw); z-index: 30; box-shadow: 0 10px 36px #000a; }
+  .editor-palette-slot { left: 0; border-right: 1px solid #b89b5860; }
+  .editor-inspector-slot { right: 0; border-left: 1px solid #b89b5860; }
+  .editor-palette-slot[data-open=true],.editor-inspector-slot[data-open=true] { display: flex; }
+}
+@media(max-width:600px) {
+  .editor-compact-tools span { display: none; }
+  .editor-workflow-strip { justify-content: space-between; }
+  .boneyard-workshop > div:first-child > div:last-child { width: 100%; justify-content: space-between; gap: 4px; }
+  .boneyard-workshop > div:first-child .btn { padding: 7px 8px!important; font-size: 9px!important; }
+}
+
+@media(max-height:600px) {
+  .editor-tool-rail { top: auto; bottom: 42px; flex-direction: row; transform: none; max-width: calc(100% - 20px); overflow-x: auto; }
+  .editor-tool-rail > * { flex-shrink: 0; }
+  .editor-workflow-strip { display: none; }
+}

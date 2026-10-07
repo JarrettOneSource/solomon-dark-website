@@ -15,6 +15,7 @@ import {
 } from '../protocol/game-protocol-contract.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
+import { materializeEditorTestBoneyard } from './editor-test-boneyard.ts'
 import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'
 import {
   startGameHost,
@@ -90,6 +91,7 @@ export interface GameSessionSupervisor {
 }
 
 interface SessionRecord {
+  readonly editorTest: boolean
   activeProxies: number
   claimed: boolean
   closePromise: Promise<void> | null
@@ -216,6 +218,7 @@ export async function startGameSessionSupervisor(
     ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
   })
   const hubSession: SessionRecord = {
+    editorTest: false,
     activeProxies: 0,
     claimed: true,
     closePromise: null,
@@ -292,7 +295,7 @@ export async function startGameSessionSupervisor(
         draining = true
         hubTickets.clear()
         const privateSessions = [...sessions.values()]
-        const restartablePrivateSessions = privateSessions.filter(session => !session.closing)
+        const restartablePrivateSessions = privateSessions.filter(session => !session.closing && !session.editorTest)
         const results = await Promise.all([
           hubHost.restartForDeployment(targetRevision, deploymentSaveTimeoutMs),
           ...restartablePrivateSessions.map(session => session.host.restartForDeployment(
@@ -366,7 +369,7 @@ export async function startGameSessionSupervisor(
       sendJson(response, 200, {
         items: [
           ...hubHost.presence().map(entry => ({ ...entry, session: 'global-hub' as const })),
-          ...[...sessions.values()].filter(session => !session.closing).flatMap(
+          ...[...sessions.values()].filter(session => !session.closing && !session.editorTest).flatMap(
             session => session.host.presence().map(
               entry => ({ ...entry, session: 'private-college' as const }),
             ),
@@ -432,6 +435,19 @@ export async function startGameSessionSupervisor(
         })
       }).catch(() => {
         sendJson(response, 400, { error: 'A valid observer request is required.' })
+      })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/editor-test') {
+      void readJsonObject(request, 12 * 1024 * 1024).then((body) => {
+        const editorTest = materializeEditorTestBoneyard(body)
+        provisionIntoResponse(response, {
+          content: materializeWebSessionContent({ manifestSha256: '0'.repeat(64), mods: [] }),
+          editorTest,
+          leaderboardUserId: null,
+        })
+      }).catch(() => {
+        sendJson(response, 400, { error: 'The Boneyard could not be tested. Check its native file, bounds and spawn.' })
       })
       return
     }
@@ -729,7 +745,7 @@ export async function startGameSessionSupervisor(
         return
       }
       let resolved = [hubSession, ...sessions.values()].flatMap(session => {
-        if (session.closing) return []
+        if (session.closing || session.editorTest) return []
         const target = session.host.partyRejoinTarget(token)
         return target ? [{ session, target }] : []
       })
@@ -886,7 +902,7 @@ export async function startGameSessionSupervisor(
   ): { session: SessionRecord; target: GameHostPartyTarget } | null {
     const matches: { session: SessionRecord; target: GameHostPartyTarget }[] = []
     for (const session of [hubSession, ...sessions.values()]) {
-      if (session.closing) continue
+      if (session.closing || session.editorTest) continue
       const target = kind === 'code'
         ? session.host.partyTargetByCode(value)
         : session.host.partyTargetByListingId(value)
@@ -897,7 +913,7 @@ export async function startGameSessionSupervisor(
 
   function activeMatchDirectory() {
     return [hubSession, ...sessions.values()].flatMap(session => (
-      session.closing ? [] : session.host.observationTargets().map(target => ({
+      session.closing || session.editorTest ? [] : session.host.observationTargets().map(target => ({
         boneyardName: target.boneyardName,
         id: observationMatchId(session.id, target.runId),
         partyLeader: target.partyLeader,
@@ -912,7 +928,7 @@ export async function startGameSessionSupervisor(
 
   function publicPartyDirectory() {
     return [hubSession, ...sessions.values()].flatMap(session => (
-      session.closing ? [] : session.host.publicParties()
+      session.closing || session.editorTest ? [] : session.host.publicParties()
     ))
   }
 
@@ -921,7 +937,7 @@ export async function startGameSessionSupervisor(
     target: GameHostObservationTarget
   } | null {
     for (const session of [hubSession, ...sessions.values()]) {
-      if (session.closing) continue
+      if (session.closing || session.editorTest) continue
       for (const target of session.host.observationTargets()) {
         if (observationMatchId(session.id, target.runId) === matchId) {
           return { session, target }
@@ -1065,7 +1081,7 @@ export async function startGameSessionSupervisor(
       expiresAt: performance.now() + unclaimedTimeoutMs,
     })
     const sessionHost = await startGameHost({
-      archiveRun: options.archiveRun,
+      ...(admission.editorTest ? { editorTest: true } : { archiveRun: options.archiveRun }),
       authentication: {
         kind: 'tickets',
         claim: candidate => claimHostTicket(tickets, candidate),
@@ -1078,7 +1094,7 @@ export async function startGameSessionSupervisor(
       contentSummary: admission.content.summary,
       modContent: admission.content,
       modAssets: admission.content.assets,
-      maxPlayers: maxConnectionsPerSession,
+      maxPlayers: admission.editorTest ? 1 : maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
         const session = sessions.get(id)
         if (!session) return
@@ -1088,20 +1104,25 @@ export async function startGameSessionSupervisor(
         }
         closeClaimedSessionIfEmpty(session)
       },
-      onPartyRecoveryEnded: endPartyRecovery,
-      partyRecoveryRevision: revision,
-      runtimeEvents: options.runtimeEvents,
-      partyRecoverySecret: options.adminSecret,
-      boneyards: createBoneyardCatalog([
-        ...(options.boneyards?.modEntries.values() ?? []),
-        ...admission.content.boneyards,
-      ]),
-      sessionKind: 'private-college',
-      socialBroker,
-      socialHostId: id,
+      ...(admission.editorTest ? {} : {
+        onPartyRecoveryEnded: endPartyRecovery,
+        partyRecoveryRevision: revision,
+        runtimeEvents: options.runtimeEvents,
+        partyRecoverySecret: options.adminSecret,
+        socialBroker,
+        socialHostId: id,
+      }),
+      boneyards: admission.editorTest
+        ? { choices: [admission.editorTest.choice], modEntries: new Map([[admission.editorTest.choice.id, admission.editorTest]]) }
+        : createBoneyardCatalog([
+            ...(options.boneyards?.modEntries.values() ?? []),
+            ...admission.content.boneyards,
+          ]),
+      sessionKind: admission.editorTest ? 'standalone' : 'private-college',
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
     const session: SessionRecord = {
+      editorTest: admission.editorTest !== undefined,
       activeProxies: 0,
       claimed: false,
       closePromise: null,

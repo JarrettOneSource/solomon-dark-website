@@ -191,6 +191,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         cls.presence_requests = 0
         cls.match_requests = 0
         cls.observer_requests: list[dict[str, object]] = []
+        cls.editor_test_requests: list[dict[str, object]] = []
+        cls.editor_test_status = 201
         cls.match_items = [
             {
                 "id": "match-safe-observer-7",
@@ -279,6 +281,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         "credential": "observer-ticket",
                         "path": "/game-hub",
                         "sessionKind": "global-hub",
+                    })
+                elif self.path == "/admin/editor-test":
+                    cls.editor_test_requests.append(self.read_json_body())
+                    self.reply(cls.editor_test_status, {
+                        "credential": "editor-test-ticket",
+                        "path": "/game-sessions/01234567890123456789012345678901",
                     })
                 elif self.path == "/admin/join/resolve":
                     self.reply(
@@ -664,6 +672,46 @@ console.log(JSON.stringify({
             self.assertEqual(status, 413)
         finally:
             self.assertEqual(self.request("DELETE", path, headers=headers)[0], 204)
+
+    def test_editor_test_admission_is_bounded_private_and_fails_closed(self) -> None:
+        cls = type(self)
+        cls.editor_test_requests.clear()
+        body = {"name": "Authored map", "bytesBase64": "AAAA"}
+        headers = {"X-Solomon-Dark-Session": "editor-test"}
+        for invalid_headers, invalid_body in (({}, body), (headers, {**body, "name": " "}),
+                (headers, {**body, "name": "x" * 161}),
+                (headers, {**body, "bytesBase64": ""})):
+            status, response = self.request("POST", "/api/game/editor-test",
+                headers=invalid_headers, json_body=invalid_body)
+            self.assertEqual(status, 400, response)
+        self.assertEqual(cls.editor_test_requests, [])
+        status, _, _ = self.request_bytes("POST", "/api/game/editor-test", body=b"{}", headers={
+            **headers, "Content-Type": "application/json", "Content-Length": str(12 * 1024 * 1024 + 1),
+        })
+        self.assertEqual(status, 413)
+        self.assertEqual(cls.editor_test_requests, [])
+        # Admission is intentionally limited to six requests per IP per minute.
+        # Reset this isolated test server between validation and upstream groups
+        # rather than weakening the production limiter or sleeping a full minute.
+        cls.stop_server()
+        cls.start_server()
+        try:
+            for upstream_status, expected_status in ((400, 400), (503, 503), (201, 200)):
+                cls.editor_test_status = upstream_status
+                status, response = self.request("POST", "/api/game/editor-test", headers=headers,
+                    json_body={**body, "save": "ignored-profile", "leaderboardUserId": 42})
+                self.assertEqual(status, expected_status, response)
+                self.assertEqual(cls.editor_test_requests[-1], body)
+                if status == 200:
+                    self.assertEqual(response, {
+                        "kind": "remote", "credential": "editor-test-ticket",
+                        "sessionKind": "private-college",
+                        "url": "wss://game.example.invalid/game-sessions/01234567890123456789012345678901",
+                    })
+        finally:
+            cls.editor_test_status = 201
+            cls.stop_server()
+            cls.start_server()
 
     def test_game_session_provisioning_fails_closed_when_supervisor_rejects(self) -> None:
         status, response = self.request("POST", "/api/game/sessions")

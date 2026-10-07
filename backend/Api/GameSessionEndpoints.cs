@@ -16,6 +16,9 @@ public static class GameSessionEndpoints
         app.MapGet("/api/game/matches", ListActiveMatchesAsync);
         app.MapPost("/api/game/observe", ObserveMatchAsync)
             .RequireRateLimiting("game-observers");
+        app.MapPost("/api/game/editor-test", TestEditorBoneyardAsync)
+            .RequireRateLimiting("game-sessions")
+            .WithMetadata(new RequestSizeLimitAttribute(12 * 1024 * 1024));
         app.MapPost("/api/game/sessions", ProvisionAsync)
             .RequireRateLimiting("game-sessions");
         app.MapPost("/api/game/hub", EnterHubAsync)
@@ -33,6 +36,38 @@ public static class GameSessionEndpoints
         app.MapPost("/api/game/rejoin", RejoinPartyAsync)
             .RequireRateLimiting("party-joins")
             .WithMetadata(new RequestSizeLimitAttribute(WebGameSaveInspector.MaxRequestBytes));
+    }
+
+    private sealed record EditorTestRequest(string? Name, string? BytesBase64);
+
+    private static async Task<IResult> TestEditorBoneyardAsync(
+        EditorTestRequest request,
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!HeaderMatches(context, "editor-test") || string.IsNullOrWhiteSpace(request.Name)
+            || request.Name.Length > 160 || string.IsNullOrEmpty(request.BytesBase64)
+            || request.BytesBase64.Length > ((8 * 1024 * 1024 + 2) / 3) * 4)
+        {
+            return ApiErrors.BadRequest("Choose a valid Boneyard smaller than 8 MiB to test.");
+        }
+        try
+        {
+            var endpoint = await provisioner.ProvisionEditorTestAsync(
+                request.Name, request.BytesBase64, cancellationToken);
+            return Results.Ok(new { kind = "remote", endpoint.Url, endpoint.Credential, endpoint.SessionKind });
+        }
+        catch (ArgumentException exception)
+        {
+            return ApiErrors.BadRequest(exception.Message);
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            return PrivateSessionUnavailable(context);
+        }
     }
 
     private static async Task<IResult> ListPublicPartiesAsync(

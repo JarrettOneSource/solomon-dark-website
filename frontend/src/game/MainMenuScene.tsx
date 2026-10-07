@@ -351,6 +351,10 @@ function PlayActions({
 }
 
 interface MainMenuSceneProps {
+  /** Only supplied by the disposable editor preview owner. */
+  editorTestSession?: GameClientSession
+  onReturnToEditor?: () => void
+  onOpenEditor?: () => void
   activeMods: readonly ActiveWebMod[]
   accountUsername: string | null
   displayName: string
@@ -405,6 +409,9 @@ function MainMenuContent({
   connectObserver,
   developerAccess,
   displayName,
+  editorTestSession,
+  onReturnToEditor,
+  onOpenEditor,
   initialScreen = 'root',
   loadGlobalHallOfFame,
   modLoadError,
@@ -425,7 +432,7 @@ function MainMenuContent({
     RetainedRendererOwner<SkillPickerRenderer> | null
   >(null)
   const stageRef = useRef<HTMLElement>(null)
-  const [screen, setScreen] = useState<MenuScreen>(initialScreen)
+  const [screen, setScreen] = useState<MenuScreen>(editorTestSession ? 'hub' : initialScreen)
   const [tutorialOfferOpen, setTutorialOfferOpen] = useState(
     initialScreen === 'root' && tutorialOfferEligible,
   )
@@ -437,6 +444,9 @@ function MainMenuContent({
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
+  useEffect(() => {
+    if (editorTestSession) setSession(editorTestSession)
+  }, [editorTestSession])
   const bookFeedback = useSkillBookFeedback(session, audio)
   const skillBookResultOpen = bookFeedback.skillId !== null
   const [observerSession, setObserverSession] = useState<GameObserverSession | null>(null)
@@ -739,7 +749,7 @@ function MainMenuContent({
     )
     setCollegeInvitations(initialCollegeInvitations)
     const initialSaveCheckpoint = session.getSaveCheckpoint()
-    if (initialSaveCheckpoint) onSaveCheckpoint(initialSaveCheckpoint)
+    if (initialSaveCheckpoint && !editorTestSession) onSaveCheckpoint(initialSaveCheckpoint)
     activeBoneyardRunRef.current = initialSnapshot.world.kind === 'boneyard'
       ? initialSnapshot.world.runId
       : null
@@ -863,6 +873,7 @@ function MainMenuContent({
       setCollegeInvitations(invitations)
     })
     const removeLeaderboardReceipt = session.onLeaderboardReceipt((receipt) => {
+      if (editorTestSession) return
       if (!session.developerAccess && gameCheatsEnabled()) return
       if (!gameOnlinePreferences(readGameSettings()).submitRuns) return
       void submitGlobalHallOfFame(receipt)
@@ -891,7 +902,9 @@ function MainMenuContent({
       }
       setPartyState(nextPartyState)
     })
-    const removeSaveCheckpoint = session.onSaveCheckpoint(onSaveCheckpoint)
+    const removeSaveCheckpoint = session.onSaveCheckpoint(checkpoint => {
+      if (!editorTestSession) onSaveCheckpoint(checkpoint)
+    })
     return () => {
       removeSnapshot()
       removeBoneyard()
@@ -911,13 +924,14 @@ function MainMenuContent({
     }
 
     function recordHallSnapshot(snapshot: GameClientSnapshot) {
+      if (editorTestSession) return
       if (snapshot.world.kind === 'boneyard' && snapshot.world.tutorial) return
       const entry = hallRecorder.observe(snapshot, session!.playerId, accountUsername)
       if (!entry) return
       setLocalHallOfFame(recordLocalHallOfFame(entry))
       setCurrentHallRunId(entry.runId)
     }
-  }, [accountUsername, advanceLoading, audio, beginLoading, onSaveCheckpoint, presentWorldSpeech, session, submitGlobalHallOfFame])
+  }, [accountUsername, advanceLoading, audio, beginLoading, editorTestSession, onSaveCheckpoint, presentWorldSpeech, session, submitGlobalHallOfFame])
 
   useEffect(() => {
     if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
@@ -1618,6 +1632,7 @@ function MainMenuContent({
   }
 
   const leaveGameplay = async () => {
+    if (editorTestSession) { onReturnToEditor?.(); return }
     if (!session || leaving) return
     setLeaving(true)
     setConnectionError(null)
@@ -1969,6 +1984,7 @@ function MainMenuContent({
   return (
     <div
       className="main-menu-page"
+      data-editor-test={Boolean(editorTestSession) || undefined}
       data-chat-open={chatOpen}
       data-cheat-menu-open={cheatMenuOpen}
       data-college-loadout-active={collegeLoadoutActive || undefined}
@@ -2147,7 +2163,7 @@ function MainMenuContent({
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
               onLoadingError={cancelBoneyardLoading}
-              onContinueGameOver={session.continueGameOver}
+              onContinueGameOver={editorTestSession ? () => onReturnToEditor?.() : session.continueGameOver}
               onHubAction={session.sendHubAction}
               onInventoryOpenChange={setInventoryScreenOpen}
               onMenuAvailabilityChange={setSceneMenuAvailability}
@@ -2664,6 +2680,13 @@ function MainMenuContent({
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>
+      {screen === 'root' && !session && titlePrompt === null && onOpenEditor ? (
+        <button type="button" className="editor-entry" onClick={onOpenEditor}>
+          <span className="editor-entry-symbol" aria-hidden>✦</span>
+          <span><strong>Boneyard Editor</strong><small>Shape your own grounds</small></span>
+          <span aria-hidden>↗</span>
+        </button>
+      ) : null}
       {!collegeAdmissionHudHidden && (
         <div className="game-edge-controls">
           {screen === 'root' && titlePrompt === null ? (

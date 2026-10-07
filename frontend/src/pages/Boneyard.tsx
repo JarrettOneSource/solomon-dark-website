@@ -4,7 +4,7 @@
 // The editor works on the semantic doc (src/editor/model.ts); the native
 // .boneyard byte layer plugs in behind src/editor/io.ts.
 
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { PaletteItem } from '../editor/assets'
 import CanvasStage, { type StageHandle } from '../components/boneyard/CanvasStage'
@@ -14,7 +14,6 @@ import PaletteRail from '../components/boneyard/PaletteRail'
 import PublishDialog from '../components/boneyard/PublishDialog'
 import Toolbar from '../components/boneyard/Toolbar'
 import WavesEditor from '../components/boneyard/WavesEditor'
-import { EmptyState } from '../components/ui'
 import { findPaletteItem } from '../editor/assets'
 import {
   bytesToBase64,
@@ -43,6 +42,9 @@ import { playSound } from '../fx/sounds'
 import { api } from '../lib/api'
 import { art } from '../lib/assets'
 import { useAuth } from '../lib/auth'
+import '../editor/workshop.css'
+
+const EditorTestRuntime = lazy(() => import('../editor/EditorTestRuntime.tsx'))
 
 const NEW_NAMES = [
   'Untitled Acre',
@@ -64,7 +66,8 @@ const RAIL_MIN = 180
 const RAIL_MAX = 460
 
 function storedRailWidth(key: string, fallback: number): number {
-  const raw = localStorage.getItem(key)
+  let raw: string | null
+  try { raw = localStorage.getItem(key) } catch { return fallback }
   if (raw === null) return fallback
   const v = Number(raw)
   return Number.isFinite(v) && (v === 0 || (v >= RAIL_MIN && v <= RAIL_MAX)) ? v : fallback
@@ -94,7 +97,21 @@ function MenuItem({
   )
 }
 
-export default function Boneyard() {
+export default function Boneyard({ onBack }: { onBack?: () => void }) {
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 1050px)').matches)
+  const [compactRail, setCompactRail] = useState<'palette' | 'inspector' | null>(null)
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1050px)')
+    const update = () => { setCompact(query.matches); setCompactRail(null) }
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  const [testDoc, setTestDoc] = useState<EditorDoc | null>(null)
+  const testButtonRef = useRef<HTMLButtonElement>(null)
+  const returnToEditing = useCallback(() => {
+    setTestDoc(null)
+    requestAnimationFrame(() => testButtonRef.current?.focus())
+  }, [])
   const { user } = useAuth()
   const [state, dispatch] = useReducer(
     reducer,
@@ -154,11 +171,11 @@ export default function Boneyard() {
   // Rail widths land in localStorage a beat after the drag settles, not on
   // every pointer move of the gutter.
   useEffect(() => {
-    const t = setTimeout(() => localStorage.setItem(RAIL_L_KEY, String(leftW)), 250)
+    const t = setTimeout(() => { try { localStorage.setItem(RAIL_L_KEY, String(leftW)) } catch { /* View preferences must not block editing when storage is full. */ } }, 250)
     return () => clearTimeout(t)
   }, [leftW])
   useEffect(() => {
-    const t = setTimeout(() => localStorage.setItem(RAIL_R_KEY, String(rightW)), 250)
+    const t = setTimeout(() => { try { localStorage.setItem(RAIL_R_KEY, String(rightW)) } catch { /* The draft has its own actionable save warning. */ } }, 250)
     return () => clearTimeout(t)
   }, [rightW])
 
@@ -211,6 +228,7 @@ export default function Boneyard() {
   // pieces, or walk the camera when the hands are empty.
   const hasSelection = state.selection.length > 0
   useEffect(() => {
+    if (testDoc) return
     const arrow = (dx: number, dy: number, fine: boolean) => {
       if (hasSelection) dispatch({ type: 'nudge', dx: fine ? Math.sign(dx) : dx, dy: fine ? Math.sign(dy) : dy })
       else stageRef.current?.panBy(dx * 10, dy * 10)
@@ -276,7 +294,7 @@ export default function Boneyard() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [tool, hasSelection])
+  }, [tool, hasSelection, testDoc])
 
   const openDraft = useCallback((id: string) => {
     const doc = loadDraft(id)
@@ -407,17 +425,18 @@ export default function Boneyard() {
   const selectionGrouped = state.selection.some((e) => groups[e.eid])
 
   return (
-    <div className="flex h-full flex-col">
+    <>
+    <div className="boneyard-workshop flex h-full flex-col" data-editor-active={!testDoc} inert={Boolean(testDoc) || undefined} aria-hidden={Boolean(testDoc) || undefined} style={testDoc ? { visibility: 'hidden' } : undefined}>
       {/* the drafting-table header: the way home, the plot's papers, the desk */}
       <div className="flex items-center gap-3 border-b border-gold/15 bg-abyss/80 px-3 py-1.5">
-        <Link
+        {onBack ? <button type="button" className="btn btn-stone flex shrink-0 items-center gap-2 !px-2.5 !py-1.5 !text-[10px]" onClick={onBack}>← Main menu</button> : <Link
           to="/"
           className="btn btn-stone flex shrink-0 items-center gap-2 !px-2.5 !py-1.5 !text-[10px]"
           title="Home"
         >
           <img src={art.skullGold} alt="" className="h-3.5 w-auto" />
           Home
-        </Link>
+        </Link>}
         <span className="h-5 w-px shrink-0 bg-gold/15" />
         <div className="flex min-w-0 items-baseline gap-3">
           <h1 className="h-display text-base leading-tight">Boneyard Editor</h1>
@@ -437,6 +456,9 @@ export default function Boneyard() {
         {notice && <p className="text-fell min-w-0 truncate text-xs text-gold/90">{notice}</p>}
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <button ref={testButtonRef} type="button" className="btn btn-gold editor-test-button" disabled={!formatReady()} onClick={() => { setDeskOpen(false); setTestDoc(structuredClone(state.doc)) }} title="Play this layout with a disposable wizard. Your saved game is untouched.">
+            <span aria-hidden>▶</span> Test Boneyard
+          </button>
           <div className="relative">
             <button
               type="button"
@@ -501,24 +523,32 @@ export default function Boneyard() {
         </div>
       </div>
 
+      <div className="editor-workflow-strip">
+        <span><b>01</b> Shape the grounds</span><i aria-hidden>→</i><span><b>02</b> Test privately</span><i aria-hidden>→</i><span><b>03</b> Return and refine</span>
+        <small>Your draft stays with you</small>
+      </div>
       {/* the table itself */}
-      <div className="hidden min-h-0 flex-1 flex-col md:flex">
+      <div className="flex min-h-0 flex-1 flex-col">
+        {compact && <div className="editor-compact-tools">
+          <button type="button" aria-expanded={compactRail === 'palette'} onClick={() => setCompactRail(current => current === 'palette' ? null : 'palette')}>✦ Palette</button>
+          <span>Tap a tool, then shape the grounds</span>
+          <button type="button" aria-expanded={compactRail === 'inspector'} onClick={() => setCompactRail(current => current === 'inspector' ? null : 'inspector')}>Inspector ☷</button>
+        </div>}
         <div
-          className="relative grid min-h-0 flex-1"
+          className="editor-workspace relative grid min-h-0 flex-1"
           style={{ gridTemplateColumns: `${leftW}px 5px minmax(0,1fr) 5px ${rightW}px` }}
         >
-          {leftW > 0 ? (
-            <PaletteRail activeKey={activeKey} onPick={onPalettePick} onCollapse={collapseLeft} />
-          ) : (
-            <div className="bg-abyss/40" />
-          )}
+          {compact && compactRail && <button type="button" className="editor-rail-backdrop" aria-label="Close panel" onClick={() => setCompactRail(null)} />}
+          <div className="editor-palette-slot" data-open={compactRail === 'palette'}>
+            {(compact ? compactRail === 'palette' : leftW > 0) && <PaletteRail activeKey={activeKey} onPick={item => { onPalettePick(item); if (compact) setCompactRail(null) }} onCollapse={compact ? () => setCompactRail(null) : collapseLeft} />}
+          </div>
           <div
-            className="cursor-col-resize bg-black/30 transition-colors hover:bg-gold/25"
+            className="editor-rail-divider cursor-col-resize bg-black/30 transition-colors hover:bg-gold/25"
             title="Drag to resize the palette · double-click to reset"
             onPointerDown={startRailDrag('left')}
             onDoubleClick={() => setLeftW(RAIL_L_DEFAULT)}
           />
-          <div className="relative flex min-h-0 flex-col">
+          <div className="editor-stage-slot relative flex min-h-0 flex-col">
             <Toolbar
               tool={tool}
               canUndo={state.past.length > 0}
@@ -542,6 +572,7 @@ export default function Boneyard() {
             />
             <CanvasStage
               ref={stageRef}
+              active={!testDoc}
               doc={state.doc}
               selection={state.selection}
               tool={tool}
@@ -556,23 +587,23 @@ export default function Boneyard() {
             />
           </div>
           <div
-            className="cursor-col-resize bg-black/30 transition-colors hover:bg-gold/25"
+            className="editor-rail-divider cursor-col-resize bg-black/30 transition-colors hover:bg-gold/25"
             title="Drag to resize the inspector · double-click to reset"
             onPointerDown={startRailDrag('right')}
             onDoubleClick={() => setRightW(RAIL_R_DEFAULT)}
           />
-          {rightW > 0 ? (
+          <div className="editor-inspector-slot" data-open={compactRail === 'inspector'}>
+          {(compact ? compactRail === 'inspector' : rightW > 0) && (
             <InspectorRail
               doc={state.doc}
               selection={state.selection}
               dispatch={dispatch}
-              onCollapse={collapseRight}
+              onCollapse={compact ? () => setCompactRail(null) : collapseRight}
               onEditWaves={onEditWaves}
             />
-          ) : (
-            <div className="bg-abyss/40" />
           )}
-          {leftW === 0 && (
+          </div>
+          {!compact && leftW === 0 && (
             <button
               type="button"
               title="Open palette"
@@ -583,7 +614,7 @@ export default function Boneyard() {
               ❯
             </button>
           )}
-          {rightW === 0 && (
+          {!compact && rightW === 0 && (
             <button
               type="button"
               title="Open inspector"
@@ -595,14 +626,6 @@ export default function Boneyard() {
             </button>
           )}
         </div>
-      </div>
-
-      {/* narrow contraptions get a polite refusal */}
-      <div className="p-6 md:hidden">
-        <EmptyState
-          title="Use a Wider Screen"
-          line="The Boneyard editor needs more screen space. Rotate your device or use a larger screen."
-        />
       </div>
 
       {chestOpen && (
@@ -635,5 +658,9 @@ export default function Boneyard() {
         <PublishDialog doc={state.doc} draftId={state.draftId} onClose={() => setPublishOpen(false)} />
       )}
     </div>
+    {testDoc && <Suspense fallback={<div className="editor-test-loading"><p>Opening private test…</p><button className="btn btn-stone" onClick={returnToEditing}>Return to editing</button></div>}>
+      <EditorTestRuntime doc={testDoc} onReturn={returnToEditing} />
+    </Suspense>}
+    </>
   )
 }
