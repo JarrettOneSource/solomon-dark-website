@@ -523,3 +523,39 @@ test('quiet periodic damage keeps shield absorption and break separate from body
   assert.deepEqual(result.events.filter(event => event.type === 'enemy-damage-sound').map(event => event.sound),
     ['hit-shield', 'pop-shield'])
 })
+
+
+test('zero secondary health debits preserve ordered target controls and positive sibling contacts', () => {
+  const source = stepBoneyardEnemyStore(createBoneyardEnemyStore('zero-contact'), {
+    tick: 0, projectileWorldBlocked: () => false,
+    players: {}, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 100, y: 100 }, spawnTick: 0, waveOrdinal: 1 }],
+  }).store
+  const actor = source.actors[0]!
+  const input = { damage: [{ amount: 0, kind: 'fire' as const, ownerId: 'player',
+    sourceActorId: 1, targetId: actor.id }], dampenedCasterTargetIds: [],
+    dispelledShieldTargetIds: [], removedProjectileIds: [],
+    targetHeadingChanges: [{ degrees: 17, mode: 'relative' as const, targetId: actor.id }],
+  }
+  for (const [amount, multiplier] of [[0, 1], [10, 0]] as const) {
+    const result = resolveBoneyardNativeSecondaryCombat(source, {
+      ...input, damage: [{ ...input.damage[0]!, amount }],
+    }, 0, undefined, () => multiplier)
+    assert.equal(result.enemies.actors[0]!.currentHealth, actor.currentHealth)
+    assert.notEqual(result.enemies.actors[0]!.headingDeg, actor.headingDeg)
+    assert.equal(result.enemies.actors[0]!.path.wanderHeadingDeg, actor.path.wanderHeadingDeg)
+    assert.deepEqual(result.events, [])
+    assert.deepEqual(result.captures, [])
+  }
+  const positive = resolveBoneyardNativeSecondaryCombat(source, {
+    ...input, damage: [{ ...input.damage[0]!, amount: 0.25 }],
+  }, 0)
+  assert.ok(positive.enemies.actors[0]!.currentHealth < actor.currentHealth)
+  for (const amount of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => resolveBoneyardNativeSecondaryCombat(source, {
+      ...input, damage: [{ ...input.damage[0]!, amount }],
+    }, 0), /enemy damage must be finite and positive/)
+  }
+})

@@ -402,6 +402,12 @@ function applyContact(
   if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
     throw new RangeError('secondary damage multiplier must be finite and non-negative')
   }
+  const amount = contact.amount * damageMultiplier
+  // Rescue/Knockback still own their separate movement, Dazzle and heading work.
+  // Their legal zero debit must not enter the strictly-positive health sink.
+  if (amount === 0 && Number.isFinite(contact.amount) && contact.amount >= 0) {
+    return { captures: [], enemies: source, events: [] }
+  }
   const actor = source.actors.find(({ id }) => id === contact.targetId)
   const target = contact.etherDrain === true && nativeEtherDrainCapturesFamily(actor?.config.enemyToken ?? 'MAGGOT')
     ? actor ?? source.maggots.find(({ id }) => id === contact.targetId) : undefined
@@ -417,7 +423,7 @@ function applyContact(
     hitStrength: contact.hitStrength,
     suppressHitReaction: contact.suppressHitReaction,
     magic: contact.kind !== 'physical',
-    amount: contact.amount * damageMultiplier,
+    amount,
     hasMagicDamage: contact.kind !== 'physical',
     lethalObserver,
     registerWorldPainter,

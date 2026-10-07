@@ -2437,3 +2437,41 @@ cost, bot affordability and restoration after health damage. Test TypeScript
 also passed on M5 at03:15 UTC. One import path in the new observer integration
 was corrected before the successful focused run; the behavioral reds are
 unchanged. Full canonical/built/live acceptance remains pending.
+
+
+### Report88 acceptance reopening: zero-damage rescue contacts
+
+The actual built ordinary enemy-damage journey reached the successful toggle
+level-up checks, then Cheat Death's rescue wave crashed the enemy damage sink.
+A focused producer-to-consumer comparison reproduces the identical contact on
+both baseline `fc34ac45` and candidate `d36f52af`: rescue-shockwave actor1 emits
+`amount:0, kind:fire, targetId:1` at its normal ten-tick contact. The unchanged
+secondary world dispatcher sends that zero to the strictly-positive health
+sink, which throws. This is an existing ordinary-gameplay defect, not caused
+by the new-wizard or Reverie changes.
+
+The recovered constructor above explicitly stores zero; its shared tick must
+still retain each contact,400-tick Dazzle and collision-resolved push. Golem
+Knockback likewise owns movement and terminal Dazzle/heading separately from
+its possible zero health debit. Guard the health-debit boundary only: a finite
+nonnegative zero resulting debit does not call the positive-damage sink.
+Continue the surrounding contact loop and heading application. Invalid
+negative/nonfinite damage remains rejected and positive contacts stay unchanged.
+Membership is all secondary zero-debit contacts, including native rescue and
+Knockback plus a permitted zero damage multiplier; no producer/contact/control
+is removed. These rows are recovered-pending-port until focused and real
+rescue/new-wizard acceptance. This corrects the previous incomplete
+producer-only rescue test, which never crossed the real enemy health sink.
+
+
+The two focused integration regressions reproduce the old crash, then pass
+with the zero-debit guard. They cover the actual rescue producer and real
+enemy sink, retained Dazzle/camera/retirement, zero-multiplier and zero-contact
+health no-ops, preserved relative heading, positive damage and rejection of
+negative/nonfinite inputs. Test types passed on M5 at04:26 UTC. The earlier
+`d36f52af` all-mode gate passed before this newly discovered sink fix; the
+combined release owner will run the final full gate on the integrated tree.
+The built browser had already passed current-XP consumers, both Hub Insight
+slots and Boneyard slotB, plus normal combat-earned level-up preserving all
+three toggles. Normal enemy damage, Cheat Death and new-wizard/free-Shield
+acceptance continue on the corrected combined artifact.

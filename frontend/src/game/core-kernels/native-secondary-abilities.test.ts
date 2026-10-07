@@ -280,7 +280,9 @@ test('Game Over expanding waves preserve their fixed origin and still submit exp
   }
 })
 
-test('accepted rescue has its own zero-damage wave, contacts and final Region proposal', () => {
+test('accepted rescue has its own zero-damage wave, contacts and final Region proposal', async () => {
+  const { resolveBoneyardNativeSecondaryCombat } = await import('../core-server/native-secondary-world.ts')
+  const { createBoneyardEnemyStore } = await import('../core-server/boneyard-enemy-store.ts')
   let state = spawnNativePlayerRescueShockwave(createNativeSecondarySimulation(31), {
     ownerId: 'player', worldKey: 'boneyard:test', position: { x: 0, y: 0 },
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
@@ -298,6 +300,9 @@ test('accepted rescue has its own zero-damage wave, contacts and final Region pr
     const result = stepNativeSecondaryAbilities(state, { ...context(35, tick, null),
       target: () => target, targets: () => [target] })
     contacts += result.damage.filter(row => row.sourceActorId === born.id && row.amount === 0).length
+    assert.doesNotThrow(() => resolveBoneyardNativeSecondaryCombat(
+      createBoneyardEnemyStore('rescue-contact'), result, tick,
+    ))
     state = result.state
     if (!state.actors.some(actor => actor.id === born.id)) {
       assert.equal(state.cameraDisplacements.length, 1)
