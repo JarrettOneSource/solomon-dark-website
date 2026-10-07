@@ -90,6 +90,7 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.deepEqual(getPlayerBelt(state, 'owner'), [
     { kind: 'skill', skillId: 72 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.equal(skills.permanentRanks[11], 0)
   assert.equal(skills.permanentRanks[72], 1)
@@ -341,6 +342,7 @@ test('Tutorial death discards its items and skills when Create confirms the new 
   assert.deepEqual(getPlayerBelt(confirmed, 'owner'), [
     { kind: 'skill', skillId: 27 }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ...Array(16).fill(null),
   ])
   assert.equal(economy.equipment.amulet, null)
   assert.deepEqual(economy.backpack.map(item => item.name), [
