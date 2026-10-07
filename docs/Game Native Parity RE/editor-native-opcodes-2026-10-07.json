@@ -1710,7 +1710,7 @@
     },
     "npcRecipes": {
       "provider": "0x004ABEF0",
-      "value": "NPCRecipe+4C UID",
+      "value": "NPCRecipe+50 UID",
       "label": "NPCRecipe+14 name"
     },
     "timelineLabels": {
