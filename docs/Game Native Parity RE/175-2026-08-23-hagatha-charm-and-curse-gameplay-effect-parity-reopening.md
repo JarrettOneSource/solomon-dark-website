@@ -2379,3 +2379,48 @@ irreversible purchases. Add public fresh-generation red/green coverage for all
 purchasable rows, owned one-shots, economic preservation and same-run resume;
 verify an actual new-wizard and lower-price repurchase browser journey.
 No platform constraint or approximation is needed.
+
+
+## 2026-10-07 — Report 93: approved all-spell Reverie cost waiver
+
+Original `1557188078760632331` reports a Magic Shield debit while Reverie remains
+active. Both retail and `HAGATHA_NATIVE_TOOLTIP_LINES[25]` say “Until you are
+hurt, all spells cost no mana.” The user explicitly approved correcting this
+inherited inconsistency on October 7, after being told stock behaves otherwise.
+This is an intentional Website extension, not a revised claim of stock parity.
+
+Confirmed instruction evidence uses the unchanged 0.72.5 image, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, read-only M5
+LLVM recovery: `0x0067C506` tests active byte +0x73D; `0x0067C50F..0x0067C511`
+zeros offensive mana factor +0x3D4. Resolver `0x0066015C` tests skill-row
++0x27, `0x00660162` skips the factor for zero, and `0x00660164..0x0066016E`
+applies it otherwise. All fifteen verified raw progression books in the
+read-only `class-loadout-goldens.json` fixture have row54 +0x27 = 0; rows8/55
+have 1. Ledger166 already proves Shield54 plus Explosive Shield55 is aggregated
+then resolved once as54. Later flat/equipment lanes can also add cost after the
+old zero factor. The previous offensive-only contract did not match the
+approved tooltip policy; do not alter the authored offensive membership.
+
+Boundary: the shared final spell mana cost, all primary/secondary consumers,
+combined child costs and late equipment lanes, server affordability/debit,
+replicated costs, bot affordability, and the existing hurt/refresh/generation
+lifetime. Tables, spell membership and cost ordering are fully recovered in the
+existing offensive-resolution and secondary ledgers.
+
+| Member / branch | Initial disposition | Acceptance |
+| --- | --- | --- |
+| Every primary and secondary spell, offensive or not, including Shield54 | recovered-pending-port, authorized extension | active Reverie waives the final cost independently of authored offensive classification |
+| Shield54+55, Golem45+75 and Magic Circle27+28 combined costs | recovered-pending-port | existing sum and resolver run once; final waiver includes all child cost |
+| Global/class/skill/element lanes, including late equipment additions | recovered-pending-port | final cost is zero after all normal validation and calculation |
+| Primary/secondary authority, snapshot/HUD costs and bot affordability | recovered-pending-port | each passes the same actor-private Reverie flag into the shared resolver; no new wire/save schema |
+| Inactive, hurt, removed, unowned and spent same-run states | verified-already-at-parity lifetime | preserve normal cost order and Battle Mage membership; no inferred waiver from an offensive factor of zero |
+| Absorbed hits, remaining health damage, refresh/resume and new wizard | verified-already-at-parity lifetime | keep the existing damage boundary and Report88 fresh-wizard policy |
+| Damage multipliers, cooldowns, mana hoard reservations, enemy/mod-authored costs | out-of-system | no cost waiver changes these separate contracts |
+
+Implementation consequence: an explicit optional waiver on the existing
+shared spell-factor input, sourced from authoritative `hagathaRuntime`, wins
+at the final cost return. Preserve input validation and zero-base costs. The
+existing offensive factor remains unchanged for native policy observations;
+its zero value alone never makes nonoffensive spells free. Add all-member
+resolver/secondary coverage and a public purchase, Shield cast and hurt test;
+verify Shield cost/debit in the same built/live browser journey.

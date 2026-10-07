@@ -7429,3 +7429,34 @@ test('the shared damage boundary births gameplay and participant feedback once p
   assert.equal(observed.blockR[11], 1)
   assert.equal(observed.secondaryEffectActive.some(Boolean), false)
 })
+
+
+test('Reverie purchase makes the public Magic Shield cast free until health damage', () => {
+  let state = createGameSimulation({ caster: { ...DEFAULT_PLAYER_CHARACTER_CONFIG, element: 'ether', discipline: 'arcane' } })
+  state = { ...state, playerEntities: replacePlayerCharacter(
+    replacePlayerEconomy(state.playerEntities, 'caster', { ...getPlayerEconomy(state, 'caster'), gold: 10_000 }),
+    'caster', { ...getPlayerCharacter(state, 'caster'), position: { x: 1340, y: 280 } },
+  ) }
+  const purchase = applyGameSimulationHubAction(state, 'caster', { type: 'buy-hagatha', selector: 25 })
+  assert.equal(purchase.accepted, true)
+  state = withPlayerSkillRank(purchase.state, 'caster', 54, 1)
+  state = withPlayerSkillRank(state, 'caster', 55, 1)
+  state = enterBoneyardWorld(state, combatBoneyard('reverie-shield'))
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', 54, 0)!
+  const cost = (value: GameSimulationState) => createGameSnapshot(value, 'caster')
+    .players.caster!.progression.secondaryManaCosts.find(row => row[0] === 54)![1]
+  assert.equal(cost(state), 0)
+  const poor = { ...state, playerEntities: setPlayerEntityMana(state.playerEntities, 'caster', 1) }
+  const cast = applyGameSimulationHubAction(poor, 'caster', { type: 'activate-belt-slot', slot: 0 })
+  assert.equal(cast.accepted, true)
+  assert.ok(cast.state.secondaryAbilities.players.caster!.magicShieldAbsorb > 0)
+  assert.equal(getPlayerProgression(cast.state, 'caster').currentMana, 1)
+  assert.equal(getPlayerProgression(cast.state, 'caster').hagathaRuntime.reverieActive, true)
+  const hurt = damageGameSimulationPlayer(state, 'caster', 1, state.tick)
+  assert.equal(getPlayerProgression(hurt, 'caster').hagathaRuntime.reverieActive, false)
+  assert.ok(cost(hurt) > 0)
+  const charged = applyGameSimulationHubAction(hurt, 'caster', { type: 'activate-belt-slot', slot: 0 })
+  assert.equal(charged.accepted, true)
+  assert.equal(getPlayerProgression(charged.state, 'caster').currentMana,
+    getPlayerProgression(hurt, 'caster').currentMana - cost(hurt))
+})

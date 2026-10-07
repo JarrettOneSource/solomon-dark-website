@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { NATIVE_SECONDARY_ABILITY_IDS } from './native-secondary-ability-contract.ts'
 import { resolveNativeEquipmentEffects } from './native-equipment-effects.ts'
 import {
   NATIVE_OFFENSIVE_SKILL_IDS,
@@ -104,4 +105,23 @@ test('equipment spell, class, and one-spell lanes feed the shared resolver once'
     resolveNativeSkillDamage(8, factors, { baseDamage: 10 }),
     (10 + 5) * 1.5 * 1.25,
   )
+})
+
+
+test('Reverie waives every spell after late cost lanes without changing offensive membership', () => {
+  const equipment = resolveNativeEquipmentEffects(new Array(83).fill(0), [{
+    effects: [{ kind: 10, magnitude: 7, operator: 0, target: 0 }], recipeIndex: null,
+  }]).modifiers
+  const lanes = { baseManaCost: 10, globalFlatManaCost: 3, classFlatManaCost: 5,
+    skillFlatManaCost: 2, globalMultiplier: 2, classMultiplier: 3,
+    skillMultiplier: 4, elementMultiplier: 5 }
+  const factors = { damage: 1, equipment, manaCost: 0, manaCostWaived: true }
+  for (const skillId of new Set([...NATIVE_SECONDARY_ABILITY_IDS, 8, 16, 24, 32, 40, 52])) {
+    assert.equal(resolveNativeSkillManaCost(skillId, factors, lanes), 0, `spell ${skillId}`)
+    assert.ok(resolveNativeSkillManaCost(skillId, { ...factors, manaCostWaived: false }, lanes) > 0,
+      `spent Reverie restores late cost ${skillId}`)
+  }
+  assert.equal(resolveNativeSkillManaCost(54, { damage: 1, manaCost: 0 }, { baseManaCost: 20 }), 20)
+  assert.equal(nativeSkillIsOffensive(54), false)
+  assert.throws(() => resolveNativeSkillManaCost(54, factors, { baseManaCost: Number.NaN }), /finite/)
 })
