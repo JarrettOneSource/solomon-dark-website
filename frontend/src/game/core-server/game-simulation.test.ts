@@ -1886,15 +1886,15 @@ test('native item belt binds shortcuts without moving ownership and activates ex
   assert.equal(getPlayerBelt(rejected.state)[7], null)
 })
 
-test('Inventory belt Ring of Ice commits a cast while the Boneyard tick stays frozen', () => {
+for (const slot of [0, 7, 8, 15, 16, 23]) test(`Inventory belt slot ${slot} casts Ring of Ice while the Boneyard tick stays frozen`, () => {
   const learned = withPlayerSkillRank(createGameSimulation(), 'local-player', 35, 1)
-  const bound = bindGameSimulationPlayerSkillQuickbar(learned, 'local-player', 35, 7)
+  const bound = bindGameSimulationPlayerSkillQuickbar(learned, 'local-player', 35, slot)
   assert.ok(bound)
   const loaded = emptyBoneyard()
   const paused = enterBoneyardWorld(bound, loaded)
   const manaBefore = getPlayerProgression(paused).currentMana
   const result = applyGameSimulationHubAction(paused, 'local-player', {
-    slot: 7,
+    slot,
     type: 'activate-belt-slot',
   })
 
