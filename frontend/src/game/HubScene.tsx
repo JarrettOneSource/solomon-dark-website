@@ -987,13 +987,6 @@ export default function HubScene({
           onQuickbarInput={(slot, pressed) => {
             const input = inputRef.current
             if (!input) return
-            const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
-            if (pressed && entry !== null && entry.kind !== 'skill') {
-              if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
-                onHubAction({ slot, type: 'activate-belt-slot' })
-              }
-              return
-            }
             if (!pressed) {
               input.setTouchQuickbar(slot, false)
               return

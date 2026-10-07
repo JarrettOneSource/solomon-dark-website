@@ -1145,13 +1145,6 @@ export default function BoneyardScene({
               onQuickbarInput={(slot, pressed) => {
                 const input = inputRef.current
                 if (!input) return
-                const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
-                if (pressed && entry !== null && entry.kind !== 'skill') {
-                  if (!inputBlocked && run.phase === 'active') {
-                    onHubAction({ slot, type: 'activate-belt-slot' })
-                  }
-                  return
-                }
                 if (!pressed) {
                   input.setTouchQuickbar(slot, false)
                   return
