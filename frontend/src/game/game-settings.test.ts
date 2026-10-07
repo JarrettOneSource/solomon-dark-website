@@ -371,5 +371,6 @@ test('hotbar migration preserves old settings when its usual fallback keys are a
   const migrated = readGameSettings(storage)
   assert.equal(migrated.musicVolumePercent, 23)
   assert.equal(migrated.controls.cycleHotbar, 'F1')
-  for (const [action, binding] of Object.entries(legacy)) assert.equal(migrated.controls[action], binding)
+  assert.deepEqual(Object.fromEntries(Object.entries(migrated.controls)
+    .filter(([action]) => action !== 'cycleHotbar')), legacy)
 })
