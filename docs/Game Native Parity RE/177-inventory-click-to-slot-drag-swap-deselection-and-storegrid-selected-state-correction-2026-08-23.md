@@ -353,3 +353,47 @@ shared level rule is consumed.
   receipts are disposable after publication.
 - No member is browser-blocked and no material unknown remains. Push to `main`
   is authorized by the user; deployment was not requested and remains separate.
+
+
+## 2026-10-07 — Report 96 direct equipped-ring transfer
+
+The report's current original (1557199921566974052) and five-second video
+show the missing hand-to-hand path. The shared Website drag controller only
+routes backpack sources to equipment sinks; authority likewise finds equip
+items only in the backpack. Equipped-ring drops therefore emit no equip action.
+
+Boundary: transfer among the three ring sinks, preserving the exact item
+identities, source holder, player ownership and the third-ring gate. Backpack
+admission, level requirements, Hat/Robe mandatory clothing, weapon aliases,
+merchant companions and rejected-drop behavior retain their existing owners.
+
+Existing typed sink recovery at 0x00570CD0 and the seven-sink catalog are reused.
+Fresh read-only M5 disassembly used retail 0.72.5 SHA-256
+03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3.
+The actual common transfer owner is 0x0056DE50: 0x0056DFD4 checks destination
+admission; 0x0056E09D resolves its resident. The occupied-sink branch installs
+the held object at 0x0056E340 and retains the source holder (+0x3C4), then uses
+that holder's position at 0x0056E501 for the displaced object's return flyby
+(0x0056E5BE). The empty-target branch at 0x0056E643 attaches the held object.
+This closes the earlier inventory membership omission; no fresh retail
+playthrough is claimed.
+
+| Member | Disposition before implementation |
+| --- | --- |
+| Ring I/II and unlocked Ring III, both directions, empty and occupied target | recovered-pending-port |
+| Same-holder release, exact item identities and unchanged backpack | recovered-pending-port |
+| Locked third ring, incompatible sinks and existing level admission | retain existing rejection contracts |
+| Standalone Inventory and all merchant companions | shared controller and renderer; browser acceptance pending |
+| Backpack equip/unequip, required clothing and weapon aliases | existing unchanged owners |
+
+A focused public equip regression fails on the unmodified authority with
+item-not-found. Acceptance and publication remain pending.
+
+The shared equip action now resolves already-equipped identities and exchanges
+compatible ring holders without a backpack detour; direct drops use that action
+and held equipment activates the same compatible-sink highlight. All 18
+ring-position/occupancy cases pass, including unchanged same-holder releases;
+locked/incompatible destinations still reject. All 63 economy tests pass.
+The presentation suite needs installed frontend dependencies; it did not run in
+the minimal source-only tree. Final type/lint/full gate and real built/live drag
+acceptance are delegated with Report80's combined candidate, not claimed here.

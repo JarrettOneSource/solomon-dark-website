@@ -1076,6 +1076,36 @@ test('equipping into an occupied compatible sink returns the exact displaced ite
   assert.equal(swap.state.backpack.some(({ id }) => id === second.id), false)
 })
 
+test('equipped rings move and swap directly between every unlocked hand without backpack insertion', () => {
+  const base = createHubEconomy(1)
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const rings = [0, 1, 2].map(index => createEquipmentInventoryItem(recipe, base.nextItemId + index))
+  for (const from of [0, 1, 2] as const) {
+    for (const to of [1, 2, 0] as const) {
+      for (const occupied of [false, true]) {
+        const equipmentRings: [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null] = [null, null, null]
+        equipmentRings[from] = rings[from]!
+        if (occupied && to !== from) equipmentRings[to] = rings[to]!
+        const state = { ...base, ownedPerkSelectors: [19], nextItemId: base.nextItemId + 3,
+          equipment: { ...base.equipment, rings: equipmentRings } }
+        const moved = equipInventoryItem(state, rings[from]!.id, `ring-${to}`, UNRESTRICTED_EQUIPMENT_ADMISSION)
+        assert.equal(moved.accepted, true, `${from} -> ${to}, occupied=${occupied}`)
+        assert.strictEqual(moved.state.equipment.rings[to], rings[from])
+        if (to !== from) assert.strictEqual(moved.state.equipment.rings[from], occupied ? rings[to] : null)
+        assert.strictEqual(moved.state.backpack, state.backpack)
+        assert.strictEqual(state.equipment.rings[from], rings[from], 'input remains immutable')
+      }
+    }
+  }
+  const state = { ...base, nextItemId: base.nextItemId + 3,
+    equipment: { ...base.equipment, rings: [rings[0]!, null, null] as [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null] } }
+  for (const [slot, reason] of [['ring-2', 'slot-locked'], ['weapon', 'invalid-slot']] as const) {
+    const rejected = equipInventoryItem(state, rings[0]!.id, slot, UNRESTRICTED_EQUIPMENT_ADMISSION)
+    assert.equal(rejected.reason, reason)
+    assert.strictEqual(rejected.state, state)
+  }
+})
+
 test('equipping a direct Sack child returns displaced gear to that same native root', () => {
   const base = createHubEconomy(1)
   const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!

@@ -90,10 +90,11 @@ export function addEquipment(
     addCenteredAtlasSprite(context, layer, 'Inventory', 16, x + xShift, y)
   }
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
-  const draggedBackpack = dragging?.owner === 'backpack'
+  const targetItem = dragging?.owner === 'backpack'
     ? findInventoryItem(economy.backpack, dragging.itemId)
-    : null
-  const targetItem = draggedBackpack
+    : dragging?.equipmentSlot
+      ? itemAtEquipmentSlot(economy, dragging.equipmentSlot)
+      : null
   const acceptingSlots = new Set(targetItem ? equipmentSlotsForItem(targetItem, thirdRingUnlocked) : [])
   for (const slot of EQUIPMENT_SLOT_ORDER) {
     if (slot === 'ring-2' && !thirdRingUnlocked) continue

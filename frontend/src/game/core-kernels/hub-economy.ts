@@ -2095,7 +2095,12 @@ export function equipInventoryItem(
   if (!nativeEquipmentAdmissionContextIsValid(context)) {
     return rejected(source, 'ineligible-item')
   }
-  const item = findInventoryItem(source.backpack, itemId)
+  const sourceSlot = EQUIPMENT_SLOTS.find((candidate) => (
+    equippedAt(source.equipment, candidate)?.id === itemId
+  ))
+  const item = sourceSlot === undefined
+    ? findInventoryItem(source.backpack, itemId)
+    : equippedAt(source.equipment, sourceSlot)
   if (!item) return rejected(source, 'item-not-found')
   if (!item.equipmentType) return rejected(source, 'ineligible-item')
   if (!nativeEquipmentMeetsLevelRequirement(item, context)) {
@@ -2106,6 +2111,15 @@ export function equipInventoryItem(
     return rejected(source, 'slot-locked')
   }
   const previous = equippedAt(source.equipment, slot)
+  if (sourceSlot !== undefined) {
+    if (sourceSlot === slot) return accepted(source)
+    return accepted({
+      ...source,
+      equipment: withEquippedItem(
+        withEquippedItem(source.equipment, sourceSlot, previous), slot, item,
+      ),
+    })
+  }
   const removed = removeInventoryTreeItem(source.backpack, itemId, null)
   if (!removed) return rejected(source, 'item-not-found')
   let backpack: readonly HubInventoryItem[] = removed.items

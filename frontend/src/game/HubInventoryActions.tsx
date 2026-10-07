@@ -713,6 +713,15 @@ function dropInventorySource(
   }
   if (source.equipmentSlot !== null) {
     const item = itemAtEquipmentSlot(economy, source.equipmentSlot)
+    if (item && item.id === source.itemId) {
+      const slot = equipmentSlotsForItem(item, thirdRingUnlocked).find((candidate) => (
+        hubInventoryEquipmentSlotRects(candidate, companion).some((rect) => pointInRect(point, rect))
+      ))
+      if (slot) {
+        if (slot !== source.equipmentSlot) onAction({ type: 'equip', itemId: item.id, slot })
+        return
+      }
+    }
     if (item && referenceDropTarget && pointInRect(point, referenceDropTarget.rect)) {
       referenceDropTarget.select(item.id)
       return
