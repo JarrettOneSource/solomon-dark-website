@@ -2242,7 +2242,7 @@ not a universal 60 FPS guarantee under arbitrary concurrent load.
 Only this acceptance receipt follows the validated code commit. Publication and
 task cleanup are recorded separately in the archive release receipt.
 
-## 2026-10-06 — Report 85: Discorporeal Bite snapshot heading
+## 2026-10-06 — Report 85: Discorporeal Bite snapshot heading and fade
 
 Original `1555271346332897370` and nearby messages were freshly re-read by the coordinating agent at 22:17 UTC, unchanged. The reporter calls the effect tentative and points to about 11 seconds. A bounded M5 Chrome read of the retained 15.346544-second clip inspected thirteen decoded timestamps from 10.008622 through approximately 15.1 seconds. The sequence shows fading unlit head silhouettes alongside the green-lit boss during Golem contact and a larger trail as the Golem dies. This supports the report's scene; it does not establish that the silhouettes themselves are unintended or reconstruct exact historical headings.
 
@@ -2264,3 +2264,15 @@ The earlier closure covered the ten-snapshot effect but missed its displayed-hea
 | Eye, Mouth, Spit, Scream, Flair and death programs | out-of-system | separate action/effect producers; existing Discorporeal suite remains the gate |
 
 Acceptance is a genuine existing enemy-store/renderer regression before the correction, complete facing/target coverage, collision and independent fade checks, plus an actual built/live Bite journey. No authored table changes or removal of intended trails are justified.
+
+### Report 85 implementation and local acceptance
+
+| Member | Final disposition | Evidence |
+| --- | --- | --- |
+| All twelve recipe sources, Hero/Golem targets, 24 facing cells and both body poses | ported-and-verified | public enemy-store/renderer and direct snapshot regressions capture the displayed body cell |
+| Native alpha ladder and inherited Fade factor | ported-and-verified | genuine old-factor red; recovered float32 birth/store values and independent zero-alpha retirement |
+| Ten collision-stepped snapshots, offsets, scale, normal blending and world-sorted ownership | verified-already-at-parity | collision clipping and immutable snapshot checks preserve the complete intentional batch |
+| Shared body renderer, eleven-update heading delay and independent lifetime | verified-already-at-parity | unchanged owner; old snapshot art never follows later body changes |
+| Eye, Mouth, Spit, Scream, Flair and death programs | out-of-system | separate producers; complete Discorporeal suite remains green |
+
+The four-line producer correction uses the existing Fade constructor constant, delayed body heading and exact float32 stores. It preserves all ten intended afterimages. The real built flow used a normal Raise Golem belt cast and a stock DemonSkull spawn through the shared Bite owner; ten snapshots appeared at tick 7685 and all were retired by 7725, with twelve repeated observations. This is shared-owner integration evidence, not a replay of the historical boss recipe/save. The public regressions cover all twelve authored sources and the heading/pose/target/fade dimensions. Exact runtime/test candidate `6ecd9247` passed the unchanged M5 all-mode `scripts/validate.sh` at 2026-10-07T00:20:16Z: 42 Python tests, 4,226 Node executions across 22 batches, no failed/cancelled/skipped tests, production builds and configured renderer quality gates with final failures empty. The built production-client/authoritative-host journey passed at 2026-10-07T00:29:02Z with all captured client, host, transport and wire error arrays empty. Five representative screenshots were inspected. Developer setup grants, native-family spawns and ordinary browser input qualify this private fixture; the original save and historical exact trajectory remain unavailable. Publication and live outcomes are recorded separately in the report archive. This acceptance addition changes documentation only.

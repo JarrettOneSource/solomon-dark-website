@@ -1404,3 +1404,14 @@ Hagatha's shop explicitly omits the common Stats footer and renders its own owne
 | Tonic 27, unknown/unowned selectors, Hub transition and Boneyard authority rejection | verified-already-at-parity | existing bounded `removeHagathaPerk` and Hub service admission remain |
 
 Acceptance uses a genuine rendered-component regression before removing the invalid producer, existing host/Hagatha contracts, and actual built/live College Stats and Hagatha shop journeys. No authored native table or new extraction is required; the earlier evidence for the complete selector inventory and native inspection semantics is reused.
+
+### Report 89 implementation and local acceptance
+
+| Member | Final disposition | Evidence |
+| --- | --- | --- |
+| Standalone College Stats and Fomentius/Luthacus/Shlorio companion Stats | ported-and-verified | all 28 selector rows render inspection-only; built pointer/Enter inspection preserves owned charms |
+| Boneyard Stats, modal close/reopen and page transitions | ported-and-verified | shared removal producer is absent; built inspection preserves selector 19 after normal combat entry |
+| Hagatha owned-charm grid, ordinary selectors 0..26 | verified-already-at-parity | built shop purchase and actual pointer removal of selector 0 preserve selector 19 |
+| Native descriptions, Tonic 27, invalid/unowned selectors and authoritative Hub/transition/Boneyard admission | verified-already-at-parity | genuine rendered-component red/green, existing Hagatha contracts and Boneyard removal refusal |
+
+The Stats removal callback and enabling prop are removed through every caller; Hagatha's owned grid remains the sole UI removal producer. The actual built flow purchased selectors 0 and 19, opened standalone College Stats twice, inspected both charms with pointer and Enter in all three other merchant companions, then removed only 0 in Hagatha's shop. Boneyard Stats inspection retained 19. Exact runtime/test candidate `6ecd9247` passed the unchanged M5 all-mode `scripts/validate.sh` at 2026-10-07T00:20:16Z: 42 Python tests, 4,226 Node executions across 22 batches, no failed/cancelled/skipped tests, production builds and configured renderer quality gates with final failures empty. The built production-client/authoritative-host journey passed at 2026-10-07T00:29:02Z with all captured client, host, transport and wire error arrays empty. Five representative screenshots were inspected. Developer setup grants, native-family spawns and ordinary browser input qualify this private fixture; the original save and historical exact trajectory remain unavailable. Publication and live outcomes are recorded separately in the report archive. This acceptance addition changes documentation only.

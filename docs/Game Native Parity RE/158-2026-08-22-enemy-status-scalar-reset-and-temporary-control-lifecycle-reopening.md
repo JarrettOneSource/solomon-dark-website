@@ -171,3 +171,7 @@ without changing immutable authored enemy configuration.
   The WSL SwiftShader renderer-start timeout was non-decisive; Mac hardware
   proof is decisive. This change is approved for publication to `main`;
   deployment remains a separate operation and is not part of this receipt.
+
+### Report 82 flee-lifecycle acceptance
+
+The reopening in entry 273 is now ported-and-verified. The cast writes both body and existing flee/wander heading once; newly cast flee duration replaces the remaining timer directly. Ordinary effect ticks never replay the cast bearing. Full movement refreshes from the current target, while degraded and targetless movement retain body heading. Collision, hit/disruption/frozen restraints and timer decrement remain with their existing owners. Public regressions cover shorter/longer recast, expiry, near-zero and half-speed status, party target loss/reacquisition and saved continuation. Exact runtime/test candidate `6ecd9247` passed the unchanged M5 all-mode `scripts/validate.sh` at 2026-10-07T00:20:16Z: 42 Python tests, 4,226 Node executions across 22 batches, no failed/cancelled/skipped tests, production builds and configured renderer quality gates with final failures empty. The real built four-family cast, expiry and continuing snapshots passed; publication/live details remain in the report archive.
