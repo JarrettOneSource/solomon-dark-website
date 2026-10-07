@@ -280,8 +280,9 @@ test('entity frame admission covers all family capacities and rejects rows beyon
       entities: { ...frame.world.entities, [field]: [...rows, rows[0]] } } }),
     new RegExp(`frame.world.entities.${field} may contain at most ${MAX_REPLICATED_ENTITIES} entries`))
   }
+  const overflowingEnemies = [...source.world.enemies, { ...enemySnapshot(), id: MAX_BONEYARD_ENEMIES + 1 }]
   assert.throws(() => gameSnapshot({ ...source, world: { ...source.world,
-    enemies: [...source.world.enemies, { ...enemySnapshot(), id: MAX_BONEYARD_ENEMIES + 1 }] } }),
+    enemies: overflowingEnemies } }),
   /replicated population.*at most/)
   const overflowingDeathEffects = [...source.world.deathEffects, enemyDeathEffectSnapshot()]
   assert.throws(() => gameSnapshot({ ...source, world: { ...source.world,
