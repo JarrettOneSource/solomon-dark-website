@@ -67,7 +67,6 @@ import {
   gameUiScale,
   gameVolume,
   readGameSettings,
-  gameUiScale,
   setGameSettings,
   subscribeGameSettings,
   type GameSettings,
