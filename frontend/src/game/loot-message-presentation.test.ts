@@ -92,7 +92,7 @@ function event(
 import './skill-book-feedback.test.ts'
 
 
-test('notification scale-distance never shifts the shared native screen origin', async () => {
+test('every notification uses the native clip and scaled moving baseline', async () => {
   const built = await build({
     stdin: { contents: `import { createElement } from 'react';
       import { renderToStaticMarkup } from 'react-dom/server';
@@ -104,20 +104,28 @@ test('notification scale-distance never shifts the shared native screen origin',
     banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(import.meta.url)});` },
   })
   const { render } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0]!.text).toString('base64')}`)
-  for (const text of ['MANA POTION', 'DOUBLE DAMAGE', 'CHEAT DEATH!', '42 GOLD']) {
-    const presentation = new NativeLootMessagePresentation(0)
-    presentation.consumeText({ eventId: 1, source: 'loot', tick: 0, text, tint: 0xffffff })
-    for (const tick of [0, 1, 9, 18, 30]) {
-      const messages = presentation.sample(tick)
-      const html = render({ messages })
-      assert.ok(html.includes(`aria-label="${text}" style="opacity:1;top:0"`),
-        `${text} at tick ${tick} must remain at the notification origin`)
+  for (const uiScale of [0.75, 1, 1.25, 1.5]) {
+    for (const source of ['loot', 'book', 'combat', 'secondary'] as const) {
+      for (const text of ['MANA POTION', 'DOUBLE DAMAGE', 'CHEAT DEATH!', '42 GOLD', 'Overloaded Mana!', 'HARDEN +1']) {
+        const presentation = new NativeLootMessagePresentation(0)
+        presentation.consumeText({ eventId: 1, source, tick: 0, text, tint: 0xffffff })
+        for (const tick of [0, 1, 9, 18, 30]) {
+          const messages = presentation.sample(tick)
+          const html = render({ messages, uiScale })
+          assert.ok(html.includes(`data-native-notification-clip="50"`), 'shared native clip must be present')
+          assert.ok(html.includes(`top:${50 * uiScale}px`), `clip must follow UI scale ${uiScale}`)
+          const top = (17 + Math.round(messages[0]!.offset)) * uiScale
+          const topCss = top === 0 ? '0' : `${top}px`
+          assert.ok(html.includes(`aria-label="${text}" style="opacity:1;top:${topCss};transform:scale(${uiScale})"`),
+            `${source} ${text} at tick ${tick} must use the clipped moving baseline`)
+        }
+        presentation.consumeText({ eventId: 2, source: 'combat', tick: 30, text: 'SECOND NOTICE', tint: 0xffffff })
+        const messages = presentation.sample(34)
+        assert.ok(messages.some(message => message.offset > 0 && message.scale < 1))
+        const html = render({ messages, uiScale })
+        for (const message of messages) assert.ok(html.includes(`top:${(17 + Math.round(message.offset)) * uiScale}px`))
+        assert.equal(render({ messages, uiScale, visible: false }), '')
+      }
     }
-    presentation.consumeText({ eventId: 2, source: 'combat', tick: 30, text: 'SECOND NOTICE', tint: 0xffffff })
-    const messages = presentation.sample(34)
-    assert.ok(messages.some(message => message.offset > 0 && message.scale < 1))
-    const html = render({ messages })
-    assert.equal((html.match(/aria-label="[^"]+" style="opacity:[^;]+;top:0"/g) ?? []).length, 2,
-      'new and receding rows share the origin while retaining their own scale/alpha')
   }
 })
