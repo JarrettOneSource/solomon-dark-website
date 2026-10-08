@@ -448,3 +448,12 @@ Later acceptance/investigation edits are documentation only. Normal publication,
 managed deployment and scoped live checks remain separate pending steps.
 
 Scope: Report 99 clothing shading and preserved equipment behavior; the original shortcut-equip allegation remains unreproduced.
+
+
+The final built desktop and emulated-touch foreground journeys passed on
+`cde84b13` at 07:49:20 UTC. Every normal cycle-key press now explicitly
+verified the next bank (0→1→2→0) in College and Boneyard Inventory, alongside
+the existing Skills/trader arrow and foreground-pixel assertions. Current
+normal cycling is rightward; no direction inversion was needed. Browser
+error arrays were empty. The mixed Report 80/98 source still awaits its
+separate live-publication boundary and any authorized completion reaction.
