@@ -10,11 +10,12 @@ import {
 } from './skill-book-feedback.ts'
 import './skill-book-feedback.css'
 
-export default function SkillBookFeedback({ skillId, hubMessages, onDismiss, style }: {
+export default function SkillBookFeedback({ skillId, hubMessages, onDismiss, style, uiScale = 1 }: {
   readonly skillId: number | null
   readonly hubMessages: readonly NativeLootMessageVisual[]
   readonly onDismiss: () => void
   readonly style: CSSProperties
+  readonly uiScale?: number
 }) {
   const layout = useMemo(() => skillId === null ? null : nativeSkillBookResultLayout(skillId), [skillId])
   const frame = useMemo(() => layout === null ? null : planNativeUiMessageFrame({
@@ -22,7 +23,7 @@ export default function SkillBookFeedback({ skillId, hubMessages, onDismiss, sty
   }), [layout])
   return <>
     {hubMessages.length > 0 ? <div className="main-menu-native-stage skill-book-hub-messages-stage" style={style}>
-      <NativeWorldNotifications messages={hubMessages} />
+      <NativeWorldNotifications messages={hubMessages} uiScale={uiScale} />
     </div> : null}
     {skillId !== null && layout !== null && frame !== null ? <NativeUiDialog
       aria-label="Skill improved"

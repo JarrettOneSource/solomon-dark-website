@@ -67,6 +67,7 @@ import {
   gameUiScale,
   gameVolume,
   readGameSettings,
+  gameUiScale,
   setGameSettings,
   subscribeGameSettings,
   type GameSettings,
@@ -2358,7 +2359,7 @@ function MainMenuContent({
 
         {session ? <SkillBookFeedback
           skillId={bookFeedback.skillId} hubMessages={bookFeedback.hubMessages}
-          onDismiss={bookFeedback.dismiss} style={nativeStageStyle}
+          onDismiss={bookFeedback.dismiss} style={nativeStageStyle} uiScale={gameUiScale(gameSettings)}
         /> : null}
 
         {session && skillBookOpen && runtimeProgression ? (

@@ -1,15 +1,18 @@
 .boneyard-loot-messages {
-  left: 50%;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
   pointer-events: none;
   position: absolute;
-  top: 67px;
+  right: 0;
   z-index: 45;
 }
 
 .boneyard-loot-messages > span {
   display: block;
-  left: 0;
+  left: 50%;
   position: absolute;
+  transform-origin: 0 0;
   white-space: nowrap;
 }
 

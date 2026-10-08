@@ -1126,7 +1126,7 @@ export default function BoneyardScene({
                 worldTarget={tutorialWorldTarget}
               />
             ) : null}
-            <NativeWorldNotifications messages={lootMessages}
+            <NativeWorldNotifications messages={lootMessages} uiScale={uiScale}
               visible={notificationsVisible && tutorialAccess?.combat !== false} />
 
             <GameHud
