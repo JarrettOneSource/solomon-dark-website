@@ -30,13 +30,13 @@ catalog, transforms, recursive lookup, admission, and action evidence below.
 
 | Member | Recovered contract | Current disposition / validation requirement |
 | --- | --- | --- |
-| All Hat and Robe icon records, primary/trim layers, explicit dye colors, recipe colors, and all five element fallbacks | authored RGB multiplied per channel by tint; original alpha and transforms retained | `recovered-pending-port`; fix the shared DOM sprite modulation path and compare shaded pixels |
-| Ring, Amulet, Staff, Wand, Sack, potion/alias icons and quantities | untinted authored texture/transform; existing ownership and counts | pending regression verification; no rendering behavior change intended |
-| White-alpha UI silhouettes and other `maskTint` consumers | alpha-mask recoloring is their explicit contract | pending regression verification; retain the separate mask API |
-| All six equipment classes, fixed sinks and Ring 0/1/2, empty/occupied sinks, root/nested owner, all three banks | `0x00552CD0/0x00552850/0x00560060`: exact owner swap, same equipped UID no-op, level/slot admission | pending complete matrix; source currently follows the recovered rule and no authority change is justified yet |
-| Sack direct-child quick-set action, nested/non-equipment preservation, repeat and save continuation | `0x0056D1B0 -> 0x0056B090`: family order, available ring sinks, displaced gear returns to the same Sack | pending regression/browser verification; preserve the established action unchanged |
-| Hub/Boneyard HUD and Inventory/Skills/College companions; mouse, keyboard, touch and controller slot addressing | shared actor belt, selected bank translated exactly once, actor-private mutation | pending focused/browser verification; bank selection is the approved Report 80 web extension |
-| Stale/missing gear, equipment level rejection, closed/replaced scene and input release | current authority admission, no identity loss or accidental activation after release | pending focused regressions |
+| All Hat and Robe icon records, primary/trim layers, explicit dye colors, recipe colors, and all five element fallbacks | authored RGB multiplied per channel by tint; original alpha and transforms retained | `exact-ported` through the shared RGB mode; channel/alpha regressions and measured Hat/Robe pixels pass; catalog records and tint selection remain shared |
+| Ring, Amulet, Staff, Wand, Sack, potion/alias icons and quantities | untinted authored texture/transform; existing ownership and counts | `verified-already-at-parity`; focused regressions and relevant equipment/Sack browser journeys pass; rendering route unchanged |
+| White-alpha UI silhouettes and other `maskTint` consumers | alpha-mask recoloring is their explicit contract | `verified-already-at-parity`; focused native-UI regressions pass and the separate mask API is retained |
+| All six equipment classes, fixed sinks and Ring 0/1/2, empty/occupied sinks, root/nested owner, all three banks | `0x00552CD0/0x00552850/0x00560060`: exact owner swap, same equipped UID no-op, level/slot admission | `verified-already-at-parity` in the authority and browser coverage below; the reported shortcut-equip failure was not reproduced and no authority behavior was changed |
+| Sack direct-child quick-set action, nested/non-equipment preservation, repeat and save continuation | `0x0056D1B0 -> 0x0056B090`: family order, available ring sinks, displaced gear returns to the same Sack | `verified-already-at-parity`; focused Sack regressions and real Boneyard quick-set/repeat/save cases pass; action unchanged |
+| Hub/Boneyard HUD and Inventory/Skills/College companions; mouse, keyboard, touch and controller slot addressing | shared actor belt, selected bank translated exactly once, actor-private mutation | focused addressing regressions pass; Hub/Boneyard HUD/Inventory pointer, keyboard and touch activation verified below; existing companion/controller paths unchanged; banks remain the Report 80 web extension |
+| Stale/missing gear, equipment level rejection, closed/replaced scene and input release | current authority admission, no identity loss or accidental activation after release | existing focused rejection/lifecycle regressions pass; no authority or release behavior changed |
 | Skill behavior, potion use, native exports, bot eight-action view | established shared belt members, not implicated by the equipment report | `out-of-system` for behavior changes; retain existing regression coverage |
 | Report 100 dots layering and Report 80 requested cycle-direction preference | separately assigned UI concerns | `out-of-system`; no control/layering change in this fix |
 
@@ -52,6 +52,69 @@ including the preserved Sack action. The complete M5 repository gate and the
 normal authorized deployment/live verification follow the exact candidate.
 If the individual-equip allegation cannot be reproduced, record that limit
 instead of changing native same-identity no-op or admission behavior.
+
+### Acceptance checkpoint — 2026-10-08
+
+Implementation `802299ae` passed the previously retained M5 baseline, focused,
+application/test TypeScript and lint stages in
+`job_20261008T040928Z_71fe34ac12`; those stages were reused, not rerun here.
+The tint regression is red on the former alpha-mask consumer and green on the
+textured consumer. The added equipment authority matrix has 144 combinations:
+six classes, six bank-edge slots (`0/7/8/15/16/23`), top-level/nested ownership,
+and Hub/Boneyard scenes, with occupied-sink return and repeated-UID no-op checks.
+Existing focused economy/input tests cover the unchanged sibling paths.
+
+The combined built runtime `11e0c6dc24bfd200d74fcf79435cfa32ca9e027b`
+passed desktop and mobile-context Chrome `153.0.8010.12` in
+`job_20261008T060958Z_9ab69a64e6`. Each mode performed 24 equipment activations
+plus repeats across cycled banks 2 and 3, HUD and Inventory, Hub and Boneyard.
+All six classes equipped. The Boneyard Sack shortcut swapped seven direct
+children, preserved all 25 owned item identities through repetition, and kept
+the Sack. The actual browser checkpoint restored all 24 belt entries and the
+same 25 identities through the maintained save-document reader; this is a
+save-content round trip, not a browser reload/resume claim.
+
+Measured Hat and Robe screenshots retain authored shading: mean RGB channel
+error against texture-times-tint is respectively `0.0321` and `0.0201` on the
+0–255 scale, with 177 and 109 red-channel shades. This comparison uses actual
+rendered icon clones normalized onto integer pixel origins, so CSS raster
+snapping is not incorrectly compared with Canvas half-pixel interpolation.
+The original half-pixel comparison failed at `19.24`; its image was retained,
+then matched source texels confirmed the comparator alignment error. Normal
+gameplay screenshots were reviewed without modifying their icon geometry.
+Both source layers and expected-reference PNGs are retained with the receipts.
+
+Mobile-context acceptance used `844 x 390`, `hasTouch: true`, `isMobile: true`
+and DPR 1. It recorded `maxTouchPoints = 1`, `(pointer: coarse) = true`,
+`(hover: none) = true`, and 50 actual hotbar `pointerdown` events, all with
+`pointerType = touch`. Assignment drags remained ordinary mouse fixtures;
+activation used real locator taps. This is Chrome touch emulation, not a
+physical-phone assertion. Both modes have empty page, console, request,
+failed-response, host and unexpected-transport error arrays.
+
+**Retained qualification:** the original individual shortcut-equip complaint
+was not reproduced by the authority or scoped browser cases. A separate
+selection-dependent interaction did occur while constructing a fixture: after
+binding a backpack Amulet, its retained selection causes a subsequent press
+on an equipped Ring to enter the previously requested click-item-to-sink web
+extension; dragging cancels that click rather than starting a Ring-source drag.
+Entry 177 explicitly distinguishes that extension from stock's hit-object
+selection. The existing native notes do not independently establish selection
+retention immediately after a belt drop, so this result is not labeled native
+parity or silently erased. The failed receipt and screenshot are retained.
+Independent assignment cases use the normal empty-space deselection control;
+actual bound shortcuts also succeeded in Inventory with a backpack item still
+selected. No equipment authority or selection behavior was changed by this fix.
+
+M5 receipts are under
+`/Volumes/Drive/codex-acceptance/report99-ioar46jj-runs/` in
+`report99-built-20261008T060959Z-desktop/receipt.json` and the matching `-touch`
+directory. The selected-item attempt is retained in
+`report99-built-20261008T053509Z-desktop/receipt.json`.
+The shared compute lease and this journey's browser/host processes were released.
+At this checkpoint the coordinator still owns the final combined canonical
+gate, publication and live-result boundary; built acceptance is not a deployment
+claim.
 
 > **2026-09-24 report 22:** [entry 252's native page-motion reopening](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-24--report-22-native-vertical-sack-page-transition)
 > supersedes this entry's 160-tick horizontal/full-stage-width claims. Native
