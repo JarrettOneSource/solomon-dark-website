@@ -73,7 +73,8 @@ export default function HotbarControls({ disabled = false, rects, renderer }: {
     <div className="hotbar-controls" data-hotbar-bank={bank} data-modal={rects ? true : undefined} style={style}>
       <button type="button" className="hotbar-arrow hotbar-previous" aria-label="Previous hotbar"
         onPointerEnter={() => setHovered(-1)} onPointerLeave={() => setHovered(null)}
-        onFocus={() => setFocused(-1)} onBlur={() => setFocused(null)}
+        onFocus={(event) => setFocused(event.currentTarget.matches(':focus-visible') ? -1 : null)}
+        onKeyDown={() => setFocused(-1)} onBlur={() => setFocused(null)}
         title="Previous hotbar" disabled={disabled} onClick={() => cycle(-1)}>
         <span aria-hidden />
       </button>
@@ -84,7 +85,8 @@ export default function HotbarControls({ disabled = false, rects, renderer }: {
       </span>
       <button type="button" className="hotbar-arrow hotbar-next" aria-label="Next hotbar"
         onPointerEnter={() => setHovered(1)} onPointerLeave={() => setHovered(null)}
-        onFocus={() => setFocused(1)} onBlur={() => setFocused(null)}
+        onFocus={(event) => setFocused(event.currentTarget.matches(':focus-visible') ? 1 : null)}
+        onKeyDown={() => setFocused(1)} onBlur={() => setFocused(null)}
         title="Next hotbar" disabled={disabled} onClick={() => cycle(1)}>
         <span aria-hidden />
       </button>
