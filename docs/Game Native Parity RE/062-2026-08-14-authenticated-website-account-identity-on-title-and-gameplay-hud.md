@@ -160,3 +160,101 @@ local Website bearer
   green: backend build, `23` Website/backend contract tests, formatting, lint
   and architecture boundaries, TypeScript, all `422` frontend tests, all `5`
   desktop tests, production frontend/host build, and production media policy.
+
+
+## 2026-10-08 — Report 98: account identity during an editor test
+
+### Reported smell and recovered ownership
+
+The reporter sees an apparent sign-out in the Boneyard editor's pause settings.
+The focused original-message and nearby-discussion read on October 8 confirms
+that the account claim remains active, without a withdrawal. At current main
+`7020dcd8`, `Boneyard` reads the Website `AuthProvider.user`, while
+`EditorTestRuntime` sends the current `getToken()` bearer with its optional-auth
+`/api/game/editor-test` request but
+passes a literal null account into `MainMenuScene`. That shared scene presents
+no HUD account and `ACCOUNT: GUEST` in gameplay settings. There is no editor
+call to `logout`, `setToken`, or a competing authentication store. The causal
+finding is a false guest presentation; actual expiration in the historical
+reporter's session is not established.
+
+This reopens the existing Website account-display boundary. Its earlier
+membership did not include the subsequently added editor-test shell. Retail
+0.72.5 has no Website account, as recorded above; no new native extraction,
+authored table, or change to stock game behavior is implicated.
+
+### Complete affected membership
+
+| Member | Ownership / source | Disposition | Validation |
+| --- | --- | --- | --- |
+| Website token and current user, login/logout/refresh | `lib/auth.tsx`, `lib/api.ts` | verified-already-at-parity | Source trace: editor reads but never clears or replaces credentials |
+| Regular Title, Hub, Boneyard and settings | `pages/Game.tsx` → `MainMenuScene` | verified-already-at-parity | Existing provider projection and shared consumer contract; unchanged |
+| Standalone `/boneyard` → private test | `pages/Boneyard.tsx` → `EditorTestRuntime` | exact-ported | Built signed-in standalone journey passes the provider's exact current username |
+| Dark Cloud Boneyards Edit/Test → private test | Same `Boneyard` and test runtime | exact-ported | Built Edit → Test and direct Test both retain the same provider identity |
+| Private-test HUD, pause settings and nested account-dependent settings | `MainMenuScene` → `GameAccountName` / `GameSettingsDialog` | exact-ported | Five built settings/HUD assertions cover signed-in names and guest; correct share-action gating |
+| Test boot, loading/cancel, return/repeat, failure and route teardown | `EditorTestRuntime` effect keyed by document | verified-already-at-parity | Document-only effect dependency remains; repeated/cancelled/failed tests retain account and draft |
+| Disposable wizard profile, saves, Hall receipts and social isolation | Existing boot profile and editor-test host | verified-already-at-parity | Presentation remains separate from the intentionally anonymous transient wizard; host tests cover no rewards/checkpoints/archives |
+| Cross-tab token synchronization and server token expiry policy | Global Website authentication | out-of-system | No new account store or expiry behavior; display follows the existing provider's current truth |
+
+### Implementation consequence and validation contract
+
+Thread only `user?.username ?? null` from the shared Boneyard owner through an
+explicit `accountUsername` prop into the existing `MainMenuScene` presentation
+seam. Preserve exact spelling/case in the HUD and the settings' existing
+uppercase formatting. Keep the profile username null: the fresh Test Wizard is
+disposable, and Website account chrome does not grant gameplay social identity,
+progression, score, cloud-save or multiplayer participation. Do not add the
+presentation prop to the authority-creation effect dependencies.
+
+A source-contract regression must fail on the original literal-null seam.
+Current account-presentation tests cover exact username and anonymous semantics.
+Mac browser acceptance must use the built candidate, cover signed-in standalone
+and both Dark Cloud entry branches, open the actual pause/account settings,
+return and repeat, and preserve the token and document. Anonymous play must
+still show guest with no false username. Test failure/cancellation must retain
+the editor and Website account. Browser errors and unexpected HTTP failures
+must be empty. Reuse the dedicated admission and host isolation cases. Required
+canonical validation, publication and deployed verification remain pending.
+
+
+### Implementation and focused acceptance receipt
+
+- Runtime code `f423de0919b6d139ff0a8c0a4eb7703935f49a25`, based on current
+  main `7020dcd8`, adds the explicit presentation prop at the one shared editor
+  seam. The transient player profile and all host/session isolation remain
+  unchanged. Follow-up `6c0f4dad` adds the existing account test file to the
+  canonical `test:native-ui` command and normalizes its import/blank-line layout;
+  it changes no runtime code or browser assets.
+- On the M5 external Drive, restoring the genuine original `Boneyard` and
+  `EditorTestRuntime` files under the new contract test fails exactly the new
+  seam assertion (2 pass / 1 fail). Restoring the candidate passes all 12
+  account/admission tests and all 14 dedicated editor-host/supervisor cases.
+  Test TypeScript, production frontend/host build and Release backend build
+  pass. These focused results are not a full canonical gate.
+- Production-built Mac Chrome on isolated loopback Website/backend/supervisor
+  services uses real throwaway local registrations and ordinary `/api/auth/me`,
+  with only the local WebSocket address adapted through `example.invalid`.
+  No production account, publish, or cloud upload is used. Signed-in standalone
+  Test → pause settings → Return, repeated Test, cancelled admission and an
+  intentional 503 retain the same bearer, successful `/api/auth/me` identity,
+  and exact locally saved editor document.
+- After dismissing the normal first-run tutorial prompt, Dark Cloud Boneyards
+  Edit → Test and direct Test show the exact current username in the HUD and
+  its existing uppercase form in the Account row. Anonymous standalone Test
+  keeps the HUD account absent and shows `ACCOUNT: GUEST`. All five settings
+  views have no Sign Out control. The mobile-share action retains its real
+  existing implementation, remains disabled before customization, and shows
+  the sign-in prerequisite only for guests. No share request was submitted.
+- The first standalone account frame and immediate Dark Cloud/guest account
+  samples were inspected. The latter capture during native-menu presentation;
+  account text and DOM state are verified, with no claim of a new layout or
+  timing audit. Unexpected page/console/HTTP errors are empty. The deliberate
+  503 is recorded separately. An earlier harness attempt stopped at the normal
+  tutorial overlay before Dark Cloud entry, then only the remaining journey was
+  rerun with that precondition handled. The initial runner also reached the
+  browser stage before its script existed; all completed checks were reused.
+- The final browser process exited zero and the owned M5 lease was released at
+  `2026-10-08T06:56:17.211659+00:00`. Combined canonical validation, normal main
+  publication, maintained deployment and deployed-client verification remain
+  with the campaign coordinator. No completion reaction is authorized by this
+  focused receipt; Report 80 shares the source's representative target.

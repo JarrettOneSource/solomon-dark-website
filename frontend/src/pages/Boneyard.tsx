@@ -665,7 +665,7 @@ export default function Boneyard({ onBack, request }: { onBack?: () => void; req
       )}
     </div>
     {testDoc && <Suspense fallback={<div className="editor-test-loading"><p>Opening private test…</p><button className="btn btn-stone" onClick={returnToEditing}>Return to editing</button></div>}>
-      <EditorTestRuntime doc={testDoc} onReturn={returnToEditing} />
+      <EditorTestRuntime accountUsername={user?.username ?? null} doc={testDoc} onReturn={returnToEditing} />
     </Suspense>}
     </>
   )
