@@ -1,5 +1,58 @@
 # 2026-08-27 — Inventory Sack pages, heterogeneous BeltButton items, and Teleport activation audit
 
+## 2026-10-08 — Report 99: equipment shortcut texture modulation and activation audit
+
+### Reported smell and evidence
+
+The three original messages `1557549570215383111`, `1557550152774848553`, and
+`1557566134776111187` were reread with nearby discussion on October 8. None is
+edited or withdrawn. The report compares the cycled gameplay belt with its
+Inventory counterpart: Hat and Robe lose their authored shading, and individual
+equipment reportedly fails while Rings work. The follow-up explicitly preserves
+the existing Sack quick-set swap. The screenshots show flattened clothing fills
+in the gameplay HUD and shaded art in Inventory; lighting-quality settings do
+not own these UI pixels. The separate indicator-layering Report 100 is excluded.
+
+At baseline `7020dcd8`, `NativeBeltItemIcon` passes clothing colors as
+`NativeUiSprite.maskTint`. That API deliberately retains only atlas alpha, so it
+cannot preserve the colored/grayscale texels in Inventory records. The Inventory
+GPU owner `addItemIcon` instead multiplies each authored texture by its layer
+tint. This is a confirmed source-and-image discrepancy, independent of bank.
+The recovered stock textured-modulation contract in entry 287 and the existing
+Inventory item catalog remain authoritative; no new native constants or art
+are needed. The previous closure missed a DOM-versus-GPU member comparison.
+
+### Boundary and membership
+
+This reopening covers exact-UID equipment and Sack BeltButton presentation and
+activation across the three approved web banks. It reuses the native ownership,
+catalog, transforms, recursive lookup, admission, and action evidence below.
+
+| Member | Recovered contract | Current disposition / validation requirement |
+| --- | --- | --- |
+| All Hat and Robe icon records, primary/trim layers, explicit dye colors, recipe colors, and all five element fallbacks | authored RGB multiplied per channel by tint; original alpha and transforms retained | `recovered-pending-port`; fix the shared DOM sprite modulation path and compare shaded pixels |
+| Ring, Amulet, Staff, Wand, Sack, potion/alias icons and quantities | untinted authored texture/transform; existing ownership and counts | pending regression verification; no rendering behavior change intended |
+| White-alpha UI silhouettes and other `maskTint` consumers | alpha-mask recoloring is their explicit contract | pending regression verification; retain the separate mask API |
+| All six equipment classes, fixed sinks and Ring 0/1/2, empty/occupied sinks, root/nested owner, all three banks | `0x00552CD0/0x00552850/0x00560060`: exact owner swap, same equipped UID no-op, level/slot admission | pending complete matrix; source currently follows the recovered rule and no authority change is justified yet |
+| Sack direct-child quick-set action, nested/non-equipment preservation, repeat and save continuation | `0x0056D1B0 -> 0x0056B090`: family order, available ring sinks, displaced gear returns to the same Sack | pending regression/browser verification; preserve the established action unchanged |
+| Hub/Boneyard HUD and Inventory/Skills/College companions; mouse, keyboard, touch and controller slot addressing | shared actor belt, selected bank translated exactly once, actor-private mutation | pending focused/browser verification; bank selection is the approved Report 80 web extension |
+| Stale/missing gear, equipment level rejection, closed/replaced scene and input release | current authority admission, no identity loss or accidental activation after release | pending focused regressions |
+| Skill behavior, potion use, native exports, bot eight-action view | established shared belt members, not implicated by the equipment report | `out-of-system` for behavior changes; retain existing regression coverage |
+| Report 100 dots layering and Report 80 requested cycle-direction preference | separately assigned UI concerns | `out-of-system`; no control/layering change in this fix |
+
+### Implementation and acceptance contract
+
+Add an explicit textured RGB-modulation mode to the shared DOM sprite, distinct
+from white-alpha masking. Use the browser's exact sRGB color matrix with unit
+alpha, rather than guessed CSS recoloring or replacement art. The clothing icon
+consumer uses that mode for every layer and tint source; unaffected sprites keep
+their current route. Browser acceptance must measure retained shading and tint,
+and exercise actual gear shortcuts in gameplay and Inventory across banks,
+including the preserved Sack action. The complete M5 repository gate and the
+normal authorized deployment/live verification follow the exact candidate.
+If the individual-equip allegation cannot be reproduced, record that limit
+instead of changing native same-identity no-op or admission behavior.
+
 > **2026-09-24 report 22:** [entry 252's native page-motion reopening](252-2026-08-27-goodie-item-sack-materialization-and-inventoryscreen-root-navigation.md#2026-09-24--report-22-native-vertical-sack-page-transition)
 > supersedes this entry's 160-tick horizontal/full-stage-width claims. Native
 > Sack pages move vertically across the grid's height: 365 pixels and 37

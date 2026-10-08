@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react'
+import { useId, type CSSProperties } from 'react'
 
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
+import { nativeUiTintMatrix } from './native-ui-tint.ts'
 import {
   nativeUiAtlas,
   nativeUiRecord,
@@ -12,6 +13,8 @@ interface NativeUiSpriteProps {
   readonly className?: string
   /** Recolors a stock white-alpha record while preserving its authored alpha. */
   readonly maskTint?: number
+  /** Multiplies authored texture RGB, retaining its shading and alpha. */
+  readonly tint?: number
   readonly record: number
   readonly style?: CSSProperties
 }
@@ -22,7 +25,10 @@ export default function NativeUiSprite({
   maskTint,
   record,
   style,
+  tint,
 }: NativeUiSpriteProps) {
+  const tintFilterId = useId()
+  const modulate = tint !== undefined && tint !== 0xffffff
   const definition = nativeUiRecord(atlas, record)
   const atlasDefinition = nativeUiAtlas(atlas)
   const [x, y, width, height] = definition.frame
@@ -41,6 +47,15 @@ export default function NativeUiSprite({
         ...style,
       }}
     >
+      {modulate ? (
+        <svg width="0" height="0" focusable="false" style={{ position: 'absolute' }}>
+          <defs>
+            <filter id={tintFilterId} colorInterpolationFilters="sRGB">
+              <feColorMatrix type="matrix" values={nativeUiTintMatrix(tint).join(' ')} />
+            </filter>
+          </defs>
+        </svg>
+      ) : null}
       <i
         style={{
           backgroundColor: maskTint === undefined
@@ -53,6 +68,7 @@ export default function NativeUiSprite({
           backgroundRepeat: 'no-repeat',
           backgroundSize: `${atlasDefinition.dimensions[0]}px ${atlasDefinition.dimensions[1]}px`,
           display: 'block',
+          filter: modulate ? `url(#${tintFilterId})` : undefined,
           height,
           left: trimX,
           maskImage: maskTint === undefined ? undefined : `url("${nativeUiAtlasSource(atlas)}")`,

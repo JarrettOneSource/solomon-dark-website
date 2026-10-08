@@ -4,6 +4,38 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { TextureSource } from 'pixi.js'
+import { nativeUiTintMatrix } from './native-ui-tint.ts'
+
+test('textured UI tint scales every RGB channel in sRGB without replacing texels or alpha', () => {
+  for (const tint of [0, 0xffffff, 0x123456, 0xff0000, 0x00ff00, 0x0000ff, 0x80c020]) {
+    const matrix = nativeUiTintMatrix(tint)
+    assert.equal(matrix.length, 20)
+    for (const texel of [[0, 0, 0, 0], [1, 1, 1, 1], [0.2, 0.4, 0.6, 0.3]]) {
+      const projected = [0, 1, 2, 3].map(row => (
+        texel.reduce((total, value, column) => total + value * matrix[row * 5 + column]!, matrix[row * 5 + 4]!)
+      ))
+      const expected = [
+        texel[0]! * (tint >>> 16) / 255,
+        texel[1]! * ((tint >>> 8) & 0xff) / 255,
+        texel[2]! * (tint & 0xff) / 255,
+        texel[3]!,
+      ]
+      projected.forEach((value, channel) => assert.ok(Math.abs(value - expected[channel]!) < 1e-12))
+    }
+  }
+  for (const tint of [-1, 0x1000000, 0.5, NaN, Infinity]) {
+    assert.throws(() => nativeUiTintMatrix(tint), RangeError)
+  }
+  const sprite = readFileSync(new URL('./NativeUiSprite.tsx', import.meta.url), 'utf8')
+  assert.match(sprite, /colorInterpolationFilters="sRGB"/)
+  assert.match(sprite, /nativeUiTintMatrix\(tint\)/)
+})
+
+test('equipment belt icons preserve authored texture RGB when applying clothing tint', () => {
+  const source = readFileSync(new URL('../NativeBeltItemIcon.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /maskTint=/, 'clothing is shaded texture, not a white-alpha silhouette')
+  assert.match(source, /tint=\{iconTints\[index\]/)
+})
 
 import {
   NATIVE_UI_ATLAS_NAMES,

@@ -36,7 +36,7 @@ export default function NativeBeltItemIcon({
           atlas="Inventory"
           className="hub-hud-belt-item-layer"
           key={`${record}:${index}`}
-          maskTint={iconTints[index] ?? undefined}
+          tint={iconTints[index] ?? undefined}
           record={record}
           style={{
             '--native-item-rotation': `${transform?.rotationDegrees ?? 0}deg`,
