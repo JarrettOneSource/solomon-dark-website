@@ -412,14 +412,14 @@ No member is `blocked-by-platform`.
   performed.
 
 
-## October 8 — Report80 rightward bank-cycle follow-up
+## October 8 — Report 80 rightward bank-cycle follow-up
 
-The mixed1557546406695149620 message additionally requests cycling right;
-its editor-account observation is tracked separately as98. Current control
-source already maps the unmodified cycle key to+1 and Shift to-1, with
-right/Next arrow+1 and left/Previous arrow-1. Bank0/1/2dots are rendered
+The mixed `1557546406695149620` message additionally requests cycling right;
+its editor-account observation is tracked separately as 98. Current control
+source already maps the unmodified cycle key to +1 and Shift to -1, with
+right/Next arrow +1 and left/Previous arrow -1. Bank 0/1/2 dots are rendered
 left-to-right in both DOM gameplay and the shared modal canvas. This is
-unchanged from the approved three-bank feature commitaf513e7f, not a newly
+unchanged from the approved three-bank feature commit `af513e7f`, not a newly
 recovered stock behavior: stock has only its existing eight-slot belt.
 
 The existing three-bank foreground browser loop now explicitly waits for
