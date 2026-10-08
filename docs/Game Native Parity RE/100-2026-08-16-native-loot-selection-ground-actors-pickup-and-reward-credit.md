@@ -1747,3 +1747,53 @@ All 63 focused notification, Inventory presentation and render-contract tests
 pass, including actual React-rendered newborn/older/stacked rows. This verifies
 the correction's component contract; real built/live HUD overlap acceptance and
 the full combined gate remain pending.
+
+
+## 2026-10-08 — Report94 shared notification clipping and UI-scale recovery
+
+The October8 recurrence screenshot (1557547475471175730) shows Gold text
+touching the selected concentration artwork. The original and follow-up
+messages were freshly reread without edits or withdrawal. The earlier
+bar-only browser measurement did not cover the complete HUD or UI-scale
+setting; it is preserved as historical acceptance, not proof against this
+new occurrence.
+
+The October7 conclusion that the row distance is never screen Y relied on an
+older Mod Loader note and contradicted the October5 captured callee evidence
+above. Fresh bounded instruction reads on M5 of the unchanged retail 0.72.5
+PE (SHA256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`)
+resolve the missing upstream clip owner, with no injected runtime or clean-stock
+playback claim. At005CF092..005CF0C4, the GUI origin becomes half viewport
+width and Y50. The005CF0CD..005CF0FC call to00420EC0 supplies
+`(-width/2,0,width,height)`. The actual clip setter00420EC0 adds the current
+GUI X/Y origin at00420F02..00420F11 and installs the resulting rectangle;
+therefore no notification pixel may draw above viewport Y50. The subsequent
+pen addition is17, yielding baseline67 before the row offset. Both shadow
+and foreground pass rounded row+0x20 as the second coordinate to004F5620;
+its forwarded centered ExactText contract is unchanged. Typed qword operands
+are0.5,-0.5,50,0,17,2,250 at the respective captured addresses. This restores
+the October5 row-motion conclusion and supersedes the October7 no-Y assertion.
+
+The React owner omitted that native clip entirely. The Boneyard also scales
+GameHud with the user UI-scale setting while leaving world notifications
+unscaled, so increasing UI scale moves/largens the HUD into the unscaled
+notification area. The correction must apply one shared notification scale
+and clip to every source and both consumers, preserving the manager's exact
+row movement, scale quantization, alpha, merge/pressure, visibility and clocks.
+No arbitrary lower offset, slower timer or message-specific exception is needed.
+
+Boundary/membership: all Loot Gold/item/Sack/three Bonuses, book-rank, combat
+rescue and secondary overload messages; newborn/settled/receding stacked rows;
+Boneyard and Hub SkillBookFeedback; UI-scale75..150%; tutorial/death visibility;
+pause, resume and teardown. Legacy CodeLine sources retain their documented
+out-of-system admission boundary. Existing manager/lifetime and upstream
+producers are verified-already-at-parity; the two display consumers and shared
+clip/scale/position paths are recovered-pending-port. The previous pass failed
+to trace the clip setter and did not verify all HUD members at nondefault scale.
+
+Instruction output hashes: draw005CF000
+`fbfca7715e301e9113637039d118958385a853940acc1fb3db882385ee6241f0`;
+centered text004F5620 `2c3fe13529100bb091534539fb432a5622f029777065262ab9c1a4d24fd9327d`;
+clip00420EC0 `b437ae24f11c549a252ab21515660ad9d1801d0439a24402722b35cf57408585`.
+Current regression, built browser, canonical gate, publication and live
+verification remain pending.
