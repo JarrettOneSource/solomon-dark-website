@@ -44,3 +44,20 @@
   }
   .hotbar-controls:not([data-modal]) .hotbar-arrow { width: 40px; height: 40px; }
 }
+
+/* Optional-book art belongs to its canvas HUD, below tooltips and draggers. */
+.hotbar-controls[data-modal] .hotbar-arrow,
+.hotbar-controls[data-modal] .hotbar-arrow:hover,
+.hotbar-controls[data-modal] .hotbar-arrow:focus-visible {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+.hotbar-controls[data-modal] .hotbar-arrow span { visibility: hidden; }
+.hotbar-controls[data-modal] .hotbar-dots {
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

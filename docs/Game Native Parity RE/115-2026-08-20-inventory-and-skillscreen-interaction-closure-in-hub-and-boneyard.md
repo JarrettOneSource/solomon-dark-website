@@ -548,3 +548,44 @@ new-save round-trip, configured input edges and held-input release; built/live
 browser verification covers cycling and assigning in both books, gameplay
 activation, scene transitions, and reload persistence. Validation and delivery
 results are recorded after the final candidate passes.
+
+
+## 2026-10-08 — Report 100 modal hotbar painter ownership
+
+The fresh original report and surrounding discussion remain unchanged. Its
+image shows the approved three-bank dots over the opaque Cosmofluxic Wand
+item-information panel. This reopens the Report 80 extension: the earlier pass
+verified bank contents and input but omitted the complete foreground layering
+membership. The three-bank extension remains explicitly authorized web behavior;
+no new stock behavior or product decision is inferred.
+
+### Causal trace and evidence
+
+Current-main `7020dcd8` paints `HotbarControls` as DOM decoration above each
+book's canvas. Item information, contextual hover boxes, draggers, dye and
+notices are canvas children, so a CSS z-index cannot interleave the controls
+with those foreground owners. Inventory's `addBelt` precedes item information,
+stat inspection and draggers in `buildInventory`; services reuse that inventory
+layer before their overlays. SkillScreen's `hud` precedes `hover` and `dragger`.
+This is direct source evidence. The stock root/page/quickbar ownership recovered
+above (`0x0065B550`, `0x006720F0`, `0x00659AD0`) remains authoritative; the new
+web bank decorations must join those established HUD painter lanes.
+
+### Boundary and membership before implementation
+
+| Member | Recovered contract | Initial disposition |
+| --- | --- | --- |
+| Inventory, root and nested sacks, College and Boneyard | All three bank dots and both arrow decorations belong to modal HUD, below item/stat tooltips, flybys and draggers | recovered-pending-port |
+| Store, Dowsing, Fomentius, Unforge and Hagatha service siblings | Reuse the same inventory HUD lane below service foreground, dye and notices | recovered-pending-port |
+| Skills, College and Boneyard, including inventory/book replacement | Same decorations follow the HUD slide, before hover cards and skill draggers | recovered-pending-port |
+| Pointer hover, keyboard focus, disabled/closing states, bank changes and teardown | DOM retains semantic/input ownership; one canvas decoration owner reflects state and retires with its book | recovered-pending-port |
+| Ordinary College/Boneyard desktop and touch HUD | Existing DOM controls share the ordinary HUD owner's stacking context and remain unchanged | verified-already-at-parity |
+| Dialogue | No hotbar decoration; no new controls | verified-already-at-parity |
+| Equipment admission/icon tint and other Report 99 state | Separate authority/icon owner, not altered here | out-of-system |
+
+The change will reuse the approved compact arrow/dot geometry and palette in a
+shared modal painter, retaining accessible DOM hit targets. No native constants,
+assets, bank assignments, save/wire rules or animation duration change. Required
+acceptance includes a browser-page pixel assertion (canvas-only captures missed
+the DOM overpaint), all three banks, arrow input, both books/scenes, replacement
+and reopening, plus the combined candidate's M5 canonical gate.

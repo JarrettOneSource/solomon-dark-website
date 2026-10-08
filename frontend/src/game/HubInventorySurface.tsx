@@ -935,6 +935,7 @@ export function NativeHubSurface({
           )}
           {surface.kind !== 'dialogue' && notice === null && dyeModal === null ? (
             <HotbarControls rects={inventoryBeltRects}
+              renderer={rendererState === 'ready' ? rendererRef.current : null}
               disabled={inputSuspended || closing || inventoryTransitionLocked} />
           ) : null}
           <HubInventoryFooter
