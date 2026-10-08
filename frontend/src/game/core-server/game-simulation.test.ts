@@ -1953,6 +1953,62 @@ test('native item belt binds shortcuts without moving ownership and activates ex
   assert.equal(getPlayerBelt(rejected.state)[7], null)
 })
 
+for (const [member, sink] of [
+  ['hat', 'hat'], ['robe', 'robe'], ['staff', 'weapon'], ['wand', 'weapon'],
+  ['amulet', 'amulet'], ['ring', 'ring-0'],
+] as const) for (const slot of [0, 7, 8, 15, 16, 23]) {
+  test(`equipment shortcut ${member} swaps its owning root at belt slot ${slot}`, () => {
+    for (const nested of [false, true]) for (const run of [false, true]) {
+      let state = createGameSimulation()
+      if (run) state = enterBoneyardWorld(state, emptyBoneyard())
+      const economy = getPlayerEconomy(state)
+      const recipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === member)!
+      const item: HubInventoryItem = {
+        ...createEquipmentInventoryItem(recipe, economy.nextItemId),
+        generatedLevel: 0, inventorySlot: 12,
+      }
+      const previous = { ...item, id: item.id + 1 }
+      const sack: HubInventoryItem = {
+        contents: [item], equipmentType: null, iconRecords: [70], id: item.id + 2,
+        inventorySlot: 20, kind: 'sack', name: 'Equipment shortcut root',
+        nativeSubtype: 0, nativeTypeId: 7008, quantity: 1, rarity: null, recipeIndex: null,
+      }
+      const equipment = sink === 'ring-0'
+        ? { ...economy.equipment, rings: [previous, previousWithId(3), previousWithId(4)] as const }
+        : { ...economy.equipment, [sink]: previous }
+      function previousWithId(offset: number): HubInventoryItem {
+        return { ...previous, id: item.id + offset }
+      }
+      state = {
+        ...state,
+        playerEntities: replacePlayerEconomy(state.playerEntities, 'local-player', {
+          ...economy, equipment, ownedPerkSelectors: [...economy.ownedPerkSelectors, 19],
+          backpack: [...economy.backpack, nested ? sack : item], nextItemId: item.id + 5,
+        }),
+      }
+      const bound = applyGameSimulationHubAction(state, 'local-player', {
+        itemId: item.id, slot, type: 'bind-belt-item',
+      })
+      assert.equal(bound.accepted, true)
+      const activated = applyGameSimulationHubAction(bound.state, 'local-player', {
+        slot, type: 'activate-belt-slot',
+      })
+      assert.equal(activated.accepted, true, `${nested ? 'Sack' : 'root'} / ${run ? 'Boneyard' : 'Hub'}: ${activated.reason}`)
+      const result = getPlayerEconomy(activated.state)
+      assert.equal((sink === 'ring-0' ? result.equipment.rings[0] : result.equipment[sink])?.id, item.id)
+      const owner = nested ? findInventoryItem(result.backpack, sack.id)!.contents! : result.backpack
+      assert.ok(owner.some(({ id }) => id === previous.id), 'displaced gear returns to the incoming owner')
+      assert.equal(findInventoryItem(result.backpack, item.id), null)
+      assert.deepEqual(getPlayerBelt(activated.state)[slot], getPlayerBelt(bound.state)[slot])
+      const repeated = applyGameSimulationHubAction(activated.state, 'local-player', {
+        slot, type: 'activate-belt-slot',
+      })
+      assert.equal(repeated.accepted, true)
+      assert.strictEqual(repeated.state, activated.state, 'already-equipped shortcut remains a native no-op')
+    }
+  })
+}
+
 for (const slot of [0, 7, 8, 15, 16, 23]) test(`Inventory belt slot ${slot} casts Ring of Ice while the Boneyard tick stays frozen`, () => {
   const learned = withPlayerSkillRank(createGameSimulation(), 'local-player', 35, 1)
   const bound = bindGameSimulationPlayerSkillQuickbar(learned, 'local-player', 35, slot)
