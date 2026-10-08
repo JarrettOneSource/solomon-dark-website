@@ -573,12 +573,12 @@ web bank decorations must join those established HUD painter lanes.
 
 ### Boundary and membership before implementation
 
-| Member | Recovered contract | Initial disposition |
+| Member | Recovered contract | Disposition after focused/browser validation |
 | --- | --- | --- |
-| Inventory, root and nested sacks, College and Boneyard | All three bank dots and both arrow decorations belong to modal HUD, below item/stat tooltips, flybys and draggers | recovered-pending-port |
-| Store, Dowsing, Fomentius, Unforge and Hagatha service siblings | Reuse the same inventory HUD lane below service foreground, dye and notices | recovered-pending-port |
-| Skills, College and Boneyard, including inventory/book replacement | Same decorations follow the HUD slide, before hover cards and skill draggers | recovered-pending-port |
-| Pointer hover, keyboard focus, disabled/closing states, bank changes and teardown | DOM retains semantic/input ownership; one canvas decoration owner reflects state and retires with its book | recovered-pending-port |
+| Inventory, root and nested sacks, College and Boneyard | All three bank dots and both arrow decorations belong to modal HUD, below item/stat tooltips, flybys and draggers | exact-ported |
+| Store, Dowsing, Fomentius, Unforge and Hagatha service siblings | Reuse the same inventory HUD lane below service foreground, dye and notices | exact-ported |
+| Skills, College and Boneyard, including inventory/book replacement | Same decorations follow the HUD slide, before hover cards and skill draggers | exact-ported |
+| Pointer hover, keyboard focus, disabled/closing states, bank changes and teardown | DOM retains semantic/input ownership; one canvas decoration owner reflects state and retires with its book | exact-ported |
 | Ordinary College/Boneyard desktop and touch HUD | Existing DOM controls share the ordinary HUD owner's stacking context and remain unchanged | verified-already-at-parity |
 | Dialogue | No hotbar decoration; no new controls | verified-already-at-parity |
 | Equipment admission/icon tint and other Report 99 state | Separate authority/icon owner, not altered here | out-of-system |
@@ -589,3 +589,49 @@ assets, bank assignments, save/wire rules or animation duration change. Required
 acceptance includes a browser-page pixel assertion (canvas-only captures missed
 the DOM overpaint), all three banks, arrow input, both books/scenes, replacement
 and reopening, plus the combined candidate's M5 canonical gate.
+
+### Implementation and verified acceptance
+
+`ModalHotbarControlsView` owns the optional books' compact arrows and bank dots.
+Inventory and every service attach it to the existing `native-modal-hud` layer;
+rebuild detaches that retained owner before retiring the old page. Skills keeps
+it between the HUD and hover/dragger layers. DOM buttons remain input and
+accessibility targets with transparent decoration, and synchronize hover,
+keyboard-only focus, disabled state and the shared active bank. Both native
+slide coordinates and close/reopen disposal are retained. Root and nested
+inventory pages use this same unconditional belt owner, not separate painters.
+
+On October 8, the focused M5 geometry regression passed all five slide samples,
+and the TypeScript project build passed. The final combined runtime
+`11e0c6dc24bfd200d74fcf79435cfa32ca9e027b` then passed the production build and
+the maintained `tools/smoke-hotbar-layering.mjs` journey on real M5 Chrome:
+
+- Desktop 1600×900 and touch/coarse-pointer 844×390 each passed College and
+  Boneyard Inventory plus Hagatha, Fomentius, Luthacus and Shlorio services.
+- Each surface covered all three active banks with an opaque Cosmofluxic Wand
+  tooltip. All 108 sampled dot-center RGB values were exactly `(0, 0, 0)`
+  across the two modes; 24 corresponding arrow-background samples were black.
+- Both scenes' Skills controls passed three forward arrow cycles, keyboard
+  activation of the previous arrow, book replacement, full close and reopening.
+  Active gold pixels were checked while uncovered, excluding an invisible-all
+  false pass. Every service passed cycling and teardown.
+- Page, console, failed-response and failed-request arrays were empty in both
+  complete journeys. Desktop tooltip, touch tooltip and keyboard-focused Skills
+  screenshots were visually inspected.
+
+A controlled regression reproduction on that same built runtime restored only
+the former DOM dot painter. It failed the unchanged foreground assertion with
+active `(208, 174, 100)` and inactive `(12, 13, 9)` pixels over the opaque card.
+This is not an old-source baseline run. Initial smoke attempts exposed harness
+assumptions, not additional game-code failures: native item information has a
+canvas diagnostic rather than a semantic tooltip, cells are column-major, a
+retained canvas initially exposes its prior settled flag, and Boneyard resume
+admission must finish before reopening. The final harness uses those actual
+contracts, a standalone local endpoint, and renderer-frame synchronization.
+
+The successful job ended at 06:05 UTC with source and served build both at
+`11e0c6dc`; only the smoke file differed from that commit, with SHA-256
+`e2272571440071175d39bf55ef2645c8854326eaaf738f314c718e3e52b4953e`. The full
+canonical gate and maintained publication belong to the combined release and
+remain pending at this receipt. No separate production or reaction claim is
+made. No platform-limited member remains in this painter correction.

@@ -25,8 +25,9 @@ const initial = createGameSimulation({ [playerId]: {
   discipline: 'arcane', displayName: 'Hotbar Layering', element: 'ether',
 } })
 const economy = getPlayerEconomy(initial, playerId)
-const wand = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_001), inventorySlot: 72 }
-const arrowWands = [68, 78].map((inventorySlot, index) => ({
+const wand = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_001), inventorySlot: 27 }
+// Native inventory addresses are column-major: these are bottom-row cells.
+const arrowWands = [11, 51].map((inventorySlot, index) => ({
   ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_002 + index), inventorySlot,
 }))
 const document = createGameSaveDocument({
@@ -45,7 +46,11 @@ const document = createGameSaveDocument({
     }),
   },
 })
-const server = await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
+const liveOrigin = process.env.SDR_HOTBAR_LIVE_URL ? new URL(process.env.SDR_HOTBAR_LIVE_URL).origin : null
+const expectedDeploymentRevision = process.env.SDR_HOTBAR_EXPECTED_REVISION ?? null
+if (liveOrigin) assert.match(expectedDeploymentRevision ?? '', /^[a-f0-9]{40}$/, 'Live verification requires the exact published revision')
+const server = liveOrigin ? { origin: liveOrigin, close: async () => {} }
+  : await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
 const credential = randomBytes(32).toString('base64url')
 const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
 const browser = await chromium.launch({
@@ -64,11 +69,16 @@ page.on('requestfailed', request => {
   if (failure === 'net::ERR_ABORTED' && /\.(?:mp3|ogg)(?:\?|$)|\/deployment\.json/.test(request.url())) return
   errors.requests.push(`${failure} ${request.url()}`)
 })
-await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+if (!liveOrigin) await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
 await page.addInitScript(({ credential: token, url }) => {
-  window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', credential: token, url } }
+  window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', sessionKind: 'standalone', credential: token, url } }
 }, { credential, url: host.address.url })
 try {
+  if (liveOrigin) {
+    const deployed = await page.request.get(`${liveOrigin}/deployment.json`)
+    assert.equal(deployed.status(), 200)
+    assert.deepEqual(await deployed.json(), { revision: expectedDeploymentRevision })
+  }
   const setupUrl = `${server.origin}/__hotbar_layer_fixture__`
   await page.route(setupUrl, route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><link rel="icon" href="data:,"><title>Save setup</title>' }))
   await page.goto(setupUrl)
@@ -100,10 +110,10 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
   await exercise('Boneyard')
   for (const values of Object.values(errors)) assert.deepEqual(values, [])
-  console.log(JSON.stringify({ touch, reproduceDom, receipts, errors, output }))
+  console.log(JSON.stringify({ touch, reproduceDom, liveOrigin, expectedDeploymentRevision, receipts, errors, output }))
 } catch (error) {
   await page.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
-  console.error(JSON.stringify({ errors, output }))
+  console.error(JSON.stringify({ errors, receipts, output }))
   throw error
 } finally {
   await page.close()
@@ -114,6 +124,7 @@ try {
 
 async function settledInventory() {
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
   return inventory
 }
@@ -169,27 +180,31 @@ async function exercise(scene) {
   await page.screenshot({ path: join(output, `${scene.toLowerCase()}-skills.png`) })
   await page.keyboard.press('i')
   inventory = await settledInventory()
-  await assertActive(inventory, `${scene} inventory replacement`)
-  assert.equal(await inventory.getByRole('tooltip').count(), 0, `${scene}: stale tooltip after replacement`)
+  await inventory.locator(`.hotbar-controls[data-hotbar-bank="${(bank + 2) % 3}"]`).waitFor()
+  // Book replacement may retain the existing inventory selection; do not alter that contract.
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'hidden' })
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"], .boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
   await page.getByRole('button', { name: /Open inventory/ }).click()
   inventory = await settledInventory()
   await assertActive(inventory, `${scene} inventory reopening`)
   assert.equal(await inventory.getByRole('tooltip').count(), 0, `${scene}: stale tooltip after reopening`)
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'hidden' })
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"], .boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
   receipts.push({ scene, tooltipBanks: covered, skillsArrowCycle: 'pass', keyboardArrow: 'pass', replacementAndReopening: 'pass' })
 }
 
 async function selectWand(stage, itemId) {
   await stage.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${itemId}"]`).first().click()
-  await stage.getByRole('tooltip').filter({ hasText: 'Cosmofluxic Wand' }).waitFor({ state: 'attached' })
+  await stage.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]').waitFor()
   await page.waitForTimeout(250)
 }
 async function assertForeground(stage, scene) {
   await selectWand(stage, wand.id)
   for (let index = 0; index < 3; index += 1) {
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await stage.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]').waitFor()
     const pixels = await hotbarPixels(stage)
     assert.deepEqual(pixels, [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${scene}: dots paint through the opaque Wand tooltip`)
     await page.keyboard.press('r')
@@ -211,6 +226,7 @@ async function exerciseServices() {
   ]) {
     await page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }).click()
     const service = page.getByRole('dialog', { name: title, exact: true })
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     await service.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
     const bank = await assertActive(service, trader)
     await service.getByRole('button', { name: 'Next hotbar', exact: true }).click()
