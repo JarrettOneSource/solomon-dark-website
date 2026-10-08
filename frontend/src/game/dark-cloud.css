@@ -190,6 +190,7 @@
     left: auto;
     width: 100%;
     height: 58px;
+    transform: none;
   }
 
   .dark-cloud-list-frame {
@@ -337,6 +338,7 @@
     width: calc(100% - 100px);
     height: 44px;
     justify-self: center;
+    transform: none;
   }
 
   .dark-cloud-native-list-art {

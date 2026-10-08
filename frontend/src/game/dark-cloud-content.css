@@ -249,6 +249,151 @@
   font: 16px/1.4 var(--font-narrative);
 }
 
+.dark-cloud-boneyards {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+  grid-row: 1 / -1;
+  overscroll-behavior: contain;
+  scrollbar-color: #876d37 #080808;
+  scrollbar-width: thin;
+}
+
+.dark-cloud-boneyards > * {
+  max-width: 980px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.dark-cloud-boneyards > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 14px;
+}
+
+.dark-cloud-boneyards h2, .dark-cloud-boneyards h3 {
+  margin: 0;
+}
+
+.dark-cloud-boneyards-tools {
+  display: grid;
+  grid-template-columns: repeat(2, 190px);
+  gap: 10px;
+}
+
+.dark-cloud-boneyards-status {
+  margin-top: 0;
+  margin-bottom: 0;
+  color: #bfffbf;
+  font: 15px/1.4 var(--font-narrative);
+}
+
+.dark-cloud-boneyards-status:not(:empty) {
+  margin-bottom: 8px;
+}
+
+.dark-cloud-boneyards-error {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #e4a39a;
+  font: 16px/1.4 var(--font-narrative);
+}
+
+.dark-cloud-boneyard-shelf {
+  margin-top: 18px;
+}
+
+.dark-cloud-boneyard-shelf h3 {
+  margin: 0 0 6px 10px;
+}
+
+.dark-cloud-boneyard-shelf ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dark-cloud-boneyard-row {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 1px solid rgb(210 178 99 / 0.12);
+}
+
+.dark-cloud-boneyard-row[data-confirming] {
+  background: rgb(228 163 154 / 0.06);
+}
+
+.dark-cloud-boneyard-copy {
+  display: block;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.dark-cloud-boneyard-copy > strong, .dark-cloud-boneyard-copy > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark-cloud-boneyard-copy > small {
+  margin-top: 3px;
+  color: #b2a78d;
+  font: 14px/1.25 var(--font-narrative);
+}
+
+.dark-cloud-boneyard-row[data-confirming] small {
+  color: #e4a39a;
+  white-space: normal;
+}
+
+.dark-cloud-boneyard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* The mod rows' action width, so labels clear the button's end caps. */
+.dark-cloud-boneyard-actions .native-ui-button {
+  flex: 0 0 130px;
+  min-width: 77px;
+}
+
+.dark-cloud-boneyards-note {
+  margin: 8px 10px 0;
+  color: #b2a78d;
+  font: 15px/1.4 var(--font-narrative);
+}
+
+.dark-cloud-boneyards-retry {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 8px 10px 0;
+}
+
+.dark-cloud-boneyards-retry .dark-cloud-boneyards-note {
+  margin: 0;
+}
+
+.dark-cloud-boneyards-retry .native-ui-button {
+  flex: 0 0 120px;
+  min-width: 77px;
+}
+
 .dark-cloud-dev-presence {
   margin-top: 24px;
 }
@@ -489,6 +634,33 @@
     margin-bottom: 24px;
   }
 
+  .dark-cloud-boneyards {
+    padding: 8px 4px;
+  }
+
+  .dark-cloud-boneyards > header {
+    justify-content: center;
+  }
+
+  /* One column when two would clip NEW BONEYARD. */
+  .dark-cloud-boneyards-tools {
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .dark-cloud-boneyard-row {
+    gap: 8px;
+    padding: 10px 4px;
+  }
+
+  .dark-cloud-boneyard-actions {
+    flex: 1 1 100%;
+  }
+
+  .dark-cloud-boneyard-actions .native-ui-button {
+    flex: 1 1 0;
+  }
+
   .dark-cloud-layout-sections {
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
@@ -532,6 +704,14 @@
 
   .dark-cloud-layout-section p {
     font-size: 13px;
+  }
+
+  .dark-cloud-boneyard-shelf {
+    margin-top: 12px;
+  }
+
+  .dark-cloud-boneyard-row {
+    min-height: 64px;
   }
 
 }

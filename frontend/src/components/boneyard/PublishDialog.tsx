@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { bytesToBase64, compileNative, docFileValue } from '../../editor/io'
 import type { EditorDoc } from '../../editor/model'
+import { saveDraftToCloud } from '../../editor/cloud'
 import { serializeWaveText, validateWaves } from '../../editor/waves'
-import { cloudIdFor, setCloudId } from '../../editor/store'
 import { playSound } from '../../fx/sounds'
 import { api, ApiError } from '../../lib/api'
 import { ErrorNote, Field } from '../ui'
@@ -42,13 +42,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
         }
       }
       const compiled = bytesToBase64(await compileNative(pressed))
-      let cloudId = cloudIdFor(draftId)
-      if (cloudId === null) {
-        const created = await api.boneyards.create(title)
-        cloudId = created.id
-        setCloudId(draftId, cloudId)
-      }
-      await api.boneyards.update(cloudId, {
+      const cloudId = await saveDraftToCloud(api.boneyards, draftId, title, {
         name: title,
         document: docFileValue(pressed),
         compiledBoneyard: compiled,

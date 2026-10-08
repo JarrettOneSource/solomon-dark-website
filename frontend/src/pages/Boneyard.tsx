@@ -22,21 +22,20 @@ import {
   downloadBlob,
   exportDocJson,
   formatReady,
-  importDocJson,
-  importNative,
+  importDocFile,
 } from '../editor/io'
 import type { EditorDoc } from '../editor/model'
 import { NATIVE_LABEL, countResidents, createDoc } from '../editor/model'
 import type { Tool, ToolStyles } from '../editor/render'
+import { saveDraftToCloud, setCloudId } from '../editor/cloud'
 import {
-  cloudIdFor,
   initialState,
   listDrafts,
   loadDraft,
   newDraftId,
   reducer,
   saveDraft,
-  setCloudId,
+  type WorkshopRequest,
 } from '../editor/store'
 import { playSound } from '../fx/sounds'
 import { api } from '../lib/api'
@@ -97,7 +96,7 @@ function MenuItem({
   )
 }
 
-export default function Boneyard({ onBack }: { onBack?: () => void }) {
+export default function Boneyard({ onBack, request }: { onBack?: () => void; request?: WorkshopRequest }) {
   const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 1050px)').matches)
   const [compactRail, setCompactRail] = useState<'palette' | 'inspector' | null>(null)
   useEffect(() => {
@@ -106,7 +105,9 @@ export default function Boneyard({ onBack }: { onBack?: () => void }) {
     query.addEventListener('change', update)
     return () => query.removeEventListener('change', update)
   }, [])
-  const [testDoc, setTestDoc] = useState<EditorDoc | null>(null)
+  const [testDoc, setTestDoc] = useState<EditorDoc | null>(() => (
+    request?.kind === 'open' && request.test && formatReady() ? structuredClone(request.doc) : null
+  ))
   const testButtonRef = useRef<HTMLButtonElement>(null)
   const returnToEditing = useCallback(() => {
     setTestDoc(null)
@@ -117,6 +118,8 @@ export default function Boneyard({ onBack }: { onBack?: () => void }) {
     reducer,
     undefined,
     () => {
+      if (request?.kind === 'new') return initialState(newDraftId(), freshDoc())
+      if (request?.kind === 'open') return { ...initialState(request.draftId, request.doc), savedAt: request.savedAt }
       const last = listDrafts()[0]
       if (last) {
         const doc = loadDraft(last.id)
@@ -223,6 +226,21 @@ export default function Boneyard({ onBack }: { onBack?: () => void }) {
     }, 800)
     return () => clearTimeout(t)
   }, [state.doc, state.dirty, state.draftId])
+
+  // Leaving cancels the pending autosave, so write the latest edits first. When the device refuses,
+  // keep the player here once; the header then explains how to keep the work.
+  const saveBeforeLeaving = useCallback((): boolean => {
+    if (!state.dirty) return true
+    try {
+      saveDraft(state.draftId, state.doc, countResidents(state.doc))
+      return true
+    } catch {
+      if (localSaveFailed) return true
+      setLocalSaveFailedFor(state.doc)
+      setNotice('Local autosave is unavailable. Save to cloud or export a copy before leaving.')
+      return false
+    }
+  }, [localSaveFailed, state.dirty, state.doc, state.draftId])
 
   // The keyboard: tools, history, housekeeping. Arrows nudge the held
   // pieces, or walk the camera when the hands are empty.
@@ -332,13 +350,7 @@ export default function Boneyard({ onBack }: { onBack?: () => void }) {
           compiled = undefined
         }
       }
-      let cloudId = cloudIdFor(state.draftId)
-      if (cloudId === null) {
-        const created = await api.boneyards.create(state.doc.meta.name || 'Untitled Acre')
-        cloudId = created.id
-        setCloudId(state.draftId, cloudId)
-      }
-      await api.boneyards.update(cloudId, {
+      await saveDraftToCloud(api.boneyards, state.draftId, state.doc.meta.name || 'Untitled Acre', {
         name: state.doc.meta.name || undefined,
         document: docFileValue(state.doc),
         ...(compiled !== undefined ? { compiledBoneyard: compiled } : {}),
@@ -353,15 +365,8 @@ export default function Boneyard({ onBack }: { onBack?: () => void }) {
 
   const onImportFile = useCallback(async (file: File) => {
     try {
-      if (file.name.endsWith('.boneyard')) {
-        const doc = importNative(new Uint8Array(await file.arrayBuffer()))
-        dispatch({ type: 'load-doc', doc, draftId: newDraftId() })
-        say(`Opened ${file.name}.`)
-      } else {
-        const doc = importDocJson(await file.text())
-        dispatch({ type: 'load-doc', doc, draftId: newDraftId() })
-        say(`Imported ${file.name}.`)
-      }
+      dispatch({ type: 'load-doc', doc: await importDocFile(file), draftId: newDraftId() })
+      say(`Opened ${file.name}.`)
     } catch (err) {
       say(err instanceof Error ? err.message : 'Could not read this file.')
     }
@@ -429,9 +434,10 @@ export default function Boneyard({ onBack }: { onBack?: () => void }) {
     <div className="boneyard-workshop flex h-full flex-col" data-editor-active={!testDoc} inert={Boolean(testDoc) || undefined} aria-hidden={Boolean(testDoc) || undefined} style={testDoc ? { visibility: 'hidden' } : undefined}>
       {/* the drafting-table header: the way home, the plot's papers, the desk */}
       <div className="flex items-center gap-3 border-b border-gold/15 bg-abyss/80 px-3 py-1.5">
-        {onBack ? <button type="button" className="btn btn-stone flex shrink-0 items-center gap-2 !px-2.5 !py-1.5 !text-[10px]" onClick={onBack}>← Main menu</button> : <Link
+        {onBack ? <button type="button" className="btn btn-stone flex shrink-0 items-center gap-2 !px-2.5 !py-1.5 !text-[10px]" onClick={() => { if (saveBeforeLeaving()) onBack() }}>← The Dark Cloud</button> : <Link
           to="/"
           className="btn btn-stone flex shrink-0 items-center gap-2 !px-2.5 !py-1.5 !text-[10px]"
+          onClick={event => { if (!saveBeforeLeaving()) event.preventDefault() }}
           title="Home"
         >
           <img src={art.skullGold} alt="" className="h-3.5 w-auto" />

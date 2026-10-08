@@ -92,6 +92,7 @@ export default function EditorTestRuntime({ doc, onReturn }: { doc: EditorDoc; o
       modLoadError={null}
       onCancelCreate={ignoreAsync}
       onKillWizard={unavailable}
+      onOpenBoneyardEditor={ignore}
       onReturnToEditor={leave}
       onSaveCheckpoint={ignore}
       onSignOut={ignore}

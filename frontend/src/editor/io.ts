@@ -180,6 +180,13 @@ export function importDocJson(text: string): EditorDoc {
   return importDocValue(parsed)
 }
 
+/** Reads a picked file: native .boneyard bytes, or the editor's JSON draft. */
+export async function importDocFile(file: File): Promise<EditorDoc> {
+  return file.name.endsWith('.boneyard')
+    ? importNative(new Uint8Array(await file.arrayBuffer()))
+    : importDocJson(await file.text())
+}
+
 export function docFileValue(doc: EditorDoc): DocFile {
   return { format: 'sdr-boneyard-doc', version: 1, doc }
 }

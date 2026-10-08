@@ -117,11 +117,13 @@ import type {
 import type {
   PartyActionRejection,
 } from './protocol/game-server-messages.ts'
+import type { WorkshopRequest } from '../editor/store.ts'
 import {
   api,
   type ActiveWebMod,
   type PartyJoinResolution,
 } from '../lib/api.ts'
+import type { DarkCloudTab } from './DarkCloudRows.tsx'
 import {
   GameModContentLoadError,
   prefetchGameContent,
@@ -354,7 +356,8 @@ interface MainMenuSceneProps {
   /** Only supplied by the disposable editor preview owner. */
   editorTestSession?: GameClientSession
   onReturnToEditor?: () => void
-  onOpenEditor?: () => void
+  /** Opens the Boneyard workshop from the Dark Cloud's Boneyards tab. */
+  onOpenBoneyardEditor: (request: WorkshopRequest) => void
   activeMods: readonly ActiveWebMod[]
   accountUsername: string | null
   displayName: string
@@ -374,7 +377,8 @@ interface MainMenuSceneProps {
     onEnded: () => void,
   ) => Promise<GameObserverSession>
   developerAccess: boolean
-  initialScreen?: 'create' | 'root'
+  initialDarkCloudTab?: DarkCloudTab
+  initialScreen?: 'create' | 'dark-cloud' | 'root'
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
   modLoadError: string | null
   onCancelCreate: () => Promise<void>
@@ -393,12 +397,14 @@ interface MainMenuSceneProps {
 
 export default function MainMenuScene(props: MainMenuSceneProps) {
   const [audio, setAudio] = useState<GameAudioDirector | null>(null)
+  // The content mounts a render later, after the host may have dropped a one-time entry.
+  const [entry] = useState(() => ({ initialDarkCloudTab: props.initialDarkCloudTab, initialScreen: props.initialScreen }))
   useLayoutEffect(() => {
     const director = createBrowserGameAudioDirector()
     setAudio(director)
     return () => director.destroy()
   }, [])
-  return audio ? <HotbarProvider><MainMenuContent {...props} audio={audio} /></HotbarProvider> : null
+  return audio ? <HotbarProvider><MainMenuContent {...props} {...entry} audio={audio} /></HotbarProvider> : null
 }
 
 function MainMenuContent({
@@ -411,7 +417,8 @@ function MainMenuContent({
   displayName,
   editorTestSession,
   onReturnToEditor,
-  onOpenEditor,
+  onOpenBoneyardEditor,
+  initialDarkCloudTab,
   initialScreen = 'root',
   loadGlobalHallOfFame,
   modLoadError,
@@ -433,8 +440,14 @@ function MainMenuContent({
   >(null)
   const stageRef = useRef<HTMLElement>(null)
   const [screen, setScreen] = useState<MenuScreen>(editorTestSession ? 'hub' : initialScreen)
+  // The workshop's return reopens its Dark Cloud tab once; later visits start on MODS.
+  const [darkCloudTab, setDarkCloudTab] = useState(initialDarkCloudTab)
+  useEffect(() => {
+    if (screen !== 'dark-cloud') setDarkCloudTab(undefined)
+  }, [screen])
+  // A menu reopened on the Dark Cloud still offers the tutorial once the player is back on the title.
   const [tutorialOfferOpen, setTutorialOfferOpen] = useState(
-    initialScreen === 'root' && tutorialOfferEligible,
+    initialScreen !== 'create' && tutorialOfferEligible,
   )
   const [tutorialDeclined, setTutorialDeclined] = useState(false)
   const [wizardName, setWizardName] = useState(() => (
@@ -1056,11 +1069,13 @@ function MainMenuContent({
   }
 
   const titleScreen = screen === 'root' || screen === 'play'
-  const titlePrompt: TitleMenuPromptKind | null = activeWizardPrompt && resumeSave
-    ? 'kill-wizard'
-    : tutorialOfferOpen
-      ? 'tutorial'
-      : null
+  const titlePrompt: TitleMenuPromptKind | null = !titleScreen
+    ? null
+    : activeWizardPrompt && resumeSave
+      ? 'kill-wizard'
+      : tutorialOfferOpen
+        ? 'tutorial'
+        : null
   const titlePromptBusy = titlePrompt === 'kill-wizard' && retiringWizard
   const gameScene = screen === 'hub' && runtimeSnapshot?.world.kind === 'boneyard'
     ? 'boneyard'
@@ -2073,10 +2088,12 @@ function MainMenuContent({
                 <DarkCloudScene
                   accountUsername={accountUsername}
                   developerAccess={developerAccess}
+                  initialTab={darkCloudTab}
                   menuKeyCode={gameSettings.controls.openMenu}
                   menuOpen={darkCloudMenuOpen || settingsContext !== null}
                   onMenu={openDarkCloudMenu}
                   onObserveMatch={observeMatch}
+                  onOpenBoneyardEditor={onOpenBoneyardEditor}
                   onPartyResolved={resolveParty}
                   requesterDisplayName={partyRequesterName}
                   onSubscriptionsChanged={refreshActiveMods}
@@ -2680,13 +2697,6 @@ function MainMenuContent({
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>
-      {screen === 'root' && !session && titlePrompt === null && onOpenEditor ? (
-        <button type="button" className="editor-entry" onClick={onOpenEditor}>
-          <span className="editor-entry-symbol" aria-hidden>✦</span>
-          <span><strong>Boneyard Editor</strong><small>Shape your own grounds</small></span>
-          <span aria-hidden>↗</span>
-        </button>
-      ) : null}
       {!collegeAdmissionHudHidden && (
         <div className="game-edge-controls">
           {screen === 'root' && titlePrompt === null ? (

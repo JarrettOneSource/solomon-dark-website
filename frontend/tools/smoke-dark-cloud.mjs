@@ -106,10 +106,10 @@ try {
   await page.getByRole('heading', { name: 'THE DARK CLOUD', exact: true }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: `You are signed in as ${username}.`, exact: true }).waitFor()
 
-  for (const label of ['MODS', 'SUBSCRIBED MODS', 'PARTIES', 'LAYOUTS']) {
+  for (const label of ['MODS', 'SUBSCRIBED MODS', 'PARTIES', 'LAYOUTS', 'BONEYARDS']) {
     assert.equal(await page.getByRole('tab', { name: label, exact: true }).count(), 1)
   }
-  for (const removed of ['RECENT', 'BONEYARDS', 'MULTIPLAYER']) {
+  for (const removed of ['RECENT', 'MULTIPLAYER']) {
     assert.equal(await page.getByRole('tab', { name: removed, exact: true }).count(), 0)
   }
   assert.equal(await page.getByText('HOW DARK ARE YOU TODAY?', { exact: true }).count(), 0)
@@ -128,9 +128,9 @@ try {
   assert.deepEqual(desktopGeometry.stage, desktopGeometry.scene)
   assert.equal(desktopGeometry.stageTransform, 'none')
   assertRectClose(desktopGeometry.list, { x: 55, y: 173, width: 1490, height: 627 })
-  assertRectClose(desktopGeometry.tabs, { x: 460, y: 128, width: 882, height: 69 })
-  assertRectClose(desktopGeometry.selectedTabBracket, { x: 460, y: 128, width: 34, height: 65 })
-  assertRectClose(desktopGeometry.restingTabBracket, { x: 630, y: 136, width: 34, height: 51 })
+  assertRectClose(desktopGeometry.tabs, { x: 239, y: 128, width: 1122, height: 69 })
+  assertRectClose(desktopGeometry.selectedTabBracket, { x: 239, y: 128, width: 34, height: 65 })
+  assertRectClose(desktopGeometry.restingTabBracket, { x: 409, y: 136, width: 34, height: 51 })
   assertRectClose(desktopGeometry.search, { x: 390, y: 818, width: 90, height: 52 })
   assertRectClose(desktopGeometry.sort, { x: 495, y: 818, width: 90, height: 52 })
   assertRectClose(desktopGeometry.primary, { x: 623.5, y: 809.5, width: 353, height: 69 })
@@ -144,7 +144,7 @@ try {
     'UI.107', 'UI.108', 'UI.109', 'UI.110',
   ])
   assert.deepEqual(desktopGeometry.listFrames, ['UI.17'])
-  assert.deepEqual(desktopGeometry.tabRecords, Array.from({ length: 12 }, () => 'UI.13'))
+  assert.deepEqual(desktopGeometry.tabRecords, Array.from({ length: 15 }, () => 'UI.13'))
   assert.deepEqual(desktopGeometry.footerRecords, [
     'UI.103', 'UI.58', 'UI.53', 'UI.53',
     'UI.103', 'UI.66', 'UI.53', 'UI.53',
@@ -312,6 +312,57 @@ try {
   const sharedCode = await page.locator('.dark-cloud-layout-receipt output').innerText()
   assert.match(sharedCode, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
   await page.screenshot({ path: layoutsScreenshotPath })
+
+  await page.getByRole('tab', { name: 'BONEYARDS', exact: true }).click()
+  await page.getByRole('heading', { name: 'YOUR BONEYARDS', exact: true }).waitFor({ timeout: 15_000 })
+  const cloudShelf = page.getByRole('region', { name: 'In the cloud', exact: true })
+  const emptyCloud = cloudShelf.getByText('Nothing in the cloud yet. Use Save to cloud in the workshop.', { exact: true })
+  await emptyCloud.waitFor()
+  await page.getByRole('button', { name: 'NEW BONEYARD', exact: true }).click()
+  const backToDarkCloud = page.getByRole('button', { name: '← The Dark Cloud', exact: true })
+  await backToDarkCloud.waitFor({ timeout: 30_000 })
+  const saveToCloudResponse = page.waitForResponse(response => (
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/boneyards'
+  ))
+  await page.getByRole('button', { name: 'Save to cloud', exact: true }).click()
+  assert.ok([200, 201].includes((await saveToCloudResponse).status()))
+  await page.getByText('Draft saved to the cloud.', { exact: true }).waitFor()
+  await backToDarkCloud.click()
+  await page.getByRole('heading', { name: 'YOUR BONEYARDS', exact: true }).waitFor({ timeout: 30_000 })
+  assert.equal(
+    await page.getByRole('tab', { name: 'BONEYARDS', exact: true }).getAttribute('aria-current'),
+    'page',
+  )
+  const cloudRow = cloudShelf.locator('.dark-cloud-boneyard-row')
+  const deleteCloudCopy = cloudRow.getByRole('button', { name: /^Delete / })
+  await deleteCloudCopy.waitFor({ timeout: 15_000 })
+  const boneyardName = (await deleteCloudCopy.getAttribute('aria-label')).slice('Delete '.length)
+  await deleteCloudCopy.click()
+  await cloudRow.getByText('Delete from the cloud? Copies on this device stay.', { exact: true }).waitFor()
+  await cloudRow.getByRole('button', { name: `Keep ${boneyardName}`, exact: true }).click()
+  await cloudRow.getByRole('button', { name: `Edit ${boneyardName}`, exact: true }).waitFor()
+  await deleteCloudCopy.click()
+  const deleteCloudResponse = page.waitForResponse(response => (
+    response.request().method() === 'DELETE'
+    && new URL(response.url()).pathname.startsWith('/api/boneyards/')
+  ))
+  await deleteCloudCopy.click()
+  assert.equal((await deleteCloudResponse).status(), 204)
+  await page.getByText(`Deleted ${boneyardName} from the cloud.`, { exact: true }).waitFor()
+  await emptyCloud.waitFor()
+
+  // Returning from the workshop reopens BONEYARDS once; the next visit starts on MODS.
+  await page.locator('.game-menu-skull').click()
+  await page.getByRole('button', { name: 'MAIN MENU', exact: true }).click()
+  await explore.waitFor({ timeout: 30_000 })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { name: 'NO', exact: true }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
+  await explore.click()
+  await page.locator('.dark-cloud-mod-row').first().waitFor({ timeout: 15_000 })
+  assert.equal(await page.getByRole('tab', { name: 'MODS', exact: true }).getAttribute('aria-current'), 'page')
 
   await page.locator('.game-menu-skull').click()
   await page.getByRole('button', { name: 'SIGN OUT', exact: true }).click()

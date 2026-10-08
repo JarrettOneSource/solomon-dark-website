@@ -176,6 +176,20 @@ try {
       }
       await capture(page, scenario, 'layouts')
       await assertNativeCloudChrome(scene)
+
+      await page.getByRole('tab', { name: 'BONEYARDS', exact: true }).click()
+      await page.getByRole('heading', { name: 'YOUR BONEYARDS', exact: true }).waitFor()
+      const deviceShelf = page.getByRole('region', { name: 'On this device', exact: true })
+      const cloudShelf = page.getByRole('region', { name: 'In the cloud', exact: true })
+      await deviceShelf.getByRole('button', { name: 'Test Lantern Hollow', exact: true }).waitFor()
+      if (scenario.authenticated) await cloudShelf.getByRole('button', { name: 'Edit Moss Acre', exact: true }).waitFor()
+      else await cloudShelf.getByText('Sign in to keep boneyards in the cloud.', { exact: true }).waitFor()
+      await capture(page, scenario, 'boneyards')
+      await deviceShelf.getByRole('button', { name: 'Delete Lantern Hollow', exact: true }).click()
+      await deviceShelf.getByText("Delete from this device? This can't be undone.", { exact: true }).waitFor()
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Keep Lantern Hollow', 'a delete confirmation must leave focus on the safe choice')
+      await capture(page, scenario, 'boneyards-confirm')
+      await assertNativeCloudChrome(scene)
       assert.deepEqual(errors, [])
       assert.equal(expectedErrors.length, 1)
       assert.deepEqual(fixture.unexpectedRequests, [])
@@ -257,6 +271,7 @@ async function installFixture(page, authenticated) {
     ['/api/mods/subscriptions', () => ({ json: { items: mods.filter(mod => subscriptions.has(mod.slug)).map(mod => ({ mod, enabled: subscriptions.get(mod.slug), createdAtUtc: user.createdAtUtc, updatedAtUtc: user.createdAtUtc })) } })],
     ['/api/game/layouts', () => ({ status: 201, json: shared })],
     ['/api/game/layouts/ABCD-EFGH', () => ({ json: shared })],
+    ['/api/boneyards', () => ({ json: [{ id: 7, name: 'Moss Acre', updatedAt: user.createdAtUtc, documentSize: 2048, compiledSize: null }] })],
     ['/api/game/players', () => ({ json: { items: [{ displayName: 'Keeper', accountUsername: 'Keeper', bot: false, developer: true, session: 'private-college', partyLeader: 'Hagatha', partySize: 2, activity: 'boneyard', boneyardName: 'The Survival Grounds', waveNumber: 3 }] } })],
     ['/api/game/matches', () => ({ json: { items: [{ id: 'match', boneyardName: 'The Survival Grounds', partyLeader: 'Hagatha', playerCount: 2, players: ['Hagatha', 'Keeper'], session: 'private-college', visibility: 'private', waveNumber: 3 }] } })],
     ['/api/game/parties', () => {
@@ -293,6 +308,7 @@ async function installFixture(page, authenticated) {
   await page.addInitScript(({ authenticated, layout }) => {
     if (authenticated) localStorage.setItem('sdr.token', 'native-ui-fixture')
     if (authenticated) localStorage.setItem('solomon-dark-mobile-ui-layout-v1', JSON.stringify(layout))
+    localStorage.setItem('sdr:boneyard:drafts', JSON.stringify([{ id: 'dpresentation', name: 'Lantern Hollow', updatedAt: Date.UTC(2026, 8, 1), residents: 12 }]))
     window.darkCloudTestPad = { axes: [0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })), connected: true, id: 'Dark Cloud test controller', index: 0, mapping: 'standard' }
     Object.defineProperty(navigator, 'getGamepads', { value: () => [window.darkCloudTestPad] })
     Object.defineProperty(navigator, 'clipboard', { value: { async writeText(code) { window.darkCloudCopiedCode = code } } })

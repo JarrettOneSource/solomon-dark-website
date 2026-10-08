@@ -568,6 +568,7 @@ const vite = await createServer({ root: 'frontend', server: { middlewareMode: tr
 try {
   const io = await vite.ssrLoadModule('/src/editor/io.ts');
   const store = await vite.ssrLoadModule('/src/editor/store.ts');
+  const cloud = await vite.ssrLoadModule('/src/editor/cloud.ts');
   const values = new Map();
   let quota = 5 * 1024 * 1024;
   globalThis.localStorage = {
@@ -591,10 +592,10 @@ try {
   assert.equal(values.get('sdr:boneyard:draft:resized'), previous);
   assert.throws(() => store.saveDraft('blocked', hydrated, 8500), {name: 'QuotaExceededError'});
   assert.deepEqual(store.listDrafts().map(draft => draft.id), ['resized']);
-  store.setCloudId('resized', 123);
-  assert.equal(store.cloudIdFor('resized'), 123);
+  cloud.setCloudId('resized', 123);
+  assert.equal(cloud.cloudIdFor('resized'), 123);
   quota = 5 * 1024 * 1024;
-  store.setCloudId('resized', 456);
+  cloud.setCloudId('resized', 456);
   assert.equal(JSON.parse(values.get('sdr:boneyard:cloudmap')).resized, 456);
 } finally {
   delete globalThis.localStorage;

@@ -122,9 +122,17 @@
   position: absolute;
   z-index: 4;
   top: 128px;
-  left: calc(50% - 340px);
-  width: 882px;
+  left: 50%;
+  width: min(1122px, calc(100% - 110px));
   height: 69px;
+  overflow: auto hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  transform: translateX(-50%);
+}
+
+.dark-cloud-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .dark-cloud-tabs-plan {

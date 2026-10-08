@@ -449,6 +449,11 @@ export interface DraftMeta {
   residents: number
 }
 
+/** What the Dark Cloud asks the workshop to open, optionally straight into its private test. */
+export type WorkshopRequest =
+  | { readonly kind: 'new' }
+  | { readonly kind: 'open'; readonly doc: EditorDoc; readonly draftId: string; readonly savedAt: number; readonly test: boolean }
+
 const INDEX_KEY = 'sdr:boneyard:drafts'
 const DRAFT_PREFIX = 'sdr:boneyard:draft:'
 
@@ -489,35 +494,4 @@ export function loadDraft(id: string): EditorDoc | null {
 export function deleteDraft(id: string) {
   localStorage.setItem(INDEX_KEY, JSON.stringify(listDrafts().filter((d) => d.id !== id)))
   localStorage.removeItem(DRAFT_PREFIX + id)
-}
-
-// ---------- local draft -> Annals (cloud) mapping ----------
-
-const CLOUD_MAP_KEY = 'sdr:boneyard:cloudmap'
-let unsavedCloudMap: Record<string, number> | null = null
-
-function cloudMap(): Record<string, number> {
-  if (unsavedCloudMap) return unsavedCloudMap
-  try {
-    return JSON.parse(localStorage.getItem(CLOUD_MAP_KEY) ?? '{}') as Record<string, number>
-  } catch {
-    return {}
-  }
-}
-
-export function cloudIdFor(draftId: string): number | null {
-  return cloudMap()[draftId] ?? null
-}
-
-export function setCloudId(draftId: string, cloudId: number | null) {
-  const map = cloudMap()
-  if (cloudId === null) delete map[draftId]
-  else map[draftId] = cloudId
-  try {
-    localStorage.setItem(CLOUD_MAP_KEY, JSON.stringify(map))
-    unsavedCloudMap = null
-  } catch {
-    // A full browser must not prevent saving the document to its cloud draft.
-    unsavedCloudMap = map
-  }
 }

@@ -1,4 +1,5 @@
 import {
+  useLayoutEffect,
   useRef,
   type ButtonHTMLAttributes,
   type CSSProperties,
@@ -15,12 +16,16 @@ import NativeUiTabs from './NativeUiTabs.tsx'
 import { nativeUiFont } from './native-ui-catalog.ts'
 import { layoutNativeUiText } from './native-ui-text.ts'
 import {
+  NATIVE_DARK_CLOUD_TAB_STRIP,
   NATIVE_DARK_CLOUD_TABS,
   planNativeDarkCloudToolButton,
 } from './native-dark-cloud-contract.ts'
 import { nativeUiPlan, nativeUiRect } from './native-ui-plan.ts'
 
-type DarkCloudTabId = 'layouts' | 'mods' | 'parties' | 'subscribed'
+type DarkCloudTabId = 'boneyards' | 'layouts' | 'mods' | 'parties' | 'subscribed'
+
+// Below this the labels stop reading, so a narrow strip scrolls instead.
+const MINIMUM_TAB_SCALE = 0.4
 
 export function NativeDarkCloudText({
   align = 'left',
@@ -178,8 +183,18 @@ export function NativeDarkCloudTabs({
   readonly selectedId: DarkCloudTabId
 }) {
   const hostRef = useRef<HTMLElement>(null)
-  const size = useNativeUiElementSize(hostRef, { height: 69, width: 882 })
-  const scale = Math.min(1, size.width / 882, size.height / 69)
+  const strip = NATIVE_DARK_CLOUD_TAB_STRIP
+  const size = useNativeUiElementSize(hostRef, strip)
+  const scale = Math.min(1, size.height / strip.height, Math.max(size.width / strip.width, MINIMUM_TAB_SCALE))
+  const width = Math.max(size.width, strip.width * scale)
+  useLayoutEffect(() => {
+    const host = hostRef.current
+    const tab = host?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!host || !tab) return
+    const right = tab.offsetLeft + tab.offsetWidth
+    if (tab.offsetLeft < host.scrollLeft) host.scrollLeft = tab.offsetLeft
+    else if (right > host.scrollLeft + host.clientWidth) host.scrollLeft = right - host.clientWidth
+  }, [selectedId, width])
   return (
     <nav className="dark-cloud-tabs" ref={hostRef}>
       <NativeUiTabs
@@ -189,9 +204,9 @@ export function NativeDarkCloudTabs({
         onSelect={(id) => onSelect(id as DarkCloudTabId)}
         selectedId={selectedId}
         scale={scale}
-        tabs={NATIVE_DARK_CLOUD_TABS.map(tab => ({ ...tab, bounds: nativeUiRect(tab.bounds.left * size.width / 882, 0, tab.bounds.width * size.width / 882, size.height) }))}
+        tabs={NATIVE_DARK_CLOUD_TABS.map(tab => ({ ...tab, bounds: nativeUiRect(tab.bounds.left * width / strip.width, 0, tab.bounds.width * width / strip.width, size.height) }))}
         tint={0xd9ba70}
-        width={size.width}
+        width={width}
       />
     </nav>
   )

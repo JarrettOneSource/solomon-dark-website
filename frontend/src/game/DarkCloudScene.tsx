@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 
+import type { WorkshopRequest } from '../editor/store.ts'
 import {
   api,
   type ActiveWebMod,
@@ -46,7 +47,10 @@ import { DarkCloudList, DeveloperPresenceSection, type DarkCloudRow, type DarkCl
 import { DarkCloudFooter, DarkCloudStatus } from './DarkCloudFooter.tsx'
 import './dark-cloud.css'
 
+const DarkCloudBoneyards = lazy(() => import('./DarkCloudBoneyards.tsx'))
 const DarkCloudLayouts = lazy(() => import('./DarkCloudLayouts.tsx'))
+
+type DarkCloudListTab = Exclude<DarkCloudTab, 'boneyards' | 'layouts'>
 
 interface DarkCloudSceneProps {
   accountUsername: string | null
@@ -55,12 +59,15 @@ interface DarkCloudSceneProps {
    * presence feed; the backend independently refuses that feed to anyone else.
    */
   developerAccess: boolean
+  initialTab?: DarkCloudTab
   /** Key code bound to the game's open-menu control (`settings.controls.openMenu`). */
   menuKeyCode: string
   /** True while the Esc menu or its settings own input, so the open-menu key stays quiet. */
   menuOpen: boolean
   /** Opens the native Esc menu; the host owns its state and mounts the menu. */
   onMenu: () => void
+  /** Leaves the Dark Cloud for the Boneyard workshop; the host brings the player back to this tab. */
+  onOpenBoneyardEditor: (request: WorkshopRequest) => void
   onPartyResolved: (resolution: PartyJoinResolution) => void
   onObserveMatch: (matchId: string) => Promise<void>
   onSubscriptionsChanged: () => Promise<readonly ActiveWebMod[]>
@@ -70,17 +77,19 @@ interface DarkCloudSceneProps {
 export default function DarkCloudScene({
   accountUsername,
   developerAccess,
+  initialTab = 'mods',
   menuKeyCode,
   menuOpen,
   onMenu,
   onObserveMatch,
+  onOpenBoneyardEditor,
   onPartyResolved,
   onSubscriptionsChanged,
   requesterDisplayName,
 }: DarkCloudSceneProps) {
   const requestGeneration = useRef(0)
   const subscriptionBusyRef = useRef(false)
-  const [tab, setTab] = useState<DarkCloudTab>('mods')
+  const [tab, setTab] = useState<DarkCloudTab>(initialTab)
   const [mods, setMods] = useState<ModSummary[]>([])
   const [subscriptions, setSubscriptions] = useState<ModSubscription[]>([])
   const [modsError, setModsError] = useState<string | null>(null)
@@ -159,7 +168,7 @@ export default function DarkCloudScene({
   ), [subscriptions])
 
   const rows = useMemo<DarkCloudRow[]>(() => {
-    const source: DarkCloudRow[] = tab === 'layouts'
+    const source: DarkCloudRow[] = tab === 'layouts' || tab === 'boneyards'
       ? []
       : tab === 'parties'
         ? parties.map(party => ({ key: `party:${party.id}`, kind: 'party', party }))
@@ -185,7 +194,7 @@ export default function DarkCloudScene({
   }, [rows, selectedKey])
 
   const selected = rows.find(row => row.key === selectedKey) ?? null
-  const activeError = { mods: modsError, subscribed: subscriptionsError, parties: partyDirectory.error, layouts: null }[tab]
+  const activeError = { mods: modsError, subscribed: subscriptionsError, parties: partyDirectory.error, boneyards: null, layouts: null }[tab]
   const detailSubscription = detailMod
     ? subscriptionsBySlug.get(detailMod.slug) ?? null
     : null
@@ -306,6 +315,10 @@ export default function DarkCloudScene({
           <Suspense fallback={<p className="dark-cloud-empty"><NativeDarkCloudText text="OPENING LAYOUTS..." /></p>}>
             <DarkCloudLayouts accountUsername={accountUsername} />
           </Suspense>
+        ) : tab === 'boneyards' ? (
+          <Suspense fallback={<p className="dark-cloud-empty"><NativeDarkCloudText text="OPENING BONEYARDS..." /></p>}>
+            <DarkCloudBoneyards accountUsername={accountUsername} onOpen={onOpenBoneyardEditor} />
+          </Suspense>
         ) : (
           <>
             <div className={`dark-cloud-columns dark-cloud-columns-${tab}`}>
@@ -417,15 +430,13 @@ async function listAllMods(): Promise<ModSummary[]> {
   return [first, ...rest].flatMap((page: ModList) => page.items)
 }
 
-function columnLabels(tab: DarkCloudTab): readonly string[] {
-  if (tab === 'layouts') return []
+function columnLabels(tab: DarkCloudListTab): readonly string[] {
   if (tab === 'parties') return ['PARTY', 'WIZARDS', 'STATUS', 'LOCATION', 'ACTION']
   if (tab === 'subscribed') return ['SUBSCRIBED MOD', 'AUTHOR', 'VERSION', 'STATUS', 'MANAGE']
   return ['MOD', 'AUTHOR', 'VERSION', 'STATUS', 'ACTION']
 }
 
-function emptyMessage(tab: DarkCloudTab, authenticated: boolean, query: string): string {
-  if (tab === 'layouts') return ''
+function emptyMessage(tab: DarkCloudListTab, authenticated: boolean, query: string): string {
   if (query) return 'NOTHING MATCHES YOUR SEARCH.'
   if (tab === 'parties') return 'NO PUBLIC PARTIES.'
   if (tab === 'subscribed') {

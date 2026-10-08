@@ -15,7 +15,8 @@ export async function assertStockCloudSurfaces(page) {
       canvas.height = source.height
       const context = canvas.getContext('2d')
       context.drawImage(source, 0, 0)
-      return [[260, 95, 140, 50], [270, 160, 160, 13], [40, 285, 15, 135], [5, 275, 30, 145]].map(rect => {
+      // Stone above the tab strip, the frame's top border beside it, and the left wall.
+      return [[260, 78, 140, 50], [130, 160, 100, 13], [40, 285, 15, 135], [5, 275, 30, 145]].map(rect => {
         const { data } = context.getImageData(...rect)
         let sum = 0
         for (let index = 0; index < data.length; index += 4) sum += (data[index] + data[index + 1] + data[index + 2]) / 3
@@ -26,7 +27,7 @@ export async function assertStockCloudSurfaces(page) {
     await reader.close()
     await page.bringToFront()
   }
-  const reference = [12.85, 53.60, 54.89, 30.46]
+  const reference = [10.53, 54.55, 54.89, 30.46]
   for (let index = 0; index < means.length; index += 1) {
     assert.ok(Math.abs(means[index] - reference[index]) < 4, `Stock surface ${index} brightness ${means[index]} differs from ${reference[index]}`)
   }
@@ -55,7 +56,7 @@ export async function darkCloudGeometry(page) {
     const slices = selector => [...document.querySelectorAll(`${selector} [data-native-ui-slice]`)]
       .map(record => record.getAttribute('data-native-ui-slice'))
     const touchTargets = [...document.querySelectorAll(
-      '.dark-cloud-heading button, .dark-cloud-tabs button, .dark-cloud-footer button, .dark-cloud-row-actions button',
+      '.dark-cloud-heading button, .dark-cloud-tabs button, .dark-cloud-footer button, .dark-cloud-row-actions button, .dark-cloud-boneyards button',
     )].filter(element => element.getClientRects().length > 0)
       .map(element => element.getBoundingClientRect().height)
     const scene = document.querySelector('.dark-cloud-scene')

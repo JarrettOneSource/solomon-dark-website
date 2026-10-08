@@ -27,7 +27,7 @@ export function DarkCloudFooter({ onPrimary, onSearch, onSort, partyBusy, progre
   return (
     <footer className="dark-cloud-footer">
       <DarkCloudDownloadProgress progress={progress} />
-      {tab !== 'layouts' ? (
+      {tab !== 'layouts' && tab !== 'boneyards' ? (
         <>
           <div className="dark-cloud-footer-tools">
             <NativeDarkCloudToolButton icon="search" label="Search" onClick={onSearch} />
@@ -84,7 +84,6 @@ function DarkCloudDownloadProgress({
 }
 
 function statusLabel(tab: DarkCloudTab, count: number, query: string, loading: boolean): string {
-  if (tab === 'layouts') return 'MOBILE UI LAYOUTS'
   if (loading && count === 0) return 'CONSULTING THE DARK CLOUD...'
   if (query) return `"${query.toUpperCase()}", ${count} ${count === 1 ? 'MATCH' : 'MATCHES'}`
   if (tab === 'parties') return `${count} ${count === 1 ? 'PARTY' : 'PARTIES'}`

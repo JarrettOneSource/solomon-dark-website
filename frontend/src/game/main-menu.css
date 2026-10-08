@@ -626,10 +626,3 @@
     transform: none;
   }
 }
-
-.editor-entry { position: fixed; left: max(24px,env(safe-area-inset-left)); bottom: max(26px,env(safe-area-inset-bottom)); z-index: 5; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border: 1px solid #b69c5f70; border-radius: 8px; background: linear-gradient(120deg,#16201fec,#0c1415ed); color: #d8cda7; text-align: left; box-shadow: 0 6px 24px #0006; cursor: pointer; transition: border-color .15s,background .15s; }
-.editor-entry:hover,.editor-entry:focus-visible { border-color: #e3cc8b; background: #22322ff5; outline: 2px solid #d9c48655; outline-offset: 3px; }
-.editor-entry strong { display: block; font: 12px 'Cinzel',serif; letter-spacing: .08em; }
-.editor-entry small { display: block; margin-top: 4px; font: 12px 'Alegreya',serif; color: #91a397; }
-.editor-entry-symbol { font-size: 27px; color: #b9ab6a; }
-@media(max-height:550px) { .editor-entry { bottom: 14px; padding: 8px 12px; } .editor-entry small { display: none; } }

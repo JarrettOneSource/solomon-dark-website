@@ -11,11 +11,12 @@ web runtime projects scenery and spawn, but does not execute imported native
 recipes, triggers or timelines. That authoring/execution work remains pending
 in the coordinator's full feature matrix.
 
-The web integration boundary comprises the title-menu entry; shared standalone
-and in-game editor surface; draft/history/selection/camera ownership; compile
-and test admission; single-player authority; runtime presentation; cancellation,
-failure, death and return; and save/score/social isolation. No active game may
-remain behind the editor: entry belongs to the out-of-run title menu.
+The web integration boundary comprises the Dark Cloud Boneyards tab; shared
+standalone and in-game editor surface; draft/history/selection/camera ownership;
+compile and test admission; single-player authority; runtime presentation;
+cancellation, failure, death and return; and save/score/social isolation. No
+active game may remain behind the editor: entry belongs to the out-of-run Dark
+Cloud.
 
 ## Contract and membership
 
@@ -40,9 +41,10 @@ remain behind the editor: entry belongs to the out-of-run title menu.
 Focused admission/materialization and authority tests cover malformed/oversized
 input, authored spawn/geometry, save rejection, no checkpoint/score/social
 outputs, normal-session compatibility and teardown. Browser acceptance covers
-standalone and title entry, editing, test/play/return, preserved camera/history,
-interrupted/repeated tests, autosave failure and title return. Required full
-Website gate and exact deployed browser verification are pending.
+standalone and Dark Cloud entry, editing, test/play/return, preserved
+camera/history, interrupted/repeated tests, autosave failure and return to the
+Boneyards tab. Required full Website gate and exact deployed browser
+verification are pending.
 
 ## Disposition
 
@@ -84,3 +86,16 @@ failure retained exact document and camera; no JavaScript page errors. Desktop
 1600x1000 and phone390x844 pixels reviewed, phone document width390px. The test
 bar was lowered below the health HUD following review. These are focused results,
 not the complete Website gate or production/live acceptance.
+
+## Dark Cloud Boneyards tab (October 7)
+
+The title-menu entry moved into the Dark Cloud as a BONEYARDS tab after
+LAYOUTS, so the first four tabs still fit a portrait phone and the strip
+scrolls to reach it. It lists drafts on this device and, when signed in, cloud
+drafts. Each row has Edit, Test and Delete; Delete asks in place and Keep holds
+focus. New boneyard and Import file sit above both lists. Test opens the
+workshop and starts the private test at once. Leaving the workshop saves any
+pending autosave and reopens the Boneyards tab once; later visits start on
+Mods. Save to cloud and Publish replace a cloud copy that was deleted
+elsewhere instead of failing. The /boneyard route and the site footer link are
+unchanged.

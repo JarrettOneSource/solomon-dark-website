@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { WorkshopRequest } from '../editor/store.ts'
 import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
 import {
   GameConnectionFailure,
@@ -71,7 +72,12 @@ interface DeploymentRestartState {
 
 export default function Game() {
   const { user, loading: authLoading, logout } = useAuth()
-  const [editorOpen, setEditorOpen] = useState(false)
+  const [workshop, setWorkshop] = useState<WorkshopRequest | null>(null)
+  // Only the menu that mounts as the workshop closes opens on the Boneyards tab; later remounts start at the title.
+  const [returnToBoneyards, setReturnToBoneyards] = useState(false)
+  useEffect(() => {
+    if (!workshop && returnToBoneyards) setReturnToBoneyards(false)
+  }, [returnToBoneyards, workshop])
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
   const diagnosticsRef = useRef<ReturnType<typeof createGameClientDiagnostics> | null>(null)
   diagnosticsRef.current ??= createGameClientDiagnostics()
@@ -442,9 +448,15 @@ export default function Game() {
     }
   }, [diagnostics, user])
 
-  if (editorOpen) {
+  if (workshop) {
     return <Suspense fallback={<NativeLoader progress={0} stage="Opening the Boneyard workshop" />}>
-      <Boneyard onBack={() => setEditorOpen(false)} />
+      <Boneyard
+        onBack={() => {
+          setWorkshop(null)
+          setReturnToBoneyards(true)
+        }}
+        request={workshop}
+      />
     </Suspense>
   }
   if (fatal && !deploymentRestart) {
@@ -467,12 +479,13 @@ export default function Game() {
               connectObserver={connectObserver}
               developerAccess={user?.developerAccess === true}
               displayName={displayName}
-              initialScreen="root"
+              initialDarkCloudTab={returnToBoneyards ? 'boneyards' : undefined}
+              initialScreen={returnToBoneyards ? 'dark-cloud' : 'root'}
               loadGlobalHallOfFame={loadGlobalHallOfFame}
               modLoadError={modLoadError}
               onCancelCreate={cancelCreate}
               onKillWizard={killWizard}
-              onOpenEditor={() => setEditorOpen(true)}
+              onOpenBoneyardEditor={setWorkshop}
               onSaveCheckpoint={persistCheckpoint}
               onSignOut={logout}
               persistSaveCheckpoint={persistCheckpointAndWait}

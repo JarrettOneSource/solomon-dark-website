@@ -7,12 +7,17 @@ import {
   type NativeUiRect,
 } from './native-ui-plan.ts'
 
+// The first three bands keep retail widths; the web-only bands follow them.
+// BONEYARDS comes last so a portrait phone still fits the first four bands and shows its edge as a scroll hint.
 export const NATIVE_DARK_CLOUD_TABS = Object.freeze([
   Object.freeze({ bounds: nativeUiRect(0, 0, 170, 69), id: 'mods', label: 'MODS' }),
   Object.freeze({ bounds: nativeUiRect(170, 0, 340, 69), id: 'subscribed', label: 'SUBSCRIBED MODS' }),
   Object.freeze({ bounds: nativeUiRect(510, 0, 170, 69), id: 'parties', label: 'PARTIES' }),
   Object.freeze({ bounds: nativeUiRect(680, 0, 202, 69), id: 'layouts', label: 'LAYOUTS' }),
+  Object.freeze({ bounds: nativeUiRect(882, 0, 240, 69), id: 'boneyards', label: 'BONEYARDS' }),
 ] satisfies readonly NativeUiTab[])
+
+export const NATIVE_DARK_CLOUD_TAB_STRIP = Object.freeze({ height: 69, width: 1122 })
 
 type NativeDarkCloudToolButtonSpec = {
   readonly bounds: NativeUiRect

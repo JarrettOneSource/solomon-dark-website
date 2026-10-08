@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { nativeUiRect, type NativeUiNode } from './native-ui-plan.ts'
-import { NATIVE_DARK_CLOUD_TABS, planNativeDarkCloudToolButton } from './native-dark-cloud-contract.ts'
+import { NATIVE_DARK_CLOUD_TAB_STRIP, NATIVE_DARK_CLOUD_TABS, planNativeDarkCloudToolButton } from './native-dark-cloud-contract.ts'
 import { planNativeDarkCloudListFrame, planNativeDarkCloudPanel, planNativeDarkCloudSceneArt } from './native-dark-cloud-frame.ts'
 import { planNativeUiControlPanel } from './native-ui-control-panel.ts'
-import { layoutNativeUiText } from './native-ui-text.ts'
+import { layoutNativeUiText, measureNativeUiText } from './native-ui-text.ts'
 import { planNativeUiTabs } from './native-ui-tabs.ts'
 
 test('the Dark Cloud tab bands expose every route and visible label in order', () => {
@@ -14,7 +14,16 @@ test('the Dark Cloud tab bands expose every route and visible label in order', (
     ['subscribed', 'SUBSCRIBED MODS', nativeUiRect(170, 0, 340, 69)],
     ['parties', 'PARTIES', nativeUiRect(510, 0, 170, 69)],
     ['layouts', 'LAYOUTS', nativeUiRect(680, 0, 202, 69)],
+    ['boneyards', 'BONEYARDS', nativeUiRect(882, 0, 240, 69)],
   ])
+})
+
+test('the Dark Cloud tab strip spans its bands and web-only labels sit between their brackets', () => {
+  const last = NATIVE_DARK_CLOUD_TABS.at(-1)!
+  assert.deepEqual(NATIVE_DARK_CLOUD_TAB_STRIP, { height: 69, width: last.bounds.left + last.bounds.width })
+  for (const tab of NATIVE_DARK_CLOUD_TABS.filter(({ id }) => id === 'boneyards' || id === 'layouts')) {
+    assert.ok(measureNativeUiText(tab.label, 'menu') <= tab.bounds.width - 2 * 34, tab.label)
+  }
 })
 
 test('Dark Cloud paints repeated wall and filigree bands omitted by the Sprite-only census', () => {
@@ -182,7 +191,7 @@ test('responsive tab art scales uniformly inside full-size touch targets', () =>
     assert.deepEqual([node.text.x, node.text.y], node.label === 'parties:label' ? [150, 36] : [50, 32])
   }
   assert.throws(() => planNativeUiTabs({ height: 44, selectedId: 'missing', tabs: [], width: 200 }), /absent/)
-  assert.throws(() => planNativeUiTabs({ height: 44, selectedId: 'missing', tabs: NATIVE_DARK_CLOUD_TABS, width: 882 }), /absent/)
+  assert.throws(() => planNativeUiTabs({ height: 44, selectedId: 'missing', tabs: NATIVE_DARK_CLOUD_TABS, width: NATIVE_DARK_CLOUD_TAB_STRIP.width }), /absent/)
 })
 
 test('a compact tool keeps its icon square and its pressed displacement proportional', () => {

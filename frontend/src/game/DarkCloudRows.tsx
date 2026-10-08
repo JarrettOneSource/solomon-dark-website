@@ -7,7 +7,7 @@ import type { DarkCloudSubscriptionAction } from './DarkCloudModDetail.tsx'
 import { directoryPartyAction, directoryPartyPresentation } from './party-directory.ts'
 import { NativeDarkCloudText, NativeUiButton } from './native-ui/react.ts'
 
-export type DarkCloudTab = 'layouts' | 'mods' | 'subscribed' | 'parties'
+export type DarkCloudTab = 'boneyards' | 'layouts' | 'mods' | 'subscribed' | 'parties'
 
 export type DarkCloudRow =
   | { key: string; kind: 'mod'; mod: ModSummary; subscription: ModSubscription | null }
