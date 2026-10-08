@@ -25,8 +25,9 @@ const initial = createGameSimulation({ [playerId]: {
   discipline: 'arcane', displayName: 'Hotbar Layering', element: 'ether',
 } })
 const economy = getPlayerEconomy(initial, playerId)
-const wand = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_001), inventorySlot: 72 }
-const arrowWands = [68, 78].map((inventorySlot, index) => ({
+const wand = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_001), inventorySlot: 27 }
+// Native inventory addresses are column-major: these are bottom-row cells.
+const arrowWands = [11, 51].map((inventorySlot, index) => ({
   ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_002 + index), inventorySlot,
 }))
 const document = createGameSaveDocument({
@@ -184,7 +185,7 @@ async function exercise(scene) {
 
 async function selectWand(stage, itemId) {
   await stage.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${itemId}"]`).first().click()
-  await stage.getByRole('tooltip').filter({ hasText: 'Cosmofluxic Wand' }).waitFor({ state: 'attached' })
+  await stage.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]').waitFor()
   await page.waitForTimeout(250)
 }
 async function assertForeground(stage, scene) {
