@@ -1,5 +1,125 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-10-08 — Report 102: empty chest investigation
+
+### Evidence and current disposition
+
+An opened chest with no visible reward is not sufficient evidence of a lost
+web item: retail contains an intentional empty-inventory path. The reported
+video does not expose its Goodie seed, selected reward, complete owned-recipe
+set, arena item limits, or authority/allocator state. This investigation does
+not claim to have reproduced that particular occurrence, and no guaranteed-
+loot fallback is justified by the available evidence.
+
+The original report and its nearby discussion were rechecked on October 8 at
+07:06 UTC; its tentative stock comparison remained unedited and unwithdrawn.
+The original 3,806,341-byte clip has SHA-256
+`f3d87c54c129409f5acf14ed4125e9f4cd976ece63e1a641ddcd3e4e161ab284`.
+Private report text and media remain in the user's retained archive.
+
+Fresh M5 instruction extraction used the unchanged 0.72.5 retail PE with
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`, and the maintained LLVM objdump with SHA-256
+`83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+The extracted windows are `0x0046BDE0..0x0046C300` and
+`0x0061F4C0..0x00620020`. No injected or clean-stock runtime was launched.
+
+### Recovered causal thread
+
+- Goodie timer 250 chooses its saved seed modulo 18. At `0x0061FB9A`, the
+  named-item branch passes mode 4 into `0x0046BDE0`.
+- Mode 4 admits Rare and Epic definitions, checks ownership/scenario exclusion
+  through `0x005CB050`, and compares recipe levels with arena `+0x8F0C` and
+  `+0x8F10`. The stock catalog has 47 named definitions, all Rare/Epic. Its
+  random-equipment placeholder lane is limited to modes 0/1, so mode 4 has
+  no generated-item fallback when the eligible named pool is empty.
+- At `0x0046C27D..0x0046C293`, an out-of-range selection becomes a null recipe
+  passed to the existing clone helper. The preexisting native factory evidence
+  establishes the null result. This is not a guarantee to choose a duplicate.
+- At `0x0061FEF3..0x0061FEFC`, the Goodie asks for the resulting inventory
+  count; a nonpositive count jumps to `0x00620001`, destroys the temporary
+  Item_Sack, and returns. Only a positive count reaches ground-Sack creation.
+- The current web selector 10 already returns no item for an empty unowned
+  named-recipe pool. `materializeGoodie` likewise returns without spawning a
+  carrier when `contents.items.length === 0`. An already-open chest therefore
+  need not contain loot in either implementation.
+
+### Newly exposed membership gaps
+
+The older eighteen-row closure omitted a special native selector rewrite.
+`0x0061FA1A..0x0061FA36` compares global `0x008203C4` with 50 and, only above
+that threshold, rewrites the selector to 99 when the saved seed modulo 887
+is zero. The same routine contains a no-item audio branch at `0x0061FEA4`
+that plays registry `+0x145C` through SoundStream `0x0040AF70`. The retained
+native audio catalog identifies that slot as registry 149,
+`sounds/YouGetNothing__Stream.wav`, SHA-256
+`325a044a456a239e61662a7ffabee7ebf5d90c86d949ea335a128a6b413aa3b1`.
+The complete 100-byte selector table at `0x00620048` and all nine destination
+pointers at `0x00620024` were extracted on M5. Their full mapping is:
+
+| Selector rows | Destination |
+| --- | --- |
+| 0..3 | `0x0061FA4F` |
+| 4..7 | `0x0061FAC7` |
+| 8..9 | `0x0061FB38` |
+| 10 | `0x0061FB9A` |
+| 11..12 | `0x0061FBBF` |
+| 13..16 | `0x0061FC2D` |
+| 17 | `0x0061FC79` |
+| 18..98 | `0x0061FEEC` (not produced by the ordinary modulo-18/99 selector) |
+| 99 | `0x0061FEA4` (`YouGetNothing` audio, no inserted item) |
+
+A complete disassembly search for the direct global operand found five
+references: increments at `0x0046DCD4` in Arena load `0x0046DC60` and
+`0x004FD6D6` in ChatContent load `0x004FD6A0`; comparisons at `0x0047F4AB`,
+`0x00500259`, and the Goodie branch `0x0061FA1A`. These establish two writers,
+not a complete semantic name, lifetime, or persistence contract. Those remain
+unestablished; they are not inferred from the sound name. The current web
+always uses `rewardSeed % 18` and has no selector-99 path. Consequently this
+omitted stock path cannot itself explain the current web clip.
+
+The native named selector also reads arena level limits, whereas current
+`selectGoodieEquipment` uses the fixed interval 0..100. This is a separate
+contract difference for nondefault authored limits; it cannot by itself make
+the current web return empty more often than the corresponding restricted
+native pool. No level-limit change is made as part of classifying the video.
+
+### Scoped membership and validation
+
+| Member | Disposition | Evidence |
+| --- | --- | --- |
+| Existing reward rows 0..17, Potion stacking/UIDs, phases 100/200/250 | verified-already-at-parity for the preserved tested contract | Four existing focused cases passed on exact `14f6ae3c0a230075e25d653b8b646ed916264deb` on M5 |
+| Selector 10 with all 47 authored recipes owned, no fallback carrier | verified-already-at-parity for default item limits | Fresh native branches above; existing exhaustion test passes |
+| Special selector rewrite to 99 and its no-item/audio ownership | recovered-pending-port; deferred discrepancy | Rewrite, full switch table and sound identity proved; global lifetime/persistence pending, web path absent |
+| Native arena item limits versus current fixed 0..100 Goodie filter | recovered-pending-port | Native direct field reads and current source differ; not a proved cause of this report |
+| The reporter's exact empty outcome | unresolved occurrence, not a completed parity disposition | No seed or continuation/authority state supplied |
+
+M5 focused verification at 07:19 UTC passed exactly four existing tests: the
+native item-mode/ownership filter, all eighteen ordinary Goodie rows, forced
+Potion insertion/UID consumption, and activation/materialization phases. It
+was a scoped diagnostic run, not a new canonical gate or browser gameplay
+acceptance. No runtime code, loot balance, or completion reaction changed.
+
+Thirteen new video samples at requested times 0.05, 0.25, 0.5, 0.75, 1, 1.25,
+1.5, 1.75, 2, 2.25, 2.5, 2.75 and 3 seconds were decoded through the installed
+M5 Chrome with every completed seek position checked against the request.
+The 0.05-second sample is black; the following samples show the closed chest
+with its key/lock indicator and the opening progression. Earlier retained
+1–15-second samples include the later open chest and inventory inspection
+without an obvious visible reward. This is sampled visual evidence, not a
+frame-complete or audio analysis. It does not reveal the authoritative reward
+or establish inventory ownership. The final media job exited zero at 07:26 UTC
+with no page errors; invalid earlier samples were excluded from the result.
+
+Report 102 stays open, with no completion reaction. The missing evidence is an
+occurrence save or deterministic reproduction, its complete owned-recipe set,
+and authoritative Goodie seed/selected reward/state (including relevant arena
+limits and allocator state). The focused kernel tests establish the known empty
+branch; they do not replay the reporter's actual cause. The discovered
+selector-99 omission and nondefault item-limit difference are recorded for
+separate follow-through; neither is silently added to this release.
+
+
 ## 2026-09-24 — Report 21: Item Charm probability investigation
 
 ### Report and recovered cause
