@@ -67,7 +67,7 @@ page.on('requestfailed', request => {
 })
 await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
 await page.addInitScript(({ credential: token, url }) => {
-  window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', credential: token, url } }
+  window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', sessionKind: 'standalone', credential: token, url } }
 }, { credential, url: host.address.url })
 try {
   const setupUrl = `${server.origin}/__hotbar_layer_fixture__`
@@ -104,7 +104,7 @@ try {
   console.log(JSON.stringify({ touch, reproduceDom, receipts, errors, output }))
 } catch (error) {
   await page.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
-  console.error(JSON.stringify({ errors, output }))
+  console.error(JSON.stringify({ errors, receipts, output }))
   throw error
 } finally {
   await page.close()
@@ -115,6 +115,7 @@ try {
 
 async function settledInventory() {
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
   return inventory
 }
@@ -174,12 +175,14 @@ async function exercise(scene) {
   // Book replacement may retain the existing inventory selection; do not alter that contract.
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'hidden' })
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"], .boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
   await page.getByRole('button', { name: /Open inventory/ }).click()
   inventory = await settledInventory()
   await assertActive(inventory, `${scene} inventory reopening`)
   assert.equal(await inventory.getByRole('tooltip').count(), 0, `${scene}: stale tooltip after reopening`)
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'hidden' })
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"], .boneyard-scene[data-gameplay-input-blocked="false"]').waitFor()
   receipts.push({ scene, tooltipBanks: covered, skillsArrowCycle: 'pass', keyboardArrow: 'pass', replacementAndReopening: 'pass' })
 }
 
@@ -214,6 +217,7 @@ async function exerciseServices() {
   ]) {
     await page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }).click()
     const service = page.getByRole('dialog', { name: title, exact: true })
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     await service.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
     const bank = await assertActive(service, trader)
     await service.getByRole('button', { name: 'Next hotbar', exact: true }).click()
