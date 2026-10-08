@@ -191,6 +191,8 @@ async function selectWand(stage, itemId) {
 async function assertForeground(stage, scene) {
   await selectWand(stage, wand.id)
   for (let index = 0; index < 3; index += 1) {
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await stage.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]').waitFor()
     const pixels = await hotbarPixels(stage)
     assert.deepEqual(pixels, [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${scene}: dots paint through the opaque Wand tooltip`)
     await page.keyboard.press('r')
