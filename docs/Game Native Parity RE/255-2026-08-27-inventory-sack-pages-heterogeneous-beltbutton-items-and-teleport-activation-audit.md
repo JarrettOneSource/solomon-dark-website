@@ -410,3 +410,21 @@ No member is `blocked-by-platform`.
   `/Users/jarrett/codex-evidence/inventory-belt-teleport-20260827-rebased/`.
   The receipt update changes documentation only. No production deployment was
   performed.
+
+
+## October 8 — Report80 rightward bank-cycle follow-up
+
+The mixed1557546406695149620 message additionally requests cycling right;
+its editor-account observation is tracked separately as98. Current control
+source already maps the unmodified cycle key to+1 and Shift to-1, with
+right/Next arrow+1 and left/Previous arrow-1. Bank0/1/2dots are rendered
+left-to-right in both DOM gameplay and the shared modal canvas. This is
+unchanged from the approved three-bank feature commitaf513e7f, not a newly
+recovered stock behavior: stock has only its existing eight-slot belt.
+
+The existing three-bank foreground browser loop now explicitly waits for
+0→1→2→0 progression after every normal cycle-key press, rather than merely
+pressing three times. This strengthens the already-intended bank coverage and
+will verify the rightward request on the final built/live client. No product
+direction inversion is made without a reproduced contrary result. The mixed
+message remains unchecked until both scopes pass their required acceptance.

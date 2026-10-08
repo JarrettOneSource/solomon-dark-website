@@ -207,7 +207,9 @@ async function assertForeground(stage, scene) {
     await stage.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]').waitFor()
     const pixels = await hotbarPixels(stage)
     assert.deepEqual(pixels, [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${scene}: dots paint through the opaque Wand tooltip`)
+    const bank = Number(await stage.locator('.hotbar-controls').getAttribute('data-hotbar-bank'))
     await page.keyboard.press('r')
+    await stage.locator(`.hotbar-controls[data-hotbar-bank="${(bank + 1) % 3}"]`).waitFor()
   }
   await page.screenshot({ path: join(output, `${scene.toLowerCase()}-tooltip.png`) })
   for (const [index, item] of arrowWands.entries()) {
