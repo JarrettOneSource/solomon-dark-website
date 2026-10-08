@@ -156,7 +156,7 @@ async function exercise(scene) {
   const covered = await assertForeground(inventory, scene)
   await inventory.getByRole('button', { name: 'Open skills', exact: true }).click()
   const skills = page.getByRole('dialog', { name: 'Skills', exact: true })
-  await skills.locator('xpath=self::*[@data-transition-phase="settled"] .skill-book-canvas').waitFor()
+  await skills.locator('xpath=self::*[@data-transition-phase="settled"]').locator('.skill-book-canvas').waitFor()
   for (let index = 0; index < 3; index += 1) {
     const bank = await assertActive(skills, `${scene} skills`)
     await skills.getByRole('button', { name: 'Next hotbar', exact: true }).click()
