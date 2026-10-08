@@ -528,3 +528,23 @@ campaign; none is claimed by this focused receipt.
   `8322c1d961fc237e1058f945956b6224ccb8a95a205f07fa89438c3acbb4b9ba`.
   All task browser/host groups stopped and exact-owner lease release completed
   at 07:24:46 UTC. No separate full gate or publication was started.
+
+
+## October 8 composed canonical acceptance
+
+Runtime/test candidate `cde84b13acd8bd95dfccd153be65bc0a59d0511f` passed the
+unchanged complete M5 `scripts/validate.sh` at 07:46:07 UTC: 45 Python tests
+and 4,414 Node executions across 22 batches, with no failures, skips or
+cancellations. Configured renderer coverage is 100%; mutation acceptance
+records 603 killed, 198 compile errors, two nonterminating timeouts, no
+survivors, and the existing documented equivalents. Quality failures are empty.
+
+The initial acceptance runner put HOME on an external volume without Unix
+ownership, causing two native launchd fixture bootstrap errors. Matching the
+maintained worker's real HOME corrected that test setup; source/build/cache/tmp
+remained external and temporary test registrations were removed. No volume
+security setting, test omission, product change or lowered gate was used.
+Later acceptance/investigation edits are documentation only. Normal publication,
+managed deployment and scoped live checks remain separate pending steps.
+
+Scope: Report 103 solo resume policy; required multiplayer recovery/readiness remains preserved.

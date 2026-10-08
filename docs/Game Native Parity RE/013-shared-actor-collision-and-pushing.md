@@ -426,3 +426,23 @@ Controlled initial pose, hidden Students/Skorcha, ordinary Skip/Done dismissal
 and default real host snapshot timing qualify both journeys. The original
 reporter's exact save/input clip was unavailable. Complete canonical gate,
 publication, managed deployment and scoped live verification still follow.
+
+
+## October 8 composed canonical acceptance
+
+Runtime/test candidate `cde84b13acd8bd95dfccd153be65bc0a59d0511f` passed the
+unchanged complete M5 `scripts/validate.sh` at 07:46:07 UTC: 45 Python tests
+and 4,414 Node executions across 22 batches, with no failures, skips or
+cancellations. Configured renderer coverage is 100%; mutation acceptance
+records 603 killed, 198 compile errors, two nonterminating timeouts, no
+survivors, and the existing documented equivalents. Quality failures are empty.
+
+The initial acceptance runner put HOME on an external volume without Unix
+ownership, causing two native launchd fixture bootstrap errors. Matching the
+maintained worker's real HOME corrected that test setup; source/build/cache/tmp
+remained external and temporary test registrations were removed. No volume
+security setting, test omission, product change or lowered gate was used.
+Later acceptance/investigation edits are documentation only. Normal publication,
+managed deployment and scoped live checks remain separate pending steps.
+
+Scope: Report 57 prediction only; the stock-compatible bench-pocket behavior remains a separate pending product decision.
