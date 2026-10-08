@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { NATIVE_BELT_SLOT_COUNT, PLAYER_HOTBAR_COUNT } from './core-kernels/native-belt.ts'
 import type { GameControlBindings } from './game-settings.ts'
 import type { NativeHudRect } from './native-hud-layout.ts'
+import { modalHotbarLayout, type ModalHotbarRenderer } from './hotbar-controls-presentation.ts'
 import './hotbar-controls.css'
 
 interface HotbarSelection {
@@ -49,20 +50,30 @@ export function useHotbarShortcut(controls: GameControlBindings, enabled: boolea
   }, [controls.cycleHotbar, cycle, enabled])
 }
 
-export default function HotbarControls({ disabled = false, rects }: {
+export default function HotbarControls({ disabled = false, rects, renderer }: {
   disabled?: boolean
   rects?: readonly NativeHudRect[]
+  renderer?: ModalHotbarRenderer | null
 }) {
   const { bank, cycle } = useHotbar()
-  const style = rects ? {
-    '--hotbar-top': `${rects[0]!.y + 10}px`,
-    '--hotbar-left': `${rects[0]!.x - 46}px`,
-    '--hotbar-right': `${rects[7]!.x + rects[7]!.width + 12}px`,
-    '--hotbar-dots-top': `${rects[0]!.y - 19}px`,
+  const [hovered, setHovered] = useState<number | null>(null)
+  const [focused, setFocused] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    renderer?.setHotbarControls({ bank, disabled, hovered, focused })
+    return () => renderer?.setHotbarControls(null)
+  }, [renderer, bank, disabled, hovered, focused])
+  const layout = rects ? modalHotbarLayout(rects) : null
+  const style = layout ? {
+    '--hotbar-top': `${layout.top}px`,
+    '--hotbar-left': `${layout.previous}px`,
+    '--hotbar-right': `${layout.next}px`,
+    '--hotbar-dots-top': `${layout.dotsTop}px`,
   } as CSSProperties : undefined
   return (
     <div className="hotbar-controls" data-hotbar-bank={bank} data-modal={rects ? true : undefined} style={style}>
       <button type="button" className="hotbar-arrow hotbar-previous" aria-label="Previous hotbar"
+        onPointerEnter={() => setHovered(-1)} onPointerLeave={() => setHovered(null)}
+        onFocus={() => setFocused(-1)} onBlur={() => setFocused(null)}
         title="Previous hotbar" disabled={disabled} onClick={() => cycle(-1)}>
         <span aria-hidden />
       </button>
@@ -72,6 +83,8 @@ export default function HotbarControls({ disabled = false, rects }: {
         ))}
       </span>
       <button type="button" className="hotbar-arrow hotbar-next" aria-label="Next hotbar"
+        onPointerEnter={() => setHovered(1)} onPointerLeave={() => setHovered(null)}
+        onFocus={() => setFocused(1)} onBlur={() => setFocused(null)}
         title="Next hotbar" disabled={disabled} onClick={() => cycle(1)}>
         <span aria-hidden />
       </button>

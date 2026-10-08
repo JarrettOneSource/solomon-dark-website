@@ -481,7 +481,8 @@ function SkillBookSurface({
           Hover over a skill icon for more information about a skill.
           Skills with a gold or green border can be dragged into your belt.
         </span>
-        <HotbarControls rects={belt} disabled={inputSuspended || phase === 'closing'} />
+        <HotbarControls rects={belt} disabled={inputSuspended || phase === 'closing'}
+          renderer={rendererState === 'ready' ? rendererRef.current : null} />
         <SkillQuickbarEditor
           key={bank}
           beltEntries={beltEntries}

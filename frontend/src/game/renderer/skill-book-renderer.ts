@@ -1,3 +1,5 @@
+import type { ModalHotbarRenderer } from '../hotbar-controls-presentation.ts'
+import { ModalHotbarControlsView } from './modal-hotbar-controls.ts'
 import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   Container,
@@ -26,6 +28,7 @@ import {
 import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
+  nativeHudModalSlideOffset,
   type NativeHudControlLayout,
   type NativeHudPoint,
 } from '../native-hud-layout.ts'
@@ -89,7 +92,7 @@ export interface SkillBookRendererPresentation {
   readonly targetQuickbarSlot: number | null
 }
 
-export interface SkillBookRenderer extends NativeUiCanvas {
+export interface SkillBookRenderer extends NativeUiCanvas, ModalHotbarRenderer {
   render(nowMs: number): void
   setPresentation(presentation: SkillBookRendererPresentation): void
 }
@@ -147,9 +150,10 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   pageViewport.addChild(pages, pageMask)
   pageViewport.mask = pageMask
   const hud = new Container()
+  const hotbarControls = new ModalHotbarControlsView()
   const hover = new Container()
   const dragger = new Container()
-  root.addChild(curtain, ambient, fixtures, field, overlay, help, pageViewport, hud, hover, dragger)
+  root.addChild(curtain, ambient, fixtures, field, overlay, help, pageViewport, hud, hotbarControls.container, hover, dragger)
   application.stage.addChild(root)
 
   drawSkillScreenField(field, resources)
@@ -162,10 +166,14 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   let previousPresentation: SkillBookRendererPresentation | null = null
   const renderer: SkillBookRenderer = {
     canvas: gpu.canvas,
+    setHotbarControls(presentation) {
+      if (!destroyed) hotbarControls.setPresentation(presentation)
+    },
     mount: gpu.mount,
     destroy() {
       if (destroyed) return
       destroyed = true
+      hotbarControls.destroy()
       gpu.destroy()
       destroyNativeUiPixiFor(resources)
       resources.destroy()
@@ -205,6 +213,8 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       help.alpha = progress ** 3
       pages.alpha = progress ** 2
       pages.position.x = -presentation.scrollX
+      hotbarControls.container.alpha = progress
+      hotbarControls.container.position.y = nativeHudModalSlideOffset(presentation.hudProgress)
       hud.alpha = progress
       hover.alpha = progress ** 2
       if (previousPresentation === null

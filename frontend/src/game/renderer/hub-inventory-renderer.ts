@@ -1,3 +1,5 @@
+import type { ModalHotbarRenderer } from '../hotbar-controls-presentation.ts'
+import { ModalHotbarControlsView } from './modal-hotbar-controls.ts'
 import {
   hub,
   skillPicker,
@@ -96,7 +98,7 @@ import {
   Sprite,
 } from 'pixi.js'
 
-export interface HubInventoryRenderer extends NativeUiCanvas {
+export interface HubInventoryRenderer extends NativeUiCanvas, ModalHotbarRenderer {
   moveDrag(pointer: { readonly x: number; readonly y: number }): void
   render(nowMs: number, reveal: number, hudProgress?: number): {
     readonly chatComplete: boolean
@@ -146,6 +148,7 @@ export async function createHubInventoryRenderer(
   const root = new Container()
   const dimmer = new Graphics().rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height).fill({ color: 0x000000 })
   const surface = new Container()
+  const hotbarControls = new ModalHotbarControlsView()
   const dowsingFlash = new Graphics()
     .rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height)
     .fill({ color: 0xff0000 })
@@ -534,6 +537,7 @@ export async function createHubInventoryRenderer(
     statsInspection = null
     inventoryCaption = null
     delete canvas.dataset.nativeSackCaption
+    hotbarControls.container.removeFromParent()
     modalHud = null
     unforgeTarget.container.removeFromParent()
     surface.removeChildren().forEach((child) => child.destroy({ children: true }))
@@ -567,6 +571,7 @@ export async function createHubInventoryRenderer(
         (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',
       )
     }
+    modalHud?.layer.addChild(hotbarControls.container)
     if (model.kind !== 'dialogue' && model.dyeModal) {
       const dye = buildDyeClothing(context, surface, model.economy, model.dyeModal)
       dyeLayer = dye.layer
@@ -587,6 +592,9 @@ export async function createHubInventoryRenderer(
 
   return {
     canvas,
+    setHotbarControls(presentation) {
+      if (!destroyed) hotbarControls.setPresentation(presentation)
+    },
     mount(host) {
       const page = currentModel?.kind === 'inventory' || currentModel?.kind === 'service'
         ? currentModel.statsPage : 0
@@ -599,6 +607,7 @@ export async function createHubInventoryRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
+      hotbarControls.destroy()
       unforgeTarget.destroy()
       gpu.destroy()
       playerCharacterAtlas.destroy()
