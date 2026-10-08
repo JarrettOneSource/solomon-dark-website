@@ -1,4 +1,5 @@
 import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
+import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
@@ -61,8 +62,8 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-resume-pressed.png',
   resumeProgress: process.env.SDR_GAME_RESUME_PROGRESS_SCREENSHOT
     || '/tmp/solomon-dark-resume-progress.png',
-  restartProgress: process.env.SDR_GAME_RESTART_PROGRESS_SCREENSHOT
-    || '/tmp/solomon-dark-restart-progress.png',
+  restartReady: process.env.SDR_GAME_RESTART_PROGRESS_SCREENSHOT
+    || '/tmp/solomon-dark-restart-ready.png',
   settingsPressed: process.env.SDR_GAME_PAUSE_SETTINGS_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-settings-pressed.png',
   skillBookOwner: process.env.SDR_GAME_PAUSE_SKILL_BOOK_SCREENSHOT
@@ -70,6 +71,8 @@ const screenshots = {
 }
 const errors = []
 const failedResponses = []
+const hostErrors = []
+const directResumeReceipts = []
 const pendingRawMessageCleanups = new Set()
 
 const vite = await createViteServer({
@@ -88,6 +91,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
+  log: entry => { if (entry.level === 'error') hostErrors.push(entry) },
   resetWhenEmpty: true,
   snapshotRate: 20,
 })
@@ -741,12 +745,14 @@ try {
     send: false,
   }))
   const boneyardSelectorHeldTick = host.state().tick
+  const boneyardSelectorReleasedAt = performance.now()
   await page.keyboard.press('Escape')
   await boneyardSelector.waitFor({ state: 'detached' })
   await assertDirectResume(
     page,
     boneyardSelectorHeldTick,
     'skill-selector-closed',
+    boneyardSelectorReleasedAt,
   )
 
   const concentrationState = host.state()
@@ -772,12 +778,14 @@ try {
   const concentrationSelector = page.getByRole('dialog', { name: 'Select Concentration' })
   await concentrationSelector.waitFor()
   const concentrationHeldTick = host.state().tick
+  const concentrationReleasedAt = performance.now()
   await page.keyboard.press('Escape')
   await concentrationSelector.waitFor({ state: 'detached' })
   await assertDirectResume(
     page,
     concentrationHeldTick,
     'concentration-selector-closed',
+    concentrationReleasedAt,
   )
 
   const peerSawBoneyardPause = nextRawMessage(peer.socket, (message) => (
@@ -875,15 +883,51 @@ try {
   latePeer.socket.close(1000, 'solo restart setup')
   latePeer = null
   await waitForHost(() => host.humanPlayerCount() === 1, 'solo restart owner')
+  await page.evaluate(() => {
+    window.__sdrSoloResumeProgress = []
+    const capture = () => {
+      for (const node of document.querySelectorAll(
+        '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-phase="progress"]',
+      )) window.__sdrSoloResumeProgress.push(node.getAttribute('data-gameplay-resume-grace-reason'))
+    }
+    window.__sdrSoloResumeObserver = new MutationObserver(capture)
+    window.__sdrSoloResumeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['data-gameplay-resume-grace-phase'],
+      childList: true,
+      subtree: true,
+    })
+    capture()
+  })
   await pressPause(page, '.boneyard-scene')
   const soloPause = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await soloPause.waitFor()
   const heldSoloPauseTick = host.state().tick
+  const soloPauseReleasedAt = performance.now()
   await soloPause.getByRole('button', { name: 'RESUME GAME' }).click()
   await soloPause.waitFor({ state: 'detached' })
-  await assertResumeProgress(page, heldSoloPauseTick, 'pause-menu-closed')
+  await assertDirectResume(page, heldSoloPauseTick, 'pause-menu-closed', soloPauseReleasedAt)
+
+  await page.keyboard.press('i')
+  const soloInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await soloInventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const heldSoloInventoryTick = host.state().tick
+  const soloInventoryReleasedAt = performance.now()
+  await page.keyboard.press('i')
+  await soloInventory.waitFor({ state: 'detached' })
+  await assertDirectResume(page, heldSoloInventoryTick, 'inventory-closed', soloInventoryReleasedAt)
+
+  await page.keyboard.press('k')
+  const soloSkills = page.getByRole('dialog', { name: 'Skills' })
+  await soloSkills.waitFor()
+  await page.locator('.skill-book-stage[data-transition-phase="settled"]').waitFor()
+  const heldSoloSkillsTick = host.state().tick
+  const soloSkillsReleasedAt = performance.now()
+  await soloSkills.getByRole('button', { name: 'Close skills' }).click()
+  await soloSkills.waitFor({ state: 'detached' })
+  await assertDirectResume(page, heldSoloSkillsTick, 'skill-book-closed', soloSkillsReleasedAt)
 
   await pressPause(page, '.boneyard-scene')
   const restartLeave = page.locator(
@@ -895,35 +939,41 @@ try {
   await waitForHost(() => host.humanPlayerCount() === 0, 'empty restart host')
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'Last Game' }).click()
-  const restartedProgress = page.locator(
-    '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="game-restarted"]',
-  )
-  await restartedProgress.waitFor({ timeout: 90_000 })
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   const heldRestartTick = host.state().tick
-  await assertResumeProgress(
-    page,
-    heldRestartTick,
-    'game-restarted',
-    screenshots.restartProgress,
-  )
+  const restartReadyAt = performance.now()
+  await assertDirectResume(page, heldRestartTick, 'game-restarted', restartReadyAt)
+  await page.screenshot({ path: screenshots.restartReady })
+  const soloResumeProgress = await page.evaluate(() => {
+    window.__sdrSoloResumeObserver.disconnect()
+    return window.__sdrSoloResumeProgress
+  })
+  assert.deepEqual(soloResumeProgress, [], 'no transient solo progress bar may mount')
 
+  assert.deepEqual(hostErrors, [])
   assert.deepEqual(errors, [])
   assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
     browserVersion: browser.version(),
     boneyardResumeTick: host.state().tick,
     chatModalReceipts,
+    directResumeReceipts,
     failedResponses,
     heldBoneyardOwnerTick: heldBoneyardOwner.tick,
     heldBoneyardPeerTick: heldBoneyardPeer.tick,
     heldRestartTick,
+    heldSoloInventoryTick,
+    heldSoloPauseTick,
+    heldSoloSkillsTick,
+    hostErrors,
+    soloResumeProgress,
     liveHubPauseEndTick: liveHubPause.after.tick,
     liveHubPauseStartTick: liveHubPause.before.tick,
     screenshots,
     status: 'ok',
   })}\n`)
 } catch (error) {
-  process.stderr.write(`${JSON.stringify({ errors, failedResponses })}\n`)
+  process.stderr.write(`${JSON.stringify({ errors, failedResponses, hostErrors })}\n`)
   throw error
 } finally {
   for (const cleanup of pendingRawMessageCleanups) cleanup()
@@ -1066,9 +1116,12 @@ async function pressPause(page, sceneSelector) {
 
 async function joinRaw(character) {
   const socket = await openSocket(host.address.url)
-  const welcomePromise = nextRawMessage(socket, (message) => message.type === 'server-welcome')
+  const welcomePromise = nextRawMessage(socket, (message) => (
+    message.type === 'server-welcome' || message.type === 'server-disconnect'
+  ))
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    enhancedEffects: true,
     onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     character,
@@ -1077,7 +1130,19 @@ async function joinRaw(character) {
     protocolVersion: GAME_PROTOCOL_VERSION,
   }))
   const welcome = await welcomePromise
-  assert.equal(welcome.type, 'server-welcome')
+  assert.equal(welcome.type, 'server-welcome', JSON.stringify(welcome))
+  const receiver = new GameWelcomeReceiver()
+  const replication = new EntityReplicationReconstructor()
+  replication.reset(welcome.snapshot, welcome.snapshotSequence)
+  socket.on('close', () => receiver.close())
+  socket.on('message', data => {
+    const message = receiver.receivePayload(data.toString(), payload => socket.send(payload))
+    if (message?.type !== 'server-snapshot') return
+    replication.apply(message.frame, message.sequence)
+    socket.send(encodeGameMessage({
+      type: 'client-snapshot-ack', requireKeyframe: false, sequence: message.sequence,
+    }))
+  })
   return { socket, welcome }
 }
 
@@ -1304,6 +1369,7 @@ function assertNoCatchUp(heldTick, resumedAtMs, label) {
     tickDelta <= maxNormalTicks,
     `${label} advanced ${tickDelta} ticks in ${elapsedMs.toFixed(1)} ms`,
   )
+  return { elapsedMs, maxNormalTicks, tickDelta }
 }
 
 async function assertResumeProgress(page, heldTick, reason, screenshotPath = null) {
@@ -1337,7 +1403,7 @@ async function assertResumeProgress(page, heldTick, reason, screenshotPath = nul
   assertNoCatchUp(resumedTick, resumedAtMs, `${reason} post-grace tick rate`)
 }
 
-async function assertDirectResume(page, heldTick, excludedReason) {
+async function assertDirectResume(page, heldTick, excludedReason, releasedAtMs) {
   await waitForHost(() => host.state().tick > heldTick, `${excludedReason} direct resume`, 1_000)
   await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor({
     timeout: 1_000,
@@ -1349,10 +1415,10 @@ async function assertDirectResume(page, heldTick, excludedReason) {
     await page.locator('.main-menu-page').getAttribute('data-gameplay-resume-grace'),
     'none',
   )
-  assert.ok(
-    host.state().tick - heldTick <= 20,
-    `${excludedReason} replayed held wall time`,
-  )
+  directResumeReceipts.push({
+    reason: excludedReason,
+    ...assertNoCatchUp(heldTick, releasedAtMs, `${excludedReason} direct tick rate`),
+  })
 }
 
 async function waitForHost(predicate, label, timeoutMs = 10_000) {

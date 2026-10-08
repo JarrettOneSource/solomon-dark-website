@@ -6622,6 +6622,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.playerId === playerId && client.partyRejoinSlot === null
       ))
     if (reason === 'skill-picker-closed' && !waitsForPickerClose) return false
+    if (!waitsForPickerClose && connectedMaterializedHumanPlayerIds(activeState).length < 2) {
+      return false
+    }
     const grace: HostGameplayResumeGrace = {
       deadlineMs: waitsForPickerClose
         ? null
@@ -6739,12 +6742,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
       ))
     ) return false
-    if (grace.reason === 'skill-picker-closed') {
+    const solo = connectedMaterializedHumanPlayerIds(activeState).length < 2
+    if (grace.reason === 'skill-picker-closed' || solo) {
+      // Readiness, required recovery members and picker presentation still
+      // hold the run above. Only multiplayer needs a post-ready countdown.
       setGameplayResumeGrace(scope, null)
       stopResumeGraceInputs(scope)
       if (!sharedWorlds) resetNextTickDeadline()
       broadcastGameplayResumeGrace(playerId, scope)
-      logGameplayResumeGrace('completed', grace, scope)
+      logGameplayResumeGrace('completed', grace, scope, solo)
       return true
     }
     grace.deadlineMs = performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS
@@ -6786,16 +6792,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const deadlineExpired = gameplayResumeGrace.deadlineMs !== null
           && now >= gameplayResumeGrace.deadlineMs
         const retired = state.world.kind !== 'boneyard' || state.run.phase !== 'active'
-        if (!deadlineExpired && !retired) return
+        const solo = gameplayResumeGrace.deadlineMs !== null
+          && connectedMaterializedHumanPlayerIds(state).length < 2
+        if (!deadlineExpired && !retired && !solo) return
         const completed = gameplayResumeGrace
         gameplayResumeGrace = null
         stopAllClientInputs()
         resetNextTickDeadline()
         broadcastGameplayResumeGrace()
-        if (deadlineExpired && !retired) {
-          logGameplayResumeGrace('completed', completed, null)
+        if ((deadlineExpired || solo) && !retired) {
+          logGameplayResumeGrace('completed', completed, null, solo)
         }
-        changed = deadlineExpired
+        changed = deadlineExpired || solo
       }
     } else {
       for (const [partyId, grace] of sharedGameplayResumeGraces) {
@@ -6804,12 +6812,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const retired = !run
           || run.state.world.kind !== 'boneyard'
           || run.state.run.phase !== 'active'
-        if (!expired && !retired) continue
+        const solo = grace.deadlineMs !== null && run !== undefined
+          && connectedMaterializedHumanPlayerIds(run.state).length < 2
+        if (!expired && !retired && !solo) continue
         sharedGameplayResumeGraces.delete(partyId)
         stopPartyInputs(partyId)
         broadcastGameplayResumeGrace(undefined, { partyId })
-        if (expired && !retired) {
-          logGameplayResumeGrace('completed', grace, { partyId })
+        if ((expired || solo) && !retired) {
+          logGameplayResumeGrace('completed', grace, { partyId }, solo)
           changed = true
         }
       }
@@ -6887,21 +6897,27 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     phase: 'completed' | 'started',
     grace: HostGameplayResumeGrace,
     scope: SharedGameplayPauseScope | null,
+    solo = false,
   ): void {
     const pickerCloseCompleted = phase === 'completed'
       && grace.reason === 'skill-picker-closed'
+    const soloReleased = phase === 'completed' && solo && !pickerCloseCompleted
     logGameServerEvent(
       options.log,
       'game-host',
       'info',
       pickerCloseCompleted
         ? 'gameplay.picker_close_completed'
-        : `gameplay.resume_grace_${phase}`,
+        : soloReleased
+          ? 'gameplay.solo_resume_released'
+          : `gameplay.resume_grace_${phase}`,
       pickerCloseCompleted
         ? 'The authoritative level-up picker close hold completed.'
-        : phase === 'started'
-          ? 'The authoritative resume grace countdown started.'
-          : 'The authoritative resume grace countdown completed.',
+        : soloReleased
+          ? 'The solo world is ready without a resume grace countdown.'
+          : phase === 'started'
+            ? 'The authoritative resume grace countdown started.'
+            : 'The authoritative resume grace countdown completed.',
       logDetails({
         partyId: scope?.partyId ?? null,
         reason: grace.reason,
@@ -6916,7 +6932,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'gameplay.resumed',
         pickerCloseCompleted
           ? 'The authoritative gameplay world resumed after the level-up picker closed.'
-          : 'The authoritative gameplay world resumed after its grace countdown.',
+          : soloReleased
+            ? 'The authoritative solo world resumed without a grace countdown.'
+            : 'The authoritative gameplay world resumed after its grace countdown.',
         logDetails({
           partyId: scope?.partyId ?? null,
           reason: grace.reason,

@@ -400,3 +400,131 @@ No member is blocked by the browser platform.
   page, console, failed-response, and host-error arrays.
 - Exact candidate: byte-identical Mac worktree and
   `/opt/homebrew/bin/bash ./scripts/validate.sh` before completion.
+
+
+## 2026-10-08 — Report 103 solo resume admission
+
+### Reported smell and evidence
+
+Report 103 asks for no `RESUMING...` interruption in a solo match. Its original
+message 1557566131907076097 was fetched directly on October 8 at 06:55:32 UTC,
+alongside reply 1557566289256644741 and six surrounding messages. Both report
+texts are unchanged and unedited. The reply specifically raises rejoining
+while other players remain in the lobby. The current authenticated account
+is the primary report's author; this latest direction supersedes the August 29
+Website-only solo countdown policy above.
+
+The retail 0.72.5 instruction evidence already recorded in this ledger and
+entry 236 proves that final suspension release admits the next ordinary
+scheduler edge without post-release grace (`0x005CBD40`, `0x00427800`,
+`0x005ABF10`). Entry 236 also closes active attachment/reset ownership at
+`0x005CDDD0`, `0x005CBA00`, and `0x005CF920`. No new native extraction, authored
+table, asset, clock constant, or approximation is needed. The exact source
+base for this reopening is `d10aa67ec5e537ad1baca64d9522c609dc7f0805`.
+
+The previous policy generalized every eligible Arena surface and readiness
+edge to solo players. The missed distinction is between a required renderer /
+recovery handshake and the optional post-handshake two-second reorientation
+phase. Removing the label alone would leave the reported interruption intact.
+
+### System boundary and membership inventory
+
+Boundary: run-scoped resume admission, from renderer/recovery readiness or
+modal release through deadline creation, projection, input/tick hold, expiry
+and teardown. The host counts connected materialized human players in the
+specific active run. Party membership, lobby users, spectators, bots and
+not-yet-materialized rejoin slots cannot create a multiplayer countdown.
+Required absent recovery members still block readiness before this count is
+consulted. The existing 2,000-ms phase remains for two or more active humans.
+
+| Member / branch | Recovered contract | Focused implementation disposition |
+| --- | --- | --- |
+| Solo ordinary/custom/Tutorial entry | Retain pending renderer readiness; all-ready clears directly without a deadline | exact-ported |
+| Solo Pause/nested Settings, Inventory and full Skill Screen close | Preserve full native close/owner lifecycle; release directly | exact-ported |
+| Solo active save restart and same-tab takeover/rejoin | Preserve run/token restoration, materialization and readiness; skip only the post-ready deadline | exact-ported |
+| Shared-host solo run with other humans in Hub or other runs | Run-local human count is one; entry, surfaces and restart/rejoin stay direct | exact-ported |
+| Multiplayer fresh ordinary/custom readiness | All required renderers ready before one shared 2,000-ms deadline | verified-already-at-parity |
+| Multiplayer Pause/Settings, Inventory/full Skills | Same source-qualified 2,000-ms deadline after final owner release | verified-already-at-parity |
+| Multiplayer rejoin, catch-up picker and coordinated restart | Wait for readiness and materialization; required absent members remain required; retain shared countdown | verified-already-at-parity |
+| Party-rejoin-wait with last living player absent | Preserve required-player hold even if only one human remains connected | verified-already-at-parity |
+| Peer disconnect during pending readiness | Remove only non-required departed receipt; run may resume directly when the remaining solo renderer is ready | exact-ported |
+| Peer disconnect during active countdown | Cancel obsolete multiplayer deadline when at most one materialized human remains; clear inputs and no catch-up | exact-ported |
+| Compact primary/concentration selectors and final LevelupScreen close | Existing direct selector release and nullable picker-close barrier remain; no new timer | verified-already-at-parity |
+| Pause-owner disconnect, stale/duplicate receipts, scene/run retirement | Preserve safe owner release, sequence checks and teardown | verified-already-at-parity |
+| Bots, observers, detached slots and lobby players | Not human participants in this run; do not affect countdown admission | out-of-system |
+| Hub/title/Create/Game Over/loadout | Separate scene owners; no active-run countdown | out-of-system |
+
+### Ownership and implementation consequence
+
+`game-host.ts` remains the sole owner. `beginRunLoadingResumeGrace` must still
+create pending records and collect readiness for every run. Only
+`maybeStartGameplayResumeGrace`, after all existing barrier/materialization
+checks, may skip the deadline for a solo audience. `beginSurfaceResumeGrace`
+applies the same audience rule to timer-producing surfaces while retaining
+the human SkillPicker close hold. An existing timed record must retire if its
+multiplayer audience shrinks to solo. Input clearing, scheduler reset and
+run-scoped broadcasts remain at the same host boundaries. The protocol and
+save shapes are unchanged; the client renders the authoritative state and
+requires no locally guessed audience or hidden timer.
+
+### Validation contract
+
+Focused M5 tests must cover solo fresh entry, all three modal producers,
+restart, same-tab takeover, lobby/other-run isolation, departing peers,
+stale-ready rejection and no catch-up. Existing multiplayer renderer,
+Pause, modded entry, SkillPicker, detached catch-up and recovery tests remain
+positive controls. The maintained browser Pause journey must retain its
+multiplayer progress checks and replace solo Pause/restart expectations with
+direct release; a progress observer must reject even transient solo bars.
+The parent coordinates the exact-tree canonical gate and built-browser
+acceptance at the next shared M5 heavy-work boundary. No check is claimed by
+this pre-implementation entry.
+
+
+### Focused M5 implementation acceptance — October 8
+
+Runtime and host-regression source were accepted at `24e38b14`; the browser
+fixture's final accepted revision is `7e116af2`. These share byte-identical
+runtime/test files. The later commit changes only this receipt. Canonical
+validation of the composed candidate, built/live acceptance, publication,
+completion reaction and cleanup remain owned by the coordinating report
+campaign; none is claimed by this focused receipt.
+
+- M2/M5 SHA-256 manifests matched every changed file before execution. All
+  checks ran under the atomic shared heavy lease on M5, with source, temporary
+  files, browser profiles and caches on `/Volumes/Drive`.
+- The original runtime failed all 11 intentional solo regressions, exposing
+  the prior two-second admission policy. The implemented host/recovery/policy
+  set then passed 138/138 tests. App and Node TypeScript checks and touched-file
+  lint passed. This retains multiplayer initial/modded renderer readiness,
+  mandatory SkillPicker, detached catch-up, coordinated private/shared
+  recovery, strict source ownership and required-player barriers.
+- Chrome 153.0.8010.12 passed the maintained Pause journey. Multiplayer loading,
+  Inventory, full Skills, Pause, primary selector and concentration selector
+  controls remain accepted. Solo Pause, Inventory, full Skills and saved-run
+  restart all release without a timed record or visible progress. A DOM
+  observer saw zero transient solo progress bars. Browser page/console,
+  failed-response and host-error arrays were empty.
+- Measured direct-release tick/wall-time pairs were: primary selector 2 ticks
+  in 14.37 ms; concentration selector 3 in 31.54 ms; solo Pause 6 in 314.43 ms;
+  solo Inventory 36 in 793.01 ms; solo full Skills 36 in 839.34 ms; solo restart
+  1 in 14.20 ms. Each satisfies the existing elapsed-time fixed-tick bound plus
+  two ticks, including UI close/controller time; no fixed tick-count cap is
+  substituted for elapsed time. Direct admission remains bounded below the
+  old two-second grace and every positive solo projection is excluded.
+- The fixture initially omitted the protocol's required `enhancedEffects`
+  hello field and snapshot receipts. It now supplies the field, reports
+  admission rejection immediately, and acknowledges successfully reconstructed
+  snapshots. No production wire or recovery semantics changed. A subsequent
+  fixed-20-tick sampling assertion was replaced by the existing elapsed-time
+  contract, retaining its two-tick tolerance and recording the observed pair.
+- Reviewed screenshots show the restored solo Boneyard with no resume bar and
+  the intact multiplayer `RESUMING...` control. Their SHA-256 values are
+  `10639d1c218fa0ff7080bf48617c97dbc9a15b6dff700eace057d9ed175ccbf0`
+  and `ac0c9926e97ca31c7929e326a91ee76708541d9aa5c9dd2f3824f8438aa5de04`.
+- Focused test-log SHA-256:
+  `50b4a89f21bc6deb4cbd48fc9c29a4ac4e63ae53f315d4d9d5e6d61a85718bb5`.
+  Final browser-log SHA-256:
+  `8322c1d961fc237e1058f945956b6224ccb8a95a205f07fa89438c3acbb4b9ba`.
+  All task browser/host groups stopped and exact-owner lease release completed
+  at 07:24:46 UTC. No separate full gate or publication was started.
