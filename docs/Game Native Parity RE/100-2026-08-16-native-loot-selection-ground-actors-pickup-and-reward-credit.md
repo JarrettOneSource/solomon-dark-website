@@ -1806,3 +1806,32 @@ clip. HubScene and GameHud already receive the full fixedViewport. Hub world
 notices must use that same full viewport and display scale; the separate
 Skill improved modal retains its centered authored stage. This is the same
 notification coordinate owner, not a change to book acquisition or dialog layout.
+
+
+### October 8 current component and built pickup acceptance
+
+The expected-red missing-clip regression failed before the port, and its green
+candidate passed. Final composed932cf0e3 then passed the expanded React/SSR
+notification regression and production build, including Hub full-viewport
+portrait/ultrawide ownership. The shared renderer, Boneyard scale/clip and Hub
+viewport members above are now exact-ported for the recovered presentation
+contract; existing source/lifetime rules remain verified-already-at-parity.
+
+Four actual built-client/private-host pickup journeys passed at UI-scale75,
+100,125and150 percent on932cf0e3, ending06:37:49UTC. Native clip tops were
+37.5,50,62.5and75pixels; complete HUD bottoms, including selected-skill art,
+were32.0625,42.75,53.4375and64.125. No visible notification glyph crossed the
+clip or HUD; rounded row motion, constant measured widths128.25/171/213.75/
+256.5pixels, fading and about3000ms removal were observed. Page, console,
+request, response, host and transport error arrays were empty at every scale.
+Newborn75/150captures were visually reviewed: the native clip removes the
+initial overlap while the authored message subsequently descends into view.
+
+The fixture is an isolated resumed task save with a nearby stock mana-potion
+sack and cleared enemy store, entered through normal Last Game and collected
+with normal keyboard input. User/original saves were untouched. This is not
+an exact historical-user-save reproduction or new stock-video playback.
+Unchanged manager tests cover stacked rows and source/lifetime transitions;
+these four journeys need not be repeated absent relevant source changes.
+Canonical gate, publication, managed deployment and live acceptance remain
+pending and are distinct from these successful focused/built observations.

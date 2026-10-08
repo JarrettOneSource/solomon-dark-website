@@ -399,3 +399,30 @@ positions in its finite probe. It is not part of this prediction candidate.
 Any change to that rule requires the user's product decision and independent
 retained-state validation; a failed finite route probe is not proof of a
 topological or permanent lock.
+
+
+### October 8 current built-client acceptance
+
+The prediction-only change passed real built-client/private-host journeys on
+desktop and Chrome-emulated touch. Desktop revision11e0c6dc recorded207
+samples,16ordinary movement inputs and two normal conversations; the known
+north contact route stayed at least33.0189977 world units from the fixed NPC.
+Touch revision932cf0e3 recorded205samples,19actual joystick transport inputs
+and two normal conversations, with minimum33.0428237 on the same north route.
+Both actual north motion and south reversal were required; all page, console,
+HTTP and request-error arrays were empty. Prediction/authority source bytes are
+unchanged between these revisions. Alternate stock-compatible pocket routes
+are not asserted nonpenetrating and the separate bench behavior remains an
+unanswered product choice, not a fixed softlock claim.
+
+The touch setup initially exposed desktop pointer media before application
+navigation despite Playwright's context options. Explicit Chromium touch
+emulation on the same CDP session used to dispatch joystick events corrected
+that harness setup; one touch point, coarse pointer and no-hover were asserted
+before navigation. The bounded corrected run ended06:47:28UTC with exit0 and
+released its exact lease. No product CSS, input gates or source were changed
+to make a joystick appear. Touch is browser emulation, not a physical device.
+Controlled initial pose, hidden Students/Skorcha, ordinary Skip/Done dismissal
+and default real host snapshot timing qualify both journeys. The original
+reporter's exact save/input clip was unavailable. Complete canonical gate,
+publication, managed deployment and scoped live verification still follow.
