@@ -368,3 +368,34 @@ Final unchanged canonical all-mode acceptance, remaining supported built
 input/lifecycle paths, normal publication/managed deployment/live readback
 and complete own task cleanup remain pending. Focused acceptance alone is
 not Report57 completion or permission for a premature completion reaction.
+
+
+## October 8, 2026: current prediction resumption
+
+Report57 was explicitly reopened by the user. The original message
+1554266708133417070 and nine nearby messages were reread on October 8
+under the expected account; the text and attachment identity are unchanged
+and there is no relevant withdrawal. The report states difficult but possible
+escape, with a permanent softlock only tentative. Historical recovery and
+acceptance above remain scoped to their original exact source revisions.
+
+The current candidate carries the already-recovered fixed-body prediction
+contract onto published main `7020dcd80e6c9761a3f8731ec367142b956b9b98`.
+Its boundary is ordinary/scripted Hub participant prediction and the snapshot
+caller, with the same complete 27-body layout, conditional Office polisher,
+three Skorcha positions, and presence/reconciliation lifetimes listed above.
+No native geometry, collision kernel, movement speed, protocol, or saved-position
+policy changes. Current all-mode and browser validation are pending; historical
+122-case acceptance is not represented as acceptance of this rebased source.
+
+A separate retained supported-browser experiment from October 4 entered the
+bench pocket with normal inputs after normal conversation dismissal and then
+escaped east. This confirms difficult navigation, not a permanent lock. The
+root-move/full-correction rejection owner is the recovered stock placement
+rule, separate from the client prediction omission. The later unpublished
+`3c0fad6d` anti-penetration draft adds a policy that deliberately diverges from
+that stock rule and did not establish safe escape from already-retained pocket
+positions in its finite probe. It is not part of this prediction candidate.
+Any change to that rule requires the user's product decision and independent
+retained-state validation; a failed finite route probe is not proof of a
+topological or permanent lock.
