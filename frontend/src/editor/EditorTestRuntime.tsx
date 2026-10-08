@@ -20,8 +20,14 @@ const noSaveTransfer: NativeSaveTransferController = {
   replaceWithImport: unavailable,
 }
 
+interface EditorTestRuntimeProps {
+  accountUsername: string | null
+  doc: EditorDoc
+  onReturn: () => void
+}
+
 /** Owns one transient authority. The editor remains mounted beneath this surface. */
-export default function EditorTestRuntime({ doc, onReturn }: { doc: EditorDoc; onReturn: () => void }) {
+export default function EditorTestRuntime({ accountUsername, doc, onReturn }: EditorTestRuntimeProps) {
   const [session, setSession] = useState<GameSession | null>(null)
   const [stage, setStage] = useState('Preparing your Boneyard')
   const [error, setError] = useState<string | null>(null)
@@ -56,6 +62,7 @@ export default function EditorTestRuntime({ doc, onReturn }: { doc: EditorDoc; o
         cheatsEnabled: false,
         enhancedEffects: readGameSettings().enhancedEffects,
         onlinePreferences: { ...gameOnlinePreferences(readGameSettings()), submitRuns: false },
+        // The disposable wizard stays anonymous; Website account chrome is separate.
         profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: 0 },
         onFatal: failure => fail(failure.message),
         onDeploymentRestart: async () => fail('The game was updated. Return to editing and start a new test.'),
@@ -82,7 +89,7 @@ export default function EditorTestRuntime({ doc, onReturn }: { doc: EditorDoc; o
   return <div className="editor-test-runtime" data-editor-test-state={error ? 'error' : session ? 'playing' : 'loading'}>
     {session ? <MainMenuScene
       activeMods={[]}
-      accountUsername={null}
+      accountUsername={accountUsername}
       connectSession={unavailable}
       connectObserver={unavailable}
       developerAccess={false}

@@ -160,3 +160,57 @@ local Website bearer
   green: backend build, `23` Website/backend contract tests, formatting, lint
   and architecture boundaries, TypeScript, all `422` frontend tests, all `5`
   desktop tests, production frontend/host build, and production media policy.
+
+
+## 2026-10-08 — Report 98: account identity during an editor test
+
+### Reported smell and recovered ownership
+
+The reporter sees an apparent sign-out in the Boneyard editor's pause settings.
+The focused original-message and nearby-discussion read on October 8 confirms
+that the account claim remains active, without a withdrawal. At current main
+`7020dcd8`, `Boneyard` reads the Website `AuthProvider.user`, while
+`EditorTestRuntime` authenticates `/api/game/editor-test` with `getToken()` but
+passes a literal null account into `MainMenuScene`. That shared scene presents
+no HUD account and `ACCOUNT: GUEST` in gameplay settings. There is no editor
+call to `logout`, `setToken`, or a competing authentication store. The causal
+finding is a false guest presentation; actual expiration in the historical
+reporter's session is not established.
+
+This reopens the existing Website account-display boundary. Its earlier
+membership did not include the subsequently added editor-test shell. Retail
+0.72.5 has no Website account, as recorded above; no new native extraction,
+authored table, or change to stock game behavior is implicated.
+
+### Complete affected membership
+
+| Member | Ownership / source | Disposition | Validation |
+| --- | --- | --- | --- |
+| Website token and current user, login/logout/refresh | `lib/auth.tsx`, `lib/api.ts` | verified-already-at-parity | Source trace: editor reads but never clears or replaces credentials |
+| Regular Title, Hub, Boneyard and settings | `pages/Game.tsx` → `MainMenuScene` | verified-already-at-parity | Existing provider projection and shared consumer contract; unchanged |
+| Standalone `/boneyard` → private test | `pages/Boneyard.tsx` → `EditorTestRuntime` | recovered-pending-port | Must pass the provider's exact current username |
+| Dark Cloud Boneyards Edit/Test → private test | Same `Boneyard` and test runtime | recovered-pending-port | Both entry branches must use the same projection |
+| Private-test HUD, pause settings and nested account-dependent settings | `MainMenuScene` → `GameAccountName` / `GameSettingsDialog` | recovered-pending-port | Exact authenticated name, or guest when provider is anonymous |
+| Test boot, loading/cancel, return/repeat, failure and route teardown | `EditorTestRuntime` effect keyed by document | recovered-pending-port | Account repaint must not restart, close or readmit the test authority |
+| Disposable wizard profile, saves, Hall receipts and social isolation | Existing boot profile and editor-test host | verified-already-at-parity | Presentation remains separate from the intentionally anonymous transient wizard; host tests cover no rewards/checkpoints/archives |
+| Cross-tab token synchronization and server token expiry policy | Global Website authentication | out-of-system | No new account store or expiry behavior; display follows the existing provider's current truth |
+
+### Implementation consequence and validation contract
+
+Thread only `user?.username ?? null` from the shared Boneyard owner through an
+explicit `accountUsername` prop into the existing `MainMenuScene` presentation
+seam. Preserve exact spelling/case in the HUD and the settings' existing
+uppercase formatting. Keep the profile username null: the fresh Test Wizard is
+disposable, and Website account chrome does not grant gameplay social identity,
+progression, score, cloud-save or multiplayer participation. Do not add the
+presentation prop to the authority-creation effect dependencies.
+
+A source-contract regression must fail on the original literal-null seam.
+Current account-presentation tests cover exact username and anonymous semantics.
+Mac browser acceptance must use the built candidate, cover signed-in standalone
+and both Dark Cloud entry branches, open the actual pause/account settings,
+return and repeat, and preserve the token and document. Anonymous play must
+still show guest with no false username. Test failure/cancellation must retain
+the editor and Website account. Browser errors and unexpected HTTP failures
+must be empty. Reuse the dedicated admission and host isolation cases. Required
+canonical validation, publication and deployed verification remain pending.
