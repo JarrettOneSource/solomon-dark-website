@@ -46,7 +46,11 @@ const document = createGameSaveDocument({
     }),
   },
 })
-const server = await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
+const liveOrigin = process.env.SDR_HOTBAR_LIVE_URL ? new URL(process.env.SDR_HOTBAR_LIVE_URL).origin : null
+const expectedDeploymentRevision = process.env.SDR_HOTBAR_EXPECTED_REVISION ?? null
+if (liveOrigin) assert.match(expectedDeploymentRevision ?? '', /^[a-f0-9]{40}$/, 'Live verification requires the exact published revision')
+const server = liveOrigin ? { origin: liveOrigin, close: async () => {} }
+  : await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
 const credential = randomBytes(32).toString('base64url')
 const host = await startGameHost({ allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
 const browser = await chromium.launch({
@@ -65,11 +69,16 @@ page.on('requestfailed', request => {
   if (failure === 'net::ERR_ABORTED' && /\.(?:mp3|ogg)(?:\?|$)|\/deployment\.json/.test(request.url())) return
   errors.requests.push(`${failure} ${request.url()}`)
 })
-await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+if (!liveOrigin) await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
 await page.addInitScript(({ credential: token, url }) => {
   window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', sessionKind: 'standalone', credential: token, url } }
 }, { credential, url: host.address.url })
 try {
+  if (liveOrigin) {
+    const deployed = await page.request.get(`${liveOrigin}/deployment.json`)
+    assert.equal(deployed.status(), 200)
+    assert.deepEqual(await deployed.json(), { revision: expectedDeploymentRevision })
+  }
   const setupUrl = `${server.origin}/__hotbar_layer_fixture__`
   await page.route(setupUrl, route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><link rel="icon" href="data:,"><title>Save setup</title>' }))
   await page.goto(setupUrl)
@@ -101,7 +110,7 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
   await exercise('Boneyard')
   for (const values of Object.values(errors)) assert.deepEqual(values, [])
-  console.log(JSON.stringify({ touch, reproduceDom, receipts, errors, output }))
+  console.log(JSON.stringify({ touch, reproduceDom, liveOrigin, expectedDeploymentRevision, receipts, errors, output }))
 } catch (error) {
   await page.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   console.error(JSON.stringify({ errors, receipts, output }))
