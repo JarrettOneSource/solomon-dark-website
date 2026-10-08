@@ -26,6 +26,9 @@ const initial = createGameSimulation({ [playerId]: {
 } })
 const economy = getPlayerEconomy(initial, playerId)
 const wand = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_001), inventorySlot: 72 }
+const arrowWands = [68, 78].map((inventorySlot, index) => ({
+  ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2], 40_002 + index), inventorySlot,
+}))
 const document = createGameSaveDocument({
   integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId,
   state: {
@@ -38,7 +41,7 @@ const document = createGameSaveDocument({
     },
     playerEntities: replacePlayerEconomy(initial.playerEntities, playerId, {
       ...economy, collegeIntroPending: false, tutorialPending: false,
-      backpack: [...economy.backpack, wand], nextItemId: 50_000,
+      backpack: [...economy.backpack, wand, ...arrowWands], nextItemId: 50_000,
     }),
   },
 })
@@ -90,6 +93,7 @@ try {
     await page.addStyleTag({ content: '.hotbar-controls[data-modal] .hotbar-dots { clip-path: none; width: auto; height: auto; overflow: visible; }' })
   }
   await exercise('College')
+  await exerciseServices()
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
   if (await picker.count()) await picker.getByRole('button').first().click()
@@ -113,7 +117,7 @@ async function settledInventory() {
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
   return inventory
 }
-async function dotPixels(stage) {
+async function hotbarPixels(stage, control = null) {
   const bounds = await stage.boundingBox()
   assert.ok(bounds)
   const layout = modalHotbarLayout(nativeHudModalSlideLayout(1600, 900, 1).belt)
@@ -121,6 +125,10 @@ async function dotPixels(stage) {
     x: bounds.x + (800 + (bank - 1) * 20) * bounds.width / 1600,
     y: bounds.y + (layout.dotsTop + 5.5) * bounds.height / 900,
   }))
+  if (control !== null) points.splice(0, points.length, {
+    x: bounds.x + ((control === 0 ? layout.previous : layout.next) + 17) * bounds.width / 1600,
+    y: bounds.y + (layout.top + 8) * bounds.height / 900,
+  })
   const screenshot = await page.screenshot()
   return page.evaluate(async ({ encoded, points }) => {
     const image = new Image()
@@ -137,7 +145,7 @@ async function dotPixels(stage) {
 async function assertActive(stage, scene) {
   const bank = Number(await stage.locator('.hotbar-controls').getAttribute('data-hotbar-bank'))
   await stage.getByRole('img', { name: `Hotbar ${bank + 1} of 3` }).waitFor({ state: 'attached' })
-  const pixels = await dotPixels(stage)
+  const pixels = await hotbarPixels(stage)
   assert.ok(pixels[bank][0] > 120 && pixels[bank][1] > 100, `${scene}: active canvas dot missing: ${JSON.stringify(pixels)}`)
   return bank
 }
@@ -145,18 +153,7 @@ async function exercise(scene) {
   await page.getByRole('button', { name: /Open inventory/ }).click()
   let inventory = await settledInventory()
   await assertActive(inventory, `${scene} inventory`)
-  await inventory.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${wand.id}"]`).first().click()
-  await inventory.getByRole('tooltip').filter({ hasText: 'Cosmofluxic Wand' }).waitFor({ state: 'attached' })
-  // ItemInfo has the recovered 200 ms reveal delay; sample only after its foreground is shown.
-  await page.waitForTimeout(250)
-  const covered = []
-  for (let index = 0; index < 3; index += 1) {
-    const pixels = await dotPixels(inventory)
-    assert.deepEqual(pixels, [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${scene}: dots paint through the opaque Wand tooltip`)
-    covered.push(pixels)
-    await page.keyboard.press('r')
-  }
-  await page.screenshot({ path: join(output, `${scene.toLowerCase()}-tooltip.png`) })
+  const covered = await assertForeground(inventory, scene)
   await inventory.getByRole('button', { name: 'Open skills', exact: true }).click()
   const skills = page.getByRole('dialog', { name: 'Skills', exact: true })
   await skills.locator('xpath=self::*[@data-transition-phase="settled"] .skill-book-canvas').waitFor()
@@ -182,5 +179,47 @@ async function exercise(scene) {
   assert.equal(await inventory.getByRole('tooltip').count(), 0, `${scene}: stale tooltip after reopening`)
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'hidden' })
-  receipts.push({ scene, tooltipBanks: covered.length, skillsArrowCycle: 'pass', keyboardArrow: 'pass', replacementAndReopening: 'pass' })
+  receipts.push({ scene, tooltipBanks: covered, skillsArrowCycle: 'pass', keyboardArrow: 'pass', replacementAndReopening: 'pass' })
+}
+
+async function selectWand(stage, itemId) {
+  await stage.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${itemId}"]`).first().click()
+  await stage.getByRole('tooltip').filter({ hasText: 'Cosmofluxic Wand' }).waitFor({ state: 'attached' })
+  await page.waitForTimeout(250)
+}
+async function assertForeground(stage, scene) {
+  await selectWand(stage, wand.id)
+  for (let index = 0; index < 3; index += 1) {
+    const pixels = await hotbarPixels(stage)
+    assert.deepEqual(pixels, [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${scene}: dots paint through the opaque Wand tooltip`)
+    await page.keyboard.press('r')
+  }
+  await page.screenshot({ path: join(output, `${scene.toLowerCase()}-tooltip.png`) })
+  for (const [index, item] of arrowWands.entries()) {
+    await selectWand(stage, item.id)
+    const pixels = await hotbarPixels(stage, index)
+    assert.deepEqual(pixels, [[0, 0, 0]], `${scene}: arrow ${index} paints through the opaque Wand tooltip`)
+  }
+  return 3
+}
+async function exerciseServices() {
+  for (const [trader, title] of [
+    ['Hagatha', "HAGATHA'S CHARMS AND CURSES"],
+    ['Fomentius', "FOMENTIUS' USEFUL THYNGS"],
+    ['Luthacus', "LUTHACUS' SCAVENGED GOODS"],
+    ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"],
+  ]) {
+    await page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }).click()
+    const service = page.getByRole('dialog', { name: title, exact: true })
+    await service.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+    const bank = await assertActive(service, trader)
+    await service.getByRole('button', { name: 'Next hotbar', exact: true }).click()
+    await service.locator(`.hotbar-controls[data-hotbar-bank="${(bank + 1) % 3}"]`).waitFor()
+    await assertActive(service, `${trader} after cycle`)
+    const tooltipBanks = await assertForeground(service, trader)
+    await service.getByRole('button', { name: 'Done', exact: true }).click()
+    await service.waitFor({ state: 'detached' })
+    await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+    receipts.push({ trader, tooltipBanks, arrowOcclusion: 'pass', arrowCycle: 'pass', teardown: 'pass' })
+  }
 }
