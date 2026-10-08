@@ -97,13 +97,26 @@ test('every notification uses the native clip and scaled moving baseline', async
     stdin: { contents: `import { createElement } from 'react';
       import { renderToStaticMarkup } from 'react-dom/server';
       import Notifications from './NativeWorldNotifications.tsx';
+      import Feedback from './SkillBookFeedback.tsx';
+      export const renderHub = props => renderToStaticMarkup(createElement(Feedback, {skillId:null,onDismiss(){},style:{transform:'translate3d(0,900px,0)'},...props}));
       export const render = props => renderToStaticMarkup(createElement(Notifications, props));`,
       loader: 'tsx', resolveDir: import.meta.dirname },
     bundle: true, format: 'esm', platform: 'node', jsx: 'automatic', write: false,
     loader: { '.css': 'empty', '.png': 'empty' },
     banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(import.meta.url)});` },
   })
-  const { render } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0]!.text).toString('base64')}`)
+  const { render, renderHub } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0]!.text).toString('base64')}`)
+  for (const viewport of [
+    {width:1600,height:900,displayScale:1},
+    {width:1600,height:2844,displayScale:0.5625},
+    {width:2400,height:900,displayScale:1},
+  ]) {
+    const hubMessages = [{eventId:1,key:'book:1',lifetime:1,offset:0,text:'HARDEN +1',tint:0xffffff,alpha:1,scale:1}]
+    const html = renderHub({hubMessages,viewport,uiScale:1.25})
+    assert.ok(html.includes(`class="skill-book-hub-messages-stage" style="height:${viewport.height}px;width:${viewport.width}px;transform:scale(${viewport.displayScale})"`))
+    assert.ok(!html.includes('translate3d'), 'World notices must not inherit modal-stage centering')
+    assert.ok(html.includes('top:62.5px'), 'Hub notices must share the scaled native clip')
+  }
   for (const uiScale of [0.75, 1, 1.25, 1.5]) {
     for (const source of ['loot', 'book', 'combat', 'secondary'] as const) {
       for (const text of ['MANA POTION', 'DOUBLE DAMAGE', 'CHEAT DEATH!', '42 GOLD', 'Overloaded Mana!', 'HARDEN +1']) {

@@ -1797,3 +1797,12 @@ centered text004F5620 `2c3fe13529100bb091534539fb432a5622f029777065262ab9c1a4d24
 clip00420EC0 `b437ae24f11c549a252ab21515660ad9d1801d0439a24402722b35cf57408585`.
 Current regression, built browser, canonical gate, publication and live
 verification remain pending.
+
+
+The shared-consumer sweep also found Hub book notices anchored to the centered
+1600x900 modal stage rather than the complete gameplay viewport. On a portrait
+viewport that adds the menu's vertical centering offset to the native Y50
+clip. HubScene and GameHud already receive the full fixedViewport. Hub world
+notices must use that same full viewport and display scale; the separate
+Skill improved modal retains its centered authored stage. This is the same
+notification coordinate owner, not a change to book acquisition or dialog layout.
