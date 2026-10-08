@@ -8,21 +8,25 @@ import {
   nativeSkillBookResultLayout,
   nativeSkillBookResultText,
 } from './skill-book-feedback.ts'
+import type { GameViewportLayout } from './renderer/game-viewport.ts'
 import './skill-book-feedback.css'
 
-export default function SkillBookFeedback({ skillId, hubMessages, onDismiss, style, uiScale = 1 }: {
+export default function SkillBookFeedback({ skillId, hubMessages, onDismiss, style, viewport, uiScale = 1 }: {
   readonly skillId: number | null
   readonly hubMessages: readonly NativeLootMessageVisual[]
   readonly onDismiss: () => void
   readonly style: CSSProperties
   readonly uiScale?: number
+  readonly viewport: GameViewportLayout
 }) {
   const layout = useMemo(() => skillId === null ? null : nativeSkillBookResultLayout(skillId), [skillId])
   const frame = useMemo(() => layout === null ? null : planNativeUiMessageFrame({
     bounds: layout.frameBounds, lines: layout.lines, dimAlpha: 0, width: 1600, height: 900,
   }), [layout])
   return <>
-    {hubMessages.length > 0 ? <div className="main-menu-native-stage skill-book-hub-messages-stage" style={style}>
+    {hubMessages.length > 0 ? <div className="skill-book-hub-messages-stage" style={{
+      height: viewport.height, width: viewport.width, transform: `scale(${viewport.displayScale})`,
+    }}>
       <NativeWorldNotifications messages={hubMessages} uiScale={uiScale} />
     </div> : null}
     {skillId !== null && layout !== null && frame !== null ? <NativeUiDialog

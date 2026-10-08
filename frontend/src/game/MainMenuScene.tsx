@@ -2358,7 +2358,8 @@ function MainMenuContent({
 
         {session ? <SkillBookFeedback
           skillId={bookFeedback.skillId} hubMessages={bookFeedback.hubMessages}
-          onDismiss={bookFeedback.dismiss} style={nativeStageStyle} uiScale={gameUiScale(gameSettings)}
+          onDismiss={bookFeedback.dismiss} style={nativeStageStyle} viewport={fixedViewport}
+          uiScale={gameUiScale(gameSettings)}
         /> : null}
 
         {session && skillBookOpen && runtimeProgression ? (

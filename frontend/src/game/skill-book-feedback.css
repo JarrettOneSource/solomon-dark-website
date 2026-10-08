@@ -6,5 +6,13 @@
   margin: 0;
 }
 .skill-book-result-dialog::backdrop { background: rgb(0 0 0 / 75%); }
-.skill-book-hub-messages-stage { pointer-events: none; z-index: 45; }
+.skill-book-hub-messages-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform-origin: 0 0;
+  z-index: 45;
+}
 .skill-book-result-dialog .native-ui-button { pointer-events: auto; }
