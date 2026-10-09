@@ -2148,3 +2148,63 @@ maintained rollout and cleanup are required delivery checks; their final
 qualified receipts are retained with Report70 in the private campaign archive.
 No universal FPS, historical acquisition-input replay, retail runtime session
 or exact rejected historical WebSocket packet is claimed.
+
+## 2026-10-09 — Failed browser renderer acquisition ownership
+
+The visual tune-up found a browser resource-lifetime defect independent of the
+native Hail clocks above. At `d00d59b9`, four UI constructors assign resource
+locals only after `Promise.all` resolves, then attempt to destroy those still
+undefined locals in its rejection handler. Hub, Boneyard, and the native UI
+workbench also join separately owned resources without failure cleanup. Any
+failed sibling can therefore abandon successfully constructed resources,
+including siblings that finish after the first rejection.
+
+This is browser-adapter ownership work. Entry 137's native bundle lifetime and
+bounded loading contract and the existing retained-scene UI ownership remain
+the authority; no new stock behavior, asset, authored row, renderer sampling,
+gameplay state, or effect timing is inferred or changed.
+
+| Member | Recovered source fact and disposition |
+| --- | --- |
+| SkillPicker, SkillBook, HUD skill selector, HubInventory | Parallel GPU application/stock texture acquisition uses one typed failure-cleanup join. HubInventory includes its separately owned mod texture set. Success transfers ownership unchanged. |
+| Hub world, Boneyard world | World and mod texture siblings are destroyed with their existing full-owner destructors when the join fails. Boneyard's static painter-image barrier is explicitly non-owning because its images belong to the editor cache. |
+| Native UI workbench | GPU and stock texture siblings use the same acquisition cleanup. Successful workbench page-hide teardown is unchanged. |
+| Retained scene renderer owner | A rejected creation promise is evicted only if it is still the current generation. Reopening can acquire again; an older rejection cannot evict a replacement or cause an implicit retry loop. Successful scene-local retention is unchanged. |
+| Mod image acquisition | Exact-promise leases keep successful images shared across overlapping mod owners. Failed/rejected acquisitions release their leases; a late failed sibling cannot evict a successful retry's shared or newer generation. Last-owner release is idempotent and identity-guarded. |
+| Browser image-promise cache | A rejected promise evicts only its own current entry. Successful cache residency and concurrent request sharing remain unchanged. |
+| Static painter cached image | A completed zero-width image rejects immediately rather than subscribing to load/error events that have already occurred. The private shared editor cache has no eviction API; recovery from this state requires a document reload. No automatic editor retry is introduced. |
+| Stock texture-map batches | Existing bounded workers already wait for started loads and destroy partial textures. Their successful and failed acquisition behavior is retained as a regression control. |
+| Sequential Loader, Title, and Create constructors | Existing texture-then-GPU failure cleanup is correct and remains unchanged. |
+
+The shared join preserves the original first rejection immediately. Each
+successful acquisition receives one cleanup attempt, even if it fulfills later.
+A cleanup exception is reported without replacing the acquisition error,
+skipping another sibling, or becoming an unhandled rejected promise. It does
+not cancel pending loads, reinterpret resource ownership, or wrap entire
+renderer construction in a new generic lifecycle framework.
+
+The lease count is scoped to mod presentation owners. Existing non-mod image
+loaders and their key-only release operations keep their prior behavior; this
+does not claim new global reference-counting guarantees for every image user.
+
+### Focused evidence and qualification boundary
+
+The pure retained-owner/resource-join regression suite passes 11 tests on M2,
+and its focused TypeScript check passes. The before receipt has four passing
+and seven failing assertions: it uses the original retained-owner module and
+a newly added bare-`Promise.all` helper modeling the prior join semantics.
+That modeled helper receipt is not original-constructor browser proof.
+
+`tools/smoke-renderer-acquisition-lifecycle.mjs` exercises the public modules
+through the same browser probe against an unchanged control tree and the
+candidate. Its recorded contracts include network-failed assets, deliberately
+held GPU initialization, early/late resource release, real WebGL context loss
+on disposal, image-cache sharing/recovery and overlapping mod owner/generation
+cleanup, retained canvas identity and stale
+lease cleanup, and the explicit static-image reload boundary. Control mode
+records candidate-contract violations rather than relabeling them as a pass.
+Expected injected request failures are retained separately from unexpected
+page/console/request/response errors. Exact-candidate full validation and
+browser execution receipts belong to the task qualification archive; the
+focused checks alone establish neither complete renderer parity nor live
+deployment acceptance.

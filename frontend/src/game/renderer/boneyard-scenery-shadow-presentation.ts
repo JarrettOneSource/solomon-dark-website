@@ -38,6 +38,7 @@ interface ShadowView {
   readonly container: Container
   readonly parts: ShadowPart[]
   plan: readonly NativeSceneryShadowQuad[] | null
+  goodieKey: { phase: number; subtype: number; x: number; y: number } | null
 }
 
 interface StaticPlan {
@@ -98,12 +99,23 @@ export class BoneyardSceneryShadowPresentation {
       if (plans) this.paint(owner, complexShadows ? plans.on : plans.off, plans.family, frame)
     }
     for (const { goodie, depthOwner } of goodies) {
-      this.paint(depthOwner, nativeGoodieShadowPlan(goodie, complexShadows), 'Goodie', frame, `goodie:${goodie.id}`)
+      const previous = this.active.get(depthOwner)
+      const key = previous?.goodieKey
+      const unchanged = !complexShadows && key !== null && key !== undefined
+        && key.subtype === goodie.subtype && key.phase === goodie.phase
+        && key.x === goodie.position.x && key.y === goodie.position.y
+      const plan = unchanged ? previous!.plan! : nativeGoodieShadowPlan(goodie, complexShadows)
+      const view = this.paint(depthOwner, plan, 'Goodie', frame, `goodie:${goodie.id}`)
+      if (view && !unchanged) {
+        view.goodieKey = { phase: goodie.phase, subtype: goodie.subtype,
+          x: goodie.position.x, y: goodie.position.y }
+      }
     }
     for (const [owner, view] of this.active) {
       if (this.live.has(owner)) continue
       view.container.removeFromParent()
       view.container.renderable = false
+      view.goodieKey = null
       this.free.push(view)
       this.active.delete(owner)
     }
@@ -130,14 +142,15 @@ export class BoneyardSceneryShadowPresentation {
   private paint(owner: ContainerChild, plan: readonly NativeSceneryShadowQuad[], family: string,
     frame: BoneyardSceneryShadowFrame,
     directionalId = this.directionalIds.get(owner),
-  ): void {
+  ): ShadowView | null {
     const parent = owner.parent
-    if (plan.length === 0 || !parent || !owner.renderable) return
+    if (plan.length === 0 || !parent || !owner.renderable) return null
     this.live.add(owner)
     let view = this.active.get(owner)
     if (!view) {
-      view = this.free.pop() ?? { container: new Container({ eventMode: 'none' }), parts: [], plan: null }
+      view = this.free.pop() ?? { container: new Container({ eventMode: 'none' }), parts: [], plan: null, goodieKey: null }
       view.plan = null
+      view.goodieKey = null
       this.active.set(owner, view)
     }
     while (view.parts.length < plan.length) {
@@ -146,6 +159,7 @@ export class BoneyardSceneryShadowPresentation {
       view.container.addChild(part.mesh)
     }
     if (view.plan !== plan) {
+      view.goodieKey = null
       for (let index = 0; index < view.parts.length; index += 1) {
         const part = view.parts[index]!, quad = plan[index]
         part.mesh.renderable = quad !== undefined
@@ -191,6 +205,7 @@ export class BoneyardSceneryShadowPresentation {
     if (container.zIndex !== owner.zIndex || parent.getChildIndex(container) !== boundary - 1) {
       frame.zOrderMismatchCount += 1
     }
+    return view
   }
 }
 

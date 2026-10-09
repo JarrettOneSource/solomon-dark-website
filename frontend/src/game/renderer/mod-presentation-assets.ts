@@ -5,11 +5,12 @@ import type {
   ModItemContent,
   ModSpriteFrame,
 } from '../core-kernels/hub-economy.ts'
-import { loadGameImage, releaseGameImages } from '../game-assets.ts'
+import { loadGameImage, releaseGameImage } from '../game-assets.ts'
 import type {
   GameModAsset,
 } from '../protocol/game-mod-contract.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 
 export interface ModPresentationTextures {
   destroy(): void
@@ -30,6 +31,38 @@ export interface ModWearableTextureFrames {
   readonly slot: NonNullable<ModItemContent['wearable']>['slot']
 }
 
+interface ModImageSource {
+  readonly key: string
+  readonly source: string
+}
+
+interface LoadedModImage extends ModImageSource {
+  readonly image: HTMLImageElement
+  release(): void
+}
+
+const modImageOwners = new WeakMap<Promise<HTMLImageElement>, number>()
+
+function acquireModImage(asset: ModImageSource): Promise<LoadedModImage> {
+  const promise = loadGameImage(asset.source)
+  modImageOwners.set(promise, (modImageOwners.get(promise) ?? 0) + 1)
+  let released = false
+  const release = () => {
+    if (released) return
+    released = true
+    const remaining = modImageOwners.get(promise)! - 1
+    if (remaining > 0) modImageOwners.set(promise, remaining)
+    else {
+      modImageOwners.delete(promise)
+      releaseGameImage(asset.source, promise)
+    }
+  }
+  return promise.then(image => ({ ...asset, image, release }), (error: unknown) => {
+    release()
+    throw error
+  })
+}
+
 export async function loadModPresentationTextures(
   assets: readonly GameModAsset[],
 ): Promise<ModPresentationTextures> {
@@ -37,9 +70,9 @@ export async function loadModPresentationTextures(
     key: assetKey(asset.modId, asset.path),
     source: gameContentUrl(asset),
   }))
-  const images = await Promise.all(sources.map(async asset => ({
-    ...asset,
-    image: await loadGameImage(asset.source),
+  const images = await acquireRendererResources<LoadedModImage[]>(sources.map(asset => ({
+    promise: acquireModImage(asset),
+    destroy: loaded => loaded.release(),
   })))
   const bases = new Map(images.map(asset => [
     asset.key,
@@ -119,7 +152,7 @@ export async function loadModPresentationTextures(
       frames.clear()
       wearableFrames.clear()
       bases.clear()
-      releaseGameImages(sources.map(({ source }) => source))
+      for (const image of images) image.release()
     },
     iconTrim(content) {
       if (destroyed) throw new Error('mod presentation textures are destroyed')

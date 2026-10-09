@@ -23,6 +23,14 @@ PAGE_PREFIX = "hub-visual-atlas"
 SOURCE_PATTERN = "hub-*.png"
 EXPECTED_SOURCE_COUNT = 87
 
+# Ground auxiliaries remain separate stock-policy textures; these atlas pages
+# are composited-policy textures. Keep their native sampling boundary intact.
+LOOSE_SOURCE_NAMES = frozenset({
+    "hub-hagatha-ground-glow.png",
+    "hub-luthacus-ground-shadow.png",
+    "hub-trader-inventory-atlas.png",
+})
+
 # filename: columns, rows, logical frame width, logical frame height
 SHEET_LAYOUTS: dict[str, tuple[int, int, int, int]] = {
     "hub-astronomer-assistants.png": (12, 1, 150, 150),
@@ -98,7 +106,7 @@ def source_paths(assets_directory: Path) -> list[Path]:
         for path in sorted(assets_directory.glob(SOURCE_PATTERN))
         if not path.name.startswith("hub-hud-")
         and not path.name.startswith("hub-primary-")
-        and path.name != "hub-trader-inventory-atlas.png"
+        and path.name not in LOOSE_SOURCE_NAMES
         and not path.name.startswith(f"{PAGE_PREFIX}-")
     ]
 

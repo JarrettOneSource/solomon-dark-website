@@ -704,3 +704,23 @@ receipts. Fresh clean Windows native tutorial and x87 evidence is included
 under `native/evidence/`; it does not establish matched camera/light pixels,
 a Grave/chest native capture, or a native Shadows on/off pair. Entry 078
 records that independent scenery boundary precisely.
+
+## 2026-10-09 — Hub atlas membership checker reopening
+
+The follow-on rendering tune-up reopens the documented 87-versus-89 Hub
+packer census failure. Source inspection at published `d00d59b9` establishes
+that the two later raw ground auxiliaries are intentionally loose stock-policy
+textures: `hubRequestedAssetSources()` includes them separately, while the
+existing generated atlas retains its exact 87-source, 582-frame membership.
+Adding them to the composited atlas would change the texture-policy boundary;
+neither their original pixels nor the generated atlas should be repacked.
+
+The bounded correction makes those two loose sources explicit exclusions in
+the packer alongside the existing non-atlas assets. Unknown new Hub sources
+must remain visible to the strict census rather than silently disappearing.
+Regression coverage must compare selected membership with the existing
+generated imports and run the complete read-only `--check`, including exact
+frame reconstruction, page pixels and generated metadata. This is a build-tool
+classification repair; it changes no runtime asset, native value or draw path.
+Exact-candidate qualification belongs to the separate tune-up receipt; this
+source-membership evidence alone is not a focused or full-gate pass.

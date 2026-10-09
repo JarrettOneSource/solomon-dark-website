@@ -8,6 +8,8 @@ import type { ResidentTexture } from './boneyard-renderer-model.ts'
 import { BoneyardComplexShadowPresentation } from './boneyard-complex-shadow-presentation.ts'
 import { BoneyardSceneryShadowPresentation } from './boneyard-scenery-shadow-presentation.ts'
 import { nativeGoodieShadowOutline } from './boneyard-native-shadow-shapes.ts'
+import { nativeGoodieShadowPlan } from './native-scenery-shadow.ts'
+import { nativePackedColor } from './native-material-batch.ts'
 
 function resident(sprite: Sprite, index = 0): ResidentTexture {
   return { cleanupSourceKey: 'object:tree', h: 271, w: 204, x: 0, y: 0, mainLayerIndex: index,
@@ -22,6 +24,188 @@ function treeLayer(): MainLayer {
 }
 
 const sources = [{ position: { x: 120, y: 300 }, radius: 1, intensity: 1, castsDirectionalShadow: true }]
+
+function chest(id = 9): BoneyardGoodieSnapshot {
+  return { id, phase: 0, position: { x: 200, y: 300 }, active: false, exhausted: false,
+    sceneryRegistrationOrdinal: id, subtype: 0, timer: 0 }
+}
+
+function chestMesh(owner: Container): MeshSimple {
+  const parent = owner.parent!
+  return parent.children[parent.getChildIndex(owner) - 1]!.children[0] as MeshSimple
+}
+
+function chestBuffers(mesh: MeshSimple) {
+  return ['aPosition', 'aUV', 'aColor'].map(name => mesh.geometry.getBuffer(name))
+}
+
+function assertChestGeometry(mesh: MeshSimple, goodie: BoneyardGoodieSnapshot): void {
+  const quad = nativeGoodieShadowPlan(goodie, false)[0]!
+  assert.deepEqual([...mesh.geometry.getBuffer('aPosition').data],
+    quad.vertices.flatMap(point => [point.x, point.y]))
+  assert.deepEqual([...mesh.geometry.getBuffer('aUV').data],
+    quad.uvs.flatMap(point => [point.x, point.y]))
+  assert.deepEqual([...mesh.geometry.getBuffer('aColor').data],
+    quad.alphas.map(alpha => nativePackedColor(quad.tint, alpha)))
+  assert.equal(mesh.label, `scenery-flat-shadow:${145 + goodie.phase}`)
+}
+
+test('unchanged live chest glyphs retain buffer revisions across fresh equal-valued snapshots', () => {
+  const root = new Container(), owner = new Container({ label: 'goodie:9' })
+  root.addChild(owner)
+  const masks = new BoneyardSceneryShadowPresentation([], new Map(), [], () => Texture.WHITE)
+  try {
+    masks.render([], false, [{ goodie: chest(), depthOwner: owner }])
+    const mesh = chestMesh(owner), buffers = chestBuffers(mesh)
+    const revisions = buffers.map(buffer => buffer._updateID)
+    const arrays = buffers.map(buffer => buffer.data)
+    for (let frame = 0; frame < 240; frame += 1) {
+      const goodie = { ...chest(), active: frame % 2 === 0, timer: frame }
+      const receipt = masks.render([], false, [{ goodie, depthOwner: owner }])
+      assert.equal(receipt.quadCount, 1)
+      assert.equal(receipt.zOrderMismatchCount, 0)
+      assert.strictEqual(chestMesh(owner), mesh)
+      assert.deepEqual(chestBuffers(mesh).map(buffer => buffer._updateID), revisions)
+      chestBuffers(mesh).forEach((buffer, index) => {
+        assert.strictEqual(buffer, buffers[index])
+        assert.strictEqual(buffer.data, arrays[index])
+      })
+      assertChestGeometry(mesh, goodie)
+    }
+  } finally {
+    masks.destroy()
+    root.destroy({ children: true })
+  }
+})
+
+test('live chest glyph cache invalidates each native phase and position coordinate exactly once', () => {
+  const root = new Container(), owner = new Container({ label: 'goodie:9' })
+  root.addChild(owner)
+  const masks = new BoneyardSceneryShadowPresentation([], new Map(), [], () => Texture.WHITE)
+  try {
+    let goodie = chest()
+    masks.render([], false, [{ goodie, depthOwner: owner }])
+    const mesh = chestMesh(owner), buffers = chestBuffers(mesh)
+    let revisions = buffers.map(buffer => buffer._updateID)
+    const states: BoneyardGoodieSnapshot[] = [
+      { ...goodie, phase: 1 }, { ...goodie, phase: 2 },
+      { ...goodie, phase: 2, position: { x: 200.25, y: 300 } },
+      { ...goodie, phase: 2, position: { x: 200.25, y: 300.5 } },
+      { ...goodie, phase: 0, position: { x: 200.25, y: 300.5 } },
+    ]
+    for (goodie of states) {
+      masks.render([], false, [{ goodie, depthOwner: owner }])
+      assert.strictEqual(chestMesh(owner), mesh)
+      assert.deepEqual(buffers.map(buffer => buffer._updateID), revisions.map(value => value + 1))
+      assertChestGeometry(mesh, goodie)
+      revisions = buffers.map(buffer => buffer._updateID)
+      masks.render([], false, [{ goodie: { ...goodie, position: { ...goodie.position } }, depthOwner: owner }])
+      assert.deepEqual(buffers.map(buffer => buffer._updateID), revisions)
+    }
+  } finally {
+    masks.destroy()
+    root.destroy({ children: true })
+  }
+})
+
+test('chest cache follows live owner, pooled-view, settings, culling and nested-parent lifetimes', () => {
+  const root = new Container(), nested = new Container(), owner = new Container({ label: 'goodie:9' })
+  const peer = new Container({ label: 'equal-depth-peer' })
+  root.addChild(owner, peer, nested)
+  const masks = new BoneyardSceneryShadowPresentation([], new Map(), [], () => Texture.WHITE)
+  try {
+    let goodie = chest()
+    masks.render([], false, [{ goodie, depthOwner: owner }])
+    const mesh = chestMesh(owner), buffers = chestBuffers(mesh)
+    const revisions = buffers.map(buffer => buffer._updateID)
+    nested.addChild(owner)
+    owner.zIndex = 4
+    const reparented = masks.render([], false, [{ goodie, depthOwner: owner }])
+    assert.equal(reparented.zOrderMismatchCount, 0)
+    assert.strictEqual(chestMesh(owner), mesh)
+    assert.equal(nested.children[0]!.zIndex, 4)
+    assert.deepEqual(buffers.map(buffer => buffer._updateID), revisions)
+    for (const mode of ['settings', 'culling', 'removal'] as const) {
+      if (mode === 'culling') owner.renderable = false
+      const hidden = masks.render([], mode === 'settings', mode === 'removal' ? [] : [{ goodie, depthOwner: owner }])
+      assert.equal(hidden.activeMeshCount, 0)
+      assert.deepEqual(nested.children, [owner])
+      for (const retained of Object.values(masks)) {
+        if (retained instanceof Map || retained instanceof Set) assert.equal(retained.has(owner), false)
+      }
+      owner.renderable = true
+      goodie = { ...goodie, position: { x: goodie.position.x + 11, y: goodie.position.y + 7 } }
+      assert.equal(masks.render([], false, [{ goodie, depthOwner: owner }]).zOrderMismatchCount, 0)
+      assertChestGeometry(chestMesh(owner), goodie)
+    }
+    masks.render([], false, [])
+    owner.removeFromParent()
+    const replacement = new Container({ label: 'goodie:9' })
+    nested.addChild(replacement)
+    const fresh = { ...chest(), position: { x: 600, y: 500 }, phase: 2 as const }
+    masks.render([], false, [{ goodie: fresh, depthOwner: replacement }])
+    assert.strictEqual(chestMesh(replacement), mesh)
+    assertChestGeometry(mesh, fresh)
+    assert.equal(masks.render([], false, [{ goodie: fresh, depthOwner: replacement }]).zOrderMismatchCount, 0)
+    owner.destroy()
+    masks.destroy()
+    assert.ok(buffers.every(buffer => buffer.destroyed))
+    assert.equal(Texture.WHITE.destroyed, false)
+  } finally {
+    masks.destroy()
+    root.destroy({ children: true })
+  }
+})
+
+test('a released chest view can paint a static Tree mask and return without a stale Goodie key', () => {
+  const root = new Container(), owner = new Container({ label: 'goodie:9' })
+  const tree = new Sprite(Texture.WHITE)
+  tree.label = 'tree'
+  root.addChild(owner, tree)
+  const masks = new BoneyardSceneryShadowPresentation([treeLayer()],
+    new Map([[0, resident(tree)]]), [], () => Texture.WHITE)
+  try {
+    masks.render([], false, [{ goodie: chest(), depthOwner: owner }])
+    const mesh = chestMesh(owner), buffers = chestBuffers(mesh)
+    masks.render([], false, [])
+    masks.render([tree], true, [])
+    const treeMask = root.children[root.getChildIndex(tree) - 1]!.children[0]
+    assert.strictEqual(treeMask, mesh)
+    assert.match(mesh.label, /^tree-root-mask:/)
+    masks.render([], true, [])
+    masks.render([], false, [{ goodie: chest(), depthOwner: owner }])
+    assert.strictEqual(chestMesh(owner), mesh)
+    assertChestGeometry(mesh, chest())
+    const revisions = buffers.map(buffer => buffer._updateID)
+    masks.render([], false, [{ goodie: chest(), depthOwner: owner }])
+    assert.deepEqual(buffers.map(buffer => buffer._updateID), revisions)
+    assert.deepEqual(root.children.filter(child => child.label.startsWith('scenery-shadow:')),
+      [root.children[root.getChildIndex(owner) - 1]])
+  } finally {
+    masks.destroy()
+    root.destroy({ children: true })
+  }
+})
+
+test('cached Goodie subtype zero never masks unsupported native subtype errors in either shadow mode', () => {
+  const root = new Container(), owner = new Container({ label: 'goodie:9' })
+  root.addChild(owner)
+  const masks = new BoneyardSceneryShadowPresentation([], new Map(), [], () => Texture.WHITE)
+  try {
+    masks.render([], false, [{ goodie: chest(), depthOwner: owner }])
+    for (const complexShadows of [false, true]) {
+      for (const subtype of [-1, 1, 2, Number.NaN]) {
+        assert.throws(() => masks.render([], complexShadows,
+          [{ goodie: { ...chest(), subtype }, depthOwner: owner }]),
+        { name: 'RangeError', message: `Unsupported native Goodie shadow subtype ${subtype}.` })
+      }
+    }
+    assert.equal(masks.render([], false, [{ goodie: chest(), depthOwner: owner }]).quadCount, 1)
+  } finally {
+    masks.destroy()
+    root.destroy({ children: true })
+  }
+})
 
 test('default-on chest lifetimes leave no retained owner references after removal', () => {
   const root = new Container()

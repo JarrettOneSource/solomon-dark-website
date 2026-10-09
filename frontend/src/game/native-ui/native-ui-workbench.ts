@@ -1,3 +1,4 @@
+import { acquireRendererResources } from '../renderer/renderer-resource-acquisition.ts'
 import { planNativeUiTabs } from './native-ui-tabs.ts'
 import { Container } from 'pixi.js'
 
@@ -54,14 +55,20 @@ void start().catch((error: unknown) => {
 })
 
 async function start(): Promise<void> {
-  const [gpu, textures] = await Promise.all([
-    createGameWebGlApplication({
-      backgroundAlpha: 0,
-      className: 'native-ui-workbench-canvas',
-      height: HEIGHT,
-      width: WIDTH,
-    }),
-    loadGameTextureMap({ stock: Object.values(NATIVE_UI_ATLAS_SOURCES) }),
+  const [gpu, textures] = await acquireRendererResources([
+    {
+      promise: createGameWebGlApplication({
+        backgroundAlpha: 0,
+        className: 'native-ui-workbench-canvas',
+        height: HEIGHT,
+        width: WIDTH,
+      }),
+      destroy: value => value.destroy(),
+    },
+    {
+      promise: loadGameTextureMap({ stock: Object.values(NATIVE_UI_ATLAS_SOURCES) }),
+      destroy: value => value.destroy(),
+    },
   ])
   const nativeUi = createNativeUiPixiAdapter(textures)
   const root = new Container({ label: 'native-ui-workbench' })

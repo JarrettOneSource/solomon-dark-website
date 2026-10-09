@@ -1,3 +1,4 @@
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import type { ModalHotbarRenderer } from '../hotbar-controls-presentation.ts'
 import { ModalHotbarControlsView } from './modal-hotbar-controls.ts'
 import {
@@ -24,8 +25,6 @@ import {
   createBoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
 import {
-  type GameTextureMap,
-  type GameWebGlApplication,
   createGameWebGlApplication,
   loadGameTextureMap,
   textureFrom,
@@ -80,7 +79,6 @@ import {
   buildService,
 } from './hub-inventory/services.ts'
 import {
-  type ModPresentationTextures,
   loadModPresentationTextures,
 } from './mod-presentation-assets.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
@@ -111,18 +109,18 @@ export interface HubInventoryRenderer extends NativeUiCanvas, ModalHotbarRendere
 export async function createHubInventoryRenderer(
   modAssets: readonly GameModAsset[] = [],
 ): Promise<HubInventoryRenderer> {
-  let gpu: GameWebGlApplication | undefined
-  let resources: GameTextureMap | undefined
-  let modTextures: ModPresentationTextures | undefined
-  try {
-    ;[gpu, resources, modTextures] = await Promise.all([
-      createGameWebGlApplication({
+  const [gpu, resources, modTextures] = await acquireRendererResources([
+    {
+      promise: createGameWebGlApplication({
         backgroundAlpha: 0,
         className: 'hub-inventory-native-canvas',
         height: HUB_NATIVE_UI_SIZE.height,
         width: HUB_NATIVE_UI_SIZE.width,
       }),
-      loadGameTextureMap({
+      destroy: value => value.destroy(),
+    },
+    {
+      promise: loadGameTextureMap({
         composited: PLAYER_CHARACTER_ATLAS_SOURCES,
         stock: [
           hub.trader.inventoryAtlas,
@@ -133,14 +131,13 @@ export async function createHubInventoryRenderer(
           BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
         ],
       }),
-      loadModPresentationTextures(modAssets),
-    ])
-  } catch (error) {
-    gpu?.destroy()
-    resources?.destroy()
-    modTextures?.destroy()
-    throw error
-  }
+      destroy: value => value.destroy(),
+    },
+    {
+      promise: loadModPresentationTextures(modAssets),
+      destroy: value => value.destroy(),
+    },
+  ])
 
   const application = gpu.application
   const canvas = gpu.canvas

@@ -86,7 +86,11 @@ export async function loadStaticPainterImages(): Promise<void> {
 
 function loadStaticPainterImage(source: string): Promise<void> {
   const image = spriteImage(source)
-  if (image.complete && image.naturalWidth > 0) return Promise.resolve()
+  if (image.complete) {
+    return image.naturalWidth > 0
+      ? Promise.resolve()
+      : Promise.reject(new Error(`could not load Boneyard painter asset: ${source}`))
+  }
   return new Promise((resolve, reject) => {
     const loaded = () => {
       cleanup()

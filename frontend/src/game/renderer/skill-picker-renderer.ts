@@ -1,3 +1,4 @@
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   Container,
@@ -18,7 +19,6 @@ import {
   createGameWebGlApplication,
   loadGameTextureMap,
   type GameTextureMap,
-  type GameWebGlApplication,
 } from './game-webgl.ts'
 import {
   SKILL_PICKER_CARD_FRAME,
@@ -72,29 +72,27 @@ export interface SkillPickerRenderer extends NativeUiCanvas {
 export type SkillPickerFontName = 'body' | 'medium' | 'menu' | 'skill-uppercase'
 
 export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> {
-  let gpu: GameWebGlApplication | undefined
-  let textures: GameTextureMap | undefined
-  try {
-    ;[gpu, textures] = await Promise.all([
-      createGameWebGlApplication({
+  const [gpu, textures] = await acquireRendererResources([
+    {
+      promise: createGameWebGlApplication({
         backgroundAlpha: 0,
         className: 'skill-picker-canvas',
         height: SKILL_PICKER_SIZE.height,
         width: SKILL_PICKER_SIZE.width,
       }),
-      loadGameTextureMap({
+      destroy: value => value.destroy(),
+    },
+    {
+      promise: loadGameTextureMap({
         stock: [
           skillPicker.fontsAtlas,
           skillPicker.skillsAtlas,
           skillPicker.uiAtlas,
         ],
       }),
-    ])
-  } catch (error) {
-    gpu?.destroy()
-    textures?.destroy()
-    throw error
-  }
+      destroy: value => value.destroy(),
+    },
+  ])
 
   const application = gpu.application
   const resources = textures

@@ -1,3 +1,4 @@
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import type { ModalHotbarRenderer } from '../hotbar-controls-presentation.ts'
 import { ModalHotbarControlsView } from './modal-hotbar-controls.ts'
 import type { NativeUiCanvas } from './native-ui-canvas.ts'
@@ -99,17 +100,18 @@ export interface SkillBookRenderer extends NativeUiCanvas, ModalHotbarRenderer {
 
 export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const constructedAtMs = performance.now()
-  let gpu: Awaited<ReturnType<typeof createGameWebGlApplication>> | undefined
-  let textures: GameTextureMap | undefined
-  try {
-    ;[gpu, textures] = await Promise.all([
-      createGameWebGlApplication({
+  const [gpu, textures] = await acquireRendererResources([
+    {
+      promise: createGameWebGlApplication({
         backgroundAlpha: 0,
         className: 'skill-book-canvas',
         height: NATIVE_SKILL_SCREEN_SIZE.height,
         width: NATIVE_SKILL_SCREEN_SIZE.width,
       }),
-      loadGameTextureMap({
+      destroy: value => value.destroy(),
+    },
+    {
+      promise: loadGameTextureMap({
         stock: [
           hub.hud.backpack,
           hub.hud.tome,
@@ -121,12 +123,9 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
           skillPicker.uiAtlas,
         ],
       }),
-    ])
-  } catch (error) {
-    gpu?.destroy()
-    textures?.destroy()
-    throw error
-  }
+      destroy: value => value.destroy(),
+    },
+  ])
 
   const application = gpu.application
   const resources = textures

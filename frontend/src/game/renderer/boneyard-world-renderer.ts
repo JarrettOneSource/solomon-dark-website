@@ -1,3 +1,4 @@
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { frozenWorldQuality } from '../client/frozen-world-quality.ts'
 import { Application, Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
@@ -85,10 +86,11 @@ export async function createBoneyardWorldRenderer(
   options: BoneyardWorldRendererOptions,
 ): Promise<BoneyardWorldRenderer> {
   requireBoneyardSnapshot(options.initialSnapshot, options.boneyard.runId)
-  const [textures, , modTextures] = await Promise.all([
-    loadBoneyardWorldTextures(),
-    loadStaticPainterImages(),
-    loadModPresentationTextures(options.modAssets),
+  const [textures, , modTextures] = await acquireRendererResources([
+    { promise: loadBoneyardWorldTextures(), destroy: destroyBoneyardWorldTextures },
+    // Static painters borrow the editor's shared image cache; this barrier owns no resources.
+    { promise: loadStaticPainterImages(), destroy: () => undefined },
+    { promise: loadModPresentationTextures(options.modAssets), destroy: value => value.destroy() },
   ])
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio

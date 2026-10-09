@@ -1,3 +1,4 @@
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
 import 'pixi.js/unsafe-eval'
@@ -199,9 +200,9 @@ interface HubWorldRendererOptions {
 export async function createHubWorldRenderer(
   options: HubWorldRendererOptions,
 ): Promise<HubWorldRenderer> {
-  const [textures, modTextures] = await Promise.all([
-    loadHubWorldTextures(),
-    loadModPresentationTextures(options.modAssets ?? []),
+  const [textures, modTextures] = await acquireRendererResources([
+    { promise: loadHubWorldTextures(), destroy: destroyHubWorldTextureFrames },
+    { promise: loadModPresentationTextures(options.modAssets ?? []), destroy: value => value.destroy() },
   ])
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio

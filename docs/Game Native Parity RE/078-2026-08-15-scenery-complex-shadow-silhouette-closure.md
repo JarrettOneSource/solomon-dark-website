@@ -365,3 +365,63 @@ browser acceptance, prior collision/status replay, and cleanup receipts are
 external qualification artifacts under the M2-only archive
 `20261009-sh9aksle-visual-parity`. They are the release authority; this document
 does not turn a pending gate into a pass or claim publication occurred.
+
+### 2026-10-09 — Retain unchanged live Goodie glyph plans
+
+Allocation-only reopening of the restored Goodie OFF branch. Source review at
+`d00d59b9` shows `BoneyardSceneryShadowPresentation.render` constructs a fresh
+`nativeGoodieShadowPlan` for every visible chest on every frame. The existing
+`paint` identity guard therefore misses even when subtype, phase and both
+position coordinates are unchanged, issuing three Pixi buffer-update/revision
+bumps. This establishes redundant CPU work, not three independent GPU uploads
+or a measured frame-rate improvement.
+
+The native contract above is unchanged: subtype zero, DeadHawg records
+145/146/147 for phases 0/1/2, the exact flat-glyph fround deformation, original
+texture/color/alpha, and the actual live painter owner. Unsupported subtypes
+still throw in either setting. The bounded owner is the existing pooled
+`ShadowView`; a scalar key may retain its immutable glyph plan only while that
+same live depth owner owns the view. Pool activation clears the key. Native
+simulation, assets, light/directional formulas and painter-slot logic remain
+out of this allocation change.
+
+Membership and validation contract:
+
+- Phase 0/1/2 and independent x/y changes: recover the existing exact geometry,
+  invalidate once per changed input, then keep stable buffer revisions.
+- Fresh equal-valued snapshots and unrelated active/timer changes: reuse the
+  same plan, typed arrays, meshes and buffers without revision bumps.
+- ON/OFF, cull/return, removal/recreation, reused actor ID with a new owner,
+  reparenting and equal-depth peers: preserve release, fresh native geometry,
+  and current pre-main painter-slot work.
+- Subtype zero and unsupported -1/1/2/NaN: preserve valid membership and the
+  existing RangeError behavior, including immediately after a cached frame.
+- Tree/Wall/static masks and all directional families: existing retained
+  plans and shared pool behavior remain unchanged; existing regressions apply.
+
+The implementation retains the scalar key only on the existing live pooled
+view. Focused Mac tests first failed three new revision-stability assertions
+on the unchanged baseline, then passed all 42 scenery/native/directional
+shadow tests after the cache and a mixed chest-to-Tree-to-chest pool regression.
+The repeated-frame test uses 240 fresh equal-valued snapshots; it checks all
+three exact buffers, typed-array identities, revisions and native geometry.
+Receipts are `chest-cache-red.log`, `chest-cache-green.log` (41 tests), and
+`chest-cache-mixed-family-green.log` (42 tests) in the M2-only visual-tuneup
+archive. These are focused receipts. Exact-candidate integrated qualification
+and browser acceptance are owned by that archive's final report and receipts,
+separately from this source-level contract.
+
+The opt-in `SDR_SHADOW_PERF_FIXTURE=seven-chests-off` (or `seven-chests-on`)
+extension to `tools/smoke-boneyard-complex-shadows.mjs` leaves the default dense
+control and its native assertions intact. It adds seven visible
+live chests with real snapshot/painter ownership in a labeled synthetic scene.
+Seven matches the largest full-scene chest population in the 12 tracked native
+generator outputs (3–7); concentrating them in one viewport is not claimed as
+a native spawn arrangement. Compare exact RGBA, resource high water and native
+lifetimes before timing a quiet same-machine ABBA run. Buffer-update reduction
+is deterministic acceptance; report frame-time differences only when measured.
+The probe archives RGBA SHA-256 and decoded-image-comparable PNGs for closed,
+open, spent, moved, culled/returned, removed/recreated, directional and restored
+states. Its exact-candidate browser execution and same-harness baseline pairing
+belong to the archive qualification receipts; syntax or focused checks alone do
+not establish runtime acceptance or an end-to-end performance improvement.

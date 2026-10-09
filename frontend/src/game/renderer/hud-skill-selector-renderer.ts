@@ -1,3 +1,4 @@
+import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import { Container, Graphics } from 'pixi.js'
 
@@ -14,8 +15,6 @@ import { measureNativeUiText } from '../native-ui/core.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
-  type GameTextureMap,
-  type GameWebGlApplication,
 } from './game-webgl.ts'
 import {
   addBitmapText,
@@ -32,28 +31,26 @@ export interface HudSkillSelectorRenderer extends NativeUiCanvas {
 }
 
 export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelectorRenderer> {
-  let gpu: GameWebGlApplication | undefined
-  let textures: GameTextureMap | undefined
-  try {
-    ;[gpu, textures] = await Promise.all([
-      createGameWebGlApplication({
+  const [gpu, textures] = await acquireRendererResources([
+    {
+      promise: createGameWebGlApplication({
         backgroundAlpha: 0,
         className: 'hud-skill-selector-canvas',
         height: 900,
         width: 1_600,
       }),
-      loadGameTextureMap({
+      destroy: value => value.destroy(),
+    },
+    {
+      promise: loadGameTextureMap({
         stock: [
           skillPicker.fontsAtlas,
           skillPicker.skillsAtlas,
         ],
       }),
-    ])
-  } catch (error) {
-    gpu?.destroy()
-    textures?.destroy()
-    throw error
-  }
+      destroy: value => value.destroy(),
+    },
+  ])
 
   const application = gpu.application
   const resources = textures

@@ -17,7 +17,13 @@ export function createRetainedRendererOwner<Renderer extends RetainedRenderer>(
       renderer = null
     },
     get() {
-      renderer ??= create()
+      if (!renderer) {
+        const creating = create()
+        renderer = creating
+        void creating.catch(() => {
+          if (renderer === creating) renderer = null
+        })
+      }
       return renderer
     },
   }

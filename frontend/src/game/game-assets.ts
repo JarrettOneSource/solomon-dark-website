@@ -94,6 +94,7 @@ export function loadGameImage(source: string): Promise<HTMLImageElement> {
     image.src = source
   })
   imagePromises.set(source, promise)
+  void promise.catch(() => releaseGameImage(source, promise))
   return promise
 }
 
@@ -134,4 +135,9 @@ export function gameStartupStageLabel(progress: GameStartupProgress): string {
 
 export function releaseGameImages(sources: readonly string[]): void {
   for (const source of sources) imagePromises.delete(source)
+}
+
+/** Release one owned generation without evicting a newer request for the same URL. */
+export function releaseGameImage(source: string, promise: Promise<HTMLImageElement>): void {
+  if (imagePromises.get(source) === promise) imagePromises.delete(source)
 }

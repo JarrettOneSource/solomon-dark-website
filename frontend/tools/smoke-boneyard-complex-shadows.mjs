@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { writeFile } from 'node:fs/promises'
 
 import { chromium } from 'playwright-core'
 
@@ -14,6 +15,9 @@ const generatedScreenshot = process.env.SDR_SHADOW_GENERATED_SCREENSHOT
   || '/tmp/solomon-dark-complex-shadows-generated.png'
 const expectedShadowImplementation = process.env.SDR_EXPECT_SHADOW_IMPLEMENTATION
   || 'native-indexed-owner-mesh'
+const performanceFixture = process.env.SDR_SHADOW_PERF_FIXTURE || 'dense-control'
+assert.ok(['dense-control', 'seven-chests-off', 'seven-chests-on'].includes(performanceFixture),
+  'SDR_SHADOW_PERF_FIXTURE must be dense-control, seven-chests-off or seven-chests-on')
 const generatedWarmupFrames = boundedInteger(
   process.env.SDR_SHADOW_WARMUP_FRAMES || '30',
   'SDR_SHADOW_WARMUP_FRAMES',
@@ -35,7 +39,7 @@ const generatedStartupIterations = boundedInteger(
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
-  headless: true,
+  headless: process.env.SDR_SHADOW_HEADED !== '1',
 })
 
 try {
@@ -560,6 +564,7 @@ try {
 
   const generated = await page.evaluate(async ({
     measurementFrames,
+    performanceFixture,
     startupIterations,
     warmupFrames,
   }) => {
@@ -582,7 +587,28 @@ try {
       import('/src/game/host/native-generated-boneyards.ts'),
     ])
     const viewport = window.__visualViewport
-    const template = templatesModule.NATIVE_GENERATED_BONEYARDS[0]
+    const nativeTemplate = templatesModule.NATIVE_GENERATED_BONEYARDS[0]
+    const chestFixture = performanceFixture !== 'dense-control'
+    const complexShadows = performanceFixture !== 'seven-chests-off'
+    // Seven is the largest whole-scene Goodie population in the twelve native
+    // templates. This deliberately concentrated placement is a synthetic probe.
+    const template = chestFixture ? {
+      ...nativeTemplate,
+      geometrySha256: 'synthetic-seven-chest-cache-fixture',
+      scene: {
+        ...nativeTemplate.scene,
+        name: 'Synthetic concentrated seven-chest cache fixture',
+        spawn: { x: 900, y: 1800, facingDeg: 180 },
+        objects: [
+          ...nativeTemplate.scene.objects.filter(object => object.typeId !== 2061),
+          ...Array.from({ length: 7 }, (_, index) => ({
+            eid: `chest-cache-${index}`, typeId: 2061, subtype: 0, variant: 0,
+            atlasEntry: 145, sortBias: 0,
+            pos: { x: 600 + (index % 4) * 200, y: 1700 + Math.floor(index / 4) * 180 },
+          })),
+        ],
+      },
+    } : nativeTemplate
     const runId = 'generated-complex-shadow-browser-proof'
     const facing = playerModule.playerCharacterFacing(template.scene.spawn.facingDeg)
     const headingIndex = facing.headingIndex
@@ -709,8 +735,13 @@ try {
       const raw = rawSnapshotAt(...args)
       return { ...defaults, ...raw, players: { local: { ...defaults.players.local, ...raw.players.local,
         progression: { ...defaults.players.local.progression, ...raw.players.local.progression } } },
-        world: { ...defaults.world, ...raw.world } }
+        world: { ...defaults.world, ...raw.world, ...(chestFixture ? {
+          // The authoritative constructor assigns identities and scenery
+          // registrations. Fresh equal-valued snapshots exercise value keys.
+          goodies: defaults.world.goodies.map(goodie => ({ ...goodie, position: { ...goodie.position } })),
+        } : {}) } }
     }
+    const { DEFAULT_GAME_SETTINGS } = await import('/src/game/game-settings.ts')
     const createRenderer = () => rendererModule.createBoneyardWorldRenderer({
       boneyard,
       now: () => 1000,
@@ -719,6 +750,7 @@ try {
       modAssets: [],
       modCatalog: [],
       playerId: 'local',
+      ...(chestFixture ? { settings: { ...DEFAULT_GAME_SETTINGS, complexShadows } } : {}),
       viewport,
     })
     const startupReceipts = []
@@ -743,7 +775,7 @@ try {
     document.body.append(renderer.canvas)
     renderer.canvas.style.width = `${viewport.width * viewport.displayScale}px`
     renderer.canvas.style.height = `${viewport.height * viewport.displayScale}px`
-    const firstFrame = { ...renderer.canvas.__sdrBoneyardFrame }
+    const firstFrame = structuredClone(renderer.canvas.__sdrBoneyardFrame)
     for (let frame = 1; frame <= warmupFrames; frame += 1) {
       await new Promise(requestAnimationFrame)
       renderer.render(snapshotAt(2_000 + frame))
@@ -753,6 +785,7 @@ try {
       allocatedQuadCapacity:
         renderer.canvas.__sdrBoneyardFrame.complexShadowAllocatedQuadCapacity,
       pooledMeshes: renderer.canvas.__sdrBoneyardFrame.complexShadowPooledMeshCount,
+      ...(chestFixture ? { scenery: sceneryResources(renderer.canvas.__sdrBoneyardFrame) } : {}),
     }
     const renderDurations = []
     const frameGaps = []
@@ -803,22 +836,60 @@ try {
       gl.deleteQuery(query)
       return value === null ? [] : [value]
     })
+    const measuredFrame = structuredClone(renderer.canvas.__sdrBoneyardFrame)
+    const measuredHeap = performance.memory ? {
+      limit: performance.memory.jsHeapSizeLimit,
+      total: performance.memory.totalJSHeapSize,
+      used: performance.memory.usedJSHeapSize,
+    } : null
+    const pixelReceipts = []
+    const chestLifecycle = []
+    if (chestFixture) {
+      // GPU-query completion awaited a frame; repaint before copying a WebGL
+      // backing store whose preserveDrawingBuffer contract is false.
+      renderer.render(snapshotAt(2559))
+      pixelReceipts.push(await rgbaReceipt('steady', renderer.canvas, complexShadows))
+      for (const state of [
+        { name: 'closed-off', phase: 0, enabled: false },
+        { name: 'open-off', phase: 1, enabled: false },
+        { name: 'spent-off', phase: 2, enabled: false },
+        { name: 'moved-off', phase: 2, enabled: false, moved: true },
+        { name: 'culled-off', phase: 2, enabled: false, culled: true },
+        { name: 'returned-off', phase: 2, enabled: false },
+        { name: 'removed-off', phase: 0, enabled: false, removed: true },
+        { name: 'recreated-off', phase: 0, enabled: false },
+        { name: 'directional-on', phase: 0, enabled: true },
+        { name: 'restored-off', phase: 0, enabled: false },
+      ]) {
+        const snapshot = snapshotAt(2600)
+        snapshot.world.goodies = state.removed ? [] : snapshot.world.goodies.map((goodie, index) => ({
+          ...goodie, phase: state.phase,
+          position: state.culled ? { x: -10000, y: -10000 } : state.moved
+            ? { x: goodie.position.x + (index + 1) * .25, y: goodie.position.y + .5 }
+            : goodie.position,
+        }))
+        renderer.setSettings({ ...DEFAULT_GAME_SETTINGS, complexShadows: state.enabled })
+        renderer.render(snapshot)
+        const frame = structuredClone(renderer.canvas.__sdrBoneyardFrame)
+        chestLifecycle.push({ state, frameCount: frame.frameCount, tick: frame.tick,
+          goodieCount: frame.goodieCount, shadows: frame.sceneryShadows,
+          resources: sceneryResources(frame) })
+        pixelReceipts.push(await rgbaReceipt(state.name, renderer.canvas, state.enabled))
+      }
+      renderer.setSettings({ ...DEFAULT_GAME_SETTINGS, complexShadows })
+      renderer.render(snapshotAt(2600))
+    }
     window.__generatedComplexShadowRenderer = renderer
     return {
       raster: { gpu: (() => { const gl = renderer.canvas.getContext('webgl2'); const e = gl.getExtension('WEBGL_debug_renderer_info'); return { renderer: e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : null, antialias: gl.getContextAttributes().antialias } })(), width: renderer.canvas.width, height: renderer.canvas.height, cssWidth: renderer.canvas.getBoundingClientRect().width, cssHeight: renderer.canvas.getBoundingClientRect().height, dpr: window.devicePixelRatio, resolution: renderer.canvas.dataset.resolution, viewport },
       averageRenderMs: renderDurations.reduce((sum, value) => sum + value, 0)
         / renderDurations.length,
       firstFrame,
-      frame: { ...renderer.canvas.__sdrBoneyardFrame },
+      frame: measuredFrame,
+      ...(chestFixture ? { performanceFixture, chestLifecycle, pixelReceipts } : {}),
       initialResources,
       frameGaps: distribution(frameGaps),
-      heapBytes: performance.memory
-        ? {
-            limit: performance.memory.jsHeapSizeLimit,
-            total: performance.memory.totalJSHeapSize,
-            used: performance.memory.usedJSHeapSize,
-          }
-        : null,
+      heapBytes: measuredHeap,
       longTasks: {
         count: longTasks.length,
         durationMs: longTasks.reduce((sum, value) => sum + value, 0),
@@ -842,6 +913,48 @@ try {
         p95: percentile(0.95),
         p99: percentile(0.99),
       }
+    }
+
+    function sceneryResources(frame) {
+      const shadows = frame.sceneryShadows
+      return { activeMeshes: shadows.activeMeshCount, pooledMeshes: shadows.pooledMeshCount,
+        quadCount: shadows.quadCount, goodieQuads: shadows.familyQuads['Goodie:scenery-flat-shadow'] ?? 0 }
+    }
+
+    async function rgbaReceipt(name, source, enabled) {
+      const before = captureState(source)
+      if (before.complexShadowsEnabled !== String(enabled)) {
+        throw new Error(`${name}: unexpected complex-shadow setting`)
+      }
+      if (before.cssWidth !== viewport.width * viewport.displayScale
+        || before.cssHeight !== viewport.height * viewport.displayScale) {
+        throw new Error(`${name}: unexpected CSS canvas dimensions`)
+      }
+      const sample = document.createElement('canvas')
+      sample.width = source.width
+      sample.height = source.height
+      const context = sample.getContext('2d', { willReadFrequently: true })
+      if (!context) throw new Error('chest cache RGBA probe has no 2D context')
+      context.drawImage(source, 0, 0)
+      const pixels = context.getImageData(0, 0, sample.width, sample.height).data
+      // Copy the backing store before awaiting; WebGL need not preserve it.
+      const pngBase64 = sample.toDataURL('image/png').split(',')[1]
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', pixels))
+      const after = captureState(source)
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        throw new Error(`${name}: frame or raster changed during RGBA capture`)
+      }
+      return { name, ...before, rasterBefore: before, rasterAfter: after,
+        rgbaSha256: [...digest].map(value => value.toString(16).padStart(2, '0')).join(''), pngBase64 }
+    }
+
+    function captureState(source) {
+      const bounds = source.getBoundingClientRect()
+      return { width: source.width, height: source.height,
+        cssWidth: bounds.width, cssHeight: bounds.height, dpr: window.devicePixelRatio,
+        resolution: source.dataset.resolution,
+        complexShadowsEnabled: source.dataset.complexShadowsEnabled,
+        frameCount: source.__sdrBoneyardFrame.frameCount, tick: source.__sdrBoneyardFrame.tick }
     }
 
     function pixelReceipt(source) {
@@ -869,6 +982,7 @@ try {
     }
   }, {
     measurementFrames: generatedMeasurementFrames,
+    performanceFixture,
     startupIterations: generatedStartupIterations,
     warmupFrames: generatedWarmupFrames,
   })
@@ -877,9 +991,15 @@ try {
   })
   assert.ok(generated.frame.staticLayerCount > 100)
   assert.ok(generated.frame.visibleMainLayerCount > 0)
-  assert.ok(generated.frame.complexShadowCasterCount > 0)
-  assert.ok(generated.frame.complexShadowRecordCount > 0)
-  assert.ok(generated.frame.complexShadowQuadCount > 0)
+  if (performanceFixture === 'seven-chests-off') {
+    assert.equal(generated.frame.complexShadowCasterCount, 0)
+    assert.equal(generated.frame.complexShadowRecordCount, 0)
+    assert.equal(generated.frame.complexShadowQuadCount, 0)
+  } else {
+    assert.ok(generated.frame.complexShadowCasterCount > 0)
+    assert.ok(generated.frame.complexShadowRecordCount > 0)
+    assert.ok(generated.frame.complexShadowQuadCount > 0)
+  }
   assert.equal(generated.firstFrame.frameCount, 1)
   assert.ok(generated.firstFrame.lightSourceCount > 0)
   assert.ok(generated.firstFrame.lightActiveBucketCount > 0)
@@ -912,10 +1032,38 @@ try {
       allocatedQuadCapacity:
         generated.frame.complexShadowAllocatedQuadCapacity,
       pooledMeshes: generated.frame.complexShadowPooledMeshCount,
+      ...(generated.initialResources.scenery ? { scenery: {
+        activeMeshes: generated.frame.sceneryShadows.activeMeshCount,
+        pooledMeshes: generated.frame.sceneryShadows.pooledMeshCount,
+        quadCount: generated.frame.sceneryShadows.quadCount,
+        goodieQuads: generated.frame.sceneryShadows.familyQuads['Goodie:scenery-flat-shadow'] ?? 0,
+      } } : {}),
     }, generated.initialResources)
   }
   assert.ok(Number.isFinite(generated.averageRenderMs))
   assert.ok(generated.averageRenderMs > 0)
+  if (performanceFixture !== 'dense-control') {
+    assert.equal(generated.frame.goodieCount, 7)
+    assert.equal(generated.frame.sceneryShadows.goodies.length, 7)
+    assert.equal(generated.frame.sceneryShadows.familyQuads['Goodie:scenery-flat-shadow'] ?? 0,
+      performanceFixture === 'seven-chests-off' ? 7 : 0)
+    assert.equal(generated.frame.sceneryShadows.zOrderMismatchCount, 0)
+    for (const { state, goodieCount, shadows } of generated.chestLifecycle) {
+      assert.equal(goodieCount, state.removed ? 0 : 7, state.name)
+      assert.equal(shadows.goodies.length, state.removed || state.culled ? 0 : 7, state.name)
+      assert.equal(shadows.familyQuads['Goodie:scenery-flat-shadow'] ?? 0,
+        state.removed || state.culled || state.enabled ? 0 : 7, state.name)
+      assert.equal(shadows.zOrderMismatchCount, 0, state.name)
+      for (const goodie of shadows.goodies) assert.equal(goodie.phase, state.phase, state.name)
+    }
+    for (const receipt of generated.pixelReceipts) {
+      assert.deepEqual(receipt.rasterBefore, receipt.rasterAfter, receipt.name)
+      const path = generatedScreenshot.replace(/\.png$/, `-${receipt.name}.png`)
+      await writeFile(path, Buffer.from(receipt.pngBase64, 'base64'))
+      delete receipt.pngBase64
+      receipt.path = path
+    }
+  }
   await page.evaluate(() => window.__generatedComplexShadowRenderer.destroy())
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
