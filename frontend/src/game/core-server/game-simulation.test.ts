@@ -7046,7 +7046,8 @@ function targetStatusLifetimeFixture(): { loadedBoneyard: LoadedBoneyard; state:
 
 test('target-owned status lifetime heals saved orphan records before the first snapshot and preserves party rejoin', () => {
   const fixture = targetStatusLifetimeFixture()
-  let state = fixture.state
+  // Avoid party-owner projection healing the fixture before the restore boundary.
+  let state = removePlayerCharacter(fixture.state, 'peer')
   const expected = state.secondaryAbilities.targetEffects
   for (const [worldKey, targetId] of [[`boneyard:${fixture.loadedBoneyard.runId}`, 900_001],
     ['boneyard:retired', expected[0]!.targetId]] as const) {
@@ -7055,6 +7056,9 @@ test('target-owned status lifetime heals saved orphan records before the first s
   }
   const saved = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: fixture.loadedBoneyard,
     mods: [], modState: {}, playerId: 'owner', state })
+  const savedEffects = JSON.parse(saved).continuation.simulation.secondaryAbilities.targetEffects
+  assert.equal(savedEffects.length, expected.length + 2, 'serialized legacy fixture must retain both orphans')
+  assert.deepEqual(savedEffects, state.secondaryAbilities.targetEffects)
   const restored = restoreGameSaveDocument(saved).state
   assert.deepEqual(restored.secondaryAbilities.targetEffects, expected)
   assert.equal(restored.tick, state.tick, 'restore cleanup does not advance clocks')
