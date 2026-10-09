@@ -21,6 +21,7 @@ import {
   type NativeBoneyardProjectedShadowEdge,
 } from './boneyard-complex-shadows.ts'
 import type { NativeBoneyardLightSamples } from './boneyard-lighting.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 export interface BoneyardComplexShadowStaticCaster {
   caster: NativeBoneyardComplexShadowCaster
@@ -28,6 +29,8 @@ export interface BoneyardComplexShadowStaticCaster {
 }
 
 export interface BoneyardComplexShadowFrame {
+  familyCasters: Record<string, number>
+  casterIds: readonly string[]
   activeMeshCount: number
   allocatedQuadCapacity: number
   casterCount: number
@@ -74,6 +77,7 @@ export class BoneyardComplexShadowPresentation {
     gateDepthOwners: ReadonlyMap<string, ContainerChild>,
     visibleStaticDepthOwners: readonly ContainerChild[],
     enabled = true,
+    dynamicCasters: readonly BoneyardComplexShadowStaticCaster[] = [],
   ): BoneyardComplexShadowFrame {
     const liveIds = this.liveIds
     liveIds.clear()
@@ -81,10 +85,13 @@ export class BoneyardComplexShadowPresentation {
     let quadCount = 0
     let recordCount = 0
     let zOrderMismatchCount = 0
+    const familyCasters: Record<string, number> = {}
 
     if (!enabled) {
       for (const id of this.activeViews.keys()) this.release(id)
       return {
+        familyCasters,
+        casterIds: [],
         activeMeshCount: 0,
         allocatedQuadCapacity: this.allocatedQuadCapacity,
         casterCount: 0,
@@ -98,18 +105,35 @@ export class BoneyardComplexShadowPresentation {
     for (const depthOwner of visibleStaticDepthOwners) {
       const caster = this.staticCastersByOwner.get(depthOwner)
       if (!caster) continue
-      if (!depthOwner.renderable || depthOwner.parent !== this.root) continue
+      if (!depthOwner.renderable || !this.owns(depthOwner)) continue
       const geometry = casterGeometry(caster, sources, presentationFrame)
       recordCount += geometry.recordCount
       if (geometry.edges.length === 0) continue
       casterCount += 1
       quadCount += geometry.edges.length
       const view = this.activate(caster.id, geometry.edges)
-      positionBeforeOwner(this.root, view.mesh, depthOwner)
-      if (!ownsNativeShadowSlot(this.root, view.mesh, depthOwner)) {
+      positionBeforeOwner(depthOwner.parent!, view.mesh, depthOwner)
+      if (!ownsNativeShadowSlot(depthOwner.parent!, view.mesh, depthOwner)) {
         zOrderMismatchCount += 1
       }
       liveIds.add(caster.id)
+      const family = caster.family ?? caster.program?.kind ?? 'polygon'
+      familyCasters[family] = (familyCasters[family] ?? 0) + 1
+    }
+
+    for (const { caster, depthOwner } of dynamicCasters) {
+      if (!depthOwner.renderable || !this.owns(depthOwner)) continue
+      const geometry = casterGeometry(caster, sources, presentationFrame)
+      recordCount += geometry.recordCount
+      if (geometry.edges.length === 0) continue
+      casterCount += 1
+      quadCount += geometry.edges.length
+      const view = this.activate(caster.id, geometry.edges)
+      positionBeforeOwner(depthOwner.parent!, view.mesh, depthOwner)
+      if (!ownsNativeShadowSlot(depthOwner.parent!, view.mesh, depthOwner)) zOrderMismatchCount += 1
+      liveIds.add(caster.id)
+      const family = caster.family ?? caster.program?.kind ?? 'polygon'
+      familyCasters[family] = (familyCasters[family] ?? 0) + 1
     }
 
     for (const gate of gateLeaves) {
@@ -132,12 +156,15 @@ export class BoneyardComplexShadowPresentation {
         zOrderMismatchCount += 1
       }
       liveIds.add(id)
+      familyCasters.Gate = (familyCasters.Gate ?? 0) + 1
     }
 
     for (const id of this.activeViews.keys()) {
       if (!liveIds.has(id)) this.release(id)
     }
     return {
+      familyCasters,
+      casterIds: [...liveIds],
       activeMeshCount: this.activeViews.size,
       allocatedQuadCapacity: this.allocatedQuadCapacity,
       casterCount,
@@ -150,10 +177,14 @@ export class BoneyardComplexShadowPresentation {
 
   destroy(): void {
     for (const id of this.activeViews.keys()) this.release(id)
-    for (const view of this.freeViews) view.mesh.destroy()
+    for (const view of this.freeViews) {
+      destroyOwnedMeshGeometry(view.mesh)
+      view.mesh.destroy()
+    }
     this.freeViews.length = 0
     this.alphaRamp.destroy(true)
     this.liveIds.clear()
+    this.staticCastersByOwner.clear()
   }
 
   private activate(
@@ -186,9 +217,16 @@ export class BoneyardComplexShadowPresentation {
     const view = this.activeViews.get(id)
     if (!view) return
     this.activeViews.delete(id)
-    if (view.mesh.parent === this.root) this.root.removeChild(view.mesh)
+    view.mesh.removeFromParent()
     view.mesh.renderable = false
     this.freeViews.push(view)
+  }
+
+  private owns(owner: ContainerChild): boolean {
+    for (let parent = owner.parent; parent; parent = parent.parent) {
+      if (parent === this.root) return true
+    }
+    return false
   }
 
   private get allocatedQuadCapacity(): number {

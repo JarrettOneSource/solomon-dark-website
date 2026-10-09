@@ -29,6 +29,7 @@ import type { NativeArenaRenderPipeline } from './native-arena-render-pipeline.t
 import { installNativeArenaRenderPipeline } from './native-arena-render-pipeline.ts'
 import { NativeCrowBlindnessView } from './native-crow-blindness-view.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import { nativeSceneryGlyphTexture } from './native-scenery-shadow.ts'
 import { NativeEnemyWorldFeedbackPresentation, nativeEnemyWorldFeedbackTransform } from './native-enemy-world-feedback.ts'
 import { installNativeFixedFunctionRenderPipeline } from './native-fixed-function-render-pipeline.ts'
 import { NativeSecondaryScreenFeedbackPresentation, nativeSecondaryWorldShake, presentNativeSecondaryScreenOverlay } from './native-secondary-presentation.ts'
@@ -160,6 +161,7 @@ export async function createBoneyardWorldRenderer(
         ground: textures.ground,
         roads: textures.roads,
       },
+      nativeSceneryGlyphTexture(textures.combatAtlas, 3),
       options.initialSnapshot.world.kind === 'boneyard'
         ? options.initialSnapshot.world.arenaTransition?.combatBounds
           ?? (options.initialSnapshot.world.tutorial === null

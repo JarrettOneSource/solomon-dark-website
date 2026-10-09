@@ -651,7 +651,7 @@ test('never invents complex-shadow silhouettes from arbitrary sprite alpha', () 
   const document = { fences: [brokenBody.fence] } as EditorDoc
 
   assert.equal(nativeBoneyardMainLayerShadowCaster(document, unknownLayer, 0), null)
-  assert.equal(nativeBoneyardMainLayerShadowCaster(document, brokenBody, 1), null)
+  assert.throws(() => nativeBoneyardMainLayerShadowCaster(document, brokenBody, 1), /requires its native constructor state/)
 })
 
 test('selects Goodie authored shadow geometry by subtype, not visible phase', () => {

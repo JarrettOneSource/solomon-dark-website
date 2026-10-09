@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { observeGameDevicePixelRatio } from './renderer/game-device-pixel-ratio.ts'
 import type {
   HubGameSnapshot,
   HubPresentationFrame,
@@ -443,7 +444,11 @@ export default function HubScene({
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(scene)
-    return () => observer.disconnect()
+    const disconnectPixelRatio = observeGameDevicePixelRatio(resize)
+    return () => {
+      observer.disconnect()
+      disconnectPixelRatio()
+    }
   }, [currentRegion, settings.cameraFovPercent])
 
   useLayoutEffect(() => {

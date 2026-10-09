@@ -118,6 +118,10 @@ export class NativeGoodieViews {
     this.views.get(id)?.setDepth(depth)
   }
 
+  depthOwner(id: number): Container | null {
+    return this.views.get(id)?.container ?? null
+  }
+
   setTint(id: number, tint: number): void {
     this.views.get(id)?.setTint(tint)
   }
@@ -235,7 +239,7 @@ function updateModPotionLayer(
 }
 
 class NativeGoodieView {
-  private readonly container: Container
+  readonly container: Container
   private readonly root: Container
   private readonly sprites: Sprite[] = []
   private readonly textures: BoneyardWorldTextures

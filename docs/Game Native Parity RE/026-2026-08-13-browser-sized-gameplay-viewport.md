@@ -477,3 +477,230 @@ No member is blocked by the browser platform.
 - At the time this receipt was recorded, no commit, push, deployment or live
   production change had been performed; the Windows checkout's uncommitted
   work by the other contributor was left untouched.
+
+## 2026-10-09 — Responsive world backing density and display-DPR refresh
+
+### Report, ownership, and evidence boundary
+
+The owner reports browser art looking lower resolution than stock. This reopens
+the final presentation-density boundary, separately from scenery shadow
+geometry. Session `sh9aksle`, coordinator `improve_solomon_visual_parity` and
+worker `audit_native_art_resolution`, inspected isolated candidate base
+`aff17b020941c5a200c9fadee5400b2f616c440e` on the M2 Mac mini. No native process
+was launched; the existing clean-stock 0.72.5 evidence above and entry 287's
+complete renderer census remain the native oracle. This investigation does not
+claim a new matched native/browser capture or that every subjective difference
+comes from backing density.
+
+The earlier viewport receipts explicitly retained quarter-step resolution
+quantization. That branch is not native sampler behavior: it rasterizes the
+entire scene at a different pixel grid and then asks the browser compositor to
+rescale it. The complete shared producer has only two callers, Hub and Boneyard,
+on both creation and resize. Both scene owners also observe CSS-size changes
+only; moving an unchanged-size window between displays can change DPR without
+notifying their ResizeObserver. The fixed UI canvas owner already watches DPR.
+
+### Evidence and falsifiers
+
+- `initialHubResolution` rounds `DPR * displayScale` to the nearest `.25`
+  after clamping to `.5..1.5`. At `1280x800`, DPR 1, logical `1600x1000`, it
+  chooses `.75` rather than `.8`: the `1200x750` image is enlarged to
+  `1280x800`. At `1366x768`, it chooses `.75` rather than `768/900`, losing
+  about 22.8% of the requested backing pixels before CSS presentation. Values
+  rounded upward incur a second downsample instead. At `1600x900`, DPR 1,
+  quantization is identity and cannot explain a mismatch.
+- `HubScene`/`BoneyardScene` call their shared resolution producer on startup
+  and CSS resize, while `native-ui-canvas` separately rearms a resolution
+  media query when DPR changes. A DPR-only event leaving world art at the old
+  density while fixed UI updates is a second independently testable defect.
+- World CSS has no pixelated/nearest override or intermediate CSS bitmap;
+  gameplay native frames retain `displayScale <= 1`. Camera FOV, the bound's
+  `worldZoom`, Hub `1.2`, Arena `1.35`, and authored world coordinates remain
+  separate from physical-pixel density. Changing them would be the wrong fix.
+- `loadGameImage` decodes the requested image directly; `ImageSource` receives
+  that image with no resize. Entry 287 and the present shared texture source
+  implementation agree on linear art min/mag and point-filtered glyph
+  variants. Arena saturation is applied by shared material shaders, not by a
+  downscaled whole-world render target. The light-field target is a separate
+  multiplicative lighting surface; its native quality/power-of-two contract
+  is unchanged. Player diffuse captures and compact masks likewise remain
+  native-purpose targets, not scene-resolution substitutes.
+
+### Asset provenance and complete shared membership
+
+Read-only comparison with `SolomonDarkAbandonware/images` found all seven
+combat runtime pages byte-identical to native: BadGuys `2048x2048`, Demon
+`512x512`, DeadHawg `2048x2048`, Golem `512x512`, Faculty `1024x1024`,
+Heartmonger `1024x1024`, Unholy `1024x1024`. The maintained combat checker
+verified all 4,286 extracted records against those seven original-layout pages.
+All 13 raw UI pages are also byte-identical: Bonedit, ControlPanel, Controls,
+Create, Fonts, GameOver, Inventory, LevelPicker, Library, Loader, Skills,
+Title, and UI. Native page dimensions range from Fonts `512x256` to Title
+`2048x1024`; none is a reduced-resolution replacement.
+
+All 12 loose PNG resources were separately confirmed byte-identical in
+`assets/game/boneyard/textures`: WallTop `128x32`; fencegrate, greenplasma and
+paintbkg `64x64`; etherplane, rise, river, road, road2, road4 and road5
+`128x128`; road3 `256x256`.
+
+The other native bundle families (Clothes, College, Memoratorium, NPCs,
+Office, Solomon, SolomonRiff, Storage) feed the existing extracted/composited
+world or terminal assets. Player packing verified all 12,067 frames from 100
+sheets into three pages (`2048x2048`, `2048x2048`, `2048x1553`), retaining
+original frame dimensions and trim origins. Exact generated Hub membership
+verified all 582 frames from 87 sources into pages `2048x2048`, `2048x2046`,
+`2048x1327`, including reconstruction and generated metadata. These packers
+crop/deduplicate at 1:1; they do not reduce sprite resolution. The Hub CLI
+checker itself has a pre-existing stale source glob: two later raw ground
+images (`hub-hagatha-ground-glow.png`, `hub-luthacus-ground-shadow.png`) make
+its expected 87 become 89. The direct audit used exactly the 87 generated
+imports, without modifying assets or treating that audit as a passing CLI run.
+
+Native system boundary: application backbuffer density and its browser
+display lifecycle, covering every consumer of the shared world-resolution
+producer. Existing native class/atlas/sampler membership in entry 287 is reused;
+no native authored data table or art sampler is changed.
+
+| Member or branch | Disposition before implementation | Proof/required acceptance |
+| --- | --- | --- |
+| Courtyard | recovered-pending-port | shared create/resize density, responsive backing dimensions |
+| Mortuary | recovered-pending-port | same renderer; native viewport and camera-bound tests retained |
+| Library | recovered-pending-port | same renderer; native viewport and camera-bound tests retained |
+| StoreRoom | recovered-pending-port | same renderer; native viewport and camera-bound tests retained |
+| Office | recovered-pending-port | same renderer; stock and 1080p geometry unchanged |
+| Generated Boneyards 0..11 | recovered-pending-port | shared Boneyard create/resize density and existing all-row viewport tests |
+| Stock Tutorial and custom/community Boneyards | recovered-pending-port | same scene owner/renderer; arbitrary scene bounds unaffected |
+| World normal, lighting, weather, VFX, actors, local/remote labels and world overlays | recovered-pending-port | all rasterize through the same backbuffer; shader/primitive/atlas contracts retained |
+| First mount, responsive resize, DPR-only monitor/browser change, repeated DPR changes, teardown | recovered-pending-port | density matrix and media-query rearm/disconnect tests; mounted-canvas browser journey |
+| Fixed Title/Create/Loader, Inventory/Skills/SkillPicker/HUD GPU canvases | verified-already-at-parity | existing fractional physical-density owner; reuse its DPR listener without changing its resolution policy |
+| All 28 native bundle families, 12 loose image resources, art linear/glyph point samplers | verified-already-at-parity for this resolution boundary | source/packing audit and existing complete entry-287 source census; no global sampler change warranted |
+| Existing world `.5` minimum/`1.5` maximum and explicit maximum override | verified-already-at-parity with the existing browser density policy | preserve bounds exactly; capped high-DPR remains a disclosed browser quality limit, not native pixel equivalence |
+| Camera, CSS frame, authored positions, simulation, collisions, authority, and RNG | out-of-system | already separate presentation/simulation owners; no edits |
+| Scenery shadow shape/edge sampling | out-of-system | separately owned investigation; no shadow geometry edits in this change |
+
+### Implementation and validation contract
+
+Remove quarter-step quantization from the one shared density producer, keeping
+the existing bounds. Reuse one rearming DPR subscription in both world scene
+owners and the existing fixed-UI observer, and remove every listener at owner
+teardown. Do not replace source art, soften point glyphs, change antialiasing,
+change camera scale, introduce frame-rate adaptation, or add per-scene tuning.
+
+Focused regression must first fail for fractional desktop/mobile densities,
+then pin stock identity, all invalid input fallbacks, both density bounds,
+explicit maximum overrides, repeated DPR changes and listener teardown. The
+canonical gate must include these tests. Parent browser acceptance owns
+baseline/candidate world backing/CSS/DPR measurements, unchanged mounted canvas
+across resize and DPR-only changes, visual inspection, and performance results.
+Full-gate and browser acceptance are pending at this ledger-before-code point.
+
+The retained `1.5` world cap means a `1920x1080` DPR-2 scene still renders a
+`2880x1620` backbuffer and is enlarged to the display's `3840x2160` pixels.
+This correction is not a claim to remove that older high-DPR quality ceiling;
+changing it requires a separately measured allocation/fill-rate decision. No
+fresh Windows clean-stock capture was available within the Mac-only scope.
+
+### Focused implementation receipt (full/browser acceptance pending)
+
+- The one density producer now returns the exact clamped fractional value.
+  `HubScene` and `BoneyardScene` subscribe their existing resize operation to
+  `observeGameDevicePixelRatio`; `native-ui-canvas` uses the same helper with
+  its existing animation-frame scheduling and unchanged UI density policy.
+  The subscription rearms after every DPR event, removes the old query, and
+  rejects queued callbacks after teardown. No world-renderer geometry, CSS,
+  atlas pixel, native sampler, light quality, or authority file changed.
+- The Mac red run passed seven old cases and failed both new density cases:
+  `.75 != .8` for responsive output and `.75 != .625` for a maximum override.
+  The Mac candidate focused run then passed all 27 tests across
+  `hub-render-contract`, `native-ui-canvas`, `game-viewport`, and
+  `game-texture-source-policy`. That includes the existing complete Hub and
+  Boneyard scene-bound inventory. The nine fixed-function/source-record tests
+  passed separately. Targeted `oxlint` found zero warnings/errors in the seven
+  modified/new source and test files; `git diff --check` passed.
+- Both changed test files are already explicit members of the canonical
+  frontend groups (`test:boneyard` and `test:native-ui`). The new observer is
+  imported by an existing test file; no silently uninvoked test was added.
+- The membership rows marked `recovered-pending-port` above were the
+  pre-implementation inventory. They are now implemented and focused-tested;
+  final exact-ported dispositions await the coordinating parent's exact-tree
+  full gate and real browser/backing-store/performance evidence. Asset checks
+  retain the separately disclosed stale Hub CLI membership failure. No
+  publication or deployment occurred in this worker.
+
+### Measured DPR-2 quality decision (2026-10-09)
+
+The initial implementation above deliberately retained the historical 1.5 cap
+until cost was measured. The final candidate raises the shared upper bound to
+2, preserving the 0.5 minimum, exact fractional density and a caller's explicit
+lower maximum. It does not add frame-rate adaptation, change camera scale,
+alter native texture filtering, or replace any art. DPR above 2 remains capped;
+this is a bounded browser quality policy rather than universal physical-pixel
+identity on every display.
+
+The experiment changed only `HUB_RENDER_MAX_RESOLUTION` in a private Vite
+pre-transform, before editing the production source. Both variants used the
+same scene, player/light settings, CSS viewport 1600 by 900 and emulated DPR 2.
+Actual backing dimensions were 2400 by 1350 (3.24 million pixels) versus 3200 by
+1800 (5.76 million pixels), a 77.8% fill/allocation-area increase. Both final
+composited screenshots were 3200 by 1800; the second avoids enlarging the world
+bitmap by 4/3. The original art's finite detail is still visible; this is not
+an asset-resolution replacement.
+
+Hardware was the physical Apple M2 (10 GPU cores), Chrome 154 / WebGL2 through
+ANGLE Metal, antialias disabled. The attached display is 1920 by 1080 at 60 Hz
+and DPR 1: DPR 2 was emulated in Chrome, not viewed on a physical Retina panel.
+Each measurement used 180 render/frame samples after warmup and 60 completed,
+non-disjoint `EXT_disjoint_timer_query_webgl2` GPU queries. The separate
+`glFinishWallDurations` field is a CPU-wall diagnostic, not a pure GPU timer.
+
+| Comparable scene | Cap 1.5 | Cap 2 |
+| --- | --- | --- |
+| Hub, headless ABBA GPU p95 | 1.62--1.81 ms | 3.15--3.19 ms |
+| Hub, headless ABBA CPU render p95 | 3.80--3.90 ms | 3.50--3.60 ms |
+| Dense Boneyard, quiet headless ABBA GPU p95 | 2.61--2.79 ms | 4.54--5.49 ms |
+| Dense Boneyard, quiet headless ABBA CPU p95 | 5.90--6.10 ms | 6.30--6.50 ms |
+| Dense Boneyard, visible Chrome GPU p95 | 3.24 ms | 4.28 ms |
+| Dense Boneyard, visible Chrome CPU p95 | 3.60 ms | 3.40 ms |
+| Dense Boneyard, visible Chrome frame-gap p95 / p99 | 16.8 / 18.3 ms | 16.9 / 18.3 ms |
+
+No long tasks or browser errors were observed in those accepted fixtures. The
+Boneyard contains 492 static layers; the sampled view includes 54 main layers,
+14 admitted directional casters and 22 native Tree root glyphs. The physical
+Region light target remains 1024 square at both densities; its logical side
+changes according to the existing density/quality contract. These are M2
+results, not a low-end/mobile headroom claim or a general speed improvement.
+
+Headless rAF tails reached about 133 ms even without other Chrome processes;
+visible Chrome held the same workload near the physical 60 Hz display cadence.
+Those headless tails are retained but are not treated as display-FPS evidence.
+A separate foreign Chrome workload appeared in the first Boneyard ABBA run;
+that run is retained as contested, and the accepted repeat records process
+samples every two seconds with no foreign Chrome observations. No foreign
+process was changed.
+
+Baseline/candidate responsive samples independently verify 1366 by 768 output
+changing from a 1201 by 675 bitmap to exactly 1366 by 768, and 844 by 390 at
+DPR 3 changing from 2435 by 1125 to 2532 by 1170. The original 1600 by 900,
+DPR-1 scene keeps the same backing size. Its additional native root masks cost
+about 0.34 ms GPU p95 in the captured before/after sample (1.15 to 1.50 ms),
+not a free rendering improvement.
+
+The bounded cap-2 source change passes the same 27 focused viewport/UI/source
+policy tests, now pinning exact DPR 2, capped DPR above 2, responsive DPR-2
+sizes, the preserved minimum and explicit lower maxima through 1.875. The
+final exact-tree gate and untransformed built-application DPR-only 1-to-2-to-1
+acceptance are release conditions recorded in the separate evidence receipt.
+This entry's pre-implementation table is historical: all in-scope density and
+DPR lifecycle members are implemented and unit/browser exercised; no source-
+extractable branch is deferred. Final qualification must use the receipt,
+not infer a full-gate pass from this pre-gate document.
+
+Evidence root on M2 only:
+`/Users/jarrett/solomon-darker-bug-reports/20261009-sh9aksle-visual-parity/`.
+Relevant artifacts include `hub-density-final-*.json`,
+`quiet-density-*.json`, `headed-density-*.json`, `final-before-*.json`,
+`final-after-*.json`, the source manifests, and the final validation/browser
+receipts. Fresh clean Windows native tutorial and x87 evidence is included
+under `native/evidence/`; it does not establish matched camera/light pixels,
+a Grave/chest native capture, or a native Shadows on/off pair. Entry 078
+records that independent scenery boundary precisely.

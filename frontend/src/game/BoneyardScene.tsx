@@ -1,4 +1,5 @@
 import { useHotbar } from './HotbarControls.tsx'
+import { observeGameDevicePixelRatio } from './renderer/game-device-pixel-ratio.ts'
 import { NativeSkillBookFeedbackCursor, nativeSkillBookWorldMessage } from './skill-book-feedback.ts'
 import {
   useEffect,
@@ -674,7 +675,11 @@ export default function BoneyardScene({
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(scene)
-    return () => observer.disconnect()
+    const disconnectPixelRatio = observeGameDevicePixelRatio(resize)
+    return () => {
+      observer.disconnect()
+      disconnectPixelRatio()
+    }
   }, [loaded.scene.bounds.h, loaded.scene.bounds.w, settings.cameraFovPercent])
 
   useLayoutEffect(() => {

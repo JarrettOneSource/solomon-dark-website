@@ -2,13 +2,16 @@ import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
 
+const viewportWidth = Number(process.env.SDR_SHADOW_VIEWPORT_WIDTH || 1600)
+const viewportHeight = Number(process.env.SDR_SHADOW_VIEWPORT_HEIGHT || 900)
+const dpr = Number(process.env.SDR_SHADOW_DEVICE_PIXEL_RATIO || 1)
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4182'
 const leftScreenshot = process.env.SDR_SHADOW_LEFT_SCREENSHOT
-  || '/tmp/solomon-dark-complex-shadows-left-20260814.png'
+  || '/tmp/solomon-dark-complex-shadows-left.png'
 const rightScreenshot = process.env.SDR_SHADOW_RIGHT_SCREENSHOT
-  || '/tmp/solomon-dark-complex-shadows-right-20260814.png'
+  || '/tmp/solomon-dark-complex-shadows-right.png'
 const generatedScreenshot = process.env.SDR_SHADOW_GENERATED_SCREENSHOT
-  || '/tmp/solomon-dark-complex-shadows-generated-20260814.png'
+  || '/tmp/solomon-dark-complex-shadows-generated.png'
 const expectedShadowImplementation = process.env.SDR_EXPECT_SHADOW_IMPLEMENTATION
   || 'native-indexed-owner-mesh'
 const generatedWarmupFrames = boundedInteger(
@@ -37,9 +40,13 @@ const browser = await chromium.launch({
 
 try {
   const page = await browser.newPage({
-    deviceScaleFactor: 1,
-    viewport: { height: 900, width: 1600 },
+    deviceScaleFactor: dpr,
+    viewport: { height: viewportHeight, width: viewportWidth },
   })
+  await page.addInitScript(({ width, height }) => {
+    const displayScale = Math.min(1, width / 1600, height / 900)
+    window.__visualViewport = { displayScale, width: width / displayScale, height: height / displayScale }
+  }, { width: viewportWidth, height: viewportHeight })
   const consoleErrors = []
   const failedResponses = []
   const pageErrors = []
@@ -65,6 +72,7 @@ try {
     document.body.replaceChildren()
     document.body.style.background = '#000'
     document.body.style.margin = '0'
+    const progressionModule = await import('/src/game/core-kernels/player-progression.ts')
     const [airModule, economyModule, rendererModule, playerModule, secondaryModule, shadowModule, spellModule] = await Promise.all([
       import('/src/game/renderer/primary-spell-air-native.ts'),
       import('/src/game/core-kernels/hub-economy.ts'),
@@ -74,7 +82,7 @@ try {
       import('/src/game/renderer/boneyard-complex-shadows.ts'),
       import('/src/game/core-kernels/primary-spells.ts'),
     ])
-    const viewport = { displayScale: 1, height: 900, width: 1600 }
+    const viewport = window.__visualViewport
     const runId = 'complex-shadow-browser-proof'
     const loaded = {
       choice: { id: 'shadow-proof', name: 'Shadow proof', source: 'default' },
@@ -99,6 +107,7 @@ try {
         }],
         name: 'Complex shadow proof',
         objects: [
+          { eid: 'goodie-shadow-probe', typeId: 2061, subtype: 0, variant: 0, atlasEntry: 145, pos: { x: 520, y: 370 }, sortBias: 0 },
           {
             atlasEntry: 264,
             eid: 'tree-0',
@@ -149,7 +158,7 @@ try {
       variant: 0,
       worldKey: `boneyard:${runId}`,
     }
-    const snapshotAt = (tick, position, headingIndex, includeLongAir = false) => {
+    const rawSnapshotAt = (tick, position, headingIndex, includeLongAir = false) => {
       const primarySpells = spellModule.createPrimarySpellSimulation()
       if (includeLongAir) primarySpells.transients.push(longAir)
       return {
@@ -175,6 +184,8 @@ try {
             position,
             primaryCast: playerModule.createIdlePlayerPrimaryCast(),
             progression: {
+              ...progressionModule.createPlayerProgression(1),
+              learnedSkillOrder: [], advancedUnlocks: [], concentrationSkillIds: [null, null],
               weldBuildId: null,
               coldSlowTicksRemaining: 0,
               currentHealth: 50,
@@ -226,7 +237,7 @@ try {
           enemyProjectileEffects: [],
           enemyProjectiles: [],
           gateLeaves: [],
-          goodies: [],
+          goodies: [{ id: 9, active: false, exhausted: false, phase: 0, position: { x: 520, y: 370 }, sceneryRegistrationOrdinal: 0, subtype: 0, timer: 0 }],
           kind: 'boneyard',
           lanternLightRegistration: null,
           lanternPosition: null,
@@ -241,9 +252,20 @@ try {
         },
       }
     }
+    const simulation = await import('/src/game/core-server/game-simulation.ts')
+    const snapshots = await import('/src/game/host/game-snapshot.ts')
+    const defaults = snapshots.createGameSnapshot(simulation.enterBoneyardWorld(
+      simulation.createGameSimulation({ local: { discipline: 'arcane', displayName: 'Visual probe', element: 'fire' } }), loaded), 'local')
+    const snapshotAt = (...args) => {
+      const raw = rawSnapshotAt(...args)
+      return { ...defaults, ...raw, players: { local: { ...defaults.players.local, ...raw.players.local,
+        progression: { ...defaults.players.local.progression, ...raw.players.local.progression } } },
+        world: { ...defaults.world, ...raw.world } }
+    }
     const renderer = await rendererModule.createBoneyardWorldRenderer({
       boneyard: loaded,
-      devicePixelRatio: 1,
+      now: () => 1000,
+      devicePixelRatio: window.devicePixelRatio,
       initialSnapshot: snapshotAt(1_000, { x: 275, y: 330 }, 6),
       modAssets: [],
       modCatalog: [],
@@ -252,6 +274,8 @@ try {
     })
     renderer.canvas.id = 'complex-shadow-probe'
     document.body.append(renderer.canvas)
+    renderer.canvas.style.width = `${viewport.width * viewport.displayScale}px`
+    renderer.canvas.style.height = `${viewport.height * viewport.displayScale}px`
     for (let frame = 1; frame <= 120; frame += 1) {
       renderer.render(snapshotAt(1_000 + frame, { x: 275, y: 330 }, 6))
     }
@@ -280,6 +304,8 @@ try {
     }
     window.__complexShadowProbe = {
       capture,
+      snapshotAt,
+      loaded,
       initialFrame,
       lateChangedPixels,
       lateChannelDelta,
@@ -292,6 +318,7 @@ try {
     }
     const treeOutline = shadowModule.nativeBoneyardTreeComplexShadowOutline(0)
     return {
+      raster: { gpu: (() => { const gl = renderer.canvas.getContext('webgl2'); const e = gl.getExtension('WEBGL_debug_renderer_info'); return { renderer: e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : null, antialias: gl.getContextAttributes().antialias } })(), width: renderer.canvas.width, height: renderer.canvas.height, cssWidth: renderer.canvas.getBoundingClientRect().width, cssHeight: renderer.canvas.getBoundingClientRect().height, dpr: window.devicePixelRatio, resolution: renderer.canvas.dataset.resolution, viewport },
       complexShadows: renderer.canvas.dataset.complexShadows,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: { ...renderer.canvas.__sdrBoneyardFrame },
@@ -344,8 +371,8 @@ try {
         >= left.frame.complexShadowQuadCount,
     )
     assert.equal(left.frame.complexShadowZOrderMismatchCount, 0)
-    assert.equal(left.frame.regionLightLogicalSide, 512 / Math.fround(0.2))
-    assert.equal(left.frame.regionLightPhysicalSide, 512)
+    assert.equal(left.frame.regionLightLogicalSide, expectedRegionTarget(left.raster).logical)
+    assert.equal(left.frame.regionLightPhysicalSide, expectedRegionTarget(left.raster).physical)
     assert.equal(left.frame.lightProviderCandidateCount, 2)
     assert.equal(
       left.frame.lightMiscTailCandidateCount,
@@ -394,6 +421,138 @@ try {
   assert.ok(right.changedPixels > 20_000)
   assert.ok(right.channelDelta > 100_000)
 
+  const fixedStates = []
+  for (const state of [
+    { name: 'fixed-on', enabled: true, phase: 0, removed: false },
+    { name: 'fixed-off', enabled: false, phase: 0, removed: false },
+    { name: 'fixed-open-off', enabled: false, phase: 1, removed: false },
+    { name: 'fixed-removed-off', enabled: false, phase: 1, removed: true },
+    { name: 'fixed-removed-on', enabled: true, phase: 1, removed: true },
+    { name: 'fixed-on-restored', enabled: true, phase: 0, removed: false },
+  ]) {
+    const row = await page.evaluate(async state => {
+      const { DEFAULT_GAME_SETTINGS } = await import('/src/game/game-settings.ts')
+      const probe = window.__complexShadowProbe
+      const fixed = probe.snapshotAt(1600, { x: 400, y: 330 }, 6, false)
+      fixed.world.goodies = state.removed ? [] : fixed.world.goodies.map(goodie => ({ ...goodie, phase: state.phase }))
+      probe.renderer.setSettings({ ...DEFAULT_GAME_SETTINGS, complexShadows: state.enabled })
+      for (let settle = 0; settle < 60; settle += 1) probe.renderer.render(fixed)
+      const pixels = probe.capture()
+      let hash = 0x811c9dc5
+      for (let i = 0; i < pixels.length; i += 1) hash = Math.imul(hash ^ pixels[i], 0x01000193)
+      return { state, pixelHash: hash >>> 0, frame: { ...probe.renderer.canvas.__sdrBoneyardFrame }, dataset: { ...probe.renderer.canvas.dataset } }
+    }, state)
+    fixedStates.push(row)
+    await canvas.screenshot({ path: leftScreenshot.replace('-left.png', `-${state.name}.png`) })
+  }
+
+  if (process.env.SDR_SHADOW_ASSERT_NATIVE_SCENERY !== '0') {
+    for (const row of fixedStates) {
+      const shadow = row.frame.sceneryShadows
+      assert.ok(shadow, 'candidate must publish its actual retained scenery shadow receipt')
+      assert.equal(shadow.zOrderMismatchCount, 0, row.state.name)
+      assert.equal(shadow.familyQuads['Tree:tree-root-mask'], 1, 'authored Tree root mask is unconditional')
+      const goodie = shadow.goodies.find(value => value.id === 9)
+      assert.equal(shadow.directionalFamilyCasters.Goodie ?? 0,
+        row.state.enabled && !row.state.removed ? 1 : 0,
+        `${row.state.name}: live chest projection must follow actual owner lifetime`)
+      if (row.state.removed) {
+        assert.equal(goodie, undefined, 'removed chest must lose its live shadow owner')
+        assert.equal(shadow.familyQuads['Goodie:scenery-flat-shadow'] ?? 0, 0)
+      } else {
+        assert.equal(goodie?.phase, row.state.phase)
+        assert.equal(goodie?.mode, row.state.enabled ? 'directional' : 'glyph')
+        assert.equal(goodie?.owner, 'goodie:9')
+      }
+      if (!row.state.enabled) {
+        assert.equal(shadow.familyQuads['Gravestone:scenery-flat-shadow'], 1)
+        assert.equal(shadow.familyQuads['Tree:scenery-flat-shadow'], 2)
+        assert.equal(shadow.familyQuads['FenceGrate:fence-flat-shadow'], 1)
+        assert.equal(shadow.familyQuads['Fencepost:scenery-flat-shadow'], 2)
+        assert.equal(shadow.familyQuads['Goodie:scenery-flat-shadow'] ?? 0, row.state.removed ? 0 : 1)
+      }
+    }
+    assert.deepEqual(fixedStates[0].frame.sceneryShadows.familyQuads,
+      fixedStates.at(-1).frame.sceneryShadows.familyQuads, 'on-off-on must restore every family')
+    assert.equal(fixedStates[0].frame.complexShadowCasterCount,
+      fixedStates.at(-1).frame.complexShadowCasterCount, 'chest restoration must rejoin directional casters')
+  }
+
+  const uncommon = []
+  if (process.env.SDR_SHADOW_EXTRA_SCENERY !== '0') {
+    await page.evaluate(async () => {
+      const { createBoneyardWorldRenderer } = await import('/src/game/renderer/boneyard-world-renderer.ts')
+      const probe = window.__complexShadowProbe
+      const boneyard = { ...probe.loaded, scene: { ...probe.loaded.scene,
+        bounds: { x: 0, y: 0, w: 1400, h: 1000 },
+        objects: [
+          { eid: 'building', typeId: 2040, variant: 0, pos: { x: 850, y: 750 } },
+          { eid: 'monument', typeId: 2009, variant: 20, pos: { x: 1050, y: 650 } },
+        ],
+        fences: [
+          { eid: 'broken', typeId: 3005, segmentCode: 1, points: [{ x: 300, y: 400 }, { x: 500, y: 460 }], startPostVariant: 3, endPostVariant: 5 },
+          { eid: 'grate', typeId: 3005, segmentCode: 0, points: [{ x: 600, y: 400 }, { x: 750, y: 420 }] },
+          { eid: 'rails', typeId: 3005, segmentCode: 4, points: [{ x: 750, y: 420 }, { x: 900, y: 450 }], startPostVariant: 9 },
+          { eid: 'wall', typeId: 3005, segmentCode: 3, points: [{ x: 550, y: 550 }, { x: 750, y: 590 }] },
+        ],
+      } }
+      const snapshot = probe.snapshotAt(1800, { x: 700, y: 550 }, 6, false)
+      snapshot.world.goodies = []
+      probe.renderer.destroy()
+      document.body.replaceChildren()
+      const renderer = await createBoneyardWorldRenderer({ boneyard,
+        devicePixelRatio: devicePixelRatio, viewport: window.__visualViewport, now: () => 1000,
+        initialSnapshot: snapshot, modAssets: [], modCatalog: [], playerId: 'local' })
+      renderer.canvas.id = 'uncommon-scenery-probe'
+      renderer.canvas.style.width = `${window.__visualViewport.width * window.__visualViewport.displayScale}px`
+      renderer.canvas.style.height = `${window.__visualViewport.height * window.__visualViewport.displayScale}px`
+      document.body.append(renderer.canvas)
+      window.__uncommonSceneryProbe = { renderer, snapshot }
+    })
+    const sceneryCases = [
+      { name: 'central-on', enabled: true, position: { x: 700, y: 550 } },
+      { name: 'central-off', enabled: false, position: { x: 700, y: 550 } },
+      { name: 'central-restored', enabled: true, position: { x: 700, y: 550 } },
+      { name: 'broken-near', enabled: true, position: { x: 400, y: 450 } },
+      { name: 'landmarks-near', enabled: true, position: { x: 950, y: 700 } },
+    ]
+    for (const sceneryCase of sceneryCases) {
+      const { enabled } = sceneryCase
+      const row = await page.evaluate(async ({ enabled, position, name }) => {
+        const { DEFAULT_GAME_SETTINGS } = await import('/src/game/game-settings.ts')
+        const { renderer, snapshot } = window.__uncommonSceneryProbe
+        snapshot.players.local.position = position
+        renderer.setSettings({ ...DEFAULT_GAME_SETTINGS, complexShadows: enabled })
+        for (let frame = 0; frame < 60; frame += 1) renderer.render(snapshot)
+        return { name, enabled, position, frame: { ...renderer.canvas.__sdrBoneyardFrame }, dataset: { ...renderer.canvas.dataset } }
+      }, sceneryCase)
+      uncommon.push(row)
+      if (process.env.SDR_SHADOW_ASSERT_NATIVE_SCENERY !== '0') {
+        assert.equal(row.frame.sceneryShadows.zOrderMismatchCount, 0)
+        assert.equal(row.frame.complexShadowZOrderMismatchCount, 0)
+        assert.equal(row.frame.sceneryShadows.familyQuads['Wall:wall-base-shadow'], 1)
+        if (row.name === 'broken-near') {
+          assert.equal(row.frame.sceneryShadows.directionalFamilyCasters.Broken, 2,
+            'both native Broken halves must project when the player light covers both')
+        }
+        if (!enabled) {
+          for (const family of ['Building:scenery-flat-shadow', 'Monument:scenery-flat-shadow', 'FenceGrate:fence-flat-shadow', 'Rails:fence-flat-shadow']) {
+            assert.ok(row.frame.sceneryShadows.familyQuads[family] > 0, family)
+          }
+        }
+      }
+      await page.locator('#uncommon-scenery-probe').screenshot({ path: leftScreenshot.replace('-left.png', `-uncommon-${uncommon.length}-${enabled ? 'on' : 'off'}.png`) })
+    }
+    if (process.env.SDR_SHADOW_ASSERT_NATIVE_SCENERY !== '0') {
+      // Admission is local-light dependent; move one real light rather than inventing global illumination.
+      for (const family of ['Broken', 'Wall', 'Building', 'Monument', 'Rails', 'FenceGrate', 'Fencepost']) {
+        assert.ok(uncommon.some(row => row.enabled && row.frame.sceneryShadows.directionalFamilyCasters[family] > 0),
+          `uncommon directional ${family}`)
+      }
+    }
+    await page.evaluate(() => window.__uncommonSceneryProbe.renderer.destroy())
+  }
+
   await page.evaluate(() => {
     window.__complexShadowProbe.renderer.destroy()
     document.body.replaceChildren()
@@ -404,6 +563,7 @@ try {
     startupIterations,
     warmupFrames,
   }) => {
+    const progressionModule = await import('/src/game/core-kernels/player-progression.ts')
     const [
       economyModule,
       encounterModule,
@@ -421,7 +581,7 @@ try {
       import('/src/game/core-kernels/primary-spells.ts'),
       import('/src/game/host/native-generated-boneyards.ts'),
     ])
-    const viewport = { displayScale: 1, height: 900, width: 1600 }
+    const viewport = window.__visualViewport
     const template = templatesModule.NATIVE_GENERATED_BONEYARDS[0]
     const runId = 'generated-complex-shadow-browser-proof'
     const facing = playerModule.playerCharacterFacing(template.scene.spawn.facingDeg)
@@ -432,7 +592,7 @@ try {
           'generated-shadow-proof',
         )
       : undefined
-    const snapshotAt = (tick) => ({
+    const rawSnapshotAt = (tick) => ({
       hostPlayerId: 'local',
       materializingPlayerIds: [],
       modEffects: [],
@@ -458,6 +618,8 @@ try {
           },
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),
           progression: {
+              ...progressionModule.createPlayerProgression(1),
+              learnedSkillOrder: [], advancedUnlocks: [], concentrationSkillIds: [null, null],
             weldBuildId: null,
             coldSlowTicksRemaining: 0,
             currentHealth: 50,
@@ -539,9 +701,20 @@ try {
       sourceSha256: template.sourceSha256,
       scene: template.scene,
     }
+    const simulation = await import('/src/game/core-server/game-simulation.ts')
+    const snapshots = await import('/src/game/host/game-snapshot.ts')
+    const defaults = snapshots.createGameSnapshot(simulation.enterBoneyardWorld(
+      simulation.createGameSimulation({ local: { discipline: 'arcane', displayName: 'Visual probe', element: 'fire' } }), boneyard), 'local')
+    const snapshotAt = (...args) => {
+      const raw = rawSnapshotAt(...args)
+      return { ...defaults, ...raw, players: { local: { ...defaults.players.local, ...raw.players.local,
+        progression: { ...defaults.players.local.progression, ...raw.players.local.progression } } },
+        world: { ...defaults.world, ...raw.world } }
+    }
     const createRenderer = () => rendererModule.createBoneyardWorldRenderer({
       boneyard,
-      devicePixelRatio: 1,
+      now: () => 1000,
+      devicePixelRatio: window.devicePixelRatio,
       initialSnapshot: snapshotAt(2_000),
       modAssets: [],
       modCatalog: [],
@@ -568,6 +741,8 @@ try {
     const renderer = await createRenderer()
     renderer.canvas.id = 'generated-complex-shadow-probe'
     document.body.append(renderer.canvas)
+    renderer.canvas.style.width = `${viewport.width * viewport.displayScale}px`
+    renderer.canvas.style.height = `${viewport.height * viewport.displayScale}px`
     const firstFrame = { ...renderer.canvas.__sdrBoneyardFrame }
     for (let frame = 1; frame <= warmupFrames; frame += 1) {
       await new Promise(requestAnimationFrame)
@@ -601,8 +776,36 @@ try {
     }
     await new Promise(requestAnimationFrame)
     observer.disconnect()
+    const completeRenderDurations = []
+    const gl = renderer.canvas.getContext('webgl2')
+    const timer = gl.getExtension('EXT_disjoint_timer_query_webgl2')
+    const queries = []
+    for (let frame = 0; frame < 60; frame += 1) {
+      const snapshot = snapshotAt(2500 + frame)
+      const query = timer ? gl.createQuery() : null
+      if (query) gl.beginQuery(timer.TIME_ELAPSED_EXT, query)
+      const started = performance.now()
+      renderer.render(snapshot)
+      if (query) { gl.endQuery(timer.TIME_ELAPSED_EXT); queries.push(query) }
+      gl.finish()
+      completeRenderDurations.push(performance.now() - started)
+    }
+    await new Promise(requestAnimationFrame)
+    // Wait for all asynchronous GPU queries; gl.finish wall time is not a GPU timer.
+    for (let attempt = 0; timer && attempt < 120
+      && queries.some(query => !gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)); attempt++) {
+      await new Promise(requestAnimationFrame)
+    }
+    const disjoint = timer ? gl.getParameter(timer.GPU_DISJOINT_EXT) : null
+    const gpuTimes = queries.flatMap(query => {
+      const available = gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)
+      const value = available && !disjoint ? gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6 : null
+      gl.deleteQuery(query)
+      return value === null ? [] : [value]
+    })
     window.__generatedComplexShadowRenderer = renderer
     return {
+      raster: { gpu: (() => { const gl = renderer.canvas.getContext('webgl2'); const e = gl.getExtension('WEBGL_debug_renderer_info'); return { renderer: e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : null, antialias: gl.getContextAttributes().antialias } })(), width: renderer.canvas.width, height: renderer.canvas.height, cssWidth: renderer.canvas.getBoundingClientRect().width, cssHeight: renderer.canvas.getBoundingClientRect().height, dpr: window.devicePixelRatio, resolution: renderer.canvas.dataset.resolution, viewport },
       averageRenderMs: renderDurations.reduce((sum, value) => sum + value, 0)
         / renderDurations.length,
       firstFrame,
@@ -622,6 +825,8 @@ try {
         maximumMs: longTasks.length > 0 ? Math.max(...longTasks) : 0,
       },
       renderDurations: distribution(renderDurations),
+      glFinishWallDurations: distribution(completeRenderDurations),
+      gpuTimer: { supported: Boolean(timer), disjoint, samples: gpuTimes.length, durations: gpuTimes.length ? distribution(gpuTimes) : null },
       startupReceipts,
     }
 
@@ -678,8 +883,8 @@ try {
   assert.equal(generated.firstFrame.frameCount, 1)
   assert.ok(generated.firstFrame.lightSourceCount > 0)
   assert.ok(generated.firstFrame.lightActiveBucketCount > 0)
-  assert.equal(generated.firstFrame.regionLightLogicalSide, 512 / Math.fround(0.2))
-  assert.equal(generated.firstFrame.regionLightPhysicalSide, 512)
+  assert.equal(generated.firstFrame.regionLightLogicalSide, expectedRegionTarget(generated.raster).logical)
+  assert.equal(generated.firstFrame.regionLightPhysicalSide, expectedRegionTarget(generated.raster).physical)
   for (const [index, startup] of generated.startupReceipts.entries()) {
     const startupFrame = startup.frame
     assert.equal(startupFrame.frameCount, 1, `startup ${index} frame count`)
@@ -687,7 +892,7 @@ try {
     assert.equal(startupFrame.lightSourceCount, 2, `startup ${index} accepted sources`)
     assert.ok(startupFrame.lightActiveBucketCount > 0, `startup ${index} light grid`)
     assert.ok(startupFrame.playerLightRadius > 0, `startup ${index} player light`)
-    assert.equal(startupFrame.regionLightPhysicalSide, 512, `startup ${index} target`)
+    assert.equal(startupFrame.regionLightPhysicalSide, expectedRegionTarget(generated.raster).physical, `startup ${index} target`)
     assert.ok(startup.pixels.nonBlackPixels > 10_000, `startup ${index} visible pixels`)
     assert.ok(startup.pixels.rgbTotal > 1_000_000, `startup ${index} lighting pixels`)
   }
@@ -720,12 +925,16 @@ try {
     left,
     generated,
     right,
+    fixedStates,
+    uncommon,
     screenshots: {
       generated: generatedScreenshot,
       left: leftScreenshot,
       right: rightScreenshot,
     },
     status: 'ok',
+    viewport: { width: viewportWidth, height: viewportHeight, dpr },
+    errors: { console: consoleErrors, page: pageErrors, responses: failedResponses },
   })}\n`)
 } finally {
   await browser.close()
@@ -737,4 +946,11 @@ function boundedInteger(value, name, minimum, maximum) {
     throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`)
   }
   return parsed
+}
+
+function expectedRegionTarget(raster) {
+  const resolution = Number(raster.resolution)
+  const request = Math.max(1, Math.trunc(Math.max(raster.viewport.width, raster.viewport.height) * resolution * .25))
+  const physical = 2 ** Math.ceil(Math.log2(request))
+  return { physical, logical: physical / Math.fround(Math.fround(resolution) * Math.fround(Math.fround(.25) * Math.fround(.8))) }
 }

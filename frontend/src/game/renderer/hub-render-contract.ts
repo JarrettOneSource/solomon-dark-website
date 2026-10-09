@@ -13,7 +13,8 @@ import {
 import { NATIVE_HUB_COURTYARD_OBSTACLES } from '../core-kernels/native-hub-world-membership.ts'
 
 export const HUB_RENDER_MIN_RESOLUTION = 0.5
-export const HUB_RENDER_MAX_RESOLUTION = 1.5
+// Preserve DPR-2 output without an extra compositor upscale; see parity ledger 026.
+export const HUB_RENDER_MAX_RESOLUTION = 2
 export const HUB_STUDENT_VISIBILITY_HALF_EXTENT = 120
 export const HUB_DIAGNOSTIC_WINDOW_FRAMES = 120
 
@@ -68,11 +69,12 @@ export function initialHubResolution({
   maxResolution = HUB_RENDER_MAX_RESOLUTION,
 }: HubResolutionInputs): number {
   const requested = finiteOr(devicePixelRatio, 1) * finiteOr(displayScale, 1)
-  return quantizeResolution(clamp(
+  // A second CSS resample would blur the entire world at fractional display scales.
+  return clamp(
     requested,
     HUB_RENDER_MIN_RESOLUTION,
     clamp(maxResolution, HUB_RENDER_MIN_RESOLUTION, HUB_RENDER_MAX_RESOLUTION),
-  ))
+  )
 }
 
 export function hubWorldDepthForActor(y: number): number {
@@ -108,10 +110,6 @@ export function spriteFrameIndex(value: number, count: number): number {
 
 function finiteOr(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback
-}
-
-function quantizeResolution(value: number): number {
-  return Math.round(value * 4) / 4
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -7,6 +7,7 @@ import type { EditorDoc, PlacedObject, Polyline, StaticSprite } from './model.ts
 import { NATIVE } from './model.ts'
 import {
   nativeFenceGrate,
+  nativeBrokenFenceHalves,
   nativeGateArtCanvasTransform,
   nativeGateArtVertices,
   nativeGateHingeArtPosition,
@@ -37,6 +38,13 @@ function doc(objects: PlacedObject[], sprites: StaticSprite[] = [], fences: Poly
 
 test('uses the four recovered native placement passes', () => {
   assert.deepEqual(NATIVE_PLACEMENT_PASSES, ['underlay', 'compact', 'shadow', 'main'])
+})
+
+test('empty native Tree secondary glyph selectors create no proxy painter', () => {
+  for (let secondaryVariant = 0; secondaryVariant < 21; secondaryVariant += 1) {
+    const tree = { eid: 'tree', typeId: NATIVE.tree, pos: { x: 20, y: 200 }, variant: 0, secondaryVariant }
+    assert.equal(buildNativeRenderPlan(doc([tree])).proxies.length, secondaryVariant < 8 ? 1 : 0)
+  }
 })
 
 test('places Gravestone, Tree, and Building component art in their native passes', () => {
@@ -188,9 +196,10 @@ test('materializes shared Fenceposts once and gives split fence leaves independe
   ]))
   const fenceLayers = plan.shadows.filter((layer) => layer.kind === 'fence')
   assert.equal(fenceLayers.filter((layer) => layer.part === 'post').length, 3)
+  const halves = nativeBrokenFenceHalves([{ x: 0, y: 10 }, { x: 100, y: 20 }])
   assert.deepEqual(fenceLayers.filter((layer) => layer.part === 'body').map((layer) => [layer.sel.eid, layer.sortKey]), [
-    ['broken', -2.1999999999999993],
-    ['broken', 2.1999999999999993],
+    ['broken', halves[0]!.root.y - 15],
+    ['broken', halves[1]!.root.y - 15],
     ['rails', 10],
   ])
 })

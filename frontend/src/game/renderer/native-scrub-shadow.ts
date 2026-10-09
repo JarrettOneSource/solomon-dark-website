@@ -3,6 +3,7 @@ import { NATIVE_GROUND_PI } from '../core-kernels/native-ground-auxiliary.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeBoneyardComplexShadowRecord } from './boneyard-complex-shadows.ts'
 import { nativeEnemySpriteGeometry } from './native-enemy-assets.ts'
+import { nativeFlatGlyphShadowVertices } from './native-scenery-shadow.ts'
 
 type Quad<T> = readonly [T, T, T, T]
 
@@ -64,16 +65,9 @@ function glyphVertices(glyph: NativeScrubGlyph): Quad<Readonly<Vec2>> {
 }
 
 function flatShadow(glyph: NativeScrubGlyph): NativeScrubShadowQuad {
-  const corners = glyphVertices(glyph)
-  const shiftX = Math.fround(glyph.height * .25)
-  const shiftY = Math.fround(shiftX * 1.25)
   return {
     alphas: [1, 1, 1, 1], role: 'scrub-flat-shadow', tint: 0, uvs: GLYPH_UVS,
-    vertices: [
-      { x: Math.fround(corners[0].x + shiftX), y: Math.fround(corners[0].y + shiftY) },
-      { x: Math.fround(corners[1].x + shiftX), y: Math.fround(corners[1].y + shiftY) },
-      corners[2], corners[3],
-    ],
+    vertices: nativeFlatGlyphShadowVertices(glyph),
   }
 }
 

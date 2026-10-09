@@ -10,6 +10,7 @@ import {
 
 export interface NativeBoneyardComplexShadowCaster {
   id: string
+  family?: string
   /** Object-local native authored vertices in their original order. */
   outline: readonly Vec2[]
   position: Vec2
@@ -17,6 +18,14 @@ export interface NativeBoneyardComplexShadowCaster {
 }
 
 export type NativeBoneyardShadowProgram =
+  | {
+      construction: 'broken'
+      end: Vec2
+      kind: 'fence-grate'
+      start: Vec2
+      step: Vec2
+      count: number
+    }
   | {
       construction: 'gate' | 'intact'
       end: Vec2
@@ -419,43 +428,11 @@ export function nativeBoneyardFenceGrateShadows(
   program: Extract<NativeBoneyardShadowProgram, { kind: 'fence-grate' }>,
   record: NativeBoneyardComplexShadowRecord,
 ): NativeBoneyardFenceGrateShadowPlan {
-  const dx = Math.fround(program.end.x - program.start.x)
-  const dy = Math.fround(program.end.y - program.start.y)
-  const length = nativeStoredLength(dx, dy)
-  const endInset = program.construction === 'gate'
-    ? NATIVE_GATE_SHADOW_END_INSET
-    : NATIVE_FENCE_SHADOW_END_INSET
-  if (length <= endInset * 2) {
-    return {
-      bars: [],
-      rail: { alpha: 0, end: { ...program.end }, start: { ...program.start }, width: 4 },
-    }
+  const baseline = nativeFenceShadowBaseline(program)
+  if (!baseline) return {
+    bars: [], rail: { alpha: 0, end: { ...program.end }, start: { ...program.start }, width: 4 },
   }
-  const inverseLength = Math.fround(1 / length)
-  const along = {
-    x: Math.fround(dx * inverseLength),
-    y: Math.fround(dy * inverseLength),
-  }
-  const shortStart = {
-    x: Math.fround(program.start.x + Math.fround(along.x * endInset)),
-    y: Math.fround(program.start.y + Math.fround(along.y * endInset)),
-  }
-  const shortEnd = {
-    x: Math.fround(program.end.x - Math.fround(along.x * endInset)),
-    y: Math.fround(program.end.y - Math.fround(along.y * endInset)),
-  }
-  const shortDx = Math.fround(shortEnd.x - shortStart.x)
-  const shortDy = Math.fround(shortEnd.y - shortStart.y)
-  const shortLength = nativeStoredLength(shortDx, shortDy)
-  const nominalStep = program.construction === 'gate'
-    ? Math.fround(shortLength / NATIVE_GATE_SHADOW_BAR_DIVISOR)
-    : NATIVE_FENCE_SHADOW_BAR_STEP
-  const step = {
-    x: Math.fround(along.x * nominalStep),
-    y: Math.fround(along.y * nominalStep),
-  }
-  const storedStepLength = nativeStoredLength(step.x, step.y)
-  const count = Math.max(1, Math.trunc(shortLength / storedStepLength) + 1)
+  const { start: shortStart, end: shortEnd, step, count } = baseline
   const bars = Array.from({ length: count }, (_, index) => {
     const center = {
       x: Math.fround(shortStart.x + Math.fround(step.x * (index + 0.5))),
@@ -497,6 +474,45 @@ export function nativeBoneyardFenceGrateShadows(
       width: NATIVE_FENCE_SHADOW_RAIL_WIDTH,
     },
   }
+}
+
+function nativeFenceShadowBaseline(
+  program: Extract<NativeBoneyardShadowProgram, { kind: 'fence-grate' }>,
+): { start: Vec2; end: Vec2; step: Vec2; count: number } | null {
+  if (program.construction === 'broken') return program.count > 0 ? program : null
+  const dx = Math.fround(program.end.x - program.start.x)
+  const dy = Math.fround(program.end.y - program.start.y)
+  const length = nativeStoredLength(dx, dy)
+  const endInset = program.construction === 'gate'
+    ? NATIVE_GATE_SHADOW_END_INSET
+    : NATIVE_FENCE_SHADOW_END_INSET
+  if (length <= endInset * 2) return null
+  const inverseLength = Math.fround(1 / length)
+  const along = {
+    x: Math.fround(dx * inverseLength),
+    y: Math.fround(dy * inverseLength),
+  }
+  const shortStart = {
+    x: Math.fround(program.start.x + Math.fround(along.x * endInset)),
+    y: Math.fround(program.start.y + Math.fround(along.y * endInset)),
+  }
+  const shortEnd = {
+    x: Math.fround(program.end.x - Math.fround(along.x * endInset)),
+    y: Math.fround(program.end.y - Math.fround(along.y * endInset)),
+  }
+  const shortDx = Math.fround(shortEnd.x - shortStart.x)
+  const shortDy = Math.fround(shortEnd.y - shortStart.y)
+  const shortLength = nativeStoredLength(shortDx, shortDy)
+  const nominalStep = program.construction === 'gate'
+    ? Math.fround(shortLength / NATIVE_GATE_SHADOW_BAR_DIVISOR)
+    : NATIVE_FENCE_SHADOW_BAR_STEP
+  const step = {
+    x: Math.fround(along.x * nominalStep),
+    y: Math.fround(along.y * nominalStep),
+  }
+  const storedStepLength = nativeStoredLength(step.x, step.y)
+  const count = Math.max(1, Math.trunc(shortLength / storedStepLength) + 1)
+  return { start: shortStart, end: shortEnd, step, count }
 }
 
 export function nativeBoneyardRailsShadows(

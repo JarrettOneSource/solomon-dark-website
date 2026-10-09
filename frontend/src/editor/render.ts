@@ -12,6 +12,8 @@ import {
   nativeGateHingeArtPosition,
   nativeGateLeaves,
   nativeGateRules,
+  nativeQuadCanvasTriangles,
+  type NativeTexturedQuad,
   NATIVE_FENCE_GRATE_HEIGHT,
   NATIVE_FENCE_TEXTURE_REPEAT,
   type NativeGateLeafOverride,
@@ -42,7 +44,8 @@ const FENCE_POST_ART = Array.from(
   (_, variant) => spriteRefFor('DeadHawg', 36 + variant),
 )
 
-const fencePostArt = (variant: number) => FENCE_POST_ART[variant] ?? null
+const ALTERNATE_FENCE_POST_ART = Array.from({ length: 28 }, (_, variant) => spriteRefFor('DeadHawg', 320 + variant))
+const fencePostArt = (variant: number, style = 0) => (style === 1 ? ALTERNATE_FENCE_POST_ART : FENCE_POST_ART)[variant] ?? null
 
 export interface Camera {
   x: number
@@ -112,6 +115,7 @@ export const STAGE_TEXTURES: string[] = [
   FENCE_GRATE_TEXTURE,
   ...Object.values(FENCE_ART).flatMap((ref) => (ref ? [ref.src] : [])),
   ...FENCE_POST_ART.flatMap((ref) => (ref ? [ref.src] : [])),
+  ...ALTERNATE_FENCE_POST_ART.flatMap((ref) => (ref ? [ref.src] : [])),
 ]
 
 export const NATIVE_BONEYARD_POST_ROAD_TEXTURES: readonly string[] = [
@@ -985,6 +989,9 @@ function paintPlacementPasses(
     }
   }
   for (const item of scene.shadows) {
+    // Runtime class painters own exact root masks and both native shadow branches.
+    // Keep this placement-only oval out of initial and repainted runtime base tiles.
+    if (mode === 'runtime-base') continue
     if (!included(item.layer.sel, filter)) continue
     if (item.kind === 'object') drawObjectShadow(ctx, item.drawable, cam, cssW, cssH)
     else drawFenceShadow(ctx, item.layer, cam, cssW, cssH)
@@ -1096,7 +1103,7 @@ function drawFenceShadow(
   cssH: number,
 ) {
   if (layer.part !== 'post') return
-  const post = fencePostArt(layer.postVariant ?? 0)
+  const post = fencePostArt(layer.postVariant ?? 0, layer.postStyle)
   const postWidth = post?.w ?? 38
   const foot = post
     ? { x: layer.pos.x + post.w / 2 - post.anchorX, y: layer.pos.y + post.h - post.anchorY }
@@ -1388,6 +1395,30 @@ function drawGateLeafArt(
   return true
 }
 
+function drawNativeQuadArt(
+  ctx: CanvasRenderingContext2D, ref: SpriteRef | null, quad: NativeTexturedQuad,
+  cam: Camera, w: number, h: number,
+) {
+  if (!ref) return
+  const img = spriteImage(ref.src)
+  if (!img.complete || img.naturalWidth === 0) return
+  for (const triangle of nativeQuadCanvasTriangles(quad, ref.w, ref.h)) {
+    const points = triangle.points.map(point => worldToScreen(point, cam, w, h))
+    const t = triangle.transform
+    const origin = worldToScreen({ x: t.e, y: t.f }, cam, w, h)
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(points[0]!.x, points[0]!.y)
+    ctx.lineTo(points[1]!.x, points[1]!.y)
+    ctx.lineTo(points[2]!.x, points[2]!.y)
+    ctx.closePath()
+    ctx.clip()
+    ctx.transform(t.a * cam.zoom, t.b * cam.zoom, t.c * cam.zoom, t.d * cam.zoom, origin.x, origin.y)
+    drawNativeImage(ctx, img, 0, 0, ref.w, ref.h)
+    ctx.restore()
+  }
+}
+
 function drawFencePart(
   ctx: CanvasRenderingContext2D,
   layer: Extract<MainLayer, { kind: 'fence' }>,
@@ -1397,7 +1428,7 @@ function drawFencePart(
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
 ) {
   if (layer.part === 'post') {
-    plantArt(ctx, fencePostArt(layer.postVariant ?? 0), layer.pos, cam, w, h)
+    plantArt(ctx, fencePostArt(layer.postVariant ?? 0, layer.postStyle), layer.pos, cam, w, h)
     return
   }
   const { fence, pieceIndex } = layer
@@ -1439,12 +1470,7 @@ function drawFencePart(
       strokePath(ctx, [worldToScreen(a, cam, w, h), worldToScreen(z, cam, w, h)])
     }
   } else if (code === 1) {
-    // Broken grate: two fallen halves, one leaning from each end.
-    if (pieceIndex === 0) {
-      plantArt(ctx, FENCE_ART.broken, at(0.28), cam, w, h)
-    } else {
-      plantArt(ctx, FENCE_ART.broken, at(0.72), cam, w, h, true)
-    }
+    if (layer.brokenHalf) drawNativeQuadArt(ctx, FENCE_ART.broken, layer.brokenHalf, cam, w, h)
   } else if (code === 2) {
     const override = gateOverrides?.get(`${fence.eid}:${pieceIndex}`)
     const leaf = override

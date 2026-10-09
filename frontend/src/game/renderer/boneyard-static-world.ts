@@ -34,6 +34,9 @@ import type {
   WallResident,
 } from './boneyard-renderer-model.ts'
 import { nativeBoneyardMainLayerShadowCaster } from './boneyard-shadow-casters.ts'
+import { createNativeStaticQuad } from './native-static-quad.ts'
+import { destroyResidentTexture } from './boneyard-resident-lifetime.ts'
+export { destroyResidentTexture } from './boneyard-resident-lifetime.ts'
 import { isMovingGateBody } from './boneyard-static-layout.ts'
 import { isBuildingLayer } from './boneyard-static-lighting.ts'
 import { type BoneyardStaticPixelRegion, cropBoneyardStaticPixels } from './boneyard-static-pixels.ts'
@@ -87,6 +90,7 @@ export async function buildStaticWorld(
   scene: LoadedBoneyard['scene'],
   root: Container,
   surfaceTextures: NativeBoneyardSurfaceTextures,
+  brokenGrateTexture: Texture,
   cleanupBounds: Readonly<BoneyardBounds> | null,
   enhancedEffects = true,
 ): Promise<StaticWorldBuild> {
@@ -178,7 +182,7 @@ export async function buildStaticWorld(
     for (let layerIndex = 0; layerIndex < mainLayers.length; layerIndex += 1) {
       const layer = mainLayers[layerIndex]
       if (isMovingGateBody(layer)) continue
-      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch, enhancedEffects)
+      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch, enhancedEffects, brokenGrateTexture)
       staticPaintCount += 1
       if (resident) {
         resident.cleanupSourceKey = layer.kind === 'object'
@@ -462,7 +466,20 @@ function buildMainLayerResident(
   layerIndex: number,
   canvas: HTMLCanvasElement,
   enhancedEffects: boolean,
+  brokenGrateTexture: Texture,
 ): ResidentTexture | null {
+  if (layer.kind === 'fence' && layer.brokenHalf) {
+    // Borrow original pixels, including RGB beneath alpha zero; no Canvas readback.
+    const texture = brokenGrateTexture
+    const sprite = createNativeStaticQuad(texture, layer.brokenHalf)
+    sprite.label = `native-broken-grate:${layer.fence.eid}:${layer.pieceIndex}`
+    const points = [layer.brokenHalf.p0, layer.brokenHalf.p1, layer.brokenHalf.p2, layer.brokenHalf.p3]
+    const x = Math.min(...points.map(point => point.x)), y = Math.min(...points.map(point => point.y))
+    return { cleanupSourceKey: null, mainLayerIndex: layerIndex, pixels: new Uint8ClampedArray(0), ownsTexture: false,
+      shadowCaster: nativeBoneyardMainLayerShadowCaster(document, layer, layerIndex),
+      sprite, surfaceMesh: null, texture, x, y,
+      w: Math.max(...points.map(point => point.x)) - x, h: Math.max(...points.map(point => point.y)) - y }
+  }
   // Scrub::Render006200B0 uses the untransformed glyph. Keep its complete
   // registered rectangle: shadow00620120 samples the original glyph UVs.
   if (layer.kind === 'object' && layer.object.typeId === 2062) {
@@ -599,7 +616,7 @@ function mainLayerCaptureBounds(layer: MainLayer): { h: number; w: number; x: nu
   const ref = layer.kind === 'object'
     ? spriteRefFor(layer.atlas, layer.atlasEntry)
     : layer.part === 'post'
-      ? spriteRefFor('DeadHawg', 36 + (layer.postVariant ?? 0))
+      ? spriteRefFor('DeadHawg', (layer.postStyle === 1 ? 320 : 36) + (layer.postVariant ?? 0))
       : null
   if (ref) {
     return {
@@ -748,14 +765,6 @@ function residentPixelTexture(source: BoneyardStaticPixelRegion): Texture {
     }),
   })
 }
-
-export function destroyResidentTexture(resident: ResidentTexture): void {
-  resident.surfaceMesh?.destroy()
-  resident.texture.destroy(true)
-  resident.pixels = EMPTY_RESIDENT_PIXELS
-}
-
-const EMPTY_RESIDENT_PIXELS = new Uint8ClampedArray(0)
 
 function documentNodeCanvas(width: number, height: number): HTMLCanvasElement {
   const canvas = window.document.createElement('canvas')

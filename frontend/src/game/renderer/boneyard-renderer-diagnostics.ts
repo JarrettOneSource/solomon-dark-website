@@ -56,6 +56,7 @@ interface BoneyardRendererFrameDiagnostics {
   cameraFocusX: number
   cameraFocusY: number
   complexShadowActiveMeshCount: number
+  sceneryShadows: import('./boneyard-scenery-shadow-presentation.ts').BoneyardSceneryShadowFrame | null
   complexShadowAllocatedQuadCapacity: number
   complexShadowCasterCount: number
   complexShadowPooledMeshCount: number
@@ -353,6 +354,7 @@ export function createBoneyardRendererDiagnostics(
     cameraFocusX: Number.NaN,
     cameraFocusY: Number.NaN,
     complexShadowActiveMeshCount: 0,
+    sceneryShadows: null,
     complexShadowAllocatedQuadCapacity: 0,
     complexShadowCasterCount: 0,
     complexShadowPooledMeshCount: 0,
@@ -589,6 +591,7 @@ export function updateBoneyardRendererDiagnostics(input: BoneyardRendererDiagnos
       frameDiagnostics.buildingVertexLightMinimum = painter.buildingVertexLightMinimum
       frameDiagnostics.buildingVisibleCount = painter.buildingVisibleCount
       frameDiagnostics.complexShadowActiveMeshCount = painter.complexShadowActiveMeshCount
+      frameDiagnostics.sceneryShadows = painter.sceneryShadows
       frameDiagnostics.complexShadowAllocatedQuadCapacity = painter.complexShadowAllocatedQuadCapacity
       frameDiagnostics.complexShadowCasterCount = painter.complexShadowCasterCount
       frameDiagnostics.complexShadowPooledMeshCount = painter.complexShadowPooledMeshCount

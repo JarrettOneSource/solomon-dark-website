@@ -8,6 +8,10 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
+    "src/editor/native-broken-fence.test.ts",
+    "src/game/renderer/native-scenery-shadow.test.ts",
+    "src/game/renderer/boneyard-scenery-shadow-presentation.test.ts",
+    "src/game/renderer/native-ui-canvas.test.ts",
     "src/game/renderer/native-hud-experience-meter.test.ts",
     "src/game/renderer/native-mesh-lifetime.test.ts",
     "src/game/renderer/primary-spell-air-native.test.ts",

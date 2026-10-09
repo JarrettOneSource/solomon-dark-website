@@ -1,13 +1,26 @@
 import type { Vec2 } from './model.ts'
 import { nativeClosedGateRoots } from '../game/core-kernels/boneyard-gate.ts'
+import { createNativeRng, drawNativeFloat } from '../game/core-kernels/native-rng.ts'
 
-export interface NativeGateLeaf {
-  hinge: Vec2
-  tip: Vec2
+export interface NativeTexturedQuad {
   p0: Vec2
   p1: Vec2
   p2: Vec2
   p3: Vec2
+}
+
+export interface NativeGateLeaf extends NativeTexturedQuad {
+  hinge: Vec2
+  tip: Vec2
+}
+
+export interface NativeBrokenFenceHalf extends NativeTexturedQuad {
+  root: Vec2
+  seed: number
+  shadowStart: Vec2
+  shadowEnd: Vec2
+  shadowStep: Vec2
+  shadowCount: number
 }
 
 export interface NativeGateLeafOverride {
@@ -46,6 +59,86 @@ export const NATIVE_GATE_ART_INDICES = [0, 1, 2, 2, 1, 3] as const
 export const NATIVE_FENCE_END_INSET = 12
 export const NATIVE_FENCE_GRATE_HEIGHT = 52
 export const NATIVE_FENCE_TEXTURE_REPEAT = 53.33333121405716
+
+/** 0x005EC6E0, factory order end half then start half. No shared RNG words. */
+export function nativeBrokenFenceHalves(
+  points: readonly Vec2[], startPostVariant = 0, endPostVariant = 0,
+): readonly NativeBrokenFenceHalf[] {
+  if (points.length < 2) return []
+  const f = Math.fround
+  const start = { x: f(points[0]!.x), y: f(points[0]!.y) }
+  const end = { x: f(points[1]!.x), y: f(points[1]!.y) }
+  const inward = nativeFenceStoredUnit({ x: f(end.x - start.x), y: f(f(end.y + 5) - f(start.y + 5)) })
+  return [false, true].map(isStart => {
+    const anchor = isStart ? start : end
+    const direction = isStart ? inward : { x: f(-inward.x), y: f(-inward.y) }
+    const selector = isStart ? startPostVariant : endPostVariant
+    // D3D leaves x87 PC24/nearest (live CW007F): every arithmetic instruction
+    // rounds even without a memory store. FISTP int64 then hashes the low word.
+    const seedInput = Math.trunc(f(f(f(selector + 1 + anchor.x) + anchor.y) * f(anchor.x * anchor.y))) | 0
+    let word = seedInput ^ (seedInput << 21)
+    word ^= word >>> 11
+    const seed = Math.abs(Math.imul(word ^ (word << 4), 0x0a67cfcf))
+    const first = drawNativeFloat(createNativeRng(seed), 20, true)
+    const second = drawNativeFloat(first.state, 20, true)
+    const third = drawNativeFloat(second.state, 18)
+    const tip = {
+      x: f(f(anchor.x + f(52 * direction.x)) + f(first.value * direction.y)),
+      y: f(f(anchor.y + f(52 * direction.y)) + f(-direction.x * first.value)),
+    }
+    const [p2, p3] = nativeFenceStoredInset(tip, anchor, 12)
+    const height = f(third.value + 32)
+    const p0 = {
+      x: f(p2.x + f(second.value * direction.x)),
+      y: f(f(f(p2.y - height) + f(second.value * direction.y)) - 20),
+    }
+    const p1 = { x: p3.x, y: f(f(p3.y - 32) - 20) }
+    const [shadowStart, shadowEnd] = nativeFenceStoredInset(p2, p3, 6)
+    const delta = { x: f(shadowEnd.x - shadowStart.x), y: f(shadowEnd.y - shadowStart.y) }
+    const unit = nativeFenceStoredUnit(delta)
+    const shadowStep = { x: f(8 * unit.x), y: f(8 * unit.y) }
+    const stepLength = nativeFenceStoredLength(shadowStep)
+    const shadowCount = stepLength > 0 ? Math.trunc(f(nativeFenceStoredLength(delta) / stepLength)) + 1 : 0
+    return { p0, p1, p2, p3, seed, shadowStart, shadowEnd, shadowStep, shadowCount,
+      root: shadowEnd.y > shadowStart.y ? shadowEnd : shadowStart }
+  })
+}
+
+export function nativeFenceStoredLength(v: Vec2): number {
+  return Math.fround(Math.sqrt(Math.fround(Math.fround(v.x * v.x) + Math.fround(v.y * v.y))))
+}
+
+export function nativeFenceStoredUnit(v: Vec2): Vec2 {
+  const length = nativeFenceStoredLength(v)
+  const inverse = length > 0 ? Math.fround(1 / length) : 0
+  return { x: Math.fround(v.x * inverse), y: Math.fround(v.y * inverse) }
+}
+
+export function nativeFenceStoredInset(a: Vec2, b: Vec2, inset: number): readonly [Vec2, Vec2] {
+  const f = Math.fround
+  const unit = nativeFenceStoredUnit({ x: f(b.x - a.x), y: f(b.y - a.y) })
+  const offset = { x: f(inset * unit.x), y: f(inset * unit.y) }
+  return [{ x: f(a.x + offset.x), y: f(a.y + offset.y) }, { x: f(b.x - offset.x), y: f(b.y - offset.y) }]
+}
+
+/** 0x0041C540 uses 0,1,2 / 2,1,3. A Broken quad is not an affine rectangle. */
+export function nativeQuadCanvasTriangles(quad: NativeTexturedQuad, width: number, height: number): readonly {
+  points: readonly [Vec2, Vec2, Vec2]
+  transform: NativeGateArtCanvasTransform
+}[] {
+  const { p0, p1, p2, p3 } = quad
+  return [
+    { points: [p0, p1, p2], transform: {
+      a: (p1.x - p0.x) / width, b: (p1.y - p0.y) / width,
+      c: (p2.x - p0.x) / height, d: (p2.y - p0.y) / height, e: p0.x, f: p0.y,
+    } },
+    { points: [p2, p1, p3], transform: {
+      a: (p3.x - p2.x) / width, b: (p3.y - p2.y) / width,
+      c: (p3.x - p1.x) / height, d: (p3.y - p1.y) / height,
+      e: p1.x + p2.x - p3.x, f: p1.y + p2.y - p3.y,
+    } },
+  ]
+}
 
 export function nativeFenceGrate(points: readonly Vec2[]): NativeFenceGrate | null {
   const start = points[0]

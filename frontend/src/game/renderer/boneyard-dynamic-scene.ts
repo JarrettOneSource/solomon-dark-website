@@ -1,8 +1,8 @@
-import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import { nativeEnemySpriteGeometry, nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { NativeSceneryHitView } from './native-scenery-hit-view.ts'
 import type { ContainerChild } from 'pixi.js'
-import { Application, Container } from 'pixi.js'
+import { Application, Container, Texture } from 'pixi.js'
 import 'pixi.js/unsafe-eval'
 import { NATIVE } from '../../editor/model.ts'
 import { nativeGatePainterRoot } from '../../editor/native-fence-geometry.ts'
@@ -24,10 +24,13 @@ import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import type { BoneyardComplexShadowStaticCaster } from './boneyard-complex-shadow-presentation.ts'
 import { BoneyardComplexShadowPresentation } from './boneyard-complex-shadow-presentation.ts'
 import { BoneyardScrubShadowPresentation } from './boneyard-scrub-shadow-presentation.ts'
+import { BoneyardSceneryShadowPresentation, type NativeGoodieShadowOwner } from './boneyard-scenery-shadow-presentation.ts'
+import { nativeSceneryGlyphTexture } from './native-scenery-shadow.ts'
+import { nativeGoodieShadowOutline } from './boneyard-native-shadow-shapes.ts'
 import { nativeBoneyardComplexShadowRecords } from './boneyard-complex-shadows.ts'
 import { BoneyardGateViews } from './boneyard-gate-views.ts'
 import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeBoneyardLightScalar, nativeBoneyardLightTint, nativeBoneyardWeatherLightingOrder, nativeSolomonSetPieceLighting } from './boneyard-lighting.ts'
-import { boneyardPlayerSortBias, boneyardVisibleWorldBounds } from './boneyard-render-contract.ts'
+import { boneyardPlayerSortBias, boneyardResidentIsVisible, boneyardVisibleWorldBounds } from './boneyard-render-contract.ts'
 import type { BoneyardPainterFrame, BoneyardWorldPresentationSettings, BuildingResidents, ResidentTexture, TreeResidents, WallResident } from './boneyard-renderer-model.ts'
 import { requireBoneyardSnapshot } from './boneyard-renderer-model.ts'
 import { BoneyardSceneLights } from './boneyard-scene-lights.ts'
@@ -77,6 +80,9 @@ export class BoneyardDynamicScene {
   private readonly buildingResidents: ReadonlyMap<string, BuildingResidents>
   private readonly complexShadows: BoneyardComplexShadowPresentation
   private readonly scrubShadows: BoneyardScrubShadowPresentation
+  private readonly sceneryShadows: BoneyardSceneryShadowPresentation
+  private readonly goodieShadowOwners: NativeGoodieShadowOwner[] = []
+  private readonly goodieShadowCasters: BoneyardComplexShadowStaticCaster[] = []
   private readonly collisionWorld: BoneyardCollisionWorld
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   readonly enemies: NativeEnemyViews
@@ -154,6 +160,9 @@ export class BoneyardDynamicScene {
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
     this.complexShadows = new BoneyardComplexShadowPresentation(root, shadowCasters)
+    this.sceneryShadows = new BoneyardSceneryShadowPresentation(mainLayers, mainResidents, shadowCasters,
+      key => key === 'white' ? Texture.WHITE : key === 'fence-grate' ? textures.fenceGrate
+        : nativeSceneryGlyphTexture(textures.combatAtlas, key))
     this.scrubShadows = new BoneyardScrubShadowPresentation(
       root, mainLayers, mainResidents, gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
       textures.base[nativeEnemySpriteRecord('DeadHawg', 21).source]!,
@@ -629,7 +638,11 @@ export class BoneyardDynamicScene {
       const layer = this.staticPainterLayers[layerIndex]!
       layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
       activeStaticPainterLayers.push(layer)
-      if (resident.shadowCaster) visibleShadowDepthOwners.push(resident.sprite)
+      // Auxiliary glyphs do not require a nonempty directional outline.
+      visibleShadowDepthOwners.push(resident.sprite)
+    }
+    for (const { resident } of this.wallResidents.values()) {
+      if (resident.sprite.renderable && resident.sprite.parent) visibleShadowDepthOwners.push(resident.sprite)
     }
     for (const layer of this.movingGatePainterLayers) {
       layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
@@ -810,6 +823,25 @@ export class BoneyardDynamicScene {
       settings.complexLighting,
     )
     this.weatherView.setDepth(weatherLightingOrder)
+    const goodieShadowOwners = this.goodieShadowOwners
+    const goodieShadowCasters = this.goodieShadowCasters
+    goodieShadowOwners.length = 0
+    goodieShadowCasters.length = 0
+    for (const goodie of snapshot.world.goodies) {
+      const depthOwner = this.goodies.depthOwner(goodie.id)
+      if (!depthOwner?.renderable || !depthOwner.parent) continue
+      const glyph = nativeEnemySpriteGeometry('DeadHawg', 145 + goodie.phase)
+      if (!boneyardResidentIsVisible({
+        x: goodie.position.x - glyph.anchorX, y: goodie.position.y - glyph.anchorY,
+        w: glyph.width, h: glyph.height,
+      }, visibleWorldBounds)) continue
+      goodieShadowOwners.push({ goodie, depthOwner })
+      goodieShadowCasters.push({ depthOwner, caster: {
+        id: `goodie:${goodie.id}`, family: 'Goodie', position: goodie.position,
+        outline: nativeGoodieShadowOutline(goodie.subtype),
+      } })
+    }
+    const sceneryShadows = this.sceneryShadows.render(visibleShadowDepthOwners, settings.complexShadows, goodieShadowOwners)
     const complexShadows = this.complexShadows.render(
       this.lights.index,
       presentationFrame,
@@ -817,12 +849,19 @@ export class BoneyardDynamicScene {
       gateShadowDepthOwners,
       visibleShadowDepthOwners,
       settings.complexLighting && settings.complexShadows,
+      goodieShadowCasters,
     )
+    sceneryShadows.directionalFamilyCasters = complexShadows.familyCasters
+    sceneryShadows.directionalCasterIds = complexShadows.casterIds
     const scrubShadows = this.scrubShadows.render(
       this.lights.index, presentationFrame, worldTick, visibleMainResidents,
       settings.complexShadows, settings.complexLighting,
       point => this.compactMasks.specialSurfaceAt(point, snapshot.world.spiderRemains),
     )
+    if (scrubShadows.familyCasters.Scrub) {
+      sceneryShadows.directionalFamilyCasters.Scrub = scrubShadows.familyCasters.Scrub
+      sceneryShadows.directionalCasterIds = [...complexShadows.casterIds, ...scrubShadows.casterIds]
+    }
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1
     this.levelUp.update(
@@ -849,6 +888,7 @@ export class BoneyardDynamicScene {
       complexShadowQuadCount: complexShadows.quadCount + scrubShadows.quadCount,
       complexShadowRecordCount: complexShadows.recordCount + scrubShadows.recordCount,
       complexShadowZOrderMismatchCount: complexShadows.zOrderMismatchCount + scrubShadows.zOrderMismatchCount,
+      sceneryShadows,
       fadedTreeCount,
       foregroundZIndex: order.foregroundZIndex,
       localPlayerPainterRow: localPainter?.row ?? 0,
@@ -919,6 +959,7 @@ export class BoneyardDynamicScene {
     this.painterOrderPlanner.clear()
     this.complexShadows.destroy()
     this.scrubShadows.destroy()
+    this.sceneryShadows.destroy()
     this.primarySpells.destroy()
     this.secondaryAbilities.destroy()
     this.compactMasks.destroy()

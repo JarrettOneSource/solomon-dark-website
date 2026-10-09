@@ -1,7 +1,8 @@
 import { nativeBoneyardFencePosts } from '../game/core-kernels/boneyard-fence-posts.ts'
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, StaticSprite, Vec2 } from './model.ts'
 import { NATIVE } from './model.ts'
-import { nativeGateLeaves, nativeGatePainterRoot } from './native-fence-geometry.ts'
+import deadhawg from './manifest/deadhawg.json' with { type: 'json' }
+import { nativeBrokenFenceHalves, nativeGateLeaves, nativeGatePainterRoot, type NativeBrokenFenceHalf } from './native-fence-geometry.ts'
 import {
   buildNativeRegionPainterOrder,
   type PositionedNativeRegionPainterLayer,
@@ -55,6 +56,8 @@ export interface FenceMainLayer {
   part: 'post' | 'body'
   pieceIndex: number
   postVariant?: number
+  postStyle?: 0 | 1
+  brokenHalf?: NativeBrokenFenceHalf
   pos: Vec2
   worldY: number
   sortBias: number
@@ -122,8 +125,10 @@ function proxyFor(
 ): ObjectMainLayer | null {
   if (object.typeId === NATIVE.tree) {
     if (object.secondaryVisible === false || (object.variant ?? 0) >= 6) return null
+    const entry = object.secondaryAtlasEntry ?? 243 + (object.secondaryVariant ?? 0)
+    if (deadhawg.entries[entry]?.empty) return null
     return {
-      ...objectLayer(object, object.secondaryAtlasEntry ?? 243 + (object.secondaryVariant ?? 0)),
+      ...objectLayer(object, entry),
       sortBias: 0,
       sortKey: object.pos.y + 100,
       sourceOrder,
@@ -157,7 +162,6 @@ function fenceBodyPositions(fence: Polyline): Vec2[] {
   // the endpoint midpoint (FenceGrate/Rails builders +0x18). Walls also
   // materialize as one body, represented at their static midpoint here.
   switch (fence.segmentCode ?? fence.style ?? 0) {
-    case 1: return [pointAlong(fence, 0.28), pointAlong(fence, 0.72)]
     case 2: return nativeGateLeaves(fence.points).map((leaf) => nativeGatePainterRoot(leaf.hinge, leaf.tip))
     default: return [pointAlong(fence, 0.5)]
   }
@@ -190,6 +194,7 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     fence,
     pos,
     postVariant,
+    postStyle,
   }, index): FenceMainLayer => ({
     kind: 'fence',
     sel: { kind: 'fence', eid: fence.eid },
@@ -197,6 +202,7 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     part: 'post',
     pieceIndex: index,
     postVariant,
+    postStyle,
     pos,
     worldY: pos.y,
     sortBias: 0,
@@ -204,18 +210,27 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     sourceOrder: objects.length + index,
   }))
   const bodySourceOrder = objects.length + fencePosts.length
-  const fenceBodies = doc.fences.flatMap((fence, fenceIndex) => fenceBodyPositions(fence).map((pos, pieceIndex): FenceMainLayer => ({
+  const fenceBodies = doc.fences.flatMap((fence, fenceIndex) => {
+    let halves: readonly NativeBrokenFenceHalf[] | undefined
+    if ((fence.segmentCode ?? fence.style ?? 0) === 1) {
+      const posts = nativeBoneyardFencePosts(doc.fences.slice(0, fenceIndex + 1))
+      const selector = (point: Vec2 | undefined) => posts.find(post => post.pos.x === point?.x && post.pos.y === point.y)?.postVariant ?? 0
+      halves = nativeBrokenFenceHalves(fence.points, selector(fence.points[0]), selector(fence.points[1]))
+    }
+    return (halves ? halves.map(half => half.root) : fenceBodyPositions(fence)).map((pos, pieceIndex): FenceMainLayer => ({
     kind: 'fence',
     sel: { kind: 'fence', eid: fence.eid },
     fence,
     part: 'body',
     pieceIndex,
+    brokenHalf: halves?.[pieceIndex],
     pos,
     worldY: pos.y,
     sortBias: -15,
     sortKey: pos.y - 15,
     sourceOrder: bodySourceOrder + fenceIndex * 2 + pieceIndex,
-  })))
+    }))
+  })
   const shadows = [...objectMain, ...fencePosts, ...fenceBodies]
   const proxyByOwnerId = new Map<string, ObjectMainLayer>()
   for (const layer of objectMain) {

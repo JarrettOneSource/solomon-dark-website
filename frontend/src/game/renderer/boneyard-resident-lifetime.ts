@@ -1,0 +1,13 @@
+import { MeshSimple } from 'pixi.js'
+import type { ResidentTexture } from './boneyard-renderer-model.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
+
+/** Retained quads own geometry; original native atlas textures remain borrowed. */
+export function destroyResidentTexture(resident: ResidentTexture): void {
+  resident.surfaceMesh?.destroy()
+  if (!resident.surfaceMesh && resident.sprite instanceof MeshSimple) destroyOwnedMeshGeometry(resident.sprite)
+  if (resident.ownsTexture !== false) resident.texture.destroy(true)
+  resident.pixels = EMPTY_RESIDENT_PIXELS
+}
+
+const EMPTY_RESIDENT_PIXELS = new Uint8ClampedArray(0)

@@ -65,6 +65,7 @@ export interface ResidentTexture extends BoneyardBounds {
   sprite: Container
   surfaceMesh: NativeStaticSurfaceMesh | null
   texture: Texture
+  ownsTexture?: boolean
 }
 
 export interface BuildingResidents {
@@ -107,6 +108,7 @@ export interface StaticWorldBuild {
 }
 
 export interface BoneyardPainterFrame {
+  sceneryShadows: import('./boneyard-scenery-shadow-presentation.ts').BoneyardSceneryShadowFrame
   activeStaticPainterLayerCount: number
   buildingBaseRoofColorMismatchCount: number
   buildingCount: number

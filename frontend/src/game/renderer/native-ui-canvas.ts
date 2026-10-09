@@ -1,4 +1,5 @@
 import type { Application } from 'pixi.js'
+import { observeGameDevicePixelRatio } from './game-device-pixel-ratio.ts'
 
 export interface NativeUiCanvas {
   readonly canvas: HTMLCanvasElement
@@ -54,7 +55,6 @@ function observeMountedCanvas(
   const renderer = application.renderer
   let frame: number | null = null
   let resizing = false
-  let media = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
   const schedule = () => {
     if (frame === null && !resizing) frame = requestAnimationFrame(update)
   }
@@ -70,12 +70,6 @@ function observeMountedCanvas(
     canvas.dataset.resolution = `${resolution}`
     application.render()
   }
-  const pixelRatioChanged = () => {
-    media.removeEventListener('change', pixelRatioChanged)
-    media = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
-    media.addEventListener('change', pixelRatioChanged)
-    schedule()
-  }
   host.append(canvas)
   const resizeObserver = new ResizeObserver(schedule)
   resizeObserver.observe(canvas)
@@ -87,14 +81,14 @@ function observeMountedCanvas(
       attributeFilter: ['class', 'hidden', 'style'],
     })
   }
-  media.addEventListener('change', pixelRatioChanged)
+  const disconnectPixelRatio = observeGameDevicePixelRatio(schedule)
   window.addEventListener('resize', schedule)
   renderer.on('resize', schedule)
   update()
   return () => {
     resizeObserver.disconnect()
     presentationObserver.disconnect()
-    media.removeEventListener('change', pixelRatioChanged)
+    disconnectPixelRatio()
     window.removeEventListener('resize', schedule)
     renderer.off('resize', schedule)
     if (frame !== null) cancelAnimationFrame(frame)

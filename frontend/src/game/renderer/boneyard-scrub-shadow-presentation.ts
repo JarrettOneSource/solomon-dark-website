@@ -58,6 +58,7 @@ export class BoneyardScrubShadowPresentation {
     specialSurfaceAt: (point: Readonly<Vec2>) => boolean,
   ): BoneyardComplexShadowFrame {
     const frame: BoneyardComplexShadowFrame = {
+      familyCasters: {}, casterIds: [],
       activeMeshCount: 0, allocatedQuadCapacity: 0, casterCount: 0,
       pooledMeshCount: 0, quadCount: 0, recordCount: 0, zOrderMismatchCount: 0,
     }
@@ -94,6 +95,10 @@ export class BoneyardScrubShadowPresentation {
         }
         this.positionBeforeOwner(view)
         frame.casterCount += 1
+        if (records.length > 0) {
+          frame.familyCasters.Scrub = (frame.familyCasters.Scrub ?? 0) + 1
+          frame.casterIds = [...frame.casterIds, view.id]
+        }
         frame.quadCount += plan.length
         frame.activeMeshCount += plan.length
         if (view.container.zIndex !== owner.zIndex

@@ -17,11 +17,22 @@ export function nativeBoneyardMainLayerShadowCaster(
   layer: MainLayer,
   layerIndex: number,
 ): NativeBoneyardComplexShadowCaster | null {
+  const family = layer.kind === 'object'
+    ? ({ 2001: 'Tree', 2029: 'Gravestone', 2009: 'Monument', 2040: 'Building', 2061: 'Goodie' } as Record<number, string>)[layer.object.typeId]
+    : layer.part === 'post' ? 'Fencepost'
+      : ['FenceGrate', 'Broken', 'Gate', 'Wall', 'Rails'][layer.fence.segmentCode ?? layer.fence.style ?? 0]
   if (layer.kind === 'fence' && layer.part === 'body') {
     const code = layer.fence.segmentCode ?? layer.fence.style ?? 0
     const start = layer.fence.points[0]
     const end = layer.fence.points[1]
     if (!start || !end) return null
+    if (code === 1) {
+      const half = layer.brokenHalf
+      if (!half) throw new Error(`Broken fence ${layer.fence.eid} requires its native constructor state.`)
+      return { id: `main:${layerIndex}`, family, outline: [], position: { ...half.root },
+        program: { kind: 'fence-grate', construction: 'broken', start: half.shadowStart,
+          end: half.shadowEnd, step: half.shadowStep, count: half.shadowCount } }
+    }
     if (code === 0) {
       return {
         id: `main:${layerIndex}`,
@@ -33,6 +44,7 @@ export function nativeBoneyardMainLayerShadowCaster(
           kind: 'fence-grate',
           start: { ...start },
         },
+        family,
       }
     }
     if (code === 4) {
@@ -41,6 +53,7 @@ export function nativeBoneyardMainLayerShadowCaster(
         outline: [],
         position: { ...layer.pos },
         program: { end: { ...end }, kind: 'rails', start: { ...start } },
+        family,
       }
     }
     if (code === 3) {
@@ -65,6 +78,7 @@ export function nativeBoneyardMainLayerShadowCaster(
             ? { ...start }
             : { x: start.x - direction.x * 15, y: start.y - direction.y * 15 },
         },
+        family,
       }
     }
   }
@@ -73,7 +87,7 @@ export function nativeBoneyardMainLayerShadowCaster(
   if (layer.kind === 'fence' && layer.part === 'post') {
     outline = nativeFencepostShadowOutline(
       layer.postVariant ?? 0,
-      (layer.fence.segmentCode ?? layer.fence.style ?? 0) === 4 ? 1 : 0,
+      layer.postStyle ?? ((layer.fence.segmentCode ?? layer.fence.style ?? 0) === 4 ? 1 : 0),
     )
   } else if (layer.kind !== 'object') {
     return null
@@ -108,7 +122,7 @@ export function nativeBoneyardMainLayerShadowCaster(
   }
   return outline.length < 3
     ? null
-    : { id: `main:${layerIndex}`, outline, position: { ...layer.pos } }
+    : { id: `main:${layerIndex}`, family, outline, position: { ...layer.pos } }
 }
 
 function normalizedSegment(start: Vec2, end: Vec2): Vec2 {

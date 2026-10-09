@@ -3,7 +3,7 @@ import greenPlasmaSource from '../../assets/game/boneyard/textures/greenplasma.p
 
 import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
-import { GROUND_TEXTURE, ROAD_TEXTURES } from '../../editor/textures.ts'
+import { FENCE_GRATE_TEXTURE, GROUND_TEXTURE, ROAD_TEXTURES } from '../../editor/textures.ts'
 import { boneyard, hub } from '../../lib/assets.ts'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
 import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
@@ -37,6 +37,7 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   base: Readonly<Record<string, Texture>>
   combatAtlas: BoneyardCombatAtlas
+  fenceGrate: Texture
   ground: Texture
   greenPlasma: Texture
   lantern: Texture
@@ -83,6 +84,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyard.solomonDig,
     boneyard.solomonFlydirt,
     GROUND_TEXTURE,
+    FENCE_GRATE_TEXTURE,
     ...ROAD_TEXTURES,
     solomonEncounterSource,
     solomonGraveMarkSource,
@@ -143,6 +145,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
   const roads = ROAD_TEXTURES.map(texture)
   const ground = texture(GROUND_TEXTURE)
   ground.source.addressMode = 'repeat'
+  texture(FENCE_GRATE_TEXTURE).source.addressMode = 'repeat'
   texture(greenPlasmaSource).source.addressMode = 'repeat'
   for (const road of roads) road.source.addressMode = 'repeat'
 
@@ -151,6 +154,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     assetSources: sources,
     base,
     combatAtlas,
+    fenceGrate: texture(FENCE_GRATE_TEXTURE),
     ground,
     greenPlasma: texture(greenPlasmaSource),
     lantern: texture(boneyard.lantern),

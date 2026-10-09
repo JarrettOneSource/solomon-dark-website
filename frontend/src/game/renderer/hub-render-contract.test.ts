@@ -4,6 +4,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { createServer } from 'vite'
+import { gameViewportLayout } from './game-viewport.ts'
 
 import {
   HUB_DIAGNOSTIC_WINDOW_FRAMES,
@@ -66,9 +67,48 @@ test('world overlays submit only their authored alpha bounds', () => {
 
 test('resolution follows displayed device pixels without a frame-rate quality fallback', () => {
   assert.equal(initialHubResolution({ devicePixelRatio: 1, displayScale: 1 }), 1)
+  assert.equal(initialHubResolution({ devicePixelRatio: 2, displayScale: 1 }), 2)
+  assert.equal(initialHubResolution({ devicePixelRatio: 3, displayScale: 1 }), 2)
   assert.equal(initialHubResolution({ devicePixelRatio: 3, displayScale: 0.5 }), 1.5)
   assert.equal(initialHubResolution({ devicePixelRatio: 1, displayScale: 0.3 }), 0.5)
   assert.equal(initialHubResolution({ devicePixelRatio: Number.NaN, displayScale: 1 }), 1)
+})
+
+test('fractional world density does not add a second browser resampling step', () => {
+  for (const [width, height, devicePixelRatio] of [
+    [1280, 800, 1],
+    [1280, 800, 2],
+    [1366, 768, 2],
+    [1600, 900, 2],
+    [1280, 720, 1],
+    [1366, 768, 1],
+    [844, 390, 2],
+    [896, 414, 2],
+    [1200, 750, 1.25],
+    [844, 390, 3],
+  ] as const) {
+    const viewport = gameViewportLayout(width, height)
+    const resolution = initialHubResolution({
+      devicePixelRatio, displayScale: viewport.displayScale,
+    })
+    assert.equal(resolution, devicePixelRatio * viewport.displayScale)
+    assert.equal(Math.round(viewport.width * resolution), Math.round(width * devicePixelRatio))
+    assert.equal(Math.round(viewport.height * resolution), Math.round(height * devicePixelRatio))
+  }
+})
+
+test('world density preserves the measured quality bounds and explicit lower maximum', () => {
+  assert.equal(initialHubResolution({ devicePixelRatio: 4, displayScale: 1 }), 2)
+  assert.equal(initialHubResolution({ devicePixelRatio: 1, displayScale: 0.1 }), 0.5)
+  for (const maxResolution of [0.625, 0.875, 1.1, 1.375, 1.5, 1.875]) {
+    assert.equal(initialHubResolution({ devicePixelRatio: 2, displayScale: 1, maxResolution }), maxResolution)
+  }
+  assert.equal(initialHubResolution({ devicePixelRatio: 2, displayScale: 1, maxResolution: 4 }), 2)
+  assert.equal(initialHubResolution({ devicePixelRatio: 2, displayScale: 1, maxResolution: 0.1 }), 0.5)
+  for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
+    assert.equal(initialHubResolution({ devicePixelRatio: invalid, displayScale: 0.8 }), 0.8)
+    assert.equal(initialHubResolution({ devicePixelRatio: 1, displayScale: invalid }), 1)
+  }
 })
 
 test('sprite frame indices wrap in both directions', () => {
