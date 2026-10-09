@@ -10,7 +10,8 @@ permissions:
 jobs:
   website:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Complete mutation runs exceeded the old 60-minute budget; retain the full gate.
+    timeout-minutes: 150
 
     steps:
       - uses: actions/checkout@v6
@@ -31,4 +32,19 @@ jobs:
 
       - run: google-chrome --version
 
-      - run: ./scripts/validate.sh
+      - name: Record validation resources
+        run: |
+          node --input-type=module <<'NODE'
+          import { availableParallelism, cpus, freemem, totalmem } from 'node:os'
+          console.log(JSON.stringify({ measuredAt: new Date().toISOString(), node: process.version,
+            platform: process.platform, arch: process.arch, availableParallelism: availableParallelism(),
+            logicalCpus: cpus().length, totalMemoryBytes: totalmem(), freeMemoryBytes: freemem() }))
+          NODE
+          /usr/bin/time --version
+
+      - name: Run complete Website validation
+        run: /usr/bin/time -v ./scripts/validate.sh
+
+      - name: Record final mutation inventory
+        if: ${{ always() }}
+        run: python3 tools/ci-mutation-diagnostics.py

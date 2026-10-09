@@ -34,7 +34,9 @@ installed stable Chrome channel on Linux and macOS; `SDR_CHROME_PATH` selects
 another executable. The canonical script creates an isolated Python test
 environment from `tests/requirements.txt`, including Pillow for asset tests.
 GitHub Actions provisions Python 3.12 and checks that Chrome is installed.
-The workflow allows 60 minutes for the complete fresh mutation campaign.
+The GitHub-hosted Website job allows 150 minutes for the complete validation
+gate, including the fresh mutation campaign.
+See [the hosted CI budget rationale and diagnostics](HOSTED_CI_BUDGET.md).
 The deployment worker allows 90 minutes for validation, packaging, and cutover.
 
 A failing stage stops the quality command immediately. For example, a browser
