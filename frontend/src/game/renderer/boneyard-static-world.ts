@@ -1,6 +1,6 @@
-import { spriteImage, spriteRefFor } from '../../editor/assets.ts'
+import { spriteRefFor } from '../../editor/assets.ts'
 import { type EditorDoc, NATIVE, type Vec2 } from '../../editor/model.ts'
-import type { MainLayer, ObjectSpriteLayer } from '../../editor/native-render-plan.ts'
+import { buildNativeRenderPlan, type CompactSpriteLayer, type MainLayer, type ObjectSpriteLayer } from '../../editor/native-render-plan.ts'
 import {
   type Camera,
   drawNativeBoneyardMainBand,
@@ -45,6 +45,13 @@ import {
   nativeWallSurfaceVertexWeights,
 } from './boneyard-static-surface-lighting.ts'
 import type { NativeTreeOcclusionInput } from './boneyard-tree-occlusion.ts'
+import {
+  createNativeStaticArtResident,
+  createNativeStaticFenceResident,
+  nativeStaticArtRecord,
+  nativeStaticMainArtEntry,
+  type NativeStaticArtTextures,
+} from './boneyard-native-static-art.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import {
   type NativeBoneyardSurfaceTextures,
@@ -90,7 +97,7 @@ export async function buildStaticWorld(
   scene: LoadedBoneyard['scene'],
   root: Container,
   surfaceTextures: NativeBoneyardSurfaceTextures,
-  brokenGrateTexture: Texture,
+  artTextures: NativeStaticArtTextures,
   cleanupBounds: Readonly<BoneyardBounds> | null,
   enhancedEffects = true,
 ): Promise<StaticWorldBuild> {
@@ -119,10 +126,14 @@ export async function buildStaticWorld(
   let cleanupPlan: ReturnType<typeof boneyardOffCameraCleanupPlan> | null = null
   const mainLayers = nativeBoneyardMainLayers(document)
   const wallLayers = nativeBoneyardPreMainWallLayers(document)
+  const placementPlan = buildNativeRenderPlan(document)
+  const baseArtLayers = [...placementPlan.underlays, ...placementPlan.compact]
   const baseSkippedSourceKeys = new Set([
     ...wallLayers.map((layer) => `fence:${layer.fence.eid}`),
     // Scrub owns both shadow branches at its painter slot, never the editor oval.
     ...document.objects.filter(object => object.typeId === 2062).map(object => `object:${object.eid}`),
+    // Original-record art has a retained base-band owner, never tile pixels.
+    ...baseArtLayers.map(layer => `${layer.kind}:${layer.sel.eid}`),
   ])
   try {
     fullBaseResidents = await buildTiledStaticLayer(
@@ -144,6 +155,29 @@ export async function buildStaticWorld(
     )
     residents.push(...fullBaseResidents)
     activeResidents.push(...fullBaseResidents)
+
+    // Native underlays precede compact decorations, as in the placement plan.
+    // Generated terrain stays in its tiles. A custom/invalid source fallback
+    // retains its original painter at this exact position in the base order.
+    for (const layer of baseArtLayers) {
+      const record = nativeStaticArtRecord(layer.atlasEntry)
+      const compact = layer.kind === 'sprite' ? layer.sprite : null
+      const scale = compact && Number.isFinite(compact.s1) ? Math.max(0, compact.s1) : 1
+      const alpha = compact && Number.isFinite(compact.s2) ? Math.max(0, Math.min(1, compact.s2)) : 1
+      if (scale <= 0 || alpha <= 0) continue
+      const resident = record ? createNativeStaticArtResident(record, artTextures.glyph(record.entry), layer.pos, {
+        cleanupSourceKey: `${layer.kind}:${layer.sel.eid}`,
+        rotationDegrees: compact && Number.isFinite(compact.s0) ? compact.s0 : 0,
+        scaleX: scale * (compact && (compact.flags & 1) !== 0 ? 0.8 : 1),
+        scaleY: scale,
+        alpha,
+      }) : buildFallbackBaseArtResident(document, layer, residentScratch)
+      if (resident === null) continue
+      base.addChild(resident.sprite)
+      residents.push(resident)
+      activeResidents.push(resident)
+      mergeCleanupSourceBounds(visualBoundsBySource, resident)
+    }
 
     for (let layerIndex = 0; layerIndex < wallLayers.length; layerIndex += 1) {
       const layer = wallLayers[layerIndex]!
@@ -182,7 +216,7 @@ export async function buildStaticWorld(
     for (let layerIndex = 0; layerIndex < mainLayers.length; layerIndex += 1) {
       const layer = mainLayers[layerIndex]
       if (isMovingGateBody(layer)) continue
-      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch, enhancedEffects, brokenGrateTexture)
+      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch, enhancedEffects, artTextures)
       staticPaintCount += 1
       if (resident) {
         resident.cleanupSourceKey = layer.kind === 'object'
@@ -237,6 +271,7 @@ export async function buildStaticWorld(
         layerIndex,
         residentScratch,
         enhancedEffects,
+        artTextures,
       )
       staticPaintCount += 1
       if (resident) {
@@ -424,6 +459,39 @@ function mergeCleanupSourceBounds(
   })
 }
 
+function buildFallbackBaseArtResident(
+  document: EditorDoc,
+  layer: ObjectSpriteLayer | CompactSpriteLayer,
+  canvas: HTMLCanvasElement,
+): ResidentTexture | null {
+  const source = layer.kind === 'object' ? layer.object : layer.sprite
+  const ref = spriteRefFor(layer.atlas, layer.atlasEntry) ?? source.sprite
+  if (!ref) return null
+  const compact = layer.kind === 'sprite' ? layer.sprite : null
+  const scale = compact && Number.isFinite(compact.s1) ? Math.max(0, compact.s1) : 1
+  const bounds = boneyardTransformedArtBounds(layer.pos, ref,
+    compact && Number.isFinite(compact.s0) ? compact.s0 : 0,
+    scale * (compact && (compact.flags & 1) !== 0 ? 0.8 : 1), scale)
+  const x = Math.floor(bounds.x) - 1, y = Math.floor(bounds.y) - 1
+  const width = Math.max(1, Math.ceil(bounds.x + bounds.w) + 1 - x)
+  const height = Math.max(1, Math.ceil(bounds.y + bounds.h) + 1 - y)
+  resizeCanvas(canvas, width, height)
+  const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
+  if (!context) throw new Error('Boneyard fallback base art could not acquire Canvas2D.')
+  drawNativeBoneyardPostRoadBase(context, width, height,
+    { x: x + width / 2, y: y + height / 2, zoom: 1 }, {
+      ...document,
+      objects: layer.kind === 'object' ? [layer.object] : [],
+      sprites: layer.kind === 'sprite' ? [layer.sprite] : [],
+      fences: [], roads: [], terrain: [],
+    })
+  const pixels = consumePaintedCanvas(canvas, true)
+  if (!pixels) return null
+  const resident = residentTexture(pixels, x + pixels.x, y + pixels.y)
+  resident.cleanupSourceKey = `${layer.kind}:${layer.sel.eid}`
+  return resident
+}
+
 async function buildTiledStaticLayer(
   document: EditorDoc,
   target: Container,
@@ -466,11 +534,11 @@ function buildMainLayerResident(
   layerIndex: number,
   canvas: HTMLCanvasElement,
   enhancedEffects: boolean,
-  brokenGrateTexture: Texture,
+  artTextures: NativeStaticArtTextures,
 ): ResidentTexture | null {
   if (layer.kind === 'fence' && layer.brokenHalf) {
     // Borrow original pixels, including RGB beneath alpha zero; no Canvas readback.
-    const texture = brokenGrateTexture
+    const texture = artTextures.glyph(3)
     const sprite = createNativeStaticQuad(texture, layer.brokenHalf)
     sprite.label = `native-broken-grate:${layer.fence.eid}:${layer.pieceIndex}`
     const points = [layer.brokenHalf.p0, layer.brokenHalf.p1, layer.brokenHalf.p2, layer.brokenHalf.p3]
@@ -480,17 +548,25 @@ function buildMainLayerResident(
       sprite, surfaceMesh: null, texture, x, y,
       w: Math.max(...points.map(point => point.x)) - x, h: Math.max(...points.map(point => point.y)) - y }
   }
-  // Scrub::Render006200B0 uses the untransformed glyph. Keep its complete
-  // registered rectangle: shadow00620120 samples the original glyph UVs.
-  if (layer.kind === 'object' && layer.object.typeId === 2062) {
-    const ref = spriteRefFor('DeadHawg', 264 + (layer.object.variant ?? 0))
-    if (!ref) throw new Error(`Scrub ${layer.object.eid} has no native glyph.`)
-    resizeCanvas(canvas, ref.w, ref.h)
-    const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
-    if (!context) throw new Error('Scrub glyph could not acquire Canvas2D.')
-    context.drawImage(spriteImage(ref.src), 0, 0)
-    const pixels = consumePaintedCanvas(canvas, false)!
-    return residentTexture(pixels, layer.pos.x - ref.anchorX, layer.pos.y - ref.anchorY, layerIndex)
+  const entry = nativeStaticMainArtEntry(layer)
+  const record = entry === null ? null : nativeStaticArtRecord(entry)
+  if (layer.kind === 'object' && layer.object.typeId === 2062 && record === null) {
+    throw new Error(`Scrub ${layer.object.eid} has no native glyph.`)
+  }
+  // Goodie's compatibility image remains hidden; its live owner is dynamic.
+  if (record && !(layer.kind === 'object' && layer.object.typeId === NATIVE.goodie)) {
+    const resident = createNativeStaticArtResident(record, artTextures.glyph(record.entry), layer.pos, {
+      mainLayerIndex: layerIndex,
+      enhancedEffects: isBuildingLayer(layer) ? enhancedEffects : undefined,
+    })
+    resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(document, layer, layerIndex)
+    return resident
+  }
+  if (layer.kind === 'fence' && layer.part === 'body'
+    && [0, 4].includes(layer.fence.segmentCode ?? layer.fence.style ?? 0)) {
+    const resident = createNativeStaticFenceResident(layer, layerIndex, artTextures)
+    if (resident) resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(document, layer, layerIndex)
+    return resident
   }
   const bounds = mainLayerCaptureBounds(layer)
   resizeCanvas(canvas, bounds.w, bounds.h)
@@ -567,7 +643,14 @@ function buildProxyLayerResident(
   layerIndex: number,
   canvas: HTMLCanvasElement,
   enhancedEffects: boolean,
+  artTextures: NativeStaticArtTextures,
 ): ResidentTexture | null {
+  const record = nativeStaticArtRecord(layer.atlasEntry)
+  if (record) {
+    return createNativeStaticArtResident(record, artTextures.glyph(record.entry), layer.pos, {
+      enhancedEffects: layer.object.typeId === NATIVE.building ? enhancedEffects : undefined,
+    })
+  }
   const bounds = objectLayerCaptureBounds(layer)
   resizeCanvas(canvas, bounds.w, bounds.h)
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })

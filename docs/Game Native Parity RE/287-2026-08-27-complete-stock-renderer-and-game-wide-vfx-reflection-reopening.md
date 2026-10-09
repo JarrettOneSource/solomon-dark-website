@@ -2395,3 +2395,161 @@ remain. No new mutation exemption, threshold change or visual tolerance was adde
 The exact source was restored after every negative control. The complete
 unchanged gate must still pass on this final candidate; its result and publication
 identity are recorded in the release receipt named above.
+
+
+## 2026-10-09 — Boneyard static-art source-sampling reopening
+
+### Evidence, boundary, and source identity (before implementation)
+
+The earlier registered-record sampling closure did not cover the runtime
+static-resident Canvas2D intermediate. Its original source pixels can be exact
+while a fractional world-to-cache placement is filtered before the final camera
+sampling. This reopens that shared representation, not global sampling,
+lighting, camera placement, or the native destination raster-center question.
+
+The isolated source is `codex/visual-crispness-sh9aksle` at
+`f63342732f3c299e6810a521c491b9b4dd0164f6`; its preexisting qualified
+`game-host.test.ts` lifecycle assertion remains independent and preserved.
+The frozen earlier tune-up has the same base; the published comparison source
+is `d00d59b9a45468d1da3d6abfad32a55fbef493ea`. The protected primary is untouched.
+The coordinator owns the final combined Mac gate; no publication is authorized.
+
+- Native evidence remains retail 0.72.5, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+  The record constructor at `0x00413DE0`, endpoints +0.5/+0.25, linear/NPM/wrap
+  source policy and unchanged float destination submission are recorded above.
+- Retained read-only audit and experiments:
+  `20261009-sh9aksle-visual-tuneup/crispness/source-sampling-audit.md`,
+  `compare-pier-settled.mjs`, `settled-pier-pixel-metrics.json`, and
+  `settled-native-current-direct-pier-4x.png` in the report archive.
+- The live Tutorial DeadHawg36 pier at `(933.454345703125,1616)` is 38x82 with
+  anchor `(19,65)`. The old cache is 40x84, with first-copy local origin
+  `(1.454345703125,1)`, then camera scale 1.35. Controlled browser edge width
+  was approximately 2.35 pixels cached versus 1.64 direct. Native interior
+  correlation improved from about .929 to .997 with direct native UVs plus
+  the *diagnostic* +0.5 Y phase. Native exact edge width is not a valid metric
+  against its different background; a rain-contaminated secondary sample is
+  excluded. There is one live pier, not the destroyed loading-stage duplicate.
+- This confirms an avoidable extra art resample. It does not establish a global
+  half-pixel correction. No diagnostic phase offset is adopted.
+
+### Complete source membership and pre-implementation dispositions
+
+All 348 DeadHawg records (0..347), not just palette choices, remain admitted by
+the existing native plan. Explicit `atlasEntry`, `atlasEntries[0]`, family
+selector and `object.sprite` precedence is unchanged. Empty/missing/custom
+fallback paint retains existing semantics, with no invented native claim.
+
+| Member | Sampling disposition | Preserved contract / open boundary |
+| --- | --- | --- |
+| Stone posts 36..42; wood posts 320..347 | direct-migrate, recovered-pending-port | Exact root/anchor, shared endpoint styles, one main owner, tint, hit redraw and shadows |
+| Monument 156..176 and explicit selectors | direct-migrate, recovered-pending-port | Same main slot, Region scalar, registered geometry and shadow companion |
+| Gravestone main 97..113 | direct-migrate, recovered-pending-port | Main owner separate from the underlay |
+| Gravestone underlay 88..96 and explicit overlay | direct-migrate, recovered-pending-port | Base band before compact art; owner-source cleanup, no main tint |
+| Tree main 264..282 | direct-migrate, recovered-pending-port | Fade, root rotation and companion shadow records remain separate |
+| Tree upper proxy 243..263 | direct-migrate, recovered-pending-port | Existing variant<6/visibility/nonempty predicate and independent painter insertion |
+| Building base 148..151 and roof 152..155, explicit selectors | mesh-migrate, recovered-pending-port | Registered visible rectangle, 2x2/3x3 grids, native sample positions, base/roof scalar sharing and diffuse redraw |
+| Scrub 264+variant | mesh-consumer-migrate, recovered-pending-port | Original full glyph geometry, shadow state, per-vertex alpha, reflection and immediate-before-owner order |
+| Every other admitted explicit DeadHawg record | direct-migrate, recovered-pending-port | Same shared record factory, no named-family-only exceptions |
+| Compact/ground art: deadHawgEntry or 114+atlasEntry | direct-migrate, recovered-pending-port | Source order, rotation s0, scale s1, flags&1 squash, normalized s2, transformed bounds and per-source retirement |
+| Intact grate, segment0 | mesh-migrate, recovered-pending-port | Original loose repeat sampler, retained quad/partial U span and both black rules; one owner and unchanged shadow program |
+| Rails, segment4, DeadHawg23 repeats | direct-migrate, recovered-pending-port | Existing complete count/placement and shared wooden posts; one owner; no new native geometry claim beyond source resampling |
+| Wall, segment3 | generated-retain | Existing three-stroke generated surface and endpoint lighting; exact native generated diffuse geometry remains an explicit preexisting gap, unrelated to original-record resampling |
+| Broken grate segment1 | direct-existing | Borrowed native record/quad and original triangle topology unchanged |
+| Moving gate segment2 | direct-existing | Live separate leaf/hinge/rule owner, movement and retirement unchanged |
+| Goodie2061 static compatibility resident | out-of-scope | Remains hidden; live dynamic Goodie owns closed/open/removed states, indicators and shadows |
+| Ground and roads | direct-existing | Native generated surface owners remain unchanged |
+| Terrain/base generated residuals and invalid/custom fallback art | generated-retain | Existing base tiles and source-aware repaint remain only for unmigrated generated/fallback pixels |
+| Root masks, directional shadows, Region fields and render targets | out-of-scope | Original dedicated generated-source policies; no global PMA, nearest or sharpening change |
+
+### Mesh UV and ownership audit refinement
+
+Pixi 8.19.0 `TextureMatrix.update` constructs `mapCoord` directly from the four
+`texture.uvs`, then applies `orig/trim`; construction immediately updates it and
+subscribes after the native record UV replay listener. `BatchableMesh.uvs`
+multiplies normalized mesh UVs by that matrix. The Building standalone shader
+already binds the same matrix. Therefore normalized Building and Scrub geometry
+must remain normalized, with native record textures bound, rather than being
+manually mapped a second time. Full-table frame/orig/trim equivalence and both
+transport paths require independent tests before acceptance.
+
+Atlas frame textures and their original ImageSources stay owned by the combat
+atlas. Static residents borrow them (`ownsTexture:false`) and carry no derived
+RGBA array. Underlay/compact sources are excluded from tile painting/repainting;
+retirement hides their own retained residents atomically using the same source
+keys. Generated residual tiles alone may mutate their private pixel buffers.
+Composite fence owners retain one depth identity and explicitly own only their
+mesh geometry. Failed construction and final teardown must release geometry
+without destroying any shared atlas source.
+
+### Acceptance still required
+
+Independent full-selector, geometry/UV/lifetime and repaint/retirement tests;
+matched/scaled multi-family edge captures; fractional camera, DPR1/1.25/2,
+same-size DPR change, context recovery and repeated scene entry/exit; Tree
+fade/wobble/proxy ordering, both Building grids, Scrub shadows/reflection, all
+fence codes, Goodie negative control; actual browser frame cost and exact final
+Mac canonical gate. Source and pre-implementation dispositions above are not a
+parity or completion claim.
+
+
+### Source implementation checkpoint, 18:24 UTC
+
+`boneyard-native-static-art.ts` now owns the complete record selection and
+registration path and the retained multi-primitive fence owners. All nonempty
+DeadHawg records use shared native atlas views; static main, proxy, underlay and
+compact placement retains full registered glyph rectangles at exact fractional
+roots. Building keeps the existing vertex-lit surface grid. Scrub keeps its
+existing normalized shadow UVs, which the native-record TextureMatrix maps once.
+No half-pixel shift, nearest filtering, source-art rewrite or lighting change is
+introduced. The static Goodie branch remains alpha zero and dynamic.
+
+Intact grate now draws one original loose-texture quad with the complete native
+repeat U span (including its partial final repeat), followed by the same two
+black rules. Rails draws the same count of original record23 instances at the
+same interpolation points, with a single composite owner. Their static Canvas
+resampling stage is removed. Borrowed frame/source ownership is retained;
+composite mesh geometry has a separate geometry-only teardown list.
+
+Every base underlay/compact source is excluded from tile painting and cleanup
+repainting. Valid native records are direct residents; a missing/empty selector
+with an existing custom SpriteRef fallback retains a per-source Canvas resident
+at its original position in the underlay/compact order. A source with no fallback
+keeps the old no-art behavior. Zero-scale/zero-alpha compact art remains absent.
+Generated terrain alone stays in the original tile path. Both direct and
+fallback residents retire through the same owner-source key; retirement never
+writes shared native page pixels.
+
+The bounded residual is explicit: Wall still uses its preexisting approximate
+browser-generated three-stroke raster, and authored polyline terrain still uses
+its existing generated/patterned Canvas tile path. Their generated edges can
+still receive final-scale filtering. Neither is an original DeadHawg record
+replacement, and the native Wall diffuse geometry gap is not closed by this
+repair. Unsupported/missing custom art uses its existing fallback raster and
+is not claimed to match stock. This checkpoint does not call the complete static
+world native-exact.
+
+M2 narrow validation: production `tsc --noEmit -p tsconfig.app.json` passed;
+targeted oxlint passed with zero warnings/errors; 57 existing native-record,
+Scrub presentation, scenery-shadow and lighting tests passed. Patch whitespace
+was clean. The later two small source refinements preserve rail interpolation
+operator ordering and zero-alpha/zero-scale compact admission. Independent new
+full-bank tests, matched/scaled browser evidence and the final combined Mac gate
+remain the acceptance authority, not this source checkpoint.
+
+
+### Final narrow-source receipt, 18:30:56 UTC
+
+The final production files pass `tsc --noEmit -p tsconfig.app.json`; the new
+independent fixtures and existing tests pass `tsc --noEmit -p tsconfig.test.json`.
+Targeted oxlint across all five production files and both new test files reports
+zero warnings/errors. All 70 focused tests pass (57 existing plus 13 independent),
+including the complete 348-row selector/geometry/UV bank, all Building base/roof
+grids, repeated quality regrids, Tree fade/wobble and proxy order, Scrub shadow
+and reflection texture pooling, native diffuse redraw, all fence families,
+source-aware cleanup and borrowed page/geometry retirement. The independent
+actual-module build/cleanup regression fails on the original f633 static-world
+implementation and passes on this candidate. The source window is closed;
+matched browser pixels, frame cost and the coordinator's exact combined Mac
+gate remain pending. These checks do not close the generated Wall/terrain gaps
+or establish a global native destination raster phase.

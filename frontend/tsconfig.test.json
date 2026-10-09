@@ -176,7 +176,8 @@
     "src/game/native-boss-hud.test.ts",
     "src/game/save/discorporeal-save.test.ts",
     "src/game/renderer/native-death-effect-allocation.test.ts",
-    "src/game/mod-ui/mod-skill-quickbar-keyboard.test.ts"
+    "src/game/mod-ui/mod-skill-quickbar-keyboard.test.ts",
+    "src/game/renderer/static-native-art-invariants.test.ts"
   ],
   "exclude": []
 }

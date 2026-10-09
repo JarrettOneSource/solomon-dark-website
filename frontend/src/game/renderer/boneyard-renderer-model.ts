@@ -17,7 +17,7 @@ import type {
 import type { NativeTreeOcclusionInput } from './boneyard-tree-occlusion.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { NativeBoneyardSurfaceView } from './native-boneyard-surface-view.ts'
-import { Container, Texture } from 'pixi.js'
+import { Container, type Geometry, Texture } from 'pixi.js'
 
 export interface BoneyardWorldRenderer {
   readonly canvas: HTMLCanvasElement
@@ -66,6 +66,7 @@ export interface ResidentTexture extends BoneyardBounds {
   surfaceMesh: NativeStaticSurfaceMesh | null
   texture: Texture
   ownsTexture?: boolean
+  ownedGeometries?: readonly Geometry[]
 }
 
 export interface BuildingResidents {

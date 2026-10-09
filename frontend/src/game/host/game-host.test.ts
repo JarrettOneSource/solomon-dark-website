@@ -4472,8 +4472,10 @@ for (const sharedHub of [false, true]) test(`solo ${sharedHub ? 'shared-host' : 
     sequence: welcome.gameplayResumeGrace!.sequence,
   }))
   await completed
-  await waitFor(() => host.playerState(welcome.playerId)!.tick > heldTick)
+  // Measure readiness at its response; a restored world's cold first tick is
+  // separate simulation work and must still advance without replaying held time.
   assert.ok(performance.now() - resumedAt < 1_000, 'solo restart must resume directly')
+  await waitFor(() => host.playerState(welcome.playerId)!.tick > heldTick)
   assert.ok(host.playerState(welcome.playerId)!.tick - heldTick <= 10, 'solo restart must not replay held time')
   assert.equal(graces.messages.some(message => message.grace?.remainingMs != null), false)
 })

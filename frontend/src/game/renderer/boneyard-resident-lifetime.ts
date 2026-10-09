@@ -6,6 +6,7 @@ import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 export function destroyResidentTexture(resident: ResidentTexture): void {
   resident.surfaceMesh?.destroy()
   if (!resident.surfaceMesh && resident.sprite instanceof MeshSimple) destroyOwnedMeshGeometry(resident.sprite)
+  for (const geometry of resident.ownedGeometries ?? []) destroyOwnedMeshGeometry({ geometry })
   if (resident.ownsTexture !== false) resident.texture.destroy(true)
   resident.pixels = EMPTY_RESIDENT_PIXELS
 }

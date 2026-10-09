@@ -163,7 +163,10 @@ export async function createBoneyardWorldRenderer(
         ground: textures.ground,
         roads: textures.roads,
       },
-      nativeSceneryGlyphTexture(textures.combatAtlas, 3),
+      {
+        fenceGrate: textures.fenceGrate,
+        glyph: entry => nativeSceneryGlyphTexture(textures.combatAtlas, entry),
+      },
       options.initialSnapshot.world.kind === 'boneyard'
         ? options.initialSnapshot.world.arenaTransition?.combatBounds
           ?? (options.initialSnapshot.world.tutorial === null
