@@ -446,3 +446,124 @@ Later acceptance/investigation edits are documentation only. Normal publication,
 managed deployment and scoped live checks remain separate pending steps.
 
 Scope: Report 57 prediction only; the stock-compatible bench-pocket behavior remains a separate pending product decision.
+
+## October 9, 2026: physical recipient eligibility (Report 105)
+
+### Reopened cause and evidence
+
+The new Ghost/player collision report reopens the receiving side of native
+actor collision. The earlier Wraith flight receipts proved that Wraith-owned
+movement disables the controller gates; they did not prove that a player or
+another actor moving into a Wraith skips it. The Website body builder conflates
+hostile query flags (`Actor+0x14`, bit 2) with the independent physical-recipient
+byte (`Actor+0x36`). Its world regression even expects physical Wraith contact.
+That expectation is not native evidence and must be replaced.
+
+The October 9 focused original/nearby read confirmed the unchanged report and
+its Cold Aura hypothesis. Full decoding of the eight-second original clip
+succeeded; sixteen sampled frames and a full-size three-second frame show
+Boneyard combat, pale Wraith/player overlap and active cyan/snow presentation.
+Neither the exact input/build nor Cold Aura causality is established by those
+pixels. The original media remains in the private report archive.
+
+Fresh, read-only LLVM instruction recovery ran on the M5 from retail 0.72.5,
+4,723,200 bytes, preferred base `0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The existing LLVM executable hashes to
+`83b32f39e5475ee168927eb1509c82978e08e0100ec8c6fafeca588d9960773c`.
+No fresh native runtime or Ghidra extraction is claimed.
+
+| Instruction evidence | Recovered rule | Confidence |
+| --- | --- | --- |
+| `0x005265F9..0x00526603` | Dynamic collision skips a candidate whose byte `+0x36` is zero, before radius/separation/contact processing. This is a recipient test, not a condition on the moving root. | high |
+| Wraith `0x00486C30`, common movement interval `0x00486E08..0x00486E34`, epilogue `0x00487177..0x00487182` | The Wraith disables controller static/dynamic movement gates during its own motion and unconditionally clears its recipient byte at `0x0048717E`. Visible/nonadmitted, contact/cooldown, and wisp/no-wisp branches all converge before that write. | high |
+| Actor `0x006287D0`; Badguy `0x00473390`; Wraith `0x00474470` | Base construction sets recipient true; Badguy keeps it and query flags 2. Wraith's first completed tick clears only physical receipt; radius 15 and hostile query membership remain. Website spawns complete the enemy tick before the next player-root movement. | high |
+| Maggot `0x0047E0F0`, `0x0047E2BF`, `0x0048B2BA`; admission `0x00487FD0` | Maggot construction clears the same recipient byte; airborne movement repeats the clear. Grounded combat admission changes `+0x244` and owner accounting, not recipient eligibility. This sibling must not retain the refuted all-living-enemies-are-solid rule. | high; constructor, initializer, admission, airborne and active movement lifecycle inspected |
+| Generic Force `0x00623C60..0x00623CBF`, call `0x00623C98 -> 0x00525800` | A nonreceiving actor can still be a driven root for an external force. Removing it from all body lists would incorrectly suppress force/knockback/Ether Drain. | high |
+| Shared modifier reset `0x00625680` | Resets speed/status state and the separate `+0xD6` flag from `+0xD7`; it does not enable the physical-recipient byte. Cold Aura's hostile query and movement modifier are distinct consumers. | high |
+
+### Boundary, complete membership, and implementation contract
+
+Native system: physical-recipient eligibility in the existing actor solver and
+Boneyard body adapter. Preserve all root motion, force, hostile query, contact
+damage, radius, Staff polygon, render, save and replication owners. The change
+must reach both general pushing/recursive collision and the indexed nonpushing
+fast path; neither may reinterpret a nonrecipient as a missing actor.
+
+| Member | Native owner/evidence | Current disposition and proof needed |
+| --- | --- | --- |
+| Wraith, five retail schedule rows; normal/Fast/Slow/Burning/scaled recipes | Type 1007, unconditional tick epilogue | recovered-pending-port; normal, Cold Slow and Frozen must remain nonrecipients; own strict 40-unit damage/Dazzle and flight remain |
+| Maggot, edge/lid airborne, inactive crawl, active crawl, parent-loss/death | Type 2045, constructor/tick/admission | recovered-pending-port; complete lifecycle audit and per-state tests |
+| Skeleton | Type 1001, inherited true recipient | verified-already-at-parity; preserve ordinary-body control |
+| SkeletonArcher | Type 1002, inherited true recipient | verified-already-at-parity; preserve ordinary-body control |
+| SkeletonMage | Type 1003, inherited true recipient | verified-already-at-parity; preserve ordinary-body control |
+| Imp and GreenImp | Types 1004/2044, inherited true recipient | verified-already-at-parity; preserve ordinary-body controls |
+| Zombie | Type 1006, inherited true recipient | verified-already-at-parity; preserve ordinary-body control |
+| DemonSkull | Type 1008, inherited true recipient | verified-already-at-parity; preserve boss-body control |
+| Demon | Type 1009, inherited true recipient | verified-already-at-parity; preserve articulation/force owner |
+| DireFaculty | Type 1010, inherited true recipient | verified-already-at-parity; preserve body/force owner |
+| Heartmonger | Type 1011, inherited true recipient | verified-already-at-parity; preserve body/force owner |
+| Spider | Type 2057, explicit true at `0x004759FB` | verified-already-at-parity; preserve body control |
+| Coffin hidden/rising/opening/open/death | Type 1013, clear `0x00479ABD`, enable `0x0049A807` | verified-already-at-parity; preserve hidden/dead exclusion and all active phases |
+| Cocoon | Type 2058, clear `0x0047BB2E` | verified-already-at-parity for recipient exclusion; target-owned restraint is separate |
+| Portal | Type 5021, explicit true `0x0047BDBC` | verified-already-at-parity; preserve radius/resistance |
+| GoodImp, Crow, Solomon_Riff | Separate ally/helper/NPC owners; Riff clears at `0x004756CA` | out-of-system; not emitted by the hostile body adapter |
+| Player and Lantern | Existing explicit body owners, ledgers 070/300 | verified-already-at-parity; preserve player lifecycle gates and Lantern pushes |
+| Dying/retired hostile rows | Existing lifetime admission | verified-already-at-parity; absent from physical recipient lists |
+| Primary/secondary spell targeting, cold status, Staff polygons | Query flag 2 and radius owner | out-of-system for eligibility; regressions must show targets remain addressable |
+| Player movement/knockback, ordinary enemy movement | `boneyard-world.ts`, `applyBoneyardPlayerKnockbacks` | recovered-pending-port; no contact or displacement through nonrecipients |
+| Secondary knockback, KnockbackArea, Ether Drain | `applyBoneyardSecondaryEnemyKnockbacks`, `moveBoneyardKnockbackAreaTarget`, `applyBoneyardEtherDrainForces` | recovered-pending-port; retain nonrecipient driven roots while skipping them as other bodies |
+| Host projection, save/restore, render | Existing positions and family/lifetime data | recovered-pending-port verification; no protocol or save-shape change is needed |
+
+The implementation will add the native recipient bit to the shared physics
+body contract, preserve it through the closed-record clone, reject false
+recipients in both solver paths, and derive the bit in the canonical Boneyard
+adapter. Do not replace hostile query flags, shrink the radius, exclude a
+cold status from its legitimate targets, or remove force roots. No authored
+numeric table changes and no browser approximation are needed.
+
+### Validation contract
+
+First record failing public world regressions for Wraith player crossing and
+Maggot sibling eligibility on unchanged runtime, plus shared solver direction,
+recursion and indexed/reference equivalence. Then implement, rerun those
+checks with family/lifecycle/force/target controls, and inspect the exact built
+Mac browser with ordinary directional input through the Wraith overlap both
+without and with actual Cold Aura status. Capture authoritative and rendered
+positions and page/console/response/wire/host errors. Run the unchanged complete
+Mac gate on the final candidate. Final member dispositions, receipts and
+publication remain pending; this entry is not acceptance.
+
+
+### Focused implementation receipt before combined acceptance
+
+The general solver and indexed nonpushing path now carry a separate optional
+`collisionRecipient` flag, defaulting to native ordinary receipt. The closed
+body clone preserves it. Wraith and all living Maggot body rows set it false;
+rows remain addressable as force roots. No status-lifetime module, radius,
+query flag, save shape or wire shape changed. Cocoon/hidden Coffin/dead-row
+exclusions and normal recipients remain under their prior owners.
+
+On M5, the six first regressions failed on unchanged runtime for the intended
+physical-contact/position assertions. The implementation then passed all 60
+actor-physics and Boneyard-world tests. The expanded membership/force/kernel
+slice passed 51 tests, with zero failures/skips/cancellations, and the full
+`tsconfig.test.json --noEmit` check passed. The only intermediate member-suite
+failure was an invalid Portal fixture missing its required authored recipe;
+it was corrected to use the stock Portal catalog. An attempted ad-hoc ESLint
+command was unsupported because the project uses oxlint; it is not a source
+failure or a completed supported lint gate.
+
+The 14-token census now has individual assertions; ordinary/Fast/Slow/Burning
+Wraiths each cover normal/Cold Slow/Frozen status. Scaled Wraith radius and
+query flags remain; all four Maggot movement/combat combinations and dying
+removal are covered. Player knockback, secondary knockback, KnockbackArea,
+Ether Drain, forced-root scenery collision, recursive pushing and both
+indexed/unindexed solver entries have focused checks. The new membership
+file is included in the existing canonical `test:boneyard` command.
+
+The parent coordinates one combined exact-tree canonical gate, built browser,
+publication and live acceptance with the separate stale-status-lifetime fix.
+Those outcomes remain pending. The original Cold Aura causal hypothesis and
+exact historical input/build remain unproved; the recipient omission itself
+is directly instruction-derived and reproduced through the public world API.

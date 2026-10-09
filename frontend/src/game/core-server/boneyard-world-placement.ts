@@ -506,6 +506,8 @@ export function boneyardEnemyBodies(
         const id = `enemy-${actor.id}`
         return {
           ...enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor)),
+          // Wraith tick 0x0048717E clears Actor +0x36, independently of query flags.
+          collisionRecipient: actor.brain.family !== 'wraith',
           // Constructor-owned resistance: Portal +0x28 = 150, Coffin = 1.
           pushResistance: actor.brain.family === 'portal' ? 150 : actor.brain.family === 'coffin' ? 1 : 0,
         }
@@ -514,7 +516,11 @@ export function boneyardEnemyBodies(
       .filter((maggot) => maggot.lifeState === 'alive')
       .map((maggot) => {
         const id = `enemy-${maggot.id}`
-        return enemyCollisionBody(id, maggot.position, maggot.collisionRadius)
+        return {
+          ...enemyCollisionBody(id, maggot.position, maggot.collisionRadius),
+          // Maggot ctor 0x0047E2BF: airborne and grounded children are not recipients.
+          collisionRecipient: false,
+        }
       }),
   ]
 }

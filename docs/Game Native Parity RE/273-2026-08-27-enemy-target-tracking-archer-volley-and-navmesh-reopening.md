@@ -2072,3 +2072,16 @@ Exact runtime/test candidate `6ecd9247` passed the unchanged M5 all-mode `script
 | Latched Pike movement and nonadmitted families | out-of-system | attachment movement stays separate; its flee restraint regression passes |
 
 Normal keyboard Solomon entry followed by an ordinary Turn Undead belt cast admitted all four families. Over the observation their outward distance increased by 65.94, 49.91, 32.73 and 21.24 respectively, with zero reversals. All four timers expired and snapshots continued to tick 7330. The collision-clear fixture selects body-safe lanes; it does not bypass collision or force enemy positions after spawn. The built production-client/authoritative-host journey passed at 2026-10-07T00:29:02Z with all captured client, host, transport and wire error arrays empty. Five representative screenshots were inspected. Developer setup grants, native-family spawns and ordinary browser input qualify this private fixture; the original save and historical exact trajectory remain unavailable. Publication and live outcomes are recorded separately in the report archive. This acceptance addition changes documentation only.
+
+## October 9, 2026: Report 105 reverse body-collision reopening
+
+The prior flight-bypass and Report 40 motion acceptance did not cover Wraiths
+as recipients of player or other actor movement. Fresh retail instructions at
+`0x0048717E` unconditionally clear `Actor+0x36`; the dynamic solver rejects that
+recipient at `0x005265F9`. The Website incorrectly includes every alive hostile
+as a solid recipient. This is separate from the exact flight/contact program
+and from the reporter's unproved Cold Aura hypothesis. The complete shared
+recipient membership, sibling sweep, force-root distinction and acceptance
+contract are recorded in [entry 013](013-shared-actor-collision-and-pushing.md#october-9-2026-physical-recipient-eligibility-report-105).
+The previous broad collision-closure claim is superseded only for this missing
+receiving-side behavior; earlier validated flight, Dazzle and rendering remain.

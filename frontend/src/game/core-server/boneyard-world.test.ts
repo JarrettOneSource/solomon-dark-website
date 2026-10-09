@@ -742,7 +742,7 @@ test('movement contact follows the Coffin hidden-to-rising hostile edge', () => 
     ['SKELETONMAGE', null, true],
     ['IMP', null, true],
     ['ZOMBIE', null, true],
-    ['WRAITH', null, true],
+    ['WRAITH', null, null],
     ['DEMON', null, true],
     ['COFFIN', 'hidden', null],
     ['COFFIN', 'rising', true],
@@ -847,7 +847,7 @@ test('movement contact follows the Coffin hidden-to-rising hostile edge', () => 
   }
 })
 
-test('player movement separates from a live owned Maggot and commits the displaced child', () => {
+test('player movement passes through a live owned Maggot without body contact or displacement', () => {
   const loaded = gatedBoneyard()
   loaded.scene.fences = []
   let world = createBoneyardWorld(loaded)
@@ -938,15 +938,9 @@ test('player movement separates from a live owned Maggot and commits the displac
   }
 
   const retained = world.enemies.maggots[0]!
-  assert.equal(observedContact, true)
-  assert.ok(retained.position.x > initialMaggotX, 'the authoritative Maggot position must retain player push')
-  assert.ok(
-    Math.hypot(
-      retained.position.x - player.position.x,
-      retained.position.y - player.position.y,
-    ) >= retained.collisionRadius + PLAYER_CHARACTER_RADIUS,
-  )
-  assert.ok(player.position.x < retained.position.x, 'the player must not pass through the Maggot')
+  assert.equal(observedContact, false)
+  assert.equal(retained.position.x, initialMaggotX, 'a nonrecipient must not be pushed by the player')
+  assert.ok(player.position.x > retained.position.x, 'the player crosses the Maggot center')
 })
 
 test('default Boneyard walks through Solomon dialogue, retreat, then authoritative spawns', () => {

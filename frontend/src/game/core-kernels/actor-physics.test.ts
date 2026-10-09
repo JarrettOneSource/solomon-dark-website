@@ -428,3 +428,60 @@ test('unpushed mover fast path preserves blocked and strict response edges', () 
     { x: 0, y: 0 },
   )
 })
+
+
+for (const indexed of [false, true]) {
+  test(`native recipient flag excludes passive contact and preserves driven roots (indexed=${indexed})`, () => {
+    const ghost = { id: 'ghost', position: { x: 30, y: 0 }, delta: { x: 0, y: 0 },
+      radius: 15, pushStrength: 0, pushResistance: 0, pushEnabled: false,
+      driven: false, collisionRecipient: false }
+    const source: ActorPhysicsBody[] = [
+      { id: 'player', position: { x: 0, y: 0 }, delta: { x: 20, y: 0 },
+        radius: 25, pushStrength: 12, pushResistance: 10 }, ghost,
+    ]
+    const contacts: string[] = []
+    const result = resolveActorMotion(source, freePhysicsWorld, allBodiesCollide,
+      indexed ? new DynamicActorGrid(8) : undefined,
+      (mover, other) => contacts.push(`${mover}:${other}`))
+    assert.deepEqual(result[0]!.position, { x: 20, y: 0 })
+    assert.deepEqual(result[1]!.position, ghost.position)
+    assert.deepEqual(contacts, [])
+    const forced = resolveActorMotion([
+      { ...source[0]!, delta: { x: 0, y: 0 }, driven: false },
+      { ...ghost, delta: { x: -10, y: 0 }, driven: true },
+    ], freePhysicsWorld, allBodiesCollide, indexed ? new DynamicActorGrid(8) : undefined)
+    assert.ok(forced[1]!.position.x >= 40, 'nonrecipient remains a forced root against the solid player')
+    assert.deepEqual(forced[0]!.position, source[0]!.position)
+  })
+
+  test(`nonpushing fast path skips native nonrecipients (indexed=${indexed})`, () => {
+    const ghost = { id: 'ghost', position: { x: 30, y: 0 }, delta: { x: 0, y: 0 },
+      radius: 15, pushStrength: 0, pushResistance: 0, pushEnabled: false,
+      driven: false, collisionRecipient: false }
+    const source: ActorPhysicsBody[] = [
+      { id: 'enemy', position: { x: 0, y: 0 }, delta: { x: 0, y: 0 },
+        radius: 15, pushStrength: 0, pushResistance: 0, pushEnabled: false }, ghost,
+    ]
+    const grid = new DynamicActorGrid(8)
+    grid.rebuild(source)
+    const position = resolveUnpushedMoverMotion(source, 0, { x: 20, y: 0 }, freePhysicsWorld,
+      indexed ? (point, radius) => grid.candidateIndicesAt(point, radius) : undefined)
+    assert.deepEqual(position, { x: 20, y: 0 })
+    assert.deepEqual(source[1]!.position, ghost.position)
+  })
+}
+
+
+test('recursive pushing skips nonrecipients without removing their root identity', () => {
+  const ghost = { id: 'ghost', position: { x: 43, y: 0 }, delta: { x: 0, y: 0 },
+    driven: false, radius: 10, pushStrength: 0, pushResistance: 0, collisionRecipient: false }
+  const bodies: ActorPhysicsBody[] = [
+    { id: 'player', position: { x: 0, y: 0 }, delta: { x: 15, y: 0 },
+      radius: 10, pushStrength: 20, pushResistance: 5 },
+    { id: 'solid', position: { x: 25, y: 0 }, delta: { x: 0, y: 0 }, driven: false,
+      radius: 10, pushStrength: 10, pushResistance: 5 }, ghost,
+  ]
+  const result = resolveActorMotion(bodies, freePhysicsWorld, allBodiesCollide, new DynamicActorGrid(8))
+  assert.ok(result[1]!.position.x > 25)
+  assert.deepEqual(result[2], ghost)
+})
