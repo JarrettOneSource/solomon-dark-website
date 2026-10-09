@@ -940,3 +940,328 @@ this lifecycle correction.
 Implementation and validation receipts are intentionally pending while this
 pre-code boundary declaration is recorded. They must be replaced with the exact
 changed-file inventory and parent-run Mac results before publication.
+
+
+## 2026-10-09 — Player aperture and compact-ground-mask RGB reopening
+
+### Symptom, scope, and pre-code evidence
+
+The residual-softness report includes pale gray/white irregular Tutorial
+puddles where retained stock pixels are dark. These are compact authored
+records, not rain splash `DeadHawg.24`: Tutorial `sprite-73` is `DeadHawg.141`
+at `(942.6280517578125, 1744.4481201171875)` and `sprite-74` is
+`DeadHawg.142` at `(996.6280517578125, 1693.4481201171875)`. Both source
+rows have scale/alpha one; native startup normalizes selectors 25..28 to
+alpha `.75`, already represented by both current base and mask consumers.
+All five decoded compact crops `DeadHawg.139..143` have black RGB at every
+nontransparent texel. Their alpha contours supply the shape. Thus the bright
+patch cannot be attributed to pale RGB baked into those source crops.
+
+The owning RGB callsite was omitted from the previous aperture/mask closure.
+This reopening supersedes the claim above that no further in-system lighting
+discrepancy remained, and qualifies entry 297's September 20 ordering closure:
+pre-world order and mask membership were covered, final composite RGB was not.
+It does not reopen unrelated tree/grave UV paths or authorize a global filter,
+pixel snap, sharpening, mask deletion, or artistic brightness replacement.
+
+Sealed authority: `SolomonDark.exe`, 4,723,200 bytes, preferred base
+`0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+This pass uses read-only raw PE constants plus LLVM instruction disassembly.
+Retained source excerpts and numeric receipts are in
+`/Users/jarrett/solomon-darker-bug-reports/20261009-sh9aksle-visual-tuneup/remaining-softness/native-source-audit/`.
+The relevant files are `arena-surface-pass.asm`,
+`primary-color-provider.asm`, `primary-palette-initializer.asm`,
+`color-transforms.asm`, `color-setter.asm`,
+`channel-integer-conversion.asm`, and `color-formula-receipt.json`.
+The receipt is an independent formula calculation from sealed constants,
+not a live native framebuffer measurement. `native-weld-constant-receipt.json`
+also decodes every one of the 15 native branch argument tuples and asserts
+that all match the formula receipt, independently of current Website tables.
+
+| Evidence | Exact owner/callsite | Observed contract |
+| --- | --- | --- |
+| Direct player aperture | Arena `+0x110`, `0x0047126E..0x0047143E` | Mode 1/2 only; additive blender 1; resolve primary descriptor color, desaturate `.2`, darken `.25`, then draw record 18 |
+| Compact target composite | Same Arena callback, `0x004726AC..0x0047282F` | Same RGB provider/transforms; additive blender 1; independently sampled alpha; draw bounded target at `0x00472817` |
+| Descriptor provider | Skills_Wizard vtable `0x007A0CD4`, slot `+0x88 -> 0x00660760` | Ordinary root palette is already 85%-desaturated; valid Weld 1000..1014 use the same 85% transform of their own base tuples |
+| Ordinary palette construction | `0x00782940..0x00782B38`, destination `0x0081CD38` | Eight root tuples transformed by `0x0040FC60` with float `.8500000238418579`; ninth sentinel is initialized separately |
+| Final color stores | `0x004713A4` / `0x004727BE -> 0x0041FE50` | Computed RGB and separate flicker alpha reach renderer state; RGB is not overwritten with white before either draw |
+| Packing | `0x0041FE50 -> 0x00747360` | Multiply RGB by current renderer modulation, multiply by double 255, truncate toward zero, pack channels; fast path is `CVTTSD2SI`, not round-to-nearest |
+
+### Exact color formula and variants
+
+Let `f` mean an IEEE float32 store. Base tuple components are stored as
+float32. `S(c,a)` is the native `0x0040FC60` transform:
+
+- `L = f(c.r * 0.3086000084877014 + c.g * 0.6093999743461609 + c.b * 0.0820000022649765)`.
+- `S(c,a).channel = f(c.channel * (1 - a) + L * a)`, followed by
+  `0x0040F770` channel clamping to `[0,1]`; alpha is copied/clamped.
+  The clamp does not change any valid palette tuple in this system.
+- Descriptor `p = S(base, 0.8500000238418579)`.
+- Aperture/mask pre-modulation RGB is
+  `f(S(p, 0.20000000298023224).channel * 0.75)`.
+- With identity renderer modulation, packed tint bytes are
+  `trunc(channel * 255)`. Do not quantize the descriptor first or reuse a
+  rounded, already-packed Enchant Staff tint.
+
+Raw factor addresses are `.85` at `0x00784D60`, `.2` at `0x00784CE8`,
+`.25` at `0x007DE978`; the three double luminance constants are at
+`0x007DE8C0`, `0x007DE8B8`, and `0x007DE8B0`.
+The saturated `+0x8C -> 0x00661260` provider used by Spider outlines is a
+separate owner and cannot substitute for `+0x88`.
+
+| Selected primary | Base tuple | Final packed RGB |
+| --- | --- | --- |
+| Ether 8 / Plane 80 | `(1,.1,1)` | `0x624e62` |
+| Fire 16 | `(1,.35,.1)` | `0x70615b` |
+| Air 24 | `(.1,1,1)` | `0x7b9090` |
+| Water 32 | `(.1,.5,1)` | `0x48515d` |
+| Earth 40 | `(.1,1,.1)` | `0x6f846f` |
+
+The complete Weld base bank, indexed by `buildId - 1000`, is
+`(1,.1,.5)`, `(1,.5,1)`, `(1,.75,1)`, `(1,.75,.5)`, `(1,.75,1)`,
+`(.75,.75,.75)`, `(1,.75,1)`, `(1,.75,.5)`, `(.8,1,1)`, `(.9,1,1)`,
+`(1,.1,.5)`, `(1,.35,.1)`, `(.1,.5,1)`, `(.1,1,1)`, `(.1,1,.1)`.
+Their final packed values in the same order are
+`5c4750`, `8b808b`, `a59fa5`, `9e9893`, `a59fa5`, `8f8f8f`,
+`a59fa5`, `9e9893`, `b0b4b4`, `b7baba`, `5c4750`, `70615b`,
+`48515d`, `7b9090`, `6f846f`.
+
+The color is selected each draw from the current primary selector and, for
+52, the provider's current Weld build at `Skills_Wizard+0x750`. The outer
+RGB calculation has no tick, weather, Region-mode, or position input.
+Time/RNG separately affects opacity: direct aperture is `.25 * (.95 + U(.05))`
+in stock, while compact composite is `.95 + U(.05)`. The existing web-only
+14%-of-stock direct-aperture policy and semantic presentation RNG remain
+explicit policies; neither permits white RGB. Mode zero skips the aperture,
+but compact masks remain candidate-driven in all modes. Later Region multiply
+and stock arena saturation still apply in their established painter interval.
+Planewalker follows the effective selector: `0x00548927` saves the prior
+selection at Wizard `+0x308`; `0x00548965` writes 80 into the same global
+setting `12+slot` consumed by both lights; removal at `0x0052F509` restores
+the saved primary. Therefore each browser player with positive
+`secondary.planewalkerTicksRemaining` uses Plane 80/Ether color, and expiry
+restores that same player's selected primary/Weld color. The retained raw
+receipts are `planewalker-enable-selector.asm` and
+`planewalker-primary-selector.asm`.
+
+### Descriptor fallback boundary recovered before fallback tests
+
+- `0x00660771..0x00660792` treats selector **-1** as an instruction to read
+  the current selected-primary global setting 12. It is not a constant-white
+  or constant-Ether default. A stateless helper cannot implement that implicit
+  context; renderer callers must supply their player's effective selection.
+  Other negative or noninteger JavaScript values have no established valid
+  stock-input contract, and must not be described as native fallback behavior.
+- For selected Welding 52 with a build outside 1000..1014 (including absent
+  build in the browser representation), `0x006607A9..0x006607AC` falls through
+  to the ordinary row descriptor. Row 52 is class/root 7, so the base is
+  `(.75,.75,.75)` and final light tint is `0x8f8f8f`.
+- For an unknown nonnegative row index, `0x00660C41..0x00660C67` grows the
+  skill array and reads that row's class at `+0x1C`. The grower `0x0046D670`
+  invokes default constructor `0x0046AF70`; instruction `0x0046AFC7` writes
+  class **-1**. Class resolver `0x00656430` returns roots 1..7 only for those
+  respective class codes, and returns root **0** for all other classes
+  (`0x00656479`). Therefore a newly defaulted positive row resolves to Ether
+  descriptor color and final `0x624e62`, not `0xbfbfbf`.
+- This owner differs from the existing saturated `nativePrimarySpellTint`
+  helper. Keep that existing helper's public fallback unchanged in this patch;
+  the new ground-light resolver must not import its unsupported white fallback.
+- Raw evidence is retained as `descriptor-class-resolver.asm`,
+  `skill-row-default-and-grower.asm`, and `default-skill-row-constructor.asm`.
+  Minimal red cases are Welding 52 with null/out-of-range build and unknown
+  positive row 9000. Do not invent a constant result for selector -1.
+
+### Full affected membership and current Website owners
+
+- `renderer/boneyard-environment-light.ts`: `BoneyardEnvironmentLightView`
+  creates additive `DeadHawg.18` per-player apertures. Its update currently
+  sets position, alpha, and depth but never tint, so RGB remains white.
+- `renderer/native-compact-mask-view.ts`: `PlayerMaskTarget` creates the
+  256-square linear NPM target and additive `native-compact-player-mask`
+  composite. Its update likewise sets visibility, alpha, position, and depth
+  without tint. Target stamps deliberately select diffuse RGB while retaining
+  source alpha, then multiply by `DeadHawg.9`; the missing color belongs on the
+  final composite, not on the normal black base art or white mask stamps.
+- All authored compact selectors 25..29 (`DeadHawg.139..143`) and retained
+  Spider decal entries 140..142 share this composite. The exact same final
+  color applies to static and dynamic members; grows/fades remain their own
+  scale/alpha fields. Seven of twelve stock generated templates contain
+  authored compact rows (counts 57, 47, 19, 37, 50, 39, 41); mode-zero templates
+  can still acquire a dynamic Spider decal. Tutorial is also covered.
+- Native Terrain polygons enter the same final target through a distinct
+  `+0x8F24` owning grid, while compact records use `+0x8F84`. The browser's
+  separately recorded missing Terrain contribution remains an explicit
+  residual; every stock generated survival template has zero Terrain rows.
+- `renderer/boneyard-dynamic-scene.ts` supplies both views with the same
+  non-materializing player membership and places aperture then compact
+  composite per player before Region/world. Existing black normal glyphs,
+  `.75`/`1` source alpha normalization, sampler/UV, target dimensions, and
+  painter ownership are not changed by the missing-RGB repair.
+- `core-kernels/native-skill-colors.ts` owns reusable raw primary/Weld tables.
+  `nativePrimarySpellTint` itself implements the other, saturated provider.
+  `player-enchant-staff-presentation.ts` contains the same descriptor-family
+  base tuples but packs too early (and rounds) for composing this formula.
+
+### Native slot asymmetry and browser network boundary
+
+Native Game has slot-indexed progression handles: Equip refresh
+`0x00555999..0x005559A5` reads `Game + 0x1654 + 4 * Equip.slot` and then
+that handle's Skills object. In the two Arena light callsites, however,
+the provider is explicitly the slot-zero handle (`Game+0x1654` with no index),
+while selected skill is global setting `12 + current player slot` and
+position is `Game+0x1358+4*slot`. This is a real native caller asymmetry;
+it is not proof that all native players share one Skills_Wizard instance.
+
+The Website protocol retains distinct authoritative `player.progression`
+records, and `world-player-view.ts` already computes Enchant Staff color from
+that same player. The accepted network adaptation is to resolve effective
+selected-primary and Weld build from the same stable player ID for both light
+views, consistent with the existing per-player Enchant Staff adaptation.
+This preserves the exact one-player contract without leaking the first
+enumeration entry's or observer's Weld state into other participants. This is
+explicitly a network ownership adaptation, not literal reproduction of the
+native four-slot caller asymmetry. Tests must reorder/delete/re-add players
+to reject accidental `Object.entries()[0]` ownership.
+
+### Falsifiers and pre-code validation state
+
+The parent-owned frozen Tutorial browser probe on baseline `1739a64` isolates
+`native-compact-player-mask`: hiding only that composite changes 19,168 pixels
+within `[625,275,988,527]`, concentrated on the visible puddles. Interior ROI
+`[650,460,710,493]` falls from RGB mean `44.58/44.46/44.12` to
+`6.68/6.55/6.19`; hiding only the aperture instead yields
+`42.66/42.53/42.19`. Restore is pixel-identical and browser error arrays are
+empty. Evidence: `remaining-softness/current-mask/receipt.json` and
+`tutorial-pier-compact-mask-hidden.png`. This is an owner-isolation test,
+not a matched native/generated-scene parity result.
+
+Required minimal regressions before claiming closure:
+
+1. Exact numeric table tests for five pure primaries, Plane, all 15 Weld builds,
+   both sequential float32 desaturations, and truncating channel packing.
+2. Both concrete consumers receive the same expected RGB; changing effective
+   primary/Weld while resident changes tint without recreating or recoloring
+   base/stamp art. Keep alpha/flicker, 14% aperture policy, target geometry,
+   sampler, blend, region/mode gating, and ordering unchanged.
+3. Cover all five authored selectors plus all three dynamic decal entries,
+   mode zero dynamic masks, candidate-free removal, dead/materializing and
+   re-entry lifecycle, and multiplayer identity/reordering.
+4. Repeat the frozen Tutorial plate with only the source-derived RGB change;
+   record tint, ROI delta, untouched control regions, full restoration, and
+   empty browser errors. Compare a matched native state if available; the
+   retained native Tutorial image has different dynamic tree/gate/light phases.
+
+No production source edit, implementation pass, aggregate validation pass,
+or publication is asserted by this pre-code evidence entry.
+
+
+### RGB candidate disposition and bounded shared-sampling follow-up
+
+The preceding pre-code state describes baseline `1739a64`. The coordinated
+candidate now implements `nativePlayerGroundLightTint` in
+`core-kernels/native-skill-colors.ts` and applies it on every update in both
+`BoneyardEnvironmentLightView` and `PlayerMaskTarget`. The shared
+`boneyard-dynamic-scene.ts` membership supplies each stable player's effective
+Plane/primary selection and own Weld build. `boneyard-environment-light-plan.ts`
+retains that progression ownership in its input type. The candidate includes
+`native-skill-colors.test.ts` and `boneyard-player-ground-light.test.ts`, wired
+through `frontend/package.json` and `frontend/tsconfig.test.json`.
+
+Final source-level disposition for the recovered **RGB owner** is implemented
+and focused-verified across both consumers, five pure primaries, Plane,
+all 15 Weld branches, invalid-Weld ordinary-root fallthrough, and defaulted
+nonnegative-row Ether fallthrough. All five compact records 139..143 and
+Spider entries 140..142 retain the same final-composite color owner; base and
+stamp alpha, target size, UV/filter/blend, 14% aperture policy, and flicker
+remain the existing contracts. Per-player ownership remains the explicit
+network adaptation above. The separately missing native Terrain-mask grid
+is not repaired or claimed exact by this RGB correction. Full-system acceptance
+is still pending the exact candidate's remaining canonical and real-journey
+checks; focused verification is not a blanket native-parity closure.
+
+Verified retained receipts, relative to `remaining-softness/`:
+
+- `ground-light-tests-final.txt`: 16 tests, 16 pass, zero failures;
+  `ground-light-tests-final-types-lint.txt` retains the focused type/lint run.
+- `ground-light-colors-v2/receipt.json`: 31 real WebGL owner checks, including
+  every palette, active/expired Planewalker, independent/reordered players,
+  materializing/returning/departing peers, and context-loss recovery. All page,
+  console, request, and response error arrays are empty; GL error is zero.
+  `tutorial-pier-full.png` and `tutorial-pier-context-restored.png` are the
+  associated plates in that same directory. Context recovery establishes
+  retained tint/owner and a regenerated nonempty target; advancing flicker
+  means this receipt does not claim identical before/after full-frame pixels.
+- `canonical-receipt.json`: M2 `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  exited 1 at the known external-volume installation boundary, with source
+  unchanged and lease released. This is a blocked aggregate gate, not a pass.
+  No M5, built-game, deployment, or live acceptance is pre-claimed here.
+
+#### Sealed native sampling and camera findings
+
+The unrelated residual tree/grave/road softness question remains open at the
+native-framebuffer comparison boundary. Raw evidence in `native-source-audit/`
+now bounds the next test:
+
+| Native evidence | Exact source | Supported conclusion |
+| --- | --- | --- |
+| Texture allocation | `0x00441180..0x00441329`, `CreateTexture` at `0x00441218` | Stock allocator explicitly requests one mip level; mode 0 is A8R8G8B8. A hidden native mip pyramid is not supported on this path. |
+| Filtering | Device initialization `0x0043FCA6..0x0043FCD0`; reset `0x0041D108..0x0041D16B` | MIN and MAG sampler states are linear. At physical/logical ratio one, reset explicitly reinstalls linear; the alternate branch skips that reset rather than establishing nearest. This is not evidence for blanket native point filtering. |
+| Vertex format and submission | FVF `0x142` at `0x0043FB71`; flush `0x0041D8F0`; append `0x00412D70..0x00412DE0` | XYZ + diffuse + one UV, stride 24. Append stores fractional float32 input x/y plus Graphics `+0x68/+0x6C`, then z/color/UV. No integer truncation or snapping occurs there. These are not pretransformed XYZRHW vertices. |
+| Glyph UV and geometry | Constructor `0x00413DE0`; draw `0x004143D0` / transformed draw `0x00414450` | Leading source coordinates add `.5`; trailing coordinates are source extent plus `.25`. Draw offsets and transformed quads remain fractional. The current browser record UV helper preserves this source convention. |
+| Screen projection | `0x00440890`, matrix stores `0x0044093F..0x004409D0`; submission `0x00440BA0` | The x/y orthographic terms are `2/W`, `-2/H`, translation `-1,+1`. There is no fixed half-pixel term in this matrix. Dispatcher index 2 sets D3D projection state 3. |
+| Default Arena view restoration | Arena field restore call `0x0046EE6C -> 0x0057D5E0`; `0x0057D5EF -> 0x00421430`; `0x0057D658 -> 0x00420B10` | Restoring the default target rebuilds the screen projection, then installs centered scale one, which is the identity view. Centering by W/2,H/2 at scale one does not create a half-pixel offset. |
+| Actual world-camera continuation | Arena renderer `0x0046EC80`, default-view branch `0x0046F081 -> 0x0046F32F`; camera translation `0x0046F333..0x0046F41A` | With feedback magnitude zero and base zoom one, the view update is skipped after identity restoration. Graphics translation receives authored Arena-center minus primary-view-center displacement, plus the separate world shake. No additional fixed half-pixel compensation appears in this default path. |
+
+The raw receipts are `texture-allocation.asm`, `renderer-reset.asm`,
+`vertex-append.asm`, `sprite-constructor.asm`, `native-quad-draw.asm`,
+`d3d-device-initialization.asm`, `d3d-transform-dispatch.asm`,
+`arena-render-entry.asm`, `region-field-restore-view.asm`, and
+`renderer-view-scale.asm`. These are sealed-binary instruction findings, not
+live transformed-vertex captures. The existing Mod Loader observation helper's
+logical-to-screen scaling is derived capture metadata and must not be passed
+off as a measured D3D device matrix or framebuffer sampling phase.
+
+Browser `boneyard-world-renderer.ts` explicitly disables `roundPixels` and
+installs the world transform from `nativeEnemyWorldFeedbackTransform` without
+a fixed half-pixel correction. `native-sprite-record-texture.ts` preserves the
+native record UV bias. Current Pixi `TextureSource` defaults are one mip level
+and no auto-generated mipmaps, consistent with the stock allocation above.
+The retained real-scene matrix `scene-reference-v2/receipt.json` passed direct
+full-page tree/grave reference equality and compositor equality at all three
+1600-by-900 physical rasters (1600x900/DPR1, 800x450/DPR2,
+1280x720/DPR1.25), with source unchanged and no browser errors. Those controls
+reject another browser cache/CSS resampling change; they do not compare the
+browser sampling phase with D3D9.
+
+A cross-API phase difference is therefore a **supported hypothesis**, not an
+accepted fix. D3D9's screen pixel centers use integer coordinates, while the
+normal OpenGL convention uses half-integer centers; unchanged projected
+geometry and UVs can consequently sample a different point under linear
+filtering. See the primary API references:
+[Microsoft D3D9 texel/pixel mapping](https://learn.microsoft.com/en-us/windows/win32/direct3d9/directly-mapping-texels-to-pixels)
+and [Khronos GLSL fragment-coordinate convention](https://registry.khronos.org/OpenGL/specs/gl/GLSLangSpec.4.60.html).
+The stock UVs are already center-biased, so copying a generic D3D9 tutorial's
+negative-half-pixel fix would be an unjustified sign/ownership substitution.
+
+Smallest falsifier: render one known stock glyph with recorded native final
+quad, exact UVs, native raster dimensions, identity color/alpha, and no
+secondary surface; preserve an actual native pixel crop. Reproduce that same
+quad in the browser and compare current geometry against **only** a
+`(+.5,+.5)` final-physical-pixel translation. At DPR other than one, convert
+that physical offset at the final renderer boundary, not into a guessed
+world-space anchor shift. Compare against native pixels and restore exactly;
+then repeat one fractional/rotated quad before broadening membership. The
+positive-half candidate follows from matching GL's half-integer samples to
+D3D9 integer samples, but is not justified for product use until this isolated
+native/browser reproduction passes. A browser-only image becoming sharper
+is insufficient. No global offset, rounding, nearest-filter, or sharpening
+change is authorized by this evidence.
+
+Roads already use the native indexed owner mesh rather than a new browser
+bake. Ground is the separately documented 512-square retail-editor field
+capture/repeat policy (entry 272), not an exact native runtime field; authored
+Terrain rendering is also a separately documented residual and absent from
+all twelve stock generated templates. Neither supports treating every surface
+as one texture-resolution defect. Large compact puddles are covered by the
+proven RGB correction; rain `DeadHawg.24` is a separate additive actor.

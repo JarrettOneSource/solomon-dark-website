@@ -1,8 +1,10 @@
 import { Container, Matrix, RenderTexture, Sprite, type Renderer } from 'pixi.js'
 import type { BoneyardBounds, BoneyardScene, BoneyardPoint } from '../core-kernels/boneyard.ts'
 import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
+import { nativePlayerGroundLightTint } from '../core-kernels/native-skill-colors.ts'
 import type { BoneyardSpiderRemainsSnapshot } from '../protocol/spider-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
+import type { BoneyardGroundLightPlayer } from './boneyard-environment-light-plan.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { renderNativeDiffuseMask } from './native-texture-color.ts'
 import { compactGridCells } from './native-compact-grid.ts'
@@ -19,12 +21,15 @@ interface CompactMask {
   readonly dynamic: boolean
 }
 
+type CompactMaskRenderer = Pick<Renderer, 'render'>
+type CompactMaskTextures = Pick<BoneyardWorldTextures, 'base'>
+
 /** Arena +0x8F84: compact masks share a bounded, additive target per player. */
 export class NativeCompactMaskView {
   private readonly root: Container
   private readonly ground: Container
-  private readonly renderer: Renderer
-  private readonly textures: BoneyardWorldTextures
+  private readonly renderer: CompactMaskRenderer
+  private readonly textures: CompactMaskTextures
   private readonly authored: readonly CompactMask[]
   private readonly surface: NativeCompactGroundSurface
   private readonly maximumColumn: number
@@ -32,7 +37,7 @@ export class NativeCompactMaskView {
   private readonly groundSprites = new Map<string, Sprite>()
   private readonly targets = new Map<string, PlayerMaskTarget>()
 
-  constructor(root: Container, ground: Container, renderer: Renderer, textures: BoneyardWorldTextures, scene: BoneyardScene) {
+  constructor(root: Container, ground: Container, renderer: CompactMaskRenderer, textures: CompactMaskTextures, scene: BoneyardScene) {
     this.surface = new NativeCompactGroundSurface(scene)
     this.root = root
     this.ground = ground
@@ -52,7 +57,7 @@ export class NativeCompactMaskView {
   }
 
   update(
-    players: Readonly<Record<string, { readonly position: Readonly<BoneyardPoint> }>>,
+    players: Readonly<Record<string, BoneyardGroundLightPlayer>>,
     remains: readonly BoneyardSpiderRemainsSnapshot[],
     bounds: Readonly<BoneyardBounds>,
     presentationFrame: number,
@@ -108,7 +113,8 @@ export class NativeCompactMaskView {
         this.targets.set(playerId, target)
       }
       const sample = drawNativeFloat(createNativeRng(Math.trunc(presentationFrame) ^ slot), 0.050000011920928955)
-      target.update(this.renderer, candidates, player.position, Math.fround(Math.fround(0.95) + sample.value), slot * 2 + 1)
+      const tint = nativePlayerGroundLightTint(player.progression.selectedPrimarySkillId, player.progression.weldBuildId)
+      target.update(this.renderer, candidates, player.position, tint, Math.fround(Math.fround(0.95) + sample.value), slot * 2 + 1)
       slot += 1
     }
     for (const [id, target] of this.targets) {
@@ -135,9 +141,9 @@ class PlayerMaskTarget {
   private readonly stamps: Sprite[] = []
   private readonly radialSource = new Container()
   private readonly radial: Sprite
-  private readonly textures: BoneyardWorldTextures
+  private readonly textures: CompactMaskTextures
 
-  constructor(root: Container, textures: BoneyardWorldTextures) {
+  constructor(root: Container, textures: CompactMaskTextures) {
     this.textures = textures
     const radial = nativeEnemySpriteRecord('DeadHawg', 9)
     this.radial = new Sprite(textures.base[radial.source])
@@ -155,7 +161,7 @@ class PlayerMaskTarget {
     root.addChild(this.composite)
   }
 
-  update(renderer: Renderer, masks: readonly CompactMask[], player: Readonly<BoneyardPoint>, alpha: number, depth: number): void {
+  update(renderer: CompactMaskRenderer, masks: readonly CompactMask[], player: Readonly<BoneyardPoint>, tint: number, alpha: number, depth: number): void {
     while (this.stamps.length < masks.length) {
       const sprite = new Sprite()
       sprite.blendMode = 'add'
@@ -173,6 +179,7 @@ class PlayerMaskTarget {
     })
     renderer.render({ clear: false, container: this.radialSource, target: this.target })
     this.composite.visible = true
+    this.composite.tint = tint
     this.composite.alpha = alpha
     this.composite.position.set(player.x, player.y)
     this.composite.zIndex = depth
@@ -187,7 +194,7 @@ class PlayerMaskTarget {
   }
 }
 
-function applyMaskSprite(sprite: Sprite, mask: CompactMask, textures: BoneyardWorldTextures): void {
+function applyMaskSprite(sprite: Sprite, mask: CompactMask, textures: CompactMaskTextures): void {
   const record = nativeEnemySpriteRecord('DeadHawg', mask.entry)
   sprite.texture = textures.base[record.source]!
   sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)

@@ -177,7 +177,9 @@
     "src/game/save/discorporeal-save.test.ts",
     "src/game/renderer/native-death-effect-allocation.test.ts",
     "src/game/mod-ui/mod-skill-quickbar-keyboard.test.ts",
-    "src/game/renderer/static-native-art-invariants.test.ts"
+    "src/game/renderer/static-native-art-invariants.test.ts",
+    "src/game/core-kernels/native-skill-colors.test.ts",
+    "src/game/renderer/boneyard-player-ground-light.test.ts"
   ],
   "exclude": []
 }

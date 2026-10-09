@@ -809,7 +809,11 @@ export class BoneyardDynamicScene {
     this.solomon?.setActorDepth(solomonPainter?.zIndex ?? 1)
     this.solomon?.setLanternDepth(lanternPainter?.zIndex ?? 1)
     this.spiderWebs.setFragmentDepth(order.foregroundZIndex + 0.25)
-    const groundLightPlayers = Object.fromEntries(Object.entries(snapshot.players).filter(([id]) => !materializingPlayerIds.has(id)))
+    const groundLightPlayers = Object.fromEntries(Object.entries(snapshot.players)
+      .filter(([id]) => !materializingPlayerIds.has(id))
+      .map(([id, player]) => [id, (snapshot.secondaryAbilities.players[id]?.planewalkerTicksRemaining ?? 0) > 0
+        ? { position: player.position, progression: { selectedPrimarySkillId: 80, weldBuildId: null } }
+        : player]))
     this.environmentLights?.update(groundLightPlayers, now)
     this.compactMasks.update(
       groundLightPlayers,

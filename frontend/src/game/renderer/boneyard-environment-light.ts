@@ -1,6 +1,6 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
-import type { Vec2 } from '../../editor/model.ts'
-import { nativeDirectEnvironmentLightAlpha } from './boneyard-environment-light-plan.ts'
+import { nativePlayerGroundLightTint } from '../core-kernels/native-skill-colors.ts'
+import { nativeDirectEnvironmentLightAlpha, type BoneyardGroundLightPlayer } from './boneyard-environment-light-plan.ts'
 
 /** Arena +0x110 draws each player's aperture before its optional compact mask. */
 export class BoneyardEnvironmentLightView {
@@ -13,7 +13,7 @@ export class BoneyardEnvironmentLightView {
     this.texture = texture
   }
 
-  update(players: Readonly<Record<string, { readonly position: Vec2 }>>, now: number): void {
+  update(players: Readonly<Record<string, BoneyardGroundLightPlayer>>, now: number): void {
     let slot = 0
     for (const [id, player] of Object.entries(players)) {
       let sprite = this.sprites.get(id)
@@ -27,6 +27,7 @@ export class BoneyardEnvironmentLightView {
         this.sprites.set(id, sprite)
       }
       sprite.position.copyFrom(player.position)
+      sprite.tint = nativePlayerGroundLightTint(player.progression.selectedPrimarySkillId, player.progression.weldBuildId)
       sprite.alpha = nativeDirectEnvironmentLightAlpha(now, slot)
       sprite.zIndex = slot * 2
       slot += 1
