@@ -507,7 +507,7 @@ export function boneyardEnemyBodies(
         return {
           ...enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor)),
           // Wraith tick 0x0048717E clears Actor +0x36, independently of query flags.
-          collisionRecipient: actor.brain.family !== 'wraith',
+          collisionRecipient: actor.brain.family !== 'wraith' || actor.brain.collisionRecipient,
           // Constructor-owned resistance: Portal +0x28 = 150, Coffin = 1.
           pushResistance: actor.brain.family === 'portal' ? 150 : actor.brain.family === 'coffin' ? 1 : 0,
         }

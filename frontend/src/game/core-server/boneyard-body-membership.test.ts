@@ -16,13 +16,17 @@ const context = { players: {}, projectileWorldBlocked: () => false,
   resolveSpawnIntents: () => [],
   resolveMovement: (request: { requestedPosition: Readonly<{ x: number; y: number }> }) => request.requestedPosition }
 
-function spawn(token: BoneyardWaveEnemyToken, flags: readonly string[] = []): BoneyardEnemyStore {
-  return stepBoneyardEnemyStore(createBoneyardEnemyStore('recipient-contract'), {
+function spawn(token: BoneyardWaveEnemyToken, flags: readonly string[] = [], completeFirstTick = true): BoneyardEnemyStore {
+  const born = stepBoneyardEnemyStore(createBoneyardEnemyStore('recipient-contract'), {
     ...context, tick: 0, resolveSpawnIntents: () => [{ enemyToken: token,
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[token], flags,
       ...(token === 'PORTAL' ? { authoredRecipe: nativePortalRecipe(Object.values(NATIVE_PORTAL_PROGRAM_BY_SOURCE_SHA256)[0]!.phases[0]!) } : {}), id: 1, locationPolicy: 'anywhere',
       position: { x: 100, y: 100 }, spawnTick: 0, waveOrdinal: 40 }],
   }).store
+  if (token !== 'WRAITH' || !completeFirstTick) return born
+  const held = { ...born, actors: born.actors.map(actor => ({ ...actor, staffMovementFactor: 0 })) }
+  const stepped = stepBoneyardEnemyStore(held, { ...context, tick: 1 }).store
+  return { ...stepped, actors: stepped.actors.map(actor => ({ ...actor, staffMovementFactor: 1 })) }
 }
 
 const recipients = [
@@ -51,7 +55,7 @@ test('the recipient census covers every authored enemy token', () => {
 for (const flags of [[], ['FLAG_FAST'], ['FLAG_SLOW'], ['FLAG_BURNING']]) {
   for (const [status, patch] of [
     ['normal', {}], ['cold-aura', { coldSlowFactor: 0.2, coldSlowTicks: 600, coldSlowMaterial: true }],
-    ['frozen', { frozenTicks: 600 }],
+    ['frozen', { frozenTicks: 600, frozenTimeScale: 0 }],
   ] as const) {
     test(`Wraith receipt stays disabled for ${flags.join('+') || 'ordinary'} ${status}`, () => {
       const initial = spawn('WRAITH', flags)
@@ -145,4 +149,28 @@ test('scaled Wraith retains its damage-query radius while remaining a nonrecipie
   assert.equal(boneyardEnemyBodies(store)[0]!.radius, 30)
   assert.equal(boneyardEnemyBodies(store)[0]!.collisionRecipient, false)
   assert.equal(boneyardEnemyActorFlags(store.actors[0]!), 2)
+})
+
+test('Wraith birth recipient state survives pause and clears even on its first Frozen tick', () => {
+  const initial = spawn('WRAITH', [], false)
+  assert.equal(boneyardEnemyBodies(initial)[0]!.collisionRecipient, true)
+  const paused = stepBoneyardEnemyStore(initial, { ...context, tick: 10, paused: true }).store
+  assert.equal(boneyardEnemyBodies(paused)[0]!.collisionRecipient, true)
+  const actor = paused.actors[0]!
+  const frozen = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(), 'recipient-contract', actor.id,
+    { frozenTicks: 100, frozenTimeScale: 0 }).targetEffects[0]!
+  const first = stepBoneyardEnemyStore(paused, { ...context, tick: 11, abilityEffects: { [actor.id]: frozen } }).store
+  assert.equal(boneyardEnemyBodies(first)[0]!.collisionRecipient, false)
+  assert.deepEqual(first.actors[0]!.position, actor.position)
+})
+
+
+test('zero-scalar Wraith first tick clears receipt while ordinary pause retains the exact bit', () => {
+  const born = spawn('WRAITH', [], false)
+  const held = { ...born, actors: born.actors.map(actor => ({ ...actor, staffMovementFactor: 0 })) }
+  const stepped = stepBoneyardEnemyStore(held, { ...context, tick: 1 }).store
+  assert.deepEqual(stepped.actors[0]!.position, held.actors[0]!.position)
+  assert.equal(boneyardEnemyBodies(stepped)[0]!.collisionRecipient, false)
+  const paused = stepBoneyardEnemyStore(stepped, { ...context, tick: 2, paused: true }).store
+  assert.equal(boneyardEnemyBodies(paused)[0]!.collisionRecipient, false)
 })

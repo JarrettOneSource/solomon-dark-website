@@ -477,7 +477,7 @@ No fresh native runtime or Ghidra extraction is claimed.
 | --- | --- | --- |
 | `0x005265F9..0x00526603` | Dynamic collision skips a candidate whose byte `+0x36` is zero, before radius/separation/contact processing. This is a recipient test, not a condition on the moving root. | high |
 | Wraith `0x00486C30`, common movement interval `0x00486E08..0x00486E34`, epilogue `0x00487177..0x00487182` | The Wraith disables controller static/dynamic movement gates during its own motion and unconditionally clears its recipient byte at `0x0048717E`. Visible/nonadmitted, contact/cooldown, and wisp/no-wisp branches all converge before that write. | high |
-| Actor `0x006287D0`; Badguy `0x00473390`; Wraith `0x00474470` | Base construction sets recipient true; Badguy keeps it and query flags 2. Wraith's first completed tick clears only physical receipt; radius 15 and hostile query membership remain. Website spawns complete the enemy tick before the next player-root movement. | high |
+| Actor `0x006287D0`; Badguy `0x00473390`; Wraith `0x00474470` | Base construction sets recipient true; Badguy keeps it and query flags 2. Wraith's first completed tick clears only physical receipt; radius 15 and hostile query membership remain. Construction-to-first-tick receipt requires the explicit state described below; the initial family-constant interpretation is superseded. | high |
 | Maggot `0x0047E0F0`, `0x0047E2BF`, `0x0048B2BA`; admission `0x00487FD0` | Maggot construction clears the same recipient byte; airborne movement repeats the clear. Grounded combat admission changes `+0x244` and owner accounting, not recipient eligibility. This sibling must not retain the refuted all-living-enemies-are-solid rule. | high; constructor, initializer, admission, airborne and active movement lifecycle inspected |
 | Generic Force `0x00623C60..0x00623CBF`, call `0x00623C98 -> 0x00525800` | A nonreceiving actor can still be a driven root for an external force. Removing it from all body lists would incorrectly suppress force/knockback/Ether Drain. | high |
 | Shared modifier reset `0x00625680` | Resets speed/status state and the separate `+0xD6` flag from `+0xD7`; it does not enable the physical-recipient byte. Cold Aura's hostile query and movement modifier are distinct consumers. | high |
@@ -539,7 +539,7 @@ publication remain pending; this entry is not acceptance.
 
 The general solver and indexed nonpushing path now carry a separate optional
 `collisionRecipient` flag, defaulting to native ordinary receipt. The closed
-body clone preserves it. Wraith and all living Maggot body rows set it false;
+body clone preserves it. The initial implementation set Wraith and all living Maggot body rows false; the Wraith birth correction below supersedes that family-constant rule.
 rows remain addressable as force roots. No status-lifetime module, radius,
 query flag, save shape or wire shape changed. Cocoon/hidden Coffin/dead-row
 exclusions and normal recipients remain under their prior owners.
@@ -567,3 +567,67 @@ publication and live acceptance with the separate stale-status-lifetime fix.
 Those outcomes remain pending. The original Cold Aura causal hypothesis and
 exact historical input/build remain unproved; the recipient omission itself
 is directly instruction-derived and reproduced through the public world API.
+
+### First-admission correction before final acceptance
+
+The first implementation's family-constant Wraith exclusion is insufficient.
+The earlier statement that Website materialization completes the actor tick
+was wrong: `stepBoneyardEnemyStore` appends materialized actors after its tick
+loop. Native `0x0063F6D0` registration calls vslot `+0x44` at `0x0063F775`,
+which reaches `0x00622F90 -> 0x005212F0`; the latter checks the constructor's
+true `+0x36` at `0x00521306`. Registration does not run the Wraith tick.
+`ObjectManager::Tick 0x004022A0` later invokes initialization at
+`0x0040233D` and the tick at `0x00402346`, walking current insertion order.
+The pre-manager wave-spawn order and earlier existing player slots are also
+established in entry 090. Thus the construction-to-first-tick recipient interval
+must be represented, not declared invisible. `0x00528FD0` is a smart-reference
+wrapper, not ordinary world registration; its extraction did not establish
+admission and is excluded from the causal proof.
+
+Wraith's only normal return follows `0x0048717E`. Cold/Frozen/zero movement
+scale can return early inside its called common movement routine, but execution
+then reaches the unconditional recipient clear. Global/hostile pause that skips
+the whole Wraith tick must retain the preceding bit. Maggots differ: their
+constructor already clears the byte, so there is no Wraith-style birth window.
+
+The authoritative Wraith brain will explicitly hold `collisionRecipient`: true
+on construction, false on every executed Wraith tick, unchanged by pause or
+save/restore. This is a save-state extension; network shape is unchanged.
+Legacy browser saves lack the bit. Their deterministic fallback retains true
+when `spawnTick >= enemies.lastStepTick`, otherwise false. This recognizes a
+saved birth boundary rather than making every historical Wraith solid again.
+An old save made after a selectively paused, unticked birth cannot reconstruct
+that missing historical bit from the old format; it uses this documented
+fallback. New saves retain the exact bit across that pause and do not use the
+fallback. Validate an explicitly present bit as a boolean.
+
+Required focused evidence now includes birth, before/after-first-tick saves,
+selectively paused birth and its round trip, Frozen/zero-scale first tick,
+legacy birth/mature fallback and rejection of malformed explicit state. Final
+acceptance must use this corrected candidate rather than the first commit.
+
+The first-tick clear must also reach the current tick's already-built physical
+body index before a later enemy moves. A public world regression reproduces
+an overlapping later Skeleton at `(131.9188945,346.8717164)` instead of the
+no-recipient reference `(110.0194104,349.0180250)`. The Wraith epilogue will
+notify the world collision owner when the bit changes; that callback changes
+only recipient eligibility, retaining geometry, index identity and force-root
+availability. It does not wait for the next global body-list rebuild.
+
+The selectively paused old-birth example above is a synthetic persistence
+qualification. The production caller supplies selective hostile pause only
+for Tutorial states, whose stock encounter does not spawn Wraiths. No normal
+play/save occurrence of that ambiguous legacy history has been demonstrated;
+it is not a reported user-facing blocker. New explicit-state saves still
+preserve the tested pause edge exactly.
+
+The corrected birth/paused-save tests first failed for missing true admission
+state and its persistence; the explicit state then passed all three focused
+cases. The same-tick later-mover regression separately failed with the stale
+index and passed after the eligibility-only callback. The final four-case
+edge slice passes, including Frozen and zero-scalar first tick, paused true
+and false states, save/restore, legacy fallback and invalid saved data.
+Supported frontend lint and production build passed before the index callback;
+full exact-tree acceptance is still owned by the combined gate. The first
+browser attempt failed at private synthetic-save admission before gameplay;
+that is a fixture investigation, not a passed recipient journey.

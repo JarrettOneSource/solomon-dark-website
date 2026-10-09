@@ -472,6 +472,7 @@ function createBrain(
           initialSpeedUnit,
           flybyTickOffset,
         ),
+        collisionRecipient: true,
         family: 'wraith',
         phase: 'flight',
       }

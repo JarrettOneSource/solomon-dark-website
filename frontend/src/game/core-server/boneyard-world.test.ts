@@ -2393,3 +2393,28 @@ test('native area movement reports collided hostile roots and restores their con
   assert.deepEqual(moved.world.enemies.actors.map(boneyardEnemyCollisionRadius),
     source.enemies.actors.map(boneyardEnemyCollisionRadius))
 })
+
+test('Wraith first-tick recipient clearing reaches later enemy movers in the same world tick', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = []
+  let world = { ...createBoneyardWorld(loaded), arenaTransition: null, encounter: null, waves: null, lanternPosition: null }
+  const player = { ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Far target', element: 'water' }, world),
+    position: { x: 400, y: 350 } }
+  const enemies = stepBoneyardEnemyStore(world.enemies, {
+    tick: 0, players: {}, projectileWorldBlocked: () => false,
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => (['WRAITH', 'SKELETON'] as const).map((enemyToken, index) => ({
+      enemyToken, nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken], flags: [], id: index + 1,
+      locationPolicy: 'anywhere', position: { x: 100 + index * 10, y: 350 }, spawnTick: 0, waveOrdinal: 1,
+    })),
+  }).store
+  world = { ...world, enemies: { ...enemies, actors: enemies.actors.map(actor => ({ ...actor,
+    targetPlayerId: 'player', nextMovementTick: 0, staffMovementFactor: actor.brain.family === 'wraith' ? 0 : 1,
+  })) } }
+  const reference = stepWorld({ ...world, enemies: { ...world.enemies,
+    actors: world.enemies.actors.filter(actor => actor.brain.family !== 'wraith') } }, { player }, {}, 1)
+  const result = stepWorld(world, { player }, {}, 1)
+  const skeleton = result.world.enemies.actors.find(actor => actor.brain.family === 'skeleton')!
+  assert.deepEqual(skeleton.position, reference.world.enemies.actors[0]!.position,
+    'the index must observe the earlier Wraith epilogue before resolving the Skeleton')
+})

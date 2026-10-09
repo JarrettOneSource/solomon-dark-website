@@ -117,6 +117,7 @@ export interface BoneyardZombieBrain {
 }
 
 export interface BoneyardWraithBrain extends NativeWraithFlightState {
+  readonly collisionRecipient: boolean
   readonly family: 'wraith'
   readonly phase: 'flight' | 'death'
 }
@@ -854,6 +855,7 @@ export interface BoneyardEnemyRetirementObserver {
 }
 
 export interface BoneyardEnemyStoreStepContext {
+  readonly onCollisionRecipientCleared?: (actorId: number) => void
   readonly screenFlashWorldKey?: string
   readonly writeScreenFlash?: WriteNativeScreenFlash
   readonly enhancedEffects?: boolean
