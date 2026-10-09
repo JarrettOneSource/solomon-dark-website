@@ -38,9 +38,22 @@ export function stepWraith(
   brain: BoneyardWraithBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
+  const stepped = stepWraithFlightAndContact(work, actor, brain, context)
+  if (brain.collisionRecipient) context.onCollisionRecipientCleared?.(actor.id)
+  return stepped
+}
+
+function stepWraithFlightAndContact(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  brain: BoneyardWraithBrain,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
   const admitted = context.nativeVisibility?.(actor.position).admitted ?? true
   const clockedBrain: BoneyardWraithBrain = {
     ...stepNativeWraithFlightClock(brain, admitted),
+    // Native Wraith tick always clears Actor +0x36, even when its movement returns early.
+    collisionRecipient: false,
     family: 'wraith',
     phase: 'flight',
   }
@@ -70,6 +83,7 @@ export function stepWraith(
         flybyTickOffset,
         turnGainUnit,
       ),
+      collisionRecipient: false,
       family: 'wraith',
       phase: 'flight',
     },

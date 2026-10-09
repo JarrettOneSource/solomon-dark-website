@@ -3711,3 +3711,39 @@ test('three hotbars round-trip while pre-expansion saves retain their first eigh
   legacy.schemaVersion = 50
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /player belt 0 is invalid/)
 })
+
+test('Wraith recipient state round-trips birth, paused birth and completed first tick', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 91))
+  assert.ok(loadedBoneyard)
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  assert.ok(state.world.kind === 'boneyard')
+  const context = { projectileWorldBlocked: () => false, players: {},
+    resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition,
+    resolveSpawnIntents: () => [] }
+  const born = stepBoneyardEnemyStore(state.world.enemies, { ...context, tick: state.tick,
+    resolveSpawnIntents: () => [{ enemyToken: 'WRAITH', flags: [], id: 1, locationPolicy: 'anywhere', nativeTypeId: 1007,
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const paused = stepBoneyardEnemyStore(born, { ...context, tick: state.tick + 10, paused: true }).store
+  const completed = stepBoneyardEnemyStore(paused, { ...context, tick: state.tick + 11 }).store
+  for (const [enemies, expected] of [[born, true], [paused, true], [completed, false]] as const) {
+    const document = createGameSaveDocument({ integrity: 'global-clean', loadedBoneyard,
+      mods: [], modState: {}, playerId: 'owner', state: { ...state, tick: Math.max(state.tick, enemies.lastStepTick),
+        world: { ...state.world, enemies } } })
+    const restored = restoreGameSaveDocument(document).state
+    assert.ok(restored.world.kind === 'boneyard')
+    const brain = restored.world.enemies.actors[0]!.brain
+    assert.ok(brain.family === 'wraith')
+    assert.equal(brain.collisionRecipient, expected)
+    const legacy = JSON.parse(document)
+    delete legacy.continuation.simulation.world.enemies.actors[0].brain.collisionRecipient
+    const migrated = restoreGameSaveDocument(JSON.stringify(legacy)).state
+    assert.ok(migrated.world.kind === 'boneyard')
+    const migratedBrain = migrated.world.enemies.actors[0]!.brain
+    assert.ok(migratedBrain.family === 'wraith')
+    assert.equal(migratedBrain.collisionRecipient, enemies === born,
+      'legacy files distinguish current birth from older actors; unticked paused history was not stored')
+    legacy.continuation.simulation.world.enemies.actors[0].brain.collisionRecipient = 'yes'
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /Wraith collision recipient/)
+  }
+})

@@ -2,6 +2,8 @@ import type { Vector2 } from './vector.ts'
 import type { ActorMotionBroadphase } from './dynamic-actor-grid.ts'
 
 export interface ActorPhysicsBody {
+  /** Native Actor +0x36: eligibility as another mover's contact candidate. */
+  collisionRecipient?: boolean
   delta: Vector2
   driven?: boolean
   id: string
@@ -140,7 +142,7 @@ export function resolveActorMotion(
     const resolvePair = (otherIndex: number): void => {
       if (otherIndex === bodyIndex) return
       const other = bodies[otherIndex]
-      if (!shouldCollide(mover, other)) return
+      if (other.collisionRecipient === false || !shouldCollide(mover, other)) return
 
       if (
         (!recursive && mover.pushEnabled === false)
@@ -242,7 +244,7 @@ export function resolveActorMotion(
 /**
  * Single non-pushing root move. Equivalent to `resolveActorMotion` over
  * `bodies` when only `bodies[moverIndex]` is driven by `delta`, that mover has
- * `pushEnabled === false`, and every pair collides: the root move is swept,
+ * `pushEnabled === false`, and the pair filter admits every enabled recipient: the root move is swept,
  * then every other body separates the mover in ascending index order with the
  * same unweighted correction and full-candidate placement. Returns the resolved
  * mover position without cloning or mutating the crowd. Both the general and
@@ -276,6 +278,7 @@ export function resolveUnpushedMoverMotion(
     }
     if (otherIndex === moverIndex) continue
     const other = bodies[otherIndex]!
+    if (other.collisionRecipient === false) continue
     const candidate = placedActorCorrection(
       mover.id,
       position,
@@ -310,6 +313,7 @@ function cloneActorPhysicsBody(source: Readonly<ActorPhysicsBody>): ActorPhysics
     pushStrength: source.pushStrength,
     radius: source.radius,
   }
+  if (source.collisionRecipient !== undefined) body.collisionRecipient = source.collisionRecipient
   if (source.driven !== undefined) body.driven = source.driven
   if (source.pushEnabled !== undefined) body.pushEnabled = source.pushEnabled
   return body

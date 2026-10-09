@@ -444,6 +444,10 @@ export function stepBoneyardWorldTick(
         velocityPerTick: { x: 0, y: 0 },
       }] as const),
     ]),
+    onCollisionRecipientCleared: (actorId) => {
+      const index = dynamicBodyIndices.get(`enemy-${actorId}`)
+      if (index !== undefined) dynamicBodies[index]!.collisionRecipient = false
+    },
     resolveMovement: ({ actorId, delta, position, purpose, radius }) => {
       if (purpose === 'spawn-placement') {
         return resolveBoneyardSpawnPosition(

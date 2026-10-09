@@ -2258,6 +2258,17 @@ function normalizeWorld(
         }
       }
       const savedBrain = record(brain, `game save Boneyard enemy brain ${index}`)
+      if (savedBrain.family === 'wraith') {
+        if (savedBrain.collisionRecipient === undefined) {
+          // Legacy saves did not persist +0x36. Preserve a saved birth boundary;
+          // an older selectively paused birth cannot recover its missing history.
+          const spawnTick = integerWithin(actor.spawnTick, 'saved Wraith spawn tick', 0, Number.MAX_SAFE_INTEGER)
+          const lastTick = integerWithin(enemies.lastStepTick, 'saved enemy tick', -1, Number.MAX_SAFE_INTEGER)
+          savedBrain.collisionRecipient = spawnTick >= lastTick
+        } else if (typeof savedBrain.collisionRecipient !== 'boolean') {
+          throw new Error('saved Wraith collision recipient is invalid')
+        }
+      }
       if (sourceSchemaVersion >= 26 && sourceSchemaVersion < 44 && savedBrain.family === 'wraith') {
         const baseSpeed = finiteNumber(savedBrain.baseFlybySpeed, 'legacy Wraith base speed')
         if (baseSpeed <= 0) throw new Error('legacy Wraith base speed must be positive')
