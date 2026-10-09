@@ -1,5 +1,130 @@
 # 2026-08-22 — Enemy status-scalar reset and temporary-control lifecycle reopening
 
+## 2026-10-09 — Report 09: target destruction retires the whole status aggregate
+
+The earlier closure recovered expiry and scalar restoration but skipped the
+owning target's destruction boundary. The new coffin-rush continuation from
+message `1557818479359426620` contains 1,041 target-effect records; 1,016 refer
+to absent owners, with 824 FrostBurn records and a maximum remaining clock of
+953,551 ticks. The original schema-50 save SHA-256 is
+`ce91c6ea7db665c779c6b9bcced2df025e38042ecc47a67a90976410c5897602`.
+Full-quality idle and held-Frost-Jet browser probes did not reproduce the
+reported lag. Retained absent-target work is independently demonstrated; this
+entry does not claim the reporter's exact lag cause is reproduced.
+
+### Fresh native evidence
+
+Bounded read-only LLVM disassembly ran on M5 `/Volumes/Drive` using retail
+0.72.5, preferred image base `00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+There is no new native runtime recording and no native behavior change.
+
+- Shared modifier application `00625680` iterates the target/Puppet manager
+  at `+104`, its count at `+10C`, and calls modifier slot `+1C`.
+- Badguy deleting destructor `00478DA0` calls shared Puppet destructor
+  `006289F0` at `00478DE5`. Maggot deleting destructor `004804B0` calls
+  `0047E330`, which reaches the same Puppet destructor at `0047E3F0`.
+- `00628A34..00628A78` destroys the manager's reference array at `+118`.
+  The array destructor invokes element release `0045ADA0` for every element;
+  `0045ADA9..0045ADC2` decrements the reference count and calls the object's
+  virtual deleting destructor on final release. No modifier clock, actor
+  combat flag, or target health gates this destruction.
+- FrostBurn constructor `00623AE0` installs vtable `0079E5B8` and native type
+  `1B78`. Its deletion slot is the common `00448DD0`; its callbacks remain
+  `006278B0` (tick), `00623950` (apply), and `00627690` (merge). Long FrostBurn
+  clocks are legitimate while their owner exists and do not justify a cap.
+
+Instruction evidence establishes target-owned lifetime with high confidence.
+The Web equivalent is actual canonical actor membership, not combat-query
+eligibility: `boneyardNativeSecondaryTarget` excludes retained dying actors,
+inactive/emerging Maggots and non-hostile actor phases.
+
+### System boundary and complete membership
+
+The repair owns the detached `NativeSecondarySimulationState.targetEffects`
+aggregate's attachment lifetime. It does not change status clocks, scalar
+composition, effect strength, target admission, particles, or actor retirement.
+
+| Member | Disposition / focused proof | Lifetime proof / intended regression |
+| --- | --- | --- |
+| ColdSlow, CircleSlow, Stun, Dazzle, Frozen | exact-ported | Each aggregate member retained for its real owner, removed with absent owner |
+| FrostBurn, ElectricBurn, Steamed, Prismatic | exact-ported | Same membership; no orphan damage, RNG or presentation callbacks; last live tick unchanged |
+| Dampen disruption, Turn Undead flee, permanent weaken | exact-ported | Shared aggregate ownership; permanent weaken retained indefinitely for an existing owner |
+| Skeleton, SkeletonArcher, SkeletonMage, Imp, Zombie, Wraith, Demon, Coffin | exact-ported | Every ordinary family is a canonical `enemies.actors` row |
+| Spider, Cocoon, Portal, Heartmonger, DireFaculty, DemonSkull | exact-ported | All six later families use that same canonical owner inventory, including boss variants |
+| Maggot, both launch trajectories and active/emerging/dying phases | exact-ported | Canonical `enemies.maggots`; combat eligibility never determines ownership |
+| Current world, removed world, coincident numeric IDs in different worlds | exact-ported | Both world key and target ID identify the owner |
+| Saved continuation, party detach/rejoin, same-tick retirement/capture, world teardown | exact-ported | Reconcile actual authoritative owners without shortening retained statuses |
+| Burn and EtherBurn | verified-already-at-parity for absence cleanup | Separate actor owners explicitly retire when their target lookup is absent; existing lifetimes unchanged |
+| Poisoned, Webbed, native knockback/pushback | out-of-system | Stored on canonical actor/player/force owners rather than this detached aggregate |
+| StoneSkin, Planewalker and player control | out-of-system | Player-owned status state has its own lifetime boundary |
+| Scenery, projectile/silk IDs, boss appendage/tail/wisp presentation | out-of-system | Producer census creates no detached target-effect identity for these; effects use their canonical enemy owner |
+| Staff Disabling Hit | out-of-system | Permanent actor-owned fields, not this detached aggregate |
+
+The 18-class historical modifier catalog is a read-only census lead, not a
+new maintained Mod Loader output. Primary status producers resolve
+`primaryTargetRows` / `boneyardSpellTargetById` from actors and Maggots;
+secondary producers use `boneyardNativeSecondaryTargets`; Staff parses only
+`enemy:` IDs. Other primary scenery, projectile and silk rows remain separate.
+No authored timing or visual tables change and no browser constraint applies.
+
+### Implementation and acceptance contract
+
+The implementation uses complete world/target membership, independent of alive/combat flags, before
+status stepping. Preserve source-order callbacks and the last timed tick.
+Reconcile again after combat before publishing the authoritative state because
+player death removes its Cocoon after the secondary step. Ether Drain capture
+retains its dying target until the next world retirement and must retain that
+target's statuses in between. Direct party-player removal also destroys owned
+Cocoons and reconciles their status records before returning. Keep permanent
+weakening for a retained owner, and let existing world teardown clear status
+state. Save/rejoin must retain valid records and heal absent-owner legacy data
+before the first restored snapshot, with no clock or RNG advance.
+
+Focused tests cover every aggregate member, every enemy family and Maggot,
+retained noncombat/dying/emerging owners, expired versus absent owners, cross-
+world identity, save continuation, party rejoin and same-tick destruction.
+The parent coordinates the unchanged canonical gate and built original-save
+browser comparison. Those combined acceptance stages remain pending.
+
+### Focused implementation receipt
+
+- The two new kernel lifetime regressions failed on unchanged runtime source
+  (M5 job `job_20261009T015546Z_a759bdc1d9`). After implementation the complete
+  secondary-kernel, world-adapter, game-simulation and save-document suites
+  passed **439/439**, with no failed, skipped or cancelled tests, in
+  `job_20261009T020754Z_981f33524a` at `2026-10-09T02:08:02Z`.
+  Full test typechecking (`tsc -p tsconfig.test.json --noEmit`) passed in
+  `job_20261009T021035Z_786aa13ffb` at `2026-10-09T02:10:48Z`.
+- Per-member tests cover all 12 modifier/status members in the detached aggregate and
+  every one of the 14 ordinary actor family tokens. Real host tests cover
+  inactive/emerging/dying Maggots, retained Demon death, immediate Skeleton
+  retirement, parent-Coffin loss, permanent weakening, cross-world identity,
+  save restore before snapshot, party detach/rejoin, Hub teardown and both
+  direct-leave and active-party death-burst Cocoon cleanup. Existing Ether
+  Drain tests now prove statuses persist during capture's retained dying tick
+  and disappear on actual retirement, including saved continuation.
+- The original save restores to **25** valid records before a tick, preserving
+  all 75 ordinary actors and 120 Maggots. Four fixed-source 1,000-tick traces
+  finish with 21 valid records, 70 ordinary actors, 120 Maggots and HP386.
+  Every full-state SHA-256 after masking absent-target records equals the
+  pre-repair baseline:
+  `124791aadcb3efa1ef53d0d61360dd071e25f4f78344321b7cbfc67c298b0de4`.
+  This compares all remaining gameplay state, not selected counters.
+- The actual candidate's four elapsed samples were 746.917, 955.414, 971.337
+  and 939.139 ms; the preserved unmodified-source samples were 1266.54 and
+  1517.10 ms. These are bounded M5 workload measurements, not proof of the
+  reporter's exact lag or a general FPS guarantee. Final status JSON shrank
+  from the baseline's 597,940 bytes to **11,874 bytes**. Network compression
+  means JSON size is not a claim about wire bandwidth.
+- Native raw evidence is task-owned under M5
+  `report09-lag-sh9aksle/evidence/status-lifetime`; focused test logs and
+  `status-lifetime-fixed-diagnostic.json` are outside Git. The original save,
+  baseline profiling and task-only probes remain unchanged and untracked.
+  No schema bump, duration cap, particle suppression or native binary change
+  is required. Publication, combined canonical gate and built-browser proof
+  are coordinated separately; this receipt alone does not claim deployment.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Frost Jet can leave enemies frozen permanently.

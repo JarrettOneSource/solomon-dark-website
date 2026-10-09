@@ -6,6 +6,7 @@ import type { NativeSecondaryDamageContact, NativeSecondaryDampenCandidates, Nat
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
+import type { BoneyardWorldState } from './boneyard-world-state.ts'
 import { canPlaceBoneyardBody } from './boneyard-collision.ts'
 import { damageBoneyardEnemy } from './enemies/damage.ts'
 import { dampenBoneyardCasters } from './enemies/dampen.ts'
@@ -17,6 +18,17 @@ const NATIVE_TELEPORT_SCORE_CAP = 0x10_0000
 const NATIVE_TELEPORT_COLLISION_RADIUS = 40
 const NATIVE_TELEPORT_RING_DISTANCE_FACTOR = 0.800000011920929
 const NATIVE_RUNTIME_PI = Math.fround(Math.PI)
+
+export function createNativeSecondaryTargetMembership(
+  world: Pick<BoneyardWorldState, 'kind' | 'runId' | 'enemies'> | { readonly kind: 'hub' },
+): (worldKey: string, targetId: number) => boolean {
+  if (world.kind !== 'boneyard') return () => false
+  const worldKey = `boneyard:${world.runId}`
+  // Actor destruction, not health, flags or emergence, ends owned modifiers.
+  const targetIds = new Set(world.enemies.actors.map(({ id }) => id))
+  for (const { id } of world.enemies.maggots) targetIds.add(id)
+  return (targetWorldKey, targetId) => targetWorldKey === worldKey && targetIds.has(targetId)
+}
 
 export interface BoneyardNativeTeleportBody {
   readonly position: Vector2

@@ -34,7 +34,7 @@ import { createNativePuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { NativeSecondarySimulationState, NativeSecondaryTargetEffectState, NativeSecondaryTickContext, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
-import { activateNativeSecondaryBeltSkill, applyNativeSecondaryDazzle, applyNativeSecondaryEtherBurn, applyNativeSecondaryFireBurn, applyNativeSecondaryTargetEffect, applyNativeUnforgeCooldownRejuvenation, createNativeSecondarySimulation, emitNativePlayerScreenFlash, enrollNativeSecondaryPainterOwners, materializeNativePlayerFlashResponse, nativeSecondaryManaCeiling, nativeSecondaryManaReserve, nativeSecondaryTargetEffect, removeNativeSecondaryOwner, resetNativeSecondaryWorld, spawnNativeScriptFires, stepNativeMindblastPresentation, stepNativeSecondaryAbilities, triggerNativePlayerMindblast } from '../core-kernels/native-secondary-abilities.ts'
+import { activateNativeSecondaryBeltSkill, applyNativeSecondaryDazzle, applyNativeSecondaryEtherBurn, applyNativeSecondaryFireBurn, applyNativeSecondaryTargetEffect, applyNativeUnforgeCooldownRejuvenation, createNativeSecondarySimulation, emitNativePlayerScreenFlash, enrollNativeSecondaryPainterOwners, materializeNativePlayerFlashResponse, nativeSecondaryManaCeiling, nativeSecondaryManaReserve, nativeSecondaryTargetEffect, retainNativeSecondaryTargetEffects, removeNativeSecondaryOwner, resetNativeSecondaryWorld, spawnNativeScriptFires, stepNativeMindblastPresentation, stepNativeSecondaryAbilities, triggerNativePlayerMindblast } from '../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_GOLEM_PLACEMENT_RADIUS, NATIVE_GOLEM_RADIUS } from '../core-kernels/native-secondary-golem.ts'
 import { captureNativeEtherDrainImage, pulseNativeEtherDrain } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeDeathWeaponActor, stepNativeDeathWeaponActors } from '../core-kernels/native-death-animations.ts'
@@ -80,7 +80,7 @@ import type { HubStudentPopulationState } from './hub-students.ts'
 import { registerHubStudentPopulationPainters } from './hub-students.ts'
 import type { HubWorldState } from './hub-world.ts'
 import { addHubParticipant, beginHubCollegeIntro, confirmHubCollegeIntroLoadout, createHubWorld, hubSpawnPoint, removeHubParticipant, stepHubWorldTick } from './hub-world.ts'
-import { boneyardNativeSecondaryDampenCandidates, boneyardNativeSecondaryTarget, boneyardNativeSecondaryTargets, resolveBoneyardNativeSecondaryCombat, resolveBoneyardNativeTeleport, resolveNativeCollisionAdjustedPosition } from './native-secondary-world.ts'
+import { createNativeSecondaryTargetMembership, boneyardNativeSecondaryDampenCandidates, boneyardNativeSecondaryTarget, boneyardNativeSecondaryTargets, resolveBoneyardNativeSecondaryCombat, resolveBoneyardNativeTeleport, resolveNativeCollisionAdjustedPosition } from './native-secondary-world.ts'
 import { applyBoneyardEtherDrainWorldAnimationForces, boneyardNativeEtherDrainTargets, boneyardNativeEtherDrainWorldAnimations, nativeEtherDrainCapturedImage } from './native-ether-drain-world.ts'
 import { applyBoneyardEtherDrainForces } from './boneyard-world-placement.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
@@ -453,26 +453,29 @@ export function removePlayerCharacter(
     state.levelUpBarrier,
     playerId,
   )
+  const world = state.world.kind === 'hub'
+    ? removeHubParticipant(state.world, playerId)
+    : {
+        ...state.world,
+        enemies: removeCocoonOwner(state.world.enemies, playerId),
+        hallOfFameRuns: Object.fromEntries(Object.entries(
+          state.world.hallOfFameRuns,
+        ).filter(([id]) => id !== playerId)),
+      }
   return {
     ...state,
     inventoryDyeSessions: closeGameSimulationInventoryDyeSession(state, playerId).inventoryDyeSessions,
     levelUpBarrier,
     playerEntities,
     primarySpells: removePrimarySpellOwner(state.primarySpells, playerId),
-    secondaryAbilities: removeNativeSecondaryOwner(state.secondaryAbilities, playerId),
+    secondaryAbilities: retainNativeSecondaryTargetEffects(
+      removeNativeSecondaryOwner(state.secondaryAbilities, playerId), createNativeSecondaryTargetMembership(world),
+    ),
     run: synchronizeGameRunParticipants(
       state.run,
       playerEntities.identities.map(({ playerId: id }) => id),
     ),
-    world: state.world.kind === 'hub'
-      ? removeHubParticipant(state.world, playerId)
-      : {
-          ...state.world,
-          enemies: removeCocoonOwner(state.world.enemies, playerId),
-          hallOfFameRuns: Object.fromEntries(Object.entries(
-            state.world.hallOfFameRuns,
-          ).filter(([id]) => id !== playerId)),
-        },
+    world,
   }
 }
 
@@ -3642,6 +3645,7 @@ function finishGameSimulationTick(
       ? [playerId]
       : []
   )))
+  secondaryAbilities = retainNativeSecondaryTargetEffects(secondaryAbilities, createNativeSecondaryTargetMembership(world))
   if (world.kind === 'boneyard') world = finalizeBoneyardPuppetQueries(world, playerCharacterRecords(playerEntities), {
     primarySpells, secondaryAbilities, playerEntities,
   })
@@ -4172,6 +4176,7 @@ function createNativeSecondaryTickContext(
       }
       return { position: { x: 0, y: 0 }, rng }
     },
+    targetExists: createNativeSecondaryTargetMembership(world),
     target: (worldKey, targetId) => (
       world.kind === 'boneyard'
       && worldKey === `boneyard:${world.runId}`

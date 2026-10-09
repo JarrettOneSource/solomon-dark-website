@@ -68,6 +68,7 @@ import {
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryPlayerDamage,
+  applyNativeSecondaryTargetEffect,
   createNativeSecondaryPlayerState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
@@ -5401,9 +5402,12 @@ test('Ether Drain captures each supported enemy image through the public lethal 
       enemyToken === 'ZOMBIE' ? ['FLAG_ROTTEN'] : [])
     if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
     const victim = state.world.enemies.actors[0]!
+    state = { ...state, secondaryAbilities: applyNativeSecondaryTargetEffect(state.secondaryAbilities,
+      `boneyard:${state.world.runId}`, victim.id, { weakenFactor: .5 }) }
     state = stepGameSimulationTick(state, {})
     if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
     assert.equal(state.world.enemies.actors.find(actor => actor.id === victim.id)?.etherDrainCaptured, true, enemyToken)
+    assert.equal(state.secondaryAbilities.targetEffects.some(effect => effect.targetId === victim.id), true)
     const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
     const image = field.etherDrain!.animations.find(animation => animation.kind === 'captured')!
     assert.equal(image.kind, 'captured')
@@ -5422,6 +5426,8 @@ test('Ether Drain captures each supported enemy image through the public lethal 
     if (next.world.kind !== 'boneyard' || resumed.world.kind !== 'boneyard') throw new Error('expected Boneyard')
     assert.equal(next.world.enemies.actors.some(actor => actor.id === victim.id), false)
     assert.equal(resumed.world.enemies.actors.some(actor => actor.id === victim.id), false)
+    assert.equal(next.secondaryAbilities.targetEffects.some(effect => effect.targetId === victim.id), false)
+    assert.equal(resumed.secondaryAbilities.targetEffects.some(effect => effect.targetId === victim.id), false)
     assert.deepEqual(next.world.enemies.deathEffects, [])
     assert.equal(next.world.enemies.projectiles.some(projectile => projectile.kind === 'poison-pool'), false)
     assert.equal(next.world.enemyEvents.some(event => event.actorId === victim.id && event.type === 'enemy-death-sound'), false)
@@ -5710,6 +5716,28 @@ test('Ether Drain and Webbed retain field/Cocoon painter ownership through curre
   const invalid = JSON.parse(document)
   invalid.continuation.simulation.world.enemies.actors.find((actor: { id: number }) => actor.id === cocoon.id).etherDrainCaptured = true
   assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /invalid Ether Drain capture/)
+})
+
+test('target-owned status lifetime clears a Cocoon when its player leaves or reaches the death burst', () => {
+  let state = withEtherDrainWebbed(enterBoneyardWorld(createGameSimulation({
+    'local-player': DEFAULT_PLAYER_CHARACTER_CONFIG, peer: DEFAULT_PLAYER_CHARACTER_CONFIG,
+  }), emptyBoneyard()), 3)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const cocoon = state.world.enemies.actors.find(actor => actor.brain.family === 'cocoon')!
+  state = { ...state, secondaryAbilities: applyNativeSecondaryTargetEffect(state.secondaryAbilities,
+    `boneyard:${state.world.runId}`, cocoon.id, { weakenFactor: .5 }) }
+  const removed = removePlayerCharacter(state, 'local-player')
+  assert.deepEqual(removed.secondaryAbilities.targetEffects, [])
+  state = damageGameSimulationPlayer(state, 'local-player', 10_000, state.tick)
+  let retired = false
+  for (let update = 0; update < PLAYER_DEATH_PRESENTATION_DURATION_TICKS; update++) {
+    state = stepGameSimulationTick(state, {})
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const exists = state.world.enemies.actors.some(actor => actor.id === cocoon.id)
+    assert.equal(state.secondaryAbilities.targetEffects.some(effect => effect.targetId === cocoon.id), exists)
+    if (!exists) { retired = true; break }
+  }
+  assert.equal(retired, true)
 })
 
 function withEtherDrainWebbed(state: GameSimulationState, stacks: number, sourceActorId = 0): GameSimulationState {
@@ -6986,6 +7014,93 @@ function emptyBoneyard(): LoadedBoneyard {
     sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   }
 }
+
+function targetStatusLifetimeFixture(): { loadedBoneyard: LoadedBoneyard; state: GameSimulationState } {
+  const loadedBoneyard = emptyBoneyard()
+  let state = enterBoneyardWorld(createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG,
+    peer: DEFAULT_PLAYER_CHARACTER_CONFIG }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const managers = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const context = { tick: 0, players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: managers.register, resolveMovement: (request: { position: Readonly<{ x: number; y: number }> }) => request.position }
+  let enemies = stepBoneyardEnemyStore(state.world.enemies, { ...context,
+    resolveSpawnIntents: () => (['DEMON', 'COFFIN', 'SKELETON'] as const).map((enemyToken, index) => ({
+      enemyToken, flags: [], id: index + 1, locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken], position: { x: 50 + index * 150, y: 50 },
+      spawnTick: 0, waveOrdinal: 1,
+    })),
+  }).store
+  enemies = { ...enemies, actors: enemies.actors.map(actor => actor.brain.family === 'coffin'
+    ? { ...actor, brain: { ...actor.brain, phase: 'opening', phaseTicksRemaining: 1 } } : actor) }
+  enemies = stepBoneyardEnemyStore(enemies, { ...context, tick: 1, resolveSpawnIntents: () => [] }).store
+  assert.ok(enemies.maggots.length >= 3)
+  enemies = { ...enemies, actors: enemies.actors.map(actor => actor.brain.family === 'coffin'
+    ? { ...actor, brain: { ...actor.brain, phase: 'holding', phaseTicksRemaining: 1000 } } : actor) }
+  state = { ...state, tick: 1, worldManagerOrder: managers.state(), world: { ...state.world, enemies } }
+  for (const actor of [...enemies.actors, ...enemies.maggots]) {
+    state = { ...state, secondaryAbilities: applyNativeSecondaryTargetEffect(state.secondaryAbilities,
+      `boneyard:${loadedBoneyard.runId}`, actor.id, { frozenTicks: 1_000_000, frozenTimeScale: 0, weakenFactor: .5 }) }
+  }
+  return { loadedBoneyard, state }
+}
+
+test('target-owned status lifetime heals saved orphan records before the first snapshot and preserves party rejoin', () => {
+  const fixture = targetStatusLifetimeFixture()
+  let state = fixture.state
+  const expected = state.secondaryAbilities.targetEffects
+  for (const [worldKey, targetId] of [[`boneyard:${fixture.loadedBoneyard.runId}`, 900_001],
+    ['boneyard:retired', expected[0]!.targetId]] as const) {
+    state = { ...state, secondaryAbilities: applyNativeSecondaryTargetEffect(state.secondaryAbilities,
+      worldKey, targetId, { frostBurnTicks: 953_551, weakenFactor: .5 }) }
+  }
+  const saved = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: fixture.loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(saved).state
+  assert.deepEqual(restored.secondaryAbilities.targetEffects, expected)
+  assert.equal(restored.tick, state.tick, 'restore cleanup does not advance clocks')
+  assert.deepEqual(restored.secondaryAbilities.rng, state.secondaryAbilities.rng)
+  assert.deepEqual(createGameSnapshot(restored, 'owner').secondaryAbilities.targetEffects, expected)
+  const stepped = stepGameSimulationTick(restored, {})
+  assert.deepEqual(stepped.secondaryAbilities.targetEffects.map(effect => effect.targetId), expected.map(effect => effect.targetId))
+  assert.ok(stepped.secondaryAbilities.targetEffects.every(effect => effect.frozenTicks === 999_999 && effect.weakenFactor === .5))
+  const detached = detachGameSimulationPlayer(fixture.state, 'peer')
+  const joined = rejoinGameSimulationPlayer(removePlayerCharacter(fixture.state, 'peer'), detached, 'peer', null)
+  assert.deepEqual(joined.secondaryAbilities.targetEffects, expected)
+  assert.deepEqual(returnGameSimulationToHub(joined).secondaryAbilities.targetEffects, [])
+})
+
+test('target-owned status lifetime retains dying and emerging owners and clears actual retirement in the same tick', () => {
+  let { state } = targetStatusLifetimeFixture()
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const source = state.world.enemies
+  const demon = source.actors.find(actor => actor.config.enemyToken === 'DEMON')!
+  const skeleton = source.actors.find(actor => actor.config.enemyToken === 'SKELETON')!
+  let enemies = damageBoneyardEnemy(source, { actorId: demon.id, amount: demon.currentHealth,
+    sourcePlayerId: 'owner', tick: state.tick }).store
+  enemies = damageBoneyardEnemy(enemies, { actorId: skeleton.id, amount: skeleton.currentHealth,
+    sourcePlayerId: 'owner', tick: state.tick }).store
+  const [emerging, inactive, dying] = enemies.maggots
+  assert.ok(emerging && inactive && dying)
+  enemies = { ...enemies, maggots: enemies.maggots.map(actor => actor.id === dying.id
+    ? { ...actor, lifeState: 'dying', lastAttackTick: state.tick, deathStartedTick: state.tick }
+    : actor.id === inactive.id ? { ...actor, combatActive: false, movementPhase: 'crawl', verticalOffset: 0 }
+      : { ...actor, combatActive: false, movementPhase: 'emerging' }) }
+  state = stepGameSimulationTick({ ...state, world: { ...state.world, enemies } }, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.actors.some(actor => actor.id === skeleton.id), false)
+  assert.equal(state.world.enemies.actors.find(actor => actor.id === demon.id)?.lifeState, 'dying')
+  const effects = state.secondaryAbilities.targetEffects
+  assert.equal(effects.some(effect => effect.targetId === skeleton.id), false)
+  for (const id of [demon.id, emerging.id, inactive.id, dying.id]) {
+    assert.equal(effects.some(effect => effect.targetId === id), true, `retained owner ${id}`)
+  }
+  // Removing the Coffin owner retires all its Maggots through the real world step.
+  state = stepGameSimulationTick({ ...state, world: { ...state.world, enemies: { ...state.world.enemies,
+    actors: state.world.enemies.actors.filter(actor => actor.config.enemyToken !== 'COFFIN') } } }, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(state.world.enemies.maggots, [])
+  assert.deepEqual(state.secondaryAbilities.targetEffects.map(effect => effect.targetId), [demon.id])
+})
 
 function combatBoneyard(runId: string): LoadedBoneyard {
   return {

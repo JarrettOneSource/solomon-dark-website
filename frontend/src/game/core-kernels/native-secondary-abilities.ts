@@ -476,6 +476,8 @@ export interface NativeSecondaryTickContext {
     worldKey: string,
     targetId: number,
   ) => NativeSecondaryTarget | null
+  // Ownership includes retained dying/noncombat actors that target() cannot hit.
+  readonly targetExists: (worldKey: string, targetId: number) => boolean
   readonly targets: (
     worldKey: string,
     center: Vector2,
@@ -1057,6 +1059,14 @@ export function nativeSecondaryTargetEffect(
   )) ?? null
 }
 
+export function retainNativeSecondaryTargetEffects(
+  source: NativeSecondarySimulationState,
+  targetExists: NativeSecondaryTickContext['targetExists'],
+): NativeSecondarySimulationState {
+  const targetEffects = source.targetEffects.filter(effect => targetExists(effect.worldKey, effect.targetId))
+  return targetEffects.length === source.targetEffects.length ? source : { ...source, targetEffects }
+}
+
 export function nativeSecondaryTargetMaterialTint(
   worldTint: number,
   effect: NativeSecondaryTargetEffectState | null | undefined,
@@ -1373,10 +1383,11 @@ export function stepNativeSecondaryAbilities(
   if (!Number.isSafeInteger(context.tick) || context.tick < 0) {
     throw new RangeError('secondary tick must be a non-negative safe integer')
   }
+  const targetEffects = retainNativeSecondaryTargetEffects(source, context.targetExists).targetEffects
   let state: NativeSecondarySimulationState = {
     ...source,
     events: source.events.filter(({ tick }) => tick >= context.tick - EVENT_RETENTION_TICKS),
-    targetEffects: source.targetEffects.flatMap((effect) => {
+    targetEffects: targetEffects.flatMap((effect) => {
       const circleSlowTicks = Math.max(0, effect.circleSlowTicks - 1)
       const coldSlowTicks = Math.max(0, effect.coldSlowTicks - 1)
       const dazzleTicks = Math.max(0, effect.dazzleTicks - 1)
@@ -1533,7 +1544,7 @@ export function stepNativeSecondaryAbilities(
       })) }).map(target => byId.get(target.id)!)
   }
 
-  for (const effect of source.targetEffects) {
+  for (const effect of targetEffects) {
     if (effect.electricBurn !== null) {
       const sourceTarget = context.target(effect.worldKey, effect.targetId)
       if (sourceTarget) {

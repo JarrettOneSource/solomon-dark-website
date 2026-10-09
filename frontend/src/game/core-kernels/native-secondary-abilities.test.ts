@@ -49,6 +49,7 @@ import {
   stepNativeSecondaryAbilities,
   triggerNativePlayerMindblast,
   type NativeSecondarySimulationState,
+  type NativeSecondaryTargetEffectPatch,
   type NativeSecondaryTickContext,
 } from './native-secondary-abilities.ts'
 import {
@@ -223,10 +224,75 @@ function context(
       rng,
     }),
     target: () => null,
+    targetExists: () => true,
     targets: () => [],
     tick,
   }
 }
+
+test('target-owned status lifetime removes every absent-owner modifier without using combat eligibility', () => {
+  const patches = {
+    'cold-slow': { coldSlowTicks: 100, coldSlowFactor: .5, coldSlowMaterial: true },
+    'circle-slow': { circleSlowTicks: 100, circleSlowFactor: .5 },
+    dazzle: { dazzleTicks: 100, dazzleMaximumTicks: 100 },
+    disrupted: { disruptedTicks: 100 },
+    'electric-burn': { electricBurn: { arcCount: 2, damagePerTick: 1, ownerId: 'player',
+      sourceActorId: 91, stunFactor: .5, ticks: 100 } },
+    flee: { fleeTicks: 100 },
+    'frost-burn': { frostBurnTicks: 953_551, frostBurnDamagePerTick: 1,
+      frostBurnOwnerId: 'player', frostBurnSkillId: 35, frostBurnSourceActorId: 92 },
+    frozen: { frozenTicks: 1000, frozenTimeScale: 0 },
+    prismatic: { prismaticTicks: 100 },
+    stun: { stunTicks: 100, stunFactor: .5 },
+    steamed: { steamed: { damagePerTick: 1, emberDamage: 1, emberFragments: 2,
+      explodeDamage: 1, explodeRadius: 10, ownerId: 'player', sourceActorId: 93, ticks: 100 } },
+    weaken: { weakenFactor: .5 },
+  } satisfies Record<string, NativeSecondaryTargetEffectPatch>
+  for (const [kind, patch] of Object.entries(patches)) {
+    let source = createNativeSecondarySimulation(42)
+    for (const [worldKey, targetId] of [['boneyard:test', 7], ['boneyard:test', 8],
+      ['boneyard:retired', 7]] as const) {
+      source = applyNativeSecondaryTargetEffect(source, worldKey, targetId, patch)
+    }
+    const tickContext = { ...context(35, 1, null), players: {},
+      targetExists: (worldKey: string, targetId: number) => worldKey === 'boneyard:test' && targetId === 7,
+      target: (worldKey: string, targetId: number) => {
+        assert.equal(worldKey, 'boneyard:test', `${kind} retired-world callback`)
+        assert.equal(targetId, 7, `${kind} absent-target callback`)
+        return null // The retained owner is temporarily ineligible for combat.
+      },
+    }
+    const stepped = stepNativeSecondaryAbilities(source, tickContext)
+    assert.deepEqual(stepped.state.targetEffects.map(({ worldKey, targetId }) => [worldKey, targetId]),
+      [['boneyard:test', 7]], kind)
+    assert.deepEqual(stepped.state.rng, source.rng, `${kind} no absent-owner random draws`)
+    assert.deepEqual(stepped.damage, [], `${kind} no absent-owner damage`)
+    if (kind === 'frost-burn') assert.equal(stepped.state.targetEffects[0]!.frostBurnTicks, 953_550)
+    if (kind === 'weaken') assert.equal(stepped.state.targetEffects[0]!.weakenFactor, .5)
+    const removed = stepNativeSecondaryAbilities(stepped.state, { ...tickContext, tick: 2,
+      targetExists: () => false })
+    assert.deepEqual(removed.state.targetEffects, [], `${kind} actual destruction`)
+  }
+})
+
+test('target-owned status lifetime preserves final live-tick damage and random draws', () => {
+  const source = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(42), 'boneyard:test', 7, {
+    frostBurnTicks: 1, frostBurnDamagePerTick: 2, frostBurnOwnerId: 'player',
+    frostBurnSkillId: 35, frostBurnSourceActorId: 92,
+  })
+  const tickContext = { ...context(35, 1, null), players: {}, targetExists: () => true,
+    target: () => ({ id: 7, family: 'SKELETON', lightRegistration: TARGET_LIGHT_REGISTRATION,
+      position: { x: 10, y: 10 }, radius: 20, scale: 1, shieldHealth: 0 }),
+  }
+  const retained = stepNativeSecondaryAbilities(source, tickContext)
+  assert.deepEqual(retained.state.targetEffects, [])
+  assert.equal(retained.damage.length, 1)
+  assert.equal(retained.damage[0]!.amount, 2)
+  assert.notDeepEqual(retained.state.rng, source.rng)
+  const removed = stepNativeSecondaryAbilities(source, { ...tickContext, targetExists: () => false })
+  assert.deepEqual(removed.damage, [])
+  assert.deepEqual(removed.state.rng, source.rng)
+})
 
 function cast(skillId: NativeSecondaryAbilityId): ReturnType<typeof stepNativeSecondaryAbilities> {
   return stepNativeSecondaryAbilities(

@@ -10,6 +10,7 @@ import { nativePuppetHitAlpha } from '../core-kernels/native-puppet-hit.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
 import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skeleton-bosses.ts'
+import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
 import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
 import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
 import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from '../protocol/boneyard-enemy-replication.ts'
@@ -17,6 +18,7 @@ import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import type { BoneyardEnemyProjectile, BoneyardEnemyStoreStepContext } from './enemies/model.ts'
 import {
+  createNativeSecondaryTargetMembership,
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
   boneyardNativeSecondaryTargets,
@@ -30,6 +32,34 @@ const EMPTY_COLLISION: BoneyardCollisionWorld = Object.freeze({
   circles: Object.freeze([]),
   polygons: Object.freeze([]),
   segments: Object.freeze([]),
+})
+
+test('target-owned status membership includes every canonical family independently of combat eligibility', () => {
+  const tokens = Object.keys(BONEYARD_WAVE_ENEMY_TYPES) as (keyof typeof BONEYARD_WAVE_ENEMY_TYPES)[]
+  const enemies = stepBoneyardEnemyStore(createBoneyardEnemyStore('status-owner-families'), {
+    tick: 0, players: {}, projectileWorldBlocked: () => false,
+    resolveMovement: request => request.position,
+    resolveSpawnIntents: () => tokens.map((enemyToken, index) => ({
+      enemyToken, flags: [], id: index + 1, locationPolicy: 'anywhere',
+      authoredRecipe: enemyToken === 'PORTAL' ? nativePortalRecipe(nativePortalProgram(
+        '9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9',
+      ).phases[0]!) : undefined,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+      position: { x: index * 100, y: 100 }, spawnTick: 0, waveOrdinal: 1,
+    })),
+  }).store
+  assert.deepEqual(enemies.actors.map(actor => actor.config.enemyToken).sort(), [...tokens].sort())
+  for (const actor of enemies.actors) {
+    for (const lifeState of ['alive', 'dying'] as const) {
+      const store = { ...enemies, actors: [{ ...actor, lifeState }] }
+      const exists = createNativeSecondaryTargetMembership({ kind: 'boneyard', runId: 'owners', enemies: store })
+      assert.equal(exists('boneyard:owners', actor.id), true, `${actor.config.enemyToken} ${lifeState}`)
+      assert.equal(exists('boneyard:old-world', actor.id), false)
+      assert.equal(exists('boneyard:owners', 999_999), false)
+      if (lifeState === 'dying') assert.equal(boneyardNativeSecondaryTarget(store, actor.id), null)
+    }
+  }
+  assert.equal(createNativeSecondaryTargetMembership({ kind: 'hub' })('boneyard:owners', 1), false)
 })
 
 test('native flag-8 contacts clear movement reaction independently of strength and hurt audio for every skeleton boss source', () => {

@@ -37,7 +37,7 @@ import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { NATIVE_FLOAT_DIVISOR, createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign } from '../core-kernels/native-rng.ts'
 import { NATIVE_BANISH_RING_ALPHA_LOSS, NATIVE_FADE_ALPHA_LOSS, NATIVE_TRAGIC_CONTACT_ALPHA_LOSS } from '../core-server/boneyard-transient-effects.ts'
 import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
-import { nativeSecondaryPainterManagerLane } from '../core-kernels/native-secondary-abilities.ts'
+import { nativeSecondaryPainterManagerLane, retainNativeSecondaryTargetEffects } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeEtherDrainState, nativeEtherDrainCapturesFamily } from '../core-kernels/native-ether-drain.ts'
 import { nativeEtherDrainState } from '../protocol/codecs/secondary-actors.ts'
 import { NATIVE_GOLEM_DEATH_FRAGMENT_COUNT, NATIVE_GOLEM_DEATH_MAX_AGE, NATIVE_GOLEM_DEATH_PAINTER_COUNT } from '../core-kernels/native-death-animations.ts'
@@ -58,6 +58,7 @@ import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-r
 import { createPlayerSkillRuntime, playerSkillDerivedStats, refreshPlayerCombatFromSkillStats, refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
 import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
 import { createBoneyardWorld } from '../core-server/boneyard-world-construction.ts'
+import { createNativeSecondaryTargetMembership } from '../core-server/native-secondary-world.ts'
 import type { BoneyardWorldState } from '../core-server/boneyard-world-state.ts'
 import type { BoneyardProjectileKnockback } from '../core-server/enemies/model.ts'
 import type { GameSimulationState } from '../core-server/game-simulation.ts'
@@ -698,6 +699,9 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     })
     state = { ...state, world: { ...world, deathWeapons, nextDeathWeaponId: nextId } }
   }
+  state = { ...state, secondaryAbilities: retainNativeSecondaryTargetEffects(
+    state.secondaryAbilities, createNativeSecondaryTargetMembership(state.world),
+  ) }
   createGameSnapshot(state, continuation.summary.playerId)
   if (state.world.kind === 'boneyard' && state.world.enemies.puppetHits.length > 0) {
     const owners = new Map(boneyardMouthWorldTargets(state.world, state).map(target => [target.id, target.hitKind]))
