@@ -447,3 +447,27 @@ Region multiply boundary must include the active shader on sampled light RGB;
 a simple D*L reduction applies only to gray light with white vertex RGB.
 Existing proof and proposed held-out same-frame boundary test are recorded in
 report SHA-256 `5b4f19e0e96ac7c6820e663615d702b5d022ec2389348210f67ae50e14c63566`.
+
+
+### Canonical-gate fixture isolation follow-up
+
+The first exact2270d826 canonical M5 gate stopped at3132/3133 tests in the
+main frontend suite. The sole failure was the retained-weather case in
+`native-mesh-lifetime.test.ts`: its real particle shader reached the browser
+canvas adapter after that fixture had restored its import-time stub. The old
+unrelated top-level ColorMatrixFilter had incidentally warmed Pixi's shared
+precision cache during the import hook. Removing the filter exposed the test's
+hidden ordering dependency; no browser/runtime fallback is warranted.
+
+The test now owns its null-WebGL canvas probe for the weather construction
+locally, and the obsolete filter-specific import stub/comment is removed.
+All retained color, reuse and destruction assertions remain unchanged. The
+failed full-gate log is retained (SHA-256
+`5e3959bc9ca6d3ce9fa64cb74a62cfa44e191a99e57c80d8a57fad23fe30af31`).
+The five runtime files retain their independently GPU-qualified bytes. The cold
+single-case run passes1/1, the complete mesh lifetime fixture passes8/8, and the
+presentation suite passes53/53. Test TypeScript and full frontend lint also pass.
+Qualification receipt SHA-256:
+`b7b5fde012663d99bc5fb2e6b1b97c2bcfdaf2e44df30181a32103fee370e3c3`.
+Exact-commit compiled reacceptance and a new complete canonical gate remain
+required for this follow-up before publication.

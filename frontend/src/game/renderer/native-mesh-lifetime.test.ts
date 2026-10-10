@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import test, { after, before, mock } from 'node:test'
+import test, { after, before } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { Color, Container, DOMAdapter, FillGradient, Graphics, MeshSimple, Particle, ParticleContainer, Texture, WebGLRenderer } from 'pixi.js'
 import { createServer, type ViteDevServer } from 'vite'
@@ -31,14 +31,8 @@ before(async () => {
   })
   secondaryAssets = await server.ssrLoadModule('/src/game/renderer/native-secondary-assets.ts') as typeof import('./native-secondary-assets.ts')
   deathEffectModule = await server.ssrLoadModule('/src/game/renderer/native-enemy-death-effect-view.ts') as typeof import('./native-enemy-death-effect-view.ts')
-  // The module's shared filter probes shader precision; these ownership tests do not render.
-  const createCanvas = mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
-  try {
-    secondaryModule = await server.ssrLoadModule('/src/game/renderer/native-secondary-world-view.ts') as typeof import('./native-secondary-world-view.ts')
-    weatherModule = await server.ssrLoadModule('/src/game/renderer/native-boneyard-weather-view.ts') as typeof import('./native-boneyard-weather-view.ts')
-  } finally {
-    createCanvas.mock.restore()
-  }
+  secondaryModule = await server.ssrLoadModule('/src/game/renderer/native-secondary-world-view.ts') as typeof import('./native-secondary-world-view.ts')
+  weatherModule = await server.ssrLoadModule('/src/game/renderer/native-boneyard-weather-view.ts') as typeof import('./native-boneyard-weather-view.ts')
 })
 after(async () => { await server?.close() })
 
@@ -150,6 +144,9 @@ function gradientCanvas(width: number, height: number) {
 }
 
 test('retained weather drops preserve Pixi colors through reuse without redundant normalization', (t) => {
+  // Shader construction probes browser precision; own this fixture dependency locally.
+  // Do not rely on another module warming Pixi's process-global precision cache.
+  t.mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
   const weather = new NativeBoneyardWeather({ enhancedEffects: true, initialTick: 0, mode: 2 })
   const colors = [0]
   t.mock.getter(weather, 'activeDropCount', () => colors.length)
