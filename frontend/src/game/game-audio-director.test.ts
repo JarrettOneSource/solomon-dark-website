@@ -210,6 +210,7 @@ const SOURCES = {
     dampen: 'dampen.wav',
     dye: 'dye.wav',
     'magic-book-get': 'magic-book-get.wav',
+    'lose-reverie': 'lose-reverie.wav',
     'golem-die': 'golem-die.wav',
     'golem-provoke': 'golem-provoke.wav',
     'leviathan-roar': 'leviathan-roar.wav',

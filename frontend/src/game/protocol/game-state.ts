@@ -466,6 +466,7 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'projectile-spawned',
   'reward',
   'player-cheat-death',
+  'player-charm-lost',
 ] as const
 
 export const BONEYARD_ENEMY_ACTION_SOUNDS = [

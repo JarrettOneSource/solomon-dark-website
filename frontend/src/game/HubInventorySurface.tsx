@@ -1,4 +1,5 @@
 import HotbarControls, { useHotbar } from './HotbarControls.tsx'
+import { createPortal } from 'react-dom'
 import type { InventoryRunSummary } from './hub-inventory-ui-model.ts'
 import {
   hubInventorySurfaceDiagnostics,
@@ -92,6 +93,9 @@ import { ServiceActions } from './HubServiceActions.tsx'
 import { DyeClothingActions } from './HubDyeClothingActions.tsx'
 import { EQUIPMENT_SLOT_ORDER, itemAtEquipmentSlot } from './hub-inventory-equipment.ts'
 import { type HubInventoryUiNotice, unforgeResultNotice } from './hub-inventory-notices.ts'
+import { NativeUiButton } from './native-ui/react.ts'
+import HubSackRenameDialog from './HubSackRenameDialog.tsx'
+import { INVENTORY_SACK_RENAME_BUTTON, inventorySackRenameTarget } from './hub-sack-rename.ts'
 
 export function NativeHubSurface({
   audio,
@@ -164,6 +168,7 @@ export function NativeHubSurface({
   surface: Exclude<HubUiSurface, null>
   storyOffice: boolean
 }) {
+  const overlayRef = useRef<HTMLDivElement>(null)
   const { bank } = useHotbar()
   const belt = useMemo(() => allBeltEntries.slice(bank * 8, bank * 8 + 8), [allBeltEntries, bank])
   const onBeltActivate = useCallback((slot: number, pointer: Vector2 | null) => {
@@ -211,6 +216,12 @@ export function NativeHubSurface({
   const [serviceHoverInspection, setServiceHoverInspection] = useState<HubServiceInspectionModel | null>(null)
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
+  const [renameSelectionOwner, setRenameSelectionOwner] = useState<'backpack' | 'service'>('backpack')
+  const [renameSackId, setRenameSackId] = useState<number | null>(null)
+  const renameCandidate = inventorySackRenameTarget(economy,
+    renameSelectionOwner === 'service' ? serviceSelection : inventorySelection, sackPath)
+  const renameSack = renameSackId === null ? null
+    : findInventoryItem(economy.backpack, renameSackId) ?? findInventoryItem(economy.storage, renameSackId)
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
   const [releasedInventoryDrag, setReleasedInventoryDrag] = useState<{
     readonly action: HubInventoryAction['type']
@@ -266,6 +277,10 @@ export function NativeHubSurface({
   )
   const inventoryTransitionLocked = sackTransition !== null || inventoryFlyby !== null
     || awaitingInventoryDrop
+
+  useEffect(() => {
+    if (renameSackId !== null && renameSack === null) setRenameSackId(null)
+  }, [renameSack, renameSackId])
 
   const modalSlides = useSyncExternalStore(
     subscribeNativeModalSlideProgress,
@@ -522,7 +537,7 @@ export function NativeHubSurface({
     if (surface.kind === 'dialogue' || inputSuspended || closing) return
     const activate = (event: KeyboardEvent) => {
       if (event.repeat || event.altKey || event.ctrlKey || event.metaKey
-        || inventoryTransitionLocked || notice !== null || dyeModal !== null
+        || inventoryTransitionLocked || notice !== null || dyeModal !== null || renameSackId !== null
         || !onUnassignBeltEntry) return
       const slot = quickbarSlotForBinding(beltBindings, event.code)
       if (slot === null || belt[slot] === null) return
@@ -534,7 +549,7 @@ export function NativeHubSurface({
     return () => window.removeEventListener('keydown', activate, { capture: true })
   }, [
     belt, beltBindings, closing, dyeModal, inputSuspended, inventoryTransitionLocked,
-    notice, onBeltActivate, onUnassignBeltEntry, surface.kind,
+    notice, onBeltActivate, onUnassignBeltEntry, renameSackId, surface.kind,
   ])
 
   const model = useMemo((): HubInventoryRendererModel => {
@@ -719,6 +734,7 @@ export function NativeHubSurface({
   return (
     <div
       className="hub-native-ui-overlay"
+      ref={overlayRef}
       data-input-suspended={inputSuspended}
       data-replacement-target={replacementTarget ?? ''}
       data-surface-kind={surface.kind}
@@ -742,7 +758,12 @@ export function NativeHubSurface({
           <span className="hub-native-ui-semantic hub-gold-ledger" data-player-gold={economy.gold}>
             {economy.gold.toLocaleString()} gold
           </span>
-          {dyeModal ? (
+          {renameSack !== null && overlayRef.current ? createPortal(
+            <HubSackRenameDialog key={renameSack.id} item={renameSack}
+              feedback={economy.actionFeedback} onAction={onAction}
+              onClose={() => setRenameSackId(null)} />,
+            overlayRef.current,
+          ) : dyeModal ? (
             <DyeClothingActions
               economy={economy}
               modal={dyeModal}
@@ -884,6 +905,7 @@ export function NativeHubSurface({
               onInsufficientGold={() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD)}
               onInventorySelect={(next) => {
                 audio.playSound('click')
+                setRenameSelectionOwner('backpack')
                 setInventorySelection(next)
               }}
               onInteractionSound={(cue) => {
@@ -898,7 +920,10 @@ export function NativeHubSurface({
               onPressedControl={setPressedControl}
               sackPath={sackPath}
               transitionLocked={inventoryTransitionLocked}
-              onSelect={setServiceSelection}
+              onSelect={(next) => {
+                setRenameSelectionOwner('service')
+                setServiceSelection(next)
+              }}
             />
           ) : (
             <InventoryActions
@@ -927,19 +952,30 @@ export function NativeHubSurface({
               onInventoryBack={onInventoryBack}
               onSelect={(next) => {
                 audio.playSound('click')
+                setRenameSelectionOwner('backpack')
                 setInventorySelection(next)
               }}
               sackPath={sackPath}
               transitionLocked={inventoryTransitionLocked}
             />
           )}
-          {surface.kind !== 'dialogue' && notice === null && dyeModal === null ? (
+          {surface.kind !== 'dialogue' && notice === null && dyeModal === null && renameSackId === null ? (
             <HotbarControls rects={inventoryBeltRects}
               renderer={rendererState === 'ready' ? rendererRef.current : null}
               disabled={inputSuspended || closing || inventoryTransitionLocked} />
           ) : null}
+          {surface.kind !== 'dialogue' && renameCandidate !== null && renameSackId === null
+            && notice === null && dyeModal === null ? (
+            <NativeUiButton className="hub-sack-rename-open" data-inventory-rename-open={renameCandidate.id}
+              aria-label={`Rename ${renameCandidate.name}`} disabled={inventoryTransitionLocked}
+              nativeBounds={INVENTORY_SACK_RENAME_BUTTON.bounds}
+              scale={INVENTORY_SACK_RENAME_BUTTON.scale} onClick={() => {
+                audio.playSound('click')
+                setRenameSackId(renameCandidate.id)
+              }}>{INVENTORY_SACK_RENAME_BUTTON.label}</NativeUiButton>
+          ) : null}
           <HubInventoryFooter
-            blocked={notice !== null || dyeModal !== null}
+            blocked={notice !== null || dyeModal !== null || renameSackId !== null}
             surface={surface}
             stats={{
               companion: surface.kind === 'service', economy, page: statsPage, offset: statsOffset,

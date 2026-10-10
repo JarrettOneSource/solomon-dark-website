@@ -9,6 +9,7 @@ import {
   type HubInventoryAction,
   type HubShopItem,
   MAX_NATIVE_DYE_SELECTIONS,
+  normalizeInventorySackName,
   NATIVE_DOWSING_MAX_OFFERS,
   NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
@@ -147,6 +148,12 @@ export function hubInventoryAction(value: unknown): HubInventoryAction {
   if (type === 'consume' || type === 'read-skill-book') {
     onlyKeys(source, 'action', ['type', 'itemId'])
     return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
+  }
+  if (type === 'rename-sack') {
+    onlyKeys(source, 'action', ['type', 'itemId', 'name'])
+    const name = normalizeInventorySackName(source.name)
+    if (name === null) throw new GameProtocolError('action.name is not a valid Sack name')
+    return { type, itemId: positiveInteger(source.itemId, 'action.itemId'), name }
   }
   if (type === 'open-dye') {
     onlyKeys(source, 'action', ['type', 'dyeItemId', 'sessionId'])
@@ -497,6 +504,7 @@ export function hubActionFeedback(
     'open-dye',
     'read-librarian-book',
     'read-skill-book',
+    'rename-sack',
     'remove-hagatha',
     'select-boast',
     'transfer',
@@ -518,6 +526,7 @@ export function hubActionFeedback(
     'ineligible-item',
     'insufficient-gold',
     'invalid-inventory',
+    'invalid-name',
     'invalid-offer',
     'invalid-slot',
     'invalid-target',

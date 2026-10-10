@@ -125,6 +125,27 @@
   z-index: 2;
 }
 
+.hub-sack-rename-open {
+  position: absolute;
+}
+
+.hub-sack-rename-dialog {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.hub-sack-rename-field {
+  position: absolute;
+}
+
+.hub-sack-rename-error {
+  margin: 4px 0 0;
+  color: #f1d37e;
+  font: 16px/1.2 var(--font-narrative);
+}
+
 .hub-native-ui-action {
   position: absolute;
   margin: 0;

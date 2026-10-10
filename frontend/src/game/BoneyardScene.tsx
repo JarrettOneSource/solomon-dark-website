@@ -100,6 +100,7 @@ import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import NativeWorldNotifications from './NativeWorldNotifications.tsx'
 import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
+import { subscribeRunCharmLossAudio } from './run-charm-audio.ts'
 import type { GameModAsset } from './protocol/game-mod-contract.ts'
 import type {
   BoneyardEnemyEventSnapshot,
@@ -478,6 +479,9 @@ export default function BoneyardScene({
     previousAudioRunRef.current = snapshot.run
   }), [audio, bookFeedbackCursor, loaded.runId, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
 
+  useEffect(() => subscribeRunCharmLossAudio(audio, playerId, loaded.runId, subscribeEnemyEvent),
+    [audio, playerId, loaded.runId, subscribeEnemyEvent])
+
   useEffect(() => subscribeEnemyEvent((event) => {
     if (event.runId !== loaded.runId) return
     if (event.type === 'enemy-dialogue-stop') {
@@ -585,6 +589,8 @@ export default function BoneyardScene({
 
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {
+      if (event.target instanceof Element
+        && event.target.closest('input, textarea, [contenteditable="true"], [data-sack-rename-dialog], .run-charm-control')) return
       if (
         inputBlocked
         || tutorialAccess?.skills === false
@@ -627,6 +633,7 @@ export default function BoneyardScene({
 
   useEffect(() => {
     const interact = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('.run-charm-control')) return
       if (
         sceneInputBlocked
         || run.phase !== 'active'

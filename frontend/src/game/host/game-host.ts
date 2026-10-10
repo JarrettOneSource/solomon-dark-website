@@ -8147,6 +8147,7 @@ function pauseAllowsInventoryAction(
       || action.type === 'dye'
       || action.type === 'equip'
       || action.type === 'move-inventory-item'
+      || action.type === 'rename-sack'
       || action.type === 'read-skill-book'
       || action.type === 'unequip'
       || action.type === 'unforge'

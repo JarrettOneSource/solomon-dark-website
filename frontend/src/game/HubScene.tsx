@@ -469,6 +469,8 @@ export default function HubScene({
 
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {
+      if (event.target instanceof Element
+        && event.target.closest('input, textarea, [contenteditable="true"], [data-sack-rename-dialog]')) return
       if (
         gameplayHudHidden
         || inputBlocked

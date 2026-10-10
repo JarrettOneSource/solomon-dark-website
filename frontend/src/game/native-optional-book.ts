@@ -7,26 +7,28 @@ export interface NativeOptionalBookBindings {
 }
 
 export type NativeOptionalBookKeyAction =
+  | Readonly<{ type: 'back' }>
   | Readonly<{ type: 'close' }>
   | Readonly<{ target: NativeOptionalBookKind; type: 'replace' }>
 
 const CLOSE_ACTION = Object.freeze({ type: 'close' } as const)
+const BACK_ACTION = Object.freeze({ type: 'back' } as const)
 const REPLACE_INVENTORY = Object.freeze({ target: 'inventory', type: 'replace' } as const)
 const REPLACE_SKILLS = Object.freeze({ target: 'skills', type: 'replace' } as const)
 
 /**
- * Shared optional-book key routing recovered from the InventoryScreen and
- * SkillScreen openers. The current screen's binding closes it; the sibling's
- * binding begins an immediate reciprocal replacement.
+ * Shared optional-book routing with approved Website Sack navigation:
+ * Inventory returns one root, Menu/Escape closes the whole book, and the
+ * sibling binding begins an immediate reciprocal replacement.
  */
 export function nativeOptionalBookKeyAction(
   code: string,
   current: NativeOptionalBookKind,
   bindings: NativeOptionalBookBindings,
 ): NativeOptionalBookKeyAction | null {
-  if (code === bindings.menu) return CLOSE_ACTION
+  if (code === bindings.menu || code === 'Escape') return CLOSE_ACTION
   if (current === 'inventory') {
-    if (code === bindings.inventory) return CLOSE_ACTION
+    if (code === bindings.inventory) return BACK_ACTION
     if (code === bindings.skills) return REPLACE_SKILLS
     return null
   }

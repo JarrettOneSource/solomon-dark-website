@@ -136,9 +136,10 @@ export function buildInventory(
   addTiledAtlas(context, layer, 'UI', 49, 0, 490, 1600, 310)
   addHorizontalChain(context, layer, 0, 470, 1600)
   addHorizontalChain(context, layer, 0, 800, 1600)
-  const captionText = inventorySackAtPath(economy.backpack, model.sackPath)?.name
+  const currentSack = inventorySackAtPath(economy.backpack, model.sackPath)
+  const captionText = currentSack?.name
     ?? HUB_INVENTORY_ROOT_CHROME.backpackHeader.text
-  const caption = addBackpackFrame(context, layer, captionText)
+  const caption = addBackpackFrame(context, layer, captionText, currentSack !== null)
   caption.visible = model.sackTransition === null
 
   const sackPages = buildSackPages(context, layer, model, selection, dragging, hiddenItemIds, caption)

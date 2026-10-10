@@ -157,6 +157,7 @@ export interface PlayerEntityCombatTickResult {
   readonly autoHealthPotionPlayerIds: readonly string[]
   readonly beganDeathEpochPlayerIds: readonly string[]
   readonly cheatDeathPlayerIds: readonly string[]
+  readonly hagathaCharmLossPlayerIds: readonly string[]
   readonly completedDeathPresentationPlayerIds: readonly string[]
   readonly deathBurstPlayerIds: readonly string[]
   readonly lastWordArchivePlayerIds: readonly string[]
@@ -175,6 +176,7 @@ export interface PlayerEntityManaDebitResult {
 export interface PlayerEntityDamageResult {
   readonly autoHealthPotionUsed: boolean
   readonly cheatDeathTriggered: boolean
+  readonly hagathaCharmsLost: boolean
   readonly store: PlayerEntityStore
 }
 
@@ -1088,7 +1090,7 @@ export function damagePlayerEntityWithResult(
 ): PlayerEntityDamageResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) {
-    return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
+    return { autoHealthPotionUsed: false, cheatDeathTriggered: false, hagathaCharmsLost: false, store: source }
   }
   const appliedDamage = damageAlreadyScaled
     ? damage
@@ -1101,7 +1103,7 @@ export function damagePlayerEntityWithResult(
       ).incomingDamageFactor), source.progressions[index]!.rescueProtection)
   const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick, recordHit, hitStrength)
   if (damaged === source.progressions[index]) {
-    return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
+    return { autoHealthPotionUsed: false, cheatDeathTriggered: false, hagathaCharmsLost: false, store: source }
   }
   const resolved = resolveNativeHagathaDamage(
     damaged,
@@ -1116,6 +1118,7 @@ export function damagePlayerEntityWithResult(
   return {
     autoHealthPotionUsed: resolved.autoHealthPotionUsed,
     cheatDeathTriggered: resolved.cheatDeathTriggered,
+    hagathaCharmsLost: resolved.hagathaCharmsLost,
     store: { ...source, economies, progressions },
   }
 }
@@ -1317,6 +1320,7 @@ export function stepPlayerEntityCombatTick(
   const autoHealthPotionPlayerIds: string[] = []
   const beganDeathEpochPlayerIds: string[] = []
   const cheatDeathPlayerIds: string[] = []
+  const hagathaCharmLossPlayerIds: string[] = []
   const completedDeathPresentationPlayerIds: string[] = []
   const deathBurstPlayerIds: string[] = []
   const lastWordArchivePlayerIds: string[] = []
@@ -1383,6 +1387,7 @@ export function stepPlayerEntityCombatTick(
       : {
           autoHealthPotionUsed: false,
           cheatDeathTriggered: false,
+          hagathaCharmsLost: false,
           economy: source.economies[index]!,
           progression: result.combat,
         }
@@ -1457,6 +1462,7 @@ export function stepPlayerEntityCombatTick(
     function recordCombatOutcomes() {
       if (resolved.autoHealthPotionUsed) autoHealthPotionPlayerIds.push(playerId)
       if (resolved.cheatDeathTriggered) cheatDeathPlayerIds.push(playerId)
+      if (resolved.hagathaCharmsLost) hagathaCharmLossPlayerIds.push(playerId)
       if (result.beganDeathEpoch && resolved.progression.lifeState === 'dying') {
         beganDeathEpochPlayerIds.push(playerId)
       }
@@ -1487,6 +1493,7 @@ export function stepPlayerEntityCombatTick(
     autoHealthPotionPlayerIds: Object.freeze(autoHealthPotionPlayerIds),
     beganDeathEpochPlayerIds: Object.freeze(beganDeathEpochPlayerIds),
     cheatDeathPlayerIds: Object.freeze(cheatDeathPlayerIds),
+    hagathaCharmLossPlayerIds: Object.freeze(hagathaCharmLossPlayerIds),
     completedDeathPresentationPlayerIds: Object.freeze(
       completedDeathPresentationPlayerIds,
     ),
@@ -2113,6 +2120,7 @@ function resolveNativeHagathaDamage(
 ): Readonly<{
   autoHealthPotionUsed: boolean
   cheatDeathTriggered: boolean
+  hagathaCharmsLost: boolean
   economy: HubEconomyState
   progression: PlayerProgressionComponent
 }> {
@@ -2172,6 +2180,7 @@ function resolveNativeHagathaDamage(
   return Object.freeze({
     autoHealthPotionUsed,
     cheatDeathTriggered,
+    hagathaCharmsLost: hagathaRuntime !== source.hagathaRuntime,
     economy,
     progression,
   })

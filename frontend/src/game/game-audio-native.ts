@@ -184,6 +184,7 @@ export type GameStreamCue =
   | NativeTutorialCue
   | 'death-guitar'
   | 'magic-book-get'
+  | 'lose-reverie'
   | 'dye'
   | 'arch-intro-0'
   | 'boast-failure'
@@ -237,6 +238,15 @@ export interface NativeEnemyEventSoundRequest {
   playbackRate: number
   sourcePosition: Readonly<{ x: number; y: number }> | null
   volume: number
+}
+
+export function nativePlayerCharmLossStreamRequest(
+  event: BoneyardEnemyEventSnapshot,
+  playerId: string,
+): Readonly<{ cue: 'lose-reverie'; playbackRate: 1; volume: 1 }> | null {
+  return event.type === 'player-charm-lost' && event.targetPlayerId === playerId
+    ? { cue: 'lose-reverie', playbackRate: 1, volume: 1 }
+    : null
 }
 
 export interface NativeSolomonDigSoundRequest {

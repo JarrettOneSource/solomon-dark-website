@@ -1,0 +1,92 @@
+.run-charm-hud {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  display: flex;
+  gap: 3px;
+  margin: 0;
+  padding: 3px 5px;
+  border: 1px solid rgb(217 186 112 / 0.4);
+  border-radius: 5px;
+  background: rgb(8 8 6 / 0.78);
+  list-style: none;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.run-charm-status {
+  width: 28px;
+  text-align: center;
+}
+
+.run-charm-control {
+  display: block;
+  width: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: help;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.run-charm-control:focus-visible {
+  outline: 2px solid #e7d4a2;
+  outline-offset: 1px;
+}
+
+.run-charm-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  display: none;
+  width: 260px;
+  max-width: 80vw;
+  padding: 8px;
+  border: 1px solid #a88d4d;
+  border-radius: 4px;
+  background: #10100e;
+  color: #f2ebd8;
+  font: 11px / 1.4 var(--font-mono);
+  text-align: left;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.run-charm-tooltip strong { display: block; }
+
+.run-charm-control:hover .run-charm-tooltip,
+.run-charm-control:focus .run-charm-tooltip { display: block; }
+
+.run-charm-icon {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.run-charm-state {
+  display: block;
+  color: #e7d4a2;
+  font: 8px / 10px var(--font-mono);
+  letter-spacing: 0.5px;
+}
+
+.run-charm-status[data-active='false'] .run-charm-icon {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+
+.run-charm-status[data-active='false'] .run-charm-state {
+  color: #fff;
+  text-decoration: underline;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .run-charm-hud {
+    top: calc(60px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    transform: translateX(-50%) scale(calc(0.85 / var(--hud-display-scale, 1) / var(--game-ui-scale, 1)));
+    transform-origin: top center;
+  }
+}

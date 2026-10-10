@@ -1,6 +1,7 @@
 import { PLAYER_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { createNativeScreenFlashes, createNativeScreenFlashWriter, resetNativeScreenFlashes, type NativeScreenFlashState, type WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
+import { renameInventorySack } from '../core-kernels/hub-economy.ts'
 import { finalizeBoneyardPuppetQueries } from './enemies/puppet-hits.ts'
 import type { BoastDefinition, BoastResolver, BoastSelection } from '../core-kernels/boast.ts'
 import { boastUsesRandomSkillChoices, failBoast, scoreBoast, succeedBoast } from '../core-kernels/boast.ts'
@@ -85,7 +86,7 @@ import { applyBoneyardEtherDrainWorldAnimationForces, boneyardNativeEtherDrainTa
 import { applyBoneyardEtherDrainForces } from './boneyard-world-placement.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import { applyPlayerContacts, finiteModMutation, gameWorldKey } from './player-contact-system.ts'
-import { emitPlayerCheatDeathFeedback } from './boneyard-player-status.ts'
+import { emitPlayerCharmLossFeedback, emitPlayerCheatDeathFeedback } from './boneyard-player-status.ts'
 import type { PlayerEntityStore } from './player-entity-store.ts'
 import { addPlayerEntity, applyPlayerEntityDamageX4Bonus, applyPlayerEntityHagathaPurchaseEffects, applyPlayerEntityHagathaRemovalEffects, applyPlayerEntityPotionEffect, applyPlayerEntitySkillChoice, autofillPlayerEntitySkillSelections, bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, coldSlowPlayerEntity, consumePlayerEntityWizardKey, createPlayerEntityStore, creditPlayerEntityLootGold, dazzlePlayerEntity, deferPlayerEntitySkillChoice, forcePlayerEntitySkillOfferIds, grantPlayerEntityBonusSkillChoice, grantPlayerEntityExperience, grantSharedPlayerEntityExperience, importPlayerEntity, increaseRandomPlayerEntitySkill, insertPlayerEntityLootItem, playerBeltAt, playerCharacterAt, playerCharacterRecords, playerEconomyAt, playerEntityCanAcceptInput, playerEntityCanCast, playerEntityIndex, playerEntityMovementScale, playerLightingAt, playerProgressionAt, playerSkillBookAt, playerSkillDerivedStatsAt, playerSkillRuntimeAt, playerStatBookAt, poisonPlayerEntity, preparePlayerEntityTutorialLoadout, refreshPlayerEntityHagathaSkillEffects, removePlayerEntity, replacePlayerCharacter, replacePlayerCharacterRecords, replacePlayerEconomy, replacePlayerEntitySkillChoiceWithMod, replacePlayerLoadout, replacePlayerPainterRegistration, rerollPlayerEntitySkillOffer, resetPlayerEntitiesForNewRun, respawnPlayerEntityAt, restorePlayerEntityHealth, restorePlayerEntityMana, selectPlayerEntityConcentrationSkill, selectPlayerEntityConcentrationSlot, selectPlayerEntityPrimarySkill, setPlayerDeathWeaponPainterRegistration, setPlayerEntityAutomaticSkillChoice, setPlayerEntityMana, setPlayerEntityMindstar, setPlayerEntitySpectating, stepPlayerEntityCombatTick, stepPlayerEntityOverlayLightingTick, synchronizePlayerEntityLevelMilestone, tryDebitPlayerEntityMana, unlockPlayerEntityAdvancedSkill } from './player-entity-store.ts'
 import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
@@ -1434,6 +1435,7 @@ function applyGameSimulationHubActionTransaction(
       )
       case 'read-librarian-book': return readLibrarianBook(economy, action.bookId)
       case 'read-skill-book': return readInventorySkillBook(economy, action.itemId)
+      case 'rename-sack': return renameInventorySack(economy, action.itemId, action.name)
       case 'select-boast': return selectHubBoast(
         economy,
         action.boastId,
@@ -2014,6 +2016,7 @@ function stepGameSimulationTickWithScreenFlashes(
     const tick = state.tick + 1
     let gameRng = state.gameRng
     let world = state.world
+    world = recordPlayerCharmLossFeedback(world, playerEntities, combat.hagathaCharmLossPlayerIds, tick)
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
       combat.cheatDeathPlayerIds, worldManagerOrder.register)
@@ -3459,6 +3462,7 @@ function finishGameSimulationTick(
   playerEntities = combat.store
   secondaryAbilities = { ...secondaryAbilities, rng: combat.rng }
   if (world.kind === 'boneyard') {
+    world = recordPlayerCharmLossFeedback(world, playerEntities, combat.hagathaCharmLossPlayerIds, tick)
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
       combat.cheatDeathPlayerIds, worldManagerOrder.register)
@@ -4603,6 +4607,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'move-inventory-item':
     case 'read-librarian-book':
     case 'read-skill-book':
+    case 'rename-sack':
     case 'select-boast':
     case 'unforge':
     case 'unequip': return null
@@ -4722,7 +4727,7 @@ function spawnAcceptedPlayerRescueWaves(
   return state
 }
 
-/** All admitted direct damage callers propagate the authoritative rescue result here. */
+/** All admitted direct damage callers propagate authoritative loss and rescue results here. */
 export function damageGameSimulationPlayer(
   source: GameSimulationState,
   playerId: string,
@@ -4730,18 +4735,41 @@ export function damageGameSimulationPlayer(
   tick: number,
 ): GameSimulationState {
   const result = damagePlayerEntityWithResult(source.playerEntities, playerId, amount, tick)
-  if (!result.cheatDeathTriggered || source.world.kind !== 'boneyard') {
+  if (source.world.kind !== 'boneyard') {
     // Stock Hub admits no harmful contact; preserve authored mod HP semantics without a combat scene birth.
     return result.store === source.playerEntities ? source : { ...source, playerEntities: result.store }
   }
+  let world = result.hagathaCharmsLost
+    ? recordPlayerCharmLossFeedback(source.world, result.store, [playerId], tick)
+    : source.world
+  if (!result.cheatDeathTriggered) {
+    return result.store === source.playerEntities ? source : { ...source, playerEntities: result.store, world }
+  }
   const order = createNativeWorldManagerOrder(source.worldManagerOrder)
   const flashes = createNativeScreenFlashWriter(source.screenFlashes, tick)
-  const world = recordPlayerCheatDeathFeedback(source.world, result.store, [playerId], tick, flashes.write)
+  world = recordPlayerCheatDeathFeedback(world, result.store, [playerId], tick, flashes.write)
   const secondaryAbilities = spawnAcceptedPlayerRescueWaves(source.secondaryAbilities, world,
     result.store, [playerId], order.register)
   return { ...source, playerEntities: result.store,
     secondaryAbilities, world,
     screenFlashes: flashes.state(), worldManagerOrder: order.state() }
+}
+
+function recordPlayerCharmLossFeedback(
+  source: BoneyardWorldState,
+  playerEntities: PlayerEntityStore,
+  playerIds: readonly string[],
+  tick: number,
+): BoneyardWorldState {
+  let world = source
+  for (const playerId of playerIds) {
+    const character = playerCharacterAt(playerEntities, playerId)
+    if (character === null) continue
+    const feedback = emitPlayerCharmLossFeedback(world.enemies, { playerId, position: character.position, tick })
+    world = { ...world, enemies: feedback.store,
+      enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents, [feedback.event], tick) }
+  }
+  return world
 }
 
 function recordPlayerCheatDeathFeedback(

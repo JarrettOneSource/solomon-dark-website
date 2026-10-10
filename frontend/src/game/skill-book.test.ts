@@ -85,10 +85,15 @@ test('routes both optional books through configured reciprocal keys and forces t
     target: 'inventory',
     type: 'replace',
   })
-  assert.deepEqual(nativeOptionalBookKeyAction('KeyB', 'inventory', bindings), { type: 'close' })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyB', 'inventory', bindings), { type: 'back' })
   assert.deepEqual(nativeOptionalBookKeyAction('KeyV', 'skills', bindings), { type: 'close' })
   assert.deepEqual(nativeOptionalBookKeyAction('Escape', 'inventory', bindings), { type: 'close' })
   assert.equal(nativeOptionalBookKeyAction('KeyI', 'skills', bindings), null)
+  const reboundMenu = { ...bindings, menu: 'KeyM' }
+  for (const book of ['inventory', 'skills'] as const) {
+    assert.deepEqual(nativeOptionalBookKeyAction('Escape', book, reboundMenu), { type: 'close' })
+    assert.deepEqual(nativeOptionalBookKeyAction('KeyM', book, reboundMenu), { type: 'close' })
+  }
   assert.equal(nativeOptionalBookHudProgress(0.25, false), 0.25)
   assert.equal(nativeOptionalBookHudProgress(0, true), 1)
   assert.equal(nativeOptionalBookHudProgress(0.75, true), 1)

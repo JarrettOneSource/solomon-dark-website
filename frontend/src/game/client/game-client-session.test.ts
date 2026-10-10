@@ -1232,6 +1232,38 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   session.destroy()
 })
 
+test('charm loss is silent on initial load and reconnect, and delivered once for a fresh event', async () => {
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }),
+    loadedBoneyardFixture('charm-reconnect'))
+  const initial = createGameSnapshot(state, 'player-1')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const loss = {
+    actorId: 0, eventId: 7, runId: initial.world.runId,
+    sourcePosition: { x: 100, y: 200 }, targetPlayerId: 'player-1', tick: 0,
+    type: 'player-charm-lost' as const,
+  }
+  initial.world.enemyEvents = [loss]
+  for (const attempt of ['initial', 'reconnect']) {
+    const transport = new MemoryTransport()
+    const connecting = connectGameClientSession({
+      character: CHARACTER, profile: NULL_PROFILE, credential: 'spawn-secret', transport,
+    })
+    receiveWelcome(transport, initial)
+    const session = await connecting
+    const received: number[] = []
+    session.onEnemyEvent(event => received.push(event.eventId))
+    receiveSnapshot(transport, { ...initial, tick: 5 }, 0)
+    assert.deepEqual(received, [], `${attempt} must seed its cursor without replaying loss`)
+    const next = { ...initial, tick: 10, world: { ...initial.world,
+      enemyEvents: [loss, { ...loss, eventId: 8, tick: 6 }],
+    } }
+    receiveSnapshot(transport, next, 0)
+    receiveSnapshot(transport, { ...next, tick: 15 }, 0)
+    assert.deepEqual(received, [8])
+    session.destroy()
+  }
+})
+
 test('client suppresses gameplay input while a skill offer is pending and submits the exact choice', async () => {
   let nowMs = 1_000
   const transport = new MemoryTransport()

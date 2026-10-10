@@ -1,4 +1,5 @@
 import { acquireRendererResources } from './renderer-resource-acquisition.ts'
+import { SACK_NAME_BROWSER_TEXT_LABEL } from './hub-inventory/sack-name.ts'
 import type { ModalHotbarRenderer } from '../hotbar-controls-presentation.ts'
 import { ModalHotbarControlsView } from './modal-hotbar-controls.ts'
 import {
@@ -583,6 +584,9 @@ export async function createHubInventoryRenderer(
       )
     }
     if (modalHud && beltAvailability) modalHud.updateAvailability(beltAvailability)
+    canvas.dataset.sackNameBrowserFallbacks = String(surface.getChildrenByLabel(SACK_NAME_BROWSER_TEXT_LABEL, true).length)
+    canvas.dataset.nativeSackCaptionFont = inventoryCaption?.getChildByLabel(SACK_NAME_BROWSER_TEXT_LABEL)
+      ? 'browser' : 'stock'
     renderSackPages(performance.now())
     renderStats(performance.now())
   }

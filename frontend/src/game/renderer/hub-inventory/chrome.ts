@@ -1,4 +1,6 @@
 import { NATIVE_INVENTORY_GOLD_LEDGER } from '../../native-inventory-gold-layout.ts'
+import { inventorySackNameNeedsBrowserFont } from '../../hub-sack-rename.ts'
+import { createBrowserSackName } from './sack-name.ts'
 import {
   NATIVE_UI_BUTTON,
   type NativeUiSingleActionMessageLayout,
@@ -178,9 +180,12 @@ function addInventorySectionHeader(
   centerX: number,
   frameTop: number,
   baselineY: number,
+  sackName = false,
 ): void {
   const header = HUB_INVENTORY_ROOT_CHROME.sectionHeader
-  const frameWidth = measureNativeUiText(label, header.font)
+  const fallback = sackName && inventorySackNameNeedsBrowserFont(label)
+    ? createBrowserSackName(label, header.tint, 1_000) : null
+  const frameWidth = (fallback?.text.width ?? measureNativeUiText(label, header.font))
     + header.horizontalPadding * 2
   addNativeNineSlice(
     context,
@@ -193,13 +198,18 @@ function addInventorySectionHeader(
     header.frameHeight,
     HUB_INVENTORY_ROOT_CHROME.edgeUvOrigin,
   )
-  addBitmapText(context, layer, label, header.font, centerX, baselineY, { tint: header.tint })
+  if (fallback) {
+    fallback.text.anchor.x = 0.5
+    fallback.text.position.set(centerX, baselineY - fallback.baselineOffset)
+    layer.addChild(fallback.text)
+  } else addBitmapText(context, layer, label, header.font, centerX, baselineY, { tint: header.tint })
 }
 
 export function addBackpackFrame(
   context: RenderContext,
   layer: Container,
   caption: string,
+  sackName = false,
 ): Container {
   addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 513.5)
   addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1663.5, 513.5, -1, 1)
@@ -219,6 +229,7 @@ export function addBackpackFrame(
     header.centerX,
     header.frameTop,
     header.baselineY,
+    sackName,
   )
   return captionLayer
 }

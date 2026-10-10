@@ -8,6 +8,18 @@ import type {
   BoneyardEnemyStore,
 } from './enemies/model.ts'
 
+/** The native until-hurt branch clears both flags but plays one owner-local stream. */
+export function emitPlayerCharmLossFeedback(
+  source: BoneyardEnemyStore,
+  request: Readonly<{ playerId: string; position: Readonly<Vector2>; tick: number }>,
+): Readonly<{ event: BoneyardEnemySemanticEvent; store: BoneyardEnemyStore }> {
+  return {
+    event: { actorId: 0, eventId: source.nextEventId, sourcePosition: { ...request.position },
+      targetPlayerId: request.playerId, tick: request.tick, type: 'player-charm-lost' },
+    store: { ...source, nextEventId: source.nextEventId + 1 },
+  }
+}
+
 /** The accepted rescue owns one cue; its four sounds are one client program. */
 export function emitPlayerCheatDeathFeedback(
   source: BoneyardEnemyStore,

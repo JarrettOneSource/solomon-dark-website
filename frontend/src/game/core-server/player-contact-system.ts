@@ -16,7 +16,7 @@ import { playerPoisonHealthDamage } from '../core-kernels/player-combat.ts'
 import { NATIVE_FLASH_RESPONSE_RADIUS, playerDeflectReflectionSourceInRange, resolvePlayerFlashResponse, resolvePlayerHarmfulContact } from '../core-kernels/player-harmful-contact.ts'
 import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import { emitPlayerCheatDeathFeedback, emitPlayerStatusBurst } from './boneyard-player-status.ts'
+import { emitPlayerCharmLossFeedback, emitPlayerCheatDeathFeedback, emitPlayerStatusBurst } from './boneyard-player-status.ts'
 import type { BoneyardWorldState } from './boneyard-world-state.ts'
 import { addNativeCocoon } from './enemies/construction.ts'
 import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
@@ -211,6 +211,13 @@ export function applyPlayerContacts(
       damage.hitStrength,
     )
     playerEntities = acceptedDamage.store
+    if (acceptedDamage.hagathaCharmsLost) {
+      const feedback = emitPlayerCharmLossFeedback(world.enemies, {
+        playerId: damage.playerId, position: character.position, tick,
+      })
+      world = { ...world, enemies: feedback.store }
+      playerDamageSoundEvents.push(feedback.event)
+    }
     if (acceptedDamage.cheatDeathTriggered) {
       const feedback = emitPlayerCheatDeathFeedback(world.enemies, {
         playerId: damage.playerId, position: character.position, tick,

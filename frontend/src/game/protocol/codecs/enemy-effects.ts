@@ -123,7 +123,8 @@ export function boneyardEnemyEvents(
     const type = rawType as BoneyardEnemyEventSnapshot['type']
     const payloadKeys = (() => {
       switch (type) {
-        case 'player-cheat-death': return ['sourcePosition', 'targetPlayerId']
+        case 'player-cheat-death':
+        case 'player-charm-lost': return ['sourcePosition', 'targetPlayerId']
         case 'enemy-stream': return ['stream', 'sourcePosition']
         case 'enemy-screen-flash': return ['screenFlash', 'screenFlashOnlyIfClear', 'sourcePosition']
         case 'enemy-camera-shake': return ['cameraShake', 'sourcePosition']
@@ -193,7 +194,7 @@ export function boneyardEnemyEvents(
     previousEventId = eventId
     previousTick = tick
     const base = {
-      actorId: type === 'player-deflected' || type === 'player-cheat-death'
+      actorId: type === 'player-deflected' || type === 'player-cheat-death' || type === 'player-charm-lost'
         ? nonnegativeInteger(source.actorId, `${eventField}.actorId`)
         : positiveInteger(source.actorId, `${eventField}.actorId`),
       eventId,
@@ -202,7 +203,8 @@ export function boneyardEnemyEvents(
       type,
     }
     switch (type) {
-      case 'player-cheat-death': {
+      case 'player-cheat-death':
+      case 'player-charm-lost': {
         if (base.actorId !== 0) throw new GameProtocolError(`${eventField}.actorId must be zero for participant feedback`)
         return {
           ...base,

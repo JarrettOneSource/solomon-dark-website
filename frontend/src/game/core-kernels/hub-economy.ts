@@ -143,6 +143,7 @@ export type HubInventoryAction =
     }
   | { readonly type: 'read-librarian-book'; readonly bookId: number }
   | { readonly type: 'read-skill-book'; readonly itemId: number }
+  | { readonly type: 'rename-sack'; readonly itemId: number; readonly name: string }
   | { readonly type: 'select-boast'; readonly boastId: BoastSelection }
   | {
       readonly type: 'transfer'
@@ -418,6 +419,7 @@ export type HubEconomyRejection =
   | 'ineligible-item'
   | 'insufficient-gold'
   | 'invalid-inventory'
+  | 'invalid-name'
   | 'invalid-offer'
   | 'invalid-slot'
   | 'invalid-target'
@@ -1194,6 +1196,32 @@ export function findInventoryItem(
   itemId: number,
 ): HubInventoryItem | null {
   return projectInventoryItems(source).find(({ item }) => item.id === itemId)?.item ?? null
+}
+
+/** Website Sack naming limit; existing generated names are not rewritten. */
+export const INVENTORY_SACK_NAME_MAX_LENGTH = 32
+
+export function normalizeInventorySackName(value: unknown): string | null {
+  if (typeof value !== 'string' || /\p{Cc}/u.test(value)) return null
+  const name = value.trim()
+  return name.length > 0 && name.length <= INVENTORY_SACK_NAME_MAX_LENGTH
+    && !/^[\p{White_Space}\p{Cf}]*$/u.test(name) ? name : null
+}
+
+export function renameInventorySack(
+  source: HubEconomyState,
+  itemId: number,
+  value: string,
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const name = normalizeInventorySackName(value)
+  if (name === null) return rejected(source, 'invalid-name')
+  const owner = findInventoryItem(source.backpack, itemId) ? 'backpack' : 'storage'
+  const item = findInventoryItem(source[owner], itemId)
+  if (!item) return rejected(source, 'item-not-found')
+  if (item.kind !== 'sack' || item.nativeTypeId !== 7008) return rejected(source, 'ineligible-item')
+  const items = replaceInventoryTreeItem(source[owner], itemId, { ...item, name })
+  return items ? accepted({ ...source, [owner]: items }) : rejected(source, 'item-not-found')
 }
 
 export function reconcileHubEconomyModPackages(

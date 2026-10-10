@@ -37,6 +37,7 @@ export function useHotbarShortcut(controls: GameControlBindings, enabled: boolea
   useEffect(() => {
     if (!enabled) return
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('.run-charm-control')) return
       if (event.code !== controls.cycleHotbar || event.repeat || event.defaultPrevented
         || event.altKey || event.ctrlKey || event.metaKey
         || (event.target instanceof HTMLElement

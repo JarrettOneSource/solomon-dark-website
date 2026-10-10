@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import type { BoneyardEnemyEventSnapshot } from './protocol/game-state.ts'
+import { subscribeRunCharmLossAudio } from './run-charm-audio.ts'
 
 import {
   CREATE_DISCIPLINE_FINALIZE_MS,
@@ -17,6 +19,7 @@ import {
   nativeBoneyardPointGain,
   nativeEnemyEventSoundRequest,
   nativePlayerCheatDeathSoundRequests,
+  nativePlayerCharmLossStreamRequest,
   nativeFootstepCue,
   nativeLootEventSoundRequest,
   nativeSolomonDigSoundRequest,
@@ -54,6 +57,45 @@ test('Cheat Death preserves its four ordered rates and the once-computed point g
     { cue: 'flash-spell', playbackRate: 0.5, sourcePosition: null, volume: 0.375 },
     { cue: 'flash', playbackRate: 1, sourcePosition: null, volume: 0.375 },
   ])
+})
+
+test('until-hurt loss requests the native stream at gain one for its owner only', () => {
+  const event = {
+    actorId: 0, eventId: 1, runId: 'run-1', sourcePosition: { x: 100, y: 100 },
+    targetPlayerId: 'owner', tick: 1, type: 'player-charm-lost' as const,
+  }
+  assert.deepEqual(nativePlayerCharmLossStreamRequest(event, 'owner'), {
+    cue: 'lose-reverie', playbackRate: 1, volume: 1,
+  })
+  assert.equal(nativePlayerCharmLossStreamRequest(event, 'peer'), null)
+  assert.equal(nativePlayerCharmLossStreamRequest({ ...event, type: 'player-cheat-death' }, 'owner'), null)
+})
+
+test('charm loss audio stops and unsubscribes on owner or run teardown', () => {
+  let listener: ((event: BoneyardEnemyEventSnapshot) => void) | null = null
+  const played: string[] = []
+  const stopped: string[] = []
+  const audio = { playStream: (cue: string) => { played.push(cue) }, stopStream: (cue: string) => { stopped.push(cue) } }
+  const dispose = subscribeRunCharmLossAudio(audio, 'owner', 'run-1', next => {
+    listener = next
+    return () => { listener = null }
+  })
+  assert.deepEqual(played, [], 'subscription must not infer or replay loss')
+  const emit = (event: BoneyardEnemyEventSnapshot) => { listener?.(event) }
+  const event = {
+    actorId: 0, eventId: 1, runId: 'run-1', sourcePosition: { x: 100, y: 100 },
+    targetPlayerId: 'owner', tick: 1, type: 'player-charm-lost' as const,
+  }
+  emit({ ...event, targetPlayerId: 'peer' })
+  emit({ ...event, runId: 'old-run' })
+  assert.deepEqual(played, [])
+  emit(event)
+  assert.deepEqual(played, ['lose-reverie'])
+  dispose()
+  assert.equal(listener, null)
+  assert.deepEqual(stopped, ['lose-reverie'])
+  emit({ ...event, eventId: 2 })
+  assert.deepEqual(played, ['lose-reverie'])
 })
 
 test('caps each retained Hail bounce sound at ten native voices', () => {

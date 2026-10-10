@@ -44,6 +44,7 @@ import dropCoins from '../assets/game/audio/sfx/drop-coins.wav'
 import dropPotion from '../assets/game/audio/sfx/drop-potion.wav'
 import dye from '../assets/game/audio/sfx/dye.wav'
 import magicBookGet from '../assets/game/audio/sfx/magic-book-get.wav'
+import loseReverie from '../assets/game/audio/sfx/lose-reverie.wav'
 import earthquakeLoop from '../assets/game/audio/sfx/earthquake-loop.wav'
 import eerieLoop from '../assets/game/audio/sfx/eerie-loop.wav'
 import electricLoop from '../assets/game/audio/sfx/electric-loop.wav'
@@ -427,6 +428,7 @@ export const GAME_AUDIO_SOURCES = {
     dampen,
     dye,
     'magic-book-get': magicBookGet,
+    'lose-reverie': loseReverie,
     'golem-die': golemDie,
     'golem-provoke': golemProvoke,
     'leviathan-roar': leviathanRoar,

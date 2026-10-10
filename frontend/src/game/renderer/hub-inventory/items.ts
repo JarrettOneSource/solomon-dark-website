@@ -1,4 +1,5 @@
 import { itemAtEquipmentSlot } from '../../hub-inventory-equipment.ts'
+import { createBrowserSackName } from './sack-name.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   type HubInventoryItem,
@@ -142,15 +143,18 @@ export function addNativeContextualHoverBox(
 ): NativeContextualHoverBox {
   const rendered = lines.map((line) => {
     const font = nativeUiFont(line.font)
-    const wrapped = wrapNativeUiText(line.text, line.font, HUB_HOVER_BOX.contentMaxWidth)
-    return { font, line, wrapped }
+    const browser = line.sackNameBrowserFont
+      ? createBrowserSackName(line.text, line.tint, HUB_HOVER_BOX.contentMaxWidth, true) : null
+    const wrapped = browser ? [] : wrapNativeUiText(line.text, line.font, HUB_HOVER_BOX.contentMaxWidth)
+    return { font, line, browser,
+      width: browser?.text.width ?? Math.max(0, ...wrapped.map(text => measureNativeUiText(text, line.font))),
+      height: browser?.text.height ?? wrapped.length * font.metrics[0],
+    }
   })
-  const contentWidth = Math.max(0, ...rendered.flatMap(({ line, wrapped }) => (
-    wrapped.map((text) => measureNativeUiText(text, line.font))
-  )))
-  const contentHeight = rendered.reduce((height, { font, wrapped }, index) => (
+  const contentWidth = Math.max(0, ...rendered.map(line => line.width))
+  const contentHeight = rendered.reduce((height, line, index) => (
     height
-    + wrapped.length * font.metrics[0]
+    + line.height
     + (index === rendered.length - 1 ? 0 : HUB_HOVER_BOX.lineGap)
   ), 0)
   const width = contentWidth + HUB_HOVER_BOX.contentMargin * 2
@@ -175,8 +179,11 @@ export function addNativeContextualHoverBox(
     .fill({ color: 0x000000 })
     .stroke({ color: 0xffffff, width: 1 }))
   let cursorY = HUB_HOVER_BOX.contentMargin
-  for (const { font, line, wrapped } of rendered) {
-    addBitmapText(
+  for (const { font, line, browser, height: lineHeight } of rendered) {
+    if (browser) {
+      browser.text.position.set(HUB_HOVER_BOX.contentMargin, cursorY - browser.baselineOffset)
+      info.addChild(browser.text)
+    } else addBitmapText(
       context,
       info,
       line.text,
@@ -190,7 +197,7 @@ export function addNativeContextualHoverBox(
         tint: line.tint,
       },
     )
-    cursorY += wrapped.length * font.metrics[0] + HUB_HOVER_BOX.lineGap
+    cursorY += lineHeight + HUB_HOVER_BOX.lineGap
   }
   layer.addChild(info)
   return info

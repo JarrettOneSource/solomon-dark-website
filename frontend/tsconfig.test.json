@@ -8,6 +8,10 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
+    "src/game/run-charm-status.test.ts",
+    "src/game/core-server/player-charm-feedback.test.ts",
+    "src/game/core-server/sack-renaming.test.ts",
+    "src/game/hub-sack-rename.test.ts",
     "src/game/native-arena-field.test.ts",
     "src/game/renderer/native-boneyard-surface-view.test.ts",
     "src/editor/native-field-painter.test.ts",

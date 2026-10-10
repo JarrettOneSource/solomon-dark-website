@@ -309,6 +309,7 @@ export default function GameChat({
 
   useEffect(() => {
     const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('.run-charm-control')) return
       if (!disabled && openRef.current) {
         if (event.key === 'Escape') {
           event.preventDefault()

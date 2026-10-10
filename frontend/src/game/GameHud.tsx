@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { hub } from '../lib/assets.ts'
 import AllyHud from './AllyHud.tsx'
 import GameAccountName from './GameAccountName.tsx'
+import RunCharmHud from './RunCharmHud.tsx'
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
@@ -262,6 +263,10 @@ export default function GameHud({
           edge in 0x005CB360 / 0x0058F320). The Website's skull is the stage-level
           GameMenuSkull the host mounts over this HUD at the same (11, 7) / 31 px. */}
       <GameAccountName placement="hud" username={accountUsername} />
+      {mode === 'run' && tutorialAccess?.combat !== false && (
+        <RunCharmHud key={`${playerId}:${initialSnapshot.run.runId}`}
+          initialSnapshot={initialSnapshot} playerId={playerId} subscribeSnapshot={subscribeSnapshot} />
+      )}
       {mode === 'run' && quickbarHud.boss?.name && (
         <span role="meter" aria-label={quickbarHud.boss.name}
           aria-valuemin={0} aria-valuemax={quickbarHud.boss.maximumHealth}

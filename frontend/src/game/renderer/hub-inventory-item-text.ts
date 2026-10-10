@@ -1,4 +1,5 @@
 import { NATIVE_SKILL_CATALOG } from '../core-kernels/player-progression.ts'
+import { inventorySackNameNeedsBrowserFont } from '../hub-sack-rename.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
@@ -54,6 +55,7 @@ export const HAGATHA_NATIVE_TOOLTIP_LINES: readonly (readonly string[])[] = [
 export type HubTooltipFont = 'body' | 'menu'
 
 export interface HubTooltipLine {
+  readonly sackNameBrowserFont?: boolean
   readonly font: HubTooltipFont
   readonly text: string
   readonly tint: number
@@ -216,7 +218,10 @@ export function hubItemTooltipLines(
       : item.rarity === 'Rare'
         ? HUB_TOOLTIP_TINT.rare
         : HUB_TOOLTIP_TINT.white
-  const lines: HubTooltipLine[] = [{ font: 'menu', text: info.title, tint: titleTint }]
+  const lines: HubTooltipLine[] = [{ font: 'menu', text: info.title, tint: titleTint,
+    ...(item.kind === 'sack' && item.nativeTypeId === 7008 && inventorySackNameNeedsBrowserFont(info.title)
+      ? { sackNameBrowserFont: true } : {}),
+  }]
 
   if (item.kind !== 'equipment') {
     if (info.description) lines.push(tooltipBody(info.description))

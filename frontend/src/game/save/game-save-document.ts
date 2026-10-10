@@ -240,7 +240,11 @@ export function createGameSaveDocument(
     secondaryAbilities: diskSecondaryProjection(ownerState.secondaryAbilities),
     world: ownerState.world.kind === 'hub'
       ? serializeHubWorld(ownerState.world)
-      : ownerState.world,
+      : {
+          ...ownerState.world,
+          // The loss cue has no durable state; retain the flags and event counter.
+          enemyEvents: ownerState.world.enemyEvents.filter(event => event.type !== 'player-charm-lost'),
+        },
   }
   return encodeDocument({
     continuation: {
@@ -456,9 +460,10 @@ function diskPlayerStoreProjection(
 
 function diskEconomy(source: HubEconomyState): HubEconomyState {
   const economy = normalizeHubEconomyInventorySlots(source)
-  return economy.actionFeedback?.dyeSessionId === undefined
-    ? economy
-    : { ...economy, actionFeedback: null }
+  // A completed rename receipt, like an open dye session, belongs only to the live UI.
+  return economy.actionFeedback?.dyeSessionId !== undefined || economy.actionFeedback?.action === 'rename-sack'
+    ? { ...economy, actionFeedback: null }
+    : economy
 }
 
 function diskSecondaryProjection(

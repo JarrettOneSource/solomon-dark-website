@@ -151,6 +151,7 @@ export default function HubInventoryUi({
     useState<HubInventorySackTransitionModel | null>(null)
   const [inventoryCloseTarget, setInventoryCloseTarget] =
     useState<'closed' | 'skills' | null>(null)
+  const inventoryCloseStartedRef = useRef(false)
   const showNotebox = useCallback((kind: NativeNoteboxKind, text: string) => {
     noteboxSequenceRef.current += 1
     setNpcNotebox({ kind, sequence: noteboxSequenceRef.current, text })
@@ -191,6 +192,7 @@ export default function HubInventoryUi({
     setInventorySackPath([])
     setInventorySackTransition(null)
     setInventoryCloseTarget(null)
+    inventoryCloseStartedRef.current = false
     onSurfaceChange(null)
   }, [economy.dowsingRolled, onAction, onSurfaceChange, surface])
 
@@ -246,11 +248,12 @@ export default function HubInventoryUi({
   }, [audio, inventorySackPath, inventorySackTransition])
 
   const beginInventoryClose = useCallback((target: 'closed' | 'skills') => {
-    if (surface?.kind !== 'inventory' || inventoryCloseTarget !== null) return
+    if (surface?.kind !== 'inventory' || inventoryCloseStartedRef.current) return
+    inventoryCloseStartedRef.current = true
     setInventoryCloseTarget(target)
     audio.playSound('open-panel')
     if (target === 'skills') onOpenSkills()
-  }, [audio, inventoryCloseTarget, onOpenSkills, surface])
+  }, [audio, onOpenSkills, surface])
 
   const inventoryBackOrClose = useCallback(() => {
     if (returnFromInventorySack()) return
@@ -319,11 +322,20 @@ export default function HubInventoryUi({
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
       if (inputSuspended) return
-      if (event.repeat) return
-      if (inventoryCloseTarget !== null) return
+      if (event.target instanceof Element && event.target.closest('.run-charm-control')) return
+      // Text entry owns its keys, including rebound letter bindings.
+      if (overlayRoot.current?.querySelector('[data-sack-rename-dialog]')) return
+      const menuKey = event.code === menuKeyCode || event.code === 'Escape'
+      const bookKey = menuKey || event.code === inventoryKeyCode || event.code === skillsKeyCode
+      if (event.repeat || inventoryCloseStartedRef.current) {
+        if (surface && bookKey) {
+          event.preventDefault()
+          event.stopImmediatePropagation()
+        }
+        return
+      }
       const dyeBack = overlayRoot.current?.querySelector<HTMLButtonElement>('[data-native-dye-cancel]')
-      if (dyeBack && (event.code === menuKeyCode || event.code === inventoryKeyCode
-        || event.code === skillsKeyCode)) {
+      if (dyeBack && bookKey) {
         event.preventDefault()
         event.stopImmediatePropagation()
         if (!dyeBack.disabled) dyeBack.click()
@@ -339,17 +351,18 @@ export default function HubInventoryUi({
           event.preventDefault()
           event.stopImmediatePropagation()
           if (action.type === 'replace') beginInventoryClose('skills')
-          else inventoryBackOrClose()
+          else if (action.type === 'back') inventoryBackOrClose()
+          else beginInventoryClose('closed')
           return
         }
       }
-      if (surface && event.code === menuKeyCode) {
-        if (surface.kind === 'dialogue' && event.code === menuKeyCode) return
+      if (surface?.kind === 'service' && (menuKey || event.code === inventoryKeyCode)) {
         event.preventDefault()
         event.stopImmediatePropagation()
-        if (surface.kind === 'inventory' || surface.kind === 'service') {
-          inventoryBackOrClose()
-        } else closeSurface()
+        if (menuKey) {
+          audio.playSound('open-panel')
+          closeSurface()
+        } else inventoryBackOrClose()
         return
       }
       if (
@@ -372,13 +385,13 @@ export default function HubInventoryUi({
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
   }, [
+    audio,
     beginInventoryClose,
     closeSurface,
     disabled,
     inventoryBackOrClose,
     inventoryEnabled,
     inventoryKeyCode,
-    inventoryCloseTarget,
     inputSuspended,
     menuKeyCode,
     nearestInteraction,
