@@ -314,3 +314,55 @@ export async function inspectNativeSurfaceSampling() {
     app.destroy(true, { children: true })
   }
 }
+
+
+/** Real renderer opt-in coverage; separate apps preserve the UI/default contract. */
+export async function inspectNativePixelCenterInstallations() {
+  const results = []
+  for (const enabled of [false, true]) {
+    const app = new Application()
+    await app.init({ autoStart: false, width: 160, height: 96,
+      preference: 'webgl', resolution: 1.25, backgroundAlpha: 0 })
+    const target = RenderTexture.create({ width: 160, height: 160, resolution: 0.1,
+      alphaMode: 'no-premultiply-alpha' })
+    const gl = app.renderer.gl
+    const originalBind = app.renderer.renderTarget.bind
+    const options = enabled
+      ? { installTextureAlphaShaders: false, nativeWorldPixelCenters: true }
+      : { installTextureAlphaShaders: false }
+    installNativeFixedFunctionRenderPipeline(app.renderer, options)
+    const installedBind = app.renderer.renderTarget.bind
+    installNativeFixedFunctionRenderPipeline(app.renderer, options)
+    const result = { enabled, wrapped: installedBind !== originalBind,
+      idempotent: installedBind === app.renderer.renderTarget.bind, rows: [] }
+    app.stage.addChild(new Sprite({ texture: Texture.WHITE, width: 24, height: 20, x: 7.25, y: 11.75 }))
+    const capture = (kind, density) => {
+      app.renderer.render({ container: app.stage, ...(kind === 'offscreen' ? { target } : {}),
+        clear: true, clearColor: [0, 0, 0, 0] })
+      const system = app.renderer.renderTarget
+      const bound = system.renderTarget
+      const source = bound.colorTexture
+      const matrix = system.projectionMatrix
+      result.rows.push({ kind, density, isRoot: bound.isRoot, resolution: source.resolution,
+        width: source.pixelWidth, height: source.pixelHeight,
+        projection: { a: matrix.a, d: matrix.d, tx: matrix.tx, ty: matrix.ty },
+        glError: gl.getError() })
+    }
+    try {
+      for (const density of [0.5, 1.25, 2.5]) {
+        app.renderer.resize(160, 96, density)
+        target.resize(160, 160, density * 0.2)
+        for (const kind of ['root', 'offscreen', 'offscreen', 'root']) capture(kind, density)
+        app.renderer.resize(192, 112, density)
+        capture('resized-root', density)
+      }
+    } finally {
+      target.destroy(true)
+      app.destroy(true, { children: true })
+    }
+    result.targetDestroyed = target.destroyed
+    result.contextLost = gl.isContextLost()
+    results.push(result)
+  }
+  return results
+}

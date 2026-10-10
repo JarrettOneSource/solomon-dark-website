@@ -188,6 +188,30 @@ try {
       { name: 'browser-overlay', pixel: [128, 128, 128, 128] },
       { name: 'default-particle', pixel: [255, 255, 255, 255] },
     ])
+    const pixelCenters = await page.evaluate(async () => {
+      const { inspectNativePixelCenterInstallations } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativePixelCenterInstallations()
+    })
+    assert.equal(pixelCenters.length, 2)
+    for (const control of pixelCenters) {
+      assert.equal(control.wrapped, control.enabled)
+      assert.ok(control.idempotent && control.targetDestroyed && control.contextLost)
+      assert.equal(control.rows.length, 15)
+      for (const row of control.rows) {
+        const phase = control.enabled ? 1 : 0
+        const y = row.isRoot ? -1 : 1
+        const expected = { a: 2 * row.resolution / row.width,
+          d: y * 2 * row.resolution / row.height,
+          tx: -1 + phase / row.width, ty: -y + y * phase / row.height }
+        assert.equal(row.isRoot, row.kind !== 'offscreen')
+        assert.equal(row.glError, 0)
+        for (const key of ['a', 'd', 'tx', 'ty']) {
+          assert.ok(Math.abs(row.projection[key] - expected[key]) < 1e-12,
+            JSON.stringify({ enabled: control.enabled, row, expected, key }))
+        }
+      }
+    }
+    console.log(JSON.stringify({ pixelCenters }))
     const transforms = await page.evaluate(async () => {
       const { compareNativeBatchTransforms } = await import('/tools/native-render-contract-probe.mjs')
       return compareNativeBatchTransforms()
