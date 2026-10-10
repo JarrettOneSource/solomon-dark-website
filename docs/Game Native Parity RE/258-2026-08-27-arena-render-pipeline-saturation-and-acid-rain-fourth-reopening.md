@@ -358,9 +358,9 @@ the synthetic filter in the shared ordinary producer.
 | Stationary Storm flash, frame>0 | exact-ported | one original atlas draw, no synthetic target, exact retained state |
 | Moving Storm flash, both enhanced modes | exact-ported | same native material, moving additive body unaffected |
 | Frame<=0 and alpha boundaries | exact-ported | absence/transparent draw and packed-alpha controls |
-| Genuine stationary body, moving body and arcs | verified-already-at-parity | existing target/corner/order assertions remain green |
+| Genuine stationary body, moving body and arcs | verified-already-at-parity | for this material change: existing target/corner/order assertions remain green; no new whole-body parity claim |
 | Pooled generic, Acid and StormDrop draw reuse | exact-ported | remove dead semantic-mode plumbing without stale draw state |
-| Hub/College ordinary skill27 admission | verified-already-at-parity | native category-two seal and fixed-region queue exclusion; compiled exact87 negative journey passes |
+| Hub/College ordinary skill27 admission | verified-already-at-parity | for this material change: native category-two seal and fixed-region queue exclusion; baseline and candidate negative journeys pass |
 | Native resource failure or corrupted/reentrant object state | out-of-system | outside successful ordinary-render contract; failure conditions remain explicit, no invented diffuse-white fallback |
 | Full field/Road/Terrain/Region final composition | out-of-system | separately open within the requested visual work; outside this strike-material owner and source atlas equality is insufficient |
 
