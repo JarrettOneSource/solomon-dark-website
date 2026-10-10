@@ -3870,13 +3870,19 @@ async function boneyardSurfaceReceipt(page, scene) {
     activeRoadMeshCount: Number(node.dataset.roadActiveMeshCount),
     arenaBaseRenderer: node.dataset.arenaBaseRenderer,
     arenaGroundRenderer: node.dataset.arenaGroundRenderer,
+    arenaFieldRecord: Number(node.dataset.arenaFieldRecord),
+    arenaFieldTileCount: Number(node.dataset.arenaFieldTileCount),
+    arenaFieldGeometryUpdates: Number(node.dataset.arenaFieldGeometryUpdates),
     roadIndexCount: Number(node.dataset.roadIndexCount),
     roadMeshCount: Number(node.dataset.roadMeshCount),
     roadRenderer: node.dataset.roadRenderer,
     roadVertexCount: Number(node.dataset.roadVertexCount),
   }))
-  assert.equal(receipt.arenaBaseRenderer, 'retail-editor-field-capture+native-road-layout')
-  assert.equal(receipt.arenaGroundRenderer, 'retail-editor-field-capture-web-override')
+  assert.equal(receipt.arenaBaseRenderer, 'native-field-lattice+native-road-layout')
+  assert.equal(receipt.arenaGroundRenderer, 'native-deadhawg-field-records-11-12')
+  assert.equal(receipt.arenaFieldRecord, scene.environmentMode === 1 || scene.environmentMode === 2 ? 11 : 12)
+  assert.ok(receipt.arenaFieldTileCount > 0 && receipt.arenaFieldTileCount < 100)
+  assert.ok(receipt.arenaFieldGeometryUpdates > 0)
   assert.equal(receipt.roadRenderer, 'native-indexed-owner-mesh')
   assert.equal(receipt.roadMeshCount, scene.roads.length)
   assert.equal(receipt.roadVertexCount, scene.roads.length * 8)

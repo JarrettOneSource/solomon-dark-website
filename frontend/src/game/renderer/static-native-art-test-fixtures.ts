@@ -153,18 +153,19 @@ export async function withStaticWorldFixture(
     }] : [],
   })
   const page = staticArtPage(), root = new Container()
+  const ground = new Texture({ source: page })
   const textures = new Map<number, Texture>()
   let build: StaticWorldBuild | undefined
   try {
     const module = await server.ssrLoadModule('/src/game/renderer/boneyard-static-world.ts') as typeof import('./boneyard-static-world.ts')
-    const scene = { ...document, bounds: document.meta.bounds } as unknown as LoadedBoneyard['scene']
+    const scene = { ...document, bounds: document.meta.bounds, environmentMode: 0 } as unknown as LoadedBoneyard['scene']
     const glyph = (entry: number) => {
       let texture = textures.get(entry)
       if (!texture) { texture = staticArtTexture(entry, page); textures.set(entry, texture) }
       return texture
     }
     build = await module.buildStaticWorld(document, scene, root,
-      { ground: Texture.WHITE, roads: [] }, { glyph, fenceGrate: Texture.WHITE }, cleanupBounds)
+      { ground, roads: [] }, { glyph, fenceGrate: Texture.WHITE }, cleanupBounds)
     await check(build, root, page, textures)
   } finally {
     build?.surface.destroy()
@@ -174,6 +175,7 @@ export async function withStaticWorldFixture(
     }
     root.destroy({ children: true })
     for (const texture of textures.values()) texture.destroy(false)
+    ground.destroy(false)
     page.destroy()
     await server.close()
     globals.forEach((key, index) => {

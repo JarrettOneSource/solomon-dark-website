@@ -33,6 +33,11 @@ export async function inspectNativeRenderContracts() {
   const arena = installNativeArenaRenderPipeline(app.renderer)
   const target = RenderTexture.create({ width: 64, height: 64, alphaMode: 'no-premultiply-alpha' })
   const texture = textures[0].texture
+  // Synthetic material fixture: the field owner consumes absolute full-page UVs.
+  const fieldTexture = new Texture({ source: new BufferImageSource({
+    resource: new Uint8Array(2048 * 2048 * 4).fill(255), width: 2048, height: 2048,
+    alphaMode: 'no-premultiply-alpha',
+  }) })
   const result = { sources: [], grids: [], liveGrids: [], roads: {}, missingRoad: {}, detachedScene: {} }
   try {
     for (const { name, texture } of textures) {
@@ -101,14 +106,15 @@ export async function inspectNativeRenderContracts() {
       startWidthScale: 1, endWidthScale: 1,
       points: [{ x: 0, y: 8 + style * 12 }, { x: 64, y: 8 + style * 12 }],
     }))
-    const scene = { bounds: { x: 0, y: 0, w: 64, h: 64 }, roads }
+    const scene = { bounds: { x: 0, y: 0, w: 64, h: 64 }, environmentMode: 0, roads }
     const roadTexture = new Texture({ source: new BufferImageSource({
       resource: new Uint8Array([128, 128, 128, 255]), width: 1, height: 1,
       alphaMode: 'no-premultiply-alpha',
     }) })
     const surface = new NativeBoneyardSurfaceView(app.stage, scene, {
-      ground: texture, roads: new Array(5).fill(roadTexture),
+      ground: fieldTexture, roads: new Array(5).fill(roadTexture),
     })
+    surface.updateField(scene.bounds)
     const meshes = [surface.container.children[0], ...surface.container.children[1].children]
     const roadRoot = surface.container.children[1]
     const resources = meshes.map(mesh => ({ mesh, geometry: mesh.geometry, shader: mesh.shader, buffers: [...mesh.geometry.buffers] }))
@@ -131,14 +137,14 @@ export async function inspectNativeRenderContracts() {
     result.roads.textureAlive = !roadTexture.destroyed
     roadTexture.destroy(true)
     const detached = new NativeBoneyardSurfaceView(app.stage, { ...scene, roads: [] }, {
-      ground: texture, roads: [],
+      ground: fieldTexture, roads: [],
     })
     app.stage.removeChild(detached.container)
     detached.destroy()
     result.detachedScene = { destroyed: detached.container.destroyed, count: detached.activeRoadMeshCount }
     const parent = new Container()
     try {
-      new NativeBoneyardSurfaceView(parent, scene, { ground: texture, roads: [] })
+      new NativeBoneyardSurfaceView(parent, scene, { ground: fieldTexture, roads: [] })
     } catch (error) {
       result.missingRoad = { message: error.message, childrenAfterFailure: parent.children.length }
     }
@@ -148,6 +154,7 @@ export async function inspectNativeRenderContracts() {
     arena.destroy()
     arena.destroy()
     app.destroy(true, { children: true })
+    fieldTexture.destroy(true)
     for (const { texture } of textures) texture.destroy(true)
   }
   return result

@@ -1,5 +1,17 @@
 # 2026-08-27 — Arena field/Road surfaces, Solomon record 13, and Tutorial generation boundary
 
+## 2026-10-10 field-identity correction
+
+The historical field-global attribution below is superseded by the
+[field-bank recovery in entry 272](<272-2026-08-27-arena-base-field-omission-and-black-boneyard-regression.md#2026-10-10--recover-the-original-field-bank-and-shared-consumers>).
+`0x00B2F2A4` and `0x00B2F368` are DeadHawg records **11 and 12**, both
+opaque 350-by-350 gravel, after the bank's 56-byte header. They are not
+records 20/21 or a 200-unit field lattice. The old white-rectangle experiment
+submitted the wrong asset records and does not falsify the real native field.
+The original Road, Solomon, and Tutorial findings below are retained; this
+correction does not renumber any generated atlas row or unrelated consumer.
+Live descriptor and final-composition qualification are still pending.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the Boneyard ground is visibly flatter and lower

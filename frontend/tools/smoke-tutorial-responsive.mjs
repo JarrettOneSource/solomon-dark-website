@@ -459,6 +459,8 @@ async function tutorialSurfaceReceipt(host, page) {
   assert.deepEqual(economy.equipment.robe?.iconTints, economy.equipment.hat?.iconTints)
   const receipt = await page.locator('.boneyard-world-canvas').evaluate((node) => ({
     arenaBaseRenderer: node.dataset.arenaBaseRenderer,
+    arenaFieldRecord: Number(node.dataset.arenaFieldRecord),
+    arenaFieldTileCount: Number(node.dataset.arenaFieldTileCount),
     orbSpriteCount: node.__sdrBoneyardFrame.orbSpriteCount,
     primaryElementEffectId: node.__sdrBoneyardFrame.playerElementEffectPrimaryId,
     roadActiveMeshCount: Number(node.dataset.roadActiveMeshCount),
@@ -468,7 +470,9 @@ async function tutorialSurfaceReceipt(host, page) {
     roadVertexCount: Number(node.dataset.roadVertexCount),
   }))
   assert.deepEqual(receipt, {
-    arenaBaseRenderer: 'retail-editor-field-capture+native-road-layout',
+    arenaBaseRenderer: 'native-field-lattice+native-road-layout',
+    arenaFieldRecord: 11,
+    arenaFieldTileCount: receipt.arenaFieldTileCount,
     orbSpriteCount: receipt.orbSpriteCount,
     primaryElementEffectId: 8,
     roadActiveMeshCount: receipt.roadActiveMeshCount,
@@ -478,6 +482,7 @@ async function tutorialSurfaceReceipt(host, page) {
     roadVertexCount: 53 * 8,
   })
   assert.ok(receipt.orbSpriteCount > 0)
+  assert.ok(receipt.arenaFieldTileCount > 0 && receipt.arenaFieldTileCount < 100)
   assert.ok(receipt.roadActiveMeshCount > 0 && receipt.roadActiveMeshCount <= receipt.roadMeshCount)
   const painterOrder = await page.locator('.boneyard-world-canvas').evaluate(
     node => structuredClone(node.__sdrBoneyardFrame.painterOrder),

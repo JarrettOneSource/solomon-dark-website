@@ -20,6 +20,7 @@ import {
 } from './native-fence-geometry'
 import type { CompactSpriteLayer, MainLayer, ObjectSpriteLayer } from './native-render-plan'
 import { buildNativeRenderPlan } from './native-render-plan'
+import { drawNativeEditorField } from './native-field-painter'
 import type { PositionedNativeRegionPainterLayer } from '../game/region-painter-order'
 import {
   FENCE_GRATE_TEXTURE,
@@ -355,11 +356,6 @@ function tracePolygon(ctx: CanvasRenderingContext2D, pts: Vec2[]) {
 
 // ---------- the stage ----------
 
-// The vignette only depends on the plot's screen rectangle; while the camera
-// holds still (drags, strokes, marquees) the same gradient serves every frame.
-let vignetteKey = ''
-let vignetteGrad: CanvasGradient | null = null
-
 const EMPTY_SET = new Set<string>()
 
 /** What paintWorld knows about selection: the direct path interleaves
@@ -379,6 +375,9 @@ interface WorldPaintUI {
 // offscreen layer and each frame blits it, painting live only what actually
 // moves: outlines, held pieces, and gesture chrome. The stage returns to the
 // direct path when motion settles, so its resting frame stays pixel-identical.
+// The field stays outside this transparent foreground cache: its primary-view
+// culling and native device-pixel phase must follow the current camera, including
+// while a padded pan layer is reused.
 
 // Pans glide the viewport, so their layer carries extra painted world at the
 // edges; every other gesture holds the camera still and skips the margin.
@@ -512,7 +511,7 @@ function renderLayer(mode: SceneLayer['mode'], margin: number, cam: Camera, doc:
     const canvas = document.createElement('canvas')
     canvas.width = pw
     canvas.height = ph
-    const lctx = canvas.getContext('2d', { alpha: false })
+    const lctx = canvas.getContext('2d')
     if (!lctx) return false
     L = sceneLayer = {
       canvas, ctx: lctx, wx: 0, wy: 0, camX: 0, camY: 0, zoom: 1, dpr: 1, cssW: 0, cssH: 0,
@@ -520,6 +519,7 @@ function renderLayer(mode: SceneLayer['mode'], margin: number, cam: Camera, doc:
     }
   }
   L.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  L.ctx.clearRect(0, 0, lw, lh)
   const skip = mode === 'sans-selection' ? selectionSet(ui.selection) : undefined
   paintWorld(L.ctx, lw, lh, cam, doc, { selected: EMPTY_SET, hover: null, showGrid: ui.showGrid }, skip)
   L.wx = cam.x - lw / 2 / cam.zoom
@@ -567,6 +567,14 @@ export function drawStage(
   }
   canvas.__sdrEditorPainterOrder = scene.painterOrder
   canvas.dataset.editorPainterLayerCount = `${scene.painterOrder.length}`
+  // Paint the field directly beneath every direct or cached foreground frame.
+  // Decoded atlas readiness is observed here immediately; CanvasStage also
+  // invalidates all foreground gesture layers in its existing onAssetReady.
+  ctx.fillStyle = '#07060a'
+  ctx.fillRect(0, 0, cssW, cssH)
+  const fieldTiles = drawNativeEditorField(ctx, spriteImage(GROUND_TEXTURE), doc.meta.bounds, cam, cssW, cssH)
+  canvas.dataset.editorFieldRecord = '12'
+  canvas.dataset.editorFieldTileCount = `${fieldTiles}`
   const mode: SceneLayer['mode'] | null =
     ui.dragging && ui.selection.length > 0
       ? 'sans-selection'
@@ -832,11 +840,6 @@ function paintWorld(
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
   placementMode: PlacementPaintMode = 'all',
 ) {
-  // The void beyond the plot. The context is opaque (alpha: false), and this
-  // covers every pixel, so no clear pass is needed.
-  ctx.fillStyle = runtime ? '#000' : '#07060a'
-  ctx.fillRect(0, 0, cssW, cssH)
-
   const b = doc.meta.bounds
   const tl = worldToScreen({ x: b.x, y: b.y }, cam, cssW, cssH)
   const br = worldToScreen({ x: b.x + b.w, y: b.y + b.h }, cam, cssW, cssH)
@@ -844,36 +847,6 @@ function paintWorld(
   // Fence art can tower ~220 world px above its baseline; pad the cull rect
   // so nothing pops at the fringe.
   const view = visibleWorld(cam, cssW, cssH, 256)
-
-  // Consecrated ground: the arena field itself, sampled from the retail
-  // editor's render (the base fill is generated in-game, not a loose file),
-  // tiled at native scale with a whisper of the site's gloom.
-  const groundPat = worldPattern(ctx, GROUND_TEXTURE, cam, cssW, cssH, 1)
-  if (groundPat) {
-    ctx.fillStyle = groundPat
-    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-    if (!runtime) {
-      ctx.fillStyle = 'rgba(8, 12, 8, 0.1)'
-      ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-    }
-  } else {
-    ctx.fillStyle = '#22251f'
-    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-  }
-  if (!runtime) {
-    const vigKey = `${tl.x.toFixed(1)},${tl.y.toFixed(1)},${br.x.toFixed(1)},${br.y.toFixed(1)}`
-    if (vigKey !== vignetteKey || !vignetteGrad) {
-      vignetteGrad = ctx.createRadialGradient(
-        (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.min(br.x - tl.x, br.y - tl.y) * 0.3,
-        (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.max(br.x - tl.x, br.y - tl.y) * 0.75,
-      )
-      vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)')
-      vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.22)')
-      vignetteKey = vigKey
-    }
-    ctx.fillStyle = vignetteGrad
-    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-  }
 
   // Survey grid: the step widens as the camera pulls out so the lines stay
   // an honest surveyor's grid instead of vanishing or turning to noise.

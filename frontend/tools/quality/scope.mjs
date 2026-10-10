@@ -11,6 +11,8 @@ export const rendererFiles = [
 ]
 
 export const rendererTests = [
+  'src/game/native-arena-field.test.ts',
+  'src/game/renderer/native-boneyard-surface-view.test.ts',
   'src/game/runtime-progression.test.ts',
   'src/game/renderer/native-texture-color.test.ts',
   'src/game/renderer/native-fixed-function-render-pipeline.test.ts',

@@ -143,8 +143,9 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     200,
   )
   const roads = ROAD_TEXTURES.map(texture)
+  // Borrow the original full DeadHawg page. Absolute record UVs must not be
+  // transformed through a cropped frame or change this shared page to repeat.
   const ground = texture(GROUND_TEXTURE)
-  ground.source.addressMode = 'repeat'
   texture(FENCE_GRATE_TEXTURE).source.addressMode = 'repeat'
   texture(greenPlasmaSource).source.addressMode = 'repeat'
   for (const road of roads) road.source.addressMode = 'repeat'

@@ -8,7 +8,6 @@ import {
   NATIVE_ROAD_STYLE_PROGRAMS,
   nativeRoadEndpointAlphas,
   nativeRoadMeshPlan,
-  webArenaGroundMeshPlan,
 } from './native-boneyard-surface.ts'
 
 const ROAD: BoneyardRoad = {
@@ -38,28 +37,13 @@ test('pins all five loose Road textures to retail bytes', () => {
   }
 })
 
-test('pins and world-anchors the restored known-good web ground field', () => {
+test('pins the original full DeadHawg page used by both field records', () => {
   assert.equal(
     createHash('sha256').update(readFileSync(new URL(
-      '../../assets/game/boneyard/textures/arena-ground.webp',
+      '../../assets/game/boneyard-combat-atlas-2.png',
       import.meta.url,
     ))).digest('hex'),
-    'dabc48e7af0220283889647f57cde6442aecc79629555ce9104815ebadbdb070',
-  )
-  const bounds = { h: 400, w: 600, x: -200, y: 100 }
-  const plan = webArenaGroundMeshPlan(bounds)
-  assert.deepEqual([...plan.positions], [-200, 100, 400, 100, -200, 500, 400, 500])
-  assert.deepEqual([...plan.indices], [0, 1, 2, 1, 3, 2])
-  assert.deepEqual([...plan.colors], new Array(16).fill(255))
-  assert.deepEqual([...plan.uvs], [
-    Math.fround(-200 / 512), Math.fround(100 / 512),
-    Math.fround(400 / 512), Math.fround(100 / 512),
-    Math.fround(-200 / 512), Math.fround(500 / 512),
-    Math.fround(400 / 512), Math.fround(500 / 512),
-  ])
-  assert.throws(
-    () => webArenaGroundMeshPlan({ ...bounds, w: 0 }),
-    /requires positive bounds/,
+    '3758ce24d516f0ca6349e57b988d8a84e8d6f89fb3827856d7bb521618281af0',
   )
 })
 

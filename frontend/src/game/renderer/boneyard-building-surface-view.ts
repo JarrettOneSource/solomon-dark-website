@@ -46,7 +46,7 @@ const NATIVE_STATIC_SURFACE_PROGRAMS = [
   name: 'native-static-surface',
 }))
 
-interface NativeSurfaceGeometry {
+export interface NativeSurfaceGeometry {
   readonly colors: Uint8Array
   readonly indices: Uint32Array
   readonly positions: Float32Array
@@ -65,7 +65,11 @@ export function createNativeLitSurfaceGrid(
   return createNativeSurfaceMesh(texture, { ...grid, colors })
 }
 
-export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeometry): NativeStaticSurfaceMesh {
+export function createNativeSurfaceMesh(
+  texture: Texture,
+  plan: NativeSurfaceGeometry,
+  shader = createNativeSurfaceShader(texture),
+): NativeStaticSurfaceMesh {
   let colors = plan.colors
   const colorBuffer = new Buffer({
     data: colors,
@@ -73,7 +77,6 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
     label: 'native-static-surface-colors',
     usage: BufferUsage.VERTEX | BufferUsage.COPY_DST,
   })
-  const shader = createNativeSurfaceShader(texture)
   const geometry = new MeshGeometry({
     indices: plan.indices,
     positions: plan.positions,

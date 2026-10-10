@@ -5,12 +5,12 @@
 // Per the native RE (native-asset-system.md, loose-image ownership): roads,
 // fencegrate, and river/rise are true world textures; WallTop is a dormant
 // stock load nothing renders, so the editor draws walls as the generated
-// mesh the game builds. The arena's base fill is generated, not a loose
-// file, so the ground tile here is sampled straight from the retail
-// editor's own field render and mirror-tiled seamless.
+// mesh the game builds. The arena field uses the original full DeadHawg
+// atlas: native-arena-field owns mode-selected records 11/12 and their
+// fractional UV endpoints. Bonedit always selects record 12.
 
 import fenceGrateUrl from '../assets/game/boneyard/textures/fencegrate.png'
-import groundUrl from '../assets/game/boneyard/textures/arena-ground.webp'
+import groundUrl from '../assets/game/boneyard-combat-atlas-2.png'
 import riseUrl from '../assets/game/boneyard/textures/rise.png'
 import riverUrl from '../assets/game/boneyard/textures/river.png'
 import road1Url from '../assets/game/boneyard/textures/road.png'
@@ -19,6 +19,7 @@ import road3Url from '../assets/game/boneyard/textures/road3.png'
 import road4Url from '../assets/game/boneyard/textures/road4.png'
 import road5Url from '../assets/game/boneyard/textures/road5.png'
 
+/** Full 2048-square atlas page; never repeat this page as a ground tile. */
 export const GROUND_TEXTURE = groundUrl
 
 /** Road surface per native texture selector 0..4 (road.png .. road5.png). */

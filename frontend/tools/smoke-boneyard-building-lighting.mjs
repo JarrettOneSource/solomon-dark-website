@@ -342,6 +342,8 @@ try {
     window.__buildingLightingRenderer = renderer
     return {
       arenaGroundRenderer: renderer.canvas.dataset.arenaGroundRenderer,
+      arenaFieldRecord: Number(renderer.canvas.dataset.arenaFieldRecord),
+      arenaFieldTileCount: Number(renderer.canvas.dataset.arenaFieldTileCount),
       buildingLighting: renderer.canvas.dataset.buildingLighting,
       buildingLightingGrid: renderer.canvas.dataset.buildingLightingGrid,
       buildingProofs,
@@ -367,7 +369,9 @@ try {
   assert.ok(receipt.groundPixels.rgbTotal > 5_000, JSON.stringify(receipt))
   assert.ok(receipt.groundPixels.distinctRgbCount > 8, JSON.stringify(receipt))
   assert.ok(receipt.groundPixels.maximumRgbTotal < 700, JSON.stringify(receipt))
-  assert.equal(receipt.arenaGroundRenderer, 'retail-editor-field-capture-web-override')
+  assert.equal(receipt.arenaGroundRenderer, 'native-deadhawg-field-records-11-12')
+  assert.ok(receipt.arenaFieldRecord === 11 || receipt.arenaFieldRecord === 12)
+  assert.ok(receipt.arenaFieldTileCount > 0)
   assert.equal(receipt.buildingLighting, 'native-elevated-vertex-grid')
   assert.equal(receipt.buildingLightingGrid, '3x3')
   assert.equal(receipt.wallLighting, 'native-endpoint-vertex-gradient')

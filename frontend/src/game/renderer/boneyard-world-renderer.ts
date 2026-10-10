@@ -244,8 +244,9 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.arenaSaturation = 'native-fragment-0.65'
   canvas.dataset.arenaTextureAlpha = 'native-npm+composite-pma'
-  canvas.dataset.arenaBaseRenderer = 'retail-editor-field-capture+native-road-layout'
-  canvas.dataset.arenaGroundRenderer = 'retail-editor-field-capture-web-override'
+  canvas.dataset.arenaBaseRenderer = 'native-field-lattice+native-road-layout'
+  canvas.dataset.arenaGroundRenderer = 'native-deadhawg-field-records-11-12'
+  canvas.dataset.arenaFieldRecord = `${staticWorld.surface.fieldRecord}`
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
   canvas.dataset.buildingLightingGrid = options.initialSnapshot.enhancedEffects ? '3x3' : '2x2'
   canvas.dataset.wallLighting = 'native-endpoint-vertex-gradient'
@@ -440,6 +441,9 @@ export async function createBoneyardWorldRenderer(
       currentStaticWorld.applyOffCameraCleanup()
     }
     const visibleWorld = boneyardVisibleWorldBounds(camera, viewport, 0)
+    currentStaticWorld.surface.updateField(visibleWorld)
+    canvas.dataset.arenaFieldTileCount = `${currentStaticWorld.surface.groundTileCount}`
+    canvas.dataset.arenaFieldGeometryUpdates = `${currentStaticWorld.surface.groundGeometryUpdateCount}`
     visibility.update(camera, viewport)
     const frameAt = advanceFrame ? now() : lastRenderedAt
     lastRenderedSnapshot = advanceFrame ? {
@@ -633,6 +637,7 @@ export async function createBoneyardWorldRenderer(
     secondaryScreenFlash.visible = screenOverlay !== null
     crowBlindness.update(snapshot.players[options.playerId]!.lighting.blindnessTicksRemaining,
       frameAt, viewport)
+    currentStaticWorld.surface.prepareFieldRender(application.renderer.resolution)
     application.render()
     updateBoneyardRendererDiagnostics({
       frameDiagnostics, canvas, cameraFocus, camera, frameCount, painter, snapshot,
