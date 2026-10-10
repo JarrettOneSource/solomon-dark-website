@@ -383,3 +383,43 @@ function seekerSnapshot(withLoot: boolean): GameSnapshot {
     },
   } as unknown as GameSnapshot
 }
+
+
+test('Region composite reuses owned mesh buffers across density, quality and coverage changes, then destroys all', async () => {
+  const { BoneyardRegionLightField } = await server.ssrLoadModule('/src/game/renderer/boneyard-region-light-field.ts') as
+    typeof import('./boneyard-region-light-field.ts')
+  const root = new Container()
+  const viewport = { width: 1600, height: 900, displayScale: 1 }
+  const view = new BoneyardRegionLightField(root, Texture.EMPTY, viewport, 2)
+  const composite = root.children[0]
+  assert.ok(composite instanceof MeshSimple)
+  const geometry = composite.geometry
+  const buffers = [...new Set([...Object.values(geometry.attributes).map(attribute => attribute.buffer), geometry.getIndex()])]
+  const target = composite.texture
+  assert.equal(buffers.length, 3)
+  let unloads = 0
+  geometry.on('unload', () => { unloads += 1 })
+  for (const resolution of [2, 2.5, 3, 1]) {
+    for (const quality of [0.25, 0.5, 0.25]) {
+      view.resize(viewport, resolution)
+      view.setQuality(quality, viewport, resolution)
+      view.setViewportCoverage(resolution, 1.35, viewport, true)
+      assert.equal(composite.geometry, geometry)
+      assert.equal(composite.texture, target)
+      assert.ok(buffers.every(buffer => !buffer.destroyed))
+      assert.equal(composite.vertices[2], Math.fround(view.targetLogicalSide))
+      view.setViewportCoverage(resolution, 1.35, viewport, false)
+      assert.equal(Math.abs(composite.vertices[0]!), 0)
+      assert.equal(Math.abs(composite.vertices[1]!), 0)
+      assert.equal(Math.abs(composite.geometry.getBuffer('aUV').data[0]!), 0)
+      assert.equal(Math.abs(composite.geometry.getBuffer('aUV').data[1]!), 0)
+    }
+  }
+  view.destroy()
+  assert.equal(root.children.length, 0)
+  assert.equal(unloads, 1)
+  assert.ok(buffers.every(buffer => buffer.destroyed))
+  assert.equal(target.destroyed, true)
+  assert.equal(Texture.EMPTY.destroyed, false)
+  root.destroy()
+})

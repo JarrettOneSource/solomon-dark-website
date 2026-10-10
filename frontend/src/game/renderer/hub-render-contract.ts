@@ -13,8 +13,12 @@ import {
 import { NATIVE_HUB_COURTYARD_OBSTACLES } from '../core-kernels/native-hub-world-membership.ts'
 
 export const HUB_RENDER_MIN_RESOLUTION = 0.5
-// Preserve DPR-2 output without an extra compositor upscale; see parity ledger 026.
-export const HUB_RENDER_MAX_RESOLUTION = 2
+export const HUB_RENDER_MAX_RESOLUTION = 4
+// Preserve the existing <=2 output, including viewports already above these budgets.
+// Only additional density uses the measured display-quality budget, not a native art scale.
+export const HUB_RENDER_LEGACY_MAX_RESOLUTION = 2
+export const HUB_RENDER_UPGRADE_MAX_PIXELS = 9_000_000
+export const HUB_RENDER_UPGRADE_MAX_SIDE = 4_096
 export const HUB_STUDENT_VISIBILITY_HALF_EXTENT = 120
 export const HUB_DIAGNOSTIC_WINDOW_FRAMES = 120
 
@@ -60,20 +64,47 @@ export const HUB_COURTYARD_OBSTACLES = NATIVE_HUB_COURTYARD_OBSTACLES
 export interface HubResolutionInputs {
   devicePixelRatio: number
   displayScale: number
+  /** Logical renderer dimensions, before resolution or the outer CSS display scale. */
+  width?: number
+  height?: number
   maxResolution?: number
 }
 
 export function initialHubResolution({
   devicePixelRatio,
   displayScale,
+  width,
+  height,
   maxResolution = HUB_RENDER_MAX_RESOLUTION,
 }: HubResolutionInputs): number {
   const requested = finiteOr(devicePixelRatio, 1) * finiteOr(displayScale, 1)
+  const explicitMaximum = Number.isNaN(maxResolution)
+    ? HUB_RENDER_LEGACY_MAX_RESOLUTION
+    : maxResolution
   // A second CSS resample would blur the entire world at fractional display scales.
   return clamp(
     requested,
     HUB_RENDER_MIN_RESOLUTION,
-    clamp(maxResolution, HUB_RENDER_MIN_RESOLUTION, HUB_RENDER_MAX_RESOLUTION),
+    Math.min(
+      viewportResolutionLimit(width, height),
+      clamp(explicitMaximum, HUB_RENDER_MIN_RESOLUTION, HUB_RENDER_MAX_RESOLUTION),
+    ),
+  )
+}
+
+function viewportResolutionLimit(width?: number, height?: number): number {
+  if (
+    width === undefined || height === undefined
+    || !Number.isFinite(width) || !Number.isFinite(height)
+    || width <= 0 || height <= 0
+  ) return HUB_RENDER_LEGACY_MAX_RESOLUTION
+  return Math.max(
+    HUB_RENDER_LEGACY_MAX_RESOLUTION,
+    Math.min(
+      HUB_RENDER_MAX_RESOLUTION,
+      Math.sqrt(HUB_RENDER_UPGRADE_MAX_PIXELS / width / height),
+      HUB_RENDER_UPGRADE_MAX_SIDE / Math.max(width, height),
+    ),
   )
 }
 

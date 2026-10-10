@@ -8,6 +8,10 @@ import { gameViewportLayout } from './game-viewport.ts'
 
 import {
   HUB_DIAGNOSTIC_WINDOW_FRAMES,
+  HUB_RENDER_LEGACY_MAX_RESOLUTION,
+  HUB_RENDER_MAX_RESOLUTION,
+  HUB_RENDER_UPGRADE_MAX_PIXELS,
+  HUB_RENDER_UPGRADE_MAX_SIDE,
   HUB_WORLD_LAYER_BOUNDS,
   HUB_STUDENT_VISIBILITY_HALF_EXTENT,
   hubStudentIntersectsView,
@@ -89,7 +93,7 @@ test('fractional world density does not add a second browser resampling step', (
   ] as const) {
     const viewport = gameViewportLayout(width, height)
     const resolution = initialHubResolution({
-      devicePixelRatio, displayScale: viewport.displayScale,
+      devicePixelRatio, ...viewport,
     })
     assert.equal(resolution, devicePixelRatio * viewport.displayScale)
     assert.equal(Math.round(viewport.width * resolution), Math.round(width * devicePixelRatio))
@@ -97,7 +101,7 @@ test('fractional world density does not add a second browser resampling step', (
   }
 })
 
-test('world density preserves the measured quality bounds and explicit lower maximum', () => {
+test('world density without viewport dimensions preserves the legacy cap and explicit lower maximum', () => {
   assert.equal(initialHubResolution({ devicePixelRatio: 4, displayScale: 1 }), 2)
   assert.equal(initialHubResolution({ devicePixelRatio: 1, displayScale: 0.1 }), 0.5)
   for (const maxResolution of [0.625, 0.875, 1.1, 1.375, 1.5, 1.875]) {
@@ -108,6 +112,135 @@ test('world density preserves the measured quality bounds and explicit lower max
   for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
     assert.equal(initialHubResolution({ devicePixelRatio: invalid, displayScale: 0.8 }), 0.8)
     assert.equal(initialHubResolution({ devicePixelRatio: 1, displayScale: invalid }), 1)
+  }
+})
+
+test('high-density desktop output uses the measured nine-megapixel upgrade budget', () => {
+  for (const [devicePixelRatio, expected] of [[2, 2], [2.5, 2.5], [3, 2.5], [4, 2.5]]) {
+    const resolution = initialHubResolution({
+      devicePixelRatio, displayScale: 1, width: 1600, height: 900,
+    })
+    assert.equal(resolution, expected)
+    assert.equal(Math.round(1600 * resolution), expected * 1600)
+    assert.equal(Math.round(900 * resolution), expected * 900)
+  }
+  assert.equal(HUB_RENDER_UPGRADE_MAX_PIXELS, 9_000_000)
+  assert.equal(HUB_RENDER_UPGRADE_MAX_SIDE, 4096)
+  const fullHd = initialHubResolution({
+    devicePixelRatio: 3, displayScale: 1, width: 1920, height: 1080,
+  })
+  assert.ok(Math.abs(fullHd - 25 / 12) < 1e-12)
+  assert.equal(Math.round(1920 * fullHd), 4000)
+  assert.equal(Math.round(1080 * fullHd), 2250)
+})
+
+test('high-density upgrades respect the long side and maximum density independently of pixel area', () => {
+  assert.equal(HUB_RENDER_MAX_RESOLUTION, 4)
+  assert.equal(initialHubResolution({
+    devicePixelRatio: 8, displayScale: 1, width: 800, height: 600,
+  }), 4)
+  assert.equal(initialHubResolution({
+    devicePixelRatio: 4, displayScale: 1, width: 2000, height: 200,
+  }), 2.048)
+  assert.equal(initialHubResolution({
+    devicePixelRatio: 4, displayScale: 1, width: 200, height: 2000,
+  }), 2.048)
+})
+
+test('phone and tablet density follows physical display pixels when within the budget', () => {
+  for (const [width, height, devicePixelRatio] of [
+    [390, 844, 3],
+    [844, 390, 3],
+    [1024, 768, 2.5],
+    [1024, 1366, 3],
+  ]) {
+    const viewport = gameViewportLayout(width, height)
+    const resolution = initialHubResolution({ devicePixelRatio, ...viewport })
+    assert.equal(resolution, devicePixelRatio * viewport.displayScale)
+    assert.equal(Math.round(viewport.width * resolution), Math.round(width * devicePixelRatio))
+    assert.equal(Math.round(viewport.height * resolution), Math.round(height * devicePixelRatio))
+  }
+  const tablet = gameViewportLayout(1366, 1024)
+  const resolution = initialHubResolution({ devicePixelRatio: 3, ...tablet })
+  assert.ok(resolution > 2)
+  assert.ok(resolution < 3 * tablet.displayScale)
+  assert.ok(Math.abs(tablet.width * tablet.height * resolution ** 2 - 9_000_000) < 1e-6)
+})
+
+test('the incremental budget never downgrades pre-existing density-two allocations', () => {
+  assert.equal(HUB_RENDER_LEGACY_MAX_RESOLUTION, 2)
+  for (const [width, height] of [[2560, 1440], [3840, 2160], [7680, 2160], [3000, 300]]) {
+    for (const devicePixelRatio of [2, 2.5, 3, 4]) {
+      assert.equal(initialHubResolution({ devicePixelRatio, displayScale: 1, width, height }), 2)
+    }
+  }
+})
+
+test('density recalculates from current logical dimensions across resize and display-scale changes', () => {
+  const results = [
+    { width: 800, height: 600, displayScale: 1, devicePixelRatio: 3 },
+    { width: 1600, height: 900, displayScale: 1, devicePixelRatio: 3 },
+    { width: 2560, height: 1440, displayScale: 1, devicePixelRatio: 3 },
+    { width: 1600, height: 900, displayScale: 0.75, devicePixelRatio: 3 },
+    { width: 1600, height: 900, displayScale: 0.5, devicePixelRatio: 3 },
+    { width: 800, height: 600, displayScale: 1, devicePixelRatio: 3 },
+  ].map(initialHubResolution)
+  assert.deepEqual(results, [3, 2.5, 2, 2.25, 1.5, 3])
+})
+
+test('viewport-aware density preserves explicit lower maxima and rejects invalid upgrades', () => {
+  for (const maxResolution of [0.625, 1.375, 1.875, 2, 2.25]) {
+    assert.equal(initialHubResolution({
+      devicePixelRatio: 4, displayScale: 1, width: 1600, height: 900, maxResolution,
+    }), maxResolution)
+  }
+  assert.equal(initialHubResolution({
+    devicePixelRatio: 4, displayScale: 1, width: 1600, height: 900, maxResolution: 8,
+  }), 2.5)
+  for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0, -1]) {
+    assert.equal(initialHubResolution({
+      devicePixelRatio: 4, displayScale: 1, width: invalid, height: 900,
+    }), 2)
+    assert.equal(initialHubResolution({
+      devicePixelRatio: 4, displayScale: 1, width: 1600, height: invalid,
+    }), 2)
+    assert.equal(initialHubResolution({
+      devicePixelRatio: invalid, displayScale: 1, width: 1600, height: 900,
+    }), 1)
+    assert.equal(initialHubResolution({
+      devicePixelRatio: 3, displayScale: invalid, width: 1600, height: 900,
+    }), 2.5)
+  }
+  assert.equal(initialHubResolution({
+    devicePixelRatio: 4, displayScale: 1, width: 1600, height: 900, maxResolution: Number.NaN,
+  }), 2)
+  assert.equal(initialHubResolution({
+    devicePixelRatio: 4, displayScale: 1, width: 1600, height: 900,
+    maxResolution: Number.POSITIVE_INFINITY,
+  }), 2.5)
+  for (const maxResolution of [0, -1, 0.1, Number.NEGATIVE_INFINITY]) {
+    assert.equal(initialHubResolution({
+      devicePixelRatio: 4, displayScale: 1, width: 1600, height: 900, maxResolution,
+    }), 0.5)
+  }
+})
+
+test('valid legacy densities remain byte-for-byte numerically unchanged across viewports', () => {
+  for (const devicePixelRatio of [0.5, 1, 1.25, 2, 2.5, 3, 4]) {
+    for (const displayScale of [0.25, 0.5, 0.625, 0.75, 1]) {
+      if (devicePixelRatio * displayScale > 2) continue
+      for (const maxResolution of [0.1, 0.5, 0.875, 1.5, 2, 4, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY]) {
+        const legacy = Math.min(
+          Math.min(2, Math.max(0.5, maxResolution)),
+          Math.max(0.5, devicePixelRatio * displayScale),
+        )
+        for (const [width, height] of [[800, 600], [1600, 900], [3840, 2160]]) {
+          assert.equal(initialHubResolution({
+            devicePixelRatio, displayScale, maxResolution, width, height,
+          }), legacy)
+        }
+      }
+    }
   }
 })
 

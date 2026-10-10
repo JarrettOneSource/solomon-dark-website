@@ -38,6 +38,7 @@ test('Stoneskin keeps its two masked passes and born distortion across live mode
   const initial = meshes[0].geometry
   const initialBuffers = [...new Set([...Object.values(initial.attributes).map(attribute => attribute.buffer), initial.getIndex()])]
   assert.equal(initial.getIndex().data.length, 486)
+  assert.deepEqual([...initial.getBuffer('aPosition').data], warp)
   assert.strictEqual(meshes[1].geometry, initial)
   assert.equal(meshes[0].y, -25)
   const target = meshes[0].texture
@@ -45,10 +46,14 @@ test('Stoneskin keeps its two masked passes and born distortion across live mode
   assert.strictEqual(meshes[0].geometry, initial)
   update(false)
   assert.equal(meshes[0].geometry.getIndex().data.length, 6)
+  assert.deepEqual([...meshes[0].geometry.getBuffer('aPosition').data],
+    [-128.5, -128.5, 127.5, -128.5, -128.5, 127.5, 127.5, 127.5])
+  assert.strictEqual(meshes[1].geometry, meshes[0].geometry)
   assert.ok(initialBuffers.every(buffer => buffer.destroyed))
   assert.equal(meshes[0].texture, target)
   update(true)
   assert.equal(meshes[0].geometry.getIndex().data.length, 486)
+  assert.deepEqual([...meshes[0].geometry.getBuffer('aPosition').data], warp)
   assert.equal(captures, 4)
   assert.equal(multiplies, 4)
   assert.equal(excluded.visible, true)

@@ -2,7 +2,7 @@ import { createNativeGolemDeathAnimation, NATIVE_GOLEM_DEATH_MAX_AGE, stepNative
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { Container, DOMAdapter, Sprite, Texture, type Renderer } from 'pixi.js'
+import { Container, DOMAdapter, RenderTexture, Sprite, Texture, type Renderer, type RenderOptions } from 'pixi.js'
 import { createServer } from 'vite'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 import type { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
@@ -992,6 +992,86 @@ test('retained Ring views split background, pre-world and snow, then remove ever
       root.destroy(); preWorld.destroy()
     }
   } finally { await server.close() }
+})
+
+test('Storm and Leviathan normal, glow and hit outputs retain native RenderToSprite corners', async (t) => {
+  const server = await createServer({ appType: 'custom', logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)), server: { middlewareMode: true } })
+  const root = new Container({ sortableChildren: true })
+  let view: NativeSecondaryWorldView | undefined
+  try {
+    const canvasProbe = t.mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
+    const module = await server.ssrLoadModule('/src/game/renderer/native-secondary-world-view.ts') as {
+      NativeSecondaryWorldView: typeof NativeSecondaryWorldView
+    }
+    canvasProbe.mock.restore()
+    const assets = await server.ssrLoadModule('/src/game/renderer/native-secondary-assets.ts') as
+      typeof import('./native-secondary-assets.ts')
+    const textures = { secondary: Object.fromEntries(assets.NATIVE_SECONDARY_SPRITE_RECORDS.map(record =>
+      [assets.nativeSecondarySpriteKey(record.atlas, record.entry), Texture.EMPTY])),
+    secondarySpecial: { etherPlane: Texture.EMPTY } } as unknown as PlayerWorldTextures
+    const captures = new Set<RenderTexture>()
+    const renderer = { render(options: RenderOptions) {
+      assert.ok(options.target instanceof RenderTexture)
+      captures.add(options.target)
+      assert.equal(options.target.width, 256)
+      assert.equal(options.target.height, 256)
+      assert.equal(options.target.source.resolution, 1)
+      assert.equal(options.target.source.alphaMode, 'no-premultiply-alpha')
+      assert.equal(options.target.source.style.scaleMode, 'linear')
+    } } as Renderer
+    view = new module.NativeSecondaryWorldView(root, textures, renderer)
+    const storm = { ...actor('storm-cloud'), id: 1, ageTicks: 40, frame: 0.9,
+      painterRegistrations: [{ managerLane: 'transient' as const, registrationOrdinal: 1 }] }
+    const leviathan = { ...actor('leviathan'), id: 2,
+      painterRegistrations: [{ managerLane: 'transient' as const, registrationOrdinal: 2 }] }
+    const appendage = { ...actor('leviathan-appendage'), id: 3, hitTargetIds: [2],
+      painterRegistrations: [{ managerLane: 'transient' as const, registrationOrdinal: 3 }] }
+    view.update({ actors: [storm, leviathan, appendage] }, storm.worldKey)
+    view.setPuppetHits(new Map([['secondary:2', {
+      feedback: { tick: 10, timer: 1, strength: 1 }, hitTick: 10, kind: 'leviathan', targetId: 'secondary:2',
+    }]]), true)
+    const descendants = (container: Container): Container[] =>
+      container.children.flatMap(child => [child, ...descendants(child)])
+    const expected = new Map([
+      ['storm-weather-render-target-composite', { scale: 5, blend: 'inherit' }],
+      ['leviathan-render-target-composite-normal', { scale: 1, blend: 'normal' }],
+      ['leviathan-render-target-composite-add', { scale: 1, blend: 'add' }],
+      ['hit:leviathan-composite:0', { scale: 1, blend: 'normal' }],
+      ['hit:leviathan-composite:1', { scale: 1, blend: 'add' }],
+    ])
+    const flash = descendants(root).find(child => child.label.startsWith('secondary:storm-weather-strike-flash:'))
+    assert.ok(flash, 'Storm strike flash must exercise the white-alpha filter')
+    assert.equal(flash.filters?.length, 1)
+    assert.equal(flash.filters?.[0]?.resolution, 'inherit')
+    const outputs = descendants(root).filter(child => expected.has(child.label))
+    assert.equal(outputs.length, 5)
+    for (const output of outputs) {
+      assert.ok(output instanceof Sprite, output.label)
+      assert.equal(output.anchor.x, 128.5 / 256, output.label)
+      assert.equal(output.anchor.y, 128.5 / 256, output.label)
+      const bounds = output.getLocalBounds()
+      assert.equal(bounds.minX, -128.5, output.label)
+      assert.equal(bounds.minY, -128.5, output.label)
+      assert.equal(bounds.maxX, 127.5, output.label)
+      assert.equal(bounds.maxY, 127.5, output.label)
+      assert.equal(output.scale.x, expected.get(output.label)!.scale)
+      assert.equal(output.scale.y, expected.get(output.label)!.scale)
+      assert.equal(output.blendMode, expected.get(output.label)!.blend)
+      assert.ok(captures.has(output.texture as RenderTexture))
+      assert.deepEqual([output.texture.uvs.x0, output.texture.uvs.y0,
+        output.texture.uvs.x2, output.texture.uvs.y2], [0, 0, 1, 1])
+    }
+    assert.equal(captures.size, 3, 'Storm, Leviathan Main and hit replay own separate captures')
+    view.destroy()
+    view = undefined
+    assert.equal(root.children.length, 0)
+    assert.ok([...captures].every(target => target.destroyed))
+  } finally {
+    view?.destroy()
+    root.destroy({ children: true })
+    await server.close()
+  }
 })
 
 test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled lights', () => {

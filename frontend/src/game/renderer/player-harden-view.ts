@@ -37,7 +37,8 @@ export class PlayerHardenView {
     if (this.composites.length === 0) {
       for (let index = 0; index < 3; index += 1) {
         const composite = new Sprite(target)
-        composite.anchor.set(0.5)
+        // Native 0x547291/2B1/2D1 consume RenderToSprite's -.5 quad.
+        composite.anchor.set(0.5 + 0.5 / target.width)
         composite.blendMode = 'add'
         composite.eventMode = 'none'
         composite.label = `player-harden-coating:${index}`

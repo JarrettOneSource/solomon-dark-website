@@ -42,6 +42,8 @@ test('the enhanced cached hit pass switches live without replacing ordinary play
   const sprite = view.container.children[0]
   assert.ok(sprite instanceof Sprite)
   assert.equal(sprite.y, -25)
+  assert.equal(sprite.anchor.x, 128.5 / 256)
+  assert.equal(sprite.anchor.y, 128.5 / 256)
   assert.equal(sprite.tint, 0x4a0000)
   assert.equal(sprite.alpha, Math.fround(nativePuppetHitAlpha(hit.progression.hitFeedback, 50, true) * Math.fround(.45)))
   assert.equal(shadow.visible, true)

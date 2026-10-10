@@ -38,7 +38,8 @@ export class PlayerWebbedView {
     if (this.composites.length === 0) {
       for (let index = 0; index < 3; index += 1) {
         const composite = new Sprite({ texture: target, label: `player-webbed:${index}`, eventMode: 'none' })
-        composite.anchor.set(0.5)
+        // Native 0x547D2C scales the generated RenderToSprite quad verbatim.
+        composite.anchor.set(0.5 + 0.5 / target.width)
         composite.position.set(0, -25)
         composite.scale.set(Math.fround(1 + Math.fround(0.05) * index))
         composite.blendMode = 'add'

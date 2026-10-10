@@ -78,6 +78,8 @@ function hotDropUsesDirectPrimitives(kind: NativeSecondaryActorState['kind']): b
 }
 
 const WHITE_ALPHA_MASK_FILTER = new ColorMatrixFilter()
+// This synthetic copy must retain its input raster density and native pixel phase.
+WHITE_ALPHA_MASK_FILTER.resolution = 'inherit'
 WHITE_ALPHA_MASK_FILTER.matrix = [
   0, 0, 0, 0, 1,
   0, 0, 0, 0, 1,
@@ -784,7 +786,8 @@ class NativeStormWeatherView {
       width: STORM_RENDER_TARGET_SIZE,
     })
     this.composite = new Sprite(this.renderTexture)
-    this.composite.anchor.set(0.5)
+    // RenderToSprite::Create 0x417310 subtracts .5 from its generated quad.
+    this.composite.anchor.set(0.5 + 0.5 / STORM_RENDER_TARGET_SIZE)
     this.composite.eventMode = 'none'
     this.composite.label = 'storm-weather-render-target-composite'
     this.composite.zIndex = -1
@@ -869,13 +872,13 @@ class NativeLeviathanCompositeView {
       width: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
     })
     this.compositeNormal = new Sprite(this.renderTexture)
-    this.compositeNormal.anchor.set(0.5)
+    this.compositeNormal.anchor.set(0.5 + 0.5 / NATIVE_LEVIATHAN_RENDER_TARGET_SIZE)
     this.compositeNormal.eventMode = 'none'
     this.compositeNormal.label = 'leviathan-render-target-composite-normal'
     this.compositeNormal.zIndex = 1
     this.compositeGlow = new Sprite(this.renderTexture)
     this.compositeGlow.alpha = 0.5
-    this.compositeGlow.anchor.set(0.5)
+    this.compositeGlow.anchor.set(0.5 + 0.5 / NATIVE_LEVIATHAN_RENDER_TARGET_SIZE)
     this.compositeGlow.blendMode = 'add'
     this.compositeGlow.eventMode = 'none'
     this.compositeGlow.label = 'leviathan-render-target-composite-add'
@@ -1001,7 +1004,8 @@ class NativeLeviathanCompositeView {
         resolution: 1, scaleMode: 'linear' })
       for (const index of [0, 1]) {
         const sprite = new Sprite({ texture: this.hitRenderTexture, eventMode: 'none', label: `hit:leviathan-composite:${index}` })
-        sprite.anchor.set(.5)
+        // Puppet's hit replay invokes the same native Main/target-output route.
+        sprite.anchor.set(0.5 + 0.5 / NATIVE_LEVIATHAN_RENDER_TARGET_SIZE)
         sprite.zIndex = sources.length + index
         setNativeDiffuseColor(sprite, true)
         this.hitOutputs.push(sprite)

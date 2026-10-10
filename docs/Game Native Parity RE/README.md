@@ -343,3 +343,5 @@ entry only when the evidence belongs to a genuinely separate system.
 - [2026-09-25 — Report 30: Silk and Arrow gradients, standalone vertex colors and texture alpha](<091-complete-enemy-animation-and-enemy-projectile-vfx-closure-2026-08-15.md#2026-09-25--report-30-silk-and-arrow-gradient-material-reopening>)
 
 - [Boneyard workshop integration and remaining native scope](editor-workshop-integration-2026-10-07.md)
+
+- [2026-10-10 — Native D3D9 pixel centers, target composition and bounded display density](<302-2026-10-10-native-d3d9-pixel-centers.md>)

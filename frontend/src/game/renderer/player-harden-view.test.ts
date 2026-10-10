@@ -50,6 +50,8 @@ test('Harden captures the current character, multiplies native ice, and submits 
     assert.equal(child.alpha, Math.fround(0.7))
     assert.equal(child.scale.x, Math.fround(1.12))
     assert.equal(child.y, -25)
+    assert.equal(child.anchor.x, 128.5 / 256)
+    assert.equal(child.anchor.y, 128.5 / 256)
   }
   view.update(active, source, [shadow], true)
   assert.equal(view.container.visible, false, 'Stoneskin owns the higher-priority native branch')

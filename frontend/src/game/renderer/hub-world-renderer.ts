@@ -217,6 +217,8 @@ export async function createHubWorldRenderer(
   const initialResolution = initialHubResolution({
     devicePixelRatio,
     displayScale: viewport.displayScale,
+    width: viewport.width,
+    height: viewport.height,
   })
   try {
     await application.init({
@@ -235,7 +237,7 @@ export async function createHubWorldRenderer(
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
     }
-    installNativeFixedFunctionRenderPipeline(application.renderer)
+    installNativeFixedFunctionRenderPipeline(application.renderer, { nativeWorldPixelCenters: true })
     for (const source of PLAYER_CHARACTER_ATLAS_SOURCES) {
       application.renderer.texture.initSource(textures.base[source].source)
     }
@@ -926,6 +928,8 @@ export async function createHubWorldRenderer(
       const nextResolution = initialHubResolution({
         devicePixelRatio: nextDevicePixelRatio,
         displayScale: nextViewport.displayScale,
+        width: nextViewport.width,
+        height: nextViewport.height,
       })
       const nextWorldZoom = gameViewportWorldZoom(nextViewport)
       if (

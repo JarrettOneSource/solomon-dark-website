@@ -29,6 +29,11 @@ test('webbing captures the current wizard, adds each admitted layer, and release
   view.update(player, first, source, [shadow], false)
   assert.equal(shadow.visible, true)
   const layers = view.container.children.slice(0, 3)
+  for (const layer of layers) {
+    assert.ok(layer instanceof Sprite)
+    assert.equal(layer.anchor.x, 128.5 / 256)
+    assert.equal(layer.anchor.y, 128.5 / 256)
+  }
   assert.deepEqual(layers.map((layer) => layer.visible), [true, false, false])
   assert.deepEqual(layers.map((layer) => layer.scale.x), [1, Math.fround(1.05), Math.fround(1.1)])
   const partial = { ...first, severity: 1.5 }

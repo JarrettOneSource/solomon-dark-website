@@ -103,6 +103,8 @@ export async function createBoneyardWorldRenderer(
   const initialResolution = initialHubResolution({
     devicePixelRatio,
     displayScale: viewport.displayScale,
+    width: viewport.width,
+    height: viewport.height,
   })
   try {
     await application.init({
@@ -123,6 +125,7 @@ export async function createBoneyardWorldRenderer(
     }
     installNativeFixedFunctionRenderPipeline(application.renderer, {
       installTextureAlphaShaders: false,
+      nativeWorldPixelCenters: true,
     })
     for (const source of PLAYER_CHARACTER_ATLAS_SOURCES) {
       application.renderer.texture.initSource(textures.base[source].source)
@@ -580,6 +583,11 @@ export async function createBoneyardWorldRenderer(
       worldTransform.position.x + currentWorldDisplacement.x,
       worldTransform.position.y + currentWorldDisplacement.y,
     )
+    regionLightField.setViewportCoverage(
+      application.renderer.resolution, worldTransform.scale, viewport,
+      feedbackMagnitude === 0 && secondaryCameraMagnitude === 0
+        && currentWorldDisplacement.x === 0 && currentWorldDisplacement.y === 0,
+    )
     drawArenaDisplacementCover(
       displacementCover,
       canvas,
@@ -671,6 +679,8 @@ export async function createBoneyardWorldRenderer(
       const nextResolution = initialHubResolution({
         devicePixelRatio: nextDevicePixelRatio,
         displayScale: nextViewport.displayScale,
+        width: nextViewport.width,
+        height: nextViewport.height,
       })
       const nextWorldZoom = gameViewportWorldZoom(nextViewport)
       if (

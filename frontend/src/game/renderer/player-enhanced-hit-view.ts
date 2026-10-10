@@ -24,7 +24,8 @@ export class PlayerEnhancedHitView {
     const target = this.capture.render(source, excluded)
     if (this.sprite === null) {
       this.sprite = new Sprite({ texture: target, label: 'player-enhanced-hit-capture', eventMode: 'none' })
-      this.sprite.anchor.set(.5)
+      // Puppet::Present 0x628DDB uses RenderToSprite's generated -.5 quad.
+      this.sprite.anchor.set(0.5 + 0.5 / target.width)
       this.sprite.position.set(0, -25)
       this.container.addChild(this.sprite)
     }

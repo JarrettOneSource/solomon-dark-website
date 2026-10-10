@@ -43,7 +43,9 @@ test('live Stoneskin quality selects native warped grid or whole capture quad wi
   assert.equal(on.indices.length, 486)
   assert.deepEqual([...on.positions], warp.positions)
   assert.deepEqual([...on.uvs.slice(0, 4)], [.25, .25, .25, Math.fround(.25 + Math.fround(.05))])
-  assert.deepEqual([...off.positions], [-128, -128, 128, -128, -128, 128, 128, 128])
+  // Off calls generic Sprite::Draw on the 256-square RenderToSprite. Create's
+  // -.5 is geometry, independent of output pixel density or target projection.
+  assert.deepEqual([...off.positions], [-128.5, -128.5, 127.5, -128.5, -128.5, 127.5, 127.5, 127.5])
   assert.deepEqual([...off.uvs], [0, 0, 1, 0, 0, 1, 1, 1])
   assert.deepEqual([...off.indices], [0, 1, 2, 2, 1, 3])
   assert.deepEqual(nativeStoneskinGeometry(warp.positions, true), on)

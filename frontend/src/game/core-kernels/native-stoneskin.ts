@@ -40,7 +40,9 @@ export function nativeStoneskinGeometry(positions: readonly number[], enhancedEf
 } {
   if (positions.length !== NATIVE_STONESKIN_GRID_COMPONENTS) throw new RangeError('invalid native Stoneskin grid')
   if (!enhancedEffects) {
-    return { positions: new Float32Array([-128, -128, 128, -128, -128, 128, 128, 128]),
+    // DrawSpecial 0x546DAD/0x546DC3 uses the generated RenderToSprite quad;
+    // Create 0x417310 subtracts .5 from its corners. The On grid below is custom.
+    return { positions: new Float32Array([-128.5, -128.5, 127.5, -128.5, -128.5, 127.5, 127.5, 127.5]),
       uvs: new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), indices: new Uint32Array([0, 1, 2, 2, 1, 3]) }
   }
   const uvs: number[] = []

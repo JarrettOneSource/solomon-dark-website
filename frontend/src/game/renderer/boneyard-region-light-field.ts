@@ -1,5 +1,6 @@
 import {
   Container,
+  MeshSimple,
   RenderTexture,
   Sprite,
   type Renderer,
@@ -7,6 +8,7 @@ import {
 } from 'pixi.js'
 
 import { spriteRefFor } from '../../editor/assets.ts'
+import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import type { Camera } from '../../editor/render.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import {
@@ -19,9 +21,12 @@ import {
   nativeRegionLightStamp,
   type NativeBoneyardLightSource,
 } from './boneyard-lighting.ts'
+import { nativeRegionCompositeCoveragePadding, writeNativeRegionCompositeQuad } from './native-region-composite-coverage.ts'
 
 export class BoneyardRegionLightField {
-  private readonly composite: Sprite
+  private readonly composite: MeshSimple
+  private readonly compositeVertices = new Float32Array(8)
+  private readonly compositeUvs = new Float32Array(8)
   private readonly glyph: Texture
   private readonly glyphRef
   private readonly renderTexture: RenderTexture
@@ -31,6 +36,8 @@ export class BoneyardRegionLightField {
   private logicalSide: number
   private physicalSide: number
   private quality: number
+  private compositePadding = -1
+  private compositeSide = -1
 
   constructor(
     root: Container,
@@ -60,7 +67,14 @@ export class BoneyardRegionLightField {
     this.logicalSide = target.logicalSide
     this.physicalSide = target.physicalSide
     this.quality = quality
-    this.composite = new Sprite(this.renderTexture)
+    this.composite = new MeshSimple({
+      texture: this.renderTexture,
+      vertices: this.compositeVertices,
+      uvs: this.compositeUvs,
+      indices: new Uint32Array([0, 1, 2, 2, 1, 3]),
+      roundPixels: false,
+    })
+    this.setViewportCoverage(resolution, 1, viewport, false)
     this.composite.blendMode = 'multiply'
     this.composite.eventMode = 'none'
     this.composite.label = 'boneyard-region-light-composite'
@@ -110,6 +124,22 @@ export class BoneyardRegionLightField {
     this.composite.zIndex = zIndex
   }
 
+  setViewportCoverage(
+    resolution: number,
+    worldScale: number,
+    viewport: GameViewportLayout,
+    steadyView: boolean,
+  ): void {
+    const padding = nativeRegionCompositeCoveragePadding(
+      this.logicalSide, resolution, worldScale, viewport, steadyView,
+    )
+    if (padding === this.compositePadding && this.logicalSide === this.compositeSide) return
+    writeNativeRegionCompositeQuad(this.compositeVertices, this.compositeUvs, this.logicalSide, padding)
+    this.composite.geometry.getBuffer('aUV').update()
+    this.compositePadding = padding
+    this.compositeSide = this.logicalSide
+  }
+
   get targetLogicalSide(): number {
     return this.logicalSide
   }
@@ -121,6 +151,7 @@ export class BoneyardRegionLightField {
   destroy(): void {
     this.root.removeChild(this.composite)
     this.sourceContainer.destroy({ children: true })
+    destroyOwnedMeshGeometry(this.composite)
     this.composite.destroy()
     this.renderTexture.destroy(true)
   }

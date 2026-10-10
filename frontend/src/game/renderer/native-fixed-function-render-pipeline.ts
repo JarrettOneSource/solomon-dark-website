@@ -14,6 +14,7 @@ import {
   type WebGLRenderer,
 } from 'pixi.js'
 import { NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
+import { installNativePixelCenterProjection } from './native-pixel-center-projection.ts'
 
 import {
   NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL, NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL, installNativeBatchMaterial,
@@ -37,6 +38,7 @@ const NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS = Object.freeze({
 interface NativeFixedFunctionRenderPipelineOptions {
   readonly installTextureAlphaShaders?: boolean
   readonly preserveBrowserCompositingAlpha?: boolean
+  readonly nativeWorldPixelCenters?: boolean
 }
 
 const NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE = `
@@ -71,6 +73,7 @@ export function installNativeFixedFunctionRenderPipeline(
 ): void {
   if (installedRenderers.has(renderer)) return
   const webgl = requireNativeWebGlRenderer(renderer)
+  if (options.nativeWorldPixelCenters) installNativePixelCenterProjection(webgl)
   const preserveAlpha = options.preserveBrowserCompositingAlpha === true
   installNativeBlendModes(webgl, preserveAlpha)
   if (options.installTextureAlphaShaders !== false) installNativeTextureAlphaShaders(webgl)
