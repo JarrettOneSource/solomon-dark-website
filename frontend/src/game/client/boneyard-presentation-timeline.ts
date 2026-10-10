@@ -1,3 +1,4 @@
+import type { Vec2 } from '../../editor/model.ts'
 import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import { playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { copyNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
@@ -41,7 +42,29 @@ export interface BoneyardPresentationFrame extends Omit<
 export interface BoneyardPresentationTimeline {
   latest(): BoneyardClientGameSnapshot
   push(snapshot: BoneyardSnapshotSource, receivedAtMs: number): void
+  samplePlayerPositionAtTick(tick: number, playerId: string): Vec2 | null
+  sampleSceneryActorPosesAtTick(tick: number): BoneyardSceneryActorPoses | null
   sample(nowMs: number): BoneyardPresentationFrame
+}
+
+/** Delivered actor poses and discrete metadata, without scenery eligibility filtering. */
+export interface BoneyardSceneryActorPoses {
+  players: readonly { id: string; position: Vec2 }[]
+  enemies: readonly {
+    id: number
+    position: Vec2
+    enemyToken: BoneyardWorldSnapshot['enemies'][number]['enemyToken']
+    nativeTypeId: number
+    animationState: BoneyardWorldSnapshot['enemies'][number]['animation']['state']
+    coffinState: BoneyardWorldSnapshot['enemies'][number]['animation']['coffinState']
+  }[]
+  maggots: readonly {
+    id: number
+    position: Vec2
+    state: BoneyardWorldSnapshot['maggots'][number]['state']
+    nativeTreeQueryMember: boolean
+  }[]
+  encounter: { position: Vec2; phase: BoneyardSolomonSnapshot['phase'] } | null
 }
 
 export interface BoneyardPresentationTimelineOptions {
@@ -103,6 +126,16 @@ export function createBoneyardPresentationTimeline(
       })
       if (history.length > MAX_BUFFERED_SNAPSHOTS) history.shift()
     },
+    samplePlayerPositionAtTick(tick, playerId) {
+      // Only delivered history is available. Do not clamp missing history or
+      // advance the stateful spell/enemy presentation owners with sample().
+      const interval = retainedPositionInterval(history, tick)
+      return interval ? samplePlayerPosition(...interval, playerId) : null
+    },
+    sampleSceneryActorPosesAtTick(tick) {
+      const interval = retainedPositionInterval(history, tick)
+      return interval ? sampleSceneryActorPoses(...interval) : null
+    },
     sample(nowMs) {
       requireFinite(nowMs, 'nowMs')
       const newest = history.at(-1)!
@@ -161,6 +194,90 @@ function bracketSnapshots(
   }
   const latest = history.at(-1)!
   return [latest, latest]
+}
+
+function retainedPositionInterval(
+  history: readonly TimedSnapshot[],
+  tick: number,
+): readonly [BoneyardClientGameSnapshot, BoneyardClientGameSnapshot, number] | null {
+  if (!Number.isFinite(tick)
+    || tick < history[0].snapshot.tick
+    || tick > history.at(-1)!.snapshot.tick) return null
+  const [older, newer] = bracketSnapshots(history, tick)
+  const span = newer.snapshot.tick - older.snapshot.tick
+  const blend = span <= 0 ? 1 : clamp((tick - older.snapshot.tick) / span, 0, 1)
+  return [older.snapshot, newer.snapshot, blend]
+}
+
+function samplePlayerPosition(
+  older: BoneyardClientGameSnapshot,
+  newer: BoneyardClientGameSnapshot,
+  blend: number,
+  playerId: string,
+): Vec2 | null {
+  const olderPlayer = Object.hasOwn(older.players, playerId) ? older.players[playerId] : undefined
+  const newerPlayer = Object.hasOwn(newer.players, playerId) ? newer.players[playerId] : undefined
+  // Match interpolateSnapshot membership, including held departing players
+  // and arrivals that become visible only at the newer interval endpoint.
+  if (olderPlayer) {
+    return newerPlayer
+      ? interpolatePoint(olderPlayer.position, newerPlayer.position, blend)
+      : { ...olderPlayer.position }
+  }
+  return blend >= 1 && newerPlayer ? { ...newerPlayer.position } : null
+}
+
+function sampleSceneryActorPoses(
+  older: BoneyardClientGameSnapshot,
+  newer: BoneyardClientGameSnapshot,
+  blend: number,
+): BoneyardSceneryActorPoses {
+  const playerIds = new Set(Object.keys(older.players))
+  if (blend >= 1) for (const id of Object.keys(newer.players)) playerIds.add(id)
+  const olderEncounter = older.world.encounter
+  const newerEncounter = newer.world.encounter
+  const discreteEncounter = blend < 1 ? olderEncounter : newerEncounter
+  return {
+    players: [...playerIds].map((id) => ({ id, position: samplePlayerPosition(older, newer, blend, id)! })),
+    enemies: sampleSceneryActorList(older.world.enemies, newer.world.enemies, blend, (enemy, position) => ({
+      id: enemy.id, position, enemyToken: enemy.enemyToken, nativeTypeId: enemy.nativeTypeId,
+      animationState: enemy.animation.state, coffinState: enemy.animation.coffinState,
+    })),
+    maggots: sampleSceneryActorList(older.world.maggots, newer.world.maggots, blend, (maggot, position) => ({
+      id: maggot.id, position, state: maggot.state, nativeTreeQueryMember: maggot.nativeTreeQueryMember,
+    })),
+    encounter: discreteEncounter === null ? null : {
+      position: olderEncounter && newerEncounter
+        ? interpolatePoint(olderEncounter.position, newerEncounter.position, blend)
+        : { ...discreteEncounter.position },
+      phase: discreteEncounter.phase,
+    },
+  }
+}
+
+function sampleSceneryActorList<T extends { id: number; position: Vec2 }, P>(
+  older: readonly T[],
+  newer: readonly T[],
+  blend: number,
+  project: (actor: T, position: Vec2) => P,
+): P[] {
+  const newerById = new Map(newer.map((actor) => [actor.id, actor]))
+  const poses: P[] = []
+  for (const source of older) {
+    const target = newerById.get(source.id)
+    if (target) {
+      poses.push(project(blend < 1 ? source : target, interpolatePoint(source.position, target.position, blend)))
+    } else if (blend < 1) {
+      poses.push(project(source, { ...source.position }))
+    }
+  }
+  if (blend >= 1) {
+    const olderIds = new Set(older.map((actor) => actor.id))
+    for (const actor of newer) {
+      if (!olderIds.has(actor.id)) poses.push(project(actor, { ...actor.position }))
+    }
+  }
+  return poses
 }
 
 function interpolateSnapshot(

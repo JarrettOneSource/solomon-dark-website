@@ -1420,6 +1420,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   if (resumedSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   resumedSnapshot.world.maggots = [{
     alpha: 1,
+    nativeTreeQueryMember: false,
     currentHealth: 1,
     deathEpoch: 0,
     deathTick: 0,
@@ -1622,6 +1623,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }]
   snapshot.world.maggots = [{
     alpha: 1,
+    nativeTreeQueryMember: false,
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,

@@ -182,7 +182,14 @@
     "src/game/mod-ui/mod-skill-quickbar-keyboard.test.ts",
     "src/game/renderer/static-native-art-invariants.test.ts",
     "src/game/core-kernels/native-skill-colors.test.ts",
-    "src/game/renderer/boneyard-player-ground-light.test.ts"
+    "src/game/renderer/boneyard-player-ground-light.test.ts",
+    "src/game/renderer/native-scenery-glyph-material.ts",
+    "src/game/renderer/native-scenery-glyph-material.test.ts",
+    "src/game/renderer/boneyard-tree-frame-history.ts",
+    "src/game/renderer/boneyard-tree-frame-history.test.ts",
+    "src/game/renderer/boneyard-tree-actors.ts",
+    "src/game/renderer/boneyard-tree-actors.test.ts",
+    "src/game/renderer/native-boneyard-light-factors.test.ts"
   ],
   "exclude": []
 }

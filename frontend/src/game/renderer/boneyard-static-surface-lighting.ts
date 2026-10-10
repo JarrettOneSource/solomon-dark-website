@@ -138,7 +138,7 @@ export function writeNativeStaticSurfaceVertexColors(
   }
   let changed = false
   for (let index = 0; index < scalars.length; index += 1) {
-    const lane = Math.trunc(Math.max(0, Math.min(1, scalars[index]!)) * 255)
+    const lane = Math.trunc(Math.fround(Math.fround(Math.max(0, Math.min(1, scalars[index]!))) * 255))
     const offset = index * 4
     if (
       colors[offset] === lane

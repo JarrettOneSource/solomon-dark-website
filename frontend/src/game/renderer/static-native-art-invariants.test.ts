@@ -424,12 +424,20 @@ test('integrated static world keeps exact fractional sources, ordered fallbacks 
       const snapshot = { tick: 100, enhancedEffects, secondaryAbilities: { actors: [{
         kind: 'earthquake-scenery-wobble', worldKey: 'boneyard:fixture', targetId: 2, phase: 6.25,
       }] } } as unknown as GameSnapshot
-      const result = lighting.update(snapshot, { x: treePosition.x, y: treePosition.y - 100 }, [...build.mainResidents.values()], false, index, () => 0.63)
+      const frame = {
+        actorPositions: [{ x: treePosition.x, y: treePosition.y - 100 }],
+        cameraBounds: { x: treePosition.x - 500, y: treePosition.y - 500, w: 1_000, h: 1_000 },
+      }
+      const result = lighting.update(snapshot, frame, [...build.mainResidents.values()], false, index, frame.cameraBounds,
+        { fromTick: 1, sample: () => frame })
       assert.equal(result.treeAlphaMismatchCount, 0)
       assert.equal(result.treeTintMismatchCount, 0)
       assert.equal(result.buildingBaseRoofColorMismatchCount, 0)
       assert.equal(result.buildingVisibleCount, 4)
-      assertNear(tree.main.sprite.alpha, 0.4, 'Tree reaches native faded alpha')
+      assert.equal(tree.main.sprite.alpha, 1, 'Tree main owns per-vertex color, not group fade')
+      assert.equal(tree.proxy.sprite.alpha, Math.fround(.4))
+      assert.equal(tree.main.sceneryMaterial!.alpha, Math.fround(.4))
+      assert.deepEqual([...tree.main.sceneryMaterial!.colors], [0x33ffffff, 0x33ffffff, 0xffffffff, 0xffffffff])
       for (const resident of [tree.main, tree.proxy]) {
         assertNear(resident.sprite.rotation, 6.25 * Math.PI / 180)
         assertNear(resident.sprite.x, treePosition.x)
@@ -471,6 +479,126 @@ test('integrated static world keeps exact fractional sources, ordered fallbacks 
     build.applyOffCameraCleanup()
     assert.deepEqual(build.activeResidents, active)
     assert.equal(pageUpdates, 0)
+  })
+})
+
+test('Tree render camera moves fractionally at a frozen tick without advancing the historical scan', async () => {
+  const treePosition = { x: 950.25, y: 1600.5 }
+  const objects = [{ eid: 'tree', typeId: NATIVE.tree, variant: 0, pos: treePosition }]
+  const document = staticArtDocument(objects)
+  const scanBounds = Object.freeze({ x: 450.25, y: 1100.5, w: 1_000, h: 1_000 })
+  const frame = Object.freeze({
+    actorPositions: Object.freeze([{ x: treePosition.x, y: treePosition.y - 100 }]),
+    cameraBounds: scanBounds,
+  })
+  await withStaticWorldFixture(document, scanBounds, async build => {
+    const { BoneyardStaticLighting } = await import('./boneyard-static-lighting.ts')
+    const { nativeTreeInitialCountdown } = await import('./boneyard-tree-occlusion.ts')
+    const lighting = new BoneyardStaticLighting(
+      { runId: 'fixture', scene: { objects } } as unknown as LoadedBoneyard,
+      buildNativeRenderPlan(document).shadows, build.buildingResidents,
+      build.wallResidents, build.treeResidents, build.treeInputs, 0,
+    )
+    const tree = build.treeResidents.get('tree')!
+    const material = tree.main.sceneryMaterial!
+    const textures = [tree.main.texture, tree.proxy.texture]
+    const geometry = material.mesh.geometry
+    const visible = [...build.mainResidents.values()]
+    const index = new NativeBoneyardLightIndex({ width: 3200, height: 2400 })
+    const firstScanTick = Math.max(1, nativeTreeInitialCountdown('tree'))
+    // Native approach precedes scan: at scan + 34 the main is in its gradient
+    // branch, still approaching .4, and the next 25-tick scan is 16 ticks away.
+    const snapshot = { tick: firstScanTick + 34, enhancedEffects: false,
+      secondaryAbilities: { actors: [] } } as unknown as GameSnapshot
+    const history = { fromTick: 1, sample: () => frame }
+    const presentations = lighting.update(snapshot, frame, visible, false, index, scanBounds, history).treePresentations
+    const fadedAlpha = 0.49000048637390137
+    assert.equal(material.alpha, fadedAlpha)
+    assert.deepEqual([...material.colors], [0x3effffff, 0x3effffff, 0xffffffff, 0xffffffff])
+
+    // Fixed PC24 results for center + (root - center) * f32(1.025); do not use
+    // nativeTreeSecondaryPosition as the assertion oracle.
+    for (const [renderBounds, expectedProxy] of [
+      [{ x: 450.75, y: 1100.25, w: 1_000, h: 1_000 }, { x: 950.2374877929688, y: 1600.5062255859375 }],
+      [{ x: 449.875, y: 1101.125, w: 1_000, h: 1_000 }, { x: 950.2593994140625, y: 1600.484375 }],
+      [scanBounds, treePosition],
+    ] as const) {
+      const result = lighting.update(snapshot, frame, visible, false, index, renderBounds, history)
+      assert.equal(result.treePresentations, presentations)
+      assert.equal(result.treeHistoryGapTicks, 0)
+      assert.equal(result.treeAlphaMismatchCount, 0)
+      assert.equal(result.minTreeAlpha, fadedAlpha, 'a render-only camera move must not advance alpha')
+      assert.equal(tree.main.sceneryMaterial, material)
+      assert.equal(material.mesh.geometry, geometry)
+      assert.equal(material.alpha, fadedAlpha)
+      assert.deepEqual([...material.colors], [0x3effffff, 0x3effffff, 0xffffffff, 0xffffffff])
+      assert.equal(tree.main.sprite.alpha, 1)
+      assert.equal(tree.proxy.sprite.alpha, fadedAlpha)
+      assert.deepEqual({ x: tree.main.sprite.x, y: tree.main.sprite.y }, treePosition)
+      assert.deepEqual({ x: tree.proxy.sprite.x, y: tree.proxy.sprite.y }, expectedProxy)
+      for (const resident of [tree.main, tree.proxy]) {
+        assert.equal(resident.sprite.pivot.x, treePosition.x - resident.x)
+        assert.equal(resident.sprite.pivot.y, treePosition.y - resident.y)
+      }
+      assert.deepEqual([tree.main.texture, tree.proxy.texture], textures)
+      assert.equal(frame.cameraBounds, scanBounds)
+    }
+
+    // Observe countdown through its next scan, without accessing private state.
+    // Empty occupants cannot change target until scan + 50; approach starts at + 51.
+    const outside = { actorPositions: [], cameraBounds: scanBounds }
+    for (let tick = snapshot.tick + 1; tick <= firstScanTick + 50; tick += 1) {
+      const result = lighting.update({ ...snapshot, tick }, outside, visible, false, index, scanBounds)
+      if (tick === firstScanTick + 40) assert.equal(result.minTreeAlpha, 0.40000057220458984)
+      if (tick >= firstScanTick + 41) assert.equal(result.minTreeAlpha, 0.4000000059604645,
+        'render-only updates must leave the 25-tick scan phase unchanged')
+    }
+    const recovered = lighting.update({ ...snapshot, tick: firstScanTick + 51 },
+      outside, visible, false, index, scanBounds)
+    assert.equal(recovered.minTreeAlpha, 0.41499999165534973)
+    assert.equal(material.alpha, recovered.minTreeAlpha)
+    assert.equal(tree.proxy.sprite.alpha, recovered.minTreeAlpha)
+  })
+})
+
+test('Tree lighting uses current render-camera rounding while the historical scan stays fixed', async () => {
+  // Source-derived PC24 vector from native-boneyard-light-factors.test.ts:
+  // camera subtraction changes D0*CC even though root and light are unchanged.
+  const treePosition = { x: 470.5591125488281, y: 509.843017578125 }
+  const objects = [{ eid: 'tree', typeId: NATIVE.tree, variant: 0, pos: treePosition }]
+  const document = staticArtDocument(objects)
+  const scanBounds = Object.freeze({ x: 0, y: 0, w: 1_000, h: 1_000 })
+  const frame = { actorPositions: [{ x: treePosition.x, y: treePosition.y - 100 }], cameraBounds: scanBounds }
+  await withStaticWorldFixture(document, scanBounds, async build => {
+    const { BoneyardStaticLighting } = await import('./boneyard-static-lighting.ts')
+    const lighting = new BoneyardStaticLighting(
+      { runId: 'fixture', scene: { objects } } as unknown as LoadedBoneyard,
+      buildNativeRenderPlan(document).shadows, build.buildingResidents,
+      build.wallResidents, build.treeResidents, build.treeInputs, 0,
+    )
+    const tree = build.treeResidents.get('tree')!
+    const index = new NativeBoneyardLightIndex({ width: 3200, height: 2400 })
+    index.rebuild([{
+      castsDirectionalShadow: true,
+      position: { x: 349.40460205078125, y: 511.1286926269531 },
+      radius: 1, intensity: 0.40911224484443665,
+    }], [], { camera: { x: 800, y: 450, zoom: 1 }, viewport: { width: 1600, height: 900 } })
+    assert.equal(index.acceptedSources.length, 1)
+    const snapshot = { tick: 100, enhancedEffects: false,
+      secondaryAbilities: { actors: [] } } as unknown as GameSnapshot
+    for (const [renderBounds, expectedScalar] of [
+      [scanBounds, 0.02840602770447731],
+      [{ ...scanBounds, x: 1252.6041259765625, y: 396.8276672363281 }, 0.028406089171767235],
+      [scanBounds, 0.02840602770447731],
+    ] as const) {
+      const result = lighting.update(snapshot, frame, [...build.mainResidents.values()], true, index,
+        renderBounds, { fromTick: 1, sample: () => frame })
+      assert.equal(result.minTreeLightScalar, expectedScalar)
+      assert.equal(tree.main.sceneryMaterial!.ordinaryLightScalar, expectedScalar)
+      assert.equal(tree.main.sceneryMaterial!.alpha, 0.4000000059604645)
+      assert.equal(tree.proxy.sprite.alpha, 0.4000000059604645)
+      assert.equal(result.treeHistoryGapTicks, 0)
+    }
   })
 })
 

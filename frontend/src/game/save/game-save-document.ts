@@ -2562,7 +2562,10 @@ function normalizeWorld(
         if ('etherDrainCaptured' in maggot && (maggot.etherDrainCaptured !== true || maggot.lifeState !== 'dying')) {
           throw new Error(`game save Maggot ${index} has an invalid Ether Drain capture`)
         }
-        return { ...maggot, hitFeedback: normalizeSavedPuppetHit(maggot.hitFeedback, maggot.lastDamageTick,
+        // Native Maggot serialization omits spatial admission. Restored actors
+        // start unbound and re-enter the grid on their first free movement.
+        return { ...maggot, nativeTreeQueryMember: false,
+          hitFeedback: normalizeSavedPuppetHit(maggot.hitFeedback, maggot.lastDamageTick,
           savedTick, sourceSchemaVersion, `game save Maggot ${index} hit feedback`) }
       }),
       ...(sourceSchemaVersion < 33 ? {

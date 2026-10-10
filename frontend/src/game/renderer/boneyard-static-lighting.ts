@@ -5,6 +5,7 @@ import type { GameSnapshot } from '../protocol/game-state.ts'
 import {
   NativeBoneyardLightIndex,
   nativeBoneyardLightTint,
+  nativeBoneyardLightFactors,
   nativeBoneyardSurfaceLightScalar,
 } from './boneyard-lighting.ts'
 import type {
@@ -17,6 +18,10 @@ import { nativeBuildingMeshGrid, writeNativeWallVertexScalars } from './boneyard
 import {
   BoneyardTreeOcclusionPresentation,
   type NativeTreeOcclusionInput,
+  type NativeTreeOcclusionFrame,
+  type NativeTreeOcclusionBounds,
+  type NativeTreeOcclusionHistory,
+  nativeTreeSecondaryPosition,
 } from './boneyard-tree-occlusion.ts'
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -57,12 +62,17 @@ export class BoneyardStaticLighting {
   }
   update(
     snapshot: GameSnapshot,
-    localPlayerPosition: Readonly<Vec2>,
+    treeFrame: NativeTreeOcclusionFrame,
     visibleMainResidents: readonly ResidentTexture[],
     complexLighting: boolean,
     lightIndex: NativeBoneyardLightIndex,
-    worldLightScalar: (position: Vec2) => number,
+    renderCameraBounds: Readonly<NativeTreeOcclusionBounds>,
+    treeHistory?: NativeTreeOcclusionHistory,
   ) {
+    const query = { cameraOrigin: renderCameraBounds }
+    const factorsAt = (position: Vec2) => complexLighting
+      ? nativeBoneyardLightFactors(position, lightIndex, query)
+      : { radial: 1, elevated: 1 }
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
     let monumentVisibleCount = 0
@@ -74,8 +84,15 @@ export class BoneyardStaticLighting {
       if (layer.kind === 'object' && layer.object.typeId === NATIVE.monument) {
         monumentVisibleCount += 1
       }
-      const scalar = worldLightScalar(layer.pos)
-      resident.sprite.tint = nativeBoneyardLightTint(scalar)
+      const factors = factorsAt(layer.pos)
+      const scalar = Math.fround(factors.radial * factors.elevated)
+      if (resident.sceneryMaterial) {
+        resident.sceneryMaterial.update(resident.sceneryMaterial.alpha, scalar, factors.radial)
+        resident.sprite.alpha = 1
+        resident.sprite.tint = 0xffffff
+      } else {
+        resident.sprite.tint = nativeBoneyardLightTint(scalar)
+      }
       maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
       minMainLightScalar = Math.min(minMainLightScalar, scalar)
     }
@@ -100,7 +117,7 @@ export class BoneyardStaticLighting {
         const scalar = complexLighting
           ? nativeBoneyardSurfaceLightScalar(
               building.samplePoints[index]!,
-              lightIndex,
+              lightIndex, query,
             )
           : 1
         building.scalars[index] = scalar
@@ -127,10 +144,10 @@ export class BoneyardStaticLighting {
       if (!wall.resident.sprite.renderable) continue
       wallVisibleCount += 1
       const startScalar = complexLighting
-        ? nativeBoneyardSurfaceLightScalar(wall.start, lightIndex)
+        ? nativeBoneyardSurfaceLightScalar(wall.start, lightIndex, query)
         : 1
       const endScalar = complexLighting
-        ? nativeBoneyardSurfaceLightScalar(wall.end, lightIndex)
+        ? nativeBoneyardSurfaceLightScalar(wall.end, lightIndex, query)
         : 1
       writeNativeWallVertexScalars(
         wall.scalars,
@@ -149,7 +166,7 @@ export class BoneyardStaticLighting {
     }
     const treePresentations = this.treeOcclusion.update(
       snapshot.tick,
-      localPlayerPosition,
+      treeFrame, treeHistory,
     )
     const earthquakeTreeWobbles = this.earthquakeTreeWobbles
     earthquakeTreeWobbles.clear()
@@ -170,12 +187,17 @@ export class BoneyardStaticLighting {
     for (const presentation of treePresentations) {
       const tree = this.treeResidents.get(presentation.eid)
       if (!tree) continue
-      const scalar = worldLightScalar(presentation.position)
+      const factors = factorsAt(presentation.position)
+      const scalar = Math.fround(factors.radial * factors.elevated)
       const tint = nativeBoneyardLightTint(scalar)
-      tree.main.sprite.alpha = presentation.alpha
+      const material = tree.main.sceneryMaterial
+      if (!material) throw new Error(`Tree ${presentation.eid} lost its native glyph material.`)
+      material.update(presentation.alpha, scalar, factors.radial)
+      tree.main.sprite.alpha = 1
+      tree.main.sprite.tint = 0xffffff
       tree.proxy.sprite.alpha = presentation.alpha
-      tree.main.sprite.tint = tint
       tree.proxy.sprite.tint = tint
+      const secondaryPosition = nativeTreeSecondaryPosition(presentation.position, renderCameraBounds)
       const wobbleRadians = (earthquakeTreeWobbles.get(presentation.eid) ?? 0)
         * Math.PI / 180
       for (const resident of [tree.main, tree.proxy]) {
@@ -184,21 +206,22 @@ export class BoneyardStaticLighting {
           presentation.position.y - resident.y,
         )
         resident.sprite.position.set(
-          presentation.position.x,
-          presentation.position.y,
+          resident === tree.proxy ? secondaryPosition.x : presentation.position.x,
+          resident === tree.proxy ? secondaryPosition.y : presentation.position.y,
         )
         resident.sprite.rotation = wobbleRadians
       }
       if (presentation.alpha < 1) fadedTreeCount += 1
       minTreeAlpha = Math.min(minTreeAlpha, presentation.alpha)
       minTreeLightScalar = Math.min(minTreeLightScalar, scalar)
-      if (tree.main.sprite.alpha !== tree.proxy.sprite.alpha) {
+      if (tree.main.sprite.alpha !== 1 || tree.proxy.sprite.alpha !== presentation.alpha
+        || material.alpha !== presentation.alpha) {
         treeAlphaMismatchCount += 1
       }
-      if (tree.main.sprite.tint !== tree.proxy.sprite.tint) {
+      if (tree.main.sprite.tint !== 0xffffff || tree.proxy.sprite.tint !== tint) {
         treeTintMismatchCount += 1
       }
     }
-    return { maxMainLightScalar, minMainLightScalar, monumentVisibleCount, buildingBaseRoofColorMismatchCount, buildingVertexLightMaximum, buildingVertexLightMinimum, buildingVisibleCount, wallVertexLightMaximum, wallVertexLightMinimum, wallVisibleCount, fadedTreeCount, minTreeAlpha, minTreeLightScalar, treeAlphaMismatchCount, treeTintMismatchCount, treePresentations }
+    return { maxMainLightScalar, minMainLightScalar, monumentVisibleCount, buildingBaseRoofColorMismatchCount, buildingVertexLightMaximum, buildingVertexLightMinimum, buildingVisibleCount, wallVertexLightMaximum, wallVertexLightMinimum, wallVisibleCount, fadedTreeCount, minTreeAlpha, minTreeLightScalar, treeAlphaMismatchCount, treeTintMismatchCount, treePresentations, treeHistoryGapTicks: this.treeOcclusion.historyGapTicks }
   }
 }

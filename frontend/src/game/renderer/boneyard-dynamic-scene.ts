@@ -29,7 +29,7 @@ import { nativeSceneryGlyphTexture } from './native-scenery-shadow.ts'
 import { nativeGoodieShadowOutline } from './boneyard-native-shadow-shapes.ts'
 import { nativeBoneyardComplexShadowRecords } from './boneyard-complex-shadows.ts'
 import { BoneyardGateViews } from './boneyard-gate-views.ts'
-import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeBoneyardLightScalar, nativeBoneyardLightTint, nativeBoneyardWeatherLightingOrder, nativeSolomonSetPieceLighting } from './boneyard-lighting.ts'
+import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeBoneyardLightFactors, nativeBoneyardLightScalar, nativeBoneyardLightTint, nativeBoneyardWeatherLightingOrder, nativeSolomonSetPieceLighting } from './boneyard-lighting.ts'
 import { boneyardPlayerSortBias, boneyardResidentIsVisible, boneyardVisibleWorldBounds } from './boneyard-render-contract.ts'
 import type { BoneyardPainterFrame, BoneyardWorldPresentationSettings, BuildingResidents, ResidentTexture, TreeResidents, WallResident } from './boneyard-renderer-model.ts'
 import { requireBoneyardSnapshot } from './boneyard-renderer-model.ts'
@@ -39,7 +39,7 @@ import { BoneyardSolomonView } from './boneyard-solomon-view.ts'
 import { isMovingGateBody, nativeStaticProxyInsertions, runtimeMainWorldY } from './boneyard-static-layout.ts'
 import { BoneyardStaticLighting } from './boneyard-static-lighting.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
-import type { NativeTreeOcclusionInput } from './boneyard-tree-occlusion.ts'
+import type { NativeTreeOcclusionInput, NativeTreeOcclusionFrame, NativeTreeOcclusionHistory } from './boneyard-tree-occlusion.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
@@ -169,7 +169,7 @@ export class BoneyardDynamicScene {
     )
     this.staticLighting = new BoneyardStaticLighting(
       boneyard, mainLayers, buildingResidents, wallResidents, treeResidents,
-      treeInputs, gameRunWorldTick(initialSnapshot.tick, initialSnapshot.run),
+      treeInputs, initialSnapshot.tick,
     )
     this.sceneryHits = new NativeSceneryHitView(mainLayers, mainResidents, treeResidents, buildingResidents)
     this.treeResidents = treeResidents
@@ -263,6 +263,8 @@ export class BoneyardDynamicScene {
     viewport: GameViewportLayout,
     settings: BoneyardWorldPresentationSettings,
     now: number,
+    treeFrame: NativeTreeOcclusionFrame,
+    treeHistory?: NativeTreeOcclusionHistory,
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
     const worldTick = gameRunWorldTick(snapshot.tick, snapshot.run)
@@ -395,8 +397,8 @@ export class BoneyardDynamicScene {
     this.spiderWebs.update(snapshot.world.spiderSilks, snapshot.world.silkFragments, presentationFrame, worldLightScalar)
     this.weatherView.update(worldLightScalar)
     const { maxMainLightScalar, minMainLightScalar, monumentVisibleCount, buildingBaseRoofColorMismatchCount, buildingVertexLightMaximum, buildingVertexLightMinimum, buildingVisibleCount, wallVertexLightMaximum, wallVertexLightMinimum, wallVisibleCount, fadedTreeCount, minTreeAlpha, minTreeLightScalar, treeAlphaMismatchCount, treeTintMismatchCount, treePresentations } = this.staticLighting.update(
-      snapshot, localPlayer.position, visibleMainResidents, settings.complexLighting,
-      this.lights.index, worldLightScalar,
+      snapshot, treeFrame, visibleMainResidents, settings.complexLighting,
+      this.lights.index, weatherBounds, treeHistory,
     )
     for (const [id, view] of this.players) {
       const player = snapshot.players[id]
@@ -484,10 +486,13 @@ export class BoneyardDynamicScene {
     }
     for (const leaf of snapshot.world.gateLeaves) {
       const position = nativeGatePainterRoot(leaf.hinge, leaf.tip)
+      const factors = settings.complexLighting
+        ? nativeBoneyardLightFactors(position, this.lights.index, { cameraOrigin: weatherBounds })
+        : { radial: 1, elevated: 1 }
       this.gates.setTint(
         leaf.fenceEid,
         leaf.side,
-        nativeBoneyardLightTint(worldLightScalar(position)),
+        nativeBoneyardLightTint(Math.fround(factors.radial * factors.elevated)),
       )
     }
     if (dig && lanternPosition) {

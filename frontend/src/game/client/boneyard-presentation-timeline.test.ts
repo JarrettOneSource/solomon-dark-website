@@ -47,6 +47,227 @@ const DEFAULT_SNAPSHOT = createGameSnapshot(createGameSimulation(), null)
 const DEFAULT_PLAYER = DEFAULT_SNAPSHOT.players['local-player']!
 const LIGHTING = DEFAULT_PLAYER.lighting
 
+test('player position history samples exact, inner and fractional delivered ticks', () => {
+  const older = snapshotAt(100, 10, 100)
+  older.players.local.position.y = -20
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(100, 'local'), { x: 10, y: -20 })
+  assert.equal(timeline.samplePlayerPositionAtTick(99.99, 'local'), null)
+  assert.equal(timeline.samplePlayerPositionAtTick(100.01, 'local'), null)
+  const newer = snapshotAt(105, 30, 100)
+  newer.players.local.position.y = 40
+  timeline.push(newer, 50)
+  for (const [tick, x, y] of [[100, 10, -20], [101, 14, -8], [102.5, 20, 10], [105, 30, 40]]) {
+    assert.deepEqual(timeline.samplePlayerPositionAtTick(tick, 'local'), { x, y })
+  }
+  for (const tick of [99, 105.01, Number.NaN, Infinity, -Infinity]) {
+    assert.equal(timeline.samplePlayerPositionAtTick(tick, 'local'), null)
+  }
+})
+
+test('player position history preserves presentation membership without fabricating missing players', () => {
+  const older = snapshotAt(100, 10, 100)
+  older.players = { ...older.players, departing: playerAt(40) }
+  const newer = snapshotAt(105, 30, 100)
+  newer.players = { ...newer.players, arriving: playerAt(60) }
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(newer, 50)
+  for (const tick of [100, 102.5, 105]) {
+    const frame = timeline.sample(50 + (tick - 100) * 10)
+    for (const id of ['local', 'departing', 'arriving', 'absent']) {
+      assert.deepEqual(timeline.samplePlayerPositionAtTick(tick, id), frame.players[id]?.position ?? null)
+    }
+  }
+  assert.equal(timeline.samplePlayerPositionAtTick(102.5, 'arriving'), null)
+  for (const id of ['toString', 'constructor', '__proto__']) {
+    assert.equal(timeline.samplePlayerPositionAtTick(102.5, id), null)
+  }
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(105, 'departing'), { x: 40, y: 200 })
+  timeline.push({ ...snapshotAt(110, 50, 100), players: {} }, 100)
+  assert.equal(timeline.samplePlayerPositionAtTick(105.01, 'departing'), null)
+})
+
+test('player position history replaces same-tick arrivals and ignores backward pushes', () => {
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: snapshotAt(100, 10, 100), serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(snapshotAt(105, 30, 100), 50)
+  timeline.push(snapshotAt(105, 50, 100), 75)
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(102.5, 'local'), { x: 30, y: 200 })
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(105, 'local'), { x: 50, y: 200 })
+  timeline.push(snapshotAt(103, 999, 100), 80)
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(102.5, 'local'), { x: 30, y: 200 })
+  assert.equal(timeline.latest().tick, 105)
+})
+
+test('player position history returns null beyond its eight delivered snapshots', () => {
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: snapshotAt(100, 0, 100), serverTickRate: 100, snapshotRate: 20 })
+  for (let index = 1; index <= 8; index += 1) {
+    timeline.push(snapshotAt(100 + index * 5, index * 10, 100), index * 50)
+  }
+  assert.equal(timeline.samplePlayerPositionAtTick(100, 'local'), null)
+  assert.equal(timeline.samplePlayerPositionAtTick(104.99, 'local'), null)
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(105, 'local'), { x: 10, y: 200 })
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(137.5, 'local'), { x: 75, y: 200 })
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(140, 'local'), { x: 80, y: 200 })
+  assert.equal(timeline.samplePlayerPositionAtTick(140.01, 'local'), null)
+})
+
+test('player position history uses delivered ticks through Game Over', () => {
+  const older = snapshotAt(100, 10, 100)
+  older.run = { ...older.run, phase: 'game-over', gameOverEventId: 1, gameOverTicks: 10 }
+  const newer = snapshotAt(105, 30, 100)
+  newer.run = { ...older.run, gameOverTicks: 15 }
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(newer, 50)
+  assert.equal(timeline.samplePlayerPositionAtTick(90, 'local'), null)
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(102.5, 'local'), { x: 20, y: 200 })
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(105, 'local'), { x: 30, y: 200 })
+})
+
+test('player position history returns copies and never advances stateful presentation sampling', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 30, 100)
+  const original = structuredClone([older, newer])
+  const options = { initialReceivedAtMs: 0, initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 }
+  const timeline = createBoneyardPresentationTimeline(options)
+  const control = createBoneyardPresentationTimeline(options)
+  timeline.push(newer, 50)
+  control.push(newer, 50)
+  for (const now of [50, 63, 75, 82, 100, 125]) {
+    for (const tick of [105, 100, 102.5, 104, 101, 99, 200]) {
+      const position = timeline.samplePlayerPositionAtTick(tick, 'local')
+      if (position) {
+        position.x = -12345
+        position.y = 98765
+      }
+    }
+    assert.deepEqual(timeline.sample(now), control.sample(now))
+  }
+  assert.deepEqual([older, newer], original)
+  assert.deepEqual(timeline.latest().players.local.position, { x: 30, y: 200 })
+  assert.deepEqual(timeline.samplePlayerPositionAtTick(100, 'local'), { x: 10, y: 200 })
+})
+
+function sceneryPosesFromFrame(frame: Pick<BoneyardGameSnapshot, 'players' | 'world'>) {
+  return {
+    players: Object.entries(frame.players).map(([id, player]) => ({ id, position: { ...player.position } })),
+    enemies: frame.world.enemies.map((enemy) => ({ id: enemy.id, position: { ...enemy.position },
+      enemyToken: enemy.enemyToken, nativeTypeId: enemy.nativeTypeId,
+      animationState: enemy.animation.state, coffinState: enemy.animation.coffinState })),
+    maggots: frame.world.maggots.map((maggot) => ({ id: maggot.id,
+      position: { ...maggot.position }, state: maggot.state, nativeTreeQueryMember: maggot.nativeTreeQueryMember })),
+    encounter: frame.world.encounter === null ? null : {
+      position: { ...frame.world.encounter.position }, phase: frame.world.encounter.phase },
+  }
+}
+
+test('scenery actor pose history preserves every actor family, membership and discrete metadata', () => {
+  const older = snapshotAt(100, 10, 100)
+  older.players = { ...older.players, departing: playerAt(40) }
+  older.world.enemies = [...older.world.enemies, { ...enemyAt(800), id: 3 }]
+  older.world.maggots = [...older.world.maggots, { ...maggotAt(900, 0), id: 4 }]
+  const newer = snapshotAt(105, 30, 200)
+  newer.players = { ...newer.players, arriving: playerAt(60) }
+  newer.world.enemies = [{ ...newer.world.enemies[0]!, enemyToken: 'COFFIN', nativeTypeId: 1020,
+    animation: { ...newer.world.enemies[0]!.animation, state: 'death', coffinState: 'open' } },
+    { ...enemyAt(1000), id: 5 }]
+  newer.world.maggots = [{ ...newer.world.maggots[0]!, state: 'death', nativeTreeQueryMember: true },
+    { ...maggotAt(1100, 0), id: 6 }]
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+  timeline.push(newer, 50)
+  for (const tick of [100, 101, 102.5, 105]) {
+    assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(tick),
+      sceneryPosesFromFrame(timeline.sample(50 + (tick - 100) * 10)))
+  }
+  const inner = timeline.sampleSceneryActorPosesAtTick(102.5)!
+  assert.deepEqual(inner.enemies.map((actor) => actor.id), [1, 3])
+  assert.deepEqual(inner.enemies[0]!.position, { x: 450, y: 500 })
+  assert.equal(inner.enemies[0]!.enemyToken, 'SKELETON')
+  assert.equal(inner.enemies[0]!.coffinState, 'closed')
+  const endpoint = timeline.sampleSceneryActorPosesAtTick(105)!
+  assert.deepEqual(endpoint.enemies.map((actor) => actor.id), [1, 5])
+  assert.deepEqual(endpoint.maggots.map((actor) => actor.id), [2, 6])
+  assert.deepEqual(endpoint.players.map((actor) => actor.id), ['local', 'departing', 'arriving'])
+  assert.equal(endpoint.enemies[0]!.animationState, 'death')
+  assert.equal(endpoint.enemies[0]!.coffinState, 'open')
+  assert.equal(endpoint.maggots[0]!.state, 'death')
+  assert.equal(inner.maggots[0]!.nativeTreeQueryMember, false)
+  assert.equal(endpoint.maggots[0]!.nativeTreeQueryMember, true)
+})
+
+test('scenery actor pose history preserves Solomon appearance and disappearance boundaries', () => {
+  for (const appearing of [true, false]) {
+    const older = snapshotAt(100, 10, 100)
+    const newer = snapshotAt(105, 30, 100)
+    if (appearing) older.world.encounter = null
+    else newer.world.encounter = null
+    const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+      initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 })
+    timeline.push(newer, 50)
+    for (const tick of [100, 102.5, 105]) {
+      assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(tick)?.encounter,
+        sceneryPosesFromFrame(timeline.sample(50 + (tick - 100) * 10)).encounter)
+    }
+  }
+})
+
+test('scenery actor pose history distinguishes empty populations from missing retained history', () => {
+  const initial = snapshotAt(100, 10, 100)
+  initial.players = {}
+  initial.world.enemies = []
+  initial.world.maggots = []
+  initial.world.encounter = null
+  const timeline = createBoneyardPresentationTimeline({ initialReceivedAtMs: 0,
+    initialSnapshot: initial, serverTickRate: 100, snapshotRate: 20 })
+  assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(100), {
+    players: [], enemies: [], maggots: [], encounter: null })
+  timeline.push(snapshotAt(105, 30, 100), 50)
+  timeline.push(snapshotAt(105, 50, 200), 75)
+  timeline.push(snapshotAt(103, 999, 999), 80)
+  assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(105)?.players[0]?.position, { x: 50, y: 200 })
+  for (let index = 2; index <= 8; index += 1) {
+    timeline.push(snapshotAt(100 + index * 5, index * 10, 100), index * 50)
+  }
+  for (const tick of [100, 104.99, 140.01, NaN, Infinity, -Infinity]) {
+    assert.equal(timeline.sampleSceneryActorPosesAtTick(tick), null)
+  }
+  assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(105)?.players[0]?.position, { x: 50, y: 200 })
+  assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(137.5)?.players[0]?.position, { x: 75, y: 200 })
+})
+
+test('scenery actor pose history is copied, stateless and uses raw Game Over ticks', () => {
+  const older = snapshotAt(100, 10, 100)
+  older.run = { ...older.run, phase: 'game-over', gameOverEventId: 1, gameOverTicks: 10 }
+  const newer = snapshotAt(105, 30, 200)
+  newer.run = { ...older.run, gameOverTicks: 15 }
+  const original = structuredClone([older, newer])
+  const options = { initialReceivedAtMs: 0, initialSnapshot: older, serverTickRate: 100, snapshotRate: 20 }
+  const timeline = createBoneyardPresentationTimeline(options)
+  const control = createBoneyardPresentationTimeline(options)
+  timeline.push(newer, 50)
+  control.push(newer, 50)
+  for (const now of [50, 63, 75, 82, 100, 125]) {
+    for (const tick of [105, 100, 102.5, 104, 101]) {
+      const poses = timeline.sampleSceneryActorPosesAtTick(tick)!
+      for (const actor of [...poses.players, ...poses.enemies, ...poses.maggots,
+        ...(poses.encounter ? [poses.encounter] : [])]) {
+        actor.position.x = -12345
+        actor.position.y = 98765
+      }
+    }
+    assert.deepEqual(timeline.sample(now), control.sample(now))
+  }
+  assert.deepEqual([older, newer], original)
+  assert.equal(timeline.sampleSceneryActorPosesAtTick(90), null)
+  assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(102.5)?.players[0]?.position, { x: 20, y: 200 })
+  assert.deepEqual(timeline.sampleSceneryActorPosesAtTick(105), sceneryPosesFromFrame(newer))
+})
+
 test('Boneyard interpolation retains continuous Player facing across bins and the zero seam', () => {
   for (const [from, to, expected] of [[0, 14, 7], [359, 1, 0]]) {
     const older = snapshotAt(100, 0, 0), newer = snapshotAt(105, 0, 0)
@@ -242,6 +463,7 @@ function enemyProjectileAt(x: number): BoneyardEnemyProjectileSnapshot {
 function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
   return {
     alpha: 1,
+    nativeTreeQueryMember: false,
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,

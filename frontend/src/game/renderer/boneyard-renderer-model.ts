@@ -1,4 +1,6 @@
 import type { Vec2 } from '../../editor/model.ts'
+import type { BoneyardSceneryActorPoses } from '../client/boneyard-presentation-timeline.ts'
+import type { NativeSceneryGlyphMaterial } from './native-scenery-glyph-material.ts'
 import type { Camera } from '../../editor/render.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
@@ -53,6 +55,8 @@ export interface BoneyardWorldRendererOptions {
   modCatalog: readonly ModConsumableCatalogEntry[]
   now?: () => number
   playerId: string
+  samplePlayerPositionAtTick?: (tick: number, playerId: string) => Readonly<Vec2> | null
+  sampleSceneryActorPosesAtTick?: (tick: number) => BoneyardSceneryActorPoses | null
   settings?: BoneyardWorldPresentationSettings
   viewport: GameViewportLayout
 }
@@ -64,6 +68,7 @@ export interface ResidentTexture extends BoneyardBounds {
   shadowCaster: NativeBoneyardComplexShadowCaster | null
   sprite: Container
   surfaceMesh: NativeStaticSurfaceMesh | null
+  sceneryMaterial?: NativeSceneryGlyphMaterial | null
   texture: Texture
   ownsTexture?: boolean
   ownedGeometries?: readonly Geometry[]

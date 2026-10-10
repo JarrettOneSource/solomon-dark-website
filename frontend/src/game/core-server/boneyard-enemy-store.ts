@@ -128,6 +128,7 @@ export function positionBoneyardEnemy(
   const rebound = nativePrimaryCellChanged(maggot.position, position)
   maggots[maggotIndex] = {
     ...maggot,
+    nativeTreeQueryMember: true,
     nativeCellBindingOrder: rebound
       ? source.nextNativeCellBindingOrder
       : maggot.nativeCellBindingOrder,

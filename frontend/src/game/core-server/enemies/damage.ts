@@ -434,6 +434,7 @@ function damageBoneyardMaggot(
   const killed = currentHealth <= 0
   const nextMaggot: BoneyardMaggotActor = {
     ...maggot,
+    nativeTreeQueryMember: killed ? false : maggot.nativeTreeQueryMember,
     ...(killed && request.etherDrainCapture ? { etherDrainCaptured: true as const } : {}),
     currentHealth,
     deathEpoch: killed ? source.nextDeathEpoch : maggot.deathEpoch,

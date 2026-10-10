@@ -784,6 +784,49 @@ test('schema 19 compact inventory roots migrate to schema 27 addressed slots', (
   )
 })
 
+
+test('Maggot Tree query binding resets on current and legacy save restoration', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const context = { players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: order.register, resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition }
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    ...context, tick: state.tick,
+    resolveSpawnIntents: () => [{ enemyToken: 'COFFIN', flags: [], id: 1,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN, locationPolicy: 'anywhere',
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const coffin = spawned.actors[0]!
+  if (coffin.brain.family !== 'coffin') throw new Error('expected Coffin')
+  const released = stepBoneyardEnemyStore({ ...spawned, actors: [{ ...coffin,
+    brain: { ...coffin.brain, phase: 'opening', phaseTicksRemaining: 1 } }] }, {
+    ...context, tick: state.tick + 1, resolveSpawnIntents: () => [],
+  }).store
+  assert.ok(released.maggots.length > 0)
+  const maggots = released.maggots.map(maggot => ({ ...maggot, nativeTreeQueryMember: true }))
+  state = { ...state, tick: state.tick + 1, world: { ...state.world,
+    enemies: { ...released, maggots } }, worldManagerOrder: order.state() }
+  const document = createGameSaveDocument({ state, loadedBoneyard, integrity: 'local-only',
+    mods: [], modState: {}, playerId: 'owner' })
+  for (const fieldWasPresent of [false, true]) {
+    const saved = JSON.parse(document)
+    if (!fieldWasPresent) {
+      for (const maggot of saved.continuation.simulation.world.enemies.maggots) delete maggot.nativeTreeQueryMember
+    }
+    const restored = restoreGameSaveDocument(JSON.stringify(saved)).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.deepEqual(restored.world.enemies.maggots,
+      maggots.map(maggot => ({ ...maggot, nativeTreeQueryMember: false })))
+    const projected = createGameSnapshot(restored, 'owner')
+    if (projected.world.kind !== 'boneyard') throw new Error('expected projected Boneyard')
+    assert.ok(projected.world.maggots.every(maggot => maggot.nativeTreeQueryMember === false))
+  }
+})
+
+
 test('schema 41 preserves independent hit reaction and legacy migration retires only the unrecoverable latch', () => {
   const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))
   assert.ok(loadedBoneyard)

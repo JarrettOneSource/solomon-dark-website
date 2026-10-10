@@ -441,6 +441,7 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
     combatActive: true,
+    nativeTreeQueryMember: false,
     currentHealth: 100,
     damage: 2,
     deathOffsets: [],

@@ -5912,6 +5912,81 @@ test('breaking a Pike updates the canonical equipment selector and cannot break 
   assert.equal(breakBoneyardSkeletonPike(broken.store, actor.id).broke, false)
 })
 
+
+test('Maggot Tree query admission waits for free movement, including zero displacement', () => {
+  const born = freezeOpenedCoffin(openedCoffin('tree-query-admission', FAR_PLAYERS)).store
+  const maggot = born.maggots[0]!
+  assert.equal(maggot.nativeTreeQueryMember, false)
+  const emerged = step(born, 5, FAR_PLAYERS).store.maggots[0]!
+  assert.equal(emerged.nativeTreeQueryMember, false)
+  const waiting = { ...born, maggots: [{ ...maggot, combatActive: true,
+    movementPhase: 'crawl' as const, nextMovementTick: 6, nextAttackTick: 100 }] }
+  const beforeMove = step(waiting, 5, FAR_PLAYERS).store
+  assert.equal(beforeMove.maggots[0]!.nativeTreeQueryMember, false)
+  const afterMove = stepBoneyardEnemyStore(beforeMove, {
+    tick: 6, players: FAR_PLAYERS, projectileWorldBlocked: NO_WORLD_CONTACT,
+    resolveSpawnIntents: () => [], resolveMovement: request => request.position,
+  }).store
+  assert.equal(afterMove.maggots[0]!.nativeTreeQueryMember, true)
+  assert.deepEqual(afterMove.maggots[0]!.position, beforeMove.maggots[0]!.position)
+  const tethered = step({ ...waiting, maggots: [{ ...waiting.maggots[0]!, combatActive: false }] }, 6, FAR_PLAYERS)
+  assert.equal(tethered.store.maggots[0]!.nativeTreeQueryMember, false)
+})
+
+test('Maggot Tree query admission follows accepted impulses and lethal category clearing', () => {
+  const born = freezeOpenedCoffin(openedCoffin('tree-query-impulse', FAR_PLAYERS)).store
+  const maggot = born.maggots[0]!
+  const free = { ...born, maggots: [{ ...maggot, combatActive: true, movementPhase: 'crawl' as const }] }
+  const impulse = positionBoneyardEnemy(free, maggot.id, maggot.position)
+  assert.equal(impulse.accepted, true)
+  assert.equal(impulse.store.maggots[0]!.nativeTreeQueryMember, true)
+  assert.deepEqual(impulse.store.maggots[0]!.position, maggot.position)
+  const rejected = positionBoneyardEnemy(born, maggot.id, maggot.position)
+  assert.equal(rejected.accepted, false)
+  assert.equal(rejected.store.maggots[0]!.nativeTreeQueryMember, false)
+  const killed = damageBoneyardEnemy(impulse.store, {
+    actorId: maggot.id, amount: maggot.currentHealth, sourcePlayerId: 'player', tick: 5,
+  })
+  assert.equal(killed.killed, true)
+  assert.equal(killed.store.maggots[0]!.nativeTreeQueryMember, false)
+})
+
+function treeQueryBitingMaggot(): BoneyardEnemyStore {
+  const born = freezeOpenedCoffin(openedCoffin('tree-query-bite', FAR_PLAYERS)).store
+  const maggot = born.maggots[0]!
+  const free = { ...born, maggots: [{ ...maggot, nativeTreeQueryMember: true,
+    combatActive: true, movementPhase: 'crawl' as const, nextAttackTick: 0 }] }
+  const bitten = step(free, 5, { player: livingTarget(maggot.position.x, maggot.position.y) }).store
+  assert.equal(bitten.maggots[0]!.lastAttackTick, 5)
+  return bitten
+}
+
+test('Maggot Tree query retains self-bite through two deferred ticks and clears at the third', () => {
+  let store = treeQueryBitingMaggot()
+  assert.equal(store.maggots[0]!.nativeTreeQueryMember, true)
+  for (const [tick, member] of [[6, true], [7, true], [8, false], [9, false]] as const) {
+    store = step(store, tick, FAR_PLAYERS).store
+    assert.equal(store.maggots[0]!.nativeTreeQueryMember, member)
+    assert.equal(store.maggots[0]!.lifeState, 'dying')
+  }
+})
+
+test('documented pause limit: world-clock Maggot disposal can lag native App-parity cleanup', () => {
+  // Map web bite tick 5 to App tick 10. App 11 enqueues queue 1, App 12
+  // pauses Region, and resumed App 13 flushes queue 1 before Tree scans.
+  const bite = treeQueryBitingMaggot()
+  const enqueued = step(bite, 6, FAR_PLAYERS).store
+  // A paused host does not step world tick, so resumed App 13 maps to web 7.
+  const resumed = step(enqueued, 7, FAR_PLAYERS).store
+  const nativeQueueParity = 11 & 1
+  const nativeMemberAtResume = (13 & 1) !== nativeQueueParity
+  assert.equal(nativeMemberAtResume, false)
+  assert.equal(resumed.maggots[0]!.nativeTreeQueryMember, true)
+  assert.notEqual(resumed.maggots[0]!.nativeTreeQueryMember, nativeMemberAtResume)
+  assert.equal(step(resumed, 8, FAR_PLAYERS).store.maggots[0]!.nativeTreeQueryMember, false)
+})
+
+
 test('Maggot periodic contacts retain zero and fractional native hit strengths', () => {
   const source = openedCoffin('burn-response-maggot', FAR_PLAYERS).store
   const maggot = source.maggots[0]!

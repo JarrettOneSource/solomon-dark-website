@@ -4,8 +4,9 @@ import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 
 /** Retained quads own geometry; original native atlas textures remain borrowed. */
 export function destroyResidentTexture(resident: ResidentTexture): void {
-  resident.surfaceMesh?.destroy()
-  if (!resident.surfaceMesh && resident.sprite instanceof MeshSimple) destroyOwnedMeshGeometry(resident.sprite)
+  if (resident.sceneryMaterial) resident.sceneryMaterial.destroy()
+  else if (resident.surfaceMesh) resident.surfaceMesh.destroy()
+  else if (resident.sprite instanceof MeshSimple) destroyOwnedMeshGeometry(resident.sprite)
   for (const geometry of resident.ownedGeometries ?? []) destroyOwnedMeshGeometry({ geometry })
   if (resident.ownsTexture !== false) resident.texture.destroy(true)
   resident.pixels = EMPTY_RESIDENT_PIXELS

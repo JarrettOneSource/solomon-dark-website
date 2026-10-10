@@ -534,11 +534,11 @@ test('normalizes the submitted light ABI to float32 and keeps raster scale separ
 
 test('uses the recovered elliptical plateau, squared falloff, and outer edge', () => {
   const source = [{ intensity: 0.6, position: { x: 0, y: 0 }, radius: 1 }]
-  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, source), 0.6)
-  assert.equal(nativeBoneyardLightScalar({ x: 75, y: 0 }, source), 0.6)
+  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, source), Math.fround(0.6))
+  assert.equal(nativeBoneyardLightScalar({ x: 75, y: 0 }, source), Math.fround(0.6))
   assert.equal(
     nativeBoneyardLightScalar({ x: 100, y: 0 }, source),
-    0.6 * (1 - (10_000 - 5_625) / 15_400),
+    0.42954549193382263,
   )
   assert.equal(nativeBoneyardLightScalar({ x: 145, y: 0 }, source), 0)
   assert.ok(nativeBoneyardLightScalar({ x: 0, y: 123.249 }, source) > 0)
@@ -551,11 +551,9 @@ test('uses independent radial and height maxima for native elevated surfaces', (
     { intensity: 0.5, position: { x: 0, y: 1 }, radius: 10 },
   ]
 
-  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, sources), 0.8)
-  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, sources), 0.4)
-  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, [sources[0]]), (
-    0.8 * 0.8 * (1 - 80 * 1.5 / 145)
-  ))
+  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, sources), Math.fround(0.8))
+  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, sources), Math.fround(0.4))
+  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, [sources[0]]), 0.11034481972455978)
 })
 
 test('squares one unattenuated source and clamps an overhead source at the height cutoff', () => {
@@ -676,7 +674,7 @@ test('takes the native maximum contribution and keeps signed Lantern flicker cos
     { intensity: 0.4, position: { x: 0, y: 0 }, radius: 1 },
     { intensity: 0.7, position: { x: 0, y: 0 }, radius: 1 },
   ]
-  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, sources), 0.7)
+  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, sources), Math.fround(0.7))
   const samples = Array.from({ length: 64 }, (_, frame) => (
     nativeLanternLightSource({ x: 4, y: 5 }, frame).intensity
   ))

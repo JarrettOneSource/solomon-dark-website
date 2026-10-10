@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { BONEYARD_MAGGOT_ENTITY_REGISTRATION, boneyardMaggotDescriptor, boneyardMaggotSample, materializeBoneyardMaggot } from './boneyard-maggot-replication.ts'
+import { boneyardMaggotSnapshot } from './codecs/enemy-projectiles.ts'
 import { gameSnapshot, gameSnapshotFrame } from './codecs/snapshot.ts'
 import { createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
@@ -1338,7 +1340,8 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
   assert.equal(descriptor[5], 1)
   assert.equal(descriptor[6], 0)
   assert.equal(descriptor[7], 1)
-  assert.equal(sample.length, 17)
+  assert.equal(sample.length, 18)
+  assert.equal(sample[17], 0)
   assert.equal(sample[9], 768)
   assert.equal(sample[12], 12)
   assert.equal(sample[13], -20 * 1024)
@@ -1934,6 +1937,7 @@ function enemyDeathEffectSnapshot(): BoneyardEnemyDeathEffectSnapshot {
 function maggotSnapshot(): BoneyardMaggotSnapshot {
   return {
     alpha: 1,
+    nativeTreeQueryMember: false,
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,
@@ -1955,6 +1959,50 @@ function maggotSnapshot(): BoneyardMaggotSnapshot {
     visualScale: 1.125,
   }
 }
+
+
+test('Maggot Tree query membership has strict JSON and compact boolean round trips', () => {
+  for (const nativeTreeQueryMember of [false, true]) {
+    const source = { ...maggotSnapshot(), nativeTreeQueryMember }
+    assert.deepEqual(boneyardMaggotSnapshot(source, 'maggot'), source)
+    const descriptor = boneyardMaggotDescriptor(source)
+    const sample = boneyardMaggotSample(source)
+    assert.equal(sample.length, 18)
+    assert.equal(sample[17], Number(nativeTreeQueryMember))
+    assert.deepEqual(materializeBoneyardMaggot(descriptor, sample), source)
+  }
+  const source = maggotSnapshot()
+  for (const invalid of [undefined, null, 0, 1, 'true']) {
+    assert.throws(() => boneyardMaggotSnapshot({ ...source, nativeTreeQueryMember: invalid }, 'maggot'),
+      /nativeTreeQueryMember/)
+  }
+  const sample = boneyardMaggotSample(source)
+  for (const invalid of [-1, 2, 0.5, Number.NaN]) {
+    const invalidSample: [number, number, ...number[]] = [sample[0], sample[1], ...sample.slice(2)]
+    invalidSample[17] = invalid
+    assert.equal(BONEYARD_MAGGOT_ENTITY_REGISTRATION.sampleIsValid(invalidSample), false)
+  }
+  assert.equal(BONEYARD_MAGGOT_ENTITY_REGISTRATION.sampleIsValid(
+    [sample[0], sample[1], ...sample.slice(2, 17)]), false)
+})
+
+test('Maggot Tree query membership changes survive compact delta reconstruction', () => {
+  const initial = boneyardSnapshot('tree-query-bit')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  initial.world.maggots = [maggotSnapshot()]
+  const reconstructor = new EntityReplicationReconstructor()
+  const first = reconstructor.apply(createGameSnapshotFrame(initial, 0, undefined, true), 1)
+  if (first.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(first.world.maggots[0]!.nativeTreeQueryMember, false)
+  const admitted = cloneSnapshot(initial)
+  if (admitted.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  admitted.tick += 1
+  admitted.world.maggots = [{ ...admitted.world.maggots[0]!, nativeTreeQueryMember: true }]
+  const next = reconstructor.apply(createGameSnapshotFrame(admitted, 1, createReplicatedEntityBaseline(initial)), 2)
+  if (next.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(next.world.maggots[0]!.nativeTreeQueryMember, true)
+})
+
 
 test('Lantern position survives guest keyframes and deltas without aliasing authority', () => {
   const initial = boneyardSnapshot('lantern-push')

@@ -11,6 +11,8 @@ import type { BoneyardEnemyEventSnapshot, GameSnapshot, ProtocolPlayerState } fr
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { copyPrimarySpellTransient } from '../client/primary-spell-transient-copy.ts'
 import { BoneyardDynamicScene } from './boneyard-dynamic-scene.ts'
+import { BoneyardTreeFrameHistory } from './boneyard-tree-frame-history.ts'
+import { nativeTreeActorPositions, nativeTreeActorPositionsFromSnapshot } from './boneyard-tree-actors.ts'
 import { NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX, nativeArenaDisplacementCoverPlan } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
 import type { BoneyardSpectatorCameraState } from './boneyard-render-contract.ts'
@@ -190,6 +192,7 @@ export async function createBoneyardWorldRenderer(
     throw error
   }
 
+  const treeFrameHistory = new BoneyardTreeFrameHistory()
   const mainLayers = nativeBoneyardMainLayers(document)
   const scene = new BoneyardDynamicScene(
     options.boneyard,
@@ -478,6 +481,24 @@ export async function createBoneyardWorldRenderer(
     )
     canvas.dataset.enhancedEffects = String(snapshot.enhancedEffects)
     canvas.dataset.buildingLightingGrid = snapshot.enhancedEffects ? '3x3' : '2x2'
+    const treeCameraLimits = tutorialCameraBounds
+      ?? snapshot.world.arenaTransition?.cameraBounds
+      ?? options.boneyard.scene.bounds
+    const treeFrames = treeFrameHistory.frame({
+      epoch: JSON.stringify([options.boneyard.runId, cameraFocus.playerId,
+        viewport.width, viewport.height, cameraZoom, treeCameraLimits]),
+      tick: snapshot.tick,
+      currentFrame: {
+        actorPositions: nativeTreeActorPositionsFromSnapshot(snapshot, options.playerId),
+        cameraBounds: visibleWorld,
+      },
+      focusPlayerId: cameraFocus.playerId,
+      sampleActors: options.sampleSceneryActorPosesAtTick,
+      sampleFocus: options.samplePlayerPositionAtTick,
+      actorPositions: poses => nativeTreeActorPositions(poses, options.playerId),
+      cameraBounds: focus => boneyardVisibleWorldBounds(
+        boneyardCamera(focus, treeCameraLimits, viewport, cameraZoom), viewport, 0),
+    })
     const painter = scene.update(
       snapshot,
       options.playerId,
@@ -496,6 +517,8 @@ export async function createBoneyardWorldRenderer(
       viewport,
       settings,
       frameAt,
+      treeFrames.current,
+      treeFrames.history,
     )
     regionLightField.setCompositeZIndex(
       painter.weatherLightingOrder.lightCompositeZIndex,

@@ -358,6 +358,8 @@ export interface BoneyardMaggotActor {
   readonly blizzardPushAccumulator: number
   readonly blizzardPushLastTick: number | null
   readonly combatActive: boolean
+  /** Native category/grid admission, used only by scenery presentation. */
+  readonly nativeTreeQueryMember: boolean
   readonly collisionRadius: number
   readonly currentHealth: number
   readonly deathOffsets: readonly Readonly<BoneyardPoint>[]

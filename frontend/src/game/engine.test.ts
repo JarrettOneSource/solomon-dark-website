@@ -195,6 +195,8 @@ function inertSession() {
     resolvePlayerCard: async () => { throw new Error('inert session') },
     saveBeforeLeave: async () => { throw new Error('inert session') },
     sampleBoneyardPresentation() { throw new Error() },
+    sampleBoneyardPlayerPositionAtTick() { return null },
+    sampleBoneyardSceneryActorPosesAtTick() { return null },
     samplePresentation() { throw new Error() },
     saveSkill() {},
     selectConcentration() {},

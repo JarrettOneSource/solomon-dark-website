@@ -711,6 +711,7 @@ export const BONEYARD_MAGGOT_STATES = ['bite', 'crawl', 'death', 'emerging'] as 
 
 export interface BoneyardMaggotSnapshot {
   alpha: number
+  nativeTreeQueryMember: boolean
   currentHealth: number
   deathEpoch: number
   deathTick: number

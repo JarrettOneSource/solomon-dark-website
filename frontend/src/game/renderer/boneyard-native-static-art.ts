@@ -5,6 +5,7 @@ import { nativeFenceGrate } from '../../editor/native-fence-geometry.ts'
 import type { MainLayer } from '../../editor/native-render-plan.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
 import { createNativeLitSurfaceGrid } from './boneyard-building-surface-view.ts'
+import { createNativeSceneryGlyphMaterial } from './native-scenery-glyph-material.ts'
 import { boneyardTransformedArtBounds } from './boneyard-off-camera-cleanup.ts'
 import type { ResidentTexture } from './boneyard-renderer-model.ts'
 
@@ -26,6 +27,7 @@ export interface NativeStaticArtOptions {
   readonly cleanupSourceKey?: string | null
   readonly enhancedEffects?: boolean
   readonly mainLayerIndex?: number | null
+  readonly sceneryMaterial?: 'ordinary' | 'tree'
   readonly rotationDegrees?: number
   readonly scaleX?: number
   readonly scaleY?: number
@@ -71,7 +73,9 @@ export function createNativeStaticArtResident(
   const y = position.y - record.anchorY
   const surfaceMesh = options.enhancedEffects === undefined ? null
     : createNativeLitSurfaceGrid(texture, record.w, record.h, options.enhancedEffects)
-  const sprite = surfaceMesh?.mesh ?? new Sprite(texture)
+  const sceneryMaterial = options.sceneryMaterial === undefined ? null
+    : createNativeSceneryGlyphMaterial(texture, record.w, record.h, options.sceneryMaterial === 'tree')
+  const sprite = sceneryMaterial?.mesh ?? surfaceMesh?.mesh ?? new Sprite(texture)
   sprite.position.set(x, y)
   if (rotation !== 0 || scaleX !== 1 || scaleY !== 1) {
     sprite.pivot.set(record.anchorX, record.anchorY)
@@ -91,6 +95,7 @@ export function createNativeStaticArtResident(
     shadowCaster: null,
     sprite,
     surfaceMesh,
+    sceneryMaterial,
     texture,
   }
 }

@@ -558,6 +558,8 @@ function buildMainLayerResident(
     const resident = createNativeStaticArtResident(record, artTextures.glyph(record.entry), layer.pos, {
       mainLayerIndex: layerIndex,
       enhancedEffects: isBuildingLayer(layer) ? enhancedEffects : undefined,
+      sceneryMaterial: isBuildingLayer(layer) ? undefined
+        : layer.kind === 'object' && layer.object.typeId === NATIVE.tree ? 'tree' : 'ordinary',
     })
     resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(document, layer, layerIndex)
     return resident

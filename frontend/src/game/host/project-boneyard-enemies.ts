@@ -196,6 +196,7 @@ export function projectBoneyardMaggots(
     return {
       alpha: 1,
       currentHealth: maggot.currentHealth,
+      nativeTreeQueryMember: maggot.nativeTreeQueryMember,
       deathEpoch: maggot.deathEpoch ?? 0,
       deathTick: maggot.deathTick,
       emergencePhase: maggot.emergencePhase,

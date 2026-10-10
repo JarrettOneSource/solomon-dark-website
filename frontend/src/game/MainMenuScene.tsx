@@ -2195,6 +2195,8 @@ function MainMenuContent({
               partyRoster={partyState?.partyRoster}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               presentationPaused={gameplayPause !== null || gameplayResumeGrace !== null}
+              samplePlayerPositionAtTick={session.sampleBoneyardPlayerPositionAtTick}
+              sampleSceneryActorPosesAtTick={session.sampleBoneyardSceneryActorPosesAtTick}
               samplePresentation={session.sampleBoneyardPresentation}
               settings={gameSettings}
               subscribePing={session.onPing}

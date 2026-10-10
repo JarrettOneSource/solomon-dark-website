@@ -6,7 +6,7 @@ import type { BuildingResidents, ResidentTexture, TreeResidents } from './boneya
 import { nativePuppetHitTint, setNativeDiffuseColor } from './native-texture-color.ts'
 
 interface SceneryRedraw {
-  readonly body: { readonly display: Container; destroy(): void }
+  readonly body: { readonly display: Container; update?: (alpha: number, complexLighting: boolean) => void; destroy(): void }
   readonly proxy: { readonly display: Container; destroy(): void } | null
 }
 
@@ -48,8 +48,12 @@ export class NativeSceneryHitView {
       const active = nativePuppetHitTimer(hit.feedback, tick) > 0
       const vertexColorsOwnMaterial = complexLighting && this.buildingIds.has(hit.targetId)
       view.body.display.visible = active
-      view.body.display.alpha = vertexColorsOwnMaterial ? 1 : nativePuppetHitAlpha(hit.feedback, tick)
-      view.body.display.tint = vertexColorsOwnMaterial ? 0xffffff : nativePuppetHitTint(complexLighting)
+      if (view.body.update) {
+        view.body.update(nativePuppetHitAlpha(hit.feedback, tick), complexLighting)
+      } else {
+        view.body.display.alpha = vertexColorsOwnMaterial ? 1 : nativePuppetHitAlpha(hit.feedback, tick)
+        view.body.display.tint = vertexColorsOwnMaterial ? 0xffffff : nativePuppetHitTint(complexLighting)
+      }
       // Main enqueues a second ordinary upper proxy; it does not retain hit RGBA.
       if (view.proxy) view.proxy.display.visible = active
         && (complexLighting || !this.buildingIds.has(hit.targetId))
@@ -68,7 +72,13 @@ export class NativeSceneryHitView {
   }
 }
 
-function redraw(resident: ResidentTexture, diffuse: boolean): { display: Container; destroy(): void } {
+function redraw(resident: ResidentTexture, diffuse: boolean): SceneryRedraw['body'] {
+  if (resident.sceneryMaterial) {
+    const copy = resident.sceneryMaterial.createHitRedraw()
+    copy.display.label = 'native-puppet-hit'
+    resident.sprite.addChild(copy.display)
+    return copy
+  }
   if (resident.surfaceMesh) {
     const copy = createNativeSurfaceRedraw(resident.surfaceMesh, diffuse)
     copy.mesh.label = diffuse ? 'native-puppet-hit' : 'native-hit-upper-proxy'

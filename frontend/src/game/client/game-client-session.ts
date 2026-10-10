@@ -1,3 +1,4 @@
+import type { Vec2 } from '../../editor/model.ts'
 import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import {
   PLAYER_CHARACTER_INPUT_ACCELERATION,
@@ -94,6 +95,7 @@ import {
   isBoneyardGameSnapshot,
   type BoneyardPresentationFrame,
   type BoneyardPresentationTimeline,
+  type BoneyardSceneryActorPoses,
 } from './boneyard-presentation-timeline.ts'
 import {
   createHubPresentationTimeline,
@@ -194,6 +196,8 @@ export interface GameClientSession {
   onPartyAction(listener: (result: GamePartyActionResult) => void): () => void
   onSaveCheckpoint(listener: (checkpoint: GameSaveCheckpoint) => void): () => void
   onSnapshot(listener: (snapshot: GameClientSnapshot) => void): () => void
+  sampleBoneyardPlayerPositionAtTick(tick: number, playerId: string): Vec2 | null
+  sampleBoneyardSceneryActorPosesAtTick(tick: number): BoneyardSceneryActorPoses | null
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
@@ -1090,6 +1094,14 @@ export function connectGameClientSession(
       onSaveCheckpoint(listener) {
         saveCheckpointListeners.add(listener)
         return () => saveCheckpointListeners.delete(listener)
+      },
+      sampleBoneyardPlayerPositionAtTick(tick, playerId) {
+        if (destroyed || !snapshot || !isBoneyardGameSnapshot(snapshot)) return null
+        return boneyardPresentationTimeline?.samplePlayerPositionAtTick(tick, playerId) ?? null
+      },
+      sampleBoneyardSceneryActorPosesAtTick(tick) {
+        if (destroyed || !snapshot || !isBoneyardGameSnapshot(snapshot)) return null
+        return boneyardPresentationTimeline?.sampleSceneryActorPosesAtTick(tick) ?? null
       },
       sampleBoneyardPresentation(requestedNow = now()) {
         if (!boneyardPresentationTimeline) {

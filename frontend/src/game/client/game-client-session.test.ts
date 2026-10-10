@@ -882,6 +882,74 @@ test('client logs and explains an unexpected transport disconnect', async () => 
   assert.match(logged?.detail ?? '', /1006/)
 })
 
+test('client samples only its current Boneyard delivered position history', async (context) => {
+  let nowMs = 0
+  let failure: GameConnectionFailure | null = null
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport, now: () => nowMs, onFatal: (value) => { failure = value } })
+  const hubState = createGameSimulation({ 'player-1': CHARACTER })
+  receiveWelcome(transport, createGameSnapshot(hubState, 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const samplePosition = session.sampleBoneyardPlayerPositionAtTick
+  const sampleActors = session.sampleBoneyardSceneryActorPosesAtTick
+  assert.equal(samplePosition(100, session.playerId), null)
+  assert.equal(sampleActors(100), null)
+
+  const activeState = enterBoneyardWorld(hubState, loadedBoneyardFixture('position-history-1'))
+  const first = createGameSnapshot({ ...activeState, tick: 100 }, session.playerId)
+  first.players[session.playerId].position = { x: 10, y: -20 }
+  receiveSnapshot(transport, first, 0)
+  assert.deepEqual(samplePosition(100, session.playerId), { x: 10, y: -20 })
+  assert.deepEqual(sampleActors(100)?.players, [{ id: session.playerId, position: { x: 10, y: -20 } }])
+  assert.equal(samplePosition(101, session.playerId), null)
+  assert.equal(samplePosition(100, 'missing-player'), null)
+
+  nowMs = 50
+  const second = { ...first, tick: 105, players: { ...first.players,
+    [session.playerId]: { ...first.players[session.playerId], position: { x: 30, y: 40 } } } }
+  receiveSnapshot(transport, second, 0)
+  const beforeSampling = session.sampleBoneyardPresentation(75)
+  assert.deepEqual(samplePosition(102.5, session.playerId), { x: 20, y: 10 })
+  assert.deepEqual(sampleActors(102.5)?.players[0]?.position, { x: 20, y: 10 })
+  assert.deepEqual(samplePosition(105, session.playerId), { x: 30, y: 40 })
+  assert.equal(samplePosition(99, session.playerId), null)
+  assert.deepEqual(session.sampleBoneyardPresentation(75), beforeSampling)
+
+  nowMs = 100
+  const terminal = { ...second, tick: 110, players: { ...second.players,
+    [session.playerId]: { ...second.players[session.playerId], position: { x: 50, y: 100 } } },
+    run: { ...second.run, phase: 'game-over' as const, gameOverEventId: 1,
+      nextGameOverEventId: 2, gameOverTicks: 5 } }
+  receiveSnapshot(transport, terminal, 0)
+  assert.equal(failure, null)
+  assert.equal(session.getSnapshot().tick, 110)
+  assert.deepEqual(samplePosition(107.5, session.playerId), { x: 40, y: 70 })
+  assert.deepEqual(sampleActors(107.5)?.players[0]?.position, { x: 40, y: 70 })
+
+  nowMs = 150
+  const nextRun = createGameSnapshot({ ...enterBoneyardWorld(hubState,
+    loadedBoneyardFixture('position-history-2')), tick: 115 }, session.playerId)
+  receiveSnapshot(transport, nextRun, 0)
+  assert.equal(samplePosition(110, session.playerId), null)
+  assert.equal(sampleActors(110), null)
+  assert.deepEqual(samplePosition(115, session.playerId), nextRun.players[session.playerId].position)
+
+  nowMs = 200
+  receiveSnapshot(transport, createGameSnapshot({ ...hubState, tick: 120 }, session.playerId), 0)
+  assert.equal(samplePosition(115, session.playerId), null)
+  assert.equal(sampleActors(115), null)
+
+  nowMs = 250
+  receiveSnapshot(transport, { ...nextRun, tick: 125 }, 0)
+  assert.equal(samplePosition(115, session.playerId), null)
+  assert.deepEqual(samplePosition(125, session.playerId), nextRun.players[session.playerId].position)
+  session.destroy()
+  assert.equal(samplePosition(125, session.playerId), null)
+  assert.equal(sampleActors(125), null)
+})
+
 test('host client keeps one session through Game Over, loadout, and Hub confirmation', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({

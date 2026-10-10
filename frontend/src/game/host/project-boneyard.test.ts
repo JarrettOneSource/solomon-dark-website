@@ -243,6 +243,7 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
     combatActive: true,
+    nativeTreeQueryMember: false,
     currentHealth: 1,
     damage: 2,
     deathOffsets: [],
@@ -294,6 +295,10 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
   }
 
   assert.equal(projectBoneyardMaggots(store, 10)[0]?.hitFlash, 1)
+  for (const nativeTreeQueryMember of [false, true]) {
+    assert.equal(projectBoneyardMaggots({ ...store,
+      maggots: [{ ...maggot, nativeTreeQueryMember }] }, 10)[0]?.nativeTreeQueryMember, nativeTreeQueryMember)
+  }
   assert.equal(projectBoneyardMaggots(store, 12)[0]?.hitFlash, .8999999761581421)
   assert.ok(Math.abs(
     projectBoneyardMaggots(store, 29)[0]!.hitFlash - .049999844282865524,
@@ -760,6 +765,7 @@ function projectedMaggot(
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
     combatActive: true,
+    nativeTreeQueryMember: false,
     currentHealth: 2,
     damage: 2,
     deathOffsets: [],

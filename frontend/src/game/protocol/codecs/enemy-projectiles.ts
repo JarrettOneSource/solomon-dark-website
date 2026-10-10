@@ -273,6 +273,7 @@ export function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardM
   const source = record(value, field)
   onlyKeys(source, field, [
     'alpha',
+    'nativeTreeQueryMember',
     'currentHealth',
     'deathEpoch',
     'deathTick',
@@ -337,6 +338,7 @@ export function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardM
   }
   return {
     alpha,
+    nativeTreeQueryMember: boolean(source.nativeTreeQueryMember, `${field}.nativeTreeQueryMember`),
     currentHealth,
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),

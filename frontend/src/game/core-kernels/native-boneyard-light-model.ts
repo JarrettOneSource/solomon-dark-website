@@ -1,6 +1,17 @@
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
 import type { BoneyardPoint as Vec2 } from './boneyard.ts'
-import { NATIVE_LANTERN_LIGHT_BASE_INTENSITY, NATIVE_LANTERN_LIGHT_FLICKER, NATIVE_LANTERN_LIGHT_RADIUS, NATIVE_LIGHT_OUTER_DISTANCE, NATIVE_PLAYER_LIGHT_OFFSET, NATIVE_PLAYER_LIGHT_RADIUS, nativeBoneyardRadialLightContribution } from './native-boneyard-lighting.ts'
+import {
+  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
+  NATIVE_LANTERN_LIGHT_FLICKER,
+  NATIVE_LANTERN_LIGHT_RADIUS,
+  NATIVE_LIGHT_OUTER_DISTANCE,
+  NATIVE_PLAYER_LIGHT_OFFSET,
+  NATIVE_PLAYER_LIGHT_RADIUS,
+  nativeBoneyardRadialLightContribution,
+  nativeBoneyardSourceLightFactors,
+  type NativeBoneyardLightFactorPair,
+  type NativeBoneyardLightQuery,
+} from './native-boneyard-lighting.ts'
 import { nativeRandomFloatFromSemanticWord, nativeRandomIntFromSemanticWord, nativeSignedRandomFloatFromSemanticWords } from './native-random-domain.ts'
 import type { NativeSecondaryActorState } from './native-secondary-abilities.ts'
 import type { NativeWeldEtherealBoulderState, NativeWeldHailstonesState, NativeWeldMeteorActorState, NativeWeldProjectileState } from './native-weld-primary-runtime.ts'
@@ -15,6 +26,7 @@ export {
   NATIVE_PLAYER_LIGHT_OFFSET,
   NATIVE_PLAYER_LIGHT_RADIUS
 } from './native-boneyard-lighting.ts'
+export type { NativeBoneyardLightFactorPair, NativeBoneyardLightQuery } from './native-boneyard-lighting.ts'
 
 export interface NativeBoneyardLightSample {
   intensity: number
@@ -36,7 +48,7 @@ export interface NativeBoneyardLightProviderCandidate {
 
 export interface NativeBoneyardLightLookup {
   readonly acceptedSources: readonly NativeBoneyardLightSource[]
-  scalarAt(position: Vec2): number
+  scalarAt(position: Vec2, query?: NativeBoneyardLightQuery): number
   sourceIndicesAt(position: Vec2): readonly number[]
 }
 
@@ -210,12 +222,12 @@ export class NativeBoneyardLightIndex implements NativeBoneyardLightLookup {
     return this.accepted
   }
 
-  scalarAt(position: Vec2): number {
-    let scalar = 0
+  scalarAt(position: Vec2, query?: NativeBoneyardLightQuery): number {
+    let scalar = Math.fround(query?.ambient ?? 0)
     for (const sourceIndex of this.sourceIndicesAt(position)) {
       scalar = Math.max(
         scalar,
-        nativeBoneyardLightContribution(position, this.accepted[sourceIndex]!),
+        nativeBoneyardLightContribution(position, this.accepted[sourceIndex]!, query),
       )
     }
     return scalar
@@ -916,19 +928,24 @@ export function nativeAcceptedBoneyardLightSources(
 export function nativeBoneyardLightScalar(
   position: Vec2,
   sources: NativeBoneyardLightSamples,
+  query?: NativeBoneyardLightQuery,
 ): number {
-  if (isNativeBoneyardLightLookup(sources)) {
-    return sources.scalarAt(position)
+  if (isNativeBoneyardLightLookup(sources)) return sources.scalarAt(position, query)
+  let scalar = Math.fround(query?.ambient ?? 0)
+  for (const source of sources) {
+    scalar = Math.max(scalar, nativeBoneyardLightContribution(position, source, query))
   }
-  return nativeBoneyardLightScalarFromSources(position, sources)
+  return scalar
 }
 
-export function nativeBoneyardSurfaceLightScalar(
+/** Common Puppet CC and D0 remain separate: hit callbacks consume CC alone. */
+export function nativeBoneyardLightFactors(
   position: Vec2,
   sources: NativeBoneyardLightSamples,
-): number {
-  let radialMaximum = 0
-  let elevatedMaximum = 0
+  query?: NativeBoneyardLightQuery,
+): NativeBoneyardLightFactorPair {
+  let radial = Math.fround(query?.ambient ?? 0)
+  let elevated = 0
   if (isNativeBoneyardLightLookup(sources)) {
     for (const sourceIndex of sources.sourceIndicesAt(position)) {
       include(sources.acceptedSources[sourceIndex]!)
@@ -936,35 +953,27 @@ export function nativeBoneyardSurfaceLightScalar(
   } else {
     for (const source of sources) include(source)
   }
-  return radialMaximum * elevatedMaximum
+  return { radial, elevated }
 
   function include(source: NativeBoneyardLightSample): void {
-    const contribution = nativeBoneyardLightContribution(position, source)
-    radialMaximum = Math.max(radialMaximum, contribution)
-    const verticalGap = position.y - source.position.y
-    const heightScalar = verticalGap > 0
-      ? Math.max(0, 1 - verticalGap * 1.5 / NATIVE_LIGHT_OUTER_DISTANCE)
-      : 1
-    elevatedMaximum = Math.max(
-      elevatedMaximum,
-      contribution * heightScalar,
-    )
+    const contribution = nativeBoneyardSourceLightFactors(position, source, query)
+    radial = Math.max(radial, contribution.radial)
+    elevated = Math.max(elevated, contribution.elevated)
   }
 }
 
-function nativeBoneyardLightScalarFromSources(
+export function nativeBoneyardSurfaceLightScalar(
   position: Vec2,
-  sources: readonly NativeBoneyardLightSample[],
+  sources: NativeBoneyardLightSamples,
+  query?: NativeBoneyardLightQuery,
 ): number {
-  let scalar = 0
-  for (const source of sources) {
-    scalar = Math.max(scalar, nativeBoneyardLightContribution(position, source))
-  }
-  return scalar
+  const { radial, elevated } = nativeBoneyardLightFactors(position, sources, query)
+  // Surface 0057E640 seeds both lanes with ambient; Puppet 0057F0E0 seeds D0=0.
+  return Math.fround(radial * Math.max(Math.fround(query?.ambient ?? 0), elevated))
 }
 
 export function nativeBoneyardLightTint(scalar: number): number {
-  const lane = Math.trunc(Math.max(0, Math.min(1, scalar)) * 255)
+  const lane = Math.trunc(Math.fround(Math.fround(Math.max(0, Math.min(1, scalar))) * 255))
   return lane * 0x010101
 }
 
@@ -1151,8 +1160,9 @@ function nativeLightContainsCandidate(
 function nativeBoneyardLightContribution(
   position: Vec2,
   source: NativeBoneyardLightSample,
+  query?: NativeBoneyardLightQuery,
 ): number {
-  return nativeBoneyardRadialLightContribution(position, source)
+  return nativeBoneyardRadialLightContribution(position, source, query)
 }
 
 interface NativeEnemyLightOwner {

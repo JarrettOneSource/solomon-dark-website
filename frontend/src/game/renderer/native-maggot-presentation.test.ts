@@ -147,6 +147,7 @@ function entries(snapshot: BoneyardMaggotSnapshot) {
 function maggot(overrides: Partial<BoneyardMaggotSnapshot>): BoneyardMaggotSnapshot {
   return {
     alpha: 1,
+    nativeTreeQueryMember: false,
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,

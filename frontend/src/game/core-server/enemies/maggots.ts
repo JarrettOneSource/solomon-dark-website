@@ -150,7 +150,12 @@ export function stepMaggots(
         source.lastAttackTick !== null
         && deathTick < NATIVE_MAGGOT_PROGRAM.bitePresentationTicks
       ) {
-        retained.push({ ...source, deathTick })
+        // Mark-only bite deletion remains in the native cell until the same
+        // App-parity disposal queue returns at t+3. This world-clock equivalent
+        // is exact for uninterrupted ticks; pause-crossing App parity is not
+        // available here (ledger 052 and the focused pause-limit regression).
+        retained.push({ ...source, deathTick,
+          nativeTreeQueryMember: source.nativeTreeQueryMember && deathTick < 3 })
         continue
       }
       emitEvent(work, context.tick, 'enemy-death', source.id)
@@ -356,6 +361,8 @@ export function stepMaggots(
     work.steeringRngState = recovery.rngState
     retained.push({
       ...source,
+      // Native free movement 525800 rebinds even when displacement is zero.
+      nativeTreeQueryMember: true,
       gaitPose: traveled === 0
         ? source.gaitPose
         : positiveModulo(

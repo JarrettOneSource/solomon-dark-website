@@ -91,7 +91,7 @@ try {
         terrain: [],
       },
     }
-    const snapshotAt = (tick, position) => ({
+    const rawSnapshotAt = (tick, position) => ({
       hostPlayerId: 'local',
       players: {
         local: {
@@ -114,22 +114,50 @@ try {
       tick,
       world: { gateLeaves: [], kind: 'boneyard', runId },
     })
-    const renderer = await rendererModule.createBoneyardWorldRenderer({
+    const simulation = await import('/src/game/core-server/game-simulation.ts')
+    const snapshots = await import('/src/game/host/game-snapshot.ts')
+    const defaults = snapshots.createGameSnapshot(simulation.enterBoneyardWorld(
+      simulation.createGameSimulation({
+        local: { discipline: 'arcane', displayName: 'Tree Probe', element: 'fire' },
+      }), loaded), 'local')
+    const snapshotAt = (...args) => {
+      const raw = rawSnapshotAt(...args)
+      return {
+        ...defaults,
+        ...raw,
+        players: { local: { ...defaults.players.local, ...raw.players.local } },
+        world: { ...defaults.world, ...raw.world },
+      }
+    }
+    // Explicit recorded fixture trajectory. Do not replay the newest position
+    // over missing historical ticks; production obtains this from its timeline.
+    const positionAtTick = tick => tick <= 1_000 || tick > 1_065 ? outside : inside
+    const rendererOptions = {
       boneyard: loaded,
+      // Hold elapsed-time effects fixed; light raster flicker also follows frames.
+      now: () => 1_000,
       devicePixelRatio: 1,
       initialSnapshot: snapshotAt(1_000, outside),
+      modAssets: [],
+      modCatalog: [],
       playerId: 'local',
+      samplePlayerPositionAtTick: (tick, playerId) => playerId === 'local' ? positionAtTick(tick) : null,
+      sampleSceneryActorPosesAtTick: tick => ({
+        players: [{ id: 'local', position: positionAtTick(tick) }],
+        enemies: [], maggots: [], encounter: null,
+      }),
       viewport,
-    })
+    }
+    const renderer = await rendererModule.createBoneyardWorldRenderer(rendererOptions)
     renderer.canvas.id = 'tree-probe'
     document.body.append(renderer.canvas)
 
-    const capture = () => {
+    const capture = (canvas = renderer.canvas) => {
       const copy = document.createElement('canvas')
-      copy.width = renderer.canvas.width
-      copy.height = renderer.canvas.height
+      copy.width = canvas.width
+      copy.height = canvas.height
       const context = copy.getContext('2d', { willReadFrequently: true })
-      context.drawImage(renderer.canvas, 0, 0)
+      context.drawImage(canvas, 0, 0)
       return context.getImageData(0, 0, copy.width, copy.height).data
     }
     const difference = (first, second) => {
@@ -163,6 +191,22 @@ try {
       outside,
       renderer,
       snapshotAt,
+      opaqueRecoveryReference: async (tick, frameCount) => {
+        const snapshot = snapshotAt(tick, outside)
+        const control = await rendererModule.createBoneyardWorldRenderer({
+          ...rendererOptions,
+          initialSnapshot: snapshot,
+        })
+        try {
+          for (let frame = 1; frame < frameCount; frame += 1) control.render(snapshot)
+          return {
+            pixels: capture(control.canvas),
+            frame: { ...control.canvas.__sdrBoneyardFrame },
+          }
+        } finally {
+          control.destroy()
+        }
+      },
     }
     return {
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
@@ -183,8 +227,9 @@ try {
   assert.equal(opaque.frame.minTreeAlpha, 1)
   assert.equal(opaque.frame.treeAlphaMismatchCount, 0)
   assert.equal(opaque.frame.treeTintMismatchCount, 0)
-  assert.ok(opaque.frame.minTreeLightScalar > 0.2)
-  assert.ok(opaque.frame.minTreeLightScalar < 0.6)
+  // Tree root is185 world units below the only light. Native elevated D0 is0
+  // past145/1.5, so ordinary RGB is black even though radial CC is nonzero.
+  assert.equal(opaque.frame.minTreeLightScalar, 0)
 
   const faded = await page.evaluate(() => {
     const probe = window.__treeOcclusionProbe
@@ -196,7 +241,7 @@ try {
     }
   })
   assert.equal(faded.frame.fadedTreeCount, 1)
-  assert.equal(faded.frame.minTreeAlpha, 0.4)
+  assert.equal(faded.frame.minTreeAlpha, Math.fround(0.4))
   assert.equal(faded.frame.treeAlphaMismatchCount, 0)
   assert.equal(faded.frame.treeTintMismatchCount, 0)
   assert.ok(Math.abs(
@@ -213,17 +258,24 @@ try {
   })
   await canvas.screenshot({ path: fadedScreenshot })
   assert.equal(behindTree.fadedTreeCount, 1)
-  assert.equal(behindTree.minTreeAlpha, 0.4)
+  assert.equal(behindTree.minTreeAlpha, Math.fround(0.4))
   assert.equal(behindTree.treeAlphaMismatchCount, 0)
   assert.equal(behindTree.treeTintMismatchCount, 0)
 
-  const recovered = await page.evaluate(() => {
+  const recovered = await page.evaluate(async () => {
     const probe = window.__treeOcclusionProbe
     probe.renderer.render(probe.snapshotAt(1_130, probe.outside))
     const pixels = probe.capture()
+    const frame = probe.frame()
+    // The native player light raster changes per presentation frame. Compare
+    // recovery to an opaque control with the same tick and frame count, while
+    // retaining the raw initial-frame difference as diagnostic evidence.
+    const control = await probe.opaqueRecoveryReference(1_130, frame.frameCount)
     return {
       difference: probe.difference(probe.baseline, pixels),
-      frame: probe.frame(),
+      matchedOpaqueDifference: probe.difference(control.pixels, pixels),
+      referenceFrame: control.frame,
+      frame,
     }
   })
   await canvas.screenshot({ path: recoveredScreenshot })
@@ -231,8 +283,14 @@ try {
   assert.equal(recovered.frame.minTreeAlpha, 1)
   assert.equal(recovered.frame.treeAlphaMismatchCount, 0)
   assert.equal(recovered.frame.treeTintMismatchCount, 0)
+  assert.equal(recovered.referenceFrame.minTreeAlpha, 1)
+  assert.equal(recovered.referenceFrame.frameCount, recovered.frame.frameCount)
+  assert.equal(
+    recovered.referenceFrame.playerLightRasterRadius,
+    recovered.frame.playerLightRasterRadius,
+  )
   assert.ok(
-    recovered.difference.changedPixels < faded.difference.changedPixels / 5,
+    recovered.matchedOpaqueDifference.changedPixels < faded.difference.changedPixels / 5,
   )
 
   await page.evaluate(() => window.__treeOcclusionProbe.renderer.destroy())

@@ -11,6 +11,7 @@ import {
 import { NATIVE_BOSS_STREAM_CUES, NATIVE_BOSS_STREAM_TICKS, NATIVE_FACULTY_VOICE_CUES } from './core-kernels/native-boss-audio.ts'
 
 import { worldToScreen, type Camera } from '../editor/render.ts'
+import type { Vec2 } from '../editor/model.ts'
 import { nativeGameOver } from '../lib/assets.ts'
 import {
   boneyardDigIndicatorLayout,
@@ -26,6 +27,7 @@ import './boneyard.css'
 import {
   isBoneyardGameSnapshot,
   type BoneyardGameSnapshot,
+  type BoneyardSceneryActorPoses,
 } from './client/boneyard-presentation-timeline.ts'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
@@ -156,6 +158,8 @@ interface BoneyardSceneProps {
   playerId: string
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
+  samplePlayerPositionAtTick?: (tick: number, playerId: string) => Readonly<Vec2> | null
+  sampleSceneryActorPosesAtTick?: (tick: number) => BoneyardSceneryActorPoses | null
   samplePresentation: (nowMs?: number) => GameSnapshot
   settings: GameSettings
   subscribePing: (listener: (pingMs: number) => void) => () => void
@@ -221,6 +225,8 @@ export default function BoneyardScene({
   playerId,
   progression,
   presentationPaused,
+  samplePlayerPositionAtTick,
+  sampleSceneryActorPosesAtTick,
   samplePresentation,
   settings,
   subscribeEnemyEvent,
@@ -823,6 +829,8 @@ export default function BoneyardScene({
       modAssets,
       modCatalog,
       playerId,
+      samplePlayerPositionAtTick,
+      sampleSceneryActorPosesAtTick,
       settings: settingsRef.current,
       viewport: viewportRef.current,
     })
@@ -1067,6 +1075,8 @@ export default function BoneyardScene({
     onHubAction,
     onInput,
     playerId,
+    samplePlayerPositionAtTick,
+    sampleSceneryActorPosesAtTick,
     samplePresentation,
   ])
 

@@ -169,6 +169,7 @@ function spawnCoffinMaggots(
       blizzardPushLastTick: null,
       collisionRadius: NATIVE_MAGGOT_PROGRAM.collisionRadius,
       combatActive: false,
+      nativeTreeQueryMember: false,
       currentHealth: family.maggotHealth,
       deathOffsets: nativeMaggotDeathOffsets(work),
       damage: family.maggotDamage,
