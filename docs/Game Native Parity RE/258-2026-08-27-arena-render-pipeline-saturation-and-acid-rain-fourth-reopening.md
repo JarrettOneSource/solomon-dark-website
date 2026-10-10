@@ -72,8 +72,11 @@ the implementation receipt remains open until exact Mac/browser proof lands.
 | Hub/fixed Regions, menus, and HUD after Arena return | separate top-level render owners | out-of-system (Arena restores saturation to `1.0`) | identity negative tests |
 | renderer blur shader | `0x00B401F8`, request `+0x230` | out-of-system (separate renderer state not selected by Arena entry or Acid painters) | state remains distinct and untouched |
 
-There are no browser-platform-blocked members and no extractable native
-unknowns in this boundary.
+The 2026-08-27 dispositions above describe that release, not unconditional
+proof of every effective device state. The 2026-10-10 reopening below withdraws
+the blanket material-composition claim for Storm strike flash and qualifies
+shader-resource success, deferred-painter ownership and native fixed-function
+selector behavior. Other historical rows retain their stated scope.
 
 ## Native ownership thread and recovered behavioral contract
 
@@ -235,3 +238,212 @@ unknowns in this boundary.
 - Mod Loader's complete Mac static RE suite passes `517/517`, including the
   registered shader/frame boundary, layout-address, and caller-catalog
   contracts. No deployment or production cutover was performed.
+
+
+## 2026-10-10 — Storm strike material and effective shader reopening
+
+### Causal model and scope
+
+The retained Storm white-alpha ColorMatrixFilter is a synthetic extra render
+target, separate from the genuine stationary Storm body target. The earlier
+pass followed the fixed-function white selector but did not establish the
+effective pixel shader at the strike, and it did not test translucent filter
+composition. The pixel-center pass in ledger302 fixed that filter's density
+while explicitly retaining its unresolved color/alpha discrepancy.
+
+This reopening owns the complete synthetic strike-material membership: both
+stationary and moving Storm variants, enhanced effects on/off, frame-zero
+absence and positive-frame flash, fade alpha, pooled draw reuse, retained sprite
+reuse and retirement. Native body composites, moving additive body, cloud arcs,
+drops, lightning, combat, audio and actor lifetime stay in their existing owners.
+The frontend sweep finds one alpha-mask producer and one filter consumer, plus
+the presentation type, generic pooled writer and Acid/StormDrop reset sites.
+No other runtime actor produces this semantic mode.
+
+### Recovered native and GPU evidence
+
+Retail identity remains SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base0x00400000. Instruction evidence establishes:
+
+- Storm+0C0x5E8970 queues a PuppetPointer through0x64E910 in Arena+0x17C;
+  PuppetPointer+0C0x63ED70 invokes the original actor's +0x24 painter0x602C30.
+  Later +0x5C/+0x24 loops cannot establish this earlier strike's inherited state.
+- Ordinary successful Arena entry requests the extracted saturation shader at
+  float32 .65. A finite type-aware172-store S/cache census reduces to six real
+  material writes: constructor1/1, frame reset1, state-sync cache and Arena.65/1.
+  No ordinary typed predecessor changes the request before the strike.
+- Forward CFG tracing from125 explicit device-global loads covers128 typed
+  device calls, exactly the five known shader-binding sites and four constant
+  uploads. It finds no state-block creation or demonstrated hidden device owner.
+- The finite painter/API inventory supports unit multipliers and unlocked color
+  on the ordinary draw path. Every non-unit setter scope resets to units or
+  restores saved state. Three guarded actor scopes correlate unchanged flags
+  at set/restore, with no intervening actor update or actor callback. These are
+  typed valid-object proofs, not claims against arbitrary memory corruption.
+- The genuine stationary256-square body target is restored before the strike.
+  The strike then samples BadGuys78 once with normal blending and packed white
+  vertex RGB; alpha is float32(actorAlpha*.75) before packing. Its fixed-function
+  white selector does not replace texture RGB in the active saturation HLSL.
+- Shader compile/create errors can log and continue natively; setter HRESULTs
+  are ignored. Those failure branches are not evidence of the normal material.
+  The separate own-device D3D9 fixture successfully compiled and created the
+  exact shader on the current RX9070XT and matched96 branch/blend cases byte for
+  byte. This proves current host capability, not historical game shader binding.
+
+The independent M2 WebGL2/Metal proof checks2080 paired source-defined vectors
+(4160 direct/filtered RGBA comparisons), all with zero byte error;24 producer
+configurations,14 retained filter and14 diffuse transitions, and955 float32
+alpha-boundary controls also pass. Original full2048-square BadGuys page0 SHA:
+`af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e`.
+BadGuys78's gray RGB varies0..228 and489 alpha-zero pixels retain nonzero RGB,
+so forcing white or switching to PMA upload changes actual sampled content.
+
+Let T be straight sampled texture, V packed/interpolated vertex color,
+a=T.a*V.a, D destination. Native one-pass normal output is
+RGB=C*a+D.rgb*(1-a), alpha=a*a+D.a*(1-a), where C is the existing saturation
+formula. The synthetic filter first stores alpha a*a, then forces white and
+blends a second time: before byte quantization its RGB is a*a+D.rgb*(1-a*a),
+and alpha is a^4+D.a*(1-a*a). At native record78 sample [71,71,71,255], white
+vertex alpha153/255 and destination[25,50,75,128], measured native-program
+one-pass RGBA is[53,63,73,143]; released87 filtered RGBA is[108,124,140,115].
+This is a branch-defined primitive proof, not a matched full native scene.
+
+Sealed proof report SHA-256:
+`34a40240921ba0ffacfd07f6cbd9b0ddbccec4187d896884a1341a4da46d8c94`;
+native D3D9 result SHA-256:
+`02b59781965757ce063b407e4a21240d68389b804318d28f1d68d2cabba1fc8e`.
+The independent shader inventory is sealed: report SHA-256
+`d72f783b9dcedd73145a31df6ff70c5fa8875fe4a3f5e5973297afe16a6aa69f`,
+manifest SHA-256
+`00dad8cc5006aa03807e61bf8aac949223d3b2f87df7a495a186df28dd86678e`.
+The separate queued-predecessor/color and scene-admission report is sealed:
+`f62d0b168ac6ac65306b8cac82004b896240ef88793fd2749bbdc8e4a806db9e`.
+Its first inventory incorrectly called the Arena loop at0x471024 a Fence
+no-op. The independent full-body correction identifies direct Terrain objects
+from Arena+0x88BC/count+0x88B0, bounds+0xD0 and draw+0x0C at0x64EDA0.
+Terrain style1 submits primary vertices, selects blend1 at0x64F056, submits
+secondary vertices, and restores blend0/tail-sync at0x64F09F/0x64F0AA.
+Other branches preserve material; its complete indexed helper copies authored
+vertex colors without changing global diffuse, multipliers, lock or shader.
+The ordinary Storm material conclusion survives this explicit census repair.
+Correction report SHA-256:
+`641f129afcb02a1a532c7c4d22209f107d0025990afa5ab62aecd71d9ad4145e`;
+machine-readable correction SHA-256:
+`e76bebbbeebdb545bd83738b62cf822f3bc8b2306bf92c261b3e7b21b196dd69`.
+No whole-program arbitrary-alias proof or historical bound-state read is claimed.
+
+### Scene admission closure
+
+The ordinary native strike route is Arena-owned. Region initializes deferred
+pointer collection+0x8C14=false at0x652B8E; Arena sets it true at0x465103,
+while Bonedit leaves it false. Storm's +0C helper returns without creating a
+PuppetPointer when that flag is false. Reviewed fixed-region late +0x24 loops
+contain Game PlayerWizard members, not Storm actors. No ordinary direct
+fixed-region call to Storm+0x24 is identified in that graph.
+
+The admission guard independently corroborates this boundary: Skills_Wizard
+constructor0x674EE0 writes category2 into row27*0x70+0x26 at0x679E02.
+Belt0x5D585F calls category predicate0x67BF10, then checks the Game+0x1ABE
+seal at0x5D5869 before dispatcher0x54CC50. Courtyard activation0x508B20
+sets this seal through0x5C7390(true,false) at0x508B9A. Current compiled Hub
+skill27 negative acceptance agrees. A manually injected Storm in a non-Arena
+renderer is not an ordinary admitted actor scene and cannot justify retaining
+the synthetic filter in the shared ordinary producer.
+
+### Membership and implementation qualification
+
+| Member | Current disposition | Required acceptance |
+| --- | --- | --- |
+| Stationary Storm flash, frame>0 | exact-ported | one original atlas draw, no synthetic target, exact retained state |
+| Moving Storm flash, both enhanced modes | exact-ported | same native material, moving additive body unaffected |
+| Frame<=0 and alpha boundaries | exact-ported | absence/transparent draw and packed-alpha controls |
+| Genuine stationary body, moving body and arcs | verified-already-at-parity | existing target/corner/order assertions remain green |
+| Pooled generic, Acid and StormDrop draw reuse | exact-ported | remove dead semantic-mode plumbing without stale draw state |
+| Hub/College ordinary skill27 admission | verified-already-at-parity | native category-two seal and fixed-region queue exclusion; compiled exact87 negative journey passes |
+| Native resource failure or corrupted/reentrant object state | out-of-system | outside successful ordinary-render contract; failure conditions remain explicit, no invented diffuse-white fallback |
+| Full field/Road/Terrain/Region final composition | out-of-system | separately open within the requested visual work; outside this strike-material owner and source atlas equality is insufficient |
+
+### Validation contract
+
+Before runtime modification, update the actual retained-view assertion to the
+recovered one-pass material and observe its failure on exact87. Cover every
+variant/gate and preserve genuine body-target lifetime and atlas ownership.
+Then qualify actual product GPU rendering over opaque/translucent destinations,
+original NPM atlas edges and supported densities. The maintained compiled
+secondary-ability browser journey must retain real UI casts, combat, depth and
+lifecycle assertions and empty browser error arrays. Baseline Boneyard skill27
+passed10:40:51 across74 authoritative ticks; baseline Hub rejection passed
+10:43:05. Both used clean exact87 source and the unmodified maintained harness.
+
+### Implementation validation receipt
+
+Five runtime owners remove the complete obsolete semantic-mode path:
+`native-secondary-weather-presentation`, `native-secondary-world-view`,
+`native-secondary-presentation-types`, `native-secondary-presentation`, and
+`native-secondary-presentation-scratch`. No atlas, transform, phase, shader,
+blend, genuine body target, actor lifetime or gameplay rule changes. The actual
+retained Sprite now samples its original atlas once, with white tint, normal
+blend and no filter. Tests retain borrowed atlas lifetime and genuine body
+composite teardown checks.
+
+- Actual-view RED captured both old synthetic-filter assertions. Final retained
+  presentation suite passes53/53. One initially mistaken moving-variant test
+  phase oracle was corrected from the unchanged source formula; its52/53
+  failed receipt is retained rather than counted as a product defect.
+- Application/test TypeScript and full frontend lint pass. Production frontend
+  build and bundle budget pass. The five runtime SHA-256 identities were frozen
+  before independent GPU compilation and remained unchanged through acceptance.
+- The independent actual-product GPU matrix passes576/576 exact RGBA outputs
+  against the separately constructed one-pass reference: two variants, enhanced
+  off/on, two poses, four alpha values, three frames, densities1/2.5/3 and root/
+  offscreen outputs. Released87 differs in all288 visible nonzero-alpha cases,
+  with maximum channel error124. All288 non-strike controls remain unchanged;
+  those controls use32-bit FNV fingerprints, while strike comparisons inspect
+  every RGBA byte. Twelve retained-lifetime sequences and twelve variant/enhanced
+  context-loss/restores pass, with no browser or GL errors. Shared Arena shader
+  behavior is grounded by the separate2080-vector proof, not independently
+  re-established by this reference. Report SHA-256:
+  `cb2c289c88e74c636cdba05f91589ec36d418be79bbe7e51293f1935a77b99e2`;
+  custody SHA-256:
+  `14e2d90235d6ee30db441f0144219b0db6bb3d73eb5a91ebb15591b6232b3b9a`.
+- Bounded actual-view throughput used24 actors,120 warmup frames, ABBA ordering,
+  and16 samples per version/density, with one blocking pixel read per sample.
+  Baseline/candidate medians were2.956/.595ms at density1,2.842/.615ms at2.5,
+  and2.858/.771ms at3. These are completed batch-throughput measurements on
+  M2/Metal, not game FPS, physical-mobile results or a production speedup claim.
+- The maintained compiled material observer leaves the Pixi material untouched,
+  records original atlas/alpha/address/filter/blend identity, and stops its own
+  animation callback after collection. Released87 genuinely fails its
+  filter-count assertion1!=0 after passing unchanged cadence gates. Two earlier
+  baseline attempts failed pre-cast cadence and remain failed diagnostics;
+  a matched observer-disabled baseline passed107 ticks. No timeout cause is
+  asserted from those results. The discriminating RED recorded8 strike samples,
+ 484 callbacks/29.6ms total observer work and1.4ms maximum callback.
+- Candidate compiled Boneyard passes83 ticks,167 peak actors and14 strike samples
+  with zero filters, white tint, normal blend and original NPM/repeat atlas.
+  The normal harness's800x450 backing uses renderer resolution0.5 at deviceDPR1;
+  the separate GPU matrix covers the higher supported densities. All page,
+  console and response error arrays are empty. Log SHA-256:
+  `9b2461525f535ffe6b548783c46edd75e58ed5218964b1961fac889a80b13a1f`.
+  Its first candidate attempt failed the same pre-cast cadence gate before
+  any material traversal (590 callbacks/8.9ms total, maximum.2ms); it is retained.
+- Exact Hub negative fixture passes with category27 blocked, no mana/position/
+  actor/event/cast-sequence changes, and all browser errors empty. Log SHA-256:
+  `e149b73bb8b715759cc0b59a964ca0bce80184df1929a97a6d838cdaa96a80c7`.
+  A preceding combined-runner attempt omitted the existing expect-blocked flag
+  and is retained as a misconfigured ordinary-cast diagnostic, not an admission
+  failure. A copied baseline runner then stopped at its clean-source preflight
+  before lease/browser launch; the corrected runner bound exact candidate hashes.
+
+The source-preserving ordinary Storm strike material is qualified independently
+of full native scene composition. Canonical exact-commit Mac validation, final
+independent review and exact compiled/live revision acceptance remain mandatory
+publication gates; no push, deployment or hosted-CI success is asserted here.
+The broader native field/Road/Terrain/Region lighting and shadow composition
+remains separately open. In particular, source-correct transport does not prove
+historical final RGB or the runtime Region target format. The source-derived
+Region multiply boundary must include the active shader on sampled light RGB;
+a simple D*L reduction applies only to gray light with white vertex RGB.
+Existing proof and proposed held-out same-frame boundary test are recorded in
+report SHA-256 `5b4f19e0e96ac7c6820e663615d702b5d022ec2389348210f67ae50e14c63566`.

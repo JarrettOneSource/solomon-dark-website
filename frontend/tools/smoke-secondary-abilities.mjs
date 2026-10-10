@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { acceptItemSets, installActiveSetBonusProbe } from './item-set-smoke-acceptance.mjs'
 import { acceptLanternAndCursor } from './lantern-cursor-smoke-acceptance.mjs'
 import { acceptEtherDrain } from './ether-drain-smoke-acceptance.mjs'
+import { acceptStormMaterial, installStormMaterialProbe } from './storm-material-smoke-acceptance.mjs'
 import { acceptEtherDrainGameplay } from './ether-drain-gameplay-smoke-acceptance.mjs'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
@@ -66,6 +67,8 @@ const primaryOverlap = process.env.SDR_SECONDARY_PRIMARY_OVERLAP === '1'
 const staffOverlap = process.env.SDR_SECONDARY_STAFF_OVERLAP === '1'
 const screenFlashOrdering = process.env.SDR_SCREEN_FLASH_ORDER_ACCEPTANCE === '1'
 const phasingFrameCapture = process.env.SDR_PHASING_FRAME_CAPTURE === '1'
+const stormMaterialAcceptance = process.env.SDR_STORM_MATERIAL_ACCEPTANCE === '1'
+const catchUpAttempts = []
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (comparisonCapture) assert.equal(retainNativeViewport, true)
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
@@ -119,6 +122,11 @@ await mkdir(screenshotRoot, { recursive: true })
 const credential = 'secondary-ability-browser-parity'
 const externalBaseUrl = process.env.SDR_SECONDARY_ABILITY_BASE_URL?.replace(/\/$/, '')
 const productionBuild = process.env.SDR_SECONDARY_ABILITY_PRODUCTION === '1'
+if (stormMaterialAcceptance) {
+  assert.equal(productionBuild, true, 'Storm material acceptance requires the compiled client')
+  assert.equal(requestedScene, 'boneyard')
+  assert.deepEqual(requestedSkillIds, [27])
+}
 if (process.env.SDR_ETHER_DRAIN_ACCEPTANCE === '1' || process.env.SDR_ETHER_DRAIN_GAMEPLAY_ACCEPTANCE === '1') {
   assert.equal(productionBuild, true, 'Ether Drain acceptance requires the compiled client')
   assert.equal(requestedScene, 'boneyard')
@@ -164,6 +172,7 @@ const responseErrors = []
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   if (process.env.SDR_ITEM_SET_ACCEPTANCE === '1') await page.addInitScript(installActiveSetBonusProbe)
+  if (stormMaterialAcceptance) await page.addInitScript(installStormMaterialProbe)
   const wireSecondarySamples = []
   page.on('websocket', (socket) => {
     if (new URL(socket.url()).href !== new URL(host.address.url).href) return
@@ -983,6 +992,9 @@ try {
       contract.skillId,
       samples,
     )
+    const stormMaterial = stormMaterialAcceptance
+      ? await acceptStormMaterial({ page, screenshotRoot })
+      : null
     const shieldLifecycle = contract.skillId === 54
       ? await captureMagicShieldLifecycle(page, host, playerId, events[0].worldKey)
       : null
@@ -1014,6 +1026,7 @@ try {
       },
       primaryOverlap: primaryOverlapReceipt,
       reportedPresentation,
+      stormMaterial,
       shieldLifecycle,
       screenshotPath,
       teleport,
@@ -1109,6 +1122,24 @@ try {
 } catch (error) {
   const failedPage = browser.contexts()[0]?.pages()[0]
   process.stderr.write(`${JSON.stringify({ pageErrors, consoleErrors, responseErrors,
+    hostTick: host.state().tick,
+    catchUpAttempts,
+    presentation: await failedPage?.evaluate(() => {
+      const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
+      const frame = canvas?.__sdrHubFrame ?? canvas?.__sdrBoneyardFrame
+      const gl = canvas?.getContext('webgl2') || canvas?.getContext('webgl')
+      const debug = gl?.getExtension('WEBGL_debug_renderer_info')
+      return { visibility: document.visibilityState, dpr: devicePixelRatio,
+        backing: canvas ? [canvas.width, canvas.height] : null,
+        gpu: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null,
+        frame: frame ? { tick: frame.tick, frameCount: frame.frameCount,
+          secondaryAbilityCount: frame.secondaryAbilityCount } : null,
+        stormMaterialSamples: window.__stormMaterialSamples?.length ?? null,
+        stormMaterialProbe: window.__stormMaterialProbeDiagnostics ?? null,
+        recent: (window.__secondaryRenderSamples ?? []).slice(-12).map(sample => ({
+          tick: sample.tick, frameCount: sample.frameCount,
+          observedAtMs: sample.observedAtMs, actorCount: sample.actorCount })) }
+    }),
     body: await failedPage?.locator('body').innerText() })}\n`)
   await failedPage?.screenshot({ path: `${screenshotRoot}/failure.png` })
   throw error
@@ -3645,10 +3676,15 @@ async function waitForStablePresentationCadence(page) {
 async function waitForHostPresentationCatchUp(canvas, host) {
   let consecutive = 0
   for (let attempt = 0; attempt < 100; attempt += 1) {
+    const evaluationStartedAt = performance.now()
     const hostTick = host.state().tick
     const presentationTick = await canvas.evaluate((node) => (
       (node.__sdrHubFrame ?? node.__sdrBoneyardFrame)?.tick ?? Number.NaN
     ))
+    const hostTickAfterEvaluate = host.state().tick
+    catchUpAttempts.push({ attempt, hostTick, hostTickAfterEvaluate, presentationTick,
+      evaluationMs: performance.now() - evaluationStartedAt,
+      lagBefore: hostTick - presentationTick, lagAfter: hostTickAfterEvaluate - presentationTick })
     const lag = hostTick - presentationTick
     if (lag >= 0 && lag <= 8) {
       consecutive += 1

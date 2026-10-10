@@ -165,7 +165,10 @@ Translucent colors differ from a direct draw by up to 55/255 with both old and
 corrected projection: that separate preexisting material/compositing limitation
 is preserved rather than mislabeled as a geometric pass. Its receipt SHA-256 is
 `a15f6d13a524137d78a4c6616601b50f7bfef375075503858e83d414d7494baf`.
-The existing white-alpha material operation is retained.
+The existing white-alpha material operation was retained in this release.
+Its source and translucent-composition contract is reopened in
+[ledger258](258-2026-08-27-arena-render-pipeline-saturation-and-acid-rain-fourth-reopening.md#2026-10-10--storm-strike-material-and-effective-shader-reopening);
+that later material work does not change this measured density/phase receipt.
 
 ## Quality policy and remaining limits
 

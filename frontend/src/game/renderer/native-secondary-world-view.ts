@@ -1,5 +1,4 @@
 import {
-  ColorMatrixFilter,
   Container,
   Graphics,
   Matrix,
@@ -77,17 +76,6 @@ function hotDropUsesDirectPrimitives(kind: NativeSecondaryActorState['kind']): b
   return kind === 'acid-drop' || kind === 'acid-splash' || kind === 'storm-drop'
 }
 
-const WHITE_ALPHA_MASK_FILTER = new ColorMatrixFilter()
-// This synthetic copy must retain its input raster density and native pixel phase.
-WHITE_ALPHA_MASK_FILTER.resolution = 'inherit'
-WHITE_ALPHA_MASK_FILTER.matrix = [
-  0, 0, 0, 0, 1,
-  0, 0, 0, 0, 1,
-  0, 0, 0, 0, 1,
-  0, 0, 0, 1, 0,
-]
-const WHITE_ALPHA_MASK_FILTERS = [WHITE_ALPHA_MASK_FILTER]
-
 export interface NativeSecondaryPainterLayer {
   readonly id: string
   readonly insertions?: readonly NativeRegionPainterInsertion[]
@@ -135,7 +123,6 @@ interface NativeSecondarySpriteBinding {
   alpha: number
   atlas: NativeSecondarySpriteDraw['atlas'] | null
   blend: NativeSecondarySpriteDraw['blend'] | null
-  colorMode: NativeSecondarySpriteDraw['colorMode'] | null
   entry: number
   matrix?: Matrix
   offsetX: number
@@ -1498,10 +1485,6 @@ function applyDraw(
   if (sourceChanged || binding.role !== draw.role) {
     sprite.label = `secondary:${draw.role}:${draw.atlas}:${draw.entry}`
     binding.role = draw.role
-  }
-  if (binding.colorMode !== draw.colorMode) {
-    sprite.filters = draw.colorMode === 'alpha-mask' ? WHITE_ALPHA_MASK_FILTERS : null
-    binding.colorMode = draw.colorMode
   }
   if (binding.alpha !== draw.alpha) {
     binding.alpha = draw.alpha

@@ -138,9 +138,6 @@ function buildNativeSecondaryPresentationPlan(
     target.alpha = options.alpha ?? actor.alpha
     target.atlas = atlas
     target.blend = options.blend ?? 'normal'
-    if (options.colorMode === undefined) {
-      if (target.colorMode !== undefined) delete target.colorMode
-    } else target.colorMode = options.colorMode
     target.entry = entry
     target.offset = options.offset ?? (
       scratch === null ? { x: 0, y: 0 } : ZERO_SECONDARY_DRAW_OFFSET

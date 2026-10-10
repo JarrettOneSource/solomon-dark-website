@@ -1041,9 +1041,8 @@ test('Storm and Leviathan normal, glow and hit outputs retain native RenderToSpr
       ['hit:leviathan-composite:1', { scale: 1, blend: 'add' }],
     ])
     const flash = descendants(root).find(child => child.label.startsWith('secondary:storm-weather-strike-flash:'))
-    assert.ok(flash, 'Storm strike flash must exercise the white-alpha filter')
-    assert.equal(flash.filters?.length, 1)
-    assert.equal(flash.filters?.[0]?.resolution, 'inherit')
+    assert.ok(flash, 'Storm strike flash must remain outside the genuine body target')
+    assert.equal(flash.filters?.length ?? 0, 0, 'native strike uses one sampled-texture pass')
     const outputs = descendants(root).filter(child => expected.has(child.label))
     assert.equal(outputs.length, 5)
     for (const output of outputs) {
@@ -1067,6 +1066,75 @@ test('Storm and Leviathan normal, glow and hit outputs retain native RenderToSpr
     view = undefined
     assert.equal(root.children.length, 0)
     assert.ok([...captures].every(target => target.destroyed))
+  } finally {
+    view?.destroy()
+    root.destroy({ children: true })
+    await server.close()
+  }
+})
+
+test('every retained Storm strike variant uses one native texture pass across fade and gate changes', async (t) => {
+  const server = await createServer({ appType: 'custom', logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)), server: { middlewareMode: true } })
+  const root = new Container({ sortableChildren: true })
+  let view: NativeSecondaryWorldView | undefined
+  const captures = new Set<RenderTexture>()
+  try {
+    const canvasProbe = t.mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
+    const module = await server.ssrLoadModule('/src/game/renderer/native-secondary-world-view.ts') as {
+      NativeSecondaryWorldView: typeof NativeSecondaryWorldView
+    }
+    canvasProbe.mock.restore()
+    const assets = await server.ssrLoadModule('/src/game/renderer/native-secondary-assets.ts') as
+      typeof import('./native-secondary-assets.ts')
+    const textures = { secondary: Object.fromEntries(assets.NATIVE_SECONDARY_SPRITE_RECORDS.map(record =>
+      [assets.nativeSecondarySpriteKey(record.atlas, record.entry), Texture.EMPTY])),
+    secondarySpecial: { etherPlane: Texture.EMPTY } } as unknown as PlayerWorldTextures
+    const renderer = { render(options: RenderOptions) {
+      assert.ok(options.target instanceof RenderTexture)
+      assert.equal(options.target.width, 256)
+      assert.equal(options.target.height, 256)
+      captures.add(options.target)
+    } } as Renderer
+    view = new module.NativeSecondaryWorldView(root, textures, renderer)
+    const descendants = (container: Container): Container[] =>
+      container.children.flatMap(child => [child, ...descendants(child)])
+    for (const variant of [0, 1]) for (const enhanced of [false, true]) {
+      let retained: Sprite | undefined
+      const source = { ...actor('storm-cloud'), ageTicks: 40, variant, enhanced, scale: .75,
+        painterRegistrations: [{ managerLane: 'transient' as const, registrationOrdinal: 1 }] }
+      const phase = drawNativeFloat(source.presentationRng!, 1, true).value * (variant === 1 ? 15 : 1)
+      for (const alpha of [0, .25, .8, 1]) for (const frame of [.9, 0, .2]) {
+        view.update({ actors: [{ ...source, alpha, frame }] }, source.worldKey, 40, () => 1, enhanced)
+        const flashes = descendants(root).filter(child => child.visible
+          && child.label.startsWith('secondary:storm-weather-strike-flash:'))
+        assert.equal(flashes.length, frame > 0 ? 1 : 0)
+        if (frame <= 0) continue
+        const flash = flashes[0]!
+        assert.ok(flash instanceof Sprite)
+        if (retained) assert.equal(flash, retained, 'flash gate/fade changes reuse its owned sprite')
+        retained = flash
+        assert.equal(flash.texture, textures.secondary['BadGuys:78'])
+        assert.equal(flash.filters?.length ?? 0, 0, 'no synthetic color/alpha target')
+        assert.equal(flash.blendMode, 'normal')
+        assert.equal(flash.tint, 0xffffff)
+        assert.equal(flash.alpha, alpha * .75)
+        const matrix = { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }
+        writeNativeRotationThenScaleMatrix(matrix, 40 * .0625 * phase * Math.PI / 180,
+          3, .75 * .8 * 4, 0, -175)
+        flash.updateLocalTransform()
+        for (const key of ['a', 'b', 'c', 'd', 'tx', 'ty'] as const) {
+          assert.ok(Math.abs(flash.localTransform[key] - matrix[key]) < 1e-9, key)
+        }
+      }
+      view.update({ actors: [] }, source.worldKey)
+      assert.equal(root.children.length, 0)
+      assert.ok(retained?.destroyed)
+      assert.ok([...captures].every(target => target.destroyed))
+    }
+    assert.equal(captures.size, 2, 'only the two stationary variants allocate genuine body targets')
+    view.destroy()
+    view = undefined
   } finally {
     view?.destroy()
     root.destroy({ children: true })
@@ -1980,7 +2048,7 @@ test('Enhanced moving Storm replays fifteen controls into thirty spline arcs and
   })
 })
 
-test('stationary Storm owns the exact three-pass render-target composite and white flash mask', () => {
+test('stationary Storm owns the exact three-pass body target and one-pass textured strike', () => {
   const source = {
     ...actor('storm-cloud'),
     ageTicks: 40,
@@ -2023,7 +2091,6 @@ test('stationary Storm owns the exact three-pass render-target composite and whi
   const flash = plan.draws.at(-1)!
   assert.deepEqual({
     alpha: flash.alpha,
-    colorMode: flash.colorMode,
     offset: flash.offset,
     role: flash.role,
     rotationRadians: flash.rotationRadians,
@@ -2031,7 +2098,6 @@ test('stationary Storm owns the exact three-pass render-target composite and whi
     scaleY: flash.scaleY,
   }, {
     alpha: 0.6000000000000001,
-    colorMode: 'alpha-mask',
     offset: { x: 0, y: -175 },
     role: 'storm-weather-strike-flash',
     rotationRadians: 40 * 0.0625 * phase * Math.PI / 180,

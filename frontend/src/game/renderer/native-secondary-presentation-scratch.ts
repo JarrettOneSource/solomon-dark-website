@@ -63,7 +63,6 @@ export class NativeSecondaryPresentationScratch {
   ): NativeSecondaryPresentationPlan {
     const draw = this.nextDraw()
     draw.atlas = 'BadGuys'
-    if (draw.colorMode !== undefined) delete draw.colorMode
     draw.offset = ZERO_SECONDARY_DRAW_OFFSET
     draw.scaleX = actor.scale
     draw.scaleY = actor.scale
@@ -140,7 +139,6 @@ export class NativeSecondaryPresentationScratch {
       draw.alpha = Math.max(0, 1 - actor.scale * actor.scale)
       draw.atlas = 'BadGuys'
       draw.blend = 'normal'
-      if (draw.colorMode !== undefined) delete draw.colorMode
       draw.entry = 63
       draw.offset = ZERO_SECONDARY_DRAW_OFFSET
       draw.role = 'storm-raindrop-ground'

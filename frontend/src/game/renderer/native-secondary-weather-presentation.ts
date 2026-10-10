@@ -112,7 +112,6 @@ export function stormAuxiliaryDraws(
   if (actor.frame > 0) {
     draws.push(draw('BadGuys', 78, {
       alpha: actor.alpha * 0.75,
-      colorMode: 'alpha-mask',
       offset: { x: 0, y: -175 },
       role: 'storm-weather-strike-flash',
       rotationRadians: degreesToRadians(actor.ageTicks * 0.0625 * phase),

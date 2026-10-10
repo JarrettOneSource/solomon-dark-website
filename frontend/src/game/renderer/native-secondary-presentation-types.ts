@@ -6,7 +6,6 @@ export interface NativeSecondarySpriteDraw {
   readonly alpha: number
   readonly atlas: NativeSecondaryAtlas
   readonly blend: 'add' | 'normal'
-  readonly colorMode?: 'alpha-mask' | 'texture'
   readonly entry: number
   readonly offset: Vector2
   readonly role: string
