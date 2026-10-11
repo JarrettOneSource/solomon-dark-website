@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
-import { tmpdir } from 'node:os'
+import { availableParallelism, freemem, totalmem, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { _electron as electron } from 'playwright-core'
@@ -17,6 +17,9 @@ const profiles = await mkdtemp(join(tmpdir(), 'solomon-darker-smoke-'))
 const running = new Set()
 const errors = []
 const receipts = { platform: process.platform, revision: manifest.revision }
+const startedAt = Date.now()
+const step = label => console.log(JSON.stringify({ step: label, elapsedMs: Date.now() - startedAt, cores: availableParallelism(), freeMemory: freemem(), totalMemory: totalmem() }))
+step('start')
 
 try {
   const solo = await launch('solo', join(profiles, 'solo'))
@@ -68,12 +71,15 @@ try {
   await host.page.getByRole('button', { name: 'Host game', exact: true }).click()
   await enterHub(host.page, 'Peer Host', 'Fire')
   console.log('Peer host entered Hub')
+  step('host process lookup start')
   const hostChild = await hostProcess(host.app)
+  step('host process lookup end')
   const invitation = await host.app.evaluate(({ Menu, clipboard }) => {
     const item = Menu.getApplicationMenu().items.find(row => row.label === 'Game').submenu.items.find(row => row.label === 'Copy multiplayer invite')
     item.click()
     return clipboard.readText()
   })
+  step('host invite copied')
   const guest = await launch('guest', join(profiles, 'guest'))
   await guest.page.getByLabel('Multiplayer invite').fill(invitation)
   await guest.page.getByRole('button', { name: 'Join game', exact: true }).click()
@@ -126,6 +132,7 @@ try {
 }
 
 async function launch(label, userData) {
+  step(`${label} launch start`)
   const app = await electron.launch({
     executablePath: executable,
     args: [
@@ -136,6 +143,7 @@ async function launch(label, userData) {
     env: { ...process.env, SDR_DESKTOP_USER_DATA: userData, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' },
     timeout: 30_000,
   })
+  step(`${label} launch connected`)
   app.process().stderr.on('data', chunk => process.stderr.write(`${label} main: ${chunk}`))
   app.context().setDefaultTimeout(30_000)
   const page = await app.firstWindow({ timeout: 30_000 })
@@ -222,9 +230,11 @@ async function readSave(page) {
 }
 
 async function hostProcess(application) {
+  step('child lookup start')
   const parent = await application.evaluate(() => process.pid)
   if (process.platform === 'win32') {
     const raw = execFileSync('powershell.exe', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "ParentProcessId=${parent}" | Select-Object ProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress`], { encoding: 'utf8' })
+    step('child lookup CIM complete')
     const value = JSON.parse(raw)
     const host = (Array.isArray(value) ? value : [value]).find(child => child.CommandLine?.includes('game-host.mjs'))
     assert.ok(host, 'the packaged app must own a separate Node host')
