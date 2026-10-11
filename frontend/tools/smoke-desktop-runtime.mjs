@@ -174,7 +174,7 @@ async function enterHub(page, name, element) {
 }
 
 async function readyHub(page) {
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 60_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 60_000 })
   await page.waitForFunction(() => {
     const canvas = document.querySelector('.hub-world-canvas')
     return canvas?.dataset.hubRegion === 'courtyard' && canvas?.dataset.transitionPhase === 'none'
@@ -194,8 +194,10 @@ async function move(page) {
   await page.locator('.hub-scene').focus()
   const before = (await hubFrame(page)).playerX
   await page.keyboard.down('d')
-  await delay(800)
-  await page.keyboard.up('d')
+  try {
+    // Software-rendered CI can run at 2 FPS; wait for movement, not a fixed key duration.
+    await page.waitForFunction(initial => document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.playerX > initial + 10, before, { timeout: 15_000 })
+  } finally { await page.keyboard.up('d') }
   await delay(200)
   const after = (await hubFrame(page)).playerX
   assert.ok(after > before + 10, JSON.stringify({ before, after }))
