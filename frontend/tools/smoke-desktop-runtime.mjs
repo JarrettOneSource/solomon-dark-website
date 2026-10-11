@@ -153,12 +153,14 @@ async function launch(label, userData) {
 }
 
 async function title(page) {
-  await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
+  const play = page.getByRole('button', { name: 'Play', exact: true })
   const tutorial = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  await play.or(tutorial).first().waitFor({ timeout: 90_000 })
   if (await tutorial.isVisible()) {
     await tutorial.getByRole('button', { name: 'NO', exact: true }).click()
     await tutorial.waitFor({ state: 'detached' })
   }
+  await play.waitFor({ timeout: 30_000 })
 }
 
 async function enterHub(page, name, element) {
