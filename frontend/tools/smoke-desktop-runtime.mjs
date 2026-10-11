@@ -147,6 +147,13 @@ async function launch(label, userData) {
   app.process().stderr.on('data', chunk => process.stderr.write(`${label} main: ${chunk}`))
   app.context().setDefaultTimeout(30_000)
   const page = await app.firstWindow({ timeout: 30_000 })
+  if (process.platform === 'win32') {
+    const gpuIds = await app.evaluate(({ app }) => app.getAppMetrics().filter(row => row.type === 'GPU').map(row => row.pid))
+    for (const gpuId of gpuIds) {
+      const result = execFileSync('powershell.exe', ['-NoProfile', '-Command', `$gpu = Get-Process -Id ${gpuId}; $gpu.ProcessorAffinity = 3; $gpu.ProcessorAffinity.ToInt64()`], { encoding: 'utf8' })
+      console.log(JSON.stringify({ label, gpuId, affinity: result.trim() }))
+    }
+  }
   const instance = { app, page, label }
   running.add(instance)
   page.on('requestfailed', request => process.stderr.write(`${label} request: ${request.url()} ${request.failure()?.errorText}\n`))
