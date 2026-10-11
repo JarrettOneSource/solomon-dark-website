@@ -137,7 +137,7 @@ async function launch(label, userData) {
     executablePath: executable,
     args: [
       '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle',
-      process.platform === 'win32' ? '--use-angle=d3d11-warp' : '--use-angle=swiftshader',
+      process.platform === 'win32' ? '--use-angle=warp' : '--use-angle=swiftshader',
       // Chromium's proxy applies to update checks too; loopback retains its native bypass.
       '--proxy-server=http://127.0.0.1:9',
     ],
