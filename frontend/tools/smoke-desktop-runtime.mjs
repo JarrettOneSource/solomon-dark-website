@@ -147,16 +147,6 @@ async function launch(label, userData) {
   app.process().stderr.on('data', chunk => process.stderr.write(`${label} main: ${chunk}`))
   app.context().setDefaultTimeout(30_000)
   const page = await app.firstWindow({ timeout: 30_000 })
-  if (process.platform === 'win32') {
-    console.log(JSON.stringify({ label, priority: await app.evaluate(({ app }) => {
-      const os = process.getBuiltinModule('os')
-      return app.getAppMetrics().filter(row => row.type === 'GPU').map(row => {
-        const before = os.getPriority(row.pid)
-        os.setPriority(row.pid, os.constants.priority.PRIORITY_NORMAL)
-        return { pid: row.pid, before, after: os.getPriority(row.pid) }
-      })
-    }) }))
-  }
   const instance = { app, page, label }
   running.add(instance)
   page.on('requestfailed', request => process.stderr.write(`${label} request: ${request.url()} ${request.failure()?.errorText}\n`))
