@@ -136,7 +136,8 @@ async function launch(label, userData) {
   const app = await electron.launch({
     executablePath: executable,
     args: [
-      '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--use-gl=angle',
+      '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle',
+      process.platform === 'win32' ? '--use-angle=warp' : '--use-angle=swiftshader',
       // Chromium's proxy applies to update checks too; loopback retains its native bypass.
       '--proxy-server=http://127.0.0.1:9',
     ],
