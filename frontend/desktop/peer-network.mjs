@@ -4,6 +4,7 @@ import { createServer as createTlsServer, connect as connectTls } from 'node:tls
 
 const TLS_OPTIONS = { minVersion: 'TLSv1.3', ciphers: 'TLS_AES_128_GCM_SHA256' }
 const CONNECT_TIMEOUT_MS = 8_000
+const trace = label => console.error(JSON.stringify({ time: Date.now(), network: process.pid, label }))
 
 export function createPeerInvite({ host, port, revision, secret }) {
   validateCapability({ host, port, revision, secret })
@@ -55,13 +56,14 @@ export async function startPeerHost({ authorityPort, port = 27843, secret, revis
     handshakeTimeout: CONNECT_TIMEOUT_MS,
     pskCallback: (_socket, identity) => identity === `sdr-v1:${revision}` ? key : null,
   }, socket => {
+    trace('host TLS accepted')
     trackSocket(sockets, socket)
     const authority = connectTcp(authorityPort, '127.0.0.1')
     trackSocket(sockets, authority)
     pipePair(socket, authority)
   })
   server.maxConnections = 32
-  server.on('connection', socket => trackSocket(sockets, socket))
+  server.on('connection', socket => { trace('host TCP accepted'); trackSocket(sockets, socket) })
   // Invalid keys and incomplete TLS handshakes belong to the connecting socket.
   server.on('tlsClientError', (_error, socket) => socket.destroy())
   await listen(server, port, '0.0.0.0')
@@ -70,8 +72,10 @@ export async function startPeerHost({ authorityPort, port = 27843, secret, revis
 
 /** Chromium keeps the shared WebSocket transport; Node owns TLS authentication. */
 export async function startPeerJoin({ invite: value, revision }) {
+  trace('join requested')
   const invite = parsePeerInvite(value, revision)
   const probe = await connectPeer(invite)
+  trace('join probe complete')
   probe.end()
   const sockets = new Set()
   const server = createTcpServer(local => {
@@ -94,6 +98,7 @@ export async function startPeerJoin({ invite: value, revision }) {
 }
 
 function peerSocket(invite) {
+  trace('TLS connect requested')
   const socket = connectTls({
     ...TLS_OPTIONS,
     host: invite.host,
@@ -102,6 +107,9 @@ function peerSocket(invite) {
     // TLS-PSK authenticates the random invite key instead of an X.509 name.
     checkServerIdentity: () => undefined,
   })
+  socket.on('connect', () => trace('TCP connected'))
+  socket.on('secureConnect', () => trace('TLS connected'))
+  socket.on('error', error => trace(`TLS error ${error.message}`))
   socket.setTimeout(CONNECT_TIMEOUT_MS, () => socket.destroy(new Error('Peer connection timed out.')))
   return socket
 }

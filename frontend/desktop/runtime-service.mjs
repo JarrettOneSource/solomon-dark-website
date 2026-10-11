@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 
 const READINESS_TIMEOUT_MS = 12_000
 const SHUTDOWN_TIMEOUT_MS = 3_000
 
 export async function startRuntimeService({ applicationRoot, entry, environment = {}, configuration, validate, onExit }) {
+  const trace = label => console.error(JSON.stringify({ time: Date.now(), parent: process.pid, entry: basename(entry), label }))
+  trace('service requested')
   const node = resolve(process.env.SDR_DESKTOP_NODE || join(applicationRoot, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node'))
   await Promise.all([access(node), access(entry)])
   const child = spawn(node, [entry], {
@@ -16,11 +18,15 @@ export async function startRuntimeService({ applicationRoot, entry, environment 
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   })
+  trace(`spawn returned pid ${child.pid}`)
+  child.once('spawn', () => trace('spawn event'))
+  child.stderr.on('data', chunk => console.error(`service ${child.pid}: ${chunk}`))
   let stopping = false
   try {
     const readiness = hostReadiness(child, validate)
-    if (configuration !== undefined) child.send(configuration)
+    if (configuration !== undefined) child.send(configuration, error => trace(`IPC sent ${error?.message || 'ok'}`))
     const ready = await readiness
+    trace('ready received')
     child.once('exit', (code, signal) => { if (!stopping) onExit(code ?? signal) })
     return {
       ready,
