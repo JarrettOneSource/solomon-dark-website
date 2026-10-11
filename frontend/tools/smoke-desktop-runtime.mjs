@@ -57,6 +57,7 @@ try {
   assert.ok(restored.playerX > movement.before + 10, JSON.stringify({ restored, movement }))
   await resumed.page.screenshot({ path: join(evidence, 'resumed.png') })
   receipts.updatePrompt = await proveUpdatePrompt(resumed)
+  console.log('Offline save resumed; update prompt dismissed')
   receipts.offline = { movement, savedPosition: save.position, resumedX: restored.playerX, origin: runtime.origin, bundledHostExited: true, updateCheckFailedWithoutBlockingPlay: true }
   await close(resumed)
 
@@ -66,6 +67,7 @@ try {
   await host.page.getByLabel('TCP port').fill(String(port))
   await host.page.getByRole('button', { name: 'Host game', exact: true }).click()
   await enterHub(host.page, 'Peer Host', 'Fire')
+  console.log('Peer host entered Hub')
   const hostChild = await hostProcess(host.app)
   const invitation = await host.app.evaluate(({ Menu, clipboard }) => {
     const item = Menu.getApplicationMenu().items.find(row => row.label === 'Game').submenu.items.find(row => row.label === 'Copy multiplayer invite')
@@ -76,6 +78,7 @@ try {
   await guest.page.getByLabel('Multiplayer invite').fill(invitation)
   await guest.page.getByRole('button', { name: 'Join game', exact: true }).click()
   await enterHub(guest.page, 'Peer Guest', 'Air')
+  console.log('Peer guest entered Hub')
   for (const player of [host, guest]) {
     await player.page.waitForFunction(() => document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.playerCount === 2)
   }
@@ -94,6 +97,7 @@ try {
   await host.page.screenshot({ path: join(evidence, 'peer-host-boneyard.png') })
   await guest.page.screenshot({ path: join(evidence, 'peer-guest-boneyard.png') })
   receipts.peer = { hostPlayer: hostHub.localPlayerId, guestPlayer: guestHub.localPlayerId, guestMovement, sharedBoneyardPlayers: 2 }
+  console.log('Both peers entered the Boneyard')
   await close(guest)
   await close(host)
   await waitForExit(hostChild.pid)
@@ -133,6 +137,7 @@ async function launch(label, userData) {
     timeout: 30_000,
   })
   app.process().stderr.on('data', chunk => process.stderr.write(`${label} main: ${chunk}`))
+  app.context().setDefaultTimeout(30_000)
   const page = await app.firstWindow({ timeout: 30_000 })
   const instance = { app, page, label }
   running.add(instance)
@@ -260,7 +265,13 @@ async function proveUpdatePrompt(instance) {
 }
 
 async function close(instance) {
-  await instance.app.close()
+  let timeout
+  try {
+    await Promise.race([
+      instance.app.close(),
+      new Promise((_resolve, reject) => { timeout = setTimeout(() => reject(new Error(`${instance.label} did not close after saving.`)), 30_000) }),
+    ])
+  } finally { clearTimeout(timeout) }
   running.delete(instance)
 }
 
