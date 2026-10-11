@@ -23,7 +23,7 @@ export async function inspectNativeUnforge(reference) {
       view.update(gpu.application.renderer, tick, 1, 256, 256)
       const actual = gpu.application.renderer.extract.pixels({ target: captured }).pixels
       const expected = referenceCapture(records, tick)
-      samples.push({ tick, ...compare(actual, expected), visiblePixels: alphaPixels(actual) })
+      samples.push({ tick, ...compare(actual, expected), visiblePixels: alphaPixels(actual), unmaskedEdgePixels: unmaskedEdgePixels(records, actual) })
     }
     const final = []
     for (const [tick, reveal] of [[0, 1], [90, 1], [270, 1], [8, 0.5], [432, 0]]) {
@@ -52,7 +52,7 @@ export async function inspectNativeUnforge(reference) {
   }
 }
 
-// Independent stock program: integer scissor, two normal image draws and
+// Independent stock program: D3D9 integer pixel centers and scissor, two normal image draws and
 // ZERO/SRCCOLOR mask. Each D3D target write rounds to its eight-bit channels.
 function referenceCapture(records, tick) {
   const output = new Uint8Array(256 * 256 * 4)
@@ -60,10 +60,10 @@ function referenceCapture(records, tick) {
   for (let y = 109; y < 148; y += 1) for (let x = 103; x < 154; x += 1) {
     let pixel = [0, 0, 0, 0]
     for (const centerY of [128 - scroll, 182 - scroll]) {
-      const source = recordPixel(records['77'], x + 0.5, y + 0.5, 128, centerY)
+      const source = recordPixel(records['77'], x, y, 128, centerY)
       if (source) pixel = blend(pixel, source)
     }
-    const mask = recordPixel(records['76'], x + 0.5, y + 0.5, 128, 128)
+    const mask = recordPixel(records['76'], x, y, 128, 128)
     if (mask) pixel = pixel.map((value, channel) => Math.round(value * mask[channel]))
     output.set(pixel, (y * 256 + x) * 4)
   }
@@ -128,5 +128,15 @@ function compare(actual, expected) {
 function alphaPixels(pixels) {
   let count = 0
   for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset]) count += 1
+  return count
+}
+
+function unmaskedEdgePixels(records, pixels) {
+  let count = 0
+  for (let y = 109; y < 148; y += 1) for (let x = 103; x < 154; x += 1) {
+    if (x !== 103 && x !== 153 && y !== 109 && y !== 147) continue
+    const mask = recordPixel(records['76'], x, y, 128, 128)
+    if (Math.round((mask?.[3] ?? 0) * 255) === 0 && pixels[(y * 256 + x) * 4 + 3] > 2) count += 1
+  }
   return count
 }

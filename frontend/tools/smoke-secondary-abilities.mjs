@@ -62,6 +62,7 @@ const retainNativeViewport = process.env.SDR_SECONDARY_ABILITY_NATIVE_VIEWPORT =
 const cooldownOnly = process.env.SDR_SECONDARY_COOLDOWN_ONLY === '1'
 const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
 const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === '1'
+const golemReplacement = process.env.SDR_SECONDARY_GOLEM_REPLACEMENT === '1'
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 const primaryOverlap = process.env.SDR_SECONDARY_PRIMARY_OVERLAP === '1'
 const staffOverlap = process.env.SDR_SECONDARY_STAFF_OVERLAP === '1'
@@ -163,7 +164,7 @@ const host = await startGameHost({
 const browser = await chromium.launch({
   args: ['--autoplay-policy=no-user-gesture-required'],
   executablePath: chromePath,
-  headless: true,
+  headless: process.env.SDR_SECONDARY_ABILITY_HEADLESS !== '0',
 })
 const pageErrors = []
 const consoleErrors = []
@@ -998,9 +999,13 @@ try {
     const shieldLifecycle = contract.skillId === 54
       ? await captureMagicShieldLifecycle(page, host, playerId, events[0].worldKey)
       : null
+    const golemReplacementLifecycle = golemReplacement && contract.skillId === 45
+      ? await captureGolemReplacement(page, host, playerId, target, baseEquipment)
+      : null
     receipts.push({
       audio: proof.audio,
       golemAssemblyAudio,
+      golemReplacementLifecycle,
       cooldownAtCast,
       cooldownPath,
       cooldownTiming,
@@ -1863,6 +1868,82 @@ async function castSecondGolem(page, host, playerId, target) {
     }
   }
   throw new Error('Fete of Clay rejected every collision-clear second-summon attempt')
+}
+
+async function captureGolemReplacement(page, host, playerId, target, baseEquipment) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  // Keep the combat scene alive, but remove incoming damage from this identity proof.
+  const origin = getPlayerCharacter(state, playerId).position
+  Object.assign(state, { world: { ...state.world, enemies: {
+    ...state.world.enemies,
+    actors: state.world.enemies.actors.map((actor) => ({
+      ...actor, position: { x: origin.x + 10_000, y: origin.y + 10_000 },
+      nextMovementTick: state.tick + 1_000_000,
+      nextTargetRefreshTick: state.tick + 1_000_000,
+    })),
+    projectiles: [],
+  } } })
+  const actors = () => host.state().secondaryAbilities.actors
+    .filter(({ kind, ownerId }) => kind === 'golem' && ownerId === playerId)
+    .sort((a, b) => a.id - b.id)
+    .map(({ id, golem }) => ({ id, currentHealth: golem.currentHealth, maximumHealth: golem.maximumHealth }))
+  const rows = () => page.locator('[data-ally-kind="golem"]').evaluateAll(nodes => nodes.map(node => {
+    const track = node.querySelector('.hub-hud-ally-bar')
+    const fill = node.querySelector('.hub-hud-ally-bar-fill')
+    const scale = track.getBoundingClientRect().width / track.offsetWidth
+    return { id: node.dataset.allyId, ratio: Number(node.dataset.healthRatio),
+      renderedRatio: fill.getBoundingClientRect().width / (track.clientWidth * scale) }
+  }))
+  const waitForRows = async expected => {
+    await page.waitForFunction(expectedRows => {
+      const actual = [...document.querySelectorAll('[data-ally-kind="golem"]')]
+      return actual.length === expectedRows.length && actual.every((node, index) => {
+        const expected = expectedRows[index]
+        const track = node.querySelector('.hub-hud-ally-bar')
+        const fill = node.querySelector('.hub-hud-ally-bar-fill')
+        const scale = track.getBoundingClientRect().width / track.offsetWidth
+        const renderedRatio = fill.getBoundingClientRect().width / (track.clientWidth * scale)
+        return node.dataset.allyId === expected.id && Number(node.dataset.healthRatio) === expected.ratio
+          && Math.abs(renderedRatio - expected.ratio) < 0.002
+      })
+    }, expected.map(actor => ({ id: `golem:${actor.id}`, ratio: actor.currentHealth / actor.maximumHealth })))
+  }
+  const receipts = []
+  for (const maximumGolem of [true, false]) {
+    const fixture = host.state()
+    if (!maximumGolem) {
+      const economy = playerEconomy(host, playerId)
+      Object.assign(fixture, { playerEntities: replacePlayerEconomy(fixture.playerEntities, playerId, {
+        ...economy, equipment: structuredClone(baseEquipment), revision: economy.revision + 1,
+      }) })
+    }
+    const originals = actors()
+    assert.equal(originals.length, 2)
+    const [retired, survivor] = originals
+    Object.assign(fixture, { secondaryAbilities: { ...fixture.secondaryAbilities,
+      actors: fixture.secondaryAbilities.actors.map(actor => originals.some(({ id }) => id === actor.id)
+        ? { ...actor, golem: { ...actor.golem, currentHealth: Math.fround(actor.golem.maximumHealth
+          * (actor.id === retired.id ? 0.2 : 0.8)) } } : actor),
+    } })
+    const before = actors()
+    await waitForRows(before)
+    const beforeRows = await rows()
+    await page.screenshot({ path: `${screenshotRoot}/45-replacement-${maximumGolem}-before.png` })
+    await castSecondGolem(page, host, playerId, target)
+    await waitUntil(() => !actors().some(({ id }) => id === retired.id), 'Lowest-health Golem did not retire')
+    const after = actors()
+    const retained = after.find(({ id }) => id === survivor.id)
+    assert.deepEqual(retained, before.find(({ id }) => id === survivor.id), 'A surviving Golem changed health on replacement')
+    const replacement = after.find(({ id }) => !originals.some(actor => actor.id === id))
+    assert.ok(replacement)
+    assert.equal(replacement.currentHealth, replacement.maximumHealth)
+    await waitForRows(after)
+    const afterRows = await rows()
+    await page.screenshot({ path: `${screenshotRoot}/45-replacement-${maximumGolem}-after.png` })
+    receipts.push({ maximumGolem, before, after, beforeRows, afterRows })
+  }
+  return receipts
 }
 
 function maximumSetReceipt(state, playerId, skillId) {

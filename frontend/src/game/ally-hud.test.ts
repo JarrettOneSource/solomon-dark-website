@@ -255,6 +255,21 @@ test('ally HUD derives every live in-world Golem row in stable actor order', () 
   ])
 })
 
+test('Golem replacement reorders actor-bound rows without healing the survivor', () => {
+  const actor = (id: number, currentHealth: number) => ({
+    golem: { currentHealth, maximumHealth: 100 }, id, kind: 'golem' as const, worldKey: 'boneyard:run',
+  })
+  const before = deriveGolemAllyHudRows([actor(1, 20), actor(2, 80)], 'boneyard:run')
+  const after = deriveGolemAllyHudRows([actor(2, 80), actor(3, 100)], 'boneyard:run')
+  assert.deepEqual(before.map(({ id, healthRatio }) => ({ id, healthRatio })), [
+    { id: 'golem:1', healthRatio: 0.2 }, { id: 'golem:2', healthRatio: 0.8 },
+  ])
+  assert.deepEqual(after.map(({ id, healthRatio }) => ({ id, healthRatio })), [
+    { id: 'golem:2', healthRatio: 0.8 }, { id: 'golem:3', healthRatio: 1 },
+  ])
+  assert.equal(before[1]!.healthRatio, after[0]!.healthRatio)
+})
+
 test('ally HUD clamps ratios without smoothing and compares semantic rows', () => {
   assert.equal(clampAllyHudHealthRatio(-1), 0)
   assert.equal(clampAllyHudHealthRatio(0.375), 0.375)

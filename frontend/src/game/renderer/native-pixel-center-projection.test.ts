@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { WebGLRenderer } from 'pixi.js'
+import type { TextureSource, WebGLRenderer } from 'pixi.js'
 import { installNativePixelCenterProjection } from './native-pixel-center-projection.ts'
 
 interface Target {
@@ -90,4 +90,34 @@ test('native projection uses current target dimensions after resize and isolates
   installNativePixelCenterProjection(second.renderer)
   second.system.bind(target)
   assert.deepEqual(first.system.projectionMatrix, second.system.projectionMatrix)
+})
+
+test('a native offscreen source cannot shift its UI canvas or unrelated targets', () => {
+  const { system, renderer } = fixture()
+  const capture = { width: 256, height: 256, isRoot: false, colorTexture: { resolution: 1 } }
+  const canvas = { width: 1600, height: 900, isRoot: true, colorTexture: { resolution: 1 } }
+  const unrelated = { ...capture, colorTexture: { resolution: 1 } }
+  installNativePixelCenterProjection(renderer, capture.colorTexture as TextureSource)
+  for (const target of [canvas, capture, unrelated, capture, canvas]) {
+    system.bind(target)
+    assert.equal(system.projectionMatrix.tx, target === capture ? -1 + 1 / 256 : -1)
+    assert.equal(system.projectionMatrix.ty, target === capture ? -1 + 1 / 256 : target.isRoot ? 1 : -1)
+  }
+})
+
+test('source registration survives target recreation and composes with all-target world projection', () => {
+  const { system, renderer } = fixture()
+  const first = { width: 256, height: 256, isRoot: false, colorTexture: { resolution: 1 } }
+  const second = { width: 512, height: 512, isRoot: false, colorTexture: { resolution: 2 } }
+  const canvas = { width: 1600, height: 900, isRoot: true, colorTexture: { resolution: 1 } }
+  for (const target of [first, second, first]) installNativePixelCenterProjection(renderer, target.colorTexture as TextureSource)
+  for (const target of [first, second, { ...first }, canvas]) {
+    system.bind(target)
+    assert.equal(system.projectionMatrix.tx, target === canvas ? -1 : -1 + 1 / target.width)
+  }
+  installNativePixelCenterProjection(renderer)
+  for (const target of [canvas, first, second, canvas]) {
+    system.bind(target)
+    assert.equal(system.projectionMatrix.tx, -1 + 1 / target.width)
+  }
 })

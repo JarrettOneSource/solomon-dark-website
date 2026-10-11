@@ -767,3 +767,115 @@ Publication is gated by the unchanged `scripts/validate.sh` and actual built
 member checks on the final source; delivery uses the maintained main worker.
 Report22's bag behavior and renewed decision hold remain separate. Completing
 Report67 does not authorize a reaction on their shared source message.
+
+## 2026-10-11 — Unforge intermediate raster-center reopening
+
+The fresh anvil-alignment report reopens the presentation-only target program.
+The unchanged UI75/76/77 assets are correctly extracted. The previously accepted
+GPU oracle repeated the browser's sample-center assumption instead of the
+native raster contract, so its agreement did not prove native clip/mask coverage.
+The transaction, input sink, eligibility, rewards and permanent bonuses remain
+outside this correction.
+
+### Evidence and recovered cause
+
+On exact Website `8a14b6694506d8a9eb39e750fd0bb4d4c46235a6`, a real Mac Chrome
+154 diagnostic reproduces the reported L-shaped raw-fire edge. The target clip
+is the recovered integer rectangle `(103,109,51,39)`, while centered UI76's
+51-by-39 quad terminates at `(153.5,147.5)`. The UI WebGL renderer uses half-integer
+fragment centers. Its last scissored column and row therefore sample exactly
+at the mask quad's excluded far edge: all 39 column-153 pixels and all 51
+row-147 pixels retain fully opaque, unmasked UI77 fire at application tick zero.
+
+The native raster contract is already recovered in entry 090: fractional XYZ
+sprite vertices, native `0x00440890` orthographic projection without a compensating
+half-pixel term, and D3D9 integer pixel centers. Applying the existing native
+pixel-center projection to the isolated diagnostic makes the complete UI76 quad
+cover its native scissor: 33 of the 39 right-edge pixels and 24 of the 51 bottom
+pixels become transparent; the remaining pixels follow the authored silhouette.
+This removes the rectangular edge without changing any asset, authored position,
+clip dimension, UV, animation clock, blend equation or target quad bias.
+
+The oracle's `referenceCapture` passed `x+0.5,y+0.5` to its strict-boundary
+`recordPixel` sampler. That excluded the mask at the same pixels as the port.
+The corrected independent capture oracle must use integer native raster samples;
+its final composition continues to model the existing browser UI surface.
+This is a target-local pixel contract, not permission to change every UI canvas.
+
+### System boundary and complete reopening inventory
+
+| Member | Recovered disposition before port | Acceptance requirement |
+| --- | --- | --- |
+| UI77 first and second image; all 55 phases and wrap | recovered-pending-port | Native integer-sample RGBA oracle at every phase, authored one-pixel image overlap retained |
+| UI76 ZERO/SRCCOLOR multiplication and `(103,109,51,39)` scissor | recovered-pending-port | Full masked silhouette; no raw-fire row/column at transparent mask edges |
+| Target bind, repeated bind, reset and destruction | recovered-pending-port | Opt in only the owned RenderTexture source; preserve current resolution and orientation; no accumulating shift or retained strong target reference |
+| UI75 pulse and completed target composition | verified-already-at-parity contract; pixel regression pending | Marker/reveal comparisons, native target half-pixel quad bias, unchanged screen-space geometry |
+| Hub/Boneyard standalone and Hagatha/Fomentius/Luthacus/Shlorio companions, Shlorio before/after Dowsing | shared recovered-pending-port | Existing full owner membership plus actual inventory visual acceptance |
+| Paused world, reveal, resized viewport, Sack depth, selection, drag, confirmation/result and overlay states | shared recovered-pending-port | Same application-clock target; no scene/state branch introduced |
+| World renderers already using native pixel projection | verified-already-at-parity contract; negative regression pending | Existing all-target installation stays idempotent and unchanged |
+| Other UI root and offscreen targets | out-of-system, negative regression required | No projection shift from registering the Unforge target; sentinel rendering and bind/state restoration |
+| Fire helper/core flame bank, input/transactions and reward state | out-of-system | No source or behavioral changes |
+
+The implementation belongs in the existing pixel-center projection owner with
+source-qualified registration, requested by NativeUnforgeTargetView for its own
+capture. The UI canvas and unrelated targets must not inherit the correction.
+A source-qualified registration remains valid through a GPU context reset and
+uses a weak source reference so target teardown does not create a new lifetime.
+Meaningful expected-red scoped-projection tests and the corrected GPU oracle
+precede the runtime change. Final parity remains pending focused checks, the
+complete canonical Mac gate, and headed built-game member acceptance.
+
+### Focused implementation and Mac acceptance receipt
+
+The source-qualified projection is now implemented in the existing projection
+owner, registered only for `NativeUnforgeTargetView.target.source`. Its weak
+source set survives target-wrapper reconstruction without retaining the texture;
+repeated registration and binds cannot accumulate a shift. Existing world
+callers still request the original all-target behavior. No authored asset,
+animation, blend factor, scissor, screen position, transaction or reward changed.
+
+The independent native oracle was corrected before the candidate GPU run. A
+task-only Vite transform removed the new registration to exercise the original
+port against that corrected oracle: 56 captures failed with 183,286 channel
+differences above tolerance and 3,136 opaque pixels on authored transparent mask
+edges. This is a meaningful expected red, rather than comparison with the old
+WebGL-center oracle. Seven focused unit expectations also failed before the
+runtime edits (five DOM frame families and two source-scope contracts).
+
+On M2, headed installed Mac Chrome then passed the corrected GPU oracle at all
+55 image-scroll phases plus wrap: zero channels differed above the two-byte
+rounding tolerance, maximum capture error was one byte, and all 56 captures had
+zero unmasked edge pixels. Five final UI75/target composites covered pulse,
+partial reveal and hidden state, with maximum errors of 1/1/1/2/0 and zero
+above-tolerance differences. The unrelated sentinel stayed exact; retained
+target, target destruction and borrowed-texture lifetime checks passed. Browser
+console, page, request and HTTP error arrays were empty. Target-wrapper reset is
+unit-covered; no forced GPU context-loss experiment is claimed.
+
+The isolated Website clone based on `8a14b669` built successfully at
+2026-10-11 04:34 UTC. Headed production journeys then passed:
+
+- `smoke-inventory-skill-book.mjs --headed` in production mode: Hub standalone,
+  resized Hub (1200x700), and paused Boneyard after Skills all retained animated
+  Unforge, with Inventory/Skills overlap, potion use and restored input checks.
+- `smoke-hub-traders.mjs --headed` in production/single-client mode: standalone
+  Inventory, all four companion owners, Shlorio before and after Dowsing,
+  Inventory after service changes, and inert target clicks yielded nine painted
+  animation receipts. Selection, held item, cancel, destruction, result dialog,
+  and `unforge.wav` checks passed. No browser, request, HTTP or aborted-request
+  errors were recorded.
+- The shared native-UI suite passed 155 tests, renderer suite passed 273 tests,
+  and the combined focused frame/projection/target suite passed 13 tests.
+
+Evidence is retained under the task's `art-evidence` directory:
+`unforge-native-oracle-red.log`, `unforge-native-oracle-green.log`,
+`expected-red-tests.log`, `focused-green-tests.log`, `native-ui-contracts.log`,
+`arena-render-contracts.log`, `built-inventory-book.log`, `built-traders.log`,
+and the `book-*`/`trader-*` production screenshots. Visually inspected Hub
+Inventory and the Unforge result preserve the authored anvil silhouette without
+the reported raw-fire rectangle.
+
+All recovered-pending-port members above are now ported and focused-verified;
+the unchanged marker/world contracts and unrelated-target negative checks pass.
+The full canonical Mac gate and final integrated acceptance remain the
+integration owner's separate closure requirement, not a claim of this receipt.

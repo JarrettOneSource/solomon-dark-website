@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react'
+import { useId, type CSSProperties } from 'react'
 
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
+import { nativeUiTintMatrix } from './native-ui-tint.ts'
 import {
   nativeUiAtlas,
   nativeUiRecord,
@@ -29,8 +30,6 @@ interface SlicePiece {
   readonly width: number
 }
 
-const MIRROR_SHIFT = 1
-
 /** DOM projection of the stock `FUN_00417760` mirrored nine-slice helper. */
 export default function NativeUiNineSlice({
   atlas,
@@ -43,6 +42,7 @@ export default function NativeUiNineSlice({
   style,
   width,
 }: NativeUiNineSliceProps) {
+  const tintFilterId = useId()
   if (edgeUvOrigin <= 0 || edgeUvOrigin >= 1) {
     throw new RangeError('native UI nine-slice edge origin must be within (0, 1)')
   }
@@ -53,9 +53,9 @@ export default function NativeUiNineSlice({
   }
   const atlasDefinition = nativeUiAtlas(atlas)
   const source = `url("${nativeUiAtlasSource(atlas)}")`
-  const tint = multiplyTint === undefined
+  const tintMatrix = multiplyTint === undefined
     ? null
-    : `#${multiplyTint.toString(16).padStart(6, '0')}`
+    : nativeUiTintMatrix(multiplyTint)
   const edgeWidth = cornerWidth * (1 - edgeUvOrigin)
   const edgeHeight = cornerHeight * (1 - edgeUvOrigin)
   const pieces = nineSlicePieces(cornerWidth, cornerHeight, width, height, fill)
@@ -67,6 +67,7 @@ export default function NativeUiNineSlice({
       data-native-ui-nine-slice={`${atlas}.${record}`}
       style={{
         display: 'block',
+        filter: tintMatrix === null ? undefined : `url(#${tintFilterId})`,
         height,
         overflow: 'hidden',
         pointerEvents: 'none',
@@ -75,6 +76,15 @@ export default function NativeUiNineSlice({
         ...style,
       }}
     >
+      {tintMatrix === null ? null : (
+        <svg width="0" height="0" focusable="false" style={{ position: 'absolute' }}>
+          <defs>
+            <filter id={tintFilterId} colorInterpolationFilters="sRGB">
+              <feColorMatrix type="matrix" values={tintMatrix.join(' ')} />
+            </filter>
+          </defs>
+        </svg>
+      )}
       {pieces.map((piece, index) => {
         if (piece.width <= 0 || piece.height <= 0) return null
         let backgroundSize = `${atlasDefinition.dimensions[0]}px ${atlasDefinition.dimensions[1]}px`
@@ -97,28 +107,17 @@ export default function NativeUiNineSlice({
           <i
             key={index}
             style={{
-              backgroundBlendMode: tint === null ? undefined : 'multiply',
-              backgroundImage: tint === null
-                ? source
-                : `linear-gradient(${tint}, ${tint}), ${source}`,
+              backgroundImage: source,
               backgroundPosition,
               backgroundRepeat: 'no-repeat',
               backgroundSize,
               display: 'block',
               height: piece.height,
               left: piece.left,
-              maskImage: tint === null ? undefined : source,
-              maskPosition: tint === null ? undefined : backgroundPosition,
-              maskRepeat: tint === null ? undefined : 'no-repeat',
-              maskSize: tint === null ? undefined : backgroundSize,
               position: 'absolute',
               top: piece.top,
               transform: `scale(${piece.mirrorX ? -1 : 1}, ${piece.mirrorY ? -1 : 1})`,
               transformOrigin: 'center',
-              WebkitMaskImage: tint === null ? undefined : source,
-              WebkitMaskPosition: tint === null ? undefined : backgroundPosition,
-              WebkitMaskRepeat: tint === null ? undefined : 'no-repeat',
-              WebkitMaskSize: tint === null ? undefined : backgroundSize,
               width: piece.width,
             }}
           />
@@ -137,8 +136,8 @@ function nineSlicePieces(
 ): readonly SlicePiece[] {
   const innerWidth = width - cornerWidth * 2
   const innerHeight = height - cornerHeight * 2
-  const right = width - cornerWidth + MIRROR_SHIFT
-  const bottom = height - cornerHeight + MIRROR_SHIFT
+  const right = width - cornerWidth
+  const bottom = height - cornerHeight
   return [
     { height: cornerHeight, kind: 'corner', left: 0, mirrorX: false, mirrorY: false, top: 0, width: cornerWidth },
     { height: cornerHeight, kind: 'corner', left: right, mirrorX: true, mirrorY: false, top: 0, width: cornerWidth },

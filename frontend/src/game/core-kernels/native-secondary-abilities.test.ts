@@ -3748,6 +3748,48 @@ test('Fete of Clay, not Iron Golem, owns the two-summon cap', () => {
   assert.equal(evictionState.actors.some(({ id }) => id === highId), true)
 })
 
+test('replacing a wounded Golem preserves the surviving actor health with and without Fete of Clay', () => {
+  let state = createNativeSecondarySimulation(77)
+  for (const [tick, slot] of [[1, 0], [2, null], [3, 0]] as const) {
+    if (tick === 3) state = finishCommonCastGate(state)
+    const tickContext = context(45, tick, slot)
+    state = stepNativeSecondaryAbilities(state, {
+      ...tickContext,
+      players: { player: { ...tickContext.players.player!, maximumGolem: true } },
+    }).state
+  }
+  const originals = state.actors.filter(({ kind }) => kind === 'golem')
+  assert.equal(originals.length, 2)
+  const [retired, survivor] = originals
+  const survivorHealth = Math.fround(survivor!.golem!.maximumHealth * 0.8)
+  const wounded: NativeSecondarySimulationState = {
+    ...state,
+    actors: state.actors.map((actor) => actor.kind === 'golem'
+      ? { ...actor, golem: { ...actor.golem!, currentHealth: actor.id === retired!.id
+        ? Math.fround(actor.golem!.maximumHealth * 0.2) : survivorHealth } }
+      : actor),
+  }
+  for (const maximumGolem of [true, false]) {
+    let replacement = wounded
+    for (const [tick, slot] of [[4, null], [5, 0]] as const) {
+      if (tick === 5) replacement = finishCommonCastGate(replacement)
+      const tickContext = context(45, tick, slot)
+      replacement = stepNativeSecondaryAbilities(replacement, {
+        ...tickContext,
+        players: { player: { ...tickContext.players.player!, maximumGolem } },
+      }).state
+    }
+    const live = replacement.actors.filter(({ kind }) => kind === 'golem')
+    assert.equal(live.some(({ id }) => id === retired!.id), false)
+    const survivingActor = live.find(({ id }) => id === survivor!.id)!
+    assert.equal(survivingActor.golem!.currentHealth, survivorHealth)
+    assert.equal(survivingActor.golem!.maximumHealth, survivor!.golem!.maximumHealth)
+    const newActor = live.find(({ id }) => !originals.some((actor) => actor.id === id))!
+    assert.ok(newActor)
+    assert.equal(newActor.golem!.currentHealth, newActor.golem!.maximumHealth)
+  }
+})
+
 test('Golem terminal damage owns the exact four-cue death sequence', () => {
   let state = cast(45).state
   for (let tick = 2; tick <= 401; tick += 1) {

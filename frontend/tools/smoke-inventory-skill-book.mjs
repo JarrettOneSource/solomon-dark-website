@@ -25,7 +25,7 @@ const screenshotRoot = process.env.SDR_GAME_BOOK_SMOKE_SCREENSHOT_ROOT
 const mobile = process.env.SDR_GAME_BOOK_SMOKE_MOBILE === '1'
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
-  headless: true,
+  headless: !process.argv.includes('--headed'),
 })
 const page = await browser.newPage({
   ...(mobile ? { hasTouch: true, isMobile: true } : {}),

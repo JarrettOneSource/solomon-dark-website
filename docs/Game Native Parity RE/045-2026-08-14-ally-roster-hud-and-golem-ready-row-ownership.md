@@ -212,3 +212,71 @@ Remaining boundary: Website combat vitals and the Golem simulation still do
 not exist. When they land, their authoritative producers must supply the row
 ratio and lifecycle through this seam. No support is claimed for Leviathan,
 Good Imp, or multiple-Golem ordering without new native evidence.
+
+## 2026-10-11 — Report 109: Golem replacement identity check
+
+The new source is Discord message `1558638384904278106`, posted at
+`2026-10-11T00:32:29.062Z`, with the preserved 15.012867-second
+`Double_Golem_Health_Glitch.mp4` attachment. It reports both displayed Golem
+bars increasing after a resummon. Frames around 11.5 and 14 seconds show a
+roughly 20% / 80% roster becoming roughly 80% / 100%. These images alone do
+not identify the actors or prove that the surviving actor healed.
+
+The bounded system includes the Raise Golem cap/lowest-health retirement,
+new-actor full-health construction, equipment removal while actors persist,
+authoritative actor IDs/current/max HP, replicated roster ordering, and DOM
+row identity. Native provenance remains the exact retail PE recorded above;
+the recovered Fete of Clay contract is in ledger 084. Current source case 45
+retires the lowest-health eligible actor before creating a new full-health
+actor. `deriveGolemAllyHudRows` sorts the surviving live IDs and derives each
+ratio directly from that actor's current/max HP. Thus row positions can both
+rise when the old first actor disappears, without any surviving HP increase.
+
+Before any gameplay correction, regressions now track both old actor IDs and
+both health values through replacement, with the set retained and removed,
+and separately prove the resulting `[old second, new actor]` roster mapping.
+A real built-browser cast with host and DOM identities is still required to
+qualify the submitted visual report. This entry does not close the report or
+change Golem behavior; native cap-removal semantics remain a separate question
+if a controlled reproduction exposes a mismatch.
+
+### Controlled actor/HUD outcome
+
+The maintained `smoke-secondary-abilities.mjs` journey now has an opt-in
+`SDR_SECONDARY_GOLEM_REPLACEMENT=1` identity proof and an explicit headed
+browser option. It first earns two assembled Golems through actual casts,
+then isolates incoming damage for the replacement observation, records both
+authoritative actors and their rendered `data-ally-id`/health ratios, casts
+again through normal pointer input, and repeats after removing the set.
+The fixture changes health and equipment only on its task-owned standalone
+host; it does not write a production save or alter runtime Golem behavior.
+
+On 2026-10-11, built headed Mac Chrome 154.0.8037.98/WebGL2 passed:
+
+- Set equipped: actors `1:40/200` and `98:160/200` became
+  `98:160/200` and new actor `197:200/200`.
+- Set removed: actors `98:40/200` and `197:160/200` became
+  `197:160/200` and new actor `294:100/100`.
+- Both rendered row lists changed from `[20%,80%]` to `[80%,100%]`, with
+  DOM row IDs matching those authoritative actor IDs exactly. The survivor's
+  current and maximum health remained byte-for-byte equal in each case.
+- Page, console and failed-response arrays were empty. Before/after frames
+  were captured; the post-removal frame was inspected visually.
+
+This reproduces the reported visual pattern without healing a surviving
+Golem. Report 109 is qualified as not reproduced as an HP defect on this
+current tree, with row replacement/reordering demonstrated. The submitted
+clip has no actor-ID trace, so it cannot independently establish which actors
+survived that historical recording. This proof is not a new verdict on every
+native cap-removal behavior. No speculative gameplay correction was made.
+
+Independent image review caught a harness-only visual-evidence gap: the first
+before frame was captured while the existing 220 ms bar-width transition was
+still catching up to the already-correct semantic ratio. The maintained proof
+now waits for measured fill/track width as well as actor ID and semantic HP.
+The final headed replay repeated the same result with IDs `1/98 -> 98/196`
+and, after set removal, `98/196 -> 196/293`. Measured ratios matched
+`20%/80% -> 80%/100%` (maximum observed rounding difference 0.000108).
+The final before image was inspected and visibly agrees. Error arrays remain
+empty. This corrects the evidence timing without changing that existing HUD
+animation or making a new claim about its native parity.

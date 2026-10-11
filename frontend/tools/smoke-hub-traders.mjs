@@ -64,7 +64,7 @@ if (productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
 }
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
-  headless: true,
+  headless: !process.argv.includes('--headed'),
 })
 const hostPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const guestPage = await browser.newPage({ viewport: { width: 960, height: 540 } })

@@ -31,6 +31,7 @@ export function useHubInventoryRenderer({
   chatCompletionHandledRef, advanceChatRef,
 }: HubInventoryRendererBinding) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const controlsRef = useRef<HTMLDivElement>(null)
 
   const rendererRef = useRef<HubInventoryRenderer | null>(null)
 
@@ -135,6 +136,8 @@ export function useHubInventoryRenderer({
           ? nativeOptionalBookHudProgress(reveal, forceModalHudSettledRef.current)
           : reveal,
       )
+      // Visible DOM chrome belongs to the same frame/lifetime as the GPU menu.
+      if (controlsRef.current) controlsRef.current.style.opacity = String(reveal)
       const offset = frame.statsOffset ?? 0
       if (offset !== statsOffsetRef.current) {
         statsOffsetRef.current = offset
@@ -163,5 +166,5 @@ export function useHubInventoryRenderer({
       detachCanvas?.()
     }
   }, [rendererOwner, chatCompletionHandledRef, advanceChatRef])
-  return { hostRef, rendererRef, rendererState, statsOffset }
+  return { hostRef, controlsRef, rendererRef, rendererState, statsOffset }
 }

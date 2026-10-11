@@ -633,7 +633,7 @@ export function NativeHubSurface({
     surface,
   ])
 
-  const { hostRef, rendererRef, rendererState, statsOffset } = useHubInventoryRenderer({
+  const { hostRef, controlsRef, rendererRef, rendererState, statsOffset } = useHubInventoryRenderer({
     rendererOwner, model, closing, forceModalHudSettled, onInventoryCloseComplete,
     chatCompletionHandledRef, advanceChatRef,
     beltAvailability: { mode, progression, playerState: secondaryPlayerState },
@@ -754,7 +754,7 @@ export function NativeHubSurface({
         })}
       >
         <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
-        <div className="hub-native-ui-actions">
+        <div ref={controlsRef} className="hub-native-ui-actions" style={{ opacity: 0 }}>
           <span className="hub-native-ui-semantic hub-gold-ledger" data-player-gold={economy.gold}>
             {economy.gold.toLocaleString()} gold
           </span>
@@ -965,7 +965,7 @@ export function NativeHubSurface({
               disabled={inputSuspended || closing || inventoryTransitionLocked} />
           ) : null}
           {surface.kind !== 'dialogue' && renameCandidate !== null && renameSackId === null
-            && notice === null && dyeModal === null ? (
+            && notice === null && dyeModal === null && sackTransition === null ? (
             <NativeUiButton className="hub-sack-rename-open" data-inventory-rename-open={renameCandidate.id}
               aria-label={`Rename ${renameCandidate.name}`} disabled={inventoryTransitionLocked}
               nativeBounds={INVENTORY_SACK_RENAME_BUTTON.bounds}

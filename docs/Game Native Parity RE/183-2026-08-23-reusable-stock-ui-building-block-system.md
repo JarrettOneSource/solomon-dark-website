@@ -1452,3 +1452,140 @@ The browser controller regression replaced the old fake-DOM Back test. Native
 plan tests cover every frame family, tool state, clipped tab, responsive hit
 band, and preserved bevel. The complete Website and built-browser results are
 recorded in entry 116; no Mod Loader file is maintained by this change.
+
+## 2026-10-11 — Shared DOM nine-slice coverage reopening
+
+The Boast instruction and failure screenshots expose uncovered lower/right
+cross-seams in the shared `NativeUiNineSlice` adapter. They are Notebox frame
+artifacts, not Boast selection hit collisions. At exact Website `8a14b669`, a
+500-by-110 UI64 frame has center/edge spans ending at x472/y82 but mirrored
+pieces beginning at x473/y83. The unsupported `MIRROR_SHIFT=1` leaves a complete
+one-pixel cross uncovered. A real Mac Chrome diagnostic reproduces both gold
+and red variants; moving only the mirrored pieces into the contiguous grid
+removes both seams without altering the stock atlas, tint or interior fill.
+
+### Recovered native geometry and provenance
+
+Bounded read-only LLVM disassembly of retail 0.72.5 (SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`) verifies the
+complete existing helper `0x00417760..0x00417E28`; this supplements the retained
+Ghidra helper contract in entry 087 without creating or modifying a Ghidra
+project. The instruction export SHA-256 is
+`a22ca059165becfd04cecd4e460ccbd51f78c198c7ebbcfba2b504b20a07ba62`.
+
+- Corners at `0x0041778F..0x004178FF` use glyph dimensions `+0x94/+0x98`,
+  half-size centers and mirror scales. The exact data are qword
+  `0x007DE808=0.5`, float `0x007DE858=-1`, and float
+  `0x007DE96C=0.949999988079071` for the UV strip. There is no extra one-pixel
+  corner translation.
+- Horizontal strips at `0x0041792D..0x00417A8D`, vertical strips at
+  `0x00417B1B..0x00417C88`, and optional center at
+  `0x00417C8D..0x00417E0E` share boundaries `x+cw`, `x+w-cw`, `y+ch`,
+  `y+h-ch`. Center admission is the caller's fill byte at `[ebp+0x18]`.
+- Therefore the nine destination rectangles form one contiguous partition;
+  sampled mirror-edge behavior is not a reason to open a hole between them.
+
+Entry 164's separate Hall renderer records an observed one-pixel mirrored
+sample profile over its independently painted background. That evidence and
+its dedicated `hallNineSliceLayout` remain unchanged here. It was incorrect
+to generalize that visible-sample workaround into destination gaps in the
+shared filled primitive. This correction does not reclassify Hall's native
+capture or change its independently verified artwork.
+
+### Complete shared-adapter membership
+
+| Consumer / variant | Stock record | Disposition before port |
+| --- | --- | --- |
+| Tutorial callouts | UI4, 20x20 | recovered-pending-port through shared primitive |
+| Boast selection outer panel | UI11, 89x89 | recovered-pending-port |
+| Boast row frames, idle and selected tint | UI50, 13x14 | recovered-pending-port |
+| MessageBox inner frame and SimpleMenu | UI17, 80x83 | recovered-pending-port |
+| Dark Cloud list/gold/panel/shadow frames, ordinary and black tint | UI17 | recovered-pending-port |
+| Boast instruction and failure Notebox, both opacity passes | UI64, 28x28, ordinary and red tint | recovered-pending-port |
+| Filled/unfilled primitive, minimum size, odd/even/fractional bounds, default/alternate edge UV origin | all five records above | recovered-pending-port; complete-partition tests must cover each |
+| Pixi nine-slice adapter | same recovered rectangle geometry, no MIRROR_SHIFT | verified-already-at-parity geometry; no implementation change |
+| Hall-specific no-fill/sample-profile renderer | independent renderer and retained entry164 capture contract | out-of-system for the shared DOM adapter; unchanged negative consumer |
+| PlanView clients with no nine-slice nodes | sprite/text/strip/solid consumers | out-of-system; no geometry or tint change |
+
+Expected-red coverage renders the actual TSX component through the existing
+esbuild/React server-rendering test pattern, then verifies the destination
+regions form exactly one nonoverlapping partition (or only the authored center
+is absent when fill is false). This avoids a test-only copy of the layout
+algorithm. Browser acceptance must inspect gold/red Notebox and all sibling
+record families at normal and scaled bounds. Final dispositions remain pending
+the complete Mac gate and headed production journey; no report is closed by
+these diagnostic screenshots alone.
+
+### Fractional-scale tinted-frame reopening
+
+Headed production acceptance exposed a second adapter defect at 1200x700:
+the red Notebox had a single-column join at physical x807 and a lower row join,
+despite its corrected destination partition. The old per-piece solid-color
+gradient plus alpha-mask tint path both reintroduces fractional mask joins and
+adds tint color behind transparent stock pixels. UI64's authored outer shadow
+RGB is black, so native RGB modulation cannot turn that shadow red. A measured
+right join reduces red from 59 to 31 between equal 59-valued neighbors; the
+opaque black interior acquires a red 28-valued line.
+
+This is covered by the already recovered RGB-only texture modulation contract
+and `nativeUiTintMatrix`, already used by `NativeUiSprite`: multiply R/G/B by
+their color factors and retain authored alpha. The shared frame must reuse that
+owner for its assembled paint, rather than independently masking each piece.
+Expected-red rendered-component tests require that exact alpha-preserving
+matrix and reject the opaque gradient/repeated mask path. The atlas, frame
+geometry, native tint values, opacity passes and Hall contract remain unchanged.
+Fractional-scale pixel acceptance remains open until that candidate is inspected.
+
+### Focused implementation and Mac acceptance receipt
+
+The shared adapter now uses the recovered contiguous destination rectangles and
+one `nativeUiTintMatrix` over assembled stock paint. The old independent solid
+gradient/mask tint implementation is removed. This preserves stock alpha,
+including black shadow RGB, without introducing another art or tint owner.
+
+Expected-red evidence is retained in `expected-red-tests.log` (all five frame
+families failed before the geometry correction) and `frame-tint-red.log` (the
+alpha-preserving modulation contract failed before the tint correction). The
+actual TSX coverage tests include filled/unfilled, minimum, odd/even/fractional
+sizes, ordinary/red/selected/black tints and both edge UV origins. The final
+native-UI suite and typecheck pass all 156 tests; touched-file lint and
+`git diff --check` are clean. No tests or checks were disabled.
+
+Headed installed Mac Chrome inspected 15 actual component frames across UI4,
+UI11, UI17, UI50 and UI64, in ordinary, tinted and unfilled variants at scales
+1 and 0.75. The tint variants include selected green, Dark Cloud black and
+failure red. `frame-family-normal.png`, `frame-family-scaled.png` and
+`frame-family-receipt.json` retain that secondary component proof, with empty
+console/page/request/HTTP error arrays. It supplements the built game rather
+than standing in for its production acceptance.
+
+The final candidate based on Website `8a14b669` built on M2 at 05:20 UTC with
+entry `Game-DHD3ThSE.js`. The complete maintained `smoke-hub-npcs.mjs --headed`
+Boast journey then passed against that production output on the actual Apple
+M2 Metal renderer at 05:21 UTC:
+
+- Real gold instruction Notebox, logical 541x118, and real potion-triggered
+  failure Notebox, logical 609x94: both opacity passes have zero uncovered or
+  doubly painted destination regions.
+- Gold notice movement remains unblocked and its timer expires normally;
+  Boast scrolling, row ownership, gold updates and automatic skill choice pass.
+- Failure rendering is inspected at 1600x900 and 1200x700, followed by click
+  dismissal and closing Inventory through the configured native control.
+- The previously measured tinted interior join at x807 and lower join rows
+  are now authored black (0,0,0); the fabricated red shadow and cross-stripes
+  are gone. The stock border still uses normal browser texture filtering.
+- Console, page and HTTP error arrays are empty. Private browser and temporary
+  static/host listeners are closed after the journey.
+
+Evidence: `art-evidence/built-boast-native-tint.log`, `art-final-build.log`,
+`native-ui-final-contracts.log`, `boast-provokatus-notebox.png`,
+`boast-provokatus-failure-notebox.png`, and
+`boast-provokatus-failure-notebox-scaled.png`. Earlier harness attempts exposed
+test-only assumptions about repeated dialogue, a fixture label and a remapped
+Inventory key; these were corrected before the complete final green run.
+
+Every recovered-pending-port member in this reopening is now ported and
+focused-verified. Pixi, Hall's separate sample profile and non-nine-slice
+clients retain their documented negative dispositions. Full canonical Mac
+validation and final integrated acceptance remain with the integration owner;
+this focused receipt does not independently close the public reports.

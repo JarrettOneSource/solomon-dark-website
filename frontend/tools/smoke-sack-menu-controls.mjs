@@ -96,6 +96,33 @@ async function journey(scenario) {
     window.solomonDarkRuntime = { gameEndpoint: endpoint }
     localStorage.setItem(settingsKey, JSON.stringify(controls))
     window.__sackPageTimings = []
+    window.__sackControlPresentation = []
+    const sampleControls = () => {
+      const stage = document.querySelector('.hub-native-ui-stage')
+      const canvas = stage?.querySelector('.hub-inventory-native-canvas')
+      const button = stage?.querySelector('[data-inventory-rename-open]')
+      const reveal = Number(canvas?.dataset.nativeRevealProgress)
+      const transition = stage?.dataset.nativeSackTransition ?? ''
+      if (stage && canvas && Number.isFinite(reveal)) {
+        let opacity = button ? 1 : 0
+        let visible = button !== null && button !== undefined
+        for (let node = button; node; node = node.parentElement) {
+          const style = getComputedStyle(node)
+          opacity *= Number(style.opacity)
+          visible &&= style.visibility !== 'hidden' && style.display !== 'none'
+        }
+        window.__sackControlPresentation.push({
+          kind: stage.closest('.hub-native-ui-overlay').dataset.surfaceKind,
+          owner: stage.getAttribute('aria-label'),
+          scene: document.querySelector('.boneyard-scene') ? 'Boneyard' : 'College',
+          path: stage.dataset.nativeSackPath, transition, reveal,
+          itemId: button?.dataset.inventoryRenameOpen ?? null,
+          opacity, visible: visible && opacity > 0,
+        })
+      }
+      requestAnimationFrame(sampleControls)
+    }
+    requestAnimationFrame(sampleControls)
     let active = null
     new MutationObserver(() => {
       const stage = document.querySelector('.hub-native-ui-stage[data-native-sack-transition]')
@@ -300,6 +327,27 @@ async function journey(scenario) {
       await ready(page)
       receipt.scenes.push('Boneyard nested rename, pause/resume, optional Skills, mandatory choice')
     }
+    receipt.renamePresentation = await page.evaluate(() => window.__sackControlPresentation)
+    const moving = receipt.renamePresentation.filter(row => row.transition !== '')
+    const fading = receipt.renamePresentation.filter(row => row.transition === ''
+      && row.itemId !== null && row.reveal > 0.1 && row.reveal < 0.9)
+    const owned = receipt.renamePresentation.filter(row => row.itemId !== null)
+    assert.ok(moving.length > 0, 'No Sack page transition was sampled')
+    if (!scenario.portrait) assert.ok(fading.length > 0, 'No closing Rename Sack control was sampled')
+    assert.equal(moving.filter(row => row.visible).length, 0,
+      'Rename Sack must retire while the native Sack page/caption changes owner')
+    assert.equal(owned.filter(row => Math.abs(row.opacity - row.reveal) > 0.001).length, 0,
+      'Rename Sack must share the Inventory renderer reveal, rather than outliving its menu')
+    assert.equal(owned.filter(row => row.reveal === 0 && row.visible).length, 0,
+      'Rename Sack must be invisible at the zero-reveal endpoint')
+    for (const owner of ['Inventory', ...(receipt.serviceLabels ?? [])]) {
+      assert.ok(owned.some(row => row.owner === owner && row.reveal === 1),
+        `${owner} never displayed a settled owned Sack command`)
+      assert.ok(moving.some(row => row.owner === owner), `${owner} had no sampled Sack transition`)
+    }
+    for (const scene of scenario.portrait ? ['College'] : ['College', 'Boneyard']) {
+      assert.ok(owned.some(row => row.scene === scene), `${scene} had no sampled Sack command`)
+    }
     receipt.scenes.push('College nested inventory and save restoration')
     receipt.timings = await page.evaluate(() => window.__sackPageTimings)
     assert.ok(receipt.timings.length >= 4)
@@ -352,6 +400,7 @@ async function serviceJourney(page, host, playerId, ids, scenario, receipt) {
     await activate(page.locator(`[data-hub-shortcut="${trader}"]`), scenario)
     const inventory = page.locator('.hub-native-ui-overlay[data-surface-kind="service"] .hub-native-ui-stage')
     await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+    ;(receipt.serviceLabels ??= []).push(await inventory.getAttribute('aria-label'))
     if (trader === 'luthacus') {
       await activate(inventory.locator(`[data-inventory-owner="storage"][data-inventory-item-id="${ids.storage}"]`), scenario)
       await rename(page, inventory, '保存袋', scenario)

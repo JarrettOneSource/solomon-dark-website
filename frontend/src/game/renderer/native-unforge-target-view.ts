@@ -1,5 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { requireNativeWebGlRenderer } from './native-material-batch.ts'
+import { installNativePixelCenterProjection } from './native-pixel-center-projection.ts'
 import {
   NATIVE_UNFORGE_CAPTURE_SIZE,
   NATIVE_UNFORGE_TARGET_RECORDS,
@@ -50,6 +51,9 @@ export class NativeUnforgeTargetView {
     this.images[0].position.set(...frame.imageCenters[0])
     this.images[1].position.set(...frame.imageCenters[1])
     const webgl = requireNativeWebGlRenderer(renderer)
+    // The native integer scissor and multiply mask share D3D9 sample centers.
+    // Register only this capture; UI screen and unrelated targets keep their projection.
+    installNativePixelCenterProjection(webgl, this.target.source)
     const modes = webgl.state['blendModesMap']
     const normal = modes.normal
     const normalNpm = modes['normal-npm']

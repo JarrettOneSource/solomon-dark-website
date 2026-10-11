@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { TextureSource } from 'pixi.js'
+import './native-ui-nine-slice.test.ts'
 import { nativeUiTintMatrix } from './native-ui-tint.ts'
 
 test('textured UI tint scales every RGB channel in sRGB without replacing texels or alpha', () => {

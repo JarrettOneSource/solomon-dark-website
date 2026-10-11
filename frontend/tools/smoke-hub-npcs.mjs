@@ -65,7 +65,7 @@ assert.ok(
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH
     || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  headless: true,
+  headless: !process.argv.includes('--headed'),
 })
 const page = await browser.newPage({ viewport: { height: 900, width: 1600 } })
 const consoleErrors = []
@@ -450,7 +450,10 @@ async function exerciseProvokatus(canvas) {
     '.native-notebox-overlay[data-native-notebox-kind="instruction"]',
   )
   await note.waitFor()
+  await note.locator('xpath=self::*[@data-native-notebox-opacity="1"]').waitFor()
   assert.match(await note.innerText(), /survive until at least Wave 30/)
+  const frameCoverage = await assertNoteboxFrameCoverage(note)
+  await page.screenshot({ path: `${screenshotRoot}-provokatus-notebox.png` })
   assert.equal(await page.locator('.hub-scene').getAttribute('data-modal-open'), 'false')
   const movement = await assertNoteboxAllowsMovement(canvas)
   await note.waitFor({ state: 'detached', timeout: 12_000 })
@@ -474,14 +477,97 @@ async function exerciseProvokatus(canvas) {
   await picker.waitFor({ state: 'hidden', timeout: 10_000 })
   const automaticElapsedMs = performance.now() - automaticStartedAt
   assert.ok(automaticElapsedMs >= 900, `automatic choice closed in ${automaticElapsedMs} ms`)
+  const failureFrameCoverage = await exerciseBoastFailure(canvas)
   receipts.push({
     automaticChoiceIndex,
     automaticElapsedMs: Math.round(automaticElapsedMs),
     interaction: 'annalist',
     noteboxAutoExpired: true,
     noteboxMovement: movement,
+    noteboxFrameCoverage: frameCoverage,
+    failureFrameCoverage,
     selectorRows: 5,
   })
+}
+
+async function assertNoteboxFrameCoverage(note) {
+  const coverage = await note.locator('[data-native-ui-nine-slice]').evaluateAll(frames => (
+    frames.map(frame => {
+      const width = parseFloat(frame.style.width)
+      const height = parseFloat(frame.style.height)
+      const pieces = Array.from(frame.querySelectorAll(':scope > i'), piece => ({
+        left: parseFloat(piece.style.left), top: parseFloat(piece.style.top),
+        width: parseFloat(piece.style.width), height: parseFloat(piece.style.height),
+      }))
+      const boundaries = (length, axis, size) => [...new Set([
+        0, length, ...pieces.flatMap(piece => [piece[axis], piece[axis] + piece[size]]),
+      ])].sort((a, b) => a - b)
+      const xs = boundaries(width, 'left', 'width')
+      const ys = boundaries(height, 'top', 'height')
+      let gaps = 0
+      let overlaps = 0
+      for (let xi = 1; xi < xs.length; xi += 1) {
+        for (let yi = 1; yi < ys.length; yi += 1) {
+          const x = (xs[xi - 1] + xs[xi]) / 2
+          const y = (ys[yi - 1] + ys[yi]) / 2
+          if (x < 0 || x >= width || y < 0 || y >= height) continue
+          const count = pieces.filter(piece => x >= piece.left && x < piece.left + piece.width
+            && y >= piece.top && y < piece.top + piece.height).length
+          if (count === 0) gaps += 1
+          if (count > 1) overlaps += 1
+        }
+      }
+      return { width, height, gaps, overlaps }
+    })
+  ))
+  assert.equal(coverage.length, 2, 'Notebox must retain both native opacity passes')
+  for (const frame of coverage) {
+    assert.equal(frame.gaps, 0, JSON.stringify(frame))
+    assert.equal(frame.overlaps, 0, JSON.stringify(frame))
+  }
+  return coverage
+}
+
+async function exerciseBoastFailure(canvas) {
+  await navigateHubRegion(page, canvas, 'courtyard', HUB_INTERACTION_GEOMETRY.annalist.position, 30, log)
+  const dialog = await openInteraction('annalist', 'Provokatus')
+  if (await dialog.getAttribute('data-native-chat-phase') === 'speech') await skipSpeech(dialog)
+  else await waitForPhase(dialog, 'choices')
+  await dialog.getByRole('button', { name: 'Boast' }).click()
+  await waitForPhase(dialog, 'selector')
+  await dialog.locator('[data-native-selector-id="0"]').click()
+  await assertSpeech(dialog, 'ANNAL_POTIONBOAST', 5_000)
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  const instruction = page.locator('.native-notebox-overlay[data-native-notebox-kind="instruction"]')
+  await instruction.waitFor()
+  await instruction.locator('.native-notebox-panel').click()
+  await instruction.waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const potion = inventory.getByLabel('Backpack').getByRole('button', {
+    exact: true, name: 'Health Potion, quantity 1',
+  })
+  await potion.click()
+  await page.waitForTimeout(550)
+  await potion.dblclick({ delay: 60 })
+  await potion.waitFor({ state: 'detached' })
+  const failure = page.locator('.native-notebox-overlay[data-native-notebox-kind="failure"]')
+  await failure.waitFor()
+  await failure.locator('xpath=self::*[@data-native-notebox-opacity="1"]').waitFor()
+  assert.match(await failure.innerText(), /FAILED "POTIONS ARE FOR PEASANTS!"/)
+  const coverage = await assertNoteboxFrameCoverage(failure)
+  await page.screenshot({ path: `${screenshotRoot}-provokatus-failure-notebox.png` })
+  await page.setViewportSize({ width: 1200, height: 700 })
+  await assertNoteboxFrameCoverage(failure)
+  await page.screenshot({ path: `${screenshotRoot}-provokatus-failure-notebox-scaled.png` })
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await failure.locator('.native-notebox-panel').click()
+  await failure.waitFor({ state: 'detached' })
+  await page.keyboard.press('i')
+  await inventory.waitFor({ state: 'hidden' })
+  return coverage
 }
 
 async function assertNoteboxAllowsMovement(canvas) {

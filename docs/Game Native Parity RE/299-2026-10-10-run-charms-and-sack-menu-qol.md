@@ -217,3 +217,92 @@ the previous-build save probe are retained in the authoritative M2 report
 archive. The clean final-commit replay, unchanged M5 all-mode gate, publication,
 exact deployed acceptance, and hosted CI are release requirements recorded in
 that archive after this source freeze; this entry does not preclaim them.
+
+## 2026-10-11 — Sack command presentation lifetime reopening
+
+Fresh source message `1558641111591821394` and its original clip show the
+Rename Sack command remaining fully bright during Inventory close. At 5.2
+seconds the surrounding Inventory is already dark; the command is not. This
+is a presentation ownership defect in the new Website feature. The original
+pass covered settled geometry, naming, ownership and navigation, but omitted
+the new DOM control from the common visual lifetime and page-owner sweep.
+
+The existing native InventoryScreen owner remains authoritative: the renderer
+uses `0.025` reveal per 10 ms tick for both opening and closing (ledger 115),
+and the Sack grid/caption uses its existing 37-tick vertical transition
+(ledgers 252/262/293). No timing constant, generated name, selection rule,
+authority command or native asset is changed. The command still names the
+selected owned Sack, or the current open Sack when nothing is selected.
+
+On exact baseline `8a14b6694506d8a9eb39e750fd0bb4d4c46235a6`, the headed
+M2 Chrome journey reproduced 361 visible-command samples during Sack page
+motion and 35 command/surface-alpha mismatches. These include both Inventory
+close and College service opening. Every sampled mismatched command had
+opacity one while its GPU owner had an intermediate reveal. Page, console,
+HTTP, wire, host and teardown errors were empty. The original clip and
+expected-red journey are retained in the M2 report archive/task evidence.
+
+Boundary: visible DOM controls owned by NativeHubSurface must consume the
+same per-frame reveal as that surface's GPU renderer. Their semantic hit
+areas retain the existing input ownership. A Sack-addressed command is hidden
+while the page/caption owner transitions and reappears only with the settled
+current selection/path. The separate rename dialog is a portaled modal and
+keeps its existing lifetime, cancellation and focus isolation.
+
+| Member | Required disposition and acceptance |
+| --- | --- |
+| Standalone Inventory in College and Boneyard | Share the GPU open/close reveal, including interrupted close and optional-book replacement |
+| Fomentius, Hagatha, Luthacus and Shlorio companions | Share each service surface's reveal; preserve existing immediate service teardown |
+| Root, nested and returned Sack pages | Suppress page-addressed command during native motion; retain exact selected/current Sack after settling |
+| Backpack versus storage selections | Preserve the existing current selection owner and exact-ID authority |
+| Notice, dye and rename child modals | Preserve command suppression, cancel priority and modal input isolation |
+| Native and Unicode names, save/reload | Preserve the accepted caption/title fallback, identity and persisted name |
+| Pickup/skill/combat world notification clocks | Out of this repair: these are Game-owned fixed-tick messages, not Inventory labels |
+
+The proposed repair binds the action layer directly to the renderer hook's
+existing reveal in the same frame and initializes it hidden before the first
+renderer frame. It introduces no CSS duration, second animation clock, or
+message-specific fade. Maintained Sack acceptance now samples effective
+command opacity and page visibility across the actual client/host journeys.
+Candidate green, exact final full Mac gate and publication remain pending.
+
+The separate post-close text visible at 5.4 seconds in the report is
+`Health Potion`. Existing ledger 100's recovered notification manager pauses
+its lifetime with gameplay and resumes its remaining fade; the video alone
+does not establish a separate lifetime defect. Do not clear or accelerate
+those notifications to conceal the independent control-lifetime failure.
+
+### Candidate implementation and final focused acceptance
+
+The repair is implemented in the shared renderer binding and action layer.
+The final headed Mac Chrome 154.0.8037.98 journey samples every finite-reveal
+frame, records owner and scene, compares all rendered owned-command opacity,
+and checks every Sack transition. Desktop recorded 1,730 samples (622 with an
+owned command), landscape touch 1,890 (656 owned), and portrait-to-landscape
+356 (141 owned). All 1,081 sampled page-transition frames hid Rename Sack;
+all 1,419 owned-command frames matched GPU reveal. Inventory and all four
+service owners had positive settled-command and page-transition coverage;
+College and Boneyard were both observed in the desktop/landscape journeys.
+All host, page, console, HTTP, wire and teardown error arrays were empty.
+
+No owned zero-reveal frame was observable: the owner unmounts at close
+completion. Endpoint protection is therefore qualified by the explicit
+initial opacity zero, same-callback opacity write before zero-reveal teardown,
+and real owner-hidden/scene-ready checks; a positive rendered zero-endpoint
+sample is not claimed. Portrait gameplay remains blocked by the existing
+rotation gate, and physical touch/onscreen-keyboard testing is not claimed.
+
+The sweep includes native 370 ms Sack motion, nested/backpack/storage targets,
+Unicode edits and save restoration, cancellation and rebound-key isolation,
+all service companions and dye cancellation, Boneyard pause/resume, an
+interrupted Sack transition, optional Skills replacement and mandatory-choice
+protection. Existing focused owner/name/navigation/notification tests and
+application/test type checks passed. The source freeze, unchanged canonical
+full Mac gate, hosted CI, and live acceptance remain release steps recorded
+separately; this entry does not preclaim publication.
+
+The final receipt positively samples fractional owned-command frames for
+Inventory, Hagatha and Luthacus. Fomentius and Shlorio have settled-command
+and page-motion coverage, while their same-hook fade ownership is established
+by source review; distinct fractional command samples for those two service
+owners are not claimed.
