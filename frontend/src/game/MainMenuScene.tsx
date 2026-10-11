@@ -41,6 +41,7 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import { hubCollegeAdmissionPreLoadout } from './core-kernels/college-admission-lifecycle.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
+import { desktopRuntime } from './desktop-runtime.ts'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import GameMenuSkull, { type GameMenuAvailability } from './GameMenuSkull.tsx'
 import type { GameChatWhisperRequest } from './GameChat.tsx'
@@ -457,6 +458,11 @@ function MainMenuContent({
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
+  useEffect(() => desktopRuntime()?.onBeforeClose(async () => {
+    if (!session || editorTestSession) return
+    await persistSaveCheckpoint(await session.saveBeforeLeave())
+    session.destroy()
+  }), [editorTestSession, persistSaveCheckpoint, session])
   useEffect(() => {
     if (editorTestSession) setSession(editorTestSession)
   }, [editorTestSession])
@@ -2041,7 +2047,7 @@ function MainMenuContent({
               hidden={titlePrompt !== null}
               style={accountStageStyle}
             >
-              <GameAccountName placement="title" username={accountUsername} />
+              {!desktopRuntime() && <GameAccountName placement="title" username={accountUsername} />}
             </div>
 
             <div className="main-menu-native-stage" style={nativeStageStyle}>
@@ -2055,7 +2061,7 @@ function MainMenuContent({
                   <RootActions
                     onHall={() => transitionTo('hall')}
                     onHighlight={setHoveredTitleAction}
-                    onExplore={() => transitionTo('dark-cloud')}
+                    onExplore={() => { const desktop = desktopRuntime(); if (desktop) void desktop.openWebsite(); else transitionTo('dark-cloud') }}
                     onPlay={() => setScreen('play')}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
@@ -2067,7 +2073,7 @@ function MainMenuContent({
                     onBack={() => setScreen('root')}
                     onHighlight={setHoveredTitleAction}
                     onLastGame={requestResumeLastGame}
-                    onJoinParty={() => transitionTo('join-party')}
+                    onJoinParty={() => { const desktop = desktopRuntime(); if (desktop) void desktop.returnToLauncher(); else transitionTo('join-party') }}
                     onNewGame={beginNewGame}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}

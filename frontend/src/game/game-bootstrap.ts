@@ -1,4 +1,5 @@
 import type { GameEndpoint, GameObserverEndpoint } from './engine.ts'
+import './desktop-runtime.ts'
 
 export type BrowserGameAdmission =
   | { readonly kind: 'global-hub' }
@@ -37,14 +38,6 @@ export async function admitBrowserGame(
 }
 
 class InactivePartyRejoinError extends Error {}
-
-declare global {
-  interface Window {
-    solomonDarkRuntime?: {
-      gameEndpoint?: GameEndpoint
-    }
-  }
-}
 
 /**
  * Platform-owned runtime configuration for the shared static client bundle.

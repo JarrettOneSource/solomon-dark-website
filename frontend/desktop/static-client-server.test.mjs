@@ -14,8 +14,10 @@ test('desktop static server is loopback-only, SPA-aware, and hardened', async (c
   const root = await mkdtemp(join(tmpdir(), 'solomon-desktop-static-'))
   context.after(() => rm(root, { force: true, recursive: true }))
   await mkdir(join(root, 'assets'))
+  await mkdir(join(root, '__desktop'))
   await writeFile(join(root, 'index.html'), '<!doctype html><title>Solomon Dark</title>')
   await writeFile(join(root, 'assets', 'game.js'), 'export const ready = true')
+  await writeFile(join(root, '__desktop', 'launcher.mjs'), 'export const launcher = true')
   const server = await startStaticClientServer({ root })
   context.after(() => server.close())
 
@@ -35,6 +37,9 @@ test('desktop static server is loopback-only, SPA-aware, and hardened', async (c
   assert.equal(asset.headers.get('content-type'), 'text/javascript; charset=utf-8')
   assert.match(asset.headers.get('cache-control') ?? '', /immutable/)
   assert.equal(await asset.text(), 'export const ready = true')
+  const launcher = await fetch(`${server.origin}/__desktop/launcher.mjs`)
+  assert.equal(launcher.headers.get('content-type'), 'text/javascript; charset=utf-8')
+  assert.equal(launcher.headers.get('cache-control'), 'no-store')
 
   const missingAsset = await fetch(`${server.origin}/assets/missing.js`)
   assert.equal(missingAsset.status, 404)
@@ -73,6 +78,24 @@ test('desktop static server closes a backpressured file when its client disconne
   assert.equal(source.fd, null)
   const health = await fetch(`${server.origin}/__desktop/health`)
   assert.deepEqual(await health.json(), { status: 'ok' })
+})
+
+test('desktop shutdown closes in-flight assets even when the renderer stops reading', async (context) => {
+  const { root, server, sources, requestAsset } = await createStreamingFixture(context)
+  await writeLargeAsset(root, 'paused.mp3')
+  const response = await requestAsset('/paused.mp3')
+  response.pause()
+  const closing = server.close()
+  try {
+    await Promise.race([
+      closing,
+      delay(1500).then(() => { throw new Error('shutdown is waiting for a paused asset response') }),
+    ])
+    await waitFor(() => sources[0].closed, 'shutdown must also close the asset file')
+  } finally {
+    response.destroy()
+    await closing
+  }
 })
 
 test('desktop static server closes files after successful streaming', async (context) => {

@@ -1,12 +1,17 @@
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { cp, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import electron from 'electron'
 
-await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'])
+if (process.platform === 'win32') await run('cmd.exe', ['/d', '/s', '/c', 'npm.cmd run build'])
+else await run('npm', ['run', 'build'])
+await mkdir('../backend/wwwroot/__desktop', { recursive: true })
+await Promise.all(['launcher.html', 'launcher.css', 'launcher.mjs'].map(file => cp(`desktop/${file}`, `../backend/wwwroot/__desktop/${file}`)))
 const child = spawn(electron, [resolve('desktop')], {
   env: {
     ...process.env,
+    SDR_DESKTOP_BUILD_JSON: JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), sourceTimestamp: 0 }),
     SDR_DESKTOP_CLIENT_ROOT: resolve('../backend/wwwroot'),
     SDR_DESKTOP_GAME_HOST: resolve('dist-game-host/game-host.mjs'),
     SDR_DESKTOP_NODE: process.execPath,

@@ -30,6 +30,7 @@ import '../game/game-surface.css'
 const NAV = [
   { to: '/', label: 'Home', end: true },
   { to: '/game', label: 'Play' },
+  { to: '/downloads', label: 'Download' },
   { to: '/about', label: 'About' },
 ]
 

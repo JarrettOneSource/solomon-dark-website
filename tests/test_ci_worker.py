@@ -14,6 +14,10 @@ from unittest.mock import patch
 
 OPS = Path(__file__).resolve().parents[1] / 'ops/local-ci'
 
+# The deployment worker owns POSIX locks, process groups and native Unix jobs.
+if os.name != 'posix':
+    raise unittest.SkipTest('The machine-local deployment worker requires POSIX; it is covered by Linux CI.')
+
 
 def load(name, filename):
     spec = importlib.util.spec_from_file_location(name, OPS / filename)

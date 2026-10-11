@@ -7,6 +7,10 @@ obj/
 # Node
 node_modules/
 frontend/dist/
+frontend/dist-desktop/
+frontend/dist-game-host/
+frontend/.desktop-stage/
+frontend/.cache/
 
 # Runtime data (db, uploads, saves)
 backend/data/

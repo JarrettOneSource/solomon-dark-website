@@ -132,33 +132,55 @@ account.
 The checked-in NFO unit, Caddy route, required environment, expiry policy, and
 release health gates are documented in `ops/nfo/README.md`.
 
-### Standalone desktop build
+### Standalone desktop app
 
-The desktop rebuild packages the same production browser client; it does not
-contain a second renderer or gameplay implementation. Electron serves that
-bundle on an OS-assigned loopback origin, starts the bundled Node runtime as a
-separate authoritative process, and injects its credentialed
-`ws://127.0.0.1/...` endpoint through an isolated preload.
+The standalone Solomon Darker app packages this same client, game host and
+assets for Windows x64, macOS Apple silicon/Intel, and Linux x64. Download a
+validated build from [GitHub Releases](https://github.com/JarrettOneSource/solomon-dark-website/releases/latest)
+or the website's `/downloads` page. Extract the archive and keep its folder
+together.
+
+Choose **Play offline**, **Host game**, or **Join a friend** in the launcher.
+Solo works without an account or internet connection. Local saves and settings
+use a stable app origin and live outside the application folder. Closing the
+app or returning to the launcher requests and persists a final checkpoint
+before the host exits.
+
+Hosts share an encrypted direct connection using **Game > Copy multiplayer
+invite**. LAN, VPN, and forwarded internet TCP addresses are supported; both
+players need the same build. No Website admission, discovery service, or relay
+is involved. The host must keep the app open. Account/cloud services and Dark
+Cloud content remain website features.
+
+The app checks GitHub for updates at startup and every four hours. An available
+update appears in the launcher and as a dismissible game notice. It never
+restarts an active game. Download the offered build, save and close, then
+replace the extracted application; local saves remain in place. These builds
+are unsigned and unnotarized, so the OS may require first-launch confirmation.
 
 From `frontend/`:
 
 ```bash
+npm run package:desktop:windows
+npm run package:desktop:mac
 npm run package:desktop:linux
 npm run smoke:desktop
 ```
 
-Packaging verifies the official Node archive SHA-256, builds both the cloud
-session supervisor and standalone Hub host, and writes the Linux application
-under `dist-desktop/`. The smoke runs the real packaged Electron app under
-Xvfb, enters the Hub, verifies WebGL and authoritative movement, proves the
-host executable is the bundled Node runtime in a separate process, exits, and
-checks that the child process was reaped. `npm run dev:desktop` exercises the
-same boundary with the development machine's Node runtime.
+Use `npm run package:desktop -- --platform darwin --arch x64` for Intel Mac.
+Package on the target operating system. Linux smoke execution needs Xvfb when
+there is no display: `xvfb-run -a npm run smoke:desktop`. The Windows acceptance
+runs the real package with external networking blocked, proves local
+save/restart/resume and child teardown, then connects two packaged clients and
+enters a shared Boneyard. Receipts and screenshots land in
+`frontend/reports/desktop-smoke`.
 
-The website is not contacted during desktop solo. Encrypted direct peer
-hosting/joining and save persistence are subsequent product slices; the one
-client, protocol, and server bundle are already the shared foundation for
-those modes.
+The same Validate workflow builds each desktop platform. Only a successful
+Website gate and all platform acceptance jobs can publish a desktop release
+for `main`. Each release identifies the source revision and contains ZIP
+archives, SHA-256 checksums and the update manifest. See
+[standalone desktop](docs/standalone-desktop.md) for the boundaries and
+[the runtime architecture](docs/game-runtime-architecture.md) for authority.
 
 ## Mod packages
 

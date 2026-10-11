@@ -94,7 +94,8 @@ async function sha256(path) {
 
 async function extractArchive(archive, destination, extractor) {
   if (extractor === 'zip') {
-    await run('unzip', ['-q', archive, '-d', destination])
+    if (process.platform === 'win32') await run('tar', ['-xf', archive, '-C', destination])
+    else await run('unzip', ['-q', archive, '-d', destination])
     return
   }
   await run('tar', [extractor === 'tar-xz' ? '-xJf' : '-xzf', archive, '-C', destination])

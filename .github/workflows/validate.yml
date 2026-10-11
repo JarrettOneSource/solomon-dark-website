@@ -48,3 +48,113 @@ jobs:
       - name: Record final mutation inventory
         if: ${{ always() }}
         run: python3 tools/ci-mutation-diagnostics.py
+
+  desktop:
+    name: Desktop (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, platform: win32, arch: x64 }
+          - { runner: macos-15, platform: darwin, arch: arm64 }
+          - { runner: macos-15-intel, platform: darwin, arch: x64 }
+          - { runner: ubuntu-latest, platform: linux, arch: x64 }
+    defaults:
+      run:
+        working-directory: frontend
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --global npm@10.9.2
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:desktop
+      - name: Build standalone app from this revision
+        run: npm run package:desktop -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+      - name: Verify packaged offline save and peer gameplay
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a npm run smoke:desktop
+          else
+            npm run smoke:desktop
+          fi
+      - name: Archive standalone app
+        run: node tools/archive-desktop.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            frontend/dist-desktop/*.zip
+            frontend/dist-desktop/*.sha256
+            frontend/dist-desktop/desktop-release.json
+          if-no-files-found: error
+      - name: Retain desktop acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-evidence-${{ matrix.platform }}-${{ matrix.arch }}
+          path: frontend/reports/desktop-smoke
+          if-no-files-found: ignore
+
+  desktop-release:
+    name: Publish standalone apps
+    needs: [website, desktop]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: desktop-artifacts
+      - name: Publish the validated revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Older workflow runs must not replace the update feed after main advances.
+          current_main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          [[ "$current_main" == "$GITHUB_SHA" ]] || exit 0
+          mkdir release
+          for target in win32-x64 darwin-arm64 darwin-x64 linux-x64; do
+            cp "desktop-artifacts/desktop-$target/Solomon-Darker-$target.zip" release/
+            cp "desktop-artifacts/desktop-$target/Solomon-Darker-$target.zip.sha256" release/
+            cmp desktop-artifacts/desktop-win32-x64/desktop-release.json "desktop-artifacts/desktop-$target/desktop-release.json"
+          done
+          cp desktop-artifacts/desktop-win32-x64/desktop-release.json release/
+          (cd release && sha256sum --check ./*.sha256)
+          python3 - <<'PY'
+          import json, os
+          with open('release/desktop-release.json') as source:
+              assert json.load(source)['revision'] == os.environ['GITHUB_SHA']
+          PY
+          tag="desktop-$GITHUB_SHA"
+          cat > release-notes.md <<'NOTES'
+          Solomon Darker standalone app: offline solo play, local saves, encrypted direct peer hosting and update notifications.
+
+          Extract the ZIP and run the app. Keep the entire extracted folder together. Your saves live in the app's user-data folder, separate from the download. To update, save and close the game, then replace the extracted application with the new version.
+
+          For multiplayer, choose Host game, start a game, and use Game > Copy multiplayer invite. Friends choose Join a friend and paste it. Internet hosts need a reachable IP or VPN address and an allowed/forwarded TCP port (default 27843). Everyone must use the same build. Keep the host running.
+
+          These builds are not publisher-signed or notarized. Windows or macOS may require an explicit first-launch confirmation. Cloud accounts and Dark Cloud content remain available in the web app.
+          NOTES
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release/* --clobber
+            gh release edit "$tag" --draft=false --latest --notes-file release-notes.md
+          else
+            gh release create "$tag" release/* --target "$GITHUB_SHA" --latest \
+              --title "Solomon Darker ${GITHUB_SHA:0:8}" --notes-file release-notes.md
+          fi

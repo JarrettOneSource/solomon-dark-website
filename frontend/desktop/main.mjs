@@ -1,191 +1,267 @@
 import { randomBytes } from 'node:crypto'
-import { spawn } from 'node:child_process'
-import { access } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
+import { networkInterfaces } from 'node:os'
 import { join, resolve } from 'node:path'
-
-import { app, BrowserWindow, ipcMain, Menu, session } from 'electron'
-
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, session, shell } from 'electron'
 import { startStaticClientServer } from './static-client-server.mjs'
+import { startLocalGameHost } from './local-game-host.mjs'
+import { createPeerInvite } from './peer-network.mjs'
+import { startLocalPeer } from './local-peer.mjs'
+import { checkForDesktopUpdate } from './updates.mjs'
 
-const READINESS_TIMEOUT_MS = 10_000
-const SHUTDOWN_TIMEOUT_MS = 3_000
-const ENDPOINT_CHANNEL = 'solomon-dark:game-endpoint'
+const APP_ORIGIN = 'solomon-darker://app'
+const LAUNCHER_URL = `${APP_ORIGIN}/__desktop/launcher.html`
+let window
 let clientServer
 let gameHost
+let peer
+let endpoint = null
+let invite = null
+let mode = null
+let build
+let update = null
+let updateError = null
+let checking
+let changingSession = false
+let closing = false
 let quitting = false
+let pendingSave = null
 
-app.setName('Solomon Dark')
+app.setName('Solomon Darker')
+if (process.env.SDR_DESKTOP_USER_DATA) app.setPath('userData', resolve(process.env.SDR_DESKTOP_USER_DATA))
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'solomon-darker',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+}])
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
-app.on('before-quit', (event) => {
-  if (quitting) return
-  event.preventDefault()
-  quitting = true
-  void shutdown().finally(() => app.quit())
-})
-
-void app.whenReady().then(start).catch(async (error) => {
-  console.error(error)
-  await shutdown()
-  app.exit(1)
-})
+if (!app.requestSingleInstanceLock()) app.quit()
+else {
+  app.on('second-instance', () => { window?.show(); window?.focus() })
+  app.on('before-quit', event => {
+    if (quitting) return
+    event.preventDefault()
+    void exit()
+  })
+  void app.whenReady().then(start).catch(async error => {
+    dialog.showErrorBox('Solomon Darker could not start', error.message)
+    await shutdown()
+    app.exit(1)
+  })
+}
 
 async function start() {
   const applicationRoot = app.getAppPath()
+  build = process.env.SDR_DESKTOP_BUILD_JSON
+    ? JSON.parse(process.env.SDR_DESKTOP_BUILD_JSON)
+    : JSON.parse(await readFile(join(applicationRoot, 'desktop-build.json'), 'utf8'))
   const clientRoot = resolve(process.env.SDR_DESKTOP_CLIENT_ROOT || join(applicationRoot, 'client'))
   clientServer = await startStaticClientServer({ root: clientRoot })
-  const endpoint = desktopRemoteEndpoint() ?? await startLocalGameHost(applicationRoot, clientServer.origin)
-  const preload = resolve(applicationRoot, 'preload.cjs')
-  await access(preload)
-
+  protocol.handle('solomon-darker', request => {
+    const url = new URL(request.url)
+    if (url.host !== 'app') return new Response(null, { status: 404 })
+    if (url.pathname.startsWith('/api/')) {
+      return Response.json({ error: 'This feature is available on the Solomon Darker website.' }, { status: 503 })
+    }
+    return net.fetch(`${clientServer.origin}${url.pathname}${url.search}`, { method: request.method })
+  })
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   session.defaultSession.setPermissionCheckHandler(() => false)
-  Menu.setApplicationMenu(null)
-  const window = new BrowserWindow({
-    backgroundColor: '#000000',
-    height: 800,
-    minHeight: 600,
-    minWidth: 960,
-    show: false,
-    title: 'Solomon Dark',
-    width: 1280,
+  window = new BrowserWindow({
+    backgroundColor: '#0c0910', height: 850, minHeight: 600, minWidth: 960, show: false,
+    title: 'Solomon Darker', width: 1360,
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload,
-      sandbox: true,
-      webSecurity: true,
+      contextIsolation: true, nodeIntegration: false, preload: join(applicationRoot, 'preload.cjs'),
+      sandbox: true, webSecurity: true,
     },
   })
-  const provideEndpoint = (event) => {
-    event.returnValue = event.sender === window.webContents ? endpoint : null
-  }
-  ipcMain.on(ENDPOINT_CHANNEL, provideEndpoint)
-  window.once('closed', () => ipcMain.off(ENDPOINT_CHANNEL, provideEndpoint))
-  const gameUrl = `${clientServer.origin}/game`
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  window.webContents.on('will-navigate', (event, url) => {
-    if (new URL(url).origin !== clientServer.origin) event.preventDefault()
-  })
-  window.webContents.on('will-attach-webview', (event) => event.preventDefault())
+  window.webContents.on('will-navigate', (event, url) => { if (!isAppUrl(url)) event.preventDefault() })
+  window.webContents.on('will-attach-webview', event => event.preventDefault())
+  window.on('close', event => { if (!quitting) { event.preventDefault(); void exit() } })
   window.once('ready-to-show', () => window.show())
-  await window.loadURL(gameUrl)
-}
-
-async function startLocalGameHost(applicationRoot, origin) {
-  const node = resolve(process.env.SDR_DESKTOP_NODE || join(applicationRoot, 'runtime', nodeExecutable()))
-  const hostEntry = resolve(process.env.SDR_DESKTOP_GAME_HOST || join(applicationRoot, 'game-host', 'game-host.mjs'))
-  await Promise.all([access(node), access(hostEntry)])
-  const credential = randomBytes(32).toString('base64url')
-  gameHost = spawn(node, [hostEntry], {
-    env: {
-      ...(process.platform === 'win32' && process.env.SystemRoot
-        ? { SystemRoot: process.env.SystemRoot }
-        : {}),
-      SDR_GAME_ALLOWED_ORIGINS: origin,
-      SDR_GAME_BOOTSTRAP_CREDENTIAL: credential,
-      SDR_GAME_HOST: '127.0.0.1',
-      SDR_GAME_PORT: '0',
-      SDR_GAME_SNAPSHOT_RATE: '20',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
+  ipcMain.on('solomon-dark:game-endpoint', event => { event.returnValue = trusted(event) ? endpoint : null })
+  ipcMain.handle('solomon-dark:desktop-state', event => { requireTrusted(event); return state() })
+  ipcMain.handle('solomon-dark:start-session', async (event, options) => {
+    requireTrusted(event)
+    if (window.webContents.getURL() !== LAUNCHER_URL || changingSession) throw new Error('Return to the launcher first.')
+    changingSession = true
+    try {
+      await startSession(options, applicationRoot)
+      await window.loadURL(`${APP_ORIGIN}/game`)
+    } catch (error) {
+      await stopSession()
+      throw error
+    } finally { changingSession = false }
   })
-  const ready = await hostReadiness(gameHost)
-  gameHost.once('exit', (code, signal) => {
-    if (!quitting) {
-      console.error(`Local game host exited (${code ?? signal ?? 'unknown'})`)
-      app.quit()
+  ipcMain.handle('solomon-dark:check-updates', event => { requireTrusted(event); return checkUpdates() })
+  ipcMain.handle('solomon-dark:download-update', event => {
+    requireTrusted(event)
+    if (!update) throw new Error('No update is available.')
+    return shell.openExternal(update.url)
+  })
+  ipcMain.handle('solomon-dark:open-website', event => { requireTrusted(event); return shell.openExternal('https://solomondarker.com') })
+  ipcMain.handle('solomon-dark:launcher', async event => { requireTrusted(event); await returnToLauncher() })
+  ipcMain.on('solomon-dark:saved', (event, result) => {
+    if (trusted(event) && pendingSave && result?.id === pendingSave.id) {
+      if (typeof result.error === 'string') pendingSave.reject(new Error(result.error))
+      else pendingSave.resolve()
     }
   })
-  return { kind: 'localhost', url: ready.url, credential }
+  installMenu()
+  await window.loadURL(LAUNCHER_URL)
+  void checkUpdates()
+  setInterval(() => { void checkUpdates() }, 4 * 60 * 60 * 1000).unref()
 }
 
-function desktopRemoteEndpoint() {
-  const configured = process.env.SDR_DESKTOP_REMOTE_ENDPOINT_JSON
-  if (!configured) return null
-  const endpoint = JSON.parse(configured)
-  if (endpoint?.kind !== 'remote' || typeof endpoint.url !== 'string'
-    || typeof endpoint.credential !== 'string') {
-    throw new Error('SDR_DESKTOP_REMOTE_ENDPOINT_JSON is invalid')
+async function startSession(options, applicationRoot) {
+  if (!options || !['solo', 'host', 'join'].includes(options.mode)) throw new Error('Choose how to play.')
+  if (options.mode === 'join') {
+    peer = await startLocalPeer({ applicationRoot, mode: 'join', invite: options.invite, revision: build.revision, onExit: peerExited })
+    endpoint = { kind: 'localhost', sessionKind: 'standalone', url: `ws://127.0.0.1:${peer.port}/game`, credential: peer.credential }
+  } else {
+    const credential = randomBytes(32).toString('base64url')
+    if (options.mode === 'host') {
+      createPeerInvite({ host: options.host, port: options.port, revision: build.revision, secret: credential })
+    }
+    gameHost = await startLocalGameHost({
+      applicationRoot, origin: APP_ORIGIN, credential,
+      onExit: code => {
+        if (!quitting) dialog.showErrorBox('The local game stopped', `The game host exited (${code}). Your last saved checkpoint is still on this device.`)
+      },
+    })
+    endpoint = gameHost.endpoint
+    if (options.mode === 'host') {
+      peer = await startLocalPeer({ applicationRoot, mode: 'host', authorityPort: Number(new URL(endpoint.url).port), port: options.port, secret: credential, revision: build.revision, onExit: peerExited })
+      invite = createPeerInvite({ host: options.host, port: peer.port, secret: credential, revision: build.revision })
+    }
   }
-  return endpoint
+  mode = options.mode
+  installMenu()
 }
 
-function hostReadiness(child) {
-  return new Promise((resolveReady, reject) => {
-    let stdout = ''
-    let stderr = ''
-    const timeout = setTimeout(() => fail(new Error('Local game host readiness timed out')), READINESS_TIMEOUT_MS)
-    const receive = (chunk) => {
-      stdout += chunk
-      if (stdout.length > 64 * 1024) {
-        fail(new Error('Local game host emitted excessive readiness output'))
-        return
-      }
-      const newline = stdout.indexOf('\n')
-      if (newline < 0) return
-      try {
-        const message = JSON.parse(stdout.slice(0, newline))
-        const url = typeof message.url === 'string' ? new URL(message.url) : null
-        if (message.type !== 'ready' || url?.protocol !== 'ws:'
-          || url.hostname !== '127.0.0.1' || url.pathname !== '/game'
-          || url.username || url.password) {
-          throw new Error('Local game host emitted invalid readiness data')
-        }
-        cleanup()
-        child.stdout.resume()
-        resolveReady(message)
-      } catch (error) {
-        fail(error)
-      }
+function state() {
+  const addresses = Object.values(networkInterfaces()).flat().filter(address => address?.family === 'IPv4' && !address.internal).map(address => address.address)
+  return { build, mode, addresses, update, updateError }
+}
+
+async function checkUpdates() {
+  if (checking) return checking
+  checking = (async () => {
+    try {
+      update = await checkForDesktopUpdate({ build, platform: process.platform, arch: process.arch, request: net.fetch.bind(net) })
+      updateError = null
+    } catch {
+      updateError = 'Updates could not be checked. You can keep playing offline.'
     }
-    const fail = (error) => {
-      cleanup()
-      reject(new Error(`${error.message}${stderr ? `: ${stderr.trim()}` : ''}`))
-    }
-    const exited = (code, signal) => fail(new Error(`Local game host exited before readiness (${code ?? signal})`))
-    const cleanup = () => {
-      clearTimeout(timeout)
-      child.stdout.off('data', receive)
-      child.off('error', fail)
-      child.off('exit', exited)
-    }
-    child.stdout.setEncoding('utf8')
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-8192) })
-    child.stdout.on('data', receive)
-    child.once('error', fail)
-    child.once('exit', exited)
+    if (!window.isDestroyed()) window.webContents.send('solomon-dark:desktop-state', state())
+    installMenu()
+    return state()
+  })().finally(() => { checking = null })
+  return checking
+}
+
+function installMenu() {
+  if (!window || window.isDestroyed()) return
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { label: 'Game', submenu: [
+      { label: 'Save and return to launcher', enabled: mode !== null, click: () => { void returnToLauncher() } },
+      { label: 'Copy multiplayer invite', enabled: invite !== null, click: () => {
+        clipboard.writeText(invite)
+      } },
+      { type: 'separator' }, { role: 'quit' },
+    ] },
+    { role: 'editMenu' },
+    { label: 'View', submenu: [{ role: 'togglefullscreen' }] },
+    { label: 'Help', submenu: [
+      { label: update ? 'Download available update' : 'Check for updates', click: () => { void manualUpdateCheck() } },
+      { label: 'Solomon Darker website', click: () => { void shell.openExternal('https://solomondarker.com') } },
+    ] },
+  ]))
+}
+
+async function manualUpdateCheck() {
+  await checkUpdates()
+  const result = await dialog.showMessageBox(window, {
+    type: 'info', message: update ? 'An update is available' : updateError || 'You have the latest available build.',
+    detail: update ? 'Download the new app and replace this copy after saving and closing. Your saves stay on this device.' : '',
+    buttons: update ? ['Download update', 'Later'] : ['OK'], cancelId: update ? 1 : 0,
   })
+  if (update && result.response === 0) await shell.openExternal(update.url)
+}
+
+async function saveBeforeClose() {
+  if (!mode || window.isDestroyed()) return true
+  try {
+    await new Promise((resolveSave, reject) => {
+      const timer = setTimeout(() => reject(new Error('The game did not finish saving.')), 20_000)
+      pendingSave = {
+        id: randomBytes(16).toString('hex'),
+        resolve: () => { clearTimeout(timer); resolveSave() },
+        reject: error => { clearTimeout(timer); reject(error) },
+      }
+      window.webContents.send('solomon-dark:save-before-close', pendingSave.id)
+    })
+    return true
+  } catch (error) {
+    const result = await dialog.showMessageBox(window, {
+      type: 'warning', message: 'The latest progress could not be saved', detail: error.message,
+      buttons: ['Keep playing', 'Close without saving'], defaultId: 0, cancelId: 0,
+    })
+    return result.response === 1
+  } finally { pendingSave = null }
+}
+
+async function returnToLauncher() {
+  if (closing || changingSession) return
+  closing = true
+  try {
+    if (!await saveBeforeClose()) return
+    await stopSession()
+    await window.loadURL(LAUNCHER_URL)
+    installMenu()
+  } finally { closing = false }
+}
+
+async function exit() {
+  if (closing) return
+  closing = true
+  if (window && !await saveBeforeClose()) { closing = false; return }
+  quitting = true
+  await shutdown()
+  app.quit()
+}
+
+async function stopSession() {
+  await peer?.close()
+  peer = null
+  await gameHost?.close()
+  gameHost = null
+  endpoint = null
+  invite = null
+  mode = null
 }
 
 async function shutdown() {
-  await Promise.allSettled([
-    stopChild(gameHost),
-    clientServer?.close(),
-  ])
-  gameHost = undefined
-  clientServer = undefined
+  await stopSession()
+  await clientServer?.close()
 }
 
-function stopChild(child) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
-  return new Promise((resolveStop) => {
-    const timeout = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-    }, SHUTDOWN_TIMEOUT_MS)
-    child.once('exit', () => {
-      clearTimeout(timeout)
-      resolveStop()
-    })
-    child.kill('SIGTERM')
-  })
+function isAppUrl(value) {
+  const url = new URL(value)
+  return url.protocol === 'solomon-darker:' && url.host === 'app'
 }
 
-function nodeExecutable() {
-  return process.platform === 'win32' ? 'node.exe' : 'node'
+function trusted(event) {
+  return event.sender === window.webContents && event.senderFrame !== null
+    && event.senderFrame === window.webContents.mainFrame && isAppUrl(event.senderFrame.url)
+}
+
+function requireTrusted(event) {
+  if (!trusted(event)) throw new Error('This action is available only in the desktop app.')
+}
+
+function peerExited(code) {
+  if (!quitting) dialog.showErrorBox('The peer connection stopped', `The network service exited (${code}). Return to the launcher to reconnect.`)
 }

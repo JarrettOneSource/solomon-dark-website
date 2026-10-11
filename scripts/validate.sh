@@ -9,7 +9,13 @@ fail() {
     exit 1
 }
 
-for command_name in python3 node npm; do
+python_command=python3
+venv_python=.venv/bin/python
+case "${OSTYPE:-}" in
+    msys*|cygwin*) python_command=python; venv_python=.venv/Scripts/python.exe ;;
+esac
+
+for command_name in "$python_command" node npm; do
     command -v "$command_name" >/dev/null 2>&1 ||
         fail "$command_name is required"
 done
@@ -46,8 +52,8 @@ install_dependencies() {
     printf 'Restoring pinned dependencies\n'
     "$dotnet_command" restore backend/Server.csproj --nologo
     npm --prefix frontend ci --no-audit --no-fund
-    python3 -m venv .venv
-    .venv/bin/python -m pip install --disable-pip-version-check --requirement tests/requirements.txt
+    "$python_command" -m venv .venv
+    "$venv_python" -m pip install --disable-pip-version-check --requirement tests/requirements.txt
 }
 
 run_lint() {
@@ -70,7 +76,7 @@ run_all() {
         --verbosity minimal
 
     printf 'Running Website contracts and backend integration tests\n'
-    .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+    "$venv_python" -m unittest discover -s tests -p 'test_*.py' -v
 
     run_lint
 

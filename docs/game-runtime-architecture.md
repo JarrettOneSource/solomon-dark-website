@@ -937,14 +937,14 @@ trust mechanisms without changing game messages or authority:
 - provisioned web or remote dedicated: `wss` with ordinary public PKI, normally
   terminated by a gateway;
 - desktop peer host: an authenticated encrypted direct or platform transport;
-  pinned-certificate `wss`, Steam Networking Sockets, and an optional relay are
-  eligible adapters after connectivity evidence is gathered.
+  Node TLS 1.3 with an invite-owned random pre-shared key wraps a transparent
+  TCP tunnel to the existing loopback WebSocket host. No Website is contacted.
 
 The host binds only to loopback by default. Non-loopback binding is explicit
 host intent and the v0 Node listener permits it only behind an explicitly
 trusted TLS gateway with a nonempty origin allowlist. Direct desktop peer
-exposure remains deferred until the encrypted transport adapter is chosen. A
-localhost listener still authenticates, validates `Host`, and
+exposure is owned by the explicit desktop Host action: the game listener stays
+loopback-only while a separate TLS listener admits invite holders. A localhost listener still authenticates, validates `Host`, and
 rejects unapproved browser origins: arbitrary websites can initiate localhost
 WebSocket requests. Bootstrap secrets travel through an inherited private
 channel or environment, never a visible command-line argument in a packaged
@@ -1508,6 +1508,45 @@ requirement. Electron is the initial desktop shell and does not own simulation:
 it serves the same static bundle and supervises a separately executable pinned
 Node host. Stack changes require a failed measured gate, not preference.
 
+## Standalone desktop lifecycle and releases
+
+The Electron shell serves the shared production bundle at the registered,
+secure standard origin `solomon-darker://app`. Asset delivery still reuses the
+loopback static server. The stable origin preserves IndexedDB saves and local
+settings across process restarts and application replacement. The renderer
+remains sandboxed with context isolation and no Node integration. Only the
+app's main frame may invoke the narrow preload operations.
+
+Solo and Host spawn the same pinned, separately executable Node authority.
+Both peer roles run their transport in a separate bundled Node child, because
+Electron's BoringSSL runtime does not provide the required TLS-PSK behavior.
+Joining creates a loopback TCP listener that tunnels to the host over TLS 1.3;
+Chromium retains the unchanged credentialed WebSocket transport. Node's
+standard TLS-PSK support authenticates a random 256-bit invitation capability,
+with an HKDF-derived transport key separate from its gameplay credential.
+Invites also bind the full source revision. Wrong keys and different revisions
+fail admission before gameplay. There is no certificate bypass for ordinary
+HTTPS, server discovery, hosted signaling, or relay. The native protocol choice
+was tested on Windows with successful encrypted transfer and wrong-key
+rejection before implementation.
+
+Close and return-to-launcher request the existing `saveBeforeLeave` checkpoint
+and await its normal local persistence owner before terminating the child.
+A failed save leaves the app open unless the player explicitly chooses to
+close without saving. Shutdown closes peer sockets and in-flight local asset
+responses, then reaps the authority. This does not add host migration.
+
+The Validate workflow builds Windows x64, macOS arm64/x64 and Linux x64 from
+one source revision and runs packaged offline/peer acceptance. Publication
+requires the canonical Website gate and all platform jobs. The latest GitHub
+release feeds optional startup/four-hour update checks; only a newer source
+revision with a matching platform artifact is offered. Download is explicit,
+and an update cannot restart or replace an active game. The M5 worker continues
+to publish the Website from the same `main` branch.
+
+References: [Electron standard protocols](https://www.electronjs.org/docs/latest/api/protocol/),
+[Node 22.17 TLS pre-shared keys](https://nodejs.org/download/release/v22.17.0/docs/api/tls.html#pre-shared-keys).
+
 ## Explicit deferrals
 
 - peer NAT traversal beyond LAN/direct address and manual port forwarding;
@@ -1612,9 +1651,9 @@ design:
   while React retains the HUD, semantic menu controls, accessibility surface,
   and Pointer Events joystick.
 
-Encrypted direct peer hosting, save persistence, combat load recovery, and
-minimum-hardware qualification remain the next product slices. None requires
-replacing this protocol, client, kernel, renderer plan, or server boundary.
+The original foundation deferred encrypted peers and desktop save persistence.
+The standalone desktop lifecycle above implements both on the same client and host.
+Combat load recovery and minimum-hardware qualification retain their own gates.
 
 ## 2026-08-12 implementation verification
 

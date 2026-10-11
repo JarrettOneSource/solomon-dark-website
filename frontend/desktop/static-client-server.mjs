@@ -11,6 +11,7 @@ const CONTENT_TYPES = new Map([
   ['.jpeg', 'image/jpeg'],
   ['.jpg', 'image/jpeg'],
   ['.js', 'text/javascript; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.mp3', 'audio/mpeg'],
   ['.png', 'image/png'],
@@ -73,7 +74,7 @@ export async function startStaticClientServer({ root, host = '127.0.0.1', port =
       const extension = extname(file).toLowerCase()
       response.writeHead(200, {
         ...securityHeaders(),
-        'cache-control': file === indexPath ? 'no-store' : 'public, max-age=31536000, immutable',
+        'cache-control': file === indexPath || path.startsWith('/__desktop/') ? 'no-store' : 'public, max-age=31536000, immutable',
         'content-type': CONTENT_TYPES.get(extension) ?? 'application/octet-stream',
         'content-length': fileInfo.size,
       })
@@ -99,12 +100,15 @@ export async function startStaticClientServer({ root, host = '127.0.0.1', port =
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('Desktop client server did not bind TCP')
   expectedHost = `${host.includes(':') ? `[${host}]` : host}:${address.port}`
+  let closing
   return {
     origin: `http://${expectedHost}`,
     async close() {
-      await new Promise((resolveClose, reject) => {
+      closing ??= new Promise((resolveClose, reject) => {
         server.close((error) => error ? reject(error) : resolveClose())
+        server.closeAllConnections()
       })
+      await closing
     },
   }
 }

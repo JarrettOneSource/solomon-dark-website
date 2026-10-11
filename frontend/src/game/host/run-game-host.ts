@@ -140,6 +140,7 @@ async function stop(): Promise<void> {
 
 process.once('SIGINT', () => { void stop() })
 process.once('SIGTERM', () => { void stop() })
+process.once('disconnect', () => { void stop() })
 
 function parsePort(value: string | undefined): number {
   if (!value) return 0

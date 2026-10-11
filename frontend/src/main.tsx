@@ -25,6 +25,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Account from './pages/Account'
 import About from './pages/About'
+import Downloads from './pages/Downloads'
 import Wizard from './pages/Wizard'
 import NotFound from './pages/NotFound'
 import RouteError from './pages/RouteError'
@@ -78,6 +79,7 @@ const router = createBrowserRouter([
       { path: '/register', element: <Register /> },
       { path: '/account', element: <Account /> },
       { path: '/about', element: <About /> },
+      { path: '/downloads', element: <Downloads /> },
       { path: '/wizards/:username', element: <Wizard /> },
       { path: '*', element: <NotFound /> },
     ],

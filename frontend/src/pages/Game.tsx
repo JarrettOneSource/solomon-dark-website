@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkshopRequest } from '../editor/store.ts'
 import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
+import DesktopUpdateNotice from '../game/DesktopUpdateNotice.tsx'
+import { desktopRuntime } from '../game/desktop-runtime.ts'
 import {
   GameConnectionFailure,
 } from '../game/client/game-connection-failure.ts'
@@ -104,6 +106,7 @@ export default function Game() {
   useEffect(() => trackPlaytime(), [])
 
   useEffect(() => {
+    if (desktopRuntime()) return
     const currentRevision = TITLE_BUILD_REVISION.full
     if (!currentRevision) return
     const controller = new AbortController()
@@ -470,6 +473,7 @@ export default function Game() {
   }
   return (
     <>
+      <DesktopUpdateNotice />
       {readiness === 'ready' && !authLoading && saveReady && modsReady
         ? (
             <MainMenuScene
