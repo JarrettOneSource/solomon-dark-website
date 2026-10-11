@@ -59,7 +59,6 @@ jobs:
       matrix:
         include:
           - { runner: windows-latest, platform: win32, arch: x64 }
-          - { runner: macos-15-intel, platform: darwin, arch: x64 }
     defaults:
       run:
         working-directory: frontend

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { networkInterfaces } from 'node:os'
+import { cpus, networkInterfaces } from 'node:os'
 import { join, resolve } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, session, shell } from 'electron'
 import { startStaticClientServer } from './static-client-server.mjs'
@@ -51,6 +51,18 @@ else {
 }
 
 async function start() {
+  let lastSample = Date.now()
+  let lastCpu = cpus()
+  setInterval(() => {
+    const now = Date.now()
+    const nextCpu = cpus()
+    const idle = nextCpu.reduce((sum, cpu, index) => sum + cpu.times.idle - lastCpu[index].times.idle, 0)
+    const total = nextCpu.reduce((sum, cpu, index) => sum + Object.values(cpu.times).reduce((a, b) => a + b) - Object.values(lastCpu[index].times).reduce((a, b) => a + b), 0)
+    console.error(JSON.stringify({ metric: 'cpu', time: now, interval: now - lastSample, idleFraction: idle / total,
+      processes: app.getAppMetrics().map(row => ({ pid: row.pid, type: row.type, cpu: row.cpu, memory: row.memory.workingSetSize })) }))
+    lastSample = now
+    lastCpu = nextCpu
+  }, 5000).unref()
   const applicationRoot = app.getAppPath()
   build = process.env.SDR_DESKTOP_BUILD_JSON
     ? JSON.parse(process.env.SDR_DESKTOP_BUILD_JSON)
@@ -63,7 +75,13 @@ async function start() {
     if (url.pathname.startsWith('/api/')) {
       return Response.json({ error: 'This feature is available on the Solomon Darker website.' }, { status: 503 })
     }
-    return net.fetch(`${clientServer.origin}${url.pathname}${url.search}`, { method: request.method })
+    const started = Date.now()
+    const response = net.fetch(`${clientServer.origin}${url.pathname}${url.search}`, { method: request.method })
+    if (url.pathname.endsWith('.js') || url.pathname === '/game') {
+      console.error(JSON.stringify({ metric: 'request', time: started, path: url.pathname }))
+      void response.then(value => console.error(JSON.stringify({ metric: 'response', time: Date.now(), duration: Date.now() - started, status: value.status, path: url.pathname })))
+    }
+    return response
   })
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   session.defaultSession.setPermissionCheckHandler(() => false)
