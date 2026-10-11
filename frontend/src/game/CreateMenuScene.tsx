@@ -8,8 +8,12 @@ import {
   createEntryMotionAt,
   createSelectionMotionAt,
 } from './create-menu-motion.ts'
+import { startCreateLoadoutFinalization, type CreateLoadoutCommit } from './create-loadout-finalization.ts'
+import { finalizeNativeCreateLoadout, NATIVE_CREATE_ENTRY_FADE_MS } from './core-kernels/native-create-loadout.ts'
+import { createNativeRng, type NativeRngState } from './core-kernels/native-rng.ts'
 import type {
   WizardDiscipline,
+  WizardDisciplineChoice,
   WizardElement,
 } from './core-kernels/player-character.ts'
 import {
@@ -20,7 +24,6 @@ import {
 } from './create-wizard-name.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
-  CREATE_DISCIPLINE_FINALIZE_MS,
   createEntryAudioEvents,
   createSelectionAudioEvents,
   type CreateAudioEvent,
@@ -29,6 +32,7 @@ import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import { nativeApplicationTick } from './native-application-tick.ts'
 import {
   CREATE_DISCIPLINES,
+  CREATE_RANDOMIZE_BOUNDS,
   CREATE_ELEMENTS,
 } from './renderer/create-menu-render-contract.ts'
 import {
@@ -48,7 +52,7 @@ interface CreateMenuSceneProps {
   backDisabled?: boolean
   displayName: string
   onBack: () => void
-  onDisciplineCommit: () => void
+  onLoadoutCommit: () => void
   onStart: (
     displayName: string,
     element: WizardElement,
@@ -76,7 +80,7 @@ export default function CreateMenuScene({
   backDisabled = false,
   displayName,
   onBack,
-  onDisciplineCommit,
+  onLoadoutCommit,
   onStart,
   retainedLoadoutCanConfirm = false,
   retainedLoadout,
@@ -91,24 +95,27 @@ export default function CreateMenuScene({
   // Keep the draft with this Create instance, not with incoming snapshots.
   const [nameDraft, setNameDraft] = useState(() => retainedLoadout?.displayName ?? displayName)
   const activeDisplayNameRef = useRef(nameDraft)
-  const pendingDisplayNameRef = useRef(nameDraft)
+  const pendingCommitRef = useRef<CreateLoadoutCommit | null>(null)
+  const randomStateRef = useRef<NativeRngState | null>(null)
+  const inputReadyRef = useRef(false)
   const selectedElementRef = useRef<WizardElement | null>(null)
   const hoveredActionRef = useRef<CreateMenuAction | null>(retainedLoadout?.element ?? null)
   const phaseStartedAtRef = useRef(0)
   const previousPhaseElapsedRef = useRef(0)
   const elementButtonsRef = useRef<Partial<Record<WizardElement, HTMLButtonElement>>>({})
-  const disciplineButtonsRef = useRef<Partial<Record<WizardDiscipline, HTMLButtonElement>>>({})
+  const disciplineButtonsRef = useRef<Partial<Record<WizardDisciplineChoice, HTMLButtonElement>>>({})
   const uiStateRef = useRef({ disciplinesVisible: false, elementsVisible: false, settled: false })
   const viewportRef = useRef(viewport)
   const [elementsVisible, setElementsVisible] = useState(false)
   const [disciplinesVisible, setDisciplinesVisible] = useState(false)
   const [motionSettled, setMotionSettled] = useState(false)
   const [selectedElement, setSelectedElement] = useState<WizardElement | null>(null)
-  const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
+  const [pendingCommit, setPendingCommit] = useState<CreateLoadoutCommit | null>(null)
+  const [inputReady, setInputReady] = useState(false)
   const [nameValidationMessage, setNameValidationMessage] = useState<string | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
   onStartRef.current = onStart
-  const nameLocked = pendingDiscipline !== null
+  const nameLocked = pendingCommit !== null
     || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
   const activeDisplayName = retainedLoadout && !retainedLoadoutCanConfirm
     ? retainedLoadout.displayName
@@ -146,7 +153,13 @@ export default function CreateMenuScene({
       stopPresentationLoop = startGamePresentationLoop((now) => {
         const selected = selectedElementRef.current
         const phase = selected ? 'discipline' : 'element'
-        const phaseElapsedMs = now - phaseStartedAtRef.current
+        const pending = pendingCommitRef.current
+        const presentationNow = pending?.kind === 'randomize' ? pending.startedAtMs : now
+        const phaseElapsedMs = presentationNow - phaseStartedAtRef.current
+        if (!inputReadyRef.current && now - sceneStartedAt >= NATIVE_CREATE_ENTRY_FADE_MS) {
+          inputReadyRef.current = true
+          setInputReady(true)
+        }
         const motionDuration = selected
           ? CREATE_SELECTION_ANIMATION_MS
           : CREATE_ENTRY_ANIMATION_MS
@@ -212,6 +225,7 @@ export default function CreateMenuScene({
       stopPresentationLoop?.()
       rendererRef.current?.destroy()
       rendererRef.current = null
+      inputReadyRef.current = false
     }
   }, [audio])
 
@@ -221,33 +235,33 @@ export default function CreateMenuScene({
   }, [audio])
 
   useEffect(() => {
-    if (!pendingDiscipline || !selectedElement) return
-    const startedAt = performance.now()
-    let animationFrame = 0
-    let active = true
-    const update = (now: number) => {
-      if (now - startedAt < CREATE_DISCIPLINE_FINALIZE_MS) {
-        animationFrame = requestAnimationFrame(update)
-        return
-      }
-      audio.playStream('catch-it')
-      void onStartRef.current(
-        pendingDisplayNameRef.current,
-        selectedElement,
-        pendingDiscipline,
-      ).then((started) => {
-        if (active && !started) setPendingDiscipline(null)
-      })
-    }
-    animationFrame = requestAnimationFrame(update)
-    return () => {
-      active = false
-      cancelAnimationFrame(animationFrame)
-    }
-  }, [audio, pendingDiscipline, selectedElement])
+    if (!pendingCommit) return
+    return startCreateLoadoutFinalization({
+      ...pendingCommit,
+      requestFrame: callback => window.requestAnimationFrame(callback),
+      cancelFrame: handle => window.cancelAnimationFrame(handle),
+      onManualFinalize: () => audio.playStream('catch-it'),
+      onStart: config => onStartRef.current(config.displayName, config.element, config.discipline),
+      onRelease: () => {
+        if (pendingCommit.kind === 'randomize') {
+          phaseStartedAtRef.current += performance.now() - pendingCommit.startedAtMs
+        }
+        pendingCommitRef.current = null
+        setPendingCommit(null)
+      },
+    })
+  }, [audio, pendingCommit])
+
+  const beginCommit = (commit: CreateLoadoutCommit) => {
+    // The ref closes the same-event/repeated-key window before React rerenders.
+    if (pendingCommitRef.current) return
+    pendingCommitRef.current = commit
+    onLoadoutCommit()
+    setPendingCommit(commit)
+  }
 
   const selectElement = (element: WizardElement) => {
-    if (selectedElementRef.current || pendingDiscipline || !elementsVisible) return
+    if (selectedElementRef.current || pendingCommitRef.current || nameLocked || !elementsVisible) return
     audio.playSound('pick-skill')
     const now = performance.now()
     selectedElementRef.current = element
@@ -260,19 +274,36 @@ export default function CreateMenuScene({
     setSelectedElement(element)
   }
 
-  const selectDiscipline = (discipline: WizardDiscipline) => {
+  const selectDiscipline = (discipline: WizardDisciplineChoice) => {
     const name = finalizeCreateWizardName(activeDisplayNameRef.current)
     if (!name.ok) return
     if (
       !selectedElementRef.current
-      || pendingDiscipline
+      || pendingCommitRef.current
       || !disciplinesVisible
       || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
     ) return
-    pendingDisplayNameRef.current = name.value
     audio.playSound('pick-skill')
-    onDisciplineCommit()
-    setPendingDiscipline(discipline)
+    beginCommit({
+      config: { displayName: name.value, element: selectedElementRef.current, discipline },
+      kind: 'manual',
+      startedAtMs: performance.now(),
+    })
+  }
+
+  const randomizeLoadout = () => {
+    if (!inputReadyRef.current || pendingCommitRef.current || nameLocked || rendererError) return
+    const name = finalizeCreateWizardName(activeDisplayNameRef.current)
+    if (!name.ok) return
+    const source = randomStateRef.current ?? createNativeRng(crypto.getRandomValues(new Uint32Array(1))[0]!)
+    const result = finalizeNativeCreateLoadout(source, {
+      displayName: name.value,
+      element: selectedElementRef.current,
+      discipline: null,
+    })
+    randomStateRef.current = result.state
+    audio.playSound('click')
+    beginCommit({ config: result.config, kind: 'randomize', startedAtMs: performance.now() })
   }
 
   const playBackPress = (event?: KeyboardEvent<HTMLButtonElement>) => {
@@ -288,6 +319,10 @@ export default function CreateMenuScene({
     viewport,
     fixedGameStageBounds(viewport, 'left', 'top'),
   )
+  const nativeDiceStageStyle = nativeStageStyle(
+    viewport,
+    fixedGameStageBounds(viewport, 'right', 'top'),
+  )
   const nativeNameStageStyle = nativeStageStyle(
     viewport,
     fixedGameStageBounds(viewport, 'center', 'top'),
@@ -299,7 +334,7 @@ export default function CreateMenuScene({
   const nameValidation = finalizeCreateWizardName(activeDisplayName)
 
   const updateDisplayName = (nextName: string) => {
-    if (nameLocked) return
+    if (nameLocked || pendingCommitRef.current) return
     if (nextName.length === 0) {
       setNameDraft('')
       setNameValidationMessage(null)
@@ -315,7 +350,7 @@ export default function CreateMenuScene({
   }
 
   const clearWizardName = () => {
-    if (nameLocked) return
+    if (nameLocked || pendingCommitRef.current) return
     audio.playSound('click')
     setNameDraft('')
     setNameValidationMessage(null)
@@ -323,7 +358,7 @@ export default function CreateMenuScene({
   }
 
   const randomizeWizardName = () => {
-    if (nameLocked) return
+    if (nameLocked || pendingCommitRef.current) return
     audio.playSound('click')
     setNameValidationMessage(null)
     setNameDraft(randomStockWizardName())
@@ -336,7 +371,9 @@ export default function CreateMenuScene({
       className="create-menu-scene"
       data-phase={selectedElement ? 'discipline' : 'element'}
       data-element={selectedElement ?? undefined}
-      data-finalizing={pendingDiscipline !== null}
+      data-finalizing={pendingCommit !== null}
+      data-finalizing-kind={pendingCommit?.kind}
+      data-input-ready={inputReady}
       data-motion-settled={motionSettled}
       data-retained-loadout={Boolean(retainedLoadout) || undefined}
       data-retained-loadout-can-confirm={retainedLoadout
@@ -355,9 +392,9 @@ export default function CreateMenuScene({
           className="create-menu-back"
           aria-label="Back"
           data-game-back="true"
-          disabled={backDisabled || pendingDiscipline !== null || Boolean(retainedLoadout)}
+          disabled={backDisabled || pendingCommit !== null || Boolean(retainedLoadout)}
           onBlur={() => highlight(null)}
-          onClick={onBack}
+          onClick={() => { if (!pendingCommitRef.current) onBack() }}
           onFocus={() => highlight('back')}
           onPointerDown={(event) => {
             if (event.button === 0) playBackPress()
@@ -365,6 +402,24 @@ export default function CreateMenuScene({
           onPointerEnter={() => highlight('back')}
           onPointerLeave={() => highlight(null)}
           onKeyDown={playBackPress}
+        />
+      </div>
+
+      <div className="create-menu-native-stage create-menu-native-dice-stage" style={nativeDiceStageStyle}>
+        <button
+          type="button"
+          aria-label="Randomize wizard loadout"
+          title="Randomize choices and keep your name"
+          className="create-menu-randomize"
+          data-game-create-randomize="true"
+          disabled={!inputReady || nameLocked || !nameValidation.ok || Boolean(rendererError)}
+          onClick={randomizeLoadout}
+          style={{
+            left: CREATE_RANDOMIZE_BOUNDS.left,
+            top: CREATE_RANDOMIZE_BOUNDS.top,
+            width: CREATE_RANDOMIZE_BOUNDS.width,
+            height: CREATE_RANDOMIZE_BOUNDS.height,
+          }}
         />
       </div>
 
@@ -426,7 +481,7 @@ export default function CreateMenuScene({
               data-game-default-focus={(retainedLoadout
                 ? element === retainedLoadout.element
                 : element === 'earth') || undefined}
-              disabled={!elementsVisible || selectedElement !== null}
+              disabled={!elementsVisible || selectedElement !== null || nameLocked}
               onBlur={() => highlight(null)}
               onClick={() => selectElement(element)}
               onFocus={() => highlight(element)}
@@ -456,7 +511,7 @@ export default function CreateMenuScene({
                 : discipline === 'arcane') || undefined}
               disabled={
                 !disciplinesVisible
-                || pendingDiscipline !== null
+                || pendingCommit !== null
                 || !nameValidation.ok
                 || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
               }
@@ -499,7 +554,7 @@ function updateSemanticElementBounds(
 }
 
 function updateSemanticDisciplineBounds(
-  buttons: Partial<Record<WizardDiscipline, HTMLButtonElement>>,
+  buttons: Partial<Record<WizardDisciplineChoice, HTMLButtonElement>>,
   elapsedMs: number,
 ): void {
   for (const discipline of CREATE_DISCIPLINES) {

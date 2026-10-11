@@ -342,6 +342,7 @@
   bottom: 42px;
 }
 
+.create-menu-randomize:focus-visible,
 .create-menu-back:focus-visible,
 .create-menu-element:focus-visible,
 .create-menu-discipline:focus-visible {
@@ -626,3 +627,16 @@
     transform: none;
   }
 }
+
+/* Record 6 supplies the artwork; the native child rectangle owns all input. */
+.create-menu-randomize {
+  position: absolute;
+  z-index: 30;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.create-menu-randomize:disabled { cursor: default; }

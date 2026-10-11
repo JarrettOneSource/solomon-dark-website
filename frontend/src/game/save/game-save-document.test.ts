@@ -77,6 +77,22 @@ const MOD_STATE = {
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
+test('Create save roots reject stale, fractional, and out-of-range skill books', () => {
+  const character = { displayName: 'Mixed', element: 'fire', discipline: 'water' } as const
+  const state = createGameSimulation({ owner: character })
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  assert.deepEqual(restoreGameSaveDocument(document).state.playerEntities.configs[0], character)
+  for (const [field, value] of [
+    ['elementRoot', -1], ['elementRoot', 5], ['elementRoot', 1.5], ['elementRoot', 2],
+    ['disciplineRoot', -1], ['disciplineRoot', 8], ['disciplineRoot', 3.5], ['disciplineRoot', 7],
+  ] as const) {
+    const invalid = JSON.parse(document)
+    invalid.continuation.simulation.playerEntities.skillBooks[0][field] = value
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /root/, `${field}=${value}`)
+  }
+})
+
 test('continuations preserve rescue particles while old saves initialize an empty actor state', () => {
   let state = createGameSimulation({ owner: OWNER })
   state = { ...state, playerEntities: { ...state.playerEntities,

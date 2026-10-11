@@ -562,7 +562,7 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
       currentHealth: finite(wizard.currentHealth, 0, 1_000_000, 'portable current health'),
       currentMana: finite(wizard.currentMana, 0, 1_000_000, 'portable current mana'),
       deferredSkillChoices: integer(wizard.deferredSkillChoices, 0, 1_000, 'portable deferred choices'),
-      disciplineRoot: integer(wizard.disciplineRoot, 5, 7, 'portable discipline root'),
+      disciplineRoot: integer(wizard.disciplineRoot, 0, 7, 'portable discipline root'),
       elementRoot: integer(wizard.elementRoot, 0, 4, 'portable element root'),
       experience: finite(wizard.experience, 0, 10_000_000, 'portable experience'),
       experienceBonus: finite(wizard.experienceBonus, -1_000, 1_000, 'portable experience bonus'),

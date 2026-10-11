@@ -950,6 +950,80 @@ test('client samples only its current Boneyard delivered position history', asyn
   assert.equal(sampleActors(125), null)
 })
 
+test('retained mixed Create confirmation waits for authoritative readiness and rejects duplicate dispatch', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const created = createGameSimulation({ 'player-1': CHARACTER, 'player-2': CHARACTER })
+  const loadout = { ...created, run: { ...created.run, phase: 'loadout' as const,
+    eligiblePlayerIds: ['player-1', 'player-2'], lastCompletedRunId: 'completed' } }
+  receiveWelcome(transport, createGameSnapshot(loadout, 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const config = { displayName: 'Mixed', element: 'fire', discipline: 'water' } as const
+  const pending = session.confirmLoadout(config.element, config.discipline, config.displayName)
+  assert.ok(pending instanceof Promise, 'dispatch is not authoritative acceptance')
+  const sent = transport.sent.length
+  assert.equal(await session.confirmLoadout('ether', 'body', 'Duplicate'), false)
+  assert.equal(transport.sent.length, sent)
+  let accepted = false
+  void pending.then(value => { accepted = value })
+  receiveSnapshot(transport, createGameSnapshot({ ...loadout, tick: 1 }, 'player-1'), 0)
+  await Promise.resolve()
+  assert.equal(accepted, false)
+  const confirmed = confirmGameSimulationLoadout(loadout, 'player-1', config)
+  assert.ok(confirmed)
+  receiveSnapshot(transport, createGameSnapshot({ ...confirmed, tick: 2 }, 'player-1'), 0)
+  assert.equal(await pending, true)
+  assert.equal(session.getSnapshot().run.phase, 'loadout', 'waiting peer keeps the Create session')
+  const beforeReadyRepeat = transport.sent.length
+  assert.equal(await session.confirmLoadout('air', 'mind', 'AlreadyReady'), false)
+  assert.equal(transport.sent.length, beforeReadyRepeat)
+})
+
+test('retained Create send failure and timeout release confirmation ownership for retry', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const created = createGameSimulation({ 'player-1': CHARACTER })
+  const loadout = { ...created, run: { ...created.run, phase: 'loadout' as const,
+    eligiblePlayerIds: ['player-1'], lastCompletedRunId: 'completed' } }
+  receiveWelcome(transport, createGameSnapshot(loadout, 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const send = transport.send.bind(transport)
+  transport.send = () => { throw new Error('fixture send failure') }
+  await assert.rejects(async () => session.confirmLoadout('fire', 'water', 'Retry'), /send failure/)
+  transport.send = send
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const timedOut = session.confirmLoadout('fire', 'water', 'Retry')
+  const rejected = assert.rejects(timedOut, /confirmation timed out/)
+  context.mock.timers.tick(10_000)
+  await rejected
+  const retry = session.confirmLoadout('fire', 'water', 'Retry')
+  const config = { displayName: 'Retry', element: 'fire', discipline: 'water' } as const
+  const confirmed = confirmGameSimulationLoadout(loadout, 'player-1', config)
+  assert.ok(confirmed)
+  receiveSnapshot(transport, createGameSnapshot({ ...confirmed, tick: 1 }, 'player-1'), 0)
+  assert.equal(await retry, true)
+})
+
+test('destroying retained Create rejects and clears its pending confirmation', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const created = createGameSimulation({ 'player-1': CHARACTER })
+  const loadout = { ...created, run: { ...created.run, phase: 'loadout' as const,
+    eligiblePlayerIds: ['player-1'], lastCompletedRunId: 'completed' } }
+  receiveWelcome(transport, createGameSnapshot(loadout, 'player-1'))
+  const session = await connecting
+  const pending = session.confirmLoadout('earth', 'ether', 'Closing')
+  const rejected = assert.rejects(pending, /destroyed/)
+  session.destroy()
+  await rejected
+  assert.equal(await session.confirmLoadout('earth', 'ether', 'Closed'), false)
+})
+
 test('host client keeps one session through Game Over, loadout, and Hub confirmation', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({

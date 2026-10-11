@@ -21,6 +21,7 @@ public static partial class GameLeaderboardEndpoints
 
     private static async Task<IResult> ListAsync(
         string? board,
+        bool? mixedRoots,
         HttpContext context,
         AppDb db,
         CancellationToken cancellationToken)
@@ -32,9 +33,16 @@ public static partial class GameLeaderboardEndpoints
             return ApiErrors.BadRequest("That leaderboard does not exist.");
         }
 
-        var source = db.GameLeaderboardEntries
+        IQueryable<GameLeaderboardEntry> source = db.GameLeaderboardEntries
             .AsNoTracking()
             .Include(entry => entry.User);
+        // Older public Hall clients only know the three ordinary disciplines.
+        // Filter before ranking/Take so capable clients cannot crowd them out.
+        if (mixedRoots != true)
+        {
+            source = source.Where(entry => entry.Discipline == "arcane"
+                || entry.Discipline == "body" || entry.Discipline == "mind");
+        }
         IOrderedQueryable<GameLeaderboardEntry> ordered = normalizedBoard switch
         {
             "wave" => source
@@ -187,7 +195,7 @@ public static partial class GameLeaderboardEndpoints
         {
             return "The wizard element is invalid.";
         }
-        if (request.Discipline is not ("arcane" or "body" or "mind"))
+        if (request.Discipline is not ("arcane" or "body" or "mind" or "ether" or "fire" or "air" or "water" or "earth"))
         {
             return "The wizard discipline is invalid.";
         }

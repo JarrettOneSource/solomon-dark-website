@@ -240,6 +240,7 @@ const ELEMENT_ROOT: Readonly<Record<WizardElement, number>> = {
   earth: 4,
 }
 const DISCIPLINE_ROOT: Readonly<Record<WizardDiscipline, number>> = {
+  ...ELEMENT_ROOT,
   body: 5,
   mind: 6,
   arcane: 7,

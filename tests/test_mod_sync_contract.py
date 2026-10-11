@@ -1178,6 +1178,41 @@ console.log(JSON.stringify({
         )
         self.assertEqual(status, 204, deleted)
 
+    def test_browser_game_save_create_roots_roundtrip_and_reject_unknowns(self) -> None:
+        auth = {"Authorization": f"Bearer {self.token}"}
+        status, existing = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200, existing)
+        revision = existing["save"]["revision"] if existing["save"] else 0
+        roots = ("ether", "fire", "air", "water", "earth", "body", "mind", "arcane")
+        for discipline in roots:
+            document = json.dumps({
+                "schemaVersion": 50, "integrity": "global-clean", "mods": [], "modState": {},
+                "nativeSource": None,
+                "profile": {"economy": {}, "hagathaRuntime": {}, "advancedUnlocks": [False] * 8},
+                "continuation": {
+                    "summary": {"activeRun": False, "character": {
+                        "discipline": discipline, "displayName": "Rootus", "element": "fire"},
+                        "partyRejoinToken": None, "phase": "hub", "playerId": "player-1",
+                        "savedAtTick": 42, "worldKind": "hub"},
+                    "simulation": {}, "loadedBoneyard": None,
+                },
+            })
+            status, saved = self.request("PUT", "/api/game/saves/0", headers=auth,
+                json_body={"document": document, "expectedRevision": revision})
+            self.assertEqual(status, 200, (discipline, saved))
+            revision = saved["revision"]
+            status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
+            self.assertEqual(status, 200, loaded)
+            self.assertEqual(loaded["save"]["document"], document)
+        for field, value in (("discipline", "unknown"), ("discipline", "constructor"), ("element", "arcane")):
+            invalid = json.loads(document)
+            invalid["continuation"]["summary"]["character"][field] = value
+            status, rejected = self.request("PUT", "/api/game/saves/0", headers=auth,
+                json_body={"document": json.dumps(invalid), "expectedRevision": revision})
+            self.assertEqual(status, 400, rejected)
+        status, deleted = self.request("DELETE", f"/api/game/saves/0?expectedRevision={revision}", headers=auth)
+        self.assertEqual(status, 204, deleted)
+
     def test_native_faculty_peak_cloud_save_and_rejoin_transport(self) -> None:
         destination = Path(self.temp.name) / "native-faculty-peak-save.json"
         subprocess.run(
@@ -1695,6 +1730,67 @@ console.log(JSON.stringify({
             "/api/game/leaderboards?board=unknown",
         )
         self.assertEqual(status, 400, rejected)
+
+        # Mixed roots retain signed receipt v1 and explicitly opt in on reads.
+        mixed_ids = set()
+        for discipline in ("ether", "fire", "air", "water", "earth"):
+            mixed = {**first, "runId": f"mixed-root-{discipline}", "discipline": discipline,
+                     "awesomeness": 150, "wave": 5, "monstersKilled": 100, "elapsedTicks": 50000}
+            receipt = self.leaderboard_receipt(self.user_id, mixed)
+            status, created = self.request("POST", "/api/game/leaderboards", headers=auth,
+                json_body={"receipt": receipt})
+            self.assertEqual(status, 201, created)
+            self.assertEqual(created["discipline"], discipline)
+            mixed_ids.add(created["runId"])
+            status, duplicate = self.request("POST", "/api/game/leaderboards", headers=auth,
+                json_body={"receipt": self.leaderboard_receipt(self.user_id, {**mixed, "awesomeness": 999})})
+            self.assertEqual(status, 200, duplicate)
+            self.assertEqual(duplicate["awesomeness"], 150)
+        for board in ("awesomeness", "wave", "kills", "time"):
+            status, capable = self.request("GET", f"/api/game/leaderboards?board={board}&mixedRoots=true")
+            self.assertEqual(status, 200, capable)
+            self.assertTrue(mixed_ids.issubset({row["runId"] for row in capable["items"]}))
+            for capability in ("", "&mixedRoots=false"):
+                status, legacy = self.request("GET", f"/api/game/leaderboards?board={board}{capability}")
+                self.assertEqual(status, 200, legacy)
+                self.assertTrue(all(row["discipline"] in ("arcane", "body", "mind") for row in legacy["items"]))
+                self.assertEqual([row["rank"] for row in legacy["items"]], list(range(1, len(legacy["items"]) + 1)))
+        status, rejected = self.request("POST", "/api/game/leaderboards", headers=auth,
+            json_body={"receipt": self.leaderboard_receipt(self.user_id, {**first, "discipline": "unknown"})})
+        self.assertEqual(status, 400, rejected)
+        status, rejected = self.request("POST", "/api/game/leaderboards", json_body={"receipt": receipt})
+        self.assertEqual(status, 401, rejected)
+        status, rejected = self.request("POST", "/api/game/leaderboards", headers=peer_auth,
+            json_body={"receipt": receipt})
+        self.assertEqual(status, 400, rejected)
+        parts = receipt.split(".")
+        parts[-1] = ("A" if parts[-1][0] != "A" else "B") + parts[-1][1:]
+        status, rejected = self.request("POST", "/api/game/leaderboards", headers=auth,
+            json_body={"receipt": ".".join(parts)})
+        self.assertEqual(status, 400, rejected)
+
+        # Seed only the disposable fixture DB, avoiding submission-rate effects.
+        # A post-Take filter would incorrectly hide every legacy row here.
+        with closing(sqlite3.connect(Path(self.temp.name) / "sdr.db")) as database, database:
+            for index in range(101):
+                database.execute("""INSERT INTO GameLeaderboardEntries
+                    (UserId, RunId, WizardName, Element, Discipline, HeadingIndex, PortraitScale,
+                     Level, Awesomeness, ElapsedTicks, Wave, MonstersKilled, AwesomestKill,
+                     HighestSkillsJson, PerksUsedJson, CompletedAtUtc)
+                    SELECT UserId, ?, WizardName, Element, 'water', HeadingIndex, PortraitScale,
+                     Level, 1000000, 1000000, 1000000, 1000000, AwesomestKill,
+                     HighestSkillsJson, PerksUsedJson, CompletedAtUtc
+                    FROM GameLeaderboardEntries WHERE RunId = ?""",
+                    (f"mixed-root-cap-{index}", first["runId"]))
+        for board in ("awesomeness", "wave", "kills", "time"):
+            status, capable = self.request("GET", f"/api/game/leaderboards?board={board}&mixedRoots=true")
+            self.assertEqual(status, 200, capable)
+            self.assertEqual(len(capable["items"]), 100)
+            self.assertTrue(all(row["discipline"] == "water" for row in capable["items"]))
+            status, legacy = self.request("GET", f"/api/game/leaderboards?board={board}")
+            self.assertEqual(status, 200, legacy)
+            self.assertEqual(len(legacy["items"]), 5)
+            self.assertEqual([row["rank"] for row in legacy["items"]], [1, 2, 3, 4, 5])
 
     def test_mod_visibility_owns_discovery_direct_access_media_and_subscriptions(self) -> None:
         def lua_package(package_id: str, name: str) -> bytes:

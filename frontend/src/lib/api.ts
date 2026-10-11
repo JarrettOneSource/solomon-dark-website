@@ -259,7 +259,7 @@ export interface GameLeaderboardEntry {
   runId: string
   wizardName: string
   element: 'air' | 'earth' | 'ether' | 'fire' | 'water'
-  discipline: 'arcane' | 'body' | 'mind'
+  discipline: 'arcane' | 'body' | 'mind' | School
   headingIndex: number
   portraitScale: number
   level: number
@@ -501,7 +501,7 @@ export const api = {
     list: (board: GameLeaderboardBoard) => request<{
       board: GameLeaderboardBoard
       items: GameLeaderboardEntry[]
-    }>(`/api/game/leaderboards?board=${board}`),
+    }>(`/api/game/leaderboards?board=${board}&mixedRoots=true`),
     submit: (receipt: string) => request<GameLeaderboardEntry>(
       '/api/game/leaderboards',
       json({ receipt }),

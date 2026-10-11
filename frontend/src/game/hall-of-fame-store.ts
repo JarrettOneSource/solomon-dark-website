@@ -3,18 +3,35 @@ import {
   type HallOfFameEntry,
 } from './core-kernels/hall-of-fame.ts'
 
-export const HALL_OF_FAME_STORAGE_KEY = 'sdr.game.hall-of-fame.v2'
+import { isWizardDiscipline } from './core-kernels/player-character.ts'
+
+// A v2 reader rejects an entire array containing an elemental secondary root.
+// Never expose mixed rows to that writer; import its later ordinary runs read-only.
+export const HALL_OF_FAME_STORAGE_KEY = 'sdr.game.hall-of-fame.v3'
+const LEGACY_HALL_OF_FAME_STORAGE_KEY = 'sdr.game.hall-of-fame.v2'
 
 export function readLocalHallOfFame(
   storage: Pick<Storage, 'getItem'> = localStorage,
 ): HallOfFameEntry[] {
-  const raw = storage.getItem(HALL_OF_FAME_STORAGE_KEY)
-  if (!raw) return []
+  const seen = new Set<string>()
+  const entries = [
+    ...readHallKey(storage, HALL_OF_FAME_STORAGE_KEY),
+    ...readHallKey(storage, LEGACY_HALL_OF_FAME_STORAGE_KEY),
+  ].filter(entry => {
+    if (seen.has(entry.runId)) return false
+    seen.add(entry.runId)
+    return true
+  })
+  return rankHallOfFameEntries(entries)
+}
+
+function readHallKey(storage: Pick<Storage, 'getItem'>, key: string): HallOfFameEntry[] {
   try {
+    const raw = storage.getItem(key)
+    if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    const entries = parsed.map(hallOfFameEntry)
-    return rankHallOfFameEntries(entries)
+    return parsed.map(hallOfFameEntry)
   } catch {
     return []
   }
@@ -103,7 +120,7 @@ function element(value: unknown): HallOfFameEntry['element'] {
 }
 
 function discipline(value: unknown): HallOfFameEntry['discipline'] {
-  if (value !== 'arcane' && value !== 'body' && value !== 'mind') {
+  if (typeof value !== 'string' || !isWizardDiscipline(value)) {
     throw new Error('Hall of Fame discipline is invalid')
   }
   return value

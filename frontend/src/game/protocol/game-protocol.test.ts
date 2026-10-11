@@ -50,6 +50,35 @@ const ONLINE_PREFERENCES = {
   submitRuns: true,
 } as const
 
+test('Create root domain uses protocol 152 across hello, confirmation, snapshot, and Player Card', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 152)
+  const elements = ['ether', 'fire', 'air', 'water', 'earth'] as const
+  for (const element of elements) {
+    for (const discipline of [...elements, 'body', 'mind', 'arcane'] as const) {
+      const character = { element, discipline, displayName: 'Rootus' }
+      const hello = { type: 'client-hello' as const, enhancedEffects: true,
+        beginCollegeIntro: true, onlinePreferences: ONLINE_PREFERENCES,
+        profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+        cheatsEnabled: false, protocolVersion: GAME_PROTOCOL_VERSION,
+        credential: 'fixture', character }
+      assert.deepEqual(decodeClientGameMessage(encodeGameMessage(hello)), hello)
+      const confirmation = { type: 'client-confirm-loadout' as const, ...character }
+      assert.deepEqual(decodeClientGameMessage(encodeGameMessage(confirmation)), confirmation)
+      const state = createGameSimulation({ 'player-1': character })
+      const snapshot = createGameSnapshot(state, 'player-1')
+      assert.deepEqual(playerSnapshotFrame(snapshot.players['player-1'], 'player').config, character)
+      const profile = { ...character, accountUsername: null, activity: 'hub' as const,
+        gold: 0, highestWave: null, playerReference: PLAYER_REFERENCE_A,
+        sessionKind: 'private-college' as const, totalPlaytimeMs: null }
+      const card = { type: 'server-player-card' as const, profile, requestId: 1 }
+      assert.deepEqual(decodeServerGameMessage(encodeGameMessage(card)), card)
+    }
+  }
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-confirm-loadout', element: 'fire', discipline: 'unknown', displayName: 'Rootus',
+  })), /discipline/)
+})
+
 function withEmptyHailTable(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
   return {

@@ -2,9 +2,12 @@ import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
 import type { Vector2 } from './vector.ts'
 
 export const WIZARD_ELEMENTS = ['air', 'earth', 'ether', 'fire', 'water'] as const
-export const WIZARD_DISCIPLINES = ['arcane', 'body', 'mind'] as const
+export const WIZARD_DISCIPLINE_CHOICES = ['arcane', 'body', 'mind'] as const
+// Create's random finalizer can also choose a second elemental root.
+export const WIZARD_DISCIPLINES = [...WIZARD_DISCIPLINE_CHOICES, ...WIZARD_ELEMENTS] as const
 
 export type WizardElement = typeof WIZARD_ELEMENTS[number]
+export type WizardDisciplineChoice = typeof WIZARD_DISCIPLINE_CHOICES[number]
 export type WizardDiscipline = typeof WIZARD_DISCIPLINES[number]
 
 export interface PlayerCharacterConfig {

@@ -474,3 +474,179 @@ element views visually clean, and empty page/console/response error arrays.
 The inspected stock and live-resize frames hash to
 `54f48bb7f9de3167e763b93286a774f5adc1ca75cc8f7d3951212684d1ef7978`
 and `74d3a81941a64aca6b9b1b93dd66c060c8f2b541aecba8fa615a87d67e7c2c05`.
+
+
+## 2026-10-11 — Report 108: Create Randomize and complete secondary-root domain
+
+### Reopening, evidence and boundary
+
+The previous record-6 membership row proved only artwork. It did not follow
+its native input owner into character finalization, so the visible dice had no
+semantic web control. This reopening closes Create's missing-choice
+finalization and its actual downstream character consumers. It adds neither a
+preview reroll nor a new name generator.
+
+Fresh static evidence uses retail 0.72.5, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. The complete causal functions, relevant vtable, literal
+strings and constants were read directly with the installed LLVM objdump and
+Capstone 5.0.7 on Mac. No new native runtime recording is claimed. The fresh
+Discord recheck at 2026-10-11 05:11:13 UTC retained report message
+`1558622450021834843` unchanged.
+
+Native system: **Create commit of manual or missing primary/secondary choices**,
+from scene construction, all input/phase branches and teardown through the
+Game finalizer, eight progression roots, character identity, and persistence
+or replication of that identity. Existing garment construction is a shared
+consumer, not a second randomizer. The implementation and focused built
+acceptance below are complete. Canonical exact-commit validation and final
+independent receipt review remain release gates, not implied by these results.
+
+| Member | Native owner and recovered contract | Disposition |
+| --- | --- | --- |
+| Fresh entry and scene reentry | ctor `0058A500`, called by Office `00504B4E` and Game `005D087D`; fresh selections `+1A4/+22C=-1`, fade `+78=1` | implemented; fresh/retained/Back/route reentry browser proof |
+| Top-right dice input and art | Build `00593C30`; child `+49C` at `(width-84,0)`, size `84x60`; record 6 is `80x54`, centered by `0059C05A..0059C0A4` | implemented; exact geometry test and desktop/touch screenshots |
+| Entry input exclusion | callback `0058EA50`, manual click `0058BCE0`, hover `0058BB50` all reject while `+78>0`; 20 updates reach zero | implemented; native fade test and semantic ready guard |
+| Unselected primary | `005D0300..005D03FA`: ordered eligible pool Ether, Fire, Air, Water, Earth, filtering Game disabled flags for primary skills 8,16,24,32,40 | implemented; complete ordered-pool kernel assertions |
+| Already selected primary | `005D02F7..005D040B`: retain it with no primary RNG draw, including when dice is pressed during the hand transition | implemented; no-draw tests and all five mid-transition browser choices |
+| Empty eligible-primary pool | Integer(0) consumes no word; native zero-filled list extension selects root 0/Ether | implemented; exact fallback/no-draw assertion |
+| Unselected secondary, ordinary branch | Integer(3) result other than 1 consumes another Integer(3): 0 Arcane/root7, 1 Body/root5, 2 Mind/root6 | implemented; all 15 ordinary pairs and exact RNG vectors |
+| Unselected secondary, elemental branch | Integer(3)==1 repeatedly draws Integer(5) until distinct from primary; this secondary draw does not use the disabled-primary pool | implemented; all 20 distinct pairs and rejection/draw-count assertions |
+| Every manual primary by discipline | five primary roots × three authored choices, existing root/starting-spell mappings and ordinary selection choreography | unchanged picker; 15-pair domain assertions and all five manual primaries in browser host/peer journeys |
+| All mixed roots and labels | 20 distinct elemental pairs reachable by dice; all 25 elemental-secondary pairs resolve to literal WIZARD in class lookup `00658B40` | implemented; all 25 fallback labels and 40 accepted codec/save pairs |
+| All 15 named classes | existing table in `native-wizard-class.ts`, recovered function `00658B40`, literal range `0079FE08..0079FEA8`; unchanged membership recorded in ledgers 118/295 | unchanged table; complete existing class-title regression |
+| Name draft and empty-name default | update `0058A8B3..0058A983` copies the same TextBox; empty uses Genericus; no dice name write | retained ledger 108; dice/manual name, reroll, account and Genericus browser assertions |
+| Dice completion and cue | callback plays click and clears `+BD/+BE`; update's separate fade exits in 23 ticks/230 ms; bypasses catch-it | implemented; exact unit timing and eleven measured browser commits, one click/no catch each |
+| Ordinary completion and cue | selected-right-hand recurrence calls catch-it at `0058BAF7`, then clears phases; existing web commit/loading policy in ledger 054 remains | unchanged 880 ms web choreography; helper cue/timing test and manual browser regression |
+| Interruption, repeated input and teardown | virtual destructor `0058EA30 -> 0058A730`; child controls and Create streams die with the scene; pending web submission must not escape unmount | implemented; cancellation/late-failure tests, repeat guard and actual browser Back during pending commit |
+| Ordinary, retained next-wizard and first College confirmation | same choices and authoritative commit, different retained connection/garment lifetimes; ready peers cannot recommit | implemented; authoritative-confirmation tests, both peer orders, retry/save browser proof; existing College replacement tests |
+| Starter clothes and downstream appearance | shared `005CFA80`, only callers `005D0756/005D24FF`; complete five-family, College guard and Tutorial contracts already in ledger 284 | unchanged owner; expanded 40-pair fresh-generation matrix and existing College/Tutorial regression |
+| Protocol, save, social identity, Inventory and Hall | eight-root identity is consumed by existing web boundaries; native class lookup callers `00562C51/005A1B46` | implemented; protocol 152, real-host 151 rejection, 40-pair round trips, signed backend and Hall migration tests |
+| Automatic/restored startup and test/Tutorial/College bypass flags | finalizer sibling call `005D0840`, startup sibling `005D24FF`; existing non-Create scene owners select their explicit startup mode | out-of-system for new behavior; do not alter their established policy |
+| Name-only reroll, account identity, bot selection menu and mod authoring | separate existing web conveniences or caller-owned choices | out-of-system for adding controls or changing defaults |
+
+The Create vtable starts at `00797B7C`: deleting destructor `0058EA30`, build
+`00593C30`, update `0058A820`, render `0059AD40`, child callback `0058EA50`,
+manual click slot `+64=0058BCE0`, hover slot `+68=0058BB50`. The only direct
+`005D0290` calls are `0058A96D` and `005D0840`. This distinguishes the actual
+constructor from the old ledger's imprecise constructor/build label.
+
+### Exact random selection, timing and compatibility
+
+The native finalizer supplies only missing choices. Primary IDs 0/1/2/3/4 map
+to Ether/Fire/Air/Water/Earth, starter primary skills 8/16/24/32/40 and starter
+secondary skills 11/21/27/35/45. Ordinary secondary choice IDs 0/1/2 map to
+Arcane/Body/Mind and roots 7/5/6. Both roots are stored independently; elemental
+secondaries do not replace the starter primary or grant its starting spell.
+The existing progression root filters must admit later offers from both roots.
+All eight base roots still initialize to rank 1.
+
+Use the existing `native-rng.ts` owner. Integer `00401170` shifts a lagged
+30-bit word by six, masks to the next-power-of-two range and takes modulo N.
+Thus `Integer(3)==1` is the exact branch, not an unbiased one-third shortcut.
+Keep draw order, selected-choice no-draw branches and distinct-secondary
+rejection. Native application RNG history is not a portable Create input;
+new browser scenes may seed their own stream, using the same range algorithm.
+Stock web scenes currently expose all five starting choices. Eligibility
+filter behavior belongs in the recovered pure finalizer, without adding new
+settings or disabling ordinary manual choices.
+
+The callback's fade guard and update use double constant `007DE8A0 =
+0.05000000074505806`, with float32 storage each tick. Entry from 1 reaches
+zero at update 20. Completion from zero first exceeds float32
+`00785150 = 1.100000023841858` at update 23. Do not reuse the web's 880 ms
+manual hand-catch duration or emit catch-it for dice. The established web
+loading barrier begins at accepted commit and owns the loading art, as in
+ledger 054; this does not expose a new preview or change name-only reroll.
+
+Character secondary typing and all validators must admit eight known roots,
+while the ordinary manual picker stays three choices. Protocol 151 cannot
+read these new enum values, so the release must move to protocol 152. Existing
+ordinary save shapes remain readable, and portable/native root integers are
+0..7. A save version bump alone would not protect older web readers, which
+accept compatible future versions. Local Hall storage needs an isolated new
+namespace with preserved legacy import: its old reader rejects a whole array
+containing an elemental secondary and later overwrites it. Public Hall output
+also needs explicit backward-readable handling for stale non-gameplay clients.
+
+The trained bot observation shape must not expand: its three discipline bits
+mean exactly Mind/Body/Arcane. Elemental-secondary configurations leave these
+bits zero while retaining the existing primary element one-hot. Human allies
+have no discipline bit fields. No model training or policy schema change is
+part of this repair.
+
+### Acceptance obligations
+
+First reproduce failing existing type/guard, progression, class and semantic
+control boundaries. Then verify native RNG vectors and draw counts, all five
+primary roots, three ordinary secondaries, twenty distinct mixed pairs,
+selected-choice preservation, eligible/empty pools and every class label.
+Exercise authoritative fresh/replaced loadouts, both-root offers, unchanged
+starter spells/garments, strict unknown-value rejection, client hello/input/
+confirmation/social/snapshot codecs, local/cloud saves, portable/native
+round trips, Hall merge/storage and signed backend leaderboard admission.
+
+Built Mac browser acceptance must use actual dice hit targets with mouse,
+keyboard and touch, fresh and mid-transition phases, each chosen primary,
+ordinary and mixed results, untouched name/Genericus, repeated input,
+unmount, failed-start retry, retained creation and ready/unready peers.
+Verify the authoritative ready snapshot rather than treating a local
+confirmation send as acceptance. Check exact responsive art/hit alignment,
+cue ownership and commitment timing; run ordinary manual regression journeys.
+The exact final source requires the canonical Mac validate.sh gate, a complete
+independent diff review and fresh built acceptance before coordinated release.
+No live release is claimed by this ledger.
+
+### Implemented boundary and pre-freeze evidence
+
+`native-create-loadout.ts` owns only the recovered missing-choice rules and
+the native RNG stream. `CreateMenuScene.tsx` captures one configuration and
+uses a shared cancellable finalization owner for manual and dice paths.
+The browser's animation-frame functions are called through window-bound
+wrappers: a first headed run caught the invalid receiver of bare native
+functions, and the narrow binding fix passed the complete replay.
+Retained confirmation remains pending until an authoritative matching ready
+snapshot, with duplicate, disconnect, destroy, send failure and timeout
+ownership explicit in `game-client-session.ts`.
+
+The schema keeps ordinary saves readable and accepts the full native 5×8
+domain, including equal elemental roots imported from native saves. This is
+different from dice's 35 eligible results. Old protocol-151 player and observer
+hellos were sent to the real host: both received protocol-mismatch and close
+1008 with “Protocol 152 is required.” before ticket claim or player admission.
+The existing client failure mapper supplies the refresh-required explanation.
+Local Hall writes use v3, while independently importing v2 read-only on every
+read; public Hall GET defaults to ordinary disciplines unless the caller
+explicitly requests `mixedRoots=true`. Filtering precedes top-100 selection.
+Signed receipt verification, unknown-value rejection, idempotency and account
+ownership remain enforced by real-backend tests.
+
+Mac mini M2 headed Chrome 154.0.8037.98 loaded the built Website against the
+real local game host. `smoke-create-randomize.mjs` passed eight journeys:
+ordinary fresh entry, both random branches, all five selected primaries during
+motion, keyboard/mouse/touch, retained next-wizard composition, ready/unready
+peers in both orders, Genericus, duplicate input and saved mixed identity.
+Actual Create Back/reentry and browser Back during finalization produced no
+host admission; Forward/reentry then started successfully. Eleven accepted
+dice commits measured 230.9–257.5 ms from click to send, each with one click
+cue and no catch-it cue. Page, console, HTTP, host and unexpected-API error
+arrays were empty. Stock/touch hit bounds and rendered dice were inspected.
+
+These are production composition journeys, with explicit test controls:
+local authentication/API fixtures, fixed Create entropy and host seed, and
+accelerated run completion through the production damage/death owner.
+Only the retry case injects one WebSocket send exception; it then verifies
+the real ready snapshot and persisted save after retry. No UI phase,
+selection or loadout-ready flags are assigned by the harness. Separate
+`smoke-create-wizard-name.mjs` headed journeys passed ordinary anonymous and
+fixture-account creation, retained manual selection, all five primary choices
+across host/peer, clear/name-only reroll, repeated entry and local/cloud
+checkpoint identity. No real cloud account was used.
+
+Raw receipts, screenshots, red/green tests and the failed first browser run
+are retained in the task-owned `solomon-create-randomize-sh9aksle-20261011`
+acceptance roots. `candidate-focused-acceptance.json` binds these receipts to
+the frozen commit and complete source manifest. The independent M5 canonical
+`scripts/validate.sh` receipt and final independent review must match that
+same identity before coordinator integration; neither gate is replaced by
+the focused tests or these screenshots.

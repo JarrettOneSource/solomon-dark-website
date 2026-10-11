@@ -116,9 +116,11 @@ export function observeMlBotPolicyWorldState(
     blockH[15] = 1 - scaledUnsigned(edgeDistance, ML_BOT_POLICY_SCALES.edgePressureRange)
   }
   const elementIndex = { fire: 16, water: 17, earth: 18, air: 19, ether: 20 }[self.config.element]
-  const disciplineIndex = { mind: 21, body: 22, arcane: 23 }[self.config.discipline]
   blockH[elementIndex] = 1
-  blockH[disciplineIndex] = 1
+  // These are three named features in the fixed policy schema, not all root IDs.
+  blockH[21] = Number(self.config.discipline === 'mind')
+  blockH[22] = Number(self.config.discipline === 'body')
+  blockH[23] = Number(self.config.discipline === 'arcane')
   const hpRatio = ratio(progression.currentHealth, progression.maximumHealth)
   const manaRatio = ratio(progression.currentMana, progression.maximumMana)
   const targetHpRatio = target ? ratio(target.currentHealth, target.maximumHealth) : 0

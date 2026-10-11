@@ -18,14 +18,15 @@ const server = await startStaticClientServer({
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH
     || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  headless: true,
+  headless: process.env.SDR_SMOKE_HEADED !== '1',
   args: ['--autoplay-policy=no-user-gesture-required'],
 })
 const receipts = []
 try {
   for (const account of [null, 'CloudTester']) receipts.push(await journey(account))
-  await writeFile(`${output}/receipt.json`, JSON.stringify({ browser: browser.version(), receipts }, null, 2))
-  console.log(JSON.stringify({ browser: browser.version(), receipts }))
+  const receipt = { browser: browser.version(), headed: process.env.SDR_SMOKE_HEADED === '1', receipts }
+  await writeFile(`${output}/receipt.json`, JSON.stringify(receipt, null, 2))
+  console.log(JSON.stringify(receipt))
 } finally {
   await browser.close()
   await server.close()

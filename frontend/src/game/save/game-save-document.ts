@@ -53,7 +53,7 @@ import { createNativeWraithFlightState } from '../core-kernels/native-wraith-fli
 import type { PlayerCharacterConfig, PlayerPrimaryCastState } from '../core-kernels/player-character.ts'
 import { createIdlePlayerPrimaryCast, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import type { PlayerSkillBookComponent, PlayerStatBookComponent } from '../core-kernels/player-progression.ts'
-import { buildPlayerSkillOffer, isNativeBeltSkill, nativeSecondaryAbilityRankStats, nativeWeldBuild, nativeWeldComponentRanksForBuild } from '../core-kernels/player-progression.ts'
+import { buildPlayerSkillOffer, createPlayerSkillBook, isNativeBeltSkill, nativeSecondaryAbilityRankStats, nativeWeldBuild, nativeWeldComponentRanksForBuild } from '../core-kernels/player-progression.ts'
 import type { PlayerSkillRuntimeComponent } from '../core-kernels/player-skill-runtime.ts'
 import { createPlayerSkillRuntime, playerSkillDerivedStats, refreshPlayerCombatFromSkillStats, refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
 import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
@@ -2090,9 +2090,9 @@ function normalizeSkillBook(
   }
   return {
     advancedUnlocks: advancedUnlocks as boolean[],
-    disciplineRoot: finiteNumber(source.disciplineRoot, 'game save discipline root'),
+    disciplineRoot: integerWithin(source.disciplineRoot, 'game save discipline root', 0, 7),
     effectiveRanks,
-    elementRoot: finiteNumber(source.elementRoot, 'game save element root'),
+    elementRoot: integerWithin(source.elementRoot, 'game save element root', 0, 4),
     learnedSkillOrder: learnedSkillOrder as number[],
     permanentRanks: permanentRanks as number[],
     primarySkillId: finiteNumber(
@@ -3111,6 +3111,12 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
   })
   const skillBooks = (store.skillBooks as unknown[]).map((value, index) => {
     const skillBook = record(value, `game save player skill book ${index}`)
+    const expectedRoots = createPlayerSkillBook((store.configs as PlayerCharacterConfig[])[index]!)
+    const elementRoot = integerWithin(skillBook.elementRoot, 'game save element root', 0, 4)
+    const disciplineRoot = integerWithin(skillBook.disciplineRoot, 'game save discipline root', 0, 7)
+    if (elementRoot !== expectedRoots.elementRoot || disciplineRoot !== expectedRoots.disciplineRoot) {
+      throw new Error(`game save player skill book ${index} roots disagree with its character`)
+    }
     const buildId = skillBook.weldBuildId
     const build = typeof buildId === 'number' ? nativeWeldBuild(buildId) : null
     const effectiveRanks = skillBook.effectiveRanks

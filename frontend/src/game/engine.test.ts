@@ -151,7 +151,7 @@ function inertSession() {
     playerId: 'p',
     resumeToken: 'r',
     sessionKind: 'standalone' as const,
-    confirmLoadout() {},
+    async confirmLoadout() { return true },
     continueGameOver() {},
     dismissCollegeInvitation() {},
     executeLua: async () => ({ error: null, ok: true, output: [], values: [] }),

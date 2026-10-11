@@ -72,6 +72,7 @@ const ELEMENT_BY_ROOT: Readonly<Record<number, WizardElement>> = Object.freeze({
   4: 'earth',
 })
 const DISCIPLINE_BY_ROOT: Readonly<Record<number, WizardDiscipline>> = Object.freeze({
+  ...ELEMENT_BY_ROOT,
   5: 'body',
   6: 'mind',
   7: 'arcane',

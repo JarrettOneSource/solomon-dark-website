@@ -4,6 +4,8 @@ import test from 'node:test'
 import {
   CREATE_ATLAS_RECORDS,
   CREATE_DISCIPLINE_SIZE,
+  CREATE_RANDOMIZE_BOUNDS,
+  CREATE_RANDOMIZE_ART_BOUNDS,
   CREATE_HAND_CENTERS,
   CREATE_HAND_LOGICAL_SIZE,
   CREATE_HAND_SIZE,
@@ -12,6 +14,16 @@ import {
   createEntryFlashAlpha,
   createSelectionFlashAlpha,
 } from './create-menu-render-contract.ts'
+
+test('Create dice uses the native 84x60 child and centered 80x54 atlas record', () => {
+  assert.deepEqual(CREATE_RANDOMIZE_BOUNDS, { left: 1516, top: 0, width: 84, height: 60 })
+  assert.deepEqual(CREATE_RANDOMIZE_ART_BOUNDS, { left: 1518, top: 3, width: 80, height: 54 })
+  assert.equal(CREATE_RANDOMIZE_BOUNDS.left + CREATE_RANDOMIZE_BOUNDS.width, 1600)
+  assert.equal(CREATE_RANDOMIZE_BOUNDS.left + CREATE_RANDOMIZE_BOUNDS.width / 2,
+    CREATE_RANDOMIZE_ART_BOUNDS.left + CREATE_RANDOMIZE_ART_BOUNDS.width / 2)
+  assert.equal(CREATE_RANDOMIZE_BOUNDS.top + CREATE_RANDOMIZE_BOUNDS.height / 2,
+    CREATE_RANDOMIZE_ART_BOUNDS.top + CREATE_RANDOMIZE_ART_BOUNDS.height / 2)
+})
 
 test('Create hands retain the recovered native centers without rotation offsets', () => {
   assert.deepEqual(CREATE_HAND_CENTERS.left, { x: 400, y: 560 })

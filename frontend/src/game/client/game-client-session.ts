@@ -155,7 +155,7 @@ export interface GameClientSession {
     element: PlayerCharacterConfig['element'],
     discipline: PlayerCharacterConfig['discipline'],
     displayName: string,
-  ): void
+  ): Promise<boolean>
   continueGameOver(runId: string, eventId: number): void
   dismissCollegeInvitation(invitationId: string): void
   destroy(): void
@@ -270,9 +270,17 @@ const PING_INTERVAL_MS = 2_000
 const PING_TIMEOUT_MS = 10_000
 const LUA_EXECUTION_TIMEOUT_MS = 10_000
 const PLAYER_CARD_REQUEST_TIMEOUT_MS = 10_000
+const LOADOUT_CONFIRMATION_TIMEOUT_MS = 10_000
 const MAX_PENDING_LUA_EXECUTIONS = 8
 const luaTextEncoder = new TextEncoder()
 let nextGameSaveStreamId = 1
+
+interface PendingLoadoutConfirmation {
+  config: PlayerCharacterConfig
+  reject: (error: Error) => void
+  resolve: (accepted: boolean) => void
+  timeout: ReturnType<typeof globalThis.setTimeout>
+}
 
 interface PendingLuaExecution {
   reject: (error: Error) => void
@@ -367,6 +375,7 @@ export function connectGameClientSession(
     const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
     const pendingPlayerCardRequests = new Map<number, PendingPlayerCardRequest>()
     let pendingLeaveSave: PendingLeaveSave | null = null
+    let pendingLoadout: PendingLoadoutConfirmation | null = null
     const entityReplication = new EntityReplicationReconstructor()
     const saveCheckpointReceiver = new GameSaveCheckpointReceiver()
     const welcomeReceiver = new GameWelcomeReceiver()
@@ -760,6 +769,7 @@ export function connectGameClientSession(
         }
       }
       publishEnemyEvents(snapshot)
+      resolvePendingLoadout(snapshot)
       for (const listener of snapshotListeners) listener(snapshot)
     })
     const removeClose = options.transport.onClose((event) => {
@@ -828,21 +838,28 @@ export function connectGameClientSession(
         }))
       },
       confirmLoadout(element, discipline, displayName) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || pendingLoadout) return Promise.resolve(false)
         const collegeLoadout = isHubGameSnapshot(snapshot)
           && snapshot.world.participants[welcome.playerId]?.transition?.phase
             === 'college-loadout'
-        if (!collegeLoadout && snapshot.run.phase !== 'loadout') return
+        if (!collegeLoadout && snapshot.run.phase !== 'loadout') return Promise.resolve(false)
         if (
           !collegeLoadout
           && snapshot.run.loadoutReadyPlayerIds.includes(welcome.playerId)
-        ) return
-        options.transport.send(encodeGameMessage({
-          type: 'client-confirm-loadout',
-          discipline,
-          displayName,
-          element,
-        }))
+        ) return Promise.resolve(false)
+        return new Promise<boolean>((resolve, reject) => {
+          const timeout = globalThis.setTimeout(() => {
+            rejectPendingLoadout(new Error('The wizard loadout confirmation timed out. Please try again.'))
+          }, LOADOUT_CONFIRMATION_TIMEOUT_MS)
+          pendingLoadout = { config: { element, discipline, displayName }, resolve, reject, timeout }
+          try {
+            options.transport.send(encodeGameMessage({
+              type: 'client-confirm-loadout', discipline, displayName, element,
+            }))
+          } catch (error) {
+            rejectPendingLoadout(error instanceof Error ? error : new Error('The loadout could not be sent.'))
+          }
+        })
       },
       continueGameOver(runId, eventId) {
         if (!welcome || !snapshot || destroyed) return
@@ -914,6 +931,7 @@ export function connectGameClientSession(
         rejectPendingLeaveSave(new Error('The game session was destroyed.'))
         rejectPendingLuaExecutions(new Error('The game session was destroyed.'))
         rejectPendingPlayerCardRequests(new Error('The game session was destroyed.'))
+        rejectPendingLoadout(new Error('The game session was destroyed.'))
         snapshotListeners.clear()
         boneyardListeners.clear()
         chatMessageListeners.clear()
@@ -1567,6 +1585,30 @@ export function connectGameClientSession(
       pendingPings.clear()
     }
 
+    function resolvePendingLoadout(current: GameClientSnapshot): void {
+      if (!pendingLoadout || !welcome) return
+      const config = current.players[welcome.playerId]?.config
+      const expected = pendingLoadout.config
+      if (!config || config.displayName !== expected.displayName
+        || config.element !== expected.element || config.discipline !== expected.discipline) return
+      const inCollegeLoadout = isHubGameSnapshot(current)
+        && current.world.participants[welcome.playerId]?.transition?.phase === 'college-loadout'
+      if (inCollegeLoadout || (current.run.phase === 'loadout'
+        && !current.run.loadoutReadyPlayerIds.includes(welcome.playerId))) return
+      const pending = pendingLoadout
+      pendingLoadout = null
+      globalThis.clearTimeout(pending.timeout)
+      pending.resolve(true)
+    }
+
+    function rejectPendingLoadout(error: Error): void {
+      const pending = pendingLoadout
+      if (!pending) return
+      pendingLoadout = null
+      globalThis.clearTimeout(pending.timeout)
+      pending.reject(error)
+    }
+
     function rejectPendingLuaExecutions(error: Error): void {
       for (const pending of pendingLuaExecutions.values()) {
         globalThis.clearTimeout(pending.timeout)
@@ -1777,6 +1819,7 @@ export function connectGameClientSession(
         rejectPendingLeaveSave(failure)
         rejectPendingLuaExecutions(failure)
         rejectPendingPlayerCardRequests(failure)
+        rejectPendingLoadout(failure)
         removeClose()
         removeMessage()
         options.diagnostics?.error(
@@ -1798,6 +1841,7 @@ export function connectGameClientSession(
       rejectPendingLeaveSave(failure)
       rejectPendingLuaExecutions(failure)
       rejectPendingPlayerCardRequests(failure)
+      rejectPendingLoadout(failure)
       removeClose()
       removeMessage()
       options.diagnostics?.error(
@@ -1876,6 +1920,7 @@ export function connectGameClientSession(
       rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       rejectPendingLuaExecutions(new Error('The game is restarting for an update.'))
       rejectPendingPlayerCardRequests(new Error('The game is restarting for an update.'))
+      rejectPendingLoadout(new Error('The game is restarting for an update.'))
       removeClose()
       removeMessage()
       snapshotListeners.clear()

@@ -92,7 +92,7 @@ const expectedEffectiveOnlyRows = expectedWizard.learnedOrder.filter(skillId => 
 const expectedGamestateSha256 = createHash('sha256').update(gamestate).digest('hex')
 const expectedBindingIntegerCount = bindingIntegerCount(gamestate)
 const elementName = ['Ether', 'Fire', 'Air', 'Water', 'Earth'][expectedWizard.elementRoot]
-const disciplineName = ({ 5: 'Body', 6: 'Mind', 7: 'Arcane' })[expectedWizard.disciplineRoot]
+const disciplineName = (['Ether', 'Fire', 'Air', 'Water', 'Earth', 'Body', 'Mind', 'Arcane'])[expectedWizard.disciplineRoot]
 assert.ok(elementName)
 assert.ok(disciplineName)
 const stockUpload = {

@@ -22,7 +22,7 @@ import {
   type CreateHandPose,
 } from '../create-menu-motion.ts'
 import type {
-  WizardDiscipline,
+  WizardDisciplineChoice,
   WizardElement,
 } from '../core-kernels/player-character.ts'
 import {
@@ -33,6 +33,7 @@ import { NATIVE_ELEMENT_VFX_SCALE } from '../element-vfx-native.ts'
 import {
   CREATE_ATLAS_RECORDS,
   CREATE_DISCIPLINES,
+  CREATE_RANDOMIZE_ART_BOUNDS,
   CREATE_DISCIPLINE_SIZE,
   CREATE_ELEMENTS,
   CREATE_ELEMENT_SIZE,
@@ -68,7 +69,7 @@ import {
   createBoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
 
-export type CreateMenuAction = 'back' | WizardElement | WizardDiscipline
+export type CreateMenuAction = 'back' | WizardElement | WizardDisciplineChoice
 export type CreateMenuPhase = 'discipline' | 'element'
 
 export interface CreateMenuRenderFrame {
@@ -269,7 +270,7 @@ export async function createCreateMenuRenderer(
     container.addChild(glyph, highlight)
     nativeActionStage.addChild(container)
     return [discipline, { container, highlight }] as const
-  })) as Record<WizardDiscipline, DisciplineView>
+  })) as Record<WizardDisciplineChoice, DisciplineView>
 
   const elementPrompt = stageSprite(
     createTexture(CREATE_ATLAS_RECORDS.chooseElement), 620, 793, 361, 92, 7,
@@ -296,7 +297,9 @@ export async function createCreateMenuRenderer(
   backHighlight.alpha = 0
   nativeBackStage.addChild(back, backHighlight)
   nativeDiceStage.addChild(stageSprite(
-    createTexture(CREATE_ATLAS_RECORDS.dice), 1520, 0, 80, 54, 8,
+    createTexture(CREATE_ATLAS_RECORDS.dice),
+    CREATE_RANDOMIZE_ART_BOUNDS.left, CREATE_RANDOMIZE_ART_BOUNDS.top,
+    CREATE_RANDOMIZE_ART_BOUNDS.width, CREATE_RANDOMIZE_ART_BOUNDS.height, 8,
   ))
   const flash = new Graphics().rect(
     0, 0, options.viewport.width, options.viewport.height,
@@ -540,7 +543,7 @@ function updateHeldVfx(
 }
 
 function updateDisciplineViews(
-  views: Readonly<Record<WizardDiscipline, DisciplineView>>,
+  views: Readonly<Record<WizardDisciplineChoice, DisciplineView>>,
   frame: CreateMenuRenderFrame,
   disciplinesVisible: boolean,
   elapsedMs: number,

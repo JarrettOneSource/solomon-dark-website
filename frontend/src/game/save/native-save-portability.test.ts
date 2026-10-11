@@ -292,6 +292,40 @@ function deflatedZipWithDeclaredSize(
 const darkdata = bytes(fixture.files.darkdata.base64)
 const gamestate = bytes(fixture.files.gamestate.base64)
 
+test('all forty Create root pairs round-trip through native, portable, and web saves', async () => {
+  const base = await createPortableGameProfileFromNative(darkdata, gamestate, fixture.expected.runName)
+  const elements = ['ether', 'fire', 'air', 'water', 'earth'] as const
+  const roots = [...elements, 'body', 'mind', 'arcane'] as const
+  for (const [elementRoot, element] of elements.entries()) {
+    for (const [disciplineRoot, discipline] of roots.entries()) {
+      const character = { displayName: 'ROOTUS', element, discipline }
+      const book = createPlayerSkillBook(character)
+      const wizard = { ...base.wizard, name: character.displayName, elementRoot, disciplineRoot,
+        startingPrimary: book.learnedSkillOrder[0]!, startingSecondary: book.learnedSkillOrder[1]!,
+        selectedPrimarySkillId: book.primarySkillId, permanentRanks: book.permanentRanks,
+        learnedOrder: book.learnedSkillOrder, skillQuickbar: Array<null>(8).fill(null),
+        concentrationSkillIds: [null, null] as const }
+      const native = patchNativeGamestate(gamestate, wizard)
+      const portable = await createPortableGameProfileFromNative(darkdata, native, fixture.expected.runName)
+      const parsed = await parsePortableGameProfile(encodePortableGameProfile(portable))
+      const imported = createWebGameSaveFromPortableProfile(parsed)
+      assert.deepEqual(imported.character, character)
+      const restored = restoreGameSaveDocument(imported.document)
+      assert.deepEqual(restored.state.playerEntities.configs[0], character)
+      assert.equal(restored.state.playerEntities.skillBooks[0]!.elementRoot, elementRoot)
+      assert.equal(restored.state.playerEntities.skillBooks[0]!.disciplineRoot, disciplineRoot)
+      const exported = await createPortableGameProfileFromWebSave(imported.document)
+      assert.equal(exported.wizard.elementRoot, elementRoot)
+      assert.equal(exported.wizard.disciplineRoot, disciplineRoot)
+      assert.equal(exported.wizard.startingPrimary, wizard.startingPrimary)
+      assert.equal(exported.wizard.startingSecondary, wizard.startingSecondary)
+      const nativeAgain = decodeNativeGamestateWizard(patchNativeGamestate(native, exported.wizard))
+      assert.equal(nativeAgain.elementRoot, elementRoot)
+      assert.equal(nativeAgain.disciplineRoot, disciplineRoot)
+    }
+  }
+})
+
 test('native SyncBuffer and darkdata codecs reproduce the controlled stock-writer bytes', () => {
   assert.equal(darkdata.byteLength, fixture.files.darkdata.bytes)
   assert.equal(gamestate.byteLength, fixture.files.gamestate.bytes)

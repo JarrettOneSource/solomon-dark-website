@@ -299,7 +299,7 @@ test('starter repair replaces only an exact superseded vivid Hat and Robe pair',
   }
 })
 
-test('all fifteen post-Game-Over Create choices build a fresh complete generation', () => {
+test('all forty post-Game-Over Create choices build a fresh complete generation', () => {
   const elementRows = {
     air: [2, 24, 27],
     earth: [4, 40, 45],
@@ -308,6 +308,7 @@ test('all fifteen post-Game-Over Create choices build a fresh complete generatio
     water: [3, 32, 35],
   } as const
   const disciplineRoots = {
+    ether: 0, fire: 1, air: 2, water: 3, earth: 4,
     arcane: 7,
     body: 5,
     mind: 6,
@@ -322,7 +323,7 @@ test('all fifteen post-Game-Over Create choices build a fresh complete generatio
   let generation = 0
   for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
     const [elementRoot, primarySkillId, secondarySkillId] = elementRows[element]
-    for (const discipline of ['arcane', 'body', 'mind'] as const) {
+    for (const discipline of ['ether', 'fire', 'air', 'water', 'earth', 'arcane', 'body', 'mind'] as const) {
       const disciplineRoot = disciplineRoots[discipline]
       generation += 1
       const offerSeed = 100_000 + generation

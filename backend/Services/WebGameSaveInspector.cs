@@ -197,7 +197,7 @@ public static class WebGameSaveInspector
             "discipline",
             "displayName",
             "element");
-        RequireMember(character, "discipline", "arcane", "body", "mind");
+        RequireMember(character, "discipline", "arcane", "body", "mind", "ether", "fire", "air", "water", "earth");
         RequireMember(character, "element", "air", "earth", "ether", "fire", "water");
         RequireString(character, "displayName", 64);
         RequireString(summary, "playerId", 128);

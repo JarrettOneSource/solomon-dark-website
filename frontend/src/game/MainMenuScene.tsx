@@ -1472,13 +1472,14 @@ function MainMenuContent({
     selectedDiscipline: WizardDiscipline,
   ): Promise<boolean> => {
     if (connecting) return false
-    if (session && (runtimeRunPhase === 'loadout' || collegeLoadoutActive)) {
-      session.confirmLoadout(selectedElement, selectedDiscipline, selectedDisplayName)
-      return true
-    }
     setConnecting(true)
     setConnectionError(null)
     try {
+      if (session && (runtimeRunPhase === 'loadout' || collegeLoadoutActive)) {
+        const accepted = await session.confirmLoadout(selectedElement, selectedDiscipline, selectedDisplayName)
+        if (!accepted) throw new Error('Your wizard loadout could not be confirmed. Please try again.')
+        return true
+      }
       await prepareGame(pendingAdmission)
       const saveDocument = transferSaveDocumentRef.current ?? profileSave?.document
       const declineFreshTutorial = tutorialDeclined && saveDocument === undefined
@@ -2151,7 +2152,7 @@ function MainMenuContent({
             backDisabled={collegeLoadoutActive}
             displayName={wizardName}
             onBack={() => { void leaveCreate() }}
-            onDisciplineCommit={beginHubLoading}
+            onLoadoutCommit={beginHubLoading}
             onStart={startHub}
             retainedLoadoutCanConfirm={runtimeRunPhase === 'loadout' && Boolean(
               session

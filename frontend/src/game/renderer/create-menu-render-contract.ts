@@ -1,10 +1,14 @@
 import type {
-  WizardDiscipline,
+  WizardDisciplineChoice,
   WizardElement,
 } from '../core-kernels/player-character.ts'
 
 export const CREATE_RENDER_WIDTH = 1600
 export const CREATE_RENDER_HEIGHT = 900
+
+// Retail child +49C is 84x60; record 6 is centered inside it.
+export const CREATE_RANDOMIZE_BOUNDS = { left: 1516, top: 0, width: 84, height: 60 } as const
+export const CREATE_RANDOMIZE_ART_BOUNDS = { left: 1518, top: 3, width: 80, height: 54 } as const
 
 export const CREATE_HAND_LOGICAL_SIZE = { height: 469, width: 420 } as const
 export const CREATE_HAND_SIZE = { height: 703.5, width: 630 } as const
@@ -47,7 +51,7 @@ export const CREATE_ELEMENT_SIZE: Readonly<Record<WizardElement, {
   water: { height: 77, width: 157 },
 }
 
-export const CREATE_DISCIPLINE_SIZE: Readonly<Record<WizardDiscipline, {
+export const CREATE_DISCIPLINE_SIZE: Readonly<Record<WizardDisciplineChoice, {
   height: number
   width: number
 }>> = {
