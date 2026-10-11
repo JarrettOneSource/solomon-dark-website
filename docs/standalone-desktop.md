@@ -6,7 +6,7 @@ process lifetime. Gameplay and save documents remain owned by the shared game.
 
 ## Delivery checks
 
-- Package Windows x64, macOS arm64/x64 and Linux x64 from the same source commit
+- Publish Windows x64, macOS arm64/x64 and Linux x64 from the same source commit
   as the main application, after the canonical Website gate.
 - Start solo without external networking; create a wizard, play, save, close,
   relaunch and resume the same local save.
@@ -29,6 +29,10 @@ origin is stable across launches so IndexedDB and settings survive restarts.
 `frontend/tools/package-desktop.mjs` owns platform packaging and source identity.
 The Validate workflow owns desktop build jobs and GitHub release publication.
 The main application's existing M5 deployment remains the Website publisher.
+
+Packaged acceptance uses software rendering. On Windows, the harness confines
+the renderer processes to two logical CPUs so the four-core CI runner can keep
+the authoritative host and test driver responsive.
 
 Peer play uses direct addresses on a LAN, VPN, or a forwarded internet TCP
 port. Invites carry a random capability; share them only with intended players.
