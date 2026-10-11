@@ -14,7 +14,6 @@ const executable = resolve(applicationPath, manifest.executable)
 const evidence = resolve(process.env.SDR_DESKTOP_EVIDENCE || 'reports/desktop-smoke')
 await mkdir(evidence, { recursive: true })
 const profiles = await mkdtemp(join(tmpdir(), 'solomon-darker-smoke-'))
-await writeFile(join(profiles, 'SwiftShader.ini'), '[Processor]\nThreadCount=1\n')
 const running = new Set()
 const errors = []
 const receipts = { platform: process.platform, revision: manifest.revision }
@@ -136,7 +135,6 @@ async function launch(label, userData) {
   step(`${label} launch start`)
   const app = await electron.launch({
     executablePath: executable,
-    cwd: profiles,
     args: [
       '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--use-gl=angle',
       // Chromium's proxy applies to update checks too; loopback retains its native bypass.
