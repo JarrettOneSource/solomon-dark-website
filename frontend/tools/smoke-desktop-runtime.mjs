@@ -147,6 +147,8 @@ async function launch(label, userData) {
   app.process().stderr.on('data', chunk => process.stderr.write(`${label} main: ${chunk}`))
   app.context().setDefaultTimeout(30_000)
   const page = await app.firstWindow({ timeout: 30_000 })
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 600))
+  console.log(JSON.stringify({ label, graphics: await app.evaluate(({ app }) => app.getGPUInfo('complete')) }))
   const instance = { app, page, label }
   running.add(instance)
   page.on('requestfailed', request => process.stderr.write(`${label} request: ${request.url()} ${request.failure()?.errorText}\n`))
