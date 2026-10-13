@@ -7252,7 +7252,8 @@ function assertUniqueFlameBirths(state: GameSimulationState): void {
 
 test('authoritative Flame no-target input publishes its deferred source and channel with endpoint-owned fade', () => {
   const state = firstAuthoritativeFlameTick(authoritativeFlameSimulation(null))
-  const channels = state.primarySpells.transients.filter(effect => effect.kind === 'weld-channel' && effect.buildId === 1003)
+  const channels = state.primarySpells.transients.filter(effect => effect.kind === 'weld-channel')
+    .filter(effect => effect.buildId === 1003)
   assert.equal(channels.length, 1)
   const channel = channels[0]!
   assert.equal(channel.targetId, null)
@@ -7273,13 +7274,13 @@ test('authoritative Flame targeted nonlethal input publishes each main presentat
     if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
     assert.ok(state.world.enemies.actors[0]!.currentHealth < 1000)
     assert.equal(state.world.enemies.actors[0]!.lifeState, 'alive')
-    const channels = state.primarySpells.transients.filter(effect => effect.kind === 'weld-channel'
-      && effect.buildId === 1003 && effect.birthTick === state.tick)
+    const channels = state.primarySpells.transients.filter(effect => effect.kind === 'weld-channel')
+      .filter(effect => effect.buildId === 1003 && effect.birthTick === state.tick)
     assert.equal(channels.length, 1)
     assert.equal(channels[0]!.targetId, 'enemy:1')
     assert.ok(channels[0]!.vector[4]! > 0, 'learned Explosion remains armed on this surviving hit')
-    const fades = state.primarySpells.transients.filter(effect => effect.kind === 'weld-flame-lash-fade'
-      && effect.birthTick === state.tick)
+    const fades = state.primarySpells.transients.filter(effect => effect.kind === 'weld-flame-lash-fade')
+      .filter(effect => effect.birthTick === state.tick)
     assert.deepEqual(fades.map(effect => effect.variant), ['endpoint', 'source'])
     assert.equal(state.primarySpells.transients.some(effect => effect.kind === 'fire-explosion' || effect.kind === 'fire-ember'), false)
     assertUniqueFlameBirths(state)
