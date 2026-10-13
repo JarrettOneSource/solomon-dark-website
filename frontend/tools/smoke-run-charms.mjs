@@ -9,10 +9,9 @@ import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import {
   addPlayerCharacter, createGameSimulation, damageGameSimulationPlayer, enterBoneyardWorld,
-  getPlayerCharacter, getPlayerEconomy, getPlayerProgression, removePlayerCharacter,
+  getPlayerEconomy, getPlayerProgression, removePlayerCharacter,
 } from '../src/game/core-server/game-simulation.ts'
 import { applyPlayerEntityHagathaPurchaseEffects, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
-import { DEFAULT_GAME_CONTROL_BINDINGS } from '../src/game/game-settings.ts'
 import { createBoneyardCatalog, materializeBoneyard } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
@@ -51,7 +50,7 @@ try {
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ headed, modes, receipts, errors, rawRequestFailures, failure,
-    qualification: 'Desktop and touch-landscape use the built client, real authority/replication/audio and public saved-run/leave/resume navigation. Narrow portrait checks only the intentional rotate gate; portrait gameplay is not accepted. Declared fixtures: owned charms, initial spent flags, authoritative damage, reactivation via existing purchase reducer, and one synthetic participant. Focused Skills, Inventory, Chat and Hotbar shortcuts are exercised; the conditional nearby-Goodie guard is source-reviewed only. Touch is Chrome emulation, not physical-device acceptance.' }, null, 2) + '\n')
+    qualification: 'Desktop and touch-landscape use the built client, real authority/replication/audio and public saved-run/leave/resume navigation. Narrow portrait checks only the intentional rotate gate; portrait gameplay is not accepted. Declared fixtures: owned charms, initial spent flags, authoritative damage, reactivation via existing purchase reducer, and one synthetic participant. The removed charm status row must stay absent throughout active, spent and restored states. Touch is Chrome emulation, not physical-device acceptance.' }, null, 2) + '\n')
   await browser.close()
   await server.close()
 }
@@ -134,83 +133,33 @@ async function journey(mode) {
     }
     await resume()
     assert.equal(host.hostPlayerId(), owner)
-    await expectActive(24, false)
-    await expectActive(25, false)
-    assert.deepEqual((await hud()).rows.map(row => row.selector), selectors)
+    expectActive(false)
+    assert.deepEqual(getPlayerEconomy(host.state(), owner).ownedPerkSelectors, selectors)
     assert.equal(await lossCount(), 0, 'initial spent state must remain silent')
     await capture('initial-spent')
 
     rearm()
-    await expectActive(24, true)
-    await expectActive(25, true)
+    expectActive(true)
     assert.equal(await lossCount(), 0, 'reactivation does not play a loss')
-    const charm = page.locator('[data-charm-selector="20"] .run-charm-control')
-    await charm.focus()
-    await charm.getByRole('tooltip').waitFor({ state: 'visible' })
-    assert.match(await charm.getByRole('tooltip').innerText(), /BARE HANDS CHARM[\s\S]*Inactive[\s\S]*Weapon equipped/)
-    const beforePosition = { ...getPlayerCharacter(host.state(), owner).position }
-    const beforeProjectiles = host.state().primarySpells.nextId
-    await page.keyboard.press('d')
-    await page.keyboard.press(DEFAULT_GAME_CONTROL_BINDINGS.openSkills.replace(/^Key/, '').toLowerCase())
-    await page.waitForTimeout(150)
-    assert.equal(await page.locator('.skill-book-stage').count(), 0,
-      'the capture-phase Skills shortcut must ignore a focused charm tooltip')
-    assert.equal(await charm.evaluate(element => element === document.activeElement), true)
-    await page.keyboard.press(DEFAULT_GAME_CONTROL_BINDINGS.openInventory.replace(/^Key/, '').toLowerCase())
-    await page.waitForTimeout(150)
-    assert.equal(await page.getByRole('dialog', { name: 'Inventory', exact: true }).count(), 0,
-      'the capture-phase Inventory shortcut must ignore a focused charm tooltip')
-    assert.equal(await charm.evaluate(element => element === document.activeElement), true)
-    const beforeHotbarBank = await page.locator('.hotbar-controls').first().getAttribute('data-hotbar-bank')
-    await page.keyboard.press(DEFAULT_GAME_CONTROL_BINDINGS.cycleHotbar.replace(/^Key/, '').toLowerCase())
-    await page.keyboard.press(DEFAULT_GAME_CONTROL_BINDINGS.openChat.replace(/^Key/, '').toLowerCase())
-    await page.waitForTimeout(150)
-    assert.equal(await page.locator('.hotbar-controls').first().getAttribute('data-hotbar-bank'), beforeHotbarBank,
-      'the capture-phase Hotbar shortcut must ignore a focused charm tooltip')
-    assert.equal(await page.locator('.game-chat[data-chat-open="true"]').count(), 0,
-      'the capture-phase Chat shortcut must ignore a focused charm tooltip')
-    assert.equal(await charm.evaluate(element => element === document.activeElement), true)
-    await charm.click()
-    await page.waitForTimeout(150)
-    assert.deepEqual(getPlayerCharacter(host.state(), owner).position, beforePosition,
-      'focused tooltip keys must not move the player')
-    assert.equal(host.state().primarySpells.nextId, beforeProjectiles,
-      'clicking a charm must not fire the primary')
-    await capture('focused-reason')
-    await page.keyboard.press('Escape')
-    if (touch) {
-      await charm.tap()
-      await charm.getByRole('tooltip').waitFor({ state: 'visible' })
-    } else {
-      await charm.hover()
-      await charm.getByRole('tooltip').waitFor({ state: 'visible' })
-    }
-    await page.mouse.move(viewport.width - 20, viewport.height / 2)
-    await page.locator('.boneyard-scene').focus()
-
     Object.assign(host.state(), installCharms(addPlayerCharacter(host.state(), peer,
       { ...config, displayName: 'Peer', element: 'fire' }), peer, [5, 24, 25]))
     damage(peer, 1)
     await page.waitForTimeout(200)
     assert.equal(await lossCount(), 0, 'another owner cannot play the local loss stream')
-    assert.equal(await page.locator('.run-charm-hud [data-charm-selector="5"]').count(), 0)
-    assert.equal(await page.locator('.run-charm-hud').getAttribute('data-charm-owner'), owner)
     damage(owner, 0)
     await page.waitForTimeout(100)
     assert.equal(await lossCount(), 0)
-    await expectActive(24, true)
+    expectActive(true)
     damage(owner, 1)
     await waitForLoss(1)
-    await expectActive(24, false)
-    await expectActive(25, false)
+    expectActive(false)
     damage(owner, 1)
     await page.waitForTimeout(250)
     assert.equal(await lossCount(), 1, 'repeated hits and snapshots cannot replay loss')
     await capture('authoritative-loss')
 
     rearm()
-    await expectActive(24, true)
-    await expectActive(25, true)
+    expectActive(true)
     assert.equal(await lossCount(), 1)
     await capture('restored-active')
     Object.assign(host.state(), removePlayerCharacter(host.state(), peer))
@@ -231,23 +180,22 @@ async function journey(mode) {
     requestContext = 'reload'
     await page.reload({ waitUntil: 'domcontentloaded' })
     await resume()
-    await expectActive(24, false)
-    await expectActive(25, false)
+    expectActive(false)
     await page.waitForTimeout(250)
     assert.equal(await lossCount(), 0, 'resume must not replay saved loss audio')
     await capture('reconnected-spent')
     rearm()
-    await expectActive(24, true)
+    expectActive(true)
     assert.equal(await lossCount(), 0)
     requestContext = 'game-over-transition'
     damage(owner, 1000)
     await waitUntil(() => host.state().run.phase === 'game-over', 'lethal damage did not end the run', 15_000)
     await waitForLoss(1)
-    await page.locator('.run-charm-hud').waitFor({ state: 'detached' })
+    assert.equal(await page.locator('.run-charm-hud').count(), 0)
     requestContext = 'game-over'
     await page.screenshot({ path: join(output, `${mode}-game-over.png`) })
     receipts.push({ mode, viewport, nativeLossAudio: beforeReloadAudio, resumedLossAudio: await lossEvents(),
-      lifecycle: 'initial/resume silent; active/spent/restored; owner-only; game-over hidden', frames: wire.frames })
+      lifecycle: 'initial/resume silent; active/spent/restored; owner-only audio; charm row absent', frames: wire.frames })
   } catch (error) {
     await page.screenshot({ path: join(output, `${mode}-failure.png`) })
     receipts.push({ mode, failure: `${error.name}: ${error.message}`, body: await page.locator('body').innerText() })
@@ -266,7 +214,6 @@ async function journey(mode) {
     await page.getByRole('button', { name: 'Last game', exact: true }).click()
     await page.locator('.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]')
       .waitFor({ timeout: 90_000 })
-    await page.locator('.run-charm-hud').waitFor()
     requestContext = 'active-run'
   }
   function rearm() {
@@ -279,8 +226,10 @@ async function journey(mode) {
     const live = host.state()
     Object.assign(live, damageGameSimulationPlayer(live, playerId, amount, live.tick))
   }
-  async function expectActive(selector, active) {
-    await page.locator(`.run-charm-hud [data-charm-selector="${selector}"][data-active="${active}"]`).waitFor()
+  function expectActive(active) {
+    const runtime = getPlayerProgression(host.state(), owner).hagathaRuntime
+    assert.equal(runtime.serendipityActive, active)
+    assert.equal(runtime.reverieActive, active)
   }
   function lossEvents() {
     return page.evaluate(() => window.__sdrAudioEvents.filter(event => event.type === 'buffer-start'
@@ -291,41 +240,13 @@ async function journey(mode) {
     await page.waitForFunction(expected => window.__sdrAudioEvents.filter(event => event.type === 'buffer-start'
       && window.__sdrAudioSourceMatches(event.src, 'lose-reverie.wav')).length === expected, count)
   }
-  function hud() {
-    return page.locator('.run-charm-hud').evaluate(element => {
-      const rect = element.getBoundingClientRect()
-      return { bounds: { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom },
-        rows: [...element.querySelectorAll('.run-charm-status')].map(row => ({
-          selector: Number(row.dataset.charmSelector), active: row.dataset.active === 'true',
-          label: row.querySelector('button').getAttribute('aria-label'),
-          opacity: getComputedStyle(row.querySelector('.run-charm-icon')).opacity,
-          filter: getComputedStyle(row.querySelector('.run-charm-icon')).filter,
-          record: row.querySelector('[data-native-ui-record]').getAttribute('data-native-ui-record'),
-        })) }
-    })
-  }
   async function capture(name) {
-    const shown = await hud()
-    assert.equal(shown.rows.length, 9)
-    assert.ok(shown.bounds.x >= 0 && shown.bounds.right <= viewport.width
-      && shown.bounds.y >= 0 && shown.bounds.bottom <= viewport.height, JSON.stringify(shown.bounds))
-    for (const row of shown.rows) {
-      assert.equal(row.record, `Skills.${127 + row.selector}`)
-      assert.match(row.label, row.active ? /: Active$/ : /: Inactive$/)
-      if (!row.active) assert.ok(Number(row.opacity) < 0.5 && row.filter.includes('grayscale'))
-    }
-    const neighbors = await page.locator('.hub-hud-meter, .hub-hud-selected-skill-action, .hub-hud-backpack-button, .hub-hud-tome-button')
-      .evaluateAll(elements => elements.map(element => {
-        const rect = element.getBoundingClientRect()
-        return { className: element.className, x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom }
-      }))
-    for (const neighbor of neighbors) {
-      assert.ok(shown.bounds.right <= neighbor.x || shown.bounds.x >= neighbor.right
-        || shown.bounds.bottom <= neighbor.y || shown.bounds.y >= neighbor.bottom,
-      `Charm HUD overlaps ${neighbor.className}: ${JSON.stringify({ shown: shown.bounds, neighbor })}`)
-    }
+    assert.equal(await page.locator('.run-charm-hud').count(), 0,
+      'owned charms must not render the removed status row')
+    assert.deepEqual(getPlayerEconomy(host.state(), owner).ownedPerkSelectors, selectors)
     await page.screenshot({ path: join(output, `${mode}-${name}.png`) })
-    receipts.push({ mode, name, ...shown, neighbors,
+    receipts.push({ mode, name, charmRowCount: 0,
+      ownedCharms: getPlayerEconomy(host.state(), owner).ownedPerkSelectors,
       authority: getPlayerProgression(host.state(), owner).hagathaRuntime })
   }
 }

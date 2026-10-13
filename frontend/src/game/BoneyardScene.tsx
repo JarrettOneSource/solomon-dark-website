@@ -590,7 +590,7 @@ export default function BoneyardScene({
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {
       if (event.target instanceof Element
-        && event.target.closest('input, textarea, [contenteditable="true"], [data-sack-rename-dialog], .run-charm-control')) return
+        && event.target.closest('input, textarea, [contenteditable="true"], [data-sack-rename-dialog]')) return
       if (
         inputBlocked
         || tutorialAccess?.skills === false
@@ -633,7 +633,6 @@ export default function BoneyardScene({
 
   useEffect(() => {
     const interact = (event: KeyboardEvent) => {
-      if (event.target instanceof Element && event.target.closest('.run-charm-control')) return
       if (
         sceneInputBlocked
         || run.phase !== 'active'

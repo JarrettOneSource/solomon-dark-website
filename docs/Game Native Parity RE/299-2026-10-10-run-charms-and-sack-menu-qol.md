@@ -1,5 +1,18 @@
 # 2026-10-10 — Active-run charms and Sack menu quality of life
 
+## 2026-10-13 — Charm status row removed
+
+At the user's request, the persistent charm status row and its tooltip controls
+are removed from the shared game HUD. The row's component, status projection,
+styles, dedicated tests and keyboard guards are removed with it. Charm
+ownership, gameplay effects, saved state and authoritative loss audio retain
+their existing owners. The maintained charm browser journey checks that the
+row stays absent while exercising charm loss, reactivation and save/resume.
+
+The HUD visibility and focused-tooltip requirements below document the original
+2026-10-10 feature and are superseded by this removal. The loss-audio and Sack
+contracts remain in force.
+
 ## Scope and acceptance boundary
 
 The user explicitly requested persistent charm visibility during an active run,

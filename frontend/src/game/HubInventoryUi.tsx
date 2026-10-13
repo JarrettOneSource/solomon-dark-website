@@ -322,7 +322,6 @@ export default function HubInventoryUi({
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
       if (inputSuspended) return
-      if (event.target instanceof Element && event.target.closest('.run-charm-control')) return
       // Text entry owns its keys, including rebound letter bindings.
       if (overlayRoot.current?.querySelector('[data-sack-rename-dialog]')) return
       const menuKey = event.code === menuKeyCode || event.code === 'Escape'
