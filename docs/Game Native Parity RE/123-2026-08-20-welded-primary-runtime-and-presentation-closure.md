@@ -8,6 +8,14 @@
 > receiver/area inventory in entry 162. Historical test/browser receipts remain
 > evidence of what ran, not proof of those disproved semantics.
 
+> **2026-10-13 native presentation correction — reports 116/118:** all earlier
+> Flame record-44 glyph, optional record-375/376 branch, alternating-UV and
+> complete geometry/fade/RNG closure assertions in this entry are superseded.
+> Flame uses record **25 UVs**; its draw binds a shared atlas page through
+> record 44's page pointer, which does not select that glyph. The corrected
+> native chain and explicit open boundaries are recorded below. This narrow
+> evidence correction does not change the verified terminal payload owner.
+
 > **2026-09-24 correction — report 20:** historical Ring/Comet/Frost Missile
 > Iceblast references to DeadHawg records 114/121 below are superseded by
 > [ledger 084](084-2026-08-20-secondary-ability-native-ownership-correction.md).
@@ -23,8 +31,10 @@
 > supersedes only the Flame Lash and Blizzard Beam parent-layer closure. Both
 > factories install `ZAnimSplit` and require clipped 25/50-unit
 > `AnimPointer` queue slices instead of the former single origin-root mesh.
-> Their recovered gameplay, geometry, art, timing, contact, and audio contracts
-> remain valid.
+> The original claim that all recovered gameplay, geometry, art, timing,
+> contact and audio contracts remain valid is historical. The 2026-10-13
+> Flame presentation and death-payload corrections above supersede it within
+> their stated scope.
 
 ## Reopened parity boundary
 
@@ -106,8 +116,9 @@ continuous presentation fields but never reroll authority.
   Merge ownership follows the strongest damage payload; ticks and damage keep
   maxima.
 - FireMissile directly uses the Fire body/impact records; Frost, Ball, and
-  Ground own their concrete compositor/child programs. Flame Lash record-44
-  mesh, Blizzard's `0x005308D0` beam, Steam record-76 normal/over actors,
+  Ground own their concrete compositor/child programs. Flame Lash uses its
+  dedicated record-25-UV ribbon (the old record-44 glyph claim is retracted),
+  Blizzard's `0x005308D0` beam, Steam record-76 normal/over actors,
   EBoulder 86/168..171/2008..2010, Meteor marker/fall/impact/debris, and Hail's
   Frost helper, record-18 rock-birth fades, release FadeFrost, and rocks
   168..171 each require separate plans and lifetimes.
@@ -222,16 +233,15 @@ browser receipts remain later gates for the combined skill tree.
 
 The same adjacency sweep closes the three channel draw families:
 
-- Flame Lash constructor `0x0045B810` uses the shared exact `0x0052E020`
-  three-point QuickSpline ribbon builder, not the former generic six-vertex
-  strip. Its record-44 body inherits the native sample spacing, wave envelope,
-  private xorshift displacement, alternating UV rows, and optional independent
-  record-375/376 branch. Normal width/alpha are `1/1`; weak uses `.75/.5`;
-  phase is `-3*birthTick`. Main and chained contacts also own independently
-  registered additive BadGuys-35 `Anim_FadeFlameLash` actors. Their constructor
-  spends two overwritten `Float(360)` words; endpoint and chain programs then
-  consume their exact color/offset/scale/wrapper lanes, retain `.2` alpha loss,
-  and sample Region light without submitting a source.
+- Flame Lash constructor `0x0045B810` calls dedicated builder `0x0052E020`.
+  It has a six-vertex short-span branch and a three-point QuickSpline
+  long-span branch. Record 25 supplies both branches' UVs. The prior
+  record-44 glyph, alternating-UV and 375/376 branch claims are superseded
+  by the correction below. Normal body width/alpha are `1/1`, weak `.75/.5`,
+  and phase is `-3*birthTick`. Independently registered record-35 fades spend
+  two overwritten `Float(360)` constructor words. Exact fade offsets, final
+  scale, Enhanced-dependent losses, lighting and RNG parity remain open under
+  report 116.
 - Blizzard factory `0x005328D0` is called by welded handler `0x00541870` with
   source-glow flag one and endpoint/enhanced flag zero. Records 6 and 31 are
   therefore unreachable for this skill. Draw `0x005308D0` owns exactly a
@@ -253,8 +263,10 @@ The same adjacency sweep closes the three channel draw families:
   Positive normal tint draws two additive record-76 copies; after tint reaches
   zero one ordinary copy remains. Over draws one ordinary quarter-alpha copy.
 
-Focused tests now pin the shared Flame ribbon, its 375/376 branch membership,
-all Flame fade RNG/lifetimes, Blizzard's two quads and negative 6/31 census,
+The historical focused tests pinned the then-current Flame ribbon and its
+claimed 375/376 branch plus fade RNG/lifetimes. They are implementation
+observations, not native proof; those Flame closure claims are superseded by
+the 2026-10-13 correction. The tests also covered Blizzard's two quads and negative 6/31 census,
 its four-word glow pair, Steam terminal/contact clocks, weak and Over branches,
 protocol ownership, and renderer plans. The remaining welded draw work is the
 Meteor ground primitive and independent debris painter/lifecycle audit before
@@ -1583,10 +1595,13 @@ Their own payload is zeroed at `0x006443E2..EF`; base contact damage is
 fragmentDamage divided by manager timestep at `0x006443DC`; registration is
 `0x0064440A`. They do not receive the Ember ten-construction-tick loop.
 
-Flame start cue 33 and held loop 157 remain source-owned. Beam record 44,
-Enhanced 375/376, fade 35, path lights, split-painter lifetimes and all release,
-cancel, death, scene and observer teardown paths remain in the inventory.
-The reported clip does not establish captured audio loudness.
+Flame start cue 33 and held loop 157 remain source-owned. The dedicated
+ribbon uses BadGuys record 25 UVs, while its draw binds the shared atlas page
+through record 44's page pointer. The copied claim that Flame emits a
+375/376 Enhanced branch is retracted. Fade 35, path lights, split-painter
+lifetimes and release/cancel/death/scene/observer teardown remain in the
+inventory with the report-116 geometry/fade/RNG boundaries below. The
+reported clip does not establish captured audio loudness.
 
 Independent native review approved a bounded shared-owner repair, not a
 blanket damage multiplier, a second global fire pass or a `killed`-only
@@ -1610,3 +1625,45 @@ full-release gates.
 
 - The native ribbon/path-light RNG sites and their position after source-flare and ribbon registration are recovered, but this task has not matched their geometry-dependent loop cardinality to the web presentation owner. That pre-existing presentation-RNG mismatch remains open. Preserve proved source/endpoint/chain ordering without claiming complete native global-RNG closure or inventing compensating draws.
 - Imp receiver `0x0048B1C0` rejects native byte `+0x234`. Its semantic identity, constructor transitions and any correspondence to supported `BoneyardImpBrain` state are not established here. The current host store contains live hostile mask-2 actors and active Maggots, rather than arbitrary native alignment states. Record this native branch as unmapped; do not invent an Imp state or claim all native wrapper states are implemented.
+
+
+### 2026-10-13 tracked presentation correction before report-118 publication
+
+The report-118 appendix and evidence JSON copied an incorrect historical
+art-membership claim. Fresh independent instruction review supersedes it:
+
+- Main and chain use factory `0x00531F00`, constructor `0x0045B810` and draw
+  `0x004583E0`. Constructor call `0x0045B915` enters the dedicated
+  `0x0052E020` Flame ribbon builder.
+- The builder copies **BadGuys record 25 UVs** from singleton `0x00819978`
+  plus `0x13A8` (record-25 descriptor plus `0x4C`) at
+  `0x0052E2CD..0x0052E2E1` and `0x0052E947..0x0052E966`.
+- Draw `0x004583E0` binds the shared atlas page through record 44's page
+  pointer at singleton plus `0x21F0`. A texture-page binding does not select
+  record 44's glyph. No record-375/376 fork is emitted by this
+  constructor/builder/draw chain. Unrelated BadGuys 375..376 receiver art
+  at `0x004963C0` is outside this retraction.
+- Native chain fade initially multiplies fields `+0x2C/+0x30` by `.1` at
+  `0x00541522..0x00541537`, then unconditionally overwrites both with
+  `.5 + Float(.5)` at `0x005415F5..0x00541612`. Its final base-scale range
+  is `[.5,1]`, not `[.05,.1]`. The inherited web fade helper still applies
+  the `.1` factor and is unchanged by report 118.
+
+The evidence is the same retail executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`
+and retained raw disassembly SHA-256
+`7b480045967ab622ed8885395176107ccbaf1c30802d5e37c750fdcc2c398158`.
+Raw anchors are constructor line 128764, full builder lines 381811..383240,
+record-25 UV references 381983..381984 and 382440..382441, and draw/page
+binding lines 124514..124521. The original scratch report's Flame44 and
+Enhanced375/376 assertion is explicitly superseded, not legitimized by its
+retained provenance hash.
+
+Geometry, final fade scale/lifetimes, global RNG and replication remain open
+under report 116. Known gaps include the consumed-but-discarded chain-width
+value, a missing short-range native RNG draw, and geometry-dependent path-light
+RNG cardinality. The report-118 phase-order and death-dispatch recovery does
+not establish complete Flame rendering or global-RNG parity. Terminal
+callback owner `0x00477020` and the death-only payload contract remain valid.
+This documentation-only correction does not change production or test bytes,
+and no report-116 runtime repair is included in the urgent payload patch.

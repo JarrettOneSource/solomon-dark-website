@@ -1,6 +1,6 @@
 {
-  "schema": "solomon-dark-report118-native-death-payload-evidence-v1",
-  "status": "native recovery; implementation and acceptance pending",
+  "schema": "solomon-dark-report118-native-death-payload-evidence-v2",
+  "status": "native recovery with 2026-10-13 presentation correction; implementation acceptance tracked separately",
   "date": "2026-10-13",
   "source_head": "762f0c9c777345f733ae7635ffd4d1d66b20cbeb",
   "native_binary": {
@@ -20,7 +20,8 @@
       "Source-flare flag/order now recovered",
       "Fire square assumption superseded by strict circle",
       "Steam unrestricted radius assumption superseded by limiting smaller square",
-      "0xBB9 exclusion identity is unverified; Coffin is 0x3F5"
+      "0xBB9 exclusion identity is unverified; Coffin is 0x3F5",
+      "Original scratch report Flame44/Enhanced375-376 art membership is retracted by presentation_correction; retained path/hash is provenance, not endorsement of that assertion"
     ]
   },
   "receiver_membership": [
@@ -7373,11 +7374,6 @@
     "ember_body": "267..270",
     "ember_contact": "251..254",
     "ember_glow": 15,
-    "beam_base": 44,
-    "beam_enhanced": [
-      375,
-      376
-    ],
     "flame_fade": 35,
     "flame_start_cue": 33,
     "flame_loop_cue": 157,
@@ -7387,7 +7383,23 @@
       "enhanced particle/light consumers and path-light births",
       "stable replicated birth identity and audio dedup",
       "pause, disconnect, owner/world removal and loop teardown"
-    ]
+    ],
+    "flame_ribbon_glyph": {
+      "atlas": "BadGuys",
+      "record": 25,
+      "uv_source": "singleton 0x00819978 + 0x13A8 (record25 descriptor + 0x4C)",
+      "builder": "0x0052E020",
+      "uv_copy_sites": [
+        "0x0052E2CD..0x0052E2E1",
+        "0x0052E947..0x0052E966"
+      ]
+    },
+    "flame_ribbon_page_binding": {
+      "draw": "0x004583E0",
+      "source": "singleton 0x00819978 + 0x21F0, record44 page pointer",
+      "meaning": "Shared atlas texture page; does not select record44 glyph"
+    },
+    "flame_ribbon_375_376_branch": "Retracted: no such fork is emitted by Flame factory0x00531F00, constructor0x0045B810, builder0x0052E020 and draw0x004583E0"
   },
   "existing_source_conflicts": [
     "Flame detonation on nonlethal contacts instead of admitted terminal deaths",
@@ -10776,13 +10788,14 @@
     }
   },
   "bounds": [
-    "Exact missing-endpoint clipping output0x410FF0 not recovered in this task; retain settled renderer geometry",
+    "Exact missing-endpoint clipping output0x410FF0 not recovered in this task; leave existing renderer geometry unchanged in report118; parity remains open under report116",
     "Direct script1060 has no current Website timeline adapter; do not invent one",
     "Website Meteor is a shared-helper adapter, not a direct native Fire-helper caller",
     "Independent review and per-direct-consumer regression coverage required before shared area/contact implementation",
     "No native Windows execution, new full release gate, publication or report closure is claimed",
     "Native Imp +0x234 rejection is byte-confirmed but semantic identity/constructor transitions and BoneyardImpBrain correspondence remain unmapped; exhaustive slot inventory is not exhaustive implemented receiver-state coverage",
-    "Native path-light RNG sites/order recovered; geometry-dependent loop cardinality versus web presentation owner remains unverified. Do not claim full global-RNG closure or invent compensating draws"
+    "Native path-light RNG sites/order recovered; geometry-dependent loop cardinality versus web presentation owner remains unverified. Do not claim full global-RNG closure or invent compensating draws",
+    "Native Flame glyph/page/375-376 and final chain-fade scale claims are corrected in presentation_correction; inherited runtime geometry/fade/global-RNG gaps remain open under report116"
   ],
   "independent_review": {
     "date": "2026-10-13",
@@ -10822,5 +10835,38 @@
       "Mac/browser/audio acceptance"
     ],
     "implementation_scope": "Verified death-payload and shared-area/contact owner repair; explicit unmapped Imp/alignment and presentation-RNG boundaries are not silently generalized"
+  },
+  "presentation_correction": {
+    "date": "2026-10-13",
+    "reviewer": "/root/finish_solomon_archive_custody/recover_flame_ribbon_contract",
+    "corrects_frozen_candidate": "13c35db1acc764edf3846d26d5fb845ec70139f0",
+    "retracted_fields": {
+      "presentation_membership.beam_base": 44,
+      "presentation_membership.beam_enhanced": [
+        375,
+        376
+      ]
+    },
+    "raw_disassembly_lines": {
+      "constructor_call": 128764,
+      "complete_builder": [
+        381811,
+        383240
+      ],
+      "record25_uv_references": [
+        381983,
+        381984,
+        382440,
+        382441
+      ],
+      "draw_and_page_binding": [
+        124514,
+        124521
+      ]
+    },
+    "unrelated_receiver_range_preserved": "receiver_membership/8/catalog_row/class_art_uses/0: BadGuys375..376, object_field0x481C, consumer0x004963C0 vslot0x08 is a different actor and is not retracted",
+    "chain_fade_scale": "Initial +0x2C/+0x30 multiplication by.1 at0x00541522..0x00541537 is overwritten with.5+Float(.5) at0x005415F5..0x00541612. Final native range[.5,1], not[.05,.1]. Existing web helper is unchanged; separate report116 gap.",
+    "open_scope": "Report116 geometry, fade offsets/final scale/Enhanced-dependent losses, lighting, global RNG and replication remain open, including discarded chain-width value, missing short-range native RNG draw and unmatched path-light loop cardinality. No complete Flame/global-RNG parity is claimed.",
+    "payload_scope": "Terminal callback owner0x00477020 and death-only payload contract remain verified. This correction changes documentation only."
   }
 }
