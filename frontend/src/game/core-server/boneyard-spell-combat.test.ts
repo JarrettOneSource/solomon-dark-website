@@ -11,7 +11,6 @@ import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-prima
 import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { createPlayerSkillBook, playerStatBook } from '../core-kernels/player-progression.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign, type NativeRngState } from '../core-kernels/native-rng.ts'
-import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
 import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
 import { createNativeWeldPersistentActor, spawnNativeWeldOneShot } from '../core-kernels/native-weld-primary-runtime.ts'
@@ -140,7 +139,6 @@ function resolveCombatWithAuthority(
     primarySceneryTargets?: readonly PrimarySpellTarget[]
     rngSeed?: number
     rng?: NativeRngState
-    steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
 ) {
   return resolveBoneyardSpellCombat(
@@ -157,7 +155,6 @@ function resolveCombatWithAuthority(
     undefined,
     options.fireActorContacts ?? [],
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
-    options.steamedPulses ?? [],
     () => options.fireballCorridorLength ?? 1_600,
     null,
     options.frostMissileWorldContacts ?? [],
@@ -537,7 +534,7 @@ test('low-charge Hurricane contact suppresses the ordinary target hit sound only
   assert.equal(result.enemies.actors[0]?.lifeState, 'alive')
 })
 
-test('Fire contact partitions direct and rectangular splash damage and consumes Ember RNG', () => {
+test('Fire contact partitions direct and two-lane root-circle splash damage and consumes Ember RNG', () => {
   const spawned = spawnEnemies([
     { position: { x: 0, y: 0 }, token: 'SKELETON' },
     { position: { x: 100, y: 0 }, token: 'SKELETON' },
@@ -570,11 +567,11 @@ test('Fire contact partitions direct and rectangular splash damage and consumes 
     result.hits.map(({ actorId, amount, spellKind }) => ({ actorId, amount, spellKind })),
     [
       { actorId: 1, amount: 18, spellKind: 'fire' },
-      { actorId: 1, amount: 6, spellKind: 'fire-explosion' },
-      { actorId: 2, amount: 6, spellKind: 'fire-explosion' },
+      { actorId: 1, amount: 12, spellKind: 'fire-explosion' },
+      { actorId: 2, amount: 12, spellKind: 'fire-explosion' },
     ],
   )
-  assert.deepEqual(result.enemies.actors.map(({ currentHealth }) => currentHealth), [76, 94, 100])
+  assert.deepEqual(result.enemies.actors.map(({ currentHealth }) => currentHealth), [70, 88, 100])
   assert.deepEqual(
     result.spells.transients.map(({ id, kind }) => ({ id, kind })),
     [
@@ -620,9 +617,9 @@ test('Fire impact skips a nonpositive direct remainder but still detonates and r
 
   assert.deepEqual(
     result.hits.map(({ amount, spellKind }) => ({ amount, spellKind })),
-    [{ amount: 3, spellKind: 'fire-explosion' }],
+    [{ amount: 6, spellKind: 'fire-explosion' }],
   )
-  assert.equal(result.enemies.actors[0]!.currentHealth, 97)
+  assert.equal(result.enemies.actors[0]!.currentHealth, 94)
   assert.deepEqual(result.burns, [
     { damage: 10, ownerId: 'wizard', targetId: actor.id },
   ])
@@ -905,7 +902,7 @@ test('welded missile contacts preserve each native elemental payload and impact 
   }), [], 31)
   assert.deepEqual(burning.hits.map(({ amount, spellKind }) => ({ amount, spellKind })), [
     { amount: 5, spellKind: 'weld' },
-    { amount: 3, spellKind: 'fire-explosion' },
+    { amount: 6, spellKind: 'fire-explosion' },
   ])
   assert.deepEqual(
     burning.spells.transients.map(({ kind }) => kind),
@@ -1934,7 +1931,7 @@ test('Lightning chains to the nearest unused roots, decays in float32, and attac
   )), ['enemy:2', 'enemy:3'])
 })
 
-test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns Fire payloads', () => {
+test('Flame Lash retains the semantic Lightning target, chains and stuns without nonlethal payloads', () => {
   const spawned = spawnEnemies([
     { position: { x: 20, y: 0 }, token: 'SKELETON' },
     { position: { x: 100, y: 0 }, token: 'SKELETON' },
@@ -1977,21 +1974,21 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
     { patch: { stunFactor: 0.4, stunTicks: 25 }, targetId: 1, worldKey: WORLD_KEY },
     { patch: { stunFactor: 0.4, stunTicks: 25 }, targetId: 2, worldKey: WORLD_KEY },
   ])
-  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'fire-explosion').length, 2)
+  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'fire-explosion').length, 0)
   assert.ok(result.enemies.actors.every(actor => actor.hitReactionTimer === 0))
   const flameFades = result.spells.transients.filter(({ kind }) => (
     kind === 'weld-flame-lash-fade'
   ))
-  assert.equal(flameFades.length, 3)
+  assert.equal(flameFades.length, 4)
   const chainFades = flameFades.filter(effect => effect.kind === 'weld-flame-lash-fade' && effect.variant === 'chain')
-  assert.equal(chainFades.length, 2)
+  assert.equal(chainFades.length, 1)
   assert.ok(chainFades.every((effect) => (
     effect.kind === 'weld-flame-lash-fade'
       && effect.variant === 'chain'
       && effect.record === 35
   )))
   const sourceFades = flameFades.filter(effect => effect.kind === 'weld-flame-lash-fade' && effect.variant === 'source')
-  assert.equal(sourceFades.length, 1)
+  assert.equal(sourceFades.length, 2)
   const sourceFade = sourceFades[0]!
   assert.ok(sourceFade.kind === 'weld-flame-lash-fade')
   assert.equal(sourceFade.record, 35)
@@ -2230,51 +2227,7 @@ test('Steam particle contact installs its ten-tick Steamed payload on a risen Co
     worldKey: WORLD_KEY,
   }])
 
-  const pulsed = resolveCombatWithAuthority(
-    applied.enemies,
-    spellState({}),
-    [],
-    2,
-    { steamedPulses: [{
-      emberDamage: 2,
-      emberFragments: 3,
-      explodeDamage: 4,
-      explodeRadius: 6,
-      position: actor.position,
-      sourcePlayerId: 'wizard',
-      targetId: actor.id,
-      worldKey: WORLD_KEY,
-    }] },
-  )
-  const explosion = pulsed.spells.transients.find(({ kind }) => kind === 'fire-explosion')
-  assert.equal(explosion?.kind === 'fire-explosion' && explosion.presentation, 'steam')
-  assert.equal(pulsed.spells.transients.some(({ kind }) => kind === 'fire-ember'), false)
-  const fragments = pulsed.spells.transients.filter(
-    (effect): effect is Extract<PrimarySpellTransientState, { kind: 'weld-steam' }> => (
-      effect.kind === 'weld-steam'
-    ),
-  )
-  assert.equal(fragments.length, 9)
-  assert.equal(fragments.every(({ vector }) => vector.every((value) => value === 0)), true)
-  assert.equal(fragments.every(({ contactDamage }) => contactDamage === Math.fround(2 / 100)), true)
-
-  const noExplosion = resolveCombatWithAuthority(
-    applied.enemies,
-    spellState({}),
-    [],
-    3,
-    { steamedPulses: [{
-      emberDamage: 2,
-      emberFragments: 3,
-      explodeDamage: 4,
-      explodeRadius: 0,
-      position: actor.position,
-      sourcePlayerId: 'wizard',
-      targetId: actor.id,
-      worldKey: WORLD_KEY,
-    }] },
-  )
-  assert.deepEqual(noExplosion.spells.transients, [])
+  // Steamed deaths are resolved by the secondary receiver, not free pulses here.
 })
 
 test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pulse', () => {

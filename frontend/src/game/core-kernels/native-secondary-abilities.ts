@@ -1,4 +1,5 @@
 import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
+import type { NativeSpellSpecialDeathPayload } from './native-special-death-payload.ts'
 import { actorHeadingFromVector, actorHeadingVector } from './actor-heading.ts'
 import type { PlayerBeltComponent } from './native-belt.ts'
 import { createNativeDampenedSpell, stepNativeDampenedSpell } from './native-dampened-spell.ts'
@@ -497,6 +498,7 @@ export interface NativeSecondaryDamageContact {
   readonly kind: NativeSecondaryDamageKind
   readonly ownerId: string
   readonly sourceActorId: number
+  readonly specialDeathPayload?: NativeSpellSpecialDeathPayload
   readonly suppressHurtSound?: boolean
   readonly targetId: number
 }
@@ -511,17 +513,6 @@ export interface NativeSecondaryTargetHeadingChange {
   readonly degrees: number
   readonly mode: 'absolute' | 'relative'
   readonly targetId: number
-}
-
-export interface NativeSecondarySteamedPulse {
-  readonly emberDamage: number
-  readonly emberFragments: number
-  readonly explodeDamage: number
-  readonly explodeRadius: number
-  readonly position: Vector2
-  readonly sourcePlayerId: string
-  readonly targetId: number
-  readonly worldKey: string
 }
 
 export interface NativeSecondaryTickResult {
@@ -544,7 +535,6 @@ export interface NativeSecondaryTickResult {
   readonly primaryOverridePlayerIds: readonly string[]
   readonly staffCastPulsePlayerIds: readonly string[]
   readonly state: NativeSecondarySimulationState
-  readonly steamedPulses: readonly NativeSecondarySteamedPulse[]
 }
 
 interface NativeFireBurnRequest {
@@ -1476,7 +1466,6 @@ export function stepNativeSecondaryAbilities(
   const manaSpent: Record<string, number> = {}
   const healthRecovered: Record<string, number> = {}
   const targetHeadingChanges: NativeSecondaryTargetHeadingChange[] = []
-  const steamedPulses: NativeSecondarySteamedPulse[] = []
   const facingHeadingDegreesByPlayer: Record<string, number> = {}
   const relocatedPlayers: Record<string, Vector2> = {}
   const removedProjectileIds = new Set<number>()
@@ -1609,6 +1598,20 @@ export function stepNativeSecondaryAbilities(
       if (target) {
         const flash = drawNativeFloat(rng, 0.5)
         rng = flash.state
+        let specialDeathPayload: NativeSpellSpecialDeathPayload | undefined
+        if (effect.steamed.explodeRadius > 0) {
+          // Mod_Steamed 0x626036 samples before submission, including surviving hits.
+          const seed = drawNativeInteger(rng, 1_000_000)
+          rng = seed.state
+          specialDeathPayload = Object.freeze({
+            kind: 'steam',
+            emberDamage: effect.steamed.emberDamage,
+            emberFragments: effect.steamed.emberFragments,
+            explodeDamage: effect.steamed.explodeDamage,
+            explodeRadius: effect.steamed.explodeRadius,
+            privateSeed: seed.value,
+          })
+        }
         damage.push({
           amount: effect.steamed.damagePerTick,
           hitStrength: Math.fround(0.25 + flash.value),
@@ -1616,18 +1619,9 @@ export function stepNativeSecondaryAbilities(
           kind: 'fire',
           ownerId: effect.steamed.ownerId,
           sourceActorId: effect.steamed.sourceActorId,
+          ...(specialDeathPayload === undefined ? {} : { specialDeathPayload }),
           targetId: target.id,
         })
-        steamedPulses.push(Object.freeze({
-          emberDamage: effect.steamed.emberDamage,
-          emberFragments: effect.steamed.emberFragments,
-          explodeDamage: effect.steamed.explodeDamage,
-          explodeRadius: effect.steamed.explodeRadius,
-          position: Object.freeze({ ...target.position }),
-          sourcePlayerId: effect.steamed.ownerId,
-          targetId: target.id,
-          worldKey: effect.worldKey,
-        }))
       }
     }
     if (effect.frostBurnTicks <= 0
@@ -3927,7 +3921,6 @@ export function stepNativeSecondaryAbilities(
     removedProjectileIds: Object.freeze([...removedProjectileIds].sort((a, b) => a - b)),
     staffCastPulsePlayerIds: Object.freeze([...staffCastPulsePlayerIds].sort()),
     state,
-    steamedPulses: Object.freeze(steamedPulses),
   }
 }
 
@@ -4002,7 +3995,6 @@ export function activateNativeSecondaryBeltSkill(
     removedProjectileIds: cast.removedProjectileIds,
     staffCastPulsePlayerIds: [],
     state,
-    steamedPulses: [],
   }
 }
 

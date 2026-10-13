@@ -5,9 +5,7 @@ import {
   nativeHurricaneMovementDue,
   nativeHurricaneOrbitForce,
 } from '../../core-kernels/native-hurricane.ts'
-import { drawNativeInteger } from '../../core-kernels/native-rng.ts'
 import type { PrimarySpellTransientState } from '../../core-kernels/primary-spells.ts'
-import { createPrimarySpellWeldSteamDetonation } from '../../core-kernels/primary-spells.ts'
 import { positionBoneyardEnemy } from '../boneyard-enemy-store.ts'
 import { damageBoneyardEnemy, releaseBoneyardSkeletonPike, setBoneyardEnemyHurricaneContactCooldown } from '../enemies/damage.ts'
 import { validatedDamageMultiplier } from './damage.ts'
@@ -249,28 +247,4 @@ export function resolveTransientForces(work: BoneyardSpellCombatWork): void {
     }
   }
 
-  for (const pulse of work.steamedPulses) {
-    if (pulse.worldKey !== work.worldKey || pulse.explodeRadius <= 0) continue
-    const privateSeed = drawNativeInteger(work.rng, 1_000_000)
-    work.rng = privateSeed.state
-    const detonation = createPrimarySpellWeldSteamDetonation(
-      work.nextSpellId,
-      {
-        emberDamage: pulse.emberDamage,
-        emberFragments: pulse.emberFragments,
-        explodeDamage: pulse.explodeDamage,
-        explodeRadius: pulse.explodeRadius,
-        ownerId: pulse.sourcePlayerId,
-        position: { ...pulse.position },
-        worldKey: work.worldKey,
-      },
-      work.tick,
-      work.rng,
-      privateSeed.value,
-      work.registerWorldPainter,
-    )
-    work.rng = detonation.rng
-    work.impactTransients.push(...work.enrollCombatActors(detonation.transients))
-    work.nextSpellId = detonation.nextId
-  }
 }

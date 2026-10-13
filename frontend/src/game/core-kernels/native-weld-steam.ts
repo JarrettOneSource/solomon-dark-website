@@ -177,6 +177,7 @@ export function spawnNativeWeldSteamActor(input: {
 export function createNativeWeldSteamDetonation(input: {
   readonly explodeDamage: number
   readonly explodeRadius: number
+  readonly beforeFragments?: (explosion: NativeWeldSteamExplosionState) => void
   readonly firstFragmentId: number
   readonly fragmentCount: number
   readonly fragmentDamage: number
@@ -222,6 +223,7 @@ export function createNativeWeldSteamDetonation(input: {
     worldKey: input.worldKey,
   })
 
+  input.beforeFragments?.(explosion)
   const fragments: NativeWeldSteamActorState[] = []
   if (input.fragmentCount > 0) {
     let privateRng = createNativeRng(input.privateSeed)

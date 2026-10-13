@@ -1,5 +1,14 @@
 # 2026-08-22 — Shared Fire explosion, Ember, camera preference, and spawn-failure reopen
 
+> **2026-10-13 correction — report 118:** the special-death producer exclusion,
+> shared area-damage/query assumptions and shared-contact closure claims below
+> are superseded by the report-118 recovery at the end of this entry. Flame
+> Lash is a live type-1 producer; Steam is a type-2 sibling through the same
+> terminal receiver. Native area damage has two half lanes, Fire and Steam use
+> distinct queries, and newborn contacts are synchronous. The separate maximum
+> Ring amount/query/order defect is recorded open, not silently included in the
+> report-118 runtime patch. Historical receipts are retained as historical.
+
 ## Reported smell and parity questions
 
 - Reported web behavior: hitting an enemy with a Fireball after learning
@@ -56,7 +65,7 @@ presentation, lights/audio, replication, interpolation, and teardown.
 | Member | Native source / authored row | Required disposition in this pass | Proof contract |
 | --- | --- | --- | --- |
 | pure Fireball ordinary contact/impact | row 16; `0x005E5160` | verified-already-at-parity except shared child handoff | existing direct/splash partition plus browser hit |
-| Explode mechanics | row 18 damage/radius; `0x00642BF0` | verified-already-at-parity for target damage; exact-port presentation/audio/light | direct and nearby target damage plus complete child census |
+| Explode mechanics | row 18 damage/radius; `0x00642BF0` | reopened 2026-10-13 | two half damage lanes, strict root-circle query and synchronous newborn contacts; presentation clocks retained |
 | explosion orange core | Anim_Fade, BadGuys 15 | exact-port | ages 0..9, fixed scale/order/alpha |
 | explosion array one | Anim_SpriteArray, BadGuys 401..419 | exact-port | float32 `.75 * .98^n`, truncation frames, ages 0..34 |
 | explosion rising lit array | Anim_SpriteArray/ZAnimLit, BadGuys 420..433 | exact-port | float32 `.625 * .97^n`, rise, ages 0..36, provider light |
@@ -70,11 +79,11 @@ presentation, lights/audio, replication, interpolation, and teardown.
 | Ember actor light | `0x005E5960` | exact-port | per-actor registration, radius/intensity/no-shadow |
 | Embers to Imps | row 19 | verified-already-at-parity; revalidate shared Ember retirement | four fragments, GoodImp/Fire sibling ownership |
 | Immolate | row 20; spent mode one | exact-port via same explosion stack | scale one, no fragments, damage/audio/VFX/light |
-| FireMissile and web weld builds 1000/1003/1007 | caller `0x005E4CA0` and welded vectors | exact-port via shared view/protocol/audio | per-build detonation fixture |
-| Steam Jet build 1005 | `Mod_Steamed::Tick 0x00625F40`, event type 2, `0x00643CA0` | `out-of-system` — the 2026-08-30 corrective trace proves this is the separate gray Steam-detonation family in entry 123, not shared helper `0x00642BF0` | negative shared-helper caller census plus Steam-family fixtures |
-| Burning Man Ring contact | Shockwave `0x005FF8C0`, scale 1.5, three Embers | exact-port; replace one-core surrogate and simplified fragments | mechanics, three-layer stack, three exact Embers, cue pair, lights |
+| FireMissile and web weld builds 1000/1003/1007 | caller `0x005E4CA0` and welded vectors; build 1003 uses type-1 death consumer | recovered; shared compatibility required | separate direct projectile and death-payload fixtures, not a per-hit Flame burst |
+| Steam Jet build 1005 | `Mod_Steamed::Tick 0x00625F40`, event type 2, `0x00643CA0` | in-system shared terminal-receiver/area sibling; distinct gray factory | no direct Fire-helper call; terminal-only type-2 burst and distinct Steam query/child fixtures |
+| Burning Man Ring contact | Shockwave `0x005FF8C0`, scale 1.5, three Embers | recovered separate defect; open outside report-118 runtime patch unless touched | full paired damage, strict root radius 82.5 and grid order; preserve independent queue and presentation |
 | scripted `DO EXPLOSION AT` | action 1060, `0x00466BC0` | out-of-system — Website does not execute the native timeline action family | negative producer census, durable native record retained |
-| special enemy-death mode | `0x00477020` | out-of-system — no supported web enemy recipe currently emits this stock mode | negative producer census |
+| special enemy-death mode | `0x00477020`; Flame writes `0x00540C6D/0x00541710`, Steam writes `0x00625FDA` | in-system; prior negative producer census falsified | per-damage payload, eligible terminal dispatch, victim root XY, no survivor bursts |
 | Hub Courtyard/private rooms | shared primary view | exact-port | each world key renders and tears down the same stack |
 | Boneyard | shared primary view plus Region lights/audio | exact-port | WebGL painter/light/audio receipt |
 | protocol/snapshot/copy/interpolation | strict wire and two presentation timelines | exact-port | life `(0,1)`, registrations, 37-tick state, wrap-forward phase |
@@ -172,8 +181,9 @@ combat rectangle but still centers a finite search on the exterior point.
 
 - Fireball/FireMissile/Ember/Ring/script callers submit immutable origin,
   scale, damage, fragment count, status payload, private seed, and alignment
-  flags to the Region-owned helper. The helper creates its three VFX children,
-  requests audio, performs area contact, then constructs Embers.
+  flags to the Region-owned helper. The helper requests audio, creates its three
+  VFX children, performs area contact, then registers and immediately pre-ticks
+  each Ember in sequence before constructing the next.
 - The longest explosion child is not the 16-tick Fireball impact. It remains
   visible through age 36 and independently owns a transient light provider.
 - Mode-zero Ember lifetime does not end at one. Life below one is the stock
@@ -299,3 +309,224 @@ combat rectangle but still centers a finite search on the exterior point.
   and persisted Off state. No system member remains blocked by the browser
   platform. Publication is pending; no deployment or production restart was
   performed.
+
+## 2026-10-13 — Report 118 shared terminal-payload and area-contact recovery
+
+### Owning-system inventory and evidence
+
+This recovery supersedes the prior negative special-death producer claim.
+Flame Lash writes type 1 at `0x00540C6D/0x00541710`; Steamed writes type 2 at
+`0x00625FDA`. The current damage event carries the payload through the real
+terminal receiver; it is not a persistent status or free per-tick explosion.
+Entry 123 owns the authored vectors, low-mana/count/RNG and presentation phase
+details. The machine-readable
+[report-118 native evidence](report118-native-death-payload-evidence.json)
+pins retail 0.72.5 SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+image base `0x00400000`, source HEAD `762f0c9c`, raw instruction excerpts
+and every PE-verified slot below.
+
+All **six** direct Fire-helper CALLs were recovered from the complete static
+disassembly, not a search limited to Flame:
+
+| Call site | Native owner | Website disposition |
+| --- | --- | --- |
+| `0x00466C49` | script action 1060, `0x00466BC0` | Native record retained; no current Website timeline adapter, do not invent one |
+| `0x0047712A` | terminal special-death type 1, `0x00477020` | In-system Flame payload consumer |
+| `0x005E4F0E` | FireMissile/Burning Bolt, `0x005E4CA0` | Direct-caller compatibility mandatory |
+| `0x005E5427` | Fireball, `0x005E5160` | Direct-contact amount remains distinct from shared area |
+| `0x005FFC0B` | maximum Ring Shockwave, `0x005FF8C0` | Separate recovered amount/query/order defect remains open unless touched |
+| `0x0060DA2A` | spent Immolate Ember, `0x0060D7E0` | Shared area compatibility, no arbitrary direct-damage scaling |
+
+Steam has exactly one direct helper call, `0x004770B7 -> 0x00643CA0`.
+Meteor's current Website reuse is an adapter, not a seventh native direct
+Fire-helper call; test its impact/direct-versus-area partition explicitly.
+Ordinary direct projectile, Ember, Burn and Meteor damage are separate
+producers and must not be doubled with the shared area.
+
+The shared `vtable + 0x88` handler `0x00477020` occurs in these **21**
+catalogued native receiver tables. The evidence JSON checks `+0x88`,
+damage `+0x4C` and death gate `+0x64` against the retail bytes for each
+row. Inherited membership does not prove hostile targeting or terminal
+payload eligibility.
+
+| Types and native family | Damage receiver | Terminal/admission consequence |
+| --- | --- | --- |
+| Badguy `0x3E8`, DemonSkull `0x3F0`, Demon `0x3F1`, Coffin `0x3F5`, Maggot `0x7FD`, Solomon Dig/Riff/DriveBy `0x1391/0x139B/0x139C` | `0x0048A290` | Common shields, dead flag, HP and family gate apply |
+| Skeleton/Archer/Mage `0x3E9/0x3EA/0x3EB`, DireFaculty `0x3F2`, Heartmonger `0x3F3` | `0x0048A600` | Admitted body damage forwards; armor break through `0x0048D130` may reject terminal death |
+| Imp/GoodImp/GreenImp `0x3EC/0x3ED/0x7FC` | `0x0048B1C0` | Rejects `+0x234`; accepted branch forwards; friendly/alignment membership remains separate |
+| Zombie `0x3EE`, Wraith `0x3EF` | `0x0048B1E0/0x0048B290` | Admitted branch forwards |
+| Spider `0x809` | `0x0048BC80` | Magic-hit flag `0x02` affects reaction/admission at `0x0048BC85`; do not infer the flag from a nonzero magic lane |
+| Cocoon `0x80A` | `0x0048BCE0` | Special nonterminal receiver: no terminal payload, even when the web's generic result says killed |
+| Portal `0x139D` | `0x0048C370` | Admitted branch forwards at `0x0048C5C6` |
+
+### Terminal dispatch is a stronger condition than “killed”
+
+Region damage submission `0x0063E7D0` invokes victim vslot `+0x4C` at
+`0x0063E808`. The common receiver `0x0048A290` first handles shields and
+already-dead `+0x94`, subtracts damage lanes, requires HP <= 0 at
+`0x0048A49A..A7`, then invokes family gate `+0x64` at
+`0x0048A4AD..B8`. Only an accepted terminal path sets `+0x94` at
+`0x0048A4F6`, removes living membership at `0x0048A530`, and calls
+`+0x88` at `0x0048A53F`. The special consumer requires victim
+`+0x5C == 0` and uses its root XY `+0x18/+0x1C`.
+
+Cocoon restraint subtracts both lanes at `0x00533368..82`; a survivor
+returns false at `0x0048C326`. Release sets `+0x94` before the common
+receiver. Missing/invalid owner can return true at `0x0048C33C..63` without
+calling `+0x88`. Consequently a generic positive/killed result is not a
+native terminal-dispatch marker. The web must never run a Flame/Steam payload
+for Cocoon. Preserve the other shields, armor, existing-dead, alignment and
+family admission gates rather than deriving one universal hit condition.
+
+### Two damage lanes, flags and no second damage owner
+
+Fire computes `payload * .5` at `0x00643089..96`, writes that same half
+to magic `DAT_0081C6EC` at `0x006430DF` and physical `DAT_0081C6E8`
+at `0x006430E6`. Steam does the same at `0x00644164/0x0064416B`.
+Common shield handling at `0x0048A2E3..2FD` consumes the lane sum without
+HP spill; unshielded HP subtraction at `0x0048A3E8..40A` applies physical
+then magic. A neutral unshielded target therefore receives full payload,
+not half.
+
+Independent source review found no second primary area HP owner. The shared
+factory stored half, `fire.ts` submitted once, and `enemies/damage.ts`
+subtracted that request once. A source-neutral branch fixture also reproduced
+the missing half for ordinary Fire. This justifies correcting this producer,
+not multiplying every Fire-family request.
+
+Each area victim first receives reset context at Fire `0x006430A5` or
+Steam `0x0064413A`; flags reset to zero at `0x00624717`. The magic
+damage lane is **not** the magic-hit flag. The port must represent this as
+`hasMagicDamage: true` while keeping `magic: false` for receiver behavior;
+Burn does not set the magic-hit flag either. Spider flag suppression and
+Cocoon's `0x00533388` magic-flag pulse are distinct consumers. The extra
+susceptibility arithmetic `0x0048A410..425` is conditional and does not
+authorize a blanket multiplier. Reset also clears special-death payload:
+area collateral kills cannot recursively inherit type 1 or type 2.
+
+### Distinct query footprints and stable native order
+
+Fire passes `f32(scale * 110)` as diameter. Region helper `0x00642280`
+halves it at `0x00642288`, then grid query `0x00523140` uses strict
+root-center circle membership (`0x005232D9..0x00523312`). No target-body
+radius expansion applies. At scale 1 the radius is 55.
+
+Steam passes `r = f32(scale * 55)` to `0x00642090`. Its stack/FPU trace
+at `0x006420D7..0x00642116` constructs
+`(origin.x-r/2, origin.y-r/2, r, r)`. Constructor `0x0040F9E0` stores
+these four values directly. Grid `0x00522F50` filters target **roots**
+through `0x005230D5 -> 0x00403DA0`, lower-inclusive and upper-exclusive.
+Only those candidates then undergo `distanceSquared < r*r + bodyRadius*bodyRadius`
+at `0x00642203..4B`. For ordinary mask-2 hostiles the square of side
+`55*scale` is already the limiting footprint; a free radius-55 circle and
+the former square of side 110 are both wrong.
+
+Both queries traverse X cell, then Y cell, then cell binding order. The
+current web actor/Maggot concatenation and Set-based candidate collection
+lose this order. Preserve authoritative grid/binding order for area damage
+and resulting deaths; do not replace it with ID sorting.
+
+Both helpers exclude native type `0xBB9`; its identity remains unverified.
+The prior entry-198 shorthand calling that type “Coffin” is disproved by
+Coffin's catalogued type `0x3F5`. Do not filter web Coffins based on that
+mislabel. Preserve the numeric native evidence without inventing an adapter.
+
+### Synchronous newborn construction and callback ownership
+
+The native helper requests the two Fire sounds first
+(`0x00642CE9/0x00642D4F`), creates core/array/rising-array children, resolves
+area contact, then constructs each Ember. An Ember is registered at
+`0x006432E4`, receives its Region pointer at `0x006432EA`, and executes
+ten immediate tick attempts at `0x006432ED..0x00643302`. Removal byte
+`+5` is checked after each; a consumed child has no later pre-tick
+contacts. Only then is the next child constructed. These operations finish
+inside the originating damage call, before the next Flame chain target
+query. Do not invent a later ordinary manager step in the same tick.
+
+The current shared factory constructs all Embers/contact records before
+server resolution and registers actors later. Flame's owned burst is born
+after the existing fire-contact pass, which scans source and impact
+transients, not the newly owned set. Subsequent source advancement moves it
+past the age-zero gate, permanently losing the required splash and
+construction contacts. A second complete fire pass would risk replaying
+unrelated sources and is not an approved correction.
+
+The scoped repair may introduce an optional synchronous construction visitor
+owned by the shared factory and used by the special-death consumer:
+area resolution first, then each child registration and each construction
+contact/removal result before the next tick/child. Existing direct consumers
+keep their default scheduling unless separately proved and changed. The
+parent must test default Fireball, Burning Bolt, Meteor-adapter and Immolate
+behavior plus the new synchronous path. Particle registration and contact
+resolution must have one owner and cannot replay on the next world tick.
+
+Steam's distinct helper owns gray overlays, one registry-27 cue and normal
+zero-own-payload Steam children. It has no Ember ten-pre-tick loop. Its typed
+payload is attached to the current modifier damage event, and admitted
+terminal processing must resolve its area before any subsequent chain or
+modifier event. Shared audiovisual identities, three visual clocks, 37-tick
+maximum child lifetime, lights, protocol/copy/interpolation, observer cue
+dedup and owner/world teardown remain unchanged contracts.
+
+### Separately open Ring defect and implementation disposition
+
+Independent review proved the maximum Ring queue stores half and applies it
+only once; its current radius `165 + bodyRadius`, inclusive boundary and
+ID sorting also disagree with the native helper at scale 1.5: strict root
+radius **82.5** and grid order. Preserve its separate secondary-world path.
+Record this defect as **recovered, open outside the report-118 runtime patch**
+unless a shared change actually touches it, in which case add explicit
+red-to-green coverage before claiming compatibility. It is not evidence of
+a hidden second half for the primary pipeline.
+
+Independent byte/source review result: **PASS for the bounded shared-owner
+repair; FAIL for a blanket multiplier, second full Fire pass, or killed-only
+callback.** The native/source evidence is ready for implementation. No runtime
+change, passing candidate gate, Mac/browser/audio acceptance or report closure
+is asserted by this documentation update. Required tests cover each direct
+non-Flame consumer and the web Meteor adapter, both query edge predicates and
+grid order, shield/armor/Spider/Cocoon/alignment/dead admission, one-time
+newborn splash, per-child consumption, collateral-before-next-chain behavior,
+negative recursive payload inheritance and all scene/observer teardown paths.
+
+### Residual receiver-state boundary
+
+The 21-table inventory is exhaustive native membership, not proof that every inherited native state is represented by the Website. In particular, Imp `+0x234` is a proved rejection byte with unresolved semantic identity and unverified `BoneyardImpBrain` correspondence. Friendly/non-authoritative `+0x5C` states are also distinct from the current live hostile mask-2 store. The scoped terminal-dispatch marker must report actual admitted current receiver branches, preserve known armor/shield/Cocoon behavior, and must not invent missing Imp/alignment state. Native path-light RNG loop cardinality versus the web owner remains an explicit presentation boundary in entry 123.
+
+### Report118 independent candidate review, 2026-10-13
+
+The synchronous constructor visitor introduces a reachable audio-consumer
+obligation. Parent Fire cues at retail 0x642CE9/0x642D4F precede area damage
+and Ember registration/pre-ticks. The prior PrimarySpellAudioSynchronizer
+iterated all fire-impact births before fire-explosion births, so a consumed
+construction Ember could sound before its parent. A read-only Mac reproduction
+confirmed that reversal with parent transient registration100 and child101.
+The scoped repair merges only those two Fire birth kinds in transient-manager
+registration order. Ordinary direct impact-before-explosion, Steam's single
+cue, initial-snapshot silence, dedup and spatial gain remain separate tests.
+The red receipt is report118-audio-order-red.log in the task evidence root.
+
+Acceptance remains bounded to the report's stock learned-skill rows and the
+ported event/damage ownership. Additional independently recovered limits:
+- Positive Explode with radius zero reaches unconditional native parent cues
+  and core creation. Stock positive Explode ranks have radius10..20; this
+  combination is not a stock-authored report118 loadout. The current Fire
+  factory and positive-scale protocol do not represent this degenerate branch.
+  It remains open; do not infer a radius gate in the native dispatcher.
+- Flame chain width consumes the recovered .8-Float(.3) draw, but the current
+  channel projection still renders normal width1. The semantic width field
+  and geometric path-light RNG cardinality remain unported presentation work.
+- Steam terminal damage and newborn resolution occur synchronously within the
+  secondary damage consumer, but modifier producers are still prequeued and
+  use the existing secondary RNG stream, separately from primary combat RNG.
+  Collateral can invalidate a later contact without undoing its earlier
+  producer draws. This patch does not claim native global-RNG interleaving.
+- Hub input is sealed for all primary casts. The suspected non-Boneyard deferred
+  birth regression was withdrawn; an authoritative held-Flame Hub test keeps
+  the existing seal. Real Boneyard targeted/no-target/death births are tested.
+
+The source code uses an explicit specialDeathAccepted result for admitted
+ordinary and active-Maggot terminal branches, false for shield absorption,
+armor break, rejected/dead actors and Cocoon release. Unrepresented native
+alignment and Imp +0x234 states remain the documented limits above.

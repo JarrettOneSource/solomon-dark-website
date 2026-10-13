@@ -2851,9 +2851,11 @@ test('all welded sustained families use one latch and run their native release v
     state = accepted.state
     assert.equal(accepted.manaSpent, profile.manaCost / 100)
     assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, true)
-    assert.ok(state.spells.transients.some(({ kind }) => (
-      kind === (profile.castKind === 'channel' ? 'weld-channel' : 'weld-persistent')
-    )))
+    if (profile.buildId === 1003) {
+      assert.ok(accepted.channelEmissions[0]?.flameLashPresentation)
+    } else {
+      assert.ok(state.spells.transients.some(({ kind }) => kind === 'weld-persistent'))
+    }
     state = stepSpellKernel(state, false, 100, true, () => true, profile).state
     assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
     const persistent = state.spells.transients.filter((effect) => (
@@ -3038,18 +3040,14 @@ test('Ethereal Boulder solid contact uses its advanced capsule and full terminal
   )).length, Math.floor(Math.max(8, 30 * boulder.scale)))
 })
 
-test('Flame Lash emission owns independent six-word endpoint and five-word source fades', () => {
+test('Flame Lash emission reserves a deferred birth after the receiver death dispatch', () => {
   const profile = weldedProfile(1003, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3])
   const source = { ...directSpellHarness('earth'), primarySkill: profile }
-  const result = stepSpellKernel(source, true, 100, true, () => true, profile).state
-  const fade = result.spells.transients.find(({ kind }) => kind === 'weld-flame-lash-fade')
-  assert.ok(fade?.kind === 'weld-flame-lash-fade')
-  assert.equal(fade.variant, 'endpoint')
-  assert.equal(fade.record, 35)
-  const sourceFade = result.spells.transients.find(effect => effect.kind === 'weld-flame-lash-fade' && effect.variant === 'source')
-  assert.ok(sourceFade?.kind === 'weld-flame-lash-fade')
-  assert.equal(sourceFade.alpha, .5)
-  assert.deepEqual(result.rng, advanceNativeRngWords(source.rng, 11))
+  const result = stepSpellKernel(source, true, 100, true, () => true, profile)
+  assert.ok(result.channelEmissions[0]?.flameLashPresentation)
+  assert.equal(result.state.spells.transients.some(({ kind }) => kind === 'weld-flame-lash-fade'), false)
+  assert.equal(result.state.spells.transients.some(({ kind }) => kind === 'weld-channel'), false)
+  assert.deepEqual(result.state.rng, source.rng, 'receiver flash/seed and presentation draws belong to synchronous combat')
 })
 
 test('Blizzard emission owns its two-glow four-word program and no endpoint extras', () => {

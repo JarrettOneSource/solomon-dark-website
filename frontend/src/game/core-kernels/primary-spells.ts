@@ -152,7 +152,6 @@ import {
   createNativeWeldHailTerrainImpact,
   NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
 } from './native-weld-hail-contact.ts'
-import { createNativeWeldFlameLashFade } from './native-weld-flame-lash.ts'
 import { createNativeWeldBlizzardSourceGlows } from './native-weld-blizzard.ts'
 import {
   advanceNativeEtherBlastCharge,
@@ -270,6 +269,8 @@ export type PrimarySpellChannelTransientState =
   | PrimarySpellWaterTransientState
 
 export interface PrimarySpellChannelEmission {
+  /** Flame birth follows its synchronous direct-contact/death dispatcher. */
+  flameLashPresentation?: Readonly<{ midpoint: Vector2 | null; targetId: string | null }>
   damage: number
   direction: Vector2
   endpoint: Vector2 | null
@@ -1765,6 +1766,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               underpowered,
             )
             channelEmissions.push({
+              ...(buildId === 1003 ? { flameLashPresentation: {
+                midpoint: lightning?.midpoint ?? null, targetId: lightning?.targetId ?? null,
+              } } : {}),
               damage: channelDamage,
               direction: { ...aimDirection },
               endpoint,
@@ -1779,7 +1783,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               underpowered,
               worldKey,
             })
-            if (buildId === 1005) {
+            if (buildId === 1003) {
+              // Reserve identity, but enroll presentation only after damage/death dispatch.
+              nextId += 1
+            } else if (buildId === 1005) {
               const steam = spawnNativeWeldSteamActor({
                 damage: channelDamage,
                 direction: aimDirection,
@@ -1829,31 +1836,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               })
               transients = [...transients, channel]
               nextId += 1
-              if (buildId === 1003 && endpoint !== null) {
-                const fade = createNativeWeldFlameLashFade({
-                  enhancedEffects,
-                  direction: aimDirection,
-                  id: nextId,
-                  origin: endpoint,
-                  ownerId: playerId,
-                  rng,
-                  tick: context.tick,
-                  variant: 'endpoint',
-                  vector: authority.primarySkill.vector.values,
-                  worldKey,
-                })
-                rng = fade.rng
-                transients = [...transients, fade.actor]
-                nextId += 1
-                const sourceFade = createNativeWeldFlameLashFade({
-                  enhancedEffects, direction: aimDirection, id: nextId, origin: emitter,
-                  ownerId: playerId, rng, tick: context.tick, variant: 'source',
-                  vector: authority.primarySkill.vector.values, worldKey,
-                })
-                rng = sourceFade.rng
-                transients.push(sourceFade.actor)
-                nextId += 1
-              } else if (buildId === 1004) {
+              if (buildId === 1004) {
                 const glows = createNativeWeldBlizzardSourceGlows({
                   direction: aimDirection,
                   firstId: nextId,

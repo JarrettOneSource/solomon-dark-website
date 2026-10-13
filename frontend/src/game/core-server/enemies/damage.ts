@@ -44,7 +44,7 @@ export function damageBoneyardEnemy(
   const actor = source.actors[index]
   if (!actor) return damageBoneyardMaggot(source, request)
   if (actor.lifeState !== 'alive') {
-    return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
+    return { accepted: false, events: [], healthDamage: 0, killed: false, specialDeathAccepted: false, store: source }
   }
   if (actor.brain.family === 'cocoon') return damageCocoon(source, actor, request)
 
@@ -427,7 +427,7 @@ function damageBoneyardMaggot(
   const index = source.maggots.findIndex((maggot) => maggot.id === request.actorId)
   const maggot = source.maggots[index]
   if (!maggot || maggot.lifeState !== 'alive' || !maggot.combatActive && !request.etherDrainCapture) {
-    return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
+    return { accepted: false, events: [], healthDamage: 0, killed: false, specialDeathAccepted: false, store: source }
   }
   const currentHealth = maggot.currentHealth - request.amount
   const healthDamage = Math.min(Math.max(maggot.currentHealth, 0), request.amount)
@@ -452,6 +452,7 @@ function damageBoneyardMaggot(
     events: [],
     healthDamage,
     killed,
+    specialDeathAccepted: killed,
     store: {
       ...source,
       maggots,
@@ -472,6 +473,7 @@ function finishDamage(
     events: Object.freeze(work.events),
     healthDamage,
     killed,
+    specialDeathAccepted: killed,
     store: {
       ...source,
       actors,

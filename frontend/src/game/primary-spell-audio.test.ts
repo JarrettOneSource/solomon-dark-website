@@ -1657,3 +1657,31 @@ function weldedSnapshot(
     },
   }
 }
+
+test('special-death Fire parent cues precede a consumed construction Ember impact by registration order', () => {
+  const initial = simulation('fire')
+  const position = { ...getPlayerCharacter(initial, PLAYER_ID).position }
+  const explosion = {
+    ageTicks: 0, burnDamage: 0, damage: 6, footprintDimension: 110, id: 100,
+    kind: 'fire-explosion', lightRegistration: { managerLane: 'transient', registrationOrdinal: 100 },
+    origin: position, ownerId: PLAYER_ID, presentation: 'fire', soundPitch: 1.05, visualScale: 1,
+    worldKey: AUDIO_WORLD_KEY,
+  } as const
+  const childImpact = {
+    ageTicks: 0, id: 102, kind: 'fire-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 101 },
+    origin: position, ownerId: PLAYER_ID, worldKey: AUDIO_WORLD_KEY,
+  } as const
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(audio as unknown as GameAudioDirector,
+    PLAYER_ID, createGameSnapshot(initial, PLAYER_ID))
+  const snapshot = createGameSnapshot({ ...initial, primarySpells: {
+    nextId: 103, projectiles: [], transients: [childImpact, explosion],
+  } }, PLAYER_ID)
+  synchronizer.update(snapshot)
+  synchronizer.update(snapshot)
+  assert.deepEqual(audio.sounds, ['fireball-hit', 'throw-fire', 'fireball-hit'])
+  assert.equal(audio.soundOptions[0]!.playbackRate, 1.05)
+  assert.deepEqual(audio.soundOptions.map(option => option.volume), [2, 2, 1])
+  synchronizer.destroy()
+})

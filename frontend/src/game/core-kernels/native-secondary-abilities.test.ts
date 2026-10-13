@@ -44,6 +44,7 @@ import {
   nativeSecondaryManaReserve,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
+  resetNativeSecondaryWorld,
   spawnNativePlayerRescueShockwave,
   stepNativeMindblastPresentation,
   stepNativeSecondaryAbilities,
@@ -462,7 +463,7 @@ test('secondary mana underflow is strict: cost greater than mana fails, exact ze
   assert.equal(exact.manaSpent.player, 75)
 })
 
-test('Steamed pulses for exactly ten native ticks and merges the strongest stored payload', () => {
+test('Steamed attaches its strongest death payload to exactly ten damage events with pre-damage seed ordering', () => {
   const target = {
     family: 'SKELETON',
     id: 7,
@@ -543,18 +544,73 @@ test('Steamed pulses for exactly ten native ticks and merges the strongest store
   })
 
   for (let tick = 1; tick <= 10; tick += 1) {
+    const flash = drawNativeFloat(state.rng, 0.5)
+    const seed = drawNativeInteger(flash.state, 1_000_000)
     const result = stepNativeSecondaryAbilities(state, {
       ...context(11, tick, null),
+      players: {},
       target: (_worldKey, targetId) => targetId === target.id ? target : null,
     })
-    assert.equal(result.steamedPulses.length, 1, `tick ${tick}`)
+    assert.equal(result.damage.length, 1, `tick ${tick}`)
+    assert.deepEqual(result.damage[0], {
+      amount: 3, hitStrength: Math.fround(0.25 + flash.value),
+      suppressHitReaction: true, kind: 'fire', ownerId: 'strongest',
+      sourceActorId: 11, targetId: target.id,
+      specialDeathPayload: { kind: 'steam', emberDamage: 3, emberFragments: 2,
+        explodeDamage: 5, explodeRadius: 12, privateSeed: seed.value },
+    })
+    assert.deepEqual(result.state.rng, seed.state, `tick ${tick}: flash then seed`)
+    assert.equal(Object.hasOwn(result, 'steamedPulses'), false)
     state = result.state
   }
   const expired = stepNativeSecondaryAbilities(state, {
     ...context(11, 11, null),
     target: () => target,
   })
-  assert.deepEqual(expired.steamedPulses, [])
+  assert.deepEqual(expired.damage, [])
+})
+
+test('Steamed death payload is per-hit, radius-gated and cleared by target loss, owner removal or world reset', () => {
+  const target = { family: 'SKELETON', id: 7, lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 4, y: 5 }, radius: 10, scale: 1, shieldHealth: 0 }
+  const payload = { damagePerTick: 2, emberDamage: 3, emberFragments: 1,
+    explodeDamage: 4, explodeRadius: 12, ownerId: 'player', sourceActorId: 10, ticks: 10 }
+  const state = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(123),
+    'boneyard:test', target.id, { steamed: payload })
+  const tickContext = { ...context(11, 1, null), players: {}, target: () => target }
+  const withoutExplosion = applyNativeSecondaryTargetEffect(createNativeSecondarySimulation(123),
+    'boneyard:test', target.id, { steamed: { ...payload, explodeRadius: 0 } })
+  const untagged = stepNativeSecondaryAbilities(withoutExplosion, tickContext)
+  assert.equal(untagged.damage.length, 1)
+  assert.equal(untagged.damage[0]!.specialDeathPayload, undefined)
+  assert.deepEqual(untagged.state.rng, drawNativeFloat(withoutExplosion.rng, 0.5).state)
+  const shielded = stepNativeSecondaryAbilities(state, { ...tickContext,
+    target: () => ({ ...target, shieldHealth: 100 }) })
+  const flash = drawNativeFloat(state.rng, 0.5)
+  const seed = drawNativeInteger(flash.state, 1_000_000)
+  assert.equal(shielded.damage[0]!.specialDeathPayload?.privateSeed, seed.value,
+    'shield absorption does not retroactively cancel the per-hit seed')
+  assert.deepEqual(shielded.state.rng, seed.state)
+  for (const cleared of [removeNativeSecondaryOwner(state, 'player'), resetNativeSecondaryWorld(state)]) {
+    const stepped = stepNativeSecondaryAbilities(cleared, tickContext)
+    assert.deepEqual(stepped.damage, [])
+    assert.deepEqual(stepped.state.rng, cleared.rng)
+  }
+  for (const targetExists of [true, false]) {
+    const missing = stepNativeSecondaryAbilities(state, { ...tickContext,
+      target: () => null, targetExists: () => targetExists })
+    assert.deepEqual(missing.damage, [])
+    assert.deepEqual(missing.state.rng, state.rng, 'ineligible or removed targets consume no Steam words')
+  }
+  const mixed = applyNativeSecondaryTargetEffect(state, 'boneyard:test', target.id, {
+    frostBurnDamagePerTick: 1, frostBurnOwnerId: 'other', frostBurnSkillId: 35,
+    frostBurnSourceActorId: 20, frostBurnTicks: 3,
+  })
+  const contacts = stepNativeSecondaryAbilities(mixed, tickContext).damage
+  assert.equal(contacts.length, 2)
+  assert.equal(contacts[0]!.specialDeathPayload?.kind, 'steam')
+  assert.equal(contacts[1]!.kind, 'ice')
+  assert.equal(contacts[1]!.specialDeathPayload, undefined, 'the following same-tick hit resets the death tag')
 })
 
 test('Mindblowing Ring births its exact burst and actor-light Shockwave from 502 RNG words', () => {

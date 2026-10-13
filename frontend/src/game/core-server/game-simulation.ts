@@ -67,6 +67,7 @@ import type { BoneyardLootEvent, BoneyardLootPickup } from './boneyard-loot-stor
 import { NATIVE_LOOT_EVENT_RETENTION_TICKS, activateBoneyardGoodie, boneyardGoodieKeyNeeded, nativeHagathaLastWordLoot, removeBoneyardLootActors } from './boneyard-loot-store.ts'
 import { createBoneyardProjectileVisibility } from './boneyard-projectile-world.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
+import { resolveBoneyardSpecialDeathPayload } from './spell-combat/special-death.ts'
 import { createBoneyardWorld } from './boneyard-world-construction.ts'
 import { createBoneyardWorldLightSampler } from './boneyard-world-light.ts'
 import { applyBoneyardSecondaryEnemyKnockbacks, placePlayersInBoneyard, spawnPlayerCharacterInBoneyard } from './boneyard-world-placement.ts'
@@ -3242,6 +3243,7 @@ function finishGameSimulationTick(
       }
     }
     const etherDrainFields = secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain' && actor.worldKey === boneyardWorldKey)
+    const secondaryDeaths: ReturnType<typeof resolveBoneyardSpecialDeathPayload>[] = []
     const secondaryCombat = resolveBoneyardNativeSecondaryCombat(
       world.enemies,
       { ...secondaryResult, damage: [...secondaryResult.damage, ...secondaryResult.etherDrainContacts.flatMap(contact => (
@@ -3265,6 +3267,25 @@ function finishGameSimulationTick(
       worldManagerOrder.register,
       etherDrainFields.map(({ position }) => position),
       previous.enhancedEffects,
+      (enemies, contact, victim) => {
+        const detonation = resolveBoneyardSpecialDeathPayload({
+          payload: contact.specialDeathPayload,
+          victim,
+          sourceEnemies: enemies,
+          nextSpellId: primarySpells.nextId,
+          rng: combatRng,
+          ownerId: contact.ownerId,
+          tick,
+          worldKey: boneyardWorldKey,
+          enhancedEffects: previous.enhancedEffects,
+          registerWorldPainter: worldManagerOrder.register,
+          lethalObserver,
+        })
+        combatRng = detonation.rng
+        primarySpells = { ...primarySpells, nextId: detonation.spells.nextId }
+        secondaryDeaths.push(detonation)
+        return { enemies: detonation.enemies, events: detonation.events }
+      },
     )
     world = {
       ...world,
@@ -3363,7 +3384,6 @@ function finishGameSimulationTick(
         collision,
         radius,
       ),
-      secondaryResult.steamedPulses,
       (ownerId) => primaryInputs[ownerId]?.viewportWidth
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
       spiderLightAt,
@@ -3371,7 +3391,13 @@ function finishGameSimulationTick(
       previous.enhancedEffects,
     )
     combatRng = spellCombat.rng
-    primarySpells = spellCombat.spells
+    // Contacts already ran synchronously. Publish age-zero actors only after the
+    // ordinary source-spell pass so it cannot replay their area damage this tick.
+    primarySpells = secondaryDeaths.length === 0 ? spellCombat.spells : {
+      ...spellCombat.spells,
+      transients: [...spellCombat.spells.transients,
+        ...secondaryDeaths.flatMap(death => death.spells.transients)],
+    }
     world = {
       ...world,
       enemies: spellCombat.enemies,
@@ -3382,7 +3408,7 @@ function finishGameSimulationTick(
       ),
     }
     const nextSecondaryActorIdBeforeAdvancedBurn = secondaryAbilities.nextActorId
-    for (const burn of spellCombat.burns) {
+    for (const burn of [...secondaryDeaths.flatMap(death => death.burns), ...spellCombat.burns]) {
       const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
       const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
       if (target === null || ownerIndex < 0) continue
@@ -3395,7 +3421,7 @@ function finishGameSimulationTick(
         worldKey: `boneyard:${boneyardWorld.runId}`,
       })
     }
-    for (const burn of spellCombat.etherBurns) {
+    for (const burn of [...secondaryDeaths.flatMap(death => death.etherBurns), ...spellCombat.etherBurns]) {
       const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
       const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
       if (target === null || ownerIndex < 0) continue
@@ -3412,7 +3438,7 @@ function finishGameSimulationTick(
         worldManagerOrder.register,
       )
     }
-    for (const effect of spellCombat.targetEffects) {
+    for (const effect of [...secondaryDeaths.flatMap(death => death.targetEffects), ...spellCombat.targetEffects]) {
       secondaryAbilities = applyNativeSecondaryTargetEffect(
         secondaryAbilities,
         effect.worldKey,

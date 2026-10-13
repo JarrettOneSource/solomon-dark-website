@@ -1,5 +1,6 @@
 import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import type { NativeSpellSpecialDeathPayload } from '../core-kernels/native-special-death-payload.ts'
 import { drawNativeFloat, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { nativeEtherDrainCapturesFamily } from '../core-kernels/native-ether-drain.ts'
 import type { NativeSecondaryDamageContact, NativeSecondaryDampenCandidates, NativeSecondaryDampenProjectileCandidate, NativeSecondaryTargetHeadingChange, NativeSecondaryPositionResult, NativeSecondaryTarget, NativeSecondaryTickResult } from '../core-kernels/native-secondary-abilities.ts'
@@ -46,6 +47,12 @@ export interface BoneyardSecondaryCombatResult {
   readonly enemies: BoneyardEnemyStore
   readonly events: readonly BoneyardEnemySemanticEvent[]
 }
+
+export type BoneyardSecondarySpecialDeathResolver = (
+  enemies: BoneyardEnemyStore,
+  contact: NativeSecondaryDamageContact & { readonly specialDeathPayload: NativeSpellSpecialDeathPayload },
+  victim: BoneyardEnemyActor | BoneyardMaggotActor,
+) => Pick<BoneyardSecondaryCombatResult, 'enemies' | 'events'>
 
 export function resolveBoneyardNativeTeleport(
   sourceRng: NativeRngState,
@@ -302,6 +309,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   registerWorldPainter?: RegisterNativeWorldPainter,
   etherDrainFields: readonly Vector2[] = [],
   enhancedEffects = true,
+  onSpecialDeath?: BoneyardSecondarySpecialDeathResolver,
 ): BoneyardSecondaryCombatResult {
   const removedProjectileIds = new Set(result.removedProjectileIds)
   let enemies = removedProjectileIds.size === 0
@@ -341,6 +349,7 @@ export function resolveBoneyardNativeSecondaryCombat(
       registerWorldPainter,
       etherDrainFields,
       enhancedEffects,
+      onSpecialDeath,
     )
     enemies = damaged.enemies
     events.push(...damaged.events)
@@ -410,6 +419,7 @@ function applyContact(
   registerWorldPainter?: RegisterNativeWorldPainter,
   etherDrainFields: readonly Vector2[] = [],
   enhancedEffects = true,
+  onSpecialDeath?: BoneyardSecondarySpecialDeathResolver,
 ): BoneyardSecondaryCombatResult {
   if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
     throw new RangeError('secondary damage multiplier must be finite and non-negative')
@@ -421,8 +431,9 @@ function applyContact(
     return { captures: [], enemies: source, events: [] }
   }
   const actor = source.actors.find(({ id }) => id === contact.targetId)
+  const victim = actor ?? source.maggots.find(({ id }) => id === contact.targetId)
   const target = contact.etherDrain === true && nativeEtherDrainCapturesFamily(actor?.config.enemyToken ?? 'MAGGOT')
-    ? actor ?? source.maggots.find(({ id }) => id === contact.targetId) : undefined
+    ? victim : undefined
   const fieldIndex = target === undefined ? -1 : etherDrainFields.findIndex((field) => {
     const dx = field.x - target.position.x
     const dy = field.y - target.position.y
@@ -443,8 +454,14 @@ function applyContact(
     suppressHurtSound: contact.suppressHurtSound,
     tick,
   })
+  // The native terminal dispatcher consumes this hit's context before the next hit.
+  // A shield, armor break or Cocoon release cannot admit its special-death payload.
+  const specialDeath = damaged.specialDeathAccepted && victim && contact.specialDeathPayload
+    ? onSpecialDeath?.(damaged.store, { ...contact, specialDeathPayload: contact.specialDeathPayload }, victim)
+    : undefined
   return { captures: damaged.killed && fieldIndex >= 0 ? [{ actor: actor ?? null, fieldIndex }] : [],
-    enemies: damaged.store, events: damaged.events }
+    enemies: specialDeath?.enemies ?? damaged.store,
+    events: specialDeath ? [...damaged.events, ...specialDeath.events] : damaged.events }
 }
 
 function canPlaceNativeTeleportBody(

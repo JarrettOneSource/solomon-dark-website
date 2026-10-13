@@ -7106,6 +7106,219 @@ test('target-owned status lifetime retains dying and emerging owners and clears 
   assert.deepEqual(state.secondaryAbilities.targetEffects.map(effect => effect.targetId), [demon.id])
 })
 
+function steamedPayloadSimulation(health: readonly number[], secondTagged = false, fragments = 0): GameSimulationState {
+  let state = enterBoneyardWorld(createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG,
+    peer: DEFAULT_PLAYER_CHARACTER_CONFIG }), combatBoneyard('steamed-payload'))
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const managers = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    tick: 0, players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: managers.register,
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => health.map((_value, index) => ({ enemyToken: 'SKELETON' as const,
+      flags: [], id: index + 1, locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: index === 1 ? 150 : 100, y: index === 2 ? 150 : 100 },
+      spawnTick: 0, waveOrdinal: 1 })),
+  }).store
+  const enemies = { ...spawned, actors: spawned.actors.map((actor, index) => ({ ...actor,
+    currentHealth: health[index]! })) }
+  state = { ...state, worldManagerOrder: managers.state(), world: { ...state.world, enemies } }
+  for (const actor of enemies.actors) {
+    const ownerId = actor.id === 2 ? 'peer' : 'owner'
+    state = { ...state, secondaryAbilities: applyNativeSecondaryTargetEffect(state.secondaryAbilities,
+      'boneyard:steamed-payload', actor.id, { frozenTicks: 1_000_000, frozenTimeScale: 0,
+        ...(actor.id === 1 || secondTagged && actor.id === 2 ? { steamed: {
+          damagePerTick: 2, emberDamage: 3, emberFragments: fragments,
+          explodeDamage: 20, explodeRadius: 20, ownerId, sourceActorId: 50 + actor.id, ticks: 10,
+        } } : {}),
+      }) }
+  }
+  return state
+}
+
+test('Steamed simulation stays silent for ten surviving ticks and retains no death payload through world reset', () => {
+  let state = steamedPayloadSimulation([100, 100])
+  for (let tick = 1; tick <= 10; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    assert.equal(state.primarySpells.transients.filter(effect => effect.kind === 'fire-explosion').length, 0,
+      `surviving Steam tick ${tick} cannot create explosion audio or visuals`)
+  }
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.actors[0]!.currentHealth, 80)
+  assert.equal(state.world.enemies.actors[1]!.currentHealth, 100)
+  const reset = returnGameSimulationToHub(state)
+  assert.deepEqual(reset.secondaryAbilities.targetEffects, [])
+  assert.deepEqual(reset.primarySpells.transients, [])
+})
+
+test('Steamed simulation resolves one terminal burst before later tagged hits without replay or inherited payload', () => {
+  const source = steamedPayloadSimulation([1, 10, 100], true, 1)
+  const state = stepGameSimulationTick(source, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const bursts = state.primarySpells.transients.filter(effect => effect.kind === 'fire-explosion')
+  assert.equal(bursts.length, 1, 'the first death kills the second tagged victim before its queued hit')
+  const burst = bursts[0]!
+  assert.equal(burst.presentation, 'steam')
+  assert.equal(burst.ageTicks, 0, 'synchronous contacts do not prematurely advance presentation')
+  assert.deepEqual(burst.origin, { x: 100, y: 100 }, 'death uses the victim root')
+  assert.equal(state.world.enemies.actors[1]!.lastDamagedByPlayerId, 'owner')
+  assert.equal(state.world.enemies.actors[2]!.currentHealth, 80,
+    'the same-tick ordinary spell pass cannot replay the already-resolved Steam area')
+  const fragments = state.primarySpells.transients.filter(effect => effect.kind === 'weld-steam')
+  assert.equal(fragments.length, 3)
+  assert.ok(fragments.every(effect => effect.vector.every(value => value === 0)))
+  assert.ok(fragments.every(effect => effect.ageTicks === 0), 'Steam children have no Ember construction pre-ticks')
+  assert.equal(new Set(state.primarySpells.transients.map(effect => effect.id)).size,
+    state.primarySpells.transients.length)
+  const registrations = state.primarySpells.transients.flatMap(effect => effect.painterRegistrations ?? [])
+    .map(registration => `${registration.managerLane}:${registration.registrationOrdinal}`)
+  assert.ok(registrations.length >= 4)
+  assert.equal(new Set(registrations).size, registrations.length, 'newborn owners register once')
+  const snapshot = createGameSnapshot(state, 'peer')
+  const decoded = gameSnapshot(JSON.parse(JSON.stringify(snapshot)))
+  assert.deepEqual(decoded.primarySpells, snapshot.primarySpells, 'observers receive stable births without authority payload')
+  const next = stepGameSimulationTick(state, {})
+  assert.equal(next.primarySpells.transients.filter(effect => effect.kind === 'fire-explosion').length, 1)
+})
+
+test('Steamed simulation admits a lethal final modifier tick and never rearms its retained dying victim', () => {
+  let state = steamedPayloadSimulation([20, 100])
+  for (let tick = 1; tick < 10; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    assert.equal(state.primarySpells.transients.some(effect => effect.kind === 'fire-explosion'), false)
+  }
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.actors[0]!.lifeState, 'dying')
+  assert.equal(state.world.enemies.actors[1]!.currentHealth, 80)
+  const burstIds = state.primarySpells.transients.filter(effect => effect.kind === 'fire-explosion')
+    .map(effect => effect.id)
+  assert.equal(burstIds.length, 1)
+  assert.equal(state.secondaryAbilities.targetEffects.find(effect => effect.targetId === 1)!.steamed, null)
+  const next = stepGameSimulationTick(state, {})
+  assert.deepEqual(next.primarySpells.transients.filter(effect => effect.kind === 'fire-explosion')
+    .map(effect => effect.id), burstIds)
+})
+
+function authoritativeFlameSimulation(targetHealth: number | null): GameSimulationState {
+  let state = createGameSimulation({ caster: { ...DEFAULT_PLAYER_CHARACTER_CONFIG, element: 'fire' } })
+  const granted = grantPlayerEntityWeldBuild(state.playerEntities, 'caster', 1003, state.gameRng)
+  state = withPlayerSkillRank({ ...state, playerEntities: granted.store, gameRng: granted.rng }, 'caster', 18, 1)
+  state = enterBoneyardWorld(state, combatBoneyard('flame-authority'))
+  assert.equal(getPlayerSkillBook(state, 'caster').weldBuildId, 1003)
+  assert.deepEqual(state.primarySpells.transients, [], 'the fixture never prebuilds a channel')
+  if (targetHealth === null) return state
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const managers = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    tick: 0, players: {}, projectileWorldBlocked: () => false, registerWorldPainter: managers.register,
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 450, y: 250 }, spawnTick: 0, waveOrdinal: 1 }],
+  }).store
+  return { ...state, worldManagerOrder: managers.state(),
+    world: { ...state.world, enemies: { ...spawned,
+      actors: spawned.actors.map(actor => ({ ...actor, currentHealth: targetHealth })) } },
+    secondaryAbilities: applyNativeSecondaryTargetEffect(state.secondaryAbilities,
+      'boneyard:flame-authority', 1, { frozenTicks: 1_000_000, frozenTimeScale: 0 }),
+  }
+}
+
+function heldFlameInput() {
+  return { ...gameplayInput(0, 0), aim: { x: 450, y: 250 },
+    cast: { primary: true, quickbar: null } }
+}
+
+function firstAuthoritativeFlameTick(source: GameSimulationState): GameSimulationState {
+  let state = source
+  for (let tick = 0; tick < 40; tick += 1) {
+    state = stepGameSimulationTick(state, { caster: heldFlameInput() })
+    if (state.primarySpells.transients.some(effect => effect.kind === 'weld-channel' && effect.buildId === 1003)) return state
+  }
+  throw new Error('real held Flame input did not publish a channel within its cast action')
+}
+
+function assertUniqueFlameBirths(state: GameSimulationState): void {
+  const effects = state.primarySpells.transients
+  assert.equal(new Set(effects.map(effect => effect.id)).size, effects.length, 'every cast birth owns a unique identity')
+  assert.ok(effects.every(effect => effect.id < state.primarySpells.nextId))
+  const registrations = effects.flatMap(effect => effect.painterRegistrations ?? [])
+    .map(registration => `${registration.managerLane}:${registration.registrationOrdinal}`)
+  assert.ok(registrations.length > 0)
+  assert.equal(new Set(registrations).size, registrations.length, 'deferred presentation registers once')
+}
+
+test('authoritative Flame no-target input publishes its deferred source and channel with endpoint-owned fade', () => {
+  const state = firstAuthoritativeFlameTick(authoritativeFlameSimulation(null))
+  const channels = state.primarySpells.transients.filter(effect => effect.kind === 'weld-channel' && effect.buildId === 1003)
+  assert.equal(channels.length, 1)
+  const channel = channels[0]!
+  assert.equal(channel.targetId, null)
+  assert.equal(channel.ageTicks, 0)
+  const fades = state.primarySpells.transients.filter(effect => effect.kind === 'weld-flame-lash-fade')
+  assert.equal(fades.filter(effect => effect.variant === 'source').length, 1)
+  assert.equal(fades.filter(effect => effect.variant === 'endpoint').length, channel.endpoint === null ? 0 : 1)
+  assert.equal(fades.some(effect => effect.variant === 'chain'), false)
+  assert.equal(state.primarySpells.transients.some(effect => effect.kind === 'fire-explosion'), false)
+  assert.ok(state.primarySpells.transients.indexOf(fades.find(effect => effect.variant === 'source')!)
+    < state.primarySpells.transients.indexOf(channel), 'source factory precedes its channel publication')
+  assertUniqueFlameBirths(state)
+})
+
+test('authoritative Flame targeted nonlethal input publishes each main presentation once without a death burst', () => {
+  let state = firstAuthoritativeFlameTick(authoritativeFlameSimulation(1000))
+  for (let emission = 0; emission < 2; emission += 1) {
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.ok(state.world.enemies.actors[0]!.currentHealth < 1000)
+    assert.equal(state.world.enemies.actors[0]!.lifeState, 'alive')
+    const channels = state.primarySpells.transients.filter(effect => effect.kind === 'weld-channel'
+      && effect.buildId === 1003 && effect.birthTick === state.tick)
+    assert.equal(channels.length, 1)
+    assert.equal(channels[0]!.targetId, 'enemy:1')
+    assert.ok(channels[0]!.vector[4]! > 0, 'learned Explosion remains armed on this surviving hit')
+    const fades = state.primarySpells.transients.filter(effect => effect.kind === 'weld-flame-lash-fade'
+      && effect.birthTick === state.tick)
+    assert.deepEqual(fades.map(effect => effect.variant), ['endpoint', 'source'])
+    assert.equal(state.primarySpells.transients.some(effect => effect.kind === 'fire-explosion' || effect.kind === 'fire-ember'), false)
+    assertUniqueFlameBirths(state)
+    state = stepGameSimulationTick(state, { caster: heldFlameInput() })
+  }
+})
+
+test('authoritative Flame lethal input publishes its death burst before main fades and channel with stable observer identities', () => {
+  const state = firstAuthoritativeFlameTick(authoritativeFlameSimulation(0.001))
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.actors[0]!.lifeState, 'dying')
+  const relevant = state.primarySpells.transients.filter(effect => effect.kind === 'fire-explosion'
+    || effect.kind === 'weld-flame-lash-fade' || effect.kind === 'weld-channel')
+  assert.deepEqual(relevant.map(effect => effect.kind === 'weld-flame-lash-fade'
+    ? `${effect.kind}:${effect.variant}` : effect.kind), [
+    'fire-explosion', 'weld-flame-lash-fade:endpoint', 'weld-flame-lash-fade:source', 'weld-channel',
+  ])
+  const burst = relevant[0]!
+  assert.equal(burst.kind, 'fire-explosion')
+  if (burst.kind !== 'fire-explosion') throw new Error('expected Fire burst')
+  assert.equal(burst.presentation, 'fire')
+  assert.deepEqual(burst.origin, { x: 450, y: 250 })
+  assert.ok(relevant.every(effect => effect.ageTicks === 0))
+  assertUniqueFlameBirths(state)
+  const snapshot = createGameSnapshot(state, 'caster')
+  assert.deepEqual(gameSnapshot(JSON.parse(JSON.stringify(snapshot))).primarySpells, snapshot.primarySpells)
+})
+
+test('authoritative Flame held input remains sealed in Hub after selecting the real Weld build', () => {
+  let state = returnGameSimulationToHub(authoritativeFlameSimulation(null))
+  const mana = getPlayerProgression(state, 'caster').currentMana
+  for (let tick = 0; tick < 40; tick += 1) state = stepGameSimulationTick(state, { caster: heldFlameInput() })
+  assert.equal(state.world.kind, 'hub')
+  assert.equal(getPlayerSkillBook(state, 'caster').weldBuildId, 1003)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.emissionSequence, 0)
+  assert.equal(getPlayerProgression(state, 'caster').currentMana, mana)
+  assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
+})
+
 function combatBoneyard(runId: string): LoadedBoneyard {
   return {
     choice: {

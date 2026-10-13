@@ -203,36 +203,31 @@ export class PrimarySpellAudioSynchronizer {
         this.audio.playSound('goto-orb', { playbackRate: 0.75, volume })
         this.audio.playSound('goto-orb', { playbackRate: 0.5, volume })
       }
-      const previousFireImpacts = new Set(primaryTransients(this.previous)
-        .filter((effect) => effect.kind === 'fire-impact')
-        .map((effect) => effect.id))
-      for (const effect of primaryTransients(snapshot)) {
-        if (
-          effect.kind !== 'fire-impact'
-          || effect.worldKey !== listenerWorldKey
-          || previousFireImpacts.has(effect.id)
-        ) continue
-        this.audio.playSound('fireball-hit', {
-          playbackRate: nativeFireImpactPitch(effect.id),
-          volume: hubAudioAttenuation(Math.hypot(
-            effect.origin.x - listener.position.x,
-            effect.origin.y - listener.position.y,
-          )),
-        })
-      }
-      const previousFireExplosions = new Set(primaryTransients(this.previous)
-        .filter((effect) => effect.kind === 'fire-explosion')
-        .map((effect) => effect.id))
-      for (const effect of primaryTransients(snapshot)) {
-        if (
-          effect.kind !== 'fire-explosion'
-          || effect.worldKey !== listenerWorldKey
-          || previousFireExplosions.has(effect.id)
-        ) continue
-        const volume = 2 * hubAudioAttenuation(Math.hypot(
+      const previousFireBirths = new Set(primaryTransients(this.previous)
+        .filter(effect => effect.kind === 'fire-impact' || effect.kind === 'fire-explosion')
+        .map(effect => `${effect.worldKey}\u0000${effect.kind}\u0000${effect.id}`))
+      const fireBirths = primaryTransients(snapshot)
+        .filter((effect): effect is Extract<PrimarySpellTransientState, { kind: 'fire-impact' | 'fire-explosion' }> => (
+          (effect.kind === 'fire-impact' || effect.kind === 'fire-explosion')
+          && effect.worldKey === listenerWorldKey
+          && !previousFireBirths.has(`${effect.worldKey}\u0000${effect.kind}\u0000${effect.id}`)
+        ))
+        // The shared transient-manager ordinal preserves both ordinary
+        // impact -> explosion and death explosion -> construction-child impact.
+        .sort((left, right) => left.lightRegistration.registrationOrdinal - right.lightRegistration.registrationOrdinal)
+      for (const effect of fireBirths) {
+        const attenuation = hubAudioAttenuation(Math.hypot(
           effect.origin.x - listener.position.x,
           effect.origin.y - listener.position.y,
         ))
+        if (effect.kind === 'fire-impact') {
+          this.audio.playSound('fireball-hit', {
+            playbackRate: nativeFireImpactPitch(effect.id),
+            volume: attenuation,
+          })
+          continue
+        }
+        const volume = 2 * attenuation
         if (effect.presentation === 'steam') {
           this.audio.playSound('explode-steam', {
             playbackRate: effect.soundPitch,

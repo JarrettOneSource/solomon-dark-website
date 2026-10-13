@@ -934,6 +934,8 @@ export interface DamageBoneyardEnemyRequest {
 }
 
 export interface DamageBoneyardEnemyResult {
+  /** Native admitted +0x88 terminal dispatch; Cocoon release is not this event. */
+  readonly specialDeathAccepted: boolean
   readonly accepted: boolean
   readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly healthDamage: number

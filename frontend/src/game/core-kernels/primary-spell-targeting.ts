@@ -400,6 +400,20 @@ export function nativePrimaryViewRayEndpoint(input: Readonly<{
   return { x: Math.fround(endpoint.x), y: Math.fround(endpoint.y) }
 }
 
+/** Native root rectangle: inclusive lower edges and exclusive upper edges. */
+export function nativePrimaryRectangleTargets<T extends PrimarySpellTarget>(query: Readonly<{
+  actorMask: number; origin: Vector2; width: number; height: number; targets: readonly T[]
+}>): T[] {
+  const minimumX = Math.fround(query.origin.x - query.width * 0.5)
+  const minimumY = Math.fround(query.origin.y - query.height * 0.5)
+  const maximumX = Math.fround(minimumX + query.width)
+  const maximumY = Math.fround(minimumY + query.height)
+  return nativeCellRangeOrder({ minimumX, minimumY, maximumX, maximumY, targets: query.targets })
+    .filter(target => nativePrimaryTargetEligible(target, query.actorMask)
+      && target.position.x >= minimumX && target.position.x < maximumX
+      && target.position.y >= minimumY && target.position.y < maximumY)
+}
+
 export function nativePrimaryRootTargets(
   origin: Vector2,
   reach: number,

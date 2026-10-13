@@ -713,6 +713,13 @@ function nativeFireExplosion(
   })
 }
 
+export interface NativeFireDetonationObserver {
+  readonly beforeEmbers?: (explosion: NativeFireExplosionState | null, soundPitch: number) => void
+  readonly registerEmber?: (ember: NativeFireEmberState) => void
+  /** True means the receiver consumed this actor; stop its immediate ticks. */
+  readonly resolveEmberContact?: (contact: NativeFireEmberContact) => boolean
+}
+
 export function createNativeFireDetonation(
   firstId: number,
   payload: NativeFireProjectilePayload,
@@ -720,6 +727,7 @@ export function createNativeFireDetonation(
   ownerId: string,
   worldKey: string,
   sourceRng: NativeRngState,
+  observer?: NativeFireDetonationObserver,
 ): NativeFireDetonation {
   if (!Number.isSafeInteger(firstId) || firstId <= 0) {
     throw new RangeError('Fire detonation first id must be a positive safe integer')
@@ -732,6 +740,9 @@ export function createNativeFireDetonation(
   let sharedRng = soundPitchDraw.state
   const startDraw = drawNativeFloat(privateRng, 360)
   privateRng = startDraw.state
+  const explosion = nativeFireExplosion(payload, origin, ownerId, worldKey)
+  const soundPitch = Math.fround(1 + soundPitchDraw.value)
+  observer?.beforeEmbers?.(explosion, soundPitch)
   const step = payload.emberFragments === 0 ? 0 : 360 / payload.emberFragments
   const embers: NativeFireEmberState[] = []
   const contacts: NativeFireEmberContact[] = []
@@ -775,12 +786,14 @@ export function createNativeFireDetonation(
       verticalVelocity: Math.fround(-(2 + verticalDraw.value)),
       worldKey,
     })
+    observer?.registerEmber?.(ember)
+    let consumed = false
     for (let tick = 0; tick < 10; tick += 1) {
       const stepped = stepNativeFireEmber(ember)
       if (!stepped.ember) throw new Error('newborn Ember retired during native pre-ticks')
       ember = stepped.ember
       if (ember.contactDue) {
-        contacts.push(Object.freeze({
+        const contact: NativeFireEmberContact = Object.freeze({
           amount: ember.damage,
           burnDamage: ember.burnDamage,
           kind: 'fire-ember',
@@ -789,18 +802,21 @@ export function createNativeFireDetonation(
           radius: 7,
           spellId: ember.id,
           worldKey: ember.worldKey,
-        }))
+        })
+        contacts.push(contact)
+        consumed = observer?.resolveEmberContact?.(contact) ?? false
+        if (consumed) break
       }
     }
-    embers.push(Object.freeze({ ...ember, contactDue: false }))
+    if (!consumed) embers.push(Object.freeze({ ...ember, contactDue: false }))
   }
   return Object.freeze({
     contacts: Object.freeze(contacts),
     embers: Object.freeze(embers),
-    explosion: nativeFireExplosion(payload, origin, ownerId, worldKey),
-    nextId: firstId + embers.length,
+    explosion,
+    nextId: firstId + payload.emberFragments,
     rng: sharedRng,
-    soundPitch: Math.fround(1 + soundPitchDraw.value),
+    soundPitch,
   })
 }
 

@@ -1,6 +1,5 @@
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
 import type {
-  NativeSecondarySteamedPulse,
   NativeSecondaryTargetEffectPatch,
 } from '../../core-kernels/native-secondary-abilities.ts'
 import type { RegisterNativeWorldPainter } from '../../core-kernels/native-world-manager-order.ts'
@@ -108,6 +107,5 @@ export interface BoneyardSpellCombatOptions {
   readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly fireActorContacts: readonly NativeFireActorContact[]
   readonly resolveEnemyMovement: ResolveBoneyardSpellEnemyMovement
-  readonly steamedPulses: readonly NativeSecondarySteamedPulse[]
   readonly fireballHostileCorridorLength: (ownerId: string) => number
 }

@@ -1,5 +1,13 @@
 # 2026-08-20 — Welded-primary runtime and presentation closure
 
+> **2026-10-13 correction — report 118:** the Flame Lash and Steam special-death
+> contracts below are reopened. A live hit supplies a per-damage payload; only
+> an admitted terminal death consumes it. The historical per-tick Steam-burst,
+> half-total area damage, unrestricted Steam radius and closure claims are
+> superseded by the report-118 recovery at the end of this entry and the shared
+> receiver/area inventory in entry 162. Historical test/browser receipts remain
+> evidence of what ran, not proof of those disproved semantics.
+
 > **2026-09-24 correction — report 20:** historical Ring/Comet/Frost Missile
 > Iceblast references to DeadHawg records 114/121 below are superseded by
 > [ledger 084](084-2026-08-20-secondary-ability-native-ownership-correction.md).
@@ -838,7 +846,7 @@ teardown**.
 | target-owned `Mod_Steamed` lifetime/tick | `0x006232F0`, `0x00625F40` | `exact-ported` | ten ticks, per-tick direct Fire damage, owner/source identity |
 | repeated modifier merge | `0x00625C80` | `exact-ported` | maximum duration, damage, radius, fragment count, and fragment damage; strongest source ownership |
 | Explosion radius zero | `0x00625FCE` strict positive gate | `exact-ported` | direct Steam damage only; no type-2 VFX, audio, or learned fragments |
-| Explosion radius positive | type-2 event plus `0x00643CA0` | `exact-ported` | one Steam detonation birth per live modifier tick; no guessed cooldown |
+| Explosion radius positive | type-2 damage event plus `0x00643CA0` | reopened 2026-10-13 | payload on each admitted modifier damage event; one detonation only on an eligible terminal death; no guessed cooldown |
 | orange record-15 core | `0x00643D8B..0x00643E3D`, BadGuys 15 | `verified-already-at-parity` through shared clock | ages 0..9, scale `visualScale*6`, alpha loss `.1` |
 | gray first array | BadGuys 401..419, `Anim_SpriteArray_ColorOverlay` | `exact-ported` | tint `(.8,.8,.8,1)`, additive, `.75*.98^n`, ages 0..34 |
 | gray rising lit array | BadGuys 420..433 plus `ZAnimLit` | `exact-ported` | tint `(.8,.8,.8,1)`, `.625*.97^n`, rise, ages 0..36, same provider light |
@@ -858,18 +866,22 @@ No member is blocked by the browser platform.
 - Only a normal, full-power Steam particle owns the contact clock. Its first
   clock is `Integer(10)` and each due edge resets to ten while life remains
   above `.5`. Over and weak particles cannot install the modifier.
-- `Mod_Steamed` begins with duration ten. Its tick sends direct Fire damage,
-  then, only when stored Explosion radius is positive, writes event type 2 with
+- `Mod_Steamed` begins with duration ten. Before submitting direct Fire damage,
+  its tick, only when stored Explosion radius is positive, writes event type 2 with
   visual scale `float32((radius-10)*.180000007+1)`, Explosion damage, fragment
   count/damage, source slot, and a private `Integer(1,000,000)` seed.
-- Re-contact merges into the resident modifier. This is the stock recurrence
-  control; there is no additional cooldown. A continuously contacted target may
-  remain steamed, but it must run the Steam detonation family rather than birth
-  ordinary Fire explosions.
+- Re-contact merges into the resident modifier. This controls direct-damage
+  recurrence, not explosion recurrence. A continuously contacted survivor may
+  remain steamed without any detonation. Only the admitted terminal-death
+  receiver can consume the current event's type-2 payload.
 - The type-2 receiver creates the same record-15 core and 401..433 clocks used
   by Fire, but both sprite arrays use `Anim_SpriteArray_ColorOverlay` with
-  gray RGB `.8`. Explosion area damage is half the stored damage inside radius
-  `visualScale*55`; the lit array owns the existing transient light.
+  gray RGB `.8`. The area supplies half the stored damage to each of physical
+  and magic lanes, giving full damage to a neutral unshielded target. Its mask-2
+  query is limited by a root square of side `f32(visualScale*55)`, followed by
+  the native distance test; it is not an unrestricted radius query. See entry
+  162 for exact bounds, flags and receiver ordering. The lit array owns the
+  existing transient light.
 - Each birth requests one positional `explodesteam` one-shot. Pitch spans the
   inclusive float32 interval `0.8999999761581421..1.100000023841858`. The
   ordinary Fire pair (`fireballhit`, then `throwfire`) is unreachable from this
@@ -892,26 +904,27 @@ No member is blocked by the browser platform.
   merge fields, gate, area formula, full VFX records/classes/clocks, audio asset
   and call arguments, complete child RNG/motion/contact program, authority, and
   teardown consequence.
-- No mechanism remains inferred. A clean-stock matched-loadout capture remains
-  useful as a final visual/audio comparison receipt, but it cannot change the
-  instruction-derived state model.
+- The former claim that no mechanism remained inferred was false: this trace
+  stopped before terminal-death admission and misread paired area lanes and
+  query broadphase. The 2026-10-13 recovery below supersedes those conclusions.
 
 ### Web implementation consequence and validation contract
 
-- Keep `Mod_Steamed` and its per-tick pulse in the authoritative secondary
-  kernel. Replace only the false pulse consumer with a cohesive Steam
-  detonation factory in `native-weld-steam.ts`.
+- Keep `Mod_Steamed` direct damage in the authoritative secondary kernel.
+  Replace the unconditional presentation pulse with its ephemeral type-2
+  damage payload and the common terminal-death consumer. The Steam factory
+  retains its distinct children and presentation in `native-weld-steam.ts`.
 - Add a replicated Fire-explosion presentation variant so the shared clock,
   area mechanics, registration, and light remain one deep module while Steam
   owns gray array tint and `explode-steam` audio. Remove build 1005 from the
   ordinary Fire cue pair.
-- Replace ordinary Fire Ember births on Steam pulses with the exact
+- Replace ordinary Fire Ember births on admitted Steam terminal deaths with the exact
   three-per-count normal Steam child program. Gate the whole detonation/fragment
   family on positive Explosion radius and preserve zero-payload child semantics
   plus the resident modifier's maximum-field merge.
 - Focused tests must cover normal/Over/weak contacts, all ten modifier ticks,
   strong/zero-payload merge and re-contact, radius-zero negative behavior, ten
-  consecutive Explosion births without Fire cues, gray plans at all three
+  surviving modifier ticks with no explosion, one eligible terminal burst, gray plans at all three
   lifetime boundaries,
   one/count/multiple fragment fans and RNG, fragment contact merge behavior,
   area damage, protocol/copy/interpolation, both scenes, release, target-death
@@ -1435,3 +1448,165 @@ one initial setup attempt used the wrong case-sensitive New Game label.
 No native spell parameter, protocol field, renderer duplicate-root invariant,
 spell-effect quality setting or gameplay rate was relaxed. Final repository-gate
 and publication receipts are tracked by the report's completion record.
+
+## 2026-10-13 — Report 118: Flame Lash and Steam death-payload recovery
+
+### Boundary, provenance and falsified assumptions
+
+Report 118 calls build 1003 “Flame Leash”; the native/source name is **Flame
+Lash**, rebuilt at `0x00666020`. This recovery begins at its authored vector,
+continues through each per-damage event and the real terminal receiver, and
+includes the shared Fire/Steam area and construction-contact consumers,
+presentation RNG, audio and lifecycle. It does not infer a graphical repair
+from the nearby Flame/Ember appearance reports.
+
+The source baseline is isolated report-118 HEAD
+`762f0c9c777345f733ae7635ffd4d1d66b20cbeb`. Fresh static reads used retail
+0.72.5, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. The checked-in
+[report-118 evidence catalog](report118-native-death-payload-evidence.json)
+contains PE-verified receiver slots, all direct helper CALLs, raw instruction
+ranges, exact CFG text/hashes and the evidence provenance. No native executable
+or Windows helper was run for this recovery.
+
+The earlier closure was false in four coupled ways: Flame materialized a
+death payload on nonlethal contacts; Steam materialized a live-modifier pulse
+instead of a terminal payload; shared area handling dropped one native damage
+lane and used the wrong query; Flame-owned newborns were appended after the
+single fire-contact pass. The latter effects never received their required
+age-zero area/construction contacts. Moving the same wrong pulse to a different
+visual/audio family did not fix its owner.
+
+The parent's restored original-save baseline on Node 22.17.0 produced 152
+explosions, 456 Embers and 163 Fire impacts in 64 advanced 100 Hz ticks, despite
+only seven lethal enemy transitions. The first two ticks each birthed four
+explosions and twelve Embers with zero kills. Silent audio synchronization
+recorded 315 fireball-hit and 152 throw-fire requests; peak resident explosion
+count was 109. The later save, ranks `[5,5,0,6,0,3]`, produced no explosions or
+Embers across 150 ticks. These are causal web observations, not measured native
+audio or post-fix acceptance.
+
+### Producer and branch inventory
+
+| Member | Native owner | Recovered contract / disposition |
+| --- | --- | --- |
+| Flame authored inputs | rows 16/24/18/25/17/26, Welding 52; build 1003 | Exact authored row lengths and vector semantics retained; no guessed clamp |
+| Main admitted Flame contact | `0x005408F0`, type-1 write `0x00540C6D` | Per-damage payload; Explode damage strictly positive is the gate even with radius zero; Embers alone do not arm it |
+| Normal chain contact | target query `0x00641340`, write `0x00541710` | Valid first contact, positive arcs, nearest distinct mask-2 root within 200; direct damage multiplies by `0.6000000238418579`; visited membership preserved |
+| Underpowered Flame | `0x005409ED..0x00540A05`, `0x00540CDE`, `0x005412BD..C2` | Direct damage and handler strength halve; main Stun and the entire chain loop are skipped; main type-1 payload remains eligible |
+| Flame cached Ember count | conversion `0x0054A424`, store `0x0054A42D` | `trunc(vector[7])` is cached before use; chain uses `trunc(cachedInteger * .5)`, not truncation of an unrounded half vector |
+| Normal Steam contact | `0x0045B940`, modifier `0x006232F0/0x00625F40` | Normal full-power particles install the ten-tick modifier; Over and weak particles have no modifier contact lane |
+| Steamed type-2 event | `0x00625FDA` | Radius-positive per-damage payload; live surviving ticks never detonate |
+| Steamed maximum merge | `0x00625C80` | Retain duration/damage/radius/count/fragment maxima and source ownership; zero-own-payload children can refresh a stronger resident modifier |
+| Common terminal consumer | `0x0048A290 -> 0x00477020` | Actual terminal dispatch, family gate and target alignment are required; entry 162 has all 21 native vtable members and exceptions |
+| No target / rejected target | main endpoint/factory branches | No damage event when producer admission fails; presentation follows endpoint availability and factory arguments, not the HP result |
+| Authored-table siblings | ordinary Fire, Burning Bolt, Meteor adapter, Immolate, Ring | Shared changes require explicit compatibility; separate Ring defect remains open as recorded in entry 162 |
+| World/lifecycle siblings | Hub/private rooms, Boneyard, owner and observers | One authoritative producer; stable replicated births; pause/release/death/disconnect/world removal and cue dedup remain required |
+
+### Exact event, RNG and terminal contract
+
+The main event resets damage context, writes flags `0x2A`, direct magic damage
+and source, calls `0x00624300`, then samples `Float(.5)+.25` hit strength
+(main `0x00540C4D`, chain `0x005416F0`). When Explode damage is positive it
+writes type 1 and samples `Integer(1,000,000)` **before submitting damage**
+(main `0x00540CCB`, chain `0x00541775`). Surviving, shielded and family-death
+rejections still consume that draw when the producer gates admitted the hit.
+
+The seed is stored as float `DAT_0081C720`; the terminal consumer converts
+that stored value to integer at `0x004770C4..D4`. It neither draws a fresh
+seed nor uses the victim's private seed. Main payload fields are cached
+Explode damage `+0x2A8`, radius `+0x2AC`, Ember damage `+0x2B0` and cached
+integer count `+0x2B4`. Scale is
+`f32((radius - 10) * 0.18000000715255737 + 1)`. The cached-count recovery is
+proved for build 1003 only; this entry does not generalize its constructor
+conversion to builds 1000/1007.
+
+Steamed first rejects its entire tick if target `+0x5C != 0` and source
+`+0x30 != 0`. Otherwise it resets at `0x00625F5E`, samples `Float(.5)`
+at `0x00625FBD`, adds `.25`, conditionally writes type 2 when radius is
+positive, samples the private seed at `0x00626036`, then submits damage at
+`0x00626052`. This is the same pre-damage seed discipline, not a kill-only
+draw. The consumer separately requires victim `+0x5C == 0`.
+
+Type 1 selects `0x00642BF0`; type 2 selects `0x00643CA0`. Both use the
+victim's **root XY** at `+0x18/+0x1C`, not a head/impact socket. Context reset
+`0x006246F0` writes type zero/source minus one at `0x0062478E`. Type zero
+is inert; the separate type-3 disintegration writer at `0x0048A44F` is not a
+Fire/Steam producer. There is no persistent “armed” status or extra rehit
+cooldown.
+
+### Main, chain, source-flare and no-target presentation phases
+
+1. Main admission and damage/payload RNG occur first. Damage submission and
+   any synchronous death burst complete before the next phase.
+2. Main endpoint fade occurs only when endpoint X is greater than native
+   sentinel `-9999` (`0x00540E91..0x0054108C`). The condition is endpoint
+   availability, not a successful HP hit: terrain/fallback endpoints qualify.
+3. Main calls factory `0x00531F00` at `0x005412B5` outside that condition.
+   Factory arguments are source XY `+8/+C`, midpoint XY `+10/+14`, end XY
+   `+18/+1C`, drawing offset XY `+20/+24`, weak byte `+28`, width `+2C`
+   and source-flare flag `+30`. Main passes flag 1 at `0x005411D3`, width
+   1 and its weak byte. Thus a missing endpoint does not suppress the source
+   flare or its RNG.
+4. Every found chain target first samples width
+   `0.800000011920929 - Float(0.30000001192092896)` at `0x005413B7`.
+   Its factory call `0x005414AA` also passes source-flare flag 1 and weak 0.
+   Factory source flare, ribbon and path-light births precede the independent
+   chain fade `0x005414B1..0x005416A3`, then chain damage/RNG/submission.
+   A rejected HP hit does not retroactively suppress these presentations.
+5. There is no extra “chain fade” at hop zero.
+
+Factory `0x00531F00` gates the source flare only on argument `+0x30` at
+`0x00531F77`; endpoint availability, weak state and hit result do not gate it.
+Its RNG sequence is `Float(15)` at `0x0053206A`, a random unit direction
+at `0x0053207F` (nested `Integer(max+1)` at `0x00410C74`), then
+`Float(.5)+.75` at `0x005320DB`. It registers at `0x0053210E` before
+ribbon construction. Ribbon registration is `0x00532456`; path-light
+`Float(.75)+.25` is `0x0053246D`, followed by per-point draws
+`0x0053269E/0x00532804`. Weak ribbon width is multiplied by `.75` and its
+alpha by `.5`; this does not weaken or suppress the source flare. Preserve
+the already recovered split-painter geometry in entry 297 and the later
+quality/path-light ownership in entry 130.
+
+The exact output of the existing clipping function `0x00410FF0` for a
+missing endpoint was not recovered here. It does not affect the proved
+source-flare gate/order. No new clipping or glyph geometry is justified.
+
+### Shared children, presentation consumers and acceptance boundary
+
+The type-1 burst owns Fire cue 30 then 97, records 15/401..419/420..433, the
+lit rising array, Ember body 267..270/contact 251..254/glow 15 and the existing
+Enhanced ground quad. Type 2 owns the gray arrays, registry-27
+`explodesteam`, and three normal Steam children per configured count.
+Their own payload is zeroed at `0x006443E2..EF`; base contact damage is
+fragmentDamage divided by manager timestep at `0x006443DC`; registration is
+`0x0064440A`. They do not receive the Ember ten-construction-tick loop.
+
+Flame start cue 33 and held loop 157 remain source-owned. Beam record 44,
+Enhanced 375/376, fade 35, path lights, split-painter lifetimes and all release,
+cancel, death, scene and observer teardown paths remain in the inventory.
+The reported clip does not establish captured audio loudness.
+
+Independent native review approved a bounded shared-owner repair, not a
+blanket damage multiplier, a second global fire pass or a `killed`-only
+callback. The planned implementation must expose actual terminal-payload
+admission, preserve Cocoon's nonterminal exception, carry Steam's typed payload
+with its own damage event and synchronously finish a death burst before the
+next chain query. Entry 162 owns the exact two-lane/query/contact contracts.
+
+Required red-to-green coverage includes nonlethal contact with positive
+Explode, eligible lethal contact, Embers-only, radius-zero positive Explode,
+normal/weak and fractional cached counts, shield/armor/alignment/dead/Cocoon
+rejections, pre-damage seed counts, main/chain/no-target presentation ordering,
+surviving ten-tick Steam, strong/zero-payload merges, both area boundary
+predicates, synchronous collateral removal before chain selection, consumed
+Ember suppression, direct shared-consumer compatibility, replication/audio
+dedup and lifecycle. Candidate review and Mac/browser/audio acceptance remain
+pending. This recovery does not claim implementation closure or rerun accepted
+full-release gates.
+
+### Explicit residual boundaries after scoped recovery
+
+- The native ribbon/path-light RNG sites and their position after source-flare and ribbon registration are recovered, but this task has not matched their geometry-dependent loop cardinality to the web presentation owner. That pre-existing presentation-RNG mismatch remains open. Preserve proved source/endpoint/chain ordering without claiming complete native global-RNG closure or inventing compensating draws.
+- Imp receiver `0x0048B1C0` rejects native byte `+0x234`. Its semantic identity, constructor transitions and any correspondence to supported `BoneyardImpBrain` state are not established here. The current host store contains live hostile mask-2 actors and active Maggots, rather than arbitrary native alignment states. Record this native branch as unmapped; do not invent an Imp state or claim all native wrapper states are implemented.

@@ -42,7 +42,7 @@ function withSilk(): BoneyardEnemyStore {
 function cast(store: BoneyardEnemyStore, emission: PrimarySpellChannelEmission) {
   return resolveBoneyardSpellCombat(store, { nextId: 10, projectiles: [], transients: [] },
     [emission], 1, worldKey, undefined, null, undefined, undefined, [], undefined,
-    [], undefined, [], undefined, () => 1)
+    [], undefined, undefined, () => 1)
 }
 
 test('powered Frost Jet includes Silk in mask 0x1082 and transfers the broken trail to its own animation queue', () => {

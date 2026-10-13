@@ -1,7 +1,6 @@
 import type { BoneyardSpellLightSampler } from './model.ts'
 import type { NativeRngState } from '../../core-kernels/native-rng.ts'
 import type {
-  NativeSecondarySteamedPulse,
   NativeSecondaryTargetEffectPatch,
 } from '../../core-kernels/native-secondary-abilities.ts'
 import {
@@ -74,7 +73,6 @@ export class BoneyardSpellCombatWork {
   readonly primarySceneryTargets: readonly PrimarySpellTarget[]
   readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly resolveEnemyMovement: ResolveBoneyardSpellEnemyMovement
-  readonly steamedPulses: readonly NativeSecondarySteamedPulse[]
   readonly fireballHostileCorridorLength: (ownerId: string) => number
   enemies: BoneyardEnemyStore
   rng: NativeRngState
@@ -105,7 +103,6 @@ export class BoneyardSpellCombatWork {
     this.primarySceneryTargets = options.primarySceneryTargets
     this.lethalObserver = options.lethalObserver
     this.resolveEnemyMovement = options.resolveEnemyMovement
-    this.steamedPulses = options.steamedPulses
     this.fireballHostileCorridorLength = options.fireballHostileCorridorLength
     this.enemies = options.sourceEnemies
     this.rng = options.sourceRng

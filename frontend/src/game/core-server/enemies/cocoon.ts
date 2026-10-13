@@ -50,7 +50,7 @@ export function damageCocoon(
     if (prior) releaseCocoon(work, { ...actor, position: actor.brain.ownerPosition }, request.tick)
   }
   return {
-    accepted: true, events: work.events, healthDamage: 0, killed: next === null,
+    accepted: true, events: work.events, healthDamage: 0, killed: next === null, specialDeathAccepted: false,
     store: finishEnemyStore(work, source.lastStepTick),
   }
 }

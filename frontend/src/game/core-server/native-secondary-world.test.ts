@@ -11,12 +11,13 @@ import { createNativeRng, drawNativeFloat, drawNativeInteger } from '../core-ker
 import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
 import { nativeSkeletonBossRecipe } from '../core-kernels/native-survival-skeleton-bosses.ts'
 import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
-import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation } from '../core-kernels/native-secondary-abilities.ts'
+import { applyNativeSecondaryTargetEffect, createNativeSecondarySimulation, type NativeSecondaryDamageContact } from '../core-kernels/native-secondary-abilities.ts'
 import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
 import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from '../protocol/boneyard-enemy-replication.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
-import type { BoneyardEnemyProjectile, BoneyardEnemyStoreStepContext } from './enemies/model.ts'
+import { damageBoneyardEnemy } from './enemies/damage.ts'
+import type { BoneyardEnemyProjectile, BoneyardEnemyStore, BoneyardEnemyStoreStepContext } from './enemies/model.ts'
 import {
   createNativeSecondaryTargetMembership,
   boneyardNativeSecondaryDampenCandidates,
@@ -32,6 +33,96 @@ const EMPTY_COLLISION: BoneyardCollisionWorld = Object.freeze({
   circles: Object.freeze([]),
   polygons: Object.freeze([]),
   segments: Object.freeze([]),
+})
+
+function steamedDeathStore(armored = false) {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('steamed-death'), {
+    tick: 0, players: {}, projectileWorldBlocked: () => false,
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [1, 2].map(id => ({ enemyToken: 'SKELETON' as const,
+      flags: armored ? ['FLAG_ARMOR' as const] : [], id, locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 100 + id, y: 150 + id }, spawnTick: 0, waveOrdinal: 1 })),
+  }).store
+  return { ...spawned, actors: spawned.actors.map(actor => ({ ...actor, currentHealth: 1 })) }
+}
+
+function steamedDeathContact(targetId: number, ownerId = 'first'): NativeSecondaryDamageContact {
+  return { amount: 2, kind: 'fire', ownerId, sourceActorId: 50, targetId,
+    specialDeathPayload: { kind: 'steam', explodeDamage: 10, explodeRadius: 12,
+      emberDamage: 3, emberFragments: 1, privateSeed: 123 } }
+}
+
+function secondaryDamageResult(damage: readonly NativeSecondaryDamageContact[]) {
+  return { damage, dampenedCasterTargetIds: [], dispelledShieldTargetIds: [],
+    targetHeadingChanges: [], removedProjectileIds: [] }
+}
+
+test('Steamed terminal payload resolves synchronously against the post-kill store before the next damage event', () => {
+  const source = steamedDeathStore()
+  const observed: number[] = []
+  const result = resolveBoneyardNativeSecondaryCombat(source,
+    secondaryDamageResult([steamedDeathContact(1), steamedDeathContact(2, 'second')]),
+    0, undefined, undefined, undefined, [], true, (enemies, contact, victim) => {
+      observed.push(victim.id)
+      assert.strictEqual(victim, source.actors[0])
+      assert.deepEqual(victim.position, { x: 101, y: 151 })
+      assert.equal(enemies.actors.find(actor => actor.id === victim.id)!.lifeState, 'dying')
+      assert.equal(contact.specialDeathPayload.privateSeed, 123)
+      const collateral = damageBoneyardEnemy(enemies, { actorId: 2, amount: 2,
+        sourcePlayerId: contact.ownerId, tick: 0 })
+      return { enemies: collateral.store, events: collateral.events }
+    })
+  assert.deepEqual(observed, [1], 'collateral death prevents the later tagged damage from firing again')
+  assert.equal(result.enemies.actors[1]!.lastDamagedByPlayerId, 'first')
+  assert.equal(result.enemies.actors[1]!.currentHealth, -1)
+})
+
+test('Steamed payload does not survive a nonlethal hit or fire on shield, armor, zero damage or an already-dead victim', () => {
+  const source = steamedDeathStore()
+  const rejected = [source,
+    { ...source, actors: source.actors.map(actor => ({ ...actor, shieldHealth: 10, shieldMaximumHealth: 10 })) },
+    steamedDeathStore(true),
+    { ...source, actors: source.actors.map(actor => ({ ...actor, lifeState: 'dying' as const })) },
+  ]
+  let callbacks = 0
+  for (const [index, enemies] of rejected.entries()) {
+    const contact = { ...steamedDeathContact(1), amount: index === 0 ? 0.25 : 100 }
+    resolveBoneyardNativeSecondaryCombat(enemies, secondaryDamageResult([contact]),
+      0, undefined, undefined, undefined, [], true, current => {
+        callbacks += 1
+        return { enemies: current, events: [] }
+      })
+  }
+  for (const amount of [0, 0.25]) {
+    resolveBoneyardNativeSecondaryCombat(source, secondaryDamageResult([
+      { ...steamedDeathContact(1), amount },
+      { amount: 2, kind: 'physical', ownerId: 'ordinary', sourceActorId: 51, targetId: 1 },
+    ]), 0, undefined, undefined, undefined, [], true, enemies => {
+      callbacks += 1
+      return { enemies, events: [] }
+    })
+  }
+  assert.equal(callbacks, 0)
+})
+
+test('Steamed Cocoon removal never dispatches a terminal payload even when the damage result reports killed', () => {
+  const source = steamedDeathStore()
+  const cocoons: BoneyardEnemyStore = { ...source, actors: source.actors.map(actor => ({
+    ...actor, brain: { family: 'cocoon', phase: 'active', ownerPlayerId: null, ownerPosition: actor.position },
+  })) }
+  const direct = damageBoneyardEnemy(cocoons, { actorId: 1, amount: 2,
+    sourcePlayerId: 'first', magic: true, tick: 0 })
+  assert.equal(direct.killed, true)
+  let callbacks = 0
+  const result = resolveBoneyardNativeSecondaryCombat(cocoons,
+    secondaryDamageResult([steamedDeathContact(1)]),
+    0, undefined, undefined, undefined, [], true, enemies => {
+      callbacks += 1
+      return { enemies, events: [] }
+    })
+  assert.equal(result.enemies.actors[0]!.lifeState, 'dying')
+  assert.equal(callbacks, 0)
 })
 
 test('target-owned status membership includes every canonical family independently of combat eligibility', () => {

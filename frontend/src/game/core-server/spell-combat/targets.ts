@@ -143,6 +143,10 @@ export function selectedWeldTarget(
   spells: PrimarySpellSimulationState,
   emission: PrimarySpellChannelEmission,
 ): PrimarySpellTarget | null {
+  if (emission.flameLashPresentation !== undefined) {
+    const row = rows.find(({ target }) => target.id === emission.flameLashPresentation!.targetId)
+    return row?.target.active && !row.target.pendingRemove ? row.target : null
+  }
   const transient = spells.transients.find((effect) => (
     effect.kind === 'weld-channel'
     && effect.id === emission.id

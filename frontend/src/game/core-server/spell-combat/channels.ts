@@ -20,7 +20,9 @@ import {
   nativePrimaryTargetEligible,
   primarySpellTargetPoint,
 } from '../../core-kernels/primary-spell-targeting.ts'
-import { createPrimarySpellWeldFireDetonation } from '../../core-kernels/primary-spells.ts'
+import type { NativeSpellSpecialDeathPayload } from '../../core-kernels/native-special-death-payload.ts'
+import { createNativeWeldChannelActor } from '../../core-kernels/native-weld-primary-runtime.ts'
+import { resolveBoneyardSpecialDeathPayload } from './special-death.ts'
 import {
   damageBoneyardEnemy,
 } from '../enemies/damage.ts'
@@ -181,129 +183,116 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
       switch (profile.buildId) {
         case 1003: {
           const first = selectedWeldTarget(primaryTargetRows(work.enemies), work.sourceSpells, emission)
-          if (!first) break
+          const mainPresentation = emission.flameLashPresentation
+          const fade = (variant: 'source' | 'endpoint' | 'chain', origin: Readonly<{ x: number; y: number }>,
+            direction: Readonly<{ x: number; y: number }>): void => {
+            const born = createNativeWeldFlameLashFade({
+              enhancedEffects: work.enhancedEffects, direction, id: work.nextSpellId,
+              origin, ownerId: emission.ownerId, rng: work.rng, tick: work.tick,
+              variant, vector: profile.vector.values, worldKey: work.worldKey,
+            })
+            work.rng = born.rng
+            work.ownedTransients.push(work.enrollCombatActor(born.actor))
+            work.nextSpellId += 1
+          }
+          const publishMain = (): void => {
+            if (emission.endpoint !== null) fade('endpoint', emission.endpoint, emission.direction)
+            // Factory source-flare flag is independent of endpoint/target/weakness.
+            fade('source', emission.origin, emission.direction)
+            if (mainPresentation !== undefined) {
+              work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
+                enhancedEffects: work.enhancedEffects, buildId: 1003,
+                direction: emission.direction, endpoint: emission.endpoint, id: emission.id,
+                midpoint: mainPresentation.midpoint, origin: emission.origin, ownerId: emission.ownerId,
+                targetId: mainPresentation.targetId, tick: work.tick, underpowered: emission.underpowered,
+                vector: profile.vector.values, worldKey: work.worldKey,
+              })))
+            }
+          }
+          if (!first) {
+            publishMain()
+            break
+          }
           const contactedIds = new Set<string>()
           let target: PrimarySpellTarget | null = first
           let damage = emission.damage
           let previousPoint = emission.origin
+          const fragments = Math.max(0, Math.trunc(profile.vector.values[7]!))
           for (let hop = 0; target && hop <= profile.vector.values[2]!; hop += 1) {
-            const row = primaryTargetRows(work.enemies).find(({ target: candidate }) => (
-              candidate.id === target!.id
-            ))
+            const row = primaryTargetRows(work.enemies).find(({ target: candidate }) => candidate.id === target!.id)
             if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
             contactedIds.add(row.target.id)
-            const stunFactor = profile.vector.values[3]!
-            if (stunFactor < 1) {
-              work.queueTargetEffect(row.actor.id, {
-                stunFactor,
-                stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
-              })
+            const point = primarySpellTargetPoint(row.target)
+            const direction = normalizedDifference(previousPoint, point)
+            if (hop > 0) {
+              // Native 0x5413B7 width draw precedes factory/source flare and contact.
+              work.rng = drawNativeFloat(work.rng, Math.fround(0.3000000119)).state
+              fade('source', previousPoint, direction)
+              const geometry = airPrimaryBoltGeometry(previousPoint, direction, point)
+              work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
+                enhancedEffects: work.enhancedEffects, buildId: 1003, direction,
+                endpoint: geometry.endpoint, id: work.nextSpellId, midpoint: geometry.midpoint,
+                origin: previousPoint, ownerId: emission.ownerId, targetId: row.target.id,
+                tick: work.tick, underpowered: false, vector: profile.vector.values, worldKey: work.worldKey,
+              })))
+              work.nextSpellId += 1
+              fade('chain', point, direction)
             }
-            const amount = damage * validatedDamageMultiplier(
-              work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
-            )
+            const stunFactor = profile.vector.values[3]!
+            if (!emission.underpowered && stunFactor < 1) {
+              work.queueTargetEffect(row.actor.id, { stunFactor, stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS })
+            }
+            const flash = drawNativeFloat(work.rng, Math.fround(0.5))
+            work.rng = flash.state
+            let payload: NativeSpellSpecialDeathPayload | null = null
+            if (profile.vector.values[4]! > 0) {
+              const seed = drawNativeInteger(work.rng, 1_000_000)
+              work.rng = seed.state
+              payload = {
+                kind: 'fire', explodeDamage: profile.vector.values[4]!,
+                explodeRadius: profile.vector.values[5]!, emberDamage: profile.vector.values[6]!,
+                emberFragments: hop === 0 ? fragments : Math.trunc(fragments * 0.5),
+                privateSeed: seed.value,
+              }
+            }
+            const amount = damage * validatedDamageMultiplier(work.damageMultiplier(row.actor.id, 'air', emission.ownerId))
             const damaged = damageBoneyardEnemy(work.enemies, {
-              enhancedEffects: work.enhancedEffects,
-              suppressHitReaction: true,
-              hasMagicDamage: true,
-              magic: true,
-              lethalObserver: work.lethalObserver,
-              actorId: row.actor.id,
-              amount,
-              sourcePlayerId: emission.ownerId,
-              registerWorldPainter: work.registerWorldPainter,
-              tick: work.tick,
+              enhancedEffects: work.enhancedEffects, hitStrength: Math.fround(0.25 + flash.value),
+              suppressHitReaction: true, hasMagicDamage: true, magic: true,
+              lethalObserver: work.lethalObserver, actorId: row.actor.id, amount,
+              sourcePlayerId: emission.ownerId, registerWorldPainter: work.registerWorldPainter, tick: work.tick,
             })
             if (damaged.accepted) {
               work.enemies = damaged.store
               work.events.push(...damaged.events)
               work.hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, work.tick))
-              const point = primarySpellTargetPoint(row.target)
-              const fadeDirection = normalizedDifference(previousPoint, point)
-              const fade = createNativeWeldFlameLashFade({
-                enhancedEffects: work.enhancedEffects,
-                direction: fadeDirection,
-                id: work.nextSpellId,
-                origin: point,
-                ownerId: emission.ownerId,
-                rng: work.rng,
-                tick: work.tick,
-                variant: 'chain',
-                vector: profile.vector.values,
-                worldKey: work.worldKey,
-              })
-              work.rng = fade.rng
-              work.ownedTransients.push(work.enrollCombatActor(fade.actor))
-              work.nextSpellId += 1
-              const privateSeed = drawNativeInteger(work.rng, 1_000_000)
-              work.rng = privateSeed.state
-              const detonation = createPrimarySpellWeldFireDetonation(
-                work.nextSpellId,
-                {
-                  buildId: 1003,
-                  direction: normalizedDifference(previousPoint, point),
-                  ownerId: emission.ownerId,
-                  position: point,
-                  vector: profile.vector.values,
-                  worldKey: work.worldKey,
-                },
-                point,
-                work.tick,
-                work.rng,
-                privateSeed.value,
-                false,
-                work.registerWorldPainter,
-              )
-              work.rng = detonation.rng
-              work.pendingFireActorContacts.push(...detonation.contacts)
-              work.ownedTransients.push(...work.enrollCombatActors(detonation.transients))
-              work.nextSpellId = detonation.nextId
+              if (damaged.specialDeathAccepted && payload !== null) {
+                const burst = resolveBoneyardSpecialDeathPayload({
+                  payload, victim: row.actor, sourceEnemies: work.enemies, nextSpellId: work.nextSpellId,
+                  rng: work.rng, ownerId: emission.ownerId, tick: work.tick, worldKey: work.worldKey,
+                  enhancedEffects: work.enhancedEffects, registerWorldPainter: work.registerCombatPainter,
+                  lethalObserver: work.lethalObserver, damageMultiplier: work.damageMultiplier,
+                })
+                work.enemies = burst.enemies
+                work.rng = burst.rng
+                work.nextSpellId = burst.spells.nextId
+                work.events.push(...burst.events)
+                work.hits.push(...burst.hits)
+                work.burns.push(...burst.burns)
+                work.etherBurns.push(...burst.etherBurns)
+                work.targetEffects.push(...burst.targetEffects)
+                work.ownedTransients.push(...burst.spells.transients)
+              }
             }
-            const currentPoint = primarySpellTargetPoint(row.target)
-            if (hop > 0) {
-              const direction = normalizedDifference(previousPoint, currentPoint)
-              const geometry = airPrimaryBoltGeometry(
-                previousPoint,
-                direction,
-                currentPoint,
-              )
-              work.ownedTransients.push(work.enrollCombatActor({
-                ageTicks: 0,
-                birthTick: work.tick,
-                buildId: 1003,
-                direction,
-                enhancedEffects: work.enhancedEffects,
-                endpoint: geometry.endpoint,
-                id: work.nextSpellId,
-                kind: 'weld-channel',
-                lightRegistration: null,
-                midpoint: geometry.midpoint,
-                origin: { ...previousPoint },
-                ownerId: emission.ownerId,
-                targetId: row.target.id,
-                underpowered: emission.underpowered,
-                variant: work.nextSpellId % 4,
-                vector: Object.freeze([...profile.vector.values]),
-                worldKey: work.worldKey,
-              }))
-              work.nextSpellId += 1
-            }
-            if (hop > 0) {
-              const sourceFade = createNativeWeldFlameLashFade({ enhancedEffects: work.enhancedEffects,
-                direction: normalizedDifference(previousPoint, currentPoint), id: work.nextSpellId,
-                origin: previousPoint, ownerId: emission.ownerId, rng: work.rng, tick: work.tick,
-                variant: 'source', vector: profile.vector.values, worldKey: work.worldKey })
-              work.rng = sourceFade.rng
-              work.ownedTransients.push(work.enrollCombatActor(sourceFade.actor))
-              work.nextSpellId += 1
-            }
-            previousPoint = currentPoint
+            if (hop === 0) publishMain()
+            previousPoint = point
             damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
-            target = nearestUnusedAirChainTarget(
-              primaryTargetRows(work.enemies).map(({ target: candidate }) => candidate),
-              row.target.position,
-              contactedIds,
-            )
+            target = emission.underpowered || hop >= profile.vector.values[2]!
+              ? null
+              : nearestUnusedAirChainTarget(
+                  primaryTargetRows(work.enemies).map(({ target: candidate }) => candidate),
+                  row.target.position, contactedIds,
+                )
           }
           break
         }
