@@ -640,7 +640,7 @@ function buildNativeSecondaryPresentationPlan(
         life: actor.alpha,
         phase: actor.frame,
         position: actor.position,
-      }, presentationFrame)
+      }, presentationFrame, enhancedEffects)
       const groundGlow = ember.groundGlow
       return plan(
         ember.draws.map(secondaryFireDraw),
@@ -650,9 +650,9 @@ function buildNativeSecondaryPresentationPlan(
           ? []
           : [{
               alpha: groundGlow.alpha,
-              atlas: null,
+              atlas: groundGlow.atlas,
               blend: groundGlow.blend,
-              entry: null,
+              entry: groundGlow.entry,
               role: 'ring-fire-fragment-enhanced-ground-glow',
               tint: groundGlow.tint,
               vertices: [

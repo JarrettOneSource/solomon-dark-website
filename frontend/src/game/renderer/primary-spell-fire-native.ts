@@ -59,7 +59,9 @@ export interface NativeFireEmberPlan {
   readonly draws: readonly NativeFireActorDraw[]
   readonly groundGlow: Readonly<{
     alpha: number
+    atlas: 'BadGuys'
     blend: 'normal'
+    entry: number
     height: number
     tint: number
     width: number
@@ -393,7 +395,8 @@ export function nativeFireEmberPlan(
         offset: { x: 0, y: state.height },
         scale: 0.5,
       }),
-      ...(enhancedEffects ? [additiveDraw(0), additiveDraw(1)] : []),
+      additiveDraw(0),
+      ...(enhancedEffects ? [additiveDraw(1)] : []),
       fireActorDraw('BadGuys', NATIVE_FIRE_EMBER_GLOW_RECORD, 'glow', {
         alpha: Math.min(state.life * 0.2, 1),
         blend: 'add',
@@ -405,7 +408,9 @@ export function nativeFireEmberPlan(
     groundGlow: enhancedEffects && state.height < 0
       ? {
           alpha: Math.fround((1 - state.height / -50 * 0.5) * 0.25),
+          atlas: 'BadGuys',
           blend: 'normal',
+          entry: NATIVE_FIRE_EMBER_GLOW_RECORD,
           height: Math.fround(37 * Math.fround(0.6000000238418579)),
           tint: 0xff8040,
           width: Math.fround(38 * 0.75),

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { Texture } from 'pixi.js'
+import { Sprite, Texture, TextureSource } from 'pixi.js'
 
 import { createNativeFirePatch } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
@@ -17,6 +17,7 @@ import type {
   PrimarySpellFireParticleState,
 } from '../core-kernels/primary-spells.ts'
 import {
+  FireActorSpellView,
   FireImpactSpellView,
   FireParticleSpellView,
   FirePrimarySpellView,
@@ -290,7 +291,9 @@ test('projects Ember glow, dual phase passes, and the exact enhanced ground quad
   ])
   assert.deepEqual(plan.groundGlow, {
     alpha: Math.fround((1 - ember.height / -50 * 0.5) * 0.25),
+    atlas: 'BadGuys',
     blend: 'normal',
+    entry: 15,
     height: Math.fround(37 * Math.fround(0.6000000238418579)),
     tint: 0xff8040,
     width: Math.fround(38 * 0.75),
@@ -307,6 +310,60 @@ test('projects Ember glow, dual phase passes, and the exact enhanced ground quad
     offset: { x: 0, y: -5.6000000000000005 },
     scale: 1,
   })
+})
+
+test('Ember keeps its first additive body with Enhanced off across every frame and fade branch', () => {
+  for (const phase of [0, 1, 2, 3]) {
+    for (const life of [3, 0.5]) {
+      for (const height of [-7, 0]) {
+        const state = { ageTicks: 20, height, id: 21, life, phase, position: { x: 100, y: 200 } }
+        const enabled = nativeFireEmberPlan(state, 12, true)
+        const disabled = nativeFireEmberPlan(state, 12, false)
+        assert.deepEqual(disabled.draws.map(draw => draw.role), ['body', 'additive-body-1', 'glow'])
+        assert.deepEqual(disabled.draws, [enabled.draws[0], enabled.draws[1], enabled.draws[3]])
+        assert.equal(disabled.draws[1]!.entry, 267 + phase)
+        assert.equal(disabled.draws[1]!.alpha, Math.min(life, 1))
+        assert.equal(disabled.groundGlow, null)
+        assert.equal(enabled.groundGlow === null, height === 0)
+      }
+    }
+  }
+})
+
+test('retained primary Ember binds the registered alpha mask through setting changes and teardown', () => {
+  const mask = new Texture({ source: new TextureSource({ width: 38, height: 37 }) })
+  const textures = { badGuys: { 15: mask, 267: Texture.EMPTY, 268: Texture.EMPTY,
+    269: Texture.EMPTY, 270: Texture.EMPTY }, deadHawg: {} }
+  try {
+    for (const worldKey of ['hub:courtyard', 'hub:private', 'boneyard:test']) {
+      const state: PrimarySpellFireEmberState = {
+        ageTicks: 20, burnDamage: 4, contactCadence: 0, contactDue: true, damage: 8,
+        height: -7, horizontalVelocity: { x: 0, y: 0 }, id: 21, kind: 'fire-ember',
+        life: 3, ownerId: 'caster', phase: 2.75, position: { x: 100, y: 200 },
+        spentEmber: { kind: 'none' }, verticalVelocity: -1, worldKey,
+      }
+      const view = new FireActorSpellView(state, textures)
+      try {
+        const ground = view.container.getChildByLabel('enhanced-airborne-ground-glow') as Sprite
+        assert.ok(ground)
+        for (const enhanced of [true, false, true]) {
+          view.update(state, 12, 1, enhanced)
+          assert.equal(ground.visible, enhanced)
+          assert.equal(ground.texture, mask)
+          assert.deepEqual([ground.width, ground.height], [28.5, Math.fround(37 * Math.fround(0.6000000238418579))])
+          assert.equal(ground.tint, 0xff8040)
+          assert.equal(ground.blendMode, 'normal')
+          assert.equal(ground.alpha, Math.fround((1 - state.height / -50 * 0.5) * 0.25))
+          assert.deepEqual([ground.anchor.x, ground.anchor.y], [0.5, 0.5])
+          assert.equal(view.container.children.length, enhanced ? 5 : 4)
+        }
+        view.update({ ...state, height: 0, life: 0.5 }, 12, 1, true)
+        assert.equal(ground.visible, false)
+      } finally { view.destroy() }
+      assert.equal(view.container.destroyed, true)
+      assert.equal(mask.destroyed, false, 'a view never owns the shared atlas texture')
+    }
+  } finally { mask.destroy(true) }
 })
 
 test('projects all three shared explosion children through their independent native clocks', () => {

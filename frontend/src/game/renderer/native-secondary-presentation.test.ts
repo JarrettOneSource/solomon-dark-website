@@ -2,7 +2,7 @@ import { createNativeGolemDeathAnimation, NATIVE_GOLEM_DEATH_MAX_AGE, stepNative
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { Container, DOMAdapter, RenderTexture, Sprite, Texture, type Renderer, type RenderOptions } from 'pixi.js'
+import { Container, DOMAdapter, RenderTexture, Sprite, Texture, TextureSource, type MeshSimple, type Renderer, type RenderOptions } from 'pixi.js'
 import { createServer } from 'vite'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 import type { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
@@ -1195,9 +1195,9 @@ test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled l
   )
   assert.deepEqual(fragmentPlan.quads, [{
     alpha: Math.fround((1 - fragment.phase / -50 * 0.5) * 0.25),
-    atlas: null,
+    atlas: 'BadGuys',
     blend: 'normal',
-    entry: null,
+    entry: 15,
     role: 'ring-fire-fragment-enhanced-ground-glow',
     tint: 0xff8040,
     vertices: [
@@ -1212,6 +1212,71 @@ test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled l
   assert.equal(fragmentLight.intensity, 0.25)
   assert.deepEqual(fragmentLight.position, fragment.position)
   assert.ok(fragmentLight.radius >= 0.75 && fragmentLight.radius <= 1)
+})
+
+test('Ring fragments forward the live Enhanced setting and retain the ordinary additive pass', () => {
+  for (const frame of [0, 1, 2, 3]) {
+    for (const alpha of [3, 0.5]) {
+      for (const phase of [-7, 0]) {
+        const fragment = { ...actor('ring-fire-fragment'), alpha, frame, phase }
+        const enabled = nativeSecondaryPresentationPlan(fragment, 12, 1, true)
+        const disabled = nativeSecondaryPresentationPlan(fragment, 12, 1, false)
+        assert.deepEqual(disabled.draws.map(draw => draw.role), ['body', 'additive-body-1', 'glow'])
+        assert.deepEqual(disabled.draws, [enabled.draws[0], enabled.draws[1], enabled.draws[3]])
+        assert.deepEqual(disabled.quads, [])
+        assert.equal(enabled.quads.length, phase < 0 ? 1 : 0)
+        assert.deepEqual(nativeSecondaryPresentationPlan({ ...fragment, enhanced: false }, 12), disabled)
+      }
+    }
+  }
+})
+
+test('retained Ring fragments bind the alpha mask and toggle it without retaining retired views', async (t) => {
+  const server = await createServer({ appType: 'custom', logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)), server: { middlewareMode: true } })
+  const mask = new Texture({ source: new TextureSource({ width: 38, height: 37 }) })
+  try {
+    const canvasProbe = t.mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
+    const module = await server.ssrLoadModule('/src/game/renderer/native-secondary-world-view.ts') as {
+      NativeSecondaryWorldView: typeof NativeSecondaryWorldView
+    }
+    canvasProbe.mock.restore()
+    for (const worldKey of ['hub:courtyard', 'boneyard:test']) {
+      const root = new Container({ sortableChildren: true })
+      root.scale.set(1.375)
+      const textures = { secondary: { 'BadGuys:15': mask, 'BadGuys:36': Texture.EMPTY, 'BadGuys:267': Texture.EMPTY,
+        'BadGuys:268': Texture.EMPTY, 'BadGuys:269': Texture.EMPTY, 'BadGuys:270': Texture.EMPTY } } as unknown as PlayerWorldTextures
+      const view = new module.NativeSecondaryWorldView(root, textures, {} as Renderer)
+      const source = { ...actor('ring-fire-fragment'), alpha: 3, frame: 2, phase: -7, worldKey,
+        painterRegistrations: [{ managerLane: 'transient' as const, registrationOrdinal: 1 }] }
+      try {
+        for (const enhanced of [true, false, true]) {
+          view.update({ actors: [source] }, worldKey, 12, () => 1, enhanced)
+          assert.equal(view.primitiveCount, enhanced ? 5 : 3)
+          if (enhanced) {
+            const quad = root.getChildByLabel('secondary:ring-fire-fragment-enhanced-ground-glow:BadGuys:15', true) as MeshSimple
+            assert.ok(quad)
+            assert.equal(quad.texture, mask)
+            assert.equal(quad.blendMode, 'normal')
+            assert.equal(quad.tint, 0xff8040)
+            assert.equal(quad.alpha, Math.fround((1 - source.phase / -50 * 0.5) * 0.25))
+          }
+        }
+        view.update({ actors: [{ ...source, phase: 0, alpha: 0.5 }] }, worldKey, 12)
+        assert.equal(view.primitiveCount, 4)
+        view.update({ actors: [] }, worldKey)
+        assert.equal(view.primitiveCount, 0)
+        assert.equal(root.children.length, 0)
+        view.update({ actors: [source] }, worldKey, 12)
+      } finally { view.destroy() }
+      assert.equal(root.children.length, 0)
+      assert.equal(mask.destroyed, false)
+      root.destroy()
+    }
+  } finally {
+    mask.destroy(true)
+    await server.close()
+  }
 })
 
 test('Dampen repairs the crashing suffix as 36 radial wisps and three magical arcs', () => {

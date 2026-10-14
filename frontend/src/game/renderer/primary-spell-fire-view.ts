@@ -77,7 +77,7 @@ export class FireActorSpellView {
     this.fireGroundGlow.eventMode = 'none'
     this.fireGroundGlow.visible = false
     this.underlayContainer.addChild(this.fireGroundGlow)
-    this.emberGroundGlow = new Sprite(Texture.WHITE)
+    this.emberGroundGlow = new Sprite()
     this.emberGroundGlow.anchor.set(0.5)
     this.emberGroundGlow.eventMode = 'none'
     this.emberGroundGlow.label = 'enhanced-airborne-ground-glow'
@@ -140,6 +140,10 @@ export class FireActorSpellView {
     const groundGlow = 'groundGlow' in plan ? plan.groundGlow : null
     this.emberGroundGlow.visible = groundGlow !== null
     if (groundGlow) {
+      // Native diffuse-only RGB still modulates the registered texture alpha.
+      const texture = this.textures.badGuys[groundGlow.entry]
+      if (!texture) throw new Error('Missing native Ember ground glow texture')
+      this.emberGroundGlow.texture = texture
       this.emberGroundGlow.alpha = groundGlow.alpha
       this.emberGroundGlow.blendMode = groundGlow.blend
       this.emberGroundGlow.height = groundGlow.height

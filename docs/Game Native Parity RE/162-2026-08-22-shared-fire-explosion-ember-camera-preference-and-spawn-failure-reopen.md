@@ -9,6 +9,118 @@
 > Ring amount/query/order defect is recorded open, not silently included in the
 > report-118 runtime patch. Historical receipts are retained as historical.
 
+## 2026-10-13 — Ember alpha-mask and Enhanced branch correction
+
+### Three distinct findings
+
+Report 119 shows orange square footprints around Embers. Source inspection at
+`6bb67218dd21f25f5412b39a808bd3d9db90ef6e` confirms a native material defect;
+the original live occurrence has not been replayed. The earlier pass recovered
+the correct ground geometry but mislabeled renderer flag `+0x223` as
+“untextured.” It skipped the alpha-stage state and accepted a flat white quad.
+That assumption is corrected in both consumers, with no blur or new asset.
+The untouched pre-correction ledger SHA-256 is
+`a686cefb21a5f973f66b60e84359fb2aea251fcd7e19551c9a74c78411a6a366`.
+
+Two independently proven branches also require correction: the shared plan
+incorrectly suppresses both additive bodies when Enhanced is off, and Ring
+fails to forward the live Enhanced setting to that plan. These are distinct
+findings; restoring texture alpha alone does not repair either branch.
+
+### Exact native evidence
+
+All instruction evidence uses retail 0.72.5 at preferred image base
+`0x00400000`, executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Static instructions and exact asset comparison establish this contract; no
+new native runtime or original-report live reproduction is claimed.
+
+| Source | Recovered contract |
+| --- | --- |
+| Ember ground pass `0x005E5A20..0x005E5B7E` | Enhanced and negative height gate; renderer `+0x223=1`; diffuse RGBA `(1,.5,.25,f32((1-height/-50*.5)*.25))`; scale `(.75,.6000000238418579)`; registered `DAT_00819978+0xBB4` through `0x00414540`; restore flag and white RGBA at `0x005E5B32..0x005E5B6A`. |
+| State application `0x00420982..0x004209F5` | Flag changes stage-0 COLOROP to SELECTARG1 (`2`) and COLORARG1 to DIFFUSE (`0`) only. Restoring it restores RGB MODULATE/TEXTURE. It never changes ALPHAOP. |
+| Initial state `0x0043FBBF..0x0043FBCC` | Stage-0 ALPHAOP is MODULATE (`4`); texture/current alpha remains active. The RGB override therefore preserves the registered feathered alpha. |
+| Submission `0x00414540..0x00414708`, `0x0041E990..0x0041EAD3` | Sprite `+8` texture and `+0x4C` UVs remain bound; context color `+0x21C` reaches vertex submission. Blend selector zero uses SRCALPHA/INVSRCALPHA at `0x0042094E..0x00420974`; the ground pass does not change selector `+0x221`. |
+| Main Ember draw `0x0060DFFA..0x0060E0D3` | First additive body is submitted before the Enhanced check at `0x0060DFFF`. Only the second additive body is skipped when off; ordinary body and orange glow remain. |
+| Native `images/BadGuys.png`, crop `(804,1090,38,37)` | Exact RGBA match to Website `assets/game/boneyard/badguys/0015.png`: 226 distinct alpha values, transparent outer edges, center alpha 255, white RGB at every nonzero-alpha texel. Existing texture times tint preserves diffuse-only RGB and texture alpha without a custom shader. |
+
+Native atlas SHA-256:
+`af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e`;
+BadGuys bundle SHA-256:
+`a7b13b464e035e2099081ce942db4aa231fc7c20de1ecacbd9d0a590132c88d3`;
+Website record-15 PNG SHA-256:
+`5abc42fa09f09a5fefe3df9281d2102e6b93a48249edb4e21f36f73e1a0011eb`.
+The D3D9 texture-stage, operation, and argument values use Microsoft's
+`D3DTEXTURESTAGESTATETYPE`, `D3DTEXTUREOP`, and `D3DTA` definitions.
+
+### Boundary and complete member inventory
+
+Boundary: the shared Ember material and its existing Enhanced setting branches,
+from the native ground/main draw methods through both Website presentation
+consumers. Geometry, tint, alpha formulas, painter order, body records 267..270,
+clocks, spawn/contact mechanics, audio, lights, and authority remain unchanged.
+
+| Member | Source and disposition before implementation | Required proof |
+| --- | --- | --- |
+| Shared Ember ground material | `nativeFireEmberPlan`; recovered-pending-port | BadGuys15 identity plus unchanged geometry, source-over blend and alpha |
+| Ordinary Fire detonation, including spent/Immolate children | `primary-spells.ts` detonation/Ember production and `FireActorSpellView`; recovered-pending-port | Actual sprite texture, frozen airborne/grounded and life 3/.5 fixtures |
+| Fire-bearing welded builds 1000, 1003, 1007 | Shared `createNativeFireDetonation` children mapped to `fire-ember`; recovered-pending-port through same view | Existing producer tests and shared-material actual-view assertion |
+| Burning Man Ring fragments | `native-secondary-abilities.ts` detonation mapping to `ring-fire-fragment`; recovered-pending-port | Quad texture BadGuys15, native UVs/vertices, actual retained mesh |
+| Enhanced main draw off/on | First additive unconditional, second optional; recovered-pending-port | Separate off/on draw-order and count assertions, unchanged first sample |
+| Ring live Enhanced forwarding | Adapter passes actual setting; recovered-pending-port | False/default/true and on→off→on transitions |
+| Airborne versus grounded | Negative-height ground-pass gate; verified-already-at-parity in plan, requires regression | Height -7 and 0 with both Enhanced values |
+| Body phases 267..270, fade life below one, separate glow15 | Existing shared plan; verified-already-at-parity except optional-body count | Every phase and life 3/.5 draw values |
+| Hub Courtyard/private rooms and Boneyard | Same primary owner; recovered-pending-port material | Both world families, fractional scale, world change and retirement |
+| Native Ember `0x7D6` and EvilEmber `0x80B` | Both vtable slot `+0x28` → `0x005E5A20`; same native material contract | Catalog/shared-method evidence |
+| Separately instantiated hostile EvilEmber | out-of-system: no Website EvilEmber/2059 presentation kind or producer; not live-tested as a `fire-ember` | Complete production caller census; entry301 corrects the old Faculty attribution |
+| Script explosion | out-of-system: no supported Website timeline-action producer | Retain native shared-material finding for future consumers |
+| Flame special-death Ember producer integrated by report 118 | `spell-combat/special-death.ts` calls the shared factory and publishes `fire-ember`; recovered-pending-port through the same primary view | Preserve terminal admission and synchronous contact behavior; shared-material assertion plus existing report-118 producer regressions |
+| Teardown, snapshots, contacts, audio and light | verified-already-at-parity; no state or protocol change | Existing affected tests; views retire/destroy without texture ownership leak |
+
+At the original `6bb67218` diagnostic base, `createNativeFireDetonation` had
+three production callers: two in `primary-spells.ts` (ordinary and welded),
+one in `native-secondary-abilities.ts` (Ring). Integration onto report-118
+main `553793d0` adds the fourth caller in `spell-combat/special-death.ts` for
+terminal Flame payloads. Its `fire-ember` output uses the same primary view.
+`nativeFireEmberPlan` still has exactly two production consumers:
+`FireActorSpellView` and the Ring fragment adapter. The separate Ring
+amount/query/order defect documented by report 118 remains open; this material
+repair does not change those mechanics.
+No separate shader, generated mask, global filtering change, or speculative
+hostile actor is needed. All authored material rows are existing BadGuys15
+and body records 267..270; there is no new guessed parameter or table.
+
+### Validation contract and current boundary
+
+First demonstrate separate red tests for missing texture identity, missing first
+additive body when Enhanced is off, and ignored Ring setting. Then verify the
+real primary Sprite and Ring Mesh receive the registered texture, including
+retirement and on→off→on transitions. Compare actual Mac-browser pixel edges
+against the unmodified alpha mask on a fixed grey surface; include both world
+families and fractional scaling, and capture browser error arrays. Unit metadata
+alone is not pixel acceptance. Preserve exact footprint and source-over alpha.
+
+The preserved isolated diagnostic candidate `d0dac367` starts from `6bb67218`.
+On 2026-10-14 the repair was integrated onto verified main `553793d0` after the
+coordinator accepted report 118's managed web deployment and bounded live review.
+The frozen report-118 source is unchanged. Final dispositions still require
+independent integrated-source pixel/game-browser review and the exact-tree M5
+gate. Main publication remains held until report 118's standalone release
+finishes. No integrated acceptance or report-119 publication is claimed here.
+
+Pre-integration Mac M2 checks: five targeted behavior regressions failed on the
+base for the intended material/setting defects, then all six selected Ember/Ring
+cases passed. The complete affected renderer suites passed 70/70; test TypeScript
+passed; focused lint passed with two pre-existing numeric-precision warnings in
+unrelated Acid center expectations. Actual retained Sprite/Mesh tests cover
+texture binding and lifetime, using a sentinel texture rather than claiming pixel
+acceptance. Independent native/source review found no production blocker.
+Historical frozen-view GPU diagnostics then passed 64 repaired and 64
+module-level negative-control cases, with exact native-mask channel delta zero
+and nonempty feathering. They are not actual `/game` or live-report acceptance.
+Integrated strict pixel, actual game/UI acceptance and the canonical M5 gate
+remain pending.
+
 ## Reported smell and parity questions
 
 - Reported web behavior: hitting an enemy with a Fireball after learning
@@ -50,7 +162,7 @@ system.
 | Production game journal | same service; `2026-08-22T16:44:14.673Z`, protocol 52 | `resolveBoneyardSpawnPosition` threw for radius `13.156531408429146` from `(4.738685131072998,3483.47802734375)`; `simulation.tick_failed` became an uncaught exception and systemd restarted the whole host after five seconds. | high-live |
 | Current Website source | `primary-spell-world-view.ts`, `game-protocol.ts`, `primary-spell-fire-native.ts`, `primary-spell-presentation.ts` | `fire-explosion` is protocol/state-bearing but no view constructor accepts it; Ember validation requires `life >= 1`; linear interpolation runs backward across phase `4 -> 0`; its plan reverses native draw order/scales/blends and omits the second Enhanced pass and light. | high |
 | Fresh retail instructions | pinned 4,723,200-byte `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; shared helper `0x00642BF0`; Anim constructors/ticks/draws `0x00452E20/0x00454000/0x00455A20`, `0x00453410/0x00457540/0x0045D6E0`; `ZAnimLit 0x005E03D0/0x005FD1D0/0x005E48E0` | The explosion is three independently clocked children using BadGuys 15, 401..419, and 420..433, plus two sounds and one lit-array provider. Longest visible life is 37 ticks. | high |
-| Fresh retail instructions plus live stock quad | `Ember 0x005E0BD0`, tick `0x0060D7E0`, draw `0x0060DDD0`, airborne pass `0x005E5A20`, light `0x005E5960`; live `DAT_00819978 + 0xBB4` | Mode zero remains live for `0 < life < 1`; draw is source-over body, one/two randomized additive copies, then additive orange glow; actor light radius is `[0.75,1]`, intensity `.25*min(life,1)`. The Enhanced airborne member is an untextured `38x37` registered ground quad scaled by `.75,.600000024`, not another Ember atlas sprite. | high-live |
+| Fresh retail instructions plus live stock quad | `Ember 0x005E0BD0`, tick `0x0060D7E0`, draw `0x0060DDD0`, airborne pass `0x005E5A20`, light `0x005E5960`; live `DAT_00819978 + 0xBB4` | Mode zero remains live for `0 < life < 1`; draw is source-over body, one/two randomized additive copies, then additive orange glow; actor light radius is `[0.75,1]`, intensity `.25*min(life,1)`. The Enhanced airborne member is the BadGuys-15 `38x37` registered alpha-mask ground quad scaled by `.75,.600000024`. Its diffuse-only RGB flag does not disable texture alpha; see the 2026-10-13 correction above. | high-live |
 | Full xref census | `0x00642BF0` references from `0x00466BC0`, `0x00477020`, `0x005E4CA0`, `0x005E5160`, `0x005FF8C0`, `0x0060D7E0` | Shared membership is script explosion, special enemy death, FireMissile, Fireball, maximum Ring Shockwave, and Immolate. | high |
 | Camera xref census | all ten direct references to `Region::ApplyCameraShake 0x0063EEB0` in nine functions; `native-camera-control.md` | No shared explosion, Fireball, or Ember owner writes camera magnitude. Enemy terminal presenters do; Ring of Fire separately writes `.25` on cast, before Shockwave contact. | high |
 | Settings evidence | `native-settings-system.md`; native global `Game.ZoomFX`; current `zoomEffects` consumers | The stock `ZOOM EFFECTS` preference already gates world/camera pulses. Every web scalar, displacement, and world-shake consumer funnels through the same value; the requested work is an explicit label/acceptance clarification rather than a second overlapping state bit. | high |
@@ -75,7 +187,7 @@ presentation, lights/audio, replication, interpolation, and teardown.
 | Embers construction/fan | row 17; Ember constructor; private seed | exact-port | constructor and ten pre-ticks, every registration-time contact callback, first-contact consumption, randomized cadence/RNG |
 | mode-zero Ember airborne/bounce/ground/fade | `0x0060D7E0` | exact-port through life `(0,3]` | protocol, fixed-tick, contact, terminal removal |
 | Ember main/additive/glow draws | `0x0060DDD0`, BadGuys 15 and 267..270 | exact-port | order, scales, two Enhanced copies, phase-wrap interpolation |
-| Ember Enhanced airborne pass | `0x005E5A20`, live shared quad corners `±19,±18.5` | exact-port | negative-height-only `28.5x22.2000009` untextured ground quad, `(1,.5,.25)` tint, exact height alpha, teardown |
+| Ember Enhanced airborne pass | `0x005E5A20`, live shared quad corners `±19,±18.5` | exact-port | negative-height-only `28.5x22.2000009` BadGuys-15 alpha-mask ground quad, `(1,.5,.25)` tint, exact height alpha, teardown |
 | Ember actor light | `0x005E5960` | exact-port | per-actor registration, radius/intensity/no-shadow |
 | Embers to Imps | row 19 | verified-already-at-parity; revalidate shared Ember retirement | four fragments, GoodImp/Fire sibling ownership |
 | Immolate | row 20; spent mode one | exact-port via same explosion stack | scale one, no fragments, damage/audio/VFX/light |
@@ -193,7 +305,7 @@ combat rectangle but still centers a finite search on the exterior point.
 - Each Ember is registered before its ten construction-time pre-ticks. Every
   cadence crossing therefore executes contact immediately; the first accepted
   target consumes that child and suppresses its later pre-age queries.
-- The Enhanced airborne vslot draws the shared untextured ground quad with
+- The Enhanced airborne vslot draws the shared BadGuys-15 alpha-mask ground quad with
   alpha `float32((1-height/-50*.5)*.25)`. The previous web same-record copy was
   a visible surrogate and the source of the duplicated/glitchy Ember shape.
 - Explode itself never calls the scalar camera lane. A lethal target's family
@@ -250,8 +362,9 @@ combat rectangle but still centers a finite search on the exterior point.
   consumes the child on its first accepted target.
 - Ember interpolation moves forward through the four-frame wrap. Its renderer
   owns the source-over body, two independently sampled Enhanced additive
-  copies, orange BadGuys-15 glow, and the exact live-recovered untextured
-  ground quad. The previous duplicate atlas-sprite surrogate is gone. Explosion
+  copies, orange BadGuys-15 glow, and the live-recovered registered
+  ground quad. The 2026-10-13 correction above supersedes the original
+  untextured-material claim and incomplete Enhanced-off validation. The previous duplicate atlas-sprite surrogate is gone. Explosion
   lit-array scale and provider radius retain the local Region point gain sampled
   at view birth rather than changing as the camera moves.
 - The existing persisted `zoomEffects` owner is exposed as `CAMERA SHAKE`.
