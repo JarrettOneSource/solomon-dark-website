@@ -30,7 +30,7 @@ test('all recovered set recipes select the opaque, centered 80px inventory borde
 test('ordinary, missing, unresolved and non-equipment items retain the ordinary inventory border', () => {
   for (const item of [null, ordinaryItem, { ...setItem, recipeIndex: null },
     { ...setItem, recipeIndex: -1 }, { ...setItem, recipeIndex: 999999 },
-    { ...setItem, kind: 'potion' as const }]) {
+    { ...setItem, kind: 'health-potion' as const }]) {
     assert.deepEqual(hubInventoryItemFrame('inventory', item, [24, 496, 72, 72]), {
       record: 10, rect: [24, 496, 72, 72], alpha: 0.4, tiled: false,
     })
