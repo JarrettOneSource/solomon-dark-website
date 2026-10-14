@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { input as nativeLootTestInput } from '../../../tools/native-loot-test-fixture.ts'
+import {
+  DOWSING_EQUIPMENT_RECIPES,
+  createEquipmentInventoryItem,
+} from '../core-kernels/hub-economy.ts'
 import {
   NATIVE_LOOT_OPEN_PLACEMENT,
+  materializeNativeLootScriptAction,
   nativeLootModifiers,
   type NativeLootDropSpec,
 } from '../core-kernels/native-loot.ts'
@@ -14,7 +20,7 @@ import {
   createNativeRng,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
-import { NATIVE_MINIBOSS_DIE_PROGRAM } from '../core-kernels/native-survival-miniboss.ts'
+import { NATIVE_MINIBOSS_DIE_PROGRAM, selectNativeMinibossDieReward } from '../core-kernels/native-survival-miniboss.ts'
 import { nextEnemyLootSeed, rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
 import type { BoneyardLootSnapshot } from '../protocol/game-state.ts'
 import {
@@ -53,6 +59,175 @@ const FAR: readonly BoneyardLootParticipant[] = [{
   playerId: 'far',
   position: { x: 10_000, y: 10_000 },
 }]
+
+test('ordinary named drops exclude each live direct ground recipe and reopen after removal', () => {
+  for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+    const ownedRecipeIndexes = DOWSING_EQUIPMENT_RECIPES
+      .filter(candidate => candidate !== recipe).map(candidate => candidate.sourceIndex)
+    const initial = spawnBoneyardLootSpecs(createBoneyardLootStore('named-exclusion'), [{
+      ...sack(createNativeLootItemIds(1)),
+      item: createEquipmentInventoryItem(recipe, 1),
+    }], 0).store
+    const input = namedDropInput(ownedRecipeIndexes)
+    const excluded = materializeBoneyardEnemyLoot(initial, input)
+    assert.equal(excluded.store.actors.length, 1, recipe.name)
+    assert.deepEqual(excluded.store.actors, initial.actors)
+    assert.equal(excluded.store.nextItemId, initial.nextItemId)
+    const removed = removeBoneyardLootActors(initial, [initial.actors[0]!.id])
+    const reopened = materializeBoneyardEnemyLoot(removed, input)
+    assert.equal(reopened.store.actors.length, 1, recipe.name)
+    assert.equal(reopened.store.actors[0]?.item?.recipeIndex, recipe.sourceIndex)
+  }
+})
+
+test('named Goodies exclude every direct ground recipe without adding an empty carrier', () => {
+  for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+    const initial = createBoneyardLootStore('named-goodie-exclusion', [{
+      eid: 'named-goodie', position: { x: 100, y: 200 }, rewardSeed: 10, subtype: 0,
+    }])
+    const spawned = spawnBoneyardLootSpecs(initial, [{
+      ...sack(createNativeLootItemIds(1)),
+      item: createEquipmentInventoryItem(recipe, 1),
+    }], 0).store
+    const participants = [{
+        ...FAR[0]!,
+        ownedRecipeIndexes: DOWSING_EQUIPMENT_RECIPES
+          .filter(candidate => candidate !== recipe).map(candidate => candidate.sourceIndex),
+      }]
+    const active = activateBoneyardGoodie(spawned, 'named-goodie', 'far')
+    const started = stepBoneyardLootStore(active, { participants, tick: 0 }).store
+    const completed = stepBoneyardLootStore(started, { participants, tick: 249 }).store
+    assert.equal(completed.goodies[0]?.exhausted, true)
+    assert.equal(completed.actors.length, 1, recipe.name)
+    assert.equal(completed.actors[0]?.item?.recipeIndex, recipe.sourceIndex)
+    assert.equal(completed.nextItemId, active.nextItemId)
+  }
+})
+
+function namedDropInput(ownedRecipeIndexes: readonly number[]): Parameters<typeof materializeBoneyardEnemyLoot>[1] {
+  return {
+    actorSeed: 110, advancedUnlocks: [],
+    arena: { disableMask: 0, itemLevelMaximum: 100, itemLevelMinimum: 0,
+      level: 10, mode: 1, specialSuppression: false },
+    inventoryHasHealthPotion: false, modifiers: nativeLootModifiers([]), nearbyMaskTwoCount: 0,
+    onDeathProgram: null, ownedRecipeIndexes, participantLevel: 20, participantSlot: 0,
+    placement: NATIVE_LOOT_OPEN_PLACEMENT,
+    policies: { gold: 4, item: 3, orb: 4, potion: 4, powerup: 4, specificItem: 4 },
+    position: { x: 100, y: 200 }, sceneForcesHealthPotion: false,
+    tick: 1, worldBadguyCount: 1, worldHasHealthPotionSack: false,
+  }
+}
+
+test('ground exclusion is direct-only and preserves approved Dire duplicate pools', () => {
+  const recipe = DOWSING_EQUIPMENT_RECIPES[39]!
+  const owned = DOWSING_EQUIPMENT_RECIPES.filter(candidate => candidate !== recipe)
+    .map(candidate => candidate.sourceIndex)
+  const named = createEquipmentInventoryItem(recipe, 1)
+  for (const source of ['enemy', 'script', 'goodie'] as const) {
+    const direct = spawnBoneyardLootSpecs(createBoneyardLootStore('carrier-scope'), [{
+      ...sack(createNativeLootItemIds(1)), source, activationDelayTicks: 300, item: named,
+    }], 0).store
+    assert.equal(direct.actors[0]?.alpha, 0)
+    assert.equal(materializeBoneyardEnemyLoot(direct, namedDropInput(owned)).store.actors.length, 1)
+    const dire = materializeBoneyardEnemyLoot(direct, {
+      ...namedDropInput(owned), itemRecipePool: [39],
+    }).store
+    assert.deepEqual(dire.actors.map(actor => actor.item?.recipeIndex), [39, 39])
+  }
+  for (const item of [
+    { ...named, recipeIndex: null },
+    { contents: [named], equipmentType: null, iconRecords: [70], id: 2,
+      kind: 'sack' as const, name: 'Sack', nativeSubtype: 0, nativeTypeId: 7008,
+      quantity: 1, rarity: null, recipeIndex: null },
+  ]) {
+    const nested = spawnBoneyardLootSpecs(createBoneyardLootStore('carrier-scope'), [{
+      ...sack(createNativeLootItemIds(1)), item,
+    }], 0).store
+    const result = materializeBoneyardEnemyLoot(nested, namedDropInput(owned)).store
+    assert.equal(result.actors.length, 2)
+    assert.equal(result.actors[1]?.item?.recipeIndex, 39)
+  }
+  for (const nativeTypeId of [2011, 2012, 2038] as const) {
+    const spawned = spawnBoneyardLootSpecs(createBoneyardLootStore('other-carrier'), [{
+      ...sack(createNativeLootItemIds(1)), item: named,
+    }], 0).store
+    const otherCarrier = {
+      ...spawned,
+      actors: spawned.actors.map(actor => ({ ...actor, nativeTypeId })),
+    }
+    const result = materializeBoneyardEnemyLoot(otherCarrier, namedDropInput(owned)).store
+    assert.equal(result.actors.length, 2, `native carrier ${nativeTypeId}`)
+    assert.equal(result.actors[1]?.item?.recipeIndex, 39)
+  }
+})
+
+test('a linked Die script sees admitted ordinary items but not allocator-rejected items', () => {
+  const owned = DOWSING_EQUIPMENT_RECIPES.filter(recipe => recipe.sourceIndex !== 39)
+    .map(recipe => recipe.sourceIndex)
+  const initial = { ...createBoneyardLootStore('same-death'), sharedRng: createNativeRng(0) }
+  const input = { ...namedDropInput(owned), onDeathProgram: 'miniboss-die' as const }
+  const ordinary = materializeBoneyardEnemyLoot(initial, { ...input, onDeathProgram: null })
+  const result = materializeBoneyardEnemyLoot(initial, input)
+  assert.equal(result.store.actors.length, 1)
+  assert.equal(result.store.actors[0]?.item?.recipeIndex, 39)
+  assert.equal(result.store.actors[0]?.source, 'enemy')
+  assert.deepEqual(result.store.actors, ordinary.store.actors)
+  assert.equal(result.store.nextItemId, ordinary.store.nextItemId)
+  assert.equal(result.store.nextActorId, ordinary.store.nextActorId)
+  assert.equal(result.rejectedCount, 0)
+  const selected = selectNativeMinibossDieReward(ordinary.store.sharedRng)
+  assert.equal(selected.action.kind, 'drop-random-item')
+  const scriptIds = createNativeLootItemIds(ordinary.store.nextItemId)
+  const expectedScript = materializeNativeLootScriptAction(nativeLootTestInput({
+    arena: { ...input.arena, lastSuccessfulItemLevel: ordinary.store.lastSuccessfulItemLevel },
+    groundRecipeIndexes: [39], itemIds: scriptIds,
+    participant: { advancedUnlocks: [], level: 20, modifiers: input.modifiers,
+      ownedRecipeIndexes: owned, slot: 0 },
+    sharedRng: selected.rngState,
+  }), selected.action)
+  assert.deepEqual(result.store.sharedRng, expectedScript.sharedRng)
+  assert.equal(result.store.nextItemId, scriptIds.peek())
+  let ordinal = 500
+  const external = materializeBoneyardEnemyLoot(initial, input, managerLane => ({
+    managerLane, registrationOrdinal: ordinal++,
+  }))
+  assert.equal(ordinal, 501)
+  assert.deepEqual(external.store.actors[0]?.painterRegistration,
+    { managerLane: 'actor', registrationOrdinal: 500 })
+  assert.deepEqual(external.store.sharedRng, result.store.sharedRng)
+  const nearFull = spawnBoneyardLootSpecs(initial, Array.from({ length: 2_046 }, () => gold(1)), 0).store
+  const near = materializeBoneyardEnemyLoot(nearFull, input)
+  const nearOrdinary = materializeBoneyardEnemyLoot(nearFull, { ...input, onDeathProgram: null })
+  assert.equal(near.rejectedCount, 0)
+  assert.equal(near.store.actors.length, 2_047)
+  assert.deepEqual(near.store.actors, nearOrdinary.store.actors)
+  assert.equal(near.store.nextActorId, nearOrdinary.store.nextActorId)
+  assert.equal(near.store.actors.at(-1)?.painterRegistration.registrationOrdinal, 2_046)
+  assert.deepEqual(near.store.sharedRng, result.store.sharedRng)
+  const full = spawnBoneyardLootSpecs(initial, Array.from({ length: 2_047 }, () => gold(1)), 0).store
+  let rejectedRegistrations = 0
+  const rejected = materializeBoneyardEnemyLoot(full, input, managerLane => ({
+    managerLane, registrationOrdinal: rejectedRegistrations++,
+  }))
+  assert.equal(rejected.rejectedCount, 2)
+  assert.equal(rejectedRegistrations, 0)
+  assert.deepEqual(rejected.store.actors, full.actors)
+  assert.ok(rejected.store.nextItemId > ordinary.store.nextItemId)
+})
+
+test('a named item inside an earlier ground Goodie bundle does not exclude a later Goodie', () => {
+  const participants = [{ ...FAR[0]!, ownedRecipeIndexes: DOWSING_EQUIPMENT_RECIPES
+    .filter(recipe => recipe.sourceIndex !== 39).map(recipe => recipe.sourceIndex) }]
+  let store = createBoneyardLootStore('goodie-direct-only', ['first', 'second'].map(eid => ({
+    eid, position: { x: 100, y: 200 }, rewardSeed: 10, subtype: 0,
+  })))
+  store = activateBoneyardGoodie(activateBoneyardGoodie(store, 'first', 'far'), 'second', 'far')
+  store = stepBoneyardLootStore(store, { participants, tick: 0 }).store
+  store = stepBoneyardLootStore(store, { participants, tick: 249 }).store
+  assert.equal(store.actors.length, 2)
+  assert.deepEqual(store.actors.map(actor => actor.item?.recipeIndex), [null, null])
+  assert.deepEqual(store.actors.map(actor => actor.item?.contents?.[0]?.recipeIndex), [39, 39])
+})
 
 test('the authoritative loot stream owns stable actor seed writes', () => {
   const initial = createBoneyardLootStore('seed-writers')

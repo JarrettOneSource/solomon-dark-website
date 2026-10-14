@@ -9,6 +9,11 @@ import { BONEYARD_ARENA_SEAL_TICKS, startBoneyardArenaTransition } from '../core
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import {
+  createEquipmentInventoryItem, createHubEconomy, DOWSING_EQUIPMENT_RECIPES,
+  insertLootInventoryItem, type HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
+import { NATIVE_LOOT_OPEN_PLACEMENT, nativeLootModifiers } from '../core-kernels/native-loot.ts'
 import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
@@ -41,7 +46,10 @@ import { boneyardEnemyCollisionRadius } from './enemies/model.ts'
 import { BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE, NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS } from './enemies/programs.ts'
 import { NATIVE_BADGUY_NAVIGATION_CLEARANCE, findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { canPlaceBoneyardBody, resolveBoneyardMovement } from './boneyard-collision.ts'
-import { spawnBoneyardCustomLootItems } from './boneyard-loot-store.ts'
+import {
+  activateBoneyardGoodie, createBoneyardLootStore, spawnBoneyardCustomLootItems,
+  stepBoneyardLootStore,
+} from './boneyard-loot-store.ts'
 
 function movementInput(x: number, y: number) {
   return {
@@ -234,6 +242,130 @@ test('emergency Potion admission counts the population after the source death', 
     if (expectedPotions > 0) assert.equal(potions[0]?.item?.nativeSubtype, 0)
   }
 })
+
+test('same-tick named pickups become recursively owned only by their receiving reward participant', () => {
+  for (const [nested, full] of [[false, false], [true, false], [false, true], [true, true]]) {
+    for (const receiver of ['host', 'guest'] as const) {
+      const loaded = gatedBoneyard()
+      loaded.scene.fences = []
+      let world = {
+        ...createBoneyardWorld(loaded),
+        arenaTransition: null, encounter: null, waves: null, lanternPosition: null,
+      } as ReturnType<typeof createBoneyardWorld>
+      const host = spawnPlayerCharacterInBoneyard({
+        discipline: 'arcane', displayName: 'Host', element: 'fire',
+      }, world)
+      const players = { host, guest: { ...host, position: { x: 100, y: 100 } } }
+      const combat = Object.fromEntries(Object.keys(players).map(playerId => [playerId, {
+        alive: true, collisionEnabled: true, eligible: true, movementScale: 1, level: 20,
+        ...namedPickupOwnershipFixture(full ? 2_048 : 46),
+      }]))
+      const step = (source: typeof world, tick: number, intents: readonly BoneyardEnemySpawnIntent[] = []) => (
+        stepBoneyardWorldTick(source, players, {}, combat, tick, undefined, undefined, {}, [], intents)
+      )
+      world = step(world, 0, [{
+        enemyToken: 'SKELETON', flags: [], id: 1, locationPolicy: 'anywhere',
+        nativeTypeId: 1001, position: { x: 400, y: 400 }, positionPolicy: 'direct',
+        spawnTick: 0, waveOrdinal: 1,
+      }]).world
+      world = { ...world, enemies: { ...world.enemies, actors: world.enemies.actors.map(actor => ({
+        ...actor,
+        config: { ...actor.config, recipeUid: 10000, onDeathProgram: null,
+          lootPolicies: { gold: 4, item: 3, orb: 4, potion: 4, powerup: 4, specificItem: 4 } },
+      })) } }
+      const enemy = world.enemies.actors[0]!
+      const death = damageBoneyardEnemy(world.enemies, {
+        actorId: enemy.id, amount: enemy.currentHealth, sourcePlayerId: 'host', tick: 0,
+      })
+      assert.equal(death.killed, true)
+      world = { ...world, enemies: death.store }
+      let checked = false
+      for (let tick = 1; tick <= 600; tick += 1) {
+        const baseline = step(world, tick)
+        if (baseline.rewards.length === 0) {
+          world = baseline.world
+          continue
+        }
+        assert.equal(baseline.world.loot.actors[0]?.item?.recipeIndex, 39)
+        const ring = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[39]!, 100)
+        const item: HubInventoryItem = nested ? {
+          contents: [ring], equipmentType: null, iconRecords: [70], id: 101,
+          kind: 'sack', name: 'Sack', nativeSubtype: 0, nativeTypeId: 7008,
+          quantity: 1, rarity: null, recipeIndex: null,
+        } : ring
+        const loot = spawnBoneyardCustomLootItems(world.loot, [item], players[receiver].position, tick).store
+        const result = step({ ...world, loot }, tick)
+        assert.equal(result.lootPickups.length, 1)
+        assert.equal(result.lootPickups[0]?.playerId, receiver)
+        assert.deepEqual(result.rewards.map(reward => reward.playerId), ['host'])
+        assert.deepEqual(result.world.loot.actors.map(actor => actor.item?.recipeIndex),
+          receiver === 'host' && !full ? [] : [39], `receiver=${receiver}, nested=${nested}, full=${full}`)
+        checked = true
+        break
+      }
+      assert.equal(checked, true, 'the dying enemy must retire within the fixture window')
+    }
+  }
+})
+
+test('Goodie catch-up projects only admitted recursive pickups in participant and item order', () => {
+  for (const nested of [false, true]) {
+    for (const receiver of ['host', 'guest']) {
+      for (const [rootSlots, fillerFirst] of [[46, false], [2_048, false], [2_047, true], [2_047, false]] as const) {
+        const participants = ['host', 'guest'].map(playerId => ({
+          advancedUnlocks: [], alive: true, connected: true, headingIndex: 0, level: 20,
+          modifiers: nativeLootModifiers([]), playerId,
+          position: playerId === receiver ? { x: 0, y: 0 } : { x: 100, y: 100 },
+          ...namedPickupOwnershipFixture(rootSlots),
+        }))
+        const context = { participants, placement: NATIVE_LOOT_OPEN_PLACEMENT }
+        let store = activateBoneyardGoodie(createBoneyardLootStore('pickup-catch-up', [{
+          eid: 'chest', position: { x: 300, y: 300 }, rewardSeed: 10, subtype: 0,
+        }]), 'chest', 'host')
+        store = stepBoneyardLootStore(store, { ...context, tick: 0 }).store
+        const ring = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[39]!, 3_000)
+        const item: HubInventoryItem = nested ? {
+          contents: [ring], equipmentType: null, iconRecords: [70], id: 3_001,
+          kind: 'sack', name: 'Sack', nativeSubtype: 0, nativeTypeId: 7008,
+          quantity: 1, rarity: null, recipeIndex: null,
+        } : ring
+        const filler = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, 3_002)
+        const items = rootSlots === 2_047 ? fillerFirst ? [filler, item] : [item, filler] : [item]
+        store = spawnBoneyardCustomLootItems(store, items, { x: 0, y: 0 }, 1).store
+        const result = stepBoneyardLootStore(store, { ...context, tick: 249 })
+        assert.equal(result.pickups.length, items.length)
+        assert.ok(result.pickups.every(pickup => pickup.playerId === receiver && pickup.tick === 1))
+        const admitted = rootSlots < 2_048 && !(rootSlots === 2_047 && fillerFirst)
+        const shouldExclude = receiver === 'host' && admitted
+        assert.deepEqual(result.store.actors.map(actor => actor.item?.contents?.[0]?.recipeIndex),
+          shouldExclude ? [] : [39], `nested=${nested}, receiver=${receiver}, rootSlots=${rootSlots}, fillerFirst=${fillerFirst}`)
+      }
+    }
+  }
+})
+
+function namedPickupOwnershipFixture(rootSlots: number) {
+  const recipes = DOWSING_EQUIPMENT_RECIPES.filter(recipe => recipe.sourceIndex !== 39)
+  const source = {
+    ...createHubEconomy(0), nextItemId: 4_000,
+    backpack: Array.from({ length: rootSlots }, (_, index) => ({
+      ...createEquipmentInventoryItem(recipes[index % recipes.length]!, index + 1),
+      inventorySlot: index,
+    })),
+  }
+  const recipeIndexes = (items: readonly HubInventoryItem[]): number[] => items.flatMap(item => [
+    ...(item.recipeIndex === null ? [] : [item.recipeIndex]),
+    ...recipeIndexes(item.contents ?? []),
+  ])
+  return {
+    ownedRecipeIndexes: recipeIndexes(source.backpack),
+    ownedRecipeIndexesAfterPickups: (items: readonly HubInventoryItem[]) => {
+      let projected = source as ReturnType<typeof createHubEconomy>
+      for (const item of items) projected = insertLootInventoryItem(projected, item).state
+      return recipeIndexes(projected.backpack)
+    },
+  }
+}
 
 test('a wizard pushes both native gate leaves aside and crosses the opening', () => {
   let world = createBoneyardWorld(gatedBoneyard())

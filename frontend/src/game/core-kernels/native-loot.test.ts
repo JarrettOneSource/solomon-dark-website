@@ -567,6 +567,43 @@ test('native item modes honor recipe rarity, level bounds and the ownership filt
   assert.deepEqual(goodie.items, [])
 })
 
+test('ground named exclusion preserves every ordinary mode and RNG contract', () => {
+  const recipes = DOWSING_EQUIPMENT_RECIPES.map(recipe => recipe.sourceIndex)
+  for (const mode of [0, 1, 2, 3, 4]) {
+    for (const arenaMode of [0, 1]) {
+      for (const seed of [0, 1, 4, 6, 10, 11, 77, 991]) {
+        const owned = input({ sharedRng: createNativeRng(seed) })
+        const ground = input({ sharedRng: createNativeRng(seed), groundRecipeIndexes: recipes })
+        const ownedResult = materializeNativeLootScriptAction({
+          ...owned, arena: { ...owned.arena, mode: arenaMode },
+          participant: { ...owned.participant, ownedRecipeIndexes: recipes },
+        }, { kind: 'drop-random-item', mode })
+        const groundResult = materializeNativeLootScriptAction({
+          ...ground, arena: { ...ground.arena, mode: arenaMode },
+        }, { kind: 'drop-random-item', mode })
+        assert.deepEqual(groundResult, ownedResult, `mode=${mode}, arena=${arenaMode}, seed=${seed}`)
+      }
+    }
+  }
+})
+
+test('explicit item scripts and approved Dire pools retain their duplicate contracts', () => {
+  const source = input({ groundRecipeIndexes: [39] })
+  const explicit = materializeNativeLootScriptAction({
+    ...source, participant: { ...source.participant, ownedRecipeIndexes: [39] },
+  }, { kind: 'drop-item', recipeIndex: 39 })
+  assert.equal(explicit.drops[0]?.item?.recipeIndex, 39)
+  for (const ownedRecipeIndexes of [[], [39]]) {
+    const base = input({ groundRecipeIndexes: [39] })
+    const dire = rollNativeEnemyLoot({
+      ...base, itemRecipePool: [39],
+      participant: { ...base.participant, ownedRecipeIndexes },
+      policies: { ...ALL_DISABLED, item: 3, specificItem: 4 },
+    })
+    assert.equal(dire.drops[0]?.item?.recipeIndex, 39)
+  }
+})
+
 test('Gold Charm exceeds eight from wave four while all amounts eight and above retain tier-three art', () => {
   const charmed = nativeLootModifiers([4])
   const totals = [

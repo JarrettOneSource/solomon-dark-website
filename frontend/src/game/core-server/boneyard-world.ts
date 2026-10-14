@@ -23,7 +23,7 @@ import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
 import { createBoneyardEnemyVisibility } from './boneyard-enemy-visibility.ts'
-import { materializeBoneyardEnemyLoot, retireBoneyardGoodiesOutsideBounds, spawnBoneyardCustomLootItems, stepBoneyardLootStore } from './boneyard-loot-store.ts'
+import { boneyardLootParticipantRecipeIndexes, materializeBoneyardEnemyLoot, retireBoneyardGoodiesOutsideBounds, spawnBoneyardCustomLootItems, stepBoneyardLootStore } from './boneyard-loot-store.ts'
 import { direBossItemRecipePool } from '../core-kernels/dire-boss-loot.ts'
 import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
 import type { BoneyardLightEnvironment } from './boneyard-world-light.ts'
@@ -210,6 +210,7 @@ export function stepBoneyardWorldTick(
       level: combat?.level ?? 1,
       modifiers: combat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
       ownedRecipeIndexes: combat?.ownedRecipeIndexes ?? [],
+      ownedRecipeIndexesAfterPickups: combat?.ownedRecipeIndexesAfterPickups,
       playerId,
       position: player.position,
     }
@@ -609,7 +610,10 @@ export function stepBoneyardWorldTick(
         reward.lootSource.position,
       ),
       onDeathProgram: reward.lootSource.onDeathProgram,
-      ownedRecipeIndexes: rewardCombat?.ownedRecipeIndexes ?? [],
+      ownedRecipeIndexes: boneyardLootParticipantRecipeIndexes(
+        lootParticipants.find(participant => participant.playerId === reward.playerId),
+        lootStep.pickups,
+      ),
       participantLevel: rewardCombat?.level ?? 1,
       participantSlot: reward.lootSource.participantSlot,
       placement: createNativeLootPlacement(

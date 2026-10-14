@@ -1,5 +1,76 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-10-14 — Named-item availability and direct ground-carrier exclusion
+
+### Reopened boundary and native evidence
+
+The Smartest Ring availability question reopens the shared named-item exclusion
+predicate, not loot rarity or guaranteed chest rewards. Retail 0.72.5
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`
+was read through the existing M2 read-only Ghidra replica wrapper. Fresh raw
+instructions agree with `0x005CB050`: common recipes bypass exclusion;
+Rare/Epic recipes search recursive profile inventory/equipment and storage.
+With a nonnull world, it additionally scans the world's live type-2013 actors,
+requiring a nonnull item at `+0x148` whose direct recipe UID at `+0x18` matches.
+It does not recurse into the contents of a ground Item_Sack. This differs from
+the recursive inventory search and must not be widened by a shared flattener.
+
+All eleven direct xrefs belong to three functions: five in enemy item factory
+`0x0046A360`, five in named selector `0x0046BDE0`, and one in Dowsing candidate
+filter `0x00554A10`. The first two use the arena/world argument; Dowsing uses
+null. The existing complete 47-recipe catalog is retained, including Epic row
+39 Smartest Ring. No recipe identity, rarity, level, effects or RNG algorithm
+is being re-extracted or changed by this reopening.
+
+The pre-repair Website world callers supplied only participant-owned recipes, omitting
+the direct ground-carrier scan. The old closure recorded inventory exclusion
+without draining this world-dependent branch. A live uncollected ordinary
+named drop can therefore remain eligible again. This is separate from the
+unreproduced historical empty-chest occurrence and does not justify making a
+second owned Smartest Ring eligible.
+
+### Membership and local implementation
+
+Independent world-level reproduction also exposed a same-tick ownership gap:
+the world removes picked-up carriers before processing enemy death rewards,
+but the simulation inserts the returned items into economy only afterward.
+The native predicate reads live profile ownership at each call. An ephemeral
+economy-owned resolver now projects that participant's pending Sack
+items through the existing sequential `insertLootInventoryItem` admission rule
+before returning recipe indexes. Rejected full-backpack inserts do not become
+owned. The same boundary covers multi-tick Goodie catch-up; direct ground
+contents remain nonrecursive. This adds no persisted state or protocol field.
+Existing rejected-pickup carrier loss is a separate transfer issue and is not
+silently altered by this eligibility correction.
+
+| Member | Current disposition | Required proof |
+| --- | --- | --- |
+| All 47 Rare/Epic recipes across six classes | locally implemented; release gate pending | each row excluded by an existing direct carrier, eligible after removal |
+| Recursive backpack, nested Sack, equipment and storage ownership | verified-already-at-parity | preserve existing collection and kernel ownership tests |
+| Ordinary enemy selection modes and native random-item script | locally implemented; release gate pending | world-ground identity reaches the common selector; generated placeholders remain eligible |
+| Goodie selector 10 | locally implemented; release gate pending | direct ground recipe exhausts a one-remaining pool; no new carrier or duplicate |
+| Ground Item_Sack contents, generated items, other carrier families | verified-already-at-parity / negative controls | no recursive ground scan and no false named exclusion |
+| Dowsing null-world path | verified-already-at-parity | no world scan added to its owned-item predicate |
+| Approved Dire associated-item pools | out-of-system, explicit Website extension | preserve credited-player missing-first selection and exhausted-pool duplicate fallback |
+| Same-death ordinary/script ordering | recovered and locally implemented; release gate pending | native queues Die script before synchronous ordinary loot; script observes admitted ordinary carrier, not allocator-rejected proposal |
+| Same-tick and multi-tick pickup-to-owned transition | locally implemented; release gate pending | 24 cases cover receiving participant, nested items, full backpack and sequential admission order |
+| Nondefault arena level limits and selector-99 global gate | out-of-system for this predicate repair; prior recovered-pending-port findings retained | no speculative authored-script integration or special global semantics |
+
+Native death owner `0x00481A39` queues the Die trigger through `0x00686E70`,
+then `0x00481A43` calls ordinary loot synchronously; ordinary carrier registration
+at `0x0063F6D0` completes before return. The Website now admits ordinary carriers
+before evaluating the queued linked script. Full and near-full world-ID tests
+preserve allocation rejection, item IDs, painter order and shared RNG state.
+
+Independent source review completed after reproducing and fixing the ownership
+transition gap. Its 7,896 individual-recipe/mode/arena/seed comparisons passed,
+as did the 8 same-tick and 16 catch-up/admission-order scenarios. Direct-ground
+exclusion covers all 47 recipes; controls retain nonrecursive ground bundles,
+generated items, non-2013 carriers, explicit item scripts and approved Dire pools.
+Final exact-revision build and browser acceptance are recorded outside this
+source ledger. No historical report occurrence, clean-stock runtime, required
+M5 full gate or publication is claimed by this local implementation.
+
 ## 2026-10-08 — Report 102: empty chest investigation
 
 ### Evidence and current disposition

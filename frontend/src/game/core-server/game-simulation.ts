@@ -1,7 +1,7 @@
 import { PLAYER_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { createNativeScreenFlashes, createNativeScreenFlashWriter, resetNativeScreenFlashes, type NativeScreenFlashState, type WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
-import { renameInventorySack } from '../core-kernels/hub-economy.ts'
+import { insertLootInventoryItem, renameInventorySack } from '../core-kernels/hub-economy.ts'
 import { finalizeBoneyardPuppetQueries } from './enemies/puppet-hits.ts'
 import type { BoastDefinition, BoastResolver, BoastSelection } from '../core-kernels/boast.ts'
 import { boastUsesRandomSkillChoices, failBoast, scoreBoast, succeedBoast } from '../core-kernels/boast.ts'
@@ -2284,6 +2284,11 @@ function stepGameSimulationTickWithScreenFlashes(
             }),
             movementScale: playerEntityMovementScale(state.playerEntities, playerId),
             ownedRecipeIndexes: economyOwnedRecipeIndexes(economy),
+            ownedRecipeIndexesAfterPickups: (items: readonly HubInventoryItem[]) => {
+              let projected = economy
+              for (const item of items) projected = insertLootInventoryItem(projected, item).state
+              return economyOwnedRecipeIndexes(projected)
+            },
             advancedUnlocks: skillBook.advancedUnlocks,
           }]
         })),
