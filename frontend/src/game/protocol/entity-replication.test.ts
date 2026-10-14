@@ -1,3 +1,5 @@
+import '../host/flame-presentation-history.test.ts'
+import './flame-presentation-history.test.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BONEYARD_MAGGOT_ENTITY_REGISTRATION, boneyardMaggotDescriptor, boneyardMaggotSample, materializeBoneyardMaggot } from './boneyard-maggot-replication.ts'
@@ -45,6 +47,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
   }), 'wizard')
   return {
     ...base,
+    flamePresentation: { kind: 'reset', epoch: 1, worldKey: `boneyard:${runId}`, throughTick: base.tick, births: [] },
     run: {
       eligiblePlayerIds: ['wizard'],
       gameOverEventId: 0,
@@ -155,6 +158,7 @@ test('three simultaneous Faculty deaths survive complete raw and compact transpo
   const world = { ...source.world, enemyEvents: [], mageLightningPulses: [], puppetHits: [] }
   const snapshotAt = (population: BoneyardEnemyStore): GameSnapshot => ({
     ...source, tick: population.lastStepTick,
+    flamePresentation: { kind: 'reset', epoch: 1, worldKey: 'boneyard:faculty-population', throughTick: population.lastStepTick, births: [] },
     world: { ...world, enemies: projectBoneyardEnemies(population, population.lastStepTick),
       deathEffects: projectBoneyardEnemyDeathEffects(population) },
   })

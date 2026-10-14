@@ -1,3 +1,4 @@
+import { finalizeHubFlameLashVisuals } from '../core-kernels/native-weld-flame-birth.ts'
 import { PLAYER_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { createNativeScreenFlashes, createNativeScreenFlashWriter, resetNativeScreenFlashes, type NativeScreenFlashState, type WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
@@ -3079,6 +3080,27 @@ function finishGameSimulationTick(
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
     spellObstructionPoint,
+    playerLightRegistration: (playerId) => {
+      const index = playerEntities.identities.findIndex(identity => identity.playerId === playerId)
+      const registration = playerEntities.lightings[index]?.lightRegistration
+      if (!registration) throw new Error('Flame factory lost its player light registration')
+      return registration
+    },
+    flameLashViewBounds: (playerId) => {
+      const player = resolvedPlayers[playerId]!
+      const bounds = result.world.kind === 'boneyard'
+        ? result.world.tutorial !== null
+          ? nativeTutorialCameraBounds(result.world.tutorial) ?? result.world.bounds
+          : result.world.arenaTransition?.cameraBounds ?? result.world.bounds
+        : (() => {
+            const definition = HUB_REGION_DEFINITIONS[result.world.participants[playerId]?.region ?? 'courtyard']
+            return { x: 0, y: 0, w: definition.width, h: definition.height }
+          })()
+      const input = primaryInputs[playerId] ?? createIdlePlayerCharacterInput()
+      return nativePrimaryViewBounds({ bounds, focus: player.position, padding: 25,
+        scale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
+        viewportHeight: input.viewportHeight, viewportWidth: input.viewportWidth })
+    },
     spellRangeEndpoint: (playerId, start, direction, padding) => {
       const bounds = result.world.kind === 'boneyard'
         ? result.world.tutorial !== null
@@ -3446,6 +3468,11 @@ function finishGameSimulationTick(
         effect.patch,
       )
     }
+  }
+  if (world.kind === 'hub') {
+    const flame = finalizeHubFlameLashVisuals(primarySpells, cast.channelEmissions, tick,
+      combatRng, previous.enhancedEffects, worldManagerOrder.register)
+    primarySpells = flame.spells; combatRng = flame.rng
   }
   const finalizedAirWaterVisuals = finalizeAirWaterPlayerVisualActors(
     primarySpells,

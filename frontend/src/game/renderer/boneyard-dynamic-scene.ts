@@ -346,6 +346,7 @@ export class BoneyardDynamicScene {
       pointGainAt,
       puppetHits,
       snapshot.enhancedEffects,
+      { x: weatherBounds.x, y: weatherBounds.y, width: weatherBounds.w, height: weatherBounds.h },
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,

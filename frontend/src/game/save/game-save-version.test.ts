@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import './flame-save-migration.test.ts'
 
 import { createGameSimulation, getPlayerEconomy } from '../core-server/game-simulation.ts'
 import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'

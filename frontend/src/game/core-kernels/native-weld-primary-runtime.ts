@@ -165,6 +165,7 @@ interface NativeWeldOwnedActorBase {
 }
 
 export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
+  readonly flameVisual?: import('./native-weld-flame-state.ts').NativeFlameChannelVisual
   readonly enhancedEffects: boolean
   readonly buildId: NativeWeldBeamBuildId
   readonly endpoint: Vector2 | null
@@ -818,6 +819,7 @@ export function stepNativeWeldProjectile(
 }
 
 export function createNativeWeldChannelActor(input: {
+  readonly flameVisual?: import('./native-weld-flame-state.ts').NativeFlameChannelVisual
   readonly enhancedEffects?: boolean
   readonly buildId: NativeWeldBeamBuildId
   readonly direction: Vector2
@@ -833,6 +835,7 @@ export function createNativeWeldChannelActor(input: {
   readonly worldKey: string
 }): NativeWeldChannelActorState {
   return Object.freeze({
+    ...(input.buildId === 1003 ? { flameVisual: input.flameVisual ?? Object.freeze({ kind: 'legacy-suppressed' as const }) } : {}),
     ageTicks: 0,
     birthTick: input.tick,
     buildId: input.buildId,

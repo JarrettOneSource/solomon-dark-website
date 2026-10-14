@@ -1,3 +1,5 @@
+import { gameRunWorldTick } from '../core-kernels/game-run.ts'
+import { createRetainedFlamePresentation } from './flame-presentation.ts'
 import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { playerCharacterFacing } from '../core-kernels/player-character.ts'
@@ -103,6 +105,7 @@ export function createHubPresentationTimeline(
     snapshot: clientHubSnapshot(options.initialSnapshot),
   }]
   const primarySpellPresentation = createRetainedBoneyardPrimarySpellPresentation()
+  const flamePresentation = createRetainedFlamePresentation(options.initialSnapshot.flamePresentation)
 
   return {
     latest: () => history.at(-1)!.snapshot,
@@ -110,6 +113,13 @@ export function createHubPresentationTimeline(
       requireFinite(receivedAtMs, 'receivedAtMs')
       const clientSnapshot = clientHubSnapshot(snapshot)
       const latest = history.at(-1)!
+      const replaced = flamePresentation.accept(clientSnapshot.flamePresentation,
+        gameRunWorldTick(history[0]!.snapshot.tick, history[0]!.snapshot.run))
+      if (replaced) {
+        history.splice(0, history.length, { presentationStartTick: clientSnapshot.tick,
+          receivedAtMs, snapshot: clientSnapshot })
+        return
+      }
       if (clientSnapshot.tick < latest.snapshot.tick) return
       if (clientSnapshot.tick === latest.snapshot.tick) {
         history[history.length - 1] = {
@@ -146,6 +156,12 @@ export function createHubPresentationTimeline(
             primarySpellPresentation,
           )
 
+      const cameras = flamePresentation.cameraDisplacements(frame.primarySpells,
+        Math.min(targetTick, gameRunWorldTick(newest.snapshot.tick, newest.snapshot.run)), frame.tick)
+      if (newest.snapshot.flamePresentation) frame.flamePresentationEpoch = newest.snapshot.flamePresentation.epoch
+      if (cameras.length) frame.flameCameraDisplacements = cameras
+      frame.primarySpells = flamePresentation.sample(frame.primarySpells,
+        Math.min(targetTick, gameRunWorldTick(newest.snapshot.tick, newest.snapshot.run)))
       const localPlayer = newest.snapshot.players[options.localPlayerId]
       if (localPlayer) {
         frame.players = {

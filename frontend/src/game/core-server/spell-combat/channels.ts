@@ -8,6 +8,7 @@ import {
   createNativeWeldBlizzardContactGlow,
   nativeWeldBlizzardContactPolygon,
 } from '../../core-kernels/native-weld-blizzard.ts'
+import { createNativeFlameLashFactory } from '../../core-kernels/native-weld-flame-birth.ts'
 import { createNativeWeldFlameLashFade } from '../../core-kernels/native-weld-flame-lash.ts'
 import {
   createNativeWeldBlizzardChainEffects,
@@ -189,18 +190,37 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
             const born = createNativeWeldFlameLashFade({
               enhancedEffects: work.enhancedEffects, direction, id: work.nextSpellId,
               origin, ownerId: emission.ownerId, rng: work.rng, tick: work.tick,
-              variant, vector: profile.vector.values, worldKey: work.worldKey,
+              alpha: variant === 'endpoint' && emission.underpowered ? .5 : 1,
+              registerWorldPainter: work.registerCombatPainter, variant, vector: profile.vector.values, worldKey: work.worldKey,
             })
             work.rng = born.rng
             work.ownedTransients.push(work.enrollCombatActor(born.actor))
             work.nextSpellId += 1
           }
           const publishMain = (): void => {
-            if (emission.endpoint !== null) fade('endpoint', emission.endpoint, emission.direction)
-            // Factory source-flare flag is independent of endpoint/target/weakness.
-            fade('source', emission.origin, emission.direction)
-            if (mainPresentation !== undefined) {
-              work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
+            const endpoint = mainPresentation?.preclipEndpoint ?? emission.endpoint
+            if (endpoint !== null && endpoint.x > -9999) fade('endpoint', endpoint, emission.direction)
+            if (mainPresentation?.nativeGeometry && mainPresentation.creatorRegistration
+              && mainPresentation.cameraDisplacement !== undefined) {
+              const factory = createNativeFlameLashFactory({
+                channel: { enhancedEffects: work.enhancedEffects, buildId: 1003,
+                  direction: emission.direction, endpoint: emission.endpoint, id: emission.id,
+                  midpoint: mainPresentation.midpoint, origin: emission.origin, ownerId: emission.ownerId,
+                  targetId: mainPresentation.targetId, tick: work.tick, underpowered: emission.underpowered,
+                  vector: profile.vector.values, worldKey: work.worldKey },
+                sourceFadeId: work.nextSpellId, geometry: mainPresentation.nativeGeometry,
+                role: 'main', width: emission.underpowered ? .75 : 1,
+                cameraDisplacement: mainPresentation.cameraDisplacement,
+                creatorRegistration: mainPresentation.creatorRegistration, miscAppendOrdinal: 0,
+                registerWorldPainter: work.registerCombatPainter, rng: work.rng,
+              })
+              work.rng = factory.rng
+              work.ownedTransients.push(factory.source, factory.channel)
+              work.nextSpellId += 1
+            } else {
+              // Compatibility fixtures/old non-retained emissions cannot invent ribbon samples.
+              fade('source', emission.origin, emission.direction)
+              if (mainPresentation !== undefined) work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
                 enhancedEffects: work.enhancedEffects, buildId: 1003,
                 direction: emission.direction, endpoint: emission.endpoint, id: emission.id,
                 midpoint: mainPresentation.midpoint, origin: emission.origin, ownerId: emission.ownerId,
@@ -217,6 +237,7 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
           let target: PrimarySpellTarget | null = first
           let damage = emission.damage
           let previousPoint = emission.origin
+          let previousNativePoint = mainPresentation?.nativeGeometry?.end ?? emission.origin
           const fragments = Math.max(0, Math.trunc(profile.vector.values[7]!))
           for (let hop = 0; target && hop <= profile.vector.values[2]!; hop += 1) {
             const row = primaryTargetRows(work.enemies).find(({ target: candidate }) => candidate.id === target!.id)
@@ -225,18 +246,44 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
             const point = primarySpellTargetPoint(row.target)
             const direction = normalizedDifference(previousPoint, point)
             if (hop > 0) {
-              // Native 0x5413B7 width draw precedes factory/source flare and contact.
-              work.rng = drawNativeFloat(work.rng, Math.fround(0.3000000119)).state
-              fade('source', previousPoint, direction)
-              const geometry = airPrimaryBoltGeometry(previousPoint, direction, point)
-              work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
-                enhancedEffects: work.enhancedEffects, buildId: 1003, direction,
-                endpoint: geometry.endpoint, id: work.nextSpellId, midpoint: geometry.midpoint,
-                origin: previousPoint, ownerId: emission.ownerId, targetId: row.target.id,
-                tick: work.tick, underpowered: false, vector: profile.vector.values, worldKey: work.worldKey,
-              })))
-              work.nextSpellId += 1
-              fade('chain', point, direction)
+              // Width precedes source five words, short width, path, and chain fade six words.
+              const width = drawNativeFloat(work.rng, Math.fround(.30000001192092896))
+              work.rng = width.state
+              const legacyGeometry = airPrimaryBoltGeometry(previousPoint, direction, point)
+              if (mainPresentation?.nativeGeometry && mainPresentation.creatorRegistration) {
+                const offset = mainPresentation.nativeGeometry.offset
+                const root = row.target.position
+                const factory = createNativeFlameLashFactory({
+                  channel: { enhancedEffects: work.enhancedEffects, buildId: 1003, direction,
+                    endpoint: legacyGeometry.endpoint, id: work.nextSpellId + 1,
+                    midpoint: legacyGeometry.midpoint, origin: previousPoint, ownerId: emission.ownerId,
+                    targetId: row.target.id, tick: work.tick, underpowered: false,
+                    vector: profile.vector.values, worldKey: work.worldKey },
+                  sourceFadeId: work.nextSpellId, cameraDisplacement: null,
+                  geometry: {
+                    start: { x: Math.fround(previousNativePoint.x + offset.x), y: Math.fround(previousNativePoint.y + offset.y) },
+                    control: { x: Math.fround((previousNativePoint.x + root.x) * .5), y: Math.fround((previousNativePoint.y + root.y) * .5) },
+                    end: root, offset,
+                  },
+                  role: 'chain', width: Math.fround(Math.fround(.800000011920929) - width.value),
+                  creatorRegistration: mainPresentation.creatorRegistration, miscAppendOrdinal: hop,
+                  registerWorldPainter: work.registerCombatPainter, rng: work.rng,
+                })
+                work.rng = factory.rng
+                work.ownedTransients.push(factory.source, factory.channel)
+                work.nextSpellId += 2
+              } else {
+                fade('source', previousPoint, direction)
+                work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
+                  enhancedEffects: work.enhancedEffects, buildId: 1003, direction,
+                  endpoint: legacyGeometry.endpoint, id: work.nextSpellId, midpoint: legacyGeometry.midpoint,
+                  origin: previousPoint, ownerId: emission.ownerId, targetId: row.target.id,
+                  tick: work.tick, underpowered: false, vector: profile.vector.values, worldKey: work.worldKey,
+                })))
+                work.nextSpellId += 1
+              }
+              fade('chain', { x: Math.fround(row.target.position.x + (mainPresentation?.nativeGeometry?.offset.x ?? 0)),
+                y: Math.fround(row.target.position.y + (mainPresentation?.nativeGeometry?.offset.y ?? -20)) }, direction)
             }
             const stunFactor = profile.vector.values[3]!
             if (!emission.underpowered && stunFactor < 1) {
@@ -286,12 +333,13 @@ export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
             }
             if (hop === 0) publishMain()
             previousPoint = point
+            if (hop > 0) previousNativePoint = row.target.position
             damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
             target = emission.underpowered || hop >= profile.vector.values[2]!
               ? null
               : nearestUnusedAirChainTarget(
                   primaryTargetRows(work.enemies).map(({ target: candidate }) => candidate),
-                  row.target.position, contactedIds,
+                  hop === 0 ? previousNativePoint : row.target.position, contactedIds,
                 )
           }
           break

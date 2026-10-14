@@ -1,3 +1,4 @@
+import { drawNativeFlameCameraDisplacement } from './native-weld-flame-camera.ts'
 import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
 import { nativeAirContactLifetimeTicks } from './native-air-presentation.ts'
 import {
@@ -270,7 +271,13 @@ export type PrimarySpellChannelTransientState =
 
 export interface PrimarySpellChannelEmission {
   /** Flame birth follows its synchronous direct-contact/death dispatcher. */
-  flameLashPresentation?: Readonly<{ midpoint: Vector2 | null; targetId: string | null }>
+  flameLashPresentation?: Readonly<{
+    cameraDisplacement?: Vector2 | null
+    midpoint: Vector2 | null; targetId: string | null
+    nativeGeometry?: Readonly<{ start: Vector2; control: Vector2; end: Vector2; offset: Vector2 }>
+    preclipEndpoint?: Vector2
+    creatorRegistration?: NativeWorldManagerRegistration
+  }>
   damage: number
   direction: Vector2
   endpoint: Vector2 | null
@@ -568,6 +575,8 @@ export interface PrimarySpellTickContext {
   spells: PrimarySpellSimulationState
   tick: number
   viewScale: number
+  flameLashViewBounds?: (ownerId: string) => Readonly<{ x: number; y: number; w: number; h: number }>
+  playerLightRegistration?: (ownerId: string) => NativeWorldManagerRegistration
   spellObstructionPoint: (
     ownerId: string,
     start: Vector2,
@@ -670,6 +679,8 @@ export function nativePrimaryPainterRegistrationContract(
     || state.kind === 'weld'
   ) return { count: 1, managerLane: 'actor' }
   switch (state.kind) {
+    case 'weld-flame-lash-fade':
+      return { count: 1, managerLane: state.flameVisual.kind === 'native-birth-v1' ? 'transient' : 'actor' }
     case 'air':
       return { count: 3, managerLane: 'actor' }
     case 'earth-impact':
@@ -1733,6 +1744,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           const emitter = primarySpellEmitter(nextPlayer, castClockElement, authority.weaponKind)
           const buildId = authority.primarySkill.buildId
           if (isChannelBuild(buildId)) {
+            const flameCamera = buildId === 1003 ? drawNativeFlameCameraDisplacement(rng, underpowered) : null
+            if (flameCamera) rng = flameCamera.rng
             const lightning = buildId === 1003
               ? createAirTransient(
                   playerId,
@@ -1767,7 +1780,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             )
             channelEmissions.push({
               ...(buildId === 1003 ? { flameLashPresentation: {
+                cameraDisplacement: flameCamera!.displacement,
                 midpoint: lightning?.midpoint ?? null, targetId: lightning?.targetId ?? null,
+                ...flameLashMainPresentation(playerId, emitter, aimDirection, lightning!, context),
               } } : {}),
               damage: channelDamage,
               direction: { ...aimDirection },
@@ -2540,6 +2555,55 @@ export function primarySpellAimDirection(
   return length > 0.0001
     ? { x: dx / length, y: dy / length }
     : { x: 0, y: -1 }
+}
+
+
+function flameLashMainPresentation(
+  ownerId: string, emitter: Vector2, aim: Vector2,
+  legacy: Pick<PrimarySpellAirTransientState, 'endpoint' | 'midpoint' | 'targetId'>,
+  context: PrimarySpellTickContext,
+) {
+  const preclipEndpoint = { x: legacy.endpoint.x,
+    y: Math.fround(legacy.endpoint.y - (legacy.targetId === null ? 0 : AIR_PRIMARY_TARGET_Y_OFFSET)) }
+  const bounds = context.flameLashViewBounds?.(ownerId)
+  const clipped = bounds ? clipNativeFlameLine(emitter, preclipEndpoint, bounds)
+    : { start: { ...emitter }, end: { ...preclipEndpoint } }
+  const length = Math.fround(Math.hypot(clipped.end.x - clipped.start.x, clipped.end.y - clipped.start.y))
+  const halfLength = Math.fround(length * .5)
+  return {
+    preclipEndpoint,
+    creatorRegistration: context.playerLightRegistration?.(ownerId)
+      ?? Object.freeze({ managerLane: 'actor' as const, registrationOrdinal: 0 }),
+    nativeGeometry: {
+      start: clipped.start,
+      control: { x: Math.fround(clipped.start.x + Math.fround(aim.x * halfLength)),
+        y: Math.fround(clipped.start.y + Math.fround(aim.y * halfLength)) },
+      end: clipped.end,
+      offset: { x: 0, y: legacy.targetId === null ? 0 : -20 },
+    },
+  }
+}
+
+/** Inclusive native view clipping; common-outcode rejection still births a collapsed ribbon. */
+function clipNativeFlameLine(start: Vector2, end: Vector2, bounds: Readonly<{ x: number; y: number; w: number; h: number }>) {
+  let first = { ...start }; let last = { ...end }
+  const right = Math.fround(bounds.x + bounds.w), bottom = Math.fround(bounds.y + bounds.h)
+  const outcode = (p: Vector2) => (p.x < bounds.x ? 1 : p.x > right ? 2 : 0)
+    | (p.y < bounds.y ? 4 : p.y > bottom ? 8 : 0)
+  for (let remaining = 8; remaining > 0; remaining -= 1) {
+    const a = outcode(first), b = outcode(last)
+    if ((a | b) === 0) return { start: first, end: last }
+    if ((a & b) !== 0) return { start: first, end: { ...first } }
+    const code = a || b
+    let x: number, y: number
+    if (code & 4) { y = bounds.y; x = first.x + (last.x - first.x) * (y - first.y) / (last.y - first.y) }
+    else if (code & 8) { y = bottom; x = first.x + (last.x - first.x) * (y - first.y) / (last.y - first.y) }
+    else if (code & 2) { x = right; y = first.y + (last.y - first.y) * (x - first.x) / (last.x - first.x) }
+    else { x = bounds.x; y = first.y + (last.y - first.y) * (x - first.x) / (last.x - first.x) }
+    const point = { x: Math.fround(x), y: Math.fround(y) }
+    if (a) first = point; else last = point
+  }
+  throw new Error('Flame line clipping did not converge')
 }
 
 function createAirTransient(

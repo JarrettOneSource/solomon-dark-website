@@ -402,6 +402,7 @@ function interpolateWeldCoreEffectTransient(
     }
   }
   if (kind === 'weld-channel') {
+    if (older.buildId === 1003 && older.flameVisual?.kind === 'native-birth-v1') return copyPrimarySpellTransient(blend < 1 ? older : newer) as typeof older
     const actor = interpolateWeldOriginTransient(older, newer, blend)
     return {
       ...actor,
@@ -436,6 +437,7 @@ function interpolateWeldFadeEffectTransient(
 ): NativeWeldWorldActor | null {
   const [kind, older, newer] = pair
   if (kind === 'weld-flame-lash-fade') {
+    if (older.flameVisual.kind === 'native-birth-v1') return copyPrimarySpellTransient(blend < 1 ? older : newer) as typeof older
     return interpolateWeldFadingPositionTransient(older, newer, blend)
   }
   if (kind === 'weld-ground-spark-fade') {

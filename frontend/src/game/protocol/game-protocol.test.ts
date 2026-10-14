@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import test from 'node:test'
+import './codecs/weld-flame.test.ts'
 import { playerCharacterFacing } from '../core-kernels/player-character.ts'
 import { playerSnapshotFrame } from './codecs/players.ts'
 import { NATIVE_HAIL_MINIMUM_HEIGHT, createNativeWaterHailActor, nativeWaterHailLifeAtAge, stepNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
@@ -50,8 +51,8 @@ const ONLINE_PREFERENCES = {
   submitRuns: true,
 } as const
 
-test('Create root domain uses protocol 152 across hello, confirmation, snapshot, and Player Card', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 152)
+test('Create root domain uses the current protocol across hello, confirmation, snapshot, and Player Card', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 153)
   const elements = ['ether', 'fire', 'air', 'water', 'earth'] as const
   for (const element of elements) {
     for (const discipline of [...elements, 'body', 'mind', 'arcane'] as const) {
@@ -4779,6 +4780,7 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
       ...frame,
       primarySpells,
       tick,
+      flamePresentation: { kind: 'reset', epoch: 1, worldKey: 'hub', throughTick: tick, births: [] },
     },
     sequence: 2,
   }))
@@ -4926,6 +4928,7 @@ test('protocol carries a native Hail bounce above its constructor height domain'
       ...frame,
       primarySpells: compact,
       tick: actor.birthTick + actor.ageTicks,
+      flamePresentation: { kind: 'reset', epoch: 1, worldKey: 'hub', throughTick: actor.birthTick + actor.ageTicks, births: [] },
     },
     sequence: 2,
   }
@@ -4996,6 +4999,7 @@ test('protocol carries both signed native Hail bounce-pitch endpoints', () => {
       ...frame,
       primarySpells: compact,
       tick: stepped.actor.birthTick + stepped.actor.ageTicks,
+      flamePresentation: { kind: 'reset', epoch: 1, worldKey: 'hub', throughTick: stepped.actor.birthTick + stepped.actor.ageTicks, births: [] },
     },
     sequence: 2,
   }
@@ -6623,6 +6627,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     buildId: 1003,
     endpoint: { x: 800, y: 200 },
     kind: 'weld-channel',
+    flameVisual: { kind: 'legacy-suppressed' },
     enhancedEffects: false,
     lightRegistration: null,
     midpoint: { x: 800, y: 300 },
@@ -6638,6 +6643,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     buildId: 1003,
     colorGreen: Math.fround(0.75),
     kind: 'weld-flame-lash-fade',
+    flameVisual: { kind: 'legacy-suppressed' },
     lightRegistration: null,
     position: { x: 800, y: 200 },
     record: 35,

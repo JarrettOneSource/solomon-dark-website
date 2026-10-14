@@ -20,6 +20,7 @@ import { createHubCollegeIntroParticipantState } from '../core-kernels/hub-regio
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { createHostFlamePresentationHistory } from '../host/flame-presentation-history.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
   createGameSnapshotFrame,
@@ -1398,6 +1399,7 @@ test('client holds local Hub presentation at authoritative state during a level-
   const initialPlayer = initialBase.players['player-1']!
   const initial = {
     ...initialBase,
+    flamePresentation: { kind: 'reset' as const, epoch: 1, worldKey: 'hub', throughTick: 100, births: [] as const },
     players: {
       ...initialBase.players,
       'player-1': {
@@ -1940,6 +1942,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
   }
   const initialSnapshot = {
     ...source,
+    flamePresentation: { kind: 'reset' as const, epoch: 1, worldKey: 'hub', throughTick: 100, births: [] as const },
     players: { ...source.players, 'player-1': eastboundPlayer },
     tick: 100,
   }
@@ -2158,6 +2161,44 @@ test('client predicts the authoritative scripted transition walk without accepti
   assert.ok(predicted.player.position.y < 100)
   assert.deepEqual(predicted.player.position, ordinaryScale.player.position)
   assert.equal(predicted.collisionRngState, 123)
+})
+
+test('ordinary Hub region re-registration bootstraps a fresh timeline from continuous Flame history', async (context) => {
+  const transport = new MemoryTransport()
+  let fatal: GameConnectionFailure | null = null
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport, onFatal: value => { fatal = value } })
+  let initial = createGameSimulation({ 'player-1': CHARACTER })
+  if (initial.world.kind !== 'hub') throw new Error('fixture')
+  initial = { ...initial, world: { ...initial.world, participants: {
+    ...initial.world.participants, 'player-1': { ...initial.world.participants['player-1']!,
+      transition: { alpha: 1, destination: 'storeroom', phase: 'outgoing',
+        scriptedSpeed: .45, scriptedTarget: { x: 100, y: -1_000 }, sourceRegion: 'courtyard' } },
+  } } }
+  const history = createHostFlamePresentationHistory()
+  const welcome = { ...createGameSnapshot(initial, 'player-1'), flamePresentation: history.resetFrame(initial) }
+  receiveWelcome(transport, welcome)
+  const session = await connecting
+  context.after(() => session.destroy())
+  const transitioned = stepGameSimulationTick(initial, {})
+  history.advance(initial, transitioned)
+  const snapshot = { ...createGameSnapshot(transitioned, 'player-1'), flamePresentation: history.resetFrame(transitioned) }
+  assert.notDeepEqual(snapshot.players['player-1']!.lighting.lightRegistration,
+    welcome.players['player-1']!.lighting.lightRegistration)
+  const baseline = createReplicatedEntityBaseline(welcome)
+  const frame = { ...createGameSnapshotFrame(snapshot, 1, baseline),
+    flamePresentation: history.frame(transitioned, baseline.flamePresentation!) }
+  assert.equal(frame.flamePresentation.kind, 'continuous')
+  transport.receive(encodeGameMessage({ type: 'server-snapshot', acknowledgedInputSequence: 0, frame, sequence: 2 }))
+  assert.equal(fatal, null)
+  assert.equal(transport.readyState, 'open')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack', requireKeyframe: false, sequence: 2,
+  })
+  const presentation = session.samplePresentation()
+  assert.equal(presentation.world.kind, 'hub')
+  if (presentation.world.kind !== 'hub') throw new Error('fixture')
+  assert.equal(presentation.world.participants['player-1']!.region, 'storeroom')
 })
 
 test('client prediction consumes the replicated native movement multiplier', () => {

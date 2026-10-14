@@ -34,6 +34,50 @@ interface WeldPainterRoot {
   readonly worldY: number
 }
 
+export interface NativeFlameRegionView {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * Retained 0x5E0275–0x5E0315: intersected initial Y, original padded loop
+ * progress, full 25/50 bands. The draw mask separately preserves Region clip.
+ */
+export function buildNativeFlameLashSplitBands(
+  ownerId: string,
+  bounds: NativeFlameRegionView,
+  enhancedEffects: boolean,
+  regionView: NativeFlameRegionView | null = null,
+): readonly NativeZAnimSplitBand[] {
+  if (!ownerId || !Object.values(bounds).every(Number.isFinite) || bounds.width < 0 || bounds.height < 0
+    || (regionView && (!Object.values(regionView).every(Number.isFinite) || regionView.width < 0 || regionView.height < 0))) {
+    throw new RangeError('Flame split requires finite nonnegative bounds and Region view')
+  }
+  const height = enhancedEffects ? 25 : 50
+  let y = Math.fround(regionView ? Math.max(bounds.y, regionView.y) : bounds.y)
+  const bands: NativeZAnimSplitBand[] = []
+  for (let progress = bounds.y; progress < bounds.y + bounds.height; progress = Math.fround(progress + height)) {
+    if (Math.fround(progress + height) <= progress || bands.length >= 32_768) {
+      throw new RangeError('Flame split exceeds its finite band progression budget')
+    }
+    bands.push({ id: `${ownerId}:band-${bands.length}`,
+      clip: { x: 0, y, width: 10_000, height }, painterY: Math.fround(y + height) })
+    y = Math.fround(y + height)
+  }
+  return bands
+}
+
+function regionClippedBand(band: NativeZAnimSplitBand, region: NativeFlameRegionView | null): NativeFlameRegionView {
+  if (!region) return band.clip
+  const x = Math.max(band.clip.x, region.x)
+  const y = Math.max(band.clip.y, region.y)
+  return { x, y,
+    width: Math.max(0, Math.min(band.clip.x + band.clip.width, region.x + region.width) - x),
+    height: Math.max(0, Math.min(band.clip.y + band.clip.height, region.y + region.height) - y) }
+}
+
 export class WeldPrimarySpellView {
   readonly container: Container
   readonly underlayContainer?: Container
@@ -41,7 +85,10 @@ export class WeldPrimarySpellView {
   private readonly buildId: NativeWeldPresentationState['buildId']
   private readonly bandContainers: readonly Container[]
   private readonly bandMasks: readonly Graphics[]
-  private readonly bands: readonly NativeZAnimSplitBand[]
+  private bands: readonly NativeZAnimSplitBand[]
+  private enhancedEffects: boolean
+  private regionView: NativeFlameRegionView | null = null
+  private readonly retainedFlamePlan: ReturnType<typeof nativeWeldVisualPlan> | null
   private readonly boundsY: number
   private readonly initialKind: NativeWeldPresentationState['kind']
   private readonly drawing = new WeldDrawingResources()
@@ -60,14 +107,20 @@ export class WeldPrimarySpellView {
     this.state = state
     this.buildId = state.buildId
     this.initialKind = state.kind
+    this.enhancedEffects = enhancedEffects
     this.container = new Container({ label: `weld:${state.buildId}:${state.kind}` })
     this.container.eventMode = 'none'
     this.plan = nativeWeldVisualPlan(state)
+    this.retainedFlamePlan = state.kind === 'weld-channel' && state.buildId === 1003 ? this.plan : null
     this.split = state.kind === 'weld-channel'
       && (state.buildId === 1003 || state.buildId === 1004)
-    const bounds = weldPlanBounds(this.plan, textures)
+    const bounds = this.plan.splitBounds ?? weldPlanBounds(this.plan, textures)
     this.boundsY = bounds.y
-    this.bands = this.split
+    // Allocate the maximal Enhanced band pool once; live coarse/Enhanced
+    // switches only change masks and painter insertions, never birth geometry.
+    this.bands = this.retainedFlamePlan?.splitBounds
+      ? buildNativeFlameLashSplitBands(`weld:${state.id}`, this.retainedFlamePlan.splitBounds, true)
+      : this.split
       ? buildNativeZAnimSplitBands(
           `weld:${state.id}`,
           bounds,
@@ -108,12 +161,24 @@ export class WeldPrimarySpellView {
   update(
     state: PrimarySpellProjectileState | PrimarySpellTransientState,
     presentationFrame?: number,
+    _pointGain?: number,
+    enhancedEffects = this.enhancedEffects,
   ): void {
     if (!isNativeWeldPresentationState(state)
       || state.kind !== this.initialKind
       || state.buildId !== this.buildId) return
     this.state = state
-    this.plan = nativeWeldVisualPlan(state, presentationFrame, this.puppetHit)
+    this.enhancedEffects = enhancedEffects
+    this.plan = this.retainedFlamePlan !== null
+      ? state.kind === 'weld-channel' && state.flameVisual?.kind === 'native-birth-v1' && state.ageTicks < 1
+        ? this.retainedFlamePlan
+        : { ...this.retainedFlamePlan, meshes: [], sprites: [], lines: [] }
+      : nativeWeldVisualPlan(state, presentationFrame, this.puppetHit)
+    if (this.retainedFlamePlan?.splitBounds) {
+      this.bands = buildNativeFlameLashSplitBands(
+        `weld:${state.id}`, this.retainedFlamePlan.splitBounds, enhancedEffects, this.regionView,
+      )
+    }
     this.drawing.update(this.plan)
     this.container.position.set(this.plan.position.x, this.plan.position.y)
     if (this.underlayContainer) {
@@ -123,6 +188,12 @@ export class WeldPrimarySpellView {
     if (this.split) {
       for (let index = 0; index < this.bandContainers.length; index += 1) {
         const root = this.bandContainers[index]!
+        const band = this.bands[index]
+        const clip = band && regionClippedBand(band, this.retainedFlamePlan ? this.regionView : null)
+        root.renderable = !!clip && clip.width > 0 && clip.height > 0
+        if (clip && this.retainedFlamePlan) {
+          this.bandMasks[index]!.clear().rect(clip.x, clip.y, clip.width, clip.height).fill(0xffffff)
+        }
         root.position.set(this.plan.position.x, this.plan.position.y)
         this.bandMasks[index]!.position.x = -this.plan.position.x
         this.drawingViews[index]!.update(this.plan, this.drawing)
@@ -144,7 +215,7 @@ export class WeldPrimarySpellView {
         insertions: this.bands.map((band, index) => ({
           sortBias: 0,
           suffix: `band-${index}`,
-          visible: true,
+          visible: this.bandContainers[index]!.renderable,
           worldY: this.plan.position.y + band.painterY,
         })),
         lane: 'world-sorted',
@@ -179,6 +250,10 @@ export class WeldPrimarySpellView {
   }
 
   setPuppetHit(active: boolean): void { this.puppetHit = active }
+
+  setRegionView(regionView: NativeFlameRegionView | null): void {
+    this.regionView = regionView
+  }
 
   painterContainer(suffix: string): Container | null {
     if (!suffix.startsWith('band-')) return null

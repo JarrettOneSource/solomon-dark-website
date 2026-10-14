@@ -24,6 +24,8 @@ import type {
   NativeWeldHailTerrainParticleState,
 } from '../core-kernels/native-weld-hail-contact.ts'
 import type { NativeWeldFlameLashFadeState } from '../core-kernels/native-weld-flame-lash.ts'
+import { buildNativeFlameLashRibbon, nativeFlameLashFactoryGeometry } from '../core-kernels/native-weld-flame-ribbon.ts'
+import { nativeSignedRandomFloatFromSemanticWords } from '../core-kernels/native-random-domain.ts'
 import {
   nativeWeldBlizzardBeamPlan,
   type NativeWeldBlizzardGlowState,
@@ -37,9 +39,7 @@ import {
 import { earthBoulderPresentationPlan } from './earth-boulder-presentation.ts'
 import { nativeFireballPlan } from './primary-spell-fire-native.ts'
 import {
-  AIR_LIGHTNING_BRANCH_RECORDS,
   buildNativeAirCoronaPlan,
-  buildNativeAirRibbonLayer,
 } from './primary-spell-air-native.ts'
 import {
   nativeEnemySpriteRegistration,
@@ -49,12 +49,11 @@ import {
 const DEG = Math.PI / 180
 
 export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
-  5, 6, 15, 16, 18, 28, 30, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
+  5, 6, 15, 16, 18, 25, 28, 30, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
   110, 111, 112,
   168, 169, 170, 171,
   ...integerRange(251, 266),
   ...integerRange(271, 282),
-  ...AIR_LIGHTNING_BRANCH_RECORDS,
   ...integerRange(1836, 1839),
   ...integerRange(2008, 2010),
 ] as const)
@@ -130,6 +129,7 @@ export interface NativeWeldAffineMatrix {
 }
 
 export interface NativeWeldMeshDraw {
+  readonly colors?: readonly number[]
   readonly alpha: number
   readonly blend: 'add' | 'normal'
   readonly indices: readonly number[]
@@ -137,6 +137,7 @@ export interface NativeWeldMeshDraw {
   readonly role: string
   readonly tint: number
   readonly uvs: readonly number[]
+  readonly uvSpace?: 'badguys-atlas'
   readonly vertices: readonly number[]
 }
 
@@ -150,6 +151,7 @@ export interface NativeWeldLineDraw {
 }
 
 export interface NativeWeldVisualPlan {
+  readonly splitBounds?: Readonly<{ x: number; y: number; width: number; height: number }>
   readonly underlays?: readonly NativeWeldSpriteDraw[]
   readonly lines: readonly NativeWeldLineDraw[]
   readonly meshes: readonly NativeWeldMeshDraw[]
@@ -333,34 +335,27 @@ function projectilePlan(
 }
 
 function channelPlan(state: NativeWeldChannelActorState): NativeWeldVisualPlan {
+  if (state.buildId === 1003) {
+    const birth = state.flameVisual
+    // The birth update has already consumed the first of the two child updates.
+    // Age one remains an ML/lifecycle row, with no second post-birth body draw.
+    if (birth?.kind !== 'native-birth-v1' || state.ageTicks >= 1) return empty({ x: 0, y: 0 })
+    const layer = buildNativeFlameLashRibbon({
+      ...birth,
+      enhancedEffects: state.enhancedEffects,
+      weak: state.underpowered,
+      phaseDegrees: birth.ribbon.kind === 'long' ? birth.ribbon.phaseDegrees : 0,
+      shortWidthFactor: birth.ribbon.kind === 'short' ? birth.ribbon.widthFactor : null,
+    })
+    return positioned({ x: 0, y: 0 }, [], {
+      meshes: flameLashMeshes(layer),
+      splitBounds: nativeFlameLashFactoryGeometry(birth).splitBounds,
+    })
+  }
   if (state.endpoint === null) return empty(state.origin)
   const endpoint = {
     x: state.endpoint.x - state.origin.x,
     y: state.endpoint.y - state.origin.y,
-  }
-  const midpoint = state.midpoint === null
-    ? { x: endpoint.x * 0.5, y: endpoint.y * 0.5 }
-    : {
-        x: state.midpoint.x - state.origin.x,
-        y: state.midpoint.y - state.origin.y,
-      }
-  if (state.buildId === 1003) {
-    const layer = buildNativeAirRibbonLayer({
-      enhancedEffects: state.enhancedEffects,
-      ribbonFamily: 'flame-lash',
-      alpha: state.underpowered ? 0.5 : 1,
-      basePhaseDegrees: -3 * state.birthTick,
-      birthTick: state.birthTick,
-      endpoint,
-      id: state.id,
-      midpoint,
-      source: { x: 0, y: 0 },
-      tint: 0xffffff,
-      width: state.underpowered ? 0.75 : 1,
-    })
-    return positioned(state.origin, [], {
-      meshes: flameLashMeshes(layer),
-    })
   }
   const blizzard = nativeWeldBlizzardBeamPlan({
     birthTick: state.birthTick,
@@ -422,29 +417,21 @@ function blizzardChainFrostPlan(
 }
 
 function flameLashMeshes(
-  layer: ReturnType<typeof buildNativeAirRibbonLayer>,
+  layer: ReturnType<typeof buildNativeFlameLashRibbon>,
 ): readonly NativeWeldMeshDraw[] {
   const body: NativeWeldMeshDraw = Object.freeze({
-    alpha: layer.alpha,
+    alpha: 1,
     blend: 'add',
+    colors: Object.freeze(Array.from(layer.colors)),
     indices: Object.freeze(Array.from(layer.indices)),
-    record: 44,
+    record: 25,
     role: 'flame-lash-ribbon',
-    tint: layer.tint,
+    tint: 0xffffff,
     uvs: Object.freeze(Array.from(layer.uvs)),
+    uvSpace: 'badguys-atlas',
     vertices: Object.freeze(Array.from(layer.vertices)),
   })
-  if (!layer.branch) return Object.freeze([body])
-  return Object.freeze([body, Object.freeze({
-    alpha: layer.alpha,
-    blend: 'add',
-    indices: Object.freeze(Array.from(layer.branch.indices)),
-    record: layer.branch.textureRecord,
-    role: `flame-lash-branch-${layer.branch.geometryRecord}`,
-    tint: layer.tint,
-    uvs: Object.freeze(Array.from(layer.branch.uvs)),
-    vertices: Object.freeze(Array.from(layer.branch.vertices)),
-  })])
+  return Object.freeze([body])
 }
 
 function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWeldVisualPlan {
@@ -880,15 +867,20 @@ function flameLashFadePlan(
   state: NativeWeldFlameLashFadeState,
   frame: number,
 ): NativeWeldVisualPlan {
-  const scale = state.baseScale * (2 + visualUnit(state.id, frame, 0x57370) * 0.25)
+  if (state.flameVisual?.kind !== 'native-birth-v1' || state.alpha <= 0) return empty(state.position)
+  // Website semantic render words deliberately do not advance gameplay RNG.
+  const jitter = nativeSignedRandomFloatFromSemanticWords(
+    visualWord(state.id, frame, 0x57370), visualWord(state.id, frame, 0x57371), .25,
+  )
+  const scale = Math.fround(state.baseScale * Math.fround(2 + jitter))
   return positioned(state.position, [sprite(35, `flame-lash-${state.variant}-fade`, {
     alpha: state.alpha,
     blend: 'add',
     scaleX: scale,
     scaleY: scale,
-    tint: packRgb(1, state.colorGreen, 0),
+    tint: 0xffffff,
   })], {
-    regionLightPoint: state.variant === 'source' ? null : state.position,
+    regionLightPoint: null,
     sortBias: state.variant === 'chain' ? 50 : 100,
   })
 }
@@ -1079,6 +1071,7 @@ function positioned(
   position: Readonly<{ x: number; y: number }>,
   sprites: readonly NativeWeldSpriteDraw[],
   options: Readonly<{
+    splitBounds?: NativeWeldVisualPlan['splitBounds']
     lines?: readonly NativeWeldLineDraw[]
     meshes?: readonly NativeWeldMeshDraw[]
     underlays?: readonly NativeWeldSpriteDraw[]
@@ -1087,6 +1080,7 @@ function positioned(
   }> = {},
 ): NativeWeldVisualPlan {
   return Object.freeze({
+    ...(options.splitBounds === undefined ? {} : { splitBounds: Object.freeze({ ...options.splitBounds }) }),
     lines: Object.freeze([...(options.lines ?? [])]),
     meshes: Object.freeze([...(options.meshes ?? [])]),
     ...(options.underlays === undefined ? {} : { underlays: Object.freeze([...options.underlays]) }),
@@ -1107,11 +1101,15 @@ function empty(position: Readonly<{ x: number; y: number }>): NativeWeldVisualPl
 }
 
 function visualUnit(id: number, frame: number, lane: number): number {
+  return visualWord(id, frame, lane) / 0x1_0000_0000
+}
+
+function visualWord(id: number, frame: number, lane: number): number {
   let value = (id ^ Math.imul(frame + 1, 0x9e3779b1) ^ Math.imul(lane + 1, 0x85ebca6b)) >>> 0
   value ^= value >>> 16
   value = Math.imul(value, 0x7feb352d) >>> 0
   value ^= value >>> 15
-  return (value >>> 0) / 0x1_0000_0000
+  return value >>> 0
 }
 
 function packRgb(red: number, green: number, blue: number): number {

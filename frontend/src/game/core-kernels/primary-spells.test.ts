@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { NativePlayerWeaponKind } from './native-player-weapon.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
+import { drawNativeFlameCameraDisplacement } from './native-weld-flame-camera.ts'
 
 import {
   createIdlePlayerCharacterInput,
@@ -3047,7 +3048,13 @@ test('Flame Lash emission reserves a deferred birth after the receiver death dis
   assert.ok(result.channelEmissions[0]?.flameLashPresentation)
   assert.equal(result.state.spells.transients.some(({ kind }) => kind === 'weld-flame-lash-fade'), false)
   assert.equal(result.state.spells.transients.some(({ kind }) => kind === 'weld-channel'), false)
-  assert.deepEqual(result.state.rng, source.rng, 'receiver flash/seed and presentation draws belong to synchronous combat')
+  const camera = drawNativeFlameCameraDisplacement(source.rng, false)
+  assert.deepEqual(result.state.rng, advanceNativeRngWords(source.rng, 2), 'normal handler draws magnitude then direction before receiver dispatch')
+  assert.deepEqual(result.state.rng, camera.rng)
+  assert.deepEqual(result.channelEmissions[0]!.flameLashPresentation!.cameraDisplacement, camera.displacement)
+  const weak = stepSpellKernel(source, true, 0, true, () => true, profile)
+  assert.deepEqual(weak.state.rng, source.rng, 'weak handler skips both camera words')
+  assert.equal(weak.channelEmissions[0]!.flameLashPresentation!.cameraDisplacement, null)
 })
 
 test('Blizzard emission owns its two-glow four-word program and no endpoint extras', () => {

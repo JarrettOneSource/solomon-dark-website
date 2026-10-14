@@ -30,6 +30,8 @@ export function createGameSnapshot(
     case 'hub':
       return {
         enhancedEffects: state.enhancedEffects,
+        flamePresentation: { kind: 'reset', epoch: 1, worldKey: 'hub',
+          throughTick: gameRunWorldTick(state.tick, state.run), births: [] },
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
         materializingPlayerIds: [],
@@ -81,6 +83,8 @@ export function createGameSnapshot(
       }))
       return {
         enhancedEffects: state.enhancedEffects,
+        flamePresentation: { kind: 'reset', epoch: 1, worldKey: `boneyard:${state.world.runId}`,
+          throughTick: gameRunWorldTick(state.tick, state.run), births: [] },
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
         materializingPlayerIds: [],

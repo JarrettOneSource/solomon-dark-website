@@ -7258,7 +7258,18 @@ test('authoritative Flame no-target input publishes its deferred source and chan
   const channel = channels[0]!
   assert.equal(channel.targetId, null)
   assert.equal(channel.ageTicks, 0)
+  assert.equal(channel.flameVisual?.kind, 'native-birth-v1')
+  assert.equal(channel.painterRegistrations?.[0]?.managerLane, 'actor')
+  if (channel.flameVisual?.kind !== 'native-birth-v1') throw new Error('Missing admitted Flame birth')
+  assert.equal(channel.flameVisual.width, 1)
+  assert.equal(channel.flameVisual.role, 'main')
+  assert.deepEqual(channel.flameVisual.offset, { x: 0, y: 0 })
   const fades = state.primarySpells.transients.filter(effect => effect.kind === 'weld-flame-lash-fade')
+  for (const fade of fades) {
+    assert.equal(fade.flameVisual.kind, 'native-birth-v1')
+    assert.equal(fade.painterRegistrations?.[0]?.managerLane, 'transient')
+    assert.equal(fade.alpha, Math.fround((fade.variant === 'source' ? .5 : 1) - fade.alphaStep))
+  }
   assert.equal(fades.filter(effect => effect.variant === 'source').length, 1)
   assert.equal(fades.filter(effect => effect.variant === 'endpoint').length, channel.endpoint === null ? 0 : 1)
   assert.equal(fades.some(effect => effect.variant === 'chain'), false)

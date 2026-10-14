@@ -3,6 +3,9 @@ import test from 'node:test'
 
 import { Container, Texture } from 'pixi.js'
 
+// Keep the pure Flame static-parity fixtures in the maintained test:boneyard gate.
+import '../core-kernels/native-weld-flame-ribbon.test.ts'
+
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
@@ -34,7 +37,7 @@ import {
 import { createNativeWeldFlameLashFade } from '../core-kernels/native-weld-flame-lash.ts'
 import { createNativeWeldBlizzardSourceGlows } from '../core-kernels/native-weld-blizzard.ts'
 import { createPrimarySpellWeldImpact } from '../core-kernels/primary-spells.ts'
-import { buildNativeAirRibbonLayer } from './primary-spell-air-native.ts'
+import { buildNativeFlameLashRibbon } from '../core-kernels/native-weld-flame-ribbon.ts'
 import {
   NATIVE_WELD_BADGUYS_RECORDS,
   NATIVE_WELD_DEADHAWG_RECORDS,
@@ -50,7 +53,7 @@ const WORLD_KEY = 'boneyard:weld-render'
 
 test('Weld atlas membership covers every recovered direct owner', () => {
   for (const record of [
-    5, 6, 15, 16, 18, 28, 30, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
+    5, 6, 15, 16, 18, 25, 28, 30, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
     110, 111, 112, 168, 169, 170, 171, 251, 266, 271, 282,
     1836, 1839, 2008, 2010,
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
@@ -142,28 +145,26 @@ test('channel and Steam plans use their concrete native classes', () => {
     targetId: 'enemy:1', underpowered: false, variant: 0,
     vector: [8, 2, 1, 0.8, 0, 0, 0, 0],
     worldKey: WORLD_KEY,
+    flameVisual: { kind: 'native-birth-v1', role: 'main', cameraDisplacement: { x: 4, y: 0 }, width: 1,
+      start: { x: 0, y: 0 }, control: { x: 50, y: 10 }, end: { x: 100, y: 0 }, offset: { x: 0, y: 0 },
+      ribbon: { kind: 'long', phaseDegrees: -3 },
+      path: { intensity: 1, radiusFactors: [], creatorRegistration: { managerLane: 'actor', registrationOrdinal: 1 }, miscAppendOrdinal: 0 } },
   }
   const flamePlan = nativeWeldVisualPlan(flame)
-  assert.deepEqual(flamePlan.meshes.map(({ record }) => record), [44])
-  const nativeLayer = buildNativeAirRibbonLayer({
-    ribbonFamily: 'flame-lash',
-    alpha: 1,
-    basePhaseDegrees: -3,
-    birthTick: 1,
-    endpoint: { x: 100, y: 0 },
-    id: 1,
-    midpoint: { x: 50, y: 10 },
-    source: { x: 0, y: 0 },
-    tint: 0xffffff,
-    width: 1,
+  assert.deepEqual(flamePlan.meshes.map(({ record }) => record), [25])
+  const birth = flame.flameVisual!
+  assert.equal(birth.kind, 'native-birth-v1')
+  const nativeLayer = buildNativeFlameLashRibbon({
+    ...birth, enhancedEffects: true, weak: false, phaseDegrees: -3, shortWidthFactor: null,
   })
   assert.deepEqual(flamePlan.meshes[0]!.vertices, Array.from(nativeLayer.vertices))
   assert.deepEqual(flamePlan.meshes[0]!.uvs, Array.from(nativeLayer.uvs))
-  const longFlame = { ...flame, midpoint: { x: 102.5, y: 0 }, endpoint: { x: 205, y: 0 } }
+  const longFlame = { ...flame, flameVisual: { ...birth, control: { x: 102.5, y: 0 }, end: { x: 205, y: 0 } } }
   assert.equal(nativeWeldVisualPlan({ ...longFlame, enhancedEffects: true }).meshes[0]!.vertices.length, 60)
   assert.equal(nativeWeldVisualPlan({ ...longFlame, enhancedEffects: false }).meshes[0]!.vertices.length, 16)
-  const weakFlame = nativeWeldVisualPlan({ ...flame, underpowered: true })
-  assert.equal(weakFlame.meshes[0]!.alpha, 0.5)
+  const weakFlame = nativeWeldVisualPlan({ ...flame, underpowered: true, flameVisual: { ...birth, width: .75 } })
+  assert.equal(weakFlame.meshes[0]!.alpha, 1)
+  assert.ok(weakFlame.meshes[0]!.colors!.slice(2, -2).every(color => color === 0x7fffffff))
   assert.notDeepEqual(weakFlame.meshes[0]!.vertices, flamePlan.meshes[0]!.vertices)
   const blizzard = { ...flame, buildId: 1004 as const, vector: [8, 2, 1, 0.8, 0, 0, 0.2] }
   assert.deepEqual(nativeWeldVisualPlan(blizzard).meshes.map(({ record }) => record), [43, 44])
@@ -199,7 +200,8 @@ test('channel and Steam plans use their concrete native classes', () => {
   const fadePlan = nativeWeldVisualPlan(fade)
   assert.equal(fadePlan.sprites[0]!.record, 35)
   assert.equal(fadePlan.sprites[0]!.blend, 'add')
-  assert.deepEqual(fadePlan.regionLightPoint, fade.position)
+  assert.equal(fadePlan.regionLightPoint, null)
+  assert.equal(fadePlan.sprites[0]!.tint, 0xffffff)
 
   const steam = spawnNativeWeldSteamActor({
     damage: 8, direction: { x: 1, y: 0 }, id: 2, origin: { x: 0, y: 0 }, ownerId: 'wizard',
@@ -557,3 +559,38 @@ function textures(): PlayerWorldTextures {
   }
   return { primarySpells: { weldActors } } as unknown as PlayerWorldTextures
 }
+
+test('Flame fade roles use white direct draws, retained alpha and signed semantic render scale', () => {
+  for (const variant of ['source', 'endpoint', 'chain'] as const) {
+    const actor = createNativeWeldFlameLashFade({
+      direction: { x: 1, y: 0 }, id: 35, origin: { x: 100, y: 40 }, ownerId: 'wizard',
+      rng: createNativeRng(30), tick: 2, variant, vector: [8, 2, 1, .8], worldKey: WORLD_KEY,
+    }).actor
+    let negative = false
+    let positive = false
+    for (let frame = 0; frame < 100; frame += 1) {
+      const plan = nativeWeldVisualPlan(actor, frame)
+      assert.deepEqual(nativeWeldVisualPlan(actor, frame), plan)
+      assert.equal(plan.sprites.length, 1)
+      const draw = plan.sprites[0]!
+      assert.equal(draw.record, 35)
+      assert.equal(draw.blend, 'add')
+      assert.equal(draw.tint, 0xffffff)
+      assert.equal(draw.rotationRadians, 0)
+      assert.equal(draw.alpha, actor.alpha)
+      assert.equal(draw.scaleX, draw.scaleY)
+      assert.ok(draw.scaleX >= Math.fround(actor.baseScale * 1.75))
+      assert.ok(draw.scaleX <= Math.fround(actor.baseScale * 2.25))
+      negative ||= draw.scaleX < actor.baseScale * 2
+      positive ||= draw.scaleX > actor.baseScale * 2
+      assert.equal(plan.regionLightPoint, null)
+      assert.equal(plan.sortBias, variant === 'chain' ? 50 : 100)
+    }
+    assert.equal(negative, true)
+    assert.equal(positive, true)
+    assert.deepEqual(nativeWeldVisualPlan({ ...actor, colorGreen: 0, rotationDegrees: 111 }, 4), nativeWeldVisualPlan(actor, 4))
+    assert.equal(nativeWeldVisualPlan({ ...actor, alpha: 1.4901161193847656e-8 }, 4).sprites.length, 1)
+    assert.deepEqual(nativeWeldVisualPlan({ ...actor, flameVisual: { kind: 'legacy-suppressed' } }).sprites, [])
+    assert.deepEqual(nativeWeldVisualPlan({ ...actor, flameVisual: undefined } as unknown as typeof actor).sprites, [])
+  }
+})

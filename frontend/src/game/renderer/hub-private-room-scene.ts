@@ -186,6 +186,7 @@ export class HubPrivateRoomScene {
     } | null = null,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
     markerSurface: HubNpcMarkerSurface = null,
+    regionView: Readonly<{ x: number; y: number; width: number; height: number }> | null = null,
   ): void {
     const localParticipant = snapshot.world.participants[localPlayerId]
     if (!localParticipant || localParticipant.region === 'courtyard') return
@@ -207,6 +208,7 @@ export class HubPrivateRoomScene {
         pointGainAt,
         undefined,
         snapshot.enhancedEffects,
+        regionView,
       )
       this.primarySpells[region].promoteOwnerOverlays((ownerId) => (
         this.players.get(ownerId)?.container.zIndex

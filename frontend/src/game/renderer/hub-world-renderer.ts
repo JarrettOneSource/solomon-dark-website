@@ -1,3 +1,4 @@
+import { flameCameraDisplacements, flamePresentationEpoch } from '../client/flame-presentation.ts'
 import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import { nativeRegionPointGain } from '../core-kernels/native-region-point-gain.ts'
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
@@ -664,6 +665,7 @@ export async function createHubWorldRenderer(
         levelUpPresentation,
         pointGainAt,
         markerSurface,
+        { x: camera.x, y: camera.y, width: visibleWorldWidth, height: viewport.height / baseCameraScale },
       )
       privateRoomScene.update(
         snapshot,
@@ -672,6 +674,7 @@ export async function createHubWorldRenderer(
         levelUpPresentation,
         pointGainAt,
         markerSurface,
+        { x: camera.x, y: camera.y, width: visibleWorldWidth, height: viewport.height / baseCameraScale },
       )
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
@@ -715,6 +718,8 @@ export async function createHubWorldRenderer(
         )
         secondaryScreenFeedback.set(participant.region, screenFeedback)
       }
+      screenFeedback.synchronizeWorldTimeline(snapshot.tick, flamePresentationEpoch(snapshot), snapshot.tick)
+      screenFeedback.consumeFlameCameraDisplacements(flameCameraDisplacements(snapshot))
       screenFeedback.consumeWorldCameraDisplacements(snapshot.secondaryAbilities.cameraDisplacements)
       screenFeedback.consumeScreenFlashes(snapshot.screenFlashes, {
         cameraCenter: { x: camera.x + visibleWorldWidth / 2,

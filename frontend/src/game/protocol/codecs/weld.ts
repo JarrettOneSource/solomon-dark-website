@@ -2,10 +2,7 @@ import type { NativeWeldBlizzardGlowState } from '../../core-kernels/native-weld
 import {
   NATIVE_BOULDER_DEBRIS_MAX_LIFETIME_TICKS,
 } from '../../core-kernels/native-weld-boulder-debris.ts'
-import {
-  NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP,
-  type NativeWeldFlameLashFadeState,
-} from '../../core-kernels/native-weld-flame-lash.ts'
+import type { NativeWeldFlameLashFadeState } from '../../core-kernels/native-weld-flame-lash.ts'
 import {
   NATIVE_WELD_HAIL_FLASH_ALPHA_STEP,
   NATIVE_WELD_HAIL_LINE_ALPHA_STEP,
@@ -43,6 +40,7 @@ import {
   vector,
 } from './native-state.ts'
 import { requireWeldHailBuild, weldBuildId, weldVector } from './primary-projectiles.ts'
+import { flameChannelVisual, flameFadePayload } from './weld-flame.ts'
 import {
   GameProtocolError,
   boolean,
@@ -120,6 +118,7 @@ export function primarySpellWeldActor(
   if (source.kind === 'weld-channel') {
     onlyKeys(source, field, [
       ...commonKeys, 'enhancedEffects', 'endpoint', 'midpoint', 'targetId', 'underpowered', 'variant',
+      ...(buildId === 1003 ? ['flameVisual'] : []),
     ])
     if (buildId !== 1003 && buildId !== 1004) {
       throw new GameProtocolError(`${field}.buildId is not a welded channel build`)
@@ -141,6 +140,11 @@ export function primarySpellWeldActor(
     return {
       ...common,
       buildId,
+      ...(buildId === 1003 ? { flameVisual: flameChannelVisual(source.flameVisual, `${field}.flameVisual`, {
+        birthTick: common.birthTick,
+        enhancedEffects: boolean(source.enhancedEffects, `${field}.enhancedEffects`),
+        underpowered: boolean(source.underpowered, `${field}.underpowered`),
+      }) } : {}),
       endpoint,
       kind: 'weld-channel',
       enhancedEffects: boolean(source.enhancedEffects, `${field}.enhancedEffects`),
@@ -295,61 +299,15 @@ export function primarySpellWeldActor(
 
   if (source.kind === 'weld-flame-lash-fade') {
     onlyKeys(source, field, [
-      ...commonKeys, 'alpha', 'alphaStep', 'baseScale', 'colorGreen', 'position',
+      ...commonKeys, 'alpha', 'alphaStep', 'baseScale', 'colorGreen', 'flameVisual', 'position',
       'record', 'rotationDegrees', 'variant', 'wrapperScalar',
     ])
     if (buildId !== 1003) throw new GameProtocolError(`${field}.buildId is not Flame Lash`)
-    const alpha = positiveFinite(source.alpha, `${field}.alpha`)
-    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
-    const coarse = alphaStep === Math.fround(0.4)
-    const sourceFlare = source.variant === 'source'
-    if (alpha > (sourceFlare ? .5 : 1) || (!coarse && alphaStep !== (sourceFlare ? Math.fround(.1) : NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP))
-      || common.ageTicks >= (coarse ? 3 : 6)) {
-      throw new GameProtocolError(`${field} exceeds the Flame Lash fade clock`)
-    }
-    const variant = source.variant
-    if (variant !== 'endpoint' && variant !== 'chain' && variant !== 'source') {
-      throw new GameProtocolError(`${field}.variant is not a Flame Lash fade branch`)
-    }
-    const baseScale = positiveFinite(source.baseScale, `${field}.baseScale`)
-    if ((variant === 'source' && (baseScale < .75 || baseScale > 1.25))
-      || (variant === 'endpoint' && (baseScale < 0.5 || baseScale > 1))
-      || (variant === 'chain' && (
-        baseScale < Math.fround(0.05)
-        || baseScale > Math.fround(0.1)
-      ))) {
-      throw new GameProtocolError(`${field}.baseScale exceeds its Flame Lash branch`)
-    }
-    const colorGreen = unitInterval(source.colorGreen, `${field}.colorGreen`)
-    if ((variant === 'source' && colorGreen !== 1)
-      || (variant === 'chain' && colorGreen !== Math.fround(0.75))
-      || (variant === 'endpoint' && (colorGreen < 0.5 || colorGreen > 1))) {
-      throw new GameProtocolError(`${field}.colorGreen exceeds its Flame Lash branch`)
-    }
-    const wrapperScalar = positiveFinite(source.wrapperScalar, `${field}.wrapperScalar`)
-    if (wrapperScalar < 0.75 || wrapperScalar > 1.5) {
-      throw new GameProtocolError(`${field}.wrapperScalar exceeds the native range`)
-    }
-    if (sourceFlare) {
-      let expected = .5
-      for (let age = 0; age < common.ageTicks; age++) expected = Math.fround(expected - alphaStep)
-      if (alpha !== expected || wrapperScalar !== 1) throw new GameProtocolError(`${field} violates its native source flare`)
-    }
-    if (source.record !== 35) throw new GameProtocolError(`${field}.record is not BadGuys 35`)
     return {
       ...common,
-      alpha,
-      alphaStep,
-      baseScale,
+      ...flameFadePayload(source, field, common.ageTicks),
       buildId: 1003,
-      colorGreen,
       kind: 'weld-flame-lash-fade',
-      lightRegistration: absentNativeActorLight(source, field),
-      position: vector(source.position, `${field}.position`),
-      record: 35,
-      rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
-      variant,
-      wrapperScalar,
     } satisfies NativeWeldFlameLashFadeState
   }
 

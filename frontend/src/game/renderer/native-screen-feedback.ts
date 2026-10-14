@@ -1,4 +1,7 @@
 import type { NativeScreenFlashState } from '../core-kernels/native-screen-flash.ts'
+import type { NativeFlameCameraProposal } from '../core-kernels/native-weld-flame-state.ts'
+import { NATIVE_FLAME_CAMERA_MAX_PRESENTATION_TICKS } from '../core-kernels/native-weld-flame-camera.ts'
+import { NativeRegionCameraPresentation } from './native-region-camera-presentation.ts'
 import { NativeScreenFlashPresentation } from './native-screen-flash.ts'
 import {
   nativeRegionHitPointGain,
@@ -70,8 +73,7 @@ export function nativeSecondaryWorldShake(
 }
 
 export class NativeSecondaryScreenFeedbackPresentation {
-  private cameraDisplacementX = 0
-  private cameraDisplacementY = 0
+  private readonly camera: NativeRegionCameraPresentation
   private cameraMagnitude = 0
   private lastEnemyEventId = 0
   private lastEventId = 0
@@ -80,7 +82,10 @@ export class NativeSecondaryScreenFeedbackPresentation {
   private lastPrimaryMagnitudeId = 0
   private lastTick: number
   private lastWorldDisplacementTick: number
-  private readonly flashes: NativeScreenFlashPresentation
+  private readonly consumedFlameBirths = new Map<string, number>()
+  private acceptedHistoryEpoch: number | undefined
+  private acceptedWorldTick: number | undefined
+  private flashes: NativeScreenFlashPresentation
   private readonly worldKey: string
 
   constructor(
@@ -89,8 +94,31 @@ export class NativeSecondaryScreenFeedbackPresentation {
   ) {
     this.lastTick = Math.max(0, Math.trunc(initialTick))
     this.lastWorldDisplacementTick = this.lastTick - 1
+    this.camera = new NativeRegionCameraPresentation(this.lastTick)
     this.worldKey = worldKey
     this.flashes = new NativeScreenFlashPresentation(initialTick, worldKey)
+  }
+
+  /** Same-tick transport resets preserve impulses; backwards world replacement does not. */
+  synchronizeWorldTimeline(worldTick: number, historyEpoch: number | undefined, liveTick: number): void {
+    if ((this.acceptedWorldTick === undefined && liveTick < this.lastTick)
+      || (historyEpoch !== undefined && this.acceptedHistoryEpoch !== undefined
+      && historyEpoch > this.acceptedHistoryEpoch && this.acceptedWorldTick !== undefined
+      && worldTick < this.acceptedWorldTick)) {
+      this.lastTick = Math.max(0, Math.trunc(liveTick))
+      this.lastWorldDisplacementTick = this.lastTick - 1
+      this.camera.reset(this.lastTick)
+      this.cameraMagnitude = 0
+      this.consumedFlameBirths.clear()
+      this.lastEnemyEventId = 0
+      this.lastEventId = 0
+      this.lastPrimaryImpactId = 0
+      this.lastPrimaryFeedbackId = 0
+      this.lastPrimaryMagnitudeId = 0
+      this.flashes = new NativeScreenFlashPresentation(this.lastTick, this.worldKey)
+    }
+    this.acceptedHistoryEpoch = historyEpoch
+    this.acceptedWorldTick = worldTick
   }
 
   consume(
@@ -160,19 +188,22 @@ export class NativeSecondaryScreenFeedbackPresentation {
     this.writeCameraDisplacement(input.displacement, eventTick)
   }
 
+  consumeFlameCameraDisplacements(proposals: readonly NativeFlameCameraProposal[]): void {
+    for (const [key, until] of this.consumedFlameBirths) if (until <= this.lastTick) this.consumedFlameBirths.delete(key)
+    for (const proposal of proposals) {
+      if (proposal.worldKey !== this.worldKey
+        || proposal.birthTick + NATIVE_FLAME_CAMERA_MAX_PRESENTATION_TICKS <= this.lastTick) continue
+      const key = `${proposal.worldKey}:${proposal.birthTick}:${proposal.id}`
+      if (this.consumedFlameBirths.has(key)) continue
+      this.consumedFlameBirths.set(key, proposal.birthTick + NATIVE_FLAME_CAMERA_MAX_PRESENTATION_TICKS)
+      // Replay the actual pre-decay phase against the retained shared history.
+      // Independently aging this vector could reverse an earlier f32 tie.
+      this.camera.proposeFlame(proposal.displacement, proposal.birthTick, proposal.id)
+    }
+  }
+
   private writeCameraDisplacement(displacement: Vector2, eventTick: number): void {
-    let x = Math.fround(displacement.x)
-    let y = Math.fround(displacement.y)
-    if (eventTick < this.lastTick) {
-      x = repeatedFloatMultiply(x, Math.fround(.75), this.lastTick - eventTick)
-      y = repeatedFloatMultiply(y, Math.fround(.75), this.lastTick - eventTick)
-    }
-    const currentSquared = this.cameraDisplacementX * this.cameraDisplacementX
-      + this.cameraDisplacementY * this.cameraDisplacementY
-    if (x * x + y * y > currentSquared) {
-      this.cameraDisplacementX = x
-      this.cameraDisplacementY = y
-    }
+    this.camera.proposeCurrent(displacement, eventTick)
   }
 
   consumePrimaryEtherBlast(
@@ -223,10 +254,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
 
   sampleCameraDisplacement(tick: number): Vector2 {
     this.advanceTo(Math.max(0, Math.trunc(tick)))
-    return {
-      x: this.cameraDisplacementX,
-      y: this.cameraDisplacementY,
-    }
+    return this.camera.sample()
   }
 
   private advanceTo(tick: number): void {
@@ -240,24 +268,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
     if (this.cameraMagnitude < MAGIC_SHIELD_EXPLOSION_CAMERA_CUTOFF) {
       this.cameraMagnitude = 0
     }
-    this.cameraDisplacementX = repeatedFloatMultiply(
-      this.cameraDisplacementX,
-      Math.fround(0.75),
-      elapsedTicks,
-    )
-    this.cameraDisplacementY = repeatedFloatMultiply(
-      this.cameraDisplacementY,
-      Math.fround(0.75),
-      elapsedTicks,
-    )
-    if (
-      this.cameraDisplacementX * this.cameraDisplacementX
-        + this.cameraDisplacementY * this.cameraDisplacementY
-      <= Math.fround(0.25)
-    ) {
-      this.cameraDisplacementX = 0
-      this.cameraDisplacementY = 0
-    }
+    this.camera.advanceTo(tick)
     this.lastTick = tick
   }
 }

@@ -1,3 +1,5 @@
+import { nativeFlameLashFadeLight } from '../core-kernels/native-weld-flame-lash.ts'
+import { nativeFlameLashPathLights } from '../core-kernels/native-weld-flame-birth.ts'
 import type { Vec2 } from '../../editor/model.ts'
 import type { Camera } from '../../editor/render.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
@@ -222,6 +224,11 @@ export class BoneyardSceneLights {
       lightProviderOwners.push({ registration, sources: [candidate.source] })
     }
     for (const effect of snapshot.primarySpells.transients) {
+      if (effect.kind === 'weld-flame-lash-fade' && effect.worldKey === `boneyard:${snapshot.world.runId}`) {
+        const source = nativeFlameLashFadeLight(effect)
+        if (source && effect.lightRegistration) lightProviderOwners.push({ registration: effect.lightRegistration, sources: [source] })
+        continue
+      }
       if (effect.kind === 'fire-patch' && effect.worldKey === `boneyard:${snapshot.world.runId}`) {
         if (effect.ageTicks > 0) lightProviderOwners.push({
           registration: effect.painterRegistrations[0]!,
@@ -372,6 +379,14 @@ export class BoneyardSceneLights {
     const lightMiscTailCandidates = this.lightMiscTailCandidates
     lightMiscTailCandidates.length = 0
     for (const effect of snapshot.primarySpells.transients) {
+      if (effect.kind === 'weld-channel' && effect.buildId === 1003 && effect.ageTicks === 0
+        && effect.worldKey === `boneyard:${snapshot.world.runId}` && effect.flameVisual?.kind === 'native-birth-v1') {
+        const path = effect.flameVisual.path
+        lightMiscBatches.push({ birthTick: effect.birthTick, id: effect.id,
+          miscLightAppendOrdinal: path.miscAppendOrdinal, registration: path.creatorRegistration,
+          sources: nativeFlameLashPathLights(effect.flameVisual, effect.enhancedEffects) })
+        continue
+      }
       if (
         effect.kind !== 'air'
         || effect.ageTicks !== 0

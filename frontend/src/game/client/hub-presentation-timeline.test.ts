@@ -112,7 +112,12 @@ function timeline(initial: HubGameSnapshot, initialReceivedAtMs = 0) {
 test('returns an owned presentation copy until a second authoritative snapshot exists', () => {
   const initial = snapshotAt(100, 10, 20)
   const presentation = timeline(initial).sample(5_000)
-  assert.deepEqual(presentation, initial)
+  const { flamePresentation: connectionHistory, ...expectedPresentation } = initial
+  assert.deepEqual(presentation, {
+    ...expectedPresentation,
+    ...(connectionHistory ? { flamePresentationEpoch: connectionHistory.epoch } : {}),
+  })
+  assert.equal(presentation.flamePresentation, undefined)
   assert.notEqual(presentation, initial)
   assert.notEqual(presentation.players.local, initial.players.local)
   assert.notEqual(presentation.players.local.lighting, initial.players.local.lighting)

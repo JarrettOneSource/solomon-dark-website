@@ -1667,3 +1667,188 @@ not establish complete Flame rendering or global-RNG parity. Terminal
 callback owner `0x00477020` and the death-only payload contract remain valid.
 This documentation-only correction does not change production or test bytes,
 and no report-116 runtime repair is included in the urgent payload patch.
+
+
+## 2026-10-14 — Report 116: retained Flame implementation contract
+
+Status: `ported-local-browser-passed-pending-integration-and-qualified-gate`. The recovered membership
+is implemented in the isolated report-116 branch, based on qualified
+`553793d074038d60110f283c63ee164790c4ba32`. This is not a native-runtime or
+publication receipt. Report-118 and report-119 worktrees remain separately owned.
+
+The recovered contract v2 (SHA-256
+`0b0787877075a09d0a45be795ebb1168b6d6b8bedea08758ef8debcf1d4b0c7a`)
+and recovered addendum v2 (SHA-256
+`aeedca858425e067d8afc1dfe9fed58ca203e0b0015404a65f82e9cafa3e4fcf`)
+are the retained evidence. The addendum supersedes the old incoming-Region-light,
+first-update, and unverified-spline statements. No static recovery is reopened.
+
+Membership: normal main, weak main, successful normal chain hops; each factory
+owns one retained record-25-UV ribbon and independent record-35 source fade,
+plus admitted path-light records. Main endpoint fade is independent of accepted
+HP damage when its pre-clipped sentinel passes; chain fade follows each
+successful hop. No weak chains, record-44 glyph, record-375/376 forks, or extra
+hop-zero fade. Enhanced changes birth spacing/loss/shadow and live split bands,
+not artwork membership. Hub/private/Tutorial/Boneyard and owner/peer/observer
+need the same complete retained birth contract, within existing scene adapters.
+
+The native owner chain is handler 0x5408F0 -> factory 0x531F00 -> constructor
+0x45B810 -> retained builder 0x52E020 -> draw 0x4583E0. Factory inputs are
+S/M/E/O/W; extension is Eprime=E+15*normalize(E-M); body uses Eprime+O while
+path lights and padded split bounds use Eprime. Short is final stored span<75,
+including collapsed controls, with one shared width sample and exactly six
+vertices/twelve indices. Long uses the recovered three-point open unweighted
+QuickSpline, named f32 stores and zero normals, first-leg approximate-length
+sampling, native phase-derived signed private mixer, transparent end caps,
+first tangent-back 25, and BL/BR on every interior. It must have a dedicated
+Flame implementation; unrelated Air and Blizzard retain their current owners.
+
+The ribbon actor-manager lane precedes the fade transient-manager lane. Both
+new children update on their birth tick. Ribbon life is two native updates.
+Fade alpha subtraction and lit-wrapper -.05 intensity updates use repeated
+f32 operations; retain positive final alpha even when packed alpha is zero.
+All Flame fades draw white/current-alpha record 35 directly, without incoming
+Region modulation, while retaining the ordinary graphics-state multiplier.
+Source has no provider; lit endpoint/chain radius uses retained birth strength
+and wrapper scalar, not current alpha or intensity.
+
+Authoritative birth RNG programs remain source 5 / endpoint 7 / chain 6 words,
+plus chain width, short width, always-sampled path intensity and one radius
+word per admitted path point. Preserve synchronous damage/death ordering and
+report 118's terminal-only Fire payload ownership. Main channel ID is reserved
+once before contact; presentation samples do not allocate replacement IDs or
+reroll gameplay RNG in views, snapshots, saves or observers. Render jitter uses
+the existing stable semantic-word policy and native signed reduction.
+
+Representation choice: a required nested discriminated Flame visual payload
+retains only factory inputs and required birth samples. Legacy-suppressed
+records keep their existing top-level channel fields, IDs, order, age 0 -> 1 ->
+retirement and painter ownership. ML lifetime remains the existing 60-second
+fallback/normalized 1; do not add top-level lifetime fields or rewrite ML
+geometry. Complete new visuals apply the birth update separately from this
+observation lifecycle. New and historical fade scale/registration domains are
+separate strict branches. Protocol/save version integers are allocated only
+after fresh integration checks. No protocol fallback invents absent samples.
+
+Transport qualification: held Flame emits each admitted primary tick, but the
+host defaults to 20 snapshots/second for a 100-tick world. A tick 1 channel is
+removed by tick 3 and absent from ordinary snapshots at 0 and 5. Existing retained
+primary presentation is Hail-only; ephemeral Flame emissions have no client
+event lane. A bounded render-only birth recipe history is therefore required
+for complete short-lived Flame membership, including fades/path lights. Its
+recovery/backpressure integration now uses the existing acknowledged snapshot
+baseline, keyframe recovery, retained-baseline pruning and payload limits.
+World replacement/load/reconnect resets the connection epoch. Relevant
+same-stopped-tick membership changes and reused-state rollback allocate a fresh
+epoch, preserving complete current survivors while clearing obsolete recipes.
+Fresh local timelines bootstrap at the supplied snapshot boundary, including
+ordinary Hub Region re-registration. Early retirement receipts survive through
+the bounded native maximum horizon to prevent stale duplicate resurrection;
+they never extend the visible interval. Overflow forces existing snapshot
+recovery. History is outside gameplay state, ML and saves; authoritative light
+sampling remains on the original host clock.
+
+The native pure geometry, source/endpoint/chain birth programs, first-update
+fade clocks, retained light recipes, transient painter lane, split-band view,
+strict object/compact/delta payloads and save migration are implemented.
+Versions 153/51 are provisional reservations, to be reconciled against fresh
+integration main before publication. Version <=50 saves receive the explicit
+legacy-suppressed discriminator without inventing missing samples or changing
+top-level fields, RNG, IDs, old update lifetime or ML observations. Current
+saves retain complete live actors only, never connection recipe queues.
+
+The normal-only camera prefix is now recovered and implemented: 0x540A2C
+calls Float(4), then 0x540A49 calls unsigned UnitVector (0x410C50), before
+staff/target preparation and receiver dispatch. Weak takes 0x540A05->0x540A76
+and skips both words. The retained displacement has fixed gain1; there is no
+position attenuation. Region sink 0x448590 uses stored-f32 squared lengths and
+strict-greater replacement, with earlier writers winning ties. Region update
+0x63F1D6 decays the combined displacement by .75 and clears only squared
+length <.25. Flame's birth already owns that first decay. Existing staff,
+secondary and enemy event-tick mappings remain unchanged; their phase has not
+been globally reinterpreted. The common stored-f32 comparison/strict cutoff is
+an intentional correction protected by mixed-family/tie regressions.
+
+The independent camera-owner review found three integration defects: a
+retained renderer could reject births after a backward world replacement;
+the deferred Flame cutoff could erase an existing family's same-tick
+post-update proposal; and independently aging a late Flame vector could
+reverse a native f32 tie. The corrected owner retains a bounded seven-live-
+tick phase journal plus a checkpoint. It replays strict shared arbitration
+before the single native decay/cutoff, then applies existing families at
+their established post-update intake phase. Same-phase proposals compress
+to their strict-f32 winner, with Flame actor IDs preserving birth order.
+Both actual renderers synchronize accepted epoch/world clock metadata before
+feedback intake. A backward replacement clears retained feedback; a same-
+tick transport reset preserves consumption and surviving impulses. The
+client-only accepted-epoch scalar survives presentation-copy queue removal
+and never widens the wire or save schema.
+
+Camera age uses the continuing Region clock, distinct from stopped visual
+age during GameOver. Ledger 052, `2026-08-14-boneyard-footsteps-and-tree-
+visibility-lighting-parity`, lines552-563, establishes that GameOver appends
+an overlay while the enabled Arena continues Region updates; ordinary pause
+sets Region+0x68=-1 and suppresses its Tick. The retained Region tail
+0x63F1D6 is unconditional after the actor/transient managers. Camera metadata
+therefore expires against the live snapshot tick even while ribbon/fade
+recipes remain on stopped world time. Ordinary pause retains the same tick.
+Regression coverage protects this distinction without globally shifting
+staff, secondary or enemy event phases.
+
+Source: retained stock-03a8345-objdump.txt SHA256
+7b480045967ab622ed8885395176107ccbaf1c30802d5e37c750fdcc2c398158,
+lines403363-403405,23885-23931,103636-103673,700243-700304. Camera recipes
+share the existing bounded birth history through their seven-tick maximum,
+without lengthening ribbon/path visibility. Consumption keys exclude the
+transport epoch: duplicate delivery and same-tick reset cannot reapply a
+surviving impulse. Load/reconnect derives only current complete actors at
+actual age; saves do not retain a connection queue. Fresh casts intentionally
+correct the native birth-word trajectory, including the two camera words;
+they do not claim byte identity with the formerly incomplete stream or
+native-runtime/x87 numerical equality. Legacy load/update, decoding, migration
+and rendering remain RNG-free at this boundary. Report-118's synchronous
+terminal-death transaction and payload order remain protected.
+
+Focused numerical/word-trace, negative-membership, first-update/provider,
+strict codec/save, legacy-ML, real admitted Boneyard cast/targetless factory,
+report-118 terminal payload, sparse 100-Hz/every-fifth-tick transport, pause,
+load, rollback, Hub transition and duplicate-retirement regressions pass.
+The independent lifecycle and corrected camera-owner closure checks pass.
+The corrected candidate passes 637 scoped regressions plus four actual
+admitted Flame input tests. Production build, host bundle/budget, focused
+TypeScript and architecture boundaries pass. The focused TypeScript set
+excludes `primary-spells.test.ts`, whose 85 diagnostics were independently
+matched to the same pre-existing excluded-test errors on the qualified base.
+Scoped lint has no errors and retains the pre-existing save-path control-regex
+warning. Existing Hub combat admission stays sealed; no test-only gameplay
+path was opened.
+
+The current compatibility source check confirms bundled desktop client/host
+pairing, exact-revision peer rejection, external Website/Dark Cloud entry,
+exact protocol-version rejection, save-before-ready deployment coordination,
+loop-free revision reload and old-save recovery. Focused compatibility tests
+pass; this source check does not qualify a new package or live deployment.
+Muted three-view Mac-browser attempt 12 passed on 2026-10-14 at 04:21 UTC,
+against runtime aggregate `8bda50817038a54b560c1872794aeb48969a623d002192fd71f27aebe8c4bd66`
+and the matching production build. Normal long/short chains, targetless,
+weak targetless/short contact, and coarse targetless phases used actual browser
+held input, unchanged host frames, and real owner/peer/true-observer renderers.
+All three shared 2,490 identical retained births; 840 history-only births proved
+coverage beyond endpoint live arrays. Real painter roots contained ribbons
+and fades in every view; Hub combat remained sealed. All captured runtime
+error arrays were empty. Owned browser, host, preview and runner teardown was
+verified. Earlier failed attempts remain failed.
+
+The harness's independent phase anchors were proven through complete held/
+release sequences across all 12 stock Boneyards (84 phase checks). It submits
+integer CSS coordinates and preflights the actual unmodified input against
+the admitted authority. Earlier diagnostic-frame world aim is only diagnostic:
+production samples a fresh camera/presentation snapshot for each input.
+Terminal payload order is separately proved through actual-input simulation,
+not claimed as a terminal browser phase. Account/directory/provisioning are
+local fixtures; this is not live-TLS, audible-audio, performance, native-runtime,
+x87 or pixel-equivalence qualification.
+
+Independent acceptance review, report-119 reconciliation, and the final exact-
+candidate M5 gate remain pending. Native-runtime comparison is unrun. No full
+M2 gate or publication is authorized by this ledger entry.

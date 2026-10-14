@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { drawNativeFlameCameraDisplacement } from '../core-kernels/native-weld-flame-camera.ts'
 import test from 'node:test'
 import { boneyardEnemyEvents } from '../protocol/codecs/enemy-effects.ts'
 import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
@@ -225,4 +227,119 @@ test('boss shakes use the proper point-gain family and share strict maximum arbi
     sourcePosition: { x: 0, y: 0 }, cameraShake: { attenuation: 'fixed', displacement: { x: -6, y: 0 } } })
   assert.deepEqual(feedback.sampleCameraDisplacement(10), { x: -6, y: 0 })
   assert.deepEqual(feedback.sampleCameraDisplacement(11), { x: -4.5, y: 0 })
+})
+
+test('Flame birth owns same-pass Region decay and duplicate history never reapplies it', () => {
+  for (const recipient of ['owner', 'peer', 'observer']) {
+    const feedback = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:flame')
+    const birth = { id: 1, birthTick: 1, worldKey: 'boneyard:flame', displacement: { x: 4, y: 0 } }
+    feedback.consumeFlameCameraDisplacements([birth])
+    assert.deepEqual(feedback.sampleCameraDisplacement(1), { x: 3, y: 0 }, recipient)
+    assert.deepEqual(feedback.sampleCameraDisplacement(2), { x: 2.25, y: 0 }, recipient)
+    feedback.consumeFlameCameraDisplacements([structuredClone(birth)]) // delivery/reset survivor
+    assert.deepEqual(feedback.sampleCameraDisplacement(2), { x: 2.25, y: 0 }, recipient)
+    assert.deepEqual(feedback.sampleCameraDisplacement(8), { x: 0, y: 0 }, recipient)
+    feedback.consumeFlameCameraDisplacements([birth])
+    assert.deepEqual(feedback.sampleCameraDisplacement(8), { x: 0, y: 0 }, recipient)
+    // New load/reconnect owner initializes from actual retained age, not age0.
+    const restored = new NativeSecondaryScreenFeedbackPresentation(2, birth.worldKey)
+    restored.consumeFlameCameraDisplacements([birth])
+    assert.deepEqual(restored.sampleCameraDisplacement(2), { x: 2.25, y: 0 }, recipient)
+  }
+})
+
+test('Region stored-f32 ties keep earlier mixed-family writer and strict cutoff preserves equality', () => {
+  const feedback = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:flame')
+  feedback.consumePrimaryCameraDisplacement({ eventId: 1, tick: 0, worldKey: 'boneyard:flame', displacement: { x: 1, y: 0 } })
+  feedback.consumeFlameCameraDisplacements([{ id: 2, birthTick: 1, worldKey: 'boneyard:flame', displacement: { x: 1, y: 2 ** -13 } }])
+  assert.deepEqual(feedback.sampleCameraDisplacement(1), { x: .75, y: 0 })
+  const cutoff = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:flame')
+  cutoff.consumePrimaryCameraDisplacement({ eventId: 1, tick: 0, worldKey: 'boneyard:flame', displacement: { x: Math.fround(2 / 3), y: 0 } })
+  cutoff.consumeFlameCameraDisplacements([{ id: 2, birthTick: 1, worldKey: 'boneyard:flame', displacement: { x: 0, y: 0 } }])
+  assert.deepEqual(cutoff.sampleCameraDisplacement(1), { x: .5, y: 0 })
+  assert.deepEqual(cutoff.sampleCameraDisplacement(2), { x: 0, y: 0 })
+  const opposite = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:flame')
+  opposite.consumePrimaryCameraDisplacement({ eventId: 1, tick: 0, worldKey: 'boneyard:flame', displacement: { x: 2, y: 0 } })
+  opposite.consumeFlameCameraDisplacements([{ id: 2, birthTick: 1, worldKey: 'boneyard:flame', displacement: { x: -2, y: 0 } }])
+  assert.deepEqual(opposite.sampleCameraDisplacement(1), { x: 1.5, y: 0 }) // max, never vector addition
+})
+
+test('Flame camera rendering and repeat delivery do not consume the authoritative RNG', () => {
+  const sampled = drawNativeFlameCameraDisplacement(createNativeRng(42), false)
+  const rng = structuredClone(sampled.rng)
+  const feedback = new NativeSecondaryScreenFeedbackPresentation(0, 'hub:courtyard')
+  const birth = { id: 1, birthTick: 1, worldKey: 'hub:courtyard', displacement: sampled.displacement! }
+  for (let tick = 1; tick <= 8; tick += 1) {
+    feedback.consumeFlameCameraDisplacements([birth, birth])
+    feedback.sampleCameraDisplacement(tick)
+  }
+  assert.deepEqual(sampled.rng, rng)
+})
+
+test('late zero and below-cutoff Flame cannot erase current-phase feedback in either intake order', () => {
+  const worldKey = 'boneyard:bosses', displacement = { x: Math.fround(.4), y: 0 }
+  const writers = [
+    (lane: NativeSecondaryScreenFeedbackPresentation) => lane.consumePrimaryCameraDisplacement({
+      eventId: 1, tick: 1, worldKey, displacement }),
+    (lane: NativeSecondaryScreenFeedbackPresentation) => lane.consumeWorldCameraDisplacements([{ tick: 1, worldKey, displacement }]),
+    (lane: NativeSecondaryScreenFeedbackPresentation) => lane.consume({ ...ring, tick: 1,
+      cameraDisplacement: displacement }, context),
+    (lane: NativeSecondaryScreenFeedbackPresentation) => lane.consumeEnemy({ actorId: 1, eventId: 1,
+      runId: 'bosses', tick: 1, type: 'enemy-camera-shake', sourcePosition: { x: 0, y: 0 },
+      cameraShake: { attenuation: 'fixed', displacement } }, context),
+  ]
+  for (const write of writers) for (const flameFirst of [true, false]) for (const x of [0, Math.fround(.6)]) {
+    const lane = new NativeSecondaryScreenFeedbackPresentation(1, worldKey)
+    const flame = () => lane.consumeFlameCameraDisplacements([{ id: 1, birthTick: 1, worldKey, displacement: { x, y: 0 } }])
+    if (flameFirst) { flame(); write(lane) } else { write(lane); flame() }
+    assert.deepEqual(lane.sampleCameraDisplacement(1), displacement)
+    assert.deepEqual(lane.sampleCameraDisplacement(2), { x: 0, y: 0 })
+  }
+})
+
+test('late Flame replays shared birth-time f32 ties instead of reversing the earlier writer', () => {
+  const worldKey = 'hub:courtyard'
+  const primary = { x: 1.7084840536117554, y: 1.4097665548324585 }
+  const flame = { x: -1.7084840536117554, y: -1.409766674041748 }
+  assert.equal(Math.fround(primary.x ** 2 + primary.y ** 2), Math.fround(flame.x ** 2 + flame.y ** 2))
+  for (const deliveryTick of [0, 1, 2, 3]) {
+    const lane = new NativeSecondaryScreenFeedbackPresentation(0, worldKey)
+    lane.consumePrimaryCameraDisplacement({ eventId: 1, tick: 0, worldKey, displacement: primary })
+    const expected = new NativeSecondaryScreenFeedbackPresentation(0, worldKey)
+    expected.consumePrimaryCameraDisplacement({ eventId: 1, tick: 0, worldKey, displacement: primary })
+    lane.sampleCameraDisplacement(deliveryTick)
+    const birth = { id: 1, birthTick: 1, worldKey, displacement: flame }
+    lane.consumeFlameCameraDisplacements([birth, birth])
+    assert.deepEqual(lane.sampleCameraDisplacement(Math.max(1, deliveryTick)),
+      expected.sampleCameraDisplacement(Math.max(1, deliveryTick)))
+  }
+  const lane = new NativeSecondaryScreenFeedbackPresentation(0, worldKey)
+  lane.consumeFlameCameraDisplacements([{ id: 2, birthTick: 1, worldKey, displacement: { x: -4, y: 0 } }])
+  assert.deepEqual(lane.sampleCameraDisplacement(1), { x: -3, y: 0 })
+  lane.consumeFlameCameraDisplacements([{ id: 1, birthTick: 1, worldKey, displacement: { x: 4, y: 0 } }])
+  assert.deepEqual(lane.sampleCameraDisplacement(1), { x: 3, y: 0 }, 'same-pass ties retain authoritative birth order')
+})
+
+test('retained feedback resets on backward world replacement but same-tick epoch changes are not impulses', () => {
+  const worldKey = 'boneyard:flame'
+  for (const recipient of ['owner', 'peer', 'observer']) {
+    const lane = new NativeSecondaryScreenFeedbackPresentation(99, worldKey)
+    lane.synchronizeWorldTimeline(100, 1, 100)
+    lane.consumeFlameCameraDisplacements([{ id: 1, birthTick: 100, worldKey, displacement: { x: 4, y: 0 } }])
+    assert.deepEqual(lane.sampleCameraDisplacement(100), { x: 3, y: 0 }, recipient)
+    const restored = { id: 1, birthTick: 1, worldKey, displacement: { x: 0, y: 4 } }
+    lane.synchronizeWorldTimeline(1, 2, 1)
+    lane.consumeFlameCameraDisplacements([restored])
+    assert.deepEqual(lane.sampleCameraDisplacement(1), { x: 0, y: 3 }, recipient)
+    lane.synchronizeWorldTimeline(1, 3, 1)
+    lane.consumeFlameCameraDisplacements([restored, restored])
+    assert.deepEqual(lane.sampleCameraDisplacement(1), { x: 0, y: 3 }, recipient)
+    assert.deepEqual(lane.sampleCameraDisplacement(8), { x: 0, y: 0 }, recipient)
+    lane.synchronizeWorldTimeline(0, 4, 0)
+    assert.deepEqual(lane.sampleCameraDisplacement(0), { x: 0, y: 0 }, `${recipient}: empty replacement`)
+    const firstFrame = new NativeSecondaryScreenFeedbackPresentation(99, worldKey)
+    firstFrame.synchronizeWorldTimeline(1, 2, 1)
+    firstFrame.consumeFlameCameraDisplacements([restored])
+    assert.deepEqual(firstFrame.sampleCameraDisplacement(1), { x: 0, y: 3 }, `${recipient}: rollback during renderer construction`)
+  }
 })

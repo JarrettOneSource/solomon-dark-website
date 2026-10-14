@@ -1,3 +1,5 @@
+import { nativeFlameLashFadeLight } from '../core-kernels/native-weld-flame-lash.ts'
+import { nativeFlameLashPathLights } from '../core-kernels/native-weld-flame-birth.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
   buildNativeAirContactLightSource,
@@ -166,6 +168,15 @@ export function boneyardWorldLightQuery(
     }
     let source: NativeBoneyardLightSource | null = null
     switch (effect.kind) {
+      case 'weld-flame-lash-fade': source = nativeFlameLashFadeLight(effect); break
+      case 'weld-channel': {
+        if (effect.buildId === 1003 && effect.ageTicks === 0 && effect.flameVisual?.kind === 'native-birth-v1') {
+          const path = effect.flameVisual.path
+          misc.push({ birthTick: effect.birthTick, id: effect.id, ordinal: path.miscAppendOrdinal,
+            registration: path.creatorRegistration, sources: nativeFlameLashPathLights(effect.flameVisual, effect.enhancedEffects) })
+        }
+        break
+      }
       case 'weld-meteor': source = nativeWeldMeteorLightSource(effect); break
       case 'weld-persistent':
         if (effect.buildId === 1006 || effect.buildId === 1008) source = nativeWeldRockLightSource(effect)

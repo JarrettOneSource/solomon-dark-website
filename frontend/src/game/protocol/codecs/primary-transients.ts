@@ -67,6 +67,7 @@ import {
 } from './values.ts'
 import { nativeWeldBoulderDebris } from './weld-children.ts'
 import { primarySpellWeldActor } from './weld.ts'
+import { validateFlameFadePainterRegistration } from './weld-flame.ts'
 
 export function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
@@ -78,15 +79,16 @@ export function primarySpellTransient(value: unknown, field: string): PrimarySpe
   const contract = nativePrimaryPainterRegistrationContract(
     decoded as PrimarySpellTransientState,
   )
-  return {
-    ...decoded,
-    painterRegistrations: nativeWorldPainterRegistrations(
-      painterRegistrationValue,
-      `${field}.painterRegistrations`,
-      contract.managerLane,
-      contract.count,
-    ),
-  } as PrimarySpellTransientState
+  const painterRegistrations = nativeWorldPainterRegistrations(
+    painterRegistrationValue,
+    `${field}.painterRegistrations`,
+    contract.managerLane,
+    contract.count,
+  )
+  if (decoded.kind === 'weld-flame-lash-fade') {
+    validateFlameFadePainterRegistration(decoded, painterRegistrations, field)
+  }
+  return { ...decoded, painterRegistrations } as PrimarySpellTransientState
 }
 
 function primarySpellTransientPayload(

@@ -1,3 +1,4 @@
+import { createRetainedFlamePresentation } from './flame-presentation.ts'
 import type { Vec2 } from '../../editor/model.ts'
 import { copyNativePlayerRescueProtection } from '../core-kernels/native-player-rescue.ts'
 import { playerCharacterFacing } from '../core-kernels/player-character.ts'
@@ -99,6 +100,7 @@ export function createBoneyardPresentationTimeline(
     snapshot: clientBoneyardSnapshot(options.initialSnapshot),
   }]
   const primarySpellPresentation = createRetainedBoneyardPrimarySpellPresentation()
+  const flamePresentation = createRetainedFlamePresentation(options.initialSnapshot.flamePresentation)
   const enemyPresentation = new BoneyardEnemySampleInterpolator()
 
   return {
@@ -107,6 +109,13 @@ export function createBoneyardPresentationTimeline(
       requireFinite(receivedAtMs, 'receivedAtMs')
       const clientSnapshot = clientBoneyardSnapshot(snapshot)
       const latest = history.at(-1)!
+      const replaced = flamePresentation.accept(clientSnapshot.flamePresentation,
+        gameRunWorldTick(history[0]!.snapshot.tick, history[0]!.snapshot.run))
+      if (replaced) {
+        history.splice(0, history.length, { presentationStartTick: clientSnapshot.tick,
+          receivedAtMs, snapshot: clientSnapshot })
+        return
+      }
       if (clientSnapshot.tick < latest.snapshot.tick) return
       if (clientSnapshot.tick === latest.snapshot.tick) {
         history[history.length - 1] = {
@@ -140,7 +149,13 @@ export function createBoneyardPresentationTimeline(
       requireFinite(nowMs, 'nowMs')
       const newest = history.at(-1)!
       if (history.length === 1) {
-        return presentationCopy(newest.snapshot, primarySpellPresentation)
+        const frame = presentationCopy(newest.snapshot, primarySpellPresentation)
+        const cameras = flamePresentation.cameraDisplacements(frame.primarySpells,
+          gameRunWorldTick(newest.snapshot.tick, newest.snapshot.run), frame.tick)
+        if (newest.snapshot.flamePresentation) frame.flamePresentationEpoch = newest.snapshot.flamePresentation.epoch
+        if (cameras.length) frame.flameCameraDisplacements = cameras
+        frame.primarySpells = flamePresentation.sample(frame.primarySpells, gameRunWorldTick(newest.snapshot.tick, newest.snapshot.run))
+        return frame
       }
       const targetTick = presentationTargetTick(newest, nowMs, options.serverTickRate)
       const [older, newer] = bracketSnapshots(history, targetTick)
@@ -150,7 +165,7 @@ export function createBoneyardPresentationTimeline(
         0,
         1,
       )
-      return interpolateSnapshot(
+      const frame = interpolateSnapshot(
         older.snapshot,
         newer.snapshot,
         blend,
@@ -158,6 +173,13 @@ export function createBoneyardPresentationTimeline(
         primarySpellPresentation,
         enemyPresentation,
       )
+      const cameras = flamePresentation.cameraDisplacements(frame.primarySpells,
+        Math.min(targetTick, gameRunWorldTick(newest.snapshot.tick, newest.snapshot.run)), frame.tick)
+      if (newest.snapshot.flamePresentation) frame.flamePresentationEpoch = newest.snapshot.flamePresentation.epoch
+      if (cameras.length) frame.flameCameraDisplacements = cameras
+      frame.primarySpells = flamePresentation.sample(frame.primarySpells,
+        Math.min(targetTick, gameRunWorldTick(newest.snapshot.tick, newest.snapshot.run)))
+      return frame
     },
   }
 }

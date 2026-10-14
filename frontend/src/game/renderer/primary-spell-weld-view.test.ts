@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
-import { Container, Graphics, Mesh, Sprite, Texture } from 'pixi.js'
+import { BatchableMesh, Container, Graphics, Mesh, Rectangle, Sprite, Texture, TextureSource } from 'pixi.js'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 import { spawnNativeWeldOneShot, type NativeWeldChannelActorState } from '../core-kernels/native-weld-primary-runtime.ts'
 import { createNativeWeldBlizzardSourceGlows } from '../core-kernels/native-weld-blizzard.ts'
@@ -10,11 +11,16 @@ import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { WeldDrawingResources, WeldDrawingView } from './primary-spell-weld-drawing.ts'
 import type { NativeWeldVisualPlan } from './primary-spell-weld-native.ts'
 import { NATIVE_WELD_SPRITES, NATIVE_WELD_DEADHAWG_SPRITES, nativeWeldVisualPlan } from './primary-spell-weld-native.ts'
-import { WeldPrimarySpellView } from './primary-spell-weld-view.ts'
+import { WeldPrimarySpellView, buildNativeFlameLashSplitBands } from './primary-spell-weld-view.ts'
+import { updateNativeMeshVertexColors } from './native-material-batch.ts'
+import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
+const flamePage = new Texture({ source: new TextureSource({ width: 2048, height: 2048, alphaMode: 'no-premultiply-alpha' }) })
+const flameRecord = nativeSpriteRecordTexture({ source: flamePage.source, frame: new Rectangle(1760, 1492, 19, 20) })
+after(() => { flameRecord.destroy(false); flamePage.destroy(true) })
 const textures: PlayerWorldTextures['primarySpells']['weldActors'] = {
-  BadGuys: Object.fromEntries(Object.entries(NATIVE_WELD_SPRITES).map(([key, value]) => [key, { ...value, texture: Texture.EMPTY }])),
+  BadGuys: Object.fromEntries(Object.entries(NATIVE_WELD_SPRITES).map(([key, value]) => [key, { ...value, texture: Number(key) === 25 ? flameRecord : Texture.EMPTY }])),
   DeadHawg: Object.fromEntries(Object.entries(NATIVE_WELD_DEADHAWG_SPRITES).map(([key, value]) => [key, { ...value, texture: Texture.EMPTY }])),
 }
 
@@ -26,6 +32,12 @@ function channel(buildId: 1003 | 1004): NativeWeldChannelActorState {
     midpoint: { x: 50, y: -310 }, origin: { x: 0, y: 0 }, ownerId: 'wizard',
     targetId: 'enemy:1', underpowered: false, variant: 0,
     vector: [8, 2, 1, 0.8, 0, 0, 0.2, 0], worldKey: 'boneyard:retained-weld',
+    ...(buildId === 1003 ? { flameVisual: {
+      kind: 'native-birth-v1' as const, role: 'main' as const, cameraDisplacement: { x: 4, y: 0 }, width: 1,
+      start: { x: 0, y: 0 }, control: { x: 50, y: -310 }, end: { x: 100, y: -600 }, offset: { x: 0, y: 0 },
+      ribbon: { kind: 'long' as const, phaseDegrees: -3 },
+      path: { intensity: 1, radiusFactors: [], creatorRegistration: { managerLane: 'actor' as const, registrationOrdinal: 1 }, miscAppendOrdinal: 0 },
+    } } : {}),
   }
 }
 
@@ -48,7 +60,7 @@ for (const buildId of [1003, 1004] as const) {
       resource.on('destroy', () => events.push('destroy'))
       return events
     })
-    const shifted = { ...state, ageTicks: 1, origin: { x: 20, y: 30 }, endpoint: { x: 120, y: -500 } }
+    const shifted = { ...state, ageTicks: buildId === 1003 ? 0 : 1, origin: { x: 20, y: 30 }, endpoint: { x: 120, y: -500 } }
     view.update(shifted, 40)
     const plan = nativeWeldVisualPlan(shifted, 40)
     for (let band = 0; band < bands.length; band += 1) {
@@ -60,14 +72,15 @@ for (const buildId of [1003, 1004] as const) {
         assert.equal(mesh.geometry, geometry[index], 'clipped views must share the semantic mesh geometry')
         assert.deepEqual(mesh.geometry.getBuffer('aPosition').data, new Float32Array(plan.meshes[index]!.vertices))
         assert.deepEqual(mesh.geometry.getBuffer('aUV').data, new Float32Array(plan.meshes[index]!.uvs))
-        assert.deepEqual(mesh.geometry.getIndex().data, new Uint32Array(plan.meshes[index]!.indices))
+        assert.deepEqual(mesh.geometry.getIndex().data, buildId === 1003
+          ? new Uint16Array(plan.meshes[index]!.indices) : new Uint32Array(plan.meshes[index]!.indices))
         assert.equal(mesh.alpha, plan.meshes[index]!.alpha)
         assert.equal(mesh.tint, plan.meshes[index]!.tint)
         assert.equal(mesh.blendMode, plan.meshes[index]!.blend)
       }
       const mask = bands[band]!.children.find(child => child instanceof Graphics)
       assert.ok(mask instanceof Graphics)
-      assert.equal(mask.position.x, -shifted.origin.x)
+      assert.equal(mask.position.x, buildId === 1003 ? 0 : -shifted.origin.x)
     }
     assert.ok(lifetimeEvents.every(events => events.length === 0))
     view.destroy()
@@ -223,4 +236,136 @@ test('Hail contact lines retain both native strokes and reject unrelated actor u
   view.update({ ...state, alpha: 0.4 })
   assert.equal(graphics.context.instructions.length, 2)
   view.destroy()
+})
+
+// CPU-side Pixi resource tests; live GPU pixels and native captures remain a
+// separate acceptance stage. Both installed native mesh pipelines consume aColor.
+test('Flame uses real packed vertex colors and one full-page absolute UV mapping', () => {
+  const state = channel(1003)
+  assert.equal(state.flameVisual!.kind, 'native-birth-v1')
+  const weak = { ...state, underpowered: true, flameVisual: { ...state.flameVisual!, width: .75 } }
+  const view = new WeldPrimarySpellView(weak, textures)
+  const meshes = view.containers.slice(1).map(band => band.children[0]!.children.find(child => child instanceof Mesh) as Mesh)
+  const mesh = meshes[0]!
+  const expected = nativeWeldVisualPlan(weak).meshes[0]!
+  assert.equal(mesh.alpha, 1)
+  assert.equal(mesh.tint, 0xffffff)
+  assert.equal(mesh.shader, null)
+  assert.equal(mesh.geometry.attributes.aColor!.format, 'unorm8x4')
+  assert.deepEqual(Array.from(mesh.geometry.getBuffer('aColor').data), expected.colors)
+  assert.deepEqual(Array.from(mesh.geometry.getBuffer('aColor').data).slice(0, 2), [0, 0])
+  assert.ok(Array.from(mesh.geometry.getBuffer('aColor').data).slice(2, -2).every(value => value === 0x7fffffff))
+  assert.equal(mesh.texture.source, flameRecord.source)
+  assert.notEqual(mesh.texture, flameRecord)
+  assert.equal(mesh.texture.frame.x, 0)
+  assert.equal(mesh.texture.frame.width, 2048)
+  assert.equal(mesh.texture.textureMatrix.isSimple, true)
+  assert.equal(flameRecord.textureMatrix.isSimple, false)
+  const batchable = new BatchableMesh()
+  batchable.geometry = mesh.geometry
+  batchable.setTexture(mesh.texture)
+  assert.deepEqual(Array.from(batchable.uvs), expected.uvs)
+  assert.equal(batchable.uvs, mesh.geometry.getBuffer('aUV').data)
+  for (const draw of meshes) {
+    assert.equal(draw.geometry, mesh.geometry)
+    assert.equal(updateNativeMeshVertexColors(draw), true)
+  }
+  const page = mesh.texture
+  view.destroy()
+  assert.equal(page.destroyed, true)
+  assert.equal(flameRecord.destroyed, false)
+  assert.equal(flameRecord.source.destroyed, false)
+})
+
+test('Flame live quality changes retain birth geometry and use padded native band progression', () => {
+  const state = channel(1003)
+  const view = new WeldPrimarySpellView(state, textures, false)
+  const firstBand = view.containers[1]!
+  const mesh = firstBand.children[0]!.children.find(child => child instanceof Mesh) as Mesh
+  const geometry = mesh.geometry
+  const positions = geometry.getBuffer('aPosition')
+  const originalWords = [...positions.data]
+  const originalUpdate = positions._updateID
+  const coarse = view.painterRoots()[0]!.insertions!
+  view.setRegionView({ x: 10, y: -300, width: 500, height: 200 })
+  view.update(state, 900, 1, true)
+  assert.equal(firstBand.children[0]!.children.find(child => child instanceof Mesh), mesh)
+  assert.equal(mesh.geometry, geometry)
+  assert.deepEqual([...positions.data], originalWords)
+  assert.equal(positions._updateID, originalUpdate)
+  const enhanced = view.painterRoots()[0]!.insertions!
+  assert.ok(enhanced.length > coarse.length)
+  assert.equal(enhanced[0]!.worldY, -275)
+  assert.equal(enhanced[1]!.worldY, -250)
+  assert.ok(enhanced.some(insertion => !insertion.visible))
+  assert.equal(view.container.position.x, 0)
+  assert.equal(view.container.position.y, 0)
+  const mask = firstBand.children.find(child => child instanceof Graphics) as Graphics
+  const maskBounds = mask.getLocalBounds()
+  assert.equal(maskBounds.minX, 10)
+  assert.equal(maskBounds.minY, -300)
+  assert.equal(maskBounds.maxX, 510)
+  assert.equal(maskBounds.maxY, -275)
+  view.update(state, 901, 1, false)
+  assert.equal(view.painterRoots()[0]!.insertions!.length, coarse.length)
+  assert.equal(view.painterRoots()[0]!.insertions![0]!.worldY, -250)
+  assert.equal(positions._updateID, originalUpdate)
+  view.update({ ...state, ageTicks: 1 }, 902, 1, true)
+  assert.deepEqual(view.painterRoots(), [])
+  assert.ok(view.containers.slice(1).every(band => !band.children[0]!.children.some(child => child instanceof Mesh)))
+  view.destroy()
+})
+
+test('Flame split clips start at the intersection but retain the original padded count', () => {
+  const bounds = { x: -40, y: -100, width: 120, height: 101 }
+  const region = { x: 0, y: -13, width: 50, height: 60 }
+  const enhanced = buildNativeFlameLashSplitBands('test', bounds, true, region)
+  assert.deepEqual(enhanced.map(band => band.clip.y), [-13, 12, 37, 62, 87])
+  assert.deepEqual(enhanced.map(band => band.painterY), [12, 37, 62, 87, 112])
+  assert.ok(enhanced.every(band => band.clip.x === 0 && band.clip.width === 10000 && band.clip.height === 25))
+  assert.deepEqual(buildNativeFlameLashSplitBands('test', bounds, false, region).map(band => band.clip.y), [-13, 37, 87])
+})
+
+test('Flame missing and legacy birth data stays invisible, including a later visual update', () => {
+  const state = channel(1003)
+  for (const flameVisual of [undefined, { kind: 'legacy-suppressed' as const }]) {
+    const view = new WeldPrimarySpellView({ ...state, flameVisual }, textures)
+    assert.deepEqual(view.painterRoots(), [])
+    assert.equal(view.containers.length, 1)
+    view.update(state)
+    assert.deepEqual(view.painterRoots(), [])
+    view.destroy()
+  }
+})
+
+test('World view changes live Flame bands without recreating the retained mesh or outer clip', () => {
+  const root = new Container()
+  const outerClip = new Graphics().rect(-1000, -1000, 2000, 2000).fill(0xffffff)
+  root.mask = outerClip
+  const worldTextures = { primarySpells: { weldActors: textures } } as PlayerWorldTextures
+  const world = new PrimarySpellWorldView(root, worldTextures)
+  const state = { ...channel(1003), painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 1 }] }
+  const spells = { nextId: 2, projectiles: [], transients: [state] }
+  world.update(spells, state.worldKey, 10, () => 1, undefined, false, { x: 0, y: -500, width: 800, height: 500 })
+  const retained = [...root.children]
+  const mesh = retained[1]!.children[0]!.children.find(child => child instanceof Mesh) as Mesh
+  const geometry = mesh.geometry
+  const coarseCount = world.painterLayers()[0]!.insertions!.length
+  let geometryDestroyed = false
+  geometry.on('destroy', () => { geometryDestroyed = true })
+  world.update(spells, state.worldKey, 11, () => 1, undefined, true, { x: 0, y: -450, width: 800, height: 450 })
+  assert.equal(root.children.length, retained.length)
+  retained.forEach((container, index) => assert.equal(root.children[index], container))
+  assert.equal(retained[1]!.children[0]!.children.find(child => child instanceof Mesh), mesh)
+  assert.equal(mesh.geometry, geometry)
+  assert.ok(world.painterLayers()[0]!.insertions!.length > coarseCount)
+  assert.equal(world.painterLayers()[0]!.insertions![0]!.worldY, -425)
+  assert.equal(root.mask, outerClip)
+  world.update({ ...spells, transients: [] }, state.worldKey)
+  assert.equal(root.children.length, 0)
+  assert.equal(geometryDestroyed, true)
+  assert.equal(root.mask, outerClip)
+  world.destroy()
+  root.destroy()
+  outerClip.destroy()
 })

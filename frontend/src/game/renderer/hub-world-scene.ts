@@ -286,6 +286,7 @@ export class HubWorldScene {
     } | null = null,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
     markerSurface: HubNpcMarkerSurface = null,
+    regionView: Readonly<{ x: number; y: number; width: number; height: number }> | null = null,
   ): void {
     const ambient = snapshot.world.ambient
     const colors = hubSealColors(ambient)
@@ -320,6 +321,7 @@ export class HubWorldScene {
       pointGainAt,
       undefined,
       snapshot.enhancedEffects,
+      regionView,
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,

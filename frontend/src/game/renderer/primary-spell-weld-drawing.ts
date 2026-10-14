@@ -1,5 +1,6 @@
 import { setNativeDiffuseColor } from './native-texture-color.ts'
-import { Container, Graphics, GraphicsContext, Matrix, Mesh, MeshGeometry, Sprite } from 'pixi.js'
+import { Container, Graphics, GraphicsContext, Matrix, Mesh, MeshGeometry, Sprite, Texture } from 'pixi.js'
+import { setNativeVertexColors } from './native-material-batch.ts'
 
 import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import type {
@@ -14,6 +15,9 @@ type WeldTextures = PlayerWorldTextures['primarySpells']['weldActors']
 export class WeldDrawingResources {
   readonly lines = new GraphicsContext()
   readonly meshes: MeshGeometry[] = []
+  readonly colors: (Uint32Array | undefined)[] = []
+  private readonly atlasPages = new Map<Texture['source'], Texture>()
+  private lastMeshPlan: NativeWeldVisualPlan['meshes'] | null = null
 
   update(plan: NativeWeldVisualPlan): void {
     this.lines.clear()
@@ -22,6 +26,8 @@ export class WeldDrawingResources {
         .lineTo(draw.end.x, draw.end.y)
         .stroke({ alpha: draw.alpha, color: draw.color, width: draw.width })
     }
+    if (this.lastMeshPlan === plan.meshes) return
+    this.lastMeshPlan = plan.meshes
     for (let index = 0; index < plan.meshes.length; index += 1) {
       const draw = plan.meshes[index]!
       let geometry = this.meshes[index]
@@ -32,6 +38,7 @@ export class WeldDrawingResources {
           topology: 'triangle-list',
           uvs: new Float32Array(draw.uvs),
         })
+        if (draw.colors) geometry.getIndex().data = new Uint16Array(draw.indices)
         this.meshes.push(geometry)
       } else {
         updateFloatBuffer(geometry, 'aPosition', draw.vertices)
@@ -40,15 +47,39 @@ export class WeldDrawingResources {
         if (indices.data.length === draw.indices.length) {
           indices.data.set(draw.indices)
           indices.update()
-        } else indices.data = new Uint32Array(draw.indices)
+        } else indices.data = draw.colors ? new Uint16Array(draw.indices) : new Uint32Array(draw.indices)
+      }
+      const previous = this.colors[index]
+      if (draw.colors) {
+        if (previous?.length === draw.colors.length) previous.set(draw.colors)
+        else this.colors[index] = new Uint32Array(draw.colors)
+      } else if (previous) {
+        this.colors[index] = new Uint32Array(draw.vertices.length / 2).fill(0xffffffff)
       }
     }
+  }
+
+  /** Absolute record-25 UVs must bypass the framed glyph's second UV mapping. */
+  atlasPage(registered: Texture): Texture {
+    const source = registered.source
+    if (source.width !== 2048 || source.height !== 2048) {
+      throw new RangeError('Native Flame ribbon requires the original 2048-square BadGuys atlas page')
+    }
+    let page = this.atlasPages.get(source)
+    if (!page) {
+      page = new Texture({ source })
+      this.atlasPages.set(source, page)
+    }
+    return page
   }
 
   destroy(): void {
     this.lines.destroy()
     for (const geometry of this.meshes) destroyOwnedMeshGeometry({ geometry })
     this.meshes.length = 0
+    this.colors.length = 0
+    for (const page of this.atlasPages.values()) page.destroy(false)
+    this.atlasPages.clear()
   }
 }
 
@@ -111,14 +142,17 @@ export class WeldDrawingView {
       const draw = plan.meshes[index]!
       const registered = this.textures.BadGuys[draw.record]
       if (!registered) throw new Error(`Missing native Weld mesh texture BadGuys:${draw.record}`)
+      const texture = draw.uvSpace === 'badguys-atlas' ? resources.atlasPage(registered.texture) : registered.texture
       let mesh = this.meshes[index]
       if (!mesh) {
-        mesh = new Mesh({ geometry: resources.meshes[index]!, texture: registered.texture })
+        mesh = new Mesh({ geometry: resources.meshes[index]!, texture })
         mesh.eventMode = 'none'
         this.meshes.push(mesh)
         this.meshRoot.addChild(mesh)
       }
-      mesh.texture = registered.texture
+      mesh.texture = texture
+      const colors = resources.colors[index]
+      if (colors) setNativeVertexColors(mesh, colors)
       mesh.alpha = draw.alpha
       mesh.blendMode = draw.blend
       mesh.label = `${draw.role}:BadGuys:${draw.record}`

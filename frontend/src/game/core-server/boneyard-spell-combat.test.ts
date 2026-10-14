@@ -1992,7 +1992,7 @@ test('Flame Lash retains the semantic Lightning target, chains and stuns without
   const sourceFade = sourceFades[0]!
   assert.ok(sourceFade.kind === 'weld-flame-lash-fade')
   assert.equal(sourceFade.record, 35)
-  assert.equal(sourceFade.alpha, .5)
+  assert.equal(sourceFade.alpha, Math.fround(.5 - Math.fround(.1)))
   assert.equal(sourceFade.alphaStep, Math.fround(.1))
   assert.equal(result.spells.transients.some((effect) => (
     effect.kind === 'weld-channel' && effect.id !== 10 && effect.targetId === 'enemy:2'

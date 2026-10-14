@@ -41,7 +41,8 @@ import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
 import { GameSaveCheckpointScheduler } from './game-save-checkpoint-scheduler.ts'
 import type { GameServerLogSink } from './game-server-logger.ts'
 import { gameServerErrorDetails, logGameServerEvent } from './game-server-logger.ts'
-import { createGameSnapshot } from './game-snapshot.ts'
+import { createGameSnapshot as createGameSnapshotState } from './game-snapshot.ts'
+import { createHostFlamePresentationHistory } from './flame-presentation-history.ts'
 import type { GameSocialBroker, GameSocialChatDelivery, GameSocialConnection } from './game-social-broker.ts'
 import type { HostPresenceEntry } from './host-presence.ts'
 import { projectHostPresence } from './host-presence.ts'
@@ -569,6 +570,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let privateParties: PartySystemState | null = sessionKind === 'private-college'
     ? createPartySystem()
     : null
+  const flameHistories = createHostFlamePresentationHistory()
+  function createGameSnapshot(...args: Parameters<typeof createGameSnapshotState>): ReturnType<typeof createGameSnapshotState> {
+    return { ...createGameSnapshotState(...args), flamePresentation: flameHistories.resetFrame(args[0]) }
+  }
   let state = sharedWorlds?.hub ?? createInitialSimulation(options.createSimulation)
   let gameplayPause: GameplayPauseState | null = null
   let privateNavigationPreparation: Promise<void> | null = null
@@ -3849,6 +3854,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               lifecycleBoundary = true
             }
           }
+          flameHistories.advance(previous.hub, sharedWorlds.hub)
+          for (const run of sharedWorlds.runs) {
+            const before = previous.runs.find(candidate => candidate.partyId === run.partyId)
+            if (before) flameHistories.advance(before.state, run.state)
+          }
           nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
           steps += 1
           sharedHostTick = Math.max(sharedHostTick + 1, state.tick)
@@ -3983,6 +3993,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (enteredGameOver) publishProfileCheckpoint()
         if (enteredGameOver || completedGameOver) stopAllClientInputs()
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
+        flameHistories.advance(previousState, state)
         nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
         steps += 1
         if (
@@ -4215,6 +4226,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   function broadcastSnapshot(): void {
     type ProjectedSnapshot = {
+      readonly sourceState: GameSimulationState
       readonly projection: GameSnapshotProjection
       readonly snapshot: ReturnType<typeof createGameSnapshot>
     }
@@ -4260,6 +4272,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         hubActivities,
       )
       const projected = {
+        sourceState: activeState,
         projection: createGameSnapshotProjection(snapshot),
         snapshot,
       }
@@ -4324,9 +4337,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       let projected: ProjectedSnapshot
       const rejoinSlot = client.partyRejoinSlot
       if (rejoinSlot) {
+        const stagingState = partyRejoinStagingState(rejoinSlot)
         const snapshot = {
           ...createGameSnapshot(
-            partyRejoinStagingState(rejoinSlot),
+            stagingState,
             activePartySystem()?.parties.find(({ id }) => (
               id === rejoinSlot.partyId
             ))?.leaderPlayerId ?? null,
@@ -4334,6 +4348,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           materializingPlayerIds: [client.playerId],
         }
         projected = {
+          sourceState: stagingState,
           projection: createGameSnapshotProjection(snapshot),
           snapshot,
         }
@@ -4353,20 +4368,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.lastSentSnapshotSequence,
       )
       const recoveryKeyframe = client.replicationRecovery !== null
+      const flamePresentation = flameHistories.frame(projected.sourceState,
+        recoveryKeyframe ? null : acknowledgedBaseline?.flamePresentation ?? null)
       const forceKeyframe = periodicKeyframe
+        || flamePresentation.kind === 'reset'
         || recoveryKeyframe
         || !acknowledgedBaseline
         || lastSentBaseline?.worldIdentity !== currentBaseline.worldIdentity
       sendGamePayload(client.socket, encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: client.acknowledgedSequence,
-        frame: createGameSnapshotFrame(
+        frame: { ...createGameSnapshotFrame(
           snapshot,
           client.acknowledgedSnapshotSequence,
           acknowledgedBaseline,
           forceKeyframe,
           projection,
-        ),
+        ), flamePresentation },
         sequence: snapshotSequence,
       }))
       sendPreparedModRuntime(
@@ -4415,20 +4433,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         observer.lastSentSnapshotSequence,
       )
       const recoveryKeyframe = observer.replicationRecovery !== null
+      const flamePresentation = flameHistories.frame(observed.state,
+        recoveryKeyframe ? null : acknowledgedBaseline?.flamePresentation ?? null)
       const forceKeyframe = periodicKeyframe
+        || flamePresentation.kind === 'reset'
         || recoveryKeyframe
         || !acknowledgedBaseline
         || lastSentBaseline?.worldIdentity !== currentBaseline.worldIdentity
       sendGamePayload(observer.socket, encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: 0,
-        frame: createGameSnapshotFrame(
+        frame: { ...createGameSnapshotFrame(
           snapshot,
           observer.acknowledgedSnapshotSequence,
           acknowledgedBaseline,
           forceKeyframe,
           projection,
-        ),
+        ), flamePresentation },
         sequence: snapshotSequence,
       }))
       sendPreparedModRuntime(
@@ -4443,6 +4464,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         observer.replicationRecovery.keyframeSentAtMs = performance.now()
       }
       pruneReplicationBaselines(observer)
+    }
+    // The existing retained snapshot-baseline window is the only history cursor.
+    for (const activeState of projectionCache.keys()) {
+      const current = flameHistories.resetFrame(activeState)
+      let oldest = current.throughTick
+      for (const peer of [...clients.values(), ...observers.values()]) {
+        for (const baseline of peer.sentReplicationBaselines.values()) {
+          if (baseline.flamePresentation?.epoch === current.epoch) oldest = Math.min(oldest, baseline.flamePresentation.worldTick)
+        }
+      }
+      flameHistories.discardThrough(activeState, oldest)
     }
   }
 
@@ -4550,6 +4582,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function replaceStateForPlayer(playerId: string, nextState: GameSimulationState): void {
+    // Ordinary same-world UI/mod mutations preserve the existing connection epoch.
+    // Save restores/world replacements have separate assignment owners and reset.
+    flameHistories.advance(stateForPlayer(playerId), nextState)
     if (!sharedWorlds) {
       state = nextState
       return
@@ -7429,6 +7464,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 stagedState = candidate
                 return
               }
+              flameHistories.advance(run.state, candidate)
               sharedWorlds = {
                 ...sharedWorlds,
                 runs: sharedWorlds.runs.map(entry => entry.partyId === partyId
@@ -7480,7 +7516,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ),
       state: {
         read: () => state,
-        write: candidate => { state = candidate },
+        write: candidate => { flameHistories.advance(state, candidate); state = candidate },
       },
       wasmPath: options.luaWasmPath,
     })

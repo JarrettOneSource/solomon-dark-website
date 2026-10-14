@@ -1,3 +1,4 @@
+import type { FlamePresentationFrame } from './flame-presentation.ts'
 import type { NativeDeathWeaponActor } from '../core-kernels/native-death-animations.ts'
 import type { NativeScreenFlashState } from '../core-kernels/native-screen-flash.ts'
 import type { NativePuppetHitState, NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
@@ -961,6 +962,7 @@ export interface PrimarySpellSimulationFrameState {
 }
 
 export interface GameSnapshot {
+  flamePresentation?: FlamePresentationFrame
   enhancedEffects: boolean
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
@@ -976,10 +978,14 @@ export interface GameSnapshot {
 }
 
 export type GameClientSnapshot = Omit<GameSnapshot, 'primarySpells'> & {
+  /** Derived render-only camera births. Not admitted by either wire codec. */
+  flameCameraDisplacements?: readonly import('../core-kernels/native-weld-flame-state.ts').NativeFlameCameraProposal[]
+  flamePresentationEpoch?: number
   primarySpells: PrimarySpellSimulationFrameState
 }
 
 export interface GameSnapshotFrame {
+  flamePresentation: FlamePresentationFrame
   enhancedEffects: boolean
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null

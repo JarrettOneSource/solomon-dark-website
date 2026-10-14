@@ -199,8 +199,9 @@ test('report118: flash then optional seed draws occur on nonlethal and shield hi
   const withoutPayload = flame(source, { arcs: 0, deferred: true, explode: 0 })
   const shielded = flame({ ...source, actors: source.actors.map(actor => ({ ...actor, shieldHealth: 20, shieldMaximumHealth: 20 })) },
     { arcs: 0, deferred: true })
-  assert.deepEqual(withPayload.rng, advanceNativeRngWords(createNativeRng(17), 13))
-  assert.deepEqual(withoutPayload.rng, advanceNativeRngWords(createNativeRng(17), 12))
+  // Report116 restores the independent endpoint heading word; flash/seed still precede all births.
+  assert.deepEqual(withPayload.rng, advanceNativeRngWords(createNativeRng(17), 14))
+  assert.deepEqual(withoutPayload.rng, advanceNativeRngWords(createNativeRng(17), 13))
   assert.deepEqual(shielded.rng, withPayload.rng)
   const flash = drawNativeFloat(createNativeRng(17), .5)
   assert.equal(withPayload.enemies.actors[0]!.hitFeedback.strength, Math.fround(.25 + flash.value))

@@ -1,3 +1,5 @@
+import { gameRunWorldTick } from '../core-kernels/game-run.ts'
+import type { FlamePresentationBaseline } from './flame-presentation-history.ts'
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import {
   BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION,
@@ -95,6 +97,7 @@ const STUDENT_DESCRIPTOR_HEADER = 6
 const STUDENT_SAMPLE_LENGTH = 7
 
 export interface ReplicatedEntityBaseline {
+  readonly flamePresentation?: FlamePresentationBaseline
   readonly descriptors: ReadonlyMap<number, ReadonlyMap<number, ReplicatedEntityDescriptor>>
   readonly playerEconomyRevisions: ReadonlyMap<string, number>
   readonly worldIdentity: string
@@ -253,6 +256,8 @@ export function createReplicatedEntityBaseline(
   snapshot: GameSnapshot,
 ): ReplicatedEntityBaseline {
   return {
+    flamePresentation: { epoch: snapshot.flamePresentation?.epoch ?? 1,
+      worldTick: gameRunWorldTick(snapshot.tick, snapshot.run) },
     descriptors: descriptorMap(snapshot),
     playerEconomyRevisions: new Map(Object.entries(snapshot.players).map(
       ([playerId, player]) => [playerId, player.economy.revision],
@@ -313,6 +318,10 @@ export function createGameSnapshotFrame(
     spawned,
   }
   const common = {
+    flamePresentation: snapshot.flamePresentation?.kind === 'continuous' ? snapshot.flamePresentation
+      : { kind: 'reset' as const, epoch: snapshot.flamePresentation?.epoch ?? 1,
+      worldKey: snapshot.world.kind === 'hub' ? 'hub' : `boneyard:${snapshot.world.runId}`,
+      throughTick: gameRunWorldTick(snapshot.tick, snapshot.run), births: [] as const },
     enhancedEffects: snapshot.enhancedEffects,
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
@@ -413,6 +422,9 @@ export class EntityReplicationReconstructor {
   private readonly playerEconomies = new Map<string, ProtocolPlayerEconomy>()
   private lastSequence = 0
   private worldIdentity: string | null = null
+  private flameEpoch = 0
+  private flameThroughTick = 0
+  private flameWorldKey = ''
 
   reset(snapshot: GameSnapshot | GameClientSnapshot, sequence: number): void {
     this.descriptors.clear()
@@ -425,6 +437,9 @@ export class EntityReplicationReconstructor {
     }
     this.lastSequence = sequence
     this.worldIdentity = replicatedWorldIdentity(snapshot)
+    this.flameEpoch = snapshot.flamePresentation?.epoch ?? 1
+    this.flameThroughTick = gameRunWorldTick(snapshot.tick, snapshot.run)
+    this.flameWorldKey = snapshot.world.kind === 'hub' ? 'hub' : `boneyard:${snapshot.world.runId}`
   }
 
   apply(frame: GameSnapshotFrame, sequence: number): GameClientSnapshot {
@@ -509,10 +524,19 @@ export class EntityReplicationReconstructor {
         goodies.push(materializeBoneyardGoodie(descriptor, sample))
       }
     }
+    const flame = frame.flamePresentation
+    if (flame.kind === 'continuous' && (flame.epoch !== this.flameEpoch
+      || flame.worldKey !== this.flameWorldKey || flame.afterTick > this.flameThroughTick)) {
+      throw new EntityReplicationGapError('Flame presentation needs the existing recovery keyframe')
+    }
     const players = materializePlayerSnapshotFrames(frame.players, this.playerEconomies)
+    this.flameEpoch = flame.epoch
+    this.flameThroughTick = flame.throughTick
+    this.flameWorldKey = flame.worldKey
     this.lastSequence = sequence
     this.worldIdentity = nextWorldIdentity
     const common = {
+      flamePresentation: frame.flamePresentation,
       enhancedEffects: frame.enhancedEffects,
       hostPlayerId: frame.hostPlayerId,
       levelUpBarrier: frame.levelUpBarrier,

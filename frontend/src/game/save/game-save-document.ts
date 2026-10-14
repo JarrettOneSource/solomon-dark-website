@@ -3,6 +3,7 @@ import { nativeScreenFlashes } from '../protocol/codecs/screen-flash.ts'
 import { nativeSecondaryCameraDisplacements } from '../protocol/codecs/secondary.ts'
 import { createNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { hubActionFeedback } from '../protocol/codecs/economy.ts'
+import { primarySpellTransient } from '../protocol/codecs/primary-transients.ts'
 import { createNativeStoneskinWarp } from '../core-kernels/native-stoneskin.ts'
 import { nativeWeldMeteorRootPosition } from '../core-kernels/native-weld-meteor.ts'
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
@@ -1058,13 +1059,19 @@ function normalizeWorldPainterOwnership(
   const transients = array(primarySpells.transients, 'game save primary transients').map(
     (value, index) => {
       const transient = record(value, `game save primary transient ${index}`)
-      return normalizePrimaryPainterOwnership(
+      const normalized = normalizePrimaryPainterOwnership(
         transient,
         legacyPrimaryPainterContract(transient),
         register,
         migrateMissing,
         `game save primary transient ${index}`,
       )
+      // Snapshot construction is a projection, not a decoder. Validate retained
+      // Flame samples here after all legacy painter/quality migrations compose.
+      return normalized.kind === 'weld-channel' || normalized.kind === 'weld-flame-lash-fade'
+        || normalized.flameVisual !== undefined
+        ? primarySpellTransient(normalized, `game save primary transient ${index}`)
+        : normalized
     },
   )
 
@@ -1376,6 +1383,13 @@ function legacyPrimaryPainterContract(
   source: Record<string, unknown>,
 ): Readonly<{ count: number; managerLane: 'actor' | 'transient' }> {
   switch (source.kind) {
+    case 'weld-flame-lash-fade': return {
+      count: 1,
+      managerLane: source.flameVisual && typeof source.flameVisual === 'object'
+        && !Array.isArray(source.flameVisual)
+        && (source.flameVisual as Record<string, unknown>).kind === 'native-birth-v1'
+        ? 'transient' : 'actor',
+    }
     case 'air': return { count: 3, managerLane: 'actor' }
     case 'earth-impact': return {
       count: earthImpactFragmentCount(finiteNumber(source.charge, 'legacy Earth impact charge')),
@@ -1778,7 +1792,13 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   const source = record(value, 'game save primary spells')
   const transients = array(source.transients, 'game save primary spell transients').map(
     (value, index) => {
-      const transient = record(value, `game save primary spell transient ${index}`)
+      const saved = record(value, `game save primary spell transient ${index}`)
+      // Old Flame actors keep their IDs, registration, clocks, geometry and ML row.
+      // Missing birth samples cannot be recovered from the saved gameplay RNG.
+      const transient = sourceSchemaVersion <= 50 && saved.buildId === 1003
+        && (saved.kind === 'weld-channel' || saved.kind === 'weld-flame-lash-fade')
+        && saved.flameVisual === undefined
+        ? { ...saved, flameVisual: { kind: 'legacy-suppressed' } } : saved
       if (sourceSchemaVersion < 46 && (transient.kind === 'harden-shard' || transient.kind === 'player-staff-pike-break')) {
         return { ...transient, enhancedShadow: true }
       }

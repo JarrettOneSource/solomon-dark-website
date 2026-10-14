@@ -1,3 +1,4 @@
+import { flamePresentationFrame } from './flame-presentation.ts'
 import { nativeScreenFlashes } from './screen-flash.ts'
 import {
   gameRunWorldTick,
@@ -157,7 +158,7 @@ export function validatedMaterializingPlayerIds(
 export function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
-    'enhancedEffects',
+    'enhancedEffects', 'flamePresentation',
     'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
     'primarySpells', 'run', 'secondaryAbilities', 'screenFlashes', 'tick', 'world',
   ])
@@ -212,6 +213,7 @@ export function gameSnapshot(value: unknown): GameSnapshot {
     validateHallOfFameRunOwners(world.hallOfFameRuns, players, 'snapshot')
   }
   return {
+    flamePresentation: flamePresentationFrame(source.flamePresentation, 'snapshot.flamePresentation', world.kind === 'hub' ? 'hub' : `boneyard:${world.runId}`, gameRunWorldTick(tick, run), primarySpells.nextId),
     enhancedEffects: boolean(source.enhancedEffects, 'snapshot.enhancedEffects'),
     screenFlashes: nativeScreenFlashes(source.screenFlashes, 'snapshot.screenFlashes', tick),
     hostPlayerId,
@@ -230,7 +232,7 @@ export function gameSnapshot(value: unknown): GameSnapshot {
 export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
-    'enhancedEffects',
+    'enhancedEffects', 'flamePresentation',
     'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
     'primarySpells', 'run', 'secondaryAbilities', 'screenFlashes', 'tick', 'world',
   ])
@@ -277,6 +279,7 @@ export function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     validateHallOfFameRunOwners(world.hallOfFameRuns, players, 'frame')
   }
   return {
+    flamePresentation: flamePresentationFrame(source.flamePresentation, 'frame.flamePresentation', world.kind === 'hub' ? 'hub' : `boneyard:${world.runId}`, gameRunWorldTick(tick, run), primarySpells.nextId),
     enhancedEffects: boolean(source.enhancedEffects, 'frame.enhancedEffects'),
     screenFlashes: nativeScreenFlashes(source.screenFlashes, 'frame.screenFlashes', tick),
     hostPlayerId,

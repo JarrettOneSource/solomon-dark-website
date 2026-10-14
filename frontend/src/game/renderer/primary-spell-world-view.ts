@@ -50,7 +50,7 @@ import {
 } from './player-staff-vfx-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 import { PlayerHardenEffectView } from './player-harden-effect-view.ts'
-import { WeldPrimarySpellView } from './primary-spell-weld-view.ts'
+import { WeldPrimarySpellView, type NativeFlameRegionView } from './primary-spell-weld-view.ts'
 import { isNativeWeldPresentationState } from './primary-spell-weld-native.ts'
 
 export interface PrimarySpellPainterLayer {
@@ -151,11 +151,13 @@ export class PrimarySpellWorldView {
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
     puppetHits?: ReadonlyMap<string, NativeWorldPuppetHit>,
     enhancedEffects = true,
+    regionView: NativeFlameRegionView | null = null,
   ): void {
     if (this.enhancedEffects !== enhancedEffects) {
       this.enhancedEffects = enhancedEffects
       for (const [id, view] of this.views) {
         if (!(view instanceof AirPrimarySpellView) && !(view instanceof WeldPrimarySpellView)) continue
+        if (view instanceof WeldPrimarySpellView && view.kind === 'weld-channel:1003') continue
         for (const container of view.containers) container.parent?.removeChild(container)
         view.destroy()
         this.views.delete(id)
@@ -263,7 +265,10 @@ export class PrimarySpellWorldView {
           this.preWorldRoot.addChild(view.underlayContainer)
         }
       }
-      if (view instanceof WeldPrimarySpellView) view.setPuppetHit(puppetHits?.has(`primary:${state.id}`) === true)
+      if (view instanceof WeldPrimarySpellView) {
+        view.setPuppetHit(puppetHits?.has(`primary:${state.id}`) === true)
+        view.setRegionView(regionView)
+      }
       view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)), enhancedEffects)
       for (const painterRoot of view.painterRoots()) {
         painterRoot.container.zIndex = painterRoot.lane === 'post-world-queue'

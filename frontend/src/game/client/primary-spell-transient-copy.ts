@@ -201,7 +201,12 @@ function copyWeldAnimatedTransient(
     case 'weld-blizzard-chain-frost':
     case 'weld-blizzard-glow':
     case 'weld-frost-fade': return copyWeldOriginTransient(effect)
-    case 'weld-flame-lash-fade':
+    case 'weld-flame-lash-fade': return {
+      ...effect, direction: { ...effect.direction }, origin: { ...effect.origin },
+      position: { ...effect.position }, vector: [...effect.vector],
+      flameVisual: structuredClone(effect.flameVisual),
+      lightRegistration: effect.lightRegistration === null ? null : { ...effect.lightRegistration },
+    }
     case 'weld-ground-spark-fade':
     case 'weld-hail-flash':
     case 'weld-hail-rock-fade':
@@ -244,6 +249,7 @@ function copyWeldOwnedTransient(
     }
     case 'weld-channel': return {
       ...copyWeldOriginTransient(effect),
+      ...(effect.flameVisual ? { flameVisual: structuredClone(effect.flameVisual) } : {}),
       endpoint: effect.endpoint === null ? null : { ...effect.endpoint },
       midpoint: effect.midpoint === null ? null : { ...effect.midpoint },
     }

@@ -1,3 +1,4 @@
+import { flameCameraDisplacements, flamePresentationEpoch } from '../client/flame-presentation.ts'
 import { acquireRendererResources } from './renderer-resource-acquisition.ts'
 import { gameRunWorldTick } from '../core-kernels/game-run.ts'
 import { frozenWorldQuality } from '../client/frozen-world-quality.ts'
@@ -530,6 +531,9 @@ export async function createBoneyardWorldRenderer(
       camera,
       viewport,
     )
+    secondaryScreenFeedback.synchronizeWorldTimeline(gameRunWorldTick(snapshot.tick, snapshot.run),
+      flamePresentationEpoch(snapshot), snapshot.tick)
+    secondaryScreenFeedback.consumeFlameCameraDisplacements(flameCameraDisplacements(snapshot))
     secondaryScreenFeedback.consumeScreenFlashes(snapshot.screenFlashes, {
       cameraCenter: { x: camera.x, y: camera.y },
       localPlayerAlternate: player.progression.lifeState !== 'alive',
