@@ -19,6 +19,9 @@ const output = process.env.SDR_DOWSING_SCREENSHOT_ROOT || await mkdtemp(join(tmp
 await mkdir(output, { recursive: true })
 const mobile = process.env.SDR_DOWSING_MOBILE === '1'
 const built = process.env.SDR_DOWSING_BUILT === '1'
+const checkReducedFlashes = process.env.SDR_DOWSING_REDUCED_FLASHES === '1'
+let reducedScreenFlashes = false
+const flashChecks = []
 const credential = randomBytes(32).toString('base64url')
 const owner = 'report39-owner'
 const itemId = 90039
@@ -68,6 +71,20 @@ const page = await browser.newPage(mobile
 const touch = mobile ? await page.context().newCDPSession(page) : null
 const receipts = []
 await page.addInitScript(installGameAudioSmokeProbe)
+if (checkReducedFlashes) await page.addInitScript(() => {
+  window.__dowsingFlashSamples = []
+  new MutationObserver(records => {
+    for (const record of records) {
+      const canvas = record.target
+      if (!(canvas instanceof HTMLCanvasElement)
+        || !canvas.classList.contains('hub-inventory-native-canvas')) continue
+      window.__dowsingFlashSamples.push({ at: performance.now(),
+        alpha: Number(canvas.dataset.dowsingFlashAlpha), trigger: canvas.dataset.dowsingFlashTrigger,
+        connected: canvas.isConnected })
+    }
+  }).observe(document, { subtree: true, attributes: true,
+    attributeFilter: ['data-dowsing-flash-alpha'] })
+})
 const errors = { page: [], console: [], responses: [] }
 page.on('pageerror', error => errors.page.push(error.message))
 page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
@@ -91,6 +108,7 @@ try {
     }
   }), { document, revision: 1, slot: WEB_GAME_SAVE_SLOT })
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  if (checkReducedFlashes) await setReducedFlashes(false, 'title')
   await page.getByRole('button', { name: 'Play', exact: true }).click({ timeout: 180000 })
   await page.getByRole('button', { name: 'Last game', exact: true }).click()
   await page.locator('.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90000 })
@@ -131,21 +149,34 @@ try {
   const purchasedRecipe = targeted.dowsingOffers[0].recipeIndex
   await activate(firstOffer)
   await firstOffer.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  await activate(firstOffer)
-  await firstOffer.waitFor({ state: 'detached' })
+  await withFlash('buy-dowsing', async () => {
+    await activate(firstOffer)
+    await firstOffer.waitFor({ state: 'detached' })
+  })
   assert.equal(ownerEconomy().dowsingRolled, true)
   assert.deepEqual(ownerEconomy().dowsingOffers, [])
   assert.ok(ownerEconomy().backpack.some(item => item.recipeIndex === purchasedRecipe))
   assert.equal(await service.getByRole('button', { name: /^DOWSE/ }).count(), 0)
   await closeService(service)
 
-  service = await openDowsing()
+  if (checkReducedFlashes) await setReducedFlashes(true, 'hub')
+  service = await withoutFlash('close/reopen after accepted purchase', () => openDowsing())
   assert.equal(await service.getAttribute('data-native-dowsing-reference'), '')
   await dropReference(service, itemId)
   await dropReference(service, staffId)
   const setless = await roll(service)
   assert.ok(setless.dowsingOffers.length > 0)
   assert.ok(setless.dowsingOffers.every(offer => [8, 18, 34].includes(offer.recipeIndex)))
+  if (checkReducedFlashes) {
+    const offer = service.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
+    await activate(offer)
+    await offer.locator('xpath=self::*[@data-selected="true"]').waitFor()
+    await withFlash('buy-dowsing', async () => {
+      await activate(offer)
+      await offer.waitFor({ state: 'detached' })
+    })
+    assert.deepEqual(ownerEconomy().dowsingOffers, [])
+  }
   await closeService(service)
 
   service = await openDowsing()
@@ -192,8 +223,10 @@ try {
   })
   await service.locator('[data-player-gold="0"]').waitFor({ state: 'attached' })
   const beforeRejection = structuredClone(ownerEconomy())
-  await activate(service.getByRole('button', { name: /^DOWSE/ }))
-  await service.getByRole('alert').waitFor()
+  await withoutFlash('insufficient gold rejection', async () => {
+    await activate(service.getByRole('button', { name: /^DOWSE/ }))
+    await service.getByRole('alert').waitFor()
+  })
   assert.deepEqual(ownerEconomy(), beforeRejection)
   await activate(service.getByRole('button', { name: 'OKAY', exact: true }))
   await closeService(service)
@@ -201,7 +234,10 @@ try {
   const receipt = { status: 'ok', browser: browser.version(), mobile, built, tooltips: receipts,
     targetedOffers: targeted.dowsingOffers, setlessOffers: setless.dowsingOffers,
     nestedOffers: nested.dowsingOffers, emptyResultChargedOnce: true,
-    referenceItemPreserved: true, purchaseRequiresReopen: true, insufficientGoldUnchanged: true, errors }
+    referenceItemPreserved: true, purchaseRequiresReopen: true, insufficientGoldUnchanged: true,
+    flashChecks, flashCheckScope: checkReducedFlashes
+      ? 'Real Settings Off/On and genuine accepted dowse/purchase, empty result, rejection and reopen. Retained renderer alpha diagnostics mirror the assigned Pixi alpha. Mid-flash preference transitions are separately unit-tested; no browser timing freeze.'
+      : null, errors }
   await writeFile(join(output, 'receipt.json'), JSON.stringify(receipt, null, 2))
   console.log(JSON.stringify(receipt))
 } catch (error) {
@@ -273,11 +309,72 @@ async function dropReference(service, id, owner = 'backpack') {
 }
 async function roll(service, empty = false) {
   const button = service.getByRole('button', { name: /^DOWSE/ })
-  await activate(button)
-  await button.waitFor({ state: 'detached' })
-  if (!empty) await service.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first().waitFor()
+  await withFlash('dowse', async () => {
+    await activate(button)
+    await button.waitFor({ state: 'detached' })
+    if (!empty) await service.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first().waitFor()
+  })
   assert.equal(ownerEconomy().dowsingRolled, true)
   return structuredClone(ownerEconomy())
+}
+
+async function setReducedFlashes(value, context) {
+  if (context === 'title') {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click({ timeout: 180000 })
+  } else {
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'GAME SETTINGS', exact: true }).click()
+  }
+  const dialog = page.locator('.game-settings-dialog')
+  await dialog.getByRole('button', { name: 'TWEAK GAME', exact: true }).click()
+  const toggle = dialog.getByRole('button', { name: 'REDUCED SCREEN FLASHES', exact: true })
+  if (await toggle.getAttribute('aria-pressed') !== String(value)) await toggle.click()
+  assert.equal(await toggle.getAttribute('aria-pressed'), String(value))
+  await dialog.getByRole('button', { name: 'BACK', exact: true }).click()
+  await dialog.getByRole('button', { name: 'DONE', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  if (context === 'hub') {
+    await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+    await page.locator(`.hub-world-canvas[data-reduced-screen-flashes="${value}"]`).waitFor()
+  }
+  reducedScreenFlashes = value
+}
+
+async function withFlash(trigger, action) {
+  if (!checkReducedFlashes) return action()
+  const start = await page.evaluate(() => window.__dowsingFlashSamples.length)
+  const before = structuredClone(ownerEconomy().actionFeedback)
+  const result = await action()
+  await page.waitForFunction(({ start, trigger }) => {
+    const samples = window.__dowsingFlashSamples.slice(start)
+    const first = samples.findIndex(x => x.alpha > 0 && x.trigger === trigger)
+    return first >= 0 && samples.slice(first + 1).some(x => x.alpha === 0)
+  }, { start, trigger }, { timeout: 5000 })
+  const samples = await page.evaluate(start => window.__dowsingFlashSamples.slice(start), start)
+  const positive = samples.filter(x => x.alpha > 0)
+  const after = structuredClone(ownerEconomy().actionFeedback)
+  assert.equal(after.action, trigger)
+  assert.equal(after.accepted, true)
+  assert.ok(after.sequence > (before?.sequence ?? 0))
+  assert.ok(positive.every(x => x.connected && x.trigger === trigger))
+  const maximum = Math.max(...positive.map(x => x.alpha))
+  assert.ok(maximum <= (reducedScreenFlashes ? 0.2 : 1))
+  assert.ok(maximum > (reducedScreenFlashes ? 0 : 0.2), 'the real flash was observed within its native lifetime')
+  const proof = { trigger, reducedScreenFlashes, before, after, maximum, samples }
+  flashChecks.push(proof)
+  console.log(JSON.stringify({ dowsingFlashProof: proof }))
+  return result
+}
+
+async function withoutFlash(label, action) {
+  if (!checkReducedFlashes) return action()
+  const start = await page.evaluate(() => window.__dowsingFlashSamples.length)
+  const result = await action()
+  const samples = await page.evaluate(start => window.__dowsingFlashSamples.slice(start), start)
+  assert.ok(samples.length > 0, `${label} did not observe the retained renderer`)
+  assert.ok(samples.every(x => x.alpha === 0), `${label} replayed an old or rejected flash`)
+  flashChecks.push({ label, reducedScreenFlashes, samples, noReplay: true })
+  return result
 }
 async function assertTooltipPaint(service) {
   const canvas = service.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]')
