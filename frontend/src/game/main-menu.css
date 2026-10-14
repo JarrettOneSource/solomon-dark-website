@@ -522,6 +522,21 @@
   border: 1px solid rgb(211 177 101 / 0.6);
 }
 
+.main-menu-player-card-feedback {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+.main-menu-player-card-feedback button {
+  padding: 0.25em 0.5em;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
 @keyframes main-menu-actions-in {
   from { opacity: 0; }
   to { opacity: 1; }

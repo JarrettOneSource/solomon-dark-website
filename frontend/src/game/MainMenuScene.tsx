@@ -16,6 +16,7 @@ import {
 import CreateMenuScene from './CreateMenuScene.tsx'
 import SkillBookFeedback from './SkillBookFeedback.tsx'
 import { useSkillBookFeedback } from './use-skill-book-feedback.ts'
+import { usePlayerCardRequest } from './use-player-card-request.ts'
 import CollegeInvitationDialog from './CollegeInvitationDialog.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
@@ -98,7 +99,6 @@ import {
 import type {
   GameChatMessage,
   GameCollegeInvitation,
-  GamePlayerCardProfile,
 } from './protocol/game-chat.ts'
 import type {
   GameClientSnapshot,
@@ -492,9 +492,10 @@ function MainMenuContent({
   const [partyActionError, setPartyActionError] = useState<string | null>(null)
   const [collegeInvitations, setCollegeInvitations] =
     useState<readonly GameCollegeInvitation[]>([])
-  const [resolvedPlayerCard, setResolvedPlayerCard] =
-    useState<GamePlayerCardProfile | null>(null)
-  const [resolvingPlayerCard, setResolvingPlayerCard] = useState(false)
+  const playerCard = usePlayerCardRequest(session)
+  const resolvedPlayerCard = playerCard.profile
+  const resolvingPlayerCard = playerCard.pending
+  const [playerCardFeedbackHasFocus, setPlayerCardFeedbackHasFocus] = useState(false)
   const [sessionCheatsEnabled, setSessionCheatsEnabled] = useState(false)
   const transferSaveDocumentRef = useRef<string | null>(null)
   const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
@@ -1261,21 +1262,6 @@ function MainMenuContent({
     setPartyConsent(resolution)
   }
 
-  const openChatPlayerCard = async (playerReference: string) => {
-    if (!session || resolvingPlayerCard) return
-    setResolvingPlayerCard(true)
-    setConnectionError(null)
-    try {
-      setResolvedPlayerCard(await session.resolvePlayerCard(playerReference))
-    } catch (error) {
-      setConnectionError(error instanceof Error
-        ? error.message
-        : 'That wizard is no longer available.')
-    } finally {
-      setResolvingPlayerCard(false)
-    }
-  }
-
   const acceptCollegeInvitation = async (invitation: GameCollegeInvitation) => {
     if (!session || routingBusy) return
     setRoutingBusy(true)
@@ -1391,7 +1377,7 @@ function MainMenuContent({
     const snapshot = nextSession.getSnapshot()
     rememberGameResumeToken(nextSession.playerId, nextSession.resumeToken)
     setWhisperRequest(null)
-    setResolvedPlayerCard(null)
+    playerCard.dismiss()
     setSession(nextSession)
     setSessionCheatsEnabled(nextSession.cheatsEnabled)
     setCollegeInvitations(nextSession.getCollegeInvitations())
@@ -1629,7 +1615,7 @@ function MainMenuContent({
     setSession(null)
     setSessionCheatsEnabled(false)
     setCollegeInvitations([])
-    setResolvedPlayerCard(null)
+    playerCard.dismiss()
     setRuntimeSnapshot(null)
     setRuntimeProgression(null)
     setRuntimeAudioScene(null)
@@ -1724,13 +1710,16 @@ function MainMenuContent({
       partyConsent !== null
       || (partyConsent === null && collegeInvitations.length > 0)
     ))
-  const chatDisabled = loading !== null
+  const playerCardFeedbackVisible = playerCard.error !== null && !connectionError && !preparing && !leaving
+  const playerCardFeedbackFocused = playerCardFeedbackVisible && playerCardFeedbackHasFocus
+  useLayoutEffect(() => setPlayerCardFeedbackHasFocus(false), [playerCard.error, playerCardFeedbackVisible])
+  const chatDisabled = playerCardFeedbackFocused || loading !== null
     || tutorialSession
     || cheatMenuOpen
     || gameplaySettingsOpen
     || gameplayResumeGrace !== null
     || socialModalOpen
-  const sceneInputBlocked = chatOpen
+  const sceneInputBlocked = playerCardFeedbackFocused || chatOpen
     || cheatMenuOpen
     || loading !== null
     || levelUpModalActive
@@ -1740,7 +1729,7 @@ function MainMenuContent({
     || (gameplayPause !== null && !ownsActiveInventoryPause)
     || gameplayResumeGrace !== null
     || socialModalOpen
-  const sceneModalDisabled = loading !== null
+  const sceneModalDisabled = playerCardFeedbackFocused || loading !== null
     || cheatMenuOpen
     || levelUpModalActive
     || skillBookOpen
@@ -1750,7 +1739,7 @@ function MainMenuContent({
     || gameplayResumeGrace !== null
     || socialModalOpen
   useHotbarShortcut(gameSettings.controls, session !== null
-    && !chatOpen && !cheatMenuOpen && loading === null && !levelUpModalActive
+    && !playerCardFeedbackFocused && !chatOpen && !cheatMenuOpen && loading === null && !levelUpModalActive
     && hudSkillSelector === null && !hubPauseMenuOpen && !gameplaySettingsOpen
     && gameplayResumeGrace === null && !socialModalOpen && !tutorialPreludeVisible
     && (gameplayPause === null || ownsModalPause))
@@ -2308,7 +2297,7 @@ function MainMenuContent({
               })}
               onOpenChange={setChatOpen}
               onPlayerCardRequest={(playerReference) => {
-                void openChatPlayerCard(playerReference)
+                void playerCard.open(playerReference)
               }}
               onWhisperRequestHandled={() => setWhisperRequest(null)}
               openKeyCode={gameSettings.controls.openChat}
@@ -2330,10 +2319,10 @@ function MainMenuContent({
               && resolvedPlayerCard.activity === 'hub'
             )}
             canMessage
-            onClose={() => setResolvedPlayerCard(null)}
+            onClose={playerCard.dismiss}
             onInvite={() => {
               session.inviteToCollege(resolvedPlayerCard.playerReference)
-              setResolvedPlayerCard(null)
+              playerCard.dismiss()
             }}
             onMessage={() => {
               setWhisperRequest({
@@ -2342,7 +2331,7 @@ function MainMenuContent({
                 playerReference: resolvedPlayerCard.playerReference,
                 requestedAtMs: Date.now(),
               })
-              setResolvedPlayerCard(null)
+              playerCard.dismiss()
             }}
             player={{
               accountUsername: resolvedPlayerCard.accountUsername,
@@ -2375,7 +2364,7 @@ function MainMenuContent({
           <Suspense fallback={null}>
             <SkillBook
               audio={audio}
-              inputSuspended={chatOpen || socialModalOpen}
+              inputSuspended={playerCardFeedbackFocused || chatOpen || socialModalOpen}
               inventoryKeyCode={gameSettings.controls.openInventory}
               inventoryScreenOpen={inventoryScreenOpen}
               menuKeyCode={gameSettings.controls.openMenu}
@@ -2407,7 +2396,7 @@ function MainMenuContent({
           <Suspense fallback={null}>
             <HudSkillSelector
               audio={audio}
-              inputSuspended={chatOpen || socialModalOpen}
+              inputSuspended={playerCardFeedbackFocused || chatOpen || socialModalOpen}
               onClose={() => setHudSkillSelector(null)}
               onSelectConcentrationSlot={session.selectConcentrationSlot}
               onSelectPrimarySkill={session.selectPrimarySkill}
@@ -2425,7 +2414,7 @@ function MainMenuContent({
             <SkillPicker
               audio={audio}
               offer={runtimeProgression?.pendingOffer ?? null}
-              inputSuspended={chatOpen || socialModalOpen}
+              inputSuspended={playerCardFeedbackFocused || chatOpen || socialModalOpen}
               onClosingChange={(closing) => {
                 setLevelUpPickerClosing(closing)
                 if (!closing) session.readyResumeGrace()
@@ -2489,7 +2478,7 @@ function MainMenuContent({
             <GameplayPauseMenu
               key={gameplayPauseMenuGeneration}
               audio={audio}
-              inputSuspended={chatOpen || socialModalOpen}
+              inputSuspended={playerCardFeedbackFocused || chatOpen || socialModalOpen}
               onSelect={(action) => {
                 if (leaving) return
                 if (action === 'leave') void leaveGameplay()
@@ -2544,6 +2533,20 @@ function MainMenuContent({
           </Suspense>
         ) : null}
         </>}
+
+        {playerCardFeedbackVisible ? (
+          <div className="main-menu-runtime-status main-menu-player-card-feedback" role="status">
+            <span>{playerCard.error}</span>
+            <button type="button" aria-label="Dismiss Player Card message" onClick={playerCard.dismiss}
+              onFocus={() => setPlayerCardFeedbackHasFocus(true)}
+              onBlur={() => setPlayerCardFeedbackHasFocus(false)}
+              onKeyDown={event => event.stopPropagation()}
+              onKeyUp={event => event.stopPropagation()}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         {(preparing || leaving || resolvingPlayerCard || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>

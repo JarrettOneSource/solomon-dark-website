@@ -41,6 +41,7 @@ import type {
 import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
+import { PlayerCardRequests } from '../player-card-request.ts'
 import { connectGameClientSession } from './game-client-session.ts'
 import { connectGameObserverSession } from './game-observer-session.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'
@@ -2583,6 +2584,30 @@ function kernelParameters() {
     playerRadius: 25,
   }
 }
+
+
+test('Player Card feedback handles real null-profile responses and synchronous destroy rejection', async context => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  receiveWelcome(transport, createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const requests = new PlayerCardRequests(session)
+  context.after(() => requests.dismiss())
+  const unavailable = requests.open(PLAYER_REFERENCE_2)
+  const wireRequest = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(wireRequest.type, 'client-player-card-request')
+  if (wireRequest.type !== 'client-player-card-request') throw new Error('expected card request')
+  transport.receive(encodeGameMessage({ type: 'server-player-card', profile: null, requestId: wireRequest.requestId }))
+  await unavailable
+  assert.equal(requests.getSnapshot().error, 'That wizard is no longer available.')
+  const interrupted = requests.open(PLAYER_REFERENCE_2)
+  session.destroy()
+  requests.dismiss()
+  await interrupted
+  assert.deepEqual(requests.getSnapshot(), { profile: null, pending: false, error: null })
+})
 
 function welcomeMessage(
   snapshot: ReturnType<typeof createGameSnapshot>,
