@@ -1456,14 +1456,16 @@ export function equipEligibleInventorySackContents(
     { nativeTypeId: 7003, slot: 'amulet' },
   ] as const) {
     const current = findInventoryItem(state.backpack, itemId)
-    const candidate = current?.contents?.find((item) => eligible(item, nativeTypeId))
+    const candidate = projectInventoryRootSlots(current?.contents ?? [])
+      .find(({ item }) => eligible(item, nativeTypeId))?.item
     if (!candidate) continue
     const equipped = equipDirectSackChild(state, itemId, candidate.id, slot)
     if (!equipped) return rejected(source, 'invalid-inventory')
     state = equipped
   }
 
-  const ringIds = (findInventoryItem(state.backpack, itemId)?.contents ?? [])
+  const ringIds = projectInventoryRootSlots(findInventoryItem(state.backpack, itemId)?.contents ?? [])
+    .map(({ item }) => item)
     .filter((item) => eligible(item, 7002))
     .map(({ id }) => id)
   const ringSlots: EquipmentSlot[] = state.ownedPerkSelectors.includes(19)
@@ -2854,7 +2856,8 @@ function equipDirectSackChild(
   slot: EquipmentSlot,
 ): HubEconomyState | null {
   const sack = findInventoryItem(source.backpack, sackId)
-  const contents = sack?.contents ?? []
+  const contents = projectInventoryRootSlots(sack?.contents ?? [])
+    .map(({ item, slot: cell }) => itemAtInventorySlot(item, cell))
   const index = contents.findIndex(({ id }) => id === itemId)
   if (!sack || sack.nativeTypeId !== 7008 || index < 0) return null
   const item = contents[index]!

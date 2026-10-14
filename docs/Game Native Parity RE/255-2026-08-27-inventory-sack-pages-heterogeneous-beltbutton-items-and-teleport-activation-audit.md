@@ -1,5 +1,95 @@
 # 2026-08-27 — Inventory Sack pages, heterogeneous BeltButton items, and Teleport activation audit
 
+## 2026-10-14 — Report 117: addressed-cell quick-set ordering
+
+### Reopened boundary and native evidence
+
+This reopens only `Item_Sack` quick-set candidate traversal in
+`0x0056D1B0 -> 0x0056B090`. Earlier coverage verified equipment families and
+ownership conservation, but did not distinguish stored web array order from
+native addressed-cell order after displaced items returned to a Sack. The
+unchanged retail executable is 0.72.5, preferred base `0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Fresh Capstone decoding of those exact bytes corroborates the prior ledger:
+
+- Each fixed-family pass scans the live Sack root from cell zero upwards.
+  Staff scan `0x0056B31F..0x0056B3B5` uses root `+0x14` as cell count and
+  root `+0x20` as its cell-pointer array. Displaced gear returns into the
+  first placeholder cell, or is appended when no placeholder exists.
+- The Wand pass restarts at `0x0056B4F1` after the Staff swap. Consequently,
+  an eligible equipped Wand returned to the same Sack can immediately be
+  selected again. Staff-to-Wand succeeds; Wand-to-Staff can undo itself.
+  This asymmetry is native-inherited, not corrected by this ordering repair.
+- Ring sink collection starts at `0x0056B8B5`: two sinks, and the third when
+  the corresponding perk is present. `0x0056BA20..0x0056BA9A` prefers an
+  empty remaining sink and otherwise uses the first remaining sink. Each
+  sink is removed from the candidate sink list after use.
+- Ring scanning starts at cell zero (`0x0056B996..0x0056B9A3`) and increments
+  the cell index (`0x0056BBB9..0x0056BC2B`). Selected incoming and displaced
+  rings are retained separately; removals and returns follow the scan at
+  `0x0056BC31` onward. Returned rings must not become additional candidates
+  during that same activation.
+
+These are instruction-derived facts. No clean-stock interactive or injected
+native runtime reproduction was performed. The reporter's exact item IDs and
+input events are unknown; the preserved clip alone does not establish both
+directions. The original report and follow-up were refreshed unchanged and
+unedited on October 14.
+
+### Controlled web cause and membership
+
+Exact `6a182778` reducer and built-game mouse/keyboard journeys reproduce the
+Staff/Wand asymmetry with a Hat toggling on each press as the activation control.
+They also demonstrate a distinct cell-order defect: a rings-only Sack retains
+an unequipped ring at an early visible cell but appends it later in its stored
+array. A second activation scans the later visible ring first. Adding a Hat
+normalizes the root during the preceding Hat swap and changes the ring result.
+Two- and three-sink cases reproduce this in College and paused Boneyard Inventory.
+Wire projections correctly sort cells; comparing their raw array order with
+authority storage is not a valid equality assertion.
+
+Independent review also found a live unaddressed-child boundary. Save hydration
+normalizes legacy roots, but native Goodie content selectors 8/9 create Sack
+children without explicit slots; loot insertion assigns child identities and
+the Sack's outer slot without assigning the child cells. Removing an incoming
+child before materializing that root compacts surviving implicit cells. A real
+selector-8, RNG-seed-27 two-Hat generation reproduces this: two presses select
+the first then second new Hat, whereas the equivalent addressed root selects
+the first new Hat then the displaced old Hat in cell zero. The same quick-set
+helper must materialize direct child cells before removal, without changing
+the nested contents or input tree. Its only callers are the quick-set loops.
+
+| Member | Native contract | Current disposition and acceptance |
+| --- | --- | --- |
+| Hat, Robe, Staff, Wand, Amulet | First eligible direct child in addressed-cell order; rescan live root for each family | Recovered-pending-port: project the current root before each family scan; test every family with noncanonical stored order |
+| Ring candidates, two/three sinks, empty/occupied sinks, repeat activation | Snapshot eligible candidates in cell order; empty remaining sink first; each sink once | Recovered-pending-port: project before candidate snapshot; test two presses with and without Hat normalization and preserve all item identities |
+| Live Goodie Sack children with implicit cells | Original addressed cells survive removal and displaced-item return | Recovered-pending-port: materialize direct child slots before removal; test every equipment family and generated two-Hat continuation |
+| Staff/Wand cross-class sequence and same-class repeat | Staff then Wand, including newly displaced Wand; same-class toggling | Verified-already-at-parity: retain sequence and two-press Hat control |
+| Level/Creativity admission, nested Sack contents, non-equipment, exact owning root | Existing eligibility and direct-child rules | Preserve established implementation and tests; add ineligible/nested ordering controls |
+| College/Boneyard, HUD pointer and paused Inventory key input, wire projection | Shared authority action, ordinary revision and pause ownership | Baseline observed; exact repaired production-build checks pending |
+| Ordinary single-item equip, visual ring sink positions, belt banks, assets/audio, rename and page navigation | Separate established contracts | Out-of-system: no behavior or representation change |
+
+The repair belongs solely in `equipEligibleInventorySackContents`: use the
+existing `projectInventoryRootSlots` at each live fixed-family scan and for the
+single ring candidate snapshot. Preserve the existing native sink order,
+immediate fixed-family returns, captured ring IDs, eligibility, and ownership.
+Within its private `equipDirectSackChild` helper, assign the projected direct
+cell before filtering the incoming child; otherwise valid live-loot roots can
+compact before the return. Reuse `itemAtInventorySlot` to retain identity when
+the cell is already explicit.
+No new catalog, schema, setting, or renderer path is needed.
+
+### Acceptance boundary
+
+Before implementation, add regressions that fail on current main for addressed
+cell traversal and rings-only repeat ordering. Verify all six equipment classes,
+two/three rings, Hat present/absent, level and nested exclusions, identity
+conservation, and unchanged Staff/Wand behavior. Follow with exact-source
+focused checks and built-browser College/Boneyard input, pause/resume, wire,
+and owned-resource cleanup. Canonical qualification/publication remain separate
+gates; no full-gate, native-runtime, live-release, audio or performance claim is
+made by the diagnostic baseline.
+
 ## 2026-10-08 — Report 99: equipment shortcut texture modulation and activation audit
 
 ### Reported smell and evidence

@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { advanceNativeRngWords, createNativeRng } from './native-rng.ts'
 import { rollNativeStarterEquipmentAppearance } from './native-starter-equipment.ts'
+import { createNativeLootItemIds, resolveNativeGoodieContents } from './native-loot-items.ts'
 
 import {
   DOWSING_EQUIPMENT_RECIPES,
@@ -1237,6 +1238,135 @@ test('Sack auto-equip uses recipe levels and the same Creativity threshold', () 
   assert.strictEqual(withCreativity.state.equipment.rings[0], ringwall)
   assert.strictEqual(findInventoryItem(withCreativity.state.backpack, generated.id), generated)
   assert.equal(findInventoryItem(withCreativity.state.backpack, ringwall.id), null)
+})
+
+test('Sack quick-set candidates follow addressed cells for all six equipment classes', () => {
+  for (const type of ['hat', 'robe', 'staff', 'wand', 'amulet', 'ring'] as const) {
+    const base = createHubEconomy(1)
+    const recipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === type && row.level === 0)!
+    const gear = (id: number, inventorySlot: number) => ({
+      ...createEquipmentInventoryItem(recipe, id), inventorySlot,
+    })
+    const early = gear(117_001, 2)
+    const late = gear(117_002, 10)
+    const ineligible = { ...gear(117_003, 0), generatedLevel: 9 }
+    const nested = { ...nativeTestSack(117_004, [gear(117_005, 0)]), inventorySlot: 1 }
+    const sack = { ...nativeTestSack(117_006, [late, ineligible, nested, early]), inventorySlot: 0 }
+    const source = { ...base, backpack: [sack], nextItemId: 118_000 }
+    const result = equipEligibleInventorySackContents(source, sack.id, { playerLevel: 5, creativityRank: 0 })
+    assert.equal(result.accepted, true, type)
+    const selected = type === 'ring' ? result.state.equipment.rings[0]
+      : type === 'staff' || type === 'wand' ? result.state.equipment.weapon
+      : result.state.equipment[type]
+    assert.equal(selected?.id, early.id, `${type}: lower addressed cell wins over stored array order`)
+    assert.equal(findInventoryItem(result.state.backpack, ineligible.id)?.id, ineligible.id)
+    assert.equal(findInventoryItem(result.state.backpack, 117_005)?.id, 117_005)
+    assert.equal(hubEconomyInventoryIsValid(result.state), true)
+  }
+})
+
+test('Sack ring repeat uses cell order with two or three sinks, independent of a Hat swap', () => {
+  for (const slots of [2, 3]) for (const withHat of [false, true]) {
+    const base = createHubEconomy(1)
+    const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === 'ring' && row.level === 0)!
+    const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === 'hat' && row.level === 0)!
+    const oldRing = createEquipmentInventoryItem(ringRecipe, 117_100)
+    const incoming = Array.from({ length: slots + 1 }, (_, index) => ({
+      ...createEquipmentInventoryItem(ringRecipe, 117_200 + index), inventorySlot: index + 1,
+    }))
+    const oldHat = createEquipmentInventoryItem(hatRecipe, 117_003)
+    const newHat = { ...createEquipmentInventoryItem(hatRecipe, 117_004), inventorySlot: 0 }
+    const sack = { ...nativeTestSack(117_000, [...(withHat ? [newHat] : []), ...incoming]), inventorySlot: 0 }
+    const source = { ...base, backpack: [sack], ownedPerkSelectors: slots === 3 ? [19] : [],
+      nextItemId: 118_000, equipment: { ...base.equipment, hat: oldHat,
+        rings: [oldRing, null, null] as [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null] } }
+    const ids = (state: Parameters<typeof equipEligibleInventorySackContents>[0]) => projectInventoryItems([
+      ...state.backpack, ...state.storage,
+      ...[state.equipment.hat, state.equipment.robe, state.equipment.weapon,
+        state.equipment.amulet, ...state.equipment.rings].filter((item): item is HubInventoryItem => item !== null),
+    ]).map(({ item }) => item.id).sort((left, right) => left - right)
+    const first = equipEligibleInventorySackContents(source, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
+    assert.equal(first.accepted, true)
+    assert.deepEqual(first.state.equipment.rings.map((item) => item?.id ?? null),
+      slots === 2 ? [117_201, 117_200, null] : [117_202, 117_200, 117_201])
+    const second = equipEligibleInventorySackContents(first.state, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
+    assert.equal(second.accepted, true)
+    assert.deepEqual(second.state.equipment.rings.map((item) => item?.id ?? null),
+      slots === 2 ? [117_100, 117_202, null] : [117_100, 117_203, 117_201],
+      `${slots} sinks, Hat=${withHat}: the returned early-cell ring must be scanned first`)
+    assert.equal(first.state.equipment.hat?.id, withHat ? newHat.id : oldHat.id)
+    assert.equal(second.state.equipment.hat?.id, oldHat.id)
+    assert.equal(findInventoryItem(second.state.backpack, 117_199 + slots)?.inventorySlot, withHat ? 1 : 0)
+    assert.equal(findInventoryItem(second.state.backpack, 117_200)?.inventorySlot, withHat ? 2 : 1)
+    if (withHat) assert.equal(findInventoryItem(second.state.backpack, newHat.id)?.inventorySlot, 0)
+    assert.deepEqual(ids(first.state), ids(source))
+    assert.deepEqual(ids(second.state), ids(source))
+    assert.equal(hubEconomyInventoryIsValid(second.state), true)
+  }
+})
+
+test('Sack cell traversal preserves native Staff-then-Wand rescanning across two presses', () => {
+  for (const from of ['staff', 'wand'] as const) for (const to of ['staff', 'wand'] as const) {
+    const base = createHubEconomy(1)
+    const gear = (type: 'staff' | 'wand' | 'hat', id: number, inventorySlot?: number) => ({
+      ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === type && row.level === 0)!, id),
+      ...(inventorySlot === undefined ? {} : { inventorySlot }),
+    })
+    const initial = gear(from, 117_001)
+    const incoming = gear(to, 117_002, 1)
+    const oldHat = gear('hat', 117_003)
+    const newHat = gear('hat', 117_004, 0)
+    const sack = { ...nativeTestSack(117_000, [newHat, incoming]), inventorySlot: 0 }
+    const source = { ...base, backpack: [sack], nextItemId: 118_000,
+      equipment: { ...base.equipment, hat: oldHat, weapon: initial } }
+    const first = equipEligibleInventorySackContents(source, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
+    const second = equipEligibleInventorySackContents(first.state, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
+    assert.equal(first.accepted && second.accepted, true)
+    assert.equal(first.state.equipment.weapon?.id, from === 'wand' && to === 'staff' ? initial.id : incoming.id)
+    assert.equal(second.state.equipment.weapon?.id, from === to || from === 'wand' ? initial.id : incoming.id)
+    assert.equal(first.state.equipment.hat?.id, newHat.id)
+    assert.equal(second.state.equipment.hat?.id, oldHat.id)
+  }
+})
+
+test('Sack quick-set materializes implicit live-loot cells before removing children', () => {
+  for (const type of ['hat', 'robe', 'staff', 'wand', 'amulet', 'ring'] as const) {
+    const base = createHubEconomy(1)
+    const recipe = DOWSING_EQUIPMENT_RECIPES.find((row) => row.type === type && row.level === 0)!
+    const contents = [117_001, 117_002, 117_003].map((id) => createEquipmentInventoryItem(recipe, id))
+    const sack = { ...nativeTestSack(117_000, contents), inventorySlot: 0 }
+    const source = { ...base, backpack: [sack], nextItemId: 118_000 }
+    assert.equal(contents.every((item) => item.inventorySlot === undefined), true)
+    const result = equipEligibleInventorySackContents(source, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
+    assert.equal(result.accepted, true, type)
+    const surviving = findInventoryItem(result.state.backpack, 117_003)
+    assert.equal(surviving?.inventorySlot, 2, `${type}: later loot must retain its original cell`)
+    if (type !== 'ring') assert.equal(findInventoryItem(result.state.backpack, 117_002)?.inventorySlot, 1)
+    assert.equal(hubEconomyInventoryIsValid(result.state), true)
+    assert.equal(source.backpack[0]!.contents!.every((item) => item.inventorySlot === undefined), true,
+      'Admission must not mutate the original loot tree')
+  }
+})
+
+test('a newly generated two-Hat Goodie Sack returns to the old Hat on the second quick-set press', () => {
+  const generated = resolveNativeGoodieContents({
+    selector: 8, playerLevel: 1, sharedRng: createNativeRng(27),
+    itemIds: createNativeLootItemIds(117_001), advancedUnlocks: new Array<boolean>(8).fill(false),
+    ownedRecipeIndexes: [],
+  })
+  assert.deepEqual(generated.items.map((item) => item.equipmentType), ['hat', 'hat'])
+  const base = createHubEconomy(1)
+  const inserted = insertLootInventoryItem(base, nativeTestSack(117_000, generated.items))
+  const sack = inserted.state.backpack.find((item) => item.nativeTypeId === 7008)!
+  const [firstHat, secondHat] = sack.contents!
+  assert.equal(sack.contents!.every((item) => item.inventorySlot === undefined), true)
+  const first = equipEligibleInventorySackContents(inserted.state, sack.id, { playerLevel: 10, creativityRank: 0 })
+  const second = equipEligibleInventorySackContents(first.state, sack.id, { playerLevel: 10, creativityRank: 0 })
+  assert.equal(first.accepted && second.accepted, true)
+  assert.equal(first.state.equipment.hat?.id, firstHat!.id)
+  assert.equal(second.state.equipment.hat?.id, base.equipment.hat!.id)
+  assert.deepEqual(projectInventoryRootSlots(findInventoryItem(second.state.backpack, sack.id)!.contents!)
+    .map(({ item, slot }) => [item.id, slot]), [[firstHat!.id, 0], [secondHat!.id, 1]])
 })
 
 test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct native capacities', () => {
