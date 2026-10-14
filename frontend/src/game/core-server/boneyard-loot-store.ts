@@ -153,6 +153,8 @@ export interface BoneyardLootParticipant {
   readonly level: number
   readonly modifiers: NativeLootModifiers
   readonly ownedRecipeIndexes: readonly number[]
+  readonly ownedRecipeIndexesAfterPickups?: (items: readonly HubInventoryItem[]) => readonly number[]
+  readonly reserveLootItem?: (item: NativeLootItem) => boolean
   readonly playerId: string
   readonly position: Readonly<BoneyardPoint>
 }
@@ -456,14 +458,14 @@ export function materializeBoneyardEnemyLoot(
 ): SpawnBoneyardLootResult {
   const itemIds = createNativeLootItemIds(source.nextItemId)
   const rolled = rollNativeEnemyLoot(enemyLootSelectionInput(source, input, itemIds))
-  let prepared = {
+  const ordinary = spawnBoneyardLootSpecs({
     ...source,
     lastSuccessfulItemLevel: rolled.lastSuccessfulItemLevel,
     nextItemId: itemIds.peek(),
     nextKeyDropLevel: rolled.nextKeyDropLevel,
     sharedRng: rolled.sharedRng,
-  }
-  const drops = [...rolled.drops]
+  }, rolled.drops, input.tick, registerWorldPainter)
+  const prepared = ordinary.store
   if (input.onDeathProgram === 'miniboss-die') {
     const selected = selectNativeMinibossDieReward(prepared.sharedRng)
     const scriptItemIds = createNativeLootItemIds(prepared.nextItemId)
@@ -471,16 +473,19 @@ export function materializeBoneyardEnemyLoot(
       enemyLootSelectionInput(prepared, input, scriptItemIds, selected.rngState),
       selected.action,
     )
-    prepared = {
+    const completed = spawnBoneyardLootSpecs({
       ...prepared,
       lastSuccessfulItemLevel: scripted.lastSuccessfulItemLevel,
       nextItemId: scriptItemIds.peek(),
       nextKeyDropLevel: scripted.nextKeyDropLevel,
       sharedRng: scripted.sharedRng,
+    }, scripted.drops, input.tick, registerWorldPainter)
+    return {
+      rejectedCount: ordinary.rejectedCount + completed.rejectedCount,
+      store: completed.store,
     }
-    drops.push(...scripted.drops)
   }
-  return spawnBoneyardLootSpecs(prepared, drops, input.tick, registerWorldPainter)
+  return ordinary
 }
 
 function enemyLootSelectionInput(
@@ -491,6 +496,7 @@ function enemyLootSelectionInput(
 ): NativeLootSelectionInput {
   return {
     actorSeed: input.actorSeed,
+    groundRecipeIndexes: groundRecipeIndexes(source.actors),
     itemRecipePool: input.itemRecipePool,
     arena: {
       ...input.arena,
@@ -521,6 +527,34 @@ function enemyLootSelectionInput(
     worldBadguyCount: input.worldBadguyCount,
     worldHasHealthPotionSack: input.worldHasHealthPotionSack,
   }
+}
+
+function groundRecipeIndexes(actors: readonly BoneyardLootActor[]): readonly number[] {
+  // Retail checks the direct item of each live type-2013 carrier, not Sack contents.
+  return actors.flatMap(actor => (
+    actor.nativeTypeId === 2013 && actor.item?.recipeIndex !== null
+      && actor.item?.recipeIndex !== undefined
+      ? [actor.item.recipeIndex]
+      : []
+  ))
+}
+
+export function boneyardLootParticipantRecipeIndexes(
+  participant: BoneyardLootParticipant | undefined,
+  pickups: readonly BoneyardLootPickup[],
+): readonly number[] {
+  if (!participant) return []
+  if (!participant.ownedRecipeIndexesAfterPickups || pickups.length === 0) {
+    return participant.ownedRecipeIndexes
+  }
+  const items = pickups.flatMap(pickup => (
+    pickup.playerId === participant.playerId && pickup.kind === 'sack' && pickup.item !== null
+      ? [pickup.item]
+      : []
+  ))
+  return items.length === 0
+    ? participant.ownedRecipeIndexes
+    : participant.ownedRecipeIndexesAfterPickups(items)
 }
 
 export function stepBoneyardLootStore(
@@ -702,6 +736,8 @@ function firstCaptureParticipant(
       work.sharedRng = gate.state
       if (gate.value !== 1) continue
     }
+    if (actor.kind === 'sack' && actor.item !== null
+      && participant.reserveLootItem?.(actor.item) === false) continue
     return participant
   }
   return null
@@ -1157,7 +1193,7 @@ function stepGoodies(
       participant?.level ?? 1,
       participant?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
       participant?.modifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
-      participant?.ownedRecipeIndexes ?? [],
+      boneyardLootParticipantRecipeIndexes(participant, work.pickups),
       placement,
       tick,
     )
@@ -1178,6 +1214,7 @@ function materializeGoodie(
   const itemIds = createNativeLootItemIds(work.nextItemId)
   const contents = resolveNativeGoodieContents({
     advancedUnlocks,
+    groundRecipeIndexes: groundRecipeIndexes(work.actors),
     itemIds,
     ownedRecipeIndexes,
     playerLevel,

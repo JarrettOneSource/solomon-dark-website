@@ -10,6 +10,8 @@
   "include": [
     "src/game/player-card-request.test.ts",
     "src/game/renderer/hub-inventory-item-frame.test.ts",
+    "src/game/core-server/loot-pickup-admission.test.ts",
+    "src/game/core-server/loot-pickup-ownership.test.ts",
     "src/game/core-server/player-charm-feedback.test.ts",
     "src/game/core-server/sack-renaming.test.ts",
     "src/game/hub-sack-rename.test.ts",

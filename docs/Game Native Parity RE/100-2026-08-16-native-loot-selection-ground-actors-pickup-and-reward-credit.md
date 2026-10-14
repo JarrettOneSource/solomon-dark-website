@@ -1,5 +1,210 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-10-14 — Local admission/ownership integration
+
+The independent named-eligibility and finite-capacity retention corrections are
+composed without changing either ownership boundary. Each participant has two
+ephemeral callbacks: reservation advances its own projected pickup economy;
+named ownership replays accepted pending items from the unchanged original
+economy. Only accepted pickups enter that list, and rejected carriers remain in
+the live direct-ground scan. Neither callback enters a save or protocol record.
+
+Eight public-simulation catch-up cases exercise direct and nested named items,
+full and near-full root inventory, and both item orders. With eligibility alone,
+the corrected fixture has six expected carrier-loss failures and two passing
+admitted controls. The combined source passes all eight. Goodies run before
+carriers within one loot tick; the fixture deliberately leaves one loot tick of
+catch-up so pickup at tick 248 precedes selection at tick 249 within one public
+step. It does not assert a reversed same-tick native order. A rejected nested
+bundle can still coexist with a later native Goodie bundle carrying the same
+recipe; direct ground items and successfully admitted nested items exclude it.
+
+Independent integration review additionally caught backpack fixture IDs colliding
+with equipped starter items. Both the public integration fixture and the earlier
+24-scenario world ownership fixture now use IDs starting at 100 and explicitly
+assert `hubEconomyInventoryIsValid`. The valid public test replayed against
+unchanged clean eligibility source `62d3b21f` still has six expected retention
+failures and two admitted controls; the composed public/world suites pass 57
+tests. The earlier invalid-ID runs are preserved and superseded for acceptance.
+
+The exact clean `f3c5277f` production build and two-client admission browser journey
+completed successfully; all collected host/client/wire error arrays were empty.
+Its teardown returned naturally after an unusually long delay, with remaining
+owned processes absent afterward. A job-wait MCP request timed out during that
+interval; no second cancellation or alternate cleanup route was needed. This
+final follow-up changes only test data and this ledger. The successful product
+build/browser proof remains bound to the unchanged production source at
+`f3c5277f`, not mislabelled as a later test-only revision, and gameplay is not
+repeated merely to change that label. Final test TypeScript, focused lint and
+registered loot checks are recorded with the local handoff.
+
+Earlier test-development failures remain separate diagnostics: the first used
+pre-clone object identity, and the second incorrectly expected pickup before
+Goodie in the same loot tick. Final registered tests preserve the actual carrier
+identity and recovered ordering. This integration changes no runtime algorithm
+beyond retaining both reviewed callbacks. Frost's independently reviewed target
+cache is included byte-for-byte; its earlier performance and save replay evidence
+is not rerun or broadened into a browser-FPS claim. Exact integration build,
+focused suites and bounded browser acceptance are recorded separately. Required
+M5 full gate and publication remain held.
+
+## 2026-10-14 — Named-item availability and direct ground-carrier exclusion
+
+### Reopened boundary and native evidence
+
+The Smartest Ring availability question reopens the shared named-item exclusion
+predicate, not loot rarity or guaranteed chest rewards. Retail 0.72.5
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`
+was read through the existing M2 read-only Ghidra replica wrapper. Fresh raw
+instructions agree with `0x005CB050`: common recipes bypass exclusion;
+Rare/Epic recipes search recursive profile inventory/equipment and storage.
+With a nonnull world, it additionally scans the world's live type-2013 actors,
+requiring a nonnull item at `+0x148` whose direct recipe UID at `+0x18` matches.
+It does not recurse into the contents of a ground Item_Sack. This differs from
+the recursive inventory search and must not be widened by a shared flattener.
+
+All eleven direct xrefs belong to three functions: five in enemy item factory
+`0x0046A360`, five in named selector `0x0046BDE0`, and one in Dowsing candidate
+filter `0x00554A10`. The first two use the arena/world argument; Dowsing uses
+null. The existing complete 47-recipe catalog is retained, including Epic row
+39 Smartest Ring. No recipe identity, rarity, level, effects or RNG algorithm
+is being re-extracted or changed by this reopening.
+
+The pre-repair Website world callers supplied only participant-owned recipes, omitting
+the direct ground-carrier scan. The old closure recorded inventory exclusion
+without draining this world-dependent branch. A live uncollected ordinary
+named drop can therefore remain eligible again. This is separate from the
+unreproduced historical empty-chest occurrence and does not justify making a
+second owned Smartest Ring eligible.
+
+### Membership and local implementation
+
+Independent world-level reproduction also exposed a same-tick ownership gap:
+the world removes picked-up carriers before processing enemy death rewards,
+but the simulation inserts the returned items into economy only afterward.
+The native predicate reads live profile ownership at each call. An ephemeral
+economy-owned resolver now projects that participant's pending Sack
+items through the existing sequential `insertLootInventoryItem` admission rule
+before returning recipe indexes. Rejected full-backpack inserts do not become
+owned. The same boundary covers multi-tick Goodie catch-up; direct ground
+contents remain nonrecursive. This adds no persisted state or protocol field.
+Existing rejected-pickup carrier loss is a separate transfer issue and is not
+silently altered by this eligibility correction.
+
+| Member | Current disposition | Required proof |
+| --- | --- | --- |
+| All 47 Rare/Epic recipes across six classes | locally implemented; release gate pending | each row excluded by an existing direct carrier, eligible after removal |
+| Recursive backpack, nested Sack, equipment and storage ownership | verified-already-at-parity | preserve existing collection and kernel ownership tests |
+| Ordinary enemy selection modes and native random-item script | locally implemented; release gate pending | world-ground identity reaches the common selector; generated placeholders remain eligible |
+| Goodie selector 10 | locally implemented; release gate pending | direct ground recipe exhausts a one-remaining pool; no new carrier or duplicate |
+| Ground Item_Sack contents, generated items, other carrier families | verified-already-at-parity / negative controls | no recursive ground scan and no false named exclusion |
+| Dowsing null-world path | verified-already-at-parity | no world scan added to its owned-item predicate |
+| Approved Dire associated-item pools | out-of-system, explicit Website extension | preserve credited-player missing-first selection and exhausted-pool duplicate fallback |
+| Same-death ordinary/script ordering | recovered and locally implemented; release gate pending | native queues Die script before synchronous ordinary loot; script observes admitted ordinary carrier, not allocator-rejected proposal |
+| Same-tick and multi-tick pickup-to-owned transition | locally implemented; release gate pending | 24 cases cover receiving participant, nested items, full backpack and sequential admission order |
+| Nondefault arena level limits and selector-99 global gate | out-of-system for this predicate repair; prior recovered-pending-port findings retained | no speculative authored-script integration or special global semantics |
+
+Native death owner `0x00481A39` queues the Die trigger through `0x00686E70`,
+then `0x00481A43` calls ordinary loot synchronously; ordinary carrier registration
+at `0x0063F6D0` completes before return. The Website now admits ordinary carriers
+before evaluating the queued linked script. Full and near-full world-ID tests
+preserve allocation rejection, item IDs, painter order and shared RNG state.
+
+Independent source review completed after reproducing and fixing the ownership
+transition gap. Its 7,896 individual-recipe/mode/arena/seed comparisons passed,
+as did the 8 same-tick and 16 catch-up/admission-order scenarios. Direct-ground
+exclusion covers all 47 recipes; controls retain nonrecursive ground bundles,
+generated items, non-2013 carriers, explicit item scripts and approved Dire pools.
+Final exact-revision build and browser acceptance are recorded outside this
+source ledger. No historical report occurrence, clean-stock runtime, required
+M5 full gate or publication is claimed by this local implementation.
+
+
+## 2026-10-14 — Finite web inventory rejection must retain the ground carrier
+
+### Reopened boundary and evidence
+
+A separate public simulation regression on released `6a1827785167d83f6c7f7defcac17fd9a61b06dc`
+filled all 2048 root backpack entries with real items, spawned one eligible
+Sack, and stepped the authoritative simulation. `insertLootInventoryItem`
+rejected the transfer; the backpack stayed unchanged but the carrier vanished.
+The earlier full-inventory coverage proved overflow beyond the 88 visible cells,
+not rejection at the finite replication ceiling or a full compatible stack.
+That admission/retirement contract was missing.
+
+M2 immutable retail bytes were independently decoded on 2026-10-14 using the
+existing Capstone installation: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Instructions `005E6D80..005E6D91` pass the carried item and
+two true flags to `0055FF20`, then `005E6DA0` clears the Sack item pointer.
+`0055FFD1..0055FFE5` adds a matching Potion quantity and destroys the incoming
+item; `0055FFA5..0055FFF9` searches Item_None (`7000`); `0056001E..00560051`
+replaces that cell; otherwise `0055FFFB..00560007` appends to the list.
+No 2048-entry or 9999-quantity rejection branch exists there. This confirms
+retail ownership transfer, not a fresh retail runtime or a native finite cap.
+
+### System boundary and membership before implementation
+
+The correction owns only admission of an already materialized type-2013 ground
+Sack into the selected participant's existing economy. A per-participant,
+per-world-step reservation uses the actual sequential `insertLootInventoryItem`
+rule before retirement and pickup feedback. The later authoritative insertion
+keeps its current order. Rejected candidates retain their live carrier and item;
+the next eligible participant can accept it in existing participant order.
+No pickup pitch RNG, event, attribution, sound, or effect is emitted for a
+rejection. Ground age, bounce, settling audio, and activation delay still advance.
+
+| Member | Current disposition | Required focused acceptance |
+| --- | --- | --- |
+| Ordinary, named, Key, Potion and nested Item_Sack payloads | locally implemented and validated; release gate pending | root admission and recursive identity preservation |
+| Full root inventory; repeated rejection; retry after freeing a slot | locally implemented and validated; release gate pending | same carrier/item survives, then transfers exactly once |
+| Potion and mod-item compatible stacks, including full-stack rejection | locally implemented and validated; release gate pending | real insertion accepts stacking at root capacity and rejects quantity overflow |
+| Near-full inventory and multiple same-tick carriers | locally implemented and validated; release gate pending | sequential reservation; rejected items consume no slot/ID |
+| Participant order, full first participant, full peers | locally implemented and validated; release gate pending | first successful eligible participant alone receives the item |
+| Visible-grid overflow and sparse root slots | verified-already-at-parity | preserve insertion past 88 cells and lowest available root slot |
+| Gold, Orb and Bonus pickup families | verified-already-at-parity | unaffected by backpack capacity |
+| Generation, named-recipe eligibility, native tables/assets, world allocation and Ether Drain destruction | out-of-system | unchanged owning contracts; no generated content or destruction policy edits |
+| Save, protocol, 2048-entry replication and stack ceilings | out-of-system | retain current finite wire/save limits; no schema migration or ceiling expansion |
+
+The finite limits are existing web representation constraints, not native
+behavior. Keeping a rejected item on the ground is the bounded conservation
+behavior at that web-only boundary, rather than claiming exact retail overflow
+at arbitrarily large inventories. Native successful transfer remains unchanged.
+The independent named-eligibility correction composes by projecting only accepted
+pickups from the original economy baseline; retained carriers remain ground-owned.
+
+### Local qualification and remaining release boundary
+
+The dedicated 36-case admission matrix has 27 behavioral failures and nine
+unchanged controls on the released baseline, then 36 passes on the candidate.
+The 412-test neighboring simulation/world/economy suite and registered 212-test
+loot suite pass without failures/skips. The configured test TypeScript check,
+seven touched-source/helper lint checks, helper syntax checks and whitespace
+review pass. The production frontend/host build and bundle budget pass.
+
+The narrow `--pickup-admission-only` built-frontend/exact-source-host journey
+enters Hub and Boneyard through real browser controls in two Mac Chrome contexts.
+Its isolated authoritative fixture fills 2048 root cells, including one wearable
+ring. The same rejected carrier remains on both clients from tick 2070 through
+2170 with no pickup sound or event. An ordinary Inventory drag equips the ring,
+frees root slot 0, and the retained carrier transfers exactly once as item 50000
+by tick 2204. Both clients retire it; one normal bag pickup sound plays. Through
+tick 2304 there is no duplicate or further inventory ID allocation. Host,
+page, console, failed-response and both wire-decoder error arrays are empty.
+Three reviewed screenshots show the visible retained ground Key, the full first
+inventory page/ring, and the retired Key with its pickup notification.
+
+The fixture is synthetic, with waves/enemies suppressed, not a user save or a
+fresh retail run. Harness-only corrections preserved strict coupled world
+ownership, advanced the injected economy revision, handled initially absent
+action feedback, and used the complete audio asset path. All unsuccessful
+invocations are retained separately; none changed production behavior or gates.
+The built revision label is the original base `6a1827785167d83f6c7f7defcac17fd9a61b06dc`
+because the repair was uncommitted during the build; exact runtime source hashes
+and build fingerprints bind the local receipt. No claim of a released clean-base
+build is made. The coordinator still owns integrated canonical validation,
+publication, deployment and live acceptance. This entry does not claim those.
+
 ## 2026-10-08 — Report 102: empty chest investigation
 
 ### Evidence and current disposition
@@ -1975,3 +2180,30 @@ Later acceptance/investigation edits are documentation only. Normal publication,
 managed deployment and scoped live checks remain separate pending steps.
 
 Scope: Report 94 shared notification presentation; Report 102 remains an unresolved occurrence with no gameplay change.
+
+## 2026-10-14 — Composition with qualified UI, Flame, and Sack ordering
+
+The isolated composition retains reviewed candidate `4307752c` (Flame, Dowsing,
+Player Card, candle pivot, and item frames), `e51032bf` (Sack addressed-cell
+ordering), and `00c1f17e` (ground named ownership, finite pickup admission, and
+resolver-local target reuse). Original candidates and their evidence remain
+unchanged. This composition introduces no new native behavior, audio tuning,
+Mortuary geometry, save migration beyond the already reviewed Flame slice,
+or WASM decision.
+
+The shared production boundary is `game-simulation.ts`: both finite-capacity
+reservation/accepted-ownership callbacks and Flame factory registration, view
+bounds, and Hub finalization must survive together. The projection cache stays
+resolver-local; channel geometry owns its independent path and RNG. Sack cell
+ordering must preserve inventory validity and named ownership before later
+ground admission. The combined test registrations must retain all tests from
+both input branches. Ledger 123 keeps both native Flame and target-cache entries.
+
+Required new qualification is exact-source union review, affected simulation,
+combat, inventory/loot, presentation/protocol and UI regression suites, app/test
+types, maintained lint, and a production build. Reuse closed per-slice visual
+proofs when their rendering bytes remain identical; do not repeat them solely
+to relabel the revision. Any newly discovered runtime intersection needs its
+own discriminating test. The canonical M5 gate, source-only transfer, hosted
+publication, and production acceptance remain pending under their existing hold.
+No full report closure is implied by successful local composition.

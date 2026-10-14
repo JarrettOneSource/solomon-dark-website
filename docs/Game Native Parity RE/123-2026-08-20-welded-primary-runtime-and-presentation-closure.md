@@ -1852,3 +1852,44 @@ x87 or pixel-equivalence qualification.
 Independent acceptance review, report-119 reconciliation, and the final exact-
 candidate M5 gate remain pending. Native-runtime comparison is unrun. No full
 M2 gate or publication is authorized by this ledger entry.
+
+## 2026-10-14 — Report 115: bounded projectile-target row reuse
+
+### Evidence and preservation contract before implementation
+
+A source-only profile of the report's unchanged save on released commit
+`6a1827785167d83f6c7f7defcac17fd9a61b06dc` replayed the same retained
+3,001-tick input sequence three times. All final serialized states were
+identical. V8 sampling attributed 16.03% of sampled time inclusively to
+`resolveProjectileContacts`, including 9.95% to `primaryTargetRows`.
+These are unpaced source CPU observations, including profiler overhead, not
+a reproduction of the reporter's browser lag or a browser frame-rate claim.
+The private original save and profiling artifacts remain outside the repository.
+
+The resolver rebuilt an identical enemy/Maggot target-row projection for each
+flying projectile even when no preceding contact changed the enemy store.
+The repair is scoped to reusing that derived projection within one resolver
+invocation, keyed by the complete immutable enemy-store object identity.
+Any new store, including a nonlethal hit, lethal hit, Maggot hit, or Frost sound
+event update, requires a new projection before the next projectile. The cache
+is discarded at the end of the resolver; it never crosses ticks or worlds.
+
+The existing native contracts remain unchanged: ascending spell ID processing;
+same-cell point lookup; strict radius and native cell-binding order; hostile
+and scenery masks; direct Frost damage before its fresh area query; dead-target
+exclusion; Boulder health/pool accounting; and piercing's existing per-contact
+target snapshot. No projectile, enemy, effect, sound, quality setting, RNG draw,
+saved field or snapshot is removed or downsampled.
+
+Affected membership is every branch of this shared projection consumer:
+Earth Boulder, Fireball, Ether Magic Missile, Fire Missile (1000), Frost Missile
+(1001), Ball Lightning (1002), and Crawling Shock (1009). Persistent/channel
+spells and Frost's independent radial projection are outside this local cache.
+Each affected member requires unchanged-store reuse coverage; lethal transitions,
+nonlethal-to-Boulder health accounting, Maggot transitions, scenery order, and
+invocation-local lifetime require focused regressions. Existing Frost rank,
+low-mana, radial and other projectile contract tests remain required.
+
+Qualification is pending. Focused source replay and unit checks do not replace
+the exact candidate's canonical Mac gate and affected real-browser acceptance.
+No report-resolution or publication claim is made by this entry.

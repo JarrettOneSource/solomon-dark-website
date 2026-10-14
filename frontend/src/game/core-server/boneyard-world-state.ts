@@ -5,7 +5,7 @@ import type { BoneyardGateLeafState } from '../core-kernels/boneyard-gate.ts'
 import type { BoneyardWaveDirectorState } from '../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
-import type { HubEconomyState } from '../core-kernels/hub-economy.ts'
+import type { HubEconomyState, HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import type {
   NativeEnemyWorldFeedbackKernelState,
 } from '../core-kernels/native-enemy-world-feedback.ts'
@@ -36,7 +36,9 @@ export interface BoneyardPlayerCombatStatus {
   readonly inventoryHasHealthPotion?: boolean
   readonly level?: number
   readonly lootModifiers?: NativeLootModifiers
+  readonly reserveLootItem?: (item: HubInventoryItem) => boolean
   readonly ownedRecipeIndexes?: readonly number[]
+  readonly ownedRecipeIndexesAfterPickups?: (items: readonly HubInventoryItem[]) => readonly number[]
   readonly advancedUnlocks?: readonly boolean[]
 }
 

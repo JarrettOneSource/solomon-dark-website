@@ -166,9 +166,17 @@ function projectileDamage(projectile: PrimarySpellProjectileState): number {
 }
 
 export function resolveProjectileContacts(work: BoneyardSpellCombatWork): void {
+  let targetRowSource: BoneyardSpellCombatWork['enemies'] | undefined
+  let enemyRows: ReturnType<typeof primaryTargetRows> = []
   for (const projectile of [...work.sourceSpells.projectiles].sort(bySpellId)) {
     if (projectile.phase !== 'flight' || projectile.worldKey !== work.worldKey) continue
-    const enemyRows = primaryTargetRows(work.enemies)
+    // Contacts replace the immutable store. Rebuild before the next projectile
+    // after any replacement, including nonlethal damage and Maggot deaths.
+    // No-contact projectiles share the projection only within this invocation.
+    if (targetRowSource !== work.enemies) {
+      targetRowSource = work.enemies
+      enemyRows = primaryTargetRows(targetRowSource)
+    }
     const rows = primaryProjectileOwnsSceneryContact(projectile)
       ? [
           ...work.primarySceneryTargets.map((target) => ({

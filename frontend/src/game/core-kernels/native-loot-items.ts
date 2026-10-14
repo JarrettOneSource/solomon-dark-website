@@ -30,6 +30,7 @@ export interface NativeLootItem extends HubInventoryItem {
 
 export interface NativeGoodieContentsInput {
   readonly advancedUnlocks: readonly boolean[]
+  readonly groundRecipeIndexes?: readonly number[]
   readonly itemIds: NativeLootItemIds
   readonly ownedRecipeIndexes: readonly number[]
   readonly playerLevel: number
@@ -105,7 +106,9 @@ export function resolveNativeGoodieContents(
       insertItem(generated.item)
     }
   } else if (input.selector === 10) {
-    const selected = selectGoodieEquipment(rng, input.itemIds, input.ownedRecipeIndexes)
+    const selected = selectGoodieEquipment(
+      rng, input.itemIds, input.ownedRecipeIndexes, input.groundRecipeIndexes ?? [],
+    )
     rng = selected.sharedRng
     if (selected.item) insertItem(selected.item)
   } else if (input.selector <= 12) {
@@ -155,6 +158,7 @@ export function selectEnemyItem(
     recipe.level >= input.arena.itemLevelMinimum
     && recipe.level <= input.arena.itemLevelMaximum
     && !input.participant.ownedRecipeIndexes.includes(recipe.sourceIndex)
+    && !input.groundRecipeIndexes?.includes(recipe.sourceIndex)
   ))
   const mode = input.policies.specificItem
   if (mode === 0) {
@@ -198,10 +202,12 @@ function selectGoodieEquipment(
   sourceRng: NativeRngState,
   itemIds: NativeLootItemIds,
   ownedRecipeIndexes: readonly number[],
+  groundRecipeIndexes: readonly number[],
 ): ItemSelectionResult {
   const candidates = DOWSING_EQUIPMENT_RECIPES.filter((recipe) => (
     recipe.level >= 0 && recipe.level <= 100
     && !ownedRecipeIndexes.includes(recipe.sourceIndex)
+    && !groundRecipeIndexes.includes(recipe.sourceIndex)
   ))
   if (candidates.length === 0) return { item: null, sharedRng: sourceRng }
   const selected = drawNativeInteger(sourceRng, candidates.length)

@@ -2,7 +2,7 @@ import { finalizeHubFlameLashVisuals } from '../core-kernels/native-weld-flame-b
 import { PLAYER_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { createNativeScreenFlashes, createNativeScreenFlashWriter, resetNativeScreenFlashes, type NativeScreenFlashState, type WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
 import type { NativeSkillBookOutcome } from '../core-kernels/hub-economy.ts'
-import { renameInventorySack } from '../core-kernels/hub-economy.ts'
+import { insertLootInventoryItem, renameInventorySack } from '../core-kernels/hub-economy.ts'
 import { finalizeBoneyardPuppetQueries } from './enemies/puppet-hits.ts'
 import type { BoastDefinition, BoastResolver, BoastSelection } from '../core-kernels/boast.ts'
 import { boastUsesRandomSkillChoices, failBoast, scoreBoast, succeedBoast } from '../core-kernels/boast.ts'
@@ -2269,6 +2269,8 @@ function stepGameSimulationTickWithScreenFlashes(
         Object.fromEntries(Object.keys(players).map((playerId) => {
           const progression = getPlayerProgression(state, playerId)
           const economy = getPlayerEconomy(state, playerId)
+          // Reserve slots and stack quantities before accepted ground carriers retire.
+          let pickupEconomy = economy
           const skillBook = getPlayerSkillBook(state, playerId)
           const derived = playerSkillDerivedStatsAt(state.playerEntities, playerId)
           if (derived === null) throw new Error(`player ${playerId} has no native skill runtime`)
@@ -2285,6 +2287,16 @@ function stepGameSimulationTickWithScreenFlashes(
             }),
             movementScale: playerEntityMovementScale(state.playerEntities, playerId),
             ownedRecipeIndexes: economyOwnedRecipeIndexes(economy),
+            ownedRecipeIndexesAfterPickups: (items: readonly HubInventoryItem[]) => {
+              let projected = economy
+              for (const item of items) projected = insertLootInventoryItem(projected, item).state
+              return economyOwnedRecipeIndexes(projected)
+            },
+            reserveLootItem: (item: HubInventoryItem) => {
+              const inserted = insertLootInventoryItem(pickupEconomy, item)
+              pickupEconomy = inserted.state
+              return inserted.accepted
+            },
             advancedUnlocks: skillBook.advancedUnlocks,
           }]
         })),

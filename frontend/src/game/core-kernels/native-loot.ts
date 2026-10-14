@@ -128,6 +128,7 @@ export interface NativeLootDropSpec {
 }
 
 export interface NativeLootSelectionInput {
+  readonly groundRecipeIndexes?: readonly number[]
   readonly actorSeed: number
   /** Approved enemy Item identity override; category rolls and scripts remain stock. */
   readonly itemRecipePool?: readonly number[]
