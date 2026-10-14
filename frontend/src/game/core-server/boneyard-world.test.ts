@@ -11,7 +11,7 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   createEquipmentInventoryItem, createHubEconomy, DOWSING_EQUIPMENT_RECIPES,
-  insertLootInventoryItem, type HubInventoryItem,
+  hubEconomyInventoryIsValid, insertLootInventoryItem, type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { NATIVE_LOOT_OPEN_PLACEMENT, nativeLootModifiers } from '../core-kernels/native-loot.ts'
 import { nativePortalProgram, nativePortalRecipe } from '../core-kernels/native-survival-portal.ts'
@@ -349,10 +349,11 @@ function namedPickupOwnershipFixture(rootSlots: number) {
   const source = {
     ...createHubEconomy(0), nextItemId: 4_000,
     backpack: Array.from({ length: rootSlots }, (_, index) => ({
-      ...createEquipmentInventoryItem(recipes[index % recipes.length]!, index + 1),
+      ...createEquipmentInventoryItem(recipes[index % recipes.length]!, index + 100),
       inventorySlot: index,
     })),
   }
+  assert.equal(hubEconomyInventoryIsValid(source), true)
   const recipeIndexes = (items: readonly HubInventoryItem[]): number[] => items.flatMap(item => [
     ...(item.recipeIndex === null ? [] : [item.recipeIndex]),
     ...recipeIndexes(item.contents ?? []),

@@ -19,6 +19,25 @@ step. It does not assert a reversed same-tick native order. A rejected nested
 bundle can still coexist with a later native Goodie bundle carrying the same
 recipe; direct ground items and successfully admitted nested items exclude it.
 
+Independent integration review additionally caught backpack fixture IDs colliding
+with equipped starter items. Both the public integration fixture and the earlier
+24-scenario world ownership fixture now use IDs starting at 100 and explicitly
+assert `hubEconomyInventoryIsValid`. The valid public test replayed against
+unchanged clean eligibility source `62d3b21f` still has six expected retention
+failures and two admitted controls; the composed public/world suites pass 57
+tests. The earlier invalid-ID runs are preserved and superseded for acceptance.
+
+The exact clean `f3c5277f` production build and two-client admission browser journey
+completed successfully; all collected host/client/wire error arrays were empty.
+Its teardown returned naturally after an unusually long delay, with remaining
+owned processes absent afterward. A job-wait MCP request timed out during that
+interval; no second cancellation or alternate cleanup route was needed. This
+final follow-up changes only test data and this ledger. The successful product
+build/browser proof remains bound to the unchanged production source at
+`f3c5277f`, not mislabelled as a later test-only revision, and gameplay is not
+repeated merely to change that label. Final test TypeScript, focused lint and
+registered loot checks are recorded with the local handoff.
+
 Earlier test-development failures remain separate diagnostics: the first used
 pre-clone object identity, and the second incorrectly expected pickup before
 Goodie in the same loot tick. Final registered tests preserve the actual carrier

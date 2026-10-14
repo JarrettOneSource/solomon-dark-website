@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
   createEquipmentInventoryItem, DOWSING_EQUIPMENT_RECIPES,
+  hubEconomyInventoryIsValid,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { NATIVE_LOOT_OPEN_PLACEMENT, nativeLootModifiers } from '../core-kernels/native-loot.ts'
@@ -41,10 +42,11 @@ for (const nested of [false, true]) {
       const economy = {
         ...getPlayerEconomy(state), nextItemId: 50_000,
         backpack: Array.from({ length: rootSlots }, (_, index) => ({
-          ...createEquipmentInventoryItem(otherRecipes[index % otherRecipes.length]!, index + 1),
+          ...createEquipmentInventoryItem(otherRecipes[index % otherRecipes.length]!, index + 100),
           inventorySlot: index,
         })),
       }
+      assert.equal(hubEconomyInventoryIsValid(economy), true)
       state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'local-player', economy) }
       if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
       const context = {
