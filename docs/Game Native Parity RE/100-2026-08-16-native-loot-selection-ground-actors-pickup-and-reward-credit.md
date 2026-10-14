@@ -71,6 +71,92 @@ Final exact-revision build and browser acceptance are recorded outside this
 source ledger. No historical report occurrence, clean-stock runtime, required
 M5 full gate or publication is claimed by this local implementation.
 
+
+## 2026-10-14 — Finite web inventory rejection must retain the ground carrier
+
+### Reopened boundary and evidence
+
+A separate public simulation regression on released `6a1827785167d83f6c7f7defcac17fd9a61b06dc`
+filled all 2048 root backpack entries with real items, spawned one eligible
+Sack, and stepped the authoritative simulation. `insertLootInventoryItem`
+rejected the transfer; the backpack stayed unchanged but the carrier vanished.
+The earlier full-inventory coverage proved overflow beyond the 88 visible cells,
+not rejection at the finite replication ceiling or a full compatible stack.
+That admission/retirement contract was missing.
+
+M2 immutable retail bytes were independently decoded on 2026-10-14 using the
+existing Capstone installation: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Instructions `005E6D80..005E6D91` pass the carried item and
+two true flags to `0055FF20`, then `005E6DA0` clears the Sack item pointer.
+`0055FFD1..0055FFE5` adds a matching Potion quantity and destroys the incoming
+item; `0055FFA5..0055FFF9` searches Item_None (`7000`); `0056001E..00560051`
+replaces that cell; otherwise `0055FFFB..00560007` appends to the list.
+No 2048-entry or 9999-quantity rejection branch exists there. This confirms
+retail ownership transfer, not a fresh retail runtime or a native finite cap.
+
+### System boundary and membership before implementation
+
+The correction owns only admission of an already materialized type-2013 ground
+Sack into the selected participant's existing economy. A per-participant,
+per-world-step reservation uses the actual sequential `insertLootInventoryItem`
+rule before retirement and pickup feedback. The later authoritative insertion
+keeps its current order. Rejected candidates retain their live carrier and item;
+the next eligible participant can accept it in existing participant order.
+No pickup pitch RNG, event, attribution, sound, or effect is emitted for a
+rejection. Ground age, bounce, settling audio, and activation delay still advance.
+
+| Member | Current disposition | Required focused acceptance |
+| --- | --- | --- |
+| Ordinary, named, Key, Potion and nested Item_Sack payloads | locally implemented and validated; release gate pending | root admission and recursive identity preservation |
+| Full root inventory; repeated rejection; retry after freeing a slot | locally implemented and validated; release gate pending | same carrier/item survives, then transfers exactly once |
+| Potion and mod-item compatible stacks, including full-stack rejection | locally implemented and validated; release gate pending | real insertion accepts stacking at root capacity and rejects quantity overflow |
+| Near-full inventory and multiple same-tick carriers | locally implemented and validated; release gate pending | sequential reservation; rejected items consume no slot/ID |
+| Participant order, full first participant, full peers | locally implemented and validated; release gate pending | first successful eligible participant alone receives the item |
+| Visible-grid overflow and sparse root slots | verified-already-at-parity | preserve insertion past 88 cells and lowest available root slot |
+| Gold, Orb and Bonus pickup families | verified-already-at-parity | unaffected by backpack capacity |
+| Generation, named-recipe eligibility, native tables/assets, world allocation and Ether Drain destruction | out-of-system | unchanged owning contracts; no generated content or destruction policy edits |
+| Save, protocol, 2048-entry replication and stack ceilings | out-of-system | retain current finite wire/save limits; no schema migration or ceiling expansion |
+
+The finite limits are existing web representation constraints, not native
+behavior. Keeping a rejected item on the ground is the bounded conservation
+behavior at that web-only boundary, rather than claiming exact retail overflow
+at arbitrarily large inventories. Native successful transfer remains unchanged.
+The independent named-eligibility correction composes by projecting only accepted
+pickups from the original economy baseline; retained carriers remain ground-owned.
+
+### Local qualification and remaining release boundary
+
+The dedicated 36-case admission matrix has 27 behavioral failures and nine
+unchanged controls on the released baseline, then 36 passes on the candidate.
+The 412-test neighboring simulation/world/economy suite and registered 212-test
+loot suite pass without failures/skips. The configured test TypeScript check,
+seven touched-source/helper lint checks, helper syntax checks and whitespace
+review pass. The production frontend/host build and bundle budget pass.
+
+The narrow `--pickup-admission-only` built-frontend/exact-source-host journey
+enters Hub and Boneyard through real browser controls in two Mac Chrome contexts.
+Its isolated authoritative fixture fills 2048 root cells, including one wearable
+ring. The same rejected carrier remains on both clients from tick 2070 through
+2170 with no pickup sound or event. An ordinary Inventory drag equips the ring,
+frees root slot 0, and the retained carrier transfers exactly once as item 50000
+by tick 2204. Both clients retire it; one normal bag pickup sound plays. Through
+tick 2304 there is no duplicate or further inventory ID allocation. Host,
+page, console, failed-response and both wire-decoder error arrays are empty.
+Three reviewed screenshots show the visible retained ground Key, the full first
+inventory page/ring, and the retired Key with its pickup notification.
+
+The fixture is synthetic, with waves/enemies suppressed, not a user save or a
+fresh retail run. Harness-only corrections preserved strict coupled world
+ownership, advanced the injected economy revision, handled initially absent
+action feedback, and used the complete audio asset path. All unsuccessful
+invocations are retained separately; none changed production behavior or gates.
+The built revision label is the original base `6a1827785167d83f6c7f7defcac17fd9a61b06dc`
+because the repair was uncommitted during the build; exact runtime source hashes
+and build fingerprints bind the local receipt. No claim of a released clean-base
+build is made. The coordinator still owns integrated canonical validation,
+publication, deployment and live acceptance. This entry does not claim those.
+
 ## 2026-10-08 — Report 102: empty chest investigation
 
 ### Evidence and current disposition

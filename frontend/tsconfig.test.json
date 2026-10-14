@@ -8,6 +8,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
+    "src/game/core-server/loot-pickup-admission.test.ts",
     "src/game/core-server/player-charm-feedback.test.ts",
     "src/game/core-server/sack-renaming.test.ts",
     "src/game/hub-sack-rename.test.ts",

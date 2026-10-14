@@ -36,6 +36,7 @@ export interface BoneyardPlayerCombatStatus {
   readonly inventoryHasHealthPotion?: boolean
   readonly level?: number
   readonly lootModifiers?: NativeLootModifiers
+  readonly reserveLootItem?: (item: HubInventoryItem) => boolean
   readonly ownedRecipeIndexes?: readonly number[]
   readonly ownedRecipeIndexesAfterPickups?: (items: readonly HubInventoryItem[]) => readonly number[]
   readonly advancedUnlocks?: readonly boolean[]

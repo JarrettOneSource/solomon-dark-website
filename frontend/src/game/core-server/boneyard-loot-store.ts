@@ -154,6 +154,7 @@ export interface BoneyardLootParticipant {
   readonly modifiers: NativeLootModifiers
   readonly ownedRecipeIndexes: readonly number[]
   readonly ownedRecipeIndexesAfterPickups?: (items: readonly HubInventoryItem[]) => readonly number[]
+  readonly reserveLootItem?: (item: NativeLootItem) => boolean
   readonly playerId: string
   readonly position: Readonly<BoneyardPoint>
 }
@@ -735,6 +736,8 @@ function firstCaptureParticipant(
       work.sharedRng = gate.state
       if (gate.value !== 1) continue
     }
+    if (actor.kind === 'sack' && actor.item !== null
+      && participant.reserveLootItem?.(actor.item) === false) continue
     return participant
   }
   return null

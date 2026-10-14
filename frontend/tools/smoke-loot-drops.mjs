@@ -12,6 +12,7 @@ import {
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { observeGoldPlacementWire, proveGoldPlacement } from './smoke-loot-gold-placement.mjs'
+import { provePickupAdmission } from './smoke-loot-pickup-admission.mjs'
 import { proveKeyDrops } from './smoke-loot-key-drops.mjs'
 import { proveItemCharm, proveItemCharmCollege } from './smoke-item-charm.mjs'
 import { proveDireBossDrops } from './smoke-dire-boss-loot.mjs'
@@ -62,6 +63,7 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
 const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
+const pickupAdmissionOnly = process.argv.includes('--pickup-admission-only')
 const itemCharmOnly = process.argv.includes('--item-charm-only')
 const charmOwnerOnly = process.argv.includes('--charm-owner-only')
 const goldPlacementOnly = process.argv.includes('--gold-placement-only')
@@ -104,7 +106,7 @@ const host = await startGameHost({
   log: entry => { if (entry.level === 'error') hostErrors.push(entry) },
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  ...(goldPlacementOnly || keyDropsOnly || direBossDropsOnly || itemCharmOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
+  ...(pickupAdmissionOnly || goldPlacementOnly || keyDropsOnly || direBossDropsOnly || itemCharmOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -123,7 +125,7 @@ const [hostPage, guestPage] = await Promise.all([
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
-const goldWires = goldPlacementOnly || keyDropsOnly || direBossDropsOnly || itemCharmOnly
+const goldWires = pickupAdmissionOnly || goldPlacementOnly || keyDropsOnly || direBossDropsOnly || itemCharmOnly
   ? [hostPage, guestPage].map((page) => observeGoldPlacementWire(page, host.address.url))
   : []
 
@@ -206,6 +208,20 @@ try {
     .map(({ playerId: connectedPlayerId }) => connectedPlayerId)
     .find((connectedPlayerId) => connectedPlayerId !== playerId)
   assert.ok(guestPlayerId, 'the second browser must own a distinct authoritative slot')
+
+  if (pickupAdmissionOnly) {
+    const pickupAdmission = await provePickupAdmission({
+      host, hostPage, guestPage, hostPlayerId: playerId, guestPlayerId,
+      position: arenaCenter(host.state().world.bounds), movePlayer, waitUntil,
+      waitForLootCount, spawnAuthoritativeLootSpecs, screenshotRoot, wires: goldWires, soundCount,
+    })
+    assert.deepEqual({ hostErrors, consoleErrors, failedResponses, pageErrors }, {
+      hostErrors: [], consoleErrors: [], failedResponses: [], pageErrors: [],
+    })
+    process.stdout.write(`${JSON.stringify({ pickupAdmission, hostErrors, consoleErrors,
+      failedResponses, pageErrors, useBuiltFrontend }, null, 2)}\n`)
+    break smoke
+  }
 
   if (goldPlacementOnly) {
     const goldPlacement = await proveGoldPlacement({
@@ -589,7 +605,7 @@ try {
   }, null, 2)}\n`)
   }
 } catch (error) {
-  if (itemCharmOnly) console.error(JSON.stringify({ hostErrors, pageErrors, consoleErrors, failedResponses,
+  if (itemCharmOnly || pickupAdmissionOnly) console.error(JSON.stringify({ hostErrors, pageErrors, consoleErrors, failedResponses,
     wireErrors: goldWires.map(wire => wire.errors),
     players: host.state().playerEntities.identities.map(row => row.playerId),
     world: host.state().world.kind, tick: host.state().tick,

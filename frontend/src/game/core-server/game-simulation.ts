@@ -2268,6 +2268,8 @@ function stepGameSimulationTickWithScreenFlashes(
         Object.fromEntries(Object.keys(players).map((playerId) => {
           const progression = getPlayerProgression(state, playerId)
           const economy = getPlayerEconomy(state, playerId)
+          // Reserve slots and stack quantities before accepted ground carriers retire.
+          let pickupEconomy = economy
           const skillBook = getPlayerSkillBook(state, playerId)
           const derived = playerSkillDerivedStatsAt(state.playerEntities, playerId)
           if (derived === null) throw new Error(`player ${playerId} has no native skill runtime`)
@@ -2288,6 +2290,11 @@ function stepGameSimulationTickWithScreenFlashes(
               let projected = economy
               for (const item of items) projected = insertLootInventoryItem(projected, item).state
               return economyOwnedRecipeIndexes(projected)
+            },
+            reserveLootItem: (item: HubInventoryItem) => {
+              const inserted = insertLootInventoryItem(pickupEconomy, item)
+              pickupEconomy = inserted.state
+              return inserted.accepted
             },
             advancedUnlocks: skillBook.advancedUnlocks,
           }]

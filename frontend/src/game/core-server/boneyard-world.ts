@@ -211,6 +211,7 @@ export function stepBoneyardWorldTick(
       modifiers: combat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
       ownedRecipeIndexes: combat?.ownedRecipeIndexes ?? [],
       ownedRecipeIndexesAfterPickups: combat?.ownedRecipeIndexesAfterPickups,
+      reserveLootItem: combat?.reserveLootItem,
       playerId,
       position: player.position,
     }
