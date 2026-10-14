@@ -1,5 +1,34 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-10-14 — Local admission/ownership integration
+
+The independent named-eligibility and finite-capacity retention corrections are
+composed without changing either ownership boundary. Each participant has two
+ephemeral callbacks: reservation advances its own projected pickup economy;
+named ownership replays accepted pending items from the unchanged original
+economy. Only accepted pickups enter that list, and rejected carriers remain in
+the live direct-ground scan. Neither callback enters a save or protocol record.
+
+Eight public-simulation catch-up cases exercise direct and nested named items,
+full and near-full root inventory, and both item orders. With eligibility alone,
+the corrected fixture has six expected carrier-loss failures and two passing
+admitted controls. The combined source passes all eight. Goodies run before
+carriers within one loot tick; the fixture deliberately leaves one loot tick of
+catch-up so pickup at tick 248 precedes selection at tick 249 within one public
+step. It does not assert a reversed same-tick native order. A rejected nested
+bundle can still coexist with a later native Goodie bundle carrying the same
+recipe; direct ground items and successfully admitted nested items exclude it.
+
+Earlier test-development failures remain separate diagnostics: the first used
+pre-clone object identity, and the second incorrectly expected pickup before
+Goodie in the same loot tick. Final registered tests preserve the actual carrier
+identity and recovered ordering. This integration changes no runtime algorithm
+beyond retaining both reviewed callbacks. Frost's independently reviewed target
+cache is included byte-for-byte; its earlier performance and save replay evidence
+is not rerun or broadened into a browser-FPS claim. Exact integration build,
+focused suites and bounded browser acceptance are recorded separately. Required
+M5 full gate and publication remain held.
+
 ## 2026-10-14 — Named-item availability and direct ground-carrier exclusion
 
 ### Reopened boundary and native evidence
