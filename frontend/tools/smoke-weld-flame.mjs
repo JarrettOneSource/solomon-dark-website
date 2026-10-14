@@ -65,10 +65,17 @@ const browser = await chromium.launch({
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
 })
 const contexts = [], bridges = [], roles = [], phases = []
+const servedAssetUrls = new Set()
+let servedDeployment
 let refill, hostSampler, progressTimer, fixtureAnchor, weak = false
 let stage = 'launch'
 const hostBirths = new Map()
 try {
+  assert.match(process.env.SDR_BUILD_REVISION ?? '', /^[0-9a-f]{40}$/)
+  const deploymentResponse = await fetch(`${origin}/deployment.json`)
+  assert.ok(deploymentResponse.ok)
+  servedDeployment = await deploymentResponse.json()
+  assert.equal(servedDeployment.revision, process.env.SDR_BUILD_REVISION)
   progressTimer = setInterval(async () => {
     const views = await Promise.all(roles.map(async ({ name, page }) => ({ name, url: page.url(),
       text: await page.locator('body').innerText({ timeout: 1_000 }).then(text => text.slice(0, 500)).catch(() => 'unavailable') })))
@@ -139,6 +146,12 @@ try {
   await owner.page.keyboard.press('Escape')
   await owner.page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 15_000 })
   await castPhase('coarse-targetless', owner, playerId, { distance: 360, targets: false, weak: false })
+  await owner.page.keyboard.press('Escape')
+  await owner.page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]').waitFor()
+  await owner.page.waitForFunction(() => Number(document.querySelector('.gameplay-pause-overlay')?.getAttribute('data-gameplay-pause-reveal')) === 1)
+  const pausedTick = host.state().tick
+  await owner.page.waitForTimeout(200)
+  assert.equal(host.state().tick, pausedTick, 'Final captures require acknowledged real owner pause')
   for (const recipient of roles) {
     const rendered = await recipient.page.evaluate(() => window.__flameFrames)
     assert.ok(rendered.some(frame => frame.kinds.includes('weld-channel:1003')), `${recipient.name} never rendered the Flame ribbon`)
@@ -149,6 +162,7 @@ try {
         `${recipient.name}: ${kind} had no actual painter-root insertion`)
     }
     await recipient.page.screenshot({ path: `${output}/${recipient.name}-released.png` })
+    assert.equal(host.state().tick, pausedTick, 'Authority remained frozen throughout each final capture')
   }
   const common = [...owner.births.keys()].filter(id => peer.births.has(id) && observer.births.has(id))
   assert.ok(common.length >= 10, 'Owner, peer and true observer lacked common retained births')
@@ -159,6 +173,7 @@ try {
   }
   assert.ok(Object.values(errors).every(list => list.length === 0), JSON.stringify(errors))
   const receipt = { status: 'ok', browser: browser.version(), muted: true, phases,
+    servedDeployment, servedAssetUrls: [...servedAssetUrls].sort(), pausedCaptureTick: pausedTick,
     welcomes: roles.map(({ name, welcome }) => ({ name, ...welcome })),
     hubCombatSealed: true, commonOwnerPeerObserverBirths: common.length, historyOnlyBirths: owner.historyOnlyBirths.size,
     sampledHostBirths: hostBirths.size,
@@ -169,7 +184,8 @@ try {
   await writeFile(`${output}/receipt.json`, JSON.stringify(receipt, null, 2))
   console.log(JSON.stringify(receipt))
 } catch (error) {
-  for (const recipient of roles) await recipient.page.screenshot({ path: `${output}/${recipient.name}-failure.png` }).catch(() => {})
+  // Failure may occur before a real pause is admitted. Preserve diagnostics,
+  // without taking an unpaused screenshot or mutating the failed phase.
   console.error(JSON.stringify({ message: error.message, errors, phases }))
   throw error
 } finally {
@@ -187,10 +203,13 @@ async function role(name, observer = false) {
   roles.push(result)
   page.on('pageerror', error => errors.page.push(`${name}: ${error.message}`))
   page.on('console', message => { if (message.type() === 'error') errors.console.push(`${name}: ${message.text()}`) })
-  page.on('response', response => { if (response.status() >= 400) errors.responses.push(`${name}: ${response.status()} ${response.url()}`) })
+  page.on('response', response => {
+    if (response.status() >= 400) errors.responses.push(`${name}: ${response.status()} ${response.url()}`)
+    const url = new URL(response.url())
+    if (url.origin === origin && url.pathname.startsWith('/assets/')) servedAssetUrls.add(url.pathname)
+  })
   page.on('requestfailed', request => errors.requests.push(`${name}: ${request.url()}: ${request.failure()?.errorText}`))
   await capturePrivateCollegeBridge(page, result, observer)
-  await page.route('**/deployment.json*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
   await page.addInitScript(({ endpoint, settingsKey, settings, observer }) => {
     localStorage.setItem(settingsKey, JSON.stringify(settings))
     if (observer) localStorage.setItem('sdr.token', 'local-flame-observer-fixture')
@@ -306,7 +325,8 @@ async function castPhase(name, owner, playerId, options) {
     await waitUntil(() => [...owner.births.values()].some(birth => birth.id >= firstId && birth.recipe.kind === 'ribbon'
       && birth.recipe.weak === options.weak), `${name}: admitted cast produced no complete Flame birth`, 12_000)
     await owner.page.waitForTimeout(800)
-    await owner.page.screenshot({ path: `${output}/${name}-held.png` })
+    // Live retained-frame and wire assertions below prove this cast. Review
+    // captures are taken only after the final real owner pause is admitted.
   } finally { owner.pendingInputPreflight = undefined; await owner.page.mouse.up() }
   await waitUntil(() => host.state().primarySpells.transients.every(actor => actor.buildId !== 1003), `${name}: Flame did not drain`, 5_000)
   await owner.page.waitForTimeout(150)

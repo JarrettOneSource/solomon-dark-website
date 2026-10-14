@@ -22,6 +22,8 @@ const built = process.env.SDR_DOWSING_BUILT === '1'
 const checkReducedFlashes = process.env.SDR_DOWSING_REDUCED_FLASHES === '1'
 let reducedScreenFlashes = false
 const flashChecks = []
+let servedDeployment = null
+const servedAssetUrls = new Set()
 const credential = randomBytes(32).toString('base64url')
 const owner = 'report39-owner'
 const itemId = 90039
@@ -64,7 +66,7 @@ if (!built) await vite.listen()
 const baseUrl = `http://127.0.0.1:${vite.httpServer.address().port}`
 const host = await startGameHost({ allowedOrigins: [baseUrl], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
 const browser = await chromium.launch({ executablePath: process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
-  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome'), headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--disable-audio-output'] })
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome'), headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--disable-audio-output', '--mute-audio'] })
 const page = await browser.newPage(mobile
   ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true }
   : { viewport: { width: 1600, height: 900 } })
@@ -88,10 +90,22 @@ if (checkReducedFlashes) await page.addInitScript(() => {
 const errors = { page: [], console: [], responses: [] }
 page.on('pageerror', error => errors.page.push(error.message))
 page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
-page.on('response', response => { if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`) })
+page.on('response', response => {
+  if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`)
+  const url = new URL(response.url())
+  if (url.origin === baseUrl && url.pathname.startsWith('/assets/')) servedAssetUrls.add(url.pathname)
+})
 try {
   await page.route('**/__report39_seed', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Report39 fixture</title>' }))
-  await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+  if (!built) await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+  if (checkReducedFlashes) {
+    assert.ok(built, 'Reduced-flash acceptance requires the production build')
+    assert.match(process.env.SDR_BUILD_REVISION ?? '', /^[0-9a-f]{40}$/)
+    const response = await page.request.get(`${baseUrl}/deployment.json`)
+    assert.ok(response.ok())
+    servedDeployment = await response.json()
+    assert.equal(servedDeployment.revision, process.env.SDR_BUILD_REVISION)
+  }
   await page.addInitScript(runtime => { window.solomonDarkRuntime = runtime }, {
     gameEndpoint: { kind: 'localhost', credential, url: host.address.url },
   })
@@ -122,7 +136,7 @@ try {
     const item = backpackItem(service, itemId)
     await activate(item)
     receipts.push({ trader, tooltip: await assertTooltipPaint(service) })
-    await page.screenshot({ path: join(output, `${trader.toLowerCase()}-tooltip.png`) })
+    await screenshot(`${trader.toLowerCase()}-tooltip.png`)
     await closeService(service)
   }
 
@@ -134,13 +148,13 @@ try {
   assert.deepEqual(ownerEconomy().equipment, unchanged.equipment)
   assert.equal(ownerEconomy().gold, unchanged.gold)
   assert.deepEqual(ownerEconomy().rng, unchanged.rng)
-  await page.screenshot({ path: join(output, 'reference.png') })
+  await screenshot('reference.png')
   const targeted = await roll(service)
   assert.ok(targeted.dowsingOffers.length >= 5 && targeted.dowsingOffers.length <= 6)
   assert.ok(targeted.dowsingOffers.slice(0, 2).every(offer => [17, 18, 19].includes(offer.recipeIndex)))
   assert.ok(targeted.dowsingOffers.slice(2).every(offer => [5, 6, 11, 20, 40].includes(offer.recipeIndex)))
   assert.ok(findInventoryItem(targeted.backpack, itemId))
-  await page.screenshot({ path: join(output, 'targeted-results.png') })
+  await screenshot('targeted-results.png')
   // Reference changes are disabled in the rolled state.
   await dragToReference(service, staffId)
   assert.equal(await service.getAttribute('data-native-dowsing-reference'), `${itemId}`)
@@ -212,7 +226,7 @@ try {
   assert.equal(empty.gold, emptyBefore.gold - emptyBefore.dowsingFee)
   assert.deepEqual(empty.backpack, emptyBefore.backpack)
   assert.equal(await service.getByRole('button', { name: /^DOWSE/ }).count(), 0)
-  await page.screenshot({ path: join(output, 'empty-result.png') })
+  await screenshot('empty-result.png')
   await closeService(service)
   service = await openDowsing()
   assert.equal(await service.getAttribute('data-native-dowsing-reference'), '')
@@ -230,18 +244,36 @@ try {
   assert.deepEqual(ownerEconomy(), beforeRejection)
   await activate(service.getByRole('button', { name: 'OKAY', exact: true }))
   await closeService(service)
+  let pausedSettingsCapture = null
+  if (checkReducedFlashes) {
+    await page.keyboard.press('Escape')
+    await page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]').waitFor()
+    await page.waitForFunction(() => Number(document.querySelector('.gameplay-pause-overlay')?.getAttribute('data-gameplay-pause-reveal')) === 1)
+    const tick = host.state().tick
+    await page.waitForTimeout(200)
+    assert.equal(host.state().tick, tick, 'The real owner pause must freeze authority before capture')
+    await page.getByRole('button', { name: 'GAME SETTINGS', exact: true }).click()
+    const dialog = page.locator('.game-settings-dialog')
+    await dialog.getByRole('button', { name: 'TWEAK GAME', exact: true }).click()
+    assert.equal(await dialog.getByRole('button', { name: 'REDUCED SCREEN FLASHES', exact: true }).getAttribute('aria-pressed'), 'true')
+    const file = 'reduced-flashes-settings-paused.png'
+    await page.screenshot({ path: join(output, file) })
+    assert.equal(host.state().tick, tick, 'Authority remained frozen throughout the Settings capture')
+    pausedSettingsCapture = { file, tick }
+  }
   assert.deepEqual(errors, { page: [], console: [], responses: [] })
   const receipt = { status: 'ok', browser: browser.version(), mobile, built, tooltips: receipts,
     targetedOffers: targeted.dowsingOffers, setlessOffers: setless.dowsingOffers,
     nestedOffers: nested.dowsingOffers, emptyResultChargedOnce: true,
     referenceItemPreserved: true, purchaseRequiresReopen: true, insufficientGoldUnchanged: true,
+    servedDeployment, servedAssetUrls: [...servedAssetUrls].sort(), pausedSettingsCapture,
     flashChecks, flashCheckScope: checkReducedFlashes
       ? 'Real Settings Off/On and genuine accepted dowse/purchase, empty result, rejection and reopen. Retained renderer alpha diagnostics mirror the assigned Pixi alpha. Mid-flash preference transitions are separately unit-tested; no browser timing freeze.'
       : null, errors }
   await writeFile(join(output, 'receipt.json'), JSON.stringify(receipt, null, 2))
   console.log(JSON.stringify(receipt))
 } catch (error) {
-  await page.screenshot({ path: join(output, 'failure.png') })
+  await screenshot('failure.png')
   console.error(JSON.stringify({ body: (await page.locator('body').innerText()).slice(0, 1500), errors }))
   throw error
 } finally {
@@ -251,6 +283,11 @@ try {
 }
 
 function ownerEconomy() { return getPlayerEconomy(host.state(), host.hostPlayerId()) }
+async function screenshot(name) {
+  // The reduced-flash journey observes the unmodified native presentation clock.
+  // It does not take screenshots of an actively painting unpaused renderer.
+  if (!checkReducedFlashes) await page.screenshot({ path: join(output, name) })
+}
 function backpackItem(service, id) {
   return service.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${id}"]`)
 }
@@ -383,6 +420,7 @@ async function assertTooltipPaint(service) {
   assert.ok(box)
   // Cloudcover Hood in slot24 puts this opaque padding above the service field.
   // In the reported failure the field overpainted this strip and the item name.
+  if (checkReducedFlashes) return { scope: 'Tooltip pixel check retained only in the original dedicated smoke; active-renderer screenshot skipped here.' }
   const image = await page.screenshot({ clip: {
     x: box.x + 548 / 1600 * box.width, y: box.y + 350 / 900 * box.height,
     width: 8 / 1600 * box.width, height: 52 / 900 * box.height,
