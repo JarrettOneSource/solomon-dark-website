@@ -1472,11 +1472,17 @@ function nextLootEffectId(host) {
 
 async function waitForBitmapMessage(page, text) {
   const message = page.locator(`.boneyard-loot-messages > span[aria-label=${JSON.stringify(text)}]`)
-  await message.waitFor({ timeout: 5_000 })
+  // Native baseline text is absolutely painted around a zero-width pen anchor.
+  // Its glyph ink is visible even though the anchor has no visible box.
+  await message.waitFor({ state: 'attached', timeout: 5_000 })
+  await message.locator('.boneyard-loot-bitmap-text > i').first()
+    .waitFor({ state: 'visible', timeout: 5_000 })
   const receipt = await message.evaluate((node) => {
     const glyphs = [...node.querySelectorAll('.boneyard-loot-bitmap-text > i')]
+    const ink = glyphs[0]?.getBoundingClientRect()
     return {
       glyphCount: glyphs.length,
+      firstGlyphInk: ink ? { height: ink.height, width: ink.width } : null,
       maskImage: glyphs[0] ? getComputedStyle(glyphs[0]).maskImage : 'none',
       opacity: getComputedStyle(node).opacity,
       text: node.getAttribute('aria-label'),
@@ -1484,6 +1490,8 @@ async function waitForBitmapMessage(page, text) {
     }
   })
   assert.ok(receipt.glyphCount > 0)
+  assert.ok(receipt.firstGlyphInk?.width > 0 && receipt.firstGlyphInk?.height > 0)
+  assert.ok(Number(receipt.opacity) > 0)
   assert.notEqual(receipt.maskImage, 'none')
   return receipt
 }
