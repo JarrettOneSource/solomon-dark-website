@@ -317,7 +317,7 @@ export const HUB_EQUIPMENT_SINK_RENDER = {
   interiorTint: 0x191916,
   normalFrameRecord: 10,
   smallFrameRecord: 9,
-  tallPrimitiveOutline: true,
+  tallTiledOutline: true,
 } as const
 
 export const HUB_INVENTORY_INFO_FRAME = {

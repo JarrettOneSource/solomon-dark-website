@@ -418,7 +418,7 @@ The second-pass RE closes the three residual owners before browser changes:
   are hat `(1337,179)`, robe `(1337,277)`, weapon `(1257,259)` and
   `(1417,259)`, amulet `(1270,192)`, and rings `(1270,326)` and
   `(1404,326)`. Hat/weapon sinks are 72-square `Inventory.10`, amulet/rings are
-  46-square `Inventory.9`, and robe is the 72 by 108 tall primitive at
+  46-square `Inventory.9`, and robe is the 72 by 108 tall textured frame at
   `(1301,223)`. Each begins with native opaque `(0.1,0.1,0.09,1)` and clips
   its natural-size class painter. The tall outline is `0x004a2ff0` through
   `0x004153b0`; `0x0041dd70` fills the sink and `DAT_00819e5e` brackets the
@@ -931,3 +931,101 @@ lesson12 rather than a fresh movement/combat playthrough. Local provisioning
 and telemetry receipts do not prove managed-service storage. Touch is Chrome
 emulation, not physical-device evidence. Publication, managed deployment and
 task cleanup are recorded separately by the release workflow.
+
+## 2026-10-14 report 124: set-item frame consumers
+
+The report's retained image is an Inventory atlas reference, not a runtime
+absence capture. The defect is independently established in source: both current
+web consumers always choose ordinary frames, while the sealed native executable
+chooses purple records for resolved set members. This is separate from tooltip
+set-name color (report 54) and from the partially resolved candle report 122.
+
+- Executable: stock 0.72.5 `SolomonDark.exe`, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+- Predicate `0x00571b70`: live item +0x84 is a set candidate, source recipe UID
+  +0x18 resolves through the recipe table, and recipe +0xac is nonnegative.
+  The existing web native recipe/set catalog supplies this membership; rarity,
+  display names and completed-set bonuses are not predicates.
+- `InventoryGrid::Present` `0x0055a070` calls that predicate at `0x0055a254`.
+  A member uses Inventory record 15, an 80-square purple frame at full opacity,
+  centered on the existing 72-square cell (four pixels outside each side).
+  Ordinary/empty/unresolved cells keep record 10 at opacity 0.4.
+- `EquipAttachmentSink` `0x00575450` repeats the predicate. Small sinks select
+  purple record 14 (54 square) instead of ordinary record 9 (46 square).
+  Square sinks select record 15 (80 square) instead of record 10 (72 square).
+  The tall sink starts at 72 by 108, then expands all sides by four for a set
+  member, yielding 80 by 116. Existing centers, interior fill, icon clipping,
+  drag ownership and selection overlays remain consumer-owned.
+- Inventory bundle has 84 records. Record 9 is `(128,295,46,46)`, 10 is
+  `(352,333,72,72)`, 14 is `(289,330,54,54)`, 15 is `(73,423,80,80)`.
+  Their logical dimensions equal their crops and registration is centered.
+- Both tall paths call `0x004a2ff0` -> `0x004153b0` with outline-only true.
+  This is textured repeating thirds, not the previously documented procedural
+  primitive, and not a stretching Pixi NineSliceSprite. The center is omitted.
+  Exact native source endpoints and fractional-tail geometry are verified below
+  before implementation; no global panel/nine-slice helper change is intended.
+- Full-text frame-reference review found these two purple-frame consumers.
+  StoreGrid (including dowsing) uses its ordinary record-10 path. The companion
+  inventory beneath services shares InventoryGrid and remains included. Detached
+  item icons and draggers are not border owners.
+
+The initial contract preceded renderer wiring. Focused acceptance follows below.
+The dc2 comparison base has not yet passed its dependency full gate; publication
+is outside this focused investigation. Native runtime capture is not claimed by
+static PE proof.
+
+### Recovered tall-frame geometry and focused result
+
+Independent sealed-PE review confirms `0x00414a20` applies each normalized source
+interval to both registered corners and UVs through `0x00404480`.
+`0x00414900` translates the resulting quad without rescaling; `0x00414760`
+clips fractional tails rather than stretching a full middle band. For each axis:
+
+1. `pitch = f32(sourceSize / 3)`; `a = f32(f32(1/3) + 0.5/pageSize)`.
+   Constructor `0x00413e1b` resolves the atlas page dimensions before storing
+   half reciprocals at +0xbc/+0xc0. Inventory page size is 1024 by 512.
+2. First band is `[0,a]` at translation 0; middle bands `[a,2a]` advance at
+   the logical-third pitch. The count truncates the positive remaining extent
+   divided by pitch; retain its fractional remainder.
+3. Tail is `[a, f32(a + remainder*a)]` at `count*pitch`; far band `[2a,1]`
+   has translation `targetSize-sourceSize`. Slice position adds
+   `sourceIntervalLow*sourceSize` to that translation. Geometry stays scale 1.
+4. Cross the axes and omit center/center cells. The f32 80/3 pitch retains a
+   tiny nonzero width tail, producing 14 quads for purple 80 by 116; ordinary
+   72 by 108 produces 12. The small overlaps are native. This arithmetic is
+   source-derived, not a claim of bit-identical x87 rounding or native capture.
+
+The local `hub-inventory/item-frame.ts` consumer uses the existing shared
+`nativeUiPixiFor` cache. The inventory surface owns retained Sprites, the adapter
+owns derived slice textures, and repeated render ticks create neither. No global
+NineSlice helper or other panel consumer changed. Ordinary tall equipment is the
+only additional visible surface corrected by replacing its procedural outline.
+
+The focused stopped-WebGL fixture uses the real `buildInventory` consumers and
+original assets. Exact baseline consumer source was restored for red-v2, then
+fixed consumers for green-v2. Three cases cover standalone, selected companion,
+and ordinary equipment. Red fails missing set slot 0; green passes all frame,
+opacity, extent, tile-count and retained-texture assertions. Its four browser
+error arrays are empty. The first failed green used a nonexistent Pixi8
+`worldAlpha` property and row-major expected coordinates; both helper errors are
+preserved in the earlier receipt, corrected to local `alpha` (unit-alpha fixture
+ancestors) and the existing four-row column-major slot contract.
+
+M2 evidence root: `/Users/jarrett/codex-acceptance/solomon-report122-124-sh9aksle-evidence`.
+Final receipts/images are `report124-red-v2` and `report124-green-v2`;
+`report124-pixel-comparison.json` finds no changed pixels outside affected frame
+rectangles and identical interiors for all 243 ordinary small/square/unresolved
+controls. Green selected companion visibly retains the green selection outline.
+Ordinary/non-set/unresolved negative controls and parent-set index 0 are covered
+by pure tests. The original catalog binds recipe 0 to parent set 0 (members 0–5)
+and ordinary recipe 29 to no set; an absent/unresolved recipe is never a set.
+
+Both final browser jobs ended, task PIDs/groups were gone and port 5173 closed at
+06:28 UTC. This is focused source/render acceptance only. Ordinary gameplay,
+production build, dependency full gate and publication remain with the parent.
+
+Independent final review: APPROVE_QUALIFIED on 2026-10-14. The reviewer reran all
+43 focused tests and helper syntax, matched all six green source bindings,
+inspected the three green images and red standalone, independently confirmed the
+changed-pixel bounds and physical runner/group/port teardown. Console checking
+records errors only. Individual Chrome child/profile IDs were not retained.

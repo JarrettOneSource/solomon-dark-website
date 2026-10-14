@@ -32,7 +32,8 @@ import {
 import { NativeElementVfxView } from '../native-element-vfx-view.ts'
 import { addNativeHudExperienceMeter } from '../native-hud-experience-meter.ts'
 import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
-import { addPrimitiveFrame } from './chrome.ts'
+import { hubInventoryItemFrame } from '../hub-inventory-item-frame.ts'
+import { addInventoryItemFrame } from './item-frame.ts'
 import {
   addAtlasSprite,
   addBitmapText,
@@ -133,20 +134,7 @@ function addEquipmentSlot(
   layer.addChild(new Graphics()
     .rect(x, y, width, height)
     .fill({ color: HUB_EQUIPMENT_SINK_RENDER.interiorTint }))
-  if (height === 46 || height === 72) {
-    addAtlasSprite(
-      context,
-      layer,
-      'Inventory',
-      height === 46
-        ? HUB_EQUIPMENT_SINK_RENDER.smallFrameRecord
-        : HUB_EQUIPMENT_SINK_RENDER.normalFrameRecord,
-      x,
-      y,
-    )
-  } else if (HUB_EQUIPMENT_SINK_RENDER.tallPrimitiveOutline) {
-    addPrimitiveFrame(layer, x + 1, y, width - 1, height - 1)
-  }
+  addInventoryItemFrame(context, layer, hubInventoryItemFrame('equipment', item, [x, y, width, height]))
   if (item && !held) addClippedItemIcon(
     context,
     layer,

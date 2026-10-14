@@ -34,7 +34,6 @@ import {
   addInventorySidePanelChrome,
 } from './chrome.ts'
 import {
-  addAtlasSprite,
   addBitmapText,
   addCenteredAtlasSprite,
   addTiledAtlas,
@@ -72,6 +71,8 @@ import {
   permanentSkillRank,
 } from './services.ts'
 import { addStats } from './stats.ts'
+import { hubInventoryItemFrame } from '../hub-inventory-item-frame.ts'
+import { addInventoryItemFrame } from './item-frame.ts'
 import {
   Container,
   Graphics,
@@ -268,8 +269,10 @@ function addInventoryGridPage(
     .map(({ item, slot }) => [hubInventoryVisibleSlot(slot, hasParentRoot), item] as const))
   for (let index = 0; index < HUB_INVENTORY_GRID.capacity; index += 1) {
     const position = hubInventorySlotPosition(index)
-    const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
-    slot.alpha = HUB_INVENTORY_GRID.slotAlpha
+    const item = items.get(index)
+    addInventoryItemFrame(context, layer, hubInventoryItemFrame('inventory', item, [
+      position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize,
+    ]))
     if (index === HUB_INVENTORY_PARENT_HOLDER.visibleSlot && parentHolderItem) {
       const parentHolder = new Container()
       parentHolder.label = 'native-inventory-parent-holder'
@@ -298,7 +301,6 @@ function addInventoryGridPage(
       )
       layer.addChild(parentHolder)
     }
-    const item = items.get(index)
     if (!item) continue
     const held = hiddenItemIds.has(item.id)
       || (dragging?.owner === 'backpack' && item.id === dragging.itemId)
