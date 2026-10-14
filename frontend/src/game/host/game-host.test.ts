@@ -5046,6 +5046,9 @@ test('thirty-second autosave publishes latest owner-only saves to a party leader
   assert.equal(GAME_SAVE_AUTOSAVE_INTERVAL_TICKS, 3_000)
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,
+    // Seed the clock before admission/history exists. Mutating an admitted
+    // state's tick would skip authoritative updates and invalidate replay.
+    createSimulation: () => ({ ...createGameSimulation({}), tick: GAME_SAVE_AUTOSAVE_INTERVAL_TICKS - 500 }),
     sharedHub: true,
     snapshotRate: 100,
   })
@@ -5073,7 +5076,8 @@ test('thirty-second autosave publishes latest owner-only saves to a party leader
   }))
   await grouped
 
-  Object.assign(host.state(), { tick: GAME_SAVE_AUTOSAVE_INTERVAL_TICKS - 1 })
+  assert.ok(host.state().tick < GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
+    'The party fixture must be admitted before the first autosave boundary')
   const leaderSave = nextMessage(leader.socket, message => (
     message.type === 'server-save-checkpoint'
     && message.reason === 'progress'

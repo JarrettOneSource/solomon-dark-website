@@ -1,5 +1,6 @@
 import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeWeldFlameLashFade, stepNativeWeldFlameLashFade } from '../core-kernels/native-weld-flame-lash.ts'
 import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
 
 export type TransientKind = PrimarySpellTransientState['kind']
@@ -94,6 +95,20 @@ export function transient<Kind extends TransientKind>(
   value = 2,
   overrides: Partial<TransientOf<Kind>> = {},
 ): TransientOf<Kind> {
+  if (kind === 'weld-flame-lash-fade') {
+    // These snapshots must carry a real immutable birth. The generic numeric
+    // fixture is not a legal current-schema Flame fade (nor a legacy save).
+    let actor = createNativeWeldFlameLashFade({ direction: { x: 1, y: 0 }, id: 7,
+      origin: { x: 2, y: 2 }, ownerId: 'wizard', rng: createNativeRng(42), tick: 0,
+      variant: 'chain', vector: [8, 2, 1, .8, 0, 0, 0, 0], worldKey: 'boneyard:test' }).actor
+    // The broad pair's values 2/6 denote the valid birth/second-update bracket.
+    for (let tick = 0; tick < Math.min(2, Math.max(0, (value - 2) / 2)); tick += 1) {
+      const next = stepNativeWeldFlameLashFade(actor)
+      if (next === null) throw new Error('Flame presentation fixture expired')
+      actor = next
+    }
+    return { ...actor, ...overrides } as TransientOf<Kind>
+  }
   const vector = { x: value, y: value }
   const debris = {
     alpha: value,

@@ -273,8 +273,24 @@ async function castPhase(name, owner, playerId, options) {
     return frame && Math.hypot(frame.playerX - position.x, frame.playerY - position.y) < .1
   }, fixtureAnchor, { timeout: 10_000 })
   const planned = planCastFixture(host.state(), playerId, name, options)
-  const fixture = prepareCastFixture(host.state(), playerId, name, { ...options, fixtureAngle: planned.angle })
+  const preparedFixture = prepareCastFixture(host.state(), playerId, name, { ...options, fixtureAngle: planned.angle })
+  const preparedTick = host.state().tick
+  const expectedPose = fixturePose(planned.settled.state)
+  await waitUntil(() => host.state().tick >= preparedTick + planned.settled.ticks
+    && fixturePose(host.state()) === expectedPose, `${name}: native fixture separation did not reach its preflighted settled pose`, 10_000)
+  const settledPosition = host.state().playerEntities.locomotions[host.state().playerEntities.identities.findIndex(row => row.playerId === playerId)].position
+  await waitUntil(() => roles.every(recipient => {
+    const position = recipient.latest?.players[playerId]?.position
+    return position && Math.hypot(position.x - settledPosition.x, position.y - settledPosition.y) < .1
+  }), `${name}: settled owner was not replicated`, 10_000)
+  await owner.page.waitForFunction(position => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame && Math.hypot(frame.playerX - position.x, frame.playerY - position.y) < .1
+  }, settledPosition)
+  const target = host.state().world.enemies.actors.find(actor => actor.id === 1)
+  const fixture = target ? { ...preparedFixture, aim: { x: target.position.x, y: target.position.y - 25 / 1.35 } } : preparedFixture
   const fixtureProof = planned.proof
+  console.log(JSON.stringify({ stage, nativeSettlement: { preparedTick, admittedTick: host.state().tick, settleTicks: planned.settled.ticks, expectedPose: JSON.parse(expectedPose), actualPose: JSON.parse(fixturePose(host.state())), aim: fixture.aim } }))
   console.log(JSON.stringify({ stage, fixtureProof }))
   await owner.page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 20_000 })
   const firstId = host.state().primarySpells.nextId
@@ -304,7 +320,8 @@ async function castPhase(name, owner, playerId, options) {
   const projectedAim = projectNativeWorldPointer(point, surface, viewport,
     { x: frame.cameraX - viewport.width / 2 / frame.cameraZoom, y: frame.cameraY - viewport.height / 2 / frame.cameraZoom }, frame.cameraZoom)
   const inputOrdinal = owner.inputOrdinal
-  const inputPreflight = { playerId, fixture, options, checked: false, proof: null, error: null }
+  const inputPreflight = { playerId, fixture, options, checked: false, proof: null, error: null,
+    diagnostics: { geometry, fixtureAim: aim, projectedAim, point, settledHostPose: JSON.parse(fixturePose(host.state())) } }
   owner.pendingInputPreflight = inputPreflight
   await owner.page.mouse.move(point.x, point.y)
   await owner.page.mouse.down()
@@ -482,7 +499,8 @@ function preflightPhaseSequence(source, playerId, position) {
     resetControlledFixture(state, playerId, position)
     state.enhancedEffects = !options.coarse
     const planned = planCastFixture(state, playerId, name, options)
-    const fixture = prepareCastFixture(state, playerId, name, { ...options, fixtureAngle: planned.angle })
+    state = planned.settled.state
+    const fixture = planned.settled.fixture
     const input = fixtureHeldInput(state, playerId, fixture)
     const proof = preflightPhase(structuredClone(state), playerId, fixture, options, input)
     for (let tick = 0; tick < 120; tick += 1) {
@@ -491,9 +509,31 @@ function preflightPhaseSequence(source, playerId, position) {
         : { ...input, cast: { primary: false, quickbar: null } } })
     }
     assert.ok(state.primarySpells.transients.every(actor => actor.buildId !== 1003), `${name}: sequence did not drain`)
-    reports.push({ name, angle: planned.angle, ...proof, afterReleaseTick: state.tick })
+    reports.push({ name, angle: planned.angle, settleTicks: planned.settled.ticks, ...proof, afterReleaseTick: state.tick })
   }
   return reports
+}
+
+function fixturePose(state) {
+  return JSON.stringify({ players: state.playerEntities.locomotions.map(row => ({ position: row.position, velocity: row.velocity })),
+    enemies: state.world.enemies.actors.map(actor => ({ id: actor.id, position: actor.position })) })
+}
+
+function settleNativeFixture(source, playerId, fixture, options) {
+  let state = source, previous = fixturePose(state), stable = 0
+  for (let ticks = 1; ticks <= 200; ticks += 1) {
+    refillFixture(state, playerId, options.weak)
+    state = stepGameSimulationTick(state, {})
+    const pose = fixturePose(state)
+    stable = pose === previous ? stable + 1 : 0
+    previous = pose
+    if (stable >= 20) {
+      const target = state.world.enemies.actors.find(actor => actor.id === 1)
+      return { state, ticks, fixture: target ? { ...fixture,
+        aim: { x: target.position.x, y: target.position.y - 25 / 1.35 } } : fixture }
+    }
+  }
+  throw new Error('Fixture did not settle')
 }
 
 function planCastFixture(source, playerId, name, options) {
@@ -502,11 +542,12 @@ function planCastFixture(source, playerId, name, options) {
     try {
       const state = structuredClone(source)
       const fixture = prepareCastFixture(state, playerId, name, { ...options, fixtureAngle: angle })
-      return { angle, proof: preflightPhase(state, playerId, fixture, options) }
+      const settled = settleNativeFixture(state, playerId, fixture, options)
+      return { angle, proof: preflightPhase(structuredClone(settled.state), playerId, settled.fixture, options), settled }
     } catch (error) {
       if (!['No clear Flame browser fixture placement', 'Targetless fixture unexpectedly acquired a target',
         'Fixture missed native target admission', 'Fixture lacked a real chain birth',
-        'Fixture missed short geometry'].some(message => error.message.startsWith(message))) throw error
+        'Fixture missed short geometry', 'Fixture did not settle'].some(message => error.message.startsWith(message))) throw error
       rejected.push(`${error.message.split('\n')[0]}${error.actual === undefined ? '' : ` (actual=${JSON.stringify(error.actual)}, expected=${JSON.stringify(error.expected)})`}`)
     }
   }
@@ -624,6 +665,8 @@ async function capturePrivateCollegeBridge(page, recipient, observer) {
         const check = recipient.pendingInputPreflight
         if (check && !check.checked && parsed.input.cast.primary) {
           check.checked = true
+          console.log(JSON.stringify({ stage, firstActualHeldInputBeforeAssertions: parsed.input,
+            setup: check.diagnostics, inputTimeHostPose: JSON.parse(fixturePose(host.state())) }))
           try {
             check.proof = preflightPhase(structuredClone(host.state()), check.playerId,
               check.fixture, check.options, parsed.input)

@@ -17,6 +17,7 @@ import { NATIVE_ENEMY_FAMILIES } from './native-enemy-presentation-model.ts'
 import { nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan } from './native-enemy-presentation.ts'
 import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 import { NATIVE_WELD_BADGUYS_RECORDS, NATIVE_WELD_DEADHAWG_RECORDS } from './primary-spell-weld-native.ts'
+import { AIR_LIGHTNING_BRANCH_RECORDS } from './primary-spell-air-native.ts'
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
   DeadHawg: manifest('../../editor/manifest/deadhawg.json'),
@@ -159,7 +160,23 @@ test('every reachable projectile and welded painter record is selected for prelo
     assert.equal(required.has('BadGuys:28'), true)
     assert.equal(required.has('BadGuys:30'), true)
     assert.equal(required.has('DeadHawg:16'), true)
-    assert.equal(required.size, 105)
+    assert.equal(required.has('BadGuys:25'), true, 'Flame owns its native ribbon record')
+    assert.deepEqual(AIR_LIGHTNING_BRANCH_RECORDS, [375, 376])
+    for (const entry of AIR_LIGHTNING_BRANCH_RECORDS) {
+      assert.equal(required.has(`BadGuys:${entry}`), false, 'Air branches are not Weld painter records')
+    }
+    const assets = await server.ssrLoadModule('/src/lib/assets.ts')
+    const textureOwner = await server.ssrLoadModule('/src/game/renderer/world-player-textures.ts')
+    const sourceResolver = await server.ssrLoadModule('/src/game/renderer/boneyard-combat-asset-source.ts')
+    const globalSources = new Set(textureOwner.playerWorldAssetSources())
+    assert.equal(assets.primarySpells.air.branches.length, AIR_LIGHTNING_BRANCH_RECORDS.length)
+    for (const [index, entry] of AIR_LIGHTNING_BRANCH_RECORDS.entries()) {
+      const source = assets.primarySpells.air.branches[index]
+      assert.ok(source.endsWith(`/badguys/${String(entry).padStart(4, '0')}.png`))
+      assert.ok(globalSources.has(sourceResolver.boneyardCombatAssetSource(source)),
+        `The independent Air texture owner must preload BadGuys:${entry}`)
+    }
+    assert.equal(required.size, 104) // + Flame 25, - separately owned Air 375/376.
 
     const deathEffectRecords = [
       ...[10, 11, 15, 20, 21, 27, 49, 55, 69, 86]

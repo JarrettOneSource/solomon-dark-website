@@ -76,7 +76,7 @@ const TRANSIENT_CONTRACTS: Record<TransientKind, TransientContract> = {
   'weld-blizzard-glow': { owned: ['direction', 'origin', 'vector'] },
   'weld-boulder-debris': { numbers: ['ageTicks'], owned: ['debris', 'debris.position', 'debris.velocity', 'direction', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
   'weld-channel': { nullableVectors: ['endpoint', 'midpoint'], numbers: ['ageTicks'], owned: ['direction', 'endpoint', 'midpoint', 'origin', 'vector'], vectors: ['direction', 'origin'] },
-  'weld-flame-lash-fade': { numbers: ['ageTicks', 'alpha'], owned: ['direction', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
+  'weld-flame-lash-fade': { owned: ['direction', 'origin', 'position', 'vector', 'flameVisual', 'lightRegistration'] },
   'weld-frost-fade': { owned: ['direction', 'origin', 'vector'] },
   'weld-ground-spark-fade': { numbers: ['ageTicks', 'alpha'], owned: ['direction', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
   'weld-hail-flash': { numbers: ['ageTicks', 'alpha'], owned: ['direction', 'origin', 'position', 'vector'], vectors: ['direction', 'origin', 'position'] },
