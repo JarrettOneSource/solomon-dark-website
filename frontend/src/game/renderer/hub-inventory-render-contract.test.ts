@@ -757,7 +757,7 @@ test('stock equipment icons retain class-owned natural transforms and starter ap
     interiorTint: 0x191916,
     normalFrameRecord: 10,
     smallFrameRecord: 9,
-    tallPrimitiveOutline: true,
+    tallTiledOutline: true,
   })
 })
 

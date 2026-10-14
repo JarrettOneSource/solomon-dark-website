@@ -272,3 +272,28 @@ There are no `blocked-by-platform` members and no undispositioned sibling rows.
   and `9135d8cae740422b5b1e17fa481ad6706c0fd8cece4aa8fdbea38f6543678d75`.
 - Publication and deployment remain separate. These receipts precede the
   requested commit/push; no production process was restarted or bypassed.
+
+
+## 2026-10-14 — Player Card lookup feedback ownership
+
+The Website Player Card lookup is asynchronous and can legitimately return no
+profile after a chat participant disconnects. On the unchanged `6a182778`
+baseline, a private-college peer's retained chat name produced the real host
+null-profile response in Boneyard. The exact unavailable-wizard warning then
+remained visible for the observed 6.5 seconds while authority ticks advanced.
+The final screenshot step in that baseline attempt failed on an incorrect pause
+selector; it is not a complete browser acceptance, a three-minute measurement,
+or proof of the reported original trigger/re-entry sequence.
+
+Player Card feedback now belongs to one gameplay session, with deterministic
+latest-request-wins handling. Old success, rejection and cleanup cannot alter a
+newer request or another session. Failure feedback is dismissible and expires
+after five seconds, an explicit Website UI choice rather than a recovered native
+lifetime. Focus on its dismiss button suspends gameplay shortcuts until focus
+leaves, the notice disappears or a higher-priority status hides it. Card requests,
+dismissal and expiry never write the serious connection/save-error state; that
+status has rendering priority. Host/profile validation and saved-game contracts
+are unchanged.
+
+Focused controller, real client-transport and chat checks cover these lifetimes.
+Exact integrated browser acceptance and the final release gates remain pending.

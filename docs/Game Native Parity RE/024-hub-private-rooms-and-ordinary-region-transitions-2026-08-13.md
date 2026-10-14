@@ -384,3 +384,104 @@ build, production frontend and game-host builds, and production media policy.
 - Dialogue, shop, books, dowsing, eulogy, and story-variant room populations
   remain their own parity slices. This room-system change must preserve their
   actor and collision seams without fabricating their UI behavior.
+
+
+## 2026-10-14 — Registered candle-flame pivot reopening (report 122)
+
+### Boundary and native evidence
+
+This bounded repair concerns the registered flame sprite's coordinate origin in
+all four fixed Hub rooms. It preserves the current anchor banks, flame selection,
+X/Y scale envelopes, rotation sampling, tick clock, additive painter order and
+room lifetime. It is separate from the anvil-alignment work and from the
+Mortuary candle-selection discrepancy recorded below. The earlier acceptance
+checked captured coordinates and envelopes but missed the logical-image pivot.
+
+The sealed retail PE remains SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. Read-only M2 instruction inspection confirms:
+
+- StoreRoom initialization `0x00510E18..0x00511077` appends nine authored
+  positions, subtracts `(537.5,327.5)`, then adds the room center `(537.5,400)`.
+  Every resulting point matches the current Website bank. Office's seven and
+  Library's seventeen authored pairs likewise match their `(102.5,102.5)` and
+  `(16,102.5)` room offsets. No candle-position tuning is warranted.
+- StoreRoom flame submission `0x00519BD9` passes the current vector element,
+  rotation and X/Y scales to `0x00415020`; the sprite is Storage record 0.
+  The shared submitter builds the scale/rotation transform, adds the supplied
+  translation and calls `0x00414540`, which transforms the registered local
+  corners at sprite `+0x2C..+0x48`.
+- `0x00413DE0` constructs those corners from signed half-content extents,
+  then adds the serialized content-center offsets (`0x00413F8E..0x00413F9F`).
+  All four records below have content `10 x 13`, logical size `10 x 26`,
+  content-center `(0,-2.5)`, no packed rotation and no extra points. Their
+  local content rectangle is `(-5,-9)..(5,4)`. The maintained extractor's
+  registered logical canvas places the same content at `(0,4)..(10,17)`.
+  Its logical center `(5,13)` therefore must be the Sprite pivot.
+
+| Member | Native record | Current flame count | Pivot status |
+| --- | --- | ---: | --- |
+| Mortuary | Memoratorium 1 | 50 | exact-ported pivot; wider placement/release not closed |
+| StoreRoom | Storage 0 | 9 | exact-ported pivot; wider placement/release not closed |
+| Library | Library 3 | 17 | exact-ported pivot; wider placement/release not closed |
+| Office, including story scene | Office 2 | 7 | exact-ported pivot; wider placement/release not closed |
+
+The current `HubPrivateRoomScene.addRoomFlames` uses a default top-left anchor.
+That shifts each flame's content by the rotated/scaled vector `(5,13)` relative
+to the native root. The shared repair is a centered `(0.5,0.5)` Sprite anchor;
+no asset, native root, room exception or camera offset changes. This is a
+source/instruction-established sprite defect, independently of a particular
+historical screenshot's timing or browser zoom.
+
+The flame's apparent small glow is part of the same additive registered sprite.
+No separate candle-light object is created by the Website room flame path.
+This repair does not assert any independent Region-light-map correction.
+
+### Separate open Mortuary selection discrepancy
+
+The native initializer `0x0050F96C..0x00510855` contains 72 possible authored
+points, with an RNG branch before each optional append. The web bank retains
+50 observed points from one historical capture; it is not a complete native
+selection algorithm. This newly recovered distinction supersedes the wording
+that a normal native room always has exactly 50 flames. The pivot correction
+preserves that existing web behavior deliberately. Native selection probability,
+RNG ownership/re-entry lifetime, the complete world-offset contract and a new
+selection implementation remain a separate open scope; this repair must not
+claim complete candle-system parity.
+
+### Validation contract
+
+The focused real-WebGL regression constructs the maintained room scene and all
+83 current sprites from real assets, renders repeated room changes and live
+Enhanced transitions at multiple ticks, and checks transformed native content
+corners and the unchanged additive/depth/position contract. An unchanged-source
+red run precedes the repair; the repaired run must pass every room and retain
+visible captures. Existing anchor/envelope unit tests remain unchanged.
+
+The candidate is based on unqualified `dc2f98fc` while its dependency full gate
+is pending. Focused proof is not full validation, ordinary built-game traversal,
+clean-stock runtime comparison, publication or production acceptance.
+
+### Focused result and explicit limits
+
+The one-line centered-anchor repair passed independent native/source and focused
+renderer review. All 83 existing flames were sampled at ticks 0, 100 and 701
+with Enhanced On-Off-On: 36 scene samples and 747 sprite samples. The final
+unchanged-source red run had native-content-corner error 9.9444–16.0372 world
+units; repaired error was at most 1.61e-13. The actual texture retains logical
+10x26, trim `(0,4,10,13)`, and centered local bounds `(-5,-13)..(5,13)`.
+All four screenshot sets were reviewed. StoreRoom's nine luminous sprites now
+align with the candle tops. Mortuary flames still visibly float above their
+stems, and Library right-wall flame/stem alignment is not established by this
+local-corner proof. Those visual-placement issues remain open; the recovered
+local pivot is not proof that every historical captured world root is correct.
+
+All eight existing room-presentation unit tests and maintained focused oxlint
+passed. The first helper used texture pixel coordinates directly in toGlobal;
+its red and post-fix failures remain failed. The corrected helper uses the
+actual Sprite local bounds before the world transform. The final red and green
+orig/trim/anchor/bounds metadata bind that correction. All final page, console,
+failed-request and failed-response arrays are empty. Owned processes/groups
+ended and port 5173 was verified closed. This is a stopped real-WebGL renderer
+fixture, not ordinary user navigation. No source candidate or build belonging
+to another task changed, and no full gate or publication ran.
