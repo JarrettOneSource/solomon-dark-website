@@ -524,6 +524,7 @@ export class HubPrivateRoomScene {
   ): void {
     const flames = HUB_PRIVATE_ROOM_FLAME_ANCHORS[region].map((position) => {
       const flame = new Sprite(this.textures.base[source])
+      flame.anchor.set(0.5)
       flame.position.copyFrom(position)
       flame.zIndex = HUB_PRIVATE_ROOM_EFFECT_DEPTH
       flame.blendMode = 'add'
