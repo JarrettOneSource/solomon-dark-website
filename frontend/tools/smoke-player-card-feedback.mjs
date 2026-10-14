@@ -45,12 +45,23 @@ try {
   if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`)
   const url = new URL(response.url())
   if (url.origin === server.origin && url.pathname.startsWith('/assets/')) {
-   const transfer = { url: response.url(), status: response.status(), startedAt: Date.now(), completedAt: null, error: null, cleanup: false }
+   // Music readiness is HTMLAudioElement.loadeddata, not whole-file playback consumption.
+   // Keep the browser response observation; verify finite media bytes independently on loopback.
+   const media = response.request().resourceType() === 'media' && url.pathname.endsWith('.mp3')
+   const transfer = { url: response.url(), status: response.status(),
+    collection: media ? 'separate-media-http' : 'browser-body', resourceType: response.request().resourceType(),
+    startedAt: Date.now(), completedAt: null, error: null, cleanup: false }
    assetTransfers.push(transfer)
    assetReads.push((async () => {
-    const served = await response.body(), local = await readFile(join(root, decodeURIComponent(url.pathname)))
+    let served
+    if (media) {
+     const verification = await fetch(response.url(), { signal: AbortSignal.timeout(15_000) })
+     assert.equal(verification.status, 200, `media identity request failed: ${url.pathname}`)
+     served = Buffer.from(await verification.arrayBuffer())
+    } else served = await response.body()
+    const local = await readFile(join(root, decodeURIComponent(url.pathname)))
     assert.ok(served.equals(local), `served asset differs: ${url.pathname}`)
-    assets.push({ path: url.pathname, sha256: createHash('sha256').update(served).digest('hex') })
+    assets.push({ path: url.pathname, collection: transfer.collection, bytes: served.length, sha256: createHash('sha256').update(served).digest('hex') })
    })().catch(error => {
     transfer.error = error.message; transfer.cleanup = cleaningUp
     errors.assetReads.push({ url: transfer.url, status: transfer.status, message: error.message, cleanup: cleaningUp })
