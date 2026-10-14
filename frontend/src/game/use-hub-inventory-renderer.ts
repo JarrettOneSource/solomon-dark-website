@@ -19,6 +19,7 @@ interface HubInventoryRendererBinding {
   readonly rendererOwner: RetainedRendererOwner<HubInventoryRenderer>
   readonly model: HubInventoryRendererModel
   readonly beltAvailability: NativeModalBeltAvailability
+  readonly reducedScreenFlashes: boolean
   readonly closing: boolean
   readonly forceModalHudSettled: boolean
   readonly onInventoryCloseComplete: () => void
@@ -28,7 +29,7 @@ interface HubInventoryRendererBinding {
 
 export function useHubInventoryRenderer({
   rendererOwner, model, beltAvailability, closing, forceModalHudSettled, onInventoryCloseComplete,
-  chatCompletionHandledRef, advanceChatRef,
+  chatCompletionHandledRef, advanceChatRef, reducedScreenFlashes,
 }: HubInventoryRendererBinding) {
   const hostRef = useRef<HTMLDivElement>(null)
   const controlsRef = useRef<HTMLDivElement>(null)
@@ -38,6 +39,8 @@ export function useHubInventoryRenderer({
   const modelRef = useRef<HubInventoryRendererModel | null>(null)
   const beltAvailabilityRef = useRef(beltAvailability)
   beltAvailabilityRef.current = beltAvailability
+  const reducedScreenFlashesRef = useRef(reducedScreenFlashes)
+  reducedScreenFlashesRef.current = reducedScreenFlashes
 
   const revealStartedAtRef = useRef<number | null>(null)
 
@@ -76,6 +79,10 @@ export function useHubInventoryRenderer({
   }, [model.kind])
 
   useLayoutEffect(() => {
+    rendererRef.current?.setReducedScreenFlashes(reducedScreenFlashes)
+  }, [reducedScreenFlashes])
+
+  useLayoutEffect(() => {
     modelRef.current = model
     const offset = rendererRef.current?.setModel(model)
     if (offset !== undefined) {
@@ -100,6 +107,7 @@ export function useHubInventoryRenderer({
       renderer = created
       rendererRef.current = created
       created.setBeltAvailability(beltAvailabilityRef.current)
+      created.setReducedScreenFlashes(reducedScreenFlashesRef.current)
       created.setModel(modelRef.current!)
       detachCanvas = created.mount(host)
       revealStartedAtRef.current = null

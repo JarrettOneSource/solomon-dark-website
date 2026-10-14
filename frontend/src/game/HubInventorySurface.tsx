@@ -101,6 +101,7 @@ export function NativeHubSurface({
   audio,
   belt: allBeltEntries,
   beltBindings,
+  reducedScreenFlashes,
   closing,
   config,
   dialogueHistory,
@@ -136,6 +137,7 @@ export function NativeHubSurface({
   audio: GameAudioDirector
   belt: PlayerBeltComponent
   beltBindings: GameControlBindings
+  reducedScreenFlashes: boolean
   closing: boolean
   config: PlayerCharacterConfig
   dialogueHistory: Set<string>
@@ -634,7 +636,7 @@ export function NativeHubSurface({
   ])
 
   const { hostRef, controlsRef, rendererRef, rendererState, statsOffset } = useHubInventoryRenderer({
-    rendererOwner, model, closing, forceModalHudSettled, onInventoryCloseComplete,
+    rendererOwner, model, closing, forceModalHudSettled, onInventoryCloseComplete, reducedScreenFlashes,
     chatCompletionHandledRef, advanceChatRef,
     beltAvailability: { mode, progression, playerState: secondaryPlayerState },
   })

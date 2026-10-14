@@ -66,6 +66,7 @@ interface HubInventoryUiProps {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
   beltBindings: GameControlBindings
+  reducedScreenFlashes: boolean
   config: PlayerCharacterConfig
   disabled: boolean
   economy: ProtocolPlayerEconomy
@@ -103,6 +104,7 @@ export default function HubInventoryUi({
   audio,
   belt,
   beltBindings,
+  reducedScreenFlashes,
   config,
   disabled,
   economy,
@@ -426,6 +428,7 @@ export default function HubInventoryUi({
       audio={audio}
       belt={belt}
       beltBindings={beltBindings}
+      reducedScreenFlashes={reducedScreenFlashes}
       closing={inventoryCloseTarget !== null}
       config={config}
       dialogueHistory={dialogueHistoryRef.current}

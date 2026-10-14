@@ -1034,6 +1034,7 @@ export default function HubScene({
           audio={audio}
           belt={liveBelt}
           beltBindings={settings.controls}
+          reducedScreenFlashes={settings.reducedScreenFlashes}
           config={hubInitialSnapshot.players[playerId]!.config}
           disabled={(modalDisabled && !optionalBookOverlap) || pickerOpen}
           economy={economy}

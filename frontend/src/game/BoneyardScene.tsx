@@ -1206,6 +1206,7 @@ export default function BoneyardScene({
               audio={audio}
               belt={liveBelt}
               beltBindings={settings.controls}
+              reducedScreenFlashes={settings.reducedScreenFlashes}
               config={boneyardInitialSnapshot.players[playerId]!.config}
               disabled={(modalDisabled && !optionalBookOverlap)
                 || tutorialAccess?.inventory === false

@@ -1,4 +1,5 @@
 import { acquireRendererResources } from './renderer-resource-acquisition.ts'
+import { HubDowsingFlashPresentation } from './hub-dowsing-flash.ts'
 import { SACK_NAME_BROWSER_TEXT_LABEL } from './hub-inventory/sack-name.ts'
 import type { ModalHotbarRenderer } from '../hotbar-controls-presentation.ts'
 import { ModalHotbarControlsView } from './modal-hotbar-controls.ts'
@@ -42,8 +43,6 @@ import {
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_TIMING,
   hubDowsingFieldTint,
-  hubDowsingFlashAlpha,
-  hubDowsingFlashFeedbackSequence,
   hubDyeModalOpacity,
   hubDyeSelectedPulse,
   hubInventoryFlybyFrame,
@@ -104,6 +103,7 @@ export interface HubInventoryRenderer extends NativeUiCanvas, ModalHotbarRendere
     readonly statsOffset: number | null
   }
   setBeltAvailability(value: NativeModalBeltAvailability): void
+  setReducedScreenFlashes(value: boolean): void
   setModel(model: HubInventoryRendererModel): number | null
 }
 
@@ -156,11 +156,10 @@ export async function createHubInventoryRenderer(
   let currentKind: HubInventoryRendererModel['kind'] = 'inventory'
   let curtainAlpha = 1
   let destroyed = false
-  let dowsingFlashStartedAt: number | null = null
-  let dowsingFlashTrigger: 'buy-dowsing' | 'dowse' | null = null
+  const dowsingFeedback = new HubDowsingFlashPresentation()
+  let reducedScreenFlashes = false
   let dowsingFieldTiles: Sprite[] = []
   let noticeRevealStartedAt: number | null = null
-  let previousActionFeedbackSequence: number | null = null
   let serviceOverlay: Container | null = null
   let dyeLayer: Container | null = null
   let dyeSelectedPulse: Graphics | null = null
@@ -231,16 +230,16 @@ export async function createHubInventoryRenderer(
   }
 
   function renderDowsing(nowMs: number): void {
-    const flashAlpha = dowsingFlashStartedAt === null
-      ? 0
-      : hubDowsingFlashAlpha(nowMs - dowsingFlashStartedAt)
+    const flash = dowsingFeedback.sample(nowMs, reducedScreenFlashes)
+    const flashAlpha = flash.alpha
     dowsingFlash.alpha = flashAlpha
     if (dowsingFieldTiles.length > 0) {
       const tint = hubDowsingFieldTint(hubNativeUiElapsedTicks(nowMs))
       for (const tile of dowsingFieldTiles) tile.tint = tint
     }
     canvas.dataset.dowsingFlash = flashAlpha > 0 ? 'active' : 'idle'
-    canvas.dataset.dowsingFlashTrigger = flashAlpha > 0 ? dowsingFlashTrigger ?? '' : ''
+    canvas.dataset.dowsingFlashTrigger = flash.trigger ?? ''
+    canvas.dataset.dowsingFlashAlpha = `${flashAlpha}`
   }
 
   function renderItemSelection(nowMs: number): void {
@@ -435,19 +434,9 @@ export async function createHubInventoryRenderer(
 
   function beginModelTransition(model: HubInventoryRendererModel): Exclude<HubInventoryRendererModel, { kind: 'dialogue' }>['notice'] {
     const feedback = model.kind === 'dialogue' ? null : model.economy.actionFeedback
-    const nextActionFeedbackSequence = feedback?.sequence ?? 0
-    const nextDowsingFlashSequence = hubDowsingFlashFeedbackSequence(feedback)
-    if (
-      previousActionFeedbackSequence !== null
-      && nextActionFeedbackSequence !== previousActionFeedbackSequence
-      && nextDowsingFlashSequence === nextActionFeedbackSequence
-    ) {
-      dowsingFlashStartedAt = performance.now()
-      dowsingFlashTrigger = feedback!.action as 'buy-dowsing' | 'dowse'
-      dowsingFlash.alpha = 1
-      canvas.dataset.dowsingFlash = 'active'
-    }
-    previousActionFeedbackSequence = nextActionFeedbackSequence
+    const nowMs = performance.now()
+    dowsingFeedback.consume(feedback, nowMs)
+    renderDowsing(nowMs)
     const nextNotice = model.kind === 'dialogue' ? null : model.notice
     if (nextNotice && nextNotice.title !== previousNoticeTitle) {
       noticeRevealStartedAt = performance.now()
@@ -664,6 +653,10 @@ export async function createHubInventoryRenderer(
       beltAvailability = value
       if (!modalHud) return
       modalHud.updateAvailability(value)
+    },
+    setReducedScreenFlashes(value) {
+      reducedScreenFlashes = value
+      renderDowsing(performance.now())
     },
   }
 }

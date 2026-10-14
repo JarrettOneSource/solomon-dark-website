@@ -485,6 +485,37 @@ and `fe9aa95e30ecc696a3337da2f3dd9d64daac5028596de526b2e265ae909ce93b`.
 
 ## 2026-09-02 — Reduced screen-flash accessibility extension
 
+### 2026-10-14 — Dowsing UI coverage extension (report 121)
+
+Source inspection at deployed `553793d074038d60110f283c63ee164790c4ba32`
+confirms that the retained Inventory renderer's Dowsing screen flash did not
+receive `reducedScreenFlashes`. The existing extension below covered Region
+gameplay overlays. This change extends the same final-alpha accessibility
+policy to the separate Dowsing UI owner; it does not reinterpret native rules.
+
+Entry 087 records the native membership: accepted `dowse` and accepted
+`buy-dowsing` both start the red full-screen alpha at one, then subtract .05
+per native UI tick for 20 ticks. Rejected/no-op actions do not start a flash.
+No success-dependent green/red branch is established by that native evidence.
+The result field's independent shimmer, feedback sequence, economy, audio,
+color, and native lifetime remain unchanged. With the local setting On, only
+the final presented alpha is multiplied by .2, once; Off is the native identity
+branch. The immediate trigger and subsequent frames share that policy, and a
+live setting update samples the current clock without restarting the fade.
+Retained close/reopen and duplicate feedback must not replay a consumed flash.
+
+The isolated report-121 patch passes 72 focused Dowsing/native Inventory/
+Settings/Region-feedback tests, `tsc -b`, scoped lint with zero warnings or
+errors, and import-boundary/diff checks on M2. Its seven new behavior tests
+cover both accepted triggers, the first reduced frame, Off identity, repeated
+live toggles without compounding or restart, initial snapshot baselining,
+rejections/unrelated actions, duplicate feedback, retained dialogue/close/
+reopen, and a new accepted purchase after a roll. The React binding applies
+the latest preference before feedback updates and before first renderer use.
+Independent review and final integrated build/full gate/browser acceptance
+remain pending. This entry is not publication or browser acceptance, and does
+not alter the separately qualified report-116/119 trees.
+
 > **2026-09-02 Phasing correction:** fresh instruction recovery at
 > `0x0054D9A1..0x0054DA1F`, `0x0052A0B0`, and sole helper `0x0063FEE0`
 > proves row 15 never writes Region feedback. The earlier census mistook the
