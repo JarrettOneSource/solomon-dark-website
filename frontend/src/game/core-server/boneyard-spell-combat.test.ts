@@ -42,7 +42,8 @@ import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
 import type { BoneyardEnemyProjectile, BoneyardEnemyStore, BoneyardMaggotActor } from './enemies/model.ts'
 import { WATER_PRIMARY_ACTOR_MASK, WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK } from './spell-combat/channels.ts'
 import type { BoneyardSpellWorldContact } from './spell-combat/model.ts'
-import { nativeWeldFrostRadialRadius } from './spell-combat/projectiles.ts'
+import { nativeWeldFrostRadialRadius, resolveProjectileContacts } from './spell-combat/projectiles.ts'
+import { BoneyardSpellCombatWork } from './spell-combat/work.ts'
 import { nativeWaterPushTargetFactor } from './spell-combat/pushback.ts'
 
 const WORLD_KEY = 'boneyard:combat-test'
@@ -3226,3 +3227,150 @@ function enemyArrow(options: {
     visualScale: 1,
   }
 }
+
+
+function projectileContactWork(
+  enemies: BoneyardEnemyStore,
+  projectiles: readonly PrimarySpellProjectileState[],
+  scenery: readonly PrimarySpellTarget[] = [],
+): BoneyardSpellCombatWork {
+  return new BoneyardSpellCombatWork({
+    channelEmissions: [], damageMultiplier: () => 1, fireActorContacts: [],
+    fireballHostileCorridorLength: () => 1_600, firstWorldContact: null,
+    lightAt: null, primarySceneryTargets: scenery,
+    resolveEnemyMovement: (_id, _start, requested) => requested,
+    sourceEnemies: enemies, sourceRng: createNativeRng(17),
+    sourceSpells: spellState({ projectiles }), tick: 1, worldKey: WORLD_KEY,
+  })
+}
+
+const PROJECTILE_ROW_MEMBERS = [
+  { kind: 'earth' }, { kind: 'fire' }, { kind: 'ether' },
+  { kind: 'weld', buildId: 1000 }, { kind: 'weld', buildId: 1001 },
+  { kind: 'weld', buildId: 1002 }, { kind: 'weld', buildId: 1009 },
+] as const
+
+for (const member of PROJECTILE_ROW_MEMBERS) {
+  test(`projectile rows reuse unchanged store within one invocation: ${member.kind}/${'buildId' in member ? member.buildId : 'pure'}`, () => {
+    const source = spawnEnemies([{ position: { x: 1_000, y: 0 }, token: 'SKELETON' }])
+    let actorProjections = 0
+    let maggotProjections = 0
+    const enemies = {
+      ...source,
+      actors: new Proxy(source.actors, { get(target, key, receiver) {
+        if (key === Symbol.iterator) actorProjections++
+        return Reflect.get(target, key, receiver)
+      } }),
+      maggots: new Proxy(source.maggots, { get(target, key, receiver) {
+        if (key === Symbol.iterator) maggotProjections++
+        return Reflect.get(target, key, receiver)
+      } }),
+    }
+    const work = projectileContactWork(enemies, Array.from({ length: 32 }, (_, id) => (
+      projectile({ ...member, id: id + 1 })
+    )))
+    resolveProjectileContacts(work)
+    assert.equal(actorProjections, 1, 'all no-contact projectiles share one enemy projection')
+    assert.equal(maggotProjections, 1, 'the empty Maggot lane is projected only once')
+    assert.deepEqual(work.hits, [])
+    assert.equal(work.enemies, enemies)
+    resolveProjectileContacts(work)
+    assert.equal(actorProjections, 2, 'the next invocation owns a new projection')
+    assert.equal(maggotProjections, 2)
+  })
+}
+
+for (const member of PROJECTILE_ROW_MEMBERS.filter(member => member.kind !== 'earth')) {
+  test(`projectile rows refresh after earlier lethal contact: ${member.kind}/${'buildId' in member ? member.buildId : 'pure'}`, () => {
+    const enemies = spawnEnemies([
+      { position: { x: 0, y: 0 }, token: 'SKELETON' },
+      { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    ])
+    const work = projectileContactWork(enemies, [
+      projectile({ ...member, id: 2, damage: 10_000 }),
+      projectile({ ...member, id: 1, damage: 10_000 }),
+    ])
+    resolveProjectileContacts(work)
+    assert.deepEqual(work.hits.map(hit => hit.actorId), [1, 2])
+    assert.deepEqual(work.hits.map(hit => hit.spellId), [1, 2])
+    assert.ok(work.enemies.actors.every(actor => actor.lifeState !== 'alive'))
+  })
+}
+
+test('projectile rows refresh current health before a later Boulder consumes its pool', () => {
+  const source = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
+  const enemies = { ...source, actors: source.actors.map(actor => ({ ...actor, currentHealth: 10 })) }
+  const work = projectileContactWork(enemies, [
+    projectile({ id: 1, kind: 'fire', damage: 7 }),
+    projectile({ id: 2, kind: 'earth', damage: 10, remainingDamage: 10 }),
+  ])
+  resolveProjectileContacts(work)
+  assert.deepEqual(work.hits.map(hit => hit.amount), [7, 3])
+  const boulder = work.updatedProjectiles.get(2)
+  assert.equal(boulder?.kind, 'earth')
+  assert.equal(boulder?.kind === 'earth' ? boulder.remainingDamage : null, 8.5)
+})
+
+
+test('projectile rows refresh Maggot membership after a lethal contact', () => {
+  const maggot: BoneyardMaggotActor = {
+    collisionRadius: 8,
+    combatActive: true,
+    nativeTreeQueryMember: false,
+    currentHealth: 100,
+    damage: 2,
+    deathOffsets: [],
+    deathEpoch: null,
+    deathStartedTick: null,
+    deathTick: 0,
+    emergencePhase: 0,
+    emergenceTick: 24,
+    gaitPose: 0,
+    headingDeg: 90,
+    blizzardPushAccumulator: 0,
+    blizzardPushLastTick: null,
+    hurricaneContactCooldown: 0,
+    id: 1,
+    launchTrajectory: 'edge',
+    launchVelocity: { x: 0, y: 0 },
+    landingBounceVelocity: -0.4,
+    lastAttackTick: null,
+    lastDamagedByPlayerId: null,
+    lastDamageTick: null,
+    hitFeedback: createNativePuppetHit(),
+    lastMovementTick: null,
+    lifeState: 'alive',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+    maximumHealth: 100,
+    movementPhase: 'crawl',
+    nativeCellBindingOrder: 1,
+    nativeRegistrationOrder: 1,
+    nextAttackTick: 20,
+    nextMovementTick: 2,
+    nextTargetRefreshTick: 300,
+    ownerCoffinActorId: 99,
+    path: TEST_ENEMY_PATH,
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: { x: 0, y: 0 },
+    spawnTick: 0,
+    staffActionFactor: 1,
+    staffMovementFactor: 1,
+    targetPlayerId: null,
+    terminalEmitted: false,
+    verticalOffset: 0,
+    verticalVelocity: 0,
+    visualScale: 1,
+  }
+  const enemies = {
+    ...createBoneyardEnemyStore('row-reuse-maggots'),
+    maggots: [maggot, { ...maggot, id: 2, nativeCellBindingOrder: 2, nativeRegistrationOrder: 2 }],
+  }
+  const work = projectileContactWork(enemies, [
+    projectile({ id: 1, kind: 'ether', damage: 1_000 }),
+    projectile({ id: 2, kind: 'ether', damage: 1_000 }),
+  ])
+  resolveProjectileContacts(work)
+  assert.deepEqual(work.hits.map(hit => hit.actorId), [1, 2])
+  assert.ok(work.enemies.maggots.every(actor => actor.lifeState === 'dying'))
+})
