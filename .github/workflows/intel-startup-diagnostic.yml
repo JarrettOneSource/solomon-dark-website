@@ -8,6 +8,12 @@ on:
   push:
     branches:
       - codex/diagnose-intel-c20-sh9aksle
+    paths:
+      - .github/workflows/intel-startup-diagnostic.yml
+      - tools/diagnostics/desktop-timeout-observer.mjs
+      - tools/diagnostics/intel-startup-diagnostic.mjs
+      - tools/diagnostics/intel-startup-diagnostic.test.mjs
+      - tools/diagnostics/package-inventory.py
 
 permissions:
   contents: read

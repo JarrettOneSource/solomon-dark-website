@@ -241,7 +241,7 @@ export async function createDesktopObserver(evidence) {
   }
   const sampleAll = async reason => {
     record('snapshot-begin', { reason })
-    await Promise.all([sampleProcesses(), ...instances.filter(item => item.instance.app.process().exitCode === null && item.instance.app.process().signalCode === null).map(snapshot)])
+    await Promise.all([sampleProcesses(), ...instances.filter(item => item.child.exitCode === null && item.child.signalCode === null).map(snapshot)])
     record('snapshot-end', { reason })
   }
   const timer = setInterval(() => { void sampleAll('periodic').catch(error => record('sampler-error', { error: clean(error.message) })) }, 2_000)
@@ -257,7 +257,9 @@ export async function createDesktopObserver(evidence) {
       await sampleProcesses()
     },
     async attach(instance) {
-      const item = { instance, app: instance.app, page: instance.page, label: instance.label, pid: instance.app.process().pid, pending: new Map(), metrics: null, cdp: null }
+      // Playwright disposes its Electron channel on close; the ChildProcess handle remains valid.
+      const child = instance.app.process()
+      const item = { instance, app: instance.app, child, page: instance.page, label: instance.label, pid: child.pid, pending: new Map(), metrics: null, cdp: null }
       instances.push(item)
       record('instance', { label: item.label, pid: item.pid })
       const requests = new WeakMap()

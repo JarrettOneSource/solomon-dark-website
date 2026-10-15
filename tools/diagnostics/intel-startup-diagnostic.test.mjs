@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import { HARNESS_SHA256, instrumentHarness, resolvePlaywrightImport } from './intel-startup-diagnostic.mjs'
-import { driverOwnedProcesses, installRendererTelemetry, ownedForest, parseProcessRows, redactDiagnosticText, registerDiagnosticSecret, safeURL, trustedRegisteredRoots } from './desktop-timeout-observer.mjs'
+import { createDesktopObserver, driverOwnedProcesses, installRendererTelemetry, ownedForest, parseProcessRows, redactDiagnosticText, registerDiagnosticSecret, safeURL, trustedRegisteredRoots } from './desktop-timeout-observer.mjs'
 import { createHash } from 'node:crypto'
 
 const directory = dirname(fileURLToPath(import.meta.url))
@@ -112,4 +112,58 @@ test('inventory records external symlink text without following it', async () =>
     assert.equal(rows[0].target, external)
     assert.equal(rows[1].sha256, createHash('sha256').update('hello').digest('hex'))
   } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('observer samples the next app after historical Electron channels are disposed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sdr-diag-lifecycle-test-'))
+  const observer = await createDesktopObserver(root)
+  const fixture = label => {
+    const child = { pid: process.pid, exitCode: null, signalCode: null }
+    let disposed = false
+    const locator = { count: async () => 0, isVisible: async () => false, evaluateAll: async () => [], or() { return this } }
+    const page = {
+      on() {}, evaluate: async () => ({ observedApp: label }), getByRole: () => locator,
+      context: () => ({ addInitScript: async () => {}, newCDPSession: async () => ({ send: async () => ({ metrics: [] }) }) }),
+    }
+    const app = {
+      process() { if (disposed) throw new TypeError('Disposed Electron channel has no _object'); return child },
+      evaluate: async () => [],
+    }
+    return { instance: { label, app, page }, close(signal = null) { disposed = true; child.exitCode = signal ? null : 0; child.signalCode = signal } }
+  }
+  try {
+    const solo = fixture('solo'), resumed = fixture('resume')
+    await observer.attach(solo.instance)
+    await observer.beforeScreenshot('solo-live')
+    solo.close()
+    observer.record('test-app-closed', { label: 'solo' })
+    await observer.attach(resumed.instance)
+    await observer.beforeScreenshot('resume-live')
+    resumed.close('SIGTERM')
+    observer.record('test-app-closed', { label: 'resume' })
+    await observer.beforeScreenshot('all-closed')
+    const readEvents = async () => (await readFile(join(root, 'telemetry.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    let events = await readEvents()
+    const closedAt = events.find(row => row.event === 'test-app-closed' && row.label === 'resume').monoMs
+    const hasClosedPeriodicSample = () => events.some(row => row.event === 'snapshot-end' && row.reason === 'periodic' && row.monoMs > closedAt)
+    const deadline = Date.now() + 10_000
+    while (!hasClosedPeriodicSample() && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 25))
+      events = await readEvents()
+    }
+    assert.equal(hasClosedPeriodicSample(), true, 'Periodic sampling must still finish after both app channels close')
+    const renderers = events.filter(row => row.event === 'probe-response' && row.channel.endsWith(':renderer'))
+    assert.deepEqual([...new Set(renderers.map(row => row.value.observedApp))], ['solo', 'resume'])
+    const closed = new Set()
+    for (const row of events) {
+      if (row.event === 'test-app-closed') closed.add(row.label)
+      if (row.event === 'probe-response' && row.channel.endsWith(':renderer')) assert.equal(closed.has(row.value.observedApp), false)
+    }
+    assert.equal(events.filter(row => row.event === 'sampler-error').length, 0)
+    assert.deepEqual(events.filter(row => row.event === 'snapshot-end' && row.reason.startsWith('before-screenshot-')).map(row => row.reason),
+      ['before-screenshot-solo-live', 'before-screenshot-resume-live', 'before-screenshot-all-closed'])
+  } finally {
+    observer.stop({ primaryError: null, cleanupErrors: [] })
+    await rm(root, { recursive: true, force: true })
+  }
 })
