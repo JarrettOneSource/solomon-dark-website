@@ -1,4 +1,4 @@
-"""Synthetic tests only: never launch a package, subprocess, or Linux fixture."""
+"""Offline tests: only inert Git fixtures; never launch a package or Linux fixture."""
 import argparse
 import importlib.util
 import json
@@ -7,6 +7,7 @@ import re
 from datetime import timedelta
 from pathlib import Path
 import signal
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch, Mock
@@ -277,6 +278,45 @@ class SupervisorTests(unittest.TestCase):
 
 
 class ContractTests(unittest.TestCase):
+    def test_reviewed_sparse_checkout_materializes_immutable_suite_inputs(self):
+        workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/linux-paired-control.yml').read_text()
+        step = workflow.split('      - name: Check out immutable reviewed verification and passive helpers\n', 1)[1].split('      - name:', 1)[0]
+        self.assertIn('          ref: ' + P.REVIEWED + '\n', step)
+        self.assertIn('          path: reviewed-tools\n', step)
+        self.assertIn('          persist-credentials: false\n', step)
+        self.assertIn('          sparse-checkout-cone-mode: false\n', step)
+        patterns = step.split('          sparse-checkout: |\n', 1)[1].split('          sparse-checkout-cone-mode:', 1)[0]
+        patterns = '\n'.join(line.strip() for line in patterns.splitlines()) + '\n'
+        required = ('.github/workflows/linux-launch-diagnostic.yml',
+                    'tools/diagnostics/linux-launch-diagnostic.test.mjs',
+                    'tools/diagnostics/linux-launch-diagnostic.mjs',
+                    'tools/diagnostics/linux-launch-observer.mjs',
+                    'tools/diagnostics/linux-cpu-calibration.test.py',
+                    'tools/diagnostics/linux-cpu-calibration.py')
+        excluded = ('.github/workflows/validate.yml', 'frontend/package.json')
+        # Use real non-cone matching in a throwaway Git tree. No commit, fetch,
+        # helper execution or product process is needed to expose missing inputs.
+        with tempfile.TemporaryDirectory(prefix='paired-sparse-fixture-') as directory:
+            root = Path(directory)
+
+            def git(*args, input=None):
+                return subprocess.run(['git', '-C', str(root), *args], input=input,
+                                      text=True, capture_output=True, check=True, timeout=10).stdout.strip()
+
+            git('init', '--quiet')
+            for path in required + excluded:
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('inert fixture: ' + path + '\n')
+            git('add', '--all')
+            tree = git('write-tree')
+            git('sparse-checkout', 'set', '--no-cone', '--stdin', input=patterns)
+            git('read-tree', '-mu', tree)
+            for path in required:
+                self.assertEqual((root / path).read_text(), 'inert fixture: ' + path + '\n', path)
+            for path in excluded:
+                self.assertFalse((root / path).exists(), path)
+
     def test_paired_workflow_uses_legal_job_env_and_current_step_exports(self):
         workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/linux-paired-control.yml').read_text()
         env = workflow.split('    env:\n', 1)[1].split('    defaults:', 1)[0]

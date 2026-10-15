@@ -48,6 +48,7 @@ jobs:
           path: reviewed-tools
           persist-credentials: false
           sparse-checkout: |
+            .github/workflows/linux-launch-diagnostic.yml
             tools/diagnostics
           sparse-checkout-cone-mode: false
       - name: Check out immutable product source
