@@ -1,0 +1,119 @@
+# Diagnostic only. Exactly one ordered pair; no release, retry, rebuild or dispatch.
+name: Linux same-runner original-passive pair (39875413, not acceptance)
+
+on:
+  push:
+    branches:
+      - codex/diagnose-intel-c20-sh9aksle
+    paths:
+      - .github/workflows/linux-paired-control.yml
+      - tools/diagnostics/linux-paired-control.py
+      - tools/diagnostics/linux-paired-control.test.py
+      - tools/diagnostics/linux-paired-control-plan.md
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  pair-linux:
+    name: One original then one passive trial on the same runner
+    if: github.repository == 'JarrettOneSource/solomon-dark-website' && github.ref == 'refs/heads/codex/diagnose-intel-c20-sh9aksle' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SDR_SOURCE_ROOT: ${{ github.workspace }}/product
+      REVIEWED_TOOLS: ${{ github.workspace }}/reviewed-tools/tools/diagnostics
+      PAIR_HELPER: ${{ github.workspace }}/paired-tools/tools/diagnostics/linux-paired-control.py
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out only the four paired-comparison candidates
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, as used by reviewed run 38810090571
+        with:
+          path: paired-tools
+          persist-credentials: false
+          sparse-checkout: |
+            .github/workflows/linux-paired-control.yml
+            tools/diagnostics/linux-paired-control.py
+            tools/diagnostics/linux-paired-control.test.py
+            tools/diagnostics/linux-paired-control-plan.md
+          sparse-checkout-cone-mode: false
+      - name: Check out immutable reviewed verification and passive helpers
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, as used by reviewed run 38810090571
+        with:
+          ref: ab612bbab50db542db7964ba79b80a6e02a7cdf3
+          path: reviewed-tools
+          persist-credentials: false
+          sparse-checkout: |
+            tools/diagnostics
+          sparse-checkout-cone-mode: false
+      - name: Check out immutable product source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, as used by reviewed run 38810090571
+        with:
+          ref: 39875413fa2d3313d5d42170993c7dfa3e885cd1
+          path: product
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6, as used by reviewed run 38810090571
+        with:
+          node-version: '22.17.0'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, as used by reviewed run 38810090571
+        with:
+          python-version: '3.12.15'
+      - name: Check inert pair contract and prepare fresh evidence roots
+        run: |
+          set -euo pipefail
+          export PAIR_EVIDENCE="$RUNNER_TEMP/linux-paired-evidence"
+          export PAIR_RUNTIME="$RUNNER_TEMP/linux-paired-runtime"
+          printf '%s\n' "PAIR_EVIDENCE=$PAIR_EVIDENCE" "PAIR_RUNTIME=$PAIR_RUNTIME" >> "$GITHUB_ENV"
+          python3 -B "$GITHUB_WORKSPACE/paired-tools/tools/diagnostics/linux-paired-control.test.py"
+          python3 -B "$PAIR_HELPER" prepare --source "$SDR_SOURCE_ROOT" --reviewed "$REVIEWED_TOOLS" --evidence "$PAIR_EVIDENCE" --runtime "$PAIR_RUNTIME"
+      - name: Install the original locked dependencies without builds
+        working-directory: product/frontend
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.2
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Fetch exact retained failing package and same-job numeric identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/JarrettOneSource/solomon-dark-website/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --jq '[.jobs[] | select(.name == "One original then one passive trial on the same runner") | {id, run_id, run_attempt, runner_id, runner_group_id, status, conclusion, started_at}]' > "$PAIR_EVIDENCE/runner-identity.json"
+          gh api repos/JarrettOneSource/solomon-dark-website/actions/artifacts/11997259442 > "$PAIR_EVIDENCE/provenance/artifact-api.json"
+          gh api repos/JarrettOneSource/solomon-dark-website/actions/jobs/116602702052 > "$PAIR_EVIDENCE/provenance/retained-package-failing-job.json"
+          gh api repos/JarrettOneSource/solomon-dark-website/actions/artifacts/11997259442/zip > "$RUNNER_TEMP/paired-retained-artifact.zip"
+          python3 -B "$PAIR_HELPER" materialize --source "$SDR_SOURCE_ROOT" --reviewed "$REVIEWED_TOOLS" --evidence "$PAIR_EVIDENCE" --runtime "$PAIR_RUNTIME" --archive "$RUNNER_TEMP/paired-retained-artifact.zip"
+      - name: Verify immutable existing observers and record runner tools
+        run: |
+          set -euo pipefail
+          node --check "$REVIEWED_TOOLS/linux-launch-diagnostic.mjs"
+          node --check "$REVIEWED_TOOLS/linux-launch-observer.mjs"
+          node --test "$REVIEWED_TOOLS/linux-launch-diagnostic.test.mjs" > "$PAIR_EVIDENCE/passive-unit-tests.log" 2>&1
+          python3 -B "$REVIEWED_TOOLS/linux-cpu-calibration.test.py" > "$PAIR_EVIDENCE/calibration-unit-tests.log" 2>&1
+          {
+            date -u
+            uname -srm
+            node --version
+            npm --version
+            python3 --version
+            gh --version
+            git --version
+            dpkg-query -W -f='${Package} ${Version}\n' xvfb xauth
+            printenv ImageOS ImageVersion
+          } > "$PAIR_EVIDENCE/runner-tools.txt"
+          lscpu --json > "$PAIR_EVIDENCE/runner-cpu.json"
+      - name: Run one fixed original then passive pair with fail-closed isolation
+        run: |
+          set -euo pipefail
+          python3 -B "$PAIR_HELPER" run --source "$SDR_SOURCE_ROOT" --reviewed "$REVIEWED_TOOLS" --evidence "$PAIR_EVIDENCE" --runtime "$PAIR_RUNTIME"
+      - name: Retain original pixels and separate passive metadata even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, as used by reviewed run 38810090571
+        with:
+          name: linux-paired-original-passive-not-acceptance-${{ github.run_id }}
+          path: ${{ runner.temp }}/linux-paired-evidence
+          if-no-files-found: error
+          retention-days: 14
