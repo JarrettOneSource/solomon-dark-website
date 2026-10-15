@@ -12,6 +12,240 @@ import { createHash } from 'node:crypto'
 import * as diagnostics from './desktop-timeout-observer.mjs'
 
 const directory = dirname(fileURLToPath(import.meta.url))
+const guestGlFixture = ({ inherited = false, shared = false, configure } = {}) => {
+  const calls = [], window = {}, canvases = new WeakMap(), extensions = new WeakMap()
+  const result = { private: 'PRIVATE_RESULT' }, failure = { private: 'PRIVATE_ERROR' }
+  let time = 100, clockReads = 0, unknown = null
+  class Element {
+    constructor(className = '') { this.className = className }
+    matches(selector) { return this.className.split(' ').includes(selector.slice(1)) }
+  }
+  const extensionPrototype = { loseContext(...args) {
+    calls.push({ kind: 'lose', receiver: this, args }); time += 7
+    if (this.fail) throw failure
+    return result
+  } }
+  class GL {
+    get canvas() { if (!canvases.has(this)) throw failure; return canvases.get(this) }
+    useProgram(...args) {
+      calls.push({ kind: 'use', receiver: this, args }); time += 5
+      if (this?.fail) throw failure
+      return result
+    }
+    getExtension(...args) {
+      calls.push({ kind: 'get', receiver: this, args })
+      if (this?.fail) throw failure
+      return /^webgl_lose_context$/i.test(String(args[0])) ? extensions.get(this) : unknown
+    }
+  }
+  class SeparateGL {}
+  for (const name of ['canvas', 'useProgram', 'getExtension']) Object.defineProperty(SeparateGL.prototype, name, Object.getOwnPropertyDescriptor(GL.prototype, name))
+  const GL2 = shared ? GL : inherited ? class extends GL {} : SeparateGL
+  const context = { window, WebGLRenderingContext: GL, WebGL2RenderingContext: GL2, Element,
+    performance: { now: () => { clockReads++; return time } } }
+  const fixture = { calls, window, result, failure, GL, GL2, extensionPrototype, context,
+    clockReads: () => clockReads,
+    setUnknown(value) { unknown = value },
+    setExtension(gl, value) { extensions.set(gl, value) },
+    create(Constructor = GL, className = '') {
+      const gl = new Constructor(), canvas = new Element(className), extension = Object.create(extensionPrototype)
+      canvases.set(gl, canvas); extensions.set(gl, extension)
+      return { gl, canvas, extension }
+    },
+    install() {
+      assert.equal(typeof diagnostics.installGuestGlTiming, 'function')
+      runInNewContext('(' + diagnostics.installGuestGlTiming.toString() + ')()', context)
+      return window.__sdrGuestGlTiming
+    },
+  }
+  configure?.(fixture)
+  fixture.install()
+  return fixture
+}
+
+test('guest GL timing preserves native receivers, arguments, returns and thrown identity', () => {
+  const f = guestGlFixture(), { gl, canvas, extension } = f.create(f.GL, 'native-loader-canvas')
+  canvas.__sdrLoaderFrame = { frameCount: 195, progress: 0.97, private: 'PRIVATE_FRAME' }
+  f.window.__sdrDesktopDiagnostic = { raf: 41 }
+  const program = { private: 'PRIVATE_PROGRAM' }, extra = { private: 'PRIVATE_ARGUMENT' }
+  assert.equal(gl.useProgram(program, extra), f.result)
+  assert.equal(gl.useProgram(), f.result)
+  assert.equal(f.clockReads(), 0, 'Non-null programs are direct passthrough')
+  assert.equal(gl.useProgram(null, extra), f.result)
+  assert.equal(gl.getExtension('WEBGL_lose_context', extra), extension)
+  assert.equal(extension.loseContext(extra), f.result)
+  gl.fail = true; extension.fail = true
+  assert.throws(() => gl.useProgram(null, extra), error => error === f.failure)
+  assert.throws(() => extension.loseContext(extra), error => error === f.failure)
+  assert.throws(() => gl.getExtension('WEBGL_lose_context', extra), error => error === f.failure)
+  assert.deepEqual(f.calls.map(row => row.kind), ['use', 'use', 'use', 'get', 'lose', 'use', 'lose', 'get'])
+  assert.ok(f.calls.filter(row => row.kind !== 'lose').every(row => row.receiver === gl))
+  assert.ok(f.calls.filter(row => row.kind === 'lose').every(row => row.receiver === extension))
+  assert.deepEqual(f.calls[0].args, [program, extra]); assert.deepEqual(f.calls[1].args, [])
+  assert.deepEqual(f.calls[2].args, [null, extra]); assert.deepEqual(f.calls[4].args, [extra])
+  const state = JSON.parse(JSON.stringify(f.window.__sdrGuestGlTiming))
+  assert.equal(state.unsupported, false)
+  assert.deepEqual(state.calls[0], { kind: 'useProgram(null)', start: 110, end: 115, duration: 5, outcome: 'returned', canvas: 'loader', canvasId: 1, frameCount: 195, progress: 0.97, raf: 41 })
+  assert.deepEqual(state.calls.map(row => row.canvasId), [1, 1, 1, 1])
+  assert.deepEqual(state.calls.map(row => [row.kind, row.duration, row.outcome]), [
+    ['useProgram(null)', 5, 'returned'], ['loseContext', 7, 'returned'], ['useProgram(null)', 5, 'threw'], ['loseContext', 7, 'threw'],
+  ])
+  assert.equal(JSON.stringify(state).includes('PRIVATE_'), false)
+})
+
+test('guest GL timing supports separate, inherited and shared WebGL prototypes without double wrapping', () => {
+  for (const options of [{}, { inherited: true }, { shared: true }]) {
+    const f = guestGlFixture(options), first = f.create(), second = f.create(f.GL2)
+    const firstExtension = first.gl.getExtension('WEBGL_lose_context')
+    const method = firstExtension.loseContext
+    assert.equal(first.gl.getExtension('webgl_lose_context'), firstExtension)
+    assert.equal(firstExtension.loseContext, method)
+    second.gl.getExtension('WEBGL_lose_context')
+    first.canvas.className = 'native-loader-canvas'; second.canvas.className = 'title-menu-canvas'
+    f.install()
+    first.gl.useProgram(null); second.gl.useProgram(null)
+    assert.equal(Reflect.apply(method, second.extension, ['borrowed']), f.result)
+    assert.equal(Reflect.apply(first.gl.useProgram, second.gl, [null, 'borrowed']), f.result)
+    const state = JSON.parse(JSON.stringify(f.window.__sdrGuestGlTiming))
+    assert.equal(state.calls.length, 4)
+    assert.deepEqual(state.calls.map(row => row.canvas), ['loader', 'title', 'title', 'title'])
+    assert.deepEqual(state.calls.map(row => row.canvasId), [1, 2, 2, 2])
+    assert.equal(state.unsupported, false)
+  }
+})
+
+test('guest GL timing leaves unknown extensions and coercion behavior untouched', () => {
+  const f = guestGlFixture(), { gl, extension } = f.create()
+  let coercions = 0
+  const name = { toString() { coercions++; return 'WEBGL_lose_context' } }
+  const original = extension.loseContext
+  assert.equal(gl.getExtension(name), extension); assert.equal(coercions, 1)
+  assert.equal(extension.loseContext, original, 'Do not coerce an extension name again to instrument it')
+  const unknown = new Proxy({}, { get() { assert.fail('Unknown object read') }, getOwnPropertyDescriptor() { assert.fail('Unknown descriptor read') }, getPrototypeOf() { assert.fail('Unknown prototype read') } })
+  f.setUnknown(unknown)
+  assert.equal(gl.getExtension('PRIVATE_UNKNOWN_EXTENSION'), unknown)
+  assert.equal(f.window.__sdrGuestGlTiming.calls.length, 0)
+  assert.equal(f.clockReads(), 0)
+  assert.throws(() => gl.getExtension({ toString() { throw f.failure } }), error => error === f.failure)
+})
+
+test('guest GL timing preserves null, undefined, primitive and borrowed receivers', () => {
+  const f = guestGlFixture(), { gl, extension } = f.create()
+  gl.getExtension('WEBGL_lose_context')
+  for (const receiver of [null, undefined, 7, 'receiver', {}]) {
+    assert.equal(Reflect.apply(gl.useProgram, receiver, [null, f.result]), f.result)
+    assert.equal(f.calls.at(-1).receiver, receiver)
+    assert.equal(Reflect.apply(gl.useProgram, receiver, [f.result]), f.result)
+    assert.equal(f.calls.at(-1).receiver, receiver)
+    if (receiver == null) assert.throws(() => Reflect.apply(extension.loseContext, receiver, []), TypeError)
+    else assert.equal(Reflect.apply(extension.loseContext, receiver, []), f.result)
+    assert.equal(f.calls.at(-1).receiver, receiver)
+    assert.equal(Reflect.apply(gl.getExtension, receiver, ['unknown']), null)
+    assert.equal(f.calls.at(-1).receiver, receiver)
+  }
+})
+
+test('guest GL timing keeps native outcomes when metadata or the clock fails', () => {
+  const f = guestGlFixture(), { gl, canvas, extension } = f.create(f.GL, 'native-loader-canvas')
+  Object.defineProperty(canvas, '__sdrLoaderFrame', { get() { throw new Error('PRIVATE_GETTER') } })
+  assert.equal(gl.useProgram(null), f.result)
+  gl.getExtension('WEBGL_lose_context')
+  f.context.performance.now = () => { throw new Error('PRIVATE_CLOCK') }
+  assert.equal(gl.useProgram(null), f.result)
+  extension.fail = true
+  assert.throws(() => extension.loseContext(), error => error === f.failure)
+  let read = 0
+  f.context.performance.now = () => { if (++read === 2) throw new Error('PRIVATE_END_CLOCK'); return 100 }
+  assert.equal(gl.useProgram(null), f.result)
+  assert.equal(f.window.__sdrGuestGlTiming.unsupported, true)
+  assert.equal(JSON.stringify(f.window.__sdrGuestGlTiming).includes('PRIVATE_'), false)
+})
+
+test('guest GL timing bounds events and reads only finite existing scalar metadata', () => {
+  const f = guestGlFixture(), { gl, canvas } = f.create(f.GL, 'native-loader-canvas PRIVATE_CANVAS')
+  let getterReads = 0
+  canvas.__sdrLoaderFrame = { get frameCount() { getterReads++; return 9 }, progress: Infinity, private: 'PRIVATE_FRAME' }
+  f.window.__sdrDesktopDiagnostic = { get raf() { getterReads++; return 9 } }
+  for (let index = 0; index < 70; index++) gl.useProgram(null)
+  const state = JSON.parse(JSON.stringify(f.window.__sdrGuestGlTiming))
+  assert.equal(state.calls.length, 64); assert.equal(state.dropped, 6)
+  assert.equal(state.calls[0].start, 130); assert.equal(state.calls.at(-1).end, 450)
+  assert.equal(getterReads, 0)
+  assert.ok(state.calls.every(row => Object.keys(row).sort().join(',') === 'canvas,canvasId,duration,end,kind,outcome,start'))
+  assert.equal(JSON.stringify(state).includes('PRIVATE_'), false)
+})
+
+test('guest GL timing cannot turn unsupported or non-writable patches into game failures', () => {
+  const f = guestGlFixture({ configure({ GL, GL2, extensionPrototype }) {
+    Object.defineProperty(GL.prototype, 'useProgram', { writable: false })
+    Object.defineProperty(GL2.prototype, 'useProgram', { writable: false })
+    Object.defineProperty(extensionPrototype, 'loseContext', { writable: false })
+  } })
+  const { gl, extension } = f.create()
+  assert.equal(gl.useProgram(null), f.result)
+  assert.equal(gl.getExtension('WEBGL_lose_context'), extension)
+  assert.equal(extension.loseContext(), f.result)
+  assert.deepEqual(JSON.parse(JSON.stringify(f.window.__sdrGuestGlTiming)), { calls: [], dropped: 0, unsupported: true })
+  const missing = guestGlFixture({ configure({ context }) { delete context.WebGLRenderingContext; delete context.WebGL2RenderingContext } })
+  assert.equal(missing.window.__sdrGuestGlTiming.unsupported, true)
+  const accessor = guestGlFixture({ configure({ context }) {
+    Object.defineProperty(context.Element.prototype, 'matches', { get() { throw new Error('PRIVATE_MATCHES') } })
+  } })
+  assert.equal(accessor.create().gl.useProgram(null), accessor.result)
+  assert.equal(accessor.window.__sdrGuestGlTiming.unsupported, true)
+})
+
+test('guest GL timing skips opaque, frozen and accessor extension methods safely', () => {
+  for (const kind of ['frozen', 'accessor', 'missing', 'opaque']) {
+    const f = guestGlFixture(), { gl, extension } = f.create()
+    let reads = 0, value = extension
+    if (kind === 'frozen') Object.preventExtensions(extension)
+    if (kind === 'accessor') Object.defineProperty(extension, 'loseContext', { get() { reads++; return () => f.result } })
+    if (kind === 'missing') value = {}
+    if (kind === 'opaque') value = new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('PRIVATE_DESCRIPTOR') } })
+    f.setExtension(gl, value)
+    assert.equal(gl.getExtension('WEBGL_lose_context'), value)
+    assert.equal(gl.getExtension('WEBGL_lose_context'), value)
+    assert.equal(reads, 0)
+    assert.deepEqual(JSON.parse(JSON.stringify(f.window.__sdrGuestGlTiming)), { calls: [], dropped: 0, unsupported: true })
+  }
+})
+
+test('guest GL timing is page-only for guest, before navigation, inside the existing init probe', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sdr-diag-gl-wiring-test-')), installed = [], calls = []
+  const observer = await createDesktopObserver(root)
+  const fixture = label => {
+    const page = { on() {}, async addInitScript(script) { installed.push({ scope: 'page', label, script }); calls.push(label + ':init') },
+      context: () => ({ async addInitScript(script) { installed.push({ scope: 'context', label, script }) },
+        newCDPSession: async () => ({ async send(method) { calls.push(method); return { metrics: [], profile: { nodes: [] } } }, async detach() {} }) }) }
+    return { label, page, app: { process: () => ({ pid: process.pid, exitCode: null, signalCode: null }), evaluate: async () => [] } }
+  }
+  try {
+    const solo = fixture('solo'), host = fixture('host'), guest = fixture('guest')
+    for (const item of [solo, host, guest]) await observer.attach(item)
+    await observer.beforeGuestNavigation(guest.page)
+    calls.push('navigate')
+    assert.deepEqual(installed.filter(row => row.script === diagnostics.installGuestGlTiming).map(({ scope, label }) => ({ scope, label })), [{ scope: 'page', label: 'guest' }])
+    assert.equal(installed.filter(row => row.script === installRendererTelemetry).length, 3)
+    assert.ok(calls.indexOf('guest:init') < calls.indexOf('Profiler.start'))
+    assert.ok(calls.indexOf('guest:init') < calls.indexOf('navigate'))
+    const events = (await readFile(join(root, 'telemetry.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    assert.deepEqual(events.filter(row => row.event === 'probe-issued' && row.channel.includes('init')).map(row => row.channel), ['solo:init-script', 'host:init-script', 'guest:init-script'])
+  } finally { await observer.stop({ primaryError: null, cleanupErrors: [] }); await rm(root, { recursive: true, force: true }) }
+})
+
+test('renderer snapshots expose the separate guest GL timing state', () => {
+  const f = guestGlFixture(), { gl } = f.create()
+  gl.useProgram(null)
+  const value = runInNewContext('(' + diagnostics.rendererSnapshot.toString() + ')()', {
+    window: f.window, performance: { now: () => 1, timeOrigin: 2 },
+    document: { querySelector: () => null, querySelectorAll: () => [], hasFocus: () => true, fonts: { status: 'loaded' } },
+    location: { protocol: 'solomon-darker:', host: 'app', pathname: '/game' }, innerWidth: 1, innerHeight: 1, devicePixelRatio: 1,
+  })
+  assert.equal(value.guestGlTiming, f.window.__sdrGuestGlTiming)
+  assert.equal(value.telemetry, null)
+})
+
 test('CPU profiles keep only bounded stack and timing fields from bundled scripts', () => {
   const secret = 'PROFILE_SENTINEL_SECRET'
   registerDiagnosticSecret(secret)
@@ -147,6 +381,7 @@ test('all original assertions, timeouts, fidelity flags and success closes are p
   const diagnosticAssertions = instrumented.match(/^\s*assert\..+$/gm).map(line => line.trim()).filter(line => !line.startsWith('assert.equal(manifest.'))
   assert.deepEqual(diagnosticAssertions, originalAssertions)
   assert.equal(originalAssertions.length, 19)
+  execFileSync(process.execPath, ['--input-type=module', '--check'], { input: instrumented })
   assert.deepEqual(instrumented.match(/timeout: [\d_]+/g), source.match(/timeout: [\d_]+/g))
   assert.ok(instrumented.includes("await close(guest)\n  await close(host)\n  await waitForExit(hostChild.pid)"))
   assert.ok(instrumented.includes('play.or(tutorial).first().waitFor({ timeout: 90_000 })'))
@@ -371,7 +606,7 @@ test('observer closes guest profiling across disposed channels and ignores late 
   let disposed = false
   const profileSession = { async send(method) { calls.push(method); return method === 'Profiler.stop' ? stopped.promise : {} }, async detach() { calls.push('detach') } }
   let sessions = 0
-  const page = { on() {}, context: () => ({ addInitScript: async () => {}, newCDPSession: async () => ++sessions === 1 ? { send: async () => ({ metrics: [] }) } : profileSession }) }
+  const page = { on() {}, addInitScript: async () => {}, context: () => ({ addInitScript: async () => {}, newCDPSession: async () => ++sessions === 1 ? { send: async () => ({ metrics: [] }) } : profileSession }) }
   const app = { process() { if (disposed) throw new Error('Disposed Electron channel'); return child }, evaluate: async () => [] }
   try {
     observer.launching('guest')

@@ -247,6 +247,127 @@ export function createGuestTitleDiagnostics({ openSession, guest, identities, re
     },
   }
 }
+// Standalone init script: do not depend on the ordering of renderer telemetry installation.
+export function installGuestGlTiming() {
+  'use strict'
+  if (Object.getOwnPropertyDescriptor(window, '__sdrGuestGlTiming')) return
+  const state = { calls: [], dropped: 0, unsupported: false }
+  try { Object.defineProperty(window, '__sdrGuestGlTiming', { value: state }) }
+  catch { return }
+  const extensionCanvases = new WeakMap(), canvasIds = new WeakMap(), canvasReaders = [], patched = { useProgram: new Set(), getExtension: new Set() }
+  let canvasOrdinal = 0
+  const member = (target, name) => {
+    for (let owner = target; owner; owner = Object.getPrototypeOf(owner)) {
+      const descriptor = Object.getOwnPropertyDescriptor(owner, name)
+      if (descriptor) return { owner, descriptor }
+    }
+    return null
+  }
+  const ownValue = (target, name) => target && (typeof target === 'object' || typeof target === 'function')
+    ? Object.getOwnPropertyDescriptor(target, name)?.value : undefined
+  let matches
+  try { matches = member(ownValue(ownValue(globalThis, 'Element'), 'prototype'), 'matches')?.descriptor.value }
+  catch { state.unsupported = true }
+  if (typeof matches !== 'function') state.unsupported = true
+  const canvasFor = receiver => {
+    for (const read of canvasReaders) {
+      try { return Reflect.apply(read, receiver, []) } catch {}
+    }
+    return null
+  }
+  const metadata = canvas => {
+    const value = { canvas: 'other' }
+    if (canvas && (typeof canvas === 'object' || typeof canvas === 'function')) {
+      if (!canvasIds.has(canvas)) canvasIds.set(canvas, ++canvasOrdinal)
+      value.canvasId = canvasIds.get(canvas)
+    }
+    if (canvas && typeof matches === 'function') {
+      if (Reflect.apply(matches, canvas, ['.native-loader-canvas'])) value.canvas = 'loader'
+      else if (Reflect.apply(matches, canvas, ['.title-menu-canvas'])) value.canvas = 'title'
+    }
+    const frame = value.canvas === 'loader' ? ownValue(canvas, '__sdrLoaderFrame') : null
+    for (const name of ['frameCount', 'progress']) {
+      const scalar = ownValue(frame, name)
+      if (typeof scalar === 'number' && Number.isFinite(scalar)) value[name] = scalar
+    }
+    const raf = ownValue(ownValue(window, '__sdrDesktopDiagnostic'), 'raf')
+    if (typeof raf === 'number' && Number.isFinite(raf)) value.raf = raf
+    return value
+  }
+  const timed = (kind, original, receiver, args, canvas) => {
+    let start = null, fields
+    try {
+      fields = metadata(canvas)
+      const now = performance.now()
+      if (Number.isFinite(now)) start = now
+      else state.unsupported = true
+    } catch { state.unsupported = true }
+    let outcome = 'threw'
+    try {
+      const result = Reflect.apply(original, receiver, args)
+      outcome = 'returned'
+      return result
+    } finally {
+      // Observer failure must never replace the native return value or thrown object.
+      if (start !== null) try {
+        const end = performance.now()
+        if (Number.isFinite(end)) {
+          if (state.calls.length === 64) { state.calls.shift(); state.dropped++ }
+          state.calls.push({ kind, start, end, duration: Math.max(0, end - start), outcome, ...fields })
+        } else state.unsupported = true
+      } catch { state.unsupported = true }
+    }
+  }
+  const patch = (target, name, descriptor, replacement) => {
+    if (!descriptor?.writable || typeof descriptor.value !== 'function') { state.unsupported = true; return }
+    try { Object.defineProperty(target, name, { ...descriptor, value: replacement }) }
+    catch { state.unsupported = true }
+  }
+  const observeExtension = (extension, receiver) => {
+    if (!extension || (typeof extension !== 'object' && typeof extension !== 'function') || extensionCanvases.has(extension)) return
+    // Pixi assigns the class after getExtension and detaches the canvas before destroy.
+    extensionCanvases.set(extension, canvasFor(receiver))
+    const found = member(extension, 'loseContext')
+    const original = found?.descriptor.value
+    const descriptor = found?.owner === extension ? found.descriptor : { ...found?.descriptor, configurable: true }
+    patch(extension, 'loseContext', descriptor, function () {
+      return timed('loseContext', original, this, arguments, extensionCanvases.get(this))
+    })
+  }
+  const prototypes = []
+  for (const name of ['WebGLRenderingContext', 'WebGL2RenderingContext']) {
+    try {
+      const prototype = ownValue(ownValue(globalThis, name), 'prototype')
+      if (!prototype || prototypes.includes(prototype)) continue
+      prototypes.push(prototype)
+      const read = member(prototype, 'canvas')?.descriptor.get
+      if (typeof read === 'function' && !canvasReaders.includes(read)) canvasReaders.push(read)
+      else if (typeof read !== 'function') state.unsupported = true
+    } catch { state.unsupported = true }
+  }
+  if (!prototypes.length) state.unsupported = true
+  for (const prototype of prototypes) for (const name of ['useProgram', 'getExtension']) {
+    try {
+      const found = member(prototype, name)
+      if (!found) { state.unsupported = true; continue }
+      if (patched[name].has(found.owner)) continue
+      patched[name].add(found.owner)
+      const original = found.descriptor.value
+      patch(found.owner, name, found.descriptor, name === 'useProgram' ? function (program) {
+        if (program !== null) return Reflect.apply(original, this, arguments)
+        return timed('useProgram(null)', original, this, arguments, canvasFor(this))
+      } : function (extensionName) {
+        const extension = Reflect.apply(original, this, arguments)
+        // Only inspect a known primitive name; native coercion has already happened once.
+        if (typeof extensionName === 'string' && /^webgl_lose_context$/i.test(extensionName)) {
+          try { observeExtension(extension, this) } catch { state.unsupported = true }
+        }
+        return extension
+      })
+    } catch { state.unsupported = true }
+  }
+}
+
 export function installRendererTelemetry() {
   const state = {
     started: performance.now(), timers: 0, raf: 0, lastTimer: performance.now(), lastRaf: null,
@@ -334,6 +455,7 @@ export function rendererSnapshot() {
     titleCanvas: canvas('.title-menu-canvas', '__sdrTitleFrame', ['frameCount', 'screen', 'solomonFrame']),
     hubCanvas: canvas('.hub-world-canvas', '__sdrHubFrame', ['frameCount', 'tick', 'playerCount']),
     boneyardCanvas: canvas('.boneyard-world-canvas', '__sdrBoneyardFrame', ['frameCount', 'tick', 'playerCount']),
+    guestGlTiming: window.__sdrGuestGlTiming ?? null,
     telemetry: state ? {
       ...state,
       decodes: { ...state.decodes, pending: Object.entries(state.decodes.pending).slice(0, 80).map(([id, value]) => ({ id, ...value, ageMs: performance.now() - value.started })) },
@@ -501,7 +623,13 @@ export async function createDesktopObserver(evidence, { applicationPath } = {}) 
       item.page.on('response', response => record('resource-response', { label: item.label, id: requests.get(response.request()), status: response.status(), fromServiceWorker: response.fromServiceWorker(), url: safeURL(response.url()) }))
       item.page.on('crash', () => record('page-crash', { label: item.label }))
       item.page.on('pageerror', error => record('page-error', { label: item.label, error: clean(error.message) }))
-      await probe(item.label + ':init-script', () => item.page.context().addInitScript(installRendererTelemetry))
+      await probe(item.label + ':init-script', async () => {
+        await item.page.context().addInitScript(installRendererTelemetry)
+        if (item.label === 'guest') {
+          try { await item.page.addInitScript(installGuestGlTiming) }
+          catch { record('instrumentation-error', { area: 'guest-gl-timing', kind: 'init-script-unavailable' }) }
+        }
+      })
       await probe(item.label + ':cdp-attach', async () => {
         item.cdp = await item.page.context().newCDPSession(item.page)
         await item.cdp.send('Performance.enable')
