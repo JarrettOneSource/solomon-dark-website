@@ -63,7 +63,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { createLinuxLaunchObserver } from './linux-launch-observer.mjs'
-import { assertSafeEnvironment, HARNESS_SHA256, PLAYWRIGHT_SHA256, instrumentHarness, instrumentPlaywright, prepareDiagnostic, resolvePlaywrightPackage } from './linux-launch-diagnostic.mjs'
+import { assertSafeEnvironment, REVISION, HARNESS_SHA256, PLAYWRIGHT_SHA256, instrumentHarness, instrumentPlaywright, prepareDiagnostic, resolvePlaywrightPackage } from './linux-launch-diagnostic.mjs'
 
 const directory = dirname(fileURLToPath(import.meta.url))
 const sourceRoot = process.env.SDR_SOURCE_ROOT ?? resolve(directory, '../..')
@@ -133,6 +133,9 @@ test('generated Playwright has only fixed metadata hooks and retains its full im
       assert.equal(digest(await readFile(join(prepared.packageCopy, path))), digest(await readFile(join(packageRoot, path))), path)
     assert.equal(digest(await readFile(join(packageRoot, 'lib/coreBundle.js'))), PLAYWRIGHT_SHA256)
     assert.equal(prepared.binding.acceptance, false)
+    assert.equal(REVISION, '39875413fa2d3313d5d42170993c7dfa3e885cd1')
+    assert.equal(prepared.binding.productRevision, REVISION)
+    assert.match(prepared.binding.scope, /retained package 11997259442 from failed exact-source qualification run 38787359411/)
     assert.deepEqual(await readdir(join(root, 'evidence')), ['source-binding.json'])
     assert.ok((await readFile(prepared.harnessPath, 'utf8')).includes('const evidence = ' + JSON.stringify(join(prepared.generatedRoot, 'captures'))))
     await assert.rejects(prepareDiagnostic({ sourceRoot, outputDirectory: join(root, 'evidence'), runtimeDirectory: join(root, 'evidence', 'runtime') }), /separate/)
@@ -373,9 +376,9 @@ test('Linux workflow remains one exact-branch diagnostic job with immutable arti
   assert.ok(!workflow.includes('npm run package'))
   assert.ok(!workflow.includes('gh release'))
   assert.ok(!workflow.includes('cancel-in-progress'))
-  assert.ok(workflow.includes("EXPECTED_ARTIFACT_ID: '11916140735'"))
-  assert.ok(workflow.includes('057c452995a6cee268baf89bcfe41fed4a10a2313d88d0dd2b1441235b70efd0'))
-  for (const required of ['digest == expected', 'inner_digest == match[1]', 'manifest["revision"] == revision', 'manifest["electronVersion"] == "43.4.0"', 'manifest["nodeRuntime"]["version"] == "22.17.0"', 'package-files-after.json', 'playwright-files-after.json', 'xvfb-run -a node', '--ignore-scripts'])
+  assert.ok(workflow.includes("EXPECTED_ARTIFACT_ID: '11997259442'"))
+  assert.ok(workflow.includes('70ca300f9cbf665c3700899a5b716153249d60c5dff496db40e625fd592defa7'))
+  for (const required of ['digest == expected', 'inner_digest == match[1] == os.environ["EXPECTED_INNER_DIGEST"]', 'manifest_digest == os.environ["EXPECTED_MANIFEST_DIGEST"]', 'failed["head_sha"] == orchestration', 'failed["conclusion"] == "failure"', 'meta["workflow_run"]["head_sha"] == orchestration', 'EXPECTED_PRODUCT_TREE', '38787359411', '116602702052', '79edf19e60a82ff0ec5f4a512f9797e36ab6bc9269f5b9c87020e37a0dcc5a27', 'manifest["revision"] == revision', 'manifest["electronVersion"] == "43.4.0"', 'manifest["nodeRuntime"]["version"] == "22.17.0"', 'package-files-after.json', 'playwright-files-after.json', 'xvfb-run -a node', '--ignore-scripts'])
     assert.ok(workflow.includes(required), required)
   if (intel) assert.ok(!intel.split('permissions:')[0].includes('linux-launch'))
 })
@@ -443,7 +446,7 @@ test('protocol observation has finite pending, session and event limits', () => 
 })
 
 
-async function peerObserverFixture(action) {
+async function peerObserverFixture(action, { extraRows = [], scan = rows => rows, role = pid => pid === 91001 ? 'renderer' : pid === 92001 ? 'gpu' : 'other' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'linux-peer-observer-test-'))
   const secret = 'private-invitation-save-url-sentinel'
   let rows = [
@@ -452,13 +455,14 @@ async function peerObserverFixture(action) {
     { pid: 92000, ppid: process.pid, pgid: 92000, sid: 92000, startTicks: '110', state: 'S', cpuTicks: '30' },
     { pid: 92001, ppid: 92000, pgid: 92000, sid: 92000, startTicks: '111', state: 'R', cpuTicks: '40' },
     { pid: 93000, ppid: 1, pgid: 93000, sid: 93000, startTicks: '200', state: 'R', cpuTicks: '9999' },
+    ...extraRows,
   ]
   const signals = []
   const roleReads = []
   const observer = createLinuxLaunchObserver({
     outputDirectory: root, executable: '/synthetic/solomon-darker', poll: false,
-    readProcesses: () => rows,
-    readProcessRole: pid => { roleReads.push(pid); return pid === 91001 ? 'renderer' : pid === 92001 ? 'gpu' : 'other' },
+    readProcesses: () => scan(rows),
+    readProcessRole: pid => { roleReads.push(pid); return role(pid) },
     signal: (pid, signal) => { signals.push({ pid, signal }); rows = rows.filter(row => row.pid !== pid) },
   })
   const peers = ['host', 'guest'].map((label, index) => {
@@ -541,6 +545,8 @@ test('capture failure stays primary and cleanup never waits for a slow or reject
     const outcome = JSON.parse(await readFile(join(root, 'launch-outcome.json'), 'utf8'))
     assert.equal(outcome.failureKind, 'TimeoutError')
     assert.equal(outcome.captureOwner, 'guest')
+    assert.equal(outcome.frameCoverageLimited, true)
+    assert.equal(outcome.instrumentationLimited, true)
     assert.equal(outcome.pending.find(row => row.id === 77).method, 'Page.captureScreenshot')
     assert.equal(outcome.pending.find(row => row.id === 77).launch, 'guest')
     const failed = before.trim().split('\n').map(JSON.parse).find(row => row.event === 'workload-failed')
@@ -563,4 +569,184 @@ test('process CPU counters and renderer roles project no command-line data', () 
   assert.equal(parseProcessRole('/app\0--type=gpu-process\0private-secret\0'), 'gpu')
   assert.equal(parseProcessRole('/app\0--url=private-secret--type=renderer\0'), 'other')
   assert.throws(() => parseProcStat('21 (private-secret) ' + fields.map((value, index) => index === 11 ? 'private-secret' : value).join(' ')))
+})
+
+
+test('role parser recognizes rewritten Chromium titles without splitting genuine argv payloads', () => {
+  for (const [marker, role] of [['renderer', 'renderer'], ['gpu-process', 'gpu']]) {
+    for (const title of [
+      `/app --type=${marker} --private=private-sentinel`,
+      `/path with spaces/app --type=${marker} --private=private-sentinel\0\0\0`,
+      `/app\t--type=${marker}\t--private=private-sentinel\0`,
+      `/path with spaces/app\0--type=${marker}\0--private=private-sentinel\0`,
+    ]) assert.equal(parseProcessRole(title), role)
+  }
+  for (const title of [
+    '', '/app', '/app --type=utility',
+    '/app --type=renderer-extra', '/app --type=gpu-process-extra',
+    '/app --url=private-sentinel--type=renderer',
+    '/app --url=private-sentinel?role=--type=gpu-process',
+    '/app "--type=renderer"',
+    '/app\0--url=private-sentinel --type=renderer\0',
+    '/app\0--private= --type=gpu-process\0',
+    '/app --type=renderer --type=gpu-process',
+    '/app\0--type=renderer\0--type=utility\0',
+  ]) assert.equal(parseProcessRole(title), 'other')
+})
+
+test('missing CPU role coverage stays explicit even when the workload completes', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  await peerObserverFixture(async ({ root, secret, observer, peers }) => {
+    for (const peer of peers) peer.page = { evaluate: async () => ({ frameCount: 1, playerCount: 2 }) }
+    observer.captureStart(peers)
+    await settleProbes()
+    t.mock.timers.tick(CAPTURE_LIMITS.intervalMs)
+    await settleProbes()
+    observer.captureStop()
+    observer.stage('workload-complete')
+    assert.equal(await observer.cleanup('/synthetic/profiles', async () => {}), true)
+    const outcome = JSON.parse(await readFile(join(root, 'launch-outcome.json'), 'utf8'))
+    assert.equal(outcome.workloadComplete, true)
+    assert.equal(outcome.failureKind, null)
+    assert.equal(outcome.instrumentationLimited, true)
+    assert.equal(outcome.captureRoleCoverage.status, 'incomplete')
+    for (const owner of outcome.captureRoleCoverage.owners) {
+      assert.equal(owner.samples, 2)
+      assert.equal(owner.completeSamples, 0)
+      assert.deepEqual(owner.processSamples, { renderer: 0, gpu: 0, other: 4, unavailable: 0 })
+      assert.deepEqual(owner.cpuSamples, { renderer: 0, gpu: 0 })
+    }
+    const events = (await readFile(join(root, 'launch-events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    assert.equal(events.filter(row => row.event === 'capture-process-progress').length, 0)
+    assert.ok(events.filter(row => row.event === 'capture-process-scan').every(row => row.roleCoverage.length === 2))
+    assert.ok(!JSON.stringify([outcome, events]).includes(secret))
+  }, { role: () => parseProcessRole('/app --private=private-invitation-save-url-sentinel') })
+})
+
+
+const completeRoleRows = [
+  { pid: 91002, ppid: 91000, pgid: 91000, sid: 91000, startTicks: '102', state: 'S', cpuTicks: '50' },
+  { pid: 92002, ppid: 92000, pgid: 92000, sid: 92000, startTicks: '112', state: 'R', cpuTicks: '60' },
+]
+const completeRole = pid => parseProcessRole({
+  91001: '/private/path with spaces/app --type=renderer --private=private-invitation-save-url-sentinel\0\0',
+  91002: '/private/path with spaces/app\0--type=gpu-process\0--private=private-invitation-save-url-sentinel\0',
+  92001: '/private/app --type=gpu-process --private=private-invitation-save-url-sentinel',
+  92002: '/private/app\0--type=renderer\0--private=private-invitation-save-url-sentinel\0',
+}[pid] ?? '/private/app --private=private-invitation-save-url-sentinel')
+
+async function observeTwoCpuSamples(t, fixture, check) {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  await peerObserverFixture(async context => {
+    const { root, secret, observer, peers, advanceCpu } = context
+    for (const peer of peers) peer.page = { evaluate: async () => ({ frameCount: 3, playerCount: 2 }) }
+    observer.captureStart(peers)
+    await settleProbes()
+    advanceCpu()
+    t.mock.timers.tick(CAPTURE_LIMITS.intervalMs)
+    await settleProbes()
+    observer.captureStop()
+    observer.stage('workload-complete')
+    assert.equal(await observer.cleanup('/synthetic/profiles', async () => {}), true)
+    const outcome = JSON.parse(await readFile(join(root, 'launch-outcome.json'), 'utf8'))
+    const events = (await readFile(join(root, 'launch-events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    assert.equal(outcome.workloadComplete, true)
+    assert.equal(outcome.failureKind, null)
+    assert.ok(!JSON.stringify([outcome, events]).includes(secret))
+    await check({ ...context, outcome, events })
+  }, fixture)
+}
+
+test('both argv forms feed complete owned renderer and GPU CPU coverage for each peer', async t => {
+  await observeTwoCpuSamples(t, { extraRows: completeRoleRows, role: completeRole }, ({ outcome, events, roleReads }) => {
+    assert.equal(outcome.captureRoleCoverage.status, 'complete')
+    assert.equal(outcome.frameCoverageLimited, false)
+    assert.equal(outcome.instrumentationLimited, false)
+    for (const owner of outcome.captureRoleCoverage.owners) {
+      assert.equal(owner.samples, 2)
+      assert.equal(owner.completeSamples, 2)
+      assert.deepEqual(owner.processSamples, { renderer: 2, gpu: 2, other: 2, unavailable: 0 })
+      assert.deepEqual(owner.cpuSamples, { renderer: 2, gpu: 2 })
+      assert.deepEqual(owner.cpuDeltaSamples, { renderer: 1, gpu: 1 })
+      assert.equal(owner.truncated, 0)
+    }
+    const cpu = events.filter(row => row.event === 'capture-process-progress')
+    assert.equal(cpu.length, 8)
+    assert.equal(cpu.filter(row => row.deltaCpuTicks === '7').length, 4)
+    assert.ok(!roleReads.includes(93000))
+    assert.ok(events.filter(row => row.event === 'capture-process-scan').every(row => row.roleCoverage.every(owner => owner.complete)))
+  })
+})
+
+test('a missing or unreadable role is disclosed per owner without changing workload verdict', async t => {
+  await observeTwoCpuSamples(t, { role: pid => pid === 91001 ? 'unavailable' : completeRole(pid) }, ({ outcome }) => {
+    assert.equal(outcome.captureRoleCoverage.status, 'incomplete')
+    assert.equal(outcome.instrumentationLimited, true)
+    const [host, guest] = outcome.captureRoleCoverage.owners
+    assert.deepEqual(host.processSamples, { renderer: 0, gpu: 0, other: 2, unavailable: 2 })
+    assert.deepEqual(guest.processSamples, { renderer: 0, gpu: 2, other: 2, unavailable: 0 })
+    assert.equal(host.completeSamples, 0)
+    assert.equal(guest.completeSamples, 0)
+  })
+})
+
+test('CPU emission keeps the exact process bound and reports per-owner truncation', async t => {
+  const extraRows = [
+    ...completeRoleRows,
+    ...Array.from({ length: 130 }, (_, index) => ({
+      pid: 91100 + index, ppid: 91000, pgid: 91000, sid: 91000, startTicks: String(300 + index), state: 'R', cpuTicks: '10',
+    })),
+  ]
+  await observeTwoCpuSamples(t, { extraRows, role: pid => pid >= 91100 && pid < 91230 ? 'renderer' : completeRole(pid) }, ({ outcome, events, roleReads }) => {
+    assert.deepEqual(CAPTURE_LIMITS, { intervalMs: 1000, ticks: 65, processesPerTick: 128 })
+    assert.equal(events.filter(row => row.event === 'capture-process-progress').length, 2 * 128)
+    assert.equal(outcome.captureRoleCoverage.status, 'incomplete')
+    assert.equal(outcome.instrumentationLimited, true)
+    assert.equal(outcome.captureRoleCoverage.owners.reduce((total, owner) => total + owner.truncated, 0), 12)
+    assert.equal(outcome.captureRoleCoverage.owners[1].cpuSamples.renderer, 0)
+    assert.equal(outcome.captureRoleCoverage.owners[1].processSamples.renderer, 2)
+    assert.ok(!roleReads.includes(93000))
+  })
+})
+
+test('unavailable CPU counters are coverage gaps rather than zero activity', async t => {
+  const extraRows = completeRoleRows.map(row => ({ ...row, cpuTicks: undefined }))
+  await observeTwoCpuSamples(t, { extraRows, role: completeRole }, ({ outcome }) => {
+    assert.equal(outcome.captureRoleCoverage.status, 'incomplete')
+    assert.equal(outcome.instrumentationLimited, true)
+    for (const owner of outcome.captureRoleCoverage.owners) {
+      assert.equal(owner.invalidCpu, 2)
+      assert.equal(owner.completeSamples, 0)
+    }
+  })
+})
+
+
+test('a failed capture process scan preserves ownership and marks role coverage incomplete', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  let scanFails = false
+  await peerObserverFixture(async ({ root, secret, observer, peers }) => {
+    for (const peer of peers) peer.page = { evaluate: async () => ({ frameCount: 1 }) }
+    observer.captureStart(peers)
+    await settleProbes()
+    scanFails = true
+    t.mock.timers.tick(CAPTURE_LIMITS.intervalMs)
+    await settleProbes()
+    const during = (await readFile(join(root, 'launch-events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    assert.equal(during.filter(row => row.event === 'process-exit-observed').length, 0)
+    assert.equal(during.filter(row => row.event === 'process-scan-failed').length, 1)
+    assert.ok(during.filter(row => row.event === 'capture-process-scan').at(-1).roleCoverage.every(owner => owner.scanFailed && !owner.complete))
+    scanFails = false
+    observer.captureStop()
+    assert.equal(await observer.cleanup('/synthetic/profiles', async () => {}), false)
+    const outcome = JSON.parse(await readFile(join(root, 'launch-outcome.json'), 'utf8'))
+    assert.equal(outcome.captureRoleCoverage.status, 'incomplete')
+    assert.equal(outcome.instrumentationLimited, true)
+    assert.equal(outcome.processOwnershipProven, false)
+    for (const owner of outcome.captureRoleCoverage.owners) {
+      assert.equal(owner.samples, 2)
+      assert.equal(owner.completeSamples, 1)
+    }
+    assert.ok(!JSON.stringify([outcome, during]).includes(secret))
+  }, { extraRows: completeRoleRows, role: completeRole, scan: rows => { if (scanFails) throw new Error('private-sentinel'); return rows } })
 })

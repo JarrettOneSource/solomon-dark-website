@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const REVISION = 'c20fd89cb98c3a76f0852305252f1a3ba06fd59a'
+export const REVISION = '39875413fa2d3313d5d42170993c7dfa3e885cd1'
 export const HARNESS_SHA256 = '036d980d4147f03a9043f7800866bc5b9a283a86de5a8e12f51d1f5bbbf3d3e3'
 export const PLAYWRIGHT_SHA256 = '6be5c2ea035554e9b184b1dbc7aa5e7f1fb428dd1b5c202022858dcfae9bee27'
 const hash = value => createHash('sha256').update(value).digest('hex')
@@ -187,8 +187,8 @@ export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDi
     originalHarnessSha256: hash(original), generatedHarnessSha256: hash(generated),
     originalPlaywrightSha256: hash(bundle), generatedPlaywrightSha256: hash(patchedBundle),
     driverSha256: hash(await readFile(fileURLToPath(import.meta.url))), observerSha256: hash(await readFile(observerPath)),
-    scope: 'Full original 19-assertion smoke workload and both peer captures on the immutable c20 control; not reproduction or acceptance of unarchived 39875413 bytes.',
-    changes: 'Metadata-only hooks in a separate dependency copy, bounded non-awaited peer frame/visibility and owned process CPU observation. Original screenshot calls write only to a transient runtime directory removed during cleanup. No raw error/receipt/body output or fallback captures. Original package, flags, workload and cleanup deadlines unchanged.',
+    scope: 'Full original 19-assertion smoke workload and both peer captures on retained package 11997259442 from failed exact-source qualification run 38787359411. These are newly built 39875413 bytes, not the unretained original run 38766573551 package. Any outcome is diagnostic only, not release acceptance.',
+    changes: 'Metadata-only hooks in a separate dependency copy, bounded non-awaited peer frame/visibility and owned process CPU observation with explicit per-owner role coverage. Original screenshot calls write only to a transient runtime directory removed during cleanup. No raw error/receipt/body output or fallback captures. Original package, flags, workload and cleanup deadlines unchanged.',
   }
   await writeFile(join(outputDirectory, 'source-binding.json'), JSON.stringify(binding, null, 2) + '\n')
   return { harnessPath, packageCopy, playwrightURL, binding, generatedRoot }

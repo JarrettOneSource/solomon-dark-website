@@ -143,10 +143,13 @@ function procRows() {
 }
 
 export function parseProcessRole(commandLine) {
-  const fields = commandLine.split('\0')
-  if (fields.includes('--type=renderer')) return 'renderer'
-  if (fields.includes('--type=gpu-process')) return 'gpu'
-  return 'other'
+  const argv = commandLine.split('\0').filter(Boolean)
+  // Chromium may rewrite argv as one space-joined title with NUL padding.
+  // Preserve real argv boundaries so a private argument cannot supply a role.
+  const fields = argv.length === 1 ? argv[0].split(/[ \t]+/) : argv
+  const roles = fields.filter(field => field.startsWith('--type='))
+  if (roles.length !== 1) return 'other'
+  return roles[0] === '--type=renderer' ? 'renderer' : roles[0] === '--type=gpu-process' ? 'gpu' : 'other'
 }
 
 function procRole(pid) {
@@ -189,6 +192,8 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
   let known = []
   let capture = null
   let captureOwner = null
+  let roleCoverage = null
+  let frameCoverageLimited = false
   let workloadComplete = false
   const roots = []
   const children = new Map()
@@ -198,25 +203,56 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     at: new Date().toISOString(), monotonicMs: Math.round(performance.now() * 1000) / 1000,
     event, launch, ...data,
   })
+  const coverageResult = () => ({
+    status: roleCoverage === null ? 'not-observed' : roleCoverage.every(owner => owner.samples > 0 && owner.completeSamples === owner.samples) ? 'complete' : 'incomplete',
+    owners: roleCoverage ?? [],
+    scope: 'Per-tick recognized renderer and GPU roles in owned sessions only. Other roles are parser non-matches, not proof of inactivity; CPU ticks are counters, not utilization.',
+  })
   const sample = (progress = false) => {
     let all
     try { all = readProcesses() }
-    catch { infrastructureFailed = true; record('process-scan-failed'); return [] }
+    catch {
+      infrastructureFailed = true
+      record('process-scan-failed')
+      if (progress) capture.lastRoles = roleCoverage.map(owner => { owner.samples++; return { owner: owner.owner, scanFailed: true, complete: false } })
+      return []
+    }
     const current = roots.flatMap(root => ownedProcesses(all, [root], known.filter(row => row.owner === root.owner)).map(row => {
       const prior = known.find(old => identity(old) === identity(row))
       const role = ['renderer', 'gpu'].includes(prior?.role) ? prior.role : readProcessRole(row.pid)
       return { ...row, owner: root.owner, role: ['renderer', 'gpu', 'other'].includes(role) ? role : 'unavailable' }
     })).sort((a, b) => a.pid - b.pid)
     if (progress) {
-      for (const row of current.filter(row => ['renderer', 'gpu'].includes(row.role)).slice(0, CAPTURE_LIMITS.processesPerTick)) {
+      const recognized = current.filter(row => ['renderer', 'gpu'].includes(row.role))
+      const cpu = []
+      for (const row of recognized.slice(0, CAPTURE_LIMITS.processesPerTick)) {
         const prior = capture?.cpu.get(identity(row))
         const ticks = typeof row.cpuTicks === 'string' && /^\d{1,31}$/.test(row.cpuTicks) ? row.cpuTicks : null
-        record('capture-process-progress', {
+        const observation = {
           owner: row.owner, pid: row.pid, startTicks: row.startTicks, role: row.role, state: row.state,
           cpuTicks: ticks, deltaCpuTicks: prior !== undefined && ticks !== null && BigInt(ticks) >= BigInt(prior) ? (BigInt(ticks) - BigInt(prior)).toString() : null,
-        })
+        }
+        record('capture-process-progress', observation)
+        cpu.push(observation)
         if (ticks !== null) capture?.cpu.set(identity(row), ticks)
       }
+      capture.lastRoles = roleCoverage.map(total => {
+        const owned = current.filter(row => row.owner === total.owner)
+        const observed = cpu.filter(row => row.owner === total.owner)
+        const processSamples = Object.fromEntries(['renderer', 'gpu', 'other', 'unavailable'].map(role => [role, owned.filter(row => row.role === role).length]))
+        const cpuSamples = Object.fromEntries(['renderer', 'gpu'].map(role => [role, observed.filter(row => row.role === role && row.cpuTicks !== null).length]))
+        const cpuDeltaSamples = Object.fromEntries(['renderer', 'gpu'].map(role => [role, observed.filter(row => row.role === role && row.deltaCpuTicks !== null).length]))
+        const truncated = recognized.filter(row => row.owner === total.owner).length - observed.length
+        const invalidCpu = observed.filter(row => row.cpuTicks === null).length
+        const complete = processSamples.renderer > 0 && processSamples.gpu > 0 && processSamples.unavailable === 0 && truncated === 0 && invalidCpu === 0
+        total.samples++
+        if (complete) total.completeSamples++
+        for (const [key, counts] of Object.entries({ processSamples, cpuSamples, cpuDeltaSamples }))
+          for (const [role, count] of Object.entries(counts)) total[key][role] += count
+        total.truncated += truncated
+        total.invalidCpu += invalidCpu
+        return { owner: total.owner, processSamples, cpuSamples, cpuDeltaSamples, truncated, invalidCpu, complete }
+      })
     }
     const oldIds = new Set(known.map(identity))
     const newIds = new Set(current.map(identity))
@@ -241,10 +277,9 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     const stopped = capture
     capture = null
     clearInterval(stopped.timer)
-    record('capture-observation-stop', {
-      ticks: stopped.ticks,
-      probes: stopped.peers.map(peer => ({ owner: peer.label, started: peer.started, completed: peer.completed, pending: peer.pendingAt !== null })),
-    })
+    const probes = stopped.peers.map(peer => ({ owner: peer.label, started: peer.started, completed: peer.completed, failed: peer.failed, pending: peer.pendingAt !== null }))
+    frameCoverageLimited = stopped.ticks >= CAPTURE_LIMITS.ticks || probes.some(peer => peer.started === 0 || peer.failed > 0 || peer.pending)
+    record('capture-observation-stop', { ticks: stopped.ticks, probes, roleCoverage: coverageResult() })
   }
   const captureTick = () => {
     const current = capture
@@ -253,7 +288,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     current.ticks++
     const scanStart = performance.now()
     sample(true)
-    record('capture-process-scan', { durationMs: Math.max(0, performance.now() - scanStart) })
+    record('capture-process-scan', { durationMs: Math.max(0, performance.now() - scanStart), roleCoverage: current.lastRoles })
     for (const peer of current.peers) {
       if (peer.pendingAt !== null) continue
       peer.pendingAt = performance.now()
@@ -264,7 +299,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
         if (capture !== current) return
         record('capture-frame-progress', { owner: peer.label, sample: peer.started, durationMs: Math.max(0, performance.now() - peer.pendingAt), ...safeFrameProgress(value) })
       }, error => {
-        if (capture === current) record('capture-frame-probe-failed', { owner: peer.label, errorKind: safeError(error) })
+        if (capture === current) { peer.failed++; record('capture-frame-probe-failed', { owner: peer.label, errorKind: safeError(error) }) }
       }).finally(() => { peer.pendingAt = null; peer.completed++ })
     }
   }
@@ -330,7 +365,12 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
       assert.equal(capture, null)
       assert.deepEqual(instances.map(instance => instance.label), ['host', 'guest'])
       for (const instance of instances) assert.equal(apps.get(instance.label), instance.app, 'Capture owner must be a registered app')
-      capture = { ticks: 0, timer: null, cpu: new Map(), peers: instances.map(instance => ({ ...instance, pendingAt: null, started: 0, completed: 0 })) }
+      roleCoverage = instances.map(instance => ({
+        owner: instance.label, samples: 0, completeSamples: 0,
+        processSamples: { renderer: 0, gpu: 0, other: 0, unavailable: 0 },
+        cpuSamples: { renderer: 0, gpu: 0 }, cpuDeltaSamples: { renderer: 0, gpu: 0 }, truncated: 0, invalidCpu: 0,
+      }))
+      capture = { ticks: 0, timer: null, cpu: new Map(), lastRoles: [], peers: instances.map(instance => ({ ...instance, pendingAt: null, started: 0, completed: 0, failed: 0 })) }
       record('capture-observation-start', { limits: CAPTURE_LIMITS })
       capture.timer = setInterval(captureTick, CAPTURE_LIMITS.intervalMs)
       capture.timer.unref()
@@ -378,6 +418,8 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
           processExitProven: !survivors.length && !infrastructureFailed,
           processProofScope: 'Registered exclusive Linux sessions and observed descendants only. Unobserved children that create a new session are outside this proof.',
           cleanupFailed, survivors, pending: protocol.pending(), protocolLimits: protocol.limits(),
+          captureRoleCoverage: coverageResult(), frameCoverageLimited,
+          instrumentationLimited: infrastructureFailed || frameCoverageLimited || coverageResult().status !== 'complete' || Object.values(protocol.limits()).some(count => count > 0),
         }
         try { writeFileSync(join(outputDirectory, 'launch-outcome.json'), JSON.stringify(result, null, 2) + '\n') }
         catch { infrastructureFailed = true }
