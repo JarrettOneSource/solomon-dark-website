@@ -28,13 +28,13 @@ export function instrumentHarness(original, observerURL, playwrightURL) {
   source = 'import { createDesktopObserver, safeURL } from ' + JSON.stringify(observerURL) + '\n' + source
   replaceOnce('const receipts = { platform: process.platform, revision: manifest.revision }',
     'const receipts = { platform: process.platform, revision: manifest.revision }\n' +
-    'const diagnostics = await createDesktopObserver(join(evidence, "diagnostic"))\nlet primaryError = null\n' +
+    'const diagnostics = await createDesktopObserver(join(evidence, "diagnostic"), { applicationPath })\nlet primaryError = null\n' +
     'assert.equal(manifest.revision, "' + REVISION + '")\nassert.equal(manifest.platform, "darwin")\nassert.equal(manifest.arch, "x64")')
   replaceOnce('  running.add(instance)', '  running.add(instance)\n  await diagnostics.attach(instance)')
   replaceOnce('async function launch(label, userData) {', 'async function launch(label, userData) {\n  diagnostics.launching(label)')
   replaceOnce("  app.process().stderr.on('data'", "  await diagnostics.launched(label, app.process().pid)\n  app.process().stderr.on('data'")
   replaceOnce('async function title(page) {', 'async function title(page) {\n  diagnostics.phase(page, "title", 90_000)')
-  replaceOnce('  await play.waitFor({ timeout: 30_000 })\n}', '  await play.waitFor({ timeout: 30_000 })\n  diagnostics.endPhase(page, "title")\n}')
+  replaceOnce('  await play.waitFor({ timeout: 30_000 })\n}', '  await play.waitFor({ timeout: 30_000 })\n  await diagnostics.endPhase(page, "title")\n}')
   replaceOnce('async function readyHub(page) {', 'async function readyHub(page) {\n  diagnostics.phase(page, "readyHub", 60_000)')
   replaceOnce("    return canvas?.dataset.hubRegion === 'courtyard' && canvas?.dataset.transitionPhase === 'none'\n  })\n}",
     "    return canvas?.dataset.hubRegion === 'courtyard' && canvas?.dataset.transitionPhase === 'none'\n  })\n  diagnostics.endPhase(page, 'readyHub')\n}")
@@ -42,6 +42,8 @@ export function instrumentHarness(original, observerURL, playwrightURL) {
     "  diagnostics.addSecret(runtime.endpoint.credential)\n  assert.equal(runtime.origin, 'solomon-darker://app')")
   replaceOnce("  const guest = await launch('guest', join(profiles, 'guest'))",
     "  diagnostics.addSecret(invitation)\n  const guest = await launch('guest', join(profiles, 'guest'))")
+  replaceOnce("  await guest.page.getByRole('button', { name: 'Join game', exact: true }).click()",
+    "  await diagnostics.beforeGuestNavigation(guest.page)\n  await guest.page.getByRole('button', { name: 'Join game', exact: true }).click()")
   replaceOnce("join(evidence, 'receipt.json')", "join(evidence, 'diagnostic-observation.json')")
   replaceOnce("JSON.stringify({ status: 'ok', ...receipts }, null, 2)", "JSON.stringify({ status: 'ok', acceptance: false, diagnostic: true, ...receipts }, null, 2)")
   replaceOnce("JSON.stringify({ status: 'ok', ...receipts, evidence })", "JSON.stringify({ status: 'ok', acceptance: false, diagnostic: true, ...receipts, evidence })")
@@ -67,7 +69,7 @@ export function instrumentHarness(original, observerURL, playwrightURL) {
     '  let cleanupErrors = []',
     '  try { cleanupErrors = await diagnostics.cleanup(running, profiles, rm) }',
     '  catch (cleanupError) { cleanupErrors.push({ step: "unexpected-cleanup", message: String(cleanupError) }) }',
-    '  try { diagnostics.stop({ primaryError: primaryError ? String(primaryError) : null, cleanupErrors }) }',
+    '  try { await diagnostics.stop({ primaryError: primaryError ? String(primaryError) : null, cleanupErrors }) }',
     '  catch (stopError) { cleanupErrors.push({ step: "observer-stop", message: String(stopError) }) }',
     '  if (primaryError === null && cleanupErrors.length) throw new AggregateError(cleanupErrors.map(row => new Error(row.step + ": " + row.message)), "Diagnostic cleanup failed")',
     '}',

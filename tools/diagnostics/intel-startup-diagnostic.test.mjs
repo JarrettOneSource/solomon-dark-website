@@ -9,8 +9,68 @@ import test from 'node:test'
 import { HARNESS_SHA256, instrumentHarness, resolvePlaywrightImport } from './intel-startup-diagnostic.mjs'
 import { createDesktopObserver, driverOwnedProcesses, installRendererTelemetry, ownedForest, parseProcessRows, redactDiagnosticText, registerDiagnosticSecret, safeURL, trustedRegisteredRoots } from './desktop-timeout-observer.mjs'
 import { createHash } from 'node:crypto'
+import * as diagnostics from './desktop-timeout-observer.mjs'
 
 const directory = dirname(fileURLToPath(import.meta.url))
+test('CPU profiles keep only bounded stack and timing fields from bundled scripts', () => {
+  const secret = 'PROFILE_SENTINEL_SECRET'
+  registerDiagnosticSecret(secret)
+  const url = 'solomon-darker://app/assets/Game-12345678.js'
+  const raw = {
+    startTime: 100, endTime: 500, secret, source: secret,
+    nodes: [{ id: 1, hitCount: 2, children: [2], deoptReason: secret,
+      callFrame: { functionName: 'renderTitle', url: url + '?token=' + secret + '#' + secret, lineNumber: 12, columnNumber: 6, scriptId: secret, locals: secret } },
+    { id: 2, callFrame: { functionName: secret, url: 'file:///Users/private/' + secret + '.js', lineNumber: 1, columnNumber: 2 } },
+    { id: 3, callFrame: { functionName: secret, url, lineNumber: 1, columnNumber: 2 } },
+    { id: 4, callFrame: { functionName: '(idle)', url: '', lineNumber: -1, columnNumber: -1 } }],
+    samples: [1, 2], timeDeltas: [100, 200], args: secret,
+  }
+  const value = diagnostics.sanitizeCPUProfile(raw, new Set(['/assets/Game-12345678.js']))
+  assert.deepEqual(value.nodes[0], { id: 1, hitCount: 2, children: [2], callFrame: { functionName: 'renderTitle', url, lineNumber: 12, columnNumber: 6 } })
+  assert.equal(value.nodes[1].callFrame.url, '')
+  assert.equal(value.nodes[1].callFrame.functionName, '[omitted]')
+  assert.equal(value.nodes[3].callFrame.functionName, '(idle)')
+  assert.deepEqual(value.samples, [1, 2]); assert.deepEqual(value.timeDeltas, [100, 200])
+  assert.equal(JSON.stringify(value).includes(secret), false)
+  assert.equal(JSON.stringify(value).includes('/Users/'), false)
+  assert.deepEqual(Object.keys(value).sort(), ['endTime', 'nodes', 'samples', 'startTime', 'timeDeltas', 'truncated'])
+  const bounded = diagnostics.sanitizeCPUProfile({ nodes: Array.from({ length: 10_001 }, (_, id) => ({ id: id + 1 })), samples: Array(20_001).fill(1), timeDeltas: Array(20_001).fill(10_000) }, new Set())
+  assert.equal(bounded.nodes.length, 10_000); assert.equal(bounded.samples.length, 20_000)
+  assert.deepEqual(bounded.truncated, { nodes: true, samples: true })
+})
+
+test('native samples exclude headers, paths, arguments, addresses and binary images', () => {
+  const secret = 'NATIVE_SENTINEL_SECRET'
+  registerDiagnosticSecret(secret)
+  const raw = `Analysis of sampling ${secret} every 1 millisecond\nProcess: ${secret}\nPath: /Users/${secret}\nCommand: --token=${secret}\nCall graph:\n    100 Thread_123 DispatchQueue_${secret}\n    + 100 start (in dyld) + 1 [0x1234]\n    + ! 80 gpu::Draw(${secret}, void*) (in libvk_swiftshader.dylib) + 44 [0x5678]\n    + ! 20 ${secret} (in ${secret}) + 2 [0x9999]\nTotal number in stack (recursive counted multiple, when >=5):\n    100 ${secret}\nBinary Images:\n    100 ${secret} /Users/${secret}\n`
+  const value = diagnostics.sanitizeNativeSample(raw)
+  assert.equal(value.intervalMs, 1)
+  assert.deepEqual(value.frames.map(row => row.symbol), ['start', 'gpu::Draw', '[omitted]'])
+  assert.deepEqual(value.frames.map(row => row.samples), [100, 80, 20])
+  const output = JSON.stringify(value)
+  for (const text of [secret, '/Users/', 'Command', 'Thread_123', '0x1234', 'void*', 'Binary Images']) assert.equal(output.includes(text), false, text)
+  const offsetFirst = diagnostics.sanitizeNativeSample('Call graph:\n    + 40 gpu::Draw(void*) + 1942 (in Electron Framework) [0x5678]\n')
+  assert.deepEqual(offsetFirst.frames[0], { depth: 1, samples: 40, symbol: 'gpu::Draw', offset: 1942 })
+})
+
+test('long task telemetry preserves a bounded chronological start and duration window', () => {
+  let callback
+  const state = {}
+  class Image { decode() {} }
+  class Mutation { observe() {} }
+  class LongTasks { constructor(value) { callback = value } observe() {} }
+  runInNewContext('(' + installRendererTelemetry.toString() + ')()', {
+    window: state, document: { querySelector: () => null, addEventListener() {} },
+    performance: { now: () => 0 }, HTMLImageElement: Image, MutationObserver: Mutation,
+    PerformanceObserver: LongTasks, setInterval() {}, requestAnimationFrame() {},
+  })
+  callback({ getEntries: () => Array.from({ length: 300 }, (_, index) => ({ startTime: index * 100, duration: index + 50, name: 'SENTINEL', attribution: ['SENTINEL'] })) })
+  const tasks = JSON.parse(JSON.stringify(state.__sdrDesktopDiagnostic.longTasks))
+  assert.equal(tasks.count, 300); assert.equal(tasks.entries.length, 256)
+  assert.deepEqual(tasks.entries[0], { startTime: 4400, duration: 94 })
+  assert.deepEqual(tasks.entries.at(-1), { startTime: 29900, duration: 349 })
+  assert.equal(tasks.dropped, 44); assert.equal(JSON.stringify(tasks).includes('SENTINEL'), false)
+})
 test('resolved Playwright module exposes the original Electron launcher without launching it', async () => {
   const module = await import(await resolvePlaywrightImport(process.env.SDR_SOURCE_ROOT))
   assert.equal(typeof module._electron.launch, 'function')
@@ -91,6 +151,10 @@ test('all original assertions, timeouts, fidelity flags and success closes are p
   assert.ok(instrumented.includes("await close(guest)\n  await close(host)\n  await waitForExit(hostChild.pid)"))
   assert.ok(instrumented.includes('play.or(tutorial).first().waitFor({ timeout: 90_000 })'))
   assert.ok(instrumented.includes('diagnostics.beforeFailure(error)'))
+  assert.ok(instrumented.includes("await diagnostics.beforeGuestNavigation(guest.page)\n  await guest.page.getByRole('button', { name: 'Join game', exact: true }).click()"))
+  assert.equal(instrumented.match(/beforeGuestNavigation/g).length, 1)
+  assert.ok(instrumented.includes('await diagnostics.endPhase(page, "title")'))
+  assert.ok(instrumented.includes('await diagnostics.stop('))
   assert.ok(instrumented.includes('throw error'))
   assert.ok(!instrumented.includes("join(evidence, 'receipt.json')"))
   assert.ok(instrumented.includes('acceptance: false'))
@@ -163,7 +227,188 @@ test('observer samples the next app after historical Electron channels are dispo
     assert.deepEqual(events.filter(row => row.event === 'snapshot-end' && row.reason.startsWith('before-screenshot-')).map(row => row.reason),
       ['before-screenshot-solo-live', 'before-screenshot-resume-live', 'before-screenshot-all-closed'])
   } finally {
-    observer.stop({ primaryError: null, cleanupErrors: [] })
+    await observer.stop({ primaryError: null, cleanupErrors: [] })
     await rm(root, { recursive: true, force: true })
   }
+})
+
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
+const profileFixture = (overrides = {}) => {
+  const calls = [], events = [], sampled = []
+  let time = 100
+  const rows = [
+    { pid: 10, ppid: 1, birth: 'guest-root' }, { pid: 11, ppid: 10, birth: 'guest-tab' },
+    { pid: 12, ppid: 10, birth: 'guest-gpu' }, { pid: 20, ppid: 1, birth: 'host-root' },
+    { pid: 21, ppid: 20, birth: 'host-tab' },
+  ]
+  const guest = { pid: 10, child: { exitCode: null, signalCode: null }, metrics: [{ pid: 11, type: 'Tab' }, { pid: 12, type: 'GPU' }, { pid: 21, type: 'Tab' }] }
+  const session = { async send(method, params) { calls.push([method, params]); return method === 'Profiler.stop' ? { profile: { startTime: 100, endTime: 200, nodes: [], samples: [], timeDeltas: [] } } : {} }, async detach() { calls.push(['detach']) } }
+  const controller = diagnostics.createGuestTitleDiagnostics({
+    openSession: async () => session, guest, identities: new Map(rows.map(row => [row.pid, row.birth])),
+    readRows: async () => rows, sampleProcess: async pid => { sampled.push(pid); return 'Call graph:\n    + 1 mach_msg (in libsystem_kernel.dylib) + 1 [0x1234]\nBinary Images:\n' },
+    bundledScripts: new Set(), record: (event, value) => events.push({ event, ...value }), now: () => time,
+    requestDeadlineMs: 20, ...overrides,
+  })
+  return { controller, calls, events, sampled, rows, guest, session, setTime(value) { time = value } }
+}
+
+test('guest profiler starts at 10 ms and stops only once on title completion', async () => {
+  const f = profileFixture()
+  assert.equal(await f.controller.start(), true)
+  assert.deepEqual(f.calls.map(row => row[0]), ['Profiler.enable', 'Profiler.setSamplingInterval', 'Profiler.start'])
+  assert.deepEqual(f.calls[1][1], { interval: 10_000 })
+  f.setTime(800)
+  await Promise.all([f.controller.finish('title-complete'), f.controller.finish('cleanup')])
+  assert.deepEqual(f.calls.map(row => row[0]), ['Profiler.enable', 'Profiler.setSamplingInterval', 'Profiler.start', 'Profiler.stop', 'detach'])
+  const profile = f.events.find(row => row.event === 'guest-cpu-profile')
+  assert.equal(profile.target, 'guest-page'); assert.equal(profile.rootPid, 10); assert.equal(profile.rootBirth, 'guest-root')
+  assert.equal(profile.startRequestedMonoMs, 100); assert.equal(profile.stopRequestedMonoMs, 800)
+  assert.equal(profile.reason, 'title-complete'); assert.equal(await f.controller.start(), false)
+})
+
+test('failure before profile startup and closed protocol channels preserve product error ownership', async () => {
+  const f = profileFixture({ openSession: async () => { throw new Error('PRIVATE_PROTOCOL_BODY') } })
+  assert.equal(await f.controller.start(), false)
+  await f.controller.finish('failure')
+  assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.step === 'profiler-start'))
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_PROTOCOL_BODY'), false)
+  const early = profileFixture({ openSession: async () => { assert.fail('Must not attach after early failure') } })
+  await early.controller.finish('failure')
+  assert.equal(await early.controller.start(), false)
+})
+
+test('a pending session attachment is detached if it resolves after failure', async () => {
+  const attachment = deferred(), f = profileFixture({ openSession: () => attachment.promise })
+  const starting = f.controller.start()
+  await f.controller.finish('failure')
+  attachment.resolve(f.session)
+  assert.equal(await starting, false)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(f.calls, [['detach']])
+})
+
+test('pending enable cannot start a profiler after title completion', async () => {
+  const enabling = deferred(), f = profileFixture()
+  f.session.send = async method => { f.calls.push([method]); if (method === 'Profiler.enable') return enabling.promise; return {} }
+  const starting = f.controller.start()
+  await new Promise(resolve => setImmediate(resolve))
+  await f.controller.finish('title-complete')
+  enabling.resolve({})
+  assert.equal(await starting, false)
+  assert.deepEqual(f.calls.map(row => row[0]), ['Profiler.enable', 'detach'])
+})
+
+test('pending start, stop and detach are bounded and late profiles are ignored', async () => {
+  for (const blocked of ['Profiler.start', 'Profiler.stop', 'detach']) {
+    const pending = deferred(), f = profileFixture()
+    const send = f.session.send.bind(f.session)
+    f.session.send = async (method, params) => { if (method === blocked) { f.calls.push([method]); return pending.promise } return send(method, params) }
+    if (blocked === 'detach') f.session.detach = async () => { f.calls.push(['detach']); return pending.promise }
+    const started = Date.now()
+    await f.controller.start()
+    await f.controller.finish('failure')
+    assert.ok(Date.now() - started < 500, blocked + ' must not hold the workload indefinitely')
+    assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.kind === 'deadline'), blocked)
+    const profiles = f.events.filter(row => row.event === 'guest-cpu-profile').length
+    pending.resolve({ profile: { nodes: [], source: 'LATE_PRIVATE_BODY' } })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(f.events.filter(row => row.event === 'guest-cpu-profile').length, profiles)
+    assert.equal(f.calls.filter(row => row[0] === 'detach').length, 1)
+    assert.equal(JSON.stringify(f.events).includes('LATE_PRIVATE_BODY'), false)
+  }
+})
+
+test('the first prolonged title renderer probe samples only guest Tab and GPU once', async () => {
+  const f = profileFixture()
+  await f.controller.start()
+  f.setTime(5099); await f.controller.checkStall(100, 'title')
+  assert.deepEqual(f.sampled, [])
+  f.setTime(5100); await f.controller.checkStall(100, 'readyHub')
+  assert.deepEqual(f.sampled, [])
+  await Promise.all([f.controller.checkStall(100, 'title'), f.controller.checkStall(100, 'title')])
+  assert.deepEqual(f.sampled.sort(), [11, 12])
+  assert.equal(f.events.filter(row => row.event === 'guest-renderer-stall').length, 1)
+  const captures = f.events.filter(row => row.event === 'process-stack-sample')
+  assert.deepEqual(captures.map(row => row.birth).sort(), ['guest-gpu', 'guest-tab'])
+  assert.ok(captures.every(row => row.startedMonoMs === 5100 && row.rootPid === 10 && row.rootBirth === 'guest-root'))
+  await f.controller.finish('title-complete')
+  await f.controller.checkStall(0, 'title')
+  assert.equal(f.sampled.length, 2)
+})
+
+test('sampling rejects PID reuse, unrelated trees and closed guest channels', async () => {
+  for (const alter of [f => { f.rows[1].birth = 'reused-tab' }, f => { f.rows[1].ppid = 20 }, f => { f.rows[0].birth = 'reused-root' }, f => { f.guest.child.exitCode = 0 }]) {
+    const f = profileFixture()
+    await f.controller.start(); alter(f); f.setTime(5100)
+    await f.controller.checkStall(100, 'title')
+    assert.equal(f.sampled.includes(11), false)
+    await f.controller.finish('failure')
+  }
+  let f
+  f = profileFixture({ sampleProcess: async pid => { if (pid === 11) f.rows[1].birth = 'reused-during-sample'; return 'Call graph:\n    + 1 render (in Electron) + 1 [0x1234]\n' } })
+  await f.controller.start(); f.setTime(5100)
+  await f.controller.checkStall(100, 'title')
+  assert.equal(f.events.some(row => row.event === 'process-stack-sample' && row.pid === 11), false)
+  assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.kind === 'identity-changed'))
+  await f.controller.finish('failure')
+})
+
+test('observer launch registration does not depend on an attached Electron channel', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sdr-diag-register-test-'))
+  const observer = await createDesktopObserver(root)
+  try {
+    observer.launching('solo')
+    await observer.launched('solo', process.pid)
+  } finally { await observer.stop({ primaryError: null, cleanupErrors: [] }); await rm(root, { recursive: true, force: true }) }
+})
+
+test('observer closes guest profiling across disposed channels and ignores late stop payloads', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sdr-diag-profile-observer-test-'))
+  const observer = await createDesktopObserver(root)
+  const stopped = deferred(), calls = []
+  const child = { pid: process.pid, exitCode: null, signalCode: null }
+  let disposed = false
+  const profileSession = { async send(method) { calls.push(method); return method === 'Profiler.stop' ? stopped.promise : {} }, async detach() { calls.push('detach') } }
+  let sessions = 0
+  const page = { on() {}, context: () => ({ addInitScript: async () => {}, newCDPSession: async () => ++sessions === 1 ? { send: async () => ({ metrics: [] }) } : profileSession }) }
+  const app = { process() { if (disposed) throw new Error('Disposed Electron channel'); return child }, evaluate: async () => [] }
+  try {
+    observer.launching('guest')
+    await observer.launched('guest', child.pid)
+    await observer.attach({ label: 'guest', page, app })
+    await observer.beforeGuestNavigation(page)
+    assert.ok(calls.includes('Profiler.start'))
+    disposed = true; child.exitCode = 0
+    await observer.stop({ primaryError: null, cleanupErrors: [] })
+    const terminal = JSON.parse(await readFile(join(root, 'diagnostic-terminal.json'), 'utf8'))
+    assert.equal(terminal.status, 'diagnostic-instrumentation-failed')
+    assert.equal(terminal.primaryError, null)
+    assert.ok(terminal.instrumentationErrors.some(row => row.step === 'profiler-stop'))
+    const before = await readFile(join(root, 'telemetry.jsonl'), 'utf8')
+    stopped.resolve({ profile: { nodes: [], source: 'PRIVATE_LATE_STOP' } })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(await readFile(join(root, 'telemetry.jsonl'), 'utf8'), before)
+    assert.deepEqual(calls, ['Profiler.enable', 'Profiler.setSamplingInterval', 'Profiler.start', 'Profiler.stop', 'detach'])
+  } finally { await observer.stop({ primaryError: null, cleanupErrors: [] }); await rm(root, { recursive: true, force: true }) }
+})
+
+test('title shutdown drains the existing native sample and records sampling failures separately', async () => {
+  const pending = deferred(), f = profileFixture({ sampleProcess: async pid => {
+    if (pid === 12) throw new Error('NATIVE_PRIVATE_COMMAND_AND_PATH')
+    return pending.promise
+  } })
+  await f.controller.start(); f.setTime(5100)
+  const capture = f.controller.checkStall(100, 'title')
+  await new Promise(resolve => setImmediate(resolve))
+  let finished = false
+  const closing = f.controller.finish('cleanup').then(() => { finished = true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(finished, false, 'Exit proof must wait for the owned native sample')
+  pending.resolve('Call graph:\n    + 1 mach_msg (in libsystem_kernel.dylib) + 1 [0x1234]\n')
+  await Promise.all([capture, closing])
+  assert.equal(finished, true)
+  assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.step === 'native-sample' && row.pid === 12))
+  assert.equal(JSON.stringify(f.events).includes('NATIVE_PRIVATE_COMMAND_AND_PATH'), false)
+  await f.controller.checkStall(100, 'title')
+  assert.equal(f.events.filter(row => row.event === 'guest-renderer-stall').length, 1)
 })

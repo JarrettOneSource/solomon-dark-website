@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { availableParallelism, cpus, freemem, loadavg, totalmem } from 'node:os'
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks'
@@ -49,10 +49,153 @@ export function safeURL(raw) {
     return u.protocol + '//' + u.host + u.pathname
   } catch { return '[unparseable-url]' }
 }
+const scalar = (value, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
+const integer = (value, fallback = 0) => Number.isSafeInteger(value) ? value : fallback
+const stackSymbol = value => typeof value === 'string' && /^[A-Za-z_$~][A-Za-z0-9_$~:.]{0,199}$/.test(value) && redactDiagnosticText(value) === value ? value : '[omitted]'
+export function sanitizeCPUProfile(profile, bundledScripts) {
+  const nodes = Array.isArray(profile?.nodes) ? profile.nodes : []
+  const samples = Array.isArray(profile?.samples) ? profile.samples : []
+  const deltas = Array.isArray(profile?.timeDeltas) ? profile.timeDeltas : []
+  let remainingEdges = 20_000
+  const frame = raw => {
+    let url = ''
+    try {
+      const parsed = new URL(raw?.url)
+      if (parsed.protocol === 'solomon-darker:' && parsed.host === 'app' && bundledScripts.has(parsed.pathname)) {
+        const candidate = 'solomon-darker://app' + parsed.pathname
+        if (redactDiagnosticText(candidate) === candidate) url = candidate
+      }
+    } catch {}
+    const builtIn = ['(root)', '(program)', '(idle)', '(garbage collector)'].includes(raw?.functionName) && !raw?.url
+    return { functionName: builtIn ? raw.functionName : url ? stackSymbol(raw?.functionName) : '[omitted]',
+      url, lineNumber: integer(raw?.lineNumber, -1), columnNumber: integer(raw?.columnNumber, -1) }
+  }
+  return {
+    startTime: scalar(profile?.startTime), endTime: scalar(profile?.endTime),
+    nodes: nodes.slice(0, 10_000).map(node => {
+      const children = Array.isArray(node?.children) ? node.children.slice(0, remainingEdges).filter(Number.isSafeInteger) : []
+      remainingEdges -= children.length
+      return { id: integer(node?.id), hitCount: Math.max(0, integer(node?.hitCount)), children, callFrame: frame(node?.callFrame) }
+    }),
+    samples: samples.slice(0, 20_000).map(value => integer(value)),
+    timeDeltas: deltas.slice(0, Math.min(20_000, samples.length)).map(value => Math.max(0, scalar(value))),
+    truncated: { nodes: nodes.length > 10_000, samples: samples.length > 20_000 },
+  }
+}
+export function sanitizeNativeSample(raw) {
+  const text = String(raw)
+  const interval = /every ([\d.]+) millisecond/.exec(text)
+  const frames = []
+  let inGraph = false, truncated = false
+  for (const line of text.split('\n')) {
+    if (line.trim() === 'Call graph:') { inGraph = true; continue }
+    if (/^(Total number in stack|Binary Images|Sort by top of stack)/.test(line)) inGraph = false
+    if (!inGraph) continue
+    const match = /^\s*([+!:| ]*)(\d+) (.+?) \(in ([^)]+)\)(?: \+ (\d+))? \[0x[0-9a-fA-F]+\]\s*$/.exec(line)
+    if (!match) continue
+    if (frames.length === 4096) { truncated = true; break }
+    // Signatures, template arguments, addresses, thread labels and image paths are not retained.
+    const leadingOffset = / \+ (\d+)$/.exec(match[3])
+    const symbol = match[3].replace(/ \+ \d+$/, '').split(/[<(]/, 1)[0].trim()
+    frames.push({ depth: match[1].replace(/ /g, '').length, samples: +match[2], symbol: stackSymbol(symbol), offset: +(match[5] ?? leadingOffset?.[1] ?? 0) })
+  }
+  return { intervalMs: interval ? +interval[1] : null, frames, truncated }
+}
+export function createGuestTitleDiagnostics({ openSession, guest, identities, readRows, bundledScripts, record,
+  now = () => performance.now(), requestDeadlineMs = PROBE_MS,
+  sampleProcess = async pid => (await exec('/usr/bin/sample', [String(pid), '1', '1', '-file', '/dev/stdout'], { timeout: 2500, maxBuffer: 1024 * 1024 })).stdout,
+}) {
+  let session, starting, closing, detaching, finished = false, cancelled = false, startIssued = false, stallTaken = false, sampling
+  let startRequestedMonoMs = null
+  const profileIdentity = { target: 'guest-page', rootPid: guest.pid, rootBirth: identities.get(guest.pid) ?? null }
+  const failure = (step, kind, detail = {}) => record('instrumentation-error', { area: 'guest-title', step, kind, ...detail })
+  const bounded = async (action, step) => {
+    let timer
+    try {
+      const result = await Promise.race([
+        Promise.resolve().then(action).then(value => ({ ok: true, value }), () => ({ ok: false, kind: 'protocol-error' })),
+        new Promise(resolve => { timer = setTimeout(() => resolve({ ok: false, kind: 'deadline' }), requestDeadlineMs) }),
+      ])
+      if (!result.ok) failure(step, result.kind)
+      return result
+    } finally { clearTimeout(timer) }
+  }
+  const detach = () => detaching ??= bounded(() => session.detach(), 'profiler-detach')
+  const closeProfiler = reason => {
+    cancelled = true
+    return closing ??= (async () => {
+      if (session && startIssued) {
+        const stopRequestedMonoMs = now()
+        const result = await bounded(() => session.send('Profiler.stop'), 'profiler-stop')
+        if (result.ok && result.value?.profile) {
+          record('guest-cpu-profile', { ...profileIdentity, reason, samplingIntervalUs: 10_000, startRequestedMonoMs, stopRequestedMonoMs, stopResponseMonoMs: now(),
+            profile: sanitizeCPUProfile(result.value.profile, bundledScripts) })
+        } else if (result.ok) failure('profiler-stop', 'missing-profile')
+      }
+      if (session) await detach()
+      record('guest-profiler-finished', { reason, startIssued })
+    })()
+  }
+  const sampleStacks = async () => {
+    // Pin identities before any asynchronous sampling. Neither metrics nor a reused PID grant ownership.
+    const rootBirth = identities.get(guest.pid)
+    const selected = ['Tab', 'GPU'].map(type => (guest.metrics ?? []).find(row => row.type === type))
+    await Promise.all(selected.map(async metric => {
+      if (!metric) { failure('native-sample', 'missing-metric'); return }
+      const { pid, type } = metric, birth = identities.get(pid)
+      const matches = rows => rootBirth && birth && rows.some(row => row.pid === guest.pid && row.birth === rootBirth) &&
+        ownedForest(rows, [guest.pid]).some(row => row.pid === pid && row.birth === birth)
+      try {
+        if (guest.child.exitCode !== null || guest.child.signalCode !== null || !matches(await readRows())) {
+          failure('native-sample', 'ownership-unverified', { pid, type }); return
+        }
+        const startedMonoMs = now()
+        const raw = await sampleProcess(pid)
+        const endedMonoMs = now()
+        if (!matches(await readRows())) { failure('native-sample', 'identity-changed', { pid, type }); return }
+        const sample = sanitizeNativeSample(raw)
+        if (!sample.frames.length) { failure('native-sample', 'no-parsed-stacks', { pid, type }); return }
+        record('process-stack-sample', { pid, type, birth, rootPid: guest.pid, rootBirth, startedMonoMs, endedMonoMs, durationSeconds: 1, sample })
+      } catch { failure('native-sample', 'sample-unavailable', { pid, type }) }
+    }))
+  }
+  return {
+    start() {
+      if (finished || cancelled) return Promise.resolve(false)
+      return starting ??= (async () => {
+        const result = await bounded(async () => {
+          session = await openSession()
+          if (cancelled) { await detach(); return false }
+          await session.send('Profiler.enable')
+          if (cancelled) return false
+          await session.send('Profiler.setSamplingInterval', { interval: 10_000 })
+          if (cancelled) return false
+          startIssued = true; startRequestedMonoMs = now()
+          await session.send('Profiler.start')
+          if (cancelled) return false
+          record('guest-profiler-started', { ...profileIdentity, samplingIntervalUs: 10_000, startRequestedMonoMs, startResponseMonoMs: now() })
+          return true
+        }, 'profiler-start')
+        if (!result.ok) void closeProfiler('start-failed')
+        return result.ok && result.value === true
+      })()
+    },
+    checkStall(issuedMonoMs, phase) {
+      if (finished || !starting || stallTaken || phase !== 'title' || now() - issuedMonoMs < 5_000 || guest.child.exitCode !== null || guest.child.signalCode !== null) return Promise.resolve()
+      stallTaken = true
+      record('guest-renderer-stall', { outstandingProbeMs: now() - issuedMonoMs, issuedMonoMs, thresholdMs: 5_000 })
+      return sampling = sampleStacks()
+    },
+    async finish(reason) {
+      finished = true
+      await Promise.all([closeProfiler(reason), sampling])
+    },
+  }
+}
 export function installRendererTelemetry() {
   const state = {
     started: performance.now(), timers: 0, raf: 0, lastTimer: performance.now(), lastRaf: null,
-    maxTimerLagMs: 0, maxRafGapMs: 0, longTasks: { count: 0, duration: 0, max: 0 },
+    maxTimerLagMs: 0, maxRafGapMs: 0, longTasks: { count: 0, duration: 0, max: 0, entries: [], dropped: 0 },
     decodes: { started: 0, completed: 0, failed: 0, pending: {} },
     contextEvents: [], firstMenu: null, firstTutorial: null,
   }
@@ -103,6 +246,8 @@ export function installRendererTelemetry() {
       for (const item of list.getEntries()) {
         state.longTasks.count++; state.longTasks.duration += item.duration
         state.longTasks.max = Math.max(state.longTasks.max, item.duration)
+        if (state.longTasks.entries.length === 256) { state.longTasks.entries.shift(); state.longTasks.dropped++ }
+        state.longTasks.entries.push({ startTime: item.startTime, duration: item.duration })
       }
     }).observe({ type: 'longtask', buffered: true })
   } catch {}
@@ -158,7 +303,7 @@ export function locatorSnapshot(elements) {
     }
   })
 }
-export async function createDesktopObserver(evidence) {
+export async function createDesktopObserver(evidence, { applicationPath } = {}) {
   mkdirSync(evidence, { recursive: true })
   const file = join(evidence, 'telemetry.jsonl')
   const started = performance.now()
@@ -167,15 +312,33 @@ export async function createDesktopObserver(evidence) {
   const channels = new Map()
   const owned = new Map()
   const phaseTimers = new Map()
+  const instrumentationErrors = []
+  const bundledScripts = new Set()
   const loop = monitorEventLoopDelay({ resolution: 20 }); loop.enable()
-  let stopped = false, lastCpu = process.cpuUsage(), requestOrdinal = 0
+  let stopped = false, stopping, lastCpu = process.cpuUsage(), requestOrdinal = 0
   const clean = redactDiagnosticText
   const record = (event, data = {}) => {
     if (stopped) return
+    if (event === 'instrumentation-error' && instrumentationErrors.length < 100) instrumentationErrors.push(data)
     appendFileSync(file, clean(JSON.stringify({ utc: new Date().toISOString(), monoMs: performance.now() - started, event, ...data })) + '\n')
   }
+  if (applicationPath) {
+    try {
+      for (const entry of readdirSync(join(applicationPath, 'Solomon Darker.app/Contents/Resources/app/client/assets'), { withFileTypes: true })) {
+        if (entry.isFile() && /^[A-Za-z0-9_-]{1,160}\.js$/.test(entry.name)) bundledScripts.add('/assets/' + entry.name)
+      }
+      if (!bundledScripts.size) record('instrumentation-error', { area: 'guest-title', step: 'bundled-script-list', kind: 'empty' })
+    } catch { record('instrumentation-error', { area: 'guest-title', step: 'bundled-script-list', kind: 'read-unavailable' }) }
+  }
   const probe = async (channel, action) => {
-    if (channels.has(channel)) { record('probe-skipped-busy', { channel }); return null }
+    if (channels.has(channel)) {
+      record('probe-skipped-busy', { channel })
+      if (channel === 'guest:renderer') {
+        const guest = instances.find(item => item.label === 'guest')
+        void guest?.titleDiagnostic?.checkStall(channels.get(channel).issued - started, guest.phase)
+      }
+      return null
+    }
     const issued = performance.now()
     record('probe-issued', { channel })
     const pending = Promise.resolve().then(action).then(value => {
@@ -185,7 +348,7 @@ export async function createDesktopObserver(evidence) {
       record('probe-error', { channel, latencyMs: performance.now() - issued, error: clean(error?.message ?? error) })
       return null
     }).finally(() => channels.delete(channel))
-    channels.set(channel, pending)
+    channels.set(channel, { pending, issued })
     let timeout
     try {
       return await Promise.race([pending, new Promise(resolve => {
@@ -256,6 +419,10 @@ export async function createDesktopObserver(evidence) {
       record('launch-process-registered', { label, pid })
       await sampleProcesses()
     },
+    async beforeGuestNavigation(page) {
+      const item = instances.find(row => row.label === 'guest' && row.page === page)
+      await item?.titleDiagnostic?.start()
+    },
     async attach(instance) {
       // Playwright disposes its Electron channel on close; the ChildProcess handle remains valid.
       const child = instance.app.process()
@@ -289,6 +456,10 @@ export async function createDesktopObserver(evidence) {
         features: app.getGPUFeatureStatus(), info: await app.getGPUInfo('basic'), versions: process.versions,
       })))
       await sampleProcesses()
+      if (item.label === 'guest') item.titleDiagnostic = createGuestTitleDiagnostics({
+        openSession: () => item.page.context().newCDPSession(item.page), guest: item, identities: owned,
+        readRows, bundledScripts, record, now: () => performance.now() - started,
+      })
     },
     phase(page, name, timeoutMs) {
       const item = instances.find(row => row.page === page)
@@ -298,30 +469,25 @@ export async function createDesktopObserver(evidence) {
       record('phase-start', { label: item.label, phase: name, criterionTimeoutMs: timeoutMs, deadlineMonoMs: performance.now() - started + timeoutMs })
       phaseTimers.set(page, setTimeout(() => { void sampleAll(name + '-before-deadline') }, Math.max(0, timeoutMs - 10_000)))
     },
-    endPhase(page, name) {
+    async endPhase(page, name) {
       const item = instances.find(row => row.page === page)
       clearTimeout(phaseTimers.get(page)); phaseTimers.delete(page)
       record('phase-complete', { label: item?.label, phase: name })
+      if (item) item.phase = null
+      if (name === 'title') await item?.titleDiagnostic?.finish('title-complete')
     },
     async beforeFailure(error) {
       record('primary-error', { stack: clean(error?.stack ?? error) })
+      await Promise.all(instances.map(item => item.titleDiagnostic?.finish('failure')))
       await sampleAll('failure-before-any-screenshot')
-      const guest = instances.find(item => item.label === 'guest')
-      const selected = (guest?.metrics ?? []).filter(row => ['Tab', 'GPU'].includes(row.type)).slice(0, 2)
-      for (const row of selected) {
-        const current = (await readRows().catch(() => [])).find(item => item.pid === row.pid)
-        if (!current || owned.get(row.pid) !== current.birth) continue
-        try {
-          const { stdout, stderr } = await exec('/usr/bin/sample', [String(row.pid), '1', '1', '-file', '/dev/stdout'], { timeout: 2500, maxBuffer: 1024 * 1024 })
-          record('process-stack-sample', { pid: row.pid, type: row.type, sample: clean(stdout), stderr: clean(stderr) })
-        } catch (failure) { record('stack-sample-unavailable', { pid: row.pid, error: clean(failure.message) }) }
-      }
     },
     async beforeScreenshot(label) { await sampleAll('before-screenshot-' + label) },
     async cleanup(running, profiles, removeProfiles) {
       clearInterval(timer)
       for (const timer of phaseTimers.values()) clearTimeout(timer)
       phaseTimers.clear()
+      // Drain the task-owned sample subprocesses before proving that owned descendants exited.
+      await Promise.all(instances.map(item => item.titleDiagnostic?.finish('cleanup')))
       const failures = []
       const fail = (step, error) => { failures.push({ step, message: clean(error?.message ?? error) }); record('cleanup-error', failures.at(-1)) }
       const incompleteLaunches = [...launches].filter(([, value]) => value.pid === null).map(([label]) => label)
@@ -373,12 +539,15 @@ export async function createDesktopObserver(evidence) {
       return failures
     },
     stop(outcome) {
-      clearInterval(timer)
-      for (const timer of phaseTimers.values()) clearTimeout(timer)
-      phaseTimers.clear(); loop.disable()
-      record('diagnostic-terminal', { ...outcome, acceptance: false })
-      writeFileSync(join(evidence, 'diagnostic-terminal.json'), clean(JSON.stringify({ status: outcome.primaryError ? 'original-workload-failed' : outcome.cleanupErrors.length ? 'diagnostic-cleanup-failed' : 'diagnostic-completed', ...outcome, acceptance: false }, null, 2)) + '\n')
-      stopped = true
+      return stopping ??= (async () => {
+        clearInterval(timer)
+        for (const timer of phaseTimers.values()) clearTimeout(timer)
+        phaseTimers.clear(); loop.disable()
+        await Promise.all(instances.map(item => item.titleDiagnostic?.finish('observer-stop')))
+        record('diagnostic-terminal', { ...outcome, instrumentationErrors, acceptance: false })
+        writeFileSync(join(evidence, 'diagnostic-terminal.json'), clean(JSON.stringify({ status: outcome.primaryError ? 'original-workload-failed' : outcome.cleanupErrors.length ? 'diagnostic-cleanup-failed' : instrumentationErrors.length ? 'diagnostic-instrumentation-failed' : 'diagnostic-completed', ...outcome, instrumentationErrors, acceptance: false }, null, 2)) + '\n')
+        stopped = true
+      })()
     },
   }
   return api
