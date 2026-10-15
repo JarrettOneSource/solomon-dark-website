@@ -71,3 +71,59 @@ scene. `Game.tsx` still owns readiness and does not mount the title until the
 resident asset promise succeeds. The loader therefore remains a real work
 gate; only its browser painter changed. `NativeLoader.tsx` retains the live
 semantic percentage as a DOM status surface and paints no artwork.
+
+## 2026-10-15 — Coalesce redundant browser progress paints
+
+Unchanged-package Intel desktop diagnostics at Website
+`c20fd89cb98c3a76f0852305252f1a3ba06fd59a` reproduced the original 90-second
+guest-Title deadline failure. Run
+[38753814155](https://github.com/JarrettOneSource/solomon-dark-website/actions/runs/38753814155)
+attributed about 46.67 seconds of wall time to Pixi `GlContextSystem.destroy`
+when `NativeLoader` unmounted. Independent run
+[38761759417](https://github.com/JarrettOneSource/solomon-dark-website/actions/runs/38761759417)
+bracketed the loader context's `WEBGL_lose_context.loseContext()` call at
+61,849.8 ms (page time 41,616.6 to 103,466.4 ms); the preceding
+`useProgram(null)` took 0 ms. Loader frame count was 206, progress was
+257/258, and the RAF observer count was 49. No diagnostic event drops or
+unsupported instrumentation were reported.
+
+The second run also observed 76 loader draws (frame 68 to 144) while the RAF
+observer stayed at 45. Source inspection identifies the producer:
+`NativeLoader` synchronously calls `renderer.render` for every committed
+progress change, and that API immediately submits `application.render()`.
+These redundant submissions are confirmed; whether they cause the Intel
+context-destruction stall remains a hypothesis until an exact-package rerun.
+This is browser scheduling evidence, not new native reverse engineering.
+
+The bounded implementation contract is one pending RAF for progress paints,
+consuming the latest bounded progress when that frame runs. Renderer creation
+still paints immediately, including progress received during asynchronous
+creation. Native artwork, crop geometry, backing resolution, synchronous
+renderer API, resize visibility, readiness ownership and ordinary context
+destruction remain unchanged. Unmount cancels pending presentation before
+destroying the owned renderer; cancelled asynchronous creation destroys only
+its own result. Progress presentation must never delay Title readiness.
+
+Test-first evidence on the Mac mini: a real React/Chrome lifecycle test with
+controlled renderer/RAF boundaries observed all 117 separate progress commits
+being painted before any RAF delivery on the unmodified source. Coalescing,
+pending-frame cancellation and StrictMode coalescing assertions failed;
+latest initial paint, cancelled creation and visible creation-error controls
+passed. The GPU renderer is intentionally outside this focused test seam.
+
+Final acceptance additionally requires the exact candidate's full Mac
+`/opt/homebrew/bin/bash ./scripts/validate.sh`, real-renderer browser checks of
+the Loader art/progress/resize/teardown and Title transition, and the original
+Intel packaged-desktop startup gate with its unchanged 90-second deadline and
+all existing assertions. A passing component test alone does not establish
+that the Intel failure is fixed. Keep before/after package identity, render
+counts, timing and teardown attribution with those receipts.
+
+Focused candidate receipt: all eight real React/Chrome lifecycle cases pass,
+including resize during a queued paint, stale callbacks across remount, late
+creation, StrictMode replay and unchanged creation-error presentation. This
+test runs through the existing `test:native-ui` entry (164 tests passed), so the
+canonical gate invokes it. The 23 existing Loader/viewport/asset-readiness
+contracts, TypeScript project build, frontend lint and whitespace checks also
+passed. No dependency, renderer, asset or desktop-smoke assertion changed.
+Real-renderer and final packaged-Intel acceptance remain open at this receipt.

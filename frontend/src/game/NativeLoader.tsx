@@ -31,6 +31,7 @@ export default function NativeLoader({
   const stageRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<LoaderRenderer | null>(null)
+  const renderFrameRef = useRef<number | null>(null)
   const progressRef = useRef(progress)
   const viewportRef = useRef(fixedGameViewportLayout(
     GAME_VIEWPORT_MIN_WIDTH,
@@ -83,13 +84,24 @@ export default function NativeLoader({
     })
     return () => {
       cancelled = true
+      if (renderFrameRef.current !== null) {
+        cancelAnimationFrame(renderFrameRef.current)
+        renderFrameRef.current = null
+      }
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
   }, [])
 
   useEffect(() => {
-    rendererRef.current?.render(boundedProgress)
+    const renderer = rendererRef.current
+    if (!renderer || renderFrameRef.current !== null) return
+    // Asset completions can commit many progress updates between browser frames.
+    renderFrameRef.current = requestAnimationFrame(() => {
+      if (rendererRef.current !== renderer) return
+      renderFrameRef.current = null
+      renderer.render(progressRef.current)
+    })
   }, [boundedProgress])
 
   return (
