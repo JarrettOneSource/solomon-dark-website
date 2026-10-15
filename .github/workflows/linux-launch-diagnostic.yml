@@ -1,0 +1,183 @@
+# Diagnostic only. Publication is owned by the coordinator; do not edit Validate.
+name: Linux launch handshake diagnostic (not release acceptance)
+
+on:
+  push:
+    branches:
+      - codex/diagnose-intel-c20-sh9aksle
+    paths:
+      - .github/workflows/linux-launch-diagnostic.yml
+      - tools/diagnostics/linux-launch-diagnostic.mjs
+      - tools/diagnostics/linux-launch-diagnostic.test.mjs
+      - tools/diagnostics/linux-launch-observer.mjs
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  observe-linux-launch:
+    name: Observe Linux second launch (diagnostic only)
+    if: github.repository == 'JarrettOneSource/solomon-dark-website' && github.ref == 'refs/heads/codex/diagnose-intel-c20-sh9aksle'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECTED_REVISION: c20fd89cb98c3a76f0852305252f1a3ba06fd59a
+      EXPECTED_ARTIFACT_ID: '11916140735'
+      EXPECTED_ARTIFACT_DIGEST: 057c452995a6cee268baf89bcfe41fed4a10a2313d88d0dd2b1441235b70efd0
+      SDR_SOURCE_ROOT: ${{ github.workspace }}/product
+      SDR_DESKTOP_APP: ${{ runner.temp }}/linux-package/Solomon Darker-linux-x64
+      SDR_DESKTOP_EVIDENCE: ${{ runner.temp }}/linux-launch-evidence
+      SDR_DIAGNOSTIC_RUNTIME: ${{ runner.temp }}/linux-launch-runtime
+    steps:
+      - name: Check out only diagnostic tools
+        uses: actions/checkout@v6
+        with:
+          path: diagnostic-tools
+          persist-credentials: false
+          sparse-checkout: |
+            tools/diagnostics
+            .github/workflows/linux-launch-diagnostic.yml
+          sparse-checkout-cone-mode: false
+      - name: Check out immutable product source
+        uses: actions/checkout@v6
+        with:
+          ref: c20fd89cb98c3a76f0852305252f1a3ba06fd59a
+          path: product
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.17.0'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Prepare separate evidence and verify source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SDR_DESKTOP_EVIDENCE" "$SDR_DIAGNOSTIC_RUNTIME" "$RUNNER_TEMP/linux-package"
+          test "$(git -C product rev-parse HEAD)" = "$EXPECTED_REVISION"
+          test -z "$(git -C product status --porcelain)"
+          {
+            date -u
+            uname -srm
+            node --version
+            printenv ImageOS ImageVersion
+          } > "$SDR_DESKTOP_EVIDENCE/runner.txt"
+      - name: Download and verify exact already-passing Linux package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/JarrettOneSource/solomon-dark-website/actions/artifacts/$EXPECTED_ARTIFACT_ID" > "$SDR_DESKTOP_EVIDENCE/artifact-api.json"
+          gh api "repos/JarrettOneSource/solomon-dark-website/actions/jobs/115997319456" > "$SDR_DESKTOP_EVIDENCE/original-passing-job.json"
+          gh api "repos/JarrettOneSource/solomon-dark-website/actions/artifacts/$EXPECTED_ARTIFACT_ID/zip" > "$RUNNER_TEMP/linux-artifact.zip"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, posixpath, re, stat, subprocess, zipfile
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          evidence = pathlib.Path(os.environ["SDR_DESKTOP_EVIDENCE"])
+          meta = json.loads((evidence / "artifact-api.json").read_text())
+          passed = json.loads((evidence / "original-passing-job.json").read_text())
+          expected = os.environ["EXPECTED_ARTIFACT_DIGEST"]
+          revision = os.environ["EXPECTED_REVISION"]
+          assert passed["id"] == 115997319456 and passed["run_id"] == 38606111614
+          assert passed["head_sha"] == revision and passed["conclusion"] == "success"
+          assert passed["name"] == "Desktop (linux-x64)"
+          assert any(s["name"] == "Verify packaged offline save and peer gameplay" and s["conclusion"] == "success" for s in passed["steps"])
+          assert meta["id"] == int(os.environ["EXPECTED_ARTIFACT_ID"])
+          assert meta["name"] == "desktop-linux-x64" and not meta["expired"]
+          assert meta["workflow_run"]["id"] == 38606111614
+          assert meta["workflow_run"]["head_sha"] == revision
+          assert meta["digest"] == "sha256:" + expected
+          archive = root / "linux-artifact.zip"
+          digest = hashlib.file_digest(archive.open("rb"), "sha256").hexdigest()
+          assert digest == expected
+          extracted = root / "linux-artifact"
+          extracted.mkdir()
+          with zipfile.ZipFile(archive) as bundle:
+              for item in bundle.infolist():
+                  path = pathlib.PurePosixPath(item.filename)
+                  assert not path.is_absolute() and ".." not in path.parts
+                  assert not stat.S_ISLNK(item.external_attr >> 16)
+              bundle.extractall(extracted)
+          zips = list(extracted.rglob("Solomon-Darker-linux-x64.zip"))
+          assert len(zips) == 1
+          inner = zips[0]
+          checksum = pathlib.Path(str(inner) + ".sha256").read_text().strip()
+          match = re.fullmatch(r"([0-9a-f]{64})\s+Solomon-Darker-linux-x64.zip", checksum)
+          assert match
+          inner_digest = hashlib.file_digest(inner.open("rb"), "sha256").hexdigest()
+          assert inner_digest == match[1]
+          with zipfile.ZipFile(inner) as bundle:
+              for item in bundle.infolist():
+                  path = pathlib.PurePosixPath(item.filename)
+                  assert not path.is_absolute() and ".." not in path.parts
+                  assert path.parts[0] == "Solomon Darker-linux-x64"
+                  if stat.S_ISLNK(item.external_attr >> 16):
+                      target = bundle.read(item).decode("utf-8")
+                      assert not target.startswith("/")
+                      resolved = posixpath.normpath(str(path.parent / target))
+                      assert resolved.startswith("Solomon Darker-linux-x64/")
+          subprocess.run(["unzip", "-q", str(inner), "-d", str(root / "linux-package")], check=True)
+          app = pathlib.Path(os.environ["SDR_DESKTOP_APP"])
+          manifest = json.loads((app / "desktop-package-manifest.json").read_text())
+          assert manifest["revision"] == revision
+          assert manifest["platform"] == "linux" and manifest["arch"] == "x64"
+          assert manifest["electronVersion"] == "43.4.0"
+          assert manifest["nodeRuntime"]["version"] == "22.17.0"
+          assert manifest["executable"] == "solomon-darker"
+          assert (app / manifest["executable"]).is_file()
+          assert os.access(app / manifest["executable"], os.X_OK)
+          (evidence / "verified-package.json").write_text(json.dumps({
+              "acceptance": False, "diagnostic": True, "artifactId": meta["id"],
+              "originalPassingJob": passed["id"], "artifactDigest": digest,
+              "innerArchiveDigest": inner_digest, "manifest": manifest,
+          }, indent=2) + "\n")
+          PY
+      - name: Install pinned observer dependencies without product builds
+        working-directory: product/frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.2
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check metadata observer and exact prefix without launching
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$GITHUB_WORKSPACE/diagnostic-tools/tools/diagnostics"
+          node --check "$tools/linux-launch-observer.mjs"
+          node --check "$tools/linux-launch-diagnostic.mjs"
+          node --test "$tools/linux-launch-diagnostic.test.mjs"
+          python3 "$tools/package-inventory.py" "$SDR_DESKTOP_APP" "$SDR_DESKTOP_EVIDENCE/package-files-before.json"
+          python3 "$tools/package-inventory.py" "$SDR_SOURCE_ROOT/frontend/node_modules/playwright-core" "$SDR_DESKTOP_EVIDENCE/playwright-files-before.json"
+      - name: Observe original solo save close and second launch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a node "$GITHUB_WORKSPACE/diagnostic-tools/tools/diagnostics/linux-launch-diagnostic.mjs" --run
+      - name: Verify immutable package and dependency bytes after observation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$GITHUB_WORKSPACE/diagnostic-tools/tools/diagnostics"
+          if [[ -f "$SDR_DESKTOP_EVIDENCE/package-files-before.json" ]]; then
+            python3 "$tools/package-inventory.py" "$SDR_DESKTOP_APP" "$SDR_DESKTOP_EVIDENCE/package-files-after.json"
+            cmp "$SDR_DESKTOP_EVIDENCE/package-files-before.json" "$SDR_DESKTOP_EVIDENCE/package-files-after.json"
+          fi
+          if [[ -f "$SDR_DESKTOP_EVIDENCE/playwright-files-before.json" ]]; then
+            python3 "$tools/package-inventory.py" "$SDR_SOURCE_ROOT/frontend/node_modules/playwright-core" "$SDR_DESKTOP_EVIDENCE/playwright-files-after.json"
+            cmp "$SDR_DESKTOP_EVIDENCE/playwright-files-before.json" "$SDR_DESKTOP_EVIDENCE/playwright-files-after.json"
+          fi
+          test "$(git -C product rev-parse HEAD)" = "$EXPECTED_REVISION"
+          test -z "$(git -C product status --porcelain)"
+      - name: Retain metadata-only diagnostic evidence separately
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-launch-diagnostic-not-acceptance-${{ github.run_id }}
+          path: ${{ runner.temp }}/linux-launch-evidence
+          if-no-files-found: error
+          retention-days: 14
