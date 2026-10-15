@@ -15,7 +15,7 @@ const METHODS = new Set([
   'Page.enable', 'Page.getFrameTree', 'Page.setLifecycleEventsEnabled', 'Page.addScriptToEvaluateOnNewDocument',
   'Page.createIsolatedWorld', 'Page.setInterceptFileChooserDialog', 'Page.frameAttached', 'Page.frameDetached',
   'Page.frameNavigated', 'Page.navigatedWithinDocument', 'Page.lifecycleEvent', 'Page.loadEventFired',
-  'Page.domContentEventFired', 'Page.windowOpen', 'Page.screencastFrame', 'Page.captureScreenshot',
+  'Page.domContentEventFired', 'Page.windowOpen', 'Page.screencastFrame', 'Page.getLayoutMetrics', 'Page.captureScreenshot',
   'Emulation.setFocusEmulationEnabled', 'Emulation.setEmulatedMedia', 'Emulation.setDeviceMetricsOverride',
   'Emulation.setTouchEmulationEnabled', 'Network.enable', 'Network.setCacheDisabled', 'Network.setBypassServiceWorker',
   'Network.requestWillBeSent', 'Network.responseReceived', 'Network.loadingFailed', 'Network.loadingFinished',
@@ -27,25 +27,35 @@ const STAGES = new Set([
   'browser-connect-ready', 'electron-initialize-start', 'node-runtime-enabled', 'electron-initialize-ready',
   'page-initialize-start', 'page-initialize-ready', 'first-noninitial-navigation-wait',
   'first-noninitial-navigation-ready', 'first-noninitial-navigation-failed',
-  'solo-host-exited', 'second-launch-resolved',
+  'solo-host-exited', 'second-launch-resolved', 'peer-boneyard-ready',
+  'peer-capture-start', 'peer-capture-complete', 'workload-complete',
 ])
 const validLabel = label => {
-  assert.ok(label === 'solo' || label === 'resume', 'Unexpected diagnostic launch label')
+  assert.ok(['solo', 'resume', 'host', 'guest'].includes(label), 'Unexpected diagnostic launch label')
   return label
 }
 const safeError = error => ['TimeoutError', 'AssertionError', 'Error', 'AggregateError'].includes(error?.name) ? error.name : 'other'
 const identity = row => row.pid + ':' + row.startTicks
 const safeInteger = value => Number.isSafeInteger(value) && value >= 0 ? value : null
 
+const CAPTURE_METHODS = new Set(['Page.getLayoutMetrics', 'Page.captureScreenshot'])
+export const CAPTURE_LIMITS = Object.freeze({ intervalMs: 1000, ticks: 65, processesPerTick: 128 })
+
 export function createProtocolRecorder(write) {
   let launch = 'solo'
   const pending = new Map()
   const active = new Set()
+  const launching = new Set()
+  let startupRecords = 0
+  let captureRecords = 0
+  const dropped = { sessionLimit: 0, recordLimit: 0, pendingLimit: 0 }
   const stamp = () => ({ at: new Date().toISOString(), monotonicMs: Math.round(performance.now() * 1000) / 1000 })
   return {
-    begin(label) { launch = validLabel(label); active.add(label) },
-    end(label) { active.delete(validLabel(label)) },
+    begin(label) { launch = validLabel(label); active.add(label); launching.add(label) },
+    launched(label) { launching.delete(validLabel(label)) },
+    end(label) { active.delete(validLabel(label)); launching.delete(label) },
     pending: () => [...pending.values()].map(row => ({ ...row })),
+    limits: () => ({ ...dropped }),
     logger(channel) {
       assert.ok(channel === 'node' || channel === 'chrome')
       const owner = launch
@@ -56,15 +66,31 @@ export function createProtocolRecorder(write) {
         if (!message || typeof message !== 'object') return
         const id = safeInteger(message.id)
         const rawSession = typeof message.sessionId === 'string' ? message.sessionId : ''
-        if (!sessions.has(rawSession)) sessions.set(rawSession, 's' + sessions.size)
+        if (!sessions.has(rawSession)) {
+          if (sessions.size >= 64) { dropped.sessionLimit++; return }
+          sessions.set(rawSession, 's' + sessions.size)
+        }
         const session = sessions.get(rawSession)
         const key = owner + ':' + channel + ':' + session + ':' + id
+        const request = pending.get(key)
         const method = direction === 'receive' && id !== null
-          ? pending.get(key)?.method ?? 'other'
+          ? request?.method ?? 'other'
           : METHODS.has(message.method) ? message.method : 'other'
-        const row = { ...stamp(), event: 'protocol', launch: owner, channel, direction, id, method, session }
-        if (direction === 'send' && id !== null) pending.set(key, row)
+        const capture = CAPTURE_METHODS.has(method)
+        if (!capture && !launching.has(owner) && !request) return
         if (direction === 'receive' && id !== null) pending.delete(key)
+        // Reserve a separate budget so startup traffic cannot consume capture evidence.
+        if (capture ? captureRecords++ >= 256 : startupRecords++ >= 4096) { dropped.recordLimit++; return }
+        const time = stamp()
+        const row = {
+          ...time, event: 'protocol', launch: owner, channel, direction, id, method, session,
+          outcome: direction === 'send' ? 'pending' : id === null ? 'event' : message.error ? 'error' : 'ok',
+          durationMs: request && direction === 'receive' ? Math.max(0, time.monotonicMs - request.monotonicMs) : null,
+        }
+        if (direction === 'send' && id !== null) {
+          if (pending.size < 256) pending.set(key, row)
+          else dropped.pendingLimit++
+        }
         write(row)
       }
     },
@@ -78,8 +104,10 @@ export function parseProcStat(text) {
   assert.ok(end > 0 && safeInteger(pid) !== null && fields.length >= 20)
   const [state, ppid, pgid, sid] = fields
   const startTicks = fields[19]
+  assert.ok([fields[11], fields[12]].every(value => /^\d{1,30}$/.test(value)))
+  const cpuTicks = (BigInt(fields[11]) + BigInt(fields[12])).toString()
   assert.ok(/^\d{1,30}$/.test(startTicks) && /^[RSDZTWtXxKPI]$/.test(state))
-  const row = { pid, ppid: Number(ppid), pgid: Number(pgid), sid: Number(sid), startTicks, state }
+  const row = { pid, ppid: Number(ppid), pgid: Number(pgid), sid: Number(sid), startTicks, state, cpuTicks }
   assert.ok([row.ppid, row.pgid, row.sid].every(x => safeInteger(x) !== null))
   return row
 }
@@ -114,7 +142,40 @@ function procRows() {
   })
 }
 
-export function createLinuxLaunchObserver({ outputDirectory, executable, readProcesses = procRows, signal = process.kill.bind(process), poll = true }) {
+export function parseProcessRole(commandLine) {
+  const fields = commandLine.split('\0')
+  if (fields.includes('--type=renderer')) return 'renderer'
+  if (fields.includes('--type=gpu-process')) return 'gpu'
+  return 'other'
+}
+
+function procRole(pid) {
+  try { return parseProcessRole(readFileSync('/proc/' + pid + '/cmdline', 'utf8')) }
+  catch { return 'unavailable' }
+}
+
+// The page projects only these primitive fields before returning over CDP.
+function readFrameProgress() {
+  const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+  return {
+    frameCount: Number.isSafeInteger(frame?.frameCount) && frame.frameCount >= 0 ? frame.frameCount : null,
+    playerCount: Number.isSafeInteger(frame?.playerCount) && frame.playerCount >= 0 ? frame.playerCount : null,
+    visibility: document.visibilityState === 'visible' ? 'visible' : document.visibilityState === 'hidden' ? 'hidden' : 'other',
+    hidden: document.hidden === true, focused: document.hasFocus() === true,
+    rendererReady: !!document.querySelector('.boneyard-scene[data-renderer-state="ready"]'),
+    overlayPresent: !!document.querySelector('.gameplay-resume-progress-overlay'),
+  }
+}
+
+function safeFrameProgress(value) {
+  return {
+    frameCount: safeInteger(value?.frameCount), playerCount: safeInteger(value?.playerCount),
+    visibility: ['visible', 'hidden'].includes(value?.visibility) ? value.visibility : 'other',
+    ...Object.fromEntries(['hidden', 'focused', 'rendererReady', 'overlayPresent'].map(key => [key, typeof value?.[key] === 'boolean' ? value[key] : null])),
+  }
+}
+
+export function createLinuxLaunchObserver({ outputDirectory, executable, readProcesses = procRows, readProcessRole = procRole, signal = process.kill.bind(process), poll = true }) {
   const eventsPath = join(outputDirectory, 'launch-events.jsonl')
   let infrastructureFailed = false
   const write = row => {
@@ -126,6 +187,9 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
   let secondStarted = false
   let failure = null
   let known = []
+  let capture = null
+  let captureOwner = null
+  let workloadComplete = false
   const roots = []
   const children = new Map()
   const apps = new Map()
@@ -134,11 +198,26 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     at: new Date().toISOString(), monotonicMs: Math.round(performance.now() * 1000) / 1000,
     event, launch, ...data,
   })
-  const sample = () => {
+  const sample = (progress = false) => {
     let all
     try { all = readProcesses() }
     catch { infrastructureFailed = true; record('process-scan-failed'); return [] }
-    const current = ownedProcesses(all, roots, known)
+    const current = roots.flatMap(root => ownedProcesses(all, [root], known.filter(row => row.owner === root.owner)).map(row => {
+      const prior = known.find(old => identity(old) === identity(row))
+      const role = ['renderer', 'gpu'].includes(prior?.role) ? prior.role : readProcessRole(row.pid)
+      return { ...row, owner: root.owner, role: ['renderer', 'gpu', 'other'].includes(role) ? role : 'unavailable' }
+    })).sort((a, b) => a.pid - b.pid)
+    if (progress) {
+      for (const row of current.filter(row => ['renderer', 'gpu'].includes(row.role)).slice(0, CAPTURE_LIMITS.processesPerTick)) {
+        const prior = capture?.cpu.get(identity(row))
+        const ticks = typeof row.cpuTicks === 'string' && /^\d{1,31}$/.test(row.cpuTicks) ? row.cpuTicks : null
+        record('capture-process-progress', {
+          owner: row.owner, pid: row.pid, startTicks: row.startTicks, role: row.role, state: row.state,
+          cpuTicks: ticks, deltaCpuTicks: prior !== undefined && ticks !== null && BigInt(ticks) >= BigInt(prior) ? (BigInt(ticks) - BigInt(prior)).toString() : null,
+        })
+        if (ticks !== null) capture?.cpu.set(identity(row), ticks)
+      }
+    }
     const oldIds = new Set(known.map(identity))
     const newIds = new Set(current.map(identity))
     for (const row of current) if (!oldIds.has(identity(row))) record('process-observed', row)
@@ -157,6 +236,38 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
       catch (error) { if (error.code !== 'ESRCH') { infrastructureFailed = true; record('cleanup-signal-failed', { pid: now.pid }) } }
     }
   }
+  const captureStop = () => {
+    if (!capture) return
+    const stopped = capture
+    capture = null
+    clearInterval(stopped.timer)
+    record('capture-observation-stop', {
+      ticks: stopped.ticks,
+      probes: stopped.peers.map(peer => ({ owner: peer.label, started: peer.started, completed: peer.completed, pending: peer.pendingAt !== null })),
+    })
+  }
+  const captureTick = () => {
+    const current = capture
+    if (!current) return
+    if (current.ticks >= CAPTURE_LIMITS.ticks) { captureStop(); return }
+    current.ticks++
+    const scanStart = performance.now()
+    sample(true)
+    record('capture-process-scan', { durationMs: Math.max(0, performance.now() - scanStart) })
+    for (const peer of current.peers) {
+      if (peer.pendingAt !== null) continue
+      peer.pendingAt = performance.now()
+      peer.started++
+      record('capture-frame-probe-start', { owner: peer.label, sample: peer.started })
+      // Never await this probe in the workload or queue a second while it is pending.
+      Promise.resolve().then(() => peer.page.evaluate(readFrameProgress)).then(value => {
+        if (capture !== current) return
+        record('capture-frame-progress', { owner: peer.label, sample: peer.started, durationMs: Math.max(0, performance.now() - peer.pendingAt), ...safeFrameProgress(value) })
+      }, error => {
+        if (capture === current) record('capture-frame-probe-failed', { owner: peer.label, errorKind: safeError(error) })
+      }).finally(() => { peer.pendingAt = null; peer.completed++ })
+    }
+  }
   const timer = poll ? setInterval(sample, 250) : null
   timer?.unref()
   record('observer-start', { acceptance: false, diagnostic: true, driverPid: process.pid })
@@ -169,9 +280,12 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
       sample()
     },
     logger: protocol.logger,
-    stage(stage) {
+    stage(stage, owner = launch) {
       assert.ok(STAGES.has(stage), 'Unknown diagnostic stage')
-      record('stage', { stage })
+      record('stage', { stage, owner: validLabel(owner) })
+      if (stage === 'peer-capture-start') captureOwner = owner
+      if (stage === 'peer-capture-complete') captureOwner = null
+      if (stage === 'workload-complete') workloadComplete = true
       if (stage === 'second-launch-resolved') secondResolved = true
       if (stage === 'solo-host-exited') sample()
     },
@@ -185,7 +299,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
         catch { infrastructureFailed = true; record('spawn-identity-read-failed', { pid: safeInteger(child.pid) }) }
       }
       if (root && root.pgid === root.pid && root.sid === root.pid) {
-        roots.push(root)
+        roots.push({ ...root, owner })
         record('spawn-owned', root)
         sample()
       } else {
@@ -204,7 +318,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     },
     returned(label, app) {
       apps.set(validLabel(label), app)
-      protocol.end(label)
+      protocol.launched(label)
       if (!children.has(label) || children.get(label).pid !== app.process().pid) {
         infrastructureFailed = true
         record('returned-ownership-unproven', { owner: label })
@@ -212,16 +326,29 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
       record('launch-resolved', { owner: label })
       sample()
     },
+    captureStart(instances) {
+      assert.equal(capture, null)
+      assert.deepEqual(instances.map(instance => instance.label), ['host', 'guest'])
+      for (const instance of instances) assert.equal(apps.get(instance.label), instance.app, 'Capture owner must be a registered app')
+      capture = { ticks: 0, timer: null, cpu: new Map(), peers: instances.map(instance => ({ ...instance, pendingAt: null, started: 0, completed: 0 })) }
+      record('capture-observation-start', { limits: CAPTURE_LIMITS })
+      capture.timer = setInterval(captureTick, CAPTURE_LIMITS.intervalMs)
+      capture.timer.unref()
+      captureTick()
+    },
+    captureStop,
     noise(kind) {
       assert.ok(['main-stderr', 'request-failed', 'page-error', 'console-error'].includes(kind))
       record('application-event', { kind })
     },
     failure(error) {
       failure = safeError(error)
-      record('workload-failed', { errorKind: failure, pending: protocol.pending() })
+      record('workload-failed', { errorKind: failure, captureOwner, pending: protocol.pending(), protocolLimits: protocol.limits() })
+      captureStop()
       sample()
     },
     async cleanup(profiles, removeProfiles) {
+      captureStop()
       let cleanupFailed = false
       try {
         for (const [label, app] of apps) {
@@ -247,16 +374,16 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
         } else cleanupFailed = true
         const result = {
           acceptance: false, diagnostic: true, secondLaunch: secondResolved ? 'resolved' : secondStarted ? 'failed-before-resolution' : 'not-reached',
-          failureKind: failure, processOwnershipProven: roots.length === children.size && !infrastructureFailed,
+          failureKind: failure, captureOwner, workloadComplete, processOwnershipProven: roots.length === children.size && !infrastructureFailed,
           processExitProven: !survivors.length && !infrastructureFailed,
           processProofScope: 'Registered exclusive Linux sessions and observed descendants only. Unobserved children that create a new session are outside this proof.',
-          cleanupFailed, survivors, pending: protocol.pending(),
+          cleanupFailed, survivors, pending: protocol.pending(), protocolLimits: protocol.limits(),
         }
         try { writeFileSync(join(outputDirectory, 'launch-outcome.json'), JSON.stringify(result, null, 2) + '\n') }
         catch { infrastructureFailed = true }
         record('observer-stop', { secondResolved, cleanupFailed, survivingProcesses: survivors.length })
         return !cleanupFailed && !infrastructureFailed
-      } finally { clearInterval(timer) }
+      } finally { clearInterval(timer); for (const label of apps.keys()) protocol.end(label) }
     },
   }
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { cp, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const REVISION = 'c20fd89cb98c3a76f0852305252f1a3ba06fd59a'
@@ -66,46 +66,40 @@ export function instrumentPlaywright(original) {
   return source
 }
 
-export function instrumentHarness(original, observerURL, playwrightURL) {
+export function instrumentHarness(original, observerURL, playwrightURL, captureDirectory) {
   assert.equal(hash(original), HARNESS_SHA256, 'Unrecognized acceptance harness')
-  const secondLaunch = "  const resumed = await launch('resume', join(profiles, 'solo'))"
-  const end = original.indexOf(secondLaunch) + secondLaunch.length
-  assert.ok(end > secondLaunch.length)
+  assert.ok(typeof captureDirectory === 'string' && isAbsolute(captureDirectory), 'A separate transient capture directory is required')
+  const catchStart = original.indexOf('} catch (error) {')
   const launchStart = original.indexOf('\nasync function launch')
-  const readSaveStart = original.indexOf('\nasync function readSave')
-  const hostStart = original.indexOf('\nasync function hostProcess')
-  const updateStart = original.indexOf('\nasync function proveUpdatePrompt')
-  const closeStart = original.indexOf('\nasync function close')
-  const portStart = original.indexOf('\nasync function freePort')
-  assert.ok(launchStart > end && readSaveStart > launchStart && hostStart > readSaveStart && updateStart > hostStart && closeStart > updateStart && portStart > closeStart)
-  let source = original.slice(0, end) + '\n' + [
+  assert.ok(catchStart > 0 && launchStart > catchStart)
+  let source = original.slice(0, catchStart) + [
     '} catch (error) {',
     '  diagnostics.failure(error)',
     '  process.exitCode = 1',
     '} finally {',
     '  if (!await diagnostics.cleanup(profiles, rm)) process.exitCode = 1',
+    '  await rm(evidence, { recursive: true, force: true })',
     '}',
-  ].join('\n') + '\n' + original.slice(launchStart, readSaveStart) + original.slice(hostStart, updateStart) + original.slice(closeStart, portStart)
+  ].join('\n') + '\n' + original.slice(launchStart)
   source = 'import { createLinuxLaunchObserver } from ' + JSON.stringify(observerURL) + '\n' + source
   const replace = (before, after) => { source = replaceOnce(source, before, after) }
   replace("from 'playwright-core'", 'from ' + JSON.stringify(playwrightURL))
+  // Keep the original screenshot calls and bytes; their transient directory is never uploaded.
+  replace("const evidence = resolve(process.env.SDR_DESKTOP_EVIDENCE || 'reports/desktop-smoke')",
+    'const evidence = ' + JSON.stringify(captureDirectory))
   replace('const receipts = { platform: process.platform, revision: manifest.revision }', [
-    'const diagnostics = createLinuxLaunchObserver({ outputDirectory: evidence, executable })',
+    'const receipts = { platform: process.platform, revision: manifest.revision }',
+    'const diagnostics = createLinuxLaunchObserver({ outputDirectory: resolve(process.env.SDR_DESKTOP_EVIDENCE), executable })',
     HOOK + ' = diagnostics',
   ].join('\n'))
-  replace('  await waitForExit(child.pid)', '  await waitForExit(child.pid)\n  diagnostics.stage("solo-host-exited")')
+  replace('  await waitForExit(child.pid)', '  await waitForExit(child.pid)\n  diagnostics.stage("solo-host-exited", "solo")')
   replace('async function launch(label, userData) {', 'async function launch(label, userData) {\n  diagnostics.begin(label)')
-  // Keep the original renderer capture operation, but discard image bytes.
-  for (const name of ['launcher', 'solo']) replace("await solo.page.screenshot({ path: join(evidence, '" + name + ".png') })", 'await solo.page.screenshot()')
   const tick = String.fromCharCode(96)
   const field = name => '$' + '{' + name + '}'
   const stderr = "  app.process().stderr.on('data', chunk => process.stderr.write(" + tick + field('label') + ' main: ' + field('chunk') + tick + '))'
   replace(stderr, [
     '  diagnostics.returned(label, app)',
-    '  if (label === "resume") {',
-    '    diagnostics.stage("second-launch-resolved")',
-    '    return { app, label }',
-    '  }',
+    '  if (label === "resume") diagnostics.stage("second-launch-resolved", label)',
     '  app.process().stderr.on("data", () => diagnostics.noise("main-stderr"))',
   ].join('\n'))
   replace("  page.on('requestfailed', request => process.stderr.write(" + tick + field('label') + ' request: ' + field('request.url()') + ' ' + field('request.failure()?.errorText') + '\\n' + tick + '))',
@@ -114,12 +108,23 @@ export function instrumentHarness(original, observerURL, playwrightURL) {
     '  page.on("pageerror", () => { errors.push(label + ": page-error"); diagnostics.noise("page-error") })')
   replace('      process.stderr.write(' + tick + field('label') + ': ' + field('message.text()') + '\\n' + tick + ')',
     '      diagnostics.noise("console-error")')
-  // The unchanged first workload prefix carries all original assertions through save/close.
-  for (const assertion of original.slice(0, end).match(/^\s*assert\..+$/gm) ?? [])
-    assert.ok(source.includes(assertion), 'Original solo assertion lost')
+  replace(original.split('\n').find(line => line.startsWith("  await writeFile(join(evidence, 'receipt.json'),")),
+    '  diagnostics.stage("workload-complete")')
+  replace(original.split('\n').find(line => line.startsWith('  process.stdout.write(')), '')
+  const ready = "    await player.page.locator('.gameplay-resume-progress-overlay').waitFor({ state: 'detached', timeout: 30_000 })"
+  replace(ready, ready + '\n    diagnostics.stage("peer-boneyard-ready", player.label)')
+  for (const owner of ['host', 'guest']) {
+    const capture = "  await " + owner + ".page.screenshot({ path: join(evidence, 'peer-" + owner + "-boneyard.png') })"
+    replace(capture, (owner === 'host' ? '  diagnostics.captureStart([host, guest])\n' : '') +
+      '  diagnostics.stage("peer-capture-start", "' + owner + '")\n' + capture +
+      '\n  diagnostics.stage("peer-capture-complete", "' + owner + '")' +
+      (owner === 'guest' ? '\n  diagnostics.captureStop()' : ''))
+  }
+  const assertions = original.match(/^\s*assert\..+$/gm) ?? []
+  assert.equal(assertions.length, 19)
+  for (const assertion of assertions) assert.ok(source.includes(assertion), 'Original assertion lost')
   const originalLaunchOptions = original.slice(original.indexOf('  const app = await electron.launch({'), original.indexOf(stderr))
   assert.ok(source.includes(originalLaunchOptions), 'Original launch options/deadline changed')
-  assert.ok(!source.includes('invitation') && !source.includes("launch('host'") && !source.includes("launch('guest'"))
   return source
 }
 
@@ -134,14 +139,35 @@ export async function resolvePlaywrightPackage(sourceRoot) {
   return { packageRoot, original }
 }
 
-export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDirectory }) {
+async function canonicalDirectory(path) {
+  path = resolve(path)
+  try { return await realpath(path) }
+  catch (error) {
+    if (error.code !== 'ENOENT' || dirname(path) === path) throw error
+    return join(await canonicalDirectory(dirname(path)), basename(path))
+  }
+}
+
+function directoriesOverlap(first, second) {
+  return [relative(first, second), relative(second, first)].some(path =>
+    !isAbsolute(path) && path !== '..' && !path.startsWith('..' + sep))
+}
+
+export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDirectory, appRoot }) {
   sourceRoot = await realpath(sourceRoot)
+  outputDirectory = await canonicalDirectory(outputDirectory)
+  runtimeDirectory = await canonicalDirectory(runtimeDirectory)
+  assert.ok(!directoriesOverlap(runtimeDirectory, outputDirectory),
+    'Runtime source and captures must be separate from uploaded metadata evidence')
+  for (const path of [outputDirectory, runtimeDirectory])
+    assert.ok(!directoriesOverlap(path, sourceRoot), 'Diagnostic output must be outside product')
+  if (appRoot !== undefined) {
+    appRoot = await realpath(appRoot)
+    for (const path of [outputDirectory, runtimeDirectory])
+      assert.ok(!directoriesOverlap(path, appRoot), 'Diagnostic output must be outside packaged app')
+  }
   await mkdir(outputDirectory, { recursive: true })
   await mkdir(runtimeDirectory, { recursive: true })
-  outputDirectory = await realpath(outputDirectory)
-  runtimeDirectory = await realpath(runtimeDirectory)
-  for (const path of [outputDirectory, runtimeDirectory])
-    assert.ok(path !== sourceRoot && !path.startsWith(sourceRoot + sep), 'Diagnostic output must be outside product')
   const original = await readFile(join(sourceRoot, 'frontend/tools/smoke-desktop-runtime.mjs'), 'utf8')
   const { packageRoot, original: bundle } = await resolvePlaywrightPackage(sourceRoot)
   const generatedRoot = await mkdtemp(join(runtimeDirectory, 'linux-launch-'))
@@ -152,8 +178,8 @@ export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDi
   await writeFile(join(packageCopy, 'lib/coreBundle.js'), patchedBundle)
   const observerPath = join(dirname(fileURLToPath(import.meta.url)), 'linux-launch-observer.mjs')
   const playwrightURL = pathToFileURL(join(packageCopy, 'index.mjs')).href
-  const generated = instrumentHarness(original, pathToFileURL(observerPath).href, playwrightURL)
-  const harnessPath = join(generatedRoot, 'launch-prefix.mjs')
+  const generated = instrumentHarness(original, pathToFileURL(observerPath).href, playwrightURL, join(generatedRoot, 'captures'))
+  const harnessPath = join(generatedRoot, 'capture-workload.mjs')
   await writeFile(harnessPath, generated)
   assert.equal(hash(await readFile(join(packageRoot, 'lib/coreBundle.js'))), PLAYWRIGHT_SHA256)
   const binding = {
@@ -161,8 +187,8 @@ export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDi
     originalHarnessSha256: hash(original), generatedHarnessSha256: hash(generated),
     originalPlaywrightSha256: hash(bundle), generatedPlaywrightSha256: hash(patchedBundle),
     driverSha256: hash(await readFile(fileURLToPath(import.meta.url))), observerSha256: hash(await readFile(observerPath)),
-    scope: 'Original solo/save/close and second electron.launch only; no resumed UI or peer acceptance.',
-    changes: 'Metadata-only synchronous callbacks in a separate dependency copy. Original captures run without writing images. Original package, flags and workload deadlines unchanged. Cleanup owns only OS-identified descendants.',
+    scope: 'Full original 19-assertion smoke workload and both peer captures on the immutable c20 control; not reproduction or acceptance of unarchived 39875413 bytes.',
+    changes: 'Metadata-only hooks in a separate dependency copy, bounded non-awaited peer frame/visibility and owned process CPU observation. Original screenshot calls write only to a transient runtime directory removed during cleanup. No raw error/receipt/body output or fallback captures. Original package, flags, workload and cleanup deadlines unchanged.',
   }
   await writeFile(join(outputDirectory, 'source-binding.json'), JSON.stringify(binding, null, 2) + '\n')
   return { harnessPath, packageCopy, playwrightURL, binding, generatedRoot }
@@ -188,17 +214,17 @@ async function main() {
   const sourceRoot = resolve(process.env.SDR_SOURCE_ROOT)
   const outputDirectory = resolve(process.env.SDR_DESKTOP_EVIDENCE)
   const runtimeDirectory = resolve(process.env.SDR_DIAGNOSTIC_RUNTIME)
+  let appRoot
   if (flags[0] === '--run') {
     assert.equal(process.platform, 'linux'); assert.equal(process.arch, 'x64')
     assert.ok(process.env.SDR_DESKTOP_APP)
-    const app = await realpath(resolve(process.env.SDR_DESKTOP_APP))
-    for (const path of [outputDirectory, runtimeDirectory]) assert.ok(path !== app && !path.startsWith(app + sep))
-    const manifest = JSON.parse(await readFile(join(app, 'desktop-package-manifest.json'), 'utf8'))
+    appRoot = await realpath(resolve(process.env.SDR_DESKTOP_APP))
+    const manifest = JSON.parse(await readFile(join(appRoot, 'desktop-package-manifest.json'), 'utf8'))
     assert.equal(manifest.revision, REVISION); assert.equal(manifest.platform, 'linux'); assert.equal(manifest.arch, 'x64')
     assert.equal(manifest.electronVersion, '43.4.0'); assert.equal(manifest.nodeRuntime.version, '22.17.0')
     assert.equal(manifest.executable, 'solomon-darker')
   }
-  const prepared = await prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDirectory })
+  const prepared = await prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDirectory, appRoot })
   if (flags[0] === '--prepare-only') { console.log('Prepared Linux diagnostic without launching.'); return }
   process.chdir(join(sourceRoot, 'frontend'))
   await import(pathToFileURL(prepared.harnessPath).href)

@@ -1,5 +1,5 @@
 # Diagnostic only. Publication is owned by the coordinator; do not edit Validate.
-name: Linux launch handshake diagnostic (not release acceptance)
+name: Linux capture-stage diagnostic (c20 control, not release acceptance)
 
 on:
   push:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   observe-linux-launch:
-    name: Observe Linux second launch (diagnostic only)
+    name: Observe original Linux peer captures (c20 control only)
     if: github.repository == 'JarrettOneSource/solomon-dark-website' && github.ref == 'refs/heads/codex/diagnose-intel-c20-sh9aksle'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -144,7 +144,7 @@ jobs:
           set -euo pipefail
           npm install --global npm@10.9.2
           npm ci --ignore-scripts --no-audit --no-fund
-      - name: Check metadata observer and exact prefix without launching
+      - name: Check metadata observer and full original workload without launching
         shell: bash
         run: |
           set -euo pipefail
@@ -154,7 +154,7 @@ jobs:
           node --test "$tools/linux-launch-diagnostic.test.mjs"
           python3 "$tools/package-inventory.py" "$SDR_DESKTOP_APP" "$SDR_DESKTOP_EVIDENCE/package-files-before.json"
           python3 "$tools/package-inventory.py" "$SDR_SOURCE_ROOT/frontend/node_modules/playwright-core" "$SDR_DESKTOP_EVIDENCE/playwright-files-before.json"
-      - name: Observe original solo save close and second launch only
+      - name: Observe full original workload and both peer captures
         shell: bash
         run: |
           set -euo pipefail
