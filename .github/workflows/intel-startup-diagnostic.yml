@@ -1,3 +1,4 @@
+# Fresh push-triggered attempts preserve prior hosted diagnostic artifacts.
 # Inert evidence draft. Publish only after owner review to:
 # .github/workflows/intel-startup-diagnostic.yml on codex/diagnose-intel-c20-sh9aksle.
 # Do not edit Validate. The coordinator must cancel ONLY the redundant Validate
