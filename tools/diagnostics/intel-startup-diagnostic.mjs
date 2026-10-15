@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { redactDiagnosticText } from './desktop-timeout-observer.mjs'
 
-export const REVISION = 'c20fd89cb98c3a76f0852305252f1a3ba06fd59a'
+export const REVISION = '39875413fa2d3313d5d42170993c7dfa3e885cd1'
 export const HARNESS_SHA256 = '036d980d4147f03a9043f7800866bc5b9a283a86de5a8e12f51d1f5bbbf3d3e3'
 const sha256 = value => createHash('sha256').update(value).digest('hex')
 export async function resolvePlaywrightImport(sourceRoot) {
