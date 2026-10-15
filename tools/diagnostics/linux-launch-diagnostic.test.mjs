@@ -242,3 +242,18 @@ test('Linux workflow remains one exact-branch diagnostic job with immutable arti
     assert.ok(workflow.includes(required), required)
   if (intel) assert.ok(!intel.split('permissions:')[0].includes('linux-launch'))
 })
+
+
+test('runner-dependent paths are initialized only in an available step context', async () => {
+  const workflow = await readFile(join(directory, '../../.github/workflows/linux-launch-diagnostic.yml'), 'utf8')
+  const jobEnv = workflow.match(/^    env:\n([\s\S]*?)^    steps:/m)?.[1]
+  assert.ok(jobEnv, 'Expected one job environment block')
+  assert.ok(!jobEnv.includes('runner.'), 'The runner context is unavailable in jobs.<job_id>.env')
+  const prepare = workflow.split('      - name: Prepare separate evidence and verify source')[1]?.split('      - name:')[0]
+  assert.ok(prepare, 'Expected the path preparation step')
+  for (const variable of ['SDR_DESKTOP_APP', 'SDR_DESKTOP_EVIDENCE', 'SDR_DIAGNOSTIC_RUNTIME']) {
+    assert.ok(prepare.includes('          ' + variable + ': ${{ runner.temp }}/'), variable + ' must use a step-level runner context')
+    assert.ok(prepare.includes('"' + variable + '=$' + variable + '"'), variable + ' must persist for subsequent steps')
+  }
+  assert.ok(prepare.includes('>> "$GITHUB_ENV"'))
+})

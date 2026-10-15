@@ -26,9 +26,6 @@ jobs:
       EXPECTED_ARTIFACT_ID: '11916140735'
       EXPECTED_ARTIFACT_DIGEST: 057c452995a6cee268baf89bcfe41fed4a10a2313d88d0dd2b1441235b70efd0
       SDR_SOURCE_ROOT: ${{ github.workspace }}/product
-      SDR_DESKTOP_APP: ${{ runner.temp }}/linux-package/Solomon Darker-linux-x64
-      SDR_DESKTOP_EVIDENCE: ${{ runner.temp }}/linux-launch-evidence
-      SDR_DIAGNOSTIC_RUNTIME: ${{ runner.temp }}/linux-launch-runtime
     steps:
       - name: Check out only diagnostic tools
         uses: actions/checkout@v6
@@ -53,8 +50,13 @@ jobs:
           python-version: '3.12'
       - name: Prepare separate evidence and verify source
         shell: bash
+        env:
+          SDR_DESKTOP_APP: ${{ runner.temp }}/linux-package/Solomon Darker-linux-x64
+          SDR_DESKTOP_EVIDENCE: ${{ runner.temp }}/linux-launch-evidence
+          SDR_DIAGNOSTIC_RUNTIME: ${{ runner.temp }}/linux-launch-runtime
         run: |
           set -euo pipefail
+          printf '%s\n' "SDR_DESKTOP_APP=$SDR_DESKTOP_APP" "SDR_DESKTOP_EVIDENCE=$SDR_DESKTOP_EVIDENCE" "SDR_DIAGNOSTIC_RUNTIME=$SDR_DIAGNOSTIC_RUNTIME" >> "$GITHUB_ENV"
           mkdir -p "$SDR_DESKTOP_EVIDENCE" "$SDR_DIAGNOSTIC_RUNTIME" "$RUNNER_TEMP/linux-package"
           test "$(git -C product rev-parse HEAD)" = "$EXPECTED_REVISION"
           test -z "$(git -C product status --porcelain)"
