@@ -1,0 +1,131 @@
+# A newly built 39875413 package, not a retry of the unretained failed package.
+# Coordinator owns publication and any exact-SHA duplicate Validate cancellation.
+name: Linux exact-source qualification (39875413, no release)
+
+on:
+  push:
+    branches:
+      - codex/diagnose-intel-c20-sh9aksle
+    paths:
+      - .github/workflows/linux-source-qualification.yml
+      - tools/diagnostics/linux-source-qualification.py
+      - tools/diagnostics/linux-source-qualification.test.py
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-linux:
+    name: Original Linux acceptance on newly built 39875413
+    if: github.repository == 'JarrettOneSource/solomon-dark-website' && github.ref == 'refs/heads/codex/diagnose-intel-c20-sh9aksle' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SDR_SOURCE_ROOT: ${{ github.workspace }}/product
+      QUALIFICATION_EVIDENCE: ${{ github.workspace }}/qualification-evidence
+      SDR_DESKTOP_EVIDENCE: ${{ github.workspace }}/qualification-evidence/smoke
+    defaults:
+      run:
+        working-directory: product/frontend
+        shell: bash
+    steps:
+      - name: Check out qualification bookkeeping separately
+        uses: actions/checkout@v6
+        with:
+          path: qualification-tools
+          persist-credentials: false
+          sparse-checkout: |
+            tools/diagnostics/linux-source-qualification.py
+            tools/diagnostics/linux-source-qualification.test.py
+            tools/diagnostics/package-inventory.py
+            .github/workflows/linux-source-qualification.yml
+          sparse-checkout-cone-mode: false
+      - name: Check out exact product source
+        uses: actions/checkout@v6
+        with:
+          ref: 39875413fa2d3313d5d42170993c7dfa3e885cd1
+          path: product
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: product/.node-version
+          cache: npm
+          cache-dependency-path: product/frontend/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify clean pinned source and qualification contract
+        id: source
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          tools="$GITHUB_WORKSPACE/qualification-tools/tools/diagnostics"
+          python3 -B "$tools/linux-source-qualification.test.py"
+          python3 -B "$tools/linux-source-qualification.py" source --source "$SDR_SOURCE_ROOT" --evidence "$QUALIFICATION_EVIDENCE"
+          {
+            date -u
+            uname -srm
+            node --version
+            printenv ImageOS ImageVersion
+          } > "$QUALIFICATION_EVIDENCE/runner.txt"
+      - name: Install original pinned toolchain and dependencies
+        id: install
+        run: |
+          npm install --global npm@10.9.2
+          npm ci --no-audit --no-fund
+      - name: Run original desktop tests
+        id: tests
+        run: npm run test:desktop
+      - name: Build standalone app from exact source with original generator
+        id: build
+        run: npm run package:desktop -- --platform linux --arch x64
+      # Retain before smoke: the prior failed run skipped its post-smoke archive.
+      - name: Archive newly built app with original archiver
+        id: archive
+        run: node tools/archive-desktop.mjs
+      - name: Bind retained archive to package and dependency inventories
+        id: package
+        run: |
+          python3 -B "$GITHUB_WORKSPACE/qualification-tools/tools/diagnostics/linux-source-qualification.py" package --source "$SDR_SOURCE_ROOT" --evidence "$QUALIFICATION_EVIDENCE"
+      - name: Retain newly built package before acceptance can fail
+        id: retain_package
+        if: ${{ always() && steps.archive.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-new-package-39875413-${{ github.run_id }}
+          path: |
+            product/frontend/dist-desktop/Solomon-Darker-linux-x64.zip
+            product/frontend/dist-desktop/Solomon-Darker-linux-x64.zip.sha256
+            product/frontend/dist-desktop/desktop-release.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain source and package provenance before smoke
+        id: checkpoint
+        if: ${{ always() && steps.source.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-source-provenance-39875413-${{ github.run_id }}
+          path: qualification-evidence
+          if-no-files-found: error
+          retention-days: 14
+      - name: Verify packaged offline save and peer gameplay
+        id: smoke
+        run: xvfb-run -a npm run smoke:desktop
+      - name: Record outcomes and verify original source and package remain unchanged
+        id: final_receipt
+        if: ${{ always() }}
+        working-directory: ${{ github.workspace }}
+        env:
+          QUALIFICATION_STEPS: ${{ toJSON(steps) }}
+          PACKAGE_ARTIFACT_ID: ${{ steps.retain_package.outputs.artifact-id }}
+          PACKAGE_ARTIFACT_DIGEST: ${{ steps.retain_package.outputs.artifact-digest }}
+        run: |
+          python3 -B "$GITHUB_WORKSPACE/qualification-tools/tools/diagnostics/linux-source-qualification.py" finish --source "$SDR_SOURCE_ROOT" --evidence "$QUALIFICATION_EVIDENCE"
+      - name: Retain original acceptance evidence and qualification result even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-qualification-evidence-39875413-${{ github.run_id }}
+          path: qualification-evidence
+          if-no-files-found: error
+          retention-days: 14
