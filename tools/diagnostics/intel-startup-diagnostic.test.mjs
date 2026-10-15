@@ -298,7 +298,7 @@ test('pending enable cannot start a profiler after title completion', async () =
   assert.deepEqual(f.calls.map(row => row[0]), ['Profiler.enable', 'detach'])
 })
 
-test('pending start, stop and detach are bounded and late profiles are ignored', async () => {
+test('pending start, stop and detach cannot delay sealing or record afterward', async () => {
   for (const blocked of ['Profiler.start', 'Profiler.stop', 'detach']) {
     const pending = deferred(), f = profileFixture()
     const send = f.session.send.bind(f.session)
@@ -308,7 +308,8 @@ test('pending start, stop and detach are bounded and late profiles are ignored',
     await f.controller.start()
     await f.controller.finish('failure')
     assert.ok(Date.now() - started < 500, blocked + ' must not hold the workload indefinitely')
-    assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.kind === 'deadline'), blocked)
+    if (blocked !== 'detach') assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.kind === 'deadline'), blocked)
+    f.controller.seal()
     const profiles = f.events.filter(row => row.event === 'guest-cpu-profile').length
     pending.resolve({ profile: { nodes: [], source: 'LATE_PRIVATE_BODY' } })
     await new Promise(resolve => setImmediate(resolve))
@@ -411,4 +412,99 @@ test('title shutdown drains the existing native sample and records sampling fail
   assert.equal(JSON.stringify(f.events).includes('NATIVE_PRIVATE_COMMAND_AND_PATH'), false)
   await f.controller.checkStall(100, 'title')
   assert.equal(f.events.filter(row => row.event === 'guest-renderer-stall').length, 1)
+})
+
+test('one pending stop retains a sanitized late profile during existing failure capture', async () => {
+  const pending = deferred(), f = profileFixture()
+  const send = f.session.send.bind(f.session)
+  f.session.send = async (method, params) => { if (method === 'Profiler.stop') { f.calls.push([method]); return pending.promise }; return send(method, params) }
+  await f.controller.start()
+  await f.controller.finish('failure')
+  assert.equal(f.calls.some(row => row[0] === 'detach'), false, 'Do not detach while the same stop request can still return evidence')
+  assert.equal(f.events.filter(row => row.event === 'guest-cpu-profile').length, 0)
+  pending.resolve({ profile: { nodes: [], source: 'PRIVATE_LATE_SOURCE', startTime: 1, endTime: 2 } })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(f.events.filter(row => row.event === 'guest-cpu-profile').length, 1)
+  assert.equal(f.calls.filter(row => row[0] === 'Profiler.stop').length, 1)
+  assert.equal(f.calls.filter(row => row[0] === 'detach').length, 1)
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_LATE_SOURCE'), false)
+  f.controller.seal()
+})
+
+test('sealing a still-pending stop adds no wait and suppresses all late capture events', async () => {
+  const pending = deferred(), f = profileFixture()
+  const send = f.session.send.bind(f.session)
+  f.session.send = async (method, params) => { if (method === 'Profiler.stop') { f.calls.push([method]); return pending.promise }; return send(method, params) }
+  await f.controller.start(); await f.controller.finish('failure')
+  assert.equal(typeof f.controller.seal, 'function')
+  f.controller.seal()
+  const before = JSON.stringify(f.events)
+  pending.resolve({ profile: { nodes: [], source: 'PRIVATE_AFTER_SEAL' } })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(JSON.stringify(f.events), before)
+  assert.equal(f.calls.filter(row => row[0] === 'detach').length, 1)
+  assert.equal(await f.controller.start(), false)
+})
+
+test('native failure preserves safe classification and owned partial frames without raw output', async () => {
+  const f = profileFixture({ sampleProcess: async () => {
+    throw Object.assign(new Error('PRIVATE_MESSAGE'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', signal: 'SIGTERM', killed: true,
+      cmd: 'PRIVATE_COMMAND', stack: 'PRIVATE_STACK', stderr: 'PRIVATE_STDERR',
+      stdout: 'PRIVATE_HEADER\nCall graph:\n    + 1 mach_msg (in libsystem_kernel.dylib) + 1 [0x1234]\nBinary Images:\nPRIVATE_IMAGE_PATH\n' })
+  } })
+  await f.controller.start(); f.setTime(5100); await f.controller.checkStall(100, 'title')
+  const failures = f.events.filter(row => row.event === 'instrumentation-error' && row.kind === 'sample-failed')
+  assert.equal(failures.length, 2)
+  assert.ok(failures.every(row => row.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' && row.signal === 'SIGTERM' && row.killed === true && row.stdoutBytes > 0 && row.stderrBytes > 0))
+  const samples = f.events.filter(row => row.event === 'process-stack-sample')
+  assert.equal(samples.length, 2); assert.ok(samples.every(row => row.partial === true && row.sample.frames[0].symbol === 'mach_msg'))
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_'), false)
+  await f.controller.finish('cleanup'); f.controller.seal()
+})
+
+test('partial native output still fails closed if PID identity changes', async () => {
+  let f
+  f = profileFixture({ sampleProcess: async pid => {
+    if (pid === 11) f.rows[1].birth = 'reused-during-failed-sample'
+    throw Object.assign(new Error('PRIVATE_MESSAGE'), { code: 'PRIVATE_CODE', signal: 'PRIVATE_SIGNAL', stdout: 'Call graph:\n    + 1 render (in Electron) + 1 [0x1234]\n' })
+  } })
+  await f.controller.start(); f.setTime(5100); await f.controller.checkStall(100, 'title')
+  assert.equal(f.events.some(row => row.event === 'process-stack-sample' && row.pid === 11), false)
+  assert.ok(f.events.some(row => row.kind === 'identity-changed' && row.pid === 11))
+  assert.ok(f.events.some(row => row.kind === 'sample-failed' && row.code === 'other' && row.signal === 'other'))
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_'), false)
+  await f.controller.finish('cleanup'); f.controller.seal()
+})
+
+test('profile serialization failure remains visible without leaking exception text', async () => {
+  const f = profileFixture(), send = f.session.send.bind(f.session)
+  f.session.send = async (method, params) => method === 'Profiler.stop' ? { get profile() { throw new Error('PRIVATE_PROFILE_BODY') } } : send(method, params)
+  await f.controller.start(); await f.controller.finish('failure')
+  assert.ok(f.events.some(row => row.event === 'instrumentation-error' && row.kind === 'capture-error'))
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_'), false)
+  f.controller.seal()
+})
+
+test('failed ownership reads reject otherwise parseable partial native evidence', async () => {
+  let f, reads = 0
+  f = profileFixture({ readRows: async () => { if (++reads > 2) throw new Error('PRIVATE_PROC_ERROR'); return f.rows }, sampleProcess: async () => {
+    throw Object.assign(new Error('PRIVATE_SAMPLE_ERROR'), { code: 1, signal: null, stdout: Buffer.from('Call graph:\n    + 1 render (in Electron) + 1 [0x1234]\n') })
+  } })
+  await f.controller.start(); f.setTime(5100); await f.controller.checkStall(100, 'title')
+  assert.equal(f.events.some(row => row.event === 'process-stack-sample'), false)
+  assert.equal(f.events.filter(row => row.kind === 'ownership-read-unavailable').length, 2)
+  assert.ok(f.events.some(row => row.kind === 'sample-failed' && row.code === 1 && row.signal === null))
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_'), false)
+  await f.controller.finish('cleanup'); f.controller.seal()
+})
+
+test('native errors without frames remain explicit and do not fabricate a timeout cause', async () => {
+  const f = profileFixture({ sampleProcess: async () => { throw Object.assign(new Error('PRIVATE_ERROR'), { code: null, signal: 'SIGTERM', killed: true, stderr: 'PRIVATE_STDERR' }) } })
+  await f.controller.start(); f.setTime(5100); await f.controller.checkStall(100, 'title')
+  assert.equal(f.events.some(row => row.event === 'process-stack-sample'), false)
+  const errors = f.events.filter(row => row.kind === 'sample-failed')
+  assert.equal(errors.length, 2)
+  assert.ok(errors.every(row => row.killed && row.code === null && row.signal === 'SIGTERM' && row.configuredTimeoutMs === 2500 && !('timedOut' in row)))
+  assert.equal(JSON.stringify(f.events).includes('PRIVATE_'), false)
+  await f.controller.finish('cleanup'); f.controller.seal()
 })

@@ -101,14 +101,27 @@ export function sanitizeNativeSample(raw) {
   }
   return { intervalMs: interval ? +interval[1] : null, frames, truncated }
 }
+function nativeFailureMetadata(error, elapsedMs) {
+  const codes = new Set(['ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'EACCES', 'EPERM', 'ENOENT', 'ESRCH', 'ETIMEDOUT'])
+  const signals = new Set(['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT', 'SIGHUP', 'SIGBUS'])
+  const byteCount = value => typeof value === 'string' ? Buffer.byteLength(value) : Buffer.isBuffer(value) ? value.length : 0
+  return {
+    code: Number.isSafeInteger(error?.code) ? error.code : error?.code == null ? null : codes.has(error.code) ? error.code : 'other',
+    signal: error?.signal == null ? null : signals.has(error.signal) ? error.signal : 'other',
+    killed: error?.killed === true, elapsedMs: Math.max(0, scalar(elapsedMs)),
+    configuredTimeoutMs: 2500, maxBufferBytes: 1024 * 1024,
+    stdoutBytes: byteCount(error?.stdout), stderrBytes: byteCount(error?.stderr),
+  }
+}
 export function createGuestTitleDiagnostics({ openSession, guest, identities, readRows, bundledScripts, record,
   now = () => performance.now(), requestDeadlineMs = PROBE_MS,
   sampleProcess = async pid => (await exec('/usr/bin/sample', [String(pid), '1', '1', '-file', '/dev/stdout'], { timeout: 2500, maxBuffer: 1024 * 1024 })).stdout,
 }) {
-  let session, starting, closing, detaching, finished = false, cancelled = false, startIssued = false, stallTaken = false, sampling
-  let startRequestedMonoMs = null
+  let session, starting, closing, detaching, finished = false, cancelled = false, sealed = false, startIssued = false, stallTaken = false, sampling
+  let startRequestedMonoMs = null, stopRequested = false, stopSettled = false, detachSettled = false
+  const emit = (event, data) => { if (!sealed) record(event, data) }
   const profileIdentity = { target: 'guest-page', rootPid: guest.pid, rootBirth: identities.get(guest.pid) ?? null }
-  const failure = (step, kind, detail = {}) => record('instrumentation-error', { area: 'guest-title', step, kind, ...detail })
+  const failure = (step, kind, detail = {}) => emit('instrumentation-error', { area: 'guest-title', step, kind, ...detail })
   const bounded = async (action, step) => {
     let timer
     try {
@@ -120,24 +133,50 @@ export function createGuestTitleDiagnostics({ openSession, guest, identities, re
       return result
     } finally { clearTimeout(timer) }
   }
-  const detach = () => detaching ??= bounded(() => session.detach(), 'profiler-detach')
+  // Raw caught detach adds neither a timer nor a new wait to final shutdown.
+  const detach = () => {
+    if (!session) return Promise.resolve()
+    return detaching ??= Promise.resolve().then(() => session.detach()).then(() => {
+      detachSettled = true; emit('guest-profiler-detached', profileIdentity)
+    }, () => {
+      detachSettled = true; failure('profiler-detach', 'protocol-error')
+    }).catch(() => {})
+  }
   const closeProfiler = reason => {
     cancelled = true
     return closing ??= (async () => {
       if (session && startIssued) {
         const stopRequestedMonoMs = now()
-        const result = await bounded(() => session.send('Profiler.stop'), 'profiler-stop')
-        if (result.ok && result.value?.profile) {
-          record('guest-cpu-profile', { ...profileIdentity, reason, samplingIntervalUs: 10_000, startRequestedMonoMs, stopRequestedMonoMs, stopResponseMonoMs: now(),
-            profile: sanitizeCPUProfile(result.value.profile, bundledScripts) })
-        } else if (result.ok) failure('profiler-stop', 'missing-profile')
+        stopRequested = true
+        // Keep the same request after its responsiveness race; recovery during
+        // existing failure capture can still provide a sanitized profile.
+        const stop = Promise.resolve().then(() => session.send('Profiler.stop')).then(value => {
+          stopSettled = true
+          if (!sealed) {
+            if (value?.profile) emit('guest-cpu-profile', { ...profileIdentity, reason, samplingIntervalUs: 10_000,
+              startRequestedMonoMs, stopRequestedMonoMs, stopResponseMonoMs: now(), profile: sanitizeCPUProfile(value.profile, bundledScripts) })
+            else failure('profiler-stop', 'missing-profile')
+            emit('guest-profiler-stop-settled', { reason, startIssued, succeeded: true })
+          }
+          void detach()
+        }, () => {
+          stopSettled = true
+          failure('profiler-stop', 'protocol-error')
+          emit('guest-profiler-stop-settled', { reason, startIssued, succeeded: false })
+          void detach()
+        }).catch(() => {
+          try { failure('profiler-stop', 'capture-error') } catch {}
+          void detach()
+        })
+        const result = await bounded(() => stop, 'profiler-stop')
+        if (!result.ok) emit('guest-profiler-stop-pending', { reason, startIssued })
+      } else {
+        if (session) void detach()
+        emit('guest-profiler-finished', { reason, startIssued, stopRequested: false })
       }
-      if (session) await detach()
-      record('guest-profiler-finished', { reason, startIssued })
     })()
   }
   const sampleStacks = async () => {
-    // Pin identities before any asynchronous sampling. Neither metrics nor a reused PID grant ownership.
     const rootBirth = identities.get(guest.pid)
     const selected = ['Tab', 'GPU'].map(type => (guest.metrics ?? []).find(row => row.type === type))
     await Promise.all(selected.map(async metric => {
@@ -145,18 +184,28 @@ export function createGuestTitleDiagnostics({ openSession, guest, identities, re
       const { pid, type } = metric, birth = identities.get(pid)
       const matches = rows => rootBirth && birth && rows.some(row => row.pid === guest.pid && row.birth === rootBirth) &&
         ownedForest(rows, [guest.pid]).some(row => row.pid === pid && row.birth === birth)
-      try {
-        if (guest.child.exitCode !== null || guest.child.signalCode !== null || !matches(await readRows())) {
-          failure('native-sample', 'ownership-unverified', { pid, type }); return
-        }
-        const startedMonoMs = now()
-        const raw = await sampleProcess(pid)
-        const endedMonoMs = now()
-        if (!matches(await readRows())) { failure('native-sample', 'identity-changed', { pid, type }); return }
-        const sample = sanitizeNativeSample(raw)
-        if (!sample.frames.length) { failure('native-sample', 'no-parsed-stacks', { pid, type }); return }
-        record('process-stack-sample', { pid, type, birth, rootPid: guest.pid, rootBirth, startedMonoMs, endedMonoMs, durationSeconds: 1, sample })
-      } catch { failure('native-sample', 'sample-unavailable', { pid, type }) }
+      let before
+      try { before = await readRows() } catch { failure('native-sample', 'ownership-read-unavailable', { pid, type }); return }
+      if (sealed || guest.child.exitCode !== null || guest.child.signalCode !== null || !matches(before)) {
+        failure('native-sample', 'ownership-unverified', { pid, type }); return
+      }
+      const startedMonoMs = now()
+      let raw, partial = false
+      try { raw = await sampleProcess(pid) }
+      catch (error) {
+        partial = true
+        failure('native-sample', 'sample-failed', { pid, type, ...nativeFailureMetadata(error, now() - startedMonoMs) })
+        raw = typeof error?.stdout === 'string' ? error.stdout : Buffer.isBuffer(error?.stdout) ? error.stdout.toString('utf8') : ''
+      }
+      if (sealed) return
+      const endedMonoMs = now()
+      let after
+      try { after = await readRows() } catch { failure('native-sample', 'ownership-read-unavailable', { pid, type }); return }
+      if (sealed) return
+      if (!matches(after)) { failure('native-sample', 'identity-changed', { pid, type }); return }
+      const sample = sanitizeNativeSample(raw)
+      if (!sample.frames.length) { failure('native-sample', 'no-parsed-stacks', { pid, type }); return }
+      emit('process-stack-sample', { pid, type, birth, rootPid: guest.pid, rootBirth, startedMonoMs, endedMonoMs, durationSeconds: 1, partial, sample })
     }))
   }
   return {
@@ -165,7 +214,7 @@ export function createGuestTitleDiagnostics({ openSession, guest, identities, re
       return starting ??= (async () => {
         const result = await bounded(async () => {
           session = await openSession()
-          if (cancelled) { await detach(); return false }
+          if (cancelled) { void detach(); return false }
           await session.send('Profiler.enable')
           if (cancelled) return false
           await session.send('Profiler.setSamplingInterval', { interval: 10_000 })
@@ -173,7 +222,7 @@ export function createGuestTitleDiagnostics({ openSession, guest, identities, re
           startIssued = true; startRequestedMonoMs = now()
           await session.send('Profiler.start')
           if (cancelled) return false
-          record('guest-profiler-started', { ...profileIdentity, samplingIntervalUs: 10_000, startRequestedMonoMs, startResponseMonoMs: now() })
+          emit('guest-profiler-started', { ...profileIdentity, samplingIntervalUs: 10_000, startRequestedMonoMs, startResponseMonoMs: now() })
           return true
         }, 'profiler-start')
         if (!result.ok) void closeProfiler('start-failed')
@@ -183,12 +232,18 @@ export function createGuestTitleDiagnostics({ openSession, guest, identities, re
     checkStall(issuedMonoMs, phase) {
       if (finished || !starting || stallTaken || phase !== 'title' || now() - issuedMonoMs < 5_000 || guest.child.exitCode !== null || guest.child.signalCode !== null) return Promise.resolve()
       stallTaken = true
-      record('guest-renderer-stall', { outstandingProbeMs: now() - issuedMonoMs, issuedMonoMs, thresholdMs: 5_000 })
+      emit('guest-renderer-stall', { outstandingProbeMs: now() - issuedMonoMs, issuedMonoMs, thresholdMs: 5_000 })
       return sampling = sampleStacks()
     },
     async finish(reason) {
       finished = true
       await Promise.all([closeProfiler(reason), sampling])
+    },
+    seal() {
+      if (sealed) return
+      emit('guest-profiler-sealed', { stopRequested, stopSettled, detachRequested: Boolean(detaching), detachSettled })
+      sealed = true; finished = true; cancelled = true
+      if (session) void detach()
     },
   }
 }
@@ -544,6 +599,7 @@ export async function createDesktopObserver(evidence, { applicationPath } = {}) 
         for (const timer of phaseTimers.values()) clearTimeout(timer)
         phaseTimers.clear(); loop.disable()
         await Promise.all(instances.map(item => item.titleDiagnostic?.finish('observer-stop')))
+        for (const item of instances) item.titleDiagnostic?.seal()
         record('diagnostic-terminal', { ...outcome, instrumentationErrors, acceptance: false })
         writeFileSync(join(evidence, 'diagnostic-terminal.json'), clean(JSON.stringify({ status: outcome.primaryError ? 'original-workload-failed' : outcome.cleanupErrors.length ? 'diagnostic-cleanup-failed' : instrumentationErrors.length ? 'diagnostic-instrumentation-failed' : 'diagnostic-completed', ...outcome, instrumentationErrors, acceptance: false }, null, 2)) + '\n')
         stopped = true
