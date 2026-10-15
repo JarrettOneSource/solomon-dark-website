@@ -81,7 +81,7 @@ export function instrumentHarness(original, observerURL, playwrightURL, captureD
     '  await rm(evidence, { recursive: true, force: true })',
     '}',
   ].join('\n') + '\n' + original.slice(launchStart)
-  source = 'import { createLinuxLaunchObserver } from ' + JSON.stringify(observerURL) + '\n' + source
+  source = 'import { createLinuxLaunchObserver, readCpuCalibration } from ' + JSON.stringify(observerURL) + '\n' + source
   const replace = (before, after) => { source = replaceOnce(source, before, after) }
   replace("from 'playwright-core'", 'from ' + JSON.stringify(playwrightURL))
   // Keep the original screenshot calls and bytes; their transient directory is never uploaded.
@@ -89,7 +89,7 @@ export function instrumentHarness(original, observerURL, playwrightURL, captureD
     'const evidence = ' + JSON.stringify(captureDirectory))
   replace('const receipts = { platform: process.platform, revision: manifest.revision }', [
     'const receipts = { platform: process.platform, revision: manifest.revision }',
-    'const diagnostics = createLinuxLaunchObserver({ outputDirectory: resolve(process.env.SDR_DESKTOP_EVIDENCE), executable })',
+    'const diagnostics = createLinuxLaunchObserver({ outputDirectory: resolve(process.env.SDR_DESKTOP_EVIDENCE), executable, frameObservation: false, cpuCalibration: readCpuCalibration() })',
     HOOK + ' = diagnostics',
   ].join('\n'))
   replace('  await waitForExit(child.pid)', '  await waitForExit(child.pid)\n  diagnostics.stage("solo-host-exited", "solo")')
@@ -177,6 +177,7 @@ export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDi
   const patchedBundle = instrumentPlaywright(bundle)
   await writeFile(join(packageCopy, 'lib/coreBundle.js'), patchedBundle)
   const observerPath = join(dirname(fileURLToPath(import.meta.url)), 'linux-launch-observer.mjs')
+  const calibrationPath = join(dirname(fileURLToPath(import.meta.url)), 'linux-cpu-calibration.py')
   const playwrightURL = pathToFileURL(join(packageCopy, 'index.mjs')).href
   const generated = instrumentHarness(original, pathToFileURL(observerPath).href, playwrightURL, join(generatedRoot, 'captures'))
   const harnessPath = join(generatedRoot, 'capture-workload.mjs')
@@ -187,8 +188,11 @@ export async function prepareDiagnostic({ sourceRoot, outputDirectory, runtimeDi
     originalHarnessSha256: hash(original), generatedHarnessSha256: hash(generated),
     originalPlaywrightSha256: hash(bundle), generatedPlaywrightSha256: hash(patchedBundle),
     driverSha256: hash(await readFile(fileURLToPath(import.meta.url))), observerSha256: hash(await readFile(observerPath)),
+    calibrationHelperSha256: hash(await readFile(calibrationPath)),
+    frameObservation: 'disabled-by-contract', observerBrowserRequests: 'none',
+    cpuCalibrationScope: 'Prelaunch SC_CLK_TCK and online CPU count; driver affinity and visible cgroup-v2 ancestor quotas only. Unknown, malformed, unsupported or bounded-out calibration is limited. Driver limits cannot prove renderer/GPU limits, hidden ancestor quotas, subsequent changes, contention, throttling or saturation.',
     scope: 'Full original 19-assertion smoke workload and both peer captures on retained package 11997259442 from failed exact-source qualification run 38787359411. These are newly built 39875413 bytes, not the unretained original run 38766573551 package. Any outcome is diagnostic only, not release acceptance.',
-    changes: 'Metadata-only hooks in a separate dependency copy, bounded non-awaited peer frame/visibility and owned process CPU observation with explicit per-owner role coverage. Original screenshot calls write only to a transient runtime directory removed during cleanup. No raw error/receipt/body output or fallback captures. Original package, flags, workload and cleanup deadlines unchanged.',
+    changes: 'Passive metadata-only hooks in a separate dependency copy and bounded owned-process CPU observation with monotonic scan-completion intervals and per-owner role coverage. Frame observation is disabled by contract: no immediate or interval page evaluation and no added browser/renderer protocol requests. Original six success screenshots write only to a transient runtime directory removed during cleanup. No raw error/receipt/body output or fallback captures. Original package, flags, workload and cleanup deadlines unchanged. Observation still has filesystem/logging/timer overhead; any outcome is diagnostic only.',
   }
   await writeFile(join(outputDirectory, 'source-binding.json'), JSON.stringify(binding, null, 2) + '\n')
   return { harnessPath, packageCopy, playwrightURL, binding, generatedRoot }

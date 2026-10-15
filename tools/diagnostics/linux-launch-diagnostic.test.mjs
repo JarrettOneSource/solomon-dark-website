@@ -62,7 +62,7 @@ import { dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { createLinuxLaunchObserver } from './linux-launch-observer.mjs'
+import { createLinuxLaunchObserver, readCpuCalibration, safeCpuCalibration } from './linux-launch-observer.mjs'
 import { assertSafeEnvironment, REVISION, HARNESS_SHA256, PLAYWRIGHT_SHA256, instrumentHarness, instrumentPlaywright, prepareDiagnostic, resolvePlaywrightPackage } from './linux-launch-diagnostic.mjs'
 
 const directory = dirname(fileURLToPath(import.meta.url))
@@ -110,6 +110,8 @@ test('source hashes fail closed and all original assertions, screenshots, timeou
   assert.ok(!generatedWorkload.includes('await diagnostics.'), 'Observers cannot add workload waits')
   const workloadLines = text => text.split('\n').filter(line => line.trim() && !line.trim().startsWith('diagnostics.') && !line.includes('writeFile(') && !line.includes('process.stdout.write'))
   assert.deepEqual(workloadLines(generatedWorkload), workloadLines(workload), 'Original workload call order and gates must be exact')
+  assert.ok(source.includes('frameObservation: false, cpuCalibration: readCpuCalibration()'))
+  assert.ok(source.indexOf('readCpuCalibration()') < source.indexOf('try {'), 'Calibration must happen before the workload and launches')
 })
 
 test('generated Playwright has only fixed metadata hooks and retains its full import layout', async () => {
@@ -124,6 +126,7 @@ test('generated Playwright has only fixed metadata hooks and retains its full im
     assert.ok(generated.includes('.stage("first-noninitial-navigation-ready")'))
     assert.ok(generated.includes('.stage("first-noninitial-navigation-failed")'))
     assert.equal((generated.match(/\.logger\("(?:node|chrome)"\)/g) ?? []).length, 2)
+    assert.equal((generated.match(/\.send(?:MayFail)?\(/g) ?? []).length, (original.match(/\.send(?:MayFail)?\(/g) ?? []).length, 'Protocol hooks cannot add requests')
     const prepared = await prepareDiagnostic({ sourceRoot, outputDirectory: join(root, 'evidence'), runtimeDirectory: join(root, 'runtime') })
     execFileSync(process.execPath, ['--check', prepared.harnessPath])
     execFileSync(process.execPath, ['--check', join(prepared.packageCopy, 'lib/coreBundle.js')])
@@ -135,6 +138,10 @@ test('generated Playwright has only fixed metadata hooks and retains its full im
     assert.equal(prepared.binding.acceptance, false)
     assert.equal(REVISION, '39875413fa2d3313d5d42170993c7dfa3e885cd1')
     assert.equal(prepared.binding.productRevision, REVISION)
+    assert.equal(prepared.binding.frameObservation, 'disabled-by-contract')
+    assert.equal(prepared.binding.observerBrowserRequests, 'none')
+    assert.match(prepared.binding.calibrationHelperSha256, /^[0-9a-f]{64}$/)
+    assert.match(prepared.binding.changes, /no immediate or interval page evaluation/)
     assert.match(prepared.binding.scope, /retained package 11997259442 from failed exact-source qualification run 38787359411/)
     assert.deepEqual(await readdir(join(root, 'evidence')), ['source-binding.json'])
     assert.ok((await readFile(prepared.harnessPath, 'utf8')).includes('const evidence = ' + JSON.stringify(join(prepared.generatedRoot, 'captures'))))
@@ -367,7 +374,7 @@ test('Linux workflow remains one exact-branch diagnostic job with immutable arti
   const workflow = await readFile(join(directory, '../../.github/workflows/linux-launch-diagnostic.yml'), 'utf8')
   const intel = await readFile(join(directory, '../../.github/workflows/intel-startup-diagnostic.yml'), 'utf8').catch(() => '')
   assert.match(workflow, /branches:\n      - codex\/diagnose-intel-c20-sh9aksle\n    paths:/)
-  for (const path of ['.github/workflows/linux-launch-diagnostic.yml', 'tools/diagnostics/linux-launch-diagnostic.mjs', 'tools/diagnostics/linux-launch-diagnostic.test.mjs', 'tools/diagnostics/linux-launch-observer.mjs'])
+  for (const path of ['.github/workflows/linux-launch-diagnostic.yml', 'tools/diagnostics/linux-launch-diagnostic.mjs', 'tools/diagnostics/linux-launch-diagnostic.test.mjs', 'tools/diagnostics/linux-launch-observer.mjs', 'tools/diagnostics/linux-cpu-calibration.py', 'tools/diagnostics/linux-cpu-calibration.test.py'])
     assert.ok(workflow.includes('      - ' + path))
   assert.equal((workflow.match(/^  [a-z][a-z-]+:$/gm) ?? []).filter(line => !line.includes('push:')).length, 1)
   assert.match(workflow, /permissions:\n  contents: read\n  actions: read/)
@@ -376,6 +383,8 @@ test('Linux workflow remains one exact-branch diagnostic job with immutable arti
   assert.ok(!workflow.includes('npm run package'))
   assert.ok(!workflow.includes('gh release'))
   assert.ok(!workflow.includes('cancel-in-progress'))
+  assert.ok(workflow.includes('github.run_attempt == 1'))
+  assert.ok(workflow.includes('runner-identity.json'))
   assert.ok(workflow.includes("EXPECTED_ARTIFACT_ID: '11997259442'"))
   assert.ok(workflow.includes('70ca300f9cbf665c3700899a5b716153249d60c5dff496db40e625fd592defa7'))
   for (const required of ['digest == expected', 'inner_digest == match[1] == os.environ["EXPECTED_INNER_DIGEST"]', 'manifest_digest == os.environ["EXPECTED_MANIFEST_DIGEST"]', 'failed["head_sha"] == orchestration', 'failed["conclusion"] == "failure"', 'meta["workflow_run"]["head_sha"] == orchestration', 'EXPECTED_PRODUCT_TREE', '38787359411', '116602702052', '79edf19e60a82ff0ec5f4a512f9797e36ab6bc9269f5b9c87020e37a0dcc5a27', 'manifest["revision"] == revision', 'manifest["electronVersion"] == "43.4.0"', 'manifest["nodeRuntime"]["version"] == "22.17.0"', 'package-files-after.json', 'playwright-files-after.json', 'xvfb-run -a node', '--ignore-scripts'])
@@ -446,7 +455,7 @@ test('protocol observation has finite pending, session and event limits', () => 
 })
 
 
-async function peerObserverFixture(action, { extraRows = [], scan = rows => rows, role = pid => pid === 91001 ? 'renderer' : pid === 92001 ? 'gpu' : 'other' } = {}) {
+async function peerObserverFixture(action, { extraRows = [], scan = rows => rows, role = pid => pid === 91001 ? 'renderer' : pid === 92001 ? 'gpu' : 'other', frameObservation = true, cpuCalibration } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'linux-peer-observer-test-'))
   const secret = 'private-invitation-save-url-sentinel'
   let rows = [
@@ -461,7 +470,7 @@ async function peerObserverFixture(action, { extraRows = [], scan = rows => rows
   const roleReads = []
   const observer = createLinuxLaunchObserver({
     outputDirectory: root, executable: '/synthetic/solomon-darker', poll: false,
-    readProcesses: () => scan(rows),
+    readProcesses: () => scan(rows), frameObservation, cpuCalibration,
     readProcessRole: pid => { roleReads.push(pid); return role(pid) },
     signal: (pid, signal) => { signals.push({ pid, signal }); rows = rows.filter(row => row.pid !== pid) },
   })
@@ -607,6 +616,7 @@ test('missing CPU role coverage stays explicit even when the workload completes'
     assert.equal(await observer.cleanup('/synthetic/profiles', async () => {}), true)
     const outcome = JSON.parse(await readFile(join(root, 'launch-outcome.json'), 'utf8'))
     assert.equal(outcome.workloadComplete, true)
+    assert.equal(outcome.cpuCalibration.status, 'limited', 'Missing calibration must be disclosed')
     assert.equal(outcome.failureKind, null)
     assert.equal(outcome.instrumentationLimited, true)
     assert.equal(outcome.captureRoleCoverage.status, 'incomplete')
@@ -621,6 +631,57 @@ test('missing CPU role coverage stays explicit even when the workload completes'
     assert.ok(events.filter(row => row.event === 'capture-process-scan').every(row => row.roleCoverage.length === 2))
     assert.ok(!JSON.stringify([outcome, events]).includes(secret))
   }, { role: () => parseProcessRole('/app --private=private-invitation-save-url-sentinel') })
+})
+
+const validCpuCalibration = {
+  clockTicksPerSecond: 100, clockTicksStatus: 'available', onlineCpuCount: 8, onlineCpuStatus: 'available',
+  driverAffinityCpuCount: 4, driverAffinityStatus: 'available', driverCgroupQuotaCpuCount: 0.5,
+  driverCgroupStatus: 'finite', driverCgroupLevels: 3,
+}
+
+test('prelaunch CPU calibration projects only allowlisted primitives and derives visible driver scope', () => {
+  const secret = 'private-path-environment-sentinel'
+  const projected = safeCpuCalibration({ ...validCpuCalibration, private: secret, status: secret, driverVisibleCpuUpperBound: 999 })
+  assert.equal(projected.status, 'available')
+  assert.equal(projected.driverVisibleCpuUpperBound, 0.5)
+  assert.equal(projected.clockTicksPerSecond, 100)
+  assert.ok(!JSON.stringify(projected).includes(secret))
+  assert.ok(Object.values(projected).every(value => value === null || ['number', 'string'].includes(typeof value)))
+  const noVisibleQuota = safeCpuCalibration({ ...validCpuCalibration, driverCgroupStatus: 'no-visible-limit', driverCgroupQuotaCpuCount: secret })
+  assert.equal(noVisibleQuota.status, 'available')
+  assert.equal(noVisibleQuota.driverCgroupQuotaCpuCount, null)
+  assert.equal(noVisibleQuota.driverVisibleCpuUpperBound, 4)
+  for (const changes of [
+    { clockTicksPerSecond: 0 }, { clockTicksPerSecond: '100' }, { onlineCpuCount: NaN },
+    { driverAffinityCpuCount: -1 }, { driverCgroupQuotaCpuCount: Infinity },
+    { driverCgroupStatus: secret }, { driverCgroupStatus: 'unsupported' }, { driverCgroupLevels: 0 },
+    { driverCgroupLevels: 34 }, { onlineCpuStatus: secret },
+  ]) {
+    const value = safeCpuCalibration({ ...validCpuCalibration, ...changes })
+    assert.equal(value.status, 'limited')
+    assert.equal(value.driverVisibleCpuUpperBound, null)
+    assert.ok(!JSON.stringify(value).includes(secret))
+  }
+})
+
+test('calibration helper is bounded, driver-only and never forwards stderr or errors', () => {
+  const value = readCpuCalibration((command, args, options) => {
+    assert.equal(command, 'python3')
+    assert.equal(args.length, 2)
+    assert.ok(args[0].endsWith('/linux-cpu-calibration.py'))
+    assert.equal(args[1], String(process.pid))
+    assert.equal(options.timeout, 5000)
+    assert.equal(options.maxBuffer, 8192)
+    assert.deepEqual(options.stdio, ['ignore', 'pipe', 'ignore'])
+    return JSON.stringify(validCpuCalibration)
+  })
+  assert.equal(value.status, 'available')
+  for (const run of [() => '{private-sentinel', () => { throw new Error('private-sentinel') }, () => '{}']) {
+    const limited = readCpuCalibration(run)
+    assert.equal(limited.status, 'limited')
+    assert.equal(limited.clockTicksPerSecond, null)
+    assert.ok(!JSON.stringify(limited).includes('private-sentinel'))
+  }
 })
 
 
@@ -749,4 +810,44 @@ test('a failed capture process scan preserves ownership and marks role coverage 
     }
     assert.ok(!JSON.stringify([outcome, during]).includes(secret))
   }, { extraRows: completeRoleRows, role: completeRole, scan: rows => { if (scanFails) throw new Error('private-sentinel'); return rows } })
+})
+
+
+test('passive capture mode makes zero page or browser requests at immediate and interval ticks', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  await peerObserverFixture(async ({ root, observer, peers, advanceCpu, roleReads }) => {
+    for (const peer of peers) Object.defineProperty(peer, 'page', { get() { assert.fail('Passive capture must never access a page') } })
+    observer.captureStart(peers)
+    await settleProbes()
+    advanceCpu()
+    for (let tick = 0; tick <= CAPTURE_LIMITS.ticks; tick++) {
+      t.mock.timers.tick(CAPTURE_LIMITS.intervalMs)
+      await settleProbes()
+    }
+    observer.stage('workload-complete')
+    assert.equal(await observer.cleanup('/synthetic/profiles', async () => {}), true)
+    const outcome = JSON.parse(await readFile(join(root, 'launch-outcome.json'), 'utf8'))
+    const events = (await readFile(join(root, 'launch-events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    assert.equal(outcome.frameObservation, 'disabled-by-contract')
+    assert.equal(outcome.frameCoverageLimited, true)
+    assert.equal(outcome.instrumentationLimited, true)
+    assert.equal(outcome.captureRoleCoverage.status, 'complete')
+    assert.equal(outcome.workloadComplete, true)
+    assert.equal(events.filter(row => row.event.startsWith('capture-frame-')).length, 0)
+    const cpu = events.filter(row => row.event === 'capture-process-progress')
+    assert.equal(cpu.length, CAPTURE_LIMITS.ticks * 4)
+    assert.ok(cpu.some(row => row.deltaCpuTicks === '7'))
+    for (const pid of [91001, 91002, 92001, 92002]) {
+      const samples = cpu.filter(row => row.pid === pid)
+      assert.equal(samples[0].deltaElapsedMs, null)
+      for (let index = 1; index < samples.length; index++) {
+        assert.ok(samples[index].deltaElapsedMs >= 0)
+        assert.equal(samples[index].deltaElapsedMs, samples[index].sampleMonotonicMs - samples[index - 1].sampleMonotonicMs)
+      }
+    }
+    assert.ok(!roleReads.includes(93000))
+    const stop = events.find(row => row.event === 'capture-observation-stop')
+    assert.deepEqual(stop.probes, [])
+    assert.equal(stop.frameObservation, 'disabled-by-contract')
+  }, { frameObservation: false, extraRows: completeRoleRows, role: completeRole })
 })

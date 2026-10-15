@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { appendFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 
 // No protocol object, error text, URL, command line, or application output is serialized.
@@ -40,6 +42,42 @@ const safeInteger = value => Number.isSafeInteger(value) && value >= 0 ? value :
 
 const CAPTURE_METHODS = new Set(['Page.getLayoutMetrics', 'Page.captureScreenshot'])
 export const CAPTURE_LIMITS = Object.freeze({ intervalMs: 1000, ticks: 65, processesPerTick: 128 })
+
+// Calibration is prelaunch and driver-scoped. It cannot establish a renderer's
+// later affinity, hidden ancestor quota, host contention, throttling or saturation.
+export function safeCpuCalibration(value) {
+  const positive = number => Number.isFinite(number) && number > 0 && number <= 1e9 ? number : null
+  const result = { schemaVersion: 1 }
+  for (const [field, status] of [
+    ['clockTicksPerSecond', 'clockTicksStatus'], ['onlineCpuCount', 'onlineCpuStatus'],
+    ['driverAffinityCpuCount', 'driverAffinityStatus'],
+  ]) {
+    result[field] = Number.isSafeInteger(value?.[field]) ? positive(value[field]) : null
+    result[status] = value?.[status] === 'available' && result[field] !== null ? 'available' : 'unavailable'
+    if (result[status] !== 'available') result[field] = null
+  }
+  result.driverCgroupStatus = ['finite', 'no-visible-limit', 'unsupported', 'unavailable', 'malformed', 'limited'].includes(value?.driverCgroupStatus) ? value.driverCgroupStatus : 'unavailable'
+  result.driverCgroupQuotaCpuCount = result.driverCgroupStatus === 'finite' ? positive(value?.driverCgroupQuotaCpuCount) : null
+  result.driverCgroupLevels = Number.isSafeInteger(value?.driverCgroupLevels) && value.driverCgroupLevels >= 0 && value.driverCgroupLevels <= 33 ? value.driverCgroupLevels : 0
+  if (['finite', 'no-visible-limit'].includes(result.driverCgroupStatus) &&
+      (result.driverCgroupLevels === 0 || (result.driverCgroupStatus === 'finite' && result.driverCgroupQuotaCpuCount === null))) {
+    result.driverCgroupStatus = 'malformed'
+    result.driverCgroupQuotaCpuCount = null
+  }
+  result.status = ['clockTicksStatus', 'onlineCpuStatus', 'driverAffinityStatus'].every(key => result[key] === 'available') &&
+    ['finite', 'no-visible-limit'].includes(result.driverCgroupStatus) ? 'available' : 'limited'
+  result.driverVisibleCpuUpperBound = result.status === 'available'
+    ? Math.min(result.onlineCpuCount, result.driverAffinityCpuCount, result.driverCgroupQuotaCpuCount ?? Infinity) : null
+  return result
+}
+
+export function readCpuCalibration(run = execFileSync) {
+  try {
+    return safeCpuCalibration(JSON.parse(run('python3', [fileURLToPath(new URL('./linux-cpu-calibration.py', import.meta.url)), String(process.pid)], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 8192, stdio: ['ignore', 'pipe', 'ignore'],
+    })))
+  } catch { return safeCpuCalibration(null) }
+}
 
 export function createProtocolRecorder(write) {
   let launch = 'solo'
@@ -178,7 +216,10 @@ function safeFrameProgress(value) {
   }
 }
 
-export function createLinuxLaunchObserver({ outputDirectory, executable, readProcesses = procRows, readProcessRole = procRole, signal = process.kill.bind(process), poll = true }) {
+export function createLinuxLaunchObserver({ outputDirectory, executable, readProcesses = procRows, readProcessRole = procRole, signal = process.kill.bind(process), poll = true, frameObservation = true, cpuCalibration }) {
+  assert.equal(typeof frameObservation, 'boolean')
+  const frameObservationStatus = frameObservation ? 'enabled' : 'disabled-by-contract'
+  const calibration = safeCpuCalibration(cpuCalibration)
   const eventsPath = join(outputDirectory, 'launch-events.jsonl')
   let infrastructureFailed = false
   const write = row => {
@@ -193,7 +234,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
   let capture = null
   let captureOwner = null
   let roleCoverage = null
-  let frameCoverageLimited = false
+  let frameCoverageLimited = !frameObservation
   let workloadComplete = false
   const roots = []
   const children = new Map()
@@ -206,7 +247,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
   const coverageResult = () => ({
     status: roleCoverage === null ? 'not-observed' : roleCoverage.every(owner => owner.samples > 0 && owner.completeSamples === owner.samples) ? 'complete' : 'incomplete',
     owners: roleCoverage ?? [],
-    scope: 'Per-tick recognized renderer and GPU roles in owned sessions only. Other roles are parser non-matches, not proof of inactivity; CPU ticks are counters, not utilization.',
+    scope: 'Per-tick recognized renderer and GPU roles in owned sessions only. Other roles are parser non-matches, not proof of inactivity. CPU ticks are counters; conversion requires an available SC_CLK_TCK rate. Elapsed intervals are monotonic process-scan completion intervals, not per-process read times or proof of saturation.',
   })
   const sample = (progress = false) => {
     let all
@@ -223,6 +264,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
       return { ...row, owner: root.owner, role: ['renderer', 'gpu', 'other'].includes(role) ? role : 'unavailable' }
     })).sort((a, b) => a.pid - b.pid)
     if (progress) {
+      const sampleMonotonicMs = Math.round(performance.now() * 1000) / 1000
       const recognized = current.filter(row => ['renderer', 'gpu'].includes(row.role))
       const cpu = []
       for (const row of recognized.slice(0, CAPTURE_LIMITS.processesPerTick)) {
@@ -230,11 +272,12 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
         const ticks = typeof row.cpuTicks === 'string' && /^\d{1,31}$/.test(row.cpuTicks) ? row.cpuTicks : null
         const observation = {
           owner: row.owner, pid: row.pid, startTicks: row.startTicks, role: row.role, state: row.state,
-          cpuTicks: ticks, deltaCpuTicks: prior !== undefined && ticks !== null && BigInt(ticks) >= BigInt(prior) ? (BigInt(ticks) - BigInt(prior)).toString() : null,
+          cpuTicks: ticks, deltaCpuTicks: prior !== undefined && ticks !== null && BigInt(ticks) >= BigInt(prior.ticks) ? (BigInt(ticks) - BigInt(prior.ticks)).toString() : null,
+          sampleMonotonicMs, deltaElapsedMs: prior !== undefined ? sampleMonotonicMs - prior.monotonicMs : null,
         }
         record('capture-process-progress', observation)
         cpu.push(observation)
-        if (ticks !== null) capture?.cpu.set(identity(row), ticks)
+        if (ticks !== null) capture?.cpu.set(identity(row), { ticks, monotonicMs: sampleMonotonicMs })
       }
       capture.lastRoles = roleCoverage.map(total => {
         const owned = current.filter(row => row.owner === total.owner)
@@ -278,8 +321,8 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     capture = null
     clearInterval(stopped.timer)
     const probes = stopped.peers.map(peer => ({ owner: peer.label, started: peer.started, completed: peer.completed, failed: peer.failed, pending: peer.pendingAt !== null }))
-    frameCoverageLimited = stopped.ticks >= CAPTURE_LIMITS.ticks || probes.some(peer => peer.started === 0 || peer.failed > 0 || peer.pending)
-    record('capture-observation-stop', { ticks: stopped.ticks, probes, roleCoverage: coverageResult() })
+    frameCoverageLimited = !frameObservation || stopped.ticks >= CAPTURE_LIMITS.ticks || probes.some(peer => peer.started === 0 || peer.failed > 0 || peer.pending)
+    record('capture-observation-stop', { ticks: stopped.ticks, probes, frameObservation: frameObservationStatus, roleCoverage: coverageResult() })
   }
   const captureTick = () => {
     const current = capture
@@ -289,6 +332,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
     const scanStart = performance.now()
     sample(true)
     record('capture-process-scan', { durationMs: Math.max(0, performance.now() - scanStart), roleCoverage: current.lastRoles })
+    if (!frameObservation) return
     for (const peer of current.peers) {
       if (peer.pendingAt !== null) continue
       peer.pendingAt = performance.now()
@@ -305,7 +349,7 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
   }
   const timer = poll ? setInterval(sample, 250) : null
   timer?.unref()
-  record('observer-start', { acceptance: false, diagnostic: true, driverPid: process.pid })
+  record('observer-start', { acceptance: false, diagnostic: true, driverPid: process.pid, frameObservation: frameObservationStatus, cpuCalibration: calibration })
   return {
     begin(label) {
       launch = validLabel(label)
@@ -370,8 +414,8 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
         processSamples: { renderer: 0, gpu: 0, other: 0, unavailable: 0 },
         cpuSamples: { renderer: 0, gpu: 0 }, cpuDeltaSamples: { renderer: 0, gpu: 0 }, truncated: 0, invalidCpu: 0,
       }))
-      capture = { ticks: 0, timer: null, cpu: new Map(), lastRoles: [], peers: instances.map(instance => ({ ...instance, pendingAt: null, started: 0, completed: 0, failed: 0 })) }
-      record('capture-observation-start', { limits: CAPTURE_LIMITS })
+      capture = { ticks: 0, timer: null, cpu: new Map(), lastRoles: [], peers: frameObservation ? instances.map(instance => ({ ...instance, pendingAt: null, started: 0, completed: 0, failed: 0 })) : [] }
+      record('capture-observation-start', { limits: CAPTURE_LIMITS, frameObservation: frameObservationStatus })
       capture.timer = setInterval(captureTick, CAPTURE_LIMITS.intervalMs)
       capture.timer.unref()
       captureTick()
@@ -418,8 +462,10 @@ export function createLinuxLaunchObserver({ outputDirectory, executable, readPro
           processExitProven: !survivors.length && !infrastructureFailed,
           processProofScope: 'Registered exclusive Linux sessions and observed descendants only. Unobserved children that create a new session are outside this proof.',
           cleanupFailed, survivors, pending: protocol.pending(), protocolLimits: protocol.limits(),
-          captureRoleCoverage: coverageResult(), frameCoverageLimited,
-          instrumentationLimited: infrastructureFailed || frameCoverageLimited || coverageResult().status !== 'complete' || Object.values(protocol.limits()).some(count => count > 0),
+          captureRoleCoverage: coverageResult(), frameCoverageLimited, frameObservation: frameObservationStatus,
+          cpuCalibration: calibration,
+          cpuCalibrationScope: 'Prelaunch SC_CLK_TCK and online CPU count, plus driver affinity and visible cgroup-v2 ancestor quota only. Driver limits do not prove every owned process limit; hidden cgroup ancestors, subsequent changes, host contention, throttling and saturation are not observed. CPU seconds = deltaCpuTicks / clockTicksPerSecond; compare with deltaElapsedMs / 1000 only when the rate and a positive interval are available.',
+          instrumentationLimited: infrastructureFailed || frameCoverageLimited || (!frameObservation && calibration.status !== 'available') || coverageResult().status !== 'complete' || Object.values(protocol.limits()).some(count => count > 0),
         }
         try { writeFileSync(join(outputDirectory, 'launch-outcome.json'), JSON.stringify(result, null, 2) + '\n') }
         catch { infrastructureFailed = true }
