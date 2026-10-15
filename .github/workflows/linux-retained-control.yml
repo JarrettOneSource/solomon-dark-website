@@ -1,0 +1,104 @@
+# One original-harness control on previously retained bytes. No release or retry loop.
+name: Linux retained-package original-harness control (39875413, no release)
+
+on:
+  push:
+    branches:
+      - codex/diagnose-intel-c20-sh9aksle
+    paths:
+      - .github/workflows/linux-retained-control.yml
+      - tools/diagnostics/linux-retained-control.py
+      - tools/diagnostics/linux-retained-control.test.py
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  control-linux:
+    name: Original uninstrumented workload on retained 39875413
+    if: github.repository == 'JarrettOneSource/solomon-dark-website' && github.ref == 'refs/heads/codex/diagnose-intel-c20-sh9aksle' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SDR_SOURCE_ROOT: ${{ github.workspace }}/product
+      CONTROL_EVIDENCE: ${{ github.workspace }}/retained-control-evidence
+      SDR_DESKTOP_EVIDENCE: ${{ github.workspace }}/retained-control-evidence/smoke
+    defaults:
+      run:
+        working-directory: product/frontend
+        shell: bash
+    steps:
+      - name: Check out control bookkeeping separately
+        uses: actions/checkout@v6
+        with:
+          path: control-tools
+          persist-credentials: false
+          sparse-checkout: |
+            tools/diagnostics/linux-retained-control.py
+            tools/diagnostics/linux-retained-control.test.py
+            tools/diagnostics/linux-source-qualification.py
+            tools/diagnostics/package-inventory.py
+            .github/workflows/linux-retained-control.yml
+          sparse-checkout-cone-mode: false
+      - name: Check out immutable product source
+        uses: actions/checkout@v6
+        with:
+          ref: 39875413fa2d3313d5d42170993c7dfa3e885cd1
+          path: product
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: product/.node-version
+          cache: npm
+          cache-dependency-path: product/frontend/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify exact source and control contract without runtime execution
+        id: source
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          tools="$GITHUB_WORKSPACE/control-tools/tools/diagnostics"
+          python3 -B "$tools/linux-retained-control.test.py"
+          python3 -B "$tools/linux-retained-control.py" source --source "$SDR_SOURCE_ROOT" --evidence "$CONTROL_EVIDENCE"
+          {
+            date -u
+            uname -srm
+            node --version
+            printenv ImageOS ImageVersion
+          } > "$CONTROL_EVIDENCE/runner.txt"
+      - name: Install original pinned toolchain and dependencies
+        id: install
+        run: |
+          npm install --global npm@10.9.2
+          npm ci --no-audit --no-fund
+      - name: Verify and materialize exact retained failing package without rebuilding
+        id: package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/JarrettOneSource/solomon-dark-website/actions/artifacts/11997259442 > "$CONTROL_EVIDENCE/artifact-api.json"
+          gh api repos/JarrettOneSource/solomon-dark-website/actions/jobs/116602702052 > "$CONTROL_EVIDENCE/retained-package-failing-job.json"
+          gh api repos/JarrettOneSource/solomon-dark-website/actions/artifacts/11997259442/zip > "$RUNNER_TEMP/retained-linux-artifact.zip"
+          python3 -B "$GITHUB_WORKSPACE/control-tools/tools/diagnostics/linux-retained-control.py" package --source "$SDR_SOURCE_ROOT" --evidence "$CONTROL_EVIDENCE" --archive "$RUNNER_TEMP/retained-linux-artifact.zip"
+      - name: Run original uninstrumented offline save and peer workload
+        id: smoke
+        run: xvfb-run -a npm run smoke:desktop
+      - name: Verify unchanged bytes and original complete receipt even on failure
+        id: final_receipt
+        if: ${{ always() }}
+        env:
+          CONTROL_STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 -B "$GITHUB_WORKSPACE/control-tools/tools/diagnostics/linux-retained-control.py" finish --source "$SDR_SOURCE_ROOT" --evidence "$CONTROL_EVIDENCE"
+      - name: Retain original control evidence even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-retained-original-control-39875413-${{ github.run_id }}
+          path: retained-control-evidence
+          if-no-files-found: error
+          retention-days: 14
