@@ -309,6 +309,7 @@ export default function GameSettingsDialog({
       ) : page === 'controls' ? (
             <ControlsSettings
               listening={listening}
+              onChange={onChange}
               onListen={setListening}
               settings={settings}
             />
@@ -493,15 +494,24 @@ function CloudSettings({
 
 function ControlsSettings({
   listening,
+  onChange,
   onListen,
   settings,
 }: {
   listening: GameBindingAction | null
+  onChange: (settings: GameSettings) => void
   onListen: (action: GameBindingAction | null) => void
   settings: GameSettings
 }) {
   return (
     <div className="game-settings-controls">
+      <NativeUiSettingsGroup title="HOTBAR CYCLING">
+        <NativeUiSettingsToggle
+          checked={settings.reverseHotbarCycle}
+          label="REVERSE HOTBAR CYCLING"
+          onChange={(reverseHotbarCycle) => onChange({ ...settings, reverseHotbarCycle })}
+        />
+      </NativeUiSettingsGroup>
       {BINDING_GROUPS.map((group) => (
         <NativeUiSettingsGroup key={group.label} title={group.label}>
           {group.rows.map(([action, label]) => (

@@ -32,7 +32,7 @@ export function useHotbar(): HotbarSelection {
   return selection
 }
 
-export function useHotbarShortcut(controls: GameControlBindings, enabled: boolean): void {
+export function useHotbarShortcut(controls: GameControlBindings, enabled: boolean, reverse: boolean): void {
   const { cycle } = useHotbar()
   useEffect(() => {
     if (!enabled) return
@@ -43,11 +43,11 @@ export function useHotbarShortcut(controls: GameControlBindings, enabled: boolea
           && event.target.closest('input, textarea, [contenteditable="true"]'))) return
       event.preventDefault()
       event.stopImmediatePropagation()
-      cycle(event.shiftKey ? -1 : 1)
+      cycle(event.shiftKey !== reverse ? -1 : 1)
     }
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [controls.cycleHotbar, cycle, enabled])
+  }, [controls.cycleHotbar, cycle, enabled, reverse])
 }
 
 export default function HotbarControls({ disabled = false, rects, renderer }: {

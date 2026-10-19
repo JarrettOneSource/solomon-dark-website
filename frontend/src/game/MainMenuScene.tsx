@@ -1742,7 +1742,7 @@ function MainMenuContent({
     && !playerCardFeedbackFocused && !chatOpen && !cheatMenuOpen && loading === null && !levelUpModalActive
     && hudSkillSelector === null && !hubPauseMenuOpen && !gameplaySettingsOpen
     && gameplayResumeGrace === null && !socialModalOpen && !tutorialPreludeVisible
-    && (gameplayPause === null || ownsModalPause))
+    && (gameplayPause === null || ownsModalPause), gameSettings.reverseHotbarCycle)
   const desiredModalPauseSource: GameplayPauseSource | null =
     runtimeSnapshot?.world.kind === 'boneyard'
       ? skillBookOpen

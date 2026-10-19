@@ -417,10 +417,6 @@
   width: 53px;
 }
 
-.hub-hud-skill-quickbar[data-mode='hub'] .hub-hud-quickbar-skill-icon {
-  filter: brightness(0.25);
-}
-
 .hub-hud-quickbar-cooldown {
   position: absolute;
   top: 50%;
