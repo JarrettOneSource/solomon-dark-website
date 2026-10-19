@@ -2972,6 +2972,8 @@ function finishGameSimulationTick(
       ]
     }),
   )
+  // The world stays immutable until this whole cast pass has completed.
+  let primaryTargets: readonly PrimarySpellTarget[] | undefined
   const cast = stepPrimarySpells({
     writeScreenFlash,
     enhancedEffects: previous.enhancedEffects,
@@ -3137,9 +3139,12 @@ function finishGameSimulationTick(
       })
       return nativePrimaryViewRayEndpoint({ direction, start, view })
     },
-    spellTargets: () => result.world.kind === 'boneyard'
-      ? boneyardPrimarySpellTargets(result.world)
-      : [],
+    spellTargets: () => {
+      primaryTargets ??= result.world.kind === 'boneyard'
+        ? boneyardPrimarySpellTargets(result.world)
+        : []
+      return primaryTargets
+    },
     worldKeyForPlayer: (playerId) => result.world.kind === 'hub'
       ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
       : `boneyard:${result.world.runId}`,
