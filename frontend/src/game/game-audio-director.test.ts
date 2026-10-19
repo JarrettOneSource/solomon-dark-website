@@ -832,12 +832,14 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
   await flushPromises()
 })
 
-test('passes the recovered ten-channel limit only for native Hail samples', () => {
+test('passes recovered ten-channel limits for Hail and Fire explosion sounds', () => {
   const { director, playback } = fixture()
   director.playSound('hail-bounce-0')
   director.playSound('hail-bounce-1')
   director.playSound('hail-bounce-2')
   director.playSound('hail-bounce-3')
+  director.playSound('fireball-hit', { playbackRate: 0.9, volume: 0.5 })
+  director.playSound('throw-fire', { playbackRate: 0.8, volume: 0.75 })
   director.playSound('click')
 
   assert.deepEqual(playback.plays.map(({ options, source }) => ({ options, source })), [
@@ -856,6 +858,14 @@ test('passes the recovered ten-channel limit only for native Hail samples', () =
     {
       options: { maximumVoices: 10, playbackRate: 1, volume: 1 },
       source: 'hail-3.wav',
+    },
+    {
+      options: { maximumVoices: 10, playbackRate: 0.9, volume: 0.5 },
+      source: 'fireball-hit.wav',
+    },
+    {
+      options: { maximumVoices: 10, playbackRate: 0.8, volume: 0.75 },
+      source: 'fire.wav',
     },
     {
       options: { playbackRate: 1, volume: 1 },

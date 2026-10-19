@@ -220,6 +220,8 @@ export interface GameAudioSources {
 export const NATIVE_SOUND_MAXIMUM_VOICES: Readonly<Partial<
   Record<GameSoundCue, number>
 >> = Object.freeze({
+  'fireball-hit': 10,
+  'throw-fire': 10,
   harden: 10,
   'ice-shatter': 10,
   'hail-bounce-0': 10,
