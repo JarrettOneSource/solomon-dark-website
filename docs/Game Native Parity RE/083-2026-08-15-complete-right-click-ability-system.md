@@ -2880,3 +2880,22 @@ level13->14 picker, frozen tick6111 and resumed tick6135. All three could then
 be toggled off normally. Report88's actual death/new-generation journey also
 passed after the zero-debit rescue sink correction documented in ledger175.
 No new native timing or browser approximation is claimed.
+
+
+## Reports 113 and 80 — College readability and cycle preference, 2026-10-19
+
+### Scope and evidence
+
+Reports 113 and 80, including the hotbar clause of mixed report 120, were reread unchanged on October 19, 2026. The supplied College screenshot retains a first-slot mouse hint and a nearly invisible secondary icon. Existing starter creation binds a learned secondary to slot zero; this change does not claim a lost assignment.
+
+Native BeltButton presentation used College RGB 0.25 and unavailable alpha 0.375. The web HUD and mobile preview multiply both, whereas the optional-book renderer already uses the availability alpha without the extra tint. For readable web presentation, remove the additional College brightness filter, retaining the unavailable alpha, cooldowns and College cast prohibition. This is an intentional web readability correction, not an exact native-pixel claim.
+
+Membership: all skill icons across the three eight-slot College HUD banks and mobile layout preview; optional Inventory/Skills books already use the target alpha; Boneyard icons, potion/item rendering, assignments and cast admission are unchanged.
+
+The web-only cycle preference belongs to saved game settings and its shared College/Boneyard keyboard hook. Default R still advances 0→1→2→0; the new Reverse Hotbar Cycling toggle reverses that shortcut, and Shift reverses the selected direction. Physical left/right arrows keep their labeled direction. All HUD, Inventory and Skills surfaces share the same bank owner.
+
+### Checks
+
+20 focused settings, belt-availability and hotbar-layout tests pass, as do the frontend typecheck and focused lint (two unchanged Fast Refresh export warnings). A local production frontend build passes. Mac Chrome verifies the visible disabled Ether icon, 14 bank transitions across College, Inventory, Skills and Boneyard, literal left-arrow behavior, and the saved toggle after reload, with no page or console errors. The before/after icon comparison reuses the same scene with the prior CSS rule temporarily applied. Two early check attempts stopped on book-navigation timing/selector mistakes; neither identified a product failure.
+
+Final disposition: College HUD and mobile-preview dimming are intentional web presentation changes, outside exact native-pixel parity; shared unavailable/cooldown alpha and cast admission remain verified-already-at-parity. Optional-book rendering and Boneyard icon rendering remain unchanged. Reverse cycling is a tested web extension. No lost starter assignment or original historical input mismatch is claimed. Full native, packaged and live-production acceptance are outside this focused check.

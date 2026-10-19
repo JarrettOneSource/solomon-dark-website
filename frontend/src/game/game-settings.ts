@@ -48,6 +48,7 @@ export interface GameSettings {
   readonly musicVolumePercent: number
   readonly multipleShadows: boolean
   readonly reducedScreenFlashes: boolean
+  readonly reverseHotbarCycle: boolean
   readonly soundVolumePercent: number
   readonly submitRunsToServer: boolean
   readonly uiScalePercent: number
@@ -98,6 +99,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = Object.freeze({
   musicVolumePercent: 100,
   multipleShadows: true,
   reducedScreenFlashes: false,
+  reverseHotbarCycle: false,
   soundVolumePercent: 100,
   submitRunsToServer: true,
   uiScalePercent: 100,
@@ -120,6 +122,7 @@ const GAME_SETTINGS_KEYS = Object.freeze([
   'musicVolumePercent',
   'multipleShadows',
   'reducedScreenFlashes',
+  'reverseHotbarCycle',
   'soundVolumePercent',
   'submitRunsToServer',
   'uiScalePercent',
@@ -279,9 +282,9 @@ function parseGameSettings(serialized: string | null): GameSettings {
         enableCheats: source.enableCheats === true,
       })
     }
-    const qualityMigrated = Object.hasOwn(source, 'enhancedEffects')
-      ? source
-      : { ...source, enhancedEffects: true }
+    const qualityMigrated: Record<string, unknown> = {
+      enhancedEffects: true, reverseHotbarCycle: false, ...source,
+    }
     const onlineMigrated = sameKeys(Object.keys(qualityMigrated).sort(), PRE_ONLINE_GAME_SETTINGS_KEYS)
       ? {
           ...qualityMigrated,
@@ -316,6 +319,7 @@ function parseGameSettings(serialized: string | null): GameSettings {
       || typeof complete.enhancedEffects !== 'boolean'
       || typeof complete.multipleShadows !== 'boolean'
       || typeof complete.reducedScreenFlashes !== 'boolean'
+      || typeof complete.reverseHotbarCycle !== 'boolean'
       || typeof complete.submitRunsToServer !== 'boolean'
       || typeof complete.zoomEffects !== 'boolean'
       || !integerInRange(complete.cameraFovPercent, CAMERA_FOV_MIN_PERCENT, CAMERA_FOV_MAX_PERCENT)
@@ -356,6 +360,7 @@ function normalizedGameSettings(settings: GameSettings): GameSettings {
     musicVolumePercent: boundedInteger(settings.musicVolumePercent, 0, 100),
     multipleShadows: settings.multipleShadows === true,
     reducedScreenFlashes: settings.reducedScreenFlashes === true,
+    reverseHotbarCycle: settings.reverseHotbarCycle === true,
     soundVolumePercent: boundedInteger(settings.soundVolumePercent, 0, 100),
     submitRunsToServer: settings.submitRunsToServer === true,
     uiScalePercent: boundedInteger(

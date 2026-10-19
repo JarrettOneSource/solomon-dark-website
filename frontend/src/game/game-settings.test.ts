@@ -77,6 +77,7 @@ test('complete Settings defaults retain native presentation and enable online ex
     musicVolumePercent: 100,
     multipleShadows: true,
     reducedScreenFlashes: false,
+    reverseHotbarCycle: false,
     soundVolumePercent: 100,
     submitRunsToServer: true,
     uiScalePercent: 100,
@@ -373,4 +374,17 @@ test('hotbar migration preserves old settings when its usual fallback keys are a
   assert.equal(migrated.controls.cycleHotbar, 'F1')
   assert.deepEqual(Object.fromEntries(Object.entries(migrated.controls)
     .filter(([action]) => action !== 'cycleHotbar')), legacy)
+})
+
+
+test('hotbar cycle preference persists and old settings retain their other choices', () => {
+  const storage = new MemoryStorage()
+  const reversed = { ...DEFAULT_GAME_SETTINGS, reverseHotbarCycle: true, musicVolumePercent: 23 }
+  assert.deepEqual(setGameSettings(reversed, storage), reversed)
+  assert.deepEqual(readGameSettings(storage), reversed)
+  const legacy = Object.fromEntries(Object.entries(reversed).filter(([key]) => key !== 'reverseHotbarCycle'))
+  storage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(legacy))
+  assert.deepEqual(readGameSettings(storage), { ...reversed, reverseHotbarCycle: false })
+  storage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ ...reversed, reverseHotbarCycle: 'yes' }))
+  assert.equal(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
 })

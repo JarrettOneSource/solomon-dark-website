@@ -529,10 +529,6 @@
   background: rgb(9 13 18 / 0.32);
 }
 
-.mobile-ui-editor-belt-preview[data-preview-in-hub='true'] .hub-hud-quickbar-skill-icon {
-  filter: brightness(0.25);
-}
-
 .mobile-ui-editor-element > span.mobile-ui-editor-slot-number {
   position: absolute;
   top: 3px;
