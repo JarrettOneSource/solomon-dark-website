@@ -573,3 +573,42 @@ media handlers from a render that React may discard. This follows React's
 - The complete canonical Mac gate remains the final check for this candidate.
   No music assets, native scene choices, crossfade durations, simulation pause
   rules, or user volume settings were changed.
+
+
+## 2026-10-19 Fire explosion sound voice capacity
+
+Report 118's death-payload repair already removes repeated explosion births.
+The remaining audio boundary is the shared Fire hit/throw pair consumed by
+ordinary Fire contact, explosive deaths, and Flame Lash's Explode upgrade.
+The web cue table omitted the stock voice limits for both sounds, allowing
+unbounded one-shot nodes even though the retained native mixer already exists.
+
+Read-only disassembly of stock 0.72.5 SolomonDark.exe (SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`)
+confirms `push 10` at `0x004EEA23` before Fire hit's `Sound_Load` call at
+`0x004EEA6A`, and `push 10` at `0x004F00A5` before throw-fire's call at
+`0x004F00EC`. These are registry rows 30 and 97, paths `sounds/fireballhit`
+and `sounds/throwfire`, respectively. Both use the same `Sound_Load`
+(`0x004076D0`) capacity argument and inactive-channel reuse contract recovered
+above for Hail. Excess simultaneous requests are rejected, not deferred or
+used to replace an active voice.
+
+| Member | Native maximum | Disposition |
+| --- | ---: | --- |
+| `fireball-hit`, registry 30 | 10 | exact-ported through existing retained voice pool |
+| `throw-fire`, registry 97 | 10 | exact-ported through existing retained voice pool |
+| Fire/Flame loop and Flame start | separate lifecycle | verified-already-at-parity in current supplied-save playback; no duplicate steady-state loops |
+| Other sound families | separate cues | out-of-system for this Fire explosion pair correction |
+
+Only the missing capacity declarations are needed. Preserve cue ordering,
+source samples, pitch, gain, explosion admission and particle behavior. The
+silent reporter clip cannot prove perceived loudness; the separate late-run
+save has no Explode/Embers ranks and needs its own performance disposition.
+
+The existing director test now checks both limits while preserving their pitch
+and gain; 71 existing director/playback/voice-pool checks pass. A built Mac Chrome
+import of the primary reporter save produced five death explosions, six Fire
+hit starts (including one ordinary impact), and five throw-fire starts. Both
+cues used native mixer slots and reused ended slots. The separate late save
+produced no explosion births or explosion sound starts. No particle, damage,
+loudness, or late-run performance change is part of this correction.
