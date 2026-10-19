@@ -1893,3 +1893,38 @@ low-mana, radial and other projectile contract tests remain required.
 Qualification is pending. Focused source replay and unit checks do not replace
 the exact candidate's canonical Mac gate and affected real-browser acceptance.
 No report-resolution or publication claim is made by this entry.
+
+## 2026-10-19 — Report 115: share movement targets within a primary cast pass
+
+The original report and supplied save were reread unchanged. A short replay of
+the first 1,000 retained held-Frost inputs on `ed85cf1f` spent 139.68 ms of
+2,373.46 ms in the primary cast's `spellTargets` callback, inclusively. This is
+an offline V8 profile, not a browser frame-rate measurement.
+
+The earlier contact-row cache does not cover this callback. Every moving
+projectile still reconstructs the same scenery, goodies, enemies and Maggots
+from `result.world`. That immutable world cannot change while `stepPrimarySpells`
+runs; contacts are resolved afterward. Reuse one lazily created target list
+for the invocation, then discard it. This covers all primary movement, cast
+construction and channel target queries; Hub queries remain empty. Target
+ordering, positions, active flags, RNG, damage, effects and save state must
+remain unchanged. Fresh invocations must observe the new world.
+
+This is a bounded allocation reduction, not a claim that all reported lag is
+resolved. The original save and profiling outputs remain private on the M2.
+
+The same 1,000-tick saved-input replay ends with an identical full serialized
+state before and after the change. Sampled inclusive callback time falls from
+139.68 to 9.58 ms; this small single-run comparison is not a general speedup
+claim. All 66 matching existing primary/Frost/projectile/target/weld checks
+pass, and the changed source passes scoped lint. No new test harness or full
+gate was added or run for this focused change.
+
+One actual-save Mac Chrome journey used the unchanged `ed85cf1f` production
+client with the changed source host. Save import, Last Game, held Frost fire
+(548 ticks, 97 impact births) and acknowledged pause worked. The paused frame
+was visually inspected. Client console, page, HTTP and request-error arrays
+are empty; the strict driver's only warning is the owned host's normal
+server-shutdown disconnect, and all owned resources closed. Roughly 100 ms
+headless frame intervals with most sampled CPU time idle remain an observation,
+not a demonstrated client bottleneck or report-resolution claim.
