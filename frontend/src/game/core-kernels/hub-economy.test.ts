@@ -1179,7 +1179,7 @@ test('Sack item action equips eligible direct children and returns displaced gea
   assert.equal(result.accepted, true)
   assert.strictEqual(result.state.equipment.hat, hat)
   assert.strictEqual(result.state.equipment.robe, robe)
-  assert.strictEqual(result.state.equipment.weapon, wand)
+  assert.strictEqual(result.state.equipment.weapon, staff)
   assert.strictEqual(result.state.equipment.amulet, amulet)
   assert.deepEqual(result.state.equipment.rings.slice(0, 2), [ringA, ringB])
   assert.equal(result.state.equipment.rings[2], null)
@@ -1195,7 +1195,7 @@ test('Sack item action equips eligible direct children and returns displaced gea
   assert.equal(retainedIds.has(base.equipment.hat!.id), true)
   assert.equal(retainedIds.has(base.equipment.robe!.id), true)
   assert.equal(retainedIds.has(base.equipment.weapon!.id), true)
-  assert.equal(retainedIds.has(staff.id), true)
+  assert.equal(retainedIds.has(wand.id), true)
   assert.strictEqual(findInventoryItem(retained.contents ?? [], nestedHat.id), nestedHat)
   assert.equal(hubEconomyInventoryIsValid(result.state), true)
 })
@@ -1305,7 +1305,7 @@ test('Sack ring repeat uses cell order with two or three sinks, independent of a
   }
 })
 
-test('Sack cell traversal preserves native Staff-then-Wand rescanning across two presses', () => {
+test('Sack quick-set swaps Staff and Wand once per activation across two presses', () => {
   for (const from of ['staff', 'wand'] as const) for (const to of ['staff', 'wand'] as const) {
     const base = createHubEconomy(1)
     const gear = (type: 'staff' | 'wand' | 'hat', id: number, inventorySlot?: number) => ({
@@ -1322,8 +1322,10 @@ test('Sack cell traversal preserves native Staff-then-Wand rescanning across two
     const first = equipEligibleInventorySackContents(source, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
     const second = equipEligibleInventorySackContents(first.state, sack.id, UNRESTRICTED_EQUIPMENT_ADMISSION)
     assert.equal(first.accepted && second.accepted, true)
-    assert.equal(first.state.equipment.weapon?.id, from === 'wand' && to === 'staff' ? initial.id : incoming.id)
-    assert.equal(second.state.equipment.weapon?.id, from === to || from === 'wand' ? initial.id : incoming.id)
+    assert.equal(first.state.equipment.weapon?.id, incoming.id)
+    assert.equal(second.state.equipment.weapon?.id, initial.id)
+    assert.equal(findInventoryItem(first.state.backpack, initial.id)?.id, initial.id)
+    assert.equal(findInventoryItem(second.state.backpack, incoming.id)?.id, incoming.id)
     assert.equal(first.state.equipment.hat?.id, newHat.id)
     assert.equal(second.state.equipment.hat?.id, oldHat.id)
   }

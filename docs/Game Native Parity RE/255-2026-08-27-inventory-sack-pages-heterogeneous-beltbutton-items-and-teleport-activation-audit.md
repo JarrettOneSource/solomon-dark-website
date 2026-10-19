@@ -1,5 +1,30 @@
 # 2026-08-27 — Inventory Sack pages, heterogeneous BeltButton items, and Teleport activation audit
 
+## 2026-10-19 — Report 117: one weapon swap per quick-set activation
+
+The current `c20fd89c` two-press check reproduces the reported usability bug:
+the Staff pass returns the equipped Wand into the Sack, then the Wand pass
+immediately selects it again. A Staff-to-Wand swap similarly cannot toggle
+back on the next press. The Hat control still swaps, so activation is accepted.
+
+The focused Website correction permits only one successful weapon-family swap
+per activation. It retains Staff-first family traversal when both classes are
+available, addressed-cell selection within each family, eligibility checks,
+displaced-item return, and the independent Ring candidate/sink ordering. It
+intentionally removes the native-inherited rescan asymmetry documented below;
+the recovered native behavior itself is unchanged as historical evidence.
+
+The existing four Staff/Wand combinations now require the incoming weapon on
+press one and the original weapon on press two, with both displaced items
+retained in the Sack and the Hat activation control unchanged. The existing
+mixed-Sack expectation selects the Staff once and leaves its Wand untouched.
+Both corrected expectations fail on `c20fd89c` before the runtime guard.
+
+After the four-line guard, all 21 existing Sack-focused economy checks pass on
+M2 with Node 22.17.0; the Type Stripping warning is retained. Ring repetition,
+addressed/implicit cells and mixed-Sack controls pass. No new harness, browser
+journey, full gate or deployment is claimed by this focused verification.
+
 ## 2026-10-14 — Report 117: addressed-cell quick-set ordering
 
 ### Reopened boundary and native evidence

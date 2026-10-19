@@ -1448,6 +1448,7 @@ export function equipEligibleInventorySackContents(
     && nativeEquipmentMeetsLevelRequirement(item, context)
   )
   let state = source
+  let weaponEquipped = false
   for (const { nativeTypeId, slot } of [
     { nativeTypeId: 7005, slot: 'hat' },
     { nativeTypeId: 7006, slot: 'robe' },
@@ -1455,6 +1456,8 @@ export function equipEligibleInventorySackContents(
     { nativeTypeId: 7011, slot: 'weapon' },
     { nativeTypeId: 7003, slot: 'amulet' },
   ] as const) {
+    // Do not reselect the displaced Wand after a successful Staff swap.
+    if (slot === 'weapon' && weaponEquipped) continue
     const current = findInventoryItem(state.backpack, itemId)
     const candidate = projectInventoryRootSlots(current?.contents ?? [])
       .find(({ item }) => eligible(item, nativeTypeId))?.item
@@ -1462,6 +1465,7 @@ export function equipEligibleInventorySackContents(
     const equipped = equipDirectSackChild(state, itemId, candidate.id, slot)
     if (!equipped) return rejected(source, 'invalid-inventory')
     state = equipped
+    if (slot === 'weapon') weaponEquipped = true
   }
 
   const ringIds = projectInventoryRootSlots(findInventoryItem(state.backpack, itemId)?.contents ?? [])
