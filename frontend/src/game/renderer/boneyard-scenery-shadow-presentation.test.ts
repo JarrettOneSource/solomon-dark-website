@@ -10,8 +10,9 @@ import { BoneyardSceneryShadowPresentation } from './boneyard-scenery-shadow-pre
 import { nativeGoodieShadowOutline } from './boneyard-native-shadow-shapes.ts'
 import { nativeGoodieShadowPlan } from './native-scenery-shadow.ts'
 import { nativePackedColor } from './native-material-batch.ts'
+import { createNativeSceneryGlyphMaterial } from './native-scenery-glyph-material.ts'
 
-function resident(sprite: Sprite, index = 0): ResidentTexture {
+function resident(sprite: Container, index = 0): ResidentTexture {
   return { cleanupSourceKey: 'object:tree', h: 271, w: 204, x: 0, y: 0, mainLayerIndex: index,
     pixels: new Uint8ClampedArray(0), shadowCaster: null, surfaceMesh: null, texture: Texture.WHITE, sprite }
 }
@@ -261,6 +262,37 @@ test('Tree mask is retained through on/off/on, independent of owner fade, and cu
   } finally {
     view.destroy()
     root.destroy({ children: true })
+  }
+})
+
+test('Tree flat shadows follow foliage fade and recover without fading the root mask', () => {
+  const root = new Container()
+  const material = createNativeSceneryGlyphMaterial(Texture.WHITE, 204, 271, true)
+  const owner = material.mesh
+  root.addChild(owner)
+  const tree = { ...resident(owner), sceneryMaterial: material }
+  const view = new BoneyardSceneryShadowPresentation([treeLayer()], new Map([[0, tree]]), [], () => Texture.WHITE)
+  try {
+    for (const alpha of [1, .7, .4, 1]) {
+      material.update(alpha, 1, 1)
+      assert.equal(owner.alpha, 1) // Tree fade is material-owned, not Container alpha.
+      assert.equal(view.render([owner], false, []).quadCount, 3)
+      const parts = root.children[0]!.children
+      assert.equal(parts[0]!.alpha, 1)
+      assert.equal(parts[1]!.alpha, Math.fround(alpha))
+      assert.equal(parts[2]!.alpha, Math.fround(alpha))
+    }
+    material.update(.4, 1, 1)
+    assert.equal(view.render([owner], true, []).quadCount, 1)
+    assert.equal(root.children[0]!.children[0]!.alpha, 1)
+    view.render([], true, [])
+    assert.equal(view.render([owner], false, []).quadCount, 3)
+    assert.deepEqual(root.children[0]!.children.map(part => part.alpha),
+      [1, Math.fround(.4), Math.fround(.4)])
+  } finally {
+    view.destroy()
+    material.destroy()
+    root.destroy()
   }
 })
 

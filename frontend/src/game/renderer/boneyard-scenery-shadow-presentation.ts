@@ -5,6 +5,7 @@ import type { BoneyardComplexShadowStaticCaster } from './boneyard-complex-shado
 import type { ResidentTexture } from './boneyard-renderer-model.ts'
 import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
+import type { NativeSceneryGlyphMaterial } from './native-scenery-glyph-material.ts'
 import {
   nativeGoodieShadowPlan, nativeSceneryShadowPlan, nativeWallSkirtPlan,
   type NativeSceneryShadowQuad,
@@ -45,6 +46,7 @@ interface StaticPlan {
   readonly on: readonly NativeSceneryShadowQuad[]
   readonly off: readonly NativeSceneryShadowQuad[]
   readonly family: string
+  readonly treeMaterial?: NativeSceneryGlyphMaterial
 }
 
 /** Native class masks own their original pixels and the same painter slot as the main owner. */
@@ -69,7 +71,8 @@ export class BoneyardSceneryShadowPresentation {
       const on = nativeSceneryShadowPlan(layer, true)
       const off = nativeSceneryShadowPlan(layer, false)
       if (on.length === 0 && off.length === 0) continue
-      this.plans.set(resident.sprite, { on, off, family: familyFor(layer) })
+      this.plans.set(resident.sprite, { on, off, family: familyFor(layer),
+        treeMaterial: resident.sceneryMaterial?.tree ? resident.sceneryMaterial : undefined })
     }
     for (const { caster, depthOwner } of staticCasters) {
       this.directionalIds.set(depthOwner, caster.id)
@@ -178,6 +181,11 @@ export class BoneyardSceneryShadowPresentation {
         part.mesh.geometry.getBuffer('aColor').update()
       }
       view.plan = plan
+    }
+    // Web visibility: an opaque flat canopy must not hide the wizard after its foliage fades.
+    const treeAlpha = this.plans.get(owner)?.treeMaterial?.alpha ?? 1
+    for (let index = 0; index < plan.length; index += 1) {
+      view.parts[index]!.mesh.alpha = plan[index]!.role === 'scenery-flat-shadow' ? treeAlpha : 1
     }
     const container = view.container
     container.label = `scenery-shadow:${family}:${owner.label}`

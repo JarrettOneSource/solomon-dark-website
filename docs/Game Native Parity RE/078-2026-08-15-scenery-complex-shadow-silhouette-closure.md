@@ -425,3 +425,27 @@ open, spent, moved, culled/returned, removed/recreated, directional and restored
 states. Its exact-candidate browser execution and same-harness baseline pairing
 belong to the archive qualification receipts; syntax or focused checks alone do
 not establish runtime acceptance or an end-to-end performance improvement.
+
+## 2026-10-19 — Web visibility correction for Tree flat shadows
+
+Report 114's black canopy obstruction is reproducible on `ed85cf1f`: with
+Complex Shadows off, a wizard at `(456.8141174316406, 2440.175048828125)`
+behind overlapping secondary-0 Trees is completely hidden after both foliage
+owners have reached `f32(.4)`. Their opaque flat-shadow copies still paint over
+the wizard. The existing Mac production-renderer diagnostic reproduces this
+using retained scene geometry and a synthetic actor position; it is not a replay
+of the reporter's historical actor state. Turning Complex Shadows on removes
+that canopy obstruction.
+
+The native recovery above remains correct: retail deliberately keeps flat
+shadows independent of fade. For web playability, Tree main/canopy flat shadows
+now follow their existing Tree material's occlusion alpha. This is an intentional
+web correction, not a new claim about retail behavior. It reuses the existing
+fade membership, timing and recovery. Root masks, directional shadows, other
+scenery, original glyph geometry and painter order are unchanged.
+
+The focused shadow/tree checks pass (34 tests), along with app/test TypeScript
+and scoped lint. The same Mac Chrome renderer view now shows the wizard through
+the flat canopies. Its Complex Shadows-on comparison is byte-identical before
+and after the correction. This is focused local verification, not a new full
+release gate or an exact historical replay.
