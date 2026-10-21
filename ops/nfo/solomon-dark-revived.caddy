@@ -13,6 +13,45 @@ solomondarker.com {
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
+	redir /game-stg /game-stg/ 308
+
+	handle_path /game-stg/* {
+		header Cache-Control "no-cache"
+		@stg_embedded path /boneyard-library /editor-test/ /editor-test/*
+		@stg_top_level not path /boneyard-library /editor-test/ /editor-test/*
+		header @stg_embedded {
+			Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; media-src 'self'; upgrade-insecure-requests"
+			X-Frame-Options "SAMEORIGIN"
+		}
+		header @stg_top_level {
+			Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; media-src 'self'; upgrade-insecure-requests"
+			X-Frame-Options "DENY"
+		}
+
+		@stg_api path /api/* /uploads/*
+		handle @stg_api {
+			reverse_proxy 127.0.0.1:5229
+		}
+		@stg_game path /game-hub /game-sessions/*
+		handle @stg_game {
+			reverse_proxy 127.0.0.1:5230
+		}
+		handle_path /site/* {
+			root * /opt/solomon-rust-stg/current/site
+			file_server
+		}
+		@stg_site path /login /register /account /boneyard-library /boneyard /boneyards /mods /mods/* /parties /about /downloads /wizards/* /game
+		handle @stg_site {
+			root * /opt/solomon-rust-stg/current/site
+			rewrite * /index.html
+			file_server
+		}
+		handle {
+			root * /opt/solomon-rust-stg/current/web
+			file_server
+		}
+	}
+
 	handle /game-hub {
 		reverse_proxy 127.0.0.1:5222
 	}

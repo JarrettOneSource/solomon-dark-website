@@ -102,6 +102,13 @@ disconnect reason and may explicitly send the bounded in-memory client log to
 the website. Those reports use the private diagnostic-log archive rather than
 public uploads.
 
+Rust staging lives under `/game-stg/` in the same checked-in Caddy site. Its
+independent API5229, native5230 and `/opt/solomon-rust-stg/current/{site,web}`
+artifacts have separate service and storage ownership. Keep this route in the
+canonical configuration: the deployment worker restores that file on drift even
+when the production game revision has not changed. The staging Library and
+editor Test document allow same-origin frames; other staging documents deny them.
+
 The guarded main deployment worker packages the checked-in Caddy site and game
 systemd unit beside the runtime. It compares both live hashes even when the
 deployed Git SHA is already current, validates each candidate before an atomic
