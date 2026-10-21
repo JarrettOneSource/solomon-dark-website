@@ -1,5 +1,16 @@
 # NFO browser game runtime
 
+The isolated `/game-stg/` route serves a matching Rust artifact from
+`/opt/solomon-rust-stg/current/web` and the extracted Website build from its
+`site` directory. Build the Website with `VITE_WEBSITE_BASE=/game-stg`,
+`VITE_GAME_ARTIFACT_BASE=/game-stg` and `SDR_WEBSITE_ASSET_BASE=/game-stg/site/`.
+The staged Website output's `game` subdirectory is supplied by the separate
+Rust `web` artifact. Staging API/uploads use loopback 5229, and game sockets
+use 5230; their services, credentials and persistent data are separate from
+production. Only the Boneyards shelf and editor Test document permit same-origin
+framing. Installing the route requires those staging services and assets first;
+configuration validation alone does not establish a playable deployment.
+
 The production website and browser game sessions are separate supervised
 processes from the same release directory:
 
