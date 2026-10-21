@@ -34,4 +34,3 @@ export function reloadForDeploymentRevision(revision: string): boolean {
   window.location.reload()
   return true
 }
-
