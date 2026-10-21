@@ -1,24 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import MainMenuScene from '../game/MainMenuScene.tsx'
-import { bootGame, type GameSession } from '../game/engine.ts'
-import { loadGameStartupAssets } from '../game/game-assets.ts'
-import { admitEditorTest } from '../game/game-bootstrap.ts'
-import { gameOnlinePreferences, readGameSettings } from '../game/game-settings.ts'
-import type { NativeSaveTransferController } from '../game/NativeSaveTransferSettings.tsx'
-import { getToken } from '../lib/api.ts'
+import { gameArtifactUrl } from '../lib/game-artifact.ts'
 import { bytesToBase64, compileNative } from './io.ts'
 import type { EditorDoc } from './model.ts'
-
-const unavailable = async (): Promise<never> => { throw new Error('This is a disposable editor test.') }
-const ignore = () => {}
-const ignoreAsync = async () => {}
-const noEntries = async () => []
-const noSaveTransfer: NativeSaveTransferController = {
-  canExport: false,
-  exportCurrent: unavailable,
-  inspectImport: unavailable,
-  replaceWithImport: unavailable,
-}
 
 interface EditorTestRuntimeProps {
   accountUsername: string | null
@@ -26,92 +9,91 @@ interface EditorTestRuntimeProps {
   onReturn: () => void
 }
 
-/** Owns one transient authority. The editor remains mounted beneath this surface. */
+/** The draft stays mounted while one disposable Rust document owns the test. */
 export default function EditorTestRuntime({ accountUsername, doc, onReturn }: EditorTestRuntimeProps) {
-  const [session, setSession] = useState<GameSession | null>(null)
+  const [playing, setPlaying] = useState(false)
   const [stage, setStage] = useState('Preparing your Boneyard')
   const [error, setError] = useState<string | null>(null)
-  const sessionRef = useRef<GameSession | null>(null)
   const returnButton = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     let cancelled = false
-    let owned: GameSession | null = null
-    returnButton.current?.focus()
-    const fail = (message: string) => {
-      if (cancelled) return
-      owned?.destroy()
-      setSession(null)
-      setError(message)
+    let ready = false
+    let started = false
+    let disposed = false
+    let payload: { name: string, bytesBase64: string, accountUsername: string | null } | null = null
+    const frame = document.createElement('iframe')
+    frame.src = gameArtifactUrl('editor-test/')
+    frame.title = 'Private Boneyard test'
+    frame.className = 'editor-test-frame'
+    frame.allow = 'autoplay; fullscreen'
+    const origin = new URL(frame.src).origin
+    const dispose = () => {
+      disposed = true
+      window.removeEventListener('message', receive)
+      frame.remove()
     }
-    void (async () => {
-      const bytes = await compileNative(doc)
-      if (cancelled) return
+    const start = () => {
+      if (cancelled || started || !ready || !payload) return
+      started = true
       setStage('Loading the test world')
-      await loadGameStartupAssets(() => {})
+      frame.contentWindow?.postMessage({ type: 'solomon-editor-test-start', ...payload }, origin)
+    }
+    const receive = (event: MessageEvent<unknown>) => {
+      if (event.origin !== origin || event.source !== frame.contentWindow) return
+      const message = event.data
+      if (typeof message !== 'object' || message === null || !('type' in message)) return
+      switch (message.type) {
+        case 'solomon-editor-test-ready':
+          ready = true
+          start()
+          break
+        case 'solomon-editor-test-disposed':
+          dispose()
+          break
+        case 'solomon-editor-test-return':
+          if (!cancelled) onReturn()
+          break
+        case 'solomon-editor-test-state':
+          if (cancelled || !('state' in message)) return
+          if (message.state === 'playing') {
+            setPlaying(true)
+          } else if ('message' in message && typeof message.message === 'string') {
+            if (message.state === 'error') {
+              setPlaying(false)
+              setError(message.message)
+            } else if (message.state === 'loading') {
+              setStage(message.message)
+            }
+          }
+      }
+    }
+    window.addEventListener('message', receive)
+    // Moving an iframe between DOM parents reloads its document. Keep its one
+    // owner outside React from admission through the final disposal receipt.
+    document.body.append(frame)
+    returnButton.current?.focus()
+    void compileNative(doc).then(bytes => {
       if (cancelled) return
-      setStage('Starting a private test')
-      const endpoint = await admitEditorTest({
-        name: doc.meta.name.trim() || 'Untitled Acre', bytesBase64: bytesToBase64(bytes),
-      }, getToken())
-      // Complete an already admitted connection even after cancellation, so its
-      // socket can be closed and the claimed ephemeral authority is reaped.
-      owned = await bootGame({
-        endpoint,
-        character: { discipline: 'arcane', displayName: 'Test Wizard', element: 'ether' },
-        cheatsEnabled: false,
-        enhancedEffects: readGameSettings().enhancedEffects,
-        onlinePreferences: { ...gameOnlinePreferences(readGameSettings()), submitRuns: false },
-        // The disposable wizard stays anonymous; Website account chrome is separate.
-        profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: 0 },
-        onFatal: failure => fail(failure.message),
-        onDeploymentRestart: async () => fail('The game was updated. Return to editing and start a new test.'),
-      })
-      if (cancelled) { owned.destroy(); return }
-      sessionRef.current = owned
-      const choice = owned.boneyards.find(item => item.id === 'editor-test')
-      if (!choice) throw new Error('The private test did not receive your Boneyard.')
-      owned.startMatch(choice.id)
-      setSession(owned)
-    })().catch((cause: unknown) => fail(cause instanceof Error ? cause.message : 'The test could not be started.'))
+      payload = { name: doc.meta.name.trim() || 'Untitled Acre', bytesBase64: bytesToBase64(bytes), accountUsername }
+      start()
+    }).catch((cause: unknown) => {
+      if (!cancelled) setError(cause instanceof Error ? cause.message : 'The test could not be started.')
+      dispose()
+    })
     return () => {
       cancelled = true
-      owned?.destroy()
-      sessionRef.current = null
+      if (disposed) return
+      if (!started) { dispose(); return }
+      // An admitted test must finish its hello and close its claimed authority.
+      // Keep that disposable document alive until it confirms the socket is closed.
+      frame.hidden = true
+      frame.contentWindow?.postMessage({ type: 'solomon-editor-test-cancel' }, origin)
     }
-  }, [doc])
+  }, [doc, onReturn, accountUsername])
 
-  const leave = () => {
-    sessionRef.current?.destroy()
-    onReturn()
-  }
-
-  return <div className="editor-test-runtime" data-editor-test-state={error ? 'error' : session ? 'playing' : 'loading'}>
-    {session ? <MainMenuScene
-      activeMods={[]}
-      accountUsername={accountUsername}
-      connectSession={unavailable}
-      connectObserver={unavailable}
-      developerAccess={false}
-      displayName="Test Wizard"
-      editorTestSession={session}
-      loadGlobalHallOfFame={noEntries}
-      modLoadError={null}
-      onCancelCreate={ignoreAsync}
-      onKillWizard={unavailable}
-      onOpenBoneyardEditor={ignore}
-      onReturnToEditor={leave}
-      onSaveCheckpoint={ignore}
-      onSignOut={ignore}
-      persistSaveCheckpoint={ignoreAsync}
-      prepareGame={unavailable}
-      profileSave={null}
-      refreshActiveMods={noEntries}
-      resumeSave={null}
-      saveTransfer={noSaveTransfer}
-      submitGlobalHallOfFame={ignoreAsync}
-      tutorialOfferEligible={false}
-    /> : <div className="editor-test-loading">
+  return <div className="editor-test-runtime" data-editor-test-state={error ? 'error' : playing ? 'playing' : 'loading'}>
+    {!playing && <div className="editor-test-loading">
       <div className="editor-test-card">
         <span className="editor-test-kicker">Boneyard workshop / Private test</span>
         <h2>{error ? 'Your draft is safe' : doc.meta.name || 'Untitled Acre'}</h2>
@@ -123,7 +105,7 @@ export default function EditorTestRuntime({ accountUsername, doc, onReturn }: Ed
     </div>}
     <div className="editor-test-bar">
       <div><span className="editor-test-dot" aria-hidden /><strong>Private test</strong><span className="editor-test-map-name">{doc.meta.name || 'Untitled Acre'}</span><small>No saved progress</small></div>
-      <button ref={returnButton} type="button" className="btn btn-gold" onClick={leave}>← Return to editing</button>
+      <button ref={returnButton} type="button" className="btn btn-gold" onClick={onReturn}>← Return to editing</button>
     </div>
   </div>
 }

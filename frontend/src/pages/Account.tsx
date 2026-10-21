@@ -14,7 +14,7 @@ import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
 import { SCHOOLS } from '../fx/SchoolBursts'
 import { formatCount, formatDate, timeAgo } from '../lib/format'
-import type { GameSaveImportPreview } from '../game/save/game-save-files.ts'
+import type { GameSaveImportPreview } from '../lib/game-save-tools.ts'
 
 const SCHOOL_LORE: Record<School, string> = {
   fire: 'Every click, a small act of arson.',
@@ -114,7 +114,7 @@ function BrowserGameSaveSlot({
     setError(null)
     setPendingImport(null)
     try {
-      const { readGameSaveFileSelection } = await import('../game/save/game-save-files.ts')
+      const { readGameSaveFileSelection } = await import('../lib/game-save-tools.ts')
       setPendingImport(await readGameSaveFileSelection(files))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The save could not be inspected.')
@@ -148,7 +148,7 @@ function BrowserGameSaveSlot({
     setError(null)
     try {
       const { exportWebGameSaveToNativeArchive } = await import(
-        '../game/save/game-save-portability.ts'
+        '../lib/game-save-tools.ts'
       )
       const exported = await exportWebGameSaveToNativeArchive(save.document)
       if (

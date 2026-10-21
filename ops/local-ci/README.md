@@ -38,11 +38,17 @@ deferral when a report owns compute.
 The exact source runs the unchanged all-mode `./scripts/validate.sh`. Clean
 source/index identity and a fresh main check precede packaging. The macOS SDK
 publishes `linux-x64` managed dependencies with no platform apphost; native
-SQLite must be ELF64 x86-64. NFO keeps its existing verified pinned Linux Node
-runtime, referenced by the unchanged game unit. A Mac native library or foreign
-runtime dependency target rejects the
-artifact before upload. The release includes the existing Caddy site, game
-unit, ML checkpoint and complete maintained worker components.
+SQLite and the supplied Rust authority must be ELF64 x86-64. Configure an exact
+`SDR_GAME_ARTIFACT_URL` plus `SDR_GAME_ARTIFACT_SHA256`, or explicit matching
+`SDR_GAME_DIST` and `SDR_GAME_NATIVE_HOST` local paths, in the protected worker
+configuration. The native artifact must target `x86_64-unknown-linux-gnu`.
+A Mac native library, altered/unlisted client file or foreign runtime rejects
+the release before upload. Node is still a pinned Website build tool; the
+production game unit starts `GameHost/solomon-darker --supervisor` directly.
+The release includes the checked-in Caddy site, game unit, original game
+manifest, immutable native revision/asset environment, learned policy under
+`wwwroot/game/assets/native`, and complete maintained worker components.
+See [the artifact contract](../../docs/RUST-GAME-CUTOVER.md).
 
 The NFO transaction is preserved: close admissions, freeze and checkpoint
 players through their normal cloud/IndexedDB owners, wait for bounded save
@@ -50,7 +56,8 @@ acknowledgements, back up/check SQLite, install verified game/Caddy/model
 configuration, atomically swap the release, and verify health. An unhealthy
 candidate restores the prior release/configuration; successful cutovers retain
 NFO rollback and database backups. The public no-store `/deployment.json`
-remains the automatic app reload edge.
+identifies the Website release; the mounted game's own deployment document
+identifies the Rust revision. The deployment drain targets that Rust revision.
 
 Complete worker versions are installed atomically behind `current`. A validated
 component update is admitted only after the full gate, discards the artifact
@@ -66,7 +73,10 @@ at each invocation, so replacing a complete version needs no competing refresh
 job or scheduler restart. Completed source/build/artifact trees and full success
 logs are deleted. `state/status.json` retains bounded diagnostics, while
 `state/last-success` and `state/failed-target` preserve the deployed or suppressed
-revision. A remote cutover failure suppresses repeated drains at the same SHA.
+Website revision. Artifact cache, already-deployed admission and failed-target
+suppression include the exact Rust manifest identity, so a deliberate game-only
+artifact update cannot silently reuse or skip a different payload. A remote
+cutover failure suppresses repeated drains for the same Website/artifact pair.
 Cached artifacts for superseded targets are removed on the next fresh main read.
 
 Install from an accepted source tree after staging the pinned SSD tools,

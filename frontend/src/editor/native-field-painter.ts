@@ -5,7 +5,7 @@ import {
   nativeArenaFieldVisibleRange,
   type NativeArenaFieldBounds,
   type NativeArenaFieldLattice,
-} from '../game/native-arena-field.ts'
+} from './native-preview/arena-field.ts'
 
 interface FieldCamera {
   readonly x: number

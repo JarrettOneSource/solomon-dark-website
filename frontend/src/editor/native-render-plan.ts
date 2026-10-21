@@ -1,4 +1,4 @@
-import { nativeBoneyardFencePosts } from '../game/core-kernels/boneyard-fence-posts.ts'
+import { nativeBoneyardFencePosts } from './native-preview/fence-posts.ts'
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, StaticSprite, Vec2 } from './model.ts'
 import { NATIVE } from './model.ts'
 import deadhawg from './manifest/deadhawg.json' with { type: 'json' }
@@ -6,7 +6,7 @@ import { nativeBrokenFenceHalves, nativeGateLeaves, nativeGatePainterRoot, type 
 import {
   buildNativeRegionPainterOrder,
   type PositionedNativeRegionPainterLayer,
-} from '../game/region-painter-order.ts'
+} from './native-preview/region-painter.ts'
 
 export const NATIVE_PLACEMENT_PASSES = ['underlay', 'compact', 'shadow', 'main'] as const
 

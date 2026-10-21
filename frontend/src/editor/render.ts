@@ -21,7 +21,7 @@ import {
 import type { CompactSpriteLayer, MainLayer, ObjectSpriteLayer } from './native-render-plan'
 import { buildNativeRenderPlan } from './native-render-plan'
 import { drawNativeEditorField } from './native-field-painter'
-import type { PositionedNativeRegionPainterLayer } from '../game/region-painter-order'
+import type { PositionedNativeRegionPainterLayer } from './native-preview/region-painter'
 import {
   FENCE_GRATE_TEXTURE,
   GROUND_TEXTURE,

@@ -48,6 +48,27 @@ fi
 
 export SDR_DOTNET="$dotnet_command"
 
+artifact_temp=""
+cleanup_artifact() {
+    if [[ -n "$artifact_temp" ]]; then
+        rm -rf -- "$artifact_temp"
+    fi
+}
+trap cleanup_artifact EXIT
+
+prepare_game_artifact() {
+    if [[ -z "${SDR_GAME_DIST:-}" && -z "${SDR_GAME_NATIVE_HOST:-}" ]]; then
+        artifact_temp="$(mktemp -d "${TMPDIR:-/tmp}/solomon-website-artifact.XXXXXX")"
+        "$python_command" tools/fetch-game-artifact.py "$artifact_temp/artifact" >"$artifact_temp/receipt.json"
+        SDR_GAME_DIST="$("$python_command" -c 'import json,sys; print(json.load(open(sys.argv[1]))["dist"])' "$artifact_temp/receipt.json")"
+        SDR_GAME_NATIVE_HOST="$("$python_command" -c 'import json,sys; print(json.load(open(sys.argv[1]))["nativeHost"])' "$artifact_temp/receipt.json")"
+        export SDR_GAME_DIST SDR_GAME_NATIVE_HOST
+    fi
+    node frontend/tools/game-artifact.mjs check
+    mkdir -p frontend/reports
+    node frontend/tools/game-artifact.mjs inspect >frontend/reports/game-artifact.json
+}
+
 install_dependencies() {
     printf 'Restoring pinned dependencies\n'
     "$dotnet_command" restore backend/Server.csproj --nologo
@@ -81,26 +102,7 @@ run_all() {
     run_lint
 
     printf 'Running frontend tests\n'
-    npm --prefix frontend run test:web-lua
-    npm --prefix frontend run test:hagatha
-    npm --prefix frontend run test:harden
-    npm --prefix frontend run test:loot
-    npm --prefix frontend run test:arena-render
-    npm --prefix frontend run test:boneyard
-    npm --prefix frontend run test:portal
-    npm --prefix frontend run test:cheat-menu
-    npm --prefix frontend run test:hud-skill-selector
-    npm --prefix frontend run test:world-weather
-    npm --prefix frontend run test:parties
-    npm --prefix frontend run test:level-up
-    npm --prefix frontend run test:native-ui
-    npm --prefix frontend run test:tutorial
-    npm --prefix frontend run test:diagnostics
-    npm --prefix frontend run test:hall
-    npm --prefix frontend run test:hub-ui
-
-    printf 'Running desktop shell tests\n'
-    npm --prefix frontend run test:desktop
+    npm --prefix frontend test
 
     printf 'Building production frontend\n'
     npm --prefix frontend run build
@@ -108,8 +110,7 @@ run_all() {
     printf 'Checking production media policy\n'
     node frontend/tools/check-production-media-policy.mjs
 
-    printf 'Measuring renderer quality gates\n'
-    npm --prefix frontend run quality:renderer
+    printf 'Game runtime and desktop gates are owned by the matched Rust artifact (docs/RUST-GAME-CUTOVER.md).\n'
 }
 
 mode="${1:-all}"
@@ -117,6 +118,7 @@ mode="${1:-all}"
 
 case "$mode" in
     all)
+        prepare_game_artifact
         install_dependencies
         run_all
         ;;

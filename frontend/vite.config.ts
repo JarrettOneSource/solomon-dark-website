@@ -16,6 +16,17 @@ const fullGitRevision = /^[0-9a-f]{40}$/
 const developmentBackendOrigin = process.env.SDR_VITE_BACKEND_URL?.trim()
   || 'http://localhost:5210'
 const developmentBackendUrl = new URL(developmentBackendOrigin)
+const websiteBase = process.env.VITE_WEBSITE_BASE || ''
+const gameBase = process.env.VITE_GAME_ARTIFACT_BASE || '/game'
+const assetBase = process.env.SDR_WEBSITE_ASSET_BASE || '/'
+for (const [name, value] of [['VITE_WEBSITE_BASE', websiteBase], ['VITE_GAME_ARTIFACT_BASE', gameBase]]) {
+  if (value && (!/^\/[a-z0-9/-]+$/.test(value) || value.endsWith('/') || value.includes('//'))) {
+    throw new Error(`${name} must be an absolute URL path without a trailing slash`)
+  }
+}
+if (!/^\/[a-z0-9/-]*$/.test(assetBase) || !assetBase.endsWith('/') || assetBase.includes('//')) {
+  throw new Error('SDR_WEBSITE_ASSET_BASE must be an absolute URL path ending with a slash')
+}
 
 if (!fullGitRevision.test(checkoutRevision)) {
   throw new Error('The frontend checkout did not resolve to a full Git commit ID')
@@ -49,6 +60,7 @@ const deploymentRevisionManifest: Plugin = {
 }
 
 export default defineConfig({
+  base: assetBase,
   define: {
     __SDR_BUILD_REVISION__: JSON.stringify(buildRevision),
   },

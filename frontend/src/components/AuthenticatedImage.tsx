@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ImgHTMLAttributes } from 'react'
 import { getToken } from '../lib/api'
+import { websiteUrl } from '../lib/website-mount.ts'
 
 export default function AuthenticatedImage({
   onLoadError,
@@ -20,7 +21,7 @@ export default function AuthenticatedImage({
     const headers = new Headers()
     const token = getToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
-    void fetch(src, { headers, signal: controller.signal }).then((response) => {
+    void fetch(websiteUrl(src), { headers, signal: controller.signal }).then((response) => {
       if (!response.ok) throw new Error(`Image request failed (${response.status})`)
       return response.blob()
     }).then((blob) => {

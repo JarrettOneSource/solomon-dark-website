@@ -20,7 +20,6 @@ import {
 } from '../fx/jukebox'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
-import '../game/game-surface.css'
 
 // The site is the door to the web port: Search Parties and the Library
 // live in-game now (the Dark Cloud), so they no longer get tabs. Their

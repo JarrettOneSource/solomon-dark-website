@@ -1,7 +1,8 @@
 # Solomon Dark Web Modding
 
 This glossary defines the shared language for authored content and behavior in
-the Solomon Dark web port. The Website is the sole runtime target; the retired
+Solomon Dark. The Website owns accounts, content, storage and authoring; the
+Rust game owns authoritative gameplay and browser presentation. The retired
 native Mod Loader is not part of this context.
 
 ## Packages and definitions
@@ -39,7 +40,7 @@ A beginner-facing constructor that expands into ordinary definition-graph nodes 
 _Avoid_: special runtime, template engine
 
 **Prefab**:
-A reusable Website-owned behavior or presentation recipe referenced by a content definition.
+A reusable game-owned behavior or presentation recipe referenced by a content definition.
 _Avoid_: arbitrary script, native function
 
 ## Behavior and lifetime
@@ -53,7 +54,7 @@ An authority-only function that receives immutable semantic input and returns co
 _Avoid_: raw mutation callback, tick hook
 
 **Intent**:
-A validated request for the Website authority to perform one semantic operation.
+A validated request for the game authority to perform one semantic operation.
 _Avoid_: packet, direct mutation, RPC
 
 **Status**:
@@ -65,7 +66,7 @@ The ownership lifetime that determines replication, persistence, and automatic t
 _Avoid_: global table, manual cleanup list
 
 **Definition Phase**:
-The pre-play phase in which the Website evaluates and atomically validates a mod definition.
+The pre-play phase in which the game authority evaluates and atomically validates a mod definition.
 _Avoid_: startup tick, runtime registration
 
 **Simulation Authority**:

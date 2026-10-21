@@ -115,6 +115,11 @@ remote_caddy_checksum() {
         "if test -r '$remote_caddy_site'; then sha256sum '$remote_caddy_site' | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
+remote_game_artifact_checksum() {
+    "$ssh_command" "${ssh_options[@]}" "$remote_host" \
+        "if test -r /opt/solomon-dark-revived/game-artifact.json; then sha256sum /opt/solomon-dark-revived/game-artifact.json | awk '{print \$1}'; else printf 'missing\n'; fi"
+}
+
 remote_game_unit_checksum() {
     "$ssh_command" "${ssh_options[@]}" "$remote_host" \
         "if test -r '$remote_game_unit'; then sha256sum '$remote_game_unit' | awk '{print \$1}'; else printf 'missing\n'; fi"
@@ -127,7 +132,7 @@ discard_artifact() {
 
 record_failed_target() {
     failed_target_temp="$state_root/.failed-target.$$"
-    printf '%s %s\n' "$target_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$failed_target_temp"
+    printf '%s %s %s\n' "$target_sha" "$target_game_checksum" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$failed_target_temp"
     mv -- "$failed_target_temp" "$failed_target_file"
     failed_target_temp=""
 }
@@ -166,7 +171,7 @@ install_validated_worker() {
     return 3
 }
 
-for command_name in curl date git install mktemp python3 tar; do
+for command_name in curl date git install mktemp node npm python3 tar; do
     require_command "$command_name"
 done
 [[ -x "$ssh_command" ]] || fail "SSH client is not executable: $ssh_command"
@@ -203,22 +208,44 @@ target_game_unit_checksum="$(
 [[ "$target_game_unit_checksum" =~ ^[0-9a-f]{64}$ ]] ||
     fail "origin/main did not contain a valid game systemd unit"
 short_sha="${target_sha:0:12}"
-artifact="$artifact_root/$target_sha.tar.gz"
+run_root="$(mktemp -d "$run_parent/run.XXXXXXXX")"
+source_checkout="$run_root/source"
+git --git-dir="$mirror" worktree add --quiet --detach "$source_checkout" "$target_sha"
+worktree_registered=1
+
+node_version="$(tr -d '[:space:]' <"$source_checkout/.node-version")"
+[[ "$(node --version)" == "v$node_version" ]] || fail "CI Node version differs from the admitted source"
+if [[ -z "${SDR_GAME_DIST:-}" && -z "${SDR_GAME_NATIVE_HOST:-}" ]]; then
+    python3 "$source_checkout/tools/fetch-game-artifact.py" "$run_root/game" >"$run_root/game-download.json"
+    SDR_GAME_DIST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["dist"])' "$run_root/game-download.json")"
+    SDR_GAME_NATIVE_HOST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["nativeHost"])' "$run_root/game-download.json")"
+fi
+export SDR_GAME_DIST SDR_GAME_NATIVE_HOST
+node "$source_checkout/frontend/tools/game-artifact.mjs" inspect >"$run_root/game-artifact.json"
+SDR_GAME_DIST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["dist"])' "$run_root/game-artifact.json")"
+SDR_GAME_NATIVE_HOST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["nativeHost"])' "$run_root/game-artifact.json")"
+target_game_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$run_root/game-artifact.json")"
+target_game_checksum="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["manifestSha256"])' "$run_root/game-artifact.json")"
+[[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"])' "$run_root/game-artifact.json")" == x86_64-unknown-linux-gnu ]] ||
+    fail "NFO requires the matching x86_64-unknown-linux-gnu Rust artifact"
+artifact="$artifact_root/$target_sha-$target_game_checksum.tar.gz"
 checksum_file="$artifact.sha256"
 # Only the current main target can be reused; preserve unrelated files in this directory.
 for cached in "$artifact_root"/*; do
     [[ -f "$cached" && ! -L "$cached" ]] || continue
     cached_name="${cached##*/}"
-    [[ "$cached_name" =~ ^([0-9a-f]{40})\.tar\.gz(\.sha256)?$ ]] || continue
-    [[ "${BASH_REMATCH[1]}" == "$target_sha" ]] || unlink -- "$cached"
+    [[ "$cached_name" =~ ^[0-9a-f]{40}(-[0-9a-f]{64})?\.tar\.gz(\.sha256)?$ ]] || continue
+    [[ "$cached" == "$artifact" || "$cached" == "$checksum_file" ]] || unlink -- "$cached"
 done
 
 deployed_sha="$(remote_deployed_sha)"
 live_caddy_checksum="$(remote_caddy_checksum)"
 live_game_unit_checksum="$(remote_game_unit_checksum)"
+live_game_checksum="$(remote_game_artifact_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" &&
-    "$live_game_unit_checksum" == "$target_game_unit_checksum" ]]; then
+    "$live_game_unit_checksum" == "$target_game_unit_checksum" &&
+    "$live_game_checksum" == "$target_game_checksum" ]]; then
     discard_artifact
     [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
     log "Production is already at origin/main $target_sha"
@@ -228,10 +255,10 @@ if [[ "$deployed_sha" == "$target_sha" ]]; then
     log "Production runtime is current but its service configuration drifted"
 fi
 if [[ -f "$failed_target_file" ]]; then
-    read -r failed_target_sha _ <"$failed_target_file"
+    read -r failed_target_sha failed_game_checksum _ <"$failed_target_file"
     [[ "$failed_target_sha" =~ ^[0-9a-f]{40}$ ]] ||
         fail "failed deployment target state is invalid"
-    if [[ "$failed_target_sha" == "$target_sha" ]]; then
+    if [[ "$failed_target_sha" == "$target_sha" && "$failed_game_checksum" == "$target_game_checksum" ]]; then
         log "Automatic deployment is suppressed for failed target $target_sha; run ops/local-ci/install.sh from a corrected checkout to retry"
         exit 0
     fi
@@ -249,19 +276,6 @@ if [[ -f "$artifact" && -f "$checksum_file" ]]; then
 fi
 
 if [[ -z "$artifact_checksum" ]]; then
-    node_version="$(tr -d '[:space:]' < <(
-        git --git-dir="$mirror" show "$target_sha:.node-version"
-    ))"
-    node_bin="$ci_root/tools/node/bin"
-    [[ -x "$node_bin/node" && -x "$node_bin/npm" ]] ||
-        fail "Pinned Node.js $node_version is not installed on the CI SSD"
-    [[ "$(node --version)" == "v$node_version" ]] || fail "CI Node version differs from the admitted source"
-
-    run_root="$(mktemp -d "$run_parent/run.XXXXXXXX")"
-    source_checkout="$run_root/source"
-    git --git-dir="$mirror" worktree add --quiet --detach "$source_checkout" "$target_sha"
-    worktree_registered=1
-
     log "Validating origin/main $target_sha"
     (
         cd "$source_checkout"
@@ -291,6 +305,12 @@ if [[ -z "$artifact_checksum" ]]; then
         --nologo \
         --verbosity minimal
     printf '%s\n' "$target_sha" >"$publish_dir/DEPLOYED_GIT_SHA"
+    install_file 0755 "$SDR_GAME_NATIVE_HOST" "$publish_dir/GameHost/solomon-darker"
+    install_file 0644 "$(dirname -- "$SDR_GAME_DIST")/game-artifact.json" "$publish_dir/game-artifact.json"
+    [[ "$(sha_file "$publish_dir/game-artifact.json")" == "$target_game_checksum" ]] ||
+        fail "Rust artifact changed during Website validation"
+    printf 'SDR_GAME_REVISION=%s\nSDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game\n' \
+        "$target_game_revision" >"$publish_dir/GameHost/release.env"
     install_file 0644 \
         "$source_checkout/$caddy_source_path" \
         "$publish_dir/Deploy/solomon-dark-revived.caddy"
@@ -309,11 +329,10 @@ if [[ -z "$artifact_checksum" ]]; then
         Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
-        GameHost/boneyard-navigation-worker.mjs \
-        GameHost/game-session-supervisor.mjs \
-        GameHost/lua54.wasm \
-        GameHost/ml-bot-policy-v7-selected.sdml \
-        GameHost/ml-bot-policy-worker.mjs \
+        GameHost/solomon-darker \
+        GameHost/release.env \
+        game-artifact.json \
+        wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml \
         wwwroot/deployment.json \
         wwwroot/index.html \
         DEPLOYED_GIT_SHA; do
@@ -321,12 +340,12 @@ if [[ -z "$artifact_checksum" ]]; then
             fail "published release is missing $required_file"
     done
 
-    artifact_temp="$artifact_root/.$target_sha.$$.tmp"
+    artifact_temp="$artifact_root/.$target_sha-$target_game_checksum.$$.tmp"
     tar -czf "$artifact_temp" -C "$publish_dir" .
     artifact_checksum="$(sha_file "$artifact_temp")"
     mv -- "$artifact_temp" "$artifact"
     artifact_temp=""
-    checksum_temp="$artifact_root/.$target_sha.$$.sha256.tmp"
+    checksum_temp="$artifact_root/.$target_sha-$target_game_checksum.$$.sha256.tmp"
     printf '%s\n' "$artifact_checksum" >"$checksum_temp"
     mv -- "$checksum_temp" "$checksum_file"
     checksum_temp=""
@@ -352,9 +371,11 @@ fi
 deployed_sha="$(remote_deployed_sha)"
 live_caddy_checksum="$(remote_caddy_checksum)"
 live_game_unit_checksum="$(remote_game_unit_checksum)"
+live_game_checksum="$(remote_game_artifact_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" &&
-    "$live_game_unit_checksum" == "$target_game_unit_checksum" ]]; then
+    "$live_game_unit_checksum" == "$target_game_unit_checksum" &&
+    "$live_game_checksum" == "$target_game_checksum" ]]; then
     discard_artifact
     log "Production reached $target_sha while this run was building"
     exit 0
@@ -366,13 +387,15 @@ log "Uploading validated release $target_sha"
 "$scp_command" "${ssh_options[@]}" -q "$artifact" "$remote_host:$remote_upload"
 
 if "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum'" <<'REMOTE_DEPLOY'
+    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum' '$target_game_revision' '$target_game_checksum'" <<'REMOTE_DEPLOY'
 set -Eeuo pipefail
 
 target_sha="$1"
 expected_checksum="$2"
 artifact="$3"
 expected_game_unit_checksum="$4"
+target_game_revision="$5"
+expected_game_checksum="$6"
 short_sha="${target_sha:0:12}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 live=/opt/solomon-dark-revived
@@ -394,7 +417,7 @@ game_env=/etc/solomon-dark-game.env
 game_env_next="${game_env}.next"
 game_env_backup=""
 game_env_changed=0
-game_checkpoint=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v7-selected.sdml
+game_checkpoint=/opt/solomon-dark-revived/wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml
 rollback_needed=0
 website_stopped=0
 game_drained=0
@@ -409,9 +432,9 @@ request_game_restart() {
     result="$(curl --fail --silent --show-error --max-time 40 \
         -H "Authorization: Bearer $SDR_GAME_SUPERVISOR_SECRET" \
         -H 'Content-Type: application/json' \
-        --data "{\"targetRevision\":\"$target_sha\"}" \
+        --data "{\"targetRevision\":\"$target_game_revision\"}" \
         http://127.0.0.1:5222/admin/deployments/restart)"
-    python3 - "$result" "$target_sha" <<'PY'
+    python3 - "$result" "$target_game_revision" <<'PY'
 import json
 import sys
 
@@ -599,8 +622,13 @@ current_game_unit_checksum="missing"
 if [[ -r "$game_unit" ]]; then
     current_game_unit_checksum="$(sha256sum "$game_unit" | awk '{print $1}')"
 fi
+current_game_checksum=missing
+if [[ -r "$live/game-artifact.json" ]]; then
+    current_game_checksum="$(sha256sum "$live/game-artifact.json" | awk '{print $1}')"
+fi
 if [[ "$current_sha" == "$target_sha" &&
-    "$current_game_unit_checksum" == "$expected_game_unit_checksum" ]]; then
+    "$current_game_unit_checksum" == "$expected_game_unit_checksum" &&
+    "$current_game_checksum" == "$expected_game_checksum" ]]; then
     install_caddy_config
     [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
         "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
@@ -616,17 +644,18 @@ for required_file in \
     Deploy/solomon-dark-game.service \
     Deploy/solomon-dark-revived.caddy \
     Server.dll \
-    GameHost/boneyard-navigation-worker.mjs \
-    GameHost/game-session-supervisor.mjs \
-    GameHost/lua54.wasm \
-    GameHost/ml-bot-policy-v7-selected.sdml \
-    GameHost/ml-bot-policy-worker.mjs \
+    GameHost/solomon-darker \
+    GameHost/release.env \
+    game-artifact.json \
+    wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml \
     wwwroot/deployment.json \
     wwwroot/index.html \
     DEPLOYED_GIT_SHA; do
     [[ -f "$stage/$required_file" ]]
 done
 [[ "$(tr -d '\r\n' <"$stage/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
+[[ "$(sha256sum "$stage/game-artifact.json" | awk '{print $1}')" == "$expected_game_checksum" ]]
+grep --fixed-strings --line-regexp --quiet "SDR_GAME_REVISION=$target_game_revision" "$stage/GameHost/release.env"
 [[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service" | awk '{print $1}')" == \
     "$expected_game_unit_checksum" ]]
 systemd-analyze verify "$stage/Deploy/solomon-dark-game.service"
@@ -676,6 +705,7 @@ fi
 [[ "$(systemctl show -p NRestarts --value solomon-dark-game.service)" == 0 ]]
 [[ "$(sqlite3 "$database" 'PRAGMA integrity_check;')" == "ok" ]]
 [[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
+[[ "$(sha256sum "$live/game-artifact.json" | awk '{print $1}')" == "$expected_game_checksum" ]]
 grep --fixed-strings --line-regexp --quiet \
     "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" "$game_env"
 [[ "$(sha256sum "$game_unit" | awk '{print $1}')" == \
@@ -711,6 +741,8 @@ live_caddy_checksum="$(remote_caddy_checksum)"
 [[ "$live_caddy_checksum" == "$target_caddy_checksum" ]] ||
     fail "production Caddy site does not match origin/main after deploying $target_sha"
 live_game_unit_checksum="$(remote_game_unit_checksum)"
+live_game_checksum="$(remote_game_artifact_checksum)"
+[[ "$live_game_checksum" == "$target_game_checksum" ]] || fail "production Rust artifact does not match the validated input"
 [[ "$live_game_unit_checksum" == "$target_game_unit_checksum" ]] ||
     fail "production game unit does not match origin/main after deploying $target_sha"
 curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
@@ -729,4 +761,4 @@ PY
 printf '%s %s\n' "$target_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$state_root/last-success"
 [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
 discard_artifact
-log "Production deployment of origin/main $target_sha passed live health checks"
+log "Production Website $target_sha with Rust game $target_game_revision passed live health checks"

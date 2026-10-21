@@ -12,7 +12,7 @@ import {
 import { BoneyardParseError, parseBoneyard } from '../boneyard/parser.ts'
 import { art } from '../lib/assets'
 
-const SAMPLE_URL = '/samples/story0.boneyard'
+const SAMPLE_URL = `${import.meta.env.BASE_URL}samples/story0.boneyard`
 const MAX_FILE_BYTES = 256 * 1024 * 1024
 
 type LoadedBoneyard = Readonly<{

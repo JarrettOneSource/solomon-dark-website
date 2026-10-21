@@ -1,0 +1,119 @@
+# Rust game artifact boundary
+
+The Website owns accounts, authentication, cloud storage, content distribution,
+leaderboards, the Boneyard library and editor. The separate Rust game owns the
+canonical simulation, authoritative hosted supervisor, multiplayer protocol,
+browser renderer, save tools, learned-bot inference and desktop game child.
+The existing Electron/PSK/update shell is maintained with that Rust repository.
+No Website TypeScript game or Node gameplay fallback is built or started.
+
+## Required build input
+
+Build one complete artifact from a clean Rust commit with
+`scripts/package-hosted-game.py`. Its layout is:
+
+```text
+game-artifact.json
+bin/solomon-darker                 # .exe for a Windows target
+client/index.html
+client/deployment.json
+client/<complete mounted client and assets>
+client/save-tools/solomon_save_tools.js
+client/save-tools/solomon_save_tools_bg.wasm
+client/editor-test/index.html
+```
+
+`game-artifact.json` has `schemaVersion: 1`, a full lowercase Git `revision`,
+a Rust `target`, and `files`, a map of every payload path to its SHA-256.
+The manifest excludes itself. Native and client files must come from this
+same directory. The client deployment document and HTML build metadata must
+identify that revision. The verifier checks every hash, complete client
+membership, actual module/WASM references and the independent save/editor
+entries before replacing Website output.
+
+Local Website builds use explicit absolute paths:
+
+```sh
+export SDR_GAME_DIST=/absolute/rust-artifact/client
+export SDR_GAME_NATIVE_HOST=/absolute/rust-artifact/bin/solomon-darker
+./scripts/validate.sh
+```
+
+CI or the deployment worker can instead set `SDR_GAME_ARTIFACT_URL` and its
+exact `SDR_GAME_ARTIFACT_SHA256`. The downloader checks the complete archive
+before safe extraction. There is no floating latest URL, automatic source
+checkout or game build in Website validation. Explicit local paths take
+precedence; setting only one local path is an error. Configure the two GitHub
+repository variables for the Website Validate workflow. Missing inputs fail
+before a production build.
+
+The artifact's URL mount must match `VITE_GAME_ARTIFACT_BASE` (default `/game`).
+A staging artifact can use `/game-stg`; set that value explicitly, together
+with the Website mount configuration. Mount changes require a new artifact.
+The game and Website revisions are separate: `client/deployment.json` identifies
+the Rust game; Website `/deployment.json` identifies the Website build.
+
+The frontend build copies the verified `client` into `backend/wwwroot/game`.
+The native deployment consumer additionally installs the supplied executable
+at `GameHost/solomon-darker`, retains the original manifest and writes an
+immutable `GameHost/release.env` with the Rust revision and asset directory.
+Linux deployment rejects a non-Linux-x64 native host and verifies all published
+client/native bytes again. It uses the Rust revision for the existing final-save
+restart handshake and includes artifact identity in cache/skip/failure state.
+The existing database backup, release swap and rollback remain Website-owned.
+See [NFO operation](../ops/nfo/README.md) and [M5 deployment](../ops/local-ci/README.md).
+
+Only the same-origin `/boneyard-library` authoring shelf and `/game/editor-test/`
+document may be embedded. The checked-in Caddy rules include their `/game-stg`
+equivalents. Other documents keep `frame-ancestors 'none'` and `DENY`. Another
+mount must enumerate those same two document routes in its gateway configuration.
+WASM execution uses the narrow `wasm-unsafe-eval` CSP permission.
+
+## Validation ownership
+
+`./scripts/validate.sh` remains the complete Website gate. It restores pinned
+.NET/npm/Python dependencies and runs backend build/format, all Python contracts,
+frontend lint/type checks, retained editor/Boneyard/library tests, artifact tests,
+production build and media policy. Lint-only mode needs no game artifact.
+The actual large-save transport test retains the unchanged current-source
+23,296,828-byte Faculty fixture compressed with its source revision, length and
+SHA-256; it still exercises HTTP/cloud/rejoin payload limits.
+
+The removed game gates moved with their implementation:
+
+| Replaced Website owner | Rust owner and acceptance |
+| --- | --- |
+| `core-server`, `core-kernels`, session/party/Lua/skill tests | `crates/sim`, `crates/launcher`, `crates/protocol`, `crates/modding`; workspace tests and committed independent Source fixtures |
+| Pixi renderer, painter/material/allocation probes and renderer mutation harness | `crates/web`, canonical presentation kernels and Source render/GPU/browser fixtures; strict native/WASM Clippy and actual mounted browser journeys |
+| TS save/native import implementation | `crates/assets`, `crates/save-tools`; whole-document current/historical migration, rejection and WASM ABI checks |
+| `frontend/desktop`, desktop build/update/peer tools | Rust repository `desktop`, `tools/package-desktop.mjs`, transport/update tests and actual packaged Electron save/peer acceptance |
+| `frontend/tools/sdmod` authoring CLI | Rust repository `tools/sdmod`; CLI/package fixtures |
+| Website bot worker/checkpoint/inference | `crates/sim/ml_bot`, `crates/assets/ml_bot_checkpoint`, launcher bot owner and `web/assets/native/ml-bot-policy-v7-selected.sdml`; exact inference/controller fixtures and actual bot browser journey |
+
+The Rust release must pass its declared gates before its artifact is admitted:
+asset membership verification, `cargo fmt --all -- --check`, complete workspace
+tests, strict native and WASM Clippy, Trunk/save-tools builds and the relevant
+ordinary browser/desktop journeys. `docs/PORT-COMPLETION.md`, the Rust README
+and desktop runtime guide own exact commands and accepted receipts. Website
+CI verifies the selected completed artifact; a passing Website job alone does
+not certify a new game build or a desktop acceptance run. The retired renderer
+coverage/mutation inventory is not represented as a Rust result.
+
+## Separate training migration follow-up
+
+Gameplay acceptance retains the trained policy and actual learned runtime.
+Training infrastructure is separate development work; no training run or partial
+Rust rollout bridge is part of this cutover.
+
+The reference is Website commit
+`fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Its historical training closure is
+`tools/train_bot_policy.py`, `tools/ml_bot/`,
+`frontend/tools/ml-bot-rollout-server.mjs`,
+`frontend/src/game/core-server/ml-bot-policy/policy-spec-v7.json`, and the
+`solomon-dark-ml-rollout-v7-choice2` NDJSON contract. These source paths remain
+recoverable from that commit; their dependent Website launchers and npm scripts
+were removed together. A future native rollout migration must port environment
+reset/step/choice/terminal metrics over the canonical Rust Session, establish
+source-equivalent observations/rewards/action masks and asynchronous choice
+semantics, then run a separately authorized training/evaluation campaign.
+Independent Python asset/backend/CI diagnostic tools remain Website-owned.

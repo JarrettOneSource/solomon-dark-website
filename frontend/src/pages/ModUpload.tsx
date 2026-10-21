@@ -84,8 +84,8 @@ export default function ModUpload() {
         <p className="text-fell mt-2 text-bone-dim">
           Upload a ZIP containing Lua scripts, Boneyards, or both, with{' '}
           <code>manifest.json</code> at the root.{' '}
-          <a href="/mod-package-format.md" className="link-arcane">Read the package format</a>
-          {' '}or <a href="/mod-manifest.schema.json" className="link-arcane">open the JSON Schema</a>.
+          <a href={`${import.meta.env.BASE_URL}mod-package-format.md`} className="link-arcane">Read the package format</a>
+          {' '}or <a href={`${import.meta.env.BASE_URL}mod-manifest.schema.json`} className="link-arcane">open the JSON Schema</a>.
         </p>
       </Reveal>
 

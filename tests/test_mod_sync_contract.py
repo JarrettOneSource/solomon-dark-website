@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import hashlib
 import hmac
 from concurrent.futures import ThreadPoolExecutor
@@ -1214,13 +1215,12 @@ console.log(JSON.stringify({
         self.assertEqual(status, 204, deleted)
 
     def test_native_faculty_peak_cloud_save_and_rejoin_transport(self) -> None:
-        destination = Path(self.temp.name) / "native-faculty-peak-save.json"
-        subprocess.run(
-            [shutil.which("node") or "node", "--experimental-strip-types",
-             "tools/native-faculty-save-fixture.ts", str(destination)],
-            cwd=ROOT / "frontend", check=True, capture_output=True, text=True, timeout=60,
-        )
-        native_document = destination.read_text()
+        fixture = ROOT / "tests/fixtures/native-faculty-peak-game-save.json.gz"
+        metadata = json.loads(fixture.with_suffix(".manifest.json").read_text())
+        native_bytes = gzip.decompress(fixture.read_bytes())
+        self.assertEqual(len(native_bytes), metadata["bytes"])
+        self.assertEqual(hashlib.sha256(native_bytes).hexdigest(), metadata["sha256"])
+        native_document = native_bytes.decode("utf-8")
         self.assertGreater(len(native_document.encode()), 16 * 1024 * 1024)
         # Legal JSON whitespace exercises both the old Kestrel 30 MB default
         # and the supervisor's 48 MiB provisioning bound without changing state.

@@ -1,20 +1,20 @@
 import { useEffect } from 'react'
 import { useRouteError } from 'react-router-dom'
-import { deploymentRevisionFromResponse, reloadForDeploymentRevision } from '../game/deployment-revision.ts'
-import { TITLE_BUILD_REVISION } from '../game/title-build-revision.ts'
+import { deploymentRevisionFromResponse, reloadForDeploymentRevision, WEBSITE_BUILD_REVISION } from '../lib/deployment-revision.ts'
 import { isModuleLoadError } from '../lib/module-load-error.ts'
+import { websiteUrl } from '../lib/website-mount.ts'
 
 // Eagerly loaded: recovery must remain usable when any lazy route/child fails.
 export default function RouteError() {
   const moduleFailure = isModuleLoadError(useRouteError())
 
   useEffect(() => {
-    const currentRevision = TITLE_BUILD_REVISION.full
+    const currentRevision = WEBSITE_BUILD_REVISION
     if (!moduleFailure || !currentRevision) return
     const controller = new AbortController()
     async function recoverChangedRelease() {
       try {
-        const response = await fetch(`/deployment.json?current=${currentRevision}`, {
+        const response = await fetch(`${import.meta.env.BASE_URL}deployment.json?current=${currentRevision}`, {
           cache: 'no-store', headers: { accept: 'application/json' }, signal: controller.signal,
         })
         const liveRevision = await deploymentRevisionFromResponse(response)
@@ -39,7 +39,7 @@ export default function RouteError() {
           : 'Reload the page to try again, or return home.'}
       </p>
       <button className="btn btn-gold" onClick={() => window.location.reload()}>Reload page</button>
-      <a className="btn btn-stone" href="/">Return home</a>
+      <a className="btn btn-stone" href={websiteUrl('/')}>Return home</a>
     </main>
   )
 }

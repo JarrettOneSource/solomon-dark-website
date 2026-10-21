@@ -1,3 +1,4 @@
+import { websiteUrl } from '../lib/website-mount.ts'
 import { Link, useNavigate } from 'react-router-dom'
 import type { ModSummary } from '../lib/api'
 import { formatCount, timeAgo } from '../lib/format'
@@ -51,7 +52,7 @@ export default function ModCard({
       <div className="relative flex aspect-[16/8] items-center justify-center overflow-hidden border-b border-gold/10 bg-[#0b0910]">
         {mod.thumbnailUrl ? (
           <AuthenticatedImage
-            src={mod.thumbnailUrl}
+            src={websiteUrl(mod.thumbnailUrl)}
             alt=""
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />

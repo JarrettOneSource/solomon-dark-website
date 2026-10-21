@@ -19,7 +19,6 @@ import {
 } from './native-fence-geometry.ts'
 import { buildNativeRenderPlan, NATIVE_PLACEMENT_PASSES } from './native-render-plan.ts'
 import { nativeSpriteAnchor } from './sprite-registration.ts'
-import { buildBoneyardPainterOrder } from '../game/boneyard-painter-order.ts'
 
 const storyFixture = new URL('../../public/samples/story0.boneyard', import.meta.url)
 
@@ -94,7 +93,7 @@ test('enumerates every Building and Monument lighting member from authored rows'
   )), [152, 153, 154, 155])
 })
 
-test('interleaves every stock main-prop family with actors and keeps proxy art late', () => {
+test('places every stock main-prop family and keeps proxy art late', () => {
   const plan = buildNativeRenderPlan(doc([
     { eid: 'grave', typeId: NATIVE.gravestone, pos: { x: 0, y: 100 }, variant: 0 },
     { eid: 'tree', typeId: NATIVE.tree, pos: { x: 0, y: 300 }, variant: 0 },
@@ -102,31 +101,6 @@ test('interleaves every stock main-prop family with actors and keeps proxy art l
     { eid: 'goodie', typeId: NATIVE.goodie, pos: { x: 0, y: 500 }, variant: 0 },
     { eid: 'building', typeId: NATIVE.building, pos: { x: 0, y: 600 }, variant: 0 },
   ]))
-  const order = buildBoneyardPainterOrder({
-    referenceY: 200,
-    staticLayers: plan.shadows.map((layer, layerIndex) => ({
-      layerIndex,
-      worldY: layer.worldY,
-      sortBias: layer.sortBias,
-      sourceOrder: layer.sourceOrder,
-    })),
-    dynamicLayers: [{
-      id: 'player',
-      queueFamily: 'ordinary-dynamic',
-      registration: { managerLane: 'actor', registrationOrdinal: 0 },
-      worldY: 200,
-      sortBias: 0,
-    }],
-  })
-  const player = order.dynamicLayers[0]
-  const eidsAt = (predicate: (zIndex: number) => boolean) => order.bands
-    .filter((band) => predicate(band.zIndex))
-    .flatMap((band) => band.layerIndexes.map((index) => plan.shadows[index].sel.eid))
-
-  assert.deepEqual(eidsAt((zIndex) => zIndex < player.zIndex), ['grave'])
-  assert.deepEqual(eidsAt((zIndex) => zIndex > player.zIndex), [
-    'tree', 'monument', 'goodie', 'building',
-  ])
   assert.deepEqual(plan.underlays.map((layer) => layer.sel.eid), ['grave'])
   assert.deepEqual(plan.main.map((layer) => layer.sel.eid), [
     'grave',
