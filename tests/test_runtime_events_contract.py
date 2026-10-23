@@ -41,6 +41,15 @@ class RuntimeEventContractTests(unittest.TestCase):
         cls.webroot = cls.root / "wwwroot"
         cls.webroot.mkdir()
         (cls.webroot / "index.html").write_text("<!doctype html><title>Solomon Dark</title>")
+        cls.website_revision = "a" * 40
+        cls.game_revision = "b" * 40
+        (cls.webroot / "deployment.json").write_text(
+            json.dumps({"revision": cls.website_revision})
+        )
+        (cls.webroot / "game").mkdir()
+        (cls.webroot / "game/deployment.json").write_text(
+            json.dumps({"revision": cls.game_revision})
+        )
         cls.port = free_port()
         cls.origin = f"http://127.0.0.1:{cls.port}"
         cls.secret = "runtime-event-contract-secret-that-is-long-enough"
@@ -130,6 +139,28 @@ class RuntimeEventContractTests(unittest.TestCase):
                 return response.status, response.read()
         except urllib.error.HTTPError as error:
             return error.code, error.read()
+
+    def test_legacy_deployment_poll_matches_the_rust_restart_target(self) -> None:
+        legacy_revision = "093aee9938e0cae2fabfafc5403b01aed961397e"
+        cases = [
+            (f"/deployment.json?current={legacy_revision}", self.game_revision),
+            ("/deployment.json", self.website_revision),
+            (f"/deployment.json?current={self.website_revision}", self.website_revision),
+            (f"/deployment.json?current={self.game_revision}", self.website_revision),
+            ("/deployment.json?current=" + "c" * 40, self.website_revision),
+            ("/game/deployment.json", self.game_revision),
+            (f"/game/deployment.json?current={self.game_revision}", self.game_revision),
+        ]
+        for path, expected_revision in cases:
+            with self.subTest(path=path):
+                request = urllib.request.Request(
+                    self.origin + path, headers={"Accept": "application/json"}
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(json.load(response), {"revision": expected_revision})
+                    self.assertEqual(response.headers.get_content_type(), "application/json")
+                    self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_runtime_event_outbox_is_private_detailed_and_bounded(self) -> None:
         occurred = datetime.now(timezone.utc).isoformat()

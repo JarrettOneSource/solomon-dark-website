@@ -347,6 +347,16 @@ var frontendFiles = new StaticFileOptions
         }
     }
 };
+// The last TypeScript game waits at this root URL for the announced Rust revision.
+app.Use((context, next) =>
+{
+    if (context.Request.Path == "/deployment.json"
+        && context.Request.Query["current"] == "093aee9938e0cae2fabfafc5403b01aed961397e")
+    {
+        context.Request.Path = "/game/deployment.json";
+    }
+    return next(context);
+});
 app.UseDefaultFiles();
 app.UseStaticFiles(frontendFiles);
 

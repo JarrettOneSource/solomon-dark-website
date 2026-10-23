@@ -53,6 +53,16 @@ with the Website mount configuration. Mount changes require a new artifact.
 The game and Website revisions are separate: `client/deployment.json` identifies
 the Rust game; Website `/deployment.json` identifies the Website build.
 
+The last production TypeScript game, `093aee9938e0cae2fabfafc5403b01aed961397e`,
+polls `/deployment.json?current=<that revision>` after its final save and only
+reloads when the response matches the announced restart target. The Website
+rewrites that exact legacy query to `/game/deployment.json`; ordinary root
+requests still identify the Website build. Keep this bridge for waiting legacy
+tabs during the first Rust cutover. The drain must announce the Rust revision,
+which is also bound into signed party-recovery saves and checked by the new host.
+The bridge ships with the new Website, after the old host's final-save drain;
+do not replace or publish the old Website's root manifest before those saves.
+
 The frontend build copies the verified `client` into `backend/wwwroot/game`.
 The native deployment consumer additionally installs the supplied executable
 at `GameHost/solomon-darker`, retains the original manifest and writes an
