@@ -473,6 +473,50 @@ class ArtifactAdmissionTests(unittest.TestCase):
                 (source / filename).write_text(before)
             self.assertEqual(installer.component_digest(source), original)
 
+    @unittest.skipUnless(shutil.which('systemd-analyze'), 'native systemd verification')
+    def test_staged_service_preflight_checks_candidate_before_first_cutover(self):
+        script = (OPS / 'deploy-main.sh').read_text()
+        start = script.index('[[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service"')
+        preflight = script[start:script.index('chown -R root:root "$stage"', start)]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            live, stage, temporary = [root / name for name in ('live', 'stage', 'temporary')]
+            (live / 'GameHost').mkdir(parents=True)
+            (live / 'GameHost/game-session-supervisor.mjs').write_text('// legacy release\n')
+            (stage / 'Deploy').mkdir(parents=True)
+            (stage / 'GameHost').mkdir()
+            temporary.mkdir()
+            host = stage / 'GameHost/solomon-darker'
+            unit = stage / 'Deploy/solomon-dark-game.service'
+            canonical = (OPS.parent / 'nfo/solomon-dark-game.service').read_text().replace(
+                '/opt/solomon-dark-revived', str(live))
+            (stage / 'GameHost/release.env').write_text('SDR_GAME_REVISION=' + 'a' * 40 + '\n')
+            for case in ('valid', 'missing-host', 'non-executable-host', 'invalid-unit', 'wrong-hash'):
+                with self.subTest(case=case):
+                    host.write_text('#!/bin/sh\nexit 0\n')
+                    host.chmod(0o644 if case == 'non-executable-host' else 0o755)
+                    if case == 'missing-host':
+                        host.unlink()
+                    contents = canonical.replace(
+                        f'ExecStart={live}/GameHost/solomon-darker --supervisor',
+                        'ExecStart=relative/solomon-darker --supervisor',
+                    ) if case == 'invalid-unit' else canonical
+                    unit.write_text(contents)
+                    before = unit.read_bytes()
+                    digest = hashlib.sha256(before).hexdigest()
+                    environment = os.environ | {
+                        'stage': str(stage), 'live': str(live), 'TMPDIR': str(temporary),
+                        'expected_game_unit_checksum': '0' * 64 if case == 'wrong-hash' else digest,
+                    }
+                    result = subprocess.run(['/bin/bash', '-c', 'set -Eeuo pipefail\n' + preflight],
+                                            env=environment, capture_output=True, text=True, timeout=20)
+                    if case == 'valid':
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    else:
+                        self.assertNotEqual(result.returncode, 0, case)
+                    self.assertEqual(unit.read_bytes(), before)
+                    self.assertEqual(list(temporary.iterdir()), [])
+
 
 if __name__ == '__main__':
     unittest.main()

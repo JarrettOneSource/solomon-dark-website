@@ -658,7 +658,19 @@ done
 grep --fixed-strings --line-regexp --quiet "SDR_GAME_REVISION=$target_game_revision" "$stage/GameHost/release.env"
 [[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service" | awk '{print $1}')" == \
     "$expected_game_unit_checksum" ]]
-systemd-analyze verify "$stage/Deploy/solomon-dark-game.service"
+# Validate release paths before the candidate replaces the legacy live tree.
+python3 - "$stage" "$live" <<'PY_VERIFY_GAME_UNIT'
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+stage, live = map(Path, sys.argv[1:])
+with tempfile.TemporaryDirectory(prefix="solomon-dark-unit-") as directory:
+    candidate = Path(directory) / "solomon-dark-game.service"
+    candidate.write_text((stage / "Deploy" / candidate.name).read_text().replace(str(live), str(stage)))
+    subprocess.run(["systemd-analyze", "verify", str(candidate)], check=True)
+PY_VERIFY_GAME_UNIT
 chown -R root:root "$stage"
 chmod -R u=rwX,go=rX "$stage"
 
