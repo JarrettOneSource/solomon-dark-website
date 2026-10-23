@@ -65,6 +65,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.temp = tempfile.TemporaryDirectory(prefix="sdr-website-mod-sync-")
+        cls.web_root = Path(cls.temp.name) / "wwwroot"
+        cls.web_root.mkdir()
         cls.port = free_port()
         cls.origin = f"http://127.0.0.1:{cls.port}"
         cls.dotnet = os.environ.get("SDR_DOTNET") or shutil.which("dotnet")
@@ -79,6 +81,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             {
                 "ASPNETCORE_ENVIRONMENT": "Production",
                 "ASPNETCORE_URLS": cls.origin,
+                "ASPNETCORE_WEBROOT": str(cls.web_root),
                 "Storage__Root": cls.temp.name,
                 "Jwt__Secret": cls.jwt_secret,
                 "GameSessions__AdminSecret": cls.leaderboard_secret,
@@ -549,6 +552,45 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             json_body=report,
             headers=headers,
         )
+
+    def test_game_binary_files_are_publicly_served_without_allowing_unknown_types(self) -> None:
+        cases = [
+            ("game/assets/stock/College.bundle", ONE_FRAME_BUNDLE, 200),
+            ("game/assets/native/ml-bot-policy-v7-selected.sdml", b"SDML\0\xff", 200),
+            ("assets/template.boneyard", BONEYARD_FIXTURE.read_bytes(), 200),
+            ("game/assets/stock/private.unknown-type", b"unrecognized format", 404),
+        ]
+        for path, contents, expected_status in cases:
+            with self.subTest(path=path):
+                fixture = self.web_root / path
+                fixture.parent.mkdir(parents=True, exist_ok=True)
+                fixture.write_bytes(contents)
+                status, payload, headers = self.request_bytes("GET", "/" + path)
+                self.assertEqual(status, expected_status)
+                if expected_status == 200:
+                    self.assertEqual(payload, contents)
+                    self.assertEqual(headers.get("Content-Type"), "application/octet-stream")
+
+    def test_every_pinned_game_artifact_extension_is_publicly_served(self) -> None:
+        dist = os.environ.get("SDR_GAME_DIST")
+        if not dist:
+            self.skipTest("the complete validation gate supplies the matched Rust artifact")
+        manifest = json.loads((Path(dist).parent / "game-artifact.json").read_text())
+        extensions = {Path(name).suffix.lower() for name in manifest["files"] if name.startswith("client/")}
+        self.assertTrue(extensions)
+        for extension in sorted(extensions):
+            with self.subTest(extension=extension):
+                path = f"game/static-contract/asset{extension}"
+                fixture = self.web_root / path
+                fixture.parent.mkdir(parents=True, exist_ok=True)
+                contents = b"artifact type contract\0" + extension.encode()
+                fixture.write_bytes(contents)
+                status, payload, headers = self.request_bytes("GET", "/" + path)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload, contents)
+                self.assertTrue(headers.get("Content-Type"))
+                if extension == ".wasm":
+                    self.assertEqual(headers["Content-Type"], "application/wasm")
 
     def test_resized_boneyard_draft_saves_reloads_and_publishes_expanded_document(self) -> None:
         generated = subprocess.run(

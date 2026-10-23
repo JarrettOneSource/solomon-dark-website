@@ -325,10 +325,11 @@ app.UseStatusCodePages(async statusContext =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 });
 
-// The editor bundle ships a .boneyard asset (the blank plot template); the
-// default provider has no mapping for it and would 404.
+// The editor and Rust artifact ship binary game formats absent from the default MIME map.
 var frontendContentTypes = new FileExtensionContentTypeProvider();
 frontendContentTypes.Mappings[".boneyard"] = "application/octet-stream";
+frontendContentTypes.Mappings[".bundle"] = "application/octet-stream";
+frontendContentTypes.Mappings[".sdml"] = "application/octet-stream";
 var frontendFiles = new StaticFileOptions
 {
     ContentTypeProvider = frontendContentTypes,
