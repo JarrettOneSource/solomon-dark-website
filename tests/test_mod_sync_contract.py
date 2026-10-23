@@ -61,6 +61,22 @@ def free_port() -> int:
         return listener.getsockname()[1]
 
 
+def party_asset(path: str, kind: str = "image", content_type: str = "image/png", byte_length: int = 64) -> dict:
+    return {"byteLength": byte_length, "contentType": content_type, "kind": kind,
+            "modId": "tests.party-assets", "path": path, "sha256": "a" * 64}
+
+
+def modded_party_target(assets: list[dict]) -> dict:
+    return {
+        "cheatsEnabled": False, "kind": "private-college", "leader": "Hagatha",
+        "memberCount": 2, "status": "hub", "visibility": "private",
+        "content": {"manifestSha256": "b" * 64, "mods": [{
+            "assets": assets, "contentSha256": "c" * 64, "id": "tests.party-assets",
+            "name": "Party Assets", "slug": "party-assets", "version": "1.0.0",
+        }]},
+    }
+
+
 class WebsiteModSyncContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -197,6 +213,16 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         cls.observer_requests: list[dict[str, object]] = []
         cls.editor_test_requests: list[dict[str, object]] = []
         cls.editor_test_status = 201
+        cls.party_join_target = {
+            "cheatsEnabled": True, "content": {"manifestSha256": "0" * 64, "mods": []},
+            "kind": "private-college", "leader": "Hagatha", "memberCount": 2,
+            "status": "hub", "visibility": "private",
+        }
+        cls.public_party_join_target = {
+            **cls.party_join_target, "cheatsEnabled": False, "kind": "global-hub", "visibility": "public",
+        }
+        cls.party_join_request_status = {"status": "pending", "intentId": None, "target": None}
+        cls.party_admit_requests: list[dict] = []
         cls.match_items = [
             {
                 "id": "match-safe-observer-7",
@@ -269,7 +295,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     cls.match_requests += 1
                     self.reply(200, {"items": cls.match_items})
                 elif self.path == "/admin/join/requests/request-token-01234567890123456789":
-                    self.reply(200, {"status": "pending", "intentId": None, "target": None})
+                    self.reply(200, cls.party_join_request_status)
                 else:
                     self.reply(404, {"error": "Not found."})
 
@@ -297,15 +323,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         201,
                         {
                             "intentId": "intent-0123456789012345678901234",
-                            "target": {
-                                "cheatsEnabled": True,
-                                "content": empty_content,
-                                "kind": "private-college",
-                                "leader": "Hagatha",
-                                "memberCount": 2,
-                                "status": "hub",
-                                "visibility": "private",
-                            },
+                            "target": cls.party_join_target,
                         },
                     )
                 elif self.path == "/admin/join/public":
@@ -313,15 +331,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         201,
                         {
                             "intentId": "intent-abcdefghijklmnopqrstuvwxyz",
-                            "target": {
-                                "cheatsEnabled": False,
-                                "content": empty_content,
-                                "kind": "global-hub",
-                                "leader": "Hagatha",
-                                "memberCount": 2,
-                                "status": "hub",
-                                "visibility": "public",
-                            },
+                            "target": cls.public_party_join_target,
                         },
                     )
                 elif self.path == "/admin/join/requests":
@@ -333,6 +343,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         },
                     )
                 elif self.path == "/admin/join/admit":
+                    cls.party_admit_requests.append(self.read_json_body())
                     self.reply(
                         201,
                         {
@@ -1019,6 +1030,142 @@ console.log(JSON.stringify({
         self.assertEqual(status, 201, rejoined)
         self.assertEqual(rejoined["sessionKind"], "global-hub")
         self.assertEqual(rejoined["credential"], "active-party-ticket")
+
+    def test_party_join_preserves_typed_assets_through_resolution_and_admission(self) -> None:
+        test_class = type(self)
+        for attribute in ("party_join_target", "public_party_join_target", "party_join_request_status"):
+            self.addCleanup(setattr, test_class, attribute, getattr(test_class, attribute))
+        # Constructed from the observed native package paths and the six-field Rust descriptor contract.
+        observed_assets = [party_asset(f"art/{name}.png") for name in
+                           ("information", "shoppingCart", "star", "target", "zoom")]
+        observed_assets += [party_asset(f"audio/{name}.ogg", "audio", "audio/ogg")
+                            for name in ("bookOpen", "handleCoins")]
+        for name, assets in (("native-art-audio", observed_assets),
+                             ("existing-sprite-metadata", [party_asset("sprites/item.png")])):
+            target = modded_party_target(assets)
+            test_class.party_join_target = target
+            test_class.public_party_join_target = {**target, "visibility": "public"}
+            test_class.party_join_request_status = {
+                "status": "accepted", "intentId": "intent-0123456789012345678901234", "target": target,
+            }
+            for method, path, body, expected in (
+                ("POST", "/api/game/join/resolve", {"code": "ABCD-2345"}, target),
+                ("POST", "/api/game/join/public", {"listingId": "listing-safe-7"}, test_class.public_party_join_target),
+                ("GET", "/api/game/join/requests/request-token-01234567890123456789", None, target),
+            ):
+                with self.subTest(package=name, path=path):
+                    status, payload, headers = self.request_bytes(
+                        method, path, body=json.dumps(body).encode() if body else None,
+                        headers={"Content-Type": "application/json", "X-Forwarded-For": "192.0.2.41"},
+                    )
+                    self.assertEqual(status, 200, payload)
+                    self.assertEqual(json.loads(payload)["target"], expected)
+                    self.assertEqual(headers.get("Cache-Control"), "no-store")
+        status, payload, headers = self.request_bytes(
+            "POST", "/api/game/join/admit", body=json.dumps({"intentId": "intent-0123456789012345678901234"}).encode(),
+            headers={"Content-Type": "application/json", "X-Forwarded-For": "192.0.2.41"},
+        )
+        self.assertEqual(status, 201, payload)
+        self.assertEqual(json.loads(payload), {"kind": "remote", "credential": "party-ticket",
+                         "url": "wss://game.example.invalid/game-sessions/01234567890123456789012345678901",
+                         "sessionKind": "private-college"})
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        self.assertEqual(test_class.party_admit_requests[-1], {
+            "activeMods": False, "content": {"manifestSha256": "0" * 64, "mods": []},
+            "developerAccess": False, "intentId": "intent-0123456789012345678901234", "leaderboardUserId": None,
+        })
+
+    def test_party_join_matches_provisioned_asset_kinds_and_bounds(self) -> None:
+        test_class = type(self)
+        self.addCleanup(setattr, test_class, "party_join_request_status", test_class.party_join_request_status)
+        kinds = [
+            party_asset("sprites/item.png"), party_asset("art/item.png"),
+            party_asset("art/item.bundle", "sprite-bundle", "application/vnd.solomon-dark.sprite-bundle"),
+            party_asset("art/item.json", "art-metadata", "application/json"),
+            party_asset("audio/item.ogg", "audio", "audio/ogg"),
+            party_asset("audio/item.wav", "audio", "audio/wav"),
+            party_asset("audio/item.mp3", "audio", "audio/mpeg"),
+            party_asset("levels/item.boneyard", "boneyard", "application/vnd.solomon-dark.boneyard"),
+            party_asset("levels/item.json", "level-metadata", "application/json"),
+            party_asset("scenes/item.json", "scene", "application/json"),
+        ]
+        cases = [("kinds", kinds, 200),
+                 ("maximum-count", [party_asset(f"art/item-{i}.png") for i in range(256)], 200),
+                 ("maximum-file-and-total", [party_asset(f"art/item-{i}.png", byte_length=16 * 1024 * 1024)
+                                             for i in range(2)], 200),
+                 ("too-many-files", [party_asset(f"art/item-{i}.png") for i in range(257)], 503),
+                 ("too-large-file", [party_asset("art/item.png", byte_length=16 * 1024 * 1024 + 1)], 503),
+                 ("too-large-total", [party_asset(f"art/item-{i}.png", byte_length=16 * 1024 * 1024)
+                                      for i in range(3)], 503)]
+        for name, assets, expected_status in cases:
+            with self.subTest(case=name):
+                target = modded_party_target(assets)
+                test_class.party_join_request_status = {
+                    "status": "accepted", "intentId": "intent-0123456789012345678901234", "target": target,
+                }
+                status, payload = self.request("GET", "/api/game/join/requests/request-token-01234567890123456789")
+                self.assertEqual(status, expected_status, payload)
+                if expected_status == 200:
+                    self.assertEqual(payload["target"], target)
+
+    def test_party_join_rejects_untrusted_asset_descriptors(self) -> None:
+        test_class = type(self)
+        self.addCleanup(setattr, test_class, "party_join_request_status", test_class.party_join_request_status)
+        valid = party_asset("sprites/item.png")
+        cases = [(field, [valid | {field: value}]) for field, value in (
+            ("kind", "audio"), ("contentType", "text/html"), ("kind", None), ("contentType", None),
+            ("modId", "another.mod"), ("sha256", "not-a-digest"), ("byteLength", 0), ("byteLength", -1),
+        )]
+        cases += [("missing-" + field, [{key: value for key, value in valid.items() if key != field}])
+                  for field in ("kind", "contentType")]
+        cases += [(path, [valid | {"path": path}]) for path in (
+            "sprites/../item.png", "sprites//item.png", "sprites\\item.png", "/sprites/item.png",
+            "sprites/item?.png", "sprites/CON.png", "sprites/" + "a" * 241 + ".png", "scripts/item.lua",
+        )]
+        cases += [("trailing-newline-digest", [valid | {"sha256": "a" * 64 + "\n"}]),
+                  ("duplicate-path", [valid, valid]),
+                  ("case-conflicting-path", [valid, valid | {"path": "sprites/Item.png"}]),
+                  ("null-asset", [None])]
+        for name, assets in cases:
+            with self.subTest(case=name):
+                test_class.party_join_request_status = {
+                    "status": "accepted", "intentId": "intent-0123456789012345678901234",
+                    "target": modded_party_target(assets),
+                }
+                status, payload = self.request("GET", "/api/game/join/requests/request-token-01234567890123456789")
+                self.assertEqual(status, 503, payload)
+
+    def test_party_join_validates_mod_owners_and_total_asset_budget(self) -> None:
+        test_class = type(self)
+        self.addCleanup(setattr, test_class, "party_join_request_status", test_class.party_join_request_status)
+        target = modded_party_target([party_asset("sprites/item.png", byte_length=16 * 1024 * 1024)])
+        first = target["content"]["mods"][0]
+        second = {**first, "id": "tests.other-assets", "assets": [
+            party_asset("sprites/item.png", byte_length=16 * 1024 * 1024) | {"modId": "tests.other-assets"},
+        ]}
+        cases = [
+            ("same-path-different-owners", {**target, "content": {**target["content"], "mods": [first, second]}}, 200),
+            ("too-large-across-mods", {**target, "content": {**target["content"], "mods": [first, {
+                **second, "assets": second["assets"] + [party_asset("sprites/extra.png", byte_length=1) |
+                                                        {"modId": "tests.other-assets"}],
+            }]}}, 503),
+            ("duplicate-mod-id", {**target, "content": {**target["content"], "mods": [first, first]}}, 503),
+            ("null-mod", {**target, "content": {**target["content"], "mods": [None]}}, 503),
+            ("null-manifest", {**target, "content": {**target["content"], "manifestSha256": None}}, 503),
+            ("trailing-newline-manifest", {**target, "content": {**target["content"], "manifestSha256": "b" * 64 + "\n"}}, 503),
+            ("trailing-newline-content-digest", {**target, "content": {**target["content"], "mods": [
+                {**first, "contentSha256": "c" * 64 + "\n"},
+            ]}}, 503),
+        ]
+        for name, candidate, expected_status in cases:
+            with self.subTest(case=name):
+                test_class.party_join_request_status = {
+                    "status": "accepted", "intentId": "intent-0123456789012345678901234", "target": candidate,
+                }
+                status, payload = self.request("GET", "/api/game/join/requests/request-token-01234567890123456789")
+                self.assertEqual(status, expected_status, payload)
+                if expected_status == 200:
+                    self.assertEqual(payload["target"], candidate)
 
     def test_party_join_responses_are_never_cached(self) -> None:
         cases = [

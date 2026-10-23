@@ -48,10 +48,10 @@ public sealed class WebModContentService(
     public const int MaxActiveLuaMods = 8;
     private const int MaxEntryScriptBytes = 256 * 1024;
     private const int MaxBoneyardBytes = 8 * 1024 * 1024;
-    private const int MaxPackageFileBytes = 16 * 1024 * 1024;
-    private const int MaxPackageFiles = 256;
-    private const int MaxPackageFilesBytes = 32 * 1024 * 1024;
-    private const int MaxProvisionedContentBytes = 32 * 1024 * 1024;
+    internal const int MaxPackageFileBytes = 16 * 1024 * 1024;
+    internal const int MaxPackageFiles = 256;
+    internal const int MaxPackageFilesBytes = 32 * 1024 * 1024;
+    internal const int MaxProvisionedContentBytes = 32 * 1024 * 1024;
 
     public async Task<WebModContentResolution> ResolveAsync(
         int? userId,
@@ -471,7 +471,7 @@ public sealed class WebModContentService(
         return files;
     }
 
-    private static (string Kind, string ContentType)? PackageAsset(string path)
+    internal static (string Kind, string ContentType)? PackageAsset(string path)
     {
         var extension = Path.GetExtension(path);
         if (path.StartsWith("sprites/", StringComparison.Ordinal) ||

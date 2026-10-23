@@ -572,8 +572,8 @@ public sealed partial class GameSessionProvisioner
             target.MemberCount < 1 || target.MemberCount > 16 ||
             target.Status is not ("hub" or "playing") ||
             target.Visibility is not ("invite-only" or "private" or "public") ||
-            target.Content is null || !Sha256Regex().IsMatch(target.Content.ManifestSha256) ||
-            target.Content.Mods is null || target.Content.Mods.Length > 128)
+            target.Content is null || !Sha256Regex().IsMatch(target.Content.ManifestSha256 ?? string.Empty) ||
+            target.Content.Mods is null || target.Content.Mods.Length > WebModContentService.MaxActiveMods)
         {
             return false;
         }
@@ -583,19 +583,44 @@ public sealed partial class GameSessionProvisioner
             return false;
         }
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return target.Content.Mods.All(mod =>
-            !string.IsNullOrWhiteSpace(mod.Id) && mod.Id.Length <= 128 && ids.Add(mod.Id) &&
-            !string.IsNullOrWhiteSpace(mod.Name) && mod.Name.Length <= 80 &&
-            !string.IsNullOrWhiteSpace(mod.Slug) && mod.Slug.Length <= 80 &&
-            !string.IsNullOrWhiteSpace(mod.Version) && mod.Version.Length <= 64 &&
-            Sha256Regex().IsMatch(mod.ContentSha256 ?? string.Empty) &&
-            mod.Assets is not null && mod.Assets.Length <= 64 && mod.Assets.All(asset =>
-                asset.ByteLength is > 0 and <= 1024 * 1024 &&
-                string.Equals(asset.ModId, mod.Id, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(asset.Path) && asset.Path.Length <= 240 &&
-                asset.Path.StartsWith("sprites/", StringComparison.Ordinal) &&
-                asset.Path.EndsWith(".png", StringComparison.Ordinal) &&
-                Sha256Regex().IsMatch(asset.Sha256 ?? string.Empty)));
+        long totalAssetBytes = 0;
+        foreach (var mod in target.Content.Mods)
+        {
+            if (mod is null ||
+                string.IsNullOrWhiteSpace(mod.Id) || mod.Id.Length > 128 || !ids.Add(mod.Id) ||
+                string.IsNullOrWhiteSpace(mod.Name) || mod.Name.Length > 80 ||
+                string.IsNullOrWhiteSpace(mod.Slug) || mod.Slug.Length > 80 ||
+                string.IsNullOrWhiteSpace(mod.Version) || mod.Version.Length > 64 ||
+                !Sha256Regex().IsMatch(mod.ContentSha256 ?? string.Empty) ||
+                mod.Assets is null || mod.Assets.Length > WebModContentService.MaxPackageFiles)
+            {
+                return false;
+            }
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            long modAssetBytes = 0;
+            foreach (var asset in mod.Assets)
+            {
+                if (asset is null || asset.ByteLength <= 0 ||
+                    asset.ByteLength > WebModContentService.MaxPackageFileBytes ||
+                    !string.Equals(asset.ModId, mod.Id, StringComparison.OrdinalIgnoreCase) ||
+                    !ModPackageInspector.IsPortableFilePath(asset.Path) || !paths.Add(asset.Path) ||
+                    WebModContentService.PackageAsset(asset.Path) is not { } expected ||
+                    !string.Equals(asset.Kind, expected.Kind, StringComparison.Ordinal) ||
+                    !string.Equals(asset.ContentType, expected.ContentType, StringComparison.Ordinal) ||
+                    !Sha256Regex().IsMatch(asset.Sha256 ?? string.Empty))
+                {
+                    return false;
+                }
+                modAssetBytes += asset.ByteLength;
+                totalAssetBytes += asset.ByteLength;
+                if (modAssetBytes > WebModContentService.MaxPackageFilesBytes ||
+                    totalAssetBytes > WebModContentService.MaxProvisionedContentBytes)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static bool ValidToken(string? value) =>
@@ -645,7 +670,7 @@ public sealed partial class GameSessionProvisioner
     [GeneratedRegex("^(?:[A-Za-z0-9_-]{43}|sdrpr[12]\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{43})$", RegexOptions.CultureInvariant)]
     private static partial Regex PartyRejoinTokenRegex();
 
-    [GeneratedRegex("^[a-f0-9]{64}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("\\A[a-f0-9]{64}\\z", RegexOptions.CultureInvariant)]
     private static partial Regex Sha256Regex();
 
     private sealed record SupervisorProvisionResponse(
@@ -712,6 +737,8 @@ public sealed record GamePartyJoinRequester(
 
 public sealed record GamePartyAsset(
     int ByteLength,
+    string ContentType,
+    string Kind,
     string ModId,
     string Path,
     string? Sha256);

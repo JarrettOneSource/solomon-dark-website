@@ -384,7 +384,20 @@ public static partial class ModPackageInspector
         BoneyardFileInspector.Validate(stream, source);
     }
 
-    private static string ValidateManifestPath(string value, string label)
+    internal static bool IsPortableFilePath(string? value)
+    {
+        try
+        {
+            ValidateManifestPath(value, "Mod asset path");
+            return true;
+        }
+        catch (ModPackageValidationException)
+        {
+            return false;
+        }
+    }
+
+    private static string ValidateManifestPath(string? value, string label)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > MaxRelativePathLength ||
             value.StartsWith("/", StringComparison.Ordinal) ||
