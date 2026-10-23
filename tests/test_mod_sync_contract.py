@@ -978,6 +978,29 @@ console.log(JSON.stringify({
         self.assertEqual(rejoined["sessionKind"], "global-hub")
         self.assertEqual(rejoined["credential"], "active-party-ticket")
 
+    def test_party_join_responses_are_never_cached(self) -> None:
+        cases = [
+            ("POST", "/api/game/join/resolve", {"code": "ABCD-2345"}, 200),
+            ("POST", "/api/game/join/public", {"listingId": "listing-safe-7"}, 200),
+            ("POST", "/api/game/join/requests", {
+                "listingId": "listing-safe-7", "displayName": "Guest Cassia",
+                "requesterId": "guest-requester-1234",
+            }, 200),
+            ("GET", "/api/game/join/requests/request-token-01234567890123456789", None, 200),
+            ("POST", "/api/game/join/admit", {"intentId": "intent-0123456789012345678901234"}, 201),
+            ("POST", "/api/game/join/requests", {
+                "listingId": "listing-safe-7", "displayName": "", "requesterId": "invalid",
+            }, 400),
+        ]
+        for method, path, body, expected_status in cases:
+            with self.subTest(method=method, path=path, status=expected_status):
+                status, payload, headers = self.request_bytes(
+                    method, path, body=json.dumps(body).encode() if body is not None else None,
+                    headers={"Content-Type": "application/json"},
+                )
+                self.assertEqual(status, expected_status, payload)
+                self.assertEqual(headers.get("Cache-Control"), "no-store")
+
 
 
     def test_run_performance_accepts_error_free_runs_and_rejects_unbounded_samples(self) -> None:

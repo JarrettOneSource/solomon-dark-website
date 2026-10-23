@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Keep the separately released Rust client identical to its artifact manifest. -->
+    <CompressionExcludePatterns>$(CompressionExcludePatterns);game/**</CompressionExcludePatterns>
   </PropertyGroup>
 
   <ItemGroup>

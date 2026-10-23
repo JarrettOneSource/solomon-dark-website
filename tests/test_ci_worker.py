@@ -1,10 +1,12 @@
 import importlib.util
 from contextlib import contextmanager
+import gzip
 import hashlib
 import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import struct
 import subprocess
 import sys
@@ -424,6 +426,39 @@ class ArtifactAdmissionTests(unittest.TestCase):
                     path.write_text(json.dumps(manifest))
                 with self.assertRaises(ValueError):
                     artifact.check_release(root)
+
+    def test_linux_publish_preserves_opaque_game_and_site_compression(self):
+        dotnet = os.environ.get('SDR_DOTNET') or shutil.which('dotnet')
+        if not dotnet:
+            self.skipTest('dotnet is unavailable')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = root / 'reference'
+            reference.mkdir()
+            self.release(reference)
+            project = root / 'backend'
+            shutil.copytree(OPS.parents[1] / 'backend', project,
+                            ignore=shutil.ignore_patterns('bin', 'obj', 'wwwroot'))
+            game = project / 'wwwroot/game'
+            shutil.copytree(reference / 'wwwroot/game', game)
+            (game / 'client.js').write_bytes(b'// immutable client bytes\n' * 512)
+            site = b'// Website asset retains ordinary SDK compression\n' * 512
+            (project / 'wwwroot/site.js').write_bytes(site)
+            manifest = json.loads((reference / 'game-artifact.json').read_text())
+            manifest['files']['client/client.js'] = hashlib.sha256((game / 'client.js').read_bytes()).hexdigest()
+            publish = root / 'publish'
+            result = subprocess.run([
+                dotnet, 'publish', str(project / 'Server.csproj'), '--configuration', 'Release',
+                '--runtime', 'linux-x64', '--self-contained', 'false', '-p:UseAppHost=false',
+                '--output', str(publish), '--nologo', '--verbosity', 'quiet',
+            ], cwd=OPS.parents[1], capture_output=True, text=True, timeout=120)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            shutil.copytree(reference / 'GameHost', publish / 'GameHost', dirs_exist_ok=True)
+            (publish / 'game-artifact.json').write_text(json.dumps(manifest))
+            self.assertEqual(artifact.check_release(publish)['runtime'], 'linux-x64')
+            self.assertTrue(any(gzip.decompress(path.read_bytes()) == site
+                                for path in (publish / 'wwwroot').glob('*.gz')),
+                            'the game exclusion must retain normal Website compression')
 
     def test_each_required_installed_component_changes_version_admission(self):
         with tempfile.TemporaryDirectory() as directory:

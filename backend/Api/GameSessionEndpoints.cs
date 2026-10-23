@@ -324,16 +324,20 @@ public static class GameSessionEndpoints
 
     private static async Task<IResult> ResolvePartyCodeAsync(
         ResolvePartyCodeRequest request,
+        HttpContext context,
         GameSessionProvisioner provisioner,
         CancellationToken cancellationToken) =>
         await PartyOperationAsync(
+            context,
             () => provisioner.ResolvePartyCodeAsync(request.Code ?? string.Empty, cancellationToken));
 
     private static async Task<IResult> ResolvePublicPartyAsync(
         ResolvePublicPartyRequest request,
+        HttpContext context,
         GameSessionProvisioner provisioner,
         CancellationToken cancellationToken) =>
         await PartyOperationAsync(
+            context,
             () => provisioner.ResolvePublicPartyAsync(
                 request.ListingId ?? string.Empty,
                 cancellationToken));
@@ -344,6 +348,7 @@ public static class GameSessionEndpoints
         GameSessionProvisioner provisioner,
         CancellationToken cancellationToken)
     {
+        context.Response.Headers.CacheControl = "no-store";
         var displayName = request.DisplayName?.Trim() ?? string.Empty;
         var requesterId = request.RequesterId?.Trim() ?? string.Empty;
         if (displayName.Length is < 1 or > 64 || requesterId.Length is < 8 or > 128)
@@ -353,7 +358,7 @@ public static class GameSessionEndpoints
         var accountUsername = TokenService.GetUserId(context.User) is null
             ? null
             : context.User.Identity?.Name;
-        return await PartyOperationAsync(() => provisioner.RequestPartyJoinAsync(
+        return await PartyOperationAsync(context, () => provisioner.RequestPartyJoinAsync(
             request.ListingId ?? string.Empty,
             new GamePartyJoinRequester(accountUsername, displayName, requesterId),
             cancellationToken));
@@ -361,9 +366,11 @@ public static class GameSessionEndpoints
 
     private static async Task<IResult> GetPartyJoinRequestAsync(
         string requestToken,
+        HttpContext context,
         GameSessionProvisioner provisioner,
         CancellationToken cancellationToken) =>
         await PartyOperationAsync(
+            context,
             () => provisioner.GetPartyJoinRequestAsync(requestToken, cancellationToken));
 
     private static async Task<IResult> AdmitPartyJoinAsync(
@@ -374,6 +381,7 @@ public static class GameSessionEndpoints
         AppDb db,
         CancellationToken cancellationToken)
     {
+        context.Response.Headers.CacheControl = "no-store";
         try
         {
             var userId = TokenService.GetUserId(context.User);
@@ -458,8 +466,9 @@ public static class GameSessionEndpoints
         }
     }
 
-    private static async Task<IResult> PartyOperationAsync<T>(Func<Task<T>> operation)
+    private static async Task<IResult> PartyOperationAsync<T>(HttpContext context, Func<Task<T>> operation)
     {
+        context.Response.Headers.CacheControl = "no-store";
         try
         {
             return Results.Ok(await operation());
