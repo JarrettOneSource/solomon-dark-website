@@ -56,21 +56,27 @@ the Rust game; Website `/deployment.json` identifies the Website build.
 A deployment publication identifies one actual cutover, independently of both
 revisions. The worker mints a fresh 32-character hexadecimal `deploymentId` outside
 the cached artifact and supplies it through the authenticated
-`X-Solomon-Deployment-Id` drain header. The JSON request body remains
+`X-Solomon-Deployment-Id` drain header. A monotonic `deploymentSequence` travels
+through `X-Solomon-Deployment-Sequence`, the announcement, receipt and publication. The JSON request body remains
 `{"targetRevision":"<Rust revision>"}` for the first legacy-to-Rust cutover.
 Publication-aware supervisors report `deploymentProtocol: 2` in health and echo
 the ID in the restart announcement and final drain receipt. Recovery claims and
 acknowledgements retain the signed target Rust revision and checkpoint sequence.
 
 The worker stages Website `wwwroot/deployment.json` as
-`{"revision":"<Website revision>","gameRevision":"<Rust revision>","deploymentId":"<ID>","ready":false}`.
+`{"revision":"<Website revision>","gameRevision":"<Rust revision>","deploymentId":"<ID>","deploymentSequence":<next>,"ready":false}`.
 It starts and verifies the replacement game before exposing Website, then verifies
 Website, service health and release integrity before atomically publishing
 `ready: true`. Anonymous, no-store `GET /api/game/deployment` exposes this document
 under the configured Website mount, including `/game-stg/api/game/deployment`.
 The immutable game's own deployment document and all hashed artifact members are
 unchanged. A saved active client reloads only after durable save, actual old
-transport retirement and a matching healthy publication. Idle/title clients
+transport retirement and a healthy publication with the announced sequence or a
+later sequence and the same signed target game revision. A later publication can
+fulfill an update that a sleeping tab missed; a retry may use another transaction
+UUID without stranding the saved client. Failed candidates restore the prior
+publication. The worker's stdlib publication owner writes atomically and fsyncs
+both file and directory; matching artifact hashes cannot skip pending metadata. Idle/title clients
 observe healthy publication changes; this also covers unchanged-game deployments.
 An unchanged-game drain against a legacy authority is rejected before retirement
 because its immutable clients do not understand publication identities.

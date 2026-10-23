@@ -115,6 +115,13 @@ remote_caddy_checksum() {
         "if test -r '$remote_caddy_site'; then sha256sum '$remote_caddy_site' | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
+
+remote_publication_ready() {
+    "$ssh_command" "${ssh_options[@]}" "$remote_host" \
+        "python3 - ready /opt/solomon-dark-revived/wwwroot/deployment.json '$target_sha' '$target_game_revision'" \
+        <"$source_checkout/ops/local-ci/deployment-publication.py"
+}
+
 remote_game_artifact_checksum() {
     "$ssh_command" "${ssh_options[@]}" "$remote_host" \
         "if test -r /opt/solomon-dark-revived/game-artifact.json; then sha256sum /opt/solomon-dark-revived/game-artifact.json | awk '{print \$1}'; else printf 'missing\n'; fi"
@@ -158,7 +165,7 @@ install_file() {
 install_validated_worker() {
     worker_temp="$(mktemp -d "$state_root/worker.XXXXXXXX")"
     tar -xzf "$artifact" -C "$worker_temp" ./Deploy/M5Worker || fail "validated worker extraction failed"
-    for name in deploy-main.sh run-worker.py install.py; do
+    for name in deploy-main.sh run-worker.py install.py deployment-publication.py; do
         [[ -f "$worker_temp/Deploy/M5Worker/$name" ]] || fail "validated worker lacks $name"
     done
     # The admitted installer owns its new version's definition, not the older running code.
@@ -245,7 +252,7 @@ live_game_checksum="$(remote_game_artifact_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" &&
     "$live_game_unit_checksum" == "$target_game_unit_checksum" &&
-    "$live_game_checksum" == "$target_game_checksum" ]]; then
+    "$live_game_checksum" == "$target_game_checksum" ]] && remote_publication_ready; then
     discard_artifact
     [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
     log "Production is already at origin/main $target_sha"
@@ -317,7 +324,7 @@ if [[ -z "$artifact_checksum" ]]; then
     install_file 0644 \
         "$source_checkout/$game_unit_source_path" \
         "$publish_dir/Deploy/solomon-dark-game.service"
-    for name in deploy-main.sh run-worker.py install.py; do
+    for name in deploy-main.sh run-worker.py install.py deployment-publication.py; do
         install_file 0700 "$source_checkout/ops/local-ci/$name" "$publish_dir/Deploy/M5Worker/$name"
     done
     python3 "$source_checkout/ops/local-ci/check-linux-artifact.py" "$publish_dir"
@@ -326,6 +333,7 @@ if [[ -z "$artifact_checksum" ]]; then
         Deploy/M5Worker/deploy-main.sh \
         Deploy/M5Worker/run-worker.py \
         Deploy/M5Worker/install.py \
+        Deploy/M5Worker/deployment-publication.py \
         Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
@@ -375,7 +383,7 @@ live_game_checksum="$(remote_game_artifact_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" &&
     "$live_game_unit_checksum" == "$target_game_unit_checksum" &&
-    "$live_game_checksum" == "$target_game_checksum" ]]; then
+    "$live_game_checksum" == "$target_game_checksum" ]] && remote_publication_ready; then
     discard_artifact
     log "Production reached $target_sha while this run was building"
     exit 0
@@ -449,9 +457,10 @@ PY_DEPLOYMENT_PROTOCOL
         -H "Authorization: Bearer $SDR_GAME_SUPERVISOR_SECRET" \
         -H 'Content-Type: application/json' \
         -H "X-Solomon-Deployment-Id: $deployment_id" \
+        -H "X-Solomon-Deployment-Sequence: $deployment_sequence" \
         --data "{\"targetRevision\":\"$target_game_revision\"}" \
         "$game_supervisor_url/admin/deployments/restart")"
-    python3 - "$result" "$target_game_revision" "$deployment_id" "$health" <<'PY'
+    python3 - "$result" "$target_game_revision" "$deployment_id" "$health" "$deployment_sequence" <<'PY'
 import json
 import sys
 
@@ -459,7 +468,9 @@ payload = json.loads(sys.argv[1])
 target = sys.argv[2]
 if payload.get("status") != "ready" or payload.get("targetRevision") != target:
     raise SystemExit("game supervisor did not confirm the deployment target")
-if json.loads(sys.argv[4]).get("deploymentProtocol") == 2 and payload.get("deploymentId") != sys.argv[3]:
+if json.loads(sys.argv[4]).get("deploymentProtocol") == 2 and (
+        payload.get("deploymentId") != sys.argv[3]
+        or payload.get("deploymentSequence") != int(sys.argv[5])):
     raise SystemExit("game supervisor did not confirm the deployment publication")
 players = payload.get("players")
 saved = payload.get("savedPlayers")
@@ -473,28 +484,8 @@ PY
 }
 
 write_deployment_publication() {
-    python3 - "$1" "$2" "$target_sha" "$target_game_revision" "$deployment_id" <<'PY_DEPLOYMENT_PUBLICATION'
-import json
-import os
-from pathlib import Path
-import sys
-import tempfile
-
-path = Path(sys.argv[1])
-publication = {"revision": sys.argv[3], "gameRevision": sys.argv[4],
-               "deploymentId": sys.argv[5], "ready": sys.argv[2] == "ready"}
-with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=".deployment-", delete=False) as output:
-    temporary = Path(output.name)
-    try:
-        json.dump(publication, output, separators=(",", ":"))
-        output.write("\n")
-        output.flush()
-        os.fsync(output.fileno())
-        os.chmod(temporary, 0o644)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
-PY_DEPLOYMENT_PUBLICATION
+    python3 "$publication_tool" write "$1" "$2" "$target_sha" "$target_game_revision" \
+        "$deployment_id" "$deployment_sequence"
 }
 
 install_game_checkpoint_path() {
@@ -674,7 +665,9 @@ if [[ -r "$live/game-artifact.json" ]]; then
 fi
 if [[ "$current_sha" == "$target_sha" &&
     "$current_game_unit_checksum" == "$expected_game_unit_checksum" &&
-    "$current_game_checksum" == "$expected_game_checksum" ]]; then
+    "$current_game_checksum" == "$expected_game_checksum" ]] &&
+    tar --extract --gzip --file "$artifact" --to-stdout ./Deploy/M5Worker/deployment-publication.py |
+        python3 - ready "$live/wwwroot/deployment.json" "$target_sha" "$target_game_revision"; then
     install_caddy_config
     [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
         "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
@@ -717,6 +710,8 @@ with tempfile.TemporaryDirectory(prefix="solomon-dark-unit-") as directory:
     candidate.write_text((stage / "Deploy" / candidate.name).read_text().replace(str(live), str(stage)))
     subprocess.run(["systemd-analyze", "verify", str(candidate)], check=True)
 PY_VERIFY_GAME_UNIT
+publication_tool="$stage/Deploy/M5Worker/deployment-publication.py"
+deployment_sequence="$(python3 "$publication_tool" next "$live/wwwroot/deployment.json")"
 write_deployment_publication "$stage/wwwroot/deployment.json" pending
 chown -R root:root "$stage"
 chmod -R u=rwX,go=rX "$stage"
@@ -734,6 +729,7 @@ mv -- "$live" "$rollback"
 rollback_needed=1
 mv -- "$stage" "$live"
 stage=""
+publication_tool="$live/Deploy/M5Worker/deployment-publication.py"
 install_game_checkpoint_path
 install_game_unit
 install_caddy_config
@@ -836,7 +832,9 @@ payload = json.loads(sys.argv[1])
 import re
 if (payload.get("revision") != sys.argv[2] or payload.get("gameRevision") != sys.argv[3]
         or payload.get("ready") is not True
-        or not re.fullmatch(r"[0-9a-f]{32}", payload.get("deploymentId", ""))):
+        or not re.fullmatch(r"[0-9a-f]{32}", payload.get("deploymentId", ""))
+        or type(payload.get("deploymentSequence")) is not int
+        or not 0 < payload["deploymentSequence"] < (1 << 64)):
     raise SystemExit("public deployment publication does not match the healthy replacement")
 PY
 

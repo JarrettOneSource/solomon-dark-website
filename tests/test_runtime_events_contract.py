@@ -172,6 +172,7 @@ class RuntimeEventContractTests(unittest.TestCase):
                     "revision": self.website_revision,
                     "gameRevision": self.game_revision,
                     "deploymentId": "ce" * 16,
+                    "deploymentSequence": 7,
                     "ready": ready,
                 }
                 publication_path.write_text(json.dumps(publication))

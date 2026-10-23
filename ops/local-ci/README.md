@@ -57,13 +57,19 @@ configuration, atomically swap the release, and verify health. An unhealthy
 candidate restores the prior release/configuration; successful cutovers retain
 NFO rollback and database backups. The worker mints a fresh publication ID for
 each cutover and sends it in the authenticated `X-Solomon-Deployment-Id` header.
-The drain still targets the signed Rust revision. Website's no-store
+The drain still targets the signed Rust revision. Its monotonic publication
+sequence is sent through `X-Solomon-Deployment-Sequence`; the UUID correlates the
+transaction, while ordering lets a later healthy replacement fulfill a sleeping
+tab's saved update or a retry with a different UUID. Website's no-store
 `/api/game/deployment` exposes its root deployment document with Website revision,
 game revision, publication ID and readiness; the mounted game's own deployment
 document remains an immutable artifact member. Staging is pending. The worker
 starts and verifies the replacement game before Website is exposed, then publishes
 readiness atomically after all candidate health/integrity checks. Website-only
 updates can therefore recover saved clients without changing the game revision.
+The complete worker bundle includes `deployment-publication.py`, its stdlib owner
+of durable publication ordering/readiness. Pending metadata prevents an
+already-deployed hash match from skipping the transaction.
 Unchanged-game drains require the current supervisor's `deploymentProtocol: 2`;
 the first changed-game legacy cutover retains its existing final-save handshake.
 

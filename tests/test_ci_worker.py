@@ -34,6 +34,7 @@ def load(name, filename):
 runner = load('ci_runner', 'run-worker.py')
 installer = load('ci_installer', 'install.py')
 artifact = load('ci_artifact', 'check-linux-artifact.py')
+publication = load('ci_publication', 'deployment-publication.py')
 
 
 def worker_fixture(root):
@@ -367,7 +368,9 @@ class DeploymentPublicationTests(unittest.TestCase):
             (game / 'deployment.json').write_text(json.dumps({'revision': 'a' * 40}))
             immutable = (game / 'deployment.json').read_bytes()
             environment = os.environ | {'target_sha': 'b' * 40, 'target_game_revision': 'a' * 40,
-                                        'deployment_id': 'ce' * 16, 'publication': str(publication)}
+                                        'deployment_id': 'ce' * 16, 'deployment_sequence': '7',
+                                        'publication_tool': str(OPS / 'deployment-publication.py'),
+                                        'publication': str(publication)}
             for state in ('pending', 'ready'):
                 result = subprocess.run(['/bin/bash', '-c', 'set -Eeuo pipefail\n' + self.helpers()
                     + f'write_deployment_publication "$publication" {state}\n'],
@@ -375,11 +378,31 @@ class DeploymentPublicationTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(publication.read_text()), {
                     'revision': 'b' * 40, 'gameRevision': 'a' * 40,
-                    'deploymentId': 'ce' * 16, 'ready': state == 'ready',
+                    'deploymentId': 'ce' * 16, 'deploymentSequence': 7, 'ready': state == 'ready',
                 })
                 self.assertEqual(publication.stat().st_mode & 0o777, 0o644)
                 self.assertEqual((game / 'deployment.json').read_bytes(), immutable)
                 self.assertEqual(list(root.glob('.deployment-*')), [])
+
+    def test_failed_and_missed_cutovers_keep_monotonic_healthy_publication_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'deployment.json'
+            legacy = json.dumps({'revision': 'a' * 40})
+            path.write_text(legacy)
+            self.assertEqual(publication.next_sequence(path), 1)
+            publication.write(path, 'pending', 'b' * 40, 'c' * 40, 'ce' * 16, 1)
+            self.assertFalse(publication.is_ready(path, 'b' * 40, 'c' * 40),
+                             'matching release hashes cannot skip a pending publication')
+            # A failed candidate restores the actual prior live publication.
+            path.write_text(legacy)
+            self.assertEqual(publication.next_sequence(path), 1)
+            publication.write(path, 'ready', 'b' * 40, 'c' * 40, 'df' * 16, 1)
+            self.assertTrue(publication.is_ready(path, 'b' * 40, 'c' * 40))
+            self.assertEqual(publication.next_sequence(path), 2)
+            publication.write(path, 'ready', 'd' * 40, 'c' * 40, 'ab' * 16, 2)
+            self.assertTrue(publication.is_ready(path, 'd' * 40, 'c' * 40))
+            self.assertFalse(publication.is_ready(path, 'd' * 40, 'e' * 40))
+            self.assertEqual(publication.next_sequence(path), 3)
 
     def test_drain_binds_publication_and_only_changed_game_can_migrate_legacy_clients(self):
         scenarios = [
@@ -411,6 +434,7 @@ class DeploymentPublicationTests(unittest.TestCase):
                                    'players': 1, 'savedPlayers': 1, 'unacknowledgedPlayers': 0}
                         if protocol == 2:
                             payload['deploymentId'] = returned_id or publication
+                            payload['deploymentSequence'] = 7
                         self.send_response(200)
                         self.end_headers()
                         self.wfile.write(json.dumps(payload).encode())
@@ -423,7 +447,7 @@ class DeploymentPublicationTests(unittest.TestCase):
                         secret = Path(directory) / 'game.env'
                         secret.write_text('SDR_GAME_SUPERVISOR_SECRET=owned-test-secret\n')
                         environment = os.environ | {
-                            'game_env': str(secret), 'deployment_id': publication,
+                            'game_env': str(secret), 'deployment_id': publication, 'deployment_sequence': '7',
                             'game_supervisor_url': f'http://127.0.0.1:{server.server_port}',
                             'current_game_revision': 'a' * 40,
                             'target_game_revision': ('a' if same_game else 'b') * 40,
@@ -438,6 +462,7 @@ class DeploymentPublicationTests(unittest.TestCase):
                             self.assertEqual(len(requests), 1)
                             headers, body = requests[0]
                             self.assertEqual(headers['X-Solomon-Deployment-Id'], publication)
+                            self.assertEqual(headers['X-Solomon-Deployment-Sequence'], '7')
                             self.assertEqual(headers['Authorization'], 'Bearer owned-test-secret')
                             self.assertEqual(body, {'targetRevision': environment['target_game_revision']})
                 finally:
