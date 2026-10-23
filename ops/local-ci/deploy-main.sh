@@ -382,12 +382,14 @@ if [[ "$deployed_sha" == "$target_sha" &&
 fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+# This identity belongs to a cutover, never to a cached immutable game artifact.
+deployment_id="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 remote_upload="/root/solomon-dark-main-$short_sha-$timestamp.tar.gz"
 log "Uploading validated release $target_sha"
 "$scp_command" "${ssh_options[@]}" -q "$artifact" "$remote_host:$remote_upload"
 
 if "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum' '$target_game_revision' '$target_game_checksum'" <<'REMOTE_DEPLOY'
+    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum' '$target_game_revision' '$target_game_checksum' '$deployment_id'" <<'REMOTE_DEPLOY'
 set -Eeuo pipefail
 
 target_sha="$1"
@@ -396,6 +398,8 @@ artifact="$3"
 expected_game_unit_checksum="$4"
 target_game_revision="$5"
 expected_game_checksum="$6"
+deployment_id="$7"
+game_supervisor_url=http://127.0.0.1:5222
 short_sha="${target_sha:0:12}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 live=/opt/solomon-dark-revived
@@ -424,17 +428,30 @@ game_drained=0
 
 request_game_restart() {
     local result
+    local health
     local SDR_GAME_SUPERVISOR_SECRET
     # shellcheck disable=SC1091
     source "$game_env"
     [[ -n "${SDR_GAME_SUPERVISOR_SECRET:-}" ]]
+    health="$(curl --fail --silent --show-error --max-time 10 "$game_supervisor_url/health")"
+    python3 - "$health" "$current_game_revision" "$target_game_revision" <<'PY_DEPLOYMENT_PROTOCOL'
+import json
+import sys
+
+health = json.loads(sys.argv[1])
+if health.get("status") != "ok" or health.get("draining") is not False:
+    raise SystemExit("game supervisor is not available for a deployment")
+if sys.argv[2] == sys.argv[3] and health.get("deploymentProtocol") != 2:
+    raise SystemExit("unchanged-game deployment requires publication-aware game clients")
+PY_DEPLOYMENT_PROTOCOL
     game_drained=1
     result="$(curl --fail --silent --show-error --max-time 40 \
         -H "Authorization: Bearer $SDR_GAME_SUPERVISOR_SECRET" \
         -H 'Content-Type: application/json' \
+        -H "X-Solomon-Deployment-Id: $deployment_id" \
         --data "{\"targetRevision\":\"$target_game_revision\"}" \
-        http://127.0.0.1:5222/admin/deployments/restart)"
-    python3 - "$result" "$target_game_revision" <<'PY'
+        "$game_supervisor_url/admin/deployments/restart")"
+    python3 - "$result" "$target_game_revision" "$deployment_id" "$health" <<'PY'
 import json
 import sys
 
@@ -442,6 +459,8 @@ payload = json.loads(sys.argv[1])
 target = sys.argv[2]
 if payload.get("status") != "ready" or payload.get("targetRevision") != target:
     raise SystemExit("game supervisor did not confirm the deployment target")
+if json.loads(sys.argv[4]).get("deploymentProtocol") == 2 and payload.get("deploymentId") != sys.argv[3]:
+    raise SystemExit("game supervisor did not confirm the deployment publication")
 players = payload.get("players")
 saved = payload.get("savedPlayers")
 unacknowledged = payload.get("unacknowledgedPlayers")
@@ -451,6 +470,31 @@ if saved + unacknowledged != players:
     raise SystemExit("game supervisor deployment counts do not balance")
 print(f"Game updating drain: players={players} saved={saved} unacknowledged={unacknowledged}")
 PY
+}
+
+write_deployment_publication() {
+    python3 - "$1" "$2" "$target_sha" "$target_game_revision" "$deployment_id" <<'PY_DEPLOYMENT_PUBLICATION'
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+path = Path(sys.argv[1])
+publication = {"revision": sys.argv[3], "gameRevision": sys.argv[4],
+               "deploymentId": sys.argv[5], "ready": sys.argv[2] == "ready"}
+with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=".deployment-", delete=False) as output:
+    temporary = Path(output.name)
+    try:
+        json.dump(publication, output, separators=(",", ":"))
+        output.write("\n")
+        output.flush()
+        os.fsync(output.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+PY_DEPLOYMENT_PUBLICATION
 }
 
 install_game_checkpoint_path() {
@@ -623,8 +667,10 @@ if [[ -r "$game_unit" ]]; then
     current_game_unit_checksum="$(sha256sum "$game_unit" | awk '{print $1}')"
 fi
 current_game_checksum=missing
+current_game_revision=""
 if [[ -r "$live/game-artifact.json" ]]; then
     current_game_checksum="$(sha256sum "$live/game-artifact.json" | awk '{print $1}')"
+    current_game_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$live/game-artifact.json")"
 fi
 if [[ "$current_sha" == "$target_sha" &&
     "$current_game_unit_checksum" == "$expected_game_unit_checksum" &&
@@ -671,6 +717,7 @@ with tempfile.TemporaryDirectory(prefix="solomon-dark-unit-") as directory:
     candidate.write_text((stage / "Deploy" / candidate.name).read_text().replace(str(live), str(stage)))
     subprocess.run(["systemd-analyze", "verify", str(candidate)], check=True)
 PY_VERIFY_GAME_UNIT
+write_deployment_publication "$stage/wwwroot/deployment.json" pending
 chown -R root:root "$stage"
 chmod -R u=rwX,go=rX "$stage"
 
@@ -690,7 +737,23 @@ stage=""
 install_game_checkpoint_path
 install_game_unit
 install_caddy_config
-systemctl start solomon-dark-game.service solomon-dark-revived.service
+# The legacy first-cutover client still polls the immutable game manifest. Keep
+# Website unavailable until its replacement game authority is actually healthy.
+systemctl start solomon-dark-game.service
+game_healthy=0
+for _attempt in {1..30}; do
+    if systemctl is-active --quiet solomon-dark-game.service &&
+        curl -fsS "$game_supervisor_url/health" >/dev/null 2>&1; then
+        game_healthy=1
+        break
+    fi
+    if [[ "$(systemctl show -p Result --value solomon-dark-game.service)" != success ]]; then
+        break
+    fi
+    sleep 1
+done
+[[ "$game_healthy" == 1 ]]
+systemctl start solomon-dark-revived.service
 website_stopped=0
 game_drained=0
 
@@ -725,6 +788,7 @@ grep --fixed-strings --line-regexp --quiet \
 [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
     "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
 
+write_deployment_publication "$live/wwwroot/deployment.json" ready
 rollback_needed=0
 caddy_changed=0
 game_env_changed=0
@@ -760,14 +824,20 @@ live_game_checksum="$(remote_game_artifact_checksum)"
 curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
 public_deployment="$(curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
-    --retry-delay 1 "$public_url/deployment.json")"
-python3 - "$public_deployment" "$target_sha" <<'PY'
+    --retry-delay 1 "$public_url/api/game/deployment")"
+python3 - "$public_deployment" "$target_sha" "$target_game_revision" <<'PY'
 import json
 import sys
 
 payload = json.loads(sys.argv[1])
-if payload != {"revision": sys.argv[2]}:
-    raise SystemExit("public deployment manifest does not match origin/main")
+# Another completed transaction can reconcile this identical release before the
+# remote swap. The drain itself verifies its exact ID; public admission verifies
+# the healthy release identity and a well-formed publication from either owner.
+import re
+if (payload.get("revision") != sys.argv[2] or payload.get("gameRevision") != sys.argv[3]
+        or payload.get("ready") is not True
+        or not re.fullmatch(r"[0-9a-f]{32}", payload.get("deploymentId", ""))):
+    raise SystemExit("public deployment publication does not match the healthy replacement")
 PY
 
 printf '%s %s\n' "$target_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$state_root/last-success"

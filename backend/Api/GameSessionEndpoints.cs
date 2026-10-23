@@ -11,6 +11,7 @@ public static class GameSessionEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/game/deployment", GetDeploymentPublication);
         app.MapGet("/api/game/parties", ListPublicPartiesAsync);
         app.MapGet("/api/game/players", ListConnectedPlayersAsync);
         app.MapGet("/api/game/matches", ListActiveMatchesAsync);
@@ -36,6 +37,15 @@ public static class GameSessionEndpoints
         app.MapPost("/api/game/rejoin", RejoinPartyAsync)
             .RequireRateLimiting("party-joins")
             .WithMetadata(new RequestSizeLimitAttribute(WebGameSaveInspector.MaxRequestBytes));
+    }
+
+    private static IResult GetDeploymentPublication(HttpContext context, IWebHostEnvironment environment)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var publication = Path.Combine(environment.WebRootPath, "deployment.json");
+        return File.Exists(publication)
+            ? Results.File(publication, "application/json")
+            : Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
     }
 
     private sealed record EditorTestRequest(string? Name, string? BytesBase64);

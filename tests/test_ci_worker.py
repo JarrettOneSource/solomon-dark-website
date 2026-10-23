@@ -1,6 +1,7 @@
 import importlib.util
 from contextlib import contextmanager
 import gzip
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import uuid
 from unittest.mock import patch
@@ -348,6 +350,100 @@ class MacInstallationTests(unittest.TestCase):
             self.assertEqual(len(status['tail']), 40)
             self.assertTrue(all(len(line) <= 2048 for line in status['tail']))
             self.assertLessEqual((root / 'logs/current.log').stat().st_size, 40 * 2048)
+
+
+class DeploymentPublicationTests(unittest.TestCase):
+    def helpers(self):
+        script = (OPS / 'deploy-main.sh').read_text()
+        start = script.index('request_game_restart() {')
+        return script[start:script.index('install_game_checkpoint_path() {', start)]
+
+    def test_website_publication_changes_without_mutating_immutable_game_members(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publication = root / 'deployment.json'
+            game = root / 'game'
+            game.mkdir()
+            (game / 'deployment.json').write_text(json.dumps({'revision': 'a' * 40}))
+            immutable = (game / 'deployment.json').read_bytes()
+            environment = os.environ | {'target_sha': 'b' * 40, 'target_game_revision': 'a' * 40,
+                                        'deployment_id': 'ce' * 16, 'publication': str(publication)}
+            for state in ('pending', 'ready'):
+                result = subprocess.run(['/bin/bash', '-c', 'set -Eeuo pipefail\n' + self.helpers()
+                    + f'write_deployment_publication "$publication" {state}\n'],
+                    env=environment, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(publication.read_text()), {
+                    'revision': 'b' * 40, 'gameRevision': 'a' * 40,
+                    'deploymentId': 'ce' * 16, 'ready': state == 'ready',
+                })
+                self.assertEqual(publication.stat().st_mode & 0o777, 0o644)
+                self.assertEqual((game / 'deployment.json').read_bytes(), immutable)
+                self.assertEqual(list(root.glob('.deployment-*')), [])
+
+    def test_drain_binds_publication_and_only_changed_game_can_migrate_legacy_clients(self):
+        scenarios = [
+            (2, True, None, True), (2, False, None, True),
+            (None, False, None, True), (None, True, None, False),
+            (2, True, 'wrong-publication', False),
+        ]
+        for protocol, same_game, returned_id, accepted in scenarios:
+            with self.subTest(protocol=protocol, same_game=same_game, returned_id=returned_id):
+                requests = []
+                publication = 'ce' * 16
+
+                class Handler(BaseHTTPRequestHandler):
+                    def log_message(self, *_args):
+                        pass
+
+                    def do_GET(self):
+                        payload = {'status': 'ok', 'draining': False}
+                        if protocol is not None:
+                            payload['deploymentProtocol'] = protocol
+                        self.send_response(200)
+                        self.end_headers()
+                        self.wfile.write(json.dumps(payload).encode())
+
+                    def do_POST(self):
+                        body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                        requests.append((dict(self.headers), body))
+                        payload = {'status': 'ready', 'targetRevision': body['targetRevision'],
+                                   'players': 1, 'savedPlayers': 1, 'unacknowledgedPlayers': 0}
+                        if protocol == 2:
+                            payload['deploymentId'] = returned_id or publication
+                        self.send_response(200)
+                        self.end_headers()
+                        self.wfile.write(json.dumps(payload).encode())
+
+                server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+                worker = threading.Thread(target=server.serve_forever)
+                worker.start()
+                try:
+                    with tempfile.TemporaryDirectory() as directory:
+                        secret = Path(directory) / 'game.env'
+                        secret.write_text('SDR_GAME_SUPERVISOR_SECRET=owned-test-secret\n')
+                        environment = os.environ | {
+                            'game_env': str(secret), 'deployment_id': publication,
+                            'game_supervisor_url': f'http://127.0.0.1:{server.server_port}',
+                            'current_game_revision': 'a' * 40,
+                            'target_game_revision': ('a' if same_game else 'b') * 40,
+                        }
+                        result = subprocess.run(['/bin/bash', '-c', 'set -Eeuo pipefail\n'
+                            + self.helpers() + 'request_game_restart\n'],
+                            env=environment, capture_output=True, text=True, timeout=10)
+                        self.assertEqual(result.returncode == 0, accepted, result.stdout + result.stderr)
+                        if protocol is None and same_game:
+                            self.assertEqual(requests, [], 'legacy unchanged-game drain must fail before saving/closing')
+                        else:
+                            self.assertEqual(len(requests), 1)
+                            headers, body = requests[0]
+                            self.assertEqual(headers['X-Solomon-Deployment-Id'], publication)
+                            self.assertEqual(headers['Authorization'], 'Bearer owned-test-secret')
+                            self.assertEqual(body, {'targetRevision': environment['target_game_revision']})
+                finally:
+                    server.shutdown()
+                    worker.join()
+                    server.server_close()
 
 
 class ArtifactAdmissionTests(unittest.TestCase):

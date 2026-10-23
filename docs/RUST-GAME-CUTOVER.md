@@ -53,6 +53,28 @@ with the Website mount configuration. Mount changes require a new artifact.
 The game and Website revisions are separate: `client/deployment.json` identifies
 the Rust game; Website `/deployment.json` identifies the Website build.
 
+A deployment publication identifies one actual cutover, independently of both
+revisions. The worker mints a fresh 32-character hexadecimal `deploymentId` outside
+the cached artifact and supplies it through the authenticated
+`X-Solomon-Deployment-Id` drain header. The JSON request body remains
+`{"targetRevision":"<Rust revision>"}` for the first legacy-to-Rust cutover.
+Publication-aware supervisors report `deploymentProtocol: 2` in health and echo
+the ID in the restart announcement and final drain receipt. Recovery claims and
+acknowledgements retain the signed target Rust revision and checkpoint sequence.
+
+The worker stages Website `wwwroot/deployment.json` as
+`{"revision":"<Website revision>","gameRevision":"<Rust revision>","deploymentId":"<ID>","ready":false}`.
+It starts and verifies the replacement game before exposing Website, then verifies
+Website, service health and release integrity before atomically publishing
+`ready: true`. Anonymous, no-store `GET /api/game/deployment` exposes this document
+under the configured Website mount, including `/game-stg/api/game/deployment`.
+The immutable game's own deployment document and all hashed artifact members are
+unchanged. A saved active client reloads only after durable save, actual old
+transport retirement and a matching healthy publication. Idle/title clients
+observe healthy publication changes; this also covers unchanged-game deployments.
+An unchanged-game drain against a legacy authority is rejected before retirement
+because its immutable clients do not understand publication identities.
+
 The last production TypeScript game, `093aee9938e0cae2fabfafc5403b01aed961397e`,
 polls `/deployment.json?current=<that revision>` after its final save and only
 reloads when the response matches the announced restart target. The Website

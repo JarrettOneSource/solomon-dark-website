@@ -55,9 +55,17 @@ players through their normal cloud/IndexedDB owners, wait for bounded save
 acknowledgements, back up/check SQLite, install verified game/Caddy/model
 configuration, atomically swap the release, and verify health. An unhealthy
 candidate restores the prior release/configuration; successful cutovers retain
-NFO rollback and database backups. The public no-store `/deployment.json`
-identifies the Website release; the mounted game's own deployment document
-identifies the Rust revision. The deployment drain targets that Rust revision.
+NFO rollback and database backups. The worker mints a fresh publication ID for
+each cutover and sends it in the authenticated `X-Solomon-Deployment-Id` header.
+The drain still targets the signed Rust revision. Website's no-store
+`/api/game/deployment` exposes its root deployment document with Website revision,
+game revision, publication ID and readiness; the mounted game's own deployment
+document remains an immutable artifact member. Staging is pending. The worker
+starts and verifies the replacement game before Website is exposed, then publishes
+readiness atomically after all candidate health/integrity checks. Website-only
+updates can therefore recover saved clients without changing the game revision.
+Unchanged-game drains require the current supervisor's `deploymentProtocol: 2`;
+the first changed-game legacy cutover retains its existing final-save handshake.
 
 Complete worker versions are installed atomically behind `current`. A validated
 component update is admitted only after the full gate, discards the artifact

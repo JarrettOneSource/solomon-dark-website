@@ -162,6 +162,28 @@ class RuntimeEventContractTests(unittest.TestCase):
                     self.assertEqual(response.headers.get_content_type(), "application/json")
                     self.assertEqual(response.headers["Cache-Control"], "no-store")
 
+    def test_game_publication_is_anonymous_uncached_and_independent_of_game_artifact(self) -> None:
+        publication_path = self.webroot / "deployment.json"
+        original = publication_path.read_bytes()
+        immutable = (self.webroot / "game/deployment.json").read_bytes()
+        try:
+            for ready in (False, True):
+                publication = {
+                    "revision": self.website_revision,
+                    "gameRevision": self.game_revision,
+                    "deploymentId": "ce" * 16,
+                    "ready": ready,
+                }
+                publication_path.write_text(json.dumps(publication))
+                with urllib.request.urlopen(self.origin + "/api/game/deployment", timeout=10) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers["Cache-Control"], "no-store")
+                    self.assertEqual(response.headers.get_content_type(), "application/json")
+                    self.assertEqual(json.load(response), publication)
+            self.assertEqual((self.webroot / "game/deployment.json").read_bytes(), immutable)
+        finally:
+            publication_path.write_bytes(original)
+
     def test_runtime_event_outbox_is_private_detailed_and_bounded(self) -> None:
         occurred = datetime.now(timezone.utc).isoformat()
         event = {
