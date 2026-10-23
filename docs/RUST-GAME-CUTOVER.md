@@ -137,6 +137,29 @@ CI verifies the selected completed artifact; a passing Website job alone does
 not certify a new game build or a desktop acceptance run. The retired renderer
 coverage/mutation inventory is not represented as a Rust result.
 
+## Recovery qualification
+
+Qualify changed-game and Website-only releases with the same ordinary hosted
+journey. Start from a real admitted player, hold its checkpoint storage request,
+and require that durable persistence finishes before the client acknowledges
+retirement. Stop the drained authority, start the actual replacement, verify its
+health, then publish ready through the maintained publication owner. The new
+document must continue the same saved wizard and run. A readiness document alone
+does not establish that a replacement authority is running.
+
+For a Website-only release, retain the complete immutable game artifact and build
+the new Website commit normally. Exercise both an active saved client and an idle
+Title client. Also hold an active tab through an intermediate publication: a later
+healthy sequence for its signed game target must recover it without depending on
+the skipped transaction UUID. Preserve raw failure receipts separately from any
+successful rerun, and record the actual Website revision, game revision,
+publication sequence and replacement process in each result.
+
+The publication sequence comes from the live Website document, not a build cache.
+Only the supported legacy document containing exactly `revision` starts at zero.
+Malformed sequences and exhaustion stop deployment; do not reset the counter or
+edit the hashed game document to make a retry appear ready.
+
 ## Separate training migration follow-up
 
 Gameplay acceptance retains the trained policy and actual learned runtime.
