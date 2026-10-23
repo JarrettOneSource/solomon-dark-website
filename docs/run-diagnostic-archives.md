@@ -1,5 +1,10 @@
 # Run diagnostic archives
 
+This is the historical Website TypeScript reference through commit
+`fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Current runtime ownership, artifact
+inputs and validation are documented in [Rust game cutover](RUST-GAME-CUTOVER.md).
+The source paths and reproduction commands below describe that reference.
+
 The Website game supervisor automatically archives Boneyard runs from the
 shared Hub and private Colleges. Each archive retains the whole party, world,
 enemies, projectiles, spell effects, RNG state, loaded map and content identities.

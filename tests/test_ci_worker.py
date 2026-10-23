@@ -1,5 +1,6 @@
 import importlib.util
 from contextlib import contextmanager
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -118,6 +119,24 @@ class ComputeOwnershipTests(unittest.TestCase):
 
 
 class MacInstallationTests(unittest.TestCase):
+    def setUp(self):
+        # Exercise real mount UUID/locks/processes on the test Mac's mounted
+        # filesystem. /Volumes/Drive is the M5 deployment path, not a test input.
+        self.enterContext(patch.object(installer, 'VOLUME', Path('/')))
+        self.enterContext(patch.object(runner, 'VOLUME', Path('/')))
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'native volume identity')
+    def test_worker_rejects_a_different_volume_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ci'
+            worker_fixture(root)
+            self.assertTrue(runner.storage_ready(root))
+            config = root / 'config.json'
+            value = json.loads(config.read_text())
+            value['volume_uuid'] = 'a-different-volume'
+            config.write_text(json.dumps(value))
+            self.assertFalse(runner.storage_ready(root))
+
     @unittest.skipUnless(sys.platform == 'darwin', 'native compiler admission')
     def test_foreign_waiting_compiler_defers_ci_until_it_finishes(self):
         import time
@@ -271,6 +290,7 @@ class MacInstallationTests(unittest.TestCase):
             code = ('import importlib.util,pathlib,sys; '
                     's=importlib.util.spec_from_file_location("runner",sys.argv[1]); '
                     'm=importlib.util.module_from_spec(s);s.loader.exec_module(m); '
+                    'm.VOLUME=pathlib.Path("/"); '
                     'm.LEASE=pathlib.Path(sys.argv[3]); '
                     'm.active_compilers=lambda: []; '
                     'raise SystemExit(m.run_once(pathlib.Path(sys.argv[2])))')
@@ -329,6 +349,27 @@ class MacInstallationTests(unittest.TestCase):
 
 
 class ArtifactAdmissionTests(unittest.TestCase):
+    def release(self, root):
+        header = bytearray(64)
+        header[:6] = b'\x7fELF\x02\x01'
+        struct.pack_into('<H', header, 18, 62)
+        revision = 'a' * 40
+        (root / 'GameHost').mkdir()
+        (root / 'wwwroot/game').mkdir(parents=True)
+        (root / 'libe_sqlite3.so').write_bytes(header)
+        (root / 'GameHost/solomon-darker').write_bytes(header)
+        (root / 'Server.deps.json').write_text(json.dumps({
+            'runtimeTarget': {'name': '.NETCoreApp,Version=v10.0/linux-x64'}}))
+        (root / 'wwwroot/game/deployment.json').write_text(json.dumps({'revision': revision}))
+        (root / 'GameHost/release.env').write_text(
+            f'SDR_GAME_REVISION={revision}\n'
+            'SDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game\n')
+        (root / 'game-artifact.json').write_text(json.dumps({
+            'schemaVersion': 1, 'revision': revision, 'target': 'x86_64-unknown-linux-gnu',
+            'files': {'bin/solomon-darker': hashlib.sha256(header).hexdigest(),
+                      'client/deployment.json': hashlib.sha256(
+                          (root / 'wwwroot/game/deployment.json').read_bytes()).hexdigest()}}))
+
     def test_installer_rejects_a_root_that_escapes_the_external_volume(self):
         root = installer.VOLUME / '..' / 'unowned-ci-root'
         with self.assertRaisesRegex(RuntimeError, 'must live on its external volume'):
@@ -353,11 +394,7 @@ class ArtifactAdmissionTests(unittest.TestCase):
     def test_managed_release_target_and_required_sqlite_are_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            header = bytearray(64)
-            header[:6] = b'\x7fELF\x02\x01'
-            struct.pack_into('<H', header, 18, 62)
-            (root / 'libe_sqlite3.so').write_bytes(header)
-            (root / 'Server.deps.json').write_text(json.dumps({'runtimeTarget': {'name': '.NETCoreApp,Version=v10.0/linux-x64'}}))
+            self.release(root)
             self.assertEqual(artifact.check_release(root)['runtime'], 'linux-x64')
             (root / 'Server.deps.json').write_text(json.dumps({'runtimeTarget': {'name': '.NETCoreApp,Version=v10.0/osx-arm64'}}))
             with self.assertRaisesRegex(ValueError, 'another runtime'):
@@ -365,6 +402,28 @@ class ArtifactAdmissionTests(unittest.TestCase):
             (root / 'libe_sqlite3.so').unlink()
             with self.assertRaisesRegex(ValueError, 'missing'):
                 artifact.check_release(root)
+
+    def test_published_native_client_membership_and_service_revision_must_match(self):
+        for changed in ['host', 'client', 'unlisted', 'environment', 'target']:
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.release(root)
+                if changed == 'host':
+                    with (root / 'GameHost/solomon-darker').open('ab') as native:
+                        native.write(b'changed native')
+                elif changed == 'client':
+                    (root / 'wwwroot/game/deployment.json').write_text('{}')
+                elif changed == 'unlisted':
+                    (root / 'wwwroot/game/old-game.js').write_text('obsolete')
+                elif changed == 'environment':
+                    (root / 'GameHost/release.env').write_text('SDR_GAME_REVISION=' + 'b' * 40)
+                else:
+                    path = root / 'game-artifact.json'
+                    manifest = json.loads(path.read_text())
+                    manifest['target'] = 'aarch64-apple-darwin'
+                    path.write_text(json.dumps(manifest))
+                with self.assertRaises(ValueError):
+                    artifact.check_release(root)
 
     def test_each_required_installed_component_changes_version_admission(self):
         with tempfile.TemporaryDirectory() as directory:

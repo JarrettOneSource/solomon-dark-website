@@ -44,7 +44,7 @@ export type EditorAction =
   | { type: 'duplicate-selection' }
   | { type: 'set-name'; name: string }
   | { type: 'set-bounds'; bounds: Rect }
-  | { type: 'set-waves'; waves: import('../game/core-kernels/boneyard-wave-schema.ts').WaveDef[] }
+  | { type: 'set-waves'; waves: import('./native-preview/waves.ts').WaveDef[] }
   | { type: 'set-spawn'; spawn: PlayerSpawn | undefined }
   | { type: 'move-item'; sel: SelEntry; pos: Vec2 }
   | { type: 'set-object-props'; eid: string; patch: Partial<Pick<PlacedObject, 'variant' | 'rot' | 'scale'>> }

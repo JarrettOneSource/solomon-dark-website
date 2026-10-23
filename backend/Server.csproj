@@ -16,31 +16,6 @@
     <Content Include="SeedAssets/survival.boneyard"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../frontend/dist-game-host/game-session-supervisor.mjs"
-             Link="GameHost/game-session-supervisor.mjs"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             Condition="Exists('../frontend/dist-game-host/game-session-supervisor.mjs')" />
-    <Content Include="../frontend/dist-game-host/lua54.wasm"
-             Link="GameHost/lua54.wasm"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             Condition="Exists('../frontend/dist-game-host/lua54.wasm')" />
-    <Content Include="../frontend/dist-game-host/boneyard-navigation-worker.mjs"
-             Link="GameHost/boneyard-navigation-worker.mjs"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             Condition="Exists('../frontend/dist-game-host/boneyard-navigation-worker.mjs')" />
-    <Content Include="../frontend/dist-game-host/ml-bot-policy-worker.mjs"
-             Link="GameHost/ml-bot-policy-worker.mjs"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             Condition="Exists('../frontend/dist-game-host/ml-bot-policy-worker.mjs')" />
-    <Content Include="../frontend/dist-game-host/ml-bot-policy-v7-selected.sdml"
-             Link="GameHost/ml-bot-policy-v7-selected.sdml"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             Condition="Exists('../frontend/dist-game-host/ml-bot-policy-v7-selected.sdml')" />
   </ItemGroup>
 
 </Project>

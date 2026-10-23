@@ -9,12 +9,12 @@
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   BONEYARD_WAVE_IGNORED_SOURCE_FLAGS,
-} from '../game/core-kernels/boneyard-wave-schema.ts'
+} from './native-preview/waves.ts'
 import type {
   WaveDef,
   WaveGroup,
   WaveGroupEntry,
-} from '../game/core-kernels/boneyard-wave-schema.ts'
+} from './native-preview/waves.ts'
 
 export type { WaveDef, WaveGroup, WaveGroupEntry }
 

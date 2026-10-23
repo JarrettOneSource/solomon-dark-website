@@ -38,11 +38,17 @@ deferral when a report owns compute.
 The exact source runs the unchanged all-mode `./scripts/validate.sh`. Clean
 source/index identity and a fresh main check precede packaging. The macOS SDK
 publishes `linux-x64` managed dependencies with no platform apphost; native
-SQLite must be ELF64 x86-64. NFO keeps its existing verified pinned Linux Node
-runtime, referenced by the unchanged game unit. A Mac native library or foreign
-runtime dependency target rejects the
-artifact before upload. The release includes the existing Caddy site, game
-unit, ML checkpoint and complete maintained worker components.
+SQLite and the supplied Rust authority must be ELF64 x86-64. Configure an exact
+`SDR_GAME_ARTIFACT_URL` plus `SDR_GAME_ARTIFACT_SHA256`, or explicit matching
+`SDR_GAME_DIST` and `SDR_GAME_NATIVE_HOST` local paths, in the protected worker
+configuration. The native artifact must target `x86_64-unknown-linux-gnu`.
+A Mac native library, altered/unlisted client file or foreign runtime rejects
+the release before upload. Node is still a pinned Website build tool; the
+production game unit starts `GameHost/solomon-darker --supervisor` directly.
+The release includes the checked-in Caddy site, game unit, original game
+manifest, immutable native revision/asset environment, learned policy under
+`wwwroot/game/assets/native`, and complete maintained worker components.
+See [the artifact contract](../../docs/RUST-GAME-CUTOVER.md).
 
 The NFO transaction is preserved: close admissions, freeze and checkpoint
 players through their normal cloud/IndexedDB owners, wait for bounded save
@@ -50,7 +56,8 @@ acknowledgements, back up/check SQLite, install verified game/Caddy/model
 configuration, atomically swap the release, and verify health. An unhealthy
 candidate restores the prior release/configuration; successful cutovers retain
 NFO rollback and database backups. The public no-store `/deployment.json`
-remains the automatic app reload edge.
+identifies the Website release; the mounted game's own deployment document
+identifies the Rust revision. The deployment drain targets that Rust revision.
 
 Complete worker versions are installed atomically behind `current`. A validated
 component update is admitted only after the full gate, discards the artifact
@@ -59,18 +66,41 @@ The installer in the admitted bundle constructs that version's complete
 definition. Automatic self-update replaces worker components without stopping
 its own scheduler; native registration policy is applied by an idle installation.
 The replacement launcher and installer are part of the same version, so an old
-Linux-only worker cannot overwrite the Mac installation. The bootstrap launcher
-waits while published main still predates this migration. Keep the current and
-one prior worker version; the stable scheduler resolves `current/run-worker.py`
+Linux-only worker cannot overwrite the Mac installation. The bootstrap guard
+waits when main lacks `ops/local-ci/run-worker.py`; it does not bridge the first
+TypeScript-to-Rust production migration. Keep the current and one prior worker
+version; the stable scheduler resolves `current/run-worker.py`
 at each invocation, so replacing a complete version needs no competing refresh
 job or scheduler restart. Completed source/build/artifact trees and full success
 logs are deleted. `state/status.json` retains bounded diagnostics, while
 `state/last-success` and `state/failed-target` preserve the deployed or suppressed
-revision. A remote cutover failure suppresses repeated drains at the same SHA.
+Website revision. Artifact cache, already-deployed admission and failed-target
+suppression include the exact Rust manifest identity, so a deliberate game-only
+artifact update cannot silently reuse or skip a different payload. A remote
+cutover failure suppresses repeated drains for the same Website/artifact pair.
 Cached artifacts for superseded targets are removed on the next fresh main read.
 
-Install from an accepted source tree after staging the pinned SSD tools,
-protected configuration and authorized SSH identity:
+The first Rust production cutover needs a manual worker admission. The installed
+TypeScript worker still publishes the old GameHost layout and checks removed
+`GameHost/*.mjs` members before `install_validated_worker()`. Its publisher also
+omits the Rust executable required by the new artifact check, so it cannot reach
+automatic admission from the extraction source. Later compatible worker updates
+can use the automatic admission described above.
+
+This is a separate production migration; public `/game-stg` acceptance does not
+install the production worker. For that separately authorized cutover:
+
+1. Publish the accepted extraction to Website `origin/main` and use that exact
+   accepted source tree on the M5.
+2. Configure its reviewed production `/game` artifact inputs in the protected
+   worker `config.json` environment, alongside the existing pinned SSD tools
+   and authorized SSH identity. GitHub repository variables configure CI only;
+   they do not configure the M5 worker.
+3. Require a passing complete `./scripts/validate.sh` receipt for that exact
+   source and artifact. The installer does not run the validation gate.
+4. Run the installer below while the existing worker is idle. It installs the
+   complete source worker and refreshes the existing native registration;
+   subsequent invocations may perform the normal production drain and cutover.
 
 ```sh
 ./ops/local-ci/install.sh --root /Volumes/Drive/solomon-cicd

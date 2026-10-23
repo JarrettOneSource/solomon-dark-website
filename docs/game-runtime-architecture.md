@@ -1,5 +1,10 @@
 # Solomon Dark rebuilt runtime architecture
 
+This is the historical Website TypeScript reference through commit
+`fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Current runtime ownership, artifact
+inputs and validation are documented in [Rust game cutover](RUST-GAME-CUTOVER.md).
+The source paths and reproduction commands below describe that reference.
+
 Status: accepted; authoritative, GPU-client, shared-Hub party/chat,
 desktop-solo, headless-crowd, and compact-replication slices implemented,
 2026-08-24

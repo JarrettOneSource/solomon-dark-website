@@ -3,52 +3,6 @@ import test from 'node:test'
 import { nativeBrokenFenceHalves, nativeQuadCanvasTriangles } from './native-fence-geometry.ts'
 import { buildNativeRenderPlan } from './native-render-plan.ts'
 import type { EditorDoc, Polyline } from './model.ts'
-import { nativeBoneyardMainLayerShadowCaster } from '../game/renderer/boneyard-shadow-casters.ts'
-import { nativeSceneryShadowPlan } from '../game/renderer/native-scenery-shadow.ts'
-import { nativeFencepostShadowOutline } from '../game/renderer/boneyard-native-shadow-shapes.ts'
-import { nativeBoneyardFenceGrateShadows } from '../game/renderer/boneyard-complex-shadows.ts'
-import { BufferImageSource, Container, Texture } from 'pixi.js'
-import { createNativeStaticQuad } from '../game/renderer/native-static-quad.ts'
-import { destroyResidentTexture } from '../game/renderer/boneyard-resident-lifetime.ts'
-
-test('retained native Broken quad owns one shared diagonal and releases all resident buffers', () => {
-  const pixels = new Uint8ClampedArray(4).fill(255)
-  const texture = new Texture({ source: new BufferImageSource({ resource: pixels, width: 1, height: 1 }) })
-  const half = nativeBrokenFenceHalves([{ x: 300, y: 400 }, { x: 500, y: 460 }], 3, 5)[0]!
-  const mesh = createNativeStaticQuad(texture, half)
-  const parent = new Container()
-  parent.addChild(mesh)
-  const buffers = [...mesh.geometry.buffers]
-  assert.deepEqual([...mesh.geometry.getIndex().data], [0, 1, 2, 2, 1, 3])
-  assert.deepEqual([...mesh.vertices], [half.p0.x, half.p0.y, half.p1.x, half.p1.y, half.p2.x, half.p2.y, half.p3.x, half.p3.y])
-  mesh.tint = 0x777777
-  mesh.zIndex = 15
-  mesh.renderable = false
-  mesh.renderable = true
-  assert.equal(mesh.tint, 0x777777)
-  assert.equal(mesh.zIndex, 15)
-  assert.equal(mesh.autoUpdate, false)
-  const resident = { pixels, sprite: mesh, surfaceMesh: null, texture,
-    x: 0, y: 0, w: 1, h: 1, mainLayerIndex: 0, cleanupSourceKey: null, shadowCaster: null }
-  destroyResidentTexture(resident)
-  assert.ok(buffers.every(buffer => buffer.destroyed))
-  assert.equal(texture.destroyed, true)
-  assert.equal(resident.pixels.length, 0)
-  parent.destroy({ children: true })
-})
-
-test('retained Broken resident never destroys its borrowed native glyph texture', () => {
-  const half = nativeBrokenFenceHalves([{ x: 100, y: 200 }, { x: 300, y: 200 }])[0]!
-  const mesh = createNativeStaticQuad(Texture.WHITE, half)
-  const buffers = [...mesh.geometry.buffers]
-  destroyResidentTexture({ pixels: new Uint8ClampedArray(0), sprite: mesh, surfaceMesh: null,
-    texture: Texture.WHITE, ownsTexture: false, x: 0, y: 0, w: 1, h: 1,
-    mainLayerIndex: 0, cleanupSourceKey: null, shadowCaster: null })
-  assert.ok(buffers.every(buffer => buffer.destroyed))
-  assert.equal(Texture.WHITE.destroyed, false)
-  mesh.destroy()
-})
-
 function document(fences: Polyline[]): EditorDoc {
   return { meta: { name: 'fences', bounds: { x: 0, y: 0, w: 1024, h: 1024 } },
     fences, objects: [], sprites: [], roads: [], terrain: [], opaque: [], hasTimeline: true }
@@ -149,22 +103,10 @@ test('Broken constructor sees current post selectors but never later source-orde
   const plan = buildNativeRenderPlan(doc)
   const bodies = plan.shadows.filter(l => l.kind === 'fence' && l.fence === broken && l.part === 'body')
   assert.deepEqual(bodies.map(l => l.kind === 'fence' ? l.brokenHalf?.seed : null), [324138022, 1831759006])
-  for (const [index, layer] of bodies.entries()) {
-    const caster = nativeBoneyardMainLayerShadowCaster(doc, layer, index)
-    assert.equal(caster?.program?.kind, 'fence-grate')
-    const program = caster!.program!
-    if (program.kind !== 'fence-grate') throw new Error('expected Broken fence program')
-    assert.equal(program.construction, 'broken')
-    assert.deepEqual(caster!.position, layer.pos)
-    const result = nativeBoneyardFenceGrateShadows(program, { baseAlpha: .8, behindScalar: .4,
-      direction: { x: 1, y: 0 }, distanceFraction: .2, projectionDistance: 100,
-      sourcePosition: { x: 100, y: 400 }, sourceRadius: 1 })
-    assert.equal(result.bars.length, 3)
-    assert.deepEqual(nativeSceneryShadowPlan(layer, false), [])
-  }
+
 })
 
-test('shared Rails post style controls main, flat-mask and directional banks in either source order', () => {
+test('shared Rails post style controls editor layers in either source order', () => {
   const grate: Polyline = { eid: 'grate', typeId: 3005, segmentCode: 0, points: [{ x: 0, y: 10 }, { x: 100, y: 20 }] }
   const rails: Polyline = { eid: 'rails', typeId: 3005, segmentCode: 4, points: [{ x: 100, y: 20 }, { x: 200, y: 30 }], startPostVariant: 9 }
   for (const fences of [[grate, rails], [rails, grate]]) {
@@ -173,7 +115,5 @@ test('shared Rails post style controls main, flat-mask and directional banks in 
     if (layer.kind !== 'fence') throw new Error('expected post')
     assert.equal(layer.postStyle, 1)
     assert.equal(layer.postVariant, 9)
-    assert.equal(nativeSceneryShadowPlan(layer, false)[0]!.texture, 329)
-    assert.deepEqual(nativeBoneyardMainLayerShadowCaster(doc, layer, 0)?.outline, nativeFencepostShadowOutline(9, 1))
   }
 })

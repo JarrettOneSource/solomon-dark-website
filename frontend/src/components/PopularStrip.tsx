@@ -1,3 +1,4 @@
+import { websiteUrl } from '../lib/website-mount.ts'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
@@ -68,7 +69,7 @@ export default function PopularStrip({
                   <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded border border-gold/15 bg-[#0b0910] transition-colors group-hover:border-gold/40">
                     {m.thumbnailUrl ? (
                       <AuthenticatedImage
-                        src={m.thumbnailUrl}
+                        src={websiteUrl(m.thumbnailUrl)}
                         alt=""
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
                       />

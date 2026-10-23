@@ -1,4 +1,4 @@
-const RELEASES = 'https://github.com/JarrettOneSource/solomon-dark-website/releases/latest'
+const RELEASES = 'https://github.com/JarrettOneSource/solomon-darker-rust/releases/latest'
 const DOWNLOADS = [
   { target: 'win32-x64', name: 'Windows', detail: '64-bit Windows · ZIP' },
   { target: 'darwin-arm64', name: 'Mac · Apple silicon', detail: 'M1 and newer · ZIP' },

@@ -1,4 +1,5 @@
 // Typed client for the SDR backend (see docs/backend-spec.md).
+import { websiteStorageKey, websiteUrl } from './website-mount.ts'
 
 /** The five declared Schools of Magic (profile-level; null = undeclared). */
 export type School = 'fire' | 'air' | 'water' | 'ether' | 'earth'
@@ -273,7 +274,7 @@ export interface GameLeaderboardEntry {
   completedAtUtc: string
 }
 
-const TOKEN_KEY = 'sdr.token'
+const TOKEN_KEY = websiteStorageKey('sdr.token')
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -298,7 +299,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   let res: Response
   try {
-    res = await fetch(path, { ...init, headers })
+    res = await fetch(websiteUrl(path), { ...init, headers })
   } catch {
     throw new ApiError(0, 'Cannot reach the server. Check your connection.')
   }

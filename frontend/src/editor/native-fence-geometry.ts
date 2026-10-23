@@ -1,6 +1,6 @@
 import type { Vec2 } from './model.ts'
-import { nativeClosedGateRoots } from '../game/core-kernels/boneyard-gate.ts'
-import { createNativeRng, drawNativeFloat } from '../game/core-kernels/native-rng.ts'
+import { nativeClosedGateRoots } from './native-preview/gate-roots.ts'
+import { createNativeRng, drawNativeFloat } from './native-preview/rng.ts'
 
 export interface NativeTexturedQuad {
   p0: Vec2

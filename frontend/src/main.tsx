@@ -14,6 +14,7 @@ import '@fontsource/jetbrains-mono/600.css'
 import './index.css'
 
 import { AuthProvider } from './lib/auth'
+import { websiteBase } from './lib/website-mount.ts'
 import Shell from './components/Shell'
 import Home from './pages/Home'
 import SearchParties from './pages/SearchParties'
@@ -30,17 +31,19 @@ import Wizard from './pages/Wizard'
 import NotFound from './pages/NotFound'
 import RouteError from './pages/RouteError'
 import { Spinner } from './components/ui'
-import NativeLoader from './game/NativeLoader'
 
-// The Boneyard editor carries its own atlas manifests and sprite pipeline;
-// it loads when someone actually picks up the shovel.
-const Boneyard = lazy(() => import('./pages/Boneyard'))
-
-// The game drags the whole engine bundle in behind it. Nobody reading the
-// Library should be made to download a renderer.
+// This route opens the independently built Rust game document.
 const Game = lazy(() => import('./pages/Game'))
 
 const router = createBrowserRouter([
+  {
+    path: '/boneyard-library',
+    errorElement: <RouteError />,
+    lazy: async () => {
+      const { default: Component } = await import('./pages/BoneyardLibrary.tsx')
+      return { Component }
+    },
+  },
   {
     path: '/boneyards',
     errorElement: <RouteError />,
@@ -56,16 +59,19 @@ const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       {
         path: '/boneyard',
-        element: (
-          <Suspense fallback={<Spinner label="Surveying the grounds…" />}>
-            <Boneyard />
-          </Suspense>
-        ),
+        // The loader consumes the one-use shelf request before React mounts.
+        lazy: async () => {
+          const [{ default: Component }, { loadWorkshopRequest: loader }] = await Promise.all([
+            import('./pages/BoneyardWorkshopRoute.tsx'),
+            import('./editor/workshop-navigation.ts'),
+          ])
+          return { Component, loader }
+        },
       },
       {
         path: '/game',
         element: (
-          <Suspense fallback={<NativeLoader progress={0} stage="Loading game code" />}>
+          <Suspense fallback={<Spinner label="Opening Solomon Dark…" />}>
             <Game />
           </Suspense>
         ),
@@ -84,7 +90,7 @@ const router = createBrowserRouter([
       { path: '*', element: <NotFound /> },
     ],
   },
-])
+], { basename: websiteBase || '/' })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -169,10 +169,8 @@ def main() -> None:
     parser.add_argument(
         "--catalog-output",
         type=Path,
-        default=(
-            Path(__file__).resolve().parents[1]
-            / "frontend/src/game/core-kernels/native-skill-catalog.json"
-        ),
+        required=True,
+        help="explicit destination for the extracted skill catalog",
     )
     args = parser.parse_args()
 

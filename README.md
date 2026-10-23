@@ -1,210 +1,80 @@
 # Solomon Darker Website
 
-## Validation
+The Website owns accounts, cloud saves, mod distribution, leaderboards and
+Boneyard authoring. The separately built Rust game supplies `/game`, its native
+authority, save tools and desktop runtime. See the [artifact and validation
+boundary](docs/RUST-GAME-CUTOVER.md).
 
-Run the complete backend build, integration contracts, lint checks, frontend
-tests, production build, and renderer quality checks from the repository root:
+## Validation and development
 
-```bash
+Use the pinned .NET and Node/npm versions and Python 3.12+ with `venv`. Supply a
+completed matching Rust artifact before the full gate:
+
+```sh
+export SDR_GAME_DIST=/absolute/rust-artifact/client
+export SDR_GAME_NATIVE_HOST=/absolute/rust-artifact/bin/solomon-darker
 ./scripts/validate.sh
 ```
 
-For lint alone, use the same entrypoint:
+Alternatively configure an exact `SDR_GAME_ARTIFACT_URL` and
+`SDR_GAME_ARTIFACT_SHA256`. The validator restores pinned dependencies, builds
+and formats the backend, runs all Python contracts, frontend lint/type checks,
+editor/library/Boneyard and artifact tests, then produces the Website with the
+verified Rust client. Lint alone is `./scripts/validate.sh lint`.
 
-```bash
-./scripts/validate.sh lint
-```
+`npm --prefix frontend run dev` serves Website development pages. The game
+artifact and Website API remain separate deployment inputs; no TypeScript
+server is started by Vite. For a production build use the same artifact inputs
+with `npm --prefix frontend run build`. Set `VITE_GAME_ARTIFACT_BASE` when the
+artifact uses a mount other than `/game`.
 
-Validation requires the pinned .NET and Node/npm versions, Python 3.12 or newer
-with `venv`, and installed stable Google Chrome for the renderer's WebGL tests.
-The script restores .NET/npm dependencies and installs the pinned Python test
-dependencies into the ignored `.venv` directory. It does not depend on globally
-installed Pillow. Playwright selects Chrome for the current operating system;
-`SDR_CHROME_PATH` overrides its executable when needed. See
-[renderer quality checks](docs/renderer-quality.md) for mutation review policy.
+## Boneyard authoring
 
-## Boneyard viewer
+`/boneyards` is the fullscreen local viewer for native `.boneyard` files.
+`/boneyard` is the authoring workshop. The retained parser, scene model, canvas
+renderer, editor state and tests are Website-owned. Local files stay in the
+browser unless the user publishes or saves them to the cloud.
 
-`/boneyards` is a dedicated fullscreen, browser-local viewer for retail
-`.boneyard` files. It decodes the native SyncBuffer and renders the actual
-spawn, terrain polygons, road quads, fence segments, world-object positions,
-and static sprite placements. Files opened from disk never leave the browser.
+Explore the Dark Cloud's Boneyards shelf is the same-origin `/boneyard-library`
+Website document. It retains local/cloud draft New, Import, Edit, Test and
+Delete operations. A one-use tab-local request opens the workshop without
+copying game authority into the editor. Test keeps the draft mounted while a
+Rust editor-test iframe owns a disposable game session and its teardown.
 
-The parser, scene model, canvas renderer, and UI are separate so the workspace
-can grow into a web editor without replacing the native document model. Run
-its real-fixture contract with:
+Run the retained frontend contracts with `npm --prefix frontend test`.
 
-```bash
-cd frontend
-npm run test:boneyard
-```
+## Runtime and deployment
 
-`/boneyard` is the authoring surface. Its large-map renderer keeps the same
-art lift without applying a Canvas filter to every placed piece on every
-frame: each decoded sprite is brightened once on a sprite-sized cache canvas.
-Painter order is cached per immutable editor document, off-screen pieces are
-culled, and ordinary pieces avoid unnecessary Canvas state stacks. Pans,
-selection drags, brush strokes, and moving cursor chrome reuse an off-screen
-scene layer; after the pointer settles, the editor restores the exact direct
-render. Those are performance invariants; putting per-piece `filter` calls or
-full-world hover paints back in the stage turns a dense retail-generated map
-into multi-second frames.
+The Rust repository owns native/browser builds, simulation and GPU Source
+fixtures, ordinary gameplay browser checks, desktop packaging and the learned
+bot runtime. Its source/acceptance guide is `docs/PORT-COMPLETION.md` in that
+repository. The Website consumes exact artifact bytes; game and Website build
+revisions remain distinct. Desktop downloads and updates must point to the
+configured Rust release repository, never a Website-built game.
 
-The browser benchmark measures file load, hover, pan, and zoom against either
-the bundled sample or a supplied dense `.boneyard`. Build and serve the site in
-one terminal, then run the benchmark in another:
-
-```bash
-cd frontend
-npm run build
-npm run preview -- --host 127.0.0.1 --port 4175
-
-BONEYARD_BENCH_URL=http://127.0.0.1:4175 \
-BONEYARD_BENCH_FIXTURE="/path/to/large-map.boneyard" \
-BONEYARD_BENCH_ROUTE=editor \
-BONEYARD_BENCH_ASSERT=1 \
-npm run benchmark:boneyard
-```
-
-`CHROME_PATH` can select a Chrome executable; otherwise the benchmark uses
-the installed stable Chrome channel. The assertion budget intentionally
-allows machine variance while still rejecting the former multi-second
-interaction frames. Its hover traversal also rejects more than two complete
-world paints: one interaction-layer paint and one settled direct frame.
-
-## Rebuilt game development
-
-The `/game` route is an ordinary client of the authoritative game host. Start
-both from `frontend/`:
-
-```bash
-npm run dev:game -- --host 127.0.0.1 --port 4178
-```
-
-The development script starts a separate Node server on an OS-assigned loopback
-port, waits for its readiness message, gives Vite the URL and development
-credential, and shuts both processes down together. This is the real socket
-and protocol boundary; the browser never runs an in-tab server. Direct
-`npm run dev` intentionally leaves `/game` without a session unless a trusted
-platform shell supplies `VITE_GAME_SERVER_URL` and
-`VITE_GAME_BOOTSTRAP_CREDENTIAL`.
-
-For a LAN-visible development page, bind Vite to `0.0.0.0` and provide the
-exact origin the browser will use, for example:
-
-```bash
-SDR_GAME_DEV_ORIGIN=http://192.168.1.50:4178 npm run dev:game -- --host 0.0.0.0 --port 4178
-```
-
-The authoritative host remains loopback-only; a browser on another machine is
-not a desktop-local client and therefore needs a separately configured secure
-remote development gateway.
-
-The shared client accepts keyboard (`WASD` or arrows), a standard controller,
-and Pointer Events joysticks on coarse-pointer mobile browsers. Controller
-gameplay uses left stick or D-pad to move, right stick to aim, right trigger for
-the primary spell, X to cast the selected quickbar slot, bumpers to select all
-eight slots, A to interact, Y for Skills, View for Inventory, and Menu/Start to
-pause. Menus use D-pad or left stick, A to confirm, B to go back, and bumpers to
-move between adjacent controls. The game preserves
-its `1600x900` native stage within wider `16:10` displays such as Steam Deck,
-and asks portrait mobile devices to rotate before play.
-
-Run only the headless host with `SDR_GAME_BOOTSTRAP_CREDENTIAL` set to a strong
-secret and then `npm run game:host`. Its first stdout line is a machine-readable
-readiness record for a desktop or cloud supervisor. See
-`docs/game-runtime-architecture.md` for the supported solo, peer-hosted,
-browser-provisioned, and dedicated topology. This standalone host ends its
-current run when the final client leaves, so a desktop restart or browser
-refresh begins from a fresh Hub and materializes a new random Boneyard.
-
-The offline bot trainer, authoritative Boneyard rollout bridge,
-checkpoint format, evaluation protocol, and diagnostics are documented in
-`docs/ml-bot-training.md`.
-
-Production browser sessions use the bundled `GameHost/game-session-supervisor.mjs`.
-The website's `POST /api/game/sessions` adapter authenticates to that
-loopback-only supervisor and returns a one-session `wss` endpoint; the static
-client contains neither the supervisor secret nor a shared gameplay credential.
-The same server-only boundary signs completed global Hall rows; the leaderboard
-API rejects browser-authored score fields and receipts belonging to another
-account.
-The checked-in NFO unit, Caddy route, required environment, expiry policy, and
-release health gates are documented in `ops/nfo/README.md`.
-
-### Standalone desktop app
-
-The standalone Solomon Darker app packages this same client, game host and
-assets for Windows x64, macOS Apple silicon/Intel, and Linux x64. Download a
-validated build from [GitHub Releases](https://github.com/JarrettOneSource/solomon-dark-website/releases/latest)
-or the website's `/downloads` page. Extract the archive and keep its folder
-together.
-
-Choose **Play offline**, **Host game**, or **Join a friend** in the launcher.
-Solo works without an account or internet connection. Local saves and settings
-use a stable app origin and live outside the application folder. Closing the
-app or returning to the launcher requests and persists a final checkpoint
-before the host exits.
-
-Hosts share an encrypted direct connection using **Game > Copy multiplayer
-invite**. LAN, VPN, and forwarded internet TCP addresses are supported; both
-players need the same build. No Website admission, discovery service, or relay
-is involved. The host must keep the app open. Account/cloud services and Dark
-Cloud content remain website features.
-
-The app checks GitHub for updates at startup and every four hours. An available
-update appears in the launcher and as a dismissible game notice. It never
-restarts an active game. Download the offered build, save and close, then
-replace the extracted application; local saves remain in place. These builds
-are unsigned and unnotarized, so the OS may require first-launch confirmation.
-
-From `frontend/`:
-
-```bash
-npm run package:desktop:windows
-npm run package:desktop:mac
-npm run package:desktop:linux
-npm run smoke:desktop
-```
-
-Use `npm run package:desktop -- --platform darwin --arch x64` for Intel Mac.
-Package on the target operating system. Linux smoke execution needs Xvfb when
-there is no display: `xvfb-run -a npm run smoke:desktop`. The Windows acceptance
-runs the real package with external networking blocked, proves local
-save/restart/resume and child teardown, then connects two packaged clients and
-enters a shared Boneyard. Receipts and screenshots land in
-`frontend/reports/desktop-smoke`.
-
-The same Validate workflow builds each desktop platform. Only a successful
-Website gate and all platform acceptance jobs can publish a desktop release
-for `main`. Each release identifies the source revision and contains ZIP
-archives, SHA-256 checksums and the update manifest. See
-[standalone desktop](docs/standalone-desktop.md) for the boundaries and
-[the runtime architecture](docs/game-runtime-architecture.md) for authority.
+The existing C# provisioner authenticates to the native supervisor through the
+same protected administration boundary. The browser receives a single-use
+admission ticket, never the supervisor or leaderboard-signing secret. See
+[NFO operation](ops/nfo/README.md) and [the deployment worker](ops/local-ci/README.md).
 
 ## Mod packages
 
-Community mod ZIPs require `manifest.json` at the archive root. Website
-packages may contain typed Boneyards, sandboxed Lua, or both. Native DLL,
-arbitrary data-tree, and `images/` replacement mods are not web-port content.
-See the [authoring
-guide](frontend/public/mod-package-format.md),
-[JSON Schema](frontend/public/mod-manifest.schema.json), and the
-[copyable examples](frontend/public/examples/).
+Community mod ZIPs require `manifest.json` at the archive root. Packages may
+contain typed Boneyards, sandboxed Lua, or both. Native DLL, arbitrary data-tree
+and `images/` replacement mods are not supported package content. See the
+[authoring guide](frontend/public/mod-package-format.md),
+[JSON Schema](frontend/public/mod-manifest.schema.json) and
+[examples](frontend/public/examples/).
 
-Subscribe in the Library and enable mods from Explore the Dark Cloud. Session
-provisioning resolves exact latest versions, validates dependencies and hashes,
-starts one isolated Lua VM per active script, and adds active package
-Boneyards to that session only. Browser lobby rows advertise the exact host
-manifest before joining. Save documents record that manifest and bounded
-per-mod state.
+Subscribe in the Library and enable mods from Explore the Dark Cloud. The
+Website resolves exact versions and dependencies; the Rust authority validates
+and compiles their real definitions, assets and scoped state before admission.
+Saves retain the accepted manifest and bounded mod state.
 
-Published mods may be `public`, `unlisted`, or `private`. Unlisted mods stay
-out of discovery but work for anyone with the direct link. Private mods are
-visible and playable only by their author.
+Public mods appear in discovery. Unlisted mods work through their direct link.
+Private mods are visible and playable only by their author. Run the backend
+contract with a .NET 10 SDK:
 
-Run the backend integration contract with a .NET 10 SDK:
-
-```bash
+```sh
 python3 -m unittest tests.test_mod_sync_contract -v
 ```
