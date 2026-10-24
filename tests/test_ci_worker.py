@@ -353,6 +353,43 @@ class MacInstallationTests(unittest.TestCase):
             self.assertLessEqual((root / 'logs/current.log').stat().st_size, 40 * 2048)
 
 
+@unittest.skipUnless(sys.platform == 'linux', 'the deployed service executable is owned by Linux procfs')
+class CaddyValidationTests(unittest.TestCase):
+    def test_validation_uses_the_live_service_executable_and_preserves_failure(self):
+        script = (OPS / 'deploy-main.sh').read_text()
+        start = script.index('validate_caddy() {')
+        helper = script[start:script.index('request_game_restart() {', start)]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # The running Python process supplies a real procfs executable. Its
+            # validation command models the service CLI and reads the real file.
+            (root / 'validate').write_text(
+                'from pathlib import Path\nimport sys\n'
+                'assert sys.argv[1] == "--config"\n'
+                'raise SystemExit(0 if Path(sys.argv[2]).read_text() == "valid" else 7)\n')
+            retired = root / 'caddy'
+            retired.write_text('#!/bin/sh\nprintf used > retired-used\nexit 0\n')
+            retired.chmod(0o755)
+            config = root / 'Caddyfile'
+            child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            try:
+                for contents, expected in [('valid', 0), ('invalid', 7)]:
+                    with self.subTest(contents=contents):
+                        config.write_text(contents)
+                        command = ('set -Eeuo pipefail\n'
+                                   'systemctl() { printf "%s\\n" "$test_service_pid"; }\n'
+                                   + helper + '\nvalidate_caddy --config "$candidate"\n')
+                        result = subprocess.run(['/bin/bash', '-c', command], cwd=root,
+                            env=os.environ | {'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                                              'test_service_pid': str(child.pid), 'candidate': str(config)},
+                            capture_output=True, text=True, timeout=10)
+                        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                        self.assertFalse((root / 'retired-used').exists())
+            finally:
+                child.terminate()
+                child.wait(timeout=10)
+
+
 class DeploymentPublicationTests(unittest.TestCase):
     def helpers(self):
         script = (OPS / 'deploy-main.sh').read_text()

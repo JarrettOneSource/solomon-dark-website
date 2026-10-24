@@ -55,7 +55,9 @@ players through their normal cloud/IndexedDB owners, wait for bounded save
 acknowledgements, back up/check SQLite, install verified game/Caddy/model
 configuration, atomically swap the release, and verify health. An unhealthy
 candidate restores the prior release/configuration; successful cutovers retain
-NFO rollback and database backups. The worker mints a fresh publication ID for
+NFO rollback and database backups. Candidate, installed and rollback Caddy
+configuration validation uses the running systemd service's executable, since
+PATH may still select an older packaged binary. The worker mints a fresh publication ID for
 each cutover and sends it in the authenticated `X-Solomon-Deployment-Id` header.
 The drain still targets the signed Rust revision. Its monotonic publication
 sequence is sent through `X-Solomon-Deployment-Sequence`; the UUID correlates the

@@ -434,6 +434,14 @@ rollback_needed=0
 website_stopped=0
 game_drained=0
 
+validate_caddy() {
+    local service_pid binary
+    # PATH can retain an older packaged Caddy than the active systemd service.
+    service_pid="$(systemctl show --property MainPID --value caddy.service)" || return
+    binary="$(readlink -e "/proc/$service_pid/exe")" || return
+    "$binary" validate "$@"
+}
+
 request_game_restart() {
     local result
     local health
@@ -566,7 +574,7 @@ restore_caddy_config() {
     [[ -n "$caddy_backup" && -f "$caddy_backup" ]]
     install -o root -g root -m 0644 -- "$caddy_backup" "$caddy_next"
     mv -- "$caddy_next" "$caddy_site"
-    caddy validate --config /etc/caddy/Caddyfile >/dev/null
+    validate_caddy --config /etc/caddy/Caddyfile >/dev/null
     systemctl reload caddy.service
     caddy_changed=0
 }
@@ -581,7 +589,7 @@ install_caddy_config() {
     install -o root -g root -m 0644 -- "$caddy_candidate" "$caddy_next"
     mv -- "$caddy_next" "$caddy_site"
     caddy_changed=1
-    caddy validate --config /etc/caddy/Caddyfile >/dev/null
+    validate_caddy --config /etc/caddy/Caddyfile >/dev/null
     systemctl reload caddy.service
     systemctl is-active --quiet caddy.service
 }
@@ -650,7 +658,7 @@ tar --extract --gzip --file "$artifact" --to-stdout \
     ./Deploy/solomon-dark-revived.caddy >"$caddy_candidate"
 chown root:root "$caddy_candidate"
 chmod 0644 "$caddy_candidate"
-caddy validate --config "$caddy_candidate" --adapter caddyfile >/dev/null
+validate_caddy --config "$caddy_candidate" --adapter caddyfile >/dev/null
 
 current_sha="$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")"
 current_game_unit_checksum="missing"
