@@ -94,15 +94,25 @@ artifact update cannot silently reuse or skip a different payload. A remote
 cutover failure suppresses repeated drains for the same Website/artifact pair.
 Cached artifacts for superseded targets are removed on the next fresh main read.
 
-The first Rust production cutover needs a manual worker admission. The installed
-TypeScript worker still publishes the old GameHost layout and checks removed
+Expanding the worker bundle needs one explicit admission when the installed
+packager does not know the new component. The three-component worker omits
+`deployment-publication.py`, so it cannot package the publication-aware installer
+for its own automatic update. After publishing the accepted source and passing
+the full gate with its exact production game artifact, use the idle installer
+below to admit the complete four-component version. Hold the shared compute lease
+while updating the artifact configuration and installing the worker; release it
+only when both published revisions and the configured artifact agree. The next
+ordinary scheduled invocation owns validation, drain and deployment.
+
+Migrating an original TypeScript worker also needs explicit admission. That
+worker publishes the old GameHost layout and checks removed
 `GameHost/*.mjs` members before `install_validated_worker()`. Its publisher also
 omits the Rust executable required by the new artifact check, so it cannot reach
 automatic admission from the extraction source. Later compatible worker updates
 can use the automatic admission described above.
 
-This is a separate production migration; public `/game-stg` acceptance does not
-install the production worker. For that separately authorized cutover:
+Public `/game-stg` acceptance does not install the production worker. For an
+authorized production admission:
 
 1. Publish the accepted extraction to Website `origin/main` and use that exact
    accepted source tree on the M5.
