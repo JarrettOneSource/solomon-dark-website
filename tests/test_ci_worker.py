@@ -635,7 +635,9 @@ class ArtifactAdmissionTests(unittest.TestCase):
     def test_staged_service_preflight_checks_candidate_before_first_cutover(self):
         script = (OPS / 'deploy-main.sh').read_text()
         start = script.index('[[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service"')
-        preflight = script[start:script.index('chown -R root:root "$stage"', start)]
+        # End at service validation; later publication setup has its own fixture.
+        marker = '\nPY_VERIFY_GAME_UNIT\n'
+        preflight = script[start:script.index(marker, start) + len(marker)]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             live, stage, temporary = [root / name for name in ('live', 'stage', 'temporary')]
