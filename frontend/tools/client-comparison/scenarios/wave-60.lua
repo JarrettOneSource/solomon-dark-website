@@ -9,10 +9,14 @@ assert(entry.seed == string.format("%08x", qa.seed) .. string.rep("0", 24),
     "the authority must admit the requested seed")
 
 local completed, captured = nil, -1
+local previous_tick, stale_samples = entry.tick, 0
 -- Six hours at two-second observations. The pilot uses ordinary simulation
 -- input and cooldowns; no wave, enemy, kill or reward state is advanced here.
 for sample = 1, 10800 do
     local state = qa.observe():await()
+    stale_samples = state.tick == previous_tick and stale_samples + 1 or 0
+    assert(stale_samples < 15, "the authority stopped advancing at tick " .. state.tick)
+    previous_tick = state.tick
     assert(state.health > 0, "the protected pilot died")
     if state.wave >= 1 then
         assert(state.protected, "the shared endurance protection status is absent")

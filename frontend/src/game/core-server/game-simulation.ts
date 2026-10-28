@@ -3946,6 +3946,9 @@ function createNativeSecondaryTickContext(
     move: NonNullable<NativeSecondaryTickContext['knockbackAreaMovement']>
   }>,
 ): NativeSecondaryTickContext {
+  const boneyardBodyBounds = world.kind === 'boneyard'
+    ? world.arenaTransition === null ? world.bounds : boneyardActiveBounds(world.arenaTransition)
+    : null
   return {
     knockbackAreaMovement: areaMovement === undefined ? undefined : (worldKey, targetId, delta, sourceActorId) => {
       const ids = areaMovement.move(worldKey, targetId, delta, sourceActorId)
@@ -3994,7 +3997,7 @@ function createNativeSecondaryTickContext(
         return resolveBoneyardMovement(
           currentPosition,
           requestedPosition,
-          world.bounds,
+          boneyardBodyBounds!,
           boneyardCollision!,
           0,
         )
@@ -4013,7 +4016,7 @@ function createNativeSecondaryTickContext(
         return resolveBoneyardMovement(
           origin,
           requestedPosition,
-          world.bounds,
+          boneyardBodyBounds!,
           boneyardCollision!,
           radius,
         )
@@ -4031,14 +4034,13 @@ function createNativeSecondaryTickContext(
         world.kind === 'boneyard'
         && worldKey === `boneyard:${world.runId}`
       ) {
-        const boneyardWorld = world
         return resolveNativeCollisionAdjustedPosition(
           rng,
           requestedPosition,
           NATIVE_GOLEM_PLACEMENT_RADIUS,
           (position) => canPlaceBoneyardBody(
             position,
-            boneyardWorld.bounds,
+            boneyardBodyBounds!,
             boneyardCollision!,
             NATIVE_GOLEM_PLACEMENT_RADIUS,
           ),
@@ -4071,7 +4073,7 @@ function createNativeSecondaryTickContext(
         if (world.kind === 'boneyard') {
           if (canPlaceBoneyardBody(
             candidate,
-            world.bounds,
+            boneyardBodyBounds!,
             boneyardCollision!,
             PLAYER_CHARACTER_RADIUS,
           )) return candidate
@@ -4244,7 +4246,7 @@ function createNativeSecondaryTickContext(
         ]
         return resolveBoneyardNativeTeleport(rng, {
           bodies,
-          bounds: boneyardWorld.bounds,
+          bounds: boneyardBodyBounds!,
           collision: boneyardCollision!,
         })
       }

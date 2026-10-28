@@ -61,7 +61,9 @@ Chrome's Metal backend. Each run owns and closes its browser and navigation chil
 - `wave-60.lua`: the shared authority Lua pilot clears wave 60, repeatedly casts
   primary and learned secondary abilities, then saves and continues in a fresh
   document. It requires earned kills, loot and XP, active protection and available
-  mana. The six-hour observation limit is a failure deadline, not a passing result.
+  mana. Fifteen consecutive unchanged two-second observations fail the combat
+  journey, so a lost authority cannot leave it reading the last snapshot for hours.
+  The six-hour observation limit is a failure deadline, not a passing result.
 
 ## Protected wave-60 runs
 
