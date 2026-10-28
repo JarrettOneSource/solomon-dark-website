@@ -84,7 +84,16 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
   return {
     async close() { if (navigation) assert.equal(await navigation.close(), 0) },
     async captureReady() {
-      if (client !== 'pixi') return
+      if (client === 'rust') {
+        if ((await ui.readUi(page)).inputScope === 'inventory') {
+          await ui.actionable(page, 'panel:close')
+          // PlayerPanels reveals for forty 10 ms presentation ticks, while its
+          // controls become actionable earlier. Capture the completed artwork.
+          await page.waitForTimeout(400)
+          await ui.nextFrame(page)
+        }
+        return
+      }
       await page.locator('.main-menu-screen-fade-idle').waitFor({ state: 'attached' })
       if (await page.locator('.title-menu-renderer').isVisible()) {
         await page.locator('.title-menu-renderer canvas[data-screen]').waitFor()
