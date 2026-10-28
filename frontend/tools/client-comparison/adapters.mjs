@@ -85,6 +85,7 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
     async close() { if (navigation) assert.equal(await navigation.close(), 0) },
     async captureReady() {
       if (client === 'rust') {
+        await ui.nextFrame(page)
         if ((await ui.readUi(page)).inputScope === 'inventory') {
           await ui.actionable(page, 'panel:close')
           // PlayerPanels reveals for forty 10 ms presentation ticks, while its
