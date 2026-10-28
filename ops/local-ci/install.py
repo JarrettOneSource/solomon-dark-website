@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 
-FILES = ('deploy-main.sh', 'run-worker.py', 'install.py', 'deployment-publication.py')
+FILES = ('deploy-main.sh', 'run-worker.py', 'install.py', 'deployment-publication.py', 'deploy-runtime.sh', 'parallel-game-saves.py', 'check-linux-artifact.py')
 LABEL = 'com.jarrett.solomon-dark-main-deploy'
 DEFAULT_ROOT = Path('/Volumes/Drive/solomon-cicd')
 VOLUME = Path('/Volumes/Drive')

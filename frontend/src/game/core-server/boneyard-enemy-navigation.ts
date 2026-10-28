@@ -1,0 +1,1567 @@
+import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
+import {
+  boneyardCollisionCandidatesInBounds,
+  boneyardCollisionGeometryIdentity,
+  canPlaceBoneyardBody,
+  NATIVE_BONEYARD_SPAWN_PLACEMENT,
+  resolveBoneyardMovement,
+  type BoneyardCollisionWorld,
+} from './boneyard-collision.ts'
+
+export const NATIVE_BADGUY_NAVIGATION_CLEARANCE = 25
+export const NATIVE_DEMON_NAVIGATION_CLEARANCE = 50
+export const NATIVE_NAVMESH_COLLISION_EXCLUSION_MASK = 0x80
+export const NATIVE_NAVMESH_LATTICE_STEP = 500
+export const NATIVE_NAVMESH_BOUNDARY_MARGIN = 200
+export const NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL = 200
+export const NATIVE_NAVMESH_PORTAL_INSET = 1
+export const NATIVE_NAVMESH_SIMPLIFICATION_CLEARANCE_FACTOR = 1.2000000476837158
+
+const TRIANGLE_EPSILON = 1e-7
+const CIRCLE_NAVIGATION_SEGMENTS = 8
+
+export interface FindBoneyardEnemyRouteRequest {
+  readonly bodyRadius: number
+  readonly bounds: Readonly<BoneyardBounds>
+  readonly clearance: number
+  readonly end: Readonly<BoneyardPoint>
+  /** Destination-owner radius for endpoint attachment; defaults to the mover. */
+  readonly endBodyRadius?: number
+  readonly ignoredSourceIds?: ReadonlySet<string>
+  readonly start: Readonly<BoneyardPoint>
+  readonly world: BoneyardCollisionWorld
+}
+
+export interface BoneyardNavigationMeshData {
+  readonly points: readonly Readonly<BoneyardPoint>[]
+  readonly triangles: readonly BoneyardNavigationTriangleData[]
+}
+
+export interface BoneyardNavigationTriangleData {
+  readonly center: Readonly<BoneyardPoint>
+  readonly id: number
+  readonly neighbors: readonly number[]
+  readonly vertices: readonly [number, number, number]
+}
+
+export interface PreparedBoneyardNavigationMesh {
+  readonly key: string
+  readonly mesh: BoneyardNavigationMeshData
+}
+
+interface MutableNavTriangle {
+  readonly center: Readonly<BoneyardPoint>
+  readonly id: number
+  readonly neighbors: number[]
+  readonly vertices: readonly [number, number, number]
+}
+
+interface DelaunayTriangle {
+  readonly vertices: readonly [number, number, number]
+}
+
+interface NavigationConstraint {
+  readonly end: Readonly<BoneyardPoint>
+  readonly start: Readonly<BoneyardPoint>
+}
+
+interface OpenTriangle {
+  readonly f: number
+  readonly g: number
+  readonly id: number
+  readonly order: number
+}
+
+const NAV_MESH_CACHE = new WeakMap<
+  object,
+  Map<string, BoneyardNavigationMeshData>
+>()
+
+function navigationMeshEntries(
+  world: BoneyardCollisionWorld,
+): Map<string, BoneyardNavigationMeshData> | undefined {
+  return NAV_MESH_CACHE.get(boneyardCollisionGeometryIdentity(world))
+}
+
+function navigationMeshKey(
+  bounds: Readonly<BoneyardBounds>,
+  clearance: number,
+): string {
+  return [bounds.x, bounds.y, bounds.w, bounds.h, clearance].join(':')
+}
+
+function freezeNavigationMesh(
+  source: BoneyardNavigationMeshData,
+): BoneyardNavigationMeshData {
+  return Object.freeze({
+    points: Object.freeze(source.points.map(point => Object.freeze({ ...point }))),
+    triangles: Object.freeze(source.triangles.map(triangle => Object.freeze({
+      center: Object.freeze({ ...triangle.center }),
+      id: triangle.id,
+      neighbors: Object.freeze([...triangle.neighbors]),
+      vertices: Object.freeze([...triangle.vertices]) as readonly [number, number, number],
+    }))),
+  })
+}
+
+/**
+ * Ports the stock Arena-owned NavMesh service: clearance-expanded collision
+ * constraints and the authored 500-unit samples feed a Delaunay triangle
+ * graph, triangle adjacency feeds A*, and the resulting portal crossings are
+ * reduced to the two waypoints retained by Badguy_ResolveNavGoal.
+ */
+export function findBoneyardEnemyRoute(
+  request: FindBoneyardEnemyRouteRequest,
+): readonly Readonly<BoneyardPoint>[] | null {
+  validateRouteRequest(request)
+  const {
+    bodyRadius,
+    bounds,
+    clearance,
+    end,
+    endBodyRadius = bodyRadius,
+    ignoredSourceIds,
+    start,
+    world,
+  } = request
+  if (pathIsClear(start, end, bounds, world, clearance, ignoredSourceIds)) {
+    return Object.freeze([
+      Object.freeze({ ...start }),
+      Object.freeze({ ...end }),
+    ])
+  }
+
+  const mesh = nativeNavMesh(bounds, world, clearance)
+  const startAttachment = resolveEndpointAttachment(
+    mesh,
+    start,
+    bounds,
+    world,
+    bodyRadius,
+    ignoredSourceIds,
+  )
+  const endAttachment = resolveEndpointAttachment(
+    mesh,
+    end,
+    bounds,
+    world,
+    endBodyRadius,
+    ignoredSourceIds,
+  )
+  if (startAttachment === null || endAttachment === null) return null
+  const trianglePath = findTrianglePath(mesh, startAttachment.triangleId, endAttachment.triangleId)
+  if (trianglePath === null) return null
+
+  const route: Readonly<BoneyardPoint>[] = []
+  for (const point of startAttachment.points) appendDistinctRoutePoint(route, point)
+  for (let index = 1; index < trianglePath.length; index += 1) {
+    const previous = mesh.triangles[trianglePath[index - 1]!]
+    const next = mesh.triangles[trianglePath[index]!]
+    if (!previous || !next) throw new Error('enemy route lost a NavMesh triangle')
+    const portal = sharedPortal(previous, next)
+    if (portal !== null) {
+      const crossing = projectToInsetPortal(
+        end,
+        mesh.points[portal[0]]!,
+        mesh.points[portal[1]]!,
+      )
+      if (
+        pathIsClear(previous.center, crossing, bounds, world, clearance)
+        && pathIsClear(crossing, next.center, bounds, world, clearance)
+      ) appendDistinctRoutePoint(route, crossing)
+    }
+    appendDistinctRoutePoint(route, next.center)
+  }
+  for (let index = endAttachment.points.length - 1; index >= 0; index -= 1) {
+    appendDistinctRoutePoint(route, endAttachment.points[index]!)
+  }
+  return Object.freeze(simplifyNativeRoutePrefix(
+    route,
+    bounds,
+    world,
+    bodyRadius,
+    ignoredSourceIds,
+  ))
+}
+
+export function prepareBoneyardNavigationMesh(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): void {
+  if (!Number.isFinite(clearance) || clearance <= 0) {
+    throw new RangeError('enemy navigation clearance must be positive and finite')
+  }
+  nativeNavMesh(bounds, world, clearance)
+}
+
+export function boneyardNavigationMeshIsPrepared(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): boolean {
+  return navigationMeshEntries(world)?.has(navigationMeshKey(bounds, clearance)) ?? false
+}
+
+export function buildPreparedBoneyardNavigationMesh(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): PreparedBoneyardNavigationMesh {
+  if (!Number.isFinite(clearance) || clearance <= 0) {
+    throw new RangeError('enemy navigation clearance must be positive and finite')
+  }
+  return {
+    key: navigationMeshKey(bounds, clearance),
+    mesh: buildNativeNavMesh(bounds, world, clearance),
+  }
+}
+
+export function installPreparedBoneyardNavigationMesh(
+  world: BoneyardCollisionWorld,
+  prepared: PreparedBoneyardNavigationMesh,
+): void {
+  let entries = navigationMeshEntries(world)
+  if (!entries) {
+    entries = new Map()
+    NAV_MESH_CACHE.set(boneyardCollisionGeometryIdentity(world), entries)
+  }
+  entries.set(prepared.key, freezeNavigationMesh(prepared.mesh))
+}
+
+function nativeNavMesh(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): BoneyardNavigationMeshData {
+  const key = navigationMeshKey(bounds, clearance)
+  let entries = navigationMeshEntries(world)
+  if (!entries) {
+    entries = new Map()
+    NAV_MESH_CACHE.set(boneyardCollisionGeometryIdentity(world), entries)
+  }
+  const cached = entries.get(key)
+  if (cached) return cached
+  const built = buildNativeNavMesh(bounds, world, clearance)
+  entries.set(key, built)
+  return built
+}
+
+function buildNativeNavMesh(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): BoneyardNavigationMeshData {
+  const navigationWorld = withoutNativeNavMeshExcludedCollision(world)
+  const constraints = navigationConstraints(navigationWorld, clearance)
+  const candidates: Readonly<BoneyardPoint>[] = []
+  for (const constraint of constraints) {
+    candidates.push(constraint.start, constraint.end)
+  }
+  appendConstraintIntersections(candidates, constraints)
+  appendNativeLattice(candidates, bounds, clearance)
+
+  const candidateBounds = {
+    x: bounds.x - NATIVE_NAVMESH_BOUNDARY_MARGIN - clearance,
+    y: bounds.y - NATIVE_NAVMESH_BOUNDARY_MARGIN - clearance,
+    w: bounds.w + (NATIVE_NAVMESH_BOUNDARY_MARGIN + clearance) * 2,
+    h: bounds.h + (NATIVE_NAVMESH_BOUNDARY_MARGIN + clearance) * 2,
+  }
+  const points = uniqueNavigationPoints(candidates).filter((point) => (
+    canPlaceBoneyardBody({ ...point }, candidateBounds, navigationWorld, clearance)
+  ))
+  const delaunay = delaunayTriangles(points)
+  const centerAccepted = delaunay.filter((triangle) => canPlaceBoneyardBody(
+    triangleCenter(triangle.vertices.map((vertex) => points[vertex]!)),
+    { ...bounds },
+    navigationWorld,
+    clearance,
+  ))
+  return connectTriangles(points, centerAccepted, bounds, navigationWorld, clearance)
+}
+
+function withoutNativeNavMeshExcludedCollision(
+  world: BoneyardCollisionWorld,
+): BoneyardCollisionWorld {
+  return Object.freeze({
+    circles: Object.freeze(world.circles.filter(({ nativeLineMask }) => (
+      !excludedFromNativeNavMesh(nativeLineMask)
+    ))),
+    polygons: Object.freeze(world.polygons.filter(({ nativeLineMask }) => (
+      !excludedFromNativeNavMesh(nativeLineMask)
+    ))),
+    segments: Object.freeze(world.segments.filter(({ nativeLineMask }) => (
+      !excludedFromNativeNavMesh(nativeLineMask)
+    ))),
+  })
+}
+
+function navigationConstraints(
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): readonly NavigationConstraint[] {
+  const constraints: NavigationConstraint[] = []
+  for (const polygon of world.polygons) {
+    if (excludedFromNativeNavMesh(polygon.nativeLineMask)) continue
+    for (let index = 0; index < polygon.points.length; index += 1) {
+      appendCapsuleConstraints(
+        constraints,
+        polygon.points[index]!,
+        polygon.points[(index + 1) % polygon.points.length]!,
+        clearance,
+      )
+    }
+  }
+  for (const segment of world.segments) {
+    if (excludedFromNativeNavMesh(segment.nativeLineMask)) continue
+    appendCapsuleConstraints(
+      constraints,
+      segment.start,
+      segment.end,
+      clearance + segment.radius,
+    )
+  }
+  for (const circle of world.circles) {
+    if (excludedFromNativeNavMesh(circle.nativeLineMask)) continue
+    const radius = circle.radius + clearance
+    const ring = Array.from({ length: CIRCLE_NAVIGATION_SEGMENTS }, (_, index) => {
+      const radians = index * Math.PI * 2 / CIRCLE_NAVIGATION_SEGMENTS
+      return Object.freeze({
+        x: Math.fround(circle.center.x + Math.cos(radians) * radius),
+        y: Math.fround(circle.center.y + Math.sin(radians) * radius),
+      })
+    })
+    appendPolygonConstraints(constraints, ring)
+  }
+  return constraints
+}
+
+function excludedFromNativeNavMesh(nativeLineMask: number | undefined): boolean {
+  return ((nativeLineMask ?? 0) & NATIVE_NAVMESH_COLLISION_EXCLUSION_MASK) !== 0
+}
+
+function appendCapsuleConstraints(
+  constraints: NavigationConstraint[],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  clearance: number,
+): void {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return
+  const radius = clearance
+  const alongX = dx / length * radius
+  const alongY = dy / length * radius
+  const acrossX = dy / length * radius
+  const acrossY = -dx / length * radius
+  appendPolygonConstraints(constraints, [
+    { x: start.x - alongX, y: start.y - alongY },
+    { x: start.x + acrossX, y: start.y + acrossY },
+    { x: end.x + acrossX, y: end.y + acrossY },
+    { x: end.x + alongX, y: end.y + alongY },
+    { x: end.x - acrossX, y: end.y - acrossY },
+    { x: start.x - acrossX, y: start.y - acrossY },
+  ].map(frozenFloatPoint))
+}
+
+function appendPolygonConstraints(
+  constraints: NavigationConstraint[],
+  points: readonly Readonly<BoneyardPoint>[],
+): void {
+  for (let index = 0; index < points.length; index += 1) {
+    constraints.push(Object.freeze({
+      end: points[(index + 1) % points.length]!,
+      start: points[index]!,
+    }))
+  }
+}
+
+function appendConstraintIntersections(
+  candidates: Readonly<BoneyardPoint>[],
+  constraints: readonly NavigationConstraint[],
+): void {
+  for (let left = 0; left < constraints.length; left += 1) {
+    for (let right = left + 1; right < constraints.length; right += 1) {
+      const intersection = segmentIntersection(
+        constraints[left]!,
+        constraints[right]!,
+      )
+      if (intersection) candidates.push(Object.freeze(intersection))
+    }
+  }
+}
+
+function segmentIntersection(
+  left: NavigationConstraint,
+  right: NavigationConstraint,
+): BoneyardPoint | null {
+  const leftX = left.end.x - left.start.x
+  const leftY = left.end.y - left.start.y
+  const rightX = right.end.x - right.start.x
+  const rightY = right.end.y - right.start.y
+  const denominator = cross(leftX, leftY, rightX, rightY)
+  if (Math.abs(denominator) <= TRIANGLE_EPSILON) return null
+  const offsetX = right.start.x - left.start.x
+  const offsetY = right.start.y - left.start.y
+  const leftProgress = cross(offsetX, offsetY, rightX, rightY) / denominator
+  const rightProgress = cross(offsetX, offsetY, leftX, leftY) / denominator
+  if (
+    leftProgress <= TRIANGLE_EPSILON
+    || leftProgress >= 1 - TRIANGLE_EPSILON
+    || rightProgress <= TRIANGLE_EPSILON
+    || rightProgress >= 1 - TRIANGLE_EPSILON
+  ) return null
+  return frozenFloatPoint({
+    x: left.start.x + leftX * leftProgress,
+    y: left.start.y + leftY * leftProgress,
+  })
+}
+
+function appendNativeLattice(
+  candidates: Readonly<BoneyardPoint>[],
+  bounds: Readonly<BoneyardBounds>,
+  clearance: number,
+): void {
+  const horizontal = axisSamples(bounds.x, bounds.x + bounds.w)
+  const vertical = axisSamples(bounds.y, bounds.y + bounds.h)
+  for (const x of horizontal) {
+    for (const y of vertical) candidates.push(Object.freeze({ x, y }))
+  }
+
+  const outerLeft = bounds.x - NATIVE_NAVMESH_BOUNDARY_MARGIN
+  const outerRight = bounds.x + bounds.w + NATIVE_NAVMESH_BOUNDARY_MARGIN
+  const outerTop = bounds.y - NATIVE_NAVMESH_BOUNDARY_MARGIN
+  const outerBottom = bounds.y + bounds.h + NATIVE_NAVMESH_BOUNDARY_MARGIN
+  for (const x of horizontal) {
+    candidates.push(Object.freeze({ x, y: outerTop }))
+    candidates.push(Object.freeze({ x, y: outerBottom }))
+  }
+  for (const y of vertical) {
+    candidates.push(Object.freeze({ x: outerLeft, y }))
+    candidates.push(Object.freeze({ x: outerRight, y }))
+  }
+  candidates.push(
+    Object.freeze({ x: outerLeft, y: outerTop }),
+    Object.freeze({ x: outerRight, y: outerTop }),
+    Object.freeze({ x: outerRight, y: outerBottom }),
+    Object.freeze({ x: outerLeft, y: outerBottom }),
+  )
+
+  const left = bounds.x + clearance
+  const right = bounds.x + bounds.w - clearance
+  const top = bounds.y + clearance
+  const bottom = bounds.y + bounds.h - clearance
+  if (left > right || top > bottom) return
+  for (const x of axisSamples(left, right)) {
+    candidates.push(Object.freeze({ x, y: top }))
+    candidates.push(Object.freeze({ x, y: bottom }))
+  }
+  for (const y of axisSamples(top, bottom)) {
+    candidates.push(Object.freeze({ x: left, y }))
+    candidates.push(Object.freeze({ x: right, y }))
+  }
+}
+
+function axisSamples(start: number, end: number): readonly number[] {
+  const samples: number[] = [Math.fround(start)]
+  for (
+    let value = start + NATIVE_NAVMESH_LATTICE_STEP;
+    value < end;
+    value += NATIVE_NAVMESH_LATTICE_STEP
+  ) samples.push(Math.fround(value))
+  if (end !== start) samples.push(Math.fround(end))
+  return samples
+}
+
+function uniqueNavigationPoints(
+  candidates: readonly Readonly<BoneyardPoint>[],
+): readonly Readonly<BoneyardPoint>[] {
+  const retained: Readonly<BoneyardPoint>[] = []
+  const keys = new Set<string>()
+  for (const candidate of candidates) {
+    if (!Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) continue
+    const point = frozenFloatPoint(candidate)
+    const key = `${Math.round(point.x * 1000)}:${Math.round(point.y * 1000)}`
+    if (keys.has(key)) continue
+    keys.add(key)
+    retained.push(point)
+  }
+  return retained
+}
+
+function delaunayTriangles(
+  sourcePoints: readonly Readonly<BoneyardPoint>[],
+): readonly DelaunayTriangle[] {
+  if (sourcePoints.length < 3) return []
+  const points = [...sourcePoints]
+  const extent = pointExtent(sourcePoints)
+  const span = Math.max(extent.maximumX - extent.minimumX, extent.maximumY - extent.minimumY, 1)
+  const centerX = (extent.minimumX + extent.maximumX) * 0.5
+  const centerY = (extent.minimumY + extent.maximumY) * 0.5
+  const firstSuperVertex = points.length
+  points.push(
+    Object.freeze({ x: centerX - span * 32, y: centerY - span }),
+    Object.freeze({ x: centerX, y: centerY + span * 32 }),
+    Object.freeze({ x: centerX + span * 32, y: centerY - span }),
+  )
+  let triangles: DelaunayTriangle[] = [orientedTriangle(
+    firstSuperVertex,
+    firstSuperVertex + 1,
+    firstSuperVertex + 2,
+    points,
+  )]
+
+  for (let pointIndex = 0; pointIndex < sourcePoints.length; pointIndex += 1) {
+    const bad = new Set<number>()
+    const boundary = new Map<string, Readonly<[number, number]>>()
+    const counts = new Map<string, number>()
+    for (const [triangleIndex, triangle] of triangles.entries()) {
+      if (!circumcircleContains(triangle, points, points[pointIndex]!)) continue
+      bad.add(triangleIndex)
+      for (const edge of triangleEdges(triangle.vertices)) {
+        const key = edgeKey(edge[0], edge[1])
+        counts.set(key, (counts.get(key) ?? 0) + 1)
+        if (!boundary.has(key)) boundary.set(key, edge)
+      }
+    }
+    triangles = triangles.filter((_, triangleIndex) => !bad.has(triangleIndex))
+    for (const [key, edge] of boundary) {
+      if (counts.get(key) !== 1) continue
+      const triangle = orientedTriangle(edge[0], edge[1], pointIndex, points)
+      if (triangleArea(triangle, points) > TRIANGLE_EPSILON) triangles.push(triangle)
+    }
+  }
+  return triangles.filter(({ vertices }) => vertices.every((vertex) => (
+    vertex < firstSuperVertex
+  )))
+}
+
+function pointExtent(points: readonly Readonly<BoneyardPoint>[]): Readonly<{
+  maximumX: number
+  maximumY: number
+  minimumX: number
+  minimumY: number
+}> {
+  let maximumX = Number.NEGATIVE_INFINITY
+  let maximumY = Number.NEGATIVE_INFINITY
+  let minimumX = Number.POSITIVE_INFINITY
+  let minimumY = Number.POSITIVE_INFINITY
+  for (const point of points) {
+    maximumX = Math.max(maximumX, point.x)
+    maximumY = Math.max(maximumY, point.y)
+    minimumX = Math.min(minimumX, point.x)
+    minimumY = Math.min(minimumY, point.y)
+  }
+  return { maximumX, maximumY, minimumX, minimumY }
+}
+
+function orientedTriangle(
+  first: number,
+  second: number,
+  third: number,
+  points: readonly Readonly<BoneyardPoint>[],
+): DelaunayTriangle {
+  const a = points[first]!
+  const b = points[second]!
+  const c = points[third]!
+  const vertices: [number, number, number] = (
+    cross(b.x - a.x, b.y - a.y, c.x - a.x, c.y - a.y) >= 0
+      ? [first, second, third]
+      : [first, third, second]
+  )
+  return Object.freeze({ vertices: Object.freeze(vertices) })
+}
+
+function circumcircleContains(
+  triangle: DelaunayTriangle,
+  points: readonly Readonly<BoneyardPoint>[],
+  point: Readonly<BoneyardPoint>,
+): boolean {
+  const a = points[triangle.vertices[0]]!
+  const b = points[triangle.vertices[1]]!
+  const c = points[triangle.vertices[2]]!
+  const ax = a.x - point.x
+  const ay = a.y - point.y
+  const bx = b.x - point.x
+  const by = b.y - point.y
+  const cx = c.x - point.x
+  const cy = c.y - point.y
+  const determinant = (ax * ax + ay * ay) * cross(bx, by, cx, cy)
+    - (bx * bx + by * by) * cross(ax, ay, cx, cy)
+    + (cx * cx + cy * cy) * cross(ax, ay, bx, by)
+  return determinant > TRIANGLE_EPSILON
+}
+
+function triangleArea(
+  triangle: DelaunayTriangle,
+  points: readonly Readonly<BoneyardPoint>[],
+): number {
+  const a = points[triangle.vertices[0]]!
+  const b = points[triangle.vertices[1]]!
+  const c = points[triangle.vertices[2]]!
+  return Math.abs(cross(b.x - a.x, b.y - a.y, c.x - a.x, c.y - a.y)) * 0.5
+}
+
+function connectTriangles(
+  points: readonly Readonly<BoneyardPoint>[],
+  triangles: readonly DelaunayTriangle[],
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): BoneyardNavigationMeshData {
+  const retained: MutableNavTriangle[] = triangles.map(({ vertices }, id) => ({
+    center: Object.freeze(triangleCenter(vertices.map((vertex) => points[vertex]!))),
+    id,
+    neighbors: [],
+    vertices,
+  }))
+  const ownerByEdge = new Map<string, number>()
+  for (const triangle of retained) {
+    for (const edge of triangleEdges(triangle.vertices)) {
+      const key = edgeKey(edge[0], edge[1])
+      const owner = ownerByEdge.get(key)
+      if (owner === undefined) {
+        ownerByEdge.set(key, triangle.id)
+        continue
+      }
+      const ownerTriangle = retained[owner]!
+      if (!pathIsClear(
+        triangle.center,
+        ownerTriangle.center,
+        bounds,
+        world,
+        clearance,
+      )) continue
+      // Component repair treats these links as undirected connectivity.
+      triangle.neighbors.push(owner)
+      ownerTriangle.neighbors.push(triangle.id)
+    }
+  }
+  connectVisibleTriangleCenters(retained, bounds, world, clearance)
+  return Object.freeze({
+    points: Object.freeze(points),
+    triangles: Object.freeze(retained.map((triangle) => Object.freeze({
+      ...triangle,
+      neighbors: Object.freeze(triangle.neighbors),
+    }))),
+  })
+}
+
+function connectVisibleTriangleCenters(
+  triangles: MutableNavTriangle[],
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): void {
+  // Stock's constrained triangulator retains these local free-space
+  // adjacencies. Browser collision arrives as overlapping polygon/circle/
+  // capsule primitives, so their overlapping constraint samples can split the
+  // same free region into components. Restore only native-lattice-local links
+  // accepted by the exact clearance query; this cannot cross collision or
+  // invent another goal.
+  const cells = new Map<string, number[]>()
+  for (const triangle of triangles) {
+    const key = triangleCellKey(triangle.center)
+    const members = cells.get(key) ?? []
+    members.push(triangle.id)
+    cells.set(key, members)
+  }
+  const cellRadius = Math.ceil(
+    NATIVE_NAVMESH_LATTICE_STEP / NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL,
+  )
+  const maximumDistanceSquared = NATIVE_NAVMESH_LATTICE_STEP ** 2
+  const parent = triangles.map(({ id }) => id)
+  let componentCount = triangles.length
+  const find = (source: number): number => {
+    let root = source
+    while (parent[root] !== root) root = parent[root]!
+    let current = source
+    while (parent[current] !== current) {
+      const next = parent[current]!
+      parent[current] = root
+      current = next
+    }
+    return root
+  }
+  const union = (left: number, right: number): boolean => {
+    const leftRoot = find(left)
+    const rightRoot = find(right)
+    if (leftRoot === rightRoot) return false
+    parent[rightRoot] = leftRoot
+    componentCount -= 1
+    return true
+  }
+  for (const triangle of triangles) {
+    for (const neighbor of triangle.neighbors) union(triangle.id, neighbor)
+  }
+  if (componentCount <= 1) return
+
+  const links: { distanceSquared: number; left: number; right: number }[] = []
+  for (const triangle of triangles) {
+    const cellX = Math.floor(triangle.center.x / NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL)
+    const cellY = Math.floor(triangle.center.y / NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL)
+    for (let offsetY = -cellRadius; offsetY <= cellRadius; offsetY += 1) {
+      for (let offsetX = -cellRadius; offsetX <= cellRadius; offsetX += 1) {
+        const candidates = cells.get(`${cellX + offsetX}:${cellY + offsetY}`) ?? []
+        for (const candidateId of candidates) {
+          if (candidateId <= triangle.id || triangle.neighbors.includes(candidateId)) continue
+          const candidate = triangles[candidateId]!
+          const distanceSquared = squaredDistance(triangle.center, candidate.center)
+          if (distanceSquared > maximumDistanceSquared) continue
+          links.push({ distanceSquared, left: triangle.id, right: candidateId })
+        }
+      }
+    }
+  }
+  links.sort((left, right) => left.distanceSquared - right.distanceSquared)
+  for (const link of links) {
+    if (componentCount <= 1) return
+    if (find(link.left) === find(link.right)) continue
+    const left = triangles[link.left]!
+    const right = triangles[link.right]!
+    if (!pathIsClear(left.center, right.center, bounds, world, clearance)) continue
+    left.neighbors.push(right.id)
+    right.neighbors.push(left.id)
+    union(left.id, right.id)
+  }
+}
+
+function triangleCellKey(point: Readonly<BoneyardPoint>): string {
+  return `${Math.floor(point.x / NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL)}:${
+    Math.floor(point.y / NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL)
+  }`
+}
+
+function appendDistinctRoutePoint(
+  route: Readonly<BoneyardPoint>[],
+  point: Readonly<BoneyardPoint>,
+): void {
+  const previous = route[route.length - 1]
+  if (previous && previous.x === point.x && previous.y === point.y) return
+  route.push(Object.freeze({ ...point }))
+}
+
+interface EndpointTriangleCandidate {
+  readonly distance: number
+  readonly id: number
+}
+
+interface EndpointAttachment {
+  readonly triangleId: number
+  readonly points: readonly Readonly<BoneyardPoint>[]
+}
+
+function byEndpointDistanceThenId(
+  left: EndpointTriangleCandidate,
+  right: EndpointTriangleCandidate,
+): number {
+  return left.distance - right.distance || left.id - right.id
+}
+
+/**
+ * Selects the first triangle, ranked by containment, then edge distance, then
+ * id, whose center the endpoint can reach. Containing triangles come from the
+ * lookup grid (an exact superset of every triangle whose epsilon-inclusive
+ * test can pass), so the common case never touches the rest of the mesh; the
+ * remaining triangles are ranked exactly as before only when none of the
+ * containing triangles is reachable.
+ */
+function resolveEndpointAttachment(
+  mesh: BoneyardNavigationMeshData,
+  point: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): EndpointAttachment | null {
+  // Every candidate check starts with pathIsClear(point, ...), which rejects a
+  // start point outside the navigation bounds before looking at geometry.
+  if (!pointInsideNavigationBounds(point, bounds, radius)) return null
+  const containing: EndpointTriangleCandidate[] = []
+  for (const id of selectNavigationTriangleCandidates(mesh, point)) {
+    const vertices = navigationTriangleVertices(mesh, id)
+    if (pointInTriangle(point, vertices)) {
+      containing.push({ distance: pointTriangleDistanceSquared(point, vertices), id })
+    }
+  }
+  containing.sort(byEndpointDistanceThenId)
+  for (const { id } of containing) {
+    if (endpointTriangleReachable(mesh, id, point, bounds, world, radius, ignoredSourceIds)) {
+      return { triangleId: id, points: [point, mesh.triangles[id]!.center] }
+    }
+  }
+  const containingIds = new Set(containing.map(({ id }) => id))
+  const remaining: EndpointTriangleCandidate[] = []
+  for (const triangle of mesh.triangles) {
+    if (containingIds.has(triangle.id)) continue
+    remaining.push({
+      distance: pointTriangleDistanceSquared(
+        point,
+        navigationTriangleVertices(mesh, triangle.id),
+      ),
+      id: triangle.id,
+    })
+  }
+  remaining.sort(byEndpointDistanceThenId)
+  for (const { id } of remaining) {
+    if (endpointTriangleReachable(mesh, id, point, bounds, world, radius, ignoredSourceIds)) {
+      return { triangleId: id, points: [point, mesh.triangles[id]!.center] }
+    }
+  }
+  if (!canPlaceBoneyardBody(point, bounds, world, radius, ignoredSourceIds)) return null
+  for (const { id } of [...containing, ...remaining]) {
+    const center = mesh.triangles[id]!.center
+    if (squaredDistance(point, center) > NATIVE_NAVMESH_LATTICE_STEP ** 2) continue
+    const points = traceEndpointConnector(point, center, bounds, world, radius, ignoredSourceIds)
+    if (points !== null) return { triangleId: id, points }
+  }
+  return null
+}
+
+/** Rounded collision can require a bend before an endpoint sees a triangle center. */
+function traceEndpointConnector(
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): readonly Readonly<BoneyardPoint>[] | null {
+  const step = NATIVE_BONEYARD_SPAWN_PLACEMENT.movementProbe
+  const points: Readonly<BoneyardPoint>[] = [start]
+  let current = start
+  let distance = Math.sqrt(squaredDistance(current, end))
+  let travelled = 0
+  const maximumSteps = Math.ceil(NATIVE_NAVMESH_LATTICE_STEP / step)
+  for (let index = 0; index < maximumSteps; index += 1) {
+    if (travelled + distance > NATIVE_NAVMESH_LATTICE_STEP) return null
+    if (pathIsClear(current, end, bounds, world, radius, ignoredSourceIds)) {
+      points.push(end)
+      return points
+    }
+    const magnitude = Math.min(step, distance)
+    const next = resolveBoneyardMovement(current, {
+      x: current.x + (end.x - current.x) / distance * magnitude,
+      y: current.y + (end.y - current.y) / distance * magnitude,
+    }, bounds, world, radius, ignoredSourceIds)
+    const nextDistance = Math.sqrt(squaredDistance(next, end))
+    if (nextDistance >= distance || !pathIsClear(current, next, bounds, world, radius, ignoredSourceIds)) return null
+    travelled += Math.sqrt(squaredDistance(current, next))
+    points.push(next)
+    current = next
+    distance = nextDistance
+  }
+  return null
+}
+
+function endpointTriangleReachable(
+  mesh: BoneyardNavigationMeshData,
+  id: number,
+  point: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): boolean {
+  return pathIsClear(
+    point,
+    mesh.triangles[id]!.center,
+    bounds,
+    world,
+    radius,
+    ignoredSourceIds,
+  )
+}
+
+function navigationTriangleVertices(
+  mesh: BoneyardNavigationMeshData,
+  id: number,
+): readonly Readonly<BoneyardPoint>[] {
+  const [first, second, third] = mesh.triangles[id]!.vertices
+  return [mesh.points[first]!, mesh.points[second]!, mesh.points[third]!]
+}
+
+function findTrianglePath(
+  mesh: BoneyardNavigationMeshData,
+  start: number,
+  end: number,
+): readonly number[] | null {
+  if (start === end) return Object.freeze([start])
+  const scores = new Map<number, number>([[start, 0]])
+  const cameFrom = new Map<number, number>()
+  const open = new TriangleMinHeap()
+  let order = 0
+  open.push({
+    f: triangleHeuristic(mesh.triangles[start]!, mesh.triangles[end]!),
+    g: 0,
+    id: start,
+    order: order++,
+  })
+  while (open.length > 0) {
+    const current = open.pop()!
+    if (scores.get(current.id) !== current.g) continue
+    if (current.id === end) return reconstructTrianglePath(end, cameFrom)
+    for (const neighbor of mesh.triangles[current.id]!.neighbors) {
+      const tentative = current.g + 1
+      if (tentative >= (scores.get(neighbor) ?? Number.POSITIVE_INFINITY)) continue
+      scores.set(neighbor, tentative)
+      cameFrom.set(neighbor, current.id)
+      open.push({
+        f: tentative + triangleHeuristic(mesh.triangles[neighbor]!, mesh.triangles[end]!),
+        g: tentative,
+        id: neighbor,
+        order: order++,
+      })
+    }
+  }
+  return null
+}
+
+function reconstructTrianglePath(
+  end: number,
+  cameFrom: ReadonlyMap<number, number>,
+): readonly number[] {
+  const reversed = [end]
+  let current = cameFrom.get(end)
+  while (current !== undefined) {
+    reversed.push(current)
+    current = cameFrom.get(current)
+  }
+  return Object.freeze(reversed.reverse())
+}
+
+function triangleHeuristic(
+  left: BoneyardNavigationTriangleData,
+  right: BoneyardNavigationTriangleData,
+): number {
+  return Math.hypot(
+    right.center.x - left.center.x,
+    right.center.y - left.center.y,
+  ) / NATIVE_NAVMESH_SPATIAL_LOOKUP_CELL
+}
+
+function sharedPortal(
+  left: BoneyardNavigationTriangleData,
+  right: BoneyardNavigationTriangleData,
+): readonly [number, number] | null {
+  const shared = left.vertices.filter((vertex) => right.vertices.includes(vertex))
+  if (shared.length !== 2) return null
+  const portal: [number, number] = [shared[0]!, shared[1]!]
+  return Object.freeze(portal)
+}
+
+function projectToInsetPortal(
+  destination: Readonly<BoneyardPoint>,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+): BoneyardPoint {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return frozenFloatPoint(start)
+  const insetProgress = Math.min(NATIVE_NAVMESH_PORTAL_INSET / length, 0.5)
+  const projected = (
+    (destination.x - start.x) * dx + (destination.y - start.y) * dy
+  ) / (length * length)
+  const progress = Math.min(1 - insetProgress, Math.max(insetProgress, projected))
+  return frozenFloatPoint({
+    x: start.x + dx * progress,
+    y: start.y + dy * progress,
+  })
+}
+
+function simplifyNativeRoutePrefix(
+  route: readonly Readonly<BoneyardPoint>[],
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  bodyRadius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): readonly Readonly<BoneyardPoint>[] {
+  if (route.length < 3) return route
+  let firstIndex = 1
+  let secondIndex = 2
+  let clearance = bodyRadius
+  for (let index = 2; index < route.length - 1; index += 1) {
+    if (!pathIsClear(
+      route[0]!,
+      route[index]!,
+      bounds,
+      world,
+      clearance,
+      ignoredSourceIds,
+    )) break
+    firstIndex = index
+    secondIndex = index + 1
+    clearance *= NATIVE_NAVMESH_SIMPLIFICATION_CLEARANCE_FACTOR
+  }
+  return Object.freeze([
+    route[0]!,
+    route[firstIndex]!,
+    route[secondIndex]!,
+  ])
+}
+
+function pathIsClear(
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): boolean {
+  if (!pointInsideNavigationBounds(start, bounds, radius)) return false
+  if (!pointInsideNavigationBounds(end, bounds, radius)) return false
+  // Only primitives whose padded boxes reach the padded segment box can block
+  // it. The collision owner's sparse broadphase returns that superset in the
+  // original primitive-family order before the unchanged clearance checks.
+  const reach = radius + NAVIGATION_BLOCKER_LOOKUP_MARGIN
+  const minX = Math.min(start.x, end.x) - reach
+  const minY = Math.min(start.y, end.y) - reach
+  const maxX = Math.max(start.x, end.x) + reach
+  const maxY = Math.max(start.y, end.y) + reach
+  const candidates = boneyardCollisionCandidatesInBounds(
+    world,
+    minX,
+    minY,
+    maxX,
+    maxY,
+  )
+  const polygonIndices = candidates?.polygonIndices
+  for (let candidate = 0; candidate < (polygonIndices?.length ?? world.polygons.length); candidate += 1) {
+    const polygon = world.polygons[polygonIndices?.[candidate] ?? candidate]!
+    if (polygon.sourceId !== undefined && ignoredSourceIds?.has(polygon.sourceId)) continue
+    if (navigationPolygonBlocks(polygon, start, end, radius)) return false
+  }
+  const circleIndices = candidates?.circleIndices
+  for (let candidate = 0; candidate < (circleIndices?.length ?? world.circles.length); candidate += 1) {
+    const circle = world.circles[circleIndices?.[candidate] ?? candidate]!
+    if (circle.sourceId !== undefined && ignoredSourceIds?.has(circle.sourceId)) continue
+    if (navigationCircleBlocks(circle, start, end, radius)) return false
+  }
+  const segmentIndices = candidates?.segmentIndices
+  for (let candidate = 0; candidate < (segmentIndices?.length ?? world.segments.length); candidate += 1) {
+    const segment = world.segments[segmentIndices?.[candidate] ?? candidate]!
+    if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
+    if (navigationSegmentBlocks(segment, start, end, radius)) return false
+  }
+  return true
+}
+
+/** Test oracle hook: the unchanged per-polygon clearance check. */
+export function navigationPolygonBlocks(
+  polygon: BoneyardCollisionWorld['polygons'][number],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  if (pointInNavigationPolygon(start, polygon.points)) return true
+  if (pointInNavigationPolygon(end, polygon.points)) return true
+  for (let index = 0; index < polygon.points.length; index += 1) {
+    const distanceSquared = segmentDistanceSquared(
+      start,
+      end,
+      polygon.points[index]!,
+      polygon.points[(index + 1) % polygon.points.length]!,
+    )
+    if (navigationSeparationBlocks(distanceSquared, radius)) return true
+  }
+  return false
+}
+
+/** Test oracle hook: the unchanged per-circle clearance check. */
+export function navigationCircleBlocks(
+  circle: BoneyardCollisionWorld['circles'][number],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  const required = radius + circle.radius
+  return navigationSeparationBlocks(
+    pointSegmentDistanceSquared(circle.center, start, end),
+    required,
+  )
+}
+
+/** Test oracle hook: the unchanged per-segment clearance check. */
+export function navigationSegmentBlocks(
+  segment: BoneyardCollisionWorld['segments'][number],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  const required = radius + segment.radius
+  return navigationSeparationBlocks(
+    segmentDistanceSquared(start, end, segment.start, segment.end),
+    required,
+  )
+}
+
+// --- Lookup grids ----------------------------------------------------------
+
+const NAVIGATION_TRIANGLE_LOOKUP_CELL = 250
+const NAVIGATION_TRIANGLE_LOOKUP_MARGIN = 1
+const NAVIGATION_BLOCKER_LOOKUP_MARGIN = 1
+const MAXIMUM_TRIANGLE_LOOKUP_CELLS = 4_096
+const EMPTY_NAVIGATION_LOOKUP_ITEMS: readonly number[] = Object.freeze([])
+/**
+ * Unit roundoff of doubles. Each `triangleSide` cross product of coordinates
+ * bounded by M is within 32 * M^2 * ROUNDING_UNIT of its exact value (four
+ * rounded differences, two rounded products, one rounded subtraction), so the
+ * triangle grid budgets twice that on top of TRIANGLE_EPSILON.
+ */
+const ROUNDING_UNIT = Number.EPSILON / 2
+
+/**
+ * Sparse grid over triangle boxes (minX, minY, maxX, maxY per item). A NaN
+ * box is handled by the caller's exact fallback list; a very large finite box
+ * is returned for every point rather than expanding across unbounded cells.
+ */
+class NavigationLookupGrid {
+  private readonly cells = new Map<number, Map<number, number[]>>()
+  private readonly cellSize: number
+  private readonly globalItems: number[] = []
+
+  constructor(boxes: Float64Array, cellSize: number) {
+    const count = boxes.length / 4
+    this.cellSize = cellSize
+    for (let item = 0; item < count; item += 1) {
+      if (Number.isNaN(boxes[item * 4])) continue
+      const firstColumn = Math.floor(boxes[item * 4]! / cellSize)
+      const firstRow = Math.floor(boxes[item * 4 + 1]! / cellSize)
+      const lastColumn = Math.floor(boxes[item * 4 + 2]! / cellSize)
+      const lastRow = Math.floor(boxes[item * 4 + 3]! / cellSize)
+      const columnSpan = lastColumn - firstColumn + 1
+      const rowSpan = lastRow - firstRow + 1
+      if (
+        !Number.isSafeInteger(firstColumn)
+        || !Number.isSafeInteger(lastColumn)
+        || !Number.isSafeInteger(firstRow)
+        || !Number.isSafeInteger(lastRow)
+        || columnSpan <= 0
+        || rowSpan <= 0
+        || columnSpan > MAXIMUM_TRIANGLE_LOOKUP_CELLS
+        || rowSpan > MAXIMUM_TRIANGLE_LOOKUP_CELLS
+        || columnSpan * rowSpan > MAXIMUM_TRIANGLE_LOOKUP_CELLS
+      ) {
+        this.globalItems.push(item)
+        continue
+      }
+      for (let column = firstColumn; column <= lastColumn; column += 1) {
+        let rows = this.cells.get(column)
+        if (!rows) {
+          rows = new Map()
+          this.cells.set(column, rows)
+        }
+        for (let row = firstRow; row <= lastRow; row += 1) {
+          const items = rows.get(row)
+          if (items) items.push(item)
+          else rows.set(row, [item])
+        }
+      }
+    }
+  }
+
+  /** Items registered in the point cell plus any exact global fallbacks. */
+  itemsAt(x: number, y: number): readonly number[] {
+    const local = this.cells
+      .get(Math.floor(x / this.cellSize))
+      ?.get(Math.floor(y / this.cellSize))
+      ?? EMPTY_NAVIGATION_LOOKUP_ITEMS
+    if (this.globalItems.length === 0) return local
+    if (local.length === 0) return this.globalItems
+    return [...this.globalItems, ...local]
+  }
+}
+
+interface NavigationTriangleIndex {
+  readonly grid: NavigationLookupGrid
+  /** Largest absolute vertex coordinate the rounding budget was derived from. */
+  readonly magnitude: number
+  /** Triangles whose inclusive region the margin cannot bound (degenerate or sliver). */
+  readonly unbounded: readonly number[]
+}
+
+const NAVIGATION_TRIANGLE_INDEXES = new WeakMap<BoneyardNavigationMeshData, NavigationTriangleIndex>()
+
+function navigationTriangleIndex(mesh: BoneyardNavigationMeshData): NavigationTriangleIndex {
+  const cached = NAVIGATION_TRIANGLE_INDEXES.get(mesh)
+  if (cached) return cached
+  let magnitude = 1
+  for (const point of mesh.points) {
+    magnitude = Math.max(magnitude, Math.abs(point.x), Math.abs(point.y))
+  }
+  const tolerance = TRIANGLE_EPSILON + 64 * ROUNDING_UNIT * magnitude * magnitude
+  const boxes = new Float64Array(mesh.triangles.length * 4)
+  const unbounded: number[] = []
+  for (const [index, triangle] of mesh.triangles.entries()) {
+    const [first, second, third] = navigationTriangleVertices(mesh, triangle.id)
+    const area2 = Math.abs(cross(
+      second!.x - first!.x,
+      second!.y - first!.y,
+      third!.x - first!.x,
+      third!.y - first!.y,
+    ))
+    const longestEdge = Math.max(
+      Math.hypot(second!.x - first!.x, second!.y - first!.y),
+      Math.hypot(third!.x - second!.x, third!.y - second!.y),
+      Math.hypot(first!.x - third!.x, first!.y - third!.y),
+    )
+    // The epsilon-inclusive triangle is the triangle scaled about its centroid
+    // by (1 + 3 tolerance / area2); its vertices move at most
+    // 2 * tolerance * longestEdge / area2 from the original vertices, and the
+    // opposite-sign branch of pointInTriangle is empty once area2 exceeds
+    // three tolerances. Requiring four tolerances and half the margin leaves
+    // room for the rounding of area2 itself.
+    const expansion = 2 * tolerance * longestEdge / area2
+    if (
+      !(area2 > 4 * tolerance)
+      || !(expansion <= NAVIGATION_TRIANGLE_LOOKUP_MARGIN / 2)
+    ) {
+      unbounded.push(triangle.id)
+      boxes[index * 4] = Number.NaN
+      boxes[index * 4 + 1] = Number.NaN
+      boxes[index * 4 + 2] = Number.NaN
+      boxes[index * 4 + 3] = Number.NaN
+      continue
+    }
+    boxes[index * 4] = Math.min(first!.x, second!.x, third!.x) - NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+    boxes[index * 4 + 1] = Math.min(first!.y, second!.y, third!.y) - NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+    boxes[index * 4 + 2] = Math.max(first!.x, second!.x, third!.x) + NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+    boxes[index * 4 + 3] = Math.max(first!.y, second!.y, third!.y) + NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+  }
+  const index: NavigationTriangleIndex = {
+    grid: new NavigationLookupGrid(boxes, NAVIGATION_TRIANGLE_LOOKUP_CELL),
+    magnitude,
+    unbounded,
+  }
+  NAVIGATION_TRIANGLE_INDEXES.set(mesh, index)
+  return index
+}
+
+/**
+ * Test oracle hook: every triangle whose `pointInTriangle` test can pass for
+ * the point is among the returned ids.
+ */
+export function selectNavigationTriangleCandidates(
+  mesh: BoneyardNavigationMeshData,
+  point: Readonly<BoneyardPoint>,
+): readonly number[] {
+  const index = navigationTriangleIndex(mesh)
+  // The rounding budget only covers points within the mesh extent; anything
+  // further out (never a bounds-checked endpoint) falls back to the full list.
+  if (!(Math.abs(point.x) <= index.magnitude && Math.abs(point.y) <= index.magnitude)) {
+    return mesh.triangles.map(({ id }) => id)
+  }
+  const candidates = index.grid.itemsAt(point.x, point.y).map((item) => mesh.triangles[item]!.id)
+  return index.unbounded.length === 0 ? candidates : [...index.unbounded, ...candidates]
+}
+
+/** Test oracle hook: the unchanged epsilon-inclusive containment test. */
+export function navigationTriangleContainsPoint(
+  mesh: BoneyardNavigationMeshData,
+  id: number,
+  point: Readonly<BoneyardPoint>,
+): boolean {
+  return pointInTriangle(point, navigationTriangleVertices(mesh, id))
+}
+
+/**
+ * Test oracle hook: every primitive that can block the padded segment is among
+ * the returned indices.
+ */
+export function selectNavigationBlockerCandidates(
+  world: BoneyardCollisionWorld,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): { circles: number[]; polygons: number[]; segments: number[] } {
+  const reach = radius + NAVIGATION_BLOCKER_LOOKUP_MARGIN
+  const minX = Math.min(start.x, end.x) - reach
+  const minY = Math.min(start.y, end.y) - reach
+  const maxX = Math.max(start.x, end.x) + reach
+  const maxY = Math.max(start.y, end.y) + reach
+  const selected = boneyardCollisionCandidatesInBounds(
+    world,
+    minX,
+    minY,
+    maxX,
+    maxY,
+  )
+  return {
+    circles: selected === null
+      ? world.circles.map((_, index) => index)
+      : [...selected.circleIndices],
+    polygons: selected === null
+      ? world.polygons.map((_, index) => index)
+      : [...selected.polygonIndices],
+    segments: selected === null
+      ? world.segments.map((_, index) => index)
+      : [...selected.segmentIndices],
+  }
+}
+
+function pointInsideNavigationBounds(
+  point: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  radius: number,
+): boolean {
+  return point.x >= bounds.x + radius
+    && point.x <= bounds.x + bounds.w - radius
+    && point.y >= bounds.y + radius
+    && point.y <= bounds.y + bounds.h - radius
+}
+
+function navigationSeparationBlocks(distanceSquared: number, required: number): boolean {
+  return required === 0
+    ? distanceSquared <= TRIANGLE_EPSILON
+    : distanceSquared < required * required
+}
+
+function segmentDistanceSquared(
+  leftStart: Readonly<BoneyardPoint>,
+  leftEnd: Readonly<BoneyardPoint>,
+  rightStart: Readonly<BoneyardPoint>,
+  rightEnd: Readonly<BoneyardPoint>,
+): number {
+  if (navigationSegmentsIntersect(leftStart, leftEnd, rightStart, rightEnd)) return 0
+  return Math.min(
+    pointSegmentDistanceSquared(leftStart, rightStart, rightEnd),
+    pointSegmentDistanceSquared(leftEnd, rightStart, rightEnd),
+    pointSegmentDistanceSquared(rightStart, leftStart, leftEnd),
+    pointSegmentDistanceSquared(rightEnd, leftStart, leftEnd),
+  )
+}
+
+function navigationSegmentsIntersect(
+  leftStart: Readonly<BoneyardPoint>,
+  leftEnd: Readonly<BoneyardPoint>,
+  rightStart: Readonly<BoneyardPoint>,
+  rightEnd: Readonly<BoneyardPoint>,
+): boolean {
+  const first = orientation(leftStart, leftEnd, rightStart)
+  const second = orientation(leftStart, leftEnd, rightEnd)
+  const third = orientation(rightStart, rightEnd, leftStart)
+  const fourth = orientation(rightStart, rightEnd, leftEnd)
+  if (
+    ((first > 0 && second < 0) || (first < 0 && second > 0))
+    && ((third > 0 && fourth < 0) || (third < 0 && fourth > 0))
+  ) return true
+  return (Math.abs(first) <= TRIANGLE_EPSILON && pointOnNavigationSegment(
+    rightStart, leftStart, leftEnd,
+  )) || (Math.abs(second) <= TRIANGLE_EPSILON && pointOnNavigationSegment(
+    rightEnd, leftStart, leftEnd,
+  )) || (Math.abs(third) <= TRIANGLE_EPSILON && pointOnNavigationSegment(
+    leftStart, rightStart, rightEnd,
+  )) || (Math.abs(fourth) <= TRIANGLE_EPSILON && pointOnNavigationSegment(
+    leftEnd, rightStart, rightEnd,
+  ))
+}
+
+function orientation(
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  point: Readonly<BoneyardPoint>,
+): number {
+  return cross(end.x - start.x, end.y - start.y, point.x - start.x, point.y - start.y)
+}
+
+function pointOnNavigationSegment(
+  point: Readonly<BoneyardPoint>,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+): boolean {
+  return point.x >= Math.min(start.x, end.x) - TRIANGLE_EPSILON
+    && point.x <= Math.max(start.x, end.x) + TRIANGLE_EPSILON
+    && point.y >= Math.min(start.y, end.y) - TRIANGLE_EPSILON
+    && point.y <= Math.max(start.y, end.y) + TRIANGLE_EPSILON
+}
+
+function pointInNavigationPolygon(
+  point: Readonly<BoneyardPoint>,
+  polygon: readonly Readonly<BoneyardPoint>[],
+): boolean {
+  let inside = false
+  for (
+    let index = 0, previous = polygon.length - 1;
+    index < polygon.length;
+    previous = index, index += 1
+  ) {
+    const currentPoint = polygon[index]!
+    const previousPoint = polygon[previous]!
+    if (
+      (currentPoint.y > point.y) !== (previousPoint.y > point.y)
+      && point.x < (
+        (previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)
+        / (previousPoint.y - currentPoint.y)
+        + currentPoint.x
+      )
+    ) inside = !inside
+  }
+  return inside
+}
+
+function triangleEdges(
+  vertices: readonly [number, number, number],
+): readonly (readonly [number, number])[] {
+  const edges: [number, number][] = [
+    [vertices[0], vertices[1]],
+    [vertices[1], vertices[2]],
+    [vertices[2], vertices[0]],
+  ]
+  return Object.freeze(edges.map((edge) => Object.freeze(edge)))
+}
+
+function edgeKey(first: number, second: number): string {
+  return first < second ? `${first}:${second}` : `${second}:${first}`
+}
+
+function triangleCenter(
+  vertices: readonly Readonly<BoneyardPoint>[],
+): BoneyardPoint {
+  return frozenFloatPoint({
+    x: (vertices[0]!.x + vertices[1]!.x + vertices[2]!.x) / 3,
+    y: (vertices[0]!.y + vertices[1]!.y + vertices[2]!.y) / 3,
+  })
+}
+
+function pointInTriangle(
+  point: Readonly<BoneyardPoint>,
+  vertices: readonly Readonly<BoneyardPoint>[],
+): boolean {
+  const first = triangleSide(point, vertices[0]!, vertices[1]!)
+  const second = triangleSide(point, vertices[1]!, vertices[2]!)
+  const third = triangleSide(point, vertices[2]!, vertices[0]!)
+  const negative = first < -TRIANGLE_EPSILON
+    || second < -TRIANGLE_EPSILON
+    || third < -TRIANGLE_EPSILON
+  const positive = first > TRIANGLE_EPSILON
+    || second > TRIANGLE_EPSILON
+    || third > TRIANGLE_EPSILON
+  return !(negative && positive)
+}
+
+function triangleSide(
+  point: Readonly<BoneyardPoint>,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+): number {
+  return cross(
+    point.x - end.x,
+    point.y - end.y,
+    start.x - end.x,
+    start.y - end.y,
+  )
+}
+
+function pointTriangleDistanceSquared(
+  point: Readonly<BoneyardPoint>,
+  vertices: readonly Readonly<BoneyardPoint>[],
+): number {
+  return Math.min(
+    pointSegmentDistanceSquared(point, vertices[0]!, vertices[1]!),
+    pointSegmentDistanceSquared(point, vertices[1]!, vertices[2]!),
+    pointSegmentDistanceSquared(point, vertices[2]!, vertices[0]!),
+  )
+}
+
+function pointSegmentDistanceSquared(
+  point: Readonly<BoneyardPoint>,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+): number {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) return squaredDistance(point, start)
+  const progress = Math.min(1, Math.max(0, (
+    (point.x - start.x) * dx + (point.y - start.y) * dy
+  ) / lengthSquared))
+  return squaredDistance(point, {
+    x: start.x + dx * progress,
+    y: start.y + dy * progress,
+  })
+}
+
+function squaredDistance(
+  left: Readonly<BoneyardPoint>,
+  right: Readonly<BoneyardPoint>,
+): number {
+  const dx = left.x - right.x
+  const dy = left.y - right.y
+  return dx * dx + dy * dy
+}
+
+function frozenFloatPoint(point: Readonly<BoneyardPoint>): Readonly<BoneyardPoint> {
+  return Object.freeze({ x: Math.fround(point.x), y: Math.fround(point.y) })
+}
+
+function cross(ax: number, ay: number, bx: number, by: number): number {
+  return ax * by - ay * bx
+}
+
+class TriangleMinHeap {
+  readonly #nodes: OpenTriangle[] = []
+
+  get length(): number {
+    return this.#nodes.length
+  }
+
+  push(node: OpenTriangle): void {
+    this.#nodes.push(node)
+    let index = this.#nodes.length - 1
+    while (index > 0) {
+      const parent = Math.floor((index - 1) / 2)
+      if (triangleBefore(this.#nodes[parent]!, node)) break
+      this.#nodes[index] = this.#nodes[parent]!
+      index = parent
+    }
+    this.#nodes[index] = node
+  }
+
+  pop(): OpenTriangle | undefined {
+    const first = this.#nodes[0]
+    const last = this.#nodes.pop()
+    if (!first || !last || this.#nodes.length === 0) return first
+    let index = 0
+    while (true) {
+      const left = index * 2 + 1
+      if (left >= this.#nodes.length) break
+      const right = left + 1
+      const child = right < this.#nodes.length
+        && triangleBefore(this.#nodes[right]!, this.#nodes[left]!)
+        ? right
+        : left
+      if (triangleBefore(last, this.#nodes[child]!)) break
+      this.#nodes[index] = this.#nodes[child]!
+      index = child
+    }
+    this.#nodes[index] = last
+    return first
+  }
+}
+
+function triangleBefore(left: OpenTriangle, right: OpenTriangle): boolean {
+  return left.f < right.f || (left.f === right.f && left.order < right.order)
+}
+
+function validateRouteRequest(request: FindBoneyardEnemyRouteRequest): void {
+  if (!Number.isFinite(request.clearance) || request.clearance <= 0) {
+    throw new RangeError('enemy navigation clearance must be positive and finite')
+  }
+  if (!Number.isFinite(request.bodyRadius) || request.bodyRadius < 0) {
+    throw new RangeError('enemy navigation body radius must be non-negative and finite')
+  }
+  if (request.endBodyRadius !== undefined
+    && (!Number.isFinite(request.endBodyRadius) || request.endBodyRadius < 0)) {
+    throw new RangeError('enemy navigation destination radius must be non-negative and finite')
+  }
+  for (const [label, point] of [
+    ['start', request.start],
+    ['end', request.end],
+  ] as const) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      throw new RangeError(`enemy route ${label} must be finite`)
+    }
+  }
+}

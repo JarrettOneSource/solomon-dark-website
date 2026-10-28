@@ -1,8 +1,9 @@
 # Solomon Dark rebuilt runtime architecture
 
-This is the historical Website TypeScript reference through commit
-`fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Current runtime ownership, artifact
-inputs and validation are documented in [Rust game cutover](RUST-GAME-CUTOVER.md).
+This describes the restored PixiJS/TypeScript implementation, sourced from
+`093aee9938e0cae2fabfafc5403b01aed961397e` (gameplay identical to `fa08ae24`).
+Parallel route ownership, Rust artifact inputs and validation are documented
+in [the game artifact boundary](RUST-GAME-CUTOVER.md).
 The source paths and reproduction commands below describe that reference.
 
 Status: accepted; authoritative, GPU-client, shared-Hub party/chat,

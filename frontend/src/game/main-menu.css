@@ -1,0 +1,657 @@
+.main-menu-page {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  container-type: size;
+  background: #000;
+  place-items: center;
+}
+
+.main-menu-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
+  background: #000;
+}
+
+.game-orientation-hint { display: none; }
+
+.main-menu-native-stage,
+.create-menu-native-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  container-type: size;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
+.main-menu-native-stage { z-index: 9; }
+
+.create-menu-native-stage { z-index: 30; }
+
+.title-menu-renderer,
+.create-menu-renderer {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.title-menu-canvas,
+.create-menu-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+}
+
+.main-menu-actions {
+  position: absolute;
+  top: 46.777778%;
+  left: 42.09375%;
+  display: flex;
+  width: 22.0625%;
+  flex-direction: column;
+  gap: 0.4375cqw;
+  pointer-events: auto;
+  transform: translateX(0.0625cqw);
+  animation: main-menu-actions-in 100ms linear both;
+}
+
+.main-menu-actions[inert] .main-menu-button[data-game-action='join-party']::after {
+  visibility: hidden;
+}
+
+.main-menu-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 353 / 69;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.main-menu-button:disabled { cursor: default; }
+
+.main-menu-button[data-game-action='join-party']::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #d8d2c0;
+  font: 700 1.08cqw var(--font-display);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0.12cqw 0.12cqw #000;
+}
+
+.main-menu-button[data-game-action='join-party']::after { content: 'JOIN PARTY'; }
+
+.main-menu-button:focus-visible {
+  outline: 0.125cqw solid rgb(221 197 139 / 0.9);
+  outline-offset: -0.1875cqw;
+}
+
+.main-menu-discord-link {
+  display: grid;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 6px;
+  border: 1px solid rgb(195 200 255 / 0.9);
+  border-radius: 8px;
+  color: #fff;
+  background: #5865f2;
+  box-shadow: 0 1px 4px #000, inset 0 0 5px rgb(255 255 255 / 0.14);
+  cursor: pointer;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.main-menu-discord-link svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.main-menu-discord-link:hover,
+.main-menu-discord-link:focus-visible {
+  border-color: #fff;
+  outline: 2px solid #fff0b7;
+  outline-offset: 2px;
+  background: #6875f5;
+}
+
+.main-menu-discord-link:active { background: #4752c4; }
+
+/* The fade covers everything on the stage — scene, chat, settings, the menu skull — so no
+   stage-level control floats on the black while a screen changes. */
+.main-menu-screen-fade {
+  position: absolute;
+  z-index: 100003;
+  inset: 0;
+  opacity: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.main-menu-screen-fade-covering {
+  pointer-events: auto;
+  animation: main-menu-screen-cover 320ms linear forwards;
+}
+
+.main-menu-screen-fade-revealing {
+  pointer-events: auto;
+  animation: main-menu-screen-reveal 400ms linear forwards;
+}
+
+.main-menu-screen-fade-hall-close.main-menu-screen-fade-covering {
+  animation-duration: 1s;
+}
+
+.create-menu-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.create-menu-back {
+  position: absolute;
+  z-index: 30;
+  top: 1%;
+  left: 0.625%;
+  width: 1.9375%;
+  aspect-ratio: 31 / 33;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* The one menu skull. Stock paints it in the HUD at (11, 7) / 31 px and OPEN MENU is a
+   keyboard edge; the Website makes the same sprite a stage-level control for the Hub,
+   the Boneyard and the Dark Cloud so it reads and behaves identically everywhere:
+   with a menu open it is that menu's back owner, otherwise it opens the scene menu.
+   `--game-menu-skull-scale` is screen px per HUD px (display scale × UI scale; 1 for
+   the Dark Cloud), so the desktop skull lands exactly where the HUD sprite sat. */
+.game-menu-skull {
+  position: absolute;
+  z-index: 100002;
+  top: calc(7px * var(--game-menu-skull-scale, 1));
+  left: calc(11px * var(--game-menu-skull-scale, 1));
+  display: grid;
+  box-sizing: border-box;
+  width: calc(31px * var(--game-menu-skull-scale, 1));
+  height: calc(33px * var(--game-menu-skull-scale, 1));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.game-menu-skull img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.game-menu-skull:hover img,
+.game-menu-skull:focus-visible img { filter: brightness(1.28); }
+
+.game-menu-skull:focus-visible {
+  outline: 1px solid #fff0b7;
+  outline-offset: 2px;
+}
+
+.game-edge-controls {
+  position: absolute;
+  z-index: 1000;
+  top: 8px;
+  right: 49px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.game-fullscreen-control {
+  position: relative;
+  pointer-events: auto;
+}
+
+.main-menu-page[data-chat-open='true'] .game-menu-skull,
+.main-menu-page[data-chat-open='true'] .game-edge-controls {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.main-menu-page[data-game-scene='root'] .game-edge-controls,
+.main-menu-page[data-game-scene='play'] .game-edge-controls {
+  top: auto;
+  right: 8px;
+  bottom: 8px;
+}
+
+.main-menu-page[data-game-scene='hall'] .game-edge-controls {
+  top: auto;
+  right: 8px;
+  bottom: 8px;
+}
+
+.main-menu-page[data-game-scene='dark-cloud'] .game-edge-controls {
+  top: 8px;
+  right: 8px;
+}
+
+.main-menu-page:has(.dark-cloud-modal-backdrop) .game-edge-controls,
+.main-menu-page:has(.dark-cloud-detail-backdrop) .game-edge-controls {
+  display: none;
+}
+
+.main-menu-page[data-game-scene='create'] .game-edge-controls {
+  top: min(0.625cqw, 1.111111cqh);
+  right: calc(8px + min(5cqw, 8.888889cqh));
+}
+
+.main-menu-page[data-skill-book-open='true'] .game-edge-controls {
+  display: none;
+}
+
+.main-menu-page[data-skill-book-open='true'] .game-menu-skull {
+  display: none;
+}
+
+.game-fullscreen-button {
+  display: grid;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 6px;
+  border: 1px solid rgb(205 177 105 / 0.8);
+  border-radius: 3px;
+  color: #dfca8e;
+  background: rgb(5 6 10 / 0.72);
+  box-shadow: 0 1px 3px #000, inset 0 0 5px rgb(185 151 78 / 0.18);
+  cursor: pointer;
+  place-items: center;
+}
+
+.game-fullscreen-button:hover,
+.game-fullscreen-button:focus-visible,
+.game-fullscreen-button[aria-pressed='true'] {
+  border-color: #f0d58f;
+  color: #fff0b7;
+  background: rgb(18 18 22 / 0.9);
+  outline: none;
+}
+
+.game-fullscreen-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 2;
+}
+
+.game-fullscreen-message {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  display: flex;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 9px;
+  border: 1px solid rgb(205 177 105 / 0.65);
+  color: #f0dca7;
+  font: 13px var(--font-display);
+  text-align: right;
+  background: rgb(7 6 14 / 0.94);
+}
+
+/* Every in-stage backdrop centres with
+   flex, never grid. A centred grid item resolves its percentage height against its own
+   content-sized implicit track, so `height: min(760px, 100%)` came out as the content
+   height (650 px) and the DONE row fell below an iPhone's 366 px stage while the body
+   never scrolled. In flex the percentage resolves against the definite absolutely
+   positioned backdrop, the body row clamps, and it scrolls with the finger. */
+.main-menu-page[data-game-scene='root'] .game-fullscreen-message,
+.main-menu-page[data-game-scene='play'] .game-fullscreen-message {
+  top: auto;
+  bottom: 42px;
+}
+
+.create-menu-randomize:focus-visible,
+.create-menu-back:focus-visible,
+.create-menu-element:focus-visible,
+.create-menu-discipline:focus-visible {
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
+}
+
+.create-menu-name-input {
+  position: absolute;
+  top: 29px;
+  left: 608px;
+  width: 384px;
+  height: 49px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+  font: inherit;
+  pointer-events: auto;
+}
+
+.create-menu-name-input:focus-visible {
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
+}
+
+/* Pixi owns the visible native glyphs, including while HTML owns selection. */
+.create-menu-name-input::selection {
+  color: transparent;
+  background: transparent;
+}
+
+.create-menu-name-clear,
+.create-menu-name-randomize {
+  position: absolute;
+  z-index: 4;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.create-menu-name-clear {
+  top: 38px;
+  left: 958px;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+}
+
+.create-menu-name-clear:focus-visible {
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
+}
+
+.create-menu-name-randomize {
+  top: 92px;
+  left: 952px;
+  width: 42px;
+  height: 30px;
+  background-color: transparent;
+  background-image: url('../assets/game/create-dice.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 42px auto;
+  filter: drop-shadow(0 1px 1px #000);
+  opacity: 0.78;
+}
+
+.create-menu-name-randomize:hover {
+  filter: brightness(1.25) drop-shadow(0 0 3px rgb(255 240 183 / 0.55));
+  opacity: 1;
+}
+
+.create-menu-name-randomize:focus-visible {
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
+}
+
+.create-menu-name-clear:disabled,
+.create-menu-name-randomize:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.create-menu-name-validation {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.create-menu-elements,
+.create-menu-disciplines {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  pointer-events: none;
+}
+
+.create-menu-elements[data-visible='false'],
+.create-menu-disciplines[data-visible='false'] {
+  visibility: hidden;
+}
+
+.create-menu-element,
+.create-menu-discipline {
+  position: absolute;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.create-menu-element-earth,
+.create-menu-element-ether {
+  width: 9.375%;
+  aspect-ratio: 150 / 84;
+}
+
+.create-menu-element-fire {
+  width: 7.25%;
+  aspect-ratio: 116 / 85;
+}
+
+.create-menu-element-water {
+  width: 9.8125%;
+  aspect-ratio: 157 / 77;
+}
+
+.create-menu-element-air {
+  width: 6%;
+  aspect-ratio: 96 / 80;
+}
+
+.create-menu-discipline-arcane {
+  width: 13.625%;
+  aspect-ratio: 218 / 238;
+}
+
+.create-menu-discipline-body {
+  width: 14.875%;
+  aspect-ratio: 238 / 229;
+}
+
+.create-menu-discipline-mind {
+  width: 14.1875%;
+  aspect-ratio: 227 / 241;
+}
+
+.main-menu-runtime-status,
+.main-menu-renderer-error {
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  bottom: 4cqh;
+  left: 0;
+  width: max-content;
+  max-width: 70cqw;
+  margin: auto;
+  padding: 0.7cqh 1.5cqw;
+  color: #ead8aa;
+  font-family: var(--font-display);
+  font-size: 1.5cqw;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 2px 2px #000;
+  background: rgb(7 6 14 / 0.88);
+  border: 1px solid rgb(211 177 101 / 0.6);
+}
+
+.main-menu-player-card-feedback {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+.main-menu-player-card-feedback button {
+  padding: 0.25em 0.5em;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+@keyframes main-menu-actions-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes main-menu-screen-cover {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes main-menu-screen-reveal {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-menu-actions { animation-duration: 1ms; }
+
+  .main-menu-screen-fade-covering,
+  .main-menu-screen-fade-revealing {
+    animation-duration: 1ms;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .main-menu-discord-link {
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  .game-fullscreen-button {
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  /* Touch: 44 px hit box at (4, 4) with 36 px art, in stage pixels (the stage is already
+     safe-area inset), the same box in every scene regardless of the world frame scale. */
+  .game-menu-skull {
+    top: 4px;
+    left: 4px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .game-menu-skull img { width: 36px; }
+
+
+  .game-fullscreen-message { top: 52px; }
+
+  .main-menu-page[data-game-scene='root'] .game-fullscreen-message,
+  .main-menu-page[data-game-scene='play'] .game-fullscreen-message {
+    top: auto;
+    bottom: 52px;
+  }
+}
+
+@media (orientation: portrait) and (hover: none) and (pointer: coarse) {
+  .main-menu-stage { visibility: hidden; }
+
+  /* The Dark Cloud is a list screen, not the fixed-aspect College stage: it lays
+     itself out for portrait phones, so the rotate gate must not hide it. */
+  .main-menu-page[data-game-scene='dark-cloud'] .main-menu-stage { visibility: visible; }
+  .main-menu-page[data-game-scene='dark-cloud'] .game-orientation-hint { display: none; }
+
+  .game-edge-controls { z-index: 100001; }
+
+  .game-orientation-hint {
+    position: fixed;
+    z-index: 100000;
+    inset: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display: grid;
+    padding: 10vw;
+    background: radial-gradient(circle at 50% 42%, #252b3b, #07080d 72%);
+    color: #dfd2a7;
+    font: clamp(22px, 7vw, 42px) var(--font-narrative);
+    place-items: center;
+    text-align: center;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .game-menu-skull[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(var(--mobile-ui-scale));
+    transform-origin: center;
+  }
+
+  /* Keep the modal-back owner at its standard corner while Settings covers gameplay.
+     The editor previews the authored pause position without letting the live skull float
+     over its canvas or SAVE row. */
+  .main-menu-stage:has(.game-settings-backdrop) .game-menu-skull[data-mobile-ui-custom='true'] {
+    top: 4px;
+    left: 4px;
+    transform: none;
+  }
+}
+
+/* Record 6 supplies the artwork; the native child rectangle owns all input. */
+.create-menu-randomize {
+  position: absolute;
+  z-index: 30;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.create-menu-randomize:disabled { cursor: default; }

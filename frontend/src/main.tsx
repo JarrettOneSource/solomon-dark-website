@@ -15,6 +15,8 @@ import './index.css'
 
 import { AuthProvider } from './lib/auth'
 import { websiteBase } from './lib/website-mount.ts'
+import { gameRuntime } from './lib/game-runtime.ts'
+import { migrateParallelGuestSave } from './lib/parallel-save-migration.ts'
 import Shell from './components/Shell'
 import Home from './pages/Home'
 import SearchParties from './pages/SearchParties'
@@ -32,8 +34,12 @@ import NotFound from './pages/NotFound'
 import RouteError from './pages/RouteError'
 import { Spinner } from './components/ui'
 
-// This route opens the independently built Rust game document.
-const Game = lazy(() => import('./pages/Game'))
+const Game = gameRuntime === 'rust'
+  ? lazy(() => import('./pages/RustGame'))
+  : lazy(async () => {
+    await migrateParallelGuestSave()
+    return import('./pages/Game')
+  })
 
 const router = createBrowserRouter([
   {

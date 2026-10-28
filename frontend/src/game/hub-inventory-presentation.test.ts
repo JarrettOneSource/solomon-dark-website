@@ -1,0 +1,386 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { build } from 'esbuild'
+import { createGameSimulation } from './core-server/game-simulation.ts'
+import { createGameSnapshot } from './host/game-snapshot.ts'
+import { projectInventoryRunSummary, sameInventoryRunSummary } from './hub-inventory-ui-model.ts'
+
+
+import {
+  archiveHubMemorialPortrait,
+  createHubMemorialState,
+} from './core-kernels/hub-memorial.ts'
+
+import {
+  HUB_HUD_SHORTCUTS,
+  HUB_INTERACTION_DIALOGUES,
+  HUB_INTERACTION_IDS,
+  HUB_STORY_OFFICE_DIALOGUES,
+  HUB_TRADER_DIALOGUES,
+  HUB_TRADER_GRID_CAPACITY,
+  HUB_TRADER_NATIVE_UI_RECORDS,
+  equipmentSlotsForItem,
+  hubEquipmentClickAction,
+  hubEquipmentItemForAlias,
+  hubPotionBeltShortcut,
+  hubInteractionAtPoint,
+  hubNpcHintAcknowledgementAction,
+  hubInteractionWithinRange,
+  hubMemorialEulogyIndex,
+  hubMemorialPortraitForInteraction,
+  hubPotionShortcut,
+  hubTraderAtPoint,
+  hubTraderWithinServiceRange,
+  nearestHubInteraction,
+  nearestHubTrader,
+} from './hub-inventory-presentation.ts'
+
+test('a Wand leaves the mirrored hand empty while a Staff occupies both hand boxes', () => {
+  const wand = { equipmentType: 'wand' as const }
+  const staff = { equipmentType: 'staff' as const }
+  assert.equal(hubEquipmentItemForAlias(wand, 0), wand)
+  assert.equal(hubEquipmentItemForAlias(wand, 1), null)
+  assert.equal(hubEquipmentItemForAlias(staff, 0), staff)
+  assert.equal(hubEquipmentItemForAlias(staff, 1), staff)
+  assert.equal(hubEquipmentItemForAlias(null, 0), null)
+  assert.equal(hubEquipmentItemForAlias(null, 1), null)
+})
+
+test('Painting eulogies follow the current shared memorial portrait id', () => {
+  const initial = createHubMemorialState()
+  assert.equal(hubMemorialEulogyIndex('painting-100', initial), 2)
+  const first = archiveHubMemorialPortrait(initial, {
+    accountUsername: 'aurelia',
+    awesomeness: 4_567,
+    awesomestKill: 'Horned Skeleton',
+    capturedAtTick: 300,
+    config: { discipline: 'arcane', displayName: 'Aurelia', element: 'ether' },
+    elapsedTicks: 12_345,
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 12,
+    level: 7,
+    monstersKilled: 321,
+    playerId: 'player-a',
+    portraitScale: 0.925,
+    runId: 'run-a',
+    wave: 12,
+  }, 0)
+  assert.equal(hubMemorialEulogyIndex('painting-100', first), 100)
+  const second = archiveHubMemorialPortrait(first, {
+    accountUsername: null,
+    awesomeness: 8_765,
+    awesomestKill: null,
+    capturedAtTick: 600,
+    config: { discipline: 'mind', displayName: 'Basil', element: 'water' },
+    elapsedTicks: 54_321,
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 4,
+    level: 9,
+    monstersKilled: 654,
+    playerId: 'player-b',
+    portraitScale: 0.9,
+    runId: 'run-b',
+    wave: 18,
+  }, 1)
+  assert.equal(hubMemorialEulogyIndex('painting-1', second), 101)
+  assert.equal(hubMemorialEulogyIndex('memorator', second), null)
+  assert.equal(
+    hubMemorialPortraitForInteraction('painting-100', second)?.config.displayName,
+    'Aurelia',
+  )
+  assert.equal(hubMemorialPortraitForInteraction('painting-0', second), null)
+})
+
+test('only native world actor wrappers acknowledge durable NPC hint rows', () => {
+  const fresh = Array<boolean>(10).fill(true)
+  assert.deepEqual(hubNpcHintAcknowledgementAction('annalist', fresh), {
+    interactionId: 'annalist',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.deepEqual(hubNpcHintAcknowledgementAction('fomentius', fresh), {
+    interactionId: 'fomentius',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.deepEqual(hubNpcHintAcknowledgementAction('luthacus', fresh), {
+    interactionId: 'luthacus',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.equal(hubNpcHintAcknowledgementAction('hagatha', fresh), null)
+  assert.equal(hubNpcHintAcknowledgementAction('painting-0', fresh), null)
+  assert.equal(hubNpcHintAcknowledgementAction('polisher', fresh), null)
+  assert.equal(hubNpcHintAcknowledgementAction('annalist', Array(10).fill(false)), null)
+})
+
+test('HUD potion shortcuts total the addressed kind and consume the first owned stack', () => {
+  const backpack = [
+    { id: 8, kind: 'health-potion', quantity: 2 },
+    { id: 9, kind: 'mana-potion', quantity: 4 },
+    { id: 10, kind: 'health-potion', quantity: 3 },
+  ] as const
+  assert.deepEqual(hubPotionShortcut(backpack, 'health-potion'), { count: 5, itemId: 8 })
+  assert.deepEqual(hubPotionShortcut(backpack, 'mana-potion'), { count: 4, itemId: 9 })
+  assert.deepEqual(hubPotionShortcut([], 'health-potion'), { count: 0, itemId: null })
+  assert.deepEqual(hubPotionBeltShortcut(backpack, 3), { count: 5, itemId: 8 })
+  assert.deepEqual(hubPotionBeltShortcut(backpack, 4), { count: 4, itemId: 9 })
+  assert.equal(hubPotionBeltShortcut(backpack, 2), null)
+})
+
+test('HUD potion shortcuts include recursively owned sack stacks in depth-first order', () => {
+  const backpack = [{
+    id: 20,
+    kind: 'sack',
+    quantity: 1,
+    contents: [{
+      id: 21,
+      kind: 'health-potion',
+      quantity: 2,
+    }, {
+      id: 22,
+      kind: 'sack',
+      quantity: 1,
+      contents: [{ id: 23, kind: 'health-potion', quantity: 3 }],
+    }],
+  }, {
+    id: 24,
+    kind: 'health-potion',
+    quantity: 4,
+  }] as const
+  assert.deepEqual(hubPotionShortcut(backpack, 'health-potion'), { count: 9, itemId: 21 })
+})
+
+test('merchant dialogue exposes only the four reachable retail service commands', () => {
+  assert.deepEqual(
+    Object.values(HUB_TRADER_DIALOGUES).map(({ actionLabel }) => actionLabel),
+    ['Buy Charms and Curses', 'Buy', 'Examine Items', 'Dowse'],
+  )
+  assert.equal(JSON.stringify(HUB_TRADER_DIALOGUES).includes('Outfit me Randomly'), false)
+  assert.equal(HUB_TRADER_DIALOGUES.hagatha.intro[0], 'All right then wizard, what do you want?')
+  assert.equal(HUB_TRADER_DIALOGUES.fomentius.intro[0], 'Hello Hello!')
+  assert.equal(HUB_TRADER_DIALOGUES.fomentius.intro[1], 'Can I interest you in a high quality and *very legal* herbal potion? Brewed with all the best natural magicks, minimal chance of causing intestinal combustion!')
+  assert.equal(HUB_TRADER_DIALOGUES.hagatha.priceLabel, 'Charm Prices?')
+  assert.equal(HUB_TRADER_DIALOGUES.shlorio.priceLabel, 'Dowsing Prices?')
+  assert.equal(HUB_TRADER_DIALOGUES.shlorio.name, 'Shlorio')
+  assert.match(HUB_TRADER_DIALOGUES.luthacus.intro[0], /Official Unreal Crime Scene Investigator/)
+  assert.match(HUB_TRADER_DIALOGUES.luthacus.intro[2], /By order of the Archchancellor, o'course\./)
+  assert.match(HUB_TRADER_DIALOGUES.shlorio.priceExplanation[2], /vapor burns/)
+})
+
+test('merchant proximity uses the exact native radius formula and room ownership', () => {
+  assert.equal(hubTraderWithinServiceRange('hagatha', 'courtyard', { x: 1340, y: 280 }), true)
+  assert.equal(hubTraderWithinServiceRange('hagatha', 'library', { x: 1340, y: 280 }), false)
+  assert.equal(hubTraderWithinServiceRange('hagatha', 'courtyard', {
+    x: 1340 + Math.sqrt(5 * 15 * 15 + 1500),
+    y: 280,
+  }), true)
+  assert.equal(hubTraderWithinServiceRange('hagatha', 'courtyard', { x: 1392, y: 280 }), false)
+  assert.equal(nearestHubTrader('library', { x: 900, y: 642.5 }), 'shlorio')
+  assert.equal(hubTraderAtPoint('courtyard', { x: 1355, y: 280 }), 'hagatha')
+  assert.equal(hubTraderAtPoint('courtyard', { x: 1355.01, y: 280 }), null)
+  assert.equal(hubTraderAtPoint('library', { x: 900, y: 642.5 }), 'shlorio')
+  assert.equal(hubTraderAtPoint('courtyard', { x: 900, y: 642.5 }), null)
+})
+
+test('the contextual interaction census covers every rendered named NPC and Mortuary portrait', () => {
+  assert.deepEqual(HUB_INTERACTION_IDS, [
+    'hagatha', 'fomentius', 'annalist', 'luthacus', 'skorcha', 'teacher',
+    'memorator',
+    'painting-0', 'painting-1', 'painting-100', 'painting-3', 'painting-4',
+    'painting-5', 'painting-6', 'painting-7', 'painting-8', 'painting-9',
+    'librarian', 'shlorio', 'arch-chancellor',
+    'polisher',
+  ])
+  assert.equal(nearestHubInteraction('courtyard', { x: 895.5, y: 455.5 }), 'annalist')
+  assert.equal(nearestHubInteraction('courtyard', { x: 576.5, y: 710.5 }), 'teacher')
+  for (const skorchaPosition of [
+    { x: 1437.5, y: 732.5 },
+    { x: 1637, y: 403.5 },
+    { x: 669, y: 705.5 },
+  ]) {
+    assert.equal(nearestHubInteraction('courtyard', skorchaPosition), null)
+    assert.equal(nearestHubInteraction(
+      'courtyard',
+      skorchaPosition,
+      { skorchaPosition },
+    ), 'skorcha')
+    assert.equal(hubInteractionAtPoint(
+      'courtyard',
+      skorchaPosition,
+      { skorchaPosition },
+    ), 'skorcha')
+    assert.equal(hubInteractionWithinRange(
+      'skorcha',
+      'courtyard',
+      skorchaPosition,
+    ), false)
+  }
+  assert.equal(nearestHubInteraction('mortuary', { x: 628, y: 770 }), 'memorator')
+  assert.equal(nearestHubInteraction('mortuary', { x: 673, y: 683 }), 'painting-100')
+  assert.equal(nearestHubInteraction('library', { x: 512, y: 595 }), 'librarian')
+  assert.equal(nearestHubInteraction('office', { x: 514, y: 467 }), 'arch-chancellor')
+  assert.equal(nearestHubInteraction('office', { x: 566, y: 735 }), null)
+  assert.equal(nearestHubInteraction(
+    'office',
+    { x: 566, y: 735 },
+    { skorchaPosition: null, storyOffice: true },
+  ), 'polisher')
+  assert.equal(hubInteractionAtPoint(
+    'office',
+    { x: 566, y: 735 },
+    { skorchaPosition: null, storyOffice: true },
+  ), 'polisher')
+  assert.equal(nearestHubInteraction('storeroom', { x: 538, y: 324 }), null)
+  assert.equal(hubInteractionAtPoint('mortuary', { x: 688, y: 683 }), 'painting-100')
+  const paintingRange = Math.sqrt(5 * 40 * 40 + 1500)
+  assert.equal(hubInteractionWithinRange('painting-100', 'mortuary', {
+    x: 673 + paintingRange - 1e-9,
+    y: 683,
+  }), true)
+  assert.equal(hubInteractionWithinRange('painting-100', 'mortuary', {
+    x: 673 + paintingRange + 1e-9,
+    y: 683,
+  }), false)
+  assert.equal(hubInteractionWithinRange('painting-100', 'library', { x: 673, y: 683 }), false)
+})
+
+test('the Hub shortcut rail uses all five native records and routes the fifth member to Shlorio', () => {
+  assert.deepEqual(HUB_HUD_SHORTCUTS, [
+    { interaction: 'annalist', levelPickerRecord: 0, mode: 'dialogue', name: 'Provokatus' },
+    { interaction: 'hagatha', levelPickerRecord: 6, mode: 'service', name: 'Hagatha' },
+    { interaction: 'luthacus', levelPickerRecord: 4, mode: 'service', name: 'Luthacus' },
+    { interaction: 'fomentius', levelPickerRecord: 5, mode: 'service', name: 'Fomentius' },
+    { interaction: 'shlorio', levelPickerRecord: 2, mode: 'service', name: 'Shlorio' },
+  ])
+  assert.equal(HUB_INTERACTION_DIALOGUES.annalist.name, 'Provokatus')
+  assert.equal(HUB_INTERACTION_DIALOGUES.teacher.name, 'Professor Machinimbus')
+  assert.equal(HUB_INTERACTION_DIALOGUES['painting-100'].intro.length, 0)
+  assert.equal(HUB_INTERACTION_DIALOGUES.shlorio.service, 'shlorio')
+  assert.deepEqual(
+    HUB_STORY_OFFICE_DIALOGUES['arch-chancellor'].questions.map(({ key }) => key),
+    ['ARCH_Q1_0', 'ARCH_Q2_0', 'ARCH_Q3_0'],
+  )
+  assert.equal(HUB_STORY_OFFICE_DIALOGUES.polisher.introRecord?.key, 'POLISHER_INTRO_0')
+})
+
+test('native shop membership retains padded grids and exports every atlas row', () => {
+  assert.deepEqual(HUB_TRADER_GRID_CAPACITY, { fomentius: 28, shlorio: 9 })
+  assert.deepEqual(HUB_TRADER_NATIVE_UI_RECORDS, {
+    Inventory: 84,
+    Skills: 166,
+    UI: 113,
+  })
+})
+
+test('all seven equipment sinks are reachable and the third ring remains gated', () => {
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'hat' }, false), ['hat'])
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'robe' }, false), ['robe'])
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'amulet' }, false), ['amulet'])
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'wand' }, false), ['weapon'])
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'staff' }, false), ['weapon'])
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'ring' }, false), ['ring-0', 'ring-1'])
+  assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'ring' }, true), ['ring-0', 'ring-1', 'ring-2'])
+})
+
+test('explicit click-to-slot admission emits only compatible authoritative equip actions', () => {
+  const ring = { equipmentType: 'ring', id: 41 } as const
+  const robe = { equipmentType: 'robe', id: 42 } as const
+  const potion = { equipmentType: null, id: 43 } as const
+
+  assert.deepEqual(hubEquipmentClickAction(ring, 'ring-0', false), {
+    itemId: 41,
+    slot: 'ring-0',
+    type: 'equip',
+  })
+  assert.equal(hubEquipmentClickAction(ring, 'ring-2', false), null)
+  assert.deepEqual(hubEquipmentClickAction(ring, 'ring-2', true), {
+    itemId: 41,
+    slot: 'ring-2',
+    type: 'equip',
+  })
+  assert.deepEqual(hubEquipmentClickAction(robe, 'robe', false), {
+    itemId: 42,
+    slot: 'robe',
+    type: 'equip',
+  })
+  assert.equal(hubEquipmentClickAction(robe, 'hat', false), null)
+  assert.equal(hubEquipmentClickAction(potion, 'weapon', false), null)
+})
+
+test('inventory summary uses the addressed actor and current survival or Tutorial wave', () => {
+  const initial = createGameSnapshot(createGameSimulation(), 'local-player').players
+  const players = { ...initial, peer: initial['local-player']! }
+  const world = {
+    kind: 'boneyard' as const,
+    runId: 'first-run',
+    hallOfFameRuns: {
+      'local-player': { monstersKilled: 17, awesomeness: 91 },
+      peer: { monstersKilled: 400, awesomeness: 9_000 },
+    },
+    tutorial: null,
+    waves: { waveOrdinal: 6 },
+  }
+  assert.deepEqual(projectInventoryRunSummary({ players, world }, 'local-player', 'first-run'), {
+    wave: 6, monstersKilled: 17, awesomeness: 91,
+  })
+  assert.deepEqual(projectInventoryRunSummary({ players, world: {
+    ...world, tutorial: { waveOrdinal: 3 }, waves: null,
+  } }, 'local-player', 'first-run'), { wave: 3, monstersKilled: 17, awesomeness: 91 })
+  assert.deepEqual(projectInventoryRunSummary({ players, world }, 'peer', 'first-run'), {
+    wave: 6, monstersKilled: 400, awesomeness: 9_000,
+  })
+})
+
+test('inventory summary clears retired run/actor values and reads restored state without a display cache', () => {
+  const players = createGameSnapshot(createGameSimulation(), 'local-player').players
+  const world = {
+    kind: 'boneyard' as const, runId: 'restored-run', tutorial: null, waves: { waveOrdinal: 12 },
+    hallOfFameRuns: { 'local-player': { monstersKilled: 321, awesomeness: 4_567 } },
+  }
+  const restored = projectInventoryRunSummary({ players, world }, 'local-player', 'restored-run')
+  assert.deepEqual(restored, { wave: 12, monstersKilled: 321, awesomeness: 4_567 })
+  assert.equal(projectInventoryRunSummary({ players, world }, 'local-player', 'old-run'), null)
+  assert.deepEqual(projectInventoryRunSummary({ players, world: {
+    ...world, runId: 'next-run', waves: { waveOrdinal: 0 },
+    hallOfFameRuns: { 'local-player': { monstersKilled: 0, awesomeness: 0 } },
+  } }, 'local-player', 'next-run'), { wave: 0, monstersKilled: 0, awesomeness: 0 })
+  assert.equal(projectInventoryRunSummary({ players: {}, world }, 'local-player', 'restored-run'), null)
+  assert.equal(projectInventoryRunSummary({ players, world: { ...world, hallOfFameRuns: {} } }, 'local-player'), null)
+  assert.deepEqual(projectInventoryRunSummary({ players, world: { kind: 'hub' } }, 'local-player'), {
+    wave: 0, monstersKilled: 0, awesomeness: 0,
+  })
+  assert.equal(projectInventoryRunSummary({ players: {}, world: { kind: 'hub' } }, 'local-player'), null)
+  assert.equal(projectInventoryRunSummary({ players, world: { kind: 'hub' } }, 'local-player', 'restored-run'), null)
+  for (const changed of [
+    { ...restored!, wave: 13 },
+    { ...restored!, monstersKilled: 322 },
+    { ...restored!, awesomeness: 4_568 },
+  ]) assert.equal(sameInventoryRunSummary(restored, changed), false)
+  assert.equal(sameInventoryRunSummary(restored, { ...restored! }), true)
+  assert.equal(sameInventoryRunSummary(restored, null), false)
+  assert.equal(sameInventoryRunSummary(null, restored), false)
+  assert.equal(sameInventoryRunSummary(null, null), true)
+})
+
+test('ordinary and companion Stats inspect every owned charm without offering removal', async () => {
+  const built = await build({
+    stdin: { contents: `import { createElement } from 'react';
+      import { renderToStaticMarkup } from 'react-dom/server';
+      import { InventoryStatsActions } from './HubInventoryControls.tsx';
+      export const renderStats = props => renderToStaticMarkup(createElement(InventoryStatsActions, props));`,
+      loader: 'tsx', resolveDir: import.meta.dirname },
+    bundle: true, format: 'esm', platform: 'node', jsx: 'automatic', write: false,
+    // Semantic controls are checked here; browser acceptance covers their art and CSS.
+    loader: { '.css': 'empty', '.png': 'empty' },
+    banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(import.meta.url)});` },
+  })
+  const { renderStats } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0]!.text).toString('base64')}`)
+  const economy = createGameSnapshot(createGameSimulation(), 'local-player').players['local-player']!.economy
+  for (const companion of [false, true]) {
+    for (let selector = 0; selector <= 27; selector += 1) {
+      const html = renderStats({ companion, economy: { ...economy, ownedPerkSelectors: [selector] },
+        page: 2, offset: 640, onPage: () => {}, onInspectionFocus: () => {}, onInspectionHover: () => {} })
+      assert.match(html, /aria-label="Inspect [^"]+"/, `${companion}/${selector} must remain inspectable`)
+      assert.doesNotMatch(html, /aria-label="Remove [^"]+"/)
+      assert.match(html, new RegExp(`data-owned-hagatha-selector="${selector}"`))
+    }
+  }
+})

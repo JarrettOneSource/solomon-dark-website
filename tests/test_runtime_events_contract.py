@@ -46,8 +46,8 @@ class RuntimeEventContractTests(unittest.TestCase):
         (cls.webroot / "deployment.json").write_text(
             json.dumps({"revision": cls.website_revision})
         )
-        (cls.webroot / "game").mkdir()
-        (cls.webroot / "game/deployment.json").write_text(
+        (cls.webroot / "game-rust").mkdir()
+        (cls.webroot / "game-rust/deployment.json").write_text(
             json.dumps({"revision": cls.game_revision})
         )
         cls.port = free_port()
@@ -140,16 +140,16 @@ class RuntimeEventContractTests(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, error.read()
 
-    def test_legacy_deployment_poll_matches_the_rust_restart_target(self) -> None:
+    def test_root_deployment_poll_stays_with_restored_pixi_game(self) -> None:
         legacy_revision = "093aee9938e0cae2fabfafc5403b01aed961397e"
         cases = [
-            (f"/deployment.json?current={legacy_revision}", self.game_revision),
+            (f"/deployment.json?current={legacy_revision}", self.website_revision),
             ("/deployment.json", self.website_revision),
             (f"/deployment.json?current={self.website_revision}", self.website_revision),
             (f"/deployment.json?current={self.game_revision}", self.website_revision),
             ("/deployment.json?current=" + "c" * 40, self.website_revision),
-            ("/game/deployment.json", self.game_revision),
-            (f"/game/deployment.json?current={self.game_revision}", self.game_revision),
+            ("/game-rust/deployment.json", self.game_revision),
+            (f"/game-rust/deployment.json?current={self.game_revision}", self.game_revision),
         ]
         for path, expected_revision in cases:
             with self.subTest(path=path):
@@ -165,7 +165,7 @@ class RuntimeEventContractTests(unittest.TestCase):
     def test_game_publication_is_anonymous_uncached_and_independent_of_game_artifact(self) -> None:
         publication_path = self.webroot / "deployment.json"
         original = publication_path.read_bytes()
-        immutable = (self.webroot / "game/deployment.json").read_bytes()
+        immutable = (self.webroot / "game-rust/deployment.json").read_bytes()
         try:
             for ready in (False, True):
                 publication = {
@@ -181,7 +181,7 @@ class RuntimeEventContractTests(unittest.TestCase):
                     self.assertEqual(response.headers["Cache-Control"], "no-store")
                     self.assertEqual(response.headers.get_content_type(), "application/json")
                     self.assertEqual(json.load(response), publication)
-            self.assertEqual((self.webroot / "game/deployment.json").read_bytes(), immutable)
+            self.assertEqual((self.webroot / "game-rust/deployment.json").read_bytes(), immutable)
         finally:
             publication_path.write_bytes(original)
 

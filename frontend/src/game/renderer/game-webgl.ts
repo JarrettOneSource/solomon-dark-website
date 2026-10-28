@@ -1,0 +1,150 @@
+// Installs Pixi's static CSP-safe shader paths; no runtime eval is required.
+import 'pixi.js/unsafe-eval'
+import { Application, Texture } from 'pixi.js'
+import { createNativeUiCanvas, type NativeUiCanvas } from './native-ui-canvas.ts'
+
+import {
+  loadGameImage,
+  releaseGameImages,
+} from '../game-assets.ts'
+import { mapAssetSources } from '../game-asset-readiness.ts'
+import {
+  installNativeFixedFunctionRenderPipeline,
+  nativeCompositedTextureFromImage,
+  nativeStockFramedTextureFromImage,
+  nativeStockPointTextureFromImage,
+  nativeStockTextureFromImage,
+} from './native-fixed-function-render-pipeline.ts'
+import {
+  planGameTextureSources,
+  type GameTextureSourceGroups,
+  type GameTextureSourcePlan,
+  type GameTextureSourcePolicy,
+} from './game-texture-source-policy.ts'
+
+export interface GameWebGlApplication extends NativeUiCanvas {
+  application: Application
+}
+
+export interface GameTextureMap {
+  policies: Readonly<Record<string, GameTextureSourcePolicy>>
+  sources: readonly string[]
+  textures: Readonly<Record<string, Texture>>
+  destroy(): void
+}
+
+interface GameWebGlApplicationOptions {
+  backgroundAlpha?: number
+  className: string
+  height: number
+  width: number
+}
+
+export async function createGameWebGlApplication({
+  backgroundAlpha = 1,
+  className,
+  height,
+  width,
+}: GameWebGlApplicationOptions): Promise<GameWebGlApplication> {
+  const application = new Application()
+  try {
+    await application.init({
+      antialias: false,
+      autoDensity: true,
+      autoStart: false,
+      background: 0x000000,
+      backgroundAlpha,
+      height,
+      powerPreference: 'high-performance',
+      preference: 'webgl',
+      preferWebGLVersion: 2,
+      resolution: 1,
+      roundPixels: false,
+      width,
+    })
+    if (!application.renderer.name.toLowerCase().includes('webgl')) {
+      throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
+    }
+    installNativeFixedFunctionRenderPipeline(application.renderer, {
+      preserveBrowserCompositingAlpha: backgroundAlpha === 0,
+    })
+  } catch (error) {
+    if (application.renderer) application.destroy({ removeView: true })
+    throw error
+  }
+  application.stop()
+  const canvas = application.canvas as HTMLCanvasElement
+  canvas.className = className
+  canvas.setAttribute('aria-hidden', 'true')
+  canvas.dataset.gameRenderer = 'pixi-webgl'
+  canvas.dataset.rendererName = application.renderer.name
+  canvas.dataset.resolution = '1'
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
+  return { application, ...createNativeUiCanvas(application, canvas) }
+}
+
+export async function loadGameTextureMap(
+  groups: GameTextureSourceGroups,
+): Promise<GameTextureMap> {
+  const plan = planGameTextureSources(groups)
+  const entries = await loadGameTextureEntriesFromPlan(plan)
+  const textures = Object.fromEntries(entries) as Record<string, Texture>
+  let destroyed = false
+  return {
+    policies: plan.policies,
+    sources: plan.sources,
+    textures,
+    destroy() {
+      if (destroyed) return
+      destroyed = true
+      for (const texture of Object.values(textures)) texture.destroy(true)
+    },
+  }
+}
+
+export async function loadGameTextureEntries(
+  groups: GameTextureSourceGroups,
+): Promise<Array<readonly [string, Texture]>> {
+  return loadGameTextureEntriesFromPlan(planGameTextureSources(groups))
+}
+
+async function loadGameTextureEntriesFromPlan(
+  plan: GameTextureSourcePlan,
+): Promise<Array<readonly [string, Texture]>> {
+  const entries: Array<readonly [string, Texture]> = []
+  try {
+    await mapAssetSources(plan.sources, async (source) => {
+      try {
+        const image = await loadGameImage(source)
+        const policy = plan.policies[source]!
+        const texture = policy === 'stock-point'
+          ? nativeStockPointTextureFromImage(image)
+          : policy === 'stock-framed'
+            ? nativeStockFramedTextureFromImage(image)
+          : policy === 'composited'
+            ? nativeCompositedTextureFromImage(image)
+            : nativeStockTextureFromImage(image)
+        const entry = [source, texture] as const
+        entries.push(entry)
+        return entry
+      } finally {
+        releaseGameImages([source])
+      }
+    })
+  } catch (error) {
+    for (const [, texture] of entries) texture.destroy(true)
+    releaseGameImages(plan.sources)
+    throw error
+  }
+  return entries
+}
+
+export function textureFrom(
+  textures: Readonly<Record<string, Texture>>,
+  source: string,
+): Texture {
+  const texture = textures[source]
+  if (!texture) throw new Error(`Game texture was not loaded: ${source}`)
+  return texture
+}

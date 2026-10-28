@@ -1,0 +1,427 @@
+import assert from 'node:assert/strict'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { chromium } from 'playwright-core'
+import { createServer } from 'vite'
+
+const root = fileURLToPath(new URL('../', import.meta.url))
+const collectCoverage = process.argv.includes('--coverage')
+const coveragePlugins = collectCoverage
+  ? [(await import('./quality/coverage-plugin.mjs')).rendererCoveragePlugin()]
+  : []
+const vite = await createServer({
+  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+  logLevel: 'error', plugins: coveragePlugins, root,
+  cacheDir: 'reports/renderer-quality/vite-cache',
+  server: { host: '127.0.0.1', port: 0 },
+})
+await vite.listen()
+const address = vite.httpServer.address()
+assert.ok(address && typeof address !== 'string')
+const origin = `http://127.0.0.1:${address.port}`
+let browser
+const errors = { console: [], page: [], responses: [] }
+try {
+  browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.SDR_CHROME_PATH,
+    headless: true,
+  })
+  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  const activeMutant = process.env.__STRYKER_ACTIVE_MUTANT__
+  if (activeMutant !== undefined) {
+    await page.addInitScript(id => { globalThis.__stryker__ = { activeMutant: id } }, activeMutant)
+  }
+  page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
+  page.on('pageerror', error => errors.page.push(error.message))
+  page.on('response', response => { if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`) })
+  await page.route(`${origin}/__materials`, route => route.fulfill({
+    body: '<!doctype html><html><body style="margin:0;background:black"></body></html>', contentType: 'text/html',
+  }))
+  await page.goto(`${origin}/__materials`, { waitUntil: 'domcontentloaded' })
+  if (process.argv.includes('--measure')) {
+    const measured = await page.evaluate(async () => {
+      const { measureNativeMaterialFrames } = await import('/tools/native-render-material-probe.mjs')
+      return measureNativeMaterialFrames()
+    })
+    for (const phase of measured.phases) {
+      phase.frameGaps = summarize(phase.frameGaps)
+      phase.renderTimes = summarize(phase.renderTimes)
+    }
+    assert.deepEqual(errors, { console: [], page: [], responses: [] })
+    console.log(JSON.stringify({ errors, measured }))
+  } else {
+    const { samples, contexts } = await page.evaluate(async () => {
+      const { renderNativeMaterialSamples } = await import('/tools/native-render-material-probe.mjs')
+      return renderNativeMaterialSamples()
+    })
+    const failures = []
+    for (const sample of samples) {
+      if (sample.role === 'drawable-color-mode' && sample.kind !== 'standalone-mesh') {
+        assert.ok(sample.retainedBuffer)
+        assert.equal(sample.retainedAttributeUpdates, 0, 'unchanged drawable color mode must reuse retained GPU attributes: ' + JSON.stringify(sample))
+      }
+      if (sample.retainedColorBuffer !== undefined) {
+        assert.equal(sample.retainedColorBuffer, true, 'gradient re-registration must reuse its GPU color buffer')
+        assert.equal(sample.retainedBufferCount, true, 'gradient re-registration must not accumulate GPU buffers')
+        assert.equal(sample.colorBufferDestroyed, true, 'retiring a gradient must destroy its owned color buffer')
+      }
+      const expected = expectedPixel(sample)
+      if (sample.pixel.some((value, index) => Math.abs(value - expected[index]) > 2)) {
+        failures.push({ ...sample, expected })
+      }
+    }
+    console.log(JSON.stringify({ errors, failures, samples: samples.length }))
+    assert.deepEqual(errors, { console: [], page: [], responses: [] })
+    assert.deepEqual(failures, [], 'GPU output must match independent native RGBA interpolation and blending')
+    assert.deepEqual(contexts, [{ previousShaderDestroyed: true, previousProgramDestroyed: true }])
+    const trails = await page.evaluate(async () => {
+      const { inspectNativeProjectileTrails } = await import('/tools/native-projectile-trail-probe.mjs')
+      return inspectNativeProjectileTrails()
+    })
+    console.log(JSON.stringify({ trails }))
+    for (const row of trails.silk) {
+      assert.equal(row.differentChannels, 0, `actual ${row.name} must match native small-quad delivery`)
+      assert.equal(row.blend, row.name === 'fragment' ? 'normal' : 'add')
+      if (['short', 'grown', 'reused-short', 'faded-grown'].includes(row.name)) assert.ok(row.visiblePixels > 0)
+      if (['new', 'invisible'].includes(row.name)) assert.equal(row.visiblePixels, 0)
+    }
+    assert.ok(trails.silk.find(row => row.name === 'grown').capacity > 100)
+    assert.equal(trails.arrows.length, 36)
+    for (const row of trails.arrows) for (const sample of row.samples) {
+      assert.ok(sample.pixel.every((value, i) => Math.abs(value - sample.expected[i]) <= 2), JSON.stringify(row))
+    }
+    assert.ok(trails.retiredWebs && trails.retiredArrows)
+    const puppetHits = await page.evaluate(async () => {
+      const { inspectNativePuppetHits } = await import('/tools/native-puppet-hit-probe.mjs')
+      return inspectNativePuppetHits()
+    })
+    console.log(JSON.stringify({ puppetHits }))
+    for (const row of puppetHits.scenery) {
+      assert.ok(row.restored && row.copiesDestroyed && row.borrowedResourcesAlive, row.kind)
+      assert.equal(row.childrenAfterRetire, 0)
+      assert.deepEqual(row.samples[0], row.samples[2], `${row.kind} setting toggle restores the material`)
+      assert.notDeepEqual(row.samples[0].body, row.before)
+      for (const sample of row.samples) {
+        const light = row.kind === 'building' ? 127 / 255 : 1
+        const base = saturate([60, 120, 30].map(channel => channel * light), 'arena')
+        const redraw = row.kind === 'building' && sample.complex ? [127, 127, 127]
+          : saturate([(sample.complex ? 165 : 255) * light, 0, 0], 'arena')
+        const alpha = row.kind === 'building' && sample.complex ? 1 : .5
+        const expected = [...redraw.map((channel, index) => channel * alpha + base[index] * (1 - alpha)),
+          255 * (alpha * alpha + 1 - alpha)]
+        assert.ok(sample.body.every((value, index) => Math.abs(value - expected[index]) <= 2), JSON.stringify({ row: row.kind, sample, expected }))
+      }
+      assert.deepEqual(row.samples.map(sample => sample.proxyDraws), row.kind === 'tree' ? [1, 1, 1]
+        : row.kind === 'building' ? [1, 0, 1] : [0, 0, 0])
+    }
+    assert.ok(puppetHits.leviathan.visibleHit && puppetHits.leviathan.normalTargetPreserved && puppetHits.leviathan.restored)
+    assert.equal(puppetHits.leviathan.retiredChildren, 0)
+    assert.ok(puppetHits.leviathan.targetsDestroyed && puppetHits.leviathan.sourceTexturesAlive)
+    assert.equal(puppetHits.leviathan.captureSamples.length, 1)
+    assert.equal(puppetHits.leviathan.clipping.length, 15)
+    for (const { quantity, scale, ordinary, hits } of puppetHits.leviathan.clipping) {
+      for (const sample of [ordinary, ...hits]) {
+        assert.ok(sample.above > 0 && sample.inside > 0, JSON.stringify({ quantity, scale, sample }))
+        assert.equal(sample.outside, 0, `Leviathan ${quantity}/${scale} must clip the lower mouth: ${JSON.stringify(sample)}`)
+        assert.equal(sample.outsideRight, 0, `Leviathan ${quantity}/${scale} must clip the full mouth width: ${JSON.stringify(sample)}`)
+        assert.equal(sample.overflow, 0, `Leviathan ${quantity}/${scale} must erase lower overflow: ${JSON.stringify(sample)}`)
+      }
+    }
+    const captured = puppetHits.leviathan.captureSamples[0]
+    for (const [field, rgb, alpha] of [['ordinary', [60, 120, 30], 128 / 255], ['hit', [165, 0, 0], 64 / 255]]) {
+      const expected = [...saturate(rgb, 'arena').map(channel => channel * alpha), 255 * alpha * alpha]
+      assert.ok(captured[field].every((value, index) => Math.abs(value - expected[index]) <= 2), JSON.stringify({ field, captured, expected }))
+    }
+    const contracts = await page.evaluate(async () => {
+      const { inspectNativeRenderContracts } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeRenderContracts()
+    })
+    console.log(JSON.stringify({ contracts }))
+    assert.deepEqual(contracts.sources.map(({ name, alphaMode, addressMode, scaleMode }) => (
+      [name, alphaMode, addressMode, scaleMode]
+    )), [
+      ['stock', 'no-premultiply-alpha', 'repeat', 'linear'],
+      ['point', 'no-premultiply-alpha', 'repeat', 'nearest'],
+      ['framed', 'no-premultiply-alpha', 'clamp-to-edge', 'linear'],
+      ['composited', 'premultiply-alpha-on-upload', 'clamp-to-edge', 'linear'],
+    ])
+    assert.ok(contracts.sources.every(({ pixel }) => pixel.every(channel => channel === 255)))
+    for (const grid of contracts.grids) {
+      assert.deepEqual(grid.initial, [255, 255, 255, 255])
+      assert.deepEqual(grid.before, [255, 255, 255, 255])
+      assert.deepEqual(grid.after, [63, 63, 63, 255])
+      assert.equal(grid.colors.length, grid.vertices * 4)
+      assert.equal(grid.colors.filter((_, index) => index % 4 !== 3).every(value => value === 63), true)
+      assert.equal(grid.removed && grid.meshDestroyed && grid.geometryDestroyed && grid.shaderDestroyed, true)
+      assert.equal(grid.borrowedTextureAlive, true)
+    }
+    assert.equal(contracts.liveGrids.length, 4)
+    for (const grid of contracts.liveGrids) {
+      assert.equal(grid.geometryRetained && grid.buffersRetained, true)
+      assert.equal(grid.positionsDelivered && grid.uvsDelivered && grid.indicesDelivered && grid.colorsDelivered, true)
+      assert.equal(grid.vertexCount, grid.enhanced ? 9 : 4)
+      assert.equal(grid.indexCount, grid.enhanced ? 24 : 6)
+      assert.equal(grid.colors.length, grid.vertexCount * 4)
+      assert.ok(grid.colors.every((value, index) => value === (index % 4 === 3 ? 255 : 127)))
+      assert.deepEqual(grid.pixel, [127, 127, 127, 255], 'live mode change must update the real GPU buffer shared by redraws')
+    }
+    assert.deepEqual(contracts.roads, {
+      countBefore: 5, countAfter: 3, countAfterEmpty: 3,
+      vertices: 40, indices: 90, meshes: 5, pixel: [128, 128, 128, 255], childrenAfterDestroy: 0,
+      resourcesDestroyed: true, textureAlive: true,
+    })
+    assert.deepEqual(contracts.detachedScene, { destroyed: true, count: 0 })
+    assert.deepEqual(contracts.missingRoad, { message: 'Native Road style 0 texture is unavailable', childrenAfterFailure: 0 })
+    const variants = await page.evaluate(async () => {
+      const { inspectNativeRendererVariants } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeRendererVariants()
+    })
+    console.log(JSON.stringify({ variants }))
+    assert.deepEqual(variants.errors, ['uninitialized-fixed', 'uninitialized-arena', 'unsupported-renderer'].map(name => (
+      { name, message: 'Native materials require an initialized WebGL renderer' }
+    )))
+    assert.deepEqual(variants.variants, [
+      { name: 'sprite-only', pixel: [128, 128, 128, 64] },
+      { name: 'blend-only', pixel: [64, 64, 64, 64] },
+      { name: 'browser-overlay', pixel: [128, 128, 128, 128] },
+      { name: 'default-particle', pixel: [255, 255, 255, 255] },
+    ])
+    const pixelCenters = await page.evaluate(async () => {
+      const { inspectNativePixelCenterInstallations } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativePixelCenterInstallations()
+    })
+    assert.equal(pixelCenters.length, 2)
+    for (const control of pixelCenters) {
+      assert.equal(control.wrapped, control.enabled)
+      assert.ok(control.idempotent && control.targetDestroyed && control.contextLost)
+      assert.equal(control.rows.length, 15)
+      for (const row of control.rows) {
+        const phase = control.enabled ? 1 : 0
+        const y = row.isRoot ? -1 : 1
+        const expected = { a: 2 * row.resolution / row.width,
+          d: y * 2 * row.resolution / row.height,
+          tx: -1 + phase / row.width, ty: -y + y * phase / row.height }
+        assert.equal(row.isRoot, row.kind !== 'offscreen')
+        assert.equal(row.glError, 0)
+        for (const key of ['a', 'd', 'tx', 'ty']) {
+          assert.ok(Math.abs(row.projection[key] - expected[key]) < 1e-12,
+            JSON.stringify({ enabled: control.enabled, row, expected, key }))
+        }
+      }
+    }
+    console.log(JSON.stringify({ pixelCenters }))
+    const transforms = await page.evaluate(async () => {
+      const { compareNativeBatchTransforms } = await import('/tools/native-render-contract-probe.mjs')
+      return compareNativeBatchTransforms()
+    })
+    console.log(JSON.stringify({ transforms }))
+    assert.equal(transforms.length, 6)
+    assert.ok(transforms.every(row => row.changedChannels === 0 && row.visiblePixels > 1000 && row.reusedBatchShaders))
+    const surfaceSampling = await page.evaluate(async () => {
+      const { inspectNativeSurfaceSampling } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeSurfaceSampling()
+    })
+    assert.deepEqual(surfaceSampling, [[160, 160, 160, 255], [160, 160, 160, 255]])
+    const staff = await page.evaluate(async () => {
+      const { compareNativeStaffFrames } = await import('/tools/native-render-staff-probe.mjs')
+      return compareNativeStaffFrames()
+    })
+    console.log(JSON.stringify({ staff }))
+    assert.equal(staff.frames.length, 6)
+    assert.ok(staff.frames.every(row => row.changedChannels === 0 && row.visiblePixels > 50))
+    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive && row.positionBufferUpdates === 0))
+    for (const options of [
+      { finishPremultiplied: false, installTextureAlphaShaders: false },
+      { finishPremultiplied: true, installTextureAlphaShaders: false },
+      { finishPremultiplied: false, installTextureAlphaShaders: true },
+      { finishPremultiplied: true, installTextureAlphaShaders: true },
+    ]) {
+      const lifetimes = await page.evaluate(async ({ finishPremultiplied, installTextureAlphaShaders }) => {
+        const { inspectNativeMaterialLifetimes } = await import('/tools/native-render-lifecycle-probe.mjs')
+        return inspectNativeMaterialLifetimes(finishPremultiplied, installTextureAlphaShaders)
+      }, options)
+      console.log(JSON.stringify({ options, lifetimes }))
+      for (const row of lifetimes.pixels) {
+        const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
+        assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
+        const expectedUpdates = row.kind === 'mesh' ? 0 : Number(options.installTextureAlphaShaders) + Number(row.phase.includes('arena'))
+        assert.equal(row.nativeUniformUpdates, expectedUpdates, `${row.phase}/${row.kind} uniform uploads`)
+      }
+      for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
+        assert.equal(lifetimes[key], true, key)
+      }
+      assert.ok(lifetimes.batchLifetimes.every(Boolean))
+    }
+    for (const installTextureAlphaShaders of [false, true]) {
+      const retainedMaterials = await page.evaluate(async installTextureAlphaShaders => {
+        const { inspectRetainedMaterialChanges } = await import('/tools/native-render-lifecycle-probe.mjs')
+        return inspectRetainedMaterialChanges(installTextureAlphaShaders)
+      }, installTextureAlphaShaders)
+      console.log(JSON.stringify({ installTextureAlphaShaders, retainedMaterials }))
+      assert.equal(retainedMaterials.pixels.length, 8)
+      assert.equal(retainedMaterials.preservedUnusedMaterial, true)
+      for (const row of retainedMaterials.pixels) {
+        assert.deepEqual(row.pixel, row.phase === 'arena' ? [128, 86, 170, 255] : [128, 64, 192, 255])
+      }
+    }
+    const opaque = await page.evaluate(async () => {
+      const { inspectNativeOpaqueBatches } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueBatches()
+    })
+    console.log(JSON.stringify({ opaque }))
+    for (const name of ['first', 'updated', 'roundTrip']) {
+      assert.equal(opaque[name].candidateDraws, 1, `${name}: ordered normal/add NPM/PMA draws must share one opaque batch`)
+      assert.equal(opaque[name].candidateIndices, opaque[name].baselineIndices)
+      assert.ok(opaque[name].maximumDelta <= 2, JSON.stringify(opaque[name]))
+    }
+    assert.equal(opaque.target.changedChannels, 0, 'render-texture RGBA must remain byte-identical')
+    assert.equal(opaque.target.candidateDraws, opaque.target.baselineDraws)
+    const opaqueBoundaries = await page.evaluate(async () => {
+      const { inspectNativeOpaqueBoundaries } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueBoundaries()
+    })
+    console.log(JSON.stringify({ opaqueBoundaries }))
+    for (const row of opaqueBoundaries) {
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+      if (['transparent', 'child-cache', 'no-group', 'outside-root', 'foreign-layer'].includes(row.role)
+        || ['changed', 'retained'].includes(row.phase) && row.role !== 'context') {
+        assert.equal(row.changedChannels, 0, JSON.stringify(row))
+        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
+      } else assert.equal(row.candidateDraws, 1, JSON.stringify(row))
+    }
+    const opaqueTransport = await page.evaluate(async () => {
+      const { inspectNativeOpaqueTransport } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueTransport()
+    })
+    console.log(JSON.stringify({ opaqueTransport }))
+    for (const row of opaqueTransport) {
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+      if (row.role === 'texture-capacity') assert.equal(row.candidateDraws, Math.ceil(40 / row.maxTextures))
+      if (row.role === 'gradient' || row.role === 'diffuse') assert.equal(row.candidateDraws, 1)
+      if (row.role === 'empty') assert.equal(row.candidateDraws, 0)
+      if (row.role === 'topology' || row.role === 'mixed-topology' || row.role === 'explicit-npm-pma') {
+        assert.equal(row.changedChannels, 0, JSON.stringify(row))
+        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
+      }
+    }
+    const opaqueRebuilds = await page.evaluate(async () => {
+      const { inspectNativeOpaqueRebuilds } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueRebuilds()
+    })
+    console.log(JSON.stringify({ opaqueRebuilds }))
+    for (const [phase, row] of Object.entries(opaqueRebuilds)) {
+      assert.equal(row.candidateDraws, 1, `${phase}: existing texture slots must remain usable at capacity`)
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.equal(row.memberCount * 6, row.candidateIndices, `${phase}: retained records must not keep retired drawables`)
+      assert.equal(row.onlyLiveMembers, true, JSON.stringify(row))
+      assert.equal(row.maximumTextures, row.expectedTextures, JSON.stringify(row))
+      assert.ok(row.maximumTextures <= row.limit, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+    }
+    const opaqueOwnership = await page.evaluate(async () => {
+      const { inspectNativeOpaqueInstructionOwnership } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueInstructionOwnership()
+    })
+    console.log(JSON.stringify({ opaqueOwnership }))
+    assert.equal(opaqueOwnership.candidateDraws, 3, 'foreign normal-PMA elements retain a separate ordinary batch')
+    assert.equal(opaqueOwnership.candidateIndices, opaqueOwnership.baselineIndices)
+    assert.deepEqual(opaqueOwnership.eligibility, [true, false, true])
+    assert.equal(opaqueOwnership.originalRetired, true, 'reinstallation retires the old material owner')
+    assert.equal(opaqueOwnership.rebuilds, 0, 'unchanged and unrelated renders must preserve cached instructions')
+    assert.equal(opaqueOwnership.retained.changedChannels, 0)
+    assert.equal(opaqueOwnership.afterUnrelated.changedChannels, 0)
+    assert.ok(opaqueOwnership.maximumDelta <= 2)
+    const opaqueRetirement = await page.evaluate(async () => {
+      const { inspectNativeOpaqueRetirement } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueRetirement()
+    })
+    assert.deepEqual(opaqueRetirement, {
+      activeDraws: 1, afterRootDraws: 0, afterRetirementDraws: 0,
+      textureAlive: true, batcherRetired: true, hookRemoved: true,
+      changedPixels: 0, changedChannels: 0, maximumDelta: 0,
+    })
+    console.log(JSON.stringify({ opaqueRetirement }))
+    assert.deepEqual(errors, { console: [], page: [], responses: [] })
+  }
+  if (collectCoverage) {
+    const coverage = await page.evaluate(() => globalThis.__coverage__)
+    assert.ok(coverage, 'renderer instrumentation must produce browser coverage')
+    const directory = resolve('reports/renderer-quality/coverage/raw')
+    await mkdir(directory, { recursive: true })
+    await writeFile(`${directory}/browser.json`, JSON.stringify(coverage))
+  }
+} finally {
+  await browser?.close()
+  await vite.close()
+}
+
+function expectedPixel(sample) {
+  if (sample.role === 'drawable-color-mode') {
+    const texture = sample.diffuse ? [1, 1, 1] : sample.rgba.slice(0, 3).map(channel => (
+      channel / (sample.premultiplied ? sample.rgba[3] : 255)
+    ))
+    const alpha = sample.rgba[3] / 255 * 128 / 255
+    const grey = (texture[0] + texture[1] + texture[2]) / 3 * (165 / 255) / 3
+    const color = texture.map((channel, index) => {
+      const real = index === 0 ? channel * 165 / 255 : 0
+      return sample.mode === 'fixed' ? real : grey * .35 + real * .65
+    })
+    const destination = sample.blend === 'add' ? 1 : 1 - alpha
+    return [...color.map((channel, index) => (channel * alpha + [.2, .1, .3][index] * destination) * 255),
+      (alpha * alpha + destination) * 255].map(value => Math.min(255, value))
+  }
+  if (sample.role === 'explicit-shader') return [63, 63, 63, 255]
+  if (sample.role === 'retained-color-mode') {
+    const color = sample.masked ? [1, 1, 1] : saturate(sample.rgba.slice(0, 3).map(channel => channel / 255), sample.mode)
+    const alpha = sample.rgba[3] / 255
+    return [...color.map(channel => channel * alpha * 255), alpha * alpha * 255]
+  }
+  if (sample.role === 'texture-opacity') {
+    const alpha = sample.rgba[3] / 255 * (128 / 255) ** 2
+    const texture = sample.rgba.slice(0, 3).map(channel => sample.premultiplied ? channel / sample.rgba[3] : channel / 255)
+    const vertex = [128 / 255, 192 / 255, 1]
+    const grey = (texture[0] + texture[1] + texture[2]) / 3 * (vertex[0] + vertex[1] + vertex[2]) / 3
+    const color = texture.map((channel, index) => (
+      sample.mode === 'fixed' ? channel * vertex[index] : grey * 0.35 + channel * vertex[index] * 0.65
+    ))
+    return [...color.map(channel => channel * alpha * 255), alpha * alpha * 255]
+  }
+
+  if (sample.role === 'particle-blend') {
+    const color = saturate([128 / 255, 64 / 255, 192 / 255], 'arena')
+    return sample.blend === 'multiply'
+      ? [...color.map(channel => channel * 255), sample.alpha]
+      : [...color.map(channel => channel * sample.alpha), sample.alpha * sample.alpha / 255]
+  }
+  if (sample.role === 'first-normal') return [128, 128, 128, 128 * 128 / 255]
+  if (sample.role === 'uniform') {
+    const alpha = (128 / 255) ** 2
+    const color = saturate([128 / 255, 192 / 255, 1], sample.mode)
+    return [...color.map(channel => channel * alpha * 255), alpha * alpha * 255]
+  }
+  if (sample.role === 'multiply') {
+    return [...saturate([128 / 255, 64 / 255, 192 / 255], sample.mode).map(channel => channel * 255), sample.alpha]
+  }
+  const amount = 8.5 / 16
+  const vertex = sample.top.map((value, index) => (value * (1 - amount) + sample.bottom[index] * amount) / 255)
+  const groupAlpha = sample.groupAlpha ?? 1
+  vertex[3] = (Math.trunc(sample.top[3] * groupAlpha) * (1 - amount) + Math.trunc(sample.bottom[3] * groupAlpha) * amount) / 255
+  const color = saturate(vertex.slice(0, 3), sample.mode)
+  return [...color.map(channel => channel * vertex[3] * 255), vertex[3] * vertex[3] * 255]
+}
+
+function saturate(color, mode) {
+  if (mode === 'fixed') return color
+  const grey = (color[0] + color[1] + color[2]) / 3
+  return color.map(channel => grey * 0.35 + channel * 0.65)
+}
+
+function summarize(values) {
+  const sorted = [...values].sort((a, b) => a - b)
+  const at = percentile => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * percentile) - 1)]
+  return { count: sorted.length, p50: at(0.5), p95: at(0.95), p99: at(0.99), max: sorted.at(-1) }
+}

@@ -1,5 +1,5 @@
 [Unit]
-Description=Solomon Dark private browser game sessions
+Description=Solomon Dark PixiJS browser game sessions
 After=network-online.target
 Wants=network-online.target
 
@@ -8,9 +8,9 @@ Type=simple
 User=solomon-dark
 Group=solomon-dark
 WorkingDirectory=/opt/solomon-dark-revived
-ExecStart=/opt/solomon-dark-revived/GameHost/solomon-darker --supervisor
+ExecStart=/opt/solomon-dark-node-v22.17.0/bin/node /opt/solomon-dark-revived/GameHost/Pixi/game-session-supervisor.mjs
 EnvironmentFile=/etc/solomon-dark-game.env
-EnvironmentFile=/opt/solomon-dark-revived/GameHost/release.env
+EnvironmentFile=/opt/solomon-dark-revived/GameHost/Pixi/release.env
 Environment=SDR_GAME_MEMORIAL_PATH=/var/lib/solomon-dark-game/memoratorium.json
 Restart=on-failure
 RestartSec=5s

@@ -1,180 +1,131 @@
-# Rust game artifact boundary
+# Parallel browser games and the Rust artifact boundary
 
-The Website owns accounts, authentication, cloud storage, content distribution,
-leaderboards, the Boneyard library and editor. The separate Rust game owns the
-canonical simulation, authoritative hosted supervisor, multiplayer protocol,
-browser renderer, save tools, learned-bot inference and desktop game child.
-The existing Electron/PSK/update shell is maintained with that Rust repository.
-No Website TypeScript game or Node gameplay fallback is built or started.
+Website supplies the latest retained PixiJS game at `/game` and mounts the
+qualified Rust release at `/game-rust/`. PixiJS source and its Node authority
+are restored from Website `093aee9938e0cae2fabfafc5403b01aed961397e`, whose gameplay
+is identical to `fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Shared Website account,
+content, authoring and operational fixes remain current.
 
-## Required build input
+Each runtime has its own authority, admission API and continuation saves.
+Accounts, JWT configuration, published content, uploads and leaderboards remain
+in the canonical Website storage. The C# source is shared by both API processes;
+root authoring Test uses PixiJS, and mounted authoring Test uses the Rust iframe.
+Desktop packaging and updates remain owned by the separate Rust repository.
 
-Build one complete artifact from a clean Rust commit with
-`scripts/package-hosted-game.py`. Its layout is:
+## Build and artifact identity
+
+Supply one completed Rust `/game` artifact using `SDR_GAME_DIST` and
+`SDR_GAME_NATIVE_HOST`, or a pinned `SDR_GAME_ARTIFACT_URL` with its exact
+`SDR_GAME_ARTIFACT_SHA256`. Website validation never builds Rust or downloads a
+floating latest release. Local paths must identify the same artifact directory:
 
 ```text
 game-artifact.json
-bin/solomon-darker                 # .exe for a Windows target
+bin/solomon-darker
 client/index.html
 client/deployment.json
-client/<complete mounted client and assets>
+client/<mounted modules, WASM and assets>
 client/save-tools/solomon_save_tools.js
 client/save-tools/solomon_save_tools_bg.wasm
 client/editor-test/index.html
 ```
 
-`game-artifact.json` has `schemaVersion: 1`, a full lowercase Git `revision`,
-a Rust `target`, and `files`, a map of every payload path to its SHA-256.
-The manifest excludes itself. Native and client files must come from this
-same directory. The client deployment document and HTML build metadata must
-identify that revision. The verifier checks every hash, complete client
-membership, actual module/WASM references and the independent save/editor
-entries before replacing Website output.
+The original schema-1 manifest records the complete member SHA-256 map, full
+Rust revision and native target. `frontend/tools/game-artifact.mjs` validates
+all members, membership, document metadata and actual module/WASM references.
+`build-parallel-apps.mjs` builds the root PixiJS site, its bundled host, and the
+mounted Rust companion site from the same Website source.
 
-Local Website builds use explicit absolute paths:
+The companion transformation changes mount references in HTML and bootstrap
+modules and adds the one-time guest-save migration module. It preserves the
+released WASM, native executable, save-tools JS and all asset bytes. A fresh
+`game-artifact.json` describes the actual mounted bytes. Its `remountedFrom`
+records the original manifest digest and mounts; `game-source-artifact.json`
+retains the exact original manifest. These are derivative deployment files,
+not a new Rust release. Package admission verifies both manifests and rejects
+changes to the original binary/asset members.
 
-```sh
-export SDR_GAME_DIST=/absolute/rust-artifact/client
-export SDR_GAME_NATIVE_HOST=/absolute/rust-artifact/bin/solomon-darker
-./scripts/validate.sh
-```
+The build produces:
 
-CI or the deployment worker can instead set `SDR_GAME_ARTIFACT_URL` and its
-exact `SDR_GAME_ARTIFACT_SHA256`. The downloader checks the complete archive
-before safe extraction. There is no floating latest URL, automatic source
-checkout or game build in Website validation. Explicit local paths take
-precedence; setting only one local path is an error. Configure the two GitHub
-repository variables for the Website Validate workflow. Missing inputs fail
-before a production build.
-
-The artifact's URL mount must match `VITE_GAME_ARTIFACT_BASE` (default `/game`).
-A staging artifact can use `/game-stg`; set that value explicitly, together
-with the Website mount configuration. Mount changes require a new artifact.
-The game and Website revisions are separate: `client/deployment.json` identifies
-the Rust game; Website `/deployment.json` identifies the Website build.
-
-A deployment publication identifies one actual cutover, independently of both
-revisions. The worker mints a fresh 32-character hexadecimal `deploymentId` outside
-the cached artifact and supplies it through the authenticated
-`X-Solomon-Deployment-Id` drain header. A monotonic `deploymentSequence` travels
-through `X-Solomon-Deployment-Sequence`, the announcement, receipt and publication. The JSON request body remains
-`{"targetRevision":"<Rust revision>"}` for the first legacy-to-Rust cutover.
-Publication-aware supervisors report `deploymentProtocol: 2` in health and echo
-the ID in the restart announcement and final drain receipt. Recovery claims and
-acknowledgements retain the signed target Rust revision and checkpoint sequence.
-
-The worker stages Website `wwwroot/deployment.json` as
-`{"revision":"<Website revision>","gameRevision":"<Rust revision>","deploymentId":"<ID>","deploymentSequence":<next>,"ready":false}`.
-It starts and verifies the replacement game before exposing Website, then verifies
-Website, service health and release integrity before atomically publishing
-`ready: true`. Anonymous, no-store `GET /api/game/deployment` exposes this document
-under the configured Website mount, including `/game-stg/api/game/deployment`.
-The immutable game's own deployment document and all hashed artifact members are
-unchanged. A saved active client reloads only after durable save, actual old
-transport retirement and a healthy publication with the announced sequence or a
-later sequence and the same signed target game revision. A later publication can
-fulfill an update that a sleeping tab missed; a retry may use another transaction
-UUID without stranding the saved client. Failed candidates restore the prior
-publication. The worker's stdlib publication owner writes atomically and fsyncs
-both file and directory; matching artifact hashes cannot skip pending metadata. Idle/title clients
-observe healthy publication changes; this also covers unchanged-game deployments.
-An unchanged-game drain against a legacy authority is rejected before retirement
-because its immutable clients do not understand publication identities.
-
-The last production TypeScript game, `093aee9938e0cae2fabfafc5403b01aed961397e`,
-polls `/deployment.json?current=<that revision>` after its final save and only
-reloads when the response matches the announced restart target. The Website
-rewrites that exact legacy query to `/game/deployment.json`; ordinary root
-requests still identify the Website build. Keep this bridge for waiting legacy
-tabs during the first Rust cutover. The drain must announce the Rust revision,
-which is also bound into signed party-recovery saves and checked by the new host.
-The bridge ships with the new Website, after the old host's final-save drain;
-do not replace or publish the old Website's root manifest before those saves.
-
-The frontend build copies the verified `client` into `backend/wwwroot/game`.
-The native deployment consumer additionally installs the supplied executable
-at `GameHost/solomon-darker`, retains the original manifest and writes an
-immutable `GameHost/release.env` with the Rust revision and asset directory.
-Linux deployment rejects a non-Linux-x64 native host and verifies all published
-client/native bytes again. It uses the Rust revision for the existing final-save
-restart handshake and includes artifact identity in cache/skip/failure state.
-The existing database backup, release swap and rollback remain Website-owned.
-See [NFO operation](../ops/nfo/README.md) and [M5 deployment](../ops/local-ci/README.md).
-
-Only the same-origin `/boneyard-library` authoring shelf and `/game/editor-test/`
-document may be embedded. The checked-in Caddy rules include their `/game-stg`
-equivalents. Other documents keep `frame-ancestors 'none'` and `DENY`. Another
-mount must enumerate those same two document routes in its gateway configuration.
-WASM execution uses the narrow `wasm-unsafe-eval` CSP permission.
-
-## Validation ownership
-
-`./scripts/validate.sh` remains the complete Website gate. It restores pinned
-.NET/npm/Python dependencies and runs backend build/format, all Python contracts,
-frontend lint/type checks, retained editor/Boneyard/library tests, artifact tests,
-production build and media policy. Lint-only mode needs no game artifact.
-The actual large-save transport test retains the unchanged current-source
-23,296,828-byte Faculty fixture compressed with its source revision, length and
-SHA-256; it still exercises HTTP/cloud/rejoin payload limits.
-
-The removed game gates moved with their implementation:
-
-| Replaced Website owner | Rust owner and acceptance |
+| Installed path | Owner |
 | --- | --- |
-| `core-server`, `core-kernels`, session/party/Lua/skill tests | `crates/sim`, `crates/launcher`, `crates/protocol`, `crates/modding`; workspace tests and committed independent Source fixtures |
-| Pixi renderer, painter/material/allocation probes and renderer mutation harness | `crates/web`, canonical presentation kernels and Source render/GPU/browser fixtures; strict native/WASM Clippy and actual mounted browser journeys |
-| TS save/native import implementation | `crates/assets`, `crates/save-tools`; whole-document current/historical migration, rejection and WASM ABI checks |
-| `frontend/desktop`, desktop build/update/peer tools | Rust repository `desktop`, `tools/package-desktop.mjs`, transport/update tests and actual packaged Electron save/peer acceptance |
-| `frontend/tools/sdmod` authoring CLI | Rust repository `tools/sdmod`; CLI/package fixtures |
-| Website bot worker/checkpoint/inference | `crates/sim/ml_bot`, `crates/assets/ml_bot_checkpoint`, launcher bot owner and `web/assets/native/ml-bot-policy-v7-selected.sdml`; exact inference/controller fixtures and actual bot browser journey |
+| `wwwroot/` | Root Website and PixiJS `/game` route |
+| `GameHost/Pixi/` | Bundled PixiJS supervisor, Lua WASM and learned checkpoint |
+| `wwwroot/game-rust/` | Remounted Rust client |
+| `GameHost/solomon-darker` | Original released Linux Rust executable |
+| `RustSite/` | Website bundle with `/game-rust` API, account and content URLs |
+| `GameHost/release.env` | Rust revision, asset/checkpoint paths and port 5232 |
+| `GameHost/rust-api.env` | Rust save namespace and supervisor URL |
 
-The Rust release must pass its declared gates before its artifact is admitted:
-asset membership verification, `cargo fmt --all -- --check`, complete workspace
-tests, strict native and WASM Clippy, Trunk/save-tools builds and the relevant
-ordinary browser/desktop journeys. `docs/PORT-COMPLETION.md`, the Rust README
-and desktop runtime guide own exact commands and accepted receipts. Website
-CI verifies the selected completed artifact; a passing Website job alone does
-not certify a new game build or a desktop acceptance run. The retired renderer
-coverage/mutation inventory is not represented as a Rust result.
+## Save ownership and migration
 
-## Recovery qualification
+Both public APIs expose slot zero. `GameSaves:Namespace=primary` maps it to
+internal database slot zero; `rust` maps it to slot one. GET, PUT, revision
+conflicts and DELETE use the same configured mapping. Browser requests cannot
+choose an internal namespace.
 
-Qualify changed-game and Website-only releases with the same ordinary hosted
-journey. Start from a real admitted player, hold its checkpoint storage request,
-and require that durable persistence finishes before the client acknowledges
-retirement. Stop the drained authority, start the actual replacement, verify its
-health, then publish ready through the maintained publication owner. The new
-document must continue the same saved wizard and run. A readiness document alone
-does not establish that a replacement authority is running.
+After the old authorities finish their checkpoint/acknowledgement barrier,
+the deployment backs up SQLite, checks integrity, and forks existing slot-zero
+documents and revisions into absent Rust destinations. A durable migration
+marker makes this a one-time operation. Existing Rust progress is preserved,
+and later deletions are not recreated. Runtime rollback preserves database
+contents, including the independently seeded namespace; it never overwrites
+newer saved data from a whole-database backup.
 
-For a Website-only release, retain the complete immutable game artifact and build
-the new Website commit normally. Exercise both an active saved client and an idle
-Title client. Also hold an active tab through an intermediate publication: a later
-healthy sequence for its signed game target must recover it without depending on
-the skipped transaction UUID. Preserve raw failure receipts separately from any
-successful rerun, and record the actual Website revision, game revision,
-publication sequence and replacement process in each result.
+Guest IndexedDB has the same split: `solomon-dark-game-saves` remains root,
+and `solomon-dark-game-saves:/game-rust` belongs to Rust. Before either new game
+can write, the bootstrap copies the old slot into an absent Rust destination.
+The destination copy and migration marker commit atomically. Simultaneous tabs,
+retries and intentional deletion cannot cause later root progress to be copied
+again. Host-specific rejoin credentials are not copied.
 
-The publication sequence comes from the live Website document, not a build cache.
-Only the supported legacy document containing exactly `revision` starts at zero.
-Malformed sequences and exhaustion stop deployment; do not reset the counter or
-edit the hashed game document to make a retry appear ready.
+A shared envelope is not a guarantee that every historical simulation payload
+is accepted by both implementations. Keep originals and verify actual restores;
+track format defects in their owning runtime. Save isolation prevents the two
+live games from replacing each other's continuing progress.
 
-## Separate training migration follow-up
+## Deployment and publication
 
-Gameplay acceptance retains the trained policy and actual learned runtime.
-Training infrastructure is separate development work; no training run or partial
-Rust rollout bridge is part of this cutover.
+The existing M5 worker owns validation, packaging and deployment; its extracted
+`deploy-runtime.sh` owns the NFO transaction. A changed Website revision drains
+both production authorities before stopping either API. The first split drains
+the old Rust authority at root, announcing the new root Website revision so its
+saved clients can reload at `/game`. Later PixiJS drains use that Website
+revision; the Rust companion uses the selected Rust revision and protocol-2
+publication ID/sequence. A Rust artifact-only update at unchanged Website source
+leaves the unchanged root processes running and drains/restarts the companion.
 
-The reference is Website commit
-`fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Its historical training closure is
-`tools/train_bot_policy.py`, `tools/ml_bot/`,
-`frontend/tools/ml-bot-rollout-server.mjs`,
-`frontend/src/game/core-server/ml-bot-policy/policy-spec-v7.json`, and the
-`solomon-dark-ml-rollout-v7-choice2` NDJSON contract. These source paths remain
-recoverable from that commit; their dependent Website launchers and npm scripts
-were removed together. A future native rollout migration must port environment
-reset/step/choice/terminal metrics over the canonical Rust Session, establish
-source-equivalent observations/rewards/action masks and asynchronous choice
-semantics, then run a separately authorized training/evaluation campaign.
-Independent Python asset/backend/CI diagnostic tools remain Website-owned.
+Root `wwwroot/deployment.json` identifies Website/PixiJS. Companion
+`RustSite/deployment.json` identifies Website/Rust. Their respective no-store
+`/api/game/deployment` routes return the matching publication. The Rust client's
+own `/game-rust/deployment.json` remains an immutable artifact member. Root
+legacy revision polls now stay at root; the obsolete TypeScript-to-Rust rewrite
+is removed.
+
+Each transaction stages both publications as pending with one fresh ID and
+monotonic sequence. Authorities must pass health checks, then the primary API
+completes schema initialization before the companion API starts. Pending API
+publications reject new admission while allowing final saves and publication
+reads. PixiJS reload polling also ignores pending publications. Only after all
+health, database and configuration checks pass are both publications made ready.
+A failed transaction restores prior runtime, units, Caddy and publication files,
+then restarts the prior admission owners. Database saves remain in place.
+
+Caddy-only drift reconciles without interrupting games. Ordinary worker
+reconciliation checks both publications, the original artifact identity, all
+three managed game/companion service units and canonical Caddy. `/game-stg`
+retains its separate services, storage and artifact ownership.
+
+## Validation
+
+Run `./scripts/validate.sh` with the exact released Rust input. It checks the
+backend, API/save/deployment contracts, frontend lint/types and tests, restored
+PixiJS gameplay suites, both production bundles, media policy and the existing
+renderer quality gates. The retired Website desktop shell is not restored.
+Rust runtime and desktop qualification remain attached to the selected release.
+
+Final acceptance uses real M2 browsers at both public routes, including actual
+save restoration, independent save writes, world NPC interaction, combat,
+party admission and authoring Test. Build tests alone do not establish those
+outcomes. See [NFO operation](../ops/nfo/README.md) and
+[M5 deployment](../ops/local-ci/README.md).

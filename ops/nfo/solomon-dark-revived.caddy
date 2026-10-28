@@ -9,8 +9,8 @@ solomondarker.com {
 	}
 
 	# Only the authoring shelf and disposable Test document may be embedded.
-	@embedded path /boneyard-library /game-stg/boneyard-library /game/editor-test/ /game/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
-	@topLevel not path /boneyard-library /game-stg/boneyard-library /game/editor-test/ /game/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
+	@embedded path /boneyard-library /game-rust/boneyard-library /game-stg/boneyard-library /game-rust/editor-test/ /game-rust/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
+	@topLevel not path /boneyard-library /game-rust/boneyard-library /game-stg/boneyard-library /game-rust/editor-test/ /game-rust/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
 	header @embedded {
 		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; media-src 'self'; upgrade-insecure-requests"
 		X-Frame-Options "SAMEORIGIN"
@@ -22,6 +22,34 @@ solomondarker.com {
 
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	redir /game-rust /game-rust/ 308
+
+	handle_path /game-rust/* {
+		header Cache-Control "no-cache"
+		@rust_api path /api/* /uploads/*
+		handle @rust_api {
+			reverse_proxy 127.0.0.1:5231
+		}
+		@rust_game path /game-hub /game-sessions/*
+		handle @rust_game {
+			reverse_proxy 127.0.0.1:5232
+		}
+		handle_path /site/* {
+			root * /opt/solomon-dark-revived/RustSite
+			file_server
+		}
+		@rust_site path /login /register /account /boneyard-library /boneyard /boneyards /mods /mods/* /parties /about /downloads /wizards/* /game
+		handle @rust_site {
+			root * /opt/solomon-dark-revived/RustSite
+			rewrite * /index.html
+			file_server
+		}
+		handle {
+			root * /opt/solomon-dark-revived/wwwroot/game-rust
+			file_server
+		}
+	}
 
 	redir /game-stg /game-stg/ 308
 

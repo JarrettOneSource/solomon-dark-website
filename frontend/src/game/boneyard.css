@@ -1,0 +1,201 @@
+.boneyard-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  cursor: auto;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Twin-stick play must not start a page pinch-zoom or pan (hub.css coarse block). */
+  .boneyard-scene { touch-action: none; }
+
+  /* Touch ally roster: a run has no party chip, so the roster takes the chip's anchor
+     (6, 54); hub.css's coarse `.hub-hud-allies` owns the rest of the rule. */
+  .boneyard-native-frame .hub-hud-allies {
+    top: calc(54px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+  }
+}
+
+.boneyard-game-over {
+  position: absolute;
+  z-index: 20000;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  overflow: hidden;
+}
+
+.boneyard-game-over:disabled {
+  opacity: 1;
+}
+
+.boneyard-game-over[data-input-ready='true'] {
+  cursor: pointer;
+}
+
+.game-over-black {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: #000;
+  pointer-events: none;
+}
+
+.game-over-entry-black {
+  z-index: 2;
+}
+
+.game-over-exit-black {
+  z-index: 6;
+}
+
+.game-over-word {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  left: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.game-over-word-game {
+  width: 307px;
+  height: 119px;
+  top: calc(50% - 175px);
+}
+
+.game-over-word-over {
+  width: 306px;
+  height: 120px;
+  top: calc(50% + 125px);
+}
+
+.game-over-solomon-riff {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: 200px;
+  height: 200px;
+  background-position: calc(var(--game-over-riff-frame) * -200px) 0;
+  background-repeat: no-repeat;
+  background-size: 2400px 200px;
+  image-rendering: auto;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(var(--game-over-riff-scale));
+  transform-origin: center;
+}
+
+.game-over-prompt {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: calc(100% - 50px);
+  display: block;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.game-over-prompt-text {
+  position: relative;
+  display: block;
+}
+
+.game-over-prompt-text > i {
+  position: absolute;
+  display: block;
+  background-color: #d9ba70;
+}
+
+.boneyard-scene:focus { outline: none; }
+
+.boneyard-native-frame {
+  isolation: isolate;
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+
+.boneyard-world-renderer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.boneyard-world-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+
+.boneyard-spectator-status {
+  position: absolute;
+  z-index: 10001;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.boneyard-spectator-respawn-status {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.boneyard-spectator-status-native-sprite,
+.boneyard-spectator-status-rail,
+.boneyard-spectator-status-rail-segment {
+  position: absolute;
+  display: block;
+}
+
+.boneyard-spectator-status-rail,
+.boneyard-spectator-status-rail-segment {
+  overflow: hidden;
+}
+
+.boneyard-spectator-status-text {
+  position: absolute;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.boneyard-dig-indicator {
+  position: absolute;
+  z-index: 10001;
+  width: 80px;
+  height: 56px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.boneyard-dig-indicator[data-ready='false'] {
+  visibility: hidden;
+}
+
+.boneyard-dig-indicator svg {
+  display: block;
+  width: 80px;
+  height: 56px;
+  overflow: visible;
+  filter: drop-shadow(0 2px 2px #000) drop-shadow(0 0 4px rgb(246 207 100 / 0.7));
+  transform: rotate(var(--boneyard-dig-rotation));
+}
+
+.boneyard-dig-indicator path {
+  fill: #d6b455;
+  stroke: #2a1c08;
+  stroke-linejoin: round;
+  stroke-width: 3px;
+}

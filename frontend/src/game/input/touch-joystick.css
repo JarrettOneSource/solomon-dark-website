@@ -1,0 +1,93 @@
+/* Geometry constants are shared with src/game/mobile-quickbar-layout.ts (base 237.5,
+   knob 100, edge inset 48, bottom inset 56) and pinned by its contract test. The stage
+   the joystick lives in is already safe-area inset by main-menu.css, so the edge insets
+   are plain root pixels — adding env() here would inset the sticks twice on a notched
+   phone. */
+.game-touch-joystick {
+  position: absolute;
+  z-index: 11000;
+  bottom: calc(56px * var(--game-ui-scale, 1));
+  display: none;
+  width: 237.5px;
+  height: 237.5px;
+  border: 3px solid rgb(226 216 181 / 0.48);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(13 18 24 / 0.12) 0 34%, rgb(9 13 18 / 0.48) 36% 100%);
+  box-shadow: inset 0 0 18px rgb(0 0 0 / 0.7), 0 4px 14px rgb(0 0 0 / 0.45);
+  touch-action: none;
+  transform: scale(var(--game-ui-scale, 1));
+}
+
+.game-touch-joystick-movement {
+  left: calc(48px * var(--game-ui-scale, 1));
+  transform-origin: bottom left;
+}
+
+.game-touch-joystick-primary {
+  right: calc(48px * var(--game-ui-scale, 1));
+  transform-origin: bottom right;
+}
+
+.game-touch-joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100px;
+  height: 100px;
+  border: 2px solid rgb(232 220 181 / 0.62);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #6d716b, #252b2c 68%, #111);
+  box-shadow: 0 3px 7px rgb(0 0 0 / 0.75), inset 0 0 8px rgb(255 244 205 / 0.2);
+}
+
+.game-touch-joystick-label {
+  position: absolute;
+  right: 0;
+  bottom: 24px;
+  left: 0;
+  color: #d9d2bc;
+  font: 700 calc(11px / var(--hud-display-scale, 1))/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
+
+.game-touch-joystick[data-active='true'] {
+  border-color: #e5cc83;
+  background-color: rgb(198 168 95 / 0.08);
+}
+
+.game-touch-joystick[data-active='true'] .game-touch-joystick-label { opacity: 0.45; }
+
+@media (hover: none) and (pointer: coarse) {
+  .game-touch-joystick { display: block; }
+}
+
+@media (orientation: portrait) and (hover: none) and (pointer: coarse) {
+  .game-touch-joystick {
+    bottom: calc(74px * var(--game-ui-scale, 1));
+  }
+
+  .game-touch-joystick-movement {
+    left: calc(54px * var(--game-ui-scale, 1));
+  }
+
+  .game-touch-joystick-primary {
+    right: calc(54px * var(--game-ui-scale, 1));
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .game-touch-joystick[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(calc(var(--game-ui-scale, 1) * var(--mobile-ui-scale)));
+    transform-origin: center;
+  }
+}

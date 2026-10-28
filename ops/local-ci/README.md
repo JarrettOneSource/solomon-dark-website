@@ -1,132 +1,110 @@
 # M5 main deployment
 
-The maintained worker runs automatically on the M5 from
-`/Volumes/Drive/solomon-cicd`. Its one native launchd job is
-`gui/501/com.jarrett.solomon-dark-main-deploy`. WSL scheduling is retired.
-The only internal-disk registration is a small native LaunchAgents plist. It
-loads at login even if the SSD is absent and waits for the SSD entry point to
-return. The launcher defers before creating data if the mounted external volume
-does not match the installed volume UUID.
+The maintained worker runs from `/Volumes/Drive/solomon-cicd` under the one native
+launchd job `gui/501/com.jarrett.solomon-dark-main-deploy`. WSL scheduling is
+retired. The internal-disk LaunchAgents plist waits for the SSD entry point; the
+launcher checks the installed external-volume UUID before creating task data.
 
-The worker fetches published `origin/main` from its own bare mirror without
-GitHub credentials. It holds a native deployment lock and the shared exclusive
-M5 lease at `/Volumes/Drive/codex-acceptance/solomon-heavy-lease`. A foreign lease
-defers the invocation without starting validation or changing that ownership.
-An already-running native Clang compiler also defers admission when no
-cooperative lease exists. This check leaves foreign work untouched and ignores
-idle agent servers. Heavy work started afterward must still use the shared
-lease convention; the check cannot prevent a later nonparticipating start.
-Signals terminate the owned process group, wait for bounded shutdown, and
-release only the matching owned lease. The 90-minute invocation limit remains.
-The native job uses Standard classification with the existing nice and I/O
-priority. This retains macOS's light resource limits while avoiding the measured
-Background-class slowdown in the canonical renderer workload.
+The worker fetches published Website `origin/main` through its isolated mirror
+without GitHub credentials. It holds a native deployment lock and the shared
+exclusive lease `/Volumes/Drive/codex-acceptance/solomon-heavy-lease`. A foreign
+lease or an already-running native Clang compiler defers admission without
+stopping that work. Heavy work started later must use the same lease convention.
+Signals terminate only the owned process group and release only its matching
+lease. Each invocation has a 90-minute cap. Standard launchd classification,
+existing nice level and I/O priority preserve the measured compute policy.
 
-Pinned tools, cache, temporary files, source worktrees, immutable release
-artifacts, worker versions, logs and status all live on the SSD. Configure
-machine-local endpoints under the protected `config.json` `environment` object.
-Use `SDR_DEPLOY_SSH_IDENTITY` for the authorized private NFO key and retain
-normal OpenSSH known-host verification. Keys and machine configuration are not
-release members. `HOME` remains the user's home; tool-specific home/cache
-variables select the SSD.
+Pinned tools, caches, temporary files, source worktrees, artifacts, complete
+worker versions, logs and status live on the SSD. Machine-local settings belong
+in the protected `config.json` environment. Keep `HOME` unchanged. Reuse the
+existing `SDR_DEPLOY_SSH_IDENTITY`, normal host-key verification and Tailscale
+route. Secrets and machine configuration are never packaged. A launchd job
+requires its own removable-volume access; SSH access does not prove it has that
+permission. Check a fresh native invocation in `state/status.json`.
 
-The background job needs macOS removable-volume access. Permission held by an
-SSH session does not grant that access to a launchd job. Verify a fresh native
-invocation in `state/status.json` after installation, including its foreign-lease
-deferral when a report owns compute.
+## Exact-source build and admission
 
-The exact source runs the unchanged all-mode `./scripts/validate.sh`. Clean
-source/index identity and a fresh main check precede packaging. The macOS SDK
-publishes `linux-x64` managed dependencies with no platform apphost; native
-SQLite and the supplied Rust authority must be ELF64 x86-64. Configure an exact
-`SDR_GAME_ARTIFACT_URL` plus `SDR_GAME_ARTIFACT_SHA256`, or explicit matching
-`SDR_GAME_DIST` and `SDR_GAME_NATIVE_HOST` local paths, in the protected worker
-configuration. The native artifact must target `x86_64-unknown-linux-gnu`.
-A Mac native library, altered/unlisted client file or foreign runtime rejects
-the release before upload. Node is still a pinned Website build tool; the
-production game unit starts `GameHost/solomon-darker --supervisor` directly.
-The release includes the checked-in Caddy site, game unit, original game
-manifest, immutable native revision/asset environment, learned policy under
-`wwwroot/game/assets/native`, and complete maintained worker components.
-See [the artifact contract](../../docs/RUST-GAME-CUTOVER.md).
+Supply the qualified Linux x64 Rust `/game` artifact using exact
+`SDR_GAME_ARTIFACT_URL` plus `SDR_GAME_ARTIFACT_SHA256`, or matching local
+`SDR_GAME_DIST` and `SDR_GAME_NATIVE_HOST`. Preserve the selected Rust release
+until a separate release qualification authorizes its replacement.
 
-The NFO transaction is preserved: close admissions, freeze and checkpoint
-players through their normal cloud/IndexedDB owners, wait for bounded save
-acknowledgements, back up/check SQLite, install verified game/Caddy/model
-configuration, atomically swap the release, and verify health. An unhealthy
-candidate restores the prior release/configuration; successful cutovers retain
-NFO rollback and database backups. Candidate, installed and rollback Caddy
-configuration validation uses the running systemd service's executable, since
-PATH may still select an older packaged binary. The worker mints a fresh publication ID for
-each cutover and sends it in the authenticated `X-Solomon-Deployment-Id` header.
-The drain still targets the signed Rust revision. Its monotonic publication
-sequence is sent through `X-Solomon-Deployment-Sequence`; the UUID correlates the
-transaction, while ordering lets a later healthy replacement fulfill a sleeping
-tab's saved update or a retry with a different UUID. Website's no-store
-`/api/game/deployment` exposes its root deployment document with Website revision,
-game revision, publication ID and readiness; the mounted game's own deployment
-document remains an immutable artifact member. Staging is pending. The worker
-starts and verifies the replacement game before Website is exposed, then publishes
-readiness atomically after all candidate health/integrity checks. Website-only
-updates can therefore recover saved clients without changing the game revision.
-The complete worker bundle includes `deployment-publication.py`, its stdlib owner
-of durable publication ordering/readiness. Pending metadata prevents an
-already-deployed hash match from skipping the transaction.
-Unchanged-game drains require the current supervisor's `deploymentProtocol: 2`;
-the first changed-game legacy cutover retains its existing final-save handshake.
+The worker runs the complete `./scripts/validate.sh` on exact published Website
+source. It verifies a clean source/index and refreshes main before packaging or
+upload. The macOS SDK publishes `linux-x64` managed dependencies without an
+apphost. Linux package admission checks native SQLite and the original Rust
+executable as ELF64 x86-64, all mounted payload hashes/membership and the
+original-to-remounted provenance. The unchanged WASM, native executable and
+assets must retain their original hashes.
 
-Complete worker versions are installed atomically behind `current`. A validated
-component update is admitted only after the full gate, discards the artifact
-built by the older worker, and defers deployment to the next invocation.
-The installer in the admitted bundle constructs that version's complete
-definition. Automatic self-update replaces worker components without stopping
-its own scheduler; native registration policy is applied by an idle installation.
-The replacement launcher and installer are part of the same version, so an old
-Linux-only worker cannot overwrite the Mac installation. The bootstrap guard
-waits when main lacks `ops/local-ci/run-worker.py`; it does not bridge the first
-TypeScript-to-Rust production migration. Keep the current and one prior worker
-version; the stable scheduler resolves `current/run-worker.py`
-at each invocation, so replacing a complete version needs no competing refresh
-job or scheduler restart. Completed source/build/artifact trees and full success
-logs are deleted. `state/status.json` retains bounded diagnostics, while
-`state/last-success` and `state/failed-target` preserve the deployed or suppressed
-Website revision. Artifact cache, already-deployed admission and failed-target
-suppression include the exact Rust manifest identity, so a deliberate game-only
-artifact update cannot silently reuse or skip a different payload. A remote
-cutover failure suppresses repeated drains for the same Website/artifact pair.
-Cached artifacts for superseded targets are removed on the next fresh main read.
+The build restores PixiJS at root, packages its Node supervisor, mounts the
+released Rust client at `/game-rust/`, and builds a companion Website bundle
+with scoped APIs and browser storage. The root uses the installed pinned NFO
+Node 22.17 executable; Rust starts its released native supervisor directly.
+See [the complete artifact and save contract](../../docs/RUST-GAME-CUTOVER.md).
 
-Expanding the worker bundle needs one explicit admission when the installed
-packager does not know the new component. The three-component worker omits
-`deployment-publication.py`, so it cannot package the publication-aware installer
-for its own automatic update. After publishing the accepted source and passing
-the full gate with its exact production game artifact, use the idle installer
-below to admit the complete four-component version. Hold the shared compute lease
-while updating the artifact configuration and installing the worker; release it
-only when both published revisions and the configured artifact agree. The next
-ordinary scheduled invocation owns validation, drain and deployment.
+Artifact cache identity and failed-target suppression include the Website SHA
+and original Rust manifest hash. A Rust artifact-only update cannot reuse a
+payload from another artifact. Superseded owned artifacts are removed; unrelated
+files are preserved. `state/last-success` identifies the deployed source;
+`state/failed-target` prevents repeated failed drains until an explicit idle
+installation clears it or a different source/artifact is selected.
 
-Migrating an original TypeScript worker also needs explicit admission. That
-worker publishes the old GameHost layout and checks removed
-`GameHost/*.mjs` members before `install_validated_worker()`. Its publisher also
-omits the Rust executable required by the new artifact check, so it cannot reach
-automatic admission from the extraction source. Later compatible worker updates
-can use the automatic admission described above.
+## NFO transaction
 
-Public `/game-stg` acceptance does not install the production worker. For an
-authorized production admission:
+`deploy-main.sh` owns build, validation and upload. The same validated source's
+`deploy-runtime.sh` owns the NFO transaction:
 
-1. Publish the accepted extraction to Website `origin/main` and use that exact
-   accepted source tree on the M5.
-2. Configure its reviewed production `/game` artifact inputs in the protected
-   worker `config.json` environment, alongside the existing pinned SSD tools
-   and authorized SSH identity. GitHub repository variables configure CI only;
-   they do not configure the M5 worker.
-3. Require a passing complete `./scripts/validate.sh` receipt for that exact
-   source and artifact. The installer does not run the validation gate.
-4. Run the installer below while the existing worker is idle. It installs the
-   complete source worker and refreshes the existing native registration;
-   subsequent invocations may perform the normal production drain and cutover.
+1. Verify the archive, original and mounted game identities, all candidate
+   systemd units, and Caddy with the active service executable.
+2. Stage separate pending root and companion publications with one new
+   publication ID and sequence. Drain each affected authority while its API
+   remains available for final cloud saves. Check acknowledgement counts and
+   protocol-2 publication identity where supported.
+3. Stop affected processes, back up/check SQLite including final saves, and
+   perform the one-time absent-destination save fork. Give the Rust authority a
+   separate memorial snapshot and mutable state directory.
+4. Exchange the release directory and install the versioned service files.
+   Start/check both authorities; start the primary API and wait for schema
+   setup, then start/check its companion. Pending publications reject new
+   admissions. Validate/reload Caddy, check database and restart counts, then
+   publish both ready documents.
+5. On failure, restore the prior runtime, unit files, Caddy and publications.
+   Restart the old admission owners, including an authority left draining by
+   an uncertain request. Preserve current database content and any seeded Rust
+   save namespace. Retain runtime/configuration/database recovery files.
+
+For a source change both game servers are drained. A Rust artifact-only update
+at unchanged Website source leaves the unchanged root services running. A
+Caddy-only reconciliation preserves both games and reloads only Caddy. Root
+legacy revision polling remains at root; the Rust companion polls its scoped
+API. The first parallel cutover announces the new Website/PixiJS revision to
+old Rust clients at `/game` so their acknowledged saves precede that reload.
+
+Ordinary reconciliation compares source, original Rust artifact, all three
+managed service units, canonical Caddy and both ready publications. Staging
+`/game-stg` remains outside this transaction. See [NFO operation](../nfo/README.md)
+for the port, service, state and credential boundaries.
+
+## Complete worker version installation
+
+A complete version contains `deploy-main.sh`, `run-worker.py`, `install.py`,
+`deployment-publication.py`, `deploy-runtime.sh`, `parallel-game-saves.py` and
+`check-linux-artifact.py`. `install.py` defines and hashes this complete set.
+Versions are installed atomically behind `current`, retaining current and one
+prior version. The stable launchd entry resolves `current/run-worker.py` each
+invocation. Automatic self-update does not stop its own scheduler, preserves
+failed-target state, discards an artifact built by older worker code, and defers
+the actual cutover to the next invocation. Completed owned worktrees, build
+outputs, artifacts and success logs are removed; bounded diagnostics remain.
+
+The installed four-component worker cannot package the expanded seven-component
+version for itself. Initial parallel deployment therefore needs one explicit
+idle admission using the accepted published source, after its complete gate has
+passed with the production Rust artifact. Hold the shared compute lease while
+admitting this worker and any input configuration changes; release it only when
+published source and configured input identity agree. Do not replace production
+by an independent manual deployment path.
 
 ```sh
 ./ops/local-ci/install.sh --root /Volumes/Drive/solomon-cicd
@@ -134,8 +112,8 @@ launchctl print gui/501/com.jarrett.solomon-dark-main-deploy
 cat /Volumes/Drive/solomon-cicd/state/status.json
 ```
 
-Install only while the existing worker is idle. Explicit installation clears a
-failed target; automatic validated self-update preserves that safety state.
-The installer creates native scheduler registration for subsequent logins and
-starts this same worker, rather than a parallel deployment path. Reinstalling or
-refreshing the scheduler must not stop an unrelated report/model process.
+Install while the existing worker is idle. The explicit installer clears a
+failed target and refreshes the existing native registration. The next ordinary
+scheduled invocation owns validation, drain and deployment. Preserve unrelated
+report/model processes, staging and other project leases. Public staging
+acceptance alone does not authorize or establish production admission.

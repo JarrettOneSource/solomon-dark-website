@@ -1,0 +1,6 @@
+.mod-powerups { position: fixed; z-index: 18; inset: 0; overflow: hidden; pointer-events: none; }
+.mod-powerup { position: absolute; display: block; background-repeat: no-repeat; image-rendering: pixelated; filter: drop-shadow(0 0 9px rgb(215 186 255 / 85%)); transform: translate(-50%, -50%); animation: mod-powerup-bob .8s ease-in-out infinite alternate; }
+.mod-powerup-pickup { position: absolute; width: 24px; height: 24px; border: 3px solid #e3c9ff; border-radius: 50%; transform: translate(-50%, -50%); animation: mod-powerup-pickup .5s ease-out forwards; }
+@keyframes mod-powerup-bob { to { transform: translate(-50%, calc(-50% - 7px)); } }
+@keyframes mod-powerup-pickup { to { opacity: 0; transform: translate(-50%, -50%) scale(3); } }
+@media (prefers-reduced-motion: reduce) { .mod-powerup { animation: none; } }

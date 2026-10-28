@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Keep the separately released Rust client identical to its artifact manifest. -->
-    <CompressionExcludePatterns>$(CompressionExcludePatterns);game/**</CompressionExcludePatterns>
+    <CompressionExcludePatterns>$(CompressionExcludePatterns);game-rust/**</CompressionExcludePatterns>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +17,12 @@
   <ItemGroup>
     <Content Include="SeedAssets/survival.boneyard"
              CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../frontend/dist-game-host/*"
+             Link="GameHost/Pixi/%(Filename)%(Extension)"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../frontend/dist-rust-site/**/*"
+             Link="RustSite/%(RecursiveDir)%(Filename)%(Extension)"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

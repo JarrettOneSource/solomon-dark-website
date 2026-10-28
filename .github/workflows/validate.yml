@@ -10,7 +10,7 @@ permissions:
 jobs:
   website:
     runs-on: ubuntu-latest
-    # Retain the complete Website/backend/editor gate; Rust owns game/desktop gates.
+    # Website and restored PixiJS gates; the supplied Rust release owns its runtime/desktop gates.
     timeout-minutes: 150
     env:
       SDR_GAME_ARTIFACT_URL: ${{ vars.SDR_GAME_ARTIFACT_URL }}

@@ -356,7 +356,7 @@ class MacInstallationTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'linux', 'the deployed service executable is owned by Linux procfs')
 class CaddyValidationTests(unittest.TestCase):
     def test_validation_uses_the_live_service_executable_and_preserves_failure(self):
-        script = (OPS / 'deploy-main.sh').read_text()
+        script = (OPS / 'deploy-runtime.sh').read_text()
         start = script.index('validate_caddy() {')
         helper = script[start:script.index('request_game_restart() {', start)]
         with tempfile.TemporaryDirectory() as directory:
@@ -392,9 +392,9 @@ class CaddyValidationTests(unittest.TestCase):
 
 class DeploymentPublicationTests(unittest.TestCase):
     def helpers(self):
-        script = (OPS / 'deploy-main.sh').read_text()
+        script = (OPS / 'deploy-runtime.sh').read_text()
         start = script.index('request_game_restart() {')
-        return script[start:script.index('install_game_checkpoint_path() {', start)]
+        return script[start:script.index('preflight_units() {', start)]
 
     def test_website_publication_changes_without_mutating_immutable_game_members(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -410,7 +410,7 @@ class DeploymentPublicationTests(unittest.TestCase):
                                         'publication': str(publication)}
             for state in ('pending', 'ready'):
                 result = subprocess.run(['/bin/bash', '-c', 'set -Eeuo pipefail\n' + self.helpers()
-                    + f'write_deployment_publication "$publication" {state}\n'],
+                    + f'write_deployment_publication "$publication" {state} "$target_game_revision"\n'],
                     env=environment, capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(publication.read_text()), {
@@ -440,6 +440,23 @@ class DeploymentPublicationTests(unittest.TestCase):
             self.assertTrue(publication.is_ready(path, 'd' * 40, 'c' * 40))
             self.assertFalse(publication.is_ready(path, 'd' * 40, 'e' * 40))
             self.assertEqual(publication.next_sequence(path), 3)
+
+    def test_both_parallel_publications_must_identify_one_healthy_transaction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            primary, companion = root / 'wwwroot/deployment.json', root / 'RustSite/deployment.json'
+            primary.parent.mkdir()
+            companion.parent.mkdir()
+            website, rust = 'a' * 40, 'b' * 40
+            publication.write(primary, 'ready', website, website, 'ce' * 16, 4)
+            publication.write(companion, 'pending', website, rust, 'ce' * 16, 4)
+            self.assertFalse(publication.parallel_ready(root, website, rust))
+            publication.write(companion, 'ready', website, rust, 'df' * 16, 4)
+            self.assertFalse(publication.parallel_ready(root, website, rust))
+            publication.write(companion, 'ready', website, rust, 'ce' * 16, 4)
+            self.assertTrue(publication.parallel_ready(root, website, rust))
+            publication.write(primary, 'ready', website, rust, 'ce' * 16, 4)
+            self.assertFalse(publication.parallel_ready(root, website, rust))
 
     def test_drain_binds_publication_and_only_changed_game_can_migrate_legacy_clients(self):
         scenarios = [
@@ -490,7 +507,7 @@ class DeploymentPublicationTests(unittest.TestCase):
                             'target_game_revision': ('a' if same_game else 'b') * 40,
                         }
                         result = subprocess.run(['/bin/bash', '-c', 'set -Eeuo pipefail\n'
-                            + self.helpers() + 'request_game_restart\n'],
+                            + self.helpers() + 'drain_target_revision=$target_game_revision\ndrain_unit=fixture.service\nrequest_game_restart\n'],
                             env=environment, capture_output=True, text=True, timeout=10)
                         self.assertEqual(result.returncode == 0, accepted, result.stdout + result.stderr)
                         if protocol is None and same_game:
@@ -515,20 +532,46 @@ class ArtifactAdmissionTests(unittest.TestCase):
         struct.pack_into('<H', header, 18, 62)
         revision = 'a' * 40
         (root / 'GameHost').mkdir()
-        (root / 'wwwroot/game').mkdir(parents=True)
+        (root / 'wwwroot/game-rust').mkdir(parents=True)
         (root / 'libe_sqlite3.so').write_bytes(header)
         (root / 'GameHost/solomon-darker').write_bytes(header)
         (root / 'Server.deps.json').write_text(json.dumps({
             'runtimeTarget': {'name': '.NETCoreApp,Version=v10.0/linux-x64'}}))
-        (root / 'wwwroot/game/deployment.json').write_text(json.dumps({'revision': revision}))
+        (root / 'wwwroot/game-rust/deployment.json').write_text(json.dumps({'revision': revision}))
         (root / 'GameHost/release.env').write_text(
             f'SDR_GAME_REVISION={revision}\n'
-            'SDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game\n')
+            'SDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game-rust\n'
+            'SDR_GAME_SUPERVISOR_PORT=5232\n'
+            'SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/wwwroot/game-rust/assets/native/ml-bot-policy-v7-selected.sdml\n')
         (root / 'game-artifact.json').write_text(json.dumps({
             'schemaVersion': 1, 'revision': revision, 'target': 'x86_64-unknown-linux-gnu',
             'files': {'bin/solomon-darker': hashlib.sha256(header).hexdigest(),
                       'client/deployment.json': hashlib.sha256(
-                          (root / 'wwwroot/game/deployment.json').read_bytes()).hexdigest()}}))
+                          (root / 'wwwroot/game-rust/deployment.json').read_bytes()).hexdigest()}}))
+
+        self.add_source_provenance(root)
+
+    def add_source_provenance(self, root):
+        source = (root / 'game-artifact.json').read_bytes()
+        (root / 'game-source-artifact.json').write_bytes(source)
+        mounted = json.loads(source)
+        mounted['remountedFrom'] = {
+            'manifestSha256': hashlib.sha256(source).hexdigest(),
+            'gameMount': '/game', 'websiteMount': '',
+        }
+        (root / 'game-artifact.json').write_text(json.dumps(mounted))
+
+    def test_remount_keeps_original_executable_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.release(root)
+            host = root / 'GameHost/solomon-darker'
+            host.write_bytes(host.read_bytes() + b'changed')
+            manifest = json.loads((root / 'game-artifact.json').read_text())
+            manifest['files']['bin/solomon-darker'] = hashlib.sha256(host.read_bytes()).hexdigest()
+            (root / 'game-artifact.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'unchanged'):
+                artifact.check_release(root)
 
     def test_installer_rejects_a_root_that_escapes_the_external_volume(self):
         root = installer.VOLUME / '..' / 'unowned-ci-root'
@@ -572,9 +615,9 @@ class ArtifactAdmissionTests(unittest.TestCase):
                     with (root / 'GameHost/solomon-darker').open('ab') as native:
                         native.write(b'changed native')
                 elif changed == 'client':
-                    (root / 'wwwroot/game/deployment.json').write_text('{}')
+                    (root / 'wwwroot/game-rust/deployment.json').write_text('{}')
                 elif changed == 'unlisted':
-                    (root / 'wwwroot/game/old-game.js').write_text('obsolete')
+                    (root / 'wwwroot/game-rust/old-game.js').write_text('obsolete')
                 elif changed == 'environment':
                     (root / 'GameHost/release.env').write_text('SDR_GAME_REVISION=' + 'b' * 40)
                 else:
@@ -597,8 +640,8 @@ class ArtifactAdmissionTests(unittest.TestCase):
             project = root / 'backend'
             shutil.copytree(OPS.parents[1] / 'backend', project,
                             ignore=shutil.ignore_patterns('bin', 'obj', 'wwwroot'))
-            game = project / 'wwwroot/game'
-            shutil.copytree(reference / 'wwwroot/game', game)
+            game = project / 'wwwroot/game-rust'
+            shutil.copytree(reference / 'wwwroot/game-rust', game)
             (game / 'client.js').write_bytes(b'// immutable client bytes\n' * 512)
             site = b'// Website asset retains ordinary SDK compression\n' * 512
             (project / 'wwwroot/site.js').write_bytes(site)
@@ -613,6 +656,7 @@ class ArtifactAdmissionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             shutil.copytree(reference / 'GameHost', publish / 'GameHost', dirs_exist_ok=True)
             (publish / 'game-artifact.json').write_text(json.dumps(manifest))
+            self.add_source_provenance(publish)
             self.assertEqual(artifact.check_release(publish)['runtime'], 'linux-x64')
             self.assertTrue(any(gzip.decompress(path.read_bytes()) == site
                                 for path in (publish / 'wwwroot').glob('*.gz')),
@@ -633,37 +677,44 @@ class ArtifactAdmissionTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('systemd-analyze'), 'native systemd verification')
     def test_staged_service_preflight_checks_candidate_before_first_cutover(self):
-        script = (OPS / 'deploy-main.sh').read_text()
-        start = script.index('[[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service"')
-        # End at service validation; later publication setup has its own fixture.
-        marker = '\nPY_VERIFY_GAME_UNIT\n'
-        preflight = script[start:script.index(marker, start) + len(marker)]
+        script = (OPS / 'deploy-runtime.sh').read_text()
+        start = script.index('preflight_units() {')
+        preflight = script[start:script.index('wait_game() {', start)] + '\npreflight_units\n'
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             live, stage, temporary = [root / name for name in ('live', 'stage', 'temporary')]
             (live / 'GameHost').mkdir(parents=True)
-            (live / 'GameHost/game-session-supervisor.mjs').write_text('// legacy release\n')
+            (live / 'GameHost/old-host.mjs').write_text('// prior release\n')
             (stage / 'Deploy').mkdir(parents=True)
             (stage / 'GameHost').mkdir()
+            (stage / 'bin').mkdir()
+            for executable in ('node', 'dotnet'):
+                path = stage / 'bin' / executable
+                path.write_text('#!/bin/sh\nexit 0\n')
+                path.chmod(0o755)
             temporary.mkdir()
+            names = ('solomon-dark-game.service', 'solomon-dark-rust-game.service', 'solomon-dark-rust-api.service')
             host = stage / 'GameHost/solomon-darker'
-            unit = stage / 'Deploy/solomon-dark-game.service'
-            canonical = (OPS.parent / 'nfo/solomon-dark-game.service').read_text().replace(
-                '/opt/solomon-dark-revived', str(live))
-            (stage / 'GameHost/release.env').write_text('SDR_GAME_REVISION=' + 'a' * 40 + '\n')
+            canonical = {}
+            for name in names:
+                canonical[name] = (OPS.parent / 'nfo' / name).read_text().replace(
+                    '/opt/solomon-dark-revived', str(live)).replace(
+                    '/opt/solomon-dark-node-v22.17.0/bin/node', str(live / 'bin/node')).replace(
+                    '/usr/bin/dotnet', str(live / 'bin/dotnet'))
             for case in ('valid', 'missing-host', 'non-executable-host', 'invalid-unit', 'wrong-hash'):
                 with self.subTest(case=case):
                     host.write_text('#!/bin/sh\nexit 0\n')
                     host.chmod(0o644 if case == 'non-executable-host' else 0o755)
                     if case == 'missing-host':
                         host.unlink()
-                    contents = canonical.replace(
-                        f'ExecStart={live}/GameHost/solomon-darker --supervisor',
-                        'ExecStart=relative/solomon-darker --supervisor',
-                    ) if case == 'invalid-unit' else canonical
-                    unit.write_text(contents)
-                    before = unit.read_bytes()
-                    digest = hashlib.sha256(before).hexdigest()
+                    before = []
+                    for name in names:
+                        contents = canonical[name]
+                        if case == 'invalid-unit' and name == 'solomon-dark-rust-game.service':
+                            contents = contents.replace(f'ExecStart={live}/GameHost/solomon-darker', 'ExecStart=relative/solomon-darker')
+                        (stage / 'Deploy' / name).write_text(contents)
+                        before.append(contents.encode())
+                    digest = hashlib.sha256(b''.join(before)).hexdigest()
                     environment = os.environ | {
                         'stage': str(stage), 'live': str(live), 'TMPDIR': str(temporary),
                         'expected_game_unit_checksum': '0' * 64 if case == 'wrong-hash' else digest,
@@ -674,8 +725,9 @@ class ArtifactAdmissionTests(unittest.TestCase):
                         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     else:
                         self.assertNotEqual(result.returncode, 0, case)
-                    self.assertEqual(unit.read_bytes(), before)
+                    self.assertEqual([(stage / 'Deploy' / name).read_bytes() for name in names], before)
                     self.assertEqual(list(temporary.iterdir()), [])
+
 
 
 if __name__ == '__main__':

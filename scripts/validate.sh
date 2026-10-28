@@ -104,13 +104,20 @@ run_all() {
     printf 'Running frontend tests\n'
     npm --prefix frontend test
 
+    for suite in web-lua hagatha harden loot arena-render boneyard portal cheat-menu hud-skill-selector world-weather parties level-up native-ui tutorial diagnostics hall hub-ui; do
+        npm --prefix frontend run "test:$suite"
+    done
+
     printf 'Building production frontend\n'
     npm --prefix frontend run build
 
     printf 'Checking production media policy\n'
     node frontend/tools/check-production-media-policy.mjs
 
-    printf 'Game runtime and desktop gates are owned by the matched Rust artifact (docs/RUST-GAME-CUTOVER.md).\n'
+    printf 'Measuring restored PixiJS renderer quality gates\n'
+    npm --prefix frontend run quality:renderer
+
+    printf 'Rust runtime and desktop gates remain owned by the matched released artifact.\n'
 }
 
 mode="${1:-all}"

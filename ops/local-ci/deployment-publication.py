@@ -38,6 +38,21 @@ def is_ready(path, website_revision, game_revision):
             and re.fullmatch('[0-9a-f]{32}', publication['deploymentId']) is not None)
 
 
+def parallel_ready(path, website_revision, game_revision):
+    root = Path(path)
+    primary = root / 'wwwroot/deployment.json'
+    companion = root / 'RustSite/deployment.json'
+    if not primary.is_file() or not companion.is_file():
+        return False
+    if not (is_ready(primary, website_revision, website_revision)
+            and is_ready(companion, website_revision, game_revision)):
+        return False
+    first, second = json.loads(primary.read_text()), json.loads(companion.read_text())
+    return (first.get('deploymentId') is not None
+            and first['deploymentId'] == second.get('deploymentId')
+            and first['deploymentSequence'] == second.get('deploymentSequence'))
+
+
 def write(path, phase, website_revision, game_revision, deployment_id, deployment_sequence):
     if (not re.fullmatch('[0-9a-f]{40}', website_revision)
             or not re.fullmatch('[0-9a-f]{40}', game_revision)
@@ -77,6 +92,10 @@ if __name__ == '__main__':
     ready_parser.add_argument('path')
     ready_parser.add_argument('website_revision')
     ready_parser.add_argument('game_revision')
+    parallel_parser = commands.add_parser('parallel-ready')
+    parallel_parser.add_argument('path')
+    parallel_parser.add_argument('website_revision')
+    parallel_parser.add_argument('game_revision')
     write_parser = commands.add_parser('write')
     for name in ('path', 'phase', 'website_revision', 'game_revision', 'deployment_id'):
         write_parser.add_argument(name)
@@ -87,5 +106,7 @@ if __name__ == '__main__':
         print(next_sequence(**args))
     elif command == 'ready':
         raise SystemExit(0 if is_ready(**args) else 1)
+    elif command == 'parallel-ready':
+        raise SystemExit(0 if parallel_ready(**args) else 1)
     else:
         write(**args)

@@ -17,7 +17,11 @@ const developmentBackendOrigin = process.env.SDR_VITE_BACKEND_URL?.trim()
   || 'http://localhost:5210'
 const developmentBackendUrl = new URL(developmentBackendOrigin)
 const websiteBase = process.env.VITE_WEBSITE_BASE || ''
-const gameBase = process.env.VITE_GAME_ARTIFACT_BASE || '/game'
+const gameBase = process.env.VITE_GAME_ARTIFACT_BASE || '/game-rust'
+const gameRuntime = process.env.VITE_GAME_RUNTIME || 'pixi'
+if (!['pixi', 'rust'].includes(gameRuntime)) {
+  throw new Error('VITE_GAME_RUNTIME must be pixi or rust')
+}
 const assetBase = process.env.SDR_WEBSITE_ASSET_BASE || '/'
 for (const [name, value] of [['VITE_WEBSITE_BASE', websiteBase], ['VITE_GAME_ARTIFACT_BASE', gameBase]]) {
   if (value && (!/^\/[a-z0-9/-]+$/.test(value) || value.endsWith('/') || value.includes('//'))) {
@@ -63,6 +67,7 @@ export default defineConfig({
   base: assetBase,
   define: {
     __SDR_BUILD_REVISION__: JSON.stringify(buildRevision),
+    'import.meta.env.VITE_GAME_RUNTIME': JSON.stringify(gameRuntime),
   },
   plugins: [deploymentRevisionManifest, react(), tailwindcss()],
   server: {
@@ -77,7 +82,7 @@ export default defineConfig({
   },
   build: {
     // The backend serves the SPA from wwwroot; `dotnet publish` picks it up.
-    outDir: '../backend/wwwroot',
+    outDir: process.env.SDR_WEBSITE_OUT_DIR || '../backend/wwwroot',
     emptyOutDir: true,
     // Production's CSP only permits same-origin media. Keep even tiny sound
     // effects as files instead of Vite's default data: URL inlining.

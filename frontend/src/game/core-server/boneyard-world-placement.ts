@@ -1,0 +1,648 @@
+import { nativeBoneyardFencePosts } from '../core-kernels/boneyard-fence-posts.ts'
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
+import type { ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
+import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
+import type { BoneyardSolomonEncounterState } from '../core-kernels/boneyard-encounter.ts'
+import { NATIVE_SOLOMON_COLLISION_RADIUS, NATIVE_SOLOMON_ESCAPE_PATH_MARGIN, NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED, NATIVE_SOLOMON_NAVIGATION_CLEARANCE, nativeSolomonEscapePathTarget, nativeSolomonEscapeTarget } from '../core-kernels/boneyard-encounter.ts'
+import type { BoneyardBounds, BoneyardPoint, LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import type { NativeLootPlacement } from '../core-kernels/native-loot.ts'
+import type { NativeSecondaryKnockbackContact } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeEtherDrainContact } from '../core-kernels/native-ether-drain.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
+import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
+import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
+import { boneyardBodyCollisionSourceIds, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, withBoneyardGateCollision } from './boneyard-collision.ts'
+import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
+import type { BoneyardPlayerCombatStatus, BoneyardWorldState } from './boneyard-world-state.ts'
+import type { BoneyardEnemyPlayerKnockback, BoneyardEnemyStore } from './enemies/model.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import { releaseBoneyardSkeletonPike } from './enemies/damage.ts'
+export function spawnPlayerCharacterInBoneyard(
+  config: PlayerCharacterConfig,
+  world: BoneyardWorldState,
+): PlayerCharacterState {
+  return {
+    ...createPlayerCharacter(config, { x: world.spawn.x, y: world.spawn.y }),
+    ...playerCharacterFacing(world.spawn.facingDeg),
+  }
+}
+
+export function placePlayersInBoneyard(
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  world: BoneyardWorldState,
+): Readonly<Record<string, PlayerCharacterState>> {
+  return Object.fromEntries(Object.entries(players).map(([playerId, player]) => [
+    playerId,
+    spawnPlayerCharacterInBoneyard(player.config, world),
+  ]))
+}
+
+export function prepareSolomonEscapeNavigation(
+  source: BoneyardSolomonEncounterState,
+  bounds: Readonly<BoneyardBounds>,
+  collision: BoneyardCollisionWorld,
+  navigationCollision: BoneyardCollisionWorld,
+): BoneyardSolomonEncounterState {
+  const escapeTarget = source.escapeTarget ?? nativeSolomonEscapeTarget(
+    source.position,
+    source.headingDeg,
+    bounds,
+  )
+  const escapeCollisionSourceIds = source.escapeTarget === null
+    ? boneyardBodyCollisionSourceIds(
+        source.position,
+        collision,
+        NATIVE_SOLOMON_COLLISION_RADIUS,
+      )
+    : source.escapeCollisionSourceIds
+  const pathTarget = nativeSolomonEscapePathTarget(
+    source.position,
+    escapeTarget,
+    bounds,
+  )
+  const traversalBounds = solomonEscapeTraversalBounds(bounds)
+  const ignoredSourceIds = new Set(escapeCollisionSourceIds)
+  const directPathBlockProgress = firstBoneyardPathBlockProgress(
+    source.position,
+    pathTarget,
+    traversalBounds,
+    collision,
+    NATIVE_SOLOMON_COLLISION_RADIUS,
+    ignoredSourceIds,
+  )
+  const route = directPathBlockProgress === null
+    ? null
+    : findBoneyardEnemyRoute({
+        bodyRadius: NATIVE_SOLOMON_COLLISION_RADIUS,
+        bounds: traversalBounds,
+        clearance: NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
+        end: pathTarget,
+        ignoredSourceIds,
+        start: source.position,
+        world: navigationCollision,
+      })
+  const goal = solomonEscapeRouteGoal(
+    source.position,
+    pathTarget,
+    route,
+    traversalBounds,
+    collision,
+    ignoredSourceIds,
+  )
+  return {
+    ...source,
+    escapeCollisionSourceIds,
+    escapeTarget,
+    headingDeg: actorHeadingFromVector(
+      goal.x - source.position.x,
+      goal.y - source.position.y,
+    ),
+  }
+}
+
+export function resolveSolomonEscapeMovement(
+  source: BoneyardSolomonEncounterState,
+  next: BoneyardSolomonEncounterState,
+  bounds: Readonly<BoneyardBounds>,
+  collision: BoneyardCollisionWorld,
+): BoneyardSolomonEncounterState {
+  const ignoredSourceIds = source.escapeCollisionSourceIds.length === 0
+    ? undefined
+    : new Set(source.escapeCollisionSourceIds)
+  const pathTarget = source.escapeTarget === null
+    ? null
+    : nativeSolomonEscapePathTarget(source.position, source.escapeTarget, bounds)
+  const pathTargetReached = pathTarget !== null
+    && squaredDistance(source.position, pathTarget)
+      <= NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED
+  const position = pathTargetReached
+    ? source.position
+    : resolveBoneyardMovement(
+        source.position,
+        next.position,
+        solomonEscapeTraversalBounds(bounds),
+        collision,
+        NATIVE_SOLOMON_COLLISION_RADIUS,
+        ignoredSourceIds,
+      )
+  if (next.phase === 'gone') return { ...next, position }
+  const activeCollisionSourceIds = new Set(boneyardBodyCollisionSourceIds(
+    position,
+    collision,
+    NATIVE_SOLOMON_COLLISION_RADIUS,
+  ))
+  const escapeCollisionSourceIds = source.escapeCollisionSourceIds.filter((sourceId) => (
+    activeCollisionSourceIds.has(sourceId)
+  ))
+  return {
+    ...next,
+    escapeCollisionSourceIds,
+    position,
+  }
+}
+
+function solomonEscapeRouteGoal(
+  position: Readonly<BoneyardPoint>,
+  pathTarget: Readonly<BoneyardPoint>,
+  route: readonly Readonly<BoneyardPoint>[] | null,
+  bounds: Readonly<BoneyardBounds>,
+  collision: BoneyardCollisionWorld,
+  ignoredSourceIds: ReadonlySet<string>,
+): Readonly<BoneyardPoint> {
+  if (route === null || route.length < 2) return pathTarget
+  let goal = route[1]!
+  for (let index = 2; index < route.length; index += 1) {
+    const candidate = route[index]!
+    if (firstBoneyardLineObstruction(
+      position,
+      candidate,
+      bounds,
+      collision,
+      undefined,
+      0,
+      ignoredSourceIds,
+    ) !== null) break
+    goal = candidate
+  }
+  return goal
+}
+
+export function solomonEscapeTraversalBounds(
+  bounds: Readonly<BoneyardBounds>,
+): BoneyardBounds {
+  // The shared resolver insets by body radius; compensate so Solomon's center
+  // can reach the native state-4 rectangle expanded by 50.
+  const padding = NATIVE_SOLOMON_ESCAPE_PATH_MARGIN + NATIVE_SOLOMON_COLLISION_RADIUS
+  return {
+    h: bounds.h + padding * 2,
+    w: bounds.w + padding * 2,
+    x: bounds.x - padding,
+    y: bounds.y - padding,
+  }
+}
+
+function squaredDistance(
+  left: Readonly<BoneyardPoint>,
+  right: Readonly<BoneyardPoint>,
+): number {
+  const dx = right.x - left.x
+  const dy = right.y - left.y
+  return dx * dx + dy * dy
+}
+
+function pointInsideBounds(
+  point: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+): boolean {
+  return point.x >= bounds.x
+    && point.y >= bounds.y
+    && point.x <= bounds.x + bounds.w
+    && point.y <= bounds.y + bounds.h
+}
+
+export function createNativeLootPlacement(
+  bounds: BoneyardBounds,
+  collision: BoneyardCollisionWorld,
+): NativeLootPlacement {
+  return {
+    canPlace: (position, radius) => canPlaceBoneyardBody(position, bounds, collision, radius),
+  }
+}
+
+export function nearbyNativeMaskTwoCount(
+  enemies: BoneyardEnemyStore,
+  excludedActorId: number,
+  position: Readonly<BoneyardPoint>,
+): number {
+  const radiusSquared = 250 * 250
+  const within = (candidate: Readonly<BoneyardPoint>) => {
+    const dx = candidate.x - position.x
+    const dy = candidate.y - position.y
+    return dx * dx + dy * dy < radiusSquared
+  }
+  return enemies.actors.filter((actor) => (
+    actor.id !== excludedActorId
+    && within(actor.position)
+  )).length + enemies.maggots.filter((actor) => (
+    actor.id !== excludedActorId
+    && within(actor.position)
+  )).length
+}
+
+export function applyBoneyardPlayerKnockbacks(
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  enemies: BoneyardEnemyStore,
+  knockbacks: readonly BoneyardEnemyPlayerKnockback[],
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+  bounds: BoneyardBounds,
+  collision: BoneyardCollisionWorld,
+  lanternPosition: Readonly<BoneyardPoint> | null,
+): Readonly<{
+  enemies: BoneyardEnemyStore
+  lanternPosition: Readonly<BoneyardPoint> | null
+  players: Readonly<Record<string, PlayerCharacterState>>
+}> {
+  if (knockbacks.length === 0) return { enemies, lanternPosition, players }
+  let bodies = boneyardCombatBodies(players, enemies, playerCombat, lanternPosition)
+  for (const knockback of knockbacks) {
+    const moverId = `player-${knockback.playerId}`
+    if (!bodies.has(moverId)) continue
+    const resolved = resolveActorMotion(
+      [...bodies.values()].map((body) => ({
+        ...body,
+        delta: body.id === moverId ? { ...knockback.delta } : { x: 0, y: 0 },
+        driven: body.id === moverId,
+      })),
+      {
+        canPlace: (_bodyId, position, radius) => canPlaceBoneyardBody(
+          position,
+          bounds,
+          collision,
+          radius,
+        ),
+        move: (_bodyId, position, delta, radius) => resolveBoneyardMovement(
+          position,
+          { x: position.x + delta.x, y: position.y + delta.y },
+          bounds,
+          collision,
+          radius,
+        ),
+      },
+      () => true,
+    )
+    bodies = new Map(resolved.map((body) => [body.id, body]))
+  }
+
+  const positions = new Map(
+    [...bodies.values()].map((body) => [body.id, body.position]),
+  )
+  return {
+    enemies: commitBoneyardEnemyCollisionPositions(enemies, positions),
+    lanternPosition: positions.get(NATIVE_LANTERN_BODY_ID) ?? lanternPosition,
+    players: Object.fromEntries(Object.entries(players).map(([playerId, player]) => {
+      const position = positions.get(`player-${playerId}`)
+      return [
+        playerId,
+        position === undefined
+          ? player
+          : { ...player, position: { ...position } },
+      ]
+    })),
+  }
+}
+
+export function applyBoneyardSecondaryEnemyKnockbacks(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  knockbacks: readonly NativeSecondaryKnockbackContact[],
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+  area?: Readonly<{ onEnemyContact: (targetId: number) => void }>,
+): BoneyardWorldState {
+  if (knockbacks.length === 0) return world
+  const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
+  let bodies = boneyardCombatBodies(players, world.enemies, playerCombat, world.lanternPosition)
+  let enemies = world.enemies
+  for (const knockback of knockbacks) {
+    const moverId = `enemy-${knockback.targetId}`
+    if (!bodies.has(moverId)) continue
+    enemies = releaseBoneyardSkeletonPike(enemies, knockback.targetId)
+    let resolved = resolveActorMotion(
+      [...bodies.values()].map((body) => ({
+        ...body,
+        delta: body.id === moverId ? { ...knockback.delta } : { x: 0, y: 0 },
+        driven: body.id === moverId,
+      })),
+      {
+        canPlace: (_bodyId, position, radius) => canPlaceBoneyardBody(
+          position,
+          world.bounds,
+          collision,
+          radius,
+        ),
+        move: (_bodyId, position, delta, radius) => resolveBoneyardMovement(
+          position,
+          { x: position.x + delta.x, y: position.y + delta.y },
+          world.bounds,
+          collision,
+          radius,
+        ),
+      },
+      () => area === undefined,
+    )
+    if (area !== undefined) {
+      const originalRadius = bodies.get(moverId)!.radius
+      resolved = resolveActorMotion(resolved.map(body => ({ ...body, delta: { x: 0, y: 0 },
+        driven: body.id === moverId,
+        radius: body.id === moverId ? Math.fround(originalRadius * 0.6000000238418579) : body.radius,
+      })), {
+        canPlace: (_id, position, radius) => canPlaceBoneyardBody(position, world.bounds, collision, radius),
+        move: (_id, position, delta, radius) => resolveBoneyardMovement(position,
+          { x: Math.fround(position.x + delta.x), y: Math.fround(position.y + delta.y) }, world.bounds, collision, radius),
+      }, () => true, undefined, (rootId, otherId) => {
+        if (rootId !== moverId || !otherId.startsWith('enemy-')) return
+        const targetId = Number(otherId.slice(6))
+        const target = enemies.actors.find(actor => actor.id === targetId)
+        if (target && (boneyardEnemyActorFlags(target) & 2) !== 0
+          || enemies.maggots.some(actor => actor.id === targetId && actor.combatActive)) area.onEnemyContact(targetId)
+      }).map(body => body.id === moverId ? { ...body, radius: originalRadius } : body)
+    }
+    bodies = new Map(resolved.map((body) => [body.id, body]))
+  }
+  return {
+    ...world,
+    lanternPosition: bodies.get(NATIVE_LANTERN_BODY_ID)?.position ?? world.lanternPosition,
+    enemies: commitBoneyardEnemyCollisionPositions(
+      enemies,
+      new Map([...bodies.values()].map((body) => [body.id, body.position])),
+    ),
+  }
+}
+
+export function moveBoneyardKnockbackAreaTarget(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  targetId: number,
+  delta: Vector2,
+  sourceActorId: number,
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+): Readonly<{ world: BoneyardWorldState; contactIds: readonly number[] }> {
+  const contactIds: number[] = []
+  const moved = applyBoneyardSecondaryEnemyKnockbacks(world, players,
+    [{ delta, sourceActorId, targetId }], playerCombat, { onEnemyContact: id => contactIds.push(id) })
+  return { world: moved, contactIds }
+}
+
+export function applyBoneyardEtherDrainForces(
+  source: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  secondary: NativeSecondarySimulationState,
+  contacts: readonly NativeEtherDrainContact[],
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+): Readonly<{ consumedFieldActorIds: readonly number[]; world: BoneyardWorldState; players: Readonly<Record<string, PlayerCharacterState>>; secondary: NativeSecondarySimulationState }> {
+  const consumedFieldActorIds: number[] = []
+  if (contacts.length === 0) return { consumedFieldActorIds, world: source, players, secondary }
+  const collision = withBoneyardGateCollision(source.collision, source.gateLeaves)
+  const move = (position: Readonly<BoneyardPoint>, delta: Readonly<BoneyardPoint>, radius: number) => resolveBoneyardMovement(
+    position, { x: Math.fround(position.x + delta.x), y: Math.fround(position.y + delta.y) }, source.bounds, collision, radius,
+  )
+  let bodies = boneyardCombatBodies(players, source.enemies, playerCombat, source.lanternPosition)
+  let enemies = source.enemies
+  let loot = source.loot
+  let actors = secondary.actors
+  for (const contact of contacts) {
+    const ref = contact.target
+    if (ref.kind === 'loot') {
+      loot = { ...loot, actors: loot.actors.flatMap(actor => {
+        if (actor.id !== ref.id || actor.painterRegistration.registrationOrdinal !== ref.registrationOrdinal) return [actor]
+        if (contact.consume) { consumedFieldActorIds.push(contact.sourceActorId); return [] }
+        // Puppet constructor radius 15; the field disables body-pair collision for flag400.
+        return [{ ...actor, position: move(actor.position, contact.delta, 15) }]
+      }) }
+      continue
+    }
+    if (ref.kind === 'golem') {
+      actors = actors.map(actor => {
+        if (actor.id !== ref.id || actor.kind !== 'golem' || actor.golem === null) return actor
+        const position = move(actor.position, contact.delta, actor.radius)
+        const delta = { x: Math.fround(position.x - actor.position.x), y: Math.fround(position.y - actor.position.y) }
+        const shift = (point: Readonly<BoneyardPoint>) => ({ x: Math.fround(point.x + delta.x), y: Math.fround(point.y + delta.y) })
+        return { ...actor, position, golem: { ...actor.golem,
+          leftFoot: shift(actor.golem.leftFoot), leftFootNext: shift(actor.golem.leftFootNext), leftFootPrevious: shift(actor.golem.leftFootPrevious),
+          rightFoot: shift(actor.golem.rightFoot), rightFootNext: shift(actor.golem.rightFootNext), rightFootPrevious: shift(actor.golem.rightFootPrevious),
+        } }
+      })
+      continue
+    }
+    const moverId = ref.kind === 'player' ? `player-${ref.id}` : `enemy-${ref.id}`
+    if (!bodies.has(moverId)) continue
+    if (ref.kind === 'enemy') enemies = releaseBoneyardSkeletonPike(enemies, ref.id)
+    const resolved = resolveActorMotion([...bodies.values()].map(body => ({
+      ...body, delta: body.id === moverId ? { ...contact.delta } : { x: 0, y: 0 }, driven: body.id === moverId,
+    })), {
+      canPlace: (_id, position, radius) => canPlaceBoneyardBody(position, source.bounds, collision, radius),
+      move: (_id, position, delta, radius) => move(position, delta, radius),
+    }, () => true)
+    bodies = new Map(resolved.map(body => [body.id, body]))
+  }
+  const positions = new Map([...bodies.values()].map(body => [body.id, body.position]))
+  const movedEnemies = commitBoneyardEnemyCollisionPositions(enemies, positions)
+  enemies = { ...movedEnemies, actors: movedEnemies.actors.map(actor => {
+    if (actor.brain.family !== 'demon') return actor
+    const before = source.enemies.actors.find(candidate => candidate.id === actor.id)!
+    const delta = { x: Math.fround(actor.position.x - before.position.x), y: Math.fround(actor.position.y - before.position.y) }
+    if (delta.x === 0 && delta.y === 0) return actor
+    const shift = (point: Readonly<BoneyardPoint>) => ({ x: Math.fround(point.x + delta.x), y: Math.fround(point.y + delta.y) })
+    const articulation = actor.brain.articulation
+    return { ...actor, brain: { ...actor.brain, articulation: { ...articulation,
+      front: { ...articulation.front, current: shift(articulation.front.current), start: shift(articulation.front.start), target: shift(articulation.front.target) },
+      rear: { ...articulation.rear, current: shift(articulation.rear.current), start: shift(articulation.rear.start), target: shift(articulation.rear.target) },
+    } } }
+  }) }
+  return {
+    consumedFieldActorIds,
+    world: { ...source, enemies, loot, lanternPosition: positions.get(NATIVE_LANTERN_BODY_ID) ?? source.lanternPosition },
+    secondary: actors === secondary.actors ? secondary : { ...secondary, actors },
+    players: Object.fromEntries(Object.entries(players).map(([id, player]) => [id,
+      positions.has(`player-${id}`) ? { ...player, position: positions.get(`player-${id}`)! } : player,
+    ])),
+  }
+}
+
+// Stock Lantern ctor 0x005E1120: radius +0x30 = 8, resistance +0x28 = 1.
+// Actor ctor 0x006287D0 leaves strength zero and enables passive pushing.
+export const NATIVE_LANTERN_BODY_ID = 'lantern'
+const NATIVE_LANTERN_PHYSICS = Object.freeze({
+  pushEnabled: true,
+  pushResistance: 1,
+  pushStrength: 0,
+  radius: 8,
+})
+
+export function boneyardLanternBodies(
+  position: Readonly<BoneyardPoint> | null,
+): ActorPhysicsBody[] {
+  return position === null ? [] : [{
+    ...NATIVE_LANTERN_PHYSICS,
+    delta: { x: 0, y: 0 },
+    driven: false,
+    id: NATIVE_LANTERN_BODY_ID,
+    position: { ...position },
+  }]
+}
+
+export function boneyardCombatBodies(
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  enemies: BoneyardEnemyStore,
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+  lanternPosition: Readonly<BoneyardPoint> | null,
+): Map<string, ActorPhysicsBody> {
+  return new Map([
+    ...Object.entries(players)
+      .filter(([playerId]) => playerCombat[playerId]?.collisionEnabled ?? true)
+      .map(([playerId, player]): [string, ActorPhysicsBody] => [
+        `player-${playerId}`,
+        {
+          ...PLAYER_CHARACTER_PHYSICS,
+          delta: { x: 0, y: 0 },
+          driven: false,
+          id: `player-${playerId}`,
+          position: { ...player.position },
+        },
+      ]),
+    ...[...boneyardEnemyBodies(enemies), ...boneyardLanternBodies(lanternPosition)]
+      .map((body): [string, ActorPhysicsBody] => [body.id, body]),
+  ])
+}
+
+export function boneyardEnemyBodies(
+  enemies: BoneyardEnemyStore,
+): ActorPhysicsBody[] {
+  return [
+    ...enemies.actors
+      .filter((actor) => actor.brain.family !== 'cocoon' && boneyardEnemyActorFlags(actor) !== 0)
+      .map((actor) => {
+        const id = `enemy-${actor.id}`
+        return {
+          ...enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor)),
+          // Wraith tick 0x0048717E clears Actor +0x36, independently of query flags.
+          collisionRecipient: actor.brain.family !== 'wraith' || actor.brain.collisionRecipient,
+          // Constructor-owned resistance: Portal +0x28 = 150, Coffin = 1.
+          pushResistance: actor.brain.family === 'portal' ? 150 : actor.brain.family === 'coffin' ? 1 : 0,
+        }
+      }),
+    ...enemies.maggots
+      .filter((maggot) => maggot.lifeState === 'alive')
+      .map((maggot) => {
+        const id = `enemy-${maggot.id}`
+        return {
+          ...enemyCollisionBody(id, maggot.position, maggot.collisionRadius),
+          // Maggot ctor 0x0047E2BF: airborne and grounded children are not recipients.
+          collisionRecipient: false,
+        }
+      }),
+  ]
+}
+
+export function commitBoneyardEnemyCollisionPositions(
+  enemies: BoneyardEnemyStore,
+  resolvedPositions: ReadonlyMap<string, Readonly<BoneyardPoint>>,
+): BoneyardEnemyStore {
+  return {
+    ...enemies,
+    actors: enemies.actors.map((actor) => {
+      const position = resolvedPositions.get(`enemy-${actor.id}`)
+      return position === undefined
+        ? actor
+        : { ...actor, position: Object.freeze({ ...position }) }
+    }),
+    maggots: enemies.maggots.map((maggot) => {
+      const position = resolvedPositions.get(`enemy-${maggot.id}`)
+      return position === undefined
+        ? maggot
+        : { ...maggot, position: Object.freeze({ ...position }) }
+    }),
+  }
+}
+
+/**
+ * `filter` for the per-tick scenery cleanup that hands back the source array
+ * when every row survives, so the sealed arena stops re-allocating three
+ * scenery lists per tick and downstream identity caches can hit.
+ */
+export function retainInsideBounds<Row extends { readonly position: Readonly<BoneyardPoint> }>(
+  rows: readonly Row[],
+  bounds: Readonly<BoneyardBounds>,
+  excludedFromCleanup?: (row: Row) => boolean,
+): readonly Row[] {
+  let index = 0
+  while (index < rows.length && (excludedFromCleanup?.(rows[index]!)
+    || pointInsideBounds(rows[index]!.position, bounds))) index += 1
+  if (index === rows.length) return rows
+  const retained = rows.slice(0, index)
+  for (index += 1; index < rows.length; index += 1) {
+    const row = rows[index]!
+    if (excludedFromCleanup?.(row) || pointInsideBounds(row.position, bounds)) retained.push(row)
+  }
+  return retained
+}
+
+export function enemyCollisionBody(
+  id: string,
+  position: Readonly<BoneyardPoint>,
+  radius: number,
+): ActorPhysicsBody {
+  return {
+    delta: { x: 0, y: 0 },
+    driven: false,
+    id,
+    position: { ...position },
+    pushEnabled: false,
+    pushResistance: 0,
+    pushStrength: 0,
+    radius,
+  }
+}
+
+export function createBoneyardSceneryTargets(
+  scene: LoadedBoneyard['scene'],
+): Pick<BoneyardWorldState, 'earthquakeSceneryTargets' | 'primarySceneryTargets' | 'scenerySpellTargets'> {
+  const objects = scene.objects
+  return {
+    earthquakeSceneryTargets: objects.map((object, id) => Object.freeze({
+      id,
+      position: Object.freeze({ ...object.pos }),
+      typeId: object.typeId,
+      ...(object.typeId === 2001 ? { secondaryVariant: object.secondaryVariant ?? 0 } : {}),
+    })),
+    primarySceneryTargets: [...objects.flatMap((object, registrationOrder) => {
+      const bodyRadius = fireballSceneryRadius(object.typeId)
+      return bodyRadius === null ? [] : [Object.freeze({
+        active: true,
+        actorFlags: 0x4,
+        attachment: Object.freeze({ x: 0, y: 0 }),
+        bodyRadius,
+        cellBindingOrder: registrationOrder,
+        id: `scenery:${object.eid}`,
+        kind: object.typeId === 2029 ? 'gravestone' as const : 'scenery' as const,
+        nativePriority: 1000,
+        queryLane: 'grid' as const,
+        pendingRemove: false,
+        position: Object.freeze({ ...object.pos }),
+        registrationOrder,
+      })]
+    }), ...nativeBoneyardFencePosts(scene.fences).map(({ pos }, index) => ({
+      active: true, actorFlags: 4, attachment: { x: 0, y: 0 }, bodyRadius: 10,
+      cellBindingOrder: objects.length + index, id: `fencepost:${index}`, kind: 'scenery' as const,
+      nativePriority: 1000, pendingRemove: false, position: { ...pos }, queryLane: 'grid' as const,
+      registrationOrder: objects.length + index,
+    }))],
+    scenerySpellTargets: objects.flatMap((object, registrationOrder) => (
+      object.typeId === 2029 ? [{
+        active: true,
+        actorFlags: 0x4,
+        attachment: { x: 0, y: 0 },
+        bodyRadius: 0,
+        cellBindingOrder: registrationOrder,
+        id: `scenery:${object.eid}`,
+        kind: 'gravestone' as const,
+        nativePriority: 1000,
+        queryLane: 'grid' as const,
+        pendingRemove: false,
+        position: { ...object.pos },
+        registrationOrder,
+      }] : []
+    )),
+  }
+}
+
+function fireballSceneryRadius(typeId: number): number | null {
+  switch (typeId) {
+    case 2001: return 8
+    case 2009: return 1
+    case 2029: return 0.01
+    case 2040: return 1
+    default: return null
+  }
+}

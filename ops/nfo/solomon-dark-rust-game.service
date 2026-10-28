@@ -1,0 +1,39 @@
+[Unit]
+Description=Solomon Dark Rust companion game sessions
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solomon-dark
+Group=solomon-dark
+WorkingDirectory=/opt/solomon-dark-revived
+ExecStart=/opt/solomon-dark-revived/GameHost/solomon-darker --supervisor
+EnvironmentFile=/etc/solomon-dark-game.env
+EnvironmentFile=/opt/solomon-dark-revived/GameHost/release.env
+Environment=SDR_GAME_MEMORIAL_PATH=/var/lib/solomon-dark-rust-game/memoratorium.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0027
+StateDirectory=solomon-dark-rust-game
+StateDirectoryMode=0750
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,7 @@ node_modules/
 frontend/dist/
 frontend/dist-desktop/
 frontend/dist-game-host/
+frontend/dist-rust-site/
 frontend/.desktop-stage/
 frontend/.cache/
 

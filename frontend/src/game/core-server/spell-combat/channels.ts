@@ -1,0 +1,710 @@
+import {
+  drawNativeDisintegratePercentile,
+  drawNativeSpellDamage,
+} from '../../core-kernels/air-water-spell-actors.ts'
+import { drawNativeFloat, drawNativeInteger } from '../../core-kernels/native-rng.ts'
+import { NATIVE_COLD_AURA_PERIOD_TICKS, nativeColdAuraQueryRadius } from '../../core-kernels/native-cold-aura.ts'
+import {
+  createNativeWeldBlizzardContactGlow,
+  nativeWeldBlizzardContactPolygon,
+} from '../../core-kernels/native-weld-blizzard.ts'
+import { createNativeFlameLashFactory } from '../../core-kernels/native-weld-flame-birth.ts'
+import { createNativeWeldFlameLashFade } from '../../core-kernels/native-weld-flame-lash.ts'
+import {
+  createNativeWeldBlizzardChainEffects,
+} from '../../core-kernels/native-weld-primary-runtime.ts'
+import {
+  type PrimarySpellTarget,
+  airPrimaryBoltGeometry,
+  nativePrimaryConeTargets,
+  nativePrimaryPolygonTargets,
+  nativePrimaryTargetEligible,
+  primarySpellTargetPoint,
+} from '../../core-kernels/primary-spell-targeting.ts'
+import type { NativeSpellSpecialDeathPayload } from '../../core-kernels/native-special-death-payload.ts'
+import { createNativeWeldChannelActor } from '../../core-kernels/native-weld-primary-runtime.ts'
+import { resolveBoneyardSpecialDeathPayload } from './special-death.ts'
+import {
+  damageBoneyardEnemy,
+} from '../enemies/damage.ts'
+import {
+  airStunModifier,
+  applyDamageWithDisintegrate,
+  channelSpellHit,
+  validatedDamageMultiplier,
+} from './damage.ts'
+import { NATIVE_WELD_FROST_SLOW_FACTOR } from './model.ts'
+import { applyChannelProjectileForce } from './projectile-forces.ts'
+import {
+  applyBlizzardPushback,
+  applyWaterPushback,
+  frostJetPushBlocked,
+  nativeWaterPushTargetFactor,
+} from './pushback.ts'
+import {
+  boneyardSpellTargetById,
+  bySpellId,
+  nativePrimaryRootTargetRows,
+  nearestUnusedAirChainTarget,
+  normalizedDifference,
+  primaryBlizzardTargetRows,
+  primaryTargetRows,
+  primaryWaterTargetRows,
+  selectedAirTargets,
+  selectedWeldTarget,
+} from './targets.ts'
+import { BoneyardSpellCombatWork } from './work.ts'
+
+export const WATER_PRIMARY_ACTOR_MASK = 0x1082
+
+export const WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK = 0x2
+
+export const NATIVE_CHILL_PROJECTILE_FORCE_FACTOR = Math.fround(0.3199999928474426)
+
+const NATIVE_WELD_CHANNEL_MODIFIER_TICKS = 25
+
+const NATIVE_BLIZZARD_CHAIN_RADIUS = 100
+
+const NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR = Math.fround(0.600000024)
+
+const NATIVE_BLIZZARD_WEAK_COLD_SLOW_FACTOR = 0.75
+
+export function resolveChannelContacts(work: BoneyardSpellCombatWork): void {
+  for (const emission of [...work.channelEmissions].sort(bySpellId)) {
+    if (emission.worldKey !== work.worldKey) continue
+    if (emission.kind === 'air') {
+      if (emission.primarySkill.kind !== 'air') {
+        throw new Error('Air channel emission does not own an Air skill payload')
+      }
+      const rows = primaryTargetRows(work.enemies)
+      const first = selectedAirTargets(rows, work.sourceSpells, emission)[0]
+      if (!first) continue
+      const contactedIds = new Set<string>()
+      let target: PrimarySpellTarget | null = first
+      let damage = emission.damage
+      let previousPoint = emission.origin
+      for (let hop = 0; target && hop <= emission.primarySkill.arcCount; hop += 1) {
+        const row = primaryTargetRows(work.enemies).find(({ target: candidate }) => (
+          candidate.id === target!.id
+        ))
+        if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
+        contactedIds.add(row.target.id)
+
+        const stun = airStunModifier(emission)
+        if (stun) work.queueTargetEffect(row.actor.id, stun)
+        let disintegrate = false
+        if (
+          !emission.underpowered
+          && emission.primarySkill.disintegrateChance > 0
+          && (row.target.actorFlags & 0x2) !== 0
+          && work.tick % 40 === row.disintegratePhase % 40
+        ) {
+          const draw = drawNativeDisintegratePercentile(
+            work.rng,
+            emission.primarySkill.disintegrateChance,
+          )
+          work.rng = draw.rng
+          disintegrate = draw.success
+        }
+        // Lightning consumes this visual scalar after the optional execute
+        // roll even though the web renderer receives semantic bolt geometry.
+        const contactScalar = drawNativeFloat(work.rng, Math.fround(0.5))
+        work.rng = contactScalar.state
+        const electricDamage = damage * validatedDamageMultiplier(
+          work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
+        )
+        const contact = applyDamageWithDisintegrate(
+          work.enemies,
+          row.actor.id,
+          electricDamage,
+          emission.ownerId,
+          work.tick,
+          disintegrate,
+          work.registerWorldPainter,
+          work.lethalObserver,
+          work.enhancedEffects,
+        )
+        work.enemies = contact.enemies
+        work.events.push(...contact.events)
+        if (contact.accepted) {
+          work.hits.push({
+            actorId: row.actor.id,
+            amount: contact.amount,
+            killed: contact.killed,
+            ownerId: emission.ownerId,
+            spellId: emission.id,
+            spellKind: 'air',
+            tick: work.tick,
+          })
+        }
+
+        const currentPoint = primarySpellTargetPoint(row.target)
+        if (hop > 0) {
+          const direction = normalizedDifference(previousPoint, currentPoint)
+          const geometry = airPrimaryBoltGeometry(previousPoint, direction, currentPoint)
+          work.ownedTransients.push(work.enrollCombatActor({
+            ageTicks: 0,
+            birthTick: work.tick,
+            direction,
+            endpoint: geometry.endpoint,
+            hurricaneCharge: 0,
+            id: work.nextSpellId,
+            kind: 'air',
+            chained: true,
+            enhancedEffects: work.enhancedEffects,
+            lightRegistration: work.registerCombatPainter('transient'),
+            midpoint: geometry.midpoint,
+            origin: geometry.source,
+            ownerId: emission.ownerId,
+            targetId: row.target.id,
+            underpowered: emission.underpowered,
+            variant: work.nextSpellId % 4,
+            worldKey: work.worldKey,
+          }))
+          work.nextSpellId += 1
+        }
+        previousPoint = currentPoint
+        damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+        target = emission.underpowered || hop >= emission.primarySkill.arcCount
+          ? null
+          : nearestUnusedAirChainTarget(
+          primaryTargetRows(work.enemies).map(({ target: candidate }) => candidate),
+          row.target.position,
+          contactedIds,
+          )
+      }
+      continue
+    }
+
+    if (emission.kind === 'weld') {
+      if (emission.primarySkill.kind !== 'weld') {
+        throw new Error('Weld channel emission does not own a Weld skill payload')
+      }
+      const profile = emission.primarySkill
+      switch (profile.buildId) {
+        case 1003: {
+          const first = selectedWeldTarget(primaryTargetRows(work.enemies), work.sourceSpells, emission)
+          const mainPresentation = emission.flameLashPresentation
+          const fade = (variant: 'source' | 'endpoint' | 'chain', origin: Readonly<{ x: number; y: number }>,
+            direction: Readonly<{ x: number; y: number }>): void => {
+            const born = createNativeWeldFlameLashFade({
+              enhancedEffects: work.enhancedEffects, direction, id: work.nextSpellId,
+              origin, ownerId: emission.ownerId, rng: work.rng, tick: work.tick,
+              alpha: variant === 'endpoint' && emission.underpowered ? .5 : 1,
+              registerWorldPainter: work.registerCombatPainter, variant, vector: profile.vector.values, worldKey: work.worldKey,
+            })
+            work.rng = born.rng
+            work.ownedTransients.push(work.enrollCombatActor(born.actor))
+            work.nextSpellId += 1
+          }
+          const publishMain = (): void => {
+            const endpoint = mainPresentation?.preclipEndpoint ?? emission.endpoint
+            if (endpoint !== null && endpoint.x > -9999) fade('endpoint', endpoint, emission.direction)
+            if (mainPresentation?.nativeGeometry && mainPresentation.creatorRegistration
+              && mainPresentation.cameraDisplacement !== undefined) {
+              const factory = createNativeFlameLashFactory({
+                channel: { enhancedEffects: work.enhancedEffects, buildId: 1003,
+                  direction: emission.direction, endpoint: emission.endpoint, id: emission.id,
+                  midpoint: mainPresentation.midpoint, origin: emission.origin, ownerId: emission.ownerId,
+                  targetId: mainPresentation.targetId, tick: work.tick, underpowered: emission.underpowered,
+                  vector: profile.vector.values, worldKey: work.worldKey },
+                sourceFadeId: work.nextSpellId, geometry: mainPresentation.nativeGeometry,
+                role: 'main', width: emission.underpowered ? .75 : 1,
+                cameraDisplacement: mainPresentation.cameraDisplacement,
+                creatorRegistration: mainPresentation.creatorRegistration, miscAppendOrdinal: 0,
+                registerWorldPainter: work.registerCombatPainter, rng: work.rng,
+              })
+              work.rng = factory.rng
+              work.ownedTransients.push(factory.source, factory.channel)
+              work.nextSpellId += 1
+            } else {
+              // Compatibility fixtures/old non-retained emissions cannot invent ribbon samples.
+              fade('source', emission.origin, emission.direction)
+              if (mainPresentation !== undefined) work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
+                enhancedEffects: work.enhancedEffects, buildId: 1003,
+                direction: emission.direction, endpoint: emission.endpoint, id: emission.id,
+                midpoint: mainPresentation.midpoint, origin: emission.origin, ownerId: emission.ownerId,
+                targetId: mainPresentation.targetId, tick: work.tick, underpowered: emission.underpowered,
+                vector: profile.vector.values, worldKey: work.worldKey,
+              })))
+            }
+          }
+          if (!first) {
+            publishMain()
+            break
+          }
+          const contactedIds = new Set<string>()
+          let target: PrimarySpellTarget | null = first
+          let damage = emission.damage
+          let previousPoint = emission.origin
+          let previousNativePoint = mainPresentation?.nativeGeometry?.end ?? emission.origin
+          const fragments = Math.max(0, Math.trunc(profile.vector.values[7]!))
+          for (let hop = 0; target && hop <= profile.vector.values[2]!; hop += 1) {
+            const row = primaryTargetRows(work.enemies).find(({ target: candidate }) => candidate.id === target!.id)
+            if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
+            contactedIds.add(row.target.id)
+            const point = primarySpellTargetPoint(row.target)
+            const direction = normalizedDifference(previousPoint, point)
+            if (hop > 0) {
+              // Width precedes source five words, short width, path, and chain fade six words.
+              const width = drawNativeFloat(work.rng, Math.fround(.30000001192092896))
+              work.rng = width.state
+              const legacyGeometry = airPrimaryBoltGeometry(previousPoint, direction, point)
+              if (mainPresentation?.nativeGeometry && mainPresentation.creatorRegistration) {
+                const offset = mainPresentation.nativeGeometry.offset
+                const root = row.target.position
+                const factory = createNativeFlameLashFactory({
+                  channel: { enhancedEffects: work.enhancedEffects, buildId: 1003, direction,
+                    endpoint: legacyGeometry.endpoint, id: work.nextSpellId + 1,
+                    midpoint: legacyGeometry.midpoint, origin: previousPoint, ownerId: emission.ownerId,
+                    targetId: row.target.id, tick: work.tick, underpowered: false,
+                    vector: profile.vector.values, worldKey: work.worldKey },
+                  sourceFadeId: work.nextSpellId, cameraDisplacement: null,
+                  geometry: {
+                    start: { x: Math.fround(previousNativePoint.x + offset.x), y: Math.fround(previousNativePoint.y + offset.y) },
+                    control: { x: Math.fround((previousNativePoint.x + root.x) * .5), y: Math.fround((previousNativePoint.y + root.y) * .5) },
+                    end: root, offset,
+                  },
+                  role: 'chain', width: Math.fround(Math.fround(.800000011920929) - width.value),
+                  creatorRegistration: mainPresentation.creatorRegistration, miscAppendOrdinal: hop,
+                  registerWorldPainter: work.registerCombatPainter, rng: work.rng,
+                })
+                work.rng = factory.rng
+                work.ownedTransients.push(factory.source, factory.channel)
+                work.nextSpellId += 2
+              } else {
+                fade('source', previousPoint, direction)
+                work.ownedTransients.push(work.enrollCombatActor(createNativeWeldChannelActor({
+                  enhancedEffects: work.enhancedEffects, buildId: 1003, direction,
+                  endpoint: legacyGeometry.endpoint, id: work.nextSpellId, midpoint: legacyGeometry.midpoint,
+                  origin: previousPoint, ownerId: emission.ownerId, targetId: row.target.id,
+                  tick: work.tick, underpowered: false, vector: profile.vector.values, worldKey: work.worldKey,
+                })))
+                work.nextSpellId += 1
+              }
+              fade('chain', { x: Math.fround(row.target.position.x + (mainPresentation?.nativeGeometry?.offset.x ?? 0)),
+                y: Math.fround(row.target.position.y + (mainPresentation?.nativeGeometry?.offset.y ?? -20)) }, direction)
+            }
+            const stunFactor = profile.vector.values[3]!
+            if (!emission.underpowered && stunFactor < 1) {
+              work.queueTargetEffect(row.actor.id, { stunFactor, stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS })
+            }
+            const flash = drawNativeFloat(work.rng, Math.fround(0.5))
+            work.rng = flash.state
+            let payload: NativeSpellSpecialDeathPayload | null = null
+            if (profile.vector.values[4]! > 0) {
+              const seed = drawNativeInteger(work.rng, 1_000_000)
+              work.rng = seed.state
+              payload = {
+                kind: 'fire', explodeDamage: profile.vector.values[4]!,
+                explodeRadius: profile.vector.values[5]!, emberDamage: profile.vector.values[6]!,
+                emberFragments: hop === 0 ? fragments : Math.trunc(fragments * 0.5),
+                privateSeed: seed.value,
+              }
+            }
+            const amount = damage * validatedDamageMultiplier(work.damageMultiplier(row.actor.id, 'air', emission.ownerId))
+            const damaged = damageBoneyardEnemy(work.enemies, {
+              enhancedEffects: work.enhancedEffects, hitStrength: Math.fround(0.25 + flash.value),
+              suppressHitReaction: true, hasMagicDamage: true, magic: true,
+              lethalObserver: work.lethalObserver, actorId: row.actor.id, amount,
+              sourcePlayerId: emission.ownerId, registerWorldPainter: work.registerWorldPainter, tick: work.tick,
+            })
+            if (damaged.accepted) {
+              work.enemies = damaged.store
+              work.events.push(...damaged.events)
+              work.hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, work.tick))
+              if (damaged.specialDeathAccepted && payload !== null) {
+                const burst = resolveBoneyardSpecialDeathPayload({
+                  payload, victim: row.actor, sourceEnemies: work.enemies, nextSpellId: work.nextSpellId,
+                  rng: work.rng, ownerId: emission.ownerId, tick: work.tick, worldKey: work.worldKey,
+                  enhancedEffects: work.enhancedEffects, registerWorldPainter: work.registerCombatPainter,
+                  lethalObserver: work.lethalObserver, damageMultiplier: work.damageMultiplier,
+                })
+                work.enemies = burst.enemies
+                work.rng = burst.rng
+                work.nextSpellId = burst.spells.nextId
+                work.events.push(...burst.events)
+                work.hits.push(...burst.hits)
+                work.burns.push(...burst.burns)
+                work.etherBurns.push(...burst.etherBurns)
+                work.targetEffects.push(...burst.targetEffects)
+                work.ownedTransients.push(...burst.spells.transients)
+              }
+            }
+            if (hop === 0) publishMain()
+            previousPoint = point
+            if (hop > 0) previousNativePoint = row.target.position
+            damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+            target = emission.underpowered || hop >= profile.vector.values[2]!
+              ? null
+              : nearestUnusedAirChainTarget(
+                  primaryTargetRows(work.enemies).map(({ target: candidate }) => candidate),
+                  hop === 0 ? previousNativePoint : row.target.position, contactedIds,
+                )
+          }
+          break
+        }
+        case 1004: {
+          if (emission.endpoint === null) break
+          const rows = primaryBlizzardTargetRows(work.enemies, work.primarySceneryTargets)
+          const polygon = nativeWeldBlizzardContactPolygon({
+            endpoint: emission.endpoint,
+            source: emission.origin,
+            underpowered: emission.underpowered,
+            widen: profile.vector.values[6]!,
+          })
+          const roots = nativePrimaryPolygonTargets({
+            actorMask: 0x1086,
+            polygon: polygon.points,
+            targets: rows.map(({ target }) => target),
+          })
+          const contactedIds = new Set<string>()
+          const chainSeedIds: string[] = []
+          if (emission.terrainContact) {
+            const glow = createNativeWeldBlizzardContactGlow({
+              direction: emission.direction,
+              id: work.nextSpellId,
+              ownerId: emission.ownerId,
+              position: emission.endpoint,
+              registerWorldPainter: work.registerCombatPainter,
+              rng: work.rng,
+              tick: work.tick,
+              vector: profile.vector.values,
+              worldKey: work.worldKey,
+            })
+            work.rng = glow.rng
+            work.ownedTransients.push(work.enrollCombatActor(glow.actor))
+            work.nextSpellId += 1
+          }
+          for (const root of roots) {
+            const row = rows.find(({ target }) => target.id === root.id)
+            if (!row) continue
+            if (row.kind === 'silk' || row.kind === 'arrow') {
+              applyChannelProjectileForce(work, row, 100, emission.direction)
+              continue
+            }
+            contactedIds.add(root.id)
+            const glow = createNativeWeldBlizzardContactGlow({
+              direction: emission.direction,
+              id: work.nextSpellId,
+              ownerId: emission.ownerId,
+              position: root.position,
+              registerWorldPainter: work.registerCombatPainter,
+              rng: work.rng,
+              tick: work.tick,
+              vector: profile.vector.values,
+              worldKey: work.worldKey,
+            })
+            work.rng = glow.rng
+            work.ownedTransients.push(work.enrollCombatActor(glow.actor))
+            work.nextSpellId += 1
+            if (row.kind !== 'enemy' || !nativePrimaryTargetEligible(root, 0x2)) continue
+            work.queueTargetEffect(row.actor.id, {
+              coldSlowFactor: emission.underpowered
+                ? NATIVE_BLIZZARD_WEAK_COLD_SLOW_FACTOR
+                : NATIVE_WELD_FROST_SLOW_FACTOR,
+              coldSlowMaterial: true,
+              coldSlowTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+            })
+            const stunFactor = profile.vector.values[3]!
+            if (!emission.underpowered && stunFactor < 1) {
+              work.queueTargetEffect(row.actor.id, {
+                stunFactor,
+                stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+              })
+            }
+            const amount = emission.damage * validatedDamageMultiplier(
+              work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
+            )
+            const damaged = damageBoneyardEnemy(work.enemies, {
+              enhancedEffects: work.enhancedEffects,
+              suppressHitReaction: true,
+              hasMagicDamage: true,
+              magic: true,
+              lethalObserver: work.lethalObserver,
+              actorId: row.actor.id,
+              amount,
+              sourcePlayerId: emission.ownerId,
+              registerWorldPainter: work.registerWorldPainter,
+              tick: work.tick,
+            })
+            if (damaged.accepted) {
+              work.enemies = damaged.store
+              work.events.push(...damaged.events)
+              work.hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, work.tick))
+            }
+            if (!emission.underpowered && profile.vector.values[5]! > 0) {
+              work.enemies = applyBlizzardPushback(
+                work.enemies,
+                row.actor.id,
+                root.actorFlags,
+                emission.queryOrigin,
+                profile.vector.values[5]!,
+                work.tick,
+                work.resolveEnemyMovement,
+              )
+            }
+            if (!emission.underpowered && profile.vector.values[2]! > 0) {
+              chainSeedIds.push(root.id)
+            }
+          }
+          for (const seedId of chainSeedIds) {
+            let source = primaryTargetRows(work.enemies).find(({ target }) => (
+              target.id === seedId
+            ))?.target
+            if (!source) continue
+            let damage = Math.fround(emission.damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+            for (let hop = 0; hop < profile.vector.values[2]!; hop += 1) {
+              const target = nearestUnusedAirChainTarget(
+                primaryTargetRows(work.enemies).map(({ target: candidate }) => candidate),
+                source.position,
+                contactedIds,
+                NATIVE_BLIZZARD_CHAIN_RADIUS,
+              )
+              if (target === null) break
+              const row = primaryTargetRows(work.enemies).find(({ target: candidate }) => (
+                candidate.id === target.id
+              ))
+              if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
+              contactedIds.add(row.target.id)
+              const direction = normalizedDifference(source.position, row.target.position)
+              const effects = createNativeWeldBlizzardChainEffects({
+                castDirection: emission.direction,
+                direction,
+                firstId: work.nextSpellId,
+                ownerId: emission.ownerId,
+                registerWorldPainter: work.registerCombatPainter,
+                rng: work.rng,
+                source: source.position,
+                tick: work.tick,
+                vector: profile.vector.values,
+                worldKey: work.worldKey,
+              })
+              work.rng = effects.rng
+              work.ownedTransients.push(...work.enrollCombatActors(effects.actors))
+              work.nextSpellId = effects.nextId
+              work.queueTargetEffect(row.actor.id, {
+                coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
+                coldSlowMaterial: true,
+                coldSlowTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+              })
+              const stunFactor = profile.vector.values[3]!
+              if (stunFactor < 1) {
+                work.queueTargetEffect(row.actor.id, {
+                  stunFactor,
+                  stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+                })
+              }
+              const amount = damage * validatedDamageMultiplier(
+                work.damageMultiplier(row.actor.id, 'air', emission.ownerId),
+              )
+              const damaged = damageBoneyardEnemy(work.enemies, {
+                enhancedEffects: work.enhancedEffects,
+                suppressHitReaction: true,
+                hasMagicDamage: true,
+                magic: true,
+                lethalObserver: work.lethalObserver,
+                actorId: row.actor.id,
+                amount,
+                sourcePlayerId: emission.ownerId,
+                registerWorldPainter: work.registerWorldPainter,
+                tick: work.tick,
+              })
+              if (damaged.accepted) {
+                work.enemies = damaged.store
+                work.events.push(...damaged.events)
+                work.hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, work.tick))
+              }
+              source = row.target
+              damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+            }
+          }
+          break
+        }
+        case 1005: {
+          const widen = emission.underpowered ? 0 : profile.vector.values[2]!
+          const pushback = emission.underpowered ? 0 : profile.vector.values[3]!
+          if (pushback <= 0) break
+          const rows = primaryWaterTargetRows(work.enemies)
+          const contacts = nativePrimaryConeTargets({
+            actorMask: 0x1082,
+            aimDirection: emission.direction,
+            halfAngleDegrees: 15 + widen * 0.5,
+            hasLineOfSight: (target) => (
+              work.firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
+            ) === null,
+            origin: emission.queryOrigin,
+            reach: 205 + 4 * widen,
+            targets: rows.map(({ target }) => target),
+          })
+          for (const target of contacts) {
+            const row = rows.find(({ target: candidate }) => (
+              candidate.id === target.id
+            ))
+            if (!row) continue
+            if (row.kind === 'silk' || row.kind === 'arrow') {
+              applyChannelProjectileForce(work, row,
+                Math.fround(pushback * NATIVE_CHILL_PROJECTILE_FORCE_FACTOR), emission.direction)
+              continue
+            }
+            work.enemies = applyWaterPushback(
+              work.enemies,
+              row.actor,
+              emission.queryOrigin,
+              pushback,
+              205 + 4 * widen,
+              1,
+              work.resolveEnemyMovement,
+            )
+          }
+          break
+        }
+        default:
+          throw new Error(`weld channel build ${profile.buildId} is not supported`)
+      }
+      continue
+    }
+
+    if (emission.primarySkill.kind !== 'water') {
+      throw new Error('Water channel emission does not own a Water skill payload')
+    }
+    const profile = emission.primarySkill
+    const pushbackFactor = emission.underpowered
+      ? 0
+      : profile.pushbackFactor
+    const rows = primaryWaterTargetRows(work.enemies)
+    const contacts = nativePrimaryConeTargets({
+      actorMask: emission.underpowered
+        ? WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK
+        : WATER_PRIMARY_ACTOR_MASK,
+      aimDirection: emission.direction,
+      halfAngleDegrees: emission.underpowered ? 15 : profile.halfAngleDegrees,
+      hasLineOfSight: (target) => (
+        work.firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
+      ) === null,
+      origin: emission.queryOrigin,
+      reach: emission.underpowered ? 205 : profile.reach,
+      targets: rows.map(({ target }) => target),
+    })
+    for (const target of contacts) {
+      const row = rows.find(({ target: candidate }) => (
+        candidate.id === target.id
+      ))
+      if (!row) continue
+      if (row.kind === 'silk' || row.kind === 'arrow') {
+        applyChannelProjectileForce(work, row,
+          Math.fround(pushbackFactor * NATIVE_CHILL_PROJECTILE_FORCE_FACTOR), emission.direction)
+        continue
+      }
+      work.queueTargetEffect(row.actor.id, {
+        coldSlowFactor: emission.underpowered ? 0.75 : profile.coldMovementFactor,
+        coldSlowMaterial: true,
+        coldSlowTicks: emission.underpowered ? 25 : profile.coldDurationTicks,
+      })
+      const amount = emission.damage * validatedDamageMultiplier(
+        work.damageMultiplier(row.actor.id, 'water', emission.ownerId),
+      )
+      const damaged = damageBoneyardEnemy(work.enemies, {
+        enhancedEffects: work.enhancedEffects,
+        suppressHitReaction: true,
+        hasMagicDamage: true,
+        magic: true,
+        actorId: row.actor.id,
+        amount,
+        lethalObserver: work.lethalObserver,
+        sourcePlayerId: emission.ownerId,
+        registerWorldPainter: work.registerWorldPainter,
+        tick: work.tick,
+      })
+      if (damaged.accepted) {
+        work.enemies = damaged.store
+        work.events.push(...damaged.events)
+        work.hits.push({
+          actorId: row.actor.id,
+          amount,
+          killed: damaged.killed,
+          ownerId: emission.ownerId,
+          spellId: emission.id,
+          spellKind: 'water',
+          tick: work.tick,
+        })
+
+        if (!emission.underpowered && profile.hailThreshold > 0) {
+          const hail = drawNativeInteger(work.rng, 3_000)
+          work.rng = hail.state
+          if (hail.value < profile.hailThreshold) {
+            const hailDamage = drawNativeSpellDamage(
+              work.rng,
+              profile.hailDamageMinimum,
+              profile.hailDamageMaximum,
+            )
+            work.rng = hailDamage.rng
+            const hailAmount = hailDamage.value * validatedDamageMultiplier(
+              work.damageMultiplier(row.actor.id, 'water-hail', emission.ownerId),
+            )
+            const hailContact = damageBoneyardEnemy(work.enemies, {
+              enhancedEffects: work.enhancedEffects,
+              hasMagicDamage: false,
+              magic: true,
+              lethalObserver: work.lethalObserver,
+              actorId: row.actor.id,
+              amount: hailAmount,
+              sourcePlayerId: emission.ownerId,
+              registerWorldPainter: work.registerWorldPainter,
+              tick: work.tick,
+            })
+            if (hailContact.accepted) {
+              work.enemies = hailContact.store
+              work.events.push(...hailContact.events)
+              work.hits.push({
+                actorId: row.actor.id,
+                amount: hailAmount,
+                killed: hailContact.killed,
+                ownerId: emission.ownerId,
+                spellId: emission.id,
+                spellKind: 'water-hail',
+                tick: work.tick,
+              })
+            }
+          }
+        }
+      }
+
+      const liveActor = boneyardSpellTargetById(work.enemies, row.actor.id)
+      if (
+        pushbackFactor > 0
+        && liveActor !== null
+        && !frostJetPushBlocked(work.enemies, liveActor, emission.origin)
+      ) {
+        work.enemies = applyWaterPushback(
+          work.enemies,
+          liveActor,
+          emission.origin,
+          pushbackFactor,
+          profile.reach,
+          nativeWaterPushTargetFactor(target.actorFlags),
+          work.resolveEnemyMovement,
+        )
+      }
+    }
+
+    if (
+      !emission.underpowered
+      && profile.auraRadiusScale > 0
+      && work.tick % NATIVE_COLD_AURA_PERIOD_TICKS === 0
+    ) {
+      for (const row of nativePrimaryRootTargetRows(
+        work.enemies,
+        emission.queryOrigin,
+        nativeColdAuraQueryRadius(profile.auraRadiusScale),
+        0x2,
+      )) {
+        work.queueTargetEffect(row.actor.id, {
+          coldSlowFactor: profile.auraMovementFactor,
+          coldSlowMaterial: true,
+          coldSlowTicks: profile.coldDurationTicks,
+        })
+      }
+    }
+  }
+}

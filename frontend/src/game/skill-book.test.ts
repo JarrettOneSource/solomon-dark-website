@@ -1,0 +1,548 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+import { nativeSkillHoverBoxLayout } from './renderer/native-skill-hover-box-layout.ts'
+import { measureNativeSkillExactText } from './renderer/skill-book-render-contract.ts'
+import { nativeUiFont, wrapNativeUiMsgBoxText } from './native-ui/core.ts'
+
+import {
+  NATIVE_SKILL_CATALOG,
+  NATIVE_WELD_BUILDS,
+  nativeSkillCategory,
+  nativeSkillIconRecord,
+} from './core-kernels/player-progression.ts'
+import { createGameSimulation } from './core-server/game-simulation.ts'
+import { createGameSnapshot } from './host/game-snapshot.ts'
+import {
+  nativeOptionalBookHudProgress,
+  nativeOptionalBookKeyAction,
+  nativeOptionalBookOwnsInventoryPause,
+} from './native-optional-book.ts'
+import {
+  NATIVE_SKILL_DRAGGER_SCALE,
+  NATIVE_SKILL_DRAGGER_SIZE,
+  NATIVE_SKILL_DRAG_THRESHOLD_SQUARED,
+  NATIVE_SKILL_PAGE_BASE_WIDTH,
+  NATIVE_SKILL_PAGE_DEPENDENT_WIDTH,
+  NATIVE_SKILL_PAGE_HEIGHT,
+  formatNativeSkillBookTooltipLine,
+  nativeSkillBookPagePlacements,
+  nativeSkillBookPageLayout,
+  nativeSkillBookColumnScrollOffset,
+  nativeSkillBookPages,
+  nativeSkillBookRows,
+  nativeSkillBookTooltipLines,
+  nativeBeltPullOffStarted,
+  nativeBeltPullOffBurstMembers,
+  nativeSkillDragStarted,
+  nativeSkillQuickbarDropSlot,
+  selectableConcentrationSkillRows,
+  selectablePrimarySkillRows,
+  selectableSecondarySkillRows,
+  type NativeSkillBookPage,
+  type NativeSkillBookRow,
+} from './skill-book-model.ts'
+import {
+  NATIVE_SKILL_HOVER_BOX,
+  NATIVE_SKILL_PAGE_PANEL,
+  NATIVE_SKILL_ROW_PRESENTATION,
+  NATIVE_SKILL_SCREEN_ROOT,
+  nativeSkillPageDisplayName,
+  nativeSkillPageTextHeight,
+  nativeSkillPageTint,
+  nativeSkillPageWrappedLines,
+  nativeSkillExactTextRuns,
+  nativeSkillScreenSealTransform,
+  nativeSkillScreenTick,
+  type NativeSkillScreenSealTransform,
+} from './renderer/skill-book-render-contract.ts'
+
+const nativeAssets = JSON.parse(readFileSync(
+  new URL('../assets/game/native-ui-assets.json', import.meta.url),
+  'utf8',
+))
+const baseline = createGameSnapshot(createGameSimulation(), null)
+  .players['local-player']!.progression
+
+test('builds the two native starting pages in learned acquisition order', () => {
+  const pages = nativeSkillBookPages(baseline)
+  assert.deepEqual(pages.map(({ rootSkillId }) => rootSkillId), [8, 11])
+  assert.deepEqual(pages.map(({ rows }) => rows.map(({ id }) => id)), [[8], [11]])
+  assert.deepEqual(pages.map(({ width }) => width), [200, 200])
+})
+
+test('routes both optional books through configured reciprocal keys and forces the shared HUD during overlap', () => {
+  const bindings = {
+    inventory: 'KeyB',
+    menu: 'Escape',
+    skills: 'KeyV',
+  } as const
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyV', 'inventory', bindings), {
+    target: 'skills',
+    type: 'replace',
+  })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyB', 'skills', bindings), {
+    target: 'inventory',
+    type: 'replace',
+  })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyB', 'inventory', bindings), { type: 'back' })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyV', 'skills', bindings), { type: 'close' })
+  assert.deepEqual(nativeOptionalBookKeyAction('Escape', 'inventory', bindings), { type: 'close' })
+  assert.equal(nativeOptionalBookKeyAction('KeyI', 'skills', bindings), null)
+  const reboundMenu = { ...bindings, menu: 'KeyM' }
+  for (const book of ['inventory', 'skills'] as const) {
+    assert.deepEqual(nativeOptionalBookKeyAction('Escape', book, reboundMenu), { type: 'close' })
+    assert.deepEqual(nativeOptionalBookKeyAction('KeyM', book, reboundMenu), { type: 'close' })
+  }
+  assert.equal(nativeOptionalBookHudProgress(0.25, false), 0.25)
+  assert.equal(nativeOptionalBookHudProgress(0, true), 1)
+  assert.equal(nativeOptionalBookHudProgress(0.75, true), 1)
+  assert.throws(() => nativeOptionalBookHudProgress(-0.01, false), RangeError)
+  assert.equal(nativeOptionalBookOwnsInventoryPause(true, true), true)
+  assert.equal(nativeOptionalBookOwnsInventoryPause(true, false), false)
+  assert.equal(nativeOptionalBookOwnsInventoryPause(false, true), false)
+})
+
+test('groups learned transitive dependents under every related native root', () => {
+  const progression = {
+    ...baseline,
+    learnedSkills: [
+      ...baseline.learnedSkills,
+      [9, 1, 1],
+      [13, 1, 1],
+      [12, 1, 1],
+      [16, 1, 1],
+      [21, 1, 1],
+      [22, 1, 1],
+    ] as const,
+    learnedSkillOrder: [8, 11, 13, 9, 12, 16, 21, 22] as const,
+  }
+  const pages = nativeSkillBookPages(progression)
+  assert.deepEqual(pages.map(({ rootSkillId }) => rootSkillId), [8, 11, 12, 16, 21])
+  assert.deepEqual(
+    pages.find(({ rootSkillId }) => rootSkillId === 8)?.rows.map(({ id }) => id),
+    [8, 13, 9],
+  )
+  assert.deepEqual(
+    pages.find(({ rootSkillId }) => rootSkillId === 16)?.rows.map(({ id }) => id),
+    [16, 22],
+  )
+  assert.deepEqual(
+    pages.find(({ rootSkillId }) => rootSkillId === 21)?.rows.map(({ id }) => id),
+    [21, 22],
+  )
+  assert.equal(pages.find(({ rootSkillId }) => rootSkillId === 8)?.width, 520)
+})
+
+test('exposes every learned interaction category without losing welded primary rows', () => {
+  const progression = {
+    ...baseline,
+    learnedSkills: [
+      ...baseline.learnedSkills,
+      [16, 1, 1],
+      [21, 1, 1],
+      [52, 1, 1],
+      [57, 1, 1],
+    ] as const,
+    learnedSkillOrder: [8, 11, 16, 21, 52, 57] as const,
+    weldBuildId: 1000,
+  }
+  assert.deepEqual(selectablePrimarySkillRows(progression).map(({ id }) => id), [8, 16, 52])
+  assert.deepEqual(selectableSecondarySkillRows(progression).map(({ id }) => id), [11, 21])
+  assert.deepEqual(selectableConcentrationSkillRows(progression).map(({ id }) => id), [57])
+  assert.deepEqual(nativeSkillBookRows(progression).map(({ id }) => id), [8, 11, 16, 21, 52, 57])
+  assert.deepEqual(
+    NATIVE_WELD_BUILDS.map(({ id }) => nativeSkillBookRows({
+      ...progression,
+      weldBuildId: id,
+    }).find((row) => row.id === 52)?.iconRecord),
+    [108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
+  )
+})
+
+test('uses the recovered page dimensions, wrapping, and common centering', () => {
+  const page = (rootSkillId: number, width: number): NativeSkillBookPage => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT,
+    rootSkillId,
+    rows: [],
+    width,
+  })
+  const placements = nativeSkillBookPagePlacements([
+    page(8, 840),
+    page(11, 840),
+    page(12, NATIVE_SKILL_PAGE_BASE_WIDTH + NATIVE_SKILL_PAGE_DEPENDENT_WIDTH),
+  ])
+  assert.deepEqual(placements.map(({ x, y }) => [x, y]), [
+    [200, 72],
+    [200, 372],
+    [1040, 372],
+  ])
+})
+
+test('keeps the captured high-count dependency pages in two native rows', () => {
+  // These widths and root IDs come from the built 27-owned-row grant/Weld
+  // baseline. Expected packing comes from retail builder 0x0066B380.
+  const dimensions: readonly (readonly [number, number])[] = [
+    [16, 680], [21, 200], [56, 200], [69, 200], [67, 200],
+    [59, 360], [63, 200], [57, 200], [40, 680], [74, 200],
+    [62, 200], [64, 200], [65, 520], [66, 200], [8, 520], [52, 200],
+  ]
+  const pages = dimensions.map(([rootSkillId, width]): NativeSkillBookPage => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT,
+    rootSkillId,
+    rows: [],
+    width,
+  }))
+  const placements = nativeSkillBookPagePlacements(pages)
+  assert.deepEqual(placements.map(({ page }) => page.rootSkillId), pages.map(page => page.rootSkillId))
+  assert.deepEqual(placements.map(({ x, y }) => [x, y]), [
+    [0, 72], [680, 72], [880, 72], [1080, 72], [1280, 72],
+    [0, 372], [360, 372], [560, 372], [760, 372], [1440, 372],
+    [1480, 72], [1640, 372], [1680, 72], [1840, 372], [2040, 372], [2200, 72],
+  ])
+})
+
+test('balances horizontal overflow into the shorter row, choosing row two at equal extents', () => {
+  const pages: NativeSkillBookPage[] = [840, 840, 840, 200, 200].map((width, index) => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT,
+    rootSkillId: 8 + index,
+    rows: [],
+    width,
+  }))
+  assert.deepEqual(nativeSkillBookPagePlacements(pages).map(({ x, y }) => [x, y]), [
+    [0, 72], [0, 372], [840, 372], [840, 72], [1040, 72],
+  ])
+})
+
+test('keeps native single-row centering and exposes the bounded horizontal extent', () => {
+  const starter = nativeSkillBookPageLayout(nativeSkillBookPages(baseline))
+  assert.equal(starter.rowCount, 1)
+  assert.equal(starter.contentWidth, 400)
+  assert.deepEqual(starter.placements.map(({ x, y }) => [x, y]), [[600, 280], [800, 280]])
+  const empty = nativeSkillBookPageLayout([])
+  assert.equal(empty.rowCount, 0)
+  assert.equal(empty.contentWidth, 0)
+  assert.deepEqual(empty.placements, [])
+  const overflowing = nativeSkillBookPageLayout([840, 840, 840].map((width, index) => ({
+    height: NATIVE_SKILL_PAGE_HEIGHT, rootSkillId: 8 + index, rows: [], width,
+  })))
+  assert.equal(overflowing.rowCount, 2)
+  assert.equal(overflowing.contentWidth, 1680)
+})
+
+test('keyboard focus reveals a full native skill column and clamps stale offsets after membership shrinks', () => {
+  const page: NativeSkillBookPage = {
+    height: NATIVE_SKILL_PAGE_HEIGHT, rootSkillId: 8, rows: [], width: 520,
+  }
+  const placement = { page, x: 2040, y: 372 }
+  assert.equal(nativeSkillBookColumnScrollOffset(0, placement, 0, 2560), 640)
+  assert.equal(nativeSkillBookColumnScrollOffset(0, placement, 1, 2560), 800)
+  assert.equal(nativeSkillBookColumnScrollOffset(0, placement, 2, 2560), 960)
+  assert.equal(nativeSkillBookColumnScrollOffset(960, { page, x: 0, y: 72 }, 0, 2560), 0)
+  assert.equal(nativeSkillBookColumnScrollOffset(960, { page, x: 600, y: 280 }, 0, 400), 0)
+})
+
+test('uses the native SkillDragger threshold and maximum-overlap belt hit model', () => {
+  assert.equal(NATIVE_SKILL_DRAG_THRESHOLD_SQUARED, 9)
+  assert.equal(NATIVE_SKILL_DRAGGER_SIZE, 40)
+  assert.equal(NATIVE_SKILL_DRAGGER_SCALE, 1.25)
+  assert.equal(nativeSkillDragStarted({ x: 10, y: 10 }, { x: 13, y: 10 }), false)
+  assert.equal(nativeSkillDragStarted({ x: 10, y: 10 }, { x: 13.01, y: 10 }), true)
+
+  const belt = [
+    { height: 53, width: 53, x: 0, y: 0 },
+    { height: 53, width: 53, x: 60, y: 0 },
+  ]
+  assert.equal(
+    nativeSkillQuickbarDropSlot({ x: 59, y: 26.5 }, belt),
+    1,
+    'pointer is outside slot 1, but its centered 40px drag rectangle overlaps slot 1 most',
+  )
+  assert.equal(nativeSkillQuickbarDropSlot({ x: 56.5, y: 26.5 }, belt), 0, 'ties retain earlier slot')
+  assert.equal(nativeSkillQuickbarDropSlot({ x: 120, y: 100 }, belt), null)
+})
+
+test('pulls a populated native BeltButton off only beyond fifty pointer units', () => {
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 60, y: 10 }), false)
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 60.001, y: 10 }), true)
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 40, y: 50 }), false)
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 40.001, y: 50 }), true)
+})
+
+test('builds the complete stock BeltButton pull-off burst for both random branches', () => {
+  for (const step of [90, 120] as const) {
+    const members = nativeBeltPullOffBurstMembers(step, () => 0.5)
+    assert.equal(members.filter(({ record }) => record === 65).length, 24)
+    assert.equal(members.filter(({ record }) => record === 69).length, 360 / step)
+    assert.deepEqual(
+      members.filter(({ record }) => record === 65).map(({ brightness }) => brightness),
+      Array.from({ length: 12 }, () => [0.5, 0.75]).flat(),
+    )
+    assert.ok(members.every(({ durationMs }) => durationMs >= 50 && durationMs <= 200))
+  }
+})
+
+test('stock SkillScreen asset membership is complete', () => {
+  for (const record of [3, 4, 10, 30, 31, 32, 33, 49, 71]) {
+    assert.ok(nativeAssets.atlases.UI.records[record])
+  }
+  for (const record of [0, 5, 6, 13, 14, 164, 165]) {
+    assert.ok(nativeAssets.atlases.Skills.records[record])
+  }
+})
+
+test('pins the omitted native root and page-wide render contract', () => {
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.ambientAlpha, 0.15)
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.titleY, 60)
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.helpLineGap, 18)
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.titleBacking, {
+    height: 34,
+    width: 114,
+    x: 743,
+    y: 34,
+  })
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.topFlourishes, [
+    { record: 33, rotationDegrees: -90, x: 80, y: 30 },
+    { record: 33, rotationDegrees: 90, x: 1520, y: 30 },
+  ])
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.topWizards, [
+    { mirrorX: true, record: 31, x: 200, y: 20 },
+    { mirrorX: false, record: 31, x: 1400, y: 20 },
+  ])
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.bottomWarriorClip, {
+    height: 80,
+    width: 1600,
+    x: 0,
+    y: 820,
+  })
+  assert.deepEqual(NATIVE_SKILL_PAGE_PANEL, {
+    additiveAlpha: 0.5,
+    height: 300,
+    inset: 12,
+    record: 0,
+    selectedAlpha: 0.5,
+    slice: 30,
+    unselectedAlpha: 0.1,
+  })
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.ordinaryFrameRecord, 5)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.actionableFrameRecord, 14)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.auraRecord, 13)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.iconShadowOffset, 4)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.selectedFrameAlpha, 1)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.selectedFrameTint, 0x97c797)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.textShadowOffset, 1)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.textWrapWidth, 140)
+  assert.equal(nativeSkillPageTint(0), 0x886688)
+  assert.equal(nativeSkillPageTint(1), 0x998077)
+  assert.deepEqual(NATIVE_SKILL_HOVER_BOX, {
+    contentMargin: 25,
+    descriptionWrapWidth: 380,
+    lineWrapWidth: 400,
+    lineGap: 10,
+    sourceGap: 50,
+    viewportMargin: 25,
+  })
+})
+
+test('keeps all eight ambient seals on deterministic sine lanes with one local 100 Hz phase', () => {
+  const atBirth: readonly NativeSkillScreenSealTransform[] = Array.from(
+    { length: NATIVE_SKILL_SCREEN_ROOT.ambientCount },
+    (_, index) => nativeSkillScreenSealTransform(index, 0),
+  )
+  assert.deepEqual(atBirth, [
+    { rotationDegrees: 0, x: 800, y: 490 },
+    { rotationDegrees: 45, x: 840, y: 490 },
+    { rotationDegrees: 90, x: 800, y: 490 },
+    { rotationDegrees: 135, x: 760, y: 490 },
+    { rotationDegrees: 180, x: 800, y: 490 },
+    { rotationDegrees: 225, x: 840, y: 490 },
+    { rotationDegrees: 270, x: 800, y: 490 },
+    { rotationDegrees: 315, x: 760, y: 490 },
+  ])
+  for (const tick of [60, 100, 21_600]) {
+    const transformsAtTick: readonly NativeSkillScreenSealTransform[] = atBirth.map(
+      (_, index) => nativeSkillScreenSealTransform(index, tick),
+    )
+    assert.deepEqual(
+      transformsAtTick.map(({ x, y }) => ({ x, y })),
+      atBirth.map(({ x, y }) => ({ x, y })),
+    )
+    transformsAtTick.forEach(({ rotationDegrees }, index) => {
+      assert.equal(rotationDegrees, atBirth[index]!.rotationDegrees - tick / 60)
+    })
+  }
+  assert.equal(nativeSkillScreenTick(0), 0)
+  assert.equal(nativeSkillScreenTick(9.999), 0)
+  assert.equal(nativeSkillScreenTick(10), 1)
+  assert.equal(nativeSkillScreenTick(1_000), 100)
+  assert.throws(() => nativeSkillScreenTick(-1), RangeError)
+  assert.throws(() => nativeSkillScreenTick(Number.NaN), RangeError)
+  assert.throws(() => nativeSkillScreenSealTransform(-1, 0), RangeError)
+  assert.throws(() => nativeSkillScreenSealTransform(8, 0), RangeError)
+  assert.throws(() => nativeSkillScreenSealTransform(0, 0.5), RangeError)
+})
+
+test('reproduces the stock SkillPage wrapper and vertically centred description block', () => {
+  const magicMissile = nativeSkillPageWrappedLines('a magic bolt that follows enemies')
+  const callLeviathan = nativeSkillPageWrappedLines('call leviathan from the ether')
+  assert.deepEqual(magicMissile, ['a magic bolt', 'that follows', 'enemies'])
+  assert.deepEqual(callLeviathan, ['call leviathan', 'from the', 'ether'])
+  assert.equal(nativeSkillPageTextHeight(magicMissile), 50)
+  assert.equal(nativeSkillPageDisplayName('Magic Missile', 1), 'MAGIC MISSILE')
+  assert.equal(nativeSkillPageDisplayName('Magic Missile', 3), 'MAGIC MISSILE 3')
+})
+
+test('builds HoverBox lines from authored stats and concentration bonuses in native order', () => {
+  const magicMissile = baselineRow(8)
+  assert.deepEqual(
+    nativeSkillBookTooltipLines(magicMissile)
+      .filter(({ kind }) => kind === 'stat')
+      .map(({ text }) => text),
+    ['   Damage: 1-2', '   Mana Cost: 6'],
+  )
+  const leviathan = baselineRow(11)
+  assert.deepEqual(
+    nativeSkillBookTooltipLines(leviathan)
+      .filter(({ kind }) => kind === 'stat')
+      .map(({ text }) => text),
+    ['   Damage: 2', '   Appendages: up to 1', '   Mana Cost: 75'],
+  )
+  const channelMana = catalogRow(57)
+  assert.deepEqual(
+    nativeSkillBookTooltipLines(channelMana)
+      .filter(({ kind }) => kind === 'stat' || kind === 'bonus')
+      .map(({ text }) => text),
+    ['   Recovery: +25%', '   Concentrate: +15% Recovery'],
+  )
+})
+
+test('formats native D/F/X/N values, percent escapes, and ExactText commands', () => {
+  assert.equal(formatNativeSkillBookTooltipLine(
+    '%d:d% | %f:f% | %x:x% | %n:n% | %n:i% | 50%%',
+    { d: 4.6, f: 1.25, i: 3, n: 2.25, x: 1.234 },
+    1,
+  ), '5 | 1.3 | 1.23 | 2.3 | 3 | 50%')
+  assert.deepEqual(nativeSkillExactTextRuns('A_s(.7)_o(0,1)_i / SEC'), [
+    { italic: false, offsetX: 0, offsetY: 0, scale: 1, text: 'A' },
+    { italic: true, offsetX: 0, offsetY: 1, scale: 0.7, text: ' / SEC' },
+  ])
+})
+
+test('drains every public SkillScreen tooltip row without unresolved stat tokens', () => {
+  for (let skillId = 8; skillId <= 79; skillId += 1) {
+    const lines = nativeSkillBookTooltipLines(catalogRow(skillId))
+    assert.ok(lines.length >= 5, `skill ${skillId} lost its HoverBox body`)
+    assert.equal(
+      lines.some(({ text }) => /%[DFNXdfnx]:/.test(text)),
+      false,
+      `skill ${skillId} retained an unresolved native stat token`,
+    )
+  }
+})
+
+test('Meditation bonus uses native line-add wrapping rather than overrunning the box', () => {
+  const lines = nativeSkillBookTooltipLines(catalogRow(58))
+  const layout = nativeSkillHoverBoxLayout(lines, 600, 382.5)
+  const bonus = layout.rendered.find(({ kind }) => kind === 'bonus')!
+  const original = lines.find(({ kind }) => kind === 'bonus')!.text
+  assert.equal(measureNativeSkillExactText(original), 424)
+  assert.deepEqual(bonus.sources, [
+    '   Concentrate: Can Meditate while walking (lesser',
+    'effect)',
+  ])
+  assert.deepEqual(bonus.sources, wrapNativeUiMsgBoxText(original, 'body', 400))
+  assert.equal(bonus.sources.length, 2)
+  assert.equal(bonus.sources.join(' '), original)
+  for (const { sources } of layout.rendered) {
+    for (const line of sources) assert.ok(measureNativeSkillExactText(line) <= layout.contentWidth)
+  }
+})
+
+test('skill HoverBox shares its 400-pixel admission rule across line kinds without clamping short rows', () => {
+  const kinds = ['title', 'category', 'boost', 'level', 'stat', 'bonus', 'spacer'] as const
+  const long = '   Concentrate: Can Meditate while walking (lesser effect)'
+  const betweenLimits = '   Concentrate: Can Meditate while walking (lesser e'
+  const middleWidth = measureNativeSkillExactText(betweenLimits)
+  assert.ok(middleWidth > 380 && middleWidth <= 400)
+  for (const kind of kinds) {
+    const short = nativeSkillHoverBoxLayout([{ kind, text: betweenLimits }], 800, 450)
+    assert.deepEqual(short.rendered[0]!.sources, [betweenLimits])
+    assert.equal(short.contentWidth, middleWidth)
+    const wrapped = nativeSkillHoverBoxLayout([{ kind, text: long }], 800, 450)
+    assert.deepEqual(wrapped.rendered[0]!.sources, [
+      '   Concentrate: Can Meditate while walking (lesser', 'effect)',
+    ])
+  }
+})
+
+test('skill HoverBox preserves native description wrapping, line breaks, rank commands and placement', () => {
+  const description = 'Recover mana more quickly when standing still (and not firing).'
+  const title = 'MEDITATION _s(.7)_o(0,1)1/3'
+  const lines = [
+    { kind: 'title' as const, text: title },
+    { kind: 'description' as const, text: description },
+    { kind: 'stat' as const, text: '   A\n   B' },
+    { kind: 'spacer' as const, text: '' },
+  ]
+  const layout = nativeSkillHoverBoxLayout(lines, 800, 800)
+  assert.deepEqual(layout.rendered.map(({ sources }) => sources), [
+    [title], wrapNativeUiMsgBoxText(description, 'body', 380), ['   A', '   B'], [''],
+  ])
+  assert.equal(layout.x, 800 - layout.width / 2)
+  assert.equal(layout.y, 800 - 50 - layout.height)
+  assert.equal(nativeSkillHoverBoxLayout(lines, 0, 25).x, 25)
+  assert.equal(nativeSkillHoverBoxLayout(lines, 0, 25).y, 75)
+  const right = nativeSkillHoverBoxLayout(lines, 1600, 450)
+  assert.equal(right.x + right.width, 1575)
+  const empty = nativeSkillHoverBoxLayout([], 800, 450)
+  assert.equal(empty.contentWidth, 0)
+  assert.deepEqual(empty.rendered, [])
+})
+
+test('shared skill tooltip sizes every authored rank, bonus, grant and Welding identity from its rendered lines', () => {
+  for (let id = 8; id <= 79; id += 1) {
+    const skill = NATIVE_SKILL_CATALOG[id]!
+    const maximum = Number(skill.config?.mMaxLevel ?? 1)
+    for (let rank = 1; rank <= maximum + 4; rank += 1) {
+      for (const permanentRank of [0, rank]) {
+        const base = { ...catalogRow(id), effectiveRank: rank, permanentRank }
+        const rows = id === 52 ? NATIVE_WELD_BUILDS.map(build => ({
+          ...base, name: build.syntheticName, weldBuildId: build.id,
+        })) : [base]
+        for (const row of rows) {
+          const lines = nativeSkillBookTooltipLines(row)
+          const layout = nativeSkillHoverBoxLayout(lines, 800, 450)
+          const widths = layout.rendered.flatMap(({ sources }) => sources.map(measureNativeSkillExactText))
+          assert.equal(layout.contentWidth, Math.max(0, ...widths), `${id}/${rank}: unclamped extent`)
+          assert.equal(layout.width, layout.contentWidth + 50)
+          assert.ok(layout.width < 1550 && layout.height < 850, `${id}/${rank}: viewport fit`)
+          assert.equal(layout.lineHeight, nativeUiFont('body').metrics[0])
+        }
+      }
+    }
+  }
+})
+
+function baselineRow(skillId: number): NativeSkillBookRow {
+  const row = nativeSkillBookRows(baseline).find(({ id }) => id === skillId)
+  assert.ok(row)
+  return row
+}
+
+function catalogRow(skillId: number): NativeSkillBookRow {
+  const skill = NATIVE_SKILL_CATALOG[skillId]
+  const category = nativeSkillCategory(skillId)
+  assert.ok(skill)
+  assert.notEqual(category, null)
+  return {
+    category: category!,
+    dependencyIds: [],
+    description: skill.config?.mQDescription ?? skill.config?.mDescription ?? '',
+    effectiveRank: 1,
+    iconRecord: nativeSkillIconRecord(skillId, skillId === 52 ? 1000 : null),
+    id: skillId,
+    name: skill.name,
+    permanentRank: 1,
+    weldBuildId: skillId === 52 ? 1000 : null,
+  }
+}

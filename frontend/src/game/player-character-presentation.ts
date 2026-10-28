@@ -1,0 +1,304 @@
+import type {
+  PlayerCharacterState,
+  WizardElement,
+} from './core-kernels/player-character.ts'
+import type { Vector2 } from './core-kernels/vector.ts'
+import type { NativeSecondaryCastAction } from './core-kernels/native-secondary-cast-action.ts'
+import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-action.ts'
+import { actorHeadingFromVector } from './core-kernels/actor-heading.ts'
+import { primaryCastPresentationPose, primarySpellEmitterOffset, type PrimarySpellTransientState } from './core-kernels/primary-spells.ts'
+import { playerStaffAttachmentOffset, playerWandPrimaryPose, playerWandSpellEmitterOffset, type PlayerStaffAttachmentPose, type PlayerWandAttachmentPose } from './core-kernels/native-player-weapon.ts'
+
+export {
+  isPlayerModEquipmentAppearance,
+  playerDeathEquipmentAppearance,
+  playerLivingEquipmentAppearance,
+  playerLivingNativeEquipmentAppearance,
+  type PlayerDeathEquipmentAppearance,
+  type PlayerEquipmentTintedSelector,
+  type PlayerLivingEquipmentAppearance,
+  type PlayerRenderableEquipmentAppearance,
+} from './core-kernels/player-equipment-appearance.ts'
+
+const STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, true,
+  true, true, true, true, true, true,
+  true, true, true, true, true, false,
+  false, false, false, false, false, false,
+]
+
+const CAST_STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, false,
+  false, true, true, true, true, true,
+  true, true, true, true, true, true,
+  false, false, false, false, false, false,
+]
+
+const CAST_TWO_STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, false,
+  false, true, true, true, true, true,
+  true, true, true, true, true, true,
+  true, false, false, false, false, false,
+]
+
+const MELEE_ALT_STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, false,
+  false, true, true, true, true, true,
+  true, true, true, true, true, true,
+  true, false, false, false, false, false,
+]
+
+export interface PlayerCharacterDrawPlan {
+  attachmentPose: PlayerStaffAttachmentPose
+  wandAttachmentPose: PlayerWandAttachmentPose
+  bareAttachmentPose: 0 | null
+  fixedRobeOffset: Vector2
+  frontAttachmentOffset: Vector2
+  headOffset: Vector2
+  headingSheetOffsetY: number
+  moving: boolean
+  orbPasses: PlayerEquippedOrbPasses
+  orbOverlayAfterHead: boolean
+  orbOffset: Vector2
+  robePose: number
+  staffFront: boolean
+  unselectedPrimaryAttachment: boolean
+}
+
+export interface PlayerEquippedOrbPasses {
+  readonly frontBase: boolean
+  readonly frontOverlay: boolean
+}
+
+export const NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD =
+  0.10000000149011612
+export const NATIVE_PLAYER_ROBE_FIXED_POSE_COUNT = 17
+export const NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE = 4
+export const NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE = 13
+
+export type PlayerRobeFixedPose = PlayerStaffAttachmentPose
+  | 10 | 11 | 12 | 13 | 14 | 15 | 16
+
+export interface PlayerDeathDrawPlan {
+  facing: number
+  frame: number
+  heading: number
+  shadow: boolean
+  visible: boolean
+}
+
+export function createPlayerDeathDrawPlan(
+  headingIndex: number,
+  lifeState: 'alive' | 'lethal-pending' | 'dying' | 'spectating',
+  deathTick: number,
+): PlayerDeathDrawPlan {
+  const frame = deathTick >= 159 ? 3 : deathTick >= 156 ? 2 : deathTick >= 153 ? 1 : 0
+  const visible = lifeState === 'dying' || lifeState === 'spectating'
+  return {
+    facing: normalizedIndex(Math.floor((headingIndex + 2) / 4), 6),
+    frame,
+    heading: normalizedIndex(headingIndex, 24),
+    shadow: visible && frame === 3,
+    visible,
+  }
+}
+
+export function createPlayerCharacterDrawPlan(
+  state: Pick<
+    PlayerCharacterState,
+    'config' | 'gaitDegrees' | 'headingIndex' | 'primaryCast' | 'velocity' | 'walkCyclePrimary'
+  >,
+  scale = 1,
+  staffActionPose: PlayerStaffAttachmentPose | null = null,
+  secondaryCast: NativeSecondaryCastAction | 'spin' | null = null,
+  elementEffectPhase = state.primaryCast.weaponPulse,
+  weaponKind: 'staff' | 'wand' = 'staff',
+): PlayerCharacterDrawPlan {
+  const castElement = selectedPrimaryCastElement(
+    state.primaryCast.selectedPrimaryId,
+    state.config.element,
+  )
+  const secondaryCastActive = secondaryCast !== null
+  const attachmentPose = secondaryCastActive
+    ? 9
+    : staffActionPose ?? primaryCastPresentationPose(state.primaryCast, castElement)
+  let wandAttachmentPose: PlayerWandAttachmentPose = playerWandPrimaryPose(
+    state.primaryCast.actionTick, state.primaryCast.channelActive, castElement,
+  )
+  if (secondaryCast === 'spin' || (secondaryCast !== null && secondaryCast.weaponKind !== 'wand')) {
+    wandAttachmentPose = 0
+  } else if (secondaryCast !== null && secondaryCast.progress > 0) {
+    wandAttachmentPose = secondaryCast.progress < 1 ? 1 : 2
+  }
+  const unselectedPrimaryAttachment = state.primaryCast.selectedPrimaryId === -1
+  const bareAttachmentPose: 0 | null = !unselectedPrimaryAttachment
+    && staffActionPose === null
+    && !secondaryCastActive
+    && state.primaryCast.actionTick < 0
+    && !state.primaryCast.channelActive
+    && !state.primaryCast.oneShotAttackPoseHeld
+    ? 0
+    : null
+  const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
+  const orbOffset = weaponKind === 'wand'
+    ? playerWandSpellEmitterOffset(state.headingIndex, wandAttachmentPose)
+    : playerStaffAttachmentOffset(state.headingIndex, attachmentPose)
+  const effectPose = weaponKind === 'wand'
+    && secondaryCast !== 'spin' && secondaryCast?.weaponKind !== 'staff'
+    ? 14 + wandAttachmentPose
+    : attachmentPose
+  return {
+    attachmentPose,
+    wandAttachmentPose,
+    bareAttachmentPose,
+    fixedRobeOffset: playerCharacterFixedRobeOffset(state.gaitDegrees, scale),
+    frontAttachmentOffset: effectPose === 9
+      ? { x: 0, y: scale }
+      : playerCharacterFrontAttachmentOffset(state.gaitDegrees, scale),
+    headOffset: playerCharacterHeadOffset(
+      state.headingIndex,
+      state.gaitDegrees,
+      scale,
+    ),
+    headingSheetOffsetY: -state.headingIndex * 170,
+    moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
+    orbPasses: playerCharacterEquippedOrbPasses(
+      orbOffset,
+      effectPose,
+      elementEffectPhase,
+    ),
+    orbOverlayAfterHead: effectPose === 9
+      || elementEffectPhase > NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD,
+    orbOffset,
+    robePose: playerCharacterRobePose(state.walkCyclePrimary),
+    staffFront,
+    unselectedPrimaryAttachment,
+  }
+}
+
+export function playerEquippedElementEffectScale(
+  effectPhase: number,
+  weaponKind: 'staff' | 'wand' = 'staff',
+): number {
+  return Math.fround((weaponKind === 'wand' ? Math.fround(0.6) : 1) * (1 + 10 * effectPhase))
+}
+
+function selectedPrimaryCastElement(
+  skillId: number,
+  fallback: WizardElement,
+): WizardElement {
+  if (skillId === 8) return 'ether'
+  if (skillId === 16) return 'fire'
+  if (skillId === 24) return 'air'
+  if (skillId === 32) return 'water'
+  if (skillId === 40) return 'earth'
+  if (skillId >= 1000 && skillId <= 1009) return 'fire'
+  return fallback
+}
+
+export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
+  return primarySpellEmitterOffset(headingIndex, -1)
+}
+
+export function playerCharacterEquippedOrbPasses(
+  socket: Vector2,
+  attachmentPose: number,
+  elementEffectPhase: number,
+): PlayerEquippedOrbPasses {
+  // PlayerWizard::Render derives this angle from the emitter, not body facing.
+  const headingDegrees = Math.trunc(actorHeadingFromVector(socket.x, socket.y + 20))
+  const backAngle = headingDegrees <= 90 || headingDegrees > 270
+  return {
+    frontBase: attachmentPose !== 9
+      && headingDegrees >= 90
+      && headingDegrees <= 270,
+    frontOverlay: attachmentPose === 9
+      || backAngle
+      || elementEffectPhase > NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD,
+  }
+}
+
+export function playerStaffActionPose(
+  transients: readonly PrimarySpellTransientState[],
+  ownerId: string,
+  worldKey: string,
+): PlayerStaffAttachmentPose | null {
+  const action = transients.find((effect) => (
+    effect.ownerId === ownerId
+    && effect.worldKey === worldKey
+    && (effect.kind === 'player-staff-melee' || effect.kind === 'player-staff-spin')
+  ))
+  return action?.kind === 'player-staff-melee' || action?.kind === 'player-staff-spin'
+    ? nativePlayerStaffActionPose(action) as PlayerStaffAttachmentPose
+    : null
+}
+
+export function playerCharacterStaffIsFront(
+  headingIndex: number,
+  attachmentPose: PlayerStaffAttachmentPose = 0,
+): boolean {
+  const bank = attachmentPose === 9
+    ? CAST_TWO_STAFF_FRONT
+    : attachmentPose === 7 || attachmentPose === 8
+      ? CAST_STAFF_FRONT
+      : attachmentPose === 4
+        || attachmentPose === 5
+        || attachmentPose === 6
+      ? MELEE_ALT_STAFF_FRONT
+      : STAFF_FRONT
+  return bank[normalizedIndex(headingIndex, bank.length)]
+}
+
+export function playerCharacterRobePose(walkCyclePrimary: number): number {
+  return Math.trunc(walkCyclePrimary)
+}
+
+export function playerCharacterRobeFixedPose(
+  attachmentPose: PlayerStaffAttachmentPose,
+  unselectedPrimaryAttachment: boolean,
+  nativeRobe: boolean,
+  wandPose: PlayerWandAttachmentPose | null = null,
+): PlayerRobeFixedPose {
+  if (unselectedPrimaryAttachment && nativeRobe) return NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE
+  return wandPose === null ? attachmentPose : ([14, 15, 16] as const)[wandPose]
+}
+
+export function playerCharacterFixedRobeOffset(
+  gaitDegrees: number,
+  scale = 1,
+): Vector2 {
+  const halfGaitRadians = gaitDegrees * 0.5 * Math.PI / 180
+  return {
+    x: Math.abs(Math.sin(halfGaitRadians)) * scale * scale,
+    y: 0,
+  }
+}
+
+export function playerCharacterFrontAttachmentOffset(
+  gaitDegrees: number,
+  scale = 1,
+): Vector2 {
+  return {
+    x: playerCharacterFixedRobeOffset(gaitDegrees, scale).x,
+    y: scale,
+  }
+}
+
+export function playerCharacterHeadOffset(
+  headingIndex: number,
+  gaitDegrees: number,
+  scale = 1,
+): Vector2 {
+  const gaitRadians = gaitDegrees * Math.PI / 180
+  const perpendicularRadians = (headingIndex * 15 + 90) * Math.PI / 180
+  const lateral = -Math.cos(gaitRadians) * 0.5 * scale
+  return {
+    x: Math.sin(perpendicularRadians) * lateral,
+    y: -Math.cos(perpendicularRadians) * lateral
+      - Math.abs(Math.sin(gaitRadians)) * 1.5 * scale,
+  }
+}
+
+function normalizedIndex(value: number, length: number): number {
+  return ((Math.round(value) % length) + length) % length
+}
